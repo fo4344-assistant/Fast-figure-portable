@@ -1,0 +1,122 @@
+# 리뷰 001 — Mantine 이관 전 UI 책임 경계
+
+## 기준 소스
+
+- `Fast-figure.html` 1.1.29-alpha
+- `agent_space/plans/plan-002.md`
+
+## 현재 shell 구조
+
+현재 애플리케이션 shell은 정적 HTML과 imperative DOM 동기화로 구성되어 있다.
+
+주요 UI 영역은 다음과 같다.
+
+- 상단 toolbar: `layoutToggle`, `labelToggle`, `captionToggle`, `printToggle`
+- sidebar와 graph/image 설정 control
+- overlay: `layoutPanel`, `labelPanel`, `captionPanel`, `printPanel`, `readmeDialog`
+- figure 영역: `dashboard`, Plotly graph DOM, slot drag/drop
+- caption 표시/편집: `dashboardCaption`, `captionText`
+
+현재 overlay lifecycle에는 `syncPopupBounds()`, 전역 Escape 처리, 전역 outside-click 판정, `hidden` class 동기화가 함께 사용된다.
+
+## 사용자 작업 단위 기준 overlay 판정
+
+현재 overlay는 모두 뒤쪽 figure를 동시에 직접 조작해야 하는 작업이 아니다.
+
+- layout: 레이아웃 설정과 layout map 조작을 한 작업으로 수행한다.
+- label: 전용 `labelPreview` 안에서 위치와 형식을 조정한다.
+- caption: 설정과 본문 편집을 하나의 caption 작업으로 합치는 것이 적절하다.
+- print: 출력 형식/크기/DPI를 정한 뒤 저장한다.
+- README: 읽고 닫는 대화상자다.
+
+따라서 다섯 overlay 모두 controlled Mantine `Modal`로 이관한다. 배경 figure 조작은 차단한다.
+
+## 책임 경계
+
+### Domain / EFSM
+
+유지한다.
+
+- project/slot/graph/image/caption 상태
+- overlay 의미 상태
+- 허용 transition
+- project mutation
+
+Mantine/React가 같은 상태를 별도로 복제하지 않는다.
+
+### Mantine
+
+이관한다.
+
+- Button/Input/ActionIcon 공통 크기와 variant
+- Modal overlay
+- focus trap과 focus return
+- Escape 감지
+- outside-click 감지
+- portal과 stacking
+- keyboard/accessibility primitive
+
+### React shell
+
+React가 다음 shell UI를 한 tree로 소유하는 것을 기본안으로 선택한다.
+
+- toolbar
+- sidebar controls
+- modal host
+- menu/tooltip/action controls
+
+### Legacy imperative 영역
+
+초기 이관에서는 유지한다.
+
+- Plotly rendering
+- dashboard slot rendering
+- graph canvas
+- slot drag/drop
+- 이미지 canvas/asset rendering 중 UI control이 아닌 부분
+
+## React shell vs portal 비교
+
+### 선택: shell 직접 이관
+
+장점:
+
+- MantineProvider가 하나다.
+- toolbar/sidebar/modal의 DOM 소유권이 React로 명확해진다.
+- 기존 DOM control과 React control을 같은 영역에 장기간 혼합하지 않는다.
+- 개별 control마다 portal mount를 만들 필요가 없다.
+- imperative sync 제거 범위를 shell 단위로 추적할 수 있다.
+
+### 선택하지 않음: 다중 portal 기반 기본 구조
+
+portal은 부분 이관에는 유용하지만 Fast Figure에서 기본 구조로 사용하면 다음 관리 계층이 장기간 공존한다.
+
+- legacy static DOM
+- React root
+- 여러 portal mount
+- imperative DOM sync
+- EFSM
+
+따라서 portal은 shell 직접 이관이 구조적으로 불가능한 특정 부분에서만 임시 migration bridge로 허용한다.
+
+## 첫 구현 경계
+
+첫 코드 패치는 UI를 바꾸지 않고 다음만 수행한다.
+
+1. React/Mantine production runtime을 단일 HTML 안에 vendoring한다.
+2. 하나의 `MantineProvider`와 비가시 bootstrap root를 만든다.
+3. 기존 shell의 geometry와 event 동작은 그대로 유지한다.
+4. runtime 외부 네트워크 요청은 없어야 한다.
+5. Mantine CSS가 기존 dashboard/Plotly geometry에 영향을 주지 않는지 검사한다.
+
+그 다음 커밋부터 toolbar를 React/Mantine shell의 첫 실제 vertical slice로 이관한다.
+
+## 중단 조건
+
+다음 중 하나가 발생하면 다음 이관 단계로 진행하지 않는다.
+
+- vendored runtime이 `file://`에서 동작하지 않음
+- Mantine global CSS가 기존 Plotly/dashboard geometry를 변경함
+- React bootstrap이 EFSM 초기화 순서와 충돌함
+- 외부 CDN/runtime 네트워크 요청이 필요함
+- bundle이 라이선스 고지를 보존하지 못함
