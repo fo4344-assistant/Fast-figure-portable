@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   apply:
+    if: startsWith(github.event.head_commit.message, 'Queue Fast Figure HTML patch')
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
