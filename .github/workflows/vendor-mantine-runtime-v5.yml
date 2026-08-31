@@ -1,0 +1,42 @@
+name: Vendor Mantine runtime once v5
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/vendor-mantine-runtime-v5.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vendor-mantine-runtime-once-v5
+  cancel-in-progress: false
+
+jobs:
+  vendor:
+    if: github.actor != 'github-actions[bot]' && github.event.head_commit.message == 'Normalize vendored runtime whitespace'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Reuse v3 builder with runtime normalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/vendor-v5.sh
+          import json
+          from pathlib import Path
+          data = json.loads(Path('.github/workflows/vendor-mantine-runtime-v3.yml').read_text(encoding='utf-8'))
+          script = data['jobs']['vendor']['steps'][1]['run']
+          old = 'runtime=Path(".vendor-runtime.js").read_text(encoding="utf-8")'
+          new = 'runtime="\\n".join(line.rstrip() for line in Path(".vendor-runtime.js").read_text(encoding="utf-8").splitlines())+"\\n"'
+          if old not in script:
+              raise SystemExit('runtime assignment marker changed')
+          script = script.replace(old, new, 1)
+          script = script.replace('20260831-013', '20260831-015')
+          print(script, end='')
+          PY
+          bash /tmp/vendor-v5.sh
