@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.34-alpha</code></p>
+          <p><code>1.1.35-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.34-alpha";
+      const APP_BUILD = "1.1.35-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -14319,13 +14319,136 @@ THE SOFTWARE.</pre
           ),
         );
       }
+      function FastFigureSidebarStaging() {
+        useFastFigureFsmSnapshot();
+        let runtime = window.FastFigureUiRuntime,
+          snapshot = fastFigureUiBridge.read();
+        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+        let { React, MantineCore } = runtime,
+          { Box, Divider, Group, Stack, Text, Title } = MantineCore,
+          slot = snapshot.selectedSlot,
+          workspace = snapshot.fsm.workspace,
+          assetSelection = snapshot.fsm.assetSelection;
+        return React.createElement(
+          Box,
+          {
+            component: "aside",
+            p: "sm",
+            w: 280,
+            "data-fast-figure-ui": "sidebar",
+          },
+          React.createElement(
+            Stack,
+            { gap: "xs" },
+            React.createElement(Title, { order: 2, size: "h5" }, "프로젝트"),
+            React.createElement(Text, { size: "sm" }, snapshot.projectName || "새 프로젝트"),
+            React.createElement(Divider),
+            React.createElement(Title, { order: 2, size: "h5" }, "선택"),
+            React.createElement(
+              Group,
+              { gap: "xs", justify: "space-between", wrap: "nowrap" },
+              React.createElement(Text, { size: "sm", c: "dimmed" }, "Workspace"),
+              React.createElement(Text, { size: "sm" }, workspace),
+            ),
+            React.createElement(
+              Group,
+              { gap: "xs", justify: "space-between", wrap: "nowrap" },
+              React.createElement(Text, { size: "sm", c: "dimmed" }, "Slot"),
+              React.createElement(Text, { size: "sm" }, slot ? slot.id : "없음"),
+            ),
+            React.createElement(
+              Group,
+              { gap: "xs", justify: "space-between", wrap: "nowrap" },
+              React.createElement(Text, { size: "sm", c: "dimmed" }, "Content"),
+              React.createElement(Text, { size: "sm" }, slot?.contentType || "없음"),
+            ),
+            React.createElement(
+              Group,
+              { gap: "xs", justify: "space-between", wrap: "nowrap" },
+              React.createElement(Text, { size: "sm", c: "dimmed" }, "Asset"),
+              React.createElement(Text, { size: "sm" }, assetSelection || "none"),
+            ),
+          ),
+        );
+      }
+      function FastFigureOverlayModalStaging({ opened, title, children }) {
+        let runtime = window.FastFigureUiRuntime;
+        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+        let { React, MantineCore } = runtime,
+          { Modal } = MantineCore;
+        return React.createElement(
+          Modal,
+          {
+            opened,
+            onClose: () => fastFigureUiBridge.send("CLOSE_OVERLAY", { source: "mantine-modal" }),
+            title,
+            centered: true,
+          },
+          children,
+        );
+      }
+      function FastFigureOverlayHostStaging() {
+        useFastFigureFsmSnapshot();
+        let runtime = window.FastFigureUiRuntime,
+          snapshot = fastFigureUiBridge.read();
+        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+        let { React, MantineCore } = runtime,
+          { Code, Stack, Text } = MantineCore,
+          summary = (value) =>
+            React.createElement(
+              Stack,
+              { gap: "xs" },
+              React.createElement(
+                Text,
+                { size: "sm", c: "dimmed" },
+                "Commit B staging: 기존 domain 값을 읽기 전용으로 표시합니다.",
+              ),
+              React.createElement(Code, { block: true }, JSON.stringify(value, null, 2)),
+            );
+        return React.createElement(
+          React.Fragment,
+          null,
+          React.createElement(
+            FastFigureOverlayModalStaging,
+            { opened: snapshot.fsm.overlay === "layout", title: "레이아웃" },
+            summary(snapshot.layout),
+          ),
+          React.createElement(
+            FastFigureOverlayModalStaging,
+            { opened: snapshot.fsm.overlay === "label", title: "레이블" },
+            summary(snapshot.labels),
+          ),
+          React.createElement(
+            FastFigureOverlayModalStaging,
+            { opened: snapshot.fsm.overlay === "caption", title: "캡션" },
+            summary(snapshot.captions),
+          ),
+          React.createElement(
+            FastFigureOverlayModalStaging,
+            { opened: snapshot.fsm.overlay === "print", title: "프린트" },
+            summary({
+              appearance: snapshot.appearance,
+              selectedSlot: snapshot.selectedSlot,
+            }),
+          ),
+          React.createElement(
+            FastFigureOverlayModalStaging,
+            { opened: snapshot.fsm.overlay === "readme", title: "README" },
+            React.createElement(
+              Text,
+              { size: "sm", c: "dimmed" },
+              "README 본문 renderer는 shell cutover 전까지 기존 문서를 재사용합니다.",
+            ),
+          ),
+        );
+      }
       function FastFigureShellStaging() {
         useFastFigureFsmSnapshot();
         let runtime = window.FastFigureUiRuntime,
           snapshot = fastFigureUiBridge.read();
         if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
         let { React, MantineCore } = runtime,
-          { Box, Stack, Text, Title } = MantineCore;
+          { Box, Group, Stack, Text, Title } = MantineCore;
         return React.createElement(
           Stack,
           { gap: 0, "data-fast-figure-ui": "shell-staging" },
@@ -14336,18 +14459,27 @@ THE SOFTWARE.</pre
             React.createElement(FastFigureToolbarStaging),
           ),
           React.createElement(
-            Box,
-            { p: "sm" },
+            Group,
+            { align: "stretch", gap: 0, wrap: "nowrap" },
+            React.createElement(FastFigureSidebarStaging),
             React.createElement(
-              Text,
-              { size: "xs", c: "dimmed" },
-              `UI staging · ${snapshot.projectName || "새 프로젝트"}`,
+              Box,
+              { component: "main", p: "sm", style: { flex: "1 1 auto" } },
+              React.createElement(
+                Text,
+                { size: "xs", c: "dimmed" },
+                `UI staging · ${snapshot.projectName || "새 프로젝트"}`,
+              ),
             ),
           ),
+          React.createElement(FastFigureOverlayHostStaging),
         );
       }
       window.FastFigureReactShell = Object.freeze({
         FastFigureToolbarStaging,
+        FastFigureSidebarStaging,
+        FastFigureOverlayModalStaging,
+        FastFigureOverlayHostStaging,
         FastFigureShellStaging,
       });
       const REQUIRED_CONTROL_IDS = [
