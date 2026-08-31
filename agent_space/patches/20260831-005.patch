@@ -1,0 +1,92 @@
+diff --git a/.github/workflows/apply-fast-figure-patch.yml b/.github/workflows/apply-fast-figure-patch.yml
+new file mode 100644
+--- /dev/null
++++ b/.github/workflows/apply-fast-figure-patch.yml
+@@ -0,0 +1,87 @@
++name: Apply Fast Figure patch
++
++on:
++  push:
++    branches:
++      - main
++    paths:
++      - "agent_space/patches/*.patch"
++
++permissions:
++  contents: write
++
++concurrency:
++  group: apply-fast-figure-patch
++  cancel-in-progress: false
++
++jobs:
++  apply:
++    runs-on: ubuntu-latest
++    steps:
++      - name: Check out repository
++        uses: actions/checkout@v4
++        with:
++          fetch-depth: 2
++
++      - name: Select patch
++        id: patch
++        shell: bash
++        run: |
++          set -euo pipefail
++          mapfile -t patches < <(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- 'agent_space/patches/*.patch')
++          if [ "${#patches[@]}" -ne 1 ]; then
++            echo "Expected exactly one changed patch file, found ${#patches[@]}." >&2
++            exit 1
++          fi
++          patch="${patches[0]}"
++          base="${patch%.patch}"
++          if [ ! -f "${base}.md" ]; then
++            echo "Missing paired explanation: ${base}.md" >&2
++            exit 1
++          fi
++          mapfile -t targets < <(sed -n 's|^+++ b/||p' "$patch" | sort -u)
++          if [ "${#targets[@]}" -ne 1 ] || [ "${targets[0]}" != "Fast-figure.html" ]; then
++            echo "Patch target must be Fast-figure.html only." >&2
++            printf 'Targets: %s\n' "${targets[*]:-none}" >&2
++            exit 1
++          fi
++          echo "path=$patch" >> "$GITHUB_OUTPUT"
++          echo "name=$(basename "$base")" >> "$GITHUB_OUTPUT"
++
++      - name: Check and apply patch
++        shell: bash
++        run: |
++          set -euo pipefail
++          git apply --check "${{ steps.patch.outputs.path }}"
++          git apply "${{ steps.patch.outputs.path }}"
++          git diff --check
++
++      - name: Check JavaScript syntax
++        shell: bash
++        run: |
++          set -euo pipefail
++          python - <<'PY'
++          from pathlib import Path
++          import re
++
++          text = Path("Fast-figure.html").read_text(encoding="utf-8")
++          scripts = re.findall(r"<script(?:\s[^>]*)?>([\s\S]*?)</script>", text)
++          if not scripts:
++              raise SystemExit("No inline script found.")
++          Path("/tmp/fast-figure-main.js").write_text(scripts[-1], encoding="utf-8")
++          PY
++          node --check /tmp/fast-figure-main.js
++
++      - name: Commit applied patch
++        shell: bash
++        run: |
++          set -euo pipefail
++          if git diff --quiet -- Fast-figure.html; then
++            echo "Patch produced no Fast-figure.html change." >&2
++            exit 1
++          fi
++          git config user.name "github-actions[bot]"
++          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
++          git add Fast-figure.html
++          git commit -m "Apply agent patch ${{ steps.patch.outputs.name }}"
++          git push
