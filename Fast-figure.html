@@ -2089,7 +2089,7 @@
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.28-alpha</code></p>
+          <p><code>1.1.29-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -2670,7 +2670,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.28-alpha";
+      const APP_BUILD = "1.1.29-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -2838,6 +2838,7 @@ THE SOFTWARE.</pre
       }
       class ProjectObject {
         constructor(state = createProjectState()) {
+          normalizeSlotContents(state.slots);
           validateProjectObjectState(state);
           this._state = state;
         }
@@ -2851,6 +2852,7 @@ THE SOFTWARE.</pre
         }
         initialize(source) {
           let next = source instanceof ProjectObject ? source._state : source;
+          normalizeSlotContents(next.slots);
           validateProjectObjectState(next);
           let previous = this._state;
           this._state = next;
@@ -2926,7 +2928,7 @@ THE SOFTWARE.</pre
           return this._state.slots;
         }
         set slots(value) {
-          this._state.slots = value;
+          this._state.slots = normalizeSlotContents(value);
         }
         get csvId() {
           return this._state.nextId.csv;
@@ -3488,6 +3490,67 @@ THE SOFTWARE.</pre
         $("file").value = "";
         payload.resetCount = targets.length;
         payload.removedChartIds = [...chartIds];
+      }
+      function applySlotsSwappedAction({ machine, payload }) {
+        machine.assertWritable("slots", "SLOTS_SWAPPED");
+        machine.assertWritable("workspace", "SLOTS_SWAPPED");
+        machine.assertWritable("editor", "SLOTS_SWAPPED");
+        let source = slotAt(Number(payload.sourceSlotId)),
+          target = slotAt(Number(payload.targetSlotId));
+        if (!source || !target || source === target || source.hidden || target.hidden)
+          throw Error("교환할 슬롯이 올바르지 않습니다.");
+        let sourceContent = source.content,
+          targetContent = target.content,
+          previous = {
+            selectedSlotId,
+            editing,
+            selectedObjectIndex,
+            activeDataReady,
+            activeCsvId,
+            activeImageId,
+            activeAssetKind,
+          };
+        try {
+          source.content = targetContent;
+          target.content = sourceContent;
+          if (selectedSlotId === source.id) selectedSlotId = target.id;
+          else if (selectedSlotId === target.id) selectedSlotId = source.id;
+          editing = null;
+          selectedObjectIndex = null;
+          activeDataReady = false;
+          activeCsvId = null;
+          activeImageId = null;
+          activeAssetKind = null;
+          validateProjectObject(activeProject, { requireSlots: true });
+        } catch (error) {
+          source.content = sourceContent;
+          target.content = targetContent;
+          selectedSlotId = previous.selectedSlotId;
+          editing = previous.editing;
+          selectedObjectIndex = previous.selectedObjectIndex;
+          activeDataReady = previous.activeDataReady;
+          activeCsvId = previous.activeCsvId;
+          activeImageId = previous.activeImageId;
+          activeAssetKind = previous.activeAssetKind;
+          throw error;
+        }
+        [source, target].forEach((slot) => {
+          if (slotImage(slot)) normalizeImageSettings(slotImage(slot));
+        });
+        payload.slotId = selectedSlotId;
+        debugLog("slot:swap", {
+          sourceSlotId: source.id,
+          targetSlotId: target.id,
+          sourceChartBefore: sourceContent.chart || null,
+          targetChartBefore: targetContent.chart || null,
+          sourceChartAfter: source.chart || null,
+          targetChartAfter: target.chart || null,
+        });
+        renderDashboard();
+        status(
+          `${source.row}행 ${source.col}열과 ${target.row}행 ${target.col}열의 슬롯 내용을 교환했습니다.`,
+        );
+        auditApp("slot:swap");
       }
       function applySlotImageLinkedAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOT_IMAGE_LINKED");
@@ -4278,6 +4341,10 @@ THE SOFTWARE.</pre
             action: applySlotsResetAction,
             target: requestedWorkspaceState,
           },
+          SLOTS_SWAPPED: {
+            action: applySlotsSwappedAction,
+            target: requestedWorkspaceState,
+          },
           SLOT_IMAGE_LINKED: {
             action: applySlotImageLinkedAction,
             target: ({ state }) => state,
@@ -4326,6 +4393,7 @@ THE SOFTWARE.</pre
           SLOT_CAPTION_MODE_CHANGED: { target: ({ state }) => state },
           CAPTION_TEXT_INPUT: { target: ({ state }) => state },
           SLOT_CAPTIONS_INSERTED: { target: ({ state }) => state },
+          SLOTS_SWAPPED: { target: ({ state }) => state },
         },
         GRAPH_OBJECT_EVENTS = {
           SELECT_GRAPH_OBJECT: {
@@ -4345,6 +4413,10 @@ THE SOFTWARE.</pre
             target: "none",
           },
           SLOTS_RESET: {
+            action: applyGraphObjectSelectionAction,
+            target: "none",
+          },
+          SLOTS_SWAPPED: {
             action: applyGraphObjectSelectionAction,
             target: "none",
           },
@@ -4381,6 +4453,10 @@ THE SOFTWARE.</pre
               ? { action: applyAssetSelectionAction, target: "none" }
               : { target: state },
           SELECT_SLOT: {
+            action: applyAssetSelectionAction,
+            target: "none",
+          },
+          SLOTS_SWAPPED: {
             action: applyAssetSelectionAction,
             target: "none",
           },
@@ -5373,17 +5449,19 @@ THE SOFTWARE.</pre
         if (notify) appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
       }
       function newGridSlot(id, row, col) {
-        return {
+        return normalizeSlotContent({
           id,
           row,
           col,
           rowSpan: 1,
           colSpan: 1,
-          chart: null,
-          imageId: null,
-          contentType: "graph",
-          caption: null,
-        };
+          content: {
+            chart: null,
+            imageId: null,
+            contentType: "graph",
+            caption: null,
+          },
+        });
       }
       function rebuildGridSlots(r, c) {
         let old = activeProject.slots
@@ -5393,12 +5471,18 @@ THE SOFTWARE.</pre
             col: s.col,
             rowSpan: s.rowSpan || 1,
             colSpan: s.colSpan || 1,
-            chart: s.chart && activeProject.charts.some((chart) => chart.id === s.chart) ? s.chart : null,
-            imageId: getProjectImage(s.imageId) ? s.imageId : null,
-            contentType: s.contentType || "graph",
-            caption: typeof s.caption === "string" ? s.caption : null,
+            content: {
+              ...projectClone(s.content),
+              chart:
+                s.chart && activeProject.charts.some((chart) => chart.id === s.chart)
+                  ? s.chart
+                  : null,
+              imageId: getProjectImage(s.imageId) ? s.imageId : null,
+              contentType: s.contentType || "graph",
+              caption: typeof s.caption === "string" ? s.caption : null,
+            },
           }));
-        let occupied = old.filter((s) => s.chart || s.imageId),
+        let occupied = old.filter((s) => s.content.chart || s.content.imageId),
           preserveCoordinates = occupied.every(
             (s) =>
               s.row >= 1 &&
@@ -7319,47 +7403,10 @@ THE SOFTWARE.</pre
       }
       function swapSlotContents(source, target) {
         if (!source || !target || source === target || source.hidden || target.hidden) return false;
-        let keys = ["chart", "imageId", "contentType"],
-          sourceContent = {},
-          targetContent = {};
-        keys.forEach((key) => {
-          sourceContent[key] = source[key];
-          targetContent[key] = target[key];
-        });
-        keys.forEach((key) => {
-          source[key] = targetContent[key];
-          target[key] = sourceContent[key];
-        });
-        [source, target].forEach((slot) => {
-          if (slotImage(slot)) normalizeImageSettings(slotImage(slot));
-          let chart = slot.chart && getChart(slot.chart);
-        });
-        if (selectedSlotId === source.id) selectedSlotId = target.id;
-        else if (selectedSlotId === target.id) selectedSlotId = source.id;
-        debugLog("slot:swap", {
+        appFSM.send("SLOTS_SWAPPED", {
           sourceSlotId: source.id,
           targetSlotId: target.id,
-          sourceChartBefore: sourceContent.chart || null,
-          targetChartBefore: targetContent.chart || null,
-          sourceChartAfter: source.chart || null,
-          targetChartAfter: target.chart || null,
         });
-        renderDashboard();
-        if (selectedSlotId !== null) {
-          let selected = slotAt(selectedSlotId);
-          if (selected)
-            $("targetInfo").textContent = `선택한 슬롯: ${selected.row}행 ${selected.col}열`;
-        }
-        status(
-          `${source.row}행 ${source.col}열과 ${target.row}행 ${target.col}열의 슬롯 내용을 교환했습니다.`,
-        );
-        appFSM.send("SELECT_SLOT", {
-          slotId: selectedSlotId,
-          reason: "slot-swapped",
-          direction: "model-to-fsm",
-        });
-        appFSM.notify("slots", "SLOTS_SWAPPED", { sourceSlotId: source.id, targetSlotId: target.id });
-        auditApp("slot:swap");
         return true;
       }
       function clearSlotDragState() {
@@ -8669,6 +8716,93 @@ THE SOFTWARE.</pre
       }
       function projectClone(value) {
         return JSON.parse(JSON.stringify(value));
+      }
+      function slotLegacyState(slot) {
+        let state = Object.fromEntries(
+            Object.entries(slot).filter(([key]) => key !== "content"),
+          ),
+          content = slot.content && typeof slot.content === "object" ? slot.content : {};
+        state.chart = content.chart ?? null;
+        state.imageId = content.imageId ?? null;
+        state.contentType = content.contentType === "image" ? "image" : "graph";
+        state.caption = typeof content.caption === "string" ? content.caption : null;
+        return state;
+      }
+      function normalizeSlotContent(slot) {
+        if (!slot || typeof slot !== "object" || Array.isArray(slot)) return slot;
+        let legacy = {
+            chart: slot.chart ?? null,
+            imageId: slot.imageId ?? null,
+            contentType: slot.contentType === "image" ? "image" : "graph",
+            caption: typeof slot.caption === "string" ? slot.caption : null,
+          },
+          content =
+            slot.content && typeof slot.content === "object" && !Array.isArray(slot.content)
+              ? slot.content
+              : {};
+        if (!Object.prototype.hasOwnProperty.call(content, "chart")) content.chart = legacy.chart;
+        if (!Object.prototype.hasOwnProperty.call(content, "imageId"))
+          content.imageId = legacy.imageId;
+        if (!Object.prototype.hasOwnProperty.call(content, "contentType"))
+          content.contentType = legacy.contentType;
+        if (!Object.prototype.hasOwnProperty.call(content, "caption"))
+          content.caption = legacy.caption;
+        slot.content = content;
+        Object.defineProperties(slot, {
+          chart: {
+            configurable: true,
+            enumerable: false,
+            get() {
+              return this.content.chart;
+            },
+            set(value) {
+              this.content.chart = value;
+            },
+          },
+          imageId: {
+            configurable: true,
+            enumerable: false,
+            get() {
+              return this.content.imageId;
+            },
+            set(value) {
+              this.content.imageId = value;
+            },
+          },
+          contentType: {
+            configurable: true,
+            enumerable: false,
+            get() {
+              return this.content.contentType;
+            },
+            set(value) {
+              this.content.contentType = value;
+            },
+          },
+          caption: {
+            configurable: true,
+            enumerable: false,
+            get() {
+              return this.content.caption;
+            },
+            set(value) {
+              this.content.caption = value;
+            },
+          },
+          toJSON: {
+            configurable: true,
+            enumerable: false,
+            value() {
+              return slotLegacyState(this);
+            },
+          },
+        });
+        return slot;
+      }
+      function normalizeSlotContents(slots) {
+        if (!Array.isArray(slots)) return slots;
+        slots.forEach(normalizeSlotContent);
+        return slots;
       }
       function projectColor(value, fallback) {
         return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value) : fallback;
