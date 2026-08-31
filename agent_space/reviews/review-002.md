@@ -1,0 +1,167 @@
+# Review 002 — Mantine shell cutover 전 UI 결합 inventory
+
+## 목적과 분류
+`plan-003.md` Commit A의 정적 검토다. EFSM을 다시 설계하지 않고, 현재 UI-state/domain code와 legacy DOM renderer의 결합을 다음 세 부류로 확정한다.
+
+- **A 유지**: Plotly, slot/image surface, dashboard geometry, layout map, label preview 등 domain renderer/effect.
+- **B 이전**: toolbar/sidebar/form/modal/menu/status처럼 일반 UI를 직접 읽거나 쓰는 adapter. React selector/binding + Mantine component로 옮긴다.
+- **C 제거**: legacy popup lifecycle, `.hidden`/active/ARIA 수동 동기화, outside-click/Escape, custom menu positioning 등 Mantine가 대체하는 UI infrastructure.
+
+## 검토 소스와 한계
+현재 GitHub connector는 약 6.2 MB인 `Fast-figure.html` 본문을 반환하지 않아 legacy UI inventory는 `/mnt/data/Fast-figure.html` 1.1.28-alpha 기준본을 정적 분석했다. 이후 main의 알려진 변경은 slot-content/`SLOTS_SWAPPED` EFSM 정리와 React/Mantine runtime/theme 도입이며 toolbar/sidebar/popup/form의 legacy UI는 아직 Mantine로 이관되지 않았다. 따라서 이 기준본은 **UI 결합 위치 분류에만** 사용한다. 다음 실제 HTML patch는 반드시 현재 main context에서 생성한다. 기준본의 구형 `swapSlotContents()`는 이 review의 근거에서 제외한다.
+
+## EFSM 판정
+`ApplicationStateMachine`은 `lifecycle`, `workspace`, `overlay`, `assetSelection`, `graphObject`를 직교 region/상태로 이미 분리한다. 따라서 새 UI FSM을 만들거나 UI region을 React local state로 복제하지 않는다. 문제는 일부 entry/update/exit가 DOM renderer 역할까지 겸한다는 점이다.
+
+목표 경계:
+```text
+EFSM + project/domain state
+  -> DOM-free selector / existing command
+  -> React subscription
+  -> Mantine shell
+
+별도 유지: domain renderer effect
+```
+
+## FSM 자체의 legacy renderer 결합
+### `publish()`
+현재 lifecycle/workspace/overlay/assetSelection/graphObject를 `document.body.dataset`에 쓴다. React 구독 수단으로 사용하지 않는다. 실제 기능/CSS 의존성이 없으면 C로 삭제하고, 진단 가치가 있으면 debug adapter로 B 이전한다. listener publish와 transition debug log는 유지한다.
+
+### `auditApp()`
+native `readmeDialog.open`, panel hidden/open, toggle active/ARIA 등 DOM과 FSM의 동일성을 검사하는 부분은 Mantine cutover 후 제거/대체한다. EFSM 내부 불변식, asset kind/path, project validation은 유지한다. Controlled Mantine props가 FSM snapshot에서 계산되는지는 통합 테스트에서 검증한다.
+
+## Workspace region
+`syncProjectWorkspaceState`, `syncGraphWorkspaceState`, `syncImageWorkspaceState`는 상태 계산과 UI 표시를 섞는다.
+
+- **B**: `targetInfo`, graph/image box visibility, filename/status, sidebar/form 값, asset tree 표시, caption/CSV/image control sync.
+- **A**: 실제 Plotly/image/dashboard surface 갱신.
+
+다음 단계에서는 selected slot/workspace/domain object에서 UI snapshot을 계산하는 selector와 renderer effect를 분리한다. `exitGraphWorkspaceState`/`exitImageWorkspaceState`의 panel hidden 처리는 C. graph-object selection 의미가 있는 상태 reset은 기존 `graphObject` semantics를 확인해 유지한다.
+
+## Overlay region
+### `setOverlayDomState()` — C 핵심
+현재 panel `.hidden`, toolbar `.active`/`data-active`/`aria-expanded`, main open class, native README `showModal()/close()/focus()`를 직접 처리한다. Mantine cutover 후 `overlay` state가 Modal `opened`와 toolbar variant를 직접 결정하므로 renderer lifecycle은 제거한다. `clearAllSlotSelections()`가 실제 selection semantics를 가진다면 DOM lifecycle과 분리해 보존한다.
+
+### `enterOverlayState()` — A/B/C 분리
+- **A**: `renderLayout()`, layout preview/map geometry.
+- **B**: label/caption form sync, print width/height 초기값.
+- **C**: `syncPopupBounds()` 및 floating-panel geometry/lifecycle.
+
+### `exitOverlayState()` / README dialog handlers — C
+panel hidden, toggle/ARIA reset, native dialog close/cancel/backdrop-click/close handlers는 controlled Mantine `Modal`의 `onClose -> appFSM.send("CLOSE_OVERLAY")`로 대체한다.
+
+## Label / Caption
+### Label
+`syncLabelControlsFromObject`, `applyLabelSettings`, `applyLabelPosition`의 native control read/write는 B. mutation helper는 DOM을 읽지 않고 명시적 value payload를 받도록 변경한다. Source of truth는 기존 project label object다.
+
+`labelPreviewGeometry`, `constrainLabelPreviewPosition`, `renderLabelPreview`의 좌표/경계/drag 변환은 A로 유지한다.
+
+### Caption
+`syncCaptionControlsFromObject`, `applyCaptionSettings`, 외부 `captionText` contenteditable, name/bold/font controls은 B. Caption Modal 내부에서 설정+본문 편집을 한 작업으로 통합하고 domain caption/slot caption을 source of truth로 유지한다. Figure caption의 실제 배치/폭/scale 계산은 A. `syncDashboardCaption()`이 legacy editor DOM을 source로 읽는 부분은 제거한다.
+
+## Layout
+- **B**: `slotStyleFromControls`, layout input `.value` sync, rows/cols, reference width, gap, margin, radius, aspect, border toggle, zoom buttons, merge/split/apply UI.
+- **A**: `renderLayout`, layout-map coordinate/selection, preview surface geometry.
+- **C**: `layoutPanel` floating geometry와 `.hidden` 여부에 의존하는 popup lifecycle.
+
+DOM에서 style object를 읽지 않고 Mantine values를 명시적 payload로 기존 action에 전달한다.
+
+## Sidebar와 일반 form
+현재 `<aside>`의 project/slot/graph/image/palette/debug 일반 UI는 전부 B다. Mantine `Stack/Group`, form components, Button/ActionIcon 등으로 구성한다.
+
+`installSidebarControls()` 분류:
+- collapse: pure presentation이면 React local state.
+- width/resizer: 현재 persistence semantics를 확인한 뒤 React shell로 이전.
+- native class/button sync: C.
+- global error/unhandledrejection logging: UI가 아닌 diagnostics이므로 유지.
+
+정적 분석에서 ApplicationStateMachine 이후 `$(...).value` 직접 참조가 100건 이상 확인됐다. 일반 form value read/write는 B로 제거한다. File input browser API는 React ref 경계로 허용하고, render surface geometry 측정은 A로 유지한다.
+
+## Asset tree / menu
+유지할 domain 의미는 hierarchy/path/kind, action availability, `assetSelection`/`assetPath`다.
+
+`renderProjectDataTree()`는 hierarchy 계산과 React renderer를 분리한다. Branch expanded처럼 presentation state만 React local state로 둘 수 있다. Custom `renderAssetTreeActionMenu`, open/close/focus/keyboard/ARIA/outside-click lifecycle은 Mantine `Menu`로 대체해 C. 메뉴 action callback은 기존 domain/FSM command를 호출한다.
+
+## Graph form / graph objects
+X/Y column, axis side, chart type, line/marker/bar, title/legend/font, graph object list/action controls은 B. `configFromForm()`과 `chartLayoutSettingsFromForm()`이 DOM `.value`/dataset을 읽는 구조를 values/payload 기반으로 바꾼다. Chart/editor model과 `graphObject` region은 유지한다. Graph object 목록 UI는 B, Plotly trace/object mutation은 기존 domain/editor action을 유지한다.
+
+## Print/export
+Print format/DPI/width/height/status/action은 B. Export 함수는 native input 대신 옵션 payload를 받는다.
+
+A로 유지할 것: export target geometry, Plotly/image/caption snapshot, DPI/physical-size 계산.
+
+제거할 것: legacy popup/toggle DOM을 export 전에 숨기고 복원하는 방식과 print input DOM read. Mantine Modal portal과 export render surface의 분리를 이용해 UI hide/restore 코드를 줄인다.
+
+## Global handler / CSS
+C 후보:
+- overlay outside-click
+- popup Escape close
+- toggle/panel composedPath 판정
+- custom asset menu lifecycle
+- popup bounds/stacking
+- generic native button/input/select/menu/dialog geometry CSS
+
+유지 후보:
+- file/slot drag-drop
+- figure interaction
+- domain render surface resize/reflow
+- diagnostics
+- Fast Figure 기능 command shortcut
+- dashboard/slot/Plotly/image/caption/layout-map/label-preview geometry CSS
+
+이벤트가 global이라는 이유만으로 삭제하지 않고 **UI primitive lifecycle인지 domain interaction인지**로 판정한다.
+
+## Commit B의 binding 계약
+1. 하나의 adapter/hook이 `appFSM.subscribe()`를 `useSyncExternalStore`와 연결한다.
+2. React는 overlay/workspace/selection/domain object를 source of truth로 복제하지 않는다.
+3. Selector는 DOM을 읽지 않고 FSM snapshot + project/domain object만 입력으로 받는다.
+4. Mantine handler는 기존 `appFSM.send(...)`, 기존 domain command, 또는 DOM 의존성을 제거한 기존 helper를 호출한다.
+5. 동일 mutation을 React에서 새로 구현하지 않는다.
+
+필요 selector 범위: selected slot display, workspace, overlay, selected asset/action availability, graph/image/label/caption/layout current values.
+
+## Commit C cutover에서 함께 제거할 활성 legacy 경로
+1. legacy toolbar markup/handlers
+2. legacy sidebar form markup/handlers
+3. layout/label/caption/print floating panels
+4. native README dialog lifecycle
+5. custom asset action menu lifecycle
+6. 일반 UI 대상 `REQUIRED_CONTROL_IDS`
+7. 일반 control 대상 DOM sync 함수
+8. `setOverlayDomState`/`exitOverlayState` renderer work
+9. popup outside-click/Escape
+10. Mantine가 대체한 generic UI CSS
+
+단 Plotly/dashboard/image/layout-map/label-preview mount element/ref는 React shell 안의 **domain renderer mount contract**로 명시적으로 남긴다. 모든 DOM ID를 없애는 것이 목표가 아니다.
+
+## 보존해야 하는 semantics
+- selected slot / graph object / asset은 기존 EFSM/domain state에서 파생.
+- tree branch/accordion open 같은 presentation만 React local state 허용.
+- 각 form의 input 즉시 적용, change/blur, Enter, Apply-button commit timing을 기존과 동일하게 유지.
+- fixed DOM ID 사용 여부가 아니라 그 DOM이 domain render mount인지 일반 UI source-of-truth인지로 경계를 판단.
+
+## 검증
+Commit B:
+- Mantine shell 준비 코드는 아직 활성 UI가 아님.
+- legacy UI behavior 변화 없음.
+- selector DOM read 없음.
+- 기존 mutation 경로 재사용.
+- React source-of-truth 복제 없음.
+
+Commit C:
+- toolbar/sidebar 전체 Mantine.
+- layout/label/caption/print/README 모두 Mantine Modal.
+- asset menu Mantine Menu.
+- 일반 form Mantine.
+- legacy general UI 동시 활성화 없음.
+- 기존 overlay/asset/graphObject/workspace semantics 유지.
+- Plotly/image/layout/label domain renderer 정상.
+
+Commit D:
+- native dialog/popup lifecycle 제거.
+- 일반 UI `.value` 직접 read/write 제거.
+- legacy toolbar/sidebar/popup ID가 기능 source-of-truth로 남지 않음.
+- generic legacy button/input/menu/modal CSS 제거.
+
+## 결론
+핵심 문제는 EFSM 분리가 아니라 **이미 분리된 상태기계의 일부 renderer callback이 legacy DOM control까지 직접 소유하는 것**이다. 다음 단계에서는 EFSM/event/domain mutation은 유지하고, UI adapter를 DOM-free selector + explicit payload로 바꾸며, 일반 UI는 한 Mantine shell에서 렌더하고, 그래프/이미지/좌표 preview만 domain renderer로 유지한다.
