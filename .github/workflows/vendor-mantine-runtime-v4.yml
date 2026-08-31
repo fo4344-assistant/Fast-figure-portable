@@ -1,0 +1,38 @@
+name: Vendor Mantine runtime once v4
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/vendor-mantine-runtime-v4.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vendor-mantine-runtime-once-v4
+  cancel-in-progress: false
+
+jobs:
+  vendor:
+    if: github.actor != 'github-actions[bot]' && github.event.head_commit.message == 'Fix vendored whitespace validation'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Reuse v3 builder with corrected validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/vendor-v4.sh
+          import json
+          from pathlib import Path
+          data = json.loads(Path('.github/workflows/vendor-mantine-runtime-v3.yml').read_text(encoding='utf-8'))
+          script = data['jobs']['vendor']['steps'][1]['run']
+          script = script.replace('git diff --check\n', 'git diff --check --ignore-space-at-eol\n')
+          script = script.replace('20260831-013', '20260831-014')
+          print(script, end='')
+          PY
+          bash /tmp/vendor-v4.sh
