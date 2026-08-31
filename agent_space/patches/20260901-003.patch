@@ -1,0 +1,55 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11569,7 +11569,7 @@ <h1>Fast figure</h1>
+             connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.32-alpha</code></p>
++          <p><code>1.1.33-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+@@ -12198,7 +12198,7 @@ <h1>Fast figure</h1>
+     </div>
+     <script>
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.32-alpha";
++      const APP_BUILD = "1.1.33-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+@@ -14215,14 +14215,27 @@ <h1>Fast figure</h1>
+           appearance: projectClone(projectObjects.read("appearance")),
+         });
+       }
++      const fastFigureUiListeners = new Set();
++      let fastFigureUiStoreSnapshot = Object.freeze({
++        version: 0,
++        state: appFSM.state,
++        event: "init",
++      });
++      appFSM.subscribe((state, event) => {
++        fastFigureUiStoreSnapshot = Object.freeze({
++          version: fastFigureUiStoreSnapshot.version + 1,
++          state,
++          event,
++        });
++        fastFigureUiListeners.forEach((listener) => listener());
++      });
+       const fastFigureUiBridge = Object.freeze({
+         subscribe(listener) {
+-          return appFSM.subscribe(() => listener());
++          fastFigureUiListeners.add(listener);
++          return () => fastFigureUiListeners.delete(listener);
+         },
+         getSnapshot() {
+-          return appFSM.state;
++          return fastFigureUiStoreSnapshot;
+         },
+         getServerSnapshot() {
+-          return appFSM.state;
++          return fastFigureUiStoreSnapshot;
+         },
+         read() {
+           return buildFastFigureUiSnapshot();
