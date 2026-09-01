@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.39-alpha</code></p>
+          <p><code>1.1.40-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.39-alpha";
+      const APP_BUILD = "1.1.40-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -14501,6 +14501,117 @@ THE SOFTWARE.</pre
           ),
         );
       }
+      function FastFigureLabelModalStaging({ opened }) {
+        useFastFigureFsmSnapshot();
+        let runtime = window.FastFigureUiRuntime,
+          snapshot = fastFigureUiBridge.read();
+        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+        let { React, MantineCore } = runtime,
+          { Button, Group, NumberInput, Select, SimpleGrid, Stack, Switch } = MantineCore,
+          buildDraft = () => ({
+            enabled: !!snapshot.labels.enabled,
+            ...snapshot.labels.settings,
+          }),
+          [draft, setDraft] = React.useState(buildDraft);
+        React.useEffect(() => {
+          if (opened) setDraft(buildDraft());
+        }, [opened]);
+        let setValue = (key, value) => setDraft((current) => ({ ...current, [key]: value })),
+          applyDraft = () => {
+            fastFigureUiBridge.setAnnotationEnabled("label", draft.enabled);
+            fastFigureUiBridge.applyLabelSettings({
+              format: draft.format,
+              parentheses: draft.parentheses,
+              order: draft.order,
+              fontFamily: draft.fontFamily,
+              fontSize: draft.fontSize,
+            });
+            fastFigureUiBridge.applyLabelPosition({ x: draft.x, y: draft.y });
+          },
+          resetPosition = () => {
+            let position = fastFigureUiBridge.resetLabelPosition();
+            if (position) setDraft((current) => ({ ...current, ...position }));
+          };
+        return React.createElement(
+          FastFigureOverlayModalStaging,
+          { opened, title: "레이블" },
+          React.createElement(
+            Stack,
+            { gap: "sm" },
+            React.createElement(Switch, {
+              label: "레이블 표시",
+              checked: !!draft.enabled,
+              onChange: (event) => setValue("enabled", event.currentTarget.checked),
+            }),
+            React.createElement(Select, {
+              label: "레이블 형식",
+              value: draft.format,
+              data: [
+                { value: "lower-alpha", label: "a, b, c" },
+                { value: "upper-alpha", label: "A, B, C" },
+                { value: "decimal", label: "1, 2, 3" },
+                { value: "lower-roman", label: "i, ii, iii" },
+                { value: "upper-roman", label: "I, II, III" },
+              ],
+              onChange: (value) => value != null && setValue("format", value),
+            }),
+            React.createElement(Switch, {
+              label: "괄호 사용",
+              checked: !!draft.parentheses,
+              onChange: (event) => setValue("parentheses", event.currentTarget.checked),
+            }),
+            React.createElement(Select, {
+              label: "순서",
+              value: draft.order,
+              data: [
+                { value: "row-major", label: "행 방향 우선" },
+                { value: "column-major", label: "열 방향 우선" },
+              ],
+              onChange: (value) => value != null && setValue("order", value),
+            }),
+            React.createElement(Select, {
+              label: "글꼴",
+              value: draft.fontFamily,
+              data: [
+                { value: "system-ui, sans-serif", label: "기본" },
+                { value: "Arial, sans-serif", label: "Arial" },
+                { value: "Times New Roman, serif", label: "Times New Roman" },
+                { value: "Georgia, serif", label: "Georgia" },
+                { value: "Courier New, monospace", label: "Courier New" },
+              ],
+              onChange: (value) => value != null && setValue("fontFamily", value),
+            }),
+            React.createElement(
+              SimpleGrid,
+              { cols: 3, spacing: "sm" },
+              React.createElement(NumberInput, {
+                label: "글자 크기(px)",
+                min: 6,
+                value: draft.fontSize,
+                onChange: (value) => setValue("fontSize", value),
+              }),
+              React.createElement(NumberInput, {
+                label: "X 위치(px)",
+                decimalScale: 2,
+                value: draft.x,
+                onChange: (value) => setValue("x", value),
+              }),
+              React.createElement(NumberInput, {
+                label: "Y 위치(px)",
+                decimalScale: 2,
+                value: draft.y,
+                onChange: (value) => setValue("y", value),
+              }),
+            ),
+            React.createElement(
+              Group,
+              { justify: "space-between" },
+              React.createElement(Button, { variant: "default", onClick: resetPosition }, "위치 초기화"),
+              React.createElement(Button, { onClick: applyDraft }, "레이블 적용"),
+            ),
+          ),
+        );
+      }
       function FastFigureOverlayHostStaging() {
         useFastFigureFsmSnapshot();
         let runtime = window.FastFigureUiRuntime,
@@ -14527,9 +14638,8 @@ THE SOFTWARE.</pre
             { opened: snapshot.fsm.overlay === "layout" },
           ),
           React.createElement(
-            FastFigureOverlayModalStaging,
-            { opened: snapshot.fsm.overlay === "label", title: "레이블" },
-            summary(snapshot.labels),
+            FastFigureLabelModalStaging,
+            { opened: snapshot.fsm.overlay === "label" },
           ),
           React.createElement(
             FastFigureOverlayModalStaging,
@@ -14593,6 +14703,7 @@ THE SOFTWARE.</pre
         FastFigureSidebarStaging,
         FastFigureOverlayModalStaging,
         FastFigureLayoutModalStaging,
+        FastFigureLabelModalStaging,
         FastFigureOverlayHostStaging,
         FastFigureShellStaging,
       });
