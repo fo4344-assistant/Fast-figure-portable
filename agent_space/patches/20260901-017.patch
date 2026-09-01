@@ -1,17 +1,17 @@
 diff --git a/Fast-figure.html b/Fast-figure.html
 --- a/Fast-figure.html
 +++ b/Fast-figure.html
-@@ -11571,3 +11571,3 @@
+@@ -15638,3 +15638,3 @@
            <p><strong>Application version</strong></p>
 -          <p><code>1.1.46-alpha</code></p>
 +          <p><code>1.1.47-alpha</code></p>
            <p><strong>Developer</strong></p>
-@@ -12200,3 +12200,3 @@
+@@ -16267,3 +16267,3 @@
        const PACKAGE_FORMAT_VERSION = 3;
 -      const APP_BUILD = "1.1.46-alpha";
 +      const APP_BUILD = "1.1.47-alpha";
        const ICONOIR_GLYPHS = Object.freeze({
-@@ -14276,5 +14276,12 @@
+@@ -18346,5 +18346,12 @@
          exportTarget(values, statusTarget) {
            return exportDashboardTargetFromValues(values, statusTarget);
          },
@@ -24,7 +24,7 @@ diff --git a/Fast-figure.html b/Fast-figure.html
 +        },
        });
        function useFastFigureFsmSnapshot() {
-@@ -14848,2 +14855,17 @@
+@@ -18911,2 +18918,17 @@
        }
 +      function FastFigureReadmeContentStaging() {
 +        let runtime = window.FastFigureUiRuntime;
@@ -42,7 +42,7 @@ diff --git a/Fast-figure.html b/Fast-figure.html
 +        );
 +      }
        function FastFigureOverlayHostStaging() {
-@@ -14943,5 +14965,3 @@
+@@ -18952,5 +18974,3 @@
              React.createElement(
 -              Text,
 -              { size: "sm", c: "dimmed" },
@@ -50,7 +50,7 @@ diff --git a/Fast-figure.html b/Fast-figure.html
 -            ),
 +              FastFigureReadmeContentStaging,
 +            ),
-@@ -14963,2 +14983,3 @@
+@@ -19000,2 +19020,3 @@
          FastFigurePrintModalStaging,
 +        FastFigureReadmeContentStaging,
          FastFigureOverlayHostStaging,
