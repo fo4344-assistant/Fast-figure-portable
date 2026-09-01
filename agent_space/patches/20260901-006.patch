@@ -21,7 +21,7 @@ diff --git a/Fast-figure.html b/Fast-figure.html
        });
        function useFastFigureFsmSnapshot() {
          let React = window.FastFigureUiRuntime?.React;
-@@ -14969,35 +14972,42 @@ <h1>Fast figure</h1>
+@@ -14969,38 +14972,49 @@ <h1>Fast figure</h1>
 -      function slotStyleFromControls() {
 +      function slotStyleFromValues(values = {}) {
          return {
@@ -78,7 +78,7 @@ diff --git a/Fast-figure.html b/Fast-figure.html
        function dashboardReferenceWidth() {
          return activeProject.layout.slotStyle.referenceWidth;
        }
-@@ -22280,11 +22290,24 @@ <h1>Fast figure</h1>
+@@ -22280,9 +22290,21 @@ <h1>Fast figure</h1>
 -      $("applyGrid").onclick = () => {
 -        let r = +$("gridRows").value,
 -          c = +$("gridCols").value;
