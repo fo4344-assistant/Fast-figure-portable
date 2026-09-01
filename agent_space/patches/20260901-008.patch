@@ -1,0 +1,97 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11569,7 +11569,7 @@ <h1>Fast figure</h1>
+             connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.37-alpha</code></p>
++          <p><code>1.1.38-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+@@ -12198,5 +12198,5 @@ <h1>Fast figure</h1>
+     <script>
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.37-alpha";
++      const APP_BUILD = "1.1.38-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+@@ -14252,6 +14252,12 @@
+         applyLayoutSettings(values) {
+           return applyLayoutSettingsFromValues(values);
+         },
++        applyLabelSettings(values) {
++          return applyLabelSettingsFromValues(values);
++        },
++        applyLabelPosition(values) {
++          return applyLabelPositionFromValues(values);
++        },
+       });
+       function useFastFigureFsmSnapshot() {
+         let React = window.FastFigureUiRuntime?.React;
+@@ -21173,25 +21179,52 @@
+-      function applyLabelSettings() {
+-        activeProject.labelSettings.format = $("labelFormat").value;
+-        activeProject.labelSettings.parentheses = $("labelParentheses").dataset.active === "true";
+-        activeProject.labelSettings.order = $("labelOrder").value;
+-        activeProject.labelSettings.fontFamily = $("labelFontFamily").value;
+-        let fontSize = Number($("labelFontSize").value);
++      function applyLabelSettingsFromValues(values = {}) {
++        activeProject.labelSettings.format = values.format ?? activeProject.labelSettings.format;
++        activeProject.labelSettings.parentheses =
++          values.parentheses == null
++            ? activeProject.labelSettings.parentheses
++            : !!values.parentheses;
++        activeProject.labelSettings.order = values.order ?? activeProject.labelSettings.order;
++        activeProject.labelSettings.fontFamily =
++          values.fontFamily ?? activeProject.labelSettings.fontFamily;
++        let fontSize = Number(values.fontSize);
+         activeProject.labelSettings.fontSize = Number.isFinite(fontSize)
+           ? Math.max(6, fontSize)
+           : 14;
+-        $("labelFontSize").value = activeProject.labelSettings.fontSize;
+         renderLabelPreview();
+         renderDashboard();
+         schedulePlotResize();
+         debugLog("annotation:label-settings", { ...activeProject.labelSettings });
+         appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
++        return { ...activeProject.labelSettings };
+       }
+-      function applyLabelPosition() {
+-        activeProject.labelSettings.x = finiteLabelPosition(Number($("labelPositionX").value));
+-        activeProject.labelSettings.y = finiteLabelPosition(Number($("labelPositionY").value));
++      function applyLabelSettings() {
++        let settings = applyLabelSettingsFromValues({
++          format: $("labelFormat").value,
++          parentheses: $("labelParentheses").dataset.active === "true",
++          order: $("labelOrder").value,
++          fontFamily: $("labelFontFamily").value,
++          fontSize: $("labelFontSize").value,
++        });
++        $("labelFontSize").value = settings.fontSize;
++      }
++      function applyLabelPositionFromValues(values = {}) {
++        activeProject.labelSettings.x = finiteLabelPosition(Number(values.x));
++        activeProject.labelSettings.y = finiteLabelPosition(Number(values.y));
+         renderLabelPreview();
+         renderDashboard();
+         schedulePlotResize();
+-        debugLog("annotation:label-position", { x: activeProject.labelSettings.x, y: activeProject.labelSettings.y });
++        debugLog("annotation:label-position", {
++          x: activeProject.labelSettings.x,
++          y: activeProject.labelSettings.y,
++        });
+         appFSM.notify("labels", "LABEL_POSITION_CHANGED");
++        return {
++          x: activeProject.labelSettings.x,
++          y: activeProject.labelSettings.y,
++        };
+       }
++      function applyLabelPosition() {
++        applyLabelPositionFromValues({
++          x: $("labelPositionX").value,
++          y: $("labelPositionY").value,
++        });
++      }
+       function installLabelSettings() {
