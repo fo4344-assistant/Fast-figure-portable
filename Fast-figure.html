@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.40-alpha</code></p>
+          <p><code>1.1.41-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.40-alpha";
+      const APP_BUILD = "1.1.41-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -14263,6 +14263,9 @@ THE SOFTWARE.</pre
         },
         resetLabelPosition() {
           return resetLabelPositionFromValues();
+        },
+        applyCaptionSettings(values, notify = true) {
+          return applyCaptionSettingsFromValues(values, notify);
         },
       });
       function useFastFigureFsmSnapshot() {
@@ -21375,25 +21378,22 @@ THE SOFTWARE.</pre
         label.addEventListener("pointercancel", stop);
         renderLabelPreview();
       }
-      function applyCaptionSettings(fromControls = true, notify = true) {
-        if (fromControls) {
-          activeProject.captionName = $("captionName").value;
-          activeProject.captionNameBold = $("captionNameBold").dataset.active === "true";
-          activeProject.captionSettings.fontFamily = $("captionFontFamily").value;
+      function applyCaptionSettingsFromValues(values = null, notify = true) {
+        if (values) {
+          activeProject.captionName = String(values.name ?? activeProject.captionName);
+          activeProject.captionNameBold =
+            values.nameBold == null ? activeProject.captionNameBold : !!values.nameBold;
+          activeProject.captionSettings.fontFamily =
+            values.fontFamily ?? activeProject.captionSettings.fontFamily;
           activeProject.captionSettings.fontSize = Math.max(
             6,
-            Math.min(96, Number($("captionFontSize").value) || 14),
+            Math.min(96, Number(values.fontSize) || 14),
           );
           activeProject.captionSettings.lineHeight = Math.max(
             0.8,
-            Math.min(4, Number($("captionLineHeight").value) || 1.45),
+            Math.min(4, Number(values.lineHeight) || 1.45),
           );
         }
-        $("captionName").value = activeProject.captionName;
-        syncSettingToggle("captionNameBold", activeProject.captionNameBold);
-        $("captionFontFamily").value = activeProject.captionSettings.fontFamily;
-        $("captionFontSize").value = activeProject.captionSettings.fontSize;
-        $("captionLineHeight").value = activeProject.captionSettings.lineHeight;
         syncDashboardCaption();
         debugLog("annotation:caption-settings", {
           name: activeProject.captionName,
@@ -21401,6 +21401,27 @@ THE SOFTWARE.</pre
           ...activeProject.captionSettings,
         });
         if (notify) appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
+        return projectClone(projectObjects.read("captions"));
+      }
+      function applyCaptionSettings(fromControls = true, notify = true) {
+        let caption = applyCaptionSettingsFromValues(
+          fromControls
+            ? {
+                name: $("captionName").value,
+                nameBold: $("captionNameBold").dataset.active === "true",
+                fontFamily: $("captionFontFamily").value,
+                fontSize: $("captionFontSize").value,
+                lineHeight: $("captionLineHeight").value,
+              }
+            : null,
+          notify,
+        );
+        $("captionName").value = caption.name;
+        syncSettingToggle("captionNameBold", caption.nameBold);
+        $("captionFontFamily").value = caption.settings.fontFamily;
+        $("captionFontSize").value = caption.settings.fontSize;
+        $("captionLineHeight").value = caption.settings.lineHeight;
+        return caption;
       }
       function installCaptionSettings() {
         $("captionFontFamily").addEventListener("change", applyCaptionSettings);
