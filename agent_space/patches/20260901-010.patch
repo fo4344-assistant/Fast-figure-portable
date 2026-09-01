@@ -17,8 +17,9 @@ diff --git a/Fast-figure.html b/Fast-figure.html
 +      const APP_BUILD = "1.1.40-alpha";
        const ICONOIR_GLYPHS = Object.freeze({
          "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
-@@ -14523,6 +14523,117 @@
-           children,
+@@ -14520,6 +14520,117 @@
+             ),
+           ),
          );
        }
 +      function FastFigureLabelModalStaging({ opened }) {
@@ -134,7 +135,6 @@ diff --git a/Fast-figure.html b/Fast-figure.html
 +      }
        function FastFigureOverlayHostStaging() {
          useFastFigureFsmSnapshot();
-         let runtime = window.FastFigureUiRuntime,
 @@ -14560,8 +14671,7 @@
            ),
            React.createElement(
