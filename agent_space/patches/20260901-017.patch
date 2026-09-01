@@ -32,43 +32,33 @@ diff --git a/Fast-figure.html b/Fast-figure.html
 +        },
        });
        function useFastFigureFsmSnapshot() {
-@@ -14846,2 +14846,22 @@
+@@ -14846,2 +14846,18 @@
        }
-+      function FastFigureReadmeModalStaging({ opened }) {
++      function FastFigureReadmeContentStaging() {
 +        let runtime = window.FastFigureUiRuntime;
 +        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
 +        let { React, MantineCore } = runtime,
-+          { Box, ScrollArea } = MantineCore,
-+          readmeHtml = fastFigureUiBridge.readReadmeHtml();
++          { Box, ScrollArea } = MantineCore;
 +        return React.createElement(
-+          FastFigureOverlayModalStaging,
-+          { opened, title: "README" },
-+          React.createElement(
-+            ScrollArea,
-+            { h: "70vh", type: "auto" },
-+            React.createElement(Box, {
-+              pr: "sm",
-+              style: { fontSize: 14, lineHeight: 1.5 },
-+              dangerouslySetInnerHTML: { __html: readmeHtml },
-+            }),
-+          ),
++          ScrollArea,
++          { h: "70vh", type: "auto" },
++          React.createElement(Box, {
++            pr: "sm",
++            style: { fontSize: 14, lineHeight: 1.5 },
++            dangerouslySetInnerHTML: { __html: fastFigureUiBridge.readReadmeHtml() },
++          }),
 +        );
 +      }
        function FastFigureOverlayHostStaging() {
-@@ -14942,9 +14962,3 @@
--          React.createElement(
--            FastFigureOverlayModalStaging,
--            { opened: snapshot.fsm.overlay === "readme", title: "README" },
--            React.createElement(
+@@ -14945,5 +14961,2 @@
+             React.createElement(
 -              Text,
 -              { size: "sm", c: "dimmed" },
 -              "README 본문 renderer는 shell cutover 전까지 기존 문서를 재사용합니다.",
 -            ),
--          ),
-+          React.createElement(FastFigureReadmeModalStaging, {
-+            opened: snapshot.fsm.overlay === "readme",
-+          }),
-@@ -14965,2 +14979,3 @@
++              FastFigureReadmeContentStaging,
++            ),
+@@ -14965,2 +14978,3 @@
          FastFigurePrintModalStaging,
-+        FastFigureReadmeModalStaging,
++        FastFigureReadmeContentStaging,
          FastFigureOverlayHostStaging,
