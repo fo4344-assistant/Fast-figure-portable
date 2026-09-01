@@ -1,0 +1,60 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -15638,3 +15638,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.51-alpha</code></p>
++          <p><code>1.1.52-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -16267,3 +16267,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.51-alpha";
++      const APP_BUILD = "1.1.52-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -18361,9 +18361,18 @@
+         runAssetAction(key, context) {
+           return runAssetTreeAction(key, context);
+         },
+         setProjectName(value, commit = false) {
+           let name = setProjectNameFromValue(value, commit);
+           publishFastFigureUiStore(appFSM.state, commit ? "project:name-commit" : "project:name-input");
+           return name;
+         },
++        changeSlotContentType(type) {
++          if (type !== "graph" && type !== "image") return false;
++          let hasSlot = !!getSelectedSlot();
++          setSlotContentType(type);
++          if (!hasSlot) publishFastFigureUiStore(appFSM.state, "slot:pending-content-type");
++          return true;
++        },
+       });
+@@ -18476,6 +18485,6 @@
+         if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+         let { React, MantineCore } = runtime,
+-          { Box, Button, Divider, Group, Menu, Stack, Text, TextInput, Title } = MantineCore,
++          { Box, Button, Divider, Group, Menu, SegmentedControl, Stack, Text, TextInput, Title } = MantineCore,
+           slot = snapshot.selectedSlot,
+           workspace = snapshot.fsm.workspace,
+           assetSelection = snapshot.fsm.assetSelection;
+@@ -18494,10 +18503,19 @@
+             Stack,
+             { gap: "xs" },
+             React.createElement(Title, { order: 2, size: "h5" }, "프로젝트"),
+             React.createElement(TextInput, {
+               label: "프로젝트 이름",
+               value: snapshot.projectName || "",
+               maxLength: 120,
+               onChange: (event) => fastFigureUiBridge.setProjectName(event.currentTarget.value),
+               onBlur: (event) =>
+                 fastFigureUiBridge.setProjectName(event.currentTarget.value, true),
+             }),
++            React.createElement(SegmentedControl, {
++              fullWidth: true,
++              value: slot ? slot.contentType : snapshot.pendingSlotContentType,
++              data: [
++                { label: "그래프", value: "graph" },
++                { label: "이미지", value: "image" },
++              ],
++              onChange: (value) => fastFigureUiBridge.changeSlotContentType(value),
++            }),
+             React.createElement(Divider),
