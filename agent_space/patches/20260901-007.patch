@@ -1,0 +1,145 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11569,7 +11569,7 @@ <h1>Fast figure</h1>
+             connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.36-alpha</code></p>
++          <p><code>1.1.37-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+@@ -12198,5 +12198,5 @@ <h1>Fast figure</h1>
+     <script>
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.36-alpha";
++      const APP_BUILD = "1.1.37-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+@@ -14418,6 +14418,105 @@
+           children,
+         );
+       }
++      function FastFigureLayoutModalStaging({ opened }) {
++        useFastFigureFsmSnapshot();
++        let runtime = window.FastFigureUiRuntime,
++          snapshot = fastFigureUiBridge.read();
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Button, Group, NumberInput, SimpleGrid, Stack, Switch } = MantineCore,
++          buildDraft = () => ({
++            gridRows: snapshot.layout.gridRows,
++            gridCols: snapshot.layout.gridCols,
++            slotStyle: { ...snapshot.layout.slotStyle },
++          }),
++          [draft, setDraft] = React.useState(buildDraft);
++        React.useEffect(() => {
++          if (opened) setDraft(buildDraft());
++        }, [opened]);
++        let setLayoutValue = (key, value) => setDraft((current) => ({ ...current, [key]: value })),
++          setSlotStyleValue = (key, value) =>
++            setDraft((current) => ({
++              ...current,
++              slotStyle: { ...current.slotStyle, [key]: value },
++            }));
++        return React.createElement(
++          FastFigureOverlayModalStaging,
++          { opened, title: "레이아웃" },
++          React.createElement(
++            Stack,
++            { gap: "sm" },
++            React.createElement(
++              SimpleGrid,
++              { cols: 2, spacing: "sm" },
++              React.createElement(NumberInput, {
++                label: "행",
++                min: 1,
++                max: 8,
++                value: draft.gridRows,
++                onChange: (value) => setLayoutValue("gridRows", value),
++              }),
++              React.createElement(NumberInput, {
++                label: "열",
++                min: 1,
++                max: 8,
++                value: draft.gridCols,
++                onChange: (value) => setLayoutValue("gridCols", value),
++              }),
++              React.createElement(NumberInput, {
++                label: "기준 가로(px)",
++                min: 100,
++                max: 20000,
++                value: draft.slotStyle.referenceWidth,
++                onChange: (value) => setSlotStyleValue("referenceWidth", value),
++              }),
++              React.createElement(NumberInput, {
++                label: "칸 간격(px)",
++                min: 0,
++                max: 2000,
++                value: draft.slotStyle.gap,
++                onChange: (value) => setSlotStyleValue("gap", value),
++              }),
++              React.createElement(NumberInput, {
++                label: "외곽 여백(px)",
++                min: 0,
++                max: 5000,
++                value: draft.slotStyle.outerMargin,
++                onChange: (value) => setSlotStyleValue("outerMargin", value),
++              }),
++              React.createElement(NumberInput, {
++                label: "모서리(px)",
++                min: 0,
++                max: 2000,
++                value: draft.slotStyle.radius,
++                onChange: (value) => setSlotStyleValue("radius", value),
++              }),
++              React.createElement(NumberInput, {
++                label: "종횡비",
++                min: 0.1,
++                max: 10,
++                decimalScale: 6,
++                value: draft.slotStyle.aspect,
++                onChange: (value) => setSlotStyleValue("aspect", value),
++              }),
++              React.createElement(Switch, {
++                label: "기본 경계선",
++                checked: !!draft.slotStyle.showBorders,
++                onChange: (event) => setSlotStyleValue("showBorders", event.currentTarget.checked),
++              }),
++            ),
++            React.createElement(
++              Group,
++              { justify: "flex-end" },
++              React.createElement(
++                Button,
++                { onClick: () => fastFigureUiBridge.applyLayoutSettings(draft) },
++                "레이아웃 적용",
++              ),
++            ),
++          ),
++        );
++      }
+       function FastFigureOverlayHostStaging() {
+         useFastFigureFsmSnapshot();
+         let runtime = window.FastFigureUiRuntime,
+@@ -14447,11 +14546,7 @@
+           React.Fragment,
+           null,
+           React.createElement(
+-            FastFigureOverlayModalStaging,
+-            { opened: snapshot.fsm.overlay === "layout", title: "레이아웃" },
+-            summary(snapshot.layout),
++            FastFigureLayoutModalStaging,
++            { opened: snapshot.fsm.overlay === "layout" },
+           ),
+           React.createElement(
+             FastFigureOverlayModalStaging,
+@@ -14515,6 +14610,7 @@
+         FastFigureToolbarStaging,
+         FastFigureSidebarStaging,
+         FastFigureOverlayModalStaging,
++        FastFigureLayoutModalStaging,
+         FastFigureOverlayHostStaging,
+         FastFigureShellStaging,
+       });
