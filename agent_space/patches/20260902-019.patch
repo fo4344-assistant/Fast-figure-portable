@@ -1,0 +1,61 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.66-alpha</code></p>
++          <p><code>1.1.67-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.66-alpha";
++      const APP_BUILD = "1.1.67-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14332,3 +14332,6 @@
+         readGraphObject() {
+           return selectedGraphObjectModel();
+         },
++        readGraphObjects() {
++          return selectedGraphObjectsModel();
++        },
+         applyGraphObject(values, chartId, objectIndex) {
+@@ -17966,3 +17969,35 @@
+           object: projectClone(object),
+         });
+       }
++      function selectedGraphObjectsModel(slot = getSelectedSlot()) {
++        let chart = slot?.chart ? getChart(slot.chart) : null;
++        if (!slot || slot.contentType === "image" || !chart?.editor) return null;
++        let objects = Array.isArray(chart.editor.objects) ? chart.editor.objects : [],
++          selectedIndex = Number.isInteger(selectedObjectIndex) ? selectedObjectIndex : null,
++          items = objects.map((object, index) => {
++            let csv = object?.csvId != null ? getProjectCsv(object.csvId) : null,
++              fallback = DEFAULT_COLORS[index % DEFAULT_COLORS.length],
++              color = typeof object?.color === "string" ? object.color : fallback,
++              name = object?.legendName || `${object?.x ?? ""} · ${object?.y ?? ""}`,
++              xSide = object?.xAxisSide === "top" ? "위" : "아래",
++              ySide = object?.yAxisSide === "right" ? "오른쪽" : "왼쪽";
++            return Object.freeze({
++              index,
++              selected: selectedIndex === index,
++              csvId: csv?.id ?? object?.csvId ?? null,
++              csvName: csv?.name ?? "",
++              x: object?.x ?? "",
++              y: object?.y ?? "",
++              xAxisSide: object?.xAxisSide ?? "bottom",
++              yAxisSide: object?.yAxisSide ?? "left",
++              legendName: object?.legendName ?? "",
++              type: object?.type ?? "scatter",
++              color,
++              label: `${index + 1}. ${name} · ${csv?.name || "CSV 없음"} · ${xSide} X / ${ySide} Y`,
++            });
++          });
++        return Object.freeze({
++          slotId: slot.id,
++          chartId: chart.id,
++          editable: chart.editor.editable !== false,
++          selectedObjectIndex: selectedIndex,
++          objects: Object.freeze(items),
++        });
++      }
+       function graphObjectControlValues() {
