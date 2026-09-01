@@ -11,7 +11,7 @@ diff --git a/Fast-figure.html b/Fast-figure.html
 -      const APP_BUILD = "1.1.51-alpha";
 +      const APP_BUILD = "1.1.52-alpha";
        const ICONOIR_GLYPHS = Object.freeze({
-@@ -18361,9 +18361,18 @@
+@@ -18361,9 +18361,16 @@
          runAssetAction(key, context) {
            return runAssetTreeAction(key, context);
          },
@@ -28,7 +28,7 @@ diff --git a/Fast-figure.html b/Fast-figure.html
 +          return true;
 +        },
        });
-@@ -18476,6 +18485,6 @@
+@@ -18476,6 +18483,6 @@
          if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
          let { React, MantineCore } = runtime,
 -          { Box, Button, Divider, Group, Menu, Stack, Text, TextInput, Title } = MantineCore,
@@ -36,7 +36,7 @@ diff --git a/Fast-figure.html b/Fast-figure.html
            slot = snapshot.selectedSlot,
            workspace = snapshot.fsm.workspace,
            assetSelection = snapshot.fsm.assetSelection;
-@@ -18494,10 +18503,19 @@
+@@ -18494,10 +18501,19 @@
              Stack,
              { gap: "xs" },
              React.createElement(Title, { order: 2, size: "h5" }, "프로젝트"),
