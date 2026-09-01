@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.47-alpha</code></p>
+          <p><code>1.1.48-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.47-alpha";
+      const APP_BUILD = "1.1.48-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -14282,6 +14282,12 @@ THE SOFTWARE.</pre
           let clone = source.cloneNode(true);
           clone.querySelector("#closeReadme")?.remove();
           return clone.innerHTML;
+        },
+        readAssetActions() {
+          return selectedAssetTreeActionModel();
+        },
+        runAssetAction(key, context) {
+          return runAssetTreeAction(key, context);
         },
       });
       function useFastFigureFsmSnapshot() {
@@ -16415,53 +16421,25 @@ THE SOFTWARE.</pre
         "select-csv": (context) => selectCsvFromTree(context.path),
         "select-image": (context) => selectImageFromTree(context.path),
       });
-      function renderAssetTreeActionMenu(nodeType = null, context = null) {
-        let trigger = $("assetActions"),
-          menu = $("assetActionMenu"),
-          definitions = (ASSET_TREE_ACTION_SCHEMA[nodeType] || []).filter(
-            (definition) => !definition.when || definition.when(context),
+      function assetTreeActionItems(nodeType = null, context = null) {
+        if (!nodeType || !context) return [];
+        return (ASSET_TREE_ACTION_SCHEMA[nodeType] || [])
+          .filter((definition) => !definition.when || definition.when(context))
+          .map((definition) =>
+            Object.freeze({
+              key: definition.key,
+              label: definition.label,
+              disabled: definition.disabled?.(context) === true,
+              disabledTitle: definition.disabledTitle || "",
+            }),
           );
-        if (!trigger || !menu) return;
-        trigger.disabled = !nodeType || !context;
-        trigger.title = context?.path ? `${context.path} 작업` : "선택 항목 작업";
-        trigger.setAttribute("aria-label", trigger.title);
-        menu.hidden = true;
-        trigger.setAttribute("aria-expanded", "false");
-        menu.replaceChildren();
-        if (!definitions.length) {
-          let empty = document.createElement("button");
-          empty.type = "button";
-          empty.disabled = true;
-          empty.textContent = "사용 가능한 작업 없음";
-          empty.setAttribute("role", "menuitem");
-          menu.append(empty);
-        } else {
-          definitions.forEach((definition) => {
-            let item = document.createElement("button"),
-              disabled = definition.disabled?.(context) === true;
-            item.type = "button";
-            item.className = "tree-node-action";
-            item.textContent = definition.label;
-            item.disabled = disabled;
-            item.setAttribute("role", "menuitem");
-            if (disabled && definition.disabledTitle) item.title = definition.disabledTitle;
-            item.addEventListener("click", (event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              if (item.disabled) return;
-              closeAssetTreeActionMenus();
-              ASSET_TREE_ACTION_HANDLERS[definition.key]?.(context);
-            });
-            menu.append(item);
-          });
-        }
       }
-      function syncAssetTreeActionMenu() {
+      function selectedAssetTreeActionModel() {
         let match = appFSM.state.assetPath ? projectVfs.resolve(appFSM.state.assetPath) : null;
         if (!match || match.kind !== appFSM.state.assetSelection)
-          return renderAssetTreeActionMenu();
+          return Object.freeze({ nodeType: null, context: null, title: "선택 항목 작업", items: [] });
         let path = match.kind === "directory" ? match.path : projectAssetPath(match.asset),
-          context = {
+          context = Object.freeze({
             path,
             inactive: projectVfs.isTrashed(path),
             hasTrashContents:
@@ -16471,8 +16449,61 @@ THE SOFTWARE.</pre
               ) ||
                 activeProject.csvFiles.some((asset) => projectVfs.isTrashed(projectAssetPath(asset))) ||
                 activeProject.images.some((asset) => projectVfs.isTrashed(projectAssetPath(asset)))),
-          };
-        renderAssetTreeActionMenu(match.kind, context);
+          });
+        return Object.freeze({
+          nodeType: match.kind,
+          context,
+          title: `${path} 작업`,
+          items: Object.freeze(assetTreeActionItems(match.kind, context)),
+        });
+      }
+      function runAssetTreeAction(key, context) {
+        let handler = ASSET_TREE_ACTION_HANDLERS[key];
+        if (typeof handler !== "function" || !context) return false;
+        handler(context);
+        return true;
+      }
+      function renderAssetTreeActionMenu(nodeType = null, context = null) {
+        let trigger = $("assetActions"),
+          menu = $("assetActionMenu"),
+          items = assetTreeActionItems(nodeType, context);
+        if (!trigger || !menu) return;
+        trigger.disabled = !nodeType || !context;
+        trigger.title = context?.path ? `${context.path} 작업` : "선택 항목 작업";
+        trigger.setAttribute("aria-label", trigger.title);
+        menu.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+        menu.replaceChildren();
+        if (!items.length) {
+          let empty = document.createElement("button");
+          empty.type = "button";
+          empty.disabled = true;
+          empty.textContent = "사용 가능한 작업 없음";
+          empty.setAttribute("role", "menuitem");
+          menu.append(empty);
+        } else {
+          items.forEach((definition) => {
+            let item = document.createElement("button");
+            item.type = "button";
+            item.className = "tree-node-action";
+            item.textContent = definition.label;
+            item.disabled = definition.disabled;
+            item.setAttribute("role", "menuitem");
+            if (definition.disabled && definition.disabledTitle) item.title = definition.disabledTitle;
+            item.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (item.disabled) return;
+              closeAssetTreeActionMenus();
+              runAssetTreeAction(definition.key, context);
+            });
+            menu.append(item);
+          });
+        }
+      }
+      function syncAssetTreeActionMenu() {
+        let model = selectedAssetTreeActionModel();
+        renderAssetTreeActionMenu(model.nodeType, model.context);
       }
       function projectDataTreeSnapshot(objects = {}) {
         return {
