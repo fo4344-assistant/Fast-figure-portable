@@ -1,0 +1,38 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.60-alpha</code></p>
++          <p><code>1.1.61-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.60-alpha";
++      const APP_BUILD = "1.1.61-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14326,3 +14326,6 @@
+           return applyGraphLayoutSettings(values, chartId);
+         },
++        readGraphObject() {
++          return selectedGraphObjectModel();
++        },
+       });
+@@ -17538,3 +17538,17 @@
+         });
+       }
++      function selectedGraphObjectModel(slot = getSelectedSlot()) {
++        let chart = slot?.chart ? getChart(slot.chart) : null,
++          objects = Array.isArray(chart?.editor?.objects) ? chart.editor.objects : [],
++          objectIndex = Number.isInteger(selectedObjectIndex) ? selectedObjectIndex : -1,
++          object = objectIndex >= 0 ? objects[objectIndex] : null;
++        if (!slot || slot.contentType === "image" || !chart?.editor || !object) return null;
++        return Object.freeze({
++          slotId: slot.id,
++          chartId: chart.id,
++          objectIndex,
++          editable: chart.editor.editable !== false,
++          object: projectClone(object),
++        });
++      }
+       function configFromForm() {
