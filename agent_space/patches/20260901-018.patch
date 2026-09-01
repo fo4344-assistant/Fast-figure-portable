@@ -1,0 +1,147 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -15638,3 +15638,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.47-alpha</code></p>
++          <p><code>1.1.48-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -16267,3 +16267,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.47-alpha";
++      const APP_BUILD = "1.1.48-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -18346,11 +18346,17 @@
+         exportTarget(values, statusTarget) {
+           return exportDashboardTargetFromValues(values, statusTarget);
+         },
+         readReadmeHtml() {
+           let source = document.querySelector("#readmeDialog .readme-content");
+           if (!source) return "";
+           let clone = source.cloneNode(true);
+           clone.querySelector("#closeReadme")?.remove();
+           return clone.innerHTML;
+         },
++        readAssetActions() {
++          return selectedAssetTreeActionModel();
++        },
++        runAssetAction(key, context) {
++          return runAssetTreeAction(key, context);
++        },
+       });
+@@ -20400,12 +20400,52 @@
+         "select-csv": (context) => selectCsvFromTree(context.path),
+         "select-image": (context) => selectImageFromTree(context.path),
+       });
++      function assetTreeActionItems(nodeType = null, context = null) {
++        if (!nodeType || !context) return [];
++        return (ASSET_TREE_ACTION_SCHEMA[nodeType] || [])
++          .filter((definition) => !definition.when || definition.when(context))
++          .map((definition) =>
++            Object.freeze({
++              key: definition.key,
++              label: definition.label,
++              disabled: definition.disabled?.(context) === true,
++              disabledTitle: definition.disabledTitle || "",
++            }),
++          );
++      }
++      function selectedAssetTreeActionModel() {
++        let match = appFSM.state.assetPath ? projectVfs.resolve(appFSM.state.assetPath) : null;
++        if (!match || match.kind !== appFSM.state.assetSelection)
++          return Object.freeze({ nodeType: null, context: null, title: "선택 항목 작업", items: [] });
++        let path = match.kind === "directory" ? match.path : projectAssetPath(match.asset),
++          context = Object.freeze({
++            path,
++            inactive: projectVfs.isTrashed(path),
++            hasTrashContents:
++              path === PROJECT_TRASH_DIRECTORY &&
++              (activeProject.fileSystem.directories.some(
++                (item) => item !== PROJECT_TRASH_DIRECTORY && projectVfs.isTrashed(item),
++              ) ||
++                activeProject.csvFiles.some((asset) => projectVfs.isTrashed(projectAssetPath(asset))) ||
++                activeProject.images.some((asset) => projectVfs.isTrashed(projectAssetPath(asset)))),
++          });
++        return Object.freeze({
++          nodeType: match.kind,
++          context,
++          title: `${path} 작업`,
++          items: Object.freeze(assetTreeActionItems(match.kind, context)),
++        });
++      }
++      function runAssetTreeAction(key, context) {
++        let handler = ASSET_TREE_ACTION_HANDLERS[key];
++        if (typeof handler !== "function" || !context) return false;
++        handler(context);
++        return true;
++      }
+       function renderAssetTreeActionMenu(nodeType = null, context = null) {
+         let trigger = $("assetActions"),
+           menu = $("assetActionMenu"),
+-          definitions = (ASSET_TREE_ACTION_SCHEMA[nodeType] || []).filter(
+-            (definition) => !definition.when || definition.when(context),
+-          );
++          items = assetTreeActionItems(nodeType, context);
+         if (!trigger || !menu) return;
+         trigger.disabled = !nodeType || !context;
+         trigger.title = context?.path ? `${context.path} 작업` : "선택 항목 작업";
+@@ -20413,7 +20453,7 @@
+         menu.hidden = true;
+         trigger.setAttribute("aria-expanded", "false");
+         menu.replaceChildren();
+-        if (!definitions.length) {
++        if (!items.length) {
+           let empty = document.createElement("button");
+           empty.type = "button";
+           empty.disabled = true;
+@@ -20421,43 +20461,28 @@
+           empty.setAttribute("role", "menuitem");
+           menu.append(empty);
+         } else {
+-          definitions.forEach((definition) => {
+-            let item = document.createElement("button"),
+-              disabled = definition.disabled?.(context) === true;
++          items.forEach((definition) => {
++            let item = document.createElement("button");
+             item.type = "button";
+             item.className = "tree-node-action";
+             item.textContent = definition.label;
+-            item.disabled = disabled;
++            item.disabled = definition.disabled;
+             item.setAttribute("role", "menuitem");
+-            if (disabled && definition.disabledTitle) item.title = definition.disabledTitle;
++            if (definition.disabled && definition.disabledTitle) item.title = definition.disabledTitle;
+             item.addEventListener("click", (event) => {
+               event.preventDefault();
+               event.stopPropagation();
+               if (item.disabled) return;
+               closeAssetTreeActionMenus();
+-              ASSET_TREE_ACTION_HANDLERS[definition.key]?.(context);
++              runAssetTreeAction(definition.key, context);
+             });
+             menu.append(item);
+           });
+         }
+       }
+       function syncAssetTreeActionMenu() {
+-        let match = appFSM.state.assetPath ? projectVfs.resolve(appFSM.state.assetPath) : null;
+-        if (!match || match.kind !== appFSM.state.assetSelection)
+-          return renderAssetTreeActionMenu();
+-        let path = match.kind === "directory" ? match.path : projectAssetPath(match.asset),
+-          context = {
+-            path,
+-            inactive: projectVfs.isTrashed(path),
+-            hasTrashContents:
+-              path === PROJECT_TRASH_DIRECTORY &&
+-              (activeProject.fileSystem.directories.some(
+-                (item) => item !== PROJECT_TRASH_DIRECTORY && projectVfs.isTrashed(item),
+-              ) ||
+-                activeProject.csvFiles.some((asset) => projectVfs.isTrashed(projectAssetPath(asset))) ||
+-                activeProject.images.some((asset) => projectVfs.isTrashed(projectAssetPath(asset)))),
+-          };
+-        renderAssetTreeActionMenu(match.kind, context);
++        let model = selectedAssetTreeActionModel();
++        renderAssetTreeActionMenu(model.nodeType, model.context);
+       }
+       function projectDataTreeSnapshot(objects = {}) {
+         return {
