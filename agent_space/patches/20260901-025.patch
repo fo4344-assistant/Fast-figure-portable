@@ -1,0 +1,198 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+index 18b055f..cb368e6 100644
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
+             connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.53-alpha</code></p>
++          <p><code>1.1.54-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
+     </div>
+     <script>
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.53-alpha";
++      const APP_BUILD = "1.1.54-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+@@ -14308,6 +14308,15 @@ THE SOFTWARE.</pre
+         loadFiles(files) {
+           return loadProjectFiles(files);
+         },
++        readImageSettings() {
++          return selectedImageSettingsModel();
++        },
++        applyImageSettings(values) {
++          return applyImageSettingsFromValues(values);
++        },
++        insertEmptyImage() {
++          return insertEmptySlotImage();
++        },
+       });
+       function useFastFigureFsmSnapshot() {
+         let React = window.FastFigureUiRuntime?.React;
+@@ -14386,10 +14395,11 @@ THE SOFTWARE.</pre
+           fileInput = fastFigureUiBridge.readFileInput();
+         if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+         let { React, MantineCore } = runtime,
+-          { Box, Button, Divider, FileButton, Group, Menu, SegmentedControl, Stack, Text, TextInput, Title } = MantineCore,
++          { Box, Button, Divider, FileButton, Group, Menu, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Text, TextInput, Title } = MantineCore,
+           slot = snapshot.selectedSlot,
+           workspace = snapshot.fsm.workspace,
+-          assetSelection = snapshot.fsm.assetSelection;
++          assetSelection = snapshot.fsm.assetSelection,
++          imageSettings = fastFigureUiBridge.readImageSettings();
+         return React.createElement(
+           Box,
+           {
+@@ -14434,6 +14444,63 @@ THE SOFTWARE.</pre
+                 ),
+             ),
+             React.createElement(Text, { size: "xs", c: "dimmed" }, fileInput.hint),
++            slot?.contentType === "image"
++              ? React.createElement(
++                  Stack,
++                  { gap: "xs" },
++                  React.createElement(
++                    Button,
++                    { variant: "default", onClick: () => fastFigureUiBridge.insertEmptyImage() },
++                    "빈 이미지 삽입",
++                  ),
++                  imageSettings
++                    ? React.createElement(
++                        React.Fragment,
++                        null,
++                        React.createElement(Select, {
++                          label: "이미지 설정 유형",
++                          value: imageSettings.fit,
++                          data: [
++                            { label: "슬롯에 맞춰 축소", value: "contain" },
++                            { label: "슬롯에 맞춰 자르기", value: "cover" },
++                            { label: "수동 설정", value: "manual" },
++                          ],
++                          allowDeselect: false,
++                          onChange: (fit) =>
++                            fit && fastFigureUiBridge.applyImageSettings({ ...imageSettings, fit }),
++                        }),
++                        imageSettings.fit === "manual"
++                          ? React.createElement(
++                              SimpleGrid,
++                              { cols: 2, spacing: "xs" },
++                              [
++                                ["scale", "크기 비율(%)", 1, 1000],
++                                ["x", "X 위치(%)", -100, 200],
++                                ["y", "Y 위치(%)", -100, 200],
++                              ].map(([key, label, min, max]) =>
++                                React.createElement(NumberInput, {
++                                  key,
++                                  label,
++                                  min,
++                                  max,
++                                  value: imageSettings[key],
++                                  onChange: (value) =>
++                                    fastFigureUiBridge.applyImageSettings({
++                                      ...imageSettings,
++                                      [key]: value,
++                                    }),
++                                }),
++                              ),
++                            )
++                          : null,
++                      )
++                    : React.createElement(
++                        Text,
++                        { size: "xs", c: "dimmed" },
++                        "이미지를 추가하면 맞춤 및 위치 설정을 사용할 수 있습니다.",
++                      ),
++                )
++              : null,
+             React.createElement(Divider),
+             React.createElement(Title, { order: 2, size: "h5" }, "선택"),
+             React.createElement(
+@@ -17757,6 +17824,18 @@ THE SOFTWARE.</pre
+         };
+         return image.settings;
+       }
++      function selectedImageSettingsModel(slot = getSelectedSlot()) {
++        let image = slotImage(slot),
++          settings = normalizeImageSettings(image);
++        return settings
++          ? Object.freeze({
++              fit: settings.fit,
++              scale: settings.scale,
++              x: settings.x,
++              y: settings.y,
++            })
++          : null;
++      }
+       function syncImageSettingsUi() {
+         let slot = getSelectedSlot(),
+           image = slotImage(slot),
+@@ -20931,10 +21010,10 @@ THE SOFTWARE.</pre
+           direction: "ui-to-fsm",
+         });
+       });
+-      $("insertEmptyImage").onclick = () => {
++      function insertEmptySlotImage() {
+         let slot = getSelectedSlot();
+         if (!slot || slot.contentType !== "image")
+-          return status("빈 이미지를 삽입할 이미지 슬롯을 먼저 선택하세요.");
++          return (status("빈 이미지를 삽입할 이미지 슬롯을 먼저 선택하세요."), false);
+         let svg =
+             '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>',
+           image = buildProjectImageModel(
+@@ -20952,7 +21031,9 @@ THE SOFTWARE.</pre
+         updateFileAvailability();
+         renderDashboard();
+         status("선택 슬롯에 빈 이미지를 삽입했습니다.");
+-      };
++        return true;
++      }
++      $("insertEmptyImage").onclick = insertEmptySlotImage;
+       function setSlotContentType(type) {
+         let slot = getSelectedSlot();
+         if (!slot) {
+@@ -20991,21 +21072,32 @@ THE SOFTWARE.</pre
+         } else element.style.objectFit = settings.fit;
+         return true;
+       }
+-      function applyImageSettings() {
++      function applyImageSettingsFromValues(values) {
+         let slot = getSelectedSlot(),
+           image = slotImage(slot);
+-        if (!image) return;
++        if (!image || !values || typeof values !== "object") return false;
+         let settings = normalizeImageSettings(image);
+-        settings.fit = $("imageFitMode").value;
++        settings.fit = ["contain", "cover", "manual"].includes(values.fit)
++          ? values.fit
++          : settings.fit;
+         if (settings.fit === "manual") {
+-          settings.scale = Math.max(1, Math.min(1000, Number($("imageScale").value) || 100));
+-          settings.x = Math.max(-100, Math.min(200, Number($("imagePositionX").value) || 0));
+-          settings.y = Math.max(-100, Math.min(200, Number($("imagePositionY").value) || 0));
++          settings.scale = Math.max(1, Math.min(1000, Number(values.scale) || 100));
++          settings.x = Math.max(-100, Math.min(200, Number(values.x) || 0));
++          settings.y = Math.max(-100, Math.min(200, Number(values.y) || 0));
+         }
+         syncImageSettingsUi();
+         syncSlotImageElement(slot, image);
+         debugLog("slot:image-settings", { slotId: selectedSlotId, settings });
+         appFSM.notify("images", "IMAGE_SETTINGS_CHANGED");
++        return true;
++      }
++      function applyImageSettings() {
++        return applyImageSettingsFromValues({
++          fit: $("imageFitMode").value,
++          scale: $("imageScale").value,
++          x: $("imagePositionX").value,
++          y: $("imagePositionY").value,
++        });
+       }
+       $("imageFitMode").onchange = applyImageSettings;
+       ["imageScale", "imagePositionX", "imagePositionY"].forEach((id) => {
