@@ -1,0 +1,70 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -15638,3 +15638,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.48-alpha</code></p>
++          <p><code>1.1.49-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -16267,3 +16267,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.48-alpha";
++      const APP_BUILD = "1.1.49-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -18470,10 +18470,11 @@
+       function FastFigureSidebarStaging() {
+         useFastFigureFsmSnapshot();
+         let runtime = window.FastFigureUiRuntime,
+-          snapshot = fastFigureUiBridge.read();
++          snapshot = fastFigureUiBridge.read(),
++          assetActions = fastFigureUiBridge.readAssetActions();
+         if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+         let { React, MantineCore } = runtime,
+-          { Box, Divider, Group, Stack, Text, Title } = MantineCore,
++          { Box, Button, Divider, Group, Menu, Stack, Text, Title } = MantineCore,
+           slot = snapshot.selectedSlot,
+           workspace = snapshot.fsm.workspace,
+           assetSelection = snapshot.fsm.assetSelection;
+@@ -18518,6 +18519,45 @@
+               React.createElement(Text, { size: "sm", c: "dimmed" }, "Asset"),
+               React.createElement(Text, { size: "sm" }, assetSelection || "none"),
+             ),
++            React.createElement(
++              Menu,
++              { position: "bottom-end", withinPortal: true },
++              React.createElement(
++                Menu.Target,
++                null,
++                React.createElement(
++                  Button,
++                  {
++                    variant: "default",
++                    disabled: !assetActions.nodeType,
++                    title: assetActions.title,
++                  },
++                  "선택 항목 작업",
++                ),
++              ),
++              React.createElement(
++                Menu.Dropdown,
++                null,
++                assetActions.items.length
++                  ? assetActions.items.map((item) =>
++                      React.createElement(
++                        Menu.Item,
++                        {
++                          key: item.key,
++                          disabled: item.disabled,
++                          title: item.disabled ? item.disabledTitle : undefined,
++                          onClick: () =>
++                            fastFigureUiBridge.runAssetAction(item.key, assetActions.context),
++                        },
++                        item.label,
++                      ),
++                    )
++                  : React.createElement(Menu.Item, { disabled: true }, "사용 가능한 작업 없음"),
++              ),
++            ),
+           ),
+         );
+       }
