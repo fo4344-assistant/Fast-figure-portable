@@ -55,7 +55,7 @@ diff --git a/Fast-figure.html b/Fast-figure.html
 +        );
 +      }
        function FastFigureOverlayHostStaging() {
-@@ -14942,9 +14962,4 @@
+@@ -14942,9 +14962,3 @@
 -          React.createElement(
 -            FastFigureOverlayModalStaging,
 -            { opened: snapshot.fsm.overlay === "readme", title: "README" },
@@ -68,7 +68,7 @@ diff --git a/Fast-figure.html b/Fast-figure.html
 +          React.createElement(FastFigureReadmeModalStaging, {
 +            opened: snapshot.fsm.overlay === "readme",
 +          }),
-@@ -14965,2 +14980,3 @@
+@@ -14965,2 +14979,3 @@
          FastFigurePrintModalStaging,
 +        FastFigureReadmeModalStaging,
          FastFigureOverlayHostStaging,
