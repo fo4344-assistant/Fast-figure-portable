@@ -1,0 +1,81 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -15638,3 +15638,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.49-alpha</code></p>
++          <p><code>1.1.50-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -16267,3 +16267,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.49-alpha";
++      const APP_BUILD = "1.1.50-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -18300,14 +18300,15 @@
+       let fastFigureUiStoreSnapshot = Object.freeze({
+         version: 0,
+         state: appFSM.state,
+         event: "init",
+       });
+-      appFSM.subscribe((state, event) => {
++      function publishFastFigureUiStore(state = appFSM.state, event = "domain-update") {
+         fastFigureUiStoreSnapshot = Object.freeze({
+           version: fastFigureUiStoreSnapshot.version + 1,
+           state,
+           event,
+         });
+         fastFigureUiListeners.forEach((listener) => listener());
+-      });
++      }
++      appFSM.subscribe((state, event) => publishFastFigureUiStore(state, event));
+       const fastFigureUiBridge = Object.freeze({
+@@ -18358,4 +18361,9 @@
+         runAssetAction(key, context) {
+           return runAssetTreeAction(key, context);
+         },
++        setProjectName(value, commit = false) {
++          let name = setProjectNameFromValue(value, commit);
++          publishFastFigureUiStore(appFSM.state, commit ? "project:name-commit" : "project:name-input");
++          return name;
++        },
+       });
+@@ -22210,10 +22218,17 @@
+       function projectFileStem(value) {
+         let stem = String(value || "")
+           .trim()
+           .replace(/[\\/:*?"<>|\x00-\x1F]/g, "-")
+           .replace(/\s+/g, " ")
+           .replace(/[. ]+$/, "")
+           .slice(0, 100);
+         return stem || "fast-figure-project";
+       }
++      function setProjectNameFromValue(value, commit = false) {
++        let name = String(value ?? "").slice(0, 120);
++        if (commit) name = name.trim().slice(0, 120);
++        activeProject.projectName = name;
++        if (commit) debugLog("project:name", { projectName: name });
++        return name;
++      }
+       function downloadProject() {
+@@ -22218,6 +22234,6 @@
+         if (getSelectedSlot())
+           return status("프로젝트 내보내기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
+         try {
+-          activeProject.projectName = $("projectName").value.trim().slice(0, 120);
+-          $("projectName").value = activeProject.projectName;
++          activeProject.projectName = fastFigureUiBridge.setProjectName($("projectName").value, true);
++          $("projectName").value = activeProject.projectName;
+           let project = ffpxBuildProject(),
+@@ -22254,10 +22270,8 @@
+       }
+       $("projectName").addEventListener("input", (event) => {
+-        activeProject.projectName = event.target.value.slice(0, 120);
++        fastFigureUiBridge.setProjectName(event.target.value);
+       });
+       $("projectName").addEventListener("change", (event) => {
+-        activeProject.projectName = event.target.value.trim().slice(0, 120);
+-        event.target.value = activeProject.projectName;
+-        debugLog("project:name", { projectName: activeProject.projectName });
++        event.target.value = fastFigureUiBridge.setProjectName(event.target.value, true);
+       });
+       $("exportProject").onclick = downloadProject;
