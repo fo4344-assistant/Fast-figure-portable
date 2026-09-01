@@ -1,0 +1,38 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.62-alpha</code></p>
++          <p><code>1.1.63-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.62-alpha";
++      const APP_BUILD = "1.1.63-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -17752,14 +17752,23 @@
+       function selectedGraphObjectModel(slot = getSelectedSlot()) {
+         let chart = slot?.chart ? getChart(slot.chart) : null,
+           objects = Array.isArray(chart?.editor?.objects) ? chart.editor.objects : [],
+           objectIndex = Number.isInteger(selectedObjectIndex) ? selectedObjectIndex : -1,
+-          object = objectIndex >= 0 ? objects[objectIndex] : null;
++          object = objectIndex >= 0 ? objects[objectIndex] : null,
++          csv = object?.csvId != null ? getProjectCsv(object.csvId) : null,
++          columns = csv
++            ? columnDefinitions(csv.rows, csv.headerLines ?? 1).map(({ id, label }) =>
++                Object.freeze({ id, label }),
++              )
++            : [];
+         if (!slot || slot.contentType === "image" || !chart?.editor || !object) return null;
+         return Object.freeze({
+           slotId: slot.id,
+           chartId: chart.id,
+           objectIndex,
+           editable: chart.editor.editable !== false,
++          csvId: csv?.id ?? null,
++          csvName: csv?.name ?? "",
++          columns: Object.freeze(columns),
+           object: projectClone(object),
+         });
+       }
