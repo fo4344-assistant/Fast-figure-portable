@@ -1,0 +1,80 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11569,7 +11569,7 @@ <h1>Fast figure</h1>
+             connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.41-alpha</code></p>
++          <p><code>1.1.42-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+@@ -12198,5 +12198,5 @@ <h1>Fast figure</h1>
+     <script>
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.41-alpha";
++      const APP_BUILD = "1.1.42-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+@@ -14267,6 +14267,12 @@
+         applyCaptionSettings(values, notify = true) {
+           return applyCaptionSettingsFromValues(values, notify);
+         },
++        readCaptionEditor() {
++          return readCaptionEditorState();
++        },
++        applyCaptionEditor(values) {
++          return applyCaptionEditorFromValues(values);
++        },
+       });
+       function useFastFigureFsmSnapshot() {
+         let React = window.FastFigureUiRuntime?.React;
+@@ -18049,6 +18049,47 @@
+           exportText: [label, text].filter(Boolean).join(" "),
+         };
+       }
++      function readCaptionEditorState() {
++        let caption = projectObjects.read("captions"),
++          view = activeCaptionView(caption);
++        return {
++          enabled: !!caption.enabled,
++          slotMode: !!caption.slotMode,
++          target: view.slot ? "slot" : "global",
++          targetSlotId: view.slot?.id ?? null,
++          text: view.text,
++          name: view.name,
++          nameBold: !!view.nameBold,
++          settings: projectClone(view.settings),
++        };
++      }
++      function applyCaptionEditorFromValues(values = {}) {
++        if (values.enabled != null)
++          applyAnnotationVisibilityFromValues("caption", values.enabled);
++        if (values.slotMode != null && !!values.slotMode !== activeProject.slotCaptionsEnabled)
++          appFSM.send("SLOT_CAPTION_MODE_CHANGED", {
++            enabled: !!values.slotMode,
++            direction: "fsm-to-model",
++          });
++        let view = activeCaptionView(),
++          currentSettings = activeProject.captionSettings;
++        applyCaptionSettingsFromValues({
++          name: view.slot ? activeProject.captionName : values.name ?? activeProject.captionName,
++          nameBold: view.slot
++            ? activeProject.captionNameBold
++            : values.nameBold ?? activeProject.captionNameBold,
++          fontFamily: values.fontFamily ?? currentSettings.fontFamily,
++          fontSize: values.fontSize ?? currentSettings.fontSize,
++          lineHeight: values.lineHeight ?? currentSettings.lineHeight,
++        });
++        if (values.text != null)
++          appFSM.send("CAPTION_TEXT_INPUT", {
++            text: String(values.text),
++            region: "body",
++            direction: "fsm-to-model",
++          });
++        return readCaptionEditorState();
++      }
+       function labelStyle() {
+         let scale = dashboardGeometry($("dashboard")?.getBoundingClientRect().width).scale;
+         return `left:${activeProject.labelSettings.x * scale}px;top:${activeProject.labelSettings.y * scale}px;font-family:${esc(activeProject.labelSettings.fontFamily)};font-size:${activeProject.labelSettings.fontSize * scale}px`;
