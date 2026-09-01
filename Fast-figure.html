@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.52-alpha</code></p>
+          <p><code>1.1.53-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.52-alpha";
+      const APP_BUILD = "1.1.53-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -14302,6 +14302,12 @@ THE SOFTWARE.</pre
           if (!hasSlot) publishFastFigureUiStore(appFSM.state, "slot:pending-content-type");
           return true;
         },
+        readFileInput() {
+          return projectFileInputModel();
+        },
+        loadFiles(files) {
+          return loadProjectFiles(files);
+        },
       });
       function useFastFigureFsmSnapshot() {
         let React = window.FastFigureUiRuntime?.React;
@@ -14376,10 +14382,11 @@ THE SOFTWARE.</pre
         useFastFigureFsmSnapshot();
         let runtime = window.FastFigureUiRuntime,
           snapshot = fastFigureUiBridge.read(),
-          assetActions = fastFigureUiBridge.readAssetActions();
+          assetActions = fastFigureUiBridge.readAssetActions(),
+          fileInput = fastFigureUiBridge.readFileInput();
         if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
         let { React, MantineCore } = runtime,
-          { Box, Button, Divider, Group, Menu, SegmentedControl, Stack, Text, TextInput, Title } = MantineCore,
+          { Box, Button, Divider, FileButton, Group, Menu, SegmentedControl, Stack, Text, TextInput, Title } = MantineCore,
           slot = snapshot.selectedSlot,
           workspace = snapshot.fsm.workspace,
           assetSelection = snapshot.fsm.assetSelection;
@@ -14412,6 +14419,21 @@ THE SOFTWARE.</pre
               ],
               onChange: (value) => fastFigureUiBridge.changeSlotContentType(value),
             }),
+            React.createElement(
+              FileButton,
+              {
+                accept: fileInput.accept,
+                multiple: fileInput.multiple,
+                onChange: (files) => fastFigureUiBridge.loadFiles(files),
+              },
+              (props) =>
+                React.createElement(
+                  Button,
+                  { ...props, variant: "default", fullWidth: true },
+                  fileInput.label,
+                ),
+            ),
+            React.createElement(Text, { size: "xs", c: "dimmed" }, fileInput.hint),
             React.createElement(Divider),
             React.createElement(Title, { order: 2, size: "h5" }, "선택"),
             React.createElement(
@@ -17749,6 +17771,20 @@ THE SOFTWARE.</pre
         $("imageScale").value = settings.scale;
         $("imagePositionX").value = settings.x;
         $("imagePositionY").value = settings.y;
+      }
+      function projectFileInputModel(slot = getSelectedSlot()) {
+        let has = !!slot,
+          isImage = slot?.contentType === "image";
+        return Object.freeze({
+          label: isImage ? "이미지 추가" : has ? "CSV 추가" : "파일 추가",
+          accept: isImage ? "image/*" : has ? ".csv,.tsv,.json" : ".csv,.tsv,.json,image/*",
+          multiple: !isImage,
+          hint: isImage
+            ? "PNG/JPEG/GIF/WebP/BMP/SVG 이미지를 선택 슬롯에 연결합니다."
+            : has
+              ? "CSV/TSV 또는 JSON 객체 배열을 선택 슬롯의 그래프 데이터로 사용합니다."
+              : "CSV/TSV/JSON 또는 이미지를 프로젝트 데이터에 추가합니다.",
+        });
       }
       function syncSlotContentTypeUi() {
         let slot = getSelectedSlot(),
@@ -21173,10 +21209,10 @@ THE SOFTWARE.</pre
           body +
           "</tbody>";
       }
-      $("file").onchange = async (e) => {
-        let files = [...e.target.files],
+      async function loadProjectFiles(fileList) {
+        let files = fileList instanceof File ? [fileList] : [...(fileList || [])],
           target = getSelectedSlot();
-        if (!files.length) return;
+        if (!files.length) return false;
         try {
           if (target && (target.contentType || "graph") === "image")
             await loadFileIntoSlot(files[0], target);
@@ -21189,11 +21225,15 @@ THE SOFTWARE.</pre
               else if (kind === "data") await loadDataFile(file, null);
               else throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
             }
+          return true;
         } catch (error) {
           status("불러오기 실패: " + error.message);
-        } finally {
-          e.target.value = "";
+          return false;
         }
+      }
+      $("file").onchange = async (e) => {
+        await loadProjectFiles(e.target.files);
+        e.target.value = "";
       };
       $("resetSelectedSlot").onclick = () => {
         let slot = getSelectedSlot();
