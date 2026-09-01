@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.35-alpha</code></p>
+          <p><code>1.1.36-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.35-alpha";
+      const APP_BUILD = "1.1.36-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -14249,6 +14249,9 @@ THE SOFTWARE.</pre
         run(lifecycle, event, task) {
           return appFSM.run(lifecycle, event, task);
         },
+        applyLayoutSettings(values) {
+          return applyLayoutSettingsFromValues(values);
+        },
       });
       function useFastFigureFsmSnapshot() {
         let React = window.FastFigureUiRuntime?.React;
@@ -15127,40 +15130,51 @@ THE SOFTWARE.</pre
           editing?.editor?.objects?.map((object) => object.color).filter(Boolean) || DEFAULT_COLORS
         );
       }
-      function slotStyleFromControls() {
+      function slotStyleFromValues(values = {}) {
         return {
           referenceWidth: readProjectNumber(
-            $("dashboardReferenceWidth")?.value,
+            values.referenceWidth,
             DEFAULT_SLOT_STYLE.referenceWidth,
             100,
             20000,
           ),
           gap: readProjectNumber(
-            $("slotGap")?.value,
+            values.gap,
             DEFAULT_SLOT_STYLE.gap,
             0,
             2000,
           ),
           outerMargin: readProjectNumber(
-            $("dashboardOuterMargin")?.value,
+            values.outerMargin,
             DEFAULT_SLOT_STYLE.outerMargin,
             0,
             5000,
           ),
           radius: readProjectNumber(
-            $("slotRadius")?.value,
+            values.radius,
             DEFAULT_SLOT_STYLE.radius,
             0,
             2000,
           ),
           aspect: readProjectNumber(
-            $("dashboardAspect")?.value,
+            values.aspect,
             DEFAULT_SLOT_STYLE.aspect,
             0.1,
             10,
           ),
-          showBorders: $("showSlotBorders").dataset.active === "true",
+          showBorders:
+            values.showBorders == null ? DEFAULT_SLOT_STYLE.showBorders : !!values.showBorders,
         };
+      }
+      function slotStyleFromControls() {
+        return slotStyleFromValues({
+          referenceWidth: $("dashboardReferenceWidth")?.value,
+          gap: $("slotGap")?.value,
+          outerMargin: $("dashboardOuterMargin")?.value,
+          radius: $("slotRadius")?.value,
+          aspect: $("dashboardAspect")?.value,
+          showBorders: $("showSlotBorders").dataset.active === "true",
+        });
       }
       function dashboardReferenceWidth() {
         return activeProject.layout.slotStyle.referenceWidth;
@@ -22372,12 +22386,23 @@ THE SOFTWARE.</pre
           e.target.value = "";
         }
       };
-      $("applyGrid").onclick = () => {
-        let r = +$("gridRows").value,
-          c = +$("gridCols").value;
+      function applyLayoutSettingsFromValues(values = {}) {
+        let r = +values.gridRows,
+          c = +values.gridCols;
         if (r < 1 || c < 1 || r > 8 || c > 8) return status("행과 열은 1~8 사이여야 합니다.");
         makeSlots(r, c);
-        applySlotStyle();
+        activeProject.layout.slotStyle = slotStyleFromValues(
+          values.slotStyle || activeProject.layout.slotStyle,
+        );
+        applySlotStyle(false);
+        return true;
+      }
+      $("applyGrid").onclick = () => {
+        applyLayoutSettingsFromValues({
+          gridRows: $("gridRows").value,
+          gridCols: $("gridCols").value,
+          slotStyle: slotStyleFromControls(),
+        });
       };
       $("showSlotBorders").onclick = () => {
         let button = $("showSlotBorders"),
