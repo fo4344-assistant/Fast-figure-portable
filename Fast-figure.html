@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.37-alpha</code></p>
+          <p><code>1.1.38-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.37-alpha";
+      const APP_BUILD = "1.1.38-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -14251,6 +14251,12 @@ THE SOFTWARE.</pre
         },
         applyLayoutSettings(values) {
           return applyLayoutSettingsFromValues(values);
+        },
+        applyLabelSettings(values) {
+          return applyLabelSettingsFromValues(values);
+        },
+        applyLabelPosition(values) {
+          return applyLabelPositionFromValues(values);
         },
       });
       function useFastFigureFsmSnapshot() {
@@ -21122,30 +21128,57 @@ THE SOFTWARE.</pre
         $("labelPositionX").value = Number(activeProject.labelSettings.x.toFixed(2));
         $("labelPositionY").value = Number(activeProject.labelSettings.y.toFixed(2));
       }
-      function applyLabelSettings() {
-        activeProject.labelSettings.format = $("labelFormat").value;
-        activeProject.labelSettings.parentheses = $("labelParentheses").dataset.active === "true";
-        activeProject.labelSettings.order = $("labelOrder").value;
-        activeProject.labelSettings.fontFamily = $("labelFontFamily").value;
-        let fontSize = Number($("labelFontSize").value);
+      function applyLabelSettingsFromValues(values = {}) {
+        activeProject.labelSettings.format = values.format ?? activeProject.labelSettings.format;
+        activeProject.labelSettings.parentheses =
+          values.parentheses == null
+            ? activeProject.labelSettings.parentheses
+            : !!values.parentheses;
+        activeProject.labelSettings.order = values.order ?? activeProject.labelSettings.order;
+        activeProject.labelSettings.fontFamily =
+          values.fontFamily ?? activeProject.labelSettings.fontFamily;
+        let fontSize = Number(values.fontSize);
         activeProject.labelSettings.fontSize = Number.isFinite(fontSize)
           ? Math.max(6, fontSize)
           : 14;
-        $("labelFontSize").value = activeProject.labelSettings.fontSize;
         renderLabelPreview();
         renderDashboard();
         schedulePlotResize();
         debugLog("annotation:label-settings", { ...activeProject.labelSettings });
         appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
+        return { ...activeProject.labelSettings };
       }
-      function applyLabelPosition() {
-        activeProject.labelSettings.x = finiteLabelPosition(Number($("labelPositionX").value));
-        activeProject.labelSettings.y = finiteLabelPosition(Number($("labelPositionY").value));
+      function applyLabelSettings() {
+        let settings = applyLabelSettingsFromValues({
+          format: $("labelFormat").value,
+          parentheses: $("labelParentheses").dataset.active === "true",
+          order: $("labelOrder").value,
+          fontFamily: $("labelFontFamily").value,
+          fontSize: $("labelFontSize").value,
+        });
+        $("labelFontSize").value = settings.fontSize;
+      }
+      function applyLabelPositionFromValues(values = {}) {
+        activeProject.labelSettings.x = finiteLabelPosition(Number(values.x));
+        activeProject.labelSettings.y = finiteLabelPosition(Number(values.y));
         renderLabelPreview();
         renderDashboard();
         schedulePlotResize();
-        debugLog("annotation:label-position", { x: activeProject.labelSettings.x, y: activeProject.labelSettings.y });
+        debugLog("annotation:label-position", {
+          x: activeProject.labelSettings.x,
+          y: activeProject.labelSettings.y,
+        });
         appFSM.notify("labels", "LABEL_POSITION_CHANGED");
+        return {
+          x: activeProject.labelSettings.x,
+          y: activeProject.labelSettings.y,
+        };
+      }
+      function applyLabelPosition() {
+        applyLabelPositionFromValues({
+          x: $("labelPositionX").value,
+          y: $("labelPositionY").value,
+        });
       }
       function installLabelSettings() {
         ["labelFormat", "labelOrder", "labelFontFamily"].forEach((id) =>
