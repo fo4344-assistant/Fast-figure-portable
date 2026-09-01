@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.42-alpha</code></p>
+          <p><code>1.1.43-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.42-alpha";
+      const APP_BUILD = "1.1.43-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -14621,6 +14621,134 @@ THE SOFTWARE.</pre
           ),
         );
       }
+      function FastFigureCaptionModalStaging({ opened }) {
+        useFastFigureFsmSnapshot();
+        let runtime = window.FastFigureUiRuntime;
+        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+        let { React, MantineCore } = runtime,
+          { Button, Group, NumberInput, Select, SimpleGrid, Stack, Switch, Text, TextInput, Textarea } =
+            MantineCore,
+          readDraft = () => {
+            let editor = fastFigureUiBridge.readCaptionEditor();
+            return {
+              enabled: editor.enabled,
+              slotMode: editor.slotMode,
+              target: editor.target,
+              targetSlotId: editor.targetSlotId,
+              text: editor.text,
+              name: editor.name,
+              nameBold: editor.nameBold,
+              fontFamily: editor.settings.fontFamily,
+              fontSize: editor.settings.fontSize,
+              lineHeight: editor.settings.lineHeight,
+            };
+          },
+          [draft, setDraft] = React.useState(readDraft);
+        React.useEffect(() => {
+          if (opened) setDraft(readDraft());
+        }, [opened]);
+        let setValue = (key, value) => setDraft((current) => ({ ...current, [key]: value })),
+          applyDraft = () => {
+            let editor = fastFigureUiBridge.applyCaptionEditor(draft);
+            setDraft({
+              enabled: editor.enabled,
+              slotMode: editor.slotMode,
+              target: editor.target,
+              targetSlotId: editor.targetSlotId,
+              text: editor.text,
+              name: editor.name,
+              nameBold: editor.nameBold,
+              fontFamily: editor.settings.fontFamily,
+              fontSize: editor.settings.fontSize,
+              lineHeight: editor.settings.lineHeight,
+            });
+          };
+        return React.createElement(
+          FastFigureOverlayModalStaging,
+          { opened, title: "캡션" },
+          React.createElement(
+            Stack,
+            { gap: "sm" },
+            React.createElement(
+              Group,
+              { grow: true },
+              React.createElement(Switch, {
+                label: "캡션 표시",
+                checked: !!draft.enabled,
+                onChange: (event) => setValue("enabled", event.currentTarget.checked),
+              }),
+              React.createElement(Switch, {
+                label: "슬롯별 캡션",
+                checked: !!draft.slotMode,
+                onChange: (event) => setValue("slotMode", event.currentTarget.checked),
+              }),
+            ),
+            React.createElement(
+              Text,
+              { size: "sm" },
+              draft.target === "slot" && draft.targetSlotId
+                ? `편집 대상: 슬롯 ${draft.targetSlotId}`
+                : "편집 대상: 전체 Figure",
+            ),
+            React.createElement(
+              SimpleGrid,
+              { cols: 2, spacing: "sm" },
+              React.createElement(TextInput, {
+                label: "이름",
+                value: draft.name,
+                disabled: draft.target === "slot",
+                onChange: (event) => setValue("name", event.currentTarget.value),
+              }),
+              React.createElement(Switch, {
+                label: "이름 굵게",
+                checked: !!draft.nameBold,
+                disabled: draft.target === "slot",
+                onChange: (event) => setValue("nameBold", event.currentTarget.checked),
+              }),
+              React.createElement(Select, {
+                label: "글꼴",
+                value: draft.fontFamily,
+                data: [
+                  { value: "system-ui, sans-serif", label: "기본" },
+                  { value: "Arial, sans-serif", label: "Arial" },
+                  { value: "Times New Roman, serif", label: "Times New Roman" },
+                  { value: "Georgia, serif", label: "Georgia" },
+                  { value: "Courier New, monospace", label: "Courier New" },
+                ],
+                onChange: (value) => value != null && setValue("fontFamily", value),
+              }),
+              React.createElement(NumberInput, {
+                label: "글자 크기(px)",
+                min: 6,
+                max: 96,
+                value: draft.fontSize,
+                onChange: (value) => setValue("fontSize", value),
+              }),
+              React.createElement(NumberInput, {
+                label: "줄간격",
+                min: 0.8,
+                max: 4,
+                step: 0.05,
+                decimalScale: 2,
+                value: draft.lineHeight,
+                onChange: (value) => setValue("lineHeight", value),
+              }),
+            ),
+            React.createElement(Textarea, {
+              label: "본문",
+              autosize: true,
+              minRows: 6,
+              value: draft.text,
+              onChange: (event) => setValue("text", event.currentTarget.value),
+            }),
+            React.createElement(
+              Group,
+              { justify: "flex-end" },
+              React.createElement(Button, { onClick: applyDraft }, "캡션 적용"),
+            ),
+          ),
+        );
+      }
       function FastFigureOverlayHostStaging() {
         useFastFigureFsmSnapshot();
         let runtime = window.FastFigureUiRuntime,
@@ -14651,9 +14779,8 @@ THE SOFTWARE.</pre
             { opened: snapshot.fsm.overlay === "label" },
           ),
           React.createElement(
-            FastFigureOverlayModalStaging,
-            { opened: snapshot.fsm.overlay === "caption", title: "캡션" },
-            summary(snapshot.captions),
+            FastFigureCaptionModalStaging,
+            { opened: snapshot.fsm.overlay === "caption" },
           ),
           React.createElement(
             FastFigureOverlayModalStaging,
@@ -14713,6 +14840,7 @@ THE SOFTWARE.</pre
         FastFigureOverlayModalStaging,
         FastFigureLayoutModalStaging,
         FastFigureLabelModalStaging,
+        FastFigureCaptionModalStaging,
         FastFigureOverlayHostStaging,
         FastFigureShellStaging,
       });
