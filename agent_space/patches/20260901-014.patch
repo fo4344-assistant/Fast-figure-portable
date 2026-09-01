@@ -19,39 +19,54 @@ diff --git a/Fast-figure.html b/Fast-figure.html
        const ICONOIR_GLYPHS = Object.freeze({
          "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
          folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
-@@ -14273,6 +14273,9 @@ <h1>Fast figure</h1>
-         applyCaptionEditor(values) {
-           return applyCaptionEditorFromValues(values);
-         },
-+        exportTarget(values, statusTarget) {
-+          return exportDashboardTargetFromValues(values, statusTarget);
-+        },
-       });
-       function useFastFigureFsmSnapshot() {
-         let React = window.FastFigureUiRuntime?.React;
-@@ -22000,9 +22000,19 @@ <h1>Fast figure</h1>
+@@ -11902,19 +11902,34 @@
+         });
+       }
        async function exportDashboardTarget() {
 -        let statusOut = $("printStatus"),
 -          snapshot = createTargetExportSnapshot(),
-+        return exportDashboardTargetFromValues(
++        let width = Math.max(100, Math.min(20000, Number($("printWidth").value) || 1000)),
++          dpi = Math.max(36, Math.min(1200, Number($("printDpi").value) || 300)),
++          requestedHeight = Number($("printHeight").value);
++        $("printWidth").value = width;
++        $("printDpi").value = dpi;
++        let result = await exportDashboardTargetFromValues(
 +          {
-+            width: $("printWidth").value,
-+            height: $("printHeight").value,
-+            dpi: $("printDpi").value,
++            width,
++            height: requestedHeight,
++            dpi,
 +            format: $("printFormat").value,
 +          },
 +          $("printStatus"),
 +        );
++        if (result?.height != null && requestedHeight > 0) $("printHeight").value = result.height;
++        return result;
 +      }
 +      async function exportDashboardTargetFromValues(values = {}, statusOut = { textContent: "" }) {
 +        let snapshot = createTargetExportSnapshot(),
            captionView = snapshot.captionView,
 -          width = Math.max(100, Math.min(20000, Number($("printWidth").value) || 1000)),
 -          requestedHeight = Number($("printHeight").value),
--          dpi = Math.max(72, Math.min(1200, Number($("printDpi").value) || 300)),
--          format = $("printFormat").value || "png",
+-          dpi = Math.max(36, Math.min(1200, Number($("printDpi").value) || 300)),
 +          width = Math.max(100, Math.min(20000, Number(values.width) || 1000)),
 +          requestedHeight = Number(values.height),
-+          dpi = Math.max(72, Math.min(1200, Number(values.dpi) || 300)),
-+          format = ["png", "jpeg", "webp", "pdf"].includes(values.format) ? values.format : "png",
-           geometry = targetExportGeometry(width, requestedHeight, snapshot),
++          dpi = Math.max(36, Math.min(1200, Number(values.dpi) || 300)),
+           rasterScale = 1,
+-          format = $("printFormat").value,
++          format = ["png", "jpeg"].includes(values.format) ? values.format : "png",
+           bordersVisible = snapshot.bordersVisible,
+           visibleSlots = snapshot.slots.filter((slot) => !slot.hidden),
+           captionShown = captionView.enabled;
+-        $("printWidth").value = width;
+-        $("printDpi").value = dpi;
+         let canvas = document.createElement("canvas"),
+           ctx = canvas.getContext("2d"),
+           baseReference = targetExportGeometry(snapshot.layout, width),
+@@ -11928,7 +11943,6 @@
+           rasterHeight = Math.round(height),
+           maxRasterDimension = 16384,
+           maxRasterArea = 64000000;
+-        if (!automaticHeight) $("printHeight").value = height;
+         if (
+           rasterWidth > maxRasterDimension ||
+           rasterHeight > maxRasterDimension ||
