@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.56-alpha</code></p>
+          <p><code>1.1.57-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.56-alpha";
+      const APP_BUILD = "1.1.57-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -14322,6 +14322,12 @@ THE SOFTWARE.</pre
         },
         applyCsvHeader(value, csvId) {
           return applyCsvHeaderLinesFromValue(value, csvId);
+        },
+        readChartLayout() {
+          return selectedChartLayoutModel();
+        },
+        applyChartLayout(values) {
+          return applyGraphLayoutSettings(values);
         },
       });
       function useFastFigureFsmSnapshot() {
@@ -17446,28 +17452,65 @@ THE SOFTWARE.</pre
           showValues: $(key + "Values").dataset.active === "true",
         };
       }
-      function chartLayoutSettingsFromForm(chart) {
-        if (!chart?.editor) throw Error("선택한 슬롯의 그래프가 없습니다.");
-        let previous = readGlobalSettings(chart),
-          previousAxes = previous.axes || {};
+      function chartLayoutControlValues() {
         return {
           title: $("title").value,
+          showLegend: $("showLegend").dataset.active === "true",
+          showTitle: $("showTitle").dataset.active === "true",
+          showZeroLine: $("showZeroLine").dataset.active === "true",
+          graphFontFamily: $("graphFontFamily").value,
+          titleFontSize: $("titleFontSize").value,
+          legendFontSize: $("legendFontSize").value,
+          axes: {
+            xBottom: readAxis("xBottom"),
+            xTop: readAxis("xTop"),
+            yLeft: readAxis("yLeft"),
+            yRight: readAxis("yRight"),
+          },
+        };
+      }
+      function chartLayoutSettingsFromValues(chart, values = {}) {
+        if (!chart?.editor) throw Error("선택한 슬롯의 그래프가 없습니다.");
+        let previous = readGlobalSettings(chart),
+          previousAxes = previous.axes || {},
+          axes = values.axes && typeof values.axes === "object" ? values.axes : {},
+          axis = (key) => ({ ...(previousAxes[key] || {}), ...(axes[key] || {}) }),
+          boolean = (key) => (values[key] == null ? previous[key] : !!values[key]);
+        return {
+          title: values.title == null ? chart.editor.title || "" : String(values.title),
           globalSettings: {
             ...previous,
-            showLegend: $("showLegend").dataset.active === "true",
-            showTitle: $("showTitle").dataset.active === "true",
-            showZeroLine: $("showZeroLine").dataset.active === "true",
-            graphFontFamily: $("graphFontFamily").value.trim(),
-            titleFontSize: $("titleFontSize").value,
-            legendFontSize: $("legendFontSize").value,
+            showLegend: boolean("showLegend"),
+            showTitle: boolean("showTitle"),
+            showZeroLine: boolean("showZeroLine"),
+            graphFontFamily:
+              values.graphFontFamily == null
+                ? previous.graphFontFamily
+                : String(values.graphFontFamily).trim(),
+            titleFontSize: values.titleFontSize ?? previous.titleFontSize,
+            legendFontSize: values.legendFontSize ?? previous.legendFontSize,
             axes: {
-              xBottom: { ...(previousAxes.xBottom || {}), ...readAxis("xBottom") },
-              xTop: { ...(previousAxes.xTop || {}), ...readAxis("xTop") },
-              yLeft: { ...(previousAxes.yLeft || {}), ...readAxis("yLeft") },
-              yRight: { ...(previousAxes.yRight || {}), ...readAxis("yRight") },
+              xBottom: axis("xBottom"),
+              xTop: axis("xTop"),
+              yLeft: axis("yLeft"),
+              yRight: axis("yRight"),
             },
           },
         };
+      }
+      function chartLayoutSettingsFromForm(chart) {
+        return chartLayoutSettingsFromValues(chart, chartLayoutControlValues());
+      }
+      function selectedChartLayoutModel(slot = getSelectedSlot()) {
+        let chart = slot?.chart ? getChart(slot.chart) : null;
+        if (!slot || slot.contentType === "image" || !chart?.editor) return null;
+        let values = chartLayoutSettingsFromValues(chart);
+        return Object.freeze({
+          slotId: slot.id,
+          chartId: chart.id,
+          title: values.title,
+          globalSettings: projectClone(values.globalSettings),
+        });
       }
       function configFromForm() {
         let target = getSelectedSlot(),
@@ -18753,7 +18796,7 @@ THE SOFTWARE.</pre
         syncEditableUi(c);
         status(`“${c.editor.title}” 그래프의 설정을 불러왔습니다.`);
       }
-      function applyGraphLayoutSettings() {
+      function applyGraphLayoutSettings(values = chartLayoutControlValues()) {
         let target = getSelectedSlot(),
           chart = target?.chart ? getChart(target.chart) : null;
         if (!target || target.contentType === "image" || !chart) {
@@ -18769,7 +18812,7 @@ THE SOFTWARE.</pre
           return;
         }
         try {
-          let form = chartLayoutSettingsFromForm(chart),
+          let form = chartLayoutSettingsFromValues(chart, values),
             payload = {
               slotId: target.id,
               chartId: chart.id,
