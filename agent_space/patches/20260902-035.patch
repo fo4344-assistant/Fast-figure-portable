@@ -1,0 +1,66 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.77-alpha</code></p>
++          <p><code>1.1.78-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.77-alpha";
++      const APP_BUILD = "1.1.78-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14319,6 +14319,9 @@
+         readGraphObjectAdd() {
+           return selectedGraphObjectAddModel();
+         },
++        addGraphObject(slotId, chartId) {
++          return addGraphObjectFromModel(slotId, chartId);
++        },
+         selectGraphObject(index, chartId) {
+           return selectGraphObjectFromIndex(index, chartId);
+         },
+@@ -18222,2 +18222,42 @@
+       }
++      function addGraphObjectFromModel(expectedSlotId, expectedChartId) {
++        let slot = getSelectedSlot();
++        if (!slot || slot.id !== expectedSlotId || slot.contentType === "image") return false;
++        let chart = slot.chart ? getChart(slot.chart) : null;
++        if ((chart?.id ?? null) !== (expectedChartId ?? null)) return false;
++        let model = selectedGraphObjectAddModel(slot);
++        if (!model || model.editable === false) return false;
++        if (!chart) {
++          let payload = {
++            slotId: slot.id,
++            csvId: model.csvId,
++            direction: "fsm-to-model",
++          };
++          appFSM.send("SLOT_DATA_CONNECTED", payload);
++          if (!payload.chart) return false;
++          selectGraphObjectFromIndex(0, payload.chart.id);
++          updateGraphView();
++          return true;
++        }
++        let next = projectClone(chart),
++          object = projectClone(model.object),
++          objects = Array.isArray(next.editor?.objects) ? next.editor.objects : [];
++        next.editor.objects = [...objects, object];
++        let axes = next.editor.globalSettings?.axes,
++          xKey = axisKey("x", object.xAxisSide),
++          yKey = axisKey("y", object.yAxisSide);
++        if (axes?.[xKey] && !axes[xKey].title) axes[xKey].title = object.x;
++        if (axes?.[yKey] && !axes[yKey].title) axes[yKey].title = object.y;
++        let payload = {
++          slotId: slot.id,
++          chartId: chart.id,
++          chart: next,
++          direction: "fsm-to-model",
++        };
++        appFSM.send("CHART_MODEL_REPLACED", payload);
++        if (!payload.chart) return false;
++        selectGraphObjectFromIndex(next.editor.objects.length - 1, payload.chart.id);
++        updateGraphView();
++        return true;
++      }
+       function graphObjectControlValues() {
