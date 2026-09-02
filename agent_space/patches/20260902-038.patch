@@ -1,0 +1,100 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11150,69 +11150,19 @@
+       $("addGraphObject").onclick = () => {
+-        let target = getSelectedSlot();
+-        if (!target || !activeDataReady) return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
+-        if (!target.chart) {
+-          let csv = getProjectCsv(activeCsvId);
+-          if (target.contentType === "image" || !csv)
+-            return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
+-          let payload = {
+-            slotId: target.id,
+-            csvId: csv.id,
+-            direction: "fsm-to-model",
+-          };
+-          appFSM.send("SLOT_DATA_CONNECTED", payload);
+-          if (!payload.chart) return status("빈 슬롯에 그래프를 추가하지 못했습니다.");
+-          editChart(payload.chart.id);
+-          selectedObjectIndex = 0;
+-          appFSM.send("SELECT_GRAPH_OBJECT", {
+-            index: selectedObjectIndex,
+-            direction: "fsm-to-model",
+-          });
+-          renderGraphObjects(payload.chart.editor.objects);
+-          updateGraphView();
+-          return;
+-        }
+-        let c = configFromForm(),
+-          object = {
+-            csvId: activeCsvId,
+-            x: c.editor.x,
+-            y: c.editor.y,
+-            xAxisSide: c.editor.xAxisSide,
+-            yAxisSide: c.editor.yAxisSide,
+-            type: c.editor.type,
+-            color: DEFAULT_COLORS[(editing?.editor?.objects?.length || 0) % DEFAULT_COLORS.length],
+-            legendName: c.editor.legendName,
+-            lineWidth: c.editor.lineWidth,
+-            lineDash: c.editor.lineDash,
+-            markerSymbol: c.editor.markerSymbol,
+-            markerSize: c.editor.markerSize,
+-            barOpacity: c.editor.barOpacity,
+-            barLineWidth: c.editor.barLineWidth,
+-          };
+-        c.editor.objects = [...ensureGraphObjects(editing || c), object];
+-        let xKey = axisKey("x", c.editor.xAxisSide),
+-          yKey = axisKey("y", c.editor.yAxisSide);
+-        if (!c.editor.globalSettings.axes[xKey].title) {
+-          c.editor.globalSettings.axes[xKey].title = c.editor.x;
+-          $(`${xKey}Title`).value = c.editor.x;
+-        }
+-        if (!c.editor.globalSettings.axes[yKey].title) {
+-          c.editor.globalSettings.axes[yKey].title = c.editor.y;
+-          $(`${yKey}Title`).value = c.editor.y;
+-        }
+-        c.id = target.chart;
+-        let payload = {
+-          slotId: target.id,
+-          chartId: target.chart,
+-          chart: c,
+-          direction: "fsm-to-model",
+-        };
+-        appFSM.send("CHART_MODEL_REPLACED", payload);
+-        editing = payload.chart;
+-        selectedObjectIndex = c.editor.objects.length - 1;
+-        appFSM.send("SELECT_GRAPH_OBJECT", {
+-          index: selectedObjectIndex,
+-          direction: "fsm-to-model",
+-        });
+-        renderGraphObjects(c.editor.objects);
+-        updateGraphView();
++        let model = selectedGraphObjectAddModel();
++        if (!model) return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
++        if (!fastFigureUiBridge.addGraphObject(model.slotId, model.chartId))
++          return status("그래프 오브젝트를 추가하지 못했습니다.");
++        let target = getSelectedSlot(),
++          chart = target?.chart ? getChart(target.chart) : null,
++          objects = chart ? ensureGraphObjects(chart) : [];
++        if (!chart || selectedObjectIndex === null)
++          return status("그래프 오브젝트를 추가하지 못했습니다.");
++        let object = objects[selectedObjectIndex],
++          csv = getProjectCsv(object.csvId);
++        if (csv) {
++          $("headerLines").value = csv.headerLines;
++          loadData(csv.rows, csv.name);
++        }
++        populateObjectForm(object);
++        renderGraphObjects(objects);
+       };
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.79-alpha</code></p>
++          <p><code>1.1.80-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.79-alpha";
++      const APP_BUILD = "1.1.80-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
