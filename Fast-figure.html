@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.84-alpha</code></p>
+          <p><code>1.1.85-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.84-alpha";
+      const APP_BUILD = "1.1.85-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -23726,14 +23726,8 @@ THE SOFTWARE.</pre
         let file = e.target.files[0];
         if (!file) return;
         try {
-          let parsed = JSON.parse(await file.text()),
-            colors = Array.isArray(parsed) ? parsed : parsed.colors;
-          if (!Array.isArray(colors) || !colors.length) throw Error("colors 배열이 없습니다.");
-          let valid = colors.filter(
-            (color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color),
-          );
-          if (!valid.length) throw Error("유효한 HEX 색상이 없습니다.");
-          let chart = getSelectedSlot()?.chart && getChart(getSelectedSlot().chart);
+          let valid = parseGraphPaletteText(await file.text()),
+            chart = getSelectedSlot()?.chart && getChart(getSelectedSlot().chart);
           if (!chart) throw Error("그래프 슬롯을 먼저 선택하세요.");
           if (!setGraphObjectColorsFromPalette(valid, chart.id))
             throw Error("색상 구성을 적용하지 못했습니다.");
