@@ -1,0 +1,108 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.90-alpha</code></p>
++          <p><code>1.1.91-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.90-alpha";
++      const APP_BUILD = "1.1.91-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14273,4 +14273,7 @@
+         applyCaptionEditor(values) {
+           return applyCaptionEditorFromValues(values);
+         },
++        insertSlotCaptions() {
++          return insertSlotCaptionsFromCurrentLayout();
++        },
+         exportTarget(values, statusTarget) {
+@@ -18088,3 +18091,18 @@
+         return readCaptionEditorState();
+       }
++      function insertSlotCaptionsFromCurrentLayout() {
++        clearAllSlotSelections();
++        let before = activeProject.captionText;
++        appFSM.send("SLOT_CAPTIONS_INSERTED", { direction: "fsm-to-model" });
++        let changed = activeProject.captionText !== before;
++        if (!changed) status("추가할 슬롯별 캡션이 없습니다.");
++        else
++          debugLog("annotation:slot-captions-inserted", {
++            length: activeProject.captionText.length - before.length,
++          });
++        return {
++          changed,
++          editor: readCaptionEditorState(),
++        };
++      }
+       function labelStyle() {
+@@ -14641,16 +14641,14 @@
+-          readDraft = () => {
+-            let editor = fastFigureUiBridge.readCaptionEditor();
+-            return {
+-              enabled: editor.enabled,
+-              slotMode: editor.slotMode,
+-              target: editor.target,
+-              targetSlotId: editor.targetSlotId,
+-              text: editor.text,
+-              name: editor.name,
+-              nameBold: editor.nameBold,
+-              fontFamily: editor.settings.fontFamily,
+-              fontSize: editor.settings.fontSize,
+-              lineHeight: editor.settings.lineHeight,
+-            };
+-          },
++          draftFromEditor = (editor) => ({
++            enabled: editor.enabled,
++            slotMode: editor.slotMode,
++            target: editor.target,
++            targetSlotId: editor.targetSlotId,
++            text: editor.text,
++            name: editor.name,
++            nameBold: editor.nameBold,
++            fontFamily: editor.settings.fontFamily,
++            fontSize: editor.settings.fontSize,
++            lineHeight: editor.settings.lineHeight,
++          }),
++          readDraft = () => draftFromEditor(fastFigureUiBridge.readCaptionEditor()),
+           [draft, setDraft] = React.useState(readDraft);
+@@ -14662,15 +14660,8 @@
+           applyDraft = () => {
+             let editor = fastFigureUiBridge.applyCaptionEditor(draft);
+-            setDraft({
+-              enabled: editor.enabled,
+-              slotMode: editor.slotMode,
+-              target: editor.target,
+-              targetSlotId: editor.targetSlotId,
+-              text: editor.text,
+-              name: editor.name,
+-              nameBold: editor.nameBold,
+-              fontFamily: editor.settings.fontFamily,
+-              fontSize: editor.settings.fontSize,
+-              lineHeight: editor.settings.lineHeight,
+-            });
++            setDraft(draftFromEditor(editor));
++          },
++          insertSlotCaptions = () => {
++            let result = fastFigureUiBridge.insertSlotCaptions();
++            if (result?.editor) setDraft(draftFromEditor(result.editor));
+           };
+@@ -14705,7 +14696,16 @@
+             React.createElement(
+               Text,
+               { size: "sm" },
+               draft.target === "slot" && draft.targetSlotId
+                 ? `편집 대상: 슬롯 ${draft.targetSlotId}`
+                 : "편집 대상: 전체 Figure",
+             ),
++            React.createElement(
++              Group,
++              { justify: "flex-start" },
++              React.createElement(
++                Button,
++                { variant: "light", onClick: insertSlotCaptions },
++                "슬롯별 캡션 추가",
++              ),
++            ),
