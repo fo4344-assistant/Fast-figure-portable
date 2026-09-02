@@ -1,0 +1,122 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.99-alpha</code></p>
++          <p><code>1.1.100-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.99-alpha";
++      const APP_BUILD = "1.1.100-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -8880,4 +8880,52 @@
+           });
+       }
++      function setGraphEditorEditableFromValue(editable, expectedChartId = null) {
++        let chart = editing;
++        if (!chart) {
++          status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
++          return null;
++        }
++        if (expectedChartId !== null && chart.id !== expectedChartId) {
++          debugLog("editor:editable-stale", {
++            expectedChartId,
++            actualChartId: chart.id,
++          });
++          return null;
++        }
++        let next = !!editable,
++          csv = null;
++        if (next && chartCsvIds(chart).length === 0) {
++          let conversionRows =
++              chart.editor.conversionRows ||
++              parsePlotlyToEditor(chart.graph.imported, chart.id).editor.conversionRows,
++            fallbackRows = [
++              ["X", "Y"],
++              ["", ""],
++            ];
++          if (!Array.isArray(conversionRows) || !conversionRows.length)
++            conversionRows = fallbackRows;
++          csv = createProjectCsv(conversionRows, "Plotly JSON.csv");
++          chart.editor.objects.forEach((object) => {
++            object.csvId = csv.id;
++          });
++          if (Array.isArray(chart.editor.conversionRows)) chart.editor.conversionRows.length = 0;
++          delete chart.editor.conversionRows;
++          fallbackRows.length = 0;
++          conversionRows = null;
++          activeCsvId = csv.id;
++          activeDataName = csv.name;
++        }
++        chart.editor.editable = next;
++        if (next) rebuildEditableGraph(chart);
++        renderDashboard();
++        status(
++          next
++            ? "가져온 JSON을 편집기 설정으로 재구성했습니다."
++            : "가져온 원본 Plotly JSON 표시로 전환했습니다.",
++        );
++        debugLog("editor:editable", { chartId: chart.id, editable: next });
++        publishFastFigureUiStore(appFSM.state, "graph:editable");
++        return { chart, csv, editable: next };
++      }
+       function projectClone(value) {
+         return JSON.parse(JSON.stringify(value));
+@@ -12494,45 +12542,14 @@
+       $("exportPlotlyJson").onclick = downloadPlotlyJson;
+       $("editorEditable").onclick = () => {
+-        let chart = editing;
+-        if (!chart) return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
+-        let next = chart.editor.editable === false;
+-        if (next && chartCsvIds(chart).length === 0) {
+-          let conversionRows =
+-              chart.editor.conversionRows ||
+-              parsePlotlyToEditor(chart.graph.imported, chart.id).editor.conversionRows,
+-            fallbackRows = [
+-              ["X", "Y"],
+-              ["", ""],
+-            ];
+-          if (!Array.isArray(conversionRows) || !conversionRows.length)
+-            conversionRows = fallbackRows;
+-          let csv = createProjectCsv(
+-            conversionRows,
+-            "Plotly JSON.csv",
+-          );
+-          chart.editor.objects.forEach((object) => {
+-            object.csvId = csv.id;
+-          });
+-          if (Array.isArray(chart.editor.conversionRows)) chart.editor.conversionRows.length = 0;
+-          delete chart.editor.conversionRows;
+-          fallbackRows.length = 0;
+-          conversionRows = null;
+-          activeCsvId = csv.id;
+-          activeDataName = csv.name;
+-          $("headerLines").value = csv.headerLines;
+-          loadData(csv.rows, csv.name);
+-          setFileName(csv.name);
+-          refreshCsvControls(csv.id);
+-        }
+-        chart.editor.editable = next;
+-        if (next) rebuildEditableGraph(chart);
+-        syncEditableUi(chart);
+-        renderDashboard();
+-        status(
+-          next
+-            ? "가져온 JSON을 편집기 설정으로 재구성했습니다."
+-            : "가져온 원본 Plotly JSON 표시로 전환했습니다.",
+-        );
+-        debugLog("editor:editable", { chartId: chart.id, editable: next });
++        let chart = editing,
++          result = setGraphEditorEditableFromValue(chart?.editor?.editable === false, chart?.id ?? null);
++        if (!result) return;
++        if (result.csv) {
++          $("headerLines").value = result.csv.headerLines;
++          loadData(result.csv.rows, result.csv.name);
++          setFileName(result.csv.name);
++          refreshCsvControls(result.csv.id);
++        }
++        syncEditableUi(result.chart);
+       };
+       $("importSlotJson").onclick = () => {
