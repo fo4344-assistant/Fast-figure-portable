@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.99-alpha</code></p>
+          <p><code>1.1.100-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.99-alpha";
+      const APP_BUILD = "1.1.100-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -20501,6 +20501,54 @@ THE SOFTWARE.</pre
             if (control.id !== "editorEditable") control.disabled = !editable;
           });
       }
+      function setGraphEditorEditableFromValue(editable, expectedChartId = null) {
+        let chart = editing;
+        if (!chart) {
+          status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
+          return null;
+        }
+        if (expectedChartId !== null && chart.id !== expectedChartId) {
+          debugLog("editor:editable-stale", {
+            expectedChartId,
+            actualChartId: chart.id,
+          });
+          return null;
+        }
+        let next = !!editable,
+          csv = null;
+        if (next && chartCsvIds(chart).length === 0) {
+          let conversionRows =
+              chart.editor.conversionRows ||
+              parsePlotlyToEditor(chart.graph.imported, chart.id).editor.conversionRows,
+            fallbackRows = [
+              ["X", "Y"],
+              ["", ""],
+            ];
+          if (!Array.isArray(conversionRows) || !conversionRows.length)
+            conversionRows = fallbackRows;
+          csv = createProjectCsv(conversionRows, "Plotly JSON.csv");
+          chart.editor.objects.forEach((object) => {
+            object.csvId = csv.id;
+          });
+          if (Array.isArray(chart.editor.conversionRows)) chart.editor.conversionRows.length = 0;
+          delete chart.editor.conversionRows;
+          fallbackRows.length = 0;
+          conversionRows = null;
+          activeCsvId = csv.id;
+          activeDataName = csv.name;
+        }
+        chart.editor.editable = next;
+        if (next) rebuildEditableGraph(chart);
+        renderDashboard();
+        status(
+          next
+            ? "가져온 JSON을 편집기 설정으로 재구성했습니다."
+            : "가져온 원본 Plotly JSON 표시로 전환했습니다.",
+        );
+        debugLog("editor:editable", { chartId: chart.id, editable: next });
+        publishFastFigureUiStore(appFSM.state, "graph:editable");
+        return { chart, csv, editable: next };
+      }
       function projectClone(value) {
         return JSON.parse(JSON.stringify(value));
       }
@@ -24353,47 +24401,16 @@ THE SOFTWARE.</pre
       $("exportSlotJson").onclick = downloadSlotFfsx;
       $("exportPlotlyJson").onclick = downloadPlotlyJson;
       $("editorEditable").onclick = () => {
-        let chart = editing;
-        if (!chart) return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
-        let next = chart.editor.editable === false;
-        if (next && chartCsvIds(chart).length === 0) {
-          let conversionRows =
-              chart.editor.conversionRows ||
-              parsePlotlyToEditor(chart.graph.imported, chart.id).editor.conversionRows,
-            fallbackRows = [
-              ["X", "Y"],
-              ["", ""],
-            ];
-          if (!Array.isArray(conversionRows) || !conversionRows.length)
-            conversionRows = fallbackRows;
-          let csv = createProjectCsv(
-            conversionRows,
-            "Plotly JSON.csv",
-          );
-          chart.editor.objects.forEach((object) => {
-            object.csvId = csv.id;
-          });
-          if (Array.isArray(chart.editor.conversionRows)) chart.editor.conversionRows.length = 0;
-          delete chart.editor.conversionRows;
-          fallbackRows.length = 0;
-          conversionRows = null;
-          activeCsvId = csv.id;
-          activeDataName = csv.name;
-          $("headerLines").value = csv.headerLines;
-          loadData(csv.rows, csv.name);
-          setFileName(csv.name);
-          refreshCsvControls(csv.id);
+        let chart = editing,
+          result = setGraphEditorEditableFromValue(chart?.editor?.editable === false, chart?.id ?? null);
+        if (!result) return;
+        if (result.csv) {
+          $("headerLines").value = result.csv.headerLines;
+          loadData(result.csv.rows, result.csv.name);
+          setFileName(result.csv.name);
+          refreshCsvControls(result.csv.id);
         }
-        chart.editor.editable = next;
-        if (next) rebuildEditableGraph(chart);
-        syncEditableUi(chart);
-        renderDashboard();
-        status(
-          next
-            ? "가져온 JSON을 편집기 설정으로 재구성했습니다."
-            : "가져온 원본 Plotly JSON 표시로 전환했습니다.",
-        );
-        debugLog("editor:editable", { chartId: chart.id, editable: next });
+        syncEditableUi(result.chart);
       };
       $("importSlotJson").onclick = () => {
         if (!getSelectedSlot())
