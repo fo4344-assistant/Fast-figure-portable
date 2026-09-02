@@ -1,0 +1,123 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.101-alpha</code></p>
++          <p><code>1.1.102-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.101-alpha";
++      const APP_BUILD = "1.1.102-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14707,1 +14707,109 @@
++      function FastFigureGraphFileActionsStaging({ graphFileActions }) {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Button, Group, Stack, Text } = MantineCore,
++          inputRef = React.useRef(null),
++          currentTarget = () => {
++            let current = fastFigureUiBridge.readGraphFileActions();
++            if (
++              !current ||
++              current.slotId !== graphFileActions.slotId ||
++              current.chartId !== graphFileActions.chartId
++            ) {
++              status("선택한 그래프 슬롯이 변경되었습니다.");
++              return null;
++            }
++            return current;
++          },
++          exportFfsx = () => {
++            if (!currentTarget()?.canExport) return;
++            downloadSlotFfsx();
++          },
++          exportPlotly = () => {
++            if (!currentTarget()?.canExport) return;
++            downloadPlotlyJson();
++          },
++          toggleEditable = () => {
++            let current = currentTarget();
++            if (!current?.canToggleEditable) return;
++            fastFigureUiBridge.setGraphEditorEditable(!current.editable, current.chartId);
++          },
++          load = async (event) => {
++            let file = event.target.files?.[0];
++            if (!file) return;
++            try {
++              let current = currentTarget(),
++                slot = getSelectedSlot();
++              if (!current || !slot || slot.id !== current.slotId)
++                throw Error("선택한 그래프 슬롯이 변경되었습니다.");
++              await importSlotFile(file, slot);
++            } catch (error) {
++              refreshCsvControls();
++              status("슬롯 불러오기 오류: " + error.message);
++              debugLog("slot:import-error", { message: error.message });
++            } finally {
++              event.target.value = "";
++            }
++          };
++        return React.createElement(
++          Stack,
++          { gap: "xs" },
++          React.createElement(Text, { size: "sm", fw: 600 }, "그래프 파일"),
++          React.createElement(
++            Group,
++            { grow: true },
++            React.createElement(
++              Button,
++              {
++                variant: "light",
++                size: "xs",
++                disabled: !graphFileActions.canExport,
++                onClick: exportFfsx,
++              },
++              "FFSX 내보내기",
++            ),
++            React.createElement(
++              Button,
++              {
++                variant: "light",
++                size: "xs",
++                disabled: !graphFileActions.canExport,
++                onClick: exportPlotly,
++              },
++              "Plotly JSON",
++            ),
++          ),
++          React.createElement(
++            Group,
++            { grow: true },
++            React.createElement(
++              Button,
++              {
++                variant: "light",
++                size: "xs",
++                onClick: () => inputRef.current?.click(),
++              },
++              "불러오기",
++            ),
++            React.createElement(
++              Button,
++              {
++                variant: "light",
++                size: "xs",
++                disabled: !graphFileActions.canToggleEditable,
++                onClick: toggleEditable,
++              },
++              graphFileActions.editable === false ? "편집 가능" : "원본 JSON",
++            ),
++          ),
++          React.createElement("input", {
++            ref: inputRef,
++            type: "file",
++            accept: ".ffsx,.json,application/json,application/vnd.fast-figure-slot",
++            hidden: true,
++            onChange: load,
++          }),
++        );
++      }
+       function FastFigureGraphObjectAddStaging({ graphObjectAdd }) {
