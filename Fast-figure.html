@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.79-alpha</code></p>
+          <p><code>1.1.80-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.79-alpha";
+      const APP_BUILD = "1.1.80-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -22519,73 +22519,23 @@ THE SOFTWARE.</pre
         });
       }
       $("addGraphObject").onclick = () => {
-        let target = getSelectedSlot();
-        if (!target || !activeDataReady) return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
-        if (!target.chart) {
-          let csv = getProjectCsv(activeCsvId);
-          if (target.contentType === "image" || !csv)
-            return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
-          let payload = {
-            slotId: target.id,
-            csvId: csv.id,
-            direction: "fsm-to-model",
-          };
-          appFSM.send("SLOT_DATA_CONNECTED", payload);
-          if (!payload.chart) return status("빈 슬롯에 그래프를 추가하지 못했습니다.");
-          editChart(payload.chart.id);
-          selectedObjectIndex = 0;
-          appFSM.send("SELECT_GRAPH_OBJECT", {
-            index: selectedObjectIndex,
-            direction: "fsm-to-model",
-          });
-          renderGraphObjects(payload.chart.editor.objects);
-          updateGraphView();
-          return;
+        let model = selectedGraphObjectAddModel();
+        if (!model) return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
+        if (!fastFigureUiBridge.addGraphObject(model.slotId, model.chartId))
+          return status("그래프 오브젝트를 추가하지 못했습니다.");
+        let target = getSelectedSlot(),
+          chart = target?.chart ? getChart(target.chart) : null,
+          objects = chart ? ensureGraphObjects(chart) : [];
+        if (!chart || selectedObjectIndex === null)
+          return status("그래프 오브젝트를 추가하지 못했습니다.");
+        let object = objects[selectedObjectIndex],
+          csv = getProjectCsv(object.csvId);
+        if (csv) {
+          $("headerLines").value = csv.headerLines;
+          loadData(csv.rows, csv.name);
         }
-        let c = configFromForm(),
-          object = {
-            csvId: activeCsvId,
-            x: c.editor.x,
-            y: c.editor.y,
-            xAxisSide: c.editor.xAxisSide,
-            yAxisSide: c.editor.yAxisSide,
-            type: c.editor.type,
-            color: DEFAULT_COLORS[(editing?.editor?.objects?.length || 0) % DEFAULT_COLORS.length],
-            legendName: c.editor.legendName,
-            lineWidth: c.editor.lineWidth,
-            lineDash: c.editor.lineDash,
-            markerSymbol: c.editor.markerSymbol,
-            markerSize: c.editor.markerSize,
-            barOpacity: c.editor.barOpacity,
-            barLineWidth: c.editor.barLineWidth,
-          };
-        c.editor.objects = [...ensureGraphObjects(editing || c), object];
-        let xKey = axisKey("x", c.editor.xAxisSide),
-          yKey = axisKey("y", c.editor.yAxisSide);
-        if (!c.editor.globalSettings.axes[xKey].title) {
-          c.editor.globalSettings.axes[xKey].title = c.editor.x;
-          $(`${xKey}Title`).value = c.editor.x;
-        }
-        if (!c.editor.globalSettings.axes[yKey].title) {
-          c.editor.globalSettings.axes[yKey].title = c.editor.y;
-          $(`${yKey}Title`).value = c.editor.y;
-        }
-        c.id = target.chart;
-        let payload = {
-          slotId: target.id,
-          chartId: target.chart,
-          chart: c,
-          direction: "fsm-to-model",
-        };
-        appFSM.send("CHART_MODEL_REPLACED", payload);
-        editing = payload.chart;
-        selectedObjectIndex = c.editor.objects.length - 1;
-        appFSM.send("SELECT_GRAPH_OBJECT", {
-          index: selectedObjectIndex,
-          direction: "fsm-to-model",
-        });
-        renderGraphObjects(c.editor.objects);
-        updateGraphView();
+        populateObjectForm(object);
+        renderGraphObjects(objects);
       };
       function updateTypeSpecificOptions() {
         let visibility = graphObjectTypeVisibility($("chartType").value);
