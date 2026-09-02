@@ -1,0 +1,83 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.93-alpha</code></p>
++          <p><code>1.1.94-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.93-alpha";
++      const APP_BUILD = "1.1.94-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14529,1 +14529,65 @@
++      function FastFigureLabelPreviewStaging({ draft, setDraft }) {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React } = runtime,
++          dragging = React.useRef(null);
++        React.useEffect(() => {
++          requestAnimationFrame(() => fastFigureUiBridge.renderLabelPreview(draft));
++        }, [draft]);
++        return React.createElement(
++          "div",
++          {
++            id: "labelPreview",
++            className: "label-preview",
++            "aria-label": "레이블 위치 미리보기",
++          },
++          React.createElement("div", {
++            className: "label-preview-slot",
++            "aria-hidden": "true",
++          }),
++          React.createElement(
++            "span",
++            {
++              id: "labelPreviewLabel",
++              className: "label-preview-label",
++              onPointerDown: (event) => {
++                event.preventDefault();
++                event.stopPropagation();
++                let rect = event.currentTarget.getBoundingClientRect();
++                dragging.current = {
++                  pointerId: event.pointerId,
++                  offsetX: event.clientX - rect.left,
++                  offsetY: event.clientY - rect.top,
++                };
++                event.currentTarget.setPointerCapture?.(event.pointerId);
++              },
++              onPointerMove: (event) => {
++                if (dragging.current?.pointerId !== event.pointerId) return;
++                let position = fastFigureUiBridge.labelPreviewPosition(
++                  event.clientX,
++                  event.clientY,
++                  dragging.current.offsetX,
++                  dragging.current.offsetY,
++                );
++                if (position)
++                  setDraft((current) => ({
++                    ...current,
++                    x: position.x,
++                    y: position.y,
++                  }));
++              },
++              onPointerUp: (event) => {
++                if (dragging.current?.pointerId !== event.pointerId) return;
++                event.currentTarget.releasePointerCapture?.(event.pointerId);
++                dragging.current = null;
++              },
++              onPointerCancel: (event) => {
++                if (dragging.current?.pointerId !== event.pointerId) return;
++                dragging.current = null;
++              },
++            },
++            "a",
++          ),
++        );
++      }
+       function FastFigureLabelModalStaging({ opened }) {
+@@ -14579,2 +14643,3 @@
++            React.createElement(FastFigureLabelPreviewStaging, { draft, setDraft }),
+             React.createElement(Select, {
+               label: "레이블 형식",
