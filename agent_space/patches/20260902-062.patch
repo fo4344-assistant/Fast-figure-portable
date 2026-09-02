@@ -1,0 +1,48 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.95-alpha</code></p>
++          <p><code>1.1.96-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.95-alpha";
++      const APP_BUILD = "1.1.96-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14890,1 +14890,23 @@
++      function FastFigurePrintCaptureStaging({ draft, setStatus }) {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Button } = MantineCore,
++          capture = async () => {
++            let statusTarget = {
++              set textContent(value) {
++                setStatus(String(value ?? ""));
++              },
++            };
++            await captureDashboardTargetFromValues(draft, statusTarget);
++          };
++        return React.createElement(
++          Button,
++          {
++            variant: "light",
++            onClick: () => capture().catch(() => {}),
++          },
++          "캡처",
++        );
++      }
+       function FastFigurePrintModalStaging({ opened }) {
+@@ -14969,9 +14991,10 @@
+             React.createElement(
+               Group,
+               { justify: "flex-end" },
++              React.createElement(FastFigurePrintCaptureStaging, { draft, setStatus }),
+               React.createElement(
+                 Button,
+                 { onClick: () => exportDraft().catch(() => {}) },
+                 "저장",
+               ),
+             ),
