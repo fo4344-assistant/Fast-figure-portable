@@ -1,0 +1,99 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.72-alpha</code></p>
++          <p><code>1.1.73-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.72-alpha";
++      const APP_BUILD = "1.1.73-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14332,9 +14332,18 @@
+         selectGraphObject(index, chartId) {
+           return selectGraphObjectFromIndex(index, chartId);
+         },
++        setGraphObjectColor(index, color, chartId) {
++          return setGraphObjectColorFromIndex(index, color, chartId);
++        },
++        removeGraphObject(index, chartId) {
++          return removeGraphObjectFromIndex(index, chartId);
++        },
++        moveGraphObject(from, to, chartId) {
++          return moveGraphObjectFromIndex(from, to, chartId);
++        },
+         applyGraphObject(values, chartId, objectIndex) {
+           return applySelectedGraphObjectFromValues(values, chartId, objectIndex);
+         },
+@@ -11010,6 +11010,69 @@
+       function saveGraphObjects(objects) {
+         let chart = replaceGraphObjects(objects);
+         if (!chart) return;
+         renderGraphObjects(chart.editor.objects);
+       }
++      function selectedGraphObjectListTarget(expectedChartId = null) {
++        let target = getSelectedSlot(),
++          chart = target?.chart ? getChart(target.chart) : null;
++        if (expectedChartId != null && chart?.id !== expectedChartId) return null;
++        if (!target || target.contentType === "image" || !chart?.editor) return null;
++        return chart;
++      }
++      function setGraphObjectColorFromIndex(index, color, expectedChartId = null) {
++        let chart = selectedGraphObjectListTarget(expectedChartId),
++          objects = Array.isArray(chart?.editor?.objects) ? chart.editor.objects : [];
++        if (!chart || !Number.isInteger(index) || index < 0 || index >= objects.length)
++          return false;
++        let next = [...objects];
++        next[index] = { ...next[index], color: String(color ?? "") };
++        return !!replaceGraphObjects(next, chart.id);
++      }
++      function removeGraphObjectFromIndex(index, expectedChartId = null) {
++        let chart = selectedGraphObjectListTarget(expectedChartId),
++          objects = Array.isArray(chart?.editor?.objects) ? chart.editor.objects : [];
++        if (!chart || !Number.isInteger(index) || index < 0 || index >= objects.length)
++          return false;
++        let applied = replaceGraphObjects(
++          objects.filter((_, objectIndex) => objectIndex !== index),
++          chart.id,
++        );
++        if (!applied) return false;
++        appFSM.send("CLEAR_GRAPH_OBJECT", {
++          index: null,
++          direction: "fsm-to-model",
++        });
++        return true;
++      }
++      function moveGraphObjectFromIndex(from, to, expectedChartId = null) {
++        let chart = selectedGraphObjectListTarget(expectedChartId),
++          objects = Array.isArray(chart?.editor?.objects) ? chart.editor.objects : [];
++        if (
++          !chart ||
++          !Number.isInteger(from) ||
++          !Number.isInteger(to) ||
++          from < 0 ||
++          from >= objects.length ||
++          to < 0 ||
++          to >= objects.length ||
++          from === to
++        )
++          return false;
++        let next = [...objects],
++          moved = next.splice(from, 1)[0],
++          nextSelectedIndex = Number.isInteger(selectedObjectIndex)
++            ? selectedObjectIndex
++            : null;
++        next.splice(to, 0, moved);
++        if (nextSelectedIndex === from) nextSelectedIndex = to;
++        else if (from < nextSelectedIndex && nextSelectedIndex <= to)
++          nextSelectedIndex--;
++        else if (to <= nextSelectedIndex && nextSelectedIndex < from)
++          nextSelectedIndex++;
++        appFSM.send("SELECT_GRAPH_OBJECT", {
++          index: nextSelectedIndex,
++          direction: "fsm-to-model",
++        });
++        return !!replaceGraphObjects(next, chart.id);
++      }
+       function renderGraphObjects(objects = []) {
