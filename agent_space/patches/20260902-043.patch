@@ -1,0 +1,56 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.83-alpha</code></p>
++          <p><code>1.1.84-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.83-alpha";
++      const APP_BUILD = "1.1.84-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -12222,1 +12222,11 @@
++      function parseGraphPaletteText(text) {
++        let parsed = JSON.parse(text),
++          colors = Array.isArray(parsed) ? parsed : parsed?.colors;
++        if (!Array.isArray(colors) || !colors.length) throw Error("colors 배열이 없습니다.");
++        let valid = colors.filter(
++          (color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color),
++        );
++        if (!valid.length) throw Error("유효한 HEX 색상이 없습니다.");
++        return valid;
++      }
+       $("resetGraphPalette").onclick = () => {
+@@ -12232,14 +12242,7 @@
+       $("saveGraphPalette").onclick = () => {
+         let slot = getSelectedSlot();
+         if (!slot) return status("그래프 슬롯을 먼저 선택하세요.");
+-        let blob = new Blob([JSON.stringify({ colors: graphPalette() }, null, 2)], {
+-            type: "application/json",
+-          }),
+-          a = document.createElement("a"),
+-          stamp = new Date().toISOString().replace(/[:.]/g, "-");
+-        a.href = URL.createObjectURL(blob);
+-        a.download = `chart-palette-${stamp}.json`;
+-        a.click();
+-        setTimeout(() => URL.revokeObjectURL(a.href), 0);
++        let stamp = new Date().toISOString().replace(/[:.]/g, "-");
++        downloadJsonFile({ colors: graphPalette() }, `chart-palette-${stamp}.json`);
+         debugLog("graphPalette:save", { slotId: slot.id });
+       };
+@@ -12251,9 +12254,3 @@
+         if (!file) return;
+         try {
+-          let parsed = JSON.parse(await file.text()),
+-            colors = Array.isArray(parsed) ? parsed : parsed.colors;
+-          if (!Array.isArray(colors) || !colors.length) throw Error("colors 배열이 없습니다.");
+-          let valid = colors.filter(
+-            (color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color),
+-          );
+-          if (!valid.length) throw Error("유효한 HEX 색상이 없습니다.");
+-          let chart = getSelectedSlot()?.chart && getChart(getSelectedSlot().chart);
++          let valid = parseGraphPaletteText(await file.text()),
++            chart = getSelectedSlot()?.chart && getChart(getSelectedSlot().chart);
+           if (!chart) throw Error("그래프 슬롯을 먼저 선택하세요.");
