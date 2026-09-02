@@ -1,0 +1,32 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.82-alpha</code></p>
++          <p><code>1.1.83-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.82-alpha";
++      const APP_BUILD = "1.1.83-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14648,3 +14648,3 @@
+         let { React, MantineCore } = runtime,
+-          { ActionIcon, ColorInput, Group, Paper, Stack, Text, Title } = MantineCore,
++          { ActionIcon, Button, ColorInput, Group, Paper, Stack, Text, Title } = MantineCore,
+           disabled = graphObjects.editable === false,
+@@ -14656,2 +14656,12 @@
+           React.createElement(Title, { order: 3, size: "h6" }, "그래프 오브젝트"),
++          React.createElement(
++            Button,
++            {
++              variant: "light",
++              size: "xs",
++              disabled: disabled || !graphObjects.objects.length,
++              onClick: () =>
++                fastFigureUiBridge.setGraphObjectColors(DEFAULT_COLORS, graphObjects.chartId),
++            },
++            "기본 색상",
++          ),
+           graphObjects.objects.length
