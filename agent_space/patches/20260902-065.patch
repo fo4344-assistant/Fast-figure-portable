@@ -1,0 +1,65 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.97-alpha</code></p>
++          <p><code>1.1.98-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.97-alpha";
++      const APP_BUILD = "1.1.98-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14407,1 +14407,51 @@
++      function FastFigureDashboardZoomStaging() {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Button, Group, Slider, Stack, Text } = MantineCore,
++          [model, setModel] = React.useState(() => readDashboardZoomModel());
++        return React.createElement(
++          Stack,
++          { gap: "xs" },
++          React.createElement(
++            Group,
++            { justify: "space-between", wrap: "nowrap" },
++            React.createElement(Text, { size: "sm" }, "대시보드 확대"),
++            React.createElement(
++              Text,
++              { size: "sm", c: "dimmed" },
++              `${Math.round(model.zoom)}% · ${Math.round(model.width)}px`,
++            ),
++          ),
++          React.createElement(Slider, {
++            min: 50,
++            max: 200,
++            step: 1,
++            value: model.zoom,
++            disabled: model.locked,
++            onChange: (value) => setModel(setDashboardZoomFromValue(value, false)),
++            onChangeEnd: (value) => setModel(setDashboardZoomFromValue(value, true)),
++          }),
++          React.createElement(
++            Group,
++            { gap: "xs" },
++            React.createElement(
++              Button,
++              {
++                variant: "light",
++                onClick: () => setModel(setDashboardZoomLockedFromValue(!model.locked)),
++              },
++              model.locked ? "폭 고정 해제" : "현재 폭 고정",
++            ),
++            React.createElement(
++              Button,
++              {
++                variant: "light",
++                onClick: () => setModel(resetDashboardZoomFromValue()),
++              },
++              "100%",
++            ),
++          ),
++        );
++      }
+       function FastFigureLayoutModalStaging({ opened }) {
