@@ -1,0 +1,81 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.86-alpha</code></p>
++          <p><code>1.1.87-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.86-alpha";
++      const APP_BUILD = "1.1.87-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14640,1 +14640,67 @@
++      function FastFigureGraphPaletteFileStaging({ graphPalette }) {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Button, Group, Stack } = MantineCore,
++          inputRef = React.useRef(null),
++          loadDisabled = graphPalette.editable === false,
++          save = () => {
++            let stamp = new Date().toISOString().replace(/[:.]/g, "-");
++            downloadJsonFile(
++              { colors: [...graphPalette.colors] },
++              `chart-palette-${stamp}.json`,
++            );
++            debugLog("graphPalette:save", { slotId: graphPalette.slotId });
++          },
++          load = async (event) => {
++            let file = event.target.files?.[0];
++            if (!file) return;
++            try {
++              let colors = parseGraphPaletteText(await file.text());
++              if (!fastFigureUiBridge.setGraphObjectColors(colors, graphPalette.chartId))
++                throw Error("색상 구성을 적용하지 못했습니다.");
++              status(`${file.name} 색상 구성을 덮어썼습니다.`);
++              debugLog("graphPalette:load", {
++                slotId: graphPalette.slotId,
++                name: file.name,
++                colors: colors.length,
++              });
++            } catch (error) {
++              status("팔레트 불러오기 실패: " + error.message);
++              debugLog("graphPalette:load-error", { message: error.message });
++            } finally {
++              event.target.value = "";
++            }
++          };
++        return React.createElement(
++          Stack,
++          { gap: "xs" },
++          React.createElement(
++            Group,
++            { grow: true },
++            React.createElement(
++              Button,
++              { variant: "light", size: "xs", onClick: save },
++              "색상 저장",
++            ),
++            React.createElement(
++              Button,
++              {
++                variant: "light",
++                size: "xs",
++                disabled: loadDisabled,
++                onClick: () => inputRef.current?.click(),
++              },
++              "색상 불러오기",
++            ),
++          ),
++          React.createElement("input", {
++            ref: inputRef,
++            type: "file",
++            accept: ".json,application/json",
++            hidden: true,
++            onChange: load,
++          }),
++        );
++      }
+       function FastFigureGraphObjectAddStaging({ graphObjectAdd }) {
