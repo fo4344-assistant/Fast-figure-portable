@@ -1,0 +1,52 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.73-alpha</code></p>
++          <p><code>1.1.74-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.73-alpha";
++      const APP_BUILD = "1.1.74-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -11125,32 +11125,16 @@
+           item.ondrop = (e) => {
+             e.preventDefault();
+             let to = +item.dataset.index;
+             if (dragging === null || dragging === to) return;
+-            let next = [...objects],
+-              moved = next.splice(dragging, 1)[0];
+-            next.splice(to, 0, moved);
+-            if (selectedObjectIndex === dragging) selectedObjectIndex = to;
+-            else if (dragging < selectedObjectIndex && selectedObjectIndex <= to)
+-              selectedObjectIndex--;
+-            else if (to <= selectedObjectIndex && selectedObjectIndex < dragging)
+-              selectedObjectIndex++;
+-            appFSM.send("SELECT_GRAPH_OBJECT", {
+-              index: selectedObjectIndex,
+-              direction: "fsm-to-model",
+-            });
+-            saveGraphObjects(next);
++            if (moveGraphObjectFromIndex(dragging, to))
++              renderGraphObjects(ensureGraphObjects(editing));
+           };
+           item.querySelector(".graph-object-color").oninput = (e) => {
+-            let next = [...objects];
+-            next[+item.dataset.index] = { ...next[+item.dataset.index], color: e.target.value };
+-            saveGraphObjects(next);
++            if (setGraphObjectColorFromIndex(+item.dataset.index, e.target.value))
++              renderGraphObjects(ensureGraphObjects(editing));
+           };
+           item.querySelector(".graph-object-delete").onclick = (e) => {
+             e.stopPropagation();
+-            saveGraphObjects(objects.filter((_, index) => index !== +item.dataset.index));
+-            appFSM.send("CLEAR_GRAPH_OBJECT", {
+-              index: null,
+-              direction: "fsm-to-model",
+-            });
+-            renderGraphObjects(ensureGraphObjects(editing));
++            if (removeGraphObjectFromIndex(+item.dataset.index))
++              renderGraphObjects(ensureGraphObjects(editing));
+           };
