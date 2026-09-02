@@ -1,0 +1,66 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.68-alpha</code></p>
++          <p><code>1.1.69-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.68-alpha";
++      const APP_BUILD = "1.1.69-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14332,6 +14332,9 @@
+         readGraphObjects() {
+           return selectedGraphObjectsModel();
+         },
++        selectGraphObject(index, chartId) {
++          return selectGraphObjectFromIndex(index, chartId);
++        },
+         applyGraphObject(values, chartId, objectIndex) {
+           return applySelectedGraphObjectFromValues(values, chartId, objectIndex);
+         },
+@@ -10912,19 +10912,36 @@
+-      function selectGraphObject(index) {
+-        let objects = ensureGraphObjects(editing);
+-        let next = selectedObjectIndex === index ? null : index;
++      function selectGraphObjectFromIndex(index, expectedChartId = null) {
++        let target = getSelectedSlot(),
++          chart = target?.chart ? getChart(target.chart) : null;
++        if (expectedChartId != null && chart?.id !== expectedChartId) return false;
++        if (!target || target.contentType === "image" || !chart?.editor) return false;
++        let objects = Array.isArray(chart.editor.objects) ? chart.editor.objects : [],
++          requested =
++            Number.isInteger(index) && index >= 0 && index < objects.length ? index : null,
++          next = selectedObjectIndex === requested ? null : requested;
+         appFSM.send(next === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", {
+           index: next,
+           direction: "fsm-to-model",
+         });
+         if (selectedObjectIndex !== null) {
+-          let object = objects[selectedObjectIndex],
+-            csv = getProjectCsv(object.csvId);
++          let object = chart.editor.objects[selectedObjectIndex],
++            csv = object?.csvId != null ? getProjectCsv(object.csvId) : null;
+           if (csv) {
+             activeCsvId = csv.id;
+             activeDataName = csv.name;
++            refreshCsvControls(csv.id);
++          }
++        }
++        return true;
++      }
++      function selectGraphObject(index) {
++        let objects = ensureGraphObjects(editing);
++        if (!selectGraphObjectFromIndex(index, editing?.id ?? null)) return;
++        if (selectedObjectIndex !== null) {
++          let object = objects[selectedObjectIndex],
++            csv = getProjectCsv(object.csvId);
++          if (csv) {
+             $("headerLines").value = csv.headerLines;
+             loadData(csv.rows, csv.name);
+-            refreshCsvControls(csv.id);
+           }
+           populateObjectForm(object);
+         }
