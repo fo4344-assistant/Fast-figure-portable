@@ -1,0 +1,37 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.85-alpha</code></p>
++          <p><code>1.1.86-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.85-alpha";
++      const APP_BUILD = "1.1.86-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14316,4 +14316,7 @@
+         readGraphObjects() {
+           return selectedGraphObjectsModel();
+         },
++        readGraphPalette() {
++          return selectedGraphPaletteModel();
++        },
+         readGraphObjectAdd() {
+@@ -18221,2 +18224,15 @@
+       }
++      function selectedGraphPaletteModel(slot = getSelectedSlot()) {
++        let chart = slot?.chart ? getChart(slot.chart) : null;
++        if (!slot || slot.contentType === "image" || !chart?.editor) return null;
++        let colors = (Array.isArray(chart.editor.objects) ? chart.editor.objects : [])
++          .map((object) => object?.color)
++          .filter(Boolean);
++        return Object.freeze({
++          slotId: slot.id,
++          chartId: chart.id,
++          editable: chart.editor.editable !== false,
++          colors: Object.freeze(colors.length ? [...colors] : [...DEFAULT_COLORS]),
++        });
++      }
+       function graphObjectControlValues() {
