@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.92-alpha</code></p>
+          <p><code>1.1.93-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.92-alpha";
+      const APP_BUILD = "1.1.93-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -14267,6 +14267,12 @@ THE SOFTWARE.</pre
         },
         applyLabelPosition(values) {
           return applyLabelPositionFromValues(values);
+        },
+        renderLabelPreview(values) {
+          return renderLabelPreviewFromValues(values, false);
+        },
+        labelPreviewPosition(clientX, clientY, offsetX = 0, offsetY = 0) {
+          return labelPreviewPositionFromPointer(clientX, clientY, offsetX, offsetY);
         },
         setAnnotationEnabled(kind, enabled) {
           return applyAnnotationVisibilityFromValues(kind, enabled);
@@ -22865,23 +22871,48 @@ THE SOFTWARE.</pre
           y: Math.min(Math.max(0, y), Math.max(0, geometry.reference.height - height)),
         };
       }
-      function renderLabelPreview() {
-        let label = $("labelPreviewLabel"),
-          slot = $("labelPreview").querySelector(".label-preview-slot"),
+      function labelPreviewPositionFromPointer(clientX, clientY, offsetX = 0, offsetY = 0) {
+        let preview = $("labelPreview");
+        if (!preview) return null;
+        let rect = preview.getBoundingClientRect(),
           geometry = labelPreviewGeometry();
-        label.textContent = displayedSlotIdentifier(0);
+        return constrainLabelPreviewPosition(
+          (clientX - rect.left - geometry.left - offsetX) / geometry.scale,
+          (clientY - rect.top - geometry.top - offsetY) / geometry.scale,
+          geometry,
+        );
+      }
+      function renderLabelPreviewFromValues(values = {}, syncControls = false) {
+        let preview = $("labelPreview"),
+          label = $("labelPreviewLabel"),
+          slot = preview?.querySelector(".label-preview-slot");
+        if (!preview || !label || !slot) return null;
+        let settings = { ...activeProject.labelSettings, ...values },
+          geometry = labelPreviewGeometry(),
+          x = finiteLabelPosition(Number(settings.x)),
+          y = finiteLabelPosition(Number(settings.y)),
+          identifier = targetSlotIdentifier(0, settings);
+        label.textContent = settings.parentheses ? `(${identifier})` : identifier;
         slot.style.left = `${geometry.left}px`;
         slot.style.top = `${geometry.top}px`;
         slot.style.width = `${geometry.width}px`;
         slot.style.height = `${geometry.height}px`;
-        label.style.left = `${geometry.left + activeProject.labelSettings.x * geometry.scale}px`;
-        label.style.top = `${geometry.top + activeProject.labelSettings.y * geometry.scale}px`;
-        label.style.fontFamily = activeProject.labelSettings.fontFamily;
-        label.style.fontSize = `${activeProject.labelSettings.fontSize * geometry.scale}px`;
+        label.style.left = `${geometry.left + x * geometry.scale}px`;
+        label.style.top = `${geometry.top + y * geometry.scale}px`;
+        label.style.fontFamily = settings.fontFamily;
+        label.style.fontSize = `${settings.fontSize * geometry.scale}px`;
         label.style.minWidth = `${20 * geometry.scale}px`;
         label.style.padding = `${2 * geometry.scale}px ${6 * geometry.scale}px`;
-        $("labelPositionX").value = Number(activeProject.labelSettings.x.toFixed(2));
-        $("labelPositionY").value = Number(activeProject.labelSettings.y.toFixed(2));
+        if (syncControls) {
+          let xControl = $("labelPositionX"),
+            yControl = $("labelPositionY");
+          if (xControl) xControl.value = Number(x.toFixed(2));
+          if (yControl) yControl.value = Number(y.toFixed(2));
+        }
+        return { x, y, geometry };
+      }
+      function renderLabelPreview() {
+        return renderLabelPreviewFromValues(activeProject.labelSettings, true);
       }
       function applyLabelSettingsFromValues(values = {}) {
         activeProject.labelSettings.format = values.format ?? activeProject.labelSettings.format;
