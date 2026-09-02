@@ -1,0 +1,25 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.102-alpha</code></p>
++          <p><code>1.1.103-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.102-alpha";
++      const APP_BUILD = "1.1.103-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -15283,5 +15283,6 @@
+           chartLayout = fastFigureUiBridge.readChartLayout(),
++          graphFileActions = fastFigureUiBridge.readGraphFileActions(),
+           graphObjectAdd = fastFigureUiBridge.readGraphObjectAdd(),
+           graphPalette = fastFigureUiBridge.readGraphPalette(),
+           graphObjects = fastFigureUiBridge.readGraphObjects(),
+           graphObject = fastFigureUiBridge.readGraphObject();
+@@ -15530,1 +15531,4 @@
++            graphFileActions
++              ? React.createElement(FastFigureGraphFileActionsStaging, { graphFileActions })
++              : null,
+             chartLayout
