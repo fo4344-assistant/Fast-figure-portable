@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.73-alpha</code></p>
+          <p><code>1.1.74-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.73-alpha";
+      const APP_BUILD = "1.1.74-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -22283,33 +22283,17 @@ THE SOFTWARE.</pre
             e.preventDefault();
             let to = +item.dataset.index;
             if (dragging === null || dragging === to) return;
-            let next = [...objects],
-              moved = next.splice(dragging, 1)[0];
-            next.splice(to, 0, moved);
-            if (selectedObjectIndex === dragging) selectedObjectIndex = to;
-            else if (dragging < selectedObjectIndex && selectedObjectIndex <= to)
-              selectedObjectIndex--;
-            else if (to <= selectedObjectIndex && selectedObjectIndex < dragging)
-              selectedObjectIndex++;
-            appFSM.send("SELECT_GRAPH_OBJECT", {
-              index: selectedObjectIndex,
-              direction: "fsm-to-model",
-            });
-            saveGraphObjects(next);
+            if (moveGraphObjectFromIndex(dragging, to))
+              renderGraphObjects(ensureGraphObjects(editing));
           };
           item.querySelector(".graph-object-color").oninput = (e) => {
-            let next = [...objects];
-            next[+item.dataset.index] = { ...next[+item.dataset.index], color: e.target.value };
-            saveGraphObjects(next);
+            if (setGraphObjectColorFromIndex(+item.dataset.index, e.target.value))
+              renderGraphObjects(ensureGraphObjects(editing));
           };
           item.querySelector(".graph-object-delete").onclick = (e) => {
             e.stopPropagation();
-            saveGraphObjects(objects.filter((_, index) => index !== +item.dataset.index));
-            appFSM.send("CLEAR_GRAPH_OBJECT", {
-              index: null,
-              direction: "fsm-to-model",
-            });
-            renderGraphObjects(ensureGraphObjects(editing));
+            if (removeGraphObjectFromIndex(+item.dataset.index))
+              renderGraphObjects(ensureGraphObjects(editing));
           };
         });
       }
