@@ -1,0 +1,135 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.74-alpha</code></p>
++          <p><code>1.1.75-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.74-alpha";
++      const APP_BUILD = "1.1.75-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14611,1 +14611,121 @@
++      function FastFigureGraphObjectListStaging({ graphObjects }) {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { ActionIcon, ColorInput, Group, Paper, Stack, Text, Title } = MantineCore,
++          disabled = graphObjects.editable === false,
++          dragType = "application/x-fast-figure-graph-object-index";
++        return React.createElement(
++          Stack,
++          { gap: "xs" },
++          React.createElement(Title, { order: 3, size: "h6" }, "그래프 오브젝트"),
++          graphObjects.objects.length
++            ? graphObjects.objects.map((item) =>
++                React.createElement(
++                  Paper,
++                  {
++                    key: `${graphObjects.chartId}-${item.index}`,
++                    withBorder: true,
++                    radius: "sm",
++                    p: "xs",
++                    shadow: item.selected ? "xs" : undefined,
++                    style: { cursor: disabled ? "default" : "pointer" },
++                    draggable: !disabled,
++                    role: "button",
++                    tabIndex: disabled ? -1 : 0,
++                    "aria-pressed": item.selected,
++                    onClick: () =>
++                      fastFigureUiBridge.selectGraphObject(
++                        item.index,
++                        graphObjects.chartId,
++                      ),
++                    onKeyDown: (event) => {
++                      if (disabled || (event.key !== "Enter" && event.key !== " ")) return;
++                      event.preventDefault();
++                      fastFigureUiBridge.selectGraphObject(
++                        item.index,
++                        graphObjects.chartId,
++                      );
++                    },
++                    onDragStart: (event) => {
++                      if (disabled || event.target.closest?.("input,button")) {
++                        event.preventDefault();
++                        return;
++                      }
++                      event.dataTransfer.effectAllowed = "move";
++                      event.dataTransfer.setData(dragType, String(item.index));
++                    },
++                    onDragOver: (event) => {
++                      if (
++                        !disabled &&
++                        Array.from(event.dataTransfer.types || []).includes(dragType)
++                      )
++                        event.preventDefault();
++                    },
++                    onDrop: (event) => {
++                      if (disabled) return;
++                      event.preventDefault();
++                      let from = Number(event.dataTransfer.getData(dragType));
++                      if (!Number.isInteger(from) || from === item.index) return;
++                      fastFigureUiBridge.moveGraphObject(
++                        from,
++                        item.index,
++                        graphObjects.chartId,
++                      );
++                    },
++                  },
++                  React.createElement(
++                    Group,
++                    { gap: "xs", wrap: "nowrap" },
++                    React.createElement(
++                      Text,
++                      {
++                        size: "sm",
++                        fw: item.selected ? 700 : 400,
++                        style: { flex: 1, minWidth: 0 },
++                      },
++                      item.label,
++                    ),
++                    React.createElement(ColorInput, {
++                      value: item.color,
++                      format: "hex",
++                      withEyeDropper: false,
++                      disabled,
++                      "aria-label": "그래프 객체 색상",
++                      onClick: (event) => event.stopPropagation(),
++                      onChange: (color) =>
++                        fastFigureUiBridge.setGraphObjectColor(
++                          item.index,
++                          color,
++                          graphObjects.chartId,
++                        ),
++                      w: 112,
++                    }),
++                    React.createElement(
++                      ActionIcon,
++                      {
++                        variant: "subtle",
++                        disabled,
++                        "aria-label": "그래프 객체 삭제",
++                        title: "삭제",
++                        onClick: (event) => {
++                          event.stopPropagation();
++                          fastFigureUiBridge.removeGraphObject(
++                            item.index,
++                            graphObjects.chartId,
++                          );
++                        },
++                      },
++                      "×",
++                    ),
++                  ),
++                ),
++              )
++            : React.createElement(
++                Text,
++                { size: "sm", c: "dimmed" },
++                "추가된 그래프 객체가 없습니다.",
++              ),
++        );
++      }
+       function FastFigureGraphObjectStaging({ graphObject }) {
