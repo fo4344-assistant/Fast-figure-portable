@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.96-alpha</code></p>
+          <p><code>1.1.97-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.96-alpha";
+      const APP_BUILD = "1.1.97-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -24458,7 +24458,7 @@ THE SOFTWARE.</pre
         syncSettingToggle(button, active);
         applySlotStyle();
       };
-      function applyDashboardZoom(resize = true, requestedValue = null) {
+      function applyDashboardZoom(resize = true, requestedValue = null, syncControls = true) {
         if (requestedValue !== null && !dashboardZoomLocked)
           dashboardZoomIntent = Math.max(50, Math.min(200, Number(requestedValue) || 100));
         let dashboard = $("dashboard"),
@@ -24473,7 +24473,7 @@ THE SOFTWARE.</pre
         applyReferenceGeometry(dashboard);
         syncDashboardCaptionWidth();
         if (resize) schedulePlotResize();
-        requestAnimationFrame(syncDashboardZoomDisplay);
+        if (syncControls) requestAnimationFrame(syncDashboardZoomDisplay);
       }
       function commitDashboardScale(reason) {
         renderDashboard();
@@ -24484,23 +24484,55 @@ THE SOFTWARE.</pre
         });
         appFSM.notify("layout", "DASHBOARD_SCALE_COMMITTED");
       }
-      function setDashboardZoomLocked(locked) {
-        let dashboard = $("dashboard"),
-          slider = $("dashboardZoom"),
-          lock = $("dashboardZoomLock");
-        dashboardZoomLocked = locked;
-        if (locked) dashboardZoomLockedWidth = dashboard.getBoundingClientRect().width;
+      function readDashboardZoomModel() {
+        let dashboard = $("dashboard");
+        return Object.freeze({
+          zoom: dashboardZoomIntent,
+          locked: dashboardZoomLocked,
+          lockedWidth: dashboardZoomLockedWidth,
+          width: dashboard?.getBoundingClientRect().width || 0,
+        });
+      }
+      function setDashboardZoomFromValue(value, commit = false) {
+        if (dashboardZoomLocked) return readDashboardZoomModel();
+        applyDashboardZoom(false, value, false);
+        if (commit) commitDashboardScale("zoom-value");
+        return readDashboardZoomModel();
+      }
+      function setDashboardZoomLockedFromValue(locked) {
+        let dashboard = $("dashboard");
+        dashboardZoomLocked = !!locked;
+        if (dashboardZoomLocked)
+          dashboardZoomLockedWidth = dashboard.getBoundingClientRect().width;
         else {
           dashboardZoomLockedWidth = null;
           dashboardZoomIntent = 100;
         }
-        slider.disabled = locked;
-        lock.setAttribute("aria-pressed", String(locked));
-        lock.title = locked ? "대시보드 크기 고정 해제" : "현재 대시보드 크기 고정";
-        applyDashboardZoom(false);
-        if (locked) schedulePlotResize();
+        applyDashboardZoom(false, null, false);
+        if (dashboardZoomLocked) schedulePlotResize();
         else commitDashboardScale("unlock-reset-100");
-        debugLog("dashboard:zoom-lock", { locked, width: dashboardZoomLockedWidth });
+        debugLog("dashboard:zoom-lock", {
+          locked: dashboardZoomLocked,
+          width: dashboardZoomLockedWidth,
+        });
+        return readDashboardZoomModel();
+      }
+      function resetDashboardZoomFromValue() {
+        if (dashboardZoomLocked) return setDashboardZoomLockedFromValue(false);
+        dashboardZoomIntent = 100;
+        applyDashboardZoom(false, null, false);
+        commitDashboardScale("reset-100");
+        return readDashboardZoomModel();
+      }
+      function setDashboardZoomLocked(locked) {
+        let slider = $("dashboardZoom"),
+          lock = $("dashboardZoomLock"),
+          state = setDashboardZoomLockedFromValue(locked);
+        slider.disabled = state.locked;
+        lock.setAttribute("aria-pressed", String(state.locked));
+        lock.title = state.locked ? "대시보드 크기 고정 해제" : "현재 대시보드 크기 고정";
+        requestAnimationFrame(syncDashboardZoomDisplay);
+        return state;
       }
       function applyCsvHeaderLinesFromValue(value, csvId = activeCsvId) {
         let csv = getProjectCsv(csvId);
