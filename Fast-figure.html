@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.68-alpha</code></p>
+          <p><code>1.1.69-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.68-alpha";
+      const APP_BUILD = "1.1.69-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -14334,6 +14334,9 @@ THE SOFTWARE.</pre
         },
         readGraphObjects() {
           return selectedGraphObjectsModel();
+        },
+        selectGraphObject(index, chartId) {
+          return selectGraphObjectFromIndex(index, chartId);
         },
         applyGraphObject(values, chartId, objectIndex) {
           return applySelectedGraphObjectFromValues(values, chartId, objectIndex);
@@ -22051,22 +22054,39 @@ THE SOFTWARE.</pre
           $(id).value = object[key] ?? "";
         });
       }
-      function selectGraphObject(index) {
-        let objects = ensureGraphObjects(editing);
-        let next = selectedObjectIndex === index ? null : index;
+      function selectGraphObjectFromIndex(index, expectedChartId = null) {
+        let target = getSelectedSlot(),
+          chart = target?.chart ? getChart(target.chart) : null;
+        if (expectedChartId != null && chart?.id !== expectedChartId) return false;
+        if (!target || target.contentType === "image" || !chart?.editor) return false;
+        let objects = Array.isArray(chart.editor.objects) ? chart.editor.objects : [],
+          requested =
+            Number.isInteger(index) && index >= 0 && index < objects.length ? index : null,
+          next = selectedObjectIndex === requested ? null : requested;
         appFSM.send(next === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", {
           index: next,
           direction: "fsm-to-model",
         });
         if (selectedObjectIndex !== null) {
-          let object = objects[selectedObjectIndex],
-            csv = getProjectCsv(object.csvId);
+          let object = chart.editor.objects[selectedObjectIndex],
+            csv = object?.csvId != null ? getProjectCsv(object.csvId) : null;
           if (csv) {
             activeCsvId = csv.id;
             activeDataName = csv.name;
+            refreshCsvControls(csv.id);
+          }
+        }
+        return true;
+      }
+      function selectGraphObject(index) {
+        let objects = ensureGraphObjects(editing);
+        if (!selectGraphObjectFromIndex(index, editing?.id ?? null)) return;
+        if (selectedObjectIndex !== null) {
+          let object = objects[selectedObjectIndex],
+            csv = getProjectCsv(object.csvId);
+          if (csv) {
             $("headerLines").value = csv.headerLines;
             loadData(csv.rows, csv.name);
-            refreshCsvControls(csv.id);
           }
           populateObjectForm(object);
         }
