@@ -1,0 +1,63 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.70-alpha</code></p>
++          <p><code>1.1.71-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.70-alpha";
++      const APP_BUILD = "1.1.71-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -10975,34 +10975,40 @@
+-      function saveGraphObjects(objects) {
++      function replaceGraphObjects(objects, expectedChartId = null) {
+         let target = getSelectedSlot(),
+           chart = target?.chart && getChart(target.chart);
++        if (expectedChartId != null && chart?.id !== expectedChartId) return null;
+         if (!chart) {
+           debugLog(
+             "graph:objects-save-skipped",
+             { slotId: target?.id ?? null, reason: "chart-not-found" },
+             "warn",
+           );
+-          return;
++          return null;
+         }
+         debugLog("graph:objects-save", {
+           slotId: target.id,
+           chartId: chart.id,
+           count: objects.length,
+         });
+         let payload = {
+           chartId: chart.id,
+           objects,
+           index: selectedObjectIndex,
+           direction: "fsm-to-model",
+         };
+         appFSM.send("GRAPH_OBJECTS_REPLACED", payload);
+         chart = payload.chart;
+         editing = chart;
+-        renderGraphObjects(chart.editor.objects);
+         updateGraphView();
+         appFSM.notify(
+           "charts",
+           payload.recovered
+             ? "GRAPH_OBJECTS_DEFAULT_CREATED"
+             : "GRAPH_OBJECTS_CHANGED",
+         );
++        return chart;
++      }
++      function saveGraphObjects(objects) {
++        let chart = replaceGraphObjects(objects);
++        if (!chart) return;
++        renderGraphObjects(chart.editor.objects);
+       }
+@@ -18110,3 +18110,3 @@
+         let next = [...objects];
+         next[selectedObjectIndex] = graphObjectSettingsFromValues(current, values);
+-        saveGraphObjects(next);
++        replaceGraphObjects(next, chart.id);
+         return true;
