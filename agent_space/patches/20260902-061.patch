@@ -1,0 +1,23 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.95-alpha</code></p>
++          <p><code>1.1.96-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.95-alpha";
++      const APP_BUILD = "1.1.96-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14276,6 +14276,9 @@
+         insertSlotCaptions() {
+           return insertSlotCaptionsFromCurrentLayout();
+         },
+         exportTarget(values, statusTarget) {
+           return exportDashboardTargetFromValues(values, statusTarget);
+         },
++        captureTarget(values, statusTarget) {
++          return captureDashboardTargetFromValues(values, statusTarget);
++        },
