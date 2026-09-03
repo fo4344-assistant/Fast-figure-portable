@@ -1,0 +1,24 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.108-alpha</code></p>
++          <p><code>1.1.109-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.108-alpha";
++      const APP_BUILD = "1.1.109-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -17675,1 +17675,10 @@
++      function applyLifecycleDomainState({ state, payload } = {}) {
++        if (state === "error" && payload?.error)
++          debugLog("fsm:lifecycle-error", payload.error, "error");
++        return state;
++      }
++      function applyOverlayOpenPolicy(state) {
++        if (state !== "none" && state !== "readme") clearAllSlotSelections();
++        return state;
++      }
+       function syncProjectWorkspaceDomainState() {
