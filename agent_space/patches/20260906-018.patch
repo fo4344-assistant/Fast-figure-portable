@@ -111,7 +111,7 @@ diff --git a/fast-figure.js b/fast-figure.js
        $("importProjectFile").onchange = async (event) => {
          let file = event.target.files[0];
          if (!file) return;
-@@ -10038,19 +10098,6 @@
+@@ -10038,18 +10098,6 @@
 -        try {
 -          let header = new Uint8Array(await file.slice(0, 4).arrayBuffer()),
 -            payload;
