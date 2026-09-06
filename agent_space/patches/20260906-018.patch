@@ -20,7 +20,7 @@ diff --git a/fast-figure.js b/fast-figure.js
          changeSlotContentType(type) {
            if (type !== "graph" && type !== "image") return false;
            let hasSlot = !!getSelectedSlot();
-@@ -2897,6 +2903,31 @@
+@@ -2897,6 +2903,32 @@
                onBlur: (event) =>
                  fastFigureUiBridge.setProjectName(event.currentTarget.value, true),
              }),
@@ -45,7 +45,11 @@ diff --git a/fast-figure.js b/fast-figure.js
 +                (props) =>
 +                  React.createElement(
 +                    Button,
-+                    { ...props, variant: "default", disabled: !!slot || snapshot.fsm.lifecycle !== "ready" },
++                    {
++                      ...props,
++                      variant: "default",
++                      disabled: !!slot || snapshot.fsm.lifecycle !== "ready",
++                    },
 +                    "FFPX 불러오기",
 +                  ),
 +              ),
@@ -53,7 +57,7 @@ diff --git a/fast-figure.js b/fast-figure.js
              React.createElement(SegmentedControl, {
                fullWidth: true,
                value: slot ? slot.contentType : snapshot.pendingSlotContentType,
-@@ -9983,12 +10014,10 @@
+@@ -9983,12 +10015,10 @@
          if (commit) debugLog("project:name", { projectName: name });
          return name;
        }
@@ -68,7 +72,7 @@ diff --git a/fast-figure.js b/fast-figure.js
            let project = ffpxBuildProject(),
              blob = new Blob([ffpxZipStore(project.assets)], {
                type: "application/vnd.fast-figure-project",
-@@ -10014,6 +10043,11 @@
+@@ -10014,6 +10044,11 @@
            debugLog("project:export-error", { message: error.message });
          }
        }
@@ -80,7 +84,7 @@ diff --git a/fast-figure.js b/fast-figure.js
        $("projectName").addEventListener("input", (event) => {
          fastFigureUiBridge.setProjectName(event.target.value);
        });
-@@ -10028,24 +10062,28 @@
+@@ -10028,24 +10063,28 @@
            return status("프로젝트 불러오기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
          $("importProjectFile").click();
        };
