@@ -1,0 +1,22 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -132,9 +132,18 @@
+       React.createElement(
+         Button,
+         { variant: "light", disabled: busy, onClick: openDataPicker },
+         "데이터 추가",
+       ),
++      React.createElement(
++        Button,
++        {
++          variant: "light",
++          disabled: busy || !["csv", "image"].includes(state.assetSelection),
++          onClick: () => downloadProjectAsset(),
++        },
++        "선택 에셋 다운로드",
++      ),
+     );
+   }
+ 
+   function FastFigureProjectActions() {
