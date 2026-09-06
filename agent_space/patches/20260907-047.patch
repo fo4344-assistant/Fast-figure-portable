@@ -1,0 +1,72 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -102,7 +102,31 @@
+     const busy = state.lifecycle !== "ready";
+     const slot = state.workspace === "project" ? null : getSelectedSlot();
+     const slotType = slot?.contentType || "graph";
++    const [resetSlotId, setResetSlotId] = useState(null);
+ 
++    const closeResetDialog = () => setResetSlotId(null);
++    const confirmSlotReset = () => {
++      if (!Number.isInteger(resetSlotId)) return;
++      const payload = {
++        slotIds: [resetSlotId],
++        direction: "fsm-to-model",
++      };
++      try {
++        appFSM.send("SLOTS_RESET", payload);
++        appFSM.send("CLEAR_ASSET_SELECTION", {
++          direction: "fsm-to-model",
++        });
++        renderDashboard();
++        status("선택한 슬롯을 초기화했습니다.");
++        debugLog("slotReset:complete", {
++          slotId: resetSlotId,
++          removedChartIds: payload.removedChartIds,
++        });
++        closeResetDialog();
++      } catch (error) {
++        status(`슬롯 초기화 오류: ${error.message}`);
++      }
++    };
+     return React.createElement(
+       Stack,
+       { gap: "xs", p: "md" },
+@@ -143,5 +163,36 @@
+         },
+         "선택 에셋 다운로드",
+       ),
++      slot
++        ? React.createElement(
++            Button,
++            {
++              variant: "light",
++              disabled: busy,
++              onClick: () => setResetSlotId(slot.id),
++            },
++            "선택 슬롯 초기화",
++          )
++        : null,
++      React.createElement(
++        Modal,
++        {
++          opened: Number.isInteger(resetSlotId),
++          onClose: closeResetDialog,
++          title: "선택 슬롯 초기화",
++          centered: true,
++        },
++        React.createElement(
++          Stack,
++          { gap: "sm" },
++          React.createElement(Text, null, "데이터를 잃습니다."),
++          React.createElement(
++            Group,
++            { justify: "flex-end", gap: "xs" },
++            React.createElement(Button, { variant: "light", onClick: closeResetDialog }, "취소"),
++            React.createElement(Button, { onClick: confirmSlotReset }, "초기화"),
++          ),
++        ),
++      ),
+     );
+   }
