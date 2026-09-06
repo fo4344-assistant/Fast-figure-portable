@@ -1,12 +1,12 @@
 diff --git a/Fast-figure.html b/Fast-figure.html
 --- a/Fast-figure.html
 +++ b/Fast-figure.html
-@@ -11420,3 +11420,3 @@
+@@ -11435,3 +11435,3 @@
        <dialog id="readmeDialog" tabindex="-1">
          <div class="popup-heading"><strong>Fast figure README</strong></div>
 -        <div class="readme-content">
 +        <template id="readmeContentTemplate">
-@@ -11772,4 +11772,5 @@
+@@ -11775,4 +11775,5 @@
 -          <button id="closeReadme" type="button" class="light">Close</button>
 -        </div>
 +        </template>
@@ -23,7 +23,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 -      const APP_BUILD = "1.1.138-alpha";
 +      const APP_BUILD = "1.1.139-alpha";
        const ICONOIR_GLYPHS = Object.freeze({
-@@ -2155,10 +2155,6 @@
+@@ -2154,10 +2154,6 @@
          exportTarget(values, statusTarget) {
            return exportDashboardTargetFromValues(values, statusTarget);
          },
@@ -35,7 +35,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 -          return clone.innerHTML;
 +          return $("readmeContentTemplate")?.innerHTML || "";
          },
-@@ -9164,6 +9161,14 @@
+@@ -9175,6 +9171,14 @@
          status(`${selected.length}개 슬롯을 나눴습니다.`);
          appFSM.notify("layout", "SLOTS_SPLIT");
        }
