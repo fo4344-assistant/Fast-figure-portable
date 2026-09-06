@@ -4,7 +4,7 @@
   if (!window.fastFigureUiRoot) throw new Error("Fast Figure React root is not initialized");
 
   const { React, MantineCore } = runtime;
-  const { AppShell, Button, Group, MantineProvider, Stack, Text } = MantineCore;
+  const { AppShell, Button, Group, MantineProvider, Modal, Stack, Text, TextInput } = MantineCore;
   const { useState, useSyncExternalStore } = React;
 
   function subscribeAppState(onStoreChange) {
@@ -152,10 +152,50 @@
     const state = useAppState();
     const snapshot = projectDataTreeSnapshot(projectDataTreeObjects());
     const [expanded, setExpanded] = useState(() => new Set(["/assets", "/slots"]));
+    const [lastDirectory, setLastDirectory] = useState("/assets");
+    const [folderDialog, setFolderDialog] = useState({
+      opened: false,
+      parent: "/assets",
+      name: "New Folder",
+    });
+    const busy = state.lifecycle !== "ready";
     const directories = [...new Set(snapshot.directories)]
       .filter((path) => path === "/assets" || path.startsWith("/assets/"))
       .sort((a, b) => a.localeCompare(b));
 
+    const openFolderDialog = () => {
+      const selectedDirectory =
+        state.assetSelection === "directory" ? state.assetPath : lastDirectory;
+      const parent =
+        typeof selectedDirectory === "string" &&
+        (selectedDirectory === "/assets" || selectedDirectory.startsWith("/assets/")) &&
+        !projectVfs.isTrashed(selectedDirectory)
+          ? selectedDirectory
+          : "/assets";
+      setFolderDialog({ opened: true, parent, name: "New Folder" });
+    };
+    const closeFolderDialog = () =>
+      setFolderDialog((current) => ({ ...current, opened: false }));
+    const createFolderFromMantine = () => {
+      const payload = {
+        parent: folderDialog.parent,
+        name: folderDialog.name,
+        direction: "ui-to-fsm",
+      };
+      try {
+        appFSM.send("PROJECT_DIRECTORY_CREATED", payload);
+        setLastDirectory(payload.path);
+        appFSM.send("SELECT_ASSET", {
+          kind: "directory",
+          path: payload.path,
+          direction: "ui-to-fsm",
+        });
+        status(`${payload.path} 폴더를 만들었습니다.`);
+        closeFolderDialog();
+      } catch (error) {
+        status(`폴더 생성 오류: ${error.message}`);
+      }
+    };
     const toggleExpanded = (path) => {
       setExpanded((current) => {
         const next = new Set(current);
@@ -220,6 +260,7 @@
             justify: "flex-start",
             "aria-expanded": open,
             onClick: () => {
+              setLastDirectory(path);
               selectDirectoryFromTree(path);
               toggleExpanded(path);
             },
@@ -258,6 +299,48 @@
       Stack,
       { gap: "xs", px: "md", pb: "md" },
       React.createElement(Text, { fw: 600, size: "sm" }, "PROJECT DATA"),
+      React.createElement(
+        Button,
+        {
+          variant: "light",
+          size: "xs",
+          disabled: busy,
+          onClick: openFolderDialog,
+        },
+        "새 폴더",
+      ),
+      React.createElement(
+        Modal,
+        {
+          opened: folderDialog.opened,
+          onClose: closeFolderDialog,
+          title: "새 폴더",
+          centered: true,
+        },
+        React.createElement(
+          Stack,
+          { gap: "sm" },
+          React.createElement(Text, { size: "sm", c: "dimmed" }, `위치: ${folderDialog.parent}`),
+          React.createElement(TextInput, {
+            label: "폴더 이름",
+            value: folderDialog.name,
+            autoFocus: true,
+            onChange: (event) =>
+              setFolderDialog((current) => ({ ...current, name: event.target.value })),
+            onKeyDown: (event) => {
+              if (event.key !== "Enter" || event.nativeEvent?.isComposing) return;
+              event.preventDefault();
+              createFolderFromMantine();
+            },
+          }),
+          React.createElement(
+            Group,
+            { justify: "flex-end", gap: "xs" },
+            React.createElement(Button, { variant: "light", onClick: closeFolderDialog }, "취소"),
+            React.createElement(Button, { onClick: createFolderFromMantine }, "만들기"),
+          ),
+        ),
+      ),
       directoryNode("/assets"),
       React.createElement(
         Button,
