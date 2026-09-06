@@ -57,7 +57,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 +        );
 +      }
        function FastFigureTextInputModalStaging({ dialog, onClose, onSubmit }) {
-@@ -3490,5 +3530,19 @@
+@@ -3490,5 +3490,19 @@
            graphObject = fastFigureUiBridge.readGraphObject(),
            [confirmation, setConfirmation] = React.useState(null),
            [inputDialog, setInputDialog] = React.useState(null),
@@ -77,7 +77,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 +          },
            openAssetDropConfirmation = (request) => {
              if (!request?.confirmation || !request.moveRequest) return;
-@@ -3655,5 +3709,6 @@
+@@ -3655,5 +3655,6 @@
                {
                  accept: fileInput.accept,
                  multiple: fileInput.multiple,
@@ -85,7 +85,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 +                onChange: (files) =>
 +                  fastFigureUiBridge.loadFiles(files, requestImportChoice),
                },
-@@ -3972,6 +4027,10 @@
+@@ -3972,4 +3972,8 @@
                onClose: () => setInputDialog(null),
                onSubmit: submitAssetInput,
              }),
@@ -94,8 +94,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 +              onChoose: resolveImportChoice,
 +            }),
            ),
-         );
-@@ -11425,11 +11484,13 @@
+@@ -11425,11 +11425,13 @@
        async function loadImageFile(
          file,
          slot,
@@ -113,7 +112,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 +                ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
 +                : planProjectAssetImport(file, PROJECT_ASSET_DIRECTORIES.image),
              image;
-@@ -11487,5 +11548,5 @@
+@@ -11487,6 +11487,6 @@
        async function loadDataFile(
          file,
          slot,
@@ -121,7 +120,8 @@ diff --git a/fast-figure.js b/fast-figure.js
 +        { replaceSlotContent = false, assetPath = null, replaceAssetId = null, assetPlan = null } = {},
        ) {
          debugLog("fileLoad:start", {
-@@ -11507,7 +11568,9 @@
+           name: file.name,
+@@ -11507,6 +11507,8 @@
            if (!Array.isArray(data) && Array.isArray(data.data)) data = data.data;
            if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
 -          let plan = assetPath
@@ -133,7 +133,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 +              ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
 +              : planProjectAssetImport(file, PROJECT_ASSET_DIRECTORIES.csv);
            if (Number.isInteger(plan.replaceId)) {
-@@ -11570,9 +11633,10 @@
+@@ -11570,9 +11570,10 @@
 -      async function loadFileIntoSlot(file, slot) {
 +      async function loadFileIntoSlot(file, slot, { assetPlan = null } = {}) {
          let kind = slotFileKind(file);
@@ -146,7 +146,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 +          assetPlan,
          });
        }
-@@ -11610,24 +11674,94 @@
+@@ -11610,18 +11610,96 @@
 -      async function loadProjectFiles(fileList) {
 +      function projectAssetImportChoiceModel(model) {
 +        if (!model || model.mode === "available") return null;
@@ -203,6 +203,8 @@ diff --git a/fast-figure.js b/fast-figure.js
          try {
 -          if (target && (target.contentType || "graph") === "image")
 -            await loadFileIntoSlot(files[0], target);
+-          else if (target)
+-            for (let file of files) await loadDataFile(file, target);
 +          if (target && (target.contentType || "graph") === "image") {
 +            let file = files[0],
 +              kind = slotFileKind(file),
@@ -217,8 +219,6 @@ diff --git a/fast-figure.js b/fast-figure.js
 +                : null;
 +            await loadFileIntoSlot(file, target, { assetPlan });
 +          } else if (target)
--          else if (target)
--            for (let file of files) await loadDataFile(file, target);
 +            for (let file of files) {
 +              let assetPlan = await resolveProjectAssetImportChoice(
 +                file,
@@ -250,3 +250,4 @@ diff --git a/fast-figure.js b/fast-figure.js
 +              } else throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
              }
            return true;
+         } catch (error) {
