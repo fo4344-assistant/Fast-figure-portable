@@ -1,0 +1,252 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.136-alpha";
++      const APP_BUILD = "1.1.137-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -2308,4 +2308,4 @@
+-        loadFiles(files) {
+-          return loadProjectFiles(files);
++        loadFiles(files, resolveImportChoice = null) {
++          return loadProjectFiles(files, resolveImportChoice);
+         },
+         readImageSettings() {
+@@ -3420,2 +3420,42 @@
+       }
++      function FastFigureChoiceStaging({ dialog, onChoose }) {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Button, Group, Modal, Stack, Text } = MantineCore,
++          closeValue = dialog?.closeValue ?? dialog?.choices?.[0]?.value ?? null;
++        return React.createElement(
++          Modal,
++          {
++            opened: !!dialog,
++            onClose: () => onChoose(closeValue),
++            title: dialog?.title || "선택",
++            centered: true,
++          },
++          React.createElement(
++            Stack,
++            { gap: "sm" },
++            React.createElement(
++              Text,
++              { size: "sm", style: { whiteSpace: "pre-wrap" } },
++              dialog?.message || "",
++            ),
++            React.createElement(
++              Group,
++              { justify: "flex-end" },
++              ...(dialog?.choices || []).map((choice) =>
++                React.createElement(
++                  Button,
++                  {
++                    key: choice.value,
++                    variant: choice.variant,
++                    onClick: () => onChoose(choice.value),
++                  },
++                  choice.label,
++                ),
++              ),
++            ),
++          ),
++        );
++      }
+       function FastFigureTextInputModalStaging({ dialog, onClose, onSubmit }) {
+@@ -3490,5 +3530,19 @@
+           graphObject = fastFigureUiBridge.readGraphObject(),
+           [confirmation, setConfirmation] = React.useState(null),
+           [inputDialog, setInputDialog] = React.useState(null),
++          [choiceDialog, setChoiceDialog] = React.useState(null),
++          choiceResolverRef = React.useRef(null),
++          requestImportChoice = (dialog) =>
++            new Promise((resolve) => {
++              choiceResolverRef.current?.(dialog?.closeValue ?? "rename");
++              choiceResolverRef.current = resolve;
++              setChoiceDialog(dialog);
++            }),
++          resolveImportChoice = (value) => {
++            let resolve = choiceResolverRef.current;
++            choiceResolverRef.current = null;
++            setChoiceDialog(null);
++            resolve?.(value);
++          },
+           openAssetDropConfirmation = (request) => {
+             if (!request?.confirmation || !request.moveRequest) return;
+@@ -3655,5 +3709,6 @@
+               {
+                 accept: fileInput.accept,
+                 multiple: fileInput.multiple,
+-                onChange: (files) => fastFigureUiBridge.loadFiles(files),
++                onChange: (files) =>
++                  fastFigureUiBridge.loadFiles(files, requestImportChoice),
+               },
+@@ -3972,6 +4027,10 @@
+               onClose: () => setInputDialog(null),
+               onSubmit: submitAssetInput,
+             }),
++            React.createElement(FastFigureChoiceStaging, {
++              dialog: choiceDialog,
++              onChoose: resolveImportChoice,
++            }),
+           ),
+         );
+@@ -11425,11 +11484,13 @@
+       async function loadImageFile(
+         file,
+         slot,
+-        { assetPath = null, replaceAssetId = null } = {},
++        { assetPath = null, replaceAssetId = null, assetPlan = null } = {},
+       ) {
+         try {
+           let bytes = new Uint8Array(await file.arrayBuffer()),
+-            plan = assetPath
+-              ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
+-              : planProjectAssetImport(file, PROJECT_ASSET_DIRECTORIES.image),
++            plan = assetPlan
++              ? { path: normalizeProjectPath(assetPlan.path), replaceId: assetPlan.replaceId }
++              : assetPath
++                ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
++                : planProjectAssetImport(file, PROJECT_ASSET_DIRECTORIES.image),
+             image;
+@@ -11487,5 +11548,5 @@
+       async function loadDataFile(
+         file,
+         slot,
+-        { replaceSlotContent = false, assetPath = null, replaceAssetId = null } = {},
++        { replaceSlotContent = false, assetPath = null, replaceAssetId = null, assetPlan = null } = {},
+       ) {
+         debugLog("fileLoad:start", {
+@@ -11507,7 +11568,9 @@
+           if (!Array.isArray(data) && Array.isArray(data.data)) data = data.data;
+           if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
+-          let plan = assetPath
+-            ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
+-            : planProjectAssetImport(file, PROJECT_ASSET_DIRECTORIES.csv);
++          let plan = assetPlan
++            ? { path: normalizeProjectPath(assetPlan.path), replaceId: assetPlan.replaceId }
++            : assetPath
++              ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
++              : planProjectAssetImport(file, PROJECT_ASSET_DIRECTORIES.csv);
+           if (Number.isInteger(plan.replaceId)) {
+@@ -11570,9 +11633,10 @@
+-      async function loadFileIntoSlot(file, slot) {
++      async function loadFileIntoSlot(file, slot, { assetPlan = null } = {}) {
+         let kind = slotFileKind(file);
+         if (!kind) throw Error("지원하지 않는 파일 형식입니다.");
+         if (kind === "slot") return importSlotFile(file, slot);
+-        if (kind === "image") return loadImageFile(file, slot);
++        if (kind === "image") return loadImageFile(file, slot, { assetPlan });
+         return loadDataFile(file, slot, {
+           replaceSlotContent: slot?.contentType === "image",
++          assetPlan,
+         });
+       }
+@@ -11610,24 +11674,94 @@
+-      async function loadProjectFiles(fileList) {
++      function projectAssetImportChoiceModel(model) {
++        if (!model || model.mode === "available") return null;
++        if (model.mode === "replace-or-rename")
++          return Object.freeze({
++            title: "같은 이름의 파일",
++            message: model.message,
++            closeValue: "rename",
++            choices: Object.freeze([
++              Object.freeze({
++                value: "rename",
++                label: "새 이름으로 추가",
++                variant: "default",
++              }),
++              Object.freeze({
++                value: "replace",
++                label: "기존 파일 교체",
++              }),
++            ]),
++          });
++        return Object.freeze({
++          title: "파일 이름 충돌",
++          message: model.notice || `${model.path}에 같은 이름의 항목이 있습니다.`,
++          closeValue: "rename",
++          choices: Object.freeze([
++            Object.freeze({
++              value: "rename",
++              label: "새 이름으로 추가",
++            }),
++          ]),
++        });
++      }
++      async function resolveProjectAssetImportChoice(
++        file,
++        directory,
++        resolveImportChoice = null,
++        reservedPaths = null,
++      ) {
++        if (typeof resolveImportChoice !== "function")
++          return planProjectAssetImport(file, directory, reservedPaths);
++        let model = projectAssetImportCollisionModel(file, directory, reservedPaths),
++          dialog = projectAssetImportChoiceModel(model),
++          choice = dialog ? await resolveImportChoice(dialog) : "rename";
++        return resolveProjectAssetImportPlan(
++          model,
++          choice ?? dialog?.closeValue ?? "rename",
++          reservedPaths,
++        );
++      }
++      async function loadProjectFiles(fileList, resolveImportChoice = null) {
+         let files = fileList instanceof File ? [fileList] : [...(fileList || [])],
+           target = getSelectedSlot();
+         if (!files.length) return false;
+         try {
+-          if (target && (target.contentType || "graph") === "image")
+-            await loadFileIntoSlot(files[0], target);
++          if (target && (target.contentType || "graph") === "image") {
++            let file = files[0],
++              kind = slotFileKind(file),
++              assetPlan = ["data", "image"].includes(kind)
++                ? await resolveProjectAssetImportChoice(
++                    file,
++                    kind === "image"
++                      ? PROJECT_ASSET_DIRECTORIES.image
++                      : PROJECT_ASSET_DIRECTORIES.csv,
++                    resolveImportChoice,
++                  )
++                : null;
++            await loadFileIntoSlot(file, target, { assetPlan });
++          } else if (target)
+-          else if (target)
+-            for (let file of files) await loadDataFile(file, target);
++            for (let file of files) {
++              let assetPlan = await resolveProjectAssetImportChoice(
++                file,
++                PROJECT_ASSET_DIRECTORIES.csv,
++                resolveImportChoice,
++              );
++              await loadDataFile(file, target, { assetPlan });
++            }
+           else
+             for (let file of files) {
+               let kind = slotFileKind(file);
+-              if (kind === "image") await loadImageFile(file, null);
+-              else if (kind === "data") await loadDataFile(file, null);
+-              else throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
++              if (kind === "image") {
++                let assetPlan = await resolveProjectAssetImportChoice(
++                  file,
++                  PROJECT_ASSET_DIRECTORIES.image,
++                  resolveImportChoice,
++                );
++                await loadImageFile(file, null, { assetPlan });
++              } else if (kind === "data") {
++                let assetPlan = await resolveProjectAssetImportChoice(
++                  file,
++                  PROJECT_ASSET_DIRECTORIES.csv,
++                  resolveImportChoice,
++                );
++                await loadDataFile(file, null, { assetPlan });
++              } else throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
+             }
+           return true;
