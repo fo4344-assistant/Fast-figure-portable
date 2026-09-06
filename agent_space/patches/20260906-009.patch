@@ -20,7 +20,7 @@ diff --git a/fast-figure.js b/fast-figure.js
          refreshImageControls();
          renderProjectDataTree(objects);
          syncLabelControlsFromObject(objects?.labels || projectObjects.read("labels"));
-@@ -1470,12 +1470,12 @@
+@@ -1470,11 +1470,12 @@
          $("imageBox").classList.add("hidden");
        }
        function syncGraphWorkspaceState({ objects } = {}) {
@@ -37,7 +37,7 @@ diff --git a/fast-figure.js b/fast-figure.js
          else if (!slot.chart) {
            setFileName();
            clearPreview();
-@@ -1483,13 +1483,13 @@
+@@ -1483,13 +1484,13 @@
          }
 -        refreshCsvControls();
          renderProjectDataTree(objects);
@@ -55,7 +55,7 @@ diff --git a/fast-figure.js b/fast-figure.js
          setFileName(slotImage(slot)?.name);
          clearPreview();
          $("buildBox").classList.add("hidden");
-@@ -1506,8 +1506,8 @@
+@@ -1506,8 +1507,8 @@
          syncCaptionControlsFromObject(projectObjects.read("captions"));
        }
        function exitGraphWorkspaceState() {
