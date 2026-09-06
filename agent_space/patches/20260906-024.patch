@@ -7,7 +7,11 @@ diff --git a/fast-figure.js b/fast-figure.js
 -      const APP_BUILD = "1.1.127-alpha";
 +      const APP_BUILD = "1.1.128-alpha";
        const ICONOIR_GLYPHS = Object.freeze({
-@@ -359,3 +359,12 @@
+@@ -356,9 +356,18 @@
+         dashboardZoomIntent = 100,
+         dashboardZoomLocked = false,
+         dashboardZoomLockedWidth = null,
+         selectedExplorerDirectory = "/assets",
          selectedObjectIndex = null;
 +      let uiStatusMessage = "",
 +        fastFigureUiStoreReady = false;
@@ -21,6 +25,8 @@ diff --git a/fast-figure.js b/fast-figure.js
 +            publishFastFigureUiStore(appFSM.state, "status:changed");
 +          return uiStatusMessage;
 +        };
+       let debugEnabled = false,
+         debugSequence = 0;
 @@ -2012,3 +2021,4 @@
            fsm: appFSM.state,
            projectName: activeProject.projectName,
