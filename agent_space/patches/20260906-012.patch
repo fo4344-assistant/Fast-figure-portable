@@ -1,0 +1,39 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.115-alpha";
++      const APP_BUILD = "1.1.116-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -4749,3 +4749,11 @@
+       }
+-      function applySlotStyle(fromControls = true, notify = true) {
++      function syncLegacySlotStyleControls(style = activeProject.layout.slotStyle) {
++        $("dashboardReferenceWidth").value = style.referenceWidth;
++        $("slotGap").value = style.gap;
++        $("dashboardOuterMargin").value = style.outerMargin;
++        $("slotRadius").value = style.radius;
++        $("dashboardAspect").value = style.aspect;
++        syncSettingToggle("showSlotBorders", style.showBorders);
++      }
++      function applySlotStyle(fromControls = true, notify = true, syncControls = true) {
+         if (fromControls) activeProject.layout.slotStyle = slotStyleFromControls();
+@@ -4752,3 +4760,2 @@
+         let style = activeProject.layout.slotStyle,
+-          outerMargin = style.outerMargin,
+           bordersVisible = style.showBorders,
+@@ -4758,8 +4765,3 @@
+           dashboard = $("dashboard");
+-        $("dashboardReferenceWidth").value = style.referenceWidth;
+-        $("slotGap").value = style.gap;
+-        $("dashboardOuterMargin").value = outerMargin;
+-        $("slotRadius").value = style.radius;
+-        $("dashboardAspect").value = style.aspect;
+-        syncSettingToggle("showSlotBorders", bordersVisible);
++        if (syncControls) syncLegacySlotStyleControls(style);
+         ["dashboard", "layoutMap", "dashboardCaption"].forEach((id) => {
+@@ -12500 +12502 @@
+-        applySlotStyle(false);
++        applySlotStyle(false, true, false);
