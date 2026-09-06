@@ -11584,7 +11584,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           </p>
           <p><strong>Bundled third-party software</strong></p>
           <p><strong>React / ReactDOM 19.2.8</strong></p>
-          <p>Fast figure bundles React and ReactDOM directly in this HTML file as part of the UI runtime. No external React runtime is required.</p>
+          <p>
+            Development source loads the vendored React/ReactDOM runtime from
+            <code>vendor/fast-figure-ui-runtime.js</code>. The portable build embeds the same bytes
+            directly in the generated HTML. No network React runtime is required.
+          </p>
           <ul><li>Source repository: <a href="https://github.com/facebook/react" target="_blank" rel="noopener noreferrer">github.com/facebook/react</a></li><li>Package version used: <code>19.2.8</code></li><li>License: MIT</li></ul>
           <p><strong>React license</strong></p><pre>MIT License
 
@@ -11608,7 +11612,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.</pre>
           <p><strong>Mantine 9.5.2</strong></p>
-          <p>Fast figure bundles <code>@mantine/core</code> and <code>@mantine/hooks</code> directly in this HTML file.</p>
+          <p>
+            Development source keeps <code>@mantine/core</code> and <code>@mantine/hooks</code> in
+            <code>vendor/fast-figure-ui-runtime.js</code>; the portable build embeds the same runtime
+            directly in the generated HTML.
+          </p>
           <ul><li>Source repository: <a href="https://github.com/mantinedev/mantine" target="_blank" rel="noopener noreferrer">github.com/mantinedev/mantine</a></li><li>Package version used: <code>9.5.2</code></li><li>License: MIT</li></ul>
           <p><strong>Mantine license</strong></p><pre>MIT License
 
@@ -11634,9 +11642,10 @@ SOFTWARE.</pre>
           <p><strong>Iconoir 7.11.1</strong></p>
           <p>
             Fast figure uses selected Iconoir SVG paths for the project data tree, its toolbar and
-            action menu, and the print/save/capture controls. The selected SVG definitions are
-            embedded directly in this HTML file; the Iconoir package, CDN, and external SVG files
-            are not required at runtime.
+            action menu, and the print/save/capture controls. Development source keeps those
+            definitions in <code>fast-figure.js</code>; the portable build embeds them in the
+            generated HTML. The Iconoir package, CDN, and external SVG files are not required at
+            runtime.
           </p>
           <ul>
             <li>
@@ -11670,8 +11679,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.</pre>
           <p><strong>Plotly.js 2.35.2</strong></p>
           <p>
-            Fast figure bundles the minified Plotly.js 2.35.2 distribution directly inside the HTML
-            file. No separate Plotly.js installation is required.
+            Development source keeps the minified Plotly.js 2.35.2 distribution in
+            <code>vendor/plotly.min.js</code>; the portable build embeds the same bytes directly
+            inside the generated HTML. No separate Plotly.js installation is required.
           </p>
           <ul>
             <li>
