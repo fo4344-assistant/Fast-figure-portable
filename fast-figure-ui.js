@@ -47,6 +47,10 @@
     document.getElementById("importProjectFile").click();
   }
 
+  function openDataPicker() {
+    document.getElementById("file").click();
+  }
+
   function FastFigureToolbar() {
     const state = useAppState();
     const activeOverlay = state.overlay;
@@ -72,6 +76,48 @@
         selectedTargetText(state),
       ),
       React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트" }, "프린트"),
+    );
+  }
+
+  function FastFigureDataActions() {
+    const state = useAppState();
+    const busy = state.lifecycle !== "ready";
+    const slot = state.workspace === "project" ? null : getSelectedSlot();
+    const slotType = slot?.contentType || "graph";
+
+    return React.createElement(
+      Stack,
+      { gap: "xs", p: "md" },
+      React.createElement(Text, { fw: 600 }, "데이터"),
+      slot
+        ? React.createElement(
+            Group,
+            { gap: "xs", grow: true },
+            React.createElement(
+              Button,
+              {
+                variant: slotType === "graph" ? "filled" : "light",
+                disabled: busy,
+                onClick: () => setSlotContentType("graph"),
+              },
+              "그래프",
+            ),
+            React.createElement(
+              Button,
+              {
+                variant: slotType === "image" ? "filled" : "light",
+                disabled: busy,
+                onClick: () => setSlotContentType("image"),
+              },
+              "이미지",
+            ),
+          )
+        : null,
+      React.createElement(
+        Button,
+        { variant: "light", disabled: busy, onClick: openDataPicker },
+        "데이터 추가",
+      ),
     );
   }
 
@@ -102,7 +148,7 @@
   function FastFigureShell() {
     return React.createElement(
       AppShell,
-      { header: { height: 57 }, padding: 0 },
+      { header: { height: 57 }, navbar: { width: 370, breakpoint: "sm" }, padding: 0 },
       React.createElement(
         AppShell.Header,
         null,
@@ -113,13 +159,20 @@
           React.createElement("div", { style: { flex: "1 1 auto", minWidth: 0 } }, React.createElement(FastFigureToolbar)),
         ),
       ),
-      React.createElement(AppShell.Main, null, React.createElement(FastFigureProjectActions)),
+      React.createElement(
+        AppShell.Navbar,
+        { p: 0 },
+        React.createElement(FastFigureDataActions),
+        React.createElement(FastFigureProjectActions),
+      ),
+      React.createElement(AppShell.Main, null),
     );
   }
 
   window.FastFigureMantineUi = Object.freeze({
     FastFigureShell,
     FastFigureToolbar,
+    FastFigureDataActions,
     FastFigureProjectActions,
     getAppStateSnapshot,
     selectedTargetText,
