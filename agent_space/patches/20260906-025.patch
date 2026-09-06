@@ -119,7 +119,7 @@ diff --git a/fast-figure.js b/fast-figure.js
          );
        }
        function applyUiPalette(fromControls = true, notify = true) {
-@@ -13142,17 +13231,13 @@
+@@ -13141,4 +13230,12 @@
          renderDashboard();
          if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
        }
@@ -132,6 +132,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 +        return applyUiPaletteFromValues(DEFAULT_UI_PALETTE, notify);
 +      }
        $("applyUiPalette").onclick = applyUiPalette;
+@@ -13145,14 +13242,2 @@
 -      $("resetUiPalette").onclick = () => {
 -        $("uiColor").value = "#B0CFCE";
 -        $("uiBackgroundColor").value = "#FAFAFA";
@@ -146,3 +147,4 @@ diff --git a/fast-figure.js b/fast-figure.js
 -        applyUiPalette();
 -      };
 +      $("resetUiPalette").onclick = () => resetUiPaletteFromValues();
+       function syncHeaderHeight() {
