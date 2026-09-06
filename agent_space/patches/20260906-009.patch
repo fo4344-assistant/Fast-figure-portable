@@ -7,7 +7,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 -      const APP_BUILD = "1.1.112-alpha";
 +      const APP_BUILD = "1.1.113-alpha";
        const ICONOIR_GLYPHS = Object.freeze({
-@@ -1454,12 +1454,12 @@
+@@ -1454,10 +1454,10 @@
        }
        function syncProjectWorkspaceState({ objects } = {}) {
 +        let { availability } = syncProjectWorkspaceDomainState();
@@ -20,7 +20,7 @@ diff --git a/fast-figure.js b/fast-figure.js
          refreshImageControls();
          renderProjectDataTree(objects);
          syncLabelControlsFromObject(objects?.labels || projectObjects.read("labels"));
-@@ -1470,12 +1470,13 @@
+@@ -1470,12 +1470,12 @@
          $("imageBox").classList.add("hidden");
        }
        function syncGraphWorkspaceState({ objects } = {}) {
@@ -37,7 +37,7 @@ diff --git a/fast-figure.js b/fast-figure.js
          else if (!slot.chart) {
            setFileName();
            clearPreview();
-@@ -1483,20 +1484,19 @@
+@@ -1483,13 +1483,13 @@
          }
 -        refreshCsvControls();
          renderProjectDataTree(objects);
