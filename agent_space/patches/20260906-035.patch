@@ -1,19 +1,15 @@
 diff --git a/Fast-figure.html b/Fast-figure.html
 --- a/Fast-figure.html
 +++ b/Fast-figure.html
-@@ -11435,3 +11435,3 @@
-       <dialog id="readmeDialog" tabindex="-1">
-         <div class="popup-heading"><strong>Fast figure README</strong></div>
+@@ -11437 +11437 @@
 -        <div class="readme-content">
 +        <template id="readmeContentTemplate">
-@@ -11775,4 +11775,5 @@
+@@ -11775,2 +11775,3 @@
 -          <button id="closeReadme" type="button" class="light">Close</button>
 -        </div>
 +        </template>
 +        <div class="readme-content"></div>
 +        <button id="closeReadme" type="button" class="light">Close</button>
-       </dialog>
-       <div id="sidebarResizer" class="sidebar-resizer">
 diff --git a/fast-figure.js b/fast-figure.js
 --- a/fast-figure.js
 +++ b/fast-figure.js
