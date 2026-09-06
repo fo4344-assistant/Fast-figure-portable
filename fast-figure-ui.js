@@ -136,6 +136,15 @@
         { variant: "light", disabled: busy, onClick: openDataPicker },
         "데이터 추가",
       ),
+      React.createElement(
+        Button,
+        {
+          variant: "light",
+          disabled: busy || !["csv", "image"].includes(state.assetSelection),
+          onClick: () => downloadProjectAsset(),
+        },
+        "선택 에셋 다운로드",
+      ),
     );
   }
 
