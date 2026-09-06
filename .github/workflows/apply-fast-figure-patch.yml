@@ -47,7 +47,7 @@ jobs:
           fi
           for target in "${targets[@]}"; do
             case "$target" in
-              Fast-figure.html|fast-figure.js|vendor/plotly.min.js|vendor/fast-figure-ui-runtime.js) ;;
+              Fast-figure.html|fast-figure.js|vendor/plotly.min.js|vendor/fast-figure-ui-runtime.js|README.md|scripts/build-portable.py) ;;
               *)
                 echo "Unsupported Fast Figure patch target: $target" >&2
                 exit 1
@@ -200,6 +200,63 @@ jobs:
             node --check /tmp/fast-figure-main.js
           fi
 
+      - name: Build portable HTML
+        if: hashFiles('scripts/build-portable.py') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fast-figure-portable
+          python scripts/build-portable.py --output /tmp/fast-figure-portable/Fast-figure.html
+          test -s /tmp/fast-figure-portable/Fast-figure.html
+
+      - name: Smoke test file URLs
+        if: hashFiles('fast-figure.js') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          if [ -z "$browser" ]; then
+            echo "No Chrome/Chromium binary is available for file:// smoke testing." >&2
+            exit 1
+          fi
+          smoke_dir="$(mktemp -d)"
+          mkdir -p "$smoke_dir/split/vendor" "$smoke_dir/portable"
+          cp Fast-figure.html fast-figure.js "$smoke_dir/split/"
+          cp vendor/plotly.min.js vendor/fast-figure-ui-runtime.js "$smoke_dir/split/vendor/"
+          if [ -f /tmp/fast-figure-portable/Fast-figure.html ]; then
+            cp /tmp/fast-figure-portable/Fast-figure.html "$smoke_dir/portable/Fast-figure.html"
+          fi
+          python - "$smoke_dir/split/Fast-figure.html" "${smoke_dir}/portable/Fast-figure.html" <<'PY'
+          from pathlib import Path
+          import sys
+
+          probe = r'''<script>
+          (() => {
+            const state = [
+              typeof Plotly !== "undefined",
+              !!window.FastFigureUiRuntime,
+              !!window.FastFigureReactShell,
+              typeof appFSM !== "undefined",
+              typeof appFSM !== "undefined" && appFSM.state?.lifecycle === "ready",
+            ];
+            document.documentElement.setAttribute("data-fast-figure-smoke", state.join(","));
+          })();
+          </script>'''
+          for value in sys.argv[1:]:
+              path = Path(value)
+              if not path.exists():
+                  continue
+              text = path.read_text(encoding="utf-8")
+              if "</body>" not in text:
+                  raise SystemExit(f"Missing body close tag in {path}")
+              path.write_text(text.replace("</body>", probe + "\n</body>", 1), encoding="utf-8")
+          PY
+          for html in "$smoke_dir/split/Fast-figure.html" "$smoke_dir/portable/Fast-figure.html"; do
+            [ -f "$html" ] || continue
+            "$browser" --headless=new --no-sandbox --disable-gpu --allow-file-access-from-files --virtual-time-budget=3000 --dump-dom "file://$html" > "$html.dom"
+            grep -q 'data-fast-figure-smoke="true,true,true,true,true"' "$html.dom"
+          done
+
       - name: Record split migration patch
         if: steps.patch.outputs.split_inline_js == 'true'
         shell: bash
@@ -224,13 +281,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t changed < <(git status --short -- Fast-figure.html fast-figure.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js)
+          mapfile -t changed < <(git status --short -- Fast-figure.html fast-figure.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js README.md scripts/build-portable.py)
           if [ "${#changed[@]}" -eq 0 ]; then
             echo "Patch produced no Fast Figure source change." >&2
             exit 1
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- Fast-figure.html fast-figure.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js "${{ steps.patch.outputs.path }}"
+          git add -- Fast-figure.html fast-figure.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js README.md scripts/build-portable.py "${{ steps.patch.outputs.path }}"
           git commit -m "Apply agent patch ${{ steps.patch.outputs.name }}"
           git push
