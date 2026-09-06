@@ -41,7 +41,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 +              ),
          );
        }
-@@ -2921,6 +2943,62 @@
+@@ -2921,6 +2943,49 @@
              : null,
          );
        }
@@ -91,7 +91,7 @@ diff --git a/fast-figure.js b/fast-figure.js
        function FastFigureSidebarStaging() {
          useFastFigureFsmSnapshot();
          let runtime = window.FastFigureUiRuntime,
-@@ -2999,6 +3077,42 @@
+@@ -2999,6 +3064,42 @@
              ),
              React.createElement(Text, { size: "xs", c: "dimmed" }, fileInput.hint),
 +            React.createElement(FastFigureSidebarCompatibilityStaging),
