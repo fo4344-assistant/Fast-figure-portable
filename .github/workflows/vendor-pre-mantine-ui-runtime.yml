@@ -131,28 +131,71 @@ jobs:
           print(f'ui runtime bytes={len(runtime_body)}')
           PY
 
-      - name: Extend byte-preserving portable builder for UI runtime
+      - name: Write byte-preserving portable builder with UI runtime
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
+          cat > scripts/build-portable.py <<'PY'
+          #!/usr/bin/env python3
+          from __future__ import annotations
+
+          import argparse
           from pathlib import Path
 
-          path = Path('scripts/build-portable.py')
-          text = path.read_text(encoding='utf-8')
-          old = '''            (\n                b'<script src="./fast-figure.js"></script>',\n                ROOT / "fast-figure.js",\n            ),\n'''
-          new = '''            (\n                b'<script id="ff-mantine-runtime" src="./vendor/fast-figure-ui-runtime.js"></script>',\n                ROOT / "vendor" / "fast-figure-ui-runtime.js",\n                b'<script id="ff-mantine-runtime">',\n            ),\n            (\n                b'<script src="./fast-figure.js"></script>',\n                ROOT / "fast-figure.js",\n                b'<script>',\n            ),\n'''
-          plotly_old = '''            (\n                b'<script src="./vendor/plotly.min.js"></script>',\n                ROOT / "vendor" / "plotly.min.js",\n            ),\n'''
-          plotly_new = '''            (\n                b'<script src="./vendor/plotly.min.js"></script>',\n                ROOT / "vendor" / "plotly.min.js",\n                b'<script>',\n            ),\n'''
-          if text.count(plotly_old) != 1 or text.count(old) != 1:
-              raise SystemExit('Portable builder tuple markers are not unique')
-          text = text.replace(plotly_old, plotly_new, 1).replace(old, new, 1)
-          loop_old = '''    for tag, source in SCRIPTS:\n        if portable.count(tag) != 1:\n            raise RuntimeError(f"expected exactly one external script tag: {tag!r}")\n        if not source.is_file():\n            raise FileNotFoundError(source)\n        portable = portable.replace(\n            tag,\n            b"<script>" + source.read_bytes() + b"</script>",\n            1,\n        )\n    for tag, _ in SCRIPTS:\n'''
-          loop_new = '''    for tag, source, open_tag in SCRIPTS:\n        if portable.count(tag) != 1:\n            raise RuntimeError(f"expected exactly one external script tag: {tag!r}")\n        if not source.is_file():\n            raise FileNotFoundError(source)\n        portable = portable.replace(\n            tag,\n            open_tag + source.read_bytes() + b"</script>",\n            1,\n        )\n    for tag, _, _ in SCRIPTS:\n'''
-          if text.count(loop_old) != 1:
-              raise SystemExit('Portable builder loop marker is not unique')
-          path.write_text(text.replace(loop_old, loop_new, 1), encoding='utf-8')
+
+          ROOT = Path(__file__).resolve().parents[1]
+          DEFAULT_OUTPUT = ROOT / "dist" / "Fast-figure.html"
+          SCRIPTS = (
+              (
+                  b'<script src="./vendor/plotly.min.js"></script>',
+                  ROOT / "vendor" / "plotly.min.js",
+                  b'<script>',
+              ),
+              (
+                  b'<script id="ff-mantine-runtime" src="./vendor/fast-figure-ui-runtime.js"></script>',
+                  ROOT / "vendor" / "fast-figure-ui-runtime.js",
+                  b'<script id="ff-mantine-runtime">',
+              ),
+              (
+                  b'<script src="./fast-figure.js"></script>',
+                  ROOT / "fast-figure.js",
+                  b'<script>',
+              ),
+          )
+
+
+          def build(output: Path) -> None:
+              portable = (ROOT / "Fast-figure.html").read_bytes()
+              for tag, source, open_tag in SCRIPTS:
+                  if portable.count(tag) != 1:
+                      raise RuntimeError(f"expected exactly one external script tag: {tag!r}")
+                  if not source.is_file():
+                      raise FileNotFoundError(source)
+                  portable = portable.replace(
+                      tag,
+                      open_tag + source.read_bytes() + b"</script>",
+                      1,
+                  )
+              for tag, _, _ in SCRIPTS:
+                  if tag in portable:
+                      raise RuntimeError(f"external script tag remains: {tag!r}")
+              output.parent.mkdir(parents=True, exist_ok=True)
+              output.write_bytes(portable)
+
+
+          def parse_args() -> argparse.Namespace:
+              parser = argparse.ArgumentParser(
+                  description="Build the byte-equivalent single-file Fast Figure HTML from split source."
+              )
+              parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+              return parser.parse_args()
+
+
+          if __name__ == "__main__":
+              args = parse_args()
+              build(args.output.resolve())
           PY
+          chmod +x scripts/build-portable.py
 
       - name: Validate exact initial Mantine portable reconstruction
         shell: bash
