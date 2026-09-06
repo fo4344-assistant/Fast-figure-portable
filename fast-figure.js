@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.125-alpha";
+      const APP_BUILD = "1.1.126-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -2135,8 +2135,8 @@
         selectAssetPath(path) {
           let match = projectVfs.resolve(path);
           if (match?.kind === "directory") selectDirectoryFromTree(match.path);
-          else if (match?.kind === "csv") selectCsvFromTree(projectAssetPath(match.asset));
-          else if (match?.kind === "image") selectImageFromTree(projectAssetPath(match.asset));
+          else if (match?.kind === "csv") selectCsvAsset(projectAssetPath(match.asset));
+          else if (match?.kind === "image") selectImageAsset(projectAssetPath(match.asset));
           else return false;
           return true;
         },
@@ -10322,11 +10322,14 @@
         });
         status(`${match.path} 폴더를 선택했습니다.`);
       }
-      function selectCsvFromTree(path) {
+      function selectCsvAsset(path) {
         let slot = getSelectedSlot(),
           match = projectVfs.resolve(path),
           csv = match?.kind === "csv" ? match.asset : null;
-        if (!csv) return status("프로젝트 CSV를 선택할 수 없습니다.");
+        if (!csv) {
+          status("프로젝트 CSV를 선택할 수 없습니다.");
+          return null;
+        }
         appFSM.send("CLEAR_GRAPH_OBJECT", {
           index: null,
           direction: "ui-to-fsm",
@@ -10337,20 +10340,32 @@
           direction: "ui-to-fsm",
         });
         activeDataName = csv.name;
+        activeCsvId = csv.id;
+        rows = dataTable(csv.rows);
+        columns = columnDefinitions(rows, csv.headerLines);
+        refreshCsvControls(csv.id);
+        activeDataReady = true;
+        if (!slot) status(`${csv.name}을 선택했습니다.`);
+        else if (slot.contentType === "image")
+          status(`${csv.name}을 선택했습니다. 그래프 슬롯에서만 새 그래프를 추가할 수 있습니다.`);
+        else status(`${csv.name}을 선택했습니다. 기존 그래프 데이터는 변경하지 않았습니다.`);
+        publishFastFigureUiStore(appFSM.state, "asset:csv-selected");
+        return { slot, csv };
+      }
+      function syncLegacyCsvAssetSelection(selection) {
+        let { slot, csv } = selection;
         $("headerLines").value = csv.headerLines;
         loadData(csv.rows, csv.name, { showGraphControls: !!slot });
         setFileName(csv.name);
         updateFileAvailability();
         renderProjectDataTree(projectDataTreeObjects());
-        activeDataReady = true;
-        if (!slot) {
-          status(`${csv.name}을 선택했습니다.`);
-          return;
-        }
-        if (slot.contentType === "image")
-          return status(`${csv.name}을 선택했습니다. 그래프 슬롯에서만 새 그래프를 추가할 수 있습니다.`);
-        renderGraphObjects(ensureGraphObjects(editing));
-        status(`${csv.name}을 선택했습니다. 기존 그래프 데이터는 변경하지 않았습니다.`);
+        if (slot && slot.contentType !== "image")
+          renderGraphObjects(ensureGraphObjects(editing));
+      }
+      function selectCsvFromTree(path) {
+        let selection = selectCsvAsset(path);
+        if (selection) syncLegacyCsvAssetSelection(selection);
+        return selection;
       }
       function deleteProjectCsv(csvIdToDelete = activeCsvId) {
         let id = csvIdToDelete,
@@ -10397,11 +10412,14 @@
             : `${csv.name}을 프로젝트에서 삭제했습니다.`,
         );
       }
-      function selectImageFromTree(path) {
+      function selectImageAsset(path) {
         let slot = getSelectedSlot(),
           match = projectVfs.resolve(path),
           image = match?.kind === "image" ? match.asset : null;
-        if (!image) return status("프로젝트 이미지를 먼저 선택하세요.");
+        if (!image) {
+          status("프로젝트 이미지를 먼저 선택하세요.");
+          return null;
+        }
         appFSM.send("CLEAR_GRAPH_OBJECT", {
           index: null,
           direction: "ui-to-fsm",
@@ -10411,24 +10429,30 @@
           path: projectAssetPath(image),
           direction: "ui-to-fsm",
         });
-        setFileName(image.name);
+        if (!slot) status(`${image.name}을 선택했습니다.`);
+        else if (slot.contentType !== "image")
+          status("이미지를 연결하려면 이미지 슬롯을 선택하세요.");
+        else {
+          appFSM.send("SLOT_IMAGE_LINKED", {
+            slotId: slot.id,
+            imageId: image.id,
+            direction: "fsm-to-model",
+          });
+          renderDashboard();
+          status(`${image.name}을 선택 슬롯에 연결했습니다.`);
+        }
+        publishFastFigureUiStore(appFSM.state, "asset:image-selected");
+        return { slot, image };
+      }
+      function syncLegacyImageAssetSelection(selection) {
+        setFileName(selection.image.name);
         updateFileAvailability();
         renderProjectDataTree(projectDataTreeObjects());
-        if (!slot) {
-          status(`${image.name}을 선택했습니다.`);
-          return;
-        }
-        if (slot.contentType !== "image")
-          return status("이미지를 연결하려면 이미지 슬롯을 선택하세요.");
-        appFSM.send("SLOT_IMAGE_LINKED", {
-          slotId: slot.id,
-          imageId: image.id,
-          direction: "fsm-to-model",
-        });
-        setFileName(image.name);
-        updateFileAvailability();
-        renderDashboard();
-        status(`${image.name}을 선택 슬롯에 연결했습니다.`);
+      }
+      function selectImageFromTree(path) {
+        let selection = selectImageAsset(path);
+        if (selection) syncLegacyImageAssetSelection(selection);
+        return selection;
       }
       function deleteProjectImage(imageIdToDelete = activeImageId) {
         let id = Number(imageIdToDelete),
