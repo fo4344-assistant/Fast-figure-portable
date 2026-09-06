@@ -1,20 +1,46 @@
 # Fast Figure
 
-Fast Figure is a single-file workspace for quickly assembling scientific figure drafts from tabular data and images.
+Fast Figure is a workspace for quickly assembling scientific figure drafts from tabular data and images.
 
 It combines graph creation, image placement, slot-based figure layout, labels, captions, project packaging, and image and Plotly export.
 
-Fast Figure runs as a self-contained HTML file and processes loaded data and images locally in the browser. Ordinary use does not require a server, account, or network connection.
+The repository keeps application and vendored JavaScript separate so development work can inspect and patch Fast Figure source without traversing multi-megabyte inline bundles. The portable build combines the same source back into one self-contained HTML file.
+
+Both forms process loaded data and images locally in the browser. Ordinary use does not require a server, account, or network connection.
 
 ## Download and use
 
-The portable application is distributed as:
+### Portable build
+
+The end-user portable application remains a single file:
 
 ```text
 Fast-figure.html
 ```
 
-Download `Fast-figure.html` and open it directly in a modern web browser.
+Release packaging generates that file from the split repository source. It can be opened directly in a modern web browser without the development JavaScript files beside it.
+
+### Repository development source
+
+The checked-in development source is:
+
+```text
+Fast-figure.html
+fast-figure.js
+vendor/
+  plotly.min.js
+  fast-figure-ui-runtime.js
+```
+
+Open the repository `Fast-figure.html` with those sibling files present for local development.
+
+To generate the single-file portable build:
+
+```bash
+python scripts/build-portable.py
+```
+
+The default output is `dist/Fast-figure.html`.
 
 The current application version, detailed project-format documentation, and bundled third-party software information are available from the README built into the application.
 
@@ -118,14 +144,14 @@ The application reads only its current format. Conversion from earlier developme
 
 ## Bundled third-party software
 
-The portable HTML currently incorporates:
+Development source keeps the vendored JavaScript separately, while the portable build embeds the same runtime bytes into its generated HTML. It incorporates:
 
 - **Iconoir 7.11.1**
 - **Plotly.js 2.35.2**
 
-Selected Iconoir SVG definitions are embedded directly in `Fast-figure.html`. The Iconoir package, CDN, and external SVG files are not required at runtime.
+Selected Iconoir SVG definitions are stored in `fast-figure.js` during development and embedded in the portable HTML build. The Iconoir package, CDN, and external SVG files are not required at runtime.
 
-The minified Plotly.js distribution is also bundled directly inside `Fast-figure.html`. No separate Plotly.js installation is required.
+The minified Plotly.js distribution is stored in `vendor/plotly.min.js` during development and embedded directly in the portable HTML build. No separate Plotly.js installation is required.
 
 Third-party copyright and license notices are retained in the distributed HTML and reproduced in the repository `LICENSE` file.
 

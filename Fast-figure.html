@@ -11437,25 +11437,37 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         <div class="readme-content">
           <p><strong>About Fast figure</strong></p>
           <p>
-            Fast figure is a single-file workspace for quickly assembling scientific figure drafts
-            from tabular data and images.
+            Fast figure is a workspace for quickly assembling scientific figure drafts from
+            tabular data and images. Repository development source keeps application and vendored
+            JavaScript in separate files so the source can be inspected and patched without
+            traversing large inline bundles.
           </p>
           <p>
             It combines graph creation, image placement, slot-based figure layout, labels, captions,
             project packaging, and image and Plotly export.
           </p>
           <p>
-            Fast figure runs as a self-contained HTML file and processes loaded data and images
-            locally in the browser. Ordinary use does not require a server, account, or network
-            connection.
+            The portable build combines the split source back into one self-contained HTML file.
+            Both forms process loaded data and images locally in the browser. Ordinary use does not
+            require a server, account, or network connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.110-alpha</code></p>
+          <p><code>1.1.111-alpha</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
           </ul>
           <p><strong>Distribution</strong></p>
+          <p>
+            Repository development source consists of <code>Fast-figure.html</code>,
+            <code>fast-figure.js</code>, and the JavaScript files under <code>vendor/</code>.
+            Opening <code>Fast-figure.html</code> with those sibling files present keeps the
+            existing local-browser workflow.
+          </p>
+          <p>
+            Run <code>python scripts/build-portable.py</code> to generate the single-file portable
+            build at <code>dist/Fast-figure.html</code>.
+          </p>
           <p>
             Repository:
             <a
