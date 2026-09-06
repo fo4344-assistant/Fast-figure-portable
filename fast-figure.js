@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.128-alpha";
+      const APP_BUILD = "1.1.129-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -2082,6 +2082,12 @@
         run(lifecycle, event, task) {
           return appFSM.run(lifecycle, event, task);
         },
+        applyUiPalette(values) {
+          return applyUiPaletteFromValues(values);
+        },
+        resetUiPalette() {
+          return resetUiPaletteFromValues();
+        },
         applyLayoutSettings(values) {
           return applyLayoutSettingsFromValues(values);
         },
@@ -3145,6 +3151,81 @@
           ),
         );
       }
+      function FastFigureUiPaletteStaging({ palette }) {
+        let runtime = window.FastFigureUiRuntime;
+        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+        let { React, MantineCore } = runtime,
+          { Accordion, Button, ColorInput, Group, SimpleGrid, Stack, Text } = MantineCore,
+          signature = JSON.stringify(palette),
+          [draft, setDraft] = React.useState(() => ({ ...palette })),
+          fields = [
+            ["uiColor", "강조색"],
+            ["uiBackgroundColor", "배경"],
+            ["uiSurfaceColor", "표면"],
+            ["uiMutedColor", "보조 텍스트"],
+            ["uiSubtleColor", "약한 요소"],
+            ["uiDisabledBgColor", "비활성 배경"],
+            ["uiDisabledTextColor", "비활성 텍스트"],
+            ["uiShadowColor", "그림자"],
+            ["paperColor", "그래프 배경"],
+            ["fontColor", "그래프 글자"],
+          ];
+        React.useEffect(() => setDraft({ ...palette }), [signature]);
+        return React.createElement(
+          Accordion,
+          { variant: "contained" },
+          React.createElement(
+            Accordion.Item,
+            { value: "ui-palette" },
+            React.createElement(Accordion.Control, null, "UI 색상"),
+            React.createElement(
+              Accordion.Panel,
+              null,
+              React.createElement(
+                Stack,
+                { gap: "xs" },
+                React.createElement(
+                  Text,
+                  { size: "xs", c: "dimmed" },
+                  "프로젝트에 저장되는 UI 및 그래프 기본 색상입니다.",
+                ),
+                React.createElement(
+                  SimpleGrid,
+                  { cols: 2, spacing: "xs" },
+                  ...fields.map(([key, label]) =>
+                    React.createElement(ColorInput, {
+                      key,
+                      label,
+                      value: draft[key] || "",
+                      format: "hex",
+                      withEyeDropper: false,
+                      onChange: (value) =>
+                        setDraft((current) => ({ ...current, [key]: value })),
+                    }),
+                  ),
+                ),
+                React.createElement(
+                  Group,
+                  { justify: "flex-end" },
+                  React.createElement(
+                    Button,
+                    {
+                      variant: "default",
+                      onClick: () => fastFigureUiBridge.resetUiPalette(),
+                    },
+                    "기본값",
+                  ),
+                  React.createElement(
+                    Button,
+                    { onClick: () => fastFigureUiBridge.applyUiPalette(draft) },
+                    "적용",
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       function FastFigureSidebarStaging() {
         useFastFigureFsmSnapshot();
         let runtime = window.FastFigureUiRuntime,
@@ -3247,6 +3328,7 @@
                   snapshot.statusMessage,
                 )
               : null,
+            React.createElement(FastFigureUiPaletteStaging, { palette: snapshot.appearance.uiPalette }),
             React.createElement(FastFigureAssetTreeStaging, {
               tree: assetTree,
               selectedPath: assetActions.context?.path || null,
@@ -13094,12 +13176,19 @@
       });
       $("mergeSlots").onclick = mergeSelected;
       $("splitSlot").onclick = splitSelected;
-      function uiPaletteFromControls() {
+      function uiPaletteFromValues(values = {}) {
         return Object.fromEntries(
           Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
             key,
-            projectColor($(key)?.value, fallback),
+            projectColor(values[key], fallback),
           ]),
+        );
+      }
+      function uiPaletteFromControls() {
+        return uiPaletteFromValues(
+          Object.fromEntries(
+            Object.keys(DEFAULT_UI_PALETTE).map((key) => [key, $(key)?.value]),
+          ),
         );
       }
       function applyUiPalette(fromControls = true, notify = true) {
@@ -13141,20 +13230,16 @@
         renderDashboard();
         if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
       }
+      function applyUiPaletteFromValues(values, notify = true) {
+        activeProject.appearance.uiPalette = uiPaletteFromValues(values);
+        applyUiPalette(false, notify);
+        return projectClone(activeProject.appearance.uiPalette);
+      }
+      function resetUiPaletteFromValues(notify = true) {
+        return applyUiPaletteFromValues(DEFAULT_UI_PALETTE, notify);
+      }
       $("applyUiPalette").onclick = applyUiPalette;
-      $("resetUiPalette").onclick = () => {
-        $("uiColor").value = "#B0CFCE";
-        $("uiBackgroundColor").value = "#FAFAFA";
-        $("uiSurfaceColor").value = "#FFFFFF";
-        $("uiMutedColor").value = "#4F525D";
-        $("uiSubtleColor").value = "#94A3B8";
-        $("uiDisabledBgColor").value = "#E5E7EB";
-        $("uiDisabledTextColor").value = "#64748B";
-        $("uiShadowColor").value = "#383A42";
-        $("paperColor").value = "#FFFFFF";
-        $("fontColor").value = "#383A42";
-        applyUiPalette();
-      };
+      $("resetUiPalette").onclick = () => resetUiPaletteFromValues();
       function syncHeaderHeight() {
         let header = document.querySelector("header");
         if (header)
