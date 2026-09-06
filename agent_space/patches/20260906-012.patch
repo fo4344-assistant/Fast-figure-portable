@@ -34,6 +34,10 @@ diff --git a/fast-figure.js b/fast-figure.js
 -        syncSettingToggle("showSlotBorders", bordersVisible);
 +        if (syncControls) syncLegacySlotStyleControls(style);
          ["dashboard", "layoutMap", "dashboardCaption"].forEach((id) => {
-@@ -12500 +12502 @@
+@@ -12497,5 +12499,5 @@
+         activeProject.layout.slotStyle = slotStyleFromValues(
+           values.slotStyle || activeProject.layout.slotStyle,
+         );
 -        applySlotStyle(false);
 +        applySlotStyle(false, true, false);
+         return true;
