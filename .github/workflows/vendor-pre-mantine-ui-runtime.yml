@@ -1,0 +1,228 @@
+name: Vendor pre-Mantine UI runtime
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "agent_space/patches/20260906-038.md"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vendor-pre-mantine-ui-runtime
+  cancel-in-progress: false
+
+jobs:
+  vendor:
+    if: github.event.head_commit.message == 'Prepare pre-Mantine UI runtime vendoring'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Fetch exact initial Mantine baseline commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin 32292f024920533f49cd265a623c5ed6d3b8decf
+          git show 32292f024920533f49cd265a623c5ed6d3b8decf:Fast-figure.html > /tmp/Fast-figure-initial-mantine.html
+          git show 32292f024920533f49cd265a623c5ed6d3b8decf:LICENSE > /tmp/LICENSE-initial-mantine
+
+      - name: Extract runtime and exact bootstrap fragments
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          reference = Path('/tmp/Fast-figure-initial-mantine.html').read_bytes()
+          current_html_path = Path('Fast-figure.html')
+          current = current_html_path.read_bytes()
+
+          runtime_re = re.compile(
+              br'<script id="ff-mantine-runtime">(?P<body>[\s\S]*?)</script>',
+              re.I,
+          )
+          runtime_matches = list(runtime_re.finditer(reference))
+          if len(runtime_matches) != 1:
+              raise SystemExit(f'Expected one initial Mantine runtime script, found {len(runtime_matches)}')
+          runtime_body = runtime_matches[0].group('body')
+          Path('vendor').mkdir(exist_ok=True)
+          Path('vendor/fast-figure-ui-runtime.js').write_bytes(runtime_body)
+
+          style_re = re.compile(
+              br'<style id="ff-mantine-core-styles">[\s\S]*?</style>',
+              re.I,
+          )
+          style_matches = list(style_re.finditer(reference))
+          if len(style_matches) != 1:
+              raise SystemExit(f'Expected one Mantine core style block, found {len(style_matches)}')
+          style_block = style_matches[0].group(0)
+
+          bootstrap_re = re.compile(
+              br'<div id="ff-react-bootstrap-root" hidden></div>\s*'
+              br'<script id="ff-mantine-bootstrap">[\s\S]*?</script>',
+              re.I,
+          )
+          bootstrap_matches = list(bootstrap_re.finditer(reference))
+          if len(bootstrap_matches) != 1:
+              raise SystemExit(f'Expected one Mantine bootstrap block, found {len(bootstrap_matches)}')
+          bootstrap_block = bootstrap_matches[0].group(0)
+
+          react_marker = b'          <p><strong>React / ReactDOM 19.2.8</strong></p>'
+          iconoir_marker = b'          <p><strong>Iconoir 7.11.1</strong></p>'
+          ref_react = reference.find(react_marker)
+          ref_iconoir = reference.find(iconoir_marker, ref_react)
+          if ref_react < 0 or ref_iconoir < 0:
+              raise SystemExit('Could not locate React/Mantine built-in README license block')
+          license_block = reference[ref_react:ref_iconoir]
+
+          plotly_bootstrap = (
+              b'    <script>\n'
+              b'      Plotly.setPlotConfig({ topojsonURL: "" });\n'
+              b'    </script>\n'
+          )
+          if current.count(plotly_bootstrap) != 1:
+              raise SystemExit('Current split HTML Plotly bootstrap marker is not unique')
+          runtime_external = (
+              b'    <!-- Vendored React/Mantine runtime; no runtime network dependency. -->\n'
+              b'    <script id="ff-mantine-runtime" src="./vendor/fast-figure-ui-runtime.js"></script>\n'
+          )
+          current = current.replace(
+              plotly_bootstrap,
+              plotly_bootstrap + runtime_external + style_block + b'\n',
+              1,
+          )
+
+          body_marker = b'  <body>\n'
+          if current.count(body_marker) != 1:
+              raise SystemExit('Current body marker is not unique')
+          current = current.replace(
+              body_marker,
+              body_marker + b'    ' + bootstrap_block.replace(b'\n', b'\n    ') + b'\n',
+              1,
+          )
+
+          if current.count(iconoir_marker) != 1:
+              raise SystemExit('Current built-in README Iconoir marker is not unique')
+          current = current.replace(iconoir_marker, license_block + iconoir_marker, 1)
+
+          old_version = b'          <p><code>1.1.29-alpha</code></p>'
+          new_version = b'          <p><code>1.1.30-alpha</code></p>'
+          if current.count(old_version) != 1:
+              raise SystemExit('Built-in README application version marker is not unique')
+          current = current.replace(old_version, new_version, 1)
+          current_html_path.write_bytes(current)
+
+          app_path = Path('fast-figure.js')
+          app = app_path.read_bytes()
+          old_build = b'const APP_BUILD = "1.1.29-alpha";'
+          new_build = b'const APP_BUILD = "1.1.30-alpha";'
+          if app.count(old_build) != 1:
+              raise SystemExit('APP_BUILD marker is not unique')
+          app_path.write_bytes(app.replace(old_build, new_build, 1))
+
+          Path('LICENSE').write_bytes(Path('/tmp/LICENSE-initial-mantine').read_bytes())
+          print(f'ui runtime bytes={len(runtime_body)}')
+          PY
+
+      - name: Extend byte-preserving portable builder for UI runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/build-portable.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''            (\n                b'<script src="./fast-figure.js"></script>',\n                ROOT / "fast-figure.js",\n            ),\n'''
+          new = '''            (\n                b'<script id="ff-mantine-runtime" src="./vendor/fast-figure-ui-runtime.js"></script>',\n                ROOT / "vendor" / "fast-figure-ui-runtime.js",\n                b'<script id="ff-mantine-runtime">',\n            ),\n            (\n                b'<script src="./fast-figure.js"></script>',\n                ROOT / "fast-figure.js",\n                b'<script>',\n            ),\n'''
+          plotly_old = '''            (\n                b'<script src="./vendor/plotly.min.js"></script>',\n                ROOT / "vendor" / "plotly.min.js",\n            ),\n'''
+          plotly_new = '''            (\n                b'<script src="./vendor/plotly.min.js"></script>',\n                ROOT / "vendor" / "plotly.min.js",\n                b'<script>',\n            ),\n'''
+          if text.count(plotly_old) != 1 or text.count(old) != 1:
+              raise SystemExit('Portable builder tuple markers are not unique')
+          text = text.replace(plotly_old, plotly_new, 1).replace(old, new, 1)
+          loop_old = '''    for tag, source in SCRIPTS:\n        if portable.count(tag) != 1:\n            raise RuntimeError(f"expected exactly one external script tag: {tag!r}")\n        if not source.is_file():\n            raise FileNotFoundError(source)\n        portable = portable.replace(\n            tag,\n            b"<script>" + source.read_bytes() + b"</script>",\n            1,\n        )\n    for tag, _ in SCRIPTS:\n'''
+          loop_new = '''    for tag, source, open_tag in SCRIPTS:\n        if portable.count(tag) != 1:\n            raise RuntimeError(f"expected exactly one external script tag: {tag!r}")\n        if not source.is_file():\n            raise FileNotFoundError(source)\n        portable = portable.replace(\n            tag,\n            open_tag + source.read_bytes() + b"</script>",\n            1,\n        )\n    for tag, _, _ in SCRIPTS:\n'''
+          if text.count(loop_old) != 1:
+              raise SystemExit('Portable builder loop marker is not unique')
+          path.write_text(text.replace(loop_old, loop_new, 1), encoding='utf-8')
+          PY
+
+      - name: Validate exact initial Mantine portable reconstruction
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check fast-figure.js
+          node --check vendor/fast-figure-ui-runtime.js
+          python scripts/build-portable.py --output /tmp/Fast-figure-rebuilt.html
+          cmp --silent /tmp/Fast-figure-initial-mantine.html /tmp/Fast-figure-rebuilt.html || {
+            echo "Rebuilt portable HTML does not match the exact initial Mantine baseline." >&2
+            cmp -l /tmp/Fast-figure-initial-mantine.html /tmp/Fast-figure-rebuilt.html | head -20 >&2 || true
+            exit 1
+          }
+          git diff --check
+
+      - name: Smoke test split and portable UI runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          if [ -z "$browser" ]; then
+            echo "No Chrome/Chromium binary is available for file:// smoke testing." >&2
+            exit 1
+          fi
+          smoke_dir="$(mktemp -d)"
+          mkdir -p "$smoke_dir/split/vendor" "$smoke_dir/portable"
+          cp Fast-figure.html fast-figure.js "$smoke_dir/split/"
+          cp vendor/plotly.min.js vendor/fast-figure-ui-runtime.js "$smoke_dir/split/vendor/"
+          cp /tmp/Fast-figure-rebuilt.html "$smoke_dir/portable/Fast-figure.html"
+          python - "$smoke_dir/split/Fast-figure.html" "$smoke_dir/portable/Fast-figure.html" <<'PY'
+          from pathlib import Path
+          import sys
+
+          probe = r'''<script>
+          (() => {
+            const state = [
+              typeof Plotly !== "undefined",
+              !!window.FastFigureUiRuntime,
+              !!window.fastFigureUiRoot,
+              typeof appFSM !== "undefined",
+              typeof appFSM !== "undefined" && appFSM.state?.lifecycle === "ready",
+            ];
+            document.documentElement.setAttribute("data-fast-figure-smoke", state.join(","));
+          })();
+          </script>'''
+          for value in sys.argv[1:]:
+              path = Path(value)
+              text = path.read_text(encoding='utf-8')
+              path.write_text(text.replace('</body>', probe + '\n</body>', 1), encoding='utf-8')
+          PY
+          for html in "$smoke_dir/split/Fast-figure.html" "$smoke_dir/portable/Fast-figure.html"; do
+            "$browser" --headless=new --no-sandbox --disable-gpu --allow-file-access-from-files --virtual-time-budget=3000 --dump-dom "file://$html" > "$html.dom"
+            grep -q 'data-fast-figure-smoke="true,true,true,true,true"' "$html.dom"
+          done
+
+      - name: Record exact runtime vendoring diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -N vendor/fast-figure-ui-runtime.js
+          git diff -- Fast-figure.html fast-figure.js vendor/fast-figure-ui-runtime.js LICENSE scripts/build-portable.py > agent_space/patches/20260906-038.patch
+          test -s agent_space/patches/20260906-038.patch
+          git apply --check --reverse agent_space/patches/20260906-038.patch
+
+      - name: Commit UI runtime baseline and patch record
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Fast-figure.html fast-figure.js vendor/fast-figure-ui-runtime.js LICENSE scripts/build-portable.py agent_space/patches/20260906-038.patch agent_space/patches/20260906-038.md
+          git commit -m "Apply agent patch 20260906-038"
+          git push
