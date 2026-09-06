@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.117-alpha";
+      const APP_BUILD = "1.1.118-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -1457,8 +1457,7 @@
         $("captionLineHeight").value = caption.settings.lineHeight;
         syncDashboardCaption(view);
       }
-      function syncProjectWorkspaceState({ objects } = {}) {
-        let { availability } = syncProjectWorkspaceDomainState();
+      function syncLegacyProjectWorkspacePresentation({ objects, availability } = {}) {
         $("targetInfo").textContent = "빈 슬롯 또는 그래프를 선택하세요.";
         setFileName();
         clearPreview();
@@ -1470,10 +1469,11 @@
         $("buildBox").classList.add("hidden");
         $("imageBox").classList.add("hidden");
       }
-      function syncGraphWorkspaceState({ objects } = {}) {
-        let domain = syncGraphWorkspaceDomainState();
-        if (!domain) return;
-        let { slot, availability, selection } = domain;
+      function syncProjectWorkspaceState({ objects } = {}) {
+        let domain = syncProjectWorkspaceDomainState();
+        syncLegacyProjectWorkspacePresentation({ objects, ...domain });
+      }
+      function syncLegacyGraphWorkspacePresentation({ objects, slot, availability, selection }) {
         $("targetInfo").textContent = `선택한 슬롯: ${slot.row}행 ${slot.col}열`;
         updateFileAvailability(availability);
         if (selection) syncLegacyGraphEditorSelection(selection);
@@ -1485,10 +1485,12 @@
         renderProjectDataTree(objects);
         syncCaptionControlsFromObject(projectObjects.read("captions"));
       }
-      function syncImageWorkspaceState({ objects } = {}) {
-        let domain = syncImageWorkspaceDomainState();
+      function syncGraphWorkspaceState({ objects } = {}) {
+        let domain = syncGraphWorkspaceDomainState();
         if (!domain) return;
-        let { slot, availability } = domain;
+        syncLegacyGraphWorkspacePresentation({ objects, ...domain });
+      }
+      function syncLegacyImageWorkspacePresentation({ objects, slot, availability }) {
         $("targetInfo").textContent = `선택한 슬롯: ${slot.row}행 ${slot.col}열`;
         updateFileAvailability(availability);
         setFileName(slotImage(slot)?.name);
@@ -1498,9 +1500,17 @@
         renderProjectDataTree(objects);
         syncCaptionControlsFromObject(projectObjects.read("captions"));
       }
+      function syncImageWorkspaceState({ objects } = {}) {
+        let domain = syncImageWorkspaceDomainState();
+        if (!domain) return;
+        syncLegacyImageWorkspacePresentation({ objects, ...domain });
+      }
+      function exitLegacyGraphWorkspacePresentation() {
+        $("buildBox").classList.add("hidden");
+      }
       function exitGraphWorkspaceState() {
         exitGraphWorkspaceDomainState();
-        $("buildBox").classList.add("hidden");
+        exitLegacyGraphWorkspacePresentation();
       }
       function exitImageWorkspaceState() {
         $("imageBox").classList.add("hidden");
