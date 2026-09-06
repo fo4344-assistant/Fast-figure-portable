@@ -7,7 +7,9 @@ diff --git a/fast-figure.js b/fast-figure.js
 -      const APP_BUILD = "1.1.120-alpha";
 +      const APP_BUILD = "1.1.121-alpha";
        const ICONOIR_GLYPHS = Object.freeze({
-@@ -4029,11 +4029,13 @@
+@@ -4238,12 +4238,14 @@
+         });
+       }
 -      function auditApp(context = "manual") {
 +      function auditApp(context = "manual", { requireLegacyControls = true } = {}) {
          let issues = [],
