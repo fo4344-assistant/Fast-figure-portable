@@ -5,7 +5,7 @@
 
   const { React, MantineCore } = runtime;
   const { AppShell, Button, Group, MantineProvider, Stack, Text } = MantineCore;
-  const { useSyncExternalStore } = React;
+  const { useState, useSyncExternalStore } = React;
 
   function subscribeAppState(onStoreChange) {
     return appFSM.subscribe(onStoreChange);
@@ -148,6 +148,146 @@
     );
   }
 
+  function FastFigureProjectDataTree() {
+    const state = useAppState();
+    const snapshot = projectDataTreeSnapshot(projectDataTreeObjects());
+    const [expanded, setExpanded] = useState(() => new Set(["/assets", "/slots"]));
+    const directories = [...new Set(snapshot.directories)]
+      .filter((path) => path === "/assets" || path.startsWith("/assets/"))
+      .sort((a, b) => a.localeCompare(b));
+
+    const toggleExpanded = (path) => {
+      setExpanded((current) => {
+        const next = new Set(current);
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+        return next;
+      });
+    };
+    const csvReferenceCount = (id) =>
+      snapshot.charts.reduce(
+        (count, chart) => count + chart.csvReferences.filter((csvId) => csvId === id).length,
+        0,
+      );
+    const imageReferenceCount = (id) =>
+      snapshot.slots.filter((slot) => slot.imageId === id).length;
+    const assetRow = (asset, kind) => {
+      const inactive = projectVfs.isTrashed(asset.path);
+      const selected = state.assetSelection === kind && state.assetPath === asset.path;
+      const meta =
+        kind === "csv"
+          ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${csvReferenceCount(asset.id)}`
+          : `참조 ${imageReferenceCount(asset.id)}`;
+      return React.createElement(
+        Button,
+        {
+          key: `${kind}:${asset.path}`,
+          variant: selected ? "filled" : "subtle",
+          size: "xs",
+          fullWidth: true,
+          disabled: inactive,
+          justify: "space-between",
+          onClick: () =>
+            kind === "csv" ? selectCsvFromTree(asset.path) : selectImageFromTree(asset.path),
+        },
+        React.createElement("span", null, projectPathName(asset.path)),
+        React.createElement("span", { style: { opacity: 0.7 } }, meta),
+      );
+    };
+    const directoryNode = (path) => {
+      const selected = state.assetSelection === "directory" && state.assetPath === path;
+      const childDirectories = directories.filter(
+        (candidate) => candidate !== path && projectParentPath(candidate) === path,
+      );
+      const childAssets = [
+        ...snapshot.data
+          .filter((asset) => projectParentPath(asset.path) === path)
+          .map((asset) => assetRow(asset, "csv")),
+        ...snapshot.images
+          .filter((asset) => projectParentPath(asset.path) === path)
+          .map((asset) => assetRow(asset, "image")),
+      ];
+      const open = expanded.has(path);
+      return React.createElement(
+        Stack,
+        { key: path, gap: 2 },
+        React.createElement(
+          Button,
+          {
+            variant: selected ? "filled" : "subtle",
+            size: "xs",
+            fullWidth: true,
+            justify: "flex-start",
+            "aria-expanded": open,
+            onClick: () => {
+              selectDirectoryFromTree(path);
+              toggleExpanded(path);
+            },
+          },
+          `${open ? "▾" : "▸"} ${path === "/assets" ? "/assets" : projectPathName(path)}`,
+        ),
+        open
+          ? React.createElement(
+              Stack,
+              { gap: 2, pl: "md" },
+              ...childDirectories.map(directoryNode),
+              ...childAssets,
+            )
+          : null,
+      );
+    };
+    const visibleSlots = snapshot.slots
+      .filter((slot) => !slot.hidden)
+      .sort((a, b) => a.row - b.row || a.col - b.col);
+    const slotReference = (slot) => {
+      if (slot.contentType === "image") {
+        const image = snapshot.images.find((item) => item.id === slot.imageId);
+        return image ? `${image.name} · ${image.path}` : "(에셋 없음)";
+      }
+      const chart = snapshot.charts.find((item) => item.id === slot.chart);
+      if (!chart) return "(에셋 없음)";
+      if (chart.editable === false) return "Plotly JSON 내부 데이터 · 외부 참조 없음";
+      const references = chart.csvIds
+        .map((id) => snapshot.data.find((item) => item.id === id))
+        .filter(Boolean)
+        .map((csv) => `${csv.name} · ${csv.path}`);
+      return references.length ? references.join(", ") : "(에셋 없음)";
+    };
+
+    return React.createElement(
+      Stack,
+      { gap: "xs", px: "md", pb: "md" },
+      React.createElement(Text, { fw: 600, size: "sm" }, "PROJECT DATA"),
+      directoryNode("/assets"),
+      React.createElement(
+        Button,
+        {
+          variant: "subtle",
+          size: "xs",
+          fullWidth: true,
+          justify: "flex-start",
+          "aria-expanded": expanded.has("/slots"),
+          onClick: () => toggleExpanded("/slots"),
+        },
+        `${expanded.has("/slots") ? "▾" : "▸"} /slots`,
+      ),
+      expanded.has("/slots")
+        ? React.createElement(
+            Stack,
+            { gap: 2, pl: "md" },
+            ...(visibleSlots.length
+              ? visibleSlots.map((slot) =>
+                  React.createElement(
+                    Text,
+                    { key: slot.id, size: "xs" },
+                    `[row=${slot.row},col=${slot.col}] — ${slotReference(slot)}`,
+                  ),
+                )
+              : [React.createElement(Text, { key: "empty", size: "xs", c: "dimmed" }, "(표시 슬롯 없음)")]),
+          )
+        : null,
+    );
+  }
   function FastFigureProjectActions() {
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
@@ -238,6 +378,7 @@
         AppShell.Navbar,
         { p: 0 },
         React.createElement(FastFigureDataActions),
+        React.createElement(FastFigureProjectDataTree),
         React.createElement(FastFigureProjectActions),
         React.createElement(FastFigureGraphFileActions),
         React.createElement(FastFigureUtilityActions),
@@ -250,6 +391,7 @@
     FastFigureShell,
     FastFigureToolbar,
     FastFigureDataActions,
+    FastFigureProjectDataTree,
     FastFigureProjectActions,
     FastFigureGraphFileActions,
     FastFigureUtilityActions,
