@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.122-alpha";
+      const APP_BUILD = "1.1.123-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -2074,8 +2074,8 @@
         applyLayoutSettings(values) {
           return applyLayoutSettingsFromValues(values);
         },
-        renderLayoutPreview() {
-          return renderLayout();
+        renderLayoutPreview(target) {
+          return renderLayout(target);
         },
         mergeSelectedSlots() {
           return mergeSelected();
@@ -2089,11 +2089,11 @@
         applyLabelPosition(values) {
           return applyLabelPositionFromValues(values);
         },
-        renderLabelPreview(values) {
-          return renderLabelPreviewFromValues(values, false);
+        renderLabelPreview(values, preview, label) {
+          return renderLabelPreviewFromValues(values, false, preview, label);
         },
-        labelPreviewPosition(clientX, clientY, offsetX = 0, offsetY = 0) {
-          return labelPreviewPositionFromPointer(clientX, clientY, offsetX, offsetY);
+        labelPreviewPosition(clientX, clientY, offsetX = 0, offsetY = 0, preview, label) {
+          return labelPreviewPositionFromPointer(clientX, clientY, offsetX, offsetY, preview, label);
         },
         setAnnotationEnabled(kind, enabled) {
           return applyAnnotationVisibilityFromValues(kind, enabled);
@@ -3345,7 +3345,8 @@
             gridCols: snapshot.layout.gridCols,
             slotStyle: { ...snapshot.layout.slotStyle },
           }),
-          [draft, setDraft] = React.useState(buildDraft);
+          [draft, setDraft] = React.useState(buildDraft),
+          layoutMapRef = React.useRef(null);
         React.useEffect(() => {
           if (opened) setDraft(buildDraft());
         }, [opened]);
@@ -3357,7 +3358,7 @@
             }));
         React.useEffect(() => {
           if (!opened) return;
-          requestAnimationFrame(() => fastFigureUiBridge.renderLayoutPreview());
+          requestAnimationFrame(() => fastFigureUiBridge.renderLayoutPreview(layoutMapRef.current));
         });
         return React.createElement(
           FastFigureOverlayModalStaging,
@@ -3434,7 +3435,7 @@
             ),
             React.createElement(FastFigureDashboardZoomStaging),
             React.createElement("div", {
-              id: "layoutMap",
+              ref: layoutMapRef,
               className: "layout-map",
               style: {
                 width: "100%",
@@ -3477,14 +3478,18 @@
         let runtime = window.FastFigureUiRuntime;
         if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
         let { React } = runtime,
-          dragging = React.useRef(null);
+          dragging = React.useRef(null),
+          previewRef = React.useRef(null),
+          labelRef = React.useRef(null);
         React.useEffect(() => {
-          requestAnimationFrame(() => fastFigureUiBridge.renderLabelPreview(draft));
+          requestAnimationFrame(() =>
+            fastFigureUiBridge.renderLabelPreview(draft, previewRef.current, labelRef.current),
+          );
         }, [draft]);
         return React.createElement(
           "div",
           {
-            id: "labelPreview",
+            ref: previewRef,
             className: "label-preview",
             "aria-label": "레이블 위치 미리보기",
           },
@@ -3495,7 +3500,7 @@
           React.createElement(
             "span",
             {
-              id: "labelPreviewLabel",
+              ref: labelRef,
               className: "label-preview-label",
               onPointerDown: (event) => {
                 event.preventDefault();
@@ -3515,6 +3520,8 @@
                   event.clientY,
                   dragging.current.offsetX,
                   dragging.current.offsetY,
+                  previewRef.current,
+                  labelRef.current,
                 );
                 if (position)
                   setDraft((current) => ({
@@ -7840,8 +7847,7 @@
           });
         });
       }
-      function renderLayout() {
-        let map = $("layoutMap");
+      function renderLayout(map = $("layoutMap")) {
         if (!map) return;
         map.style.gridTemplateColumns = `repeat(${activeProject.gridCols},minmax(0,1fr))`;
         map.style.gridTemplateRows = `repeat(${activeProject.gridRows},minmax(0,1fr))`;
@@ -7861,7 +7867,7 @@
             e.setAttribute("aria-label", `${s.row}행 ${s.col}열${hasContent ? " · 콘텐츠 있음" : ""}`);
             e.onclick = () => {
               layoutSelected.has(s.id) ? layoutSelected.delete(s.id) : layoutSelected.add(s.id);
-              renderLayout();
+              renderLayout(map);
             };
             map.append(e);
           });
@@ -11085,9 +11091,8 @@
       function finiteLabelPosition(value) {
         return Number.isFinite(value) ? value : 0;
       }
-      function labelPreviewGeometry() {
-        let preview = $("labelPreview"),
-          referenceGeometry = dashboardGeometry(dashboardReferenceWidth()),
+      function labelPreviewGeometry(preview = $("labelPreview")) {
+        let referenceGeometry = dashboardGeometry(dashboardReferenceWidth()),
           reference = gridSlotGeometry(
             activeProject.layout,
             referenceGeometry,
@@ -11107,33 +11112,47 @@
           reference,
         };
       }
-      function constrainLabelPreviewPosition(x, y, geometry = labelPreviewGeometry()) {
-        let label = $("labelPreviewLabel"),
-          width = label.getBoundingClientRect().width / geometry.scale,
+      function constrainLabelPreviewPosition(
+        x,
+        y,
+        geometry = labelPreviewGeometry(),
+        label = $("labelPreviewLabel"),
+      ) {
+        let width = label.getBoundingClientRect().width / geometry.scale,
           height = label.getBoundingClientRect().height / geometry.scale;
         return {
           x: Math.min(Math.max(0, x), Math.max(0, geometry.reference.width - width)),
           y: Math.min(Math.max(0, y), Math.max(0, geometry.reference.height - height)),
         };
       }
-      function labelPreviewPositionFromPointer(clientX, clientY, offsetX = 0, offsetY = 0) {
-        let preview = $("labelPreview");
+      function labelPreviewPositionFromPointer(
+        clientX,
+        clientY,
+        offsetX = 0,
+        offsetY = 0,
+        preview = $("labelPreview"),
+        label = $("labelPreviewLabel"),
+      ) {
         if (!preview) return null;
         let rect = preview.getBoundingClientRect(),
-          geometry = labelPreviewGeometry();
+          geometry = labelPreviewGeometry(preview);
         return constrainLabelPreviewPosition(
           (clientX - rect.left - geometry.left - offsetX) / geometry.scale,
           (clientY - rect.top - geometry.top - offsetY) / geometry.scale,
           geometry,
+          label,
         );
       }
-      function renderLabelPreviewFromValues(values = {}, syncControls = false) {
-        let preview = $("labelPreview"),
-          label = $("labelPreviewLabel"),
-          slot = preview?.querySelector(".label-preview-slot");
+      function renderLabelPreviewFromValues(
+        values = {},
+        syncControls = false,
+        preview = $("labelPreview"),
+        label = $("labelPreviewLabel"),
+      ) {
+        let slot = preview?.querySelector(".label-preview-slot");
         if (!preview || !label || !slot) return null;
         let settings = { ...activeProject.labelSettings, ...values },
-          geometry = labelPreviewGeometry(),
+          geometry = labelPreviewGeometry(preview),
           x = finiteLabelPosition(Number(settings.x)),
           y = finiteLabelPosition(Number(settings.y)),
           identifier = targetSlotIdentifier(0, settings);
