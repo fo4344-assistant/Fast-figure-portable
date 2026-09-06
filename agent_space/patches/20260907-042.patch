@@ -1,0 +1,43 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -145,6 +145,23 @@
+     );
+   }
+ 
++  function FastFigureUtilityActions() {
++    const state = useAppState();
++    return React.createElement(
++      Stack,
++      { gap: "xs", p: "md", mt: "auto" },
++      React.createElement(
++        Button,
++        {
++          variant: state.overlay === "readme" ? "filled" : "light",
++          "aria-expanded": state.overlay === "readme",
++          onClick: () => toggleOverlay("readme"),
++        },
++        "README",
++      ),
++    );
++  }
++
+   function FastFigureShell() {
+     return React.createElement(
+       AppShell,
+@@ -164,6 +181,7 @@
+         { p: 0 },
+         React.createElement(FastFigureDataActions),
+         React.createElement(FastFigureProjectActions),
++        React.createElement(FastFigureUtilityActions),
+       ),
+       React.createElement(AppShell.Main, null),
+     );
+@@ -174,6 +192,7 @@
+     FastFigureToolbar,
+     FastFigureDataActions,
+     FastFigureProjectActions,
++    FastFigureUtilityActions,
+     getAppStateSnapshot,
+     selectedTargetText,
+   });
