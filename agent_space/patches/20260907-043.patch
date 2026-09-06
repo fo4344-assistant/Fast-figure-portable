@@ -48,7 +48,7 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
    function FastFigureToolbar() {
      const state = useAppState();
      const activeOverlay = state.overlay;
-@@ -121,6 +139,33 @@
+@@ -121,6 +139,37 @@
      );
    }
  
@@ -86,7 +86,7 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
    function FastFigureUtilityActions() {
      const state = useAppState();
      return React.createElement(
-@@ -163,6 +208,7 @@
+@@ -163,6 +212,7 @@
          { p: 0 },
          React.createElement(FastFigureDataActions),
          React.createElement(FastFigureProjectActions),
@@ -94,7 +94,7 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
          React.createElement(FastFigureUtilityActions),
        ),
        React.createElement(AppShell.Main, null),
-@@ -173,6 +219,7 @@
+@@ -173,6 +223,7 @@
      FastFigureToolbar,
      FastFigureDataActions,
      FastFigureProjectActions,
