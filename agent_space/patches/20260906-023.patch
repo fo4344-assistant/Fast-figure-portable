@@ -7,13 +7,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 -      const APP_BUILD = "1.1.126-alpha";
 +      const APP_BUILD = "1.1.127-alpha";
        const ICONOIR_GLYPHS = Object.freeze({
-@@ -2135,8 +2135,56 @@
-         selectAssetPath(path) {
-           let match = projectVfs.resolve(path);
-           if (match?.kind === "directory") selectDirectoryFromTree(match.path);
-           else if (match?.kind === "csv") selectCsvAsset(projectAssetPath(match.asset));
-           else if (match?.kind === "image") selectImageAsset(projectAssetPath(match.asset));
-           else return false;
+@@ -2141,3 +2141,51 @@
            return true;
          },
 +        canDragAsset(path) {
@@ -64,10 +58,8 @@ diff --git a/fast-figure.js b/fast-figure.js
 +          publishFastFigureUiStore(appFSM.state, "asset:drop");
 +          return true;
 +        },
-@@ -2956,100 +3004,133 @@
-       function FastFigureAssetTreeStaging({ tree, selectedPath }) {
-         let runtime = window.FastFigureUiRuntime;
-         if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+         createAssetDirectory() {
+@@ -2959,3 +3007,32 @@
          let { React, MantineCore } = runtime,
            { NavLink, Stack, Text } = MantineCore,
 +          target = (kind, path = "", slotId = null) => ({ kind, path, slotId }),
@@ -100,104 +92,24 @@ diff --git a/fast-figure.js b/fast-figure.js
 +            },
 +          }),
            directories = tree.directories
-             .filter((path) => path === "/assets" || path.startsWith("/assets/"))
-             .sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b)),
-           directorySet = new Set(directories),
-           csvById = new Map(tree.data.map((csv) => [csv.id, csv])),
-           imageById = new Map(tree.images.map((image) => [image.id, image])),
-           chartById = new Map(tree.charts.map((chart) => [chart.id, chart])),
-           directoryChildren = (parent) =>
-             directories.filter((path) => path !== parent && projectParentPath(path) === parent),
-           assetChildren = (parent) => [
-             ...tree.data
-               .filter((csv) => projectParentPath(csv.path) === parent)
-               .map((csv) => ({
-                 key: `csv:${csv.id}`,
-                 path: csv.path,
-                 label: projectPathName(csv.path),
-                 meta: `${csv.rowCount}행`,
-               })),
-             ...tree.images
-               .filter((image) => projectParentPath(image.path) === parent)
-               .map((image) => ({
-                 key: `image:${image.id}`,
-                 path: image.path,
-                 label: projectPathName(image.path),
-                 meta: "이미지",
-               })),
-           ].sort((a, b) => a.path.localeCompare(b.path)),
-           renderDirectory = (path) => {
-             let children = [
-               ...directoryChildren(path).map(renderDirectory),
-               ...assetChildren(path).map((asset) =>
-                 React.createElement(
-                   NavLink,
-                   {
-                     key: asset.key,
-                     label: asset.label,
-                     description: asset.meta,
+@@ -3000,3 +3077,4 @@
                      active: selectedPath === asset.path,
                      onClick: () => fastFigureUiBridge.selectAssetPath(asset.path),
 +                    ...dragProps(asset.path),
                    },
-                 ),
-               ),
-             ];
-             return React.createElement(
-               NavLink,
-               {
-                 key: path,
-                 label: path === "/assets" ? "/assets" : projectPathName(path),
+@@ -3012,4 +3090,6 @@
                  active: selectedPath === path,
                  defaultOpened: path === "/assets",
                  onClick: () => fastFigureUiBridge.selectAssetPath(path),
 +                ...dragProps(path),
 +                ...dropProps(target("folder", path)),
                },
-               children,
-             );
-           },
-           slotItems = tree.slots
-             .filter((slot) => !slot.hidden)
-             .sort((a, b) => a.row - b.row || a.col - b.col)
-             .map((slot) => {
-               let references = [];
-               if (slot.contentType === "image") {
-                 let image = imageById.get(slot.imageId);
-                 if (image) references.push(image.path);
-               } else {
-                 let chart = chartById.get(slot.chart);
-                 if (chart?.editable === false) references.push("Plotly JSON 내부 데이터");
-                 else
-                   (chart?.csvIds || []).forEach((id) => {
-                     let csv = csvById.get(id);
-                     if (csv) references.push(csv.path);
-                   });
-               }
-               return React.createElement(
-                 NavLink,
-                 {
+@@ -3043,4 +3123,5 @@
                    key: `slot:${slot.id}`,
                    label: `[row=${slot.row},col=${slot.col}]`,
                    description: references.length ? references.join(" · ") : "(에셋 없음)",
 +                  ...dropProps(target("slot", "", slot.id)),
                  },
-               );
-             });
-         return React.createElement(
-           Stack,
-           { gap: 0, "data-fast-figure-ui": "asset-tree" },
-           React.createElement(Text, { size: "xs", fw: 700, mb: 4 }, "PROJECT DATA"),
-           directorySet.has("/assets") ? renderDirectory("/assets") : null,
-           React.createElement(
-             NavLink,
-             { label: "/slots", defaultOpened: true },
-             slotItems.length
-               ? slotItems
-               : React.createElement(Text, { size: "xs", c: "dimmed", px: "sm", py: "xs" }, "(표시 슬롯 없음)"),
-           ),
-         );
-       }
 @@ -6093,1 +6174,6 @@
 -      async function executeAssetTreeDrop(dataTransfer, target, policy) {
 +      async function executeAssetTreeDrop(
