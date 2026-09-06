@@ -132,7 +132,10 @@ diff --git a/fast-figure.js b/fast-figure.js
              React.createElement(FastFigureUiPaletteStaging, { palette: snapshot.appearance.uiPalette }),
 +            React.createElement(FastFigureDebugStaging, { debugState: fastFigureUiBridge.readDebug() }),
              React.createElement(FastFigureAssetTreeStaging, {
-@@ -13311,27 +13399,49 @@
+@@ -13308,31 +13396,53 @@
+         });
+         requestAnimationFrame(refreshSidebarMinimum);
+       }
 -      $("saveDebug").onclick = () => {
 +      function readDebugState() {
 +        return Object.freeze({
@@ -197,3 +200,4 @@ diff --git a/fast-figure.js b/fast-figure.js
 +      $("saveDebug").onclick = saveDebugLog;
 +      $("clearDebug").onclick = clearDebugLog;
 +      $("toggleDebug").onclick = () => setDebugEnabled(!debugEnabled);
+       window.addEventListener("error", (event) =>
