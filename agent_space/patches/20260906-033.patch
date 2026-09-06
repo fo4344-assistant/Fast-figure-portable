@@ -120,7 +120,6 @@ diff --git a/fast-figure.js b/fast-figure.js
 +        { replaceSlotContent = false, assetPath = null, replaceAssetId = null, assetPlan = null } = {},
        ) {
          debugLog("fileLoad:start", {
-           name: file.name,
 @@ -11507,6 +11507,8 @@
            if (!Array.isArray(data) && Array.isArray(data.data)) data = data.data;
            if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
