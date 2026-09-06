@@ -1,0 +1,56 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.113-alpha";
++      const APP_BUILD = "1.1.114-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -2140,8 +2140,8 @@
+         readCsvHeader() {
+           return selectedCsvHeaderModel();
+         },
+         applyCsvHeader(value, csvId) {
+-          return applyCsvHeaderLinesFromValue(value, csvId);
++          return !!applyCsvHeaderLinesToModel(value, csvId);
+         },
+         readChartLayout() {
+           return selectedChartLayoutModel();
+@@ -12591,25 +12591,33 @@
+       function applyCsvHeaderLinesFromValue(value, csvId = activeCsvId) {
++        let result = applyCsvHeaderLinesToModel(value, csvId);
++        if (!result) return false;
++        $("headerLines").value = result.headerLines;
++        refreshColumnControls();
++        return true;
++      }
++      function applyCsvHeaderLinesToModel(value, csvId = activeCsvId) {
+         let csv = getProjectCsv(csvId);
+         if (!csv || csv.id !== activeCsvId) return false;
+         let count = headerLineCount(value, csv.rows);
+-        $("headerLines").value = count;
+         csv.headerLines = count;
+-        refreshColumnControls();
+         activeProject.charts.forEach((chart) => {
+           if (
+             chart.editor?.editable !== false &&
+             chartCsvIds(chart).includes(csv.id)
+           )
+             rebuildEditableGraph(chart);
+         });
+         renderDashboard();
+         debugLog("csv:header-lines", {
+           csvId: csv.id,
+           headerLines: count,
+         });
+         publishFastFigureUiStore(appFSM.state, "csv:header-lines");
+-        return true;
++        return Object.freeze({
++          csvId: csv.id,
++          headerLines: count,
++        });
+       }
+       $("headerLines").onchange = () => {
+         applyCsvHeaderLinesFromValue($("headerLines").value);
+       };
