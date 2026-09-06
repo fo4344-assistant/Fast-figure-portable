@@ -7,37 +7,21 @@ diff --git a/fast-figure.js b/fast-figure.js
 -      const APP_BUILD = "1.1.118-alpha";
 +      const APP_BUILD = "1.1.119-alpha";
        const ICONOIR_GLYPHS = Object.freeze({
-@@ -1545,29 +1545,35 @@
-         if (name !== "readme" && $("readmeDialog").open) $("readmeDialog").close();
-         if (name === "readme" && !$("readmeDialog").open) {
-           $("readmeDialog").showModal();
-           $("readmeDialog").focus({ preventScroll: true });
+@@ -1549,5 +1549,7 @@
            requestAnimationFrame(() => ($("readmeDialog").scrollTop = 0));
          }
 -        applyOverlayOpenPolicy(name);
        }
--      function enterOverlayState({ state, objects }) {
--        setOverlayDomState(state);
 +      function enterOverlayDomainState({ state }) {
 +        return applyOverlayOpenPolicy(state);
 +      }
+       function enterOverlayState({ state, objects }) {
+@@ -1553,3 +1555,2 @@
+-      function enterOverlayState({ state, objects }) {
+-        setOverlayDomState(state);
 +      function syncLegacyOverlayPresentation({ state, objects }) {
          if (state === "layout") {
-           renderLayout();
-           requestAnimationFrame(() => {
-             syncLayoutMapSize();
-             let map = $("layoutMap");
-             debugLog("layoutPanel:open", {
-               mapWidth: Math.round(map.getBoundingClientRect().width),
-               mapHeight: Math.round(map.getBoundingClientRect().height),
-               panelHeight: Math.round($("layoutPanel").getBoundingClientRect().height),
-             });
-           });
-         } else if (state === "label") syncLabelControlsFromObject(objects.labels);
-         else if (state === "caption") syncCaptionControlsFromObject(objects.captions);
-         else if (state === "print") {
-           $("printWidth").value = Math.max(100, Math.round(dashboardReferenceWidth()));
-           $("printHeight").value = "";
+@@ -1571,4 +1572,9 @@
            syncPopupBounds();
          }
        }
@@ -46,3 +30,4 @@ diff --git a/fast-figure.js b/fast-figure.js
 +        enterOverlayDomainState(context);
 +        syncLegacyOverlayPresentation(context);
 +      }
+       function exitOverlayState({ state }) {
