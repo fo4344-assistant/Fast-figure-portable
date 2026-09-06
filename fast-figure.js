@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.115-alpha";
+      const APP_BUILD = "1.1.116-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -4747,21 +4747,23 @@
         caption.style.width = `${width}px`;
         caption.style.minWidth = `${width}px`;
       }
-      function applySlotStyle(fromControls = true, notify = true) {
+      function syncLegacySlotStyleControls(style = activeProject.layout.slotStyle) {
+        $("dashboardReferenceWidth").value = style.referenceWidth;
+        $("slotGap").value = style.gap;
+        $("dashboardOuterMargin").value = style.outerMargin;
+        $("slotRadius").value = style.radius;
+        $("dashboardAspect").value = style.aspect;
+        syncSettingToggle("showSlotBorders", style.showBorders);
+      }
+      function applySlotStyle(fromControls = true, notify = true, syncControls = true) {
         if (fromControls) activeProject.layout.slotStyle = slotStyleFromControls();
         let style = activeProject.layout.slotStyle,
-          outerMargin = style.outerMargin,
           bordersVisible = style.showBorders,
           border = bordersVisible ? "var(--ui-color)" : "transparent",
           aspect = style.aspect,
           hasAspect = Number.isFinite(aspect) && aspect > 0,
           dashboard = $("dashboard");
-        $("dashboardReferenceWidth").value = style.referenceWidth;
-        $("slotGap").value = style.gap;
-        $("dashboardOuterMargin").value = outerMargin;
-        $("slotRadius").value = style.radius;
-        $("dashboardAspect").value = style.aspect;
-        syncSettingToggle("showSlotBorders", bordersVisible);
+        if (syncControls) syncLegacySlotStyleControls(style);
         ["dashboard", "layoutMap", "dashboardCaption"].forEach((id) => {
           let el = $(id);
           if (el) {
@@ -12497,7 +12499,7 @@
         activeProject.layout.slotStyle = slotStyleFromValues(
           values.slotStyle || activeProject.layout.slotStyle,
         );
-        applySlotStyle(false);
+        applySlotStyle(false, true, false);
         return true;
       }
       $("applyGrid").onclick = () => {
