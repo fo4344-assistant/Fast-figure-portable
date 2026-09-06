@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.134-alpha";
+      const APP_BUILD = "1.1.135-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -2203,6 +2203,26 @@
           dataTransfer.setData("text/plain", resolvedPath);
           return true;
         },
+        readAssetDropRequest(dataTransfer, target) {
+          let node = {
+              dataset: {
+                explorerTarget: target?.kind || "",
+                path: target?.path || "",
+                slotId: target?.slotId == null ? "" : String(target.slotId),
+              },
+            },
+            policy = assetTreeDropPolicy(dataTransfer, node),
+            moveRequest = policy.allowed
+              ? assetTreeInternalMoveRequest(dataTransfer, node, policy)
+              : null;
+          return Object.freeze({
+            allowed: policy.allowed,
+            operation: policy.operation || "",
+            reason: policy.reason || "",
+            confirmation: moveRequest?.confirmation || null,
+            moveRequest,
+          });
+        },
         readAssetDropPolicy(dataTransfer, target) {
           let node = {
             dataset: {
@@ -2231,6 +2251,11 @@
           });
           publishFastFigureUiStore(appFSM.state, "asset:drop");
           return true;
+        },
+        dropAssetConfirmed(request) {
+          let moved = executeProjectAssetMove(request, { preserveLegacyOpenState: false });
+          if (moved) publishFastFigureUiStore(appFSM.state, "asset:drop-confirmed");
+          return moved;
         },
         createAssetDirectory() {
           return createAssetDirectory();
@@ -3069,7 +3094,7 @@
             : null,
         );
       }
-      function FastFigureAssetTreeStaging({ tree, selectedPath }) {
+      function FastFigureAssetTreeStaging({ tree, selectedPath, onDropConfirmation }) {
         let runtime = window.FastFigureUiRuntime;
         if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
         let { React, MantineCore } = runtime,
@@ -3093,6 +3118,13 @@
             onDrop: async (event) => {
               event.preventDefault();
               event.stopPropagation();
+              let request = fastFigureUiBridge.readAssetDropRequest(
+                event.dataTransfer,
+                dropTarget,
+              );
+              if (!request.allowed) return status(request.reason);
+              if (request.confirmation && request.moveRequest)
+                return onDropConfirmation?.(request);
               await fastFigureUiBridge.dropAsset(event.dataTransfer, dropTarget);
             },
           }),
@@ -3462,6 +3494,14 @@
           graphObject = fastFigureUiBridge.readGraphObject(),
           [confirmation, setConfirmation] = React.useState(null),
           [inputDialog, setInputDialog] = React.useState(null),
+          openAssetDropConfirmation = (request) => {
+            if (!request?.confirmation || !request.moveRequest) return;
+            setConfirmation({
+              ...request.confirmation,
+              kind: "asset-drop",
+              moveRequest: request.moveRequest,
+            });
+          },
           openAssetDeletionConfirmation = () => {
             let model = fastFigureUiBridge.readSelectedAssetDeletion();
             if (!model) return;
@@ -3524,6 +3564,8 @@
             if (!confirmation) return;
             if (confirmation.kind === "slot-reset")
               fastFigureUiBridge.resetSelectedSlotConfirmed(confirmation.slotId);
+            else if (confirmation.kind === "asset-drop")
+              fastFigureUiBridge.dropAssetConfirmed(confirmation.moveRequest);
             else if (confirmation.kind === "asset-delete")
               fastFigureUiBridge.deleteSelectedAssetConfirmed(
                 confirmation.assetKind,
@@ -3636,6 +3678,7 @@
             React.createElement(FastFigureAssetTreeStaging, {
               tree: assetTree,
               selectedPath: assetActions.context?.path || null,
+              onDropConfirmation: openAssetDropConfirmation,
             }),
             React.createElement(
               SimpleGrid,
@@ -6518,6 +6561,39 @@
       function assetTreeDropTarget(event) {
         return event.target.closest?.("#assetTree [data-explorer-target]") || null;
       }
+      function projectAssetMovePolicy({ kind, path, targetPath }) {
+        let match = path ? projectVfs.resolve(path) : null,
+          target = targetPath ? projectVfs.resolve(targetPath) : null,
+          protectedDefaultCsv =
+            match?.kind === "csv" && match.asset.isDefaultEmpty === true,
+          fixedDirectory = match?.kind === "directory" && projectVfs.isFixedDirectory(match.path),
+          sameFolder = path && projectParentPath(path) === targetPath,
+          recursive =
+            match?.kind === "directory" && targetPath && projectPathInDirectory(targetPath, match.path),
+          targetAvailable = target?.kind === "directory";
+        return {
+          allowed:
+            !!match &&
+            match.kind === kind &&
+            targetAvailable &&
+            !protectedDefaultCsv &&
+            !fixedDirectory &&
+            !sameFolder &&
+            !recursive,
+          operation: "move",
+          reason: protectedDefaultCsv
+            ? "프로젝트 기본 빈 CSV는 이동할 수 없습니다."
+            : fixedDirectory
+              ? "기본 프로젝트 폴더는 이동할 수 없습니다."
+              : recursive
+                ? "폴더를 자기 자신 또는 하위 폴더로 이동할 수 없습니다."
+                : sameFolder
+                  ? "이미 같은 폴더에 있습니다."
+                  : !targetAvailable
+                    ? "이동할 대상 폴더가 없습니다."
+                    : "",
+        };
+      }
       function assetTreeDropPolicy(dataTransfer, target) {
         let targetKind = target?.dataset.explorerTarget,
           types = new Set(Array.from(dataTransfer?.types || []));
@@ -6528,10 +6604,6 @@
             dragged = JSON.parse(dataTransfer.getData(ASSET_TREE_DRAG_TYPE) || "null");
           } catch (_) {}
           let match = dragged?.path ? projectVfs.resolve(dragged.path) : null,
-            protectedDefaultCsv =
-              types.has(ASSET_TREE_LOCKED_TYPE) ||
-              (match?.kind === "csv" && match.asset.isDefaultEmpty === true),
-            fixedDirectory = match?.kind === "directory" && projectVfs.isFixedDirectory(match.path),
             trashed = dragged?.path && projectVfs.isTrashed(dragged.path);
           if (targetKind === "slot")
             return {
@@ -6543,21 +6615,11 @@
                   ? "폴더는 슬롯에 연결할 수 없습니다."
                   : "",
             };
-          let sameFolder = dragged?.path && projectParentPath(dragged.path) === target.dataset.path,
-            recursive = match?.kind === "directory" && projectPathInDirectory(target.dataset.path, match.path);
-          return {
-            allowed: !!match && !protectedDefaultCsv && !fixedDirectory && !sameFolder && !recursive,
-            operation: "move",
-            reason: protectedDefaultCsv
-              ? "프로젝트 기본 빈 CSV는 이동할 수 없습니다."
-              : fixedDirectory
-                ? "기본 프로젝트 폴더는 이동할 수 없습니다."
-                : recursive
-                  ? "폴더를 자기 자신 또는 하위 폴더로 이동할 수 없습니다."
-              : sameFolder
-                ? "이미 같은 폴더에 있습니다."
-                : "",
-          };
+          return projectAssetMovePolicy({
+            kind: dragged?.kind,
+            path: dragged?.path,
+            targetPath: target.dataset.path,
+          });
         }
         if (!dataTransferHasFiles(dataTransfer))
           return { allowed: false, reason: "지원하는 드래그 데이터가 아닙니다." };
@@ -6585,6 +6647,88 @@
           operation: "import-folder",
           reason: allowed ? "" : "FFSX는 슬롯에만 놓을 수 있습니다.",
         };
+      }
+      function projectAssetMoveConfirmation(request) {
+        let match = request?.path ? projectVfs.resolve(request.path) : null;
+        if (!match || match.kind !== request.kind) return null;
+        if (
+          !projectVfs.isTrashed(request.targetPath) ||
+          projectVfs.isTrashed(request.path)
+        )
+          return null;
+        let movingAssets =
+            request.kind === "directory"
+              ? projectVfs.descendants(request.path)
+              : [{ kind: request.kind, asset: match.asset }],
+          csvIds = new Set(
+            movingAssets.filter(({ kind }) => kind === "csv").map(({ asset }) => asset.id),
+          ),
+          imageIds = new Set(
+            movingAssets.filter(({ kind }) => kind === "image").map(({ asset }) => asset.id),
+          ),
+          referenceCount = projectAssetReferenceCount(csvIds, imageIds);
+        return referenceCount
+          ? Object.freeze({
+              title: "휴지통으로 이동",
+              message: `이 항목을 휴지통으로 이동하면 그래프·슬롯 참조 ${referenceCount}개가 제거됩니다. 계속할까요?`,
+              confirmLabel: "이동",
+            })
+          : null;
+      }
+      function assetTreeInternalMoveRequest(dataTransfer, target, policy) {
+        if (policy?.operation !== "move") return null;
+        let dragged = null;
+        try {
+          dragged = JSON.parse(dataTransfer.getData(ASSET_TREE_DRAG_TYPE) || "null");
+        } catch (_) {}
+        if (!dragged?.kind || !dragged?.path || !target?.dataset?.path) return null;
+        let request = {
+          kind: dragged.kind,
+          path: dragged.path,
+          targetPath: target.dataset.path,
+        };
+        return Object.freeze({
+          ...request,
+          confirmation: projectAssetMoveConfirmation(request),
+        });
+      }
+      function executeProjectAssetMove(request, { preserveLegacyOpenState = true } = {}) {
+        let policy = projectAssetMovePolicy(request || {});
+        if (!policy.allowed) {
+          status(policy.reason);
+          return false;
+        }
+        let movedOpen = preserveLegacyOpenState && request.kind === "directory"
+            ? [...$("assetTree").querySelectorAll("details[data-path]")]
+                .filter((branch) => projectPathInDirectory(branch.dataset.path, request.path))
+                .map((branch) => ({
+                  suffix: branch.dataset.path.slice(request.path.length),
+                  open: branch.open,
+                }))
+            : [],
+          selectedSuffix =
+            request.kind === "directory" &&
+            projectPathInDirectory(selectedExplorerDirectory, request.path)
+              ? selectedExplorerDirectory.slice(request.path.length)
+              : null,
+          payload = {
+            path: request.path,
+            directory: request.targetPath,
+            direction: "ui-to-fsm",
+          };
+        appFSM.send("PROJECT_NODE_MOVED", payload);
+        if (request.kind === "directory") {
+          if (selectedSuffix !== null)
+            selectedExplorerDirectory = `${payload.path}${selectedSuffix}`;
+          movedOpen.forEach(({ suffix, open }) => {
+            let path = `${payload.path}${suffix}`,
+              branch = [...$("assetTree").querySelectorAll("details[data-path]")]
+                .find((item) => item.dataset.path === path);
+            if (branch) branch.open = open;
+          });
+        }
+        status(payload.trashed ? `${payload.path}을 휴지통으로 이동했습니다.` : `${payload.path}로 이동했습니다.`);
+        return true;
       }
       function clearAssetTreeDropState() {
         $("assetTree")
@@ -6627,55 +6771,11 @@
             match = projectVfs.resolve(dragged.path);
           if (!match || match.kind !== dragged.kind) throw Error("드래그한 프로젝트 항목이 없습니다.");
           if (policy.operation === "move") {
-            let movedOpen = preserveLegacyOpenState && dragged.kind === "directory"
-                ? [...$("assetTree").querySelectorAll("details[data-path]")]
-                    .filter((branch) => projectPathInDirectory(branch.dataset.path, dragged.path))
-                    .map((branch) => ({
-                      suffix: branch.dataset.path.slice(dragged.path.length),
-                      open: branch.open,
-                    }))
-                : [],
-              selectedSuffix = dragged.kind === "directory" &&
-                  projectPathInDirectory(selectedExplorerDirectory, dragged.path)
-                ? selectedExplorerDirectory.slice(dragged.path.length)
-                : null,
-              payload = {
-                path: dragged.path,
-                directory: target.dataset.path,
-                direction: "ui-to-fsm",
-              };
-            if (projectVfs.isTrashed(target.dataset.path) && !projectVfs.isTrashed(dragged.path)) {
-              let movingAssets = dragged.kind === "directory"
-                  ? projectVfs.descendants(dragged.path)
-                  : [{ kind: dragged.kind, asset: match.asset }],
-                csvIds = new Set(
-                  movingAssets.filter(({ kind }) => kind === "csv").map(({ asset }) => asset.id),
-                ),
-                imageIds = new Set(
-                  movingAssets.filter(({ kind }) => kind === "image").map(({ asset }) => asset.id),
-                ),
-                referenceCount = projectAssetReferenceCount(csvIds, imageIds);
-              if (
-                referenceCount &&
-                !window.confirm(
-                  `이 항목을 휴지통으로 이동하면 그래프·슬롯 참조 ${referenceCount}개가 제거됩니다. 계속할까요?`,
-                )
-              )
-                return;
-            }
-            appFSM.send("PROJECT_NODE_MOVED", payload);
-            if (dragged.kind === "directory") {
-              if (selectedSuffix !== null)
-                selectedExplorerDirectory = `${payload.path}${selectedSuffix}`;
-              movedOpen.forEach(({ suffix, open }) => {
-                let path = `${payload.path}${suffix}`,
-                  branch = [...$("assetTree").querySelectorAll("details[data-path]")]
-                    .find((item) => item.dataset.path === path);
-                if (branch) branch.open = open;
-              });
-            }
-            status(payload.trashed ? `${payload.path}을 휴지통으로 이동했습니다.` : `${payload.path}로 이동했습니다.`);
-            return;
+            let request = assetTreeInternalMoveRequest(dataTransfer, target, policy);
+            if (!request) throw Error("프로젝트 이동 요청이 올바르지 않습니다.");
+            if (request.confirmation && !window.confirm(request.confirmation.message))
+              return false;
+            return executeProjectAssetMove(request, { preserveLegacyOpenState });
           }
           connectProjectAssetToSlot(
             dragged.path,
