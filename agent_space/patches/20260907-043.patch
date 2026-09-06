@@ -1,7 +1,7 @@
 diff --git a/fast-figure-ui.js b/fast-figure-ui.js
 --- a/fast-figure-ui.js
 +++ b/fast-figure-ui.js
-@@ -22,18 +22,19 @@
+@@ -22,18 +22,22 @@
      appFSM.send("TOGGLE_OVERLAY", { overlay, source: "mantine" });
    }
  
@@ -27,7 +27,7 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
    function openProjectImportPicker() {
      if (getSelectedSlot())
        return status("프로젝트 불러오기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
-@@ -44,6 +45,23 @@
+@@ -44,6 +48,20 @@
      document.getElementById("file").click();
    }
  
@@ -48,7 +48,7 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
    function FastFigureToolbar() {
      const state = useAppState();
      const activeOverlay = state.overlay;
-@@ -121,6 +139,48 @@
+@@ -121,6 +139,33 @@
      );
    }
  
@@ -86,7 +86,7 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
    function FastFigureUtilityActions() {
      const state = useAppState();
      return React.createElement(
-@@ -163,6 +223,7 @@
+@@ -163,6 +208,7 @@
          { p: 0 },
          React.createElement(FastFigureDataActions),
          React.createElement(FastFigureProjectActions),
@@ -94,7 +94,7 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
          React.createElement(FastFigureUtilityActions),
        ),
        React.createElement(AppShell.Main, null),
-@@ -173,6 +234,7 @@
+@@ -173,6 +219,7 @@
      FastFigureToolbar,
      FastFigureDataActions,
      FastFigureProjectActions,
@@ -102,4 +102,3 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
      FastFigureUtilityActions,
      getAppStateSnapshot,
      selectedTargetText,
-
