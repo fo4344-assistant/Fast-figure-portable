@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.130-alpha";
+      const APP_BUILD = "1.1.131-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -2167,6 +2167,12 @@
         runAssetAction(key, context) {
           return runAssetTreeAction(key, context);
         },
+        readAssetActionConfirmation(key, context) {
+          return assetTreeActionConfirmation(key, context);
+        },
+        runAssetActionConfirmed(key, context) {
+          return runAssetTreeActionConfirmed(key, context);
+        },
         readAssetTree() {
           return projectDataTreeSnapshot(projectDataTreeObjects());
         },
@@ -3313,6 +3319,44 @@
           ),
         );
       }
+      function FastFigureConfirmationStaging({ confirmation, onClose, onConfirm }) {
+        let runtime = window.FastFigureUiRuntime;
+        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+        let { React, MantineCore } = runtime,
+          { Button, Group, Modal, Stack, Text } = MantineCore;
+        return React.createElement(
+          Modal,
+          {
+            opened: !!confirmation,
+            onClose,
+            title: confirmation?.title || "확인",
+            centered: true,
+          },
+          React.createElement(
+            Stack,
+            { gap: "sm" },
+            React.createElement(
+              Text,
+              { size: "sm", style: { whiteSpace: "pre-wrap" } },
+              confirmation?.message || "",
+            ),
+            React.createElement(
+              Group,
+              { justify: "flex-end" },
+              React.createElement(
+                Button,
+                { variant: "default", onClick: onClose },
+                "취소",
+              ),
+              React.createElement(
+                Button,
+                { onClick: onConfirm },
+                confirmation?.confirmLabel || "확인",
+              ),
+            ),
+          ),
+        );
+      }
       function FastFigureSidebarStaging() {
         useFastFigureFsmSnapshot();
         let runtime = window.FastFigureUiRuntime,
@@ -3333,7 +3377,31 @@
           graphObjectAdd = fastFigureUiBridge.readGraphObjectAdd(),
           graphPalette = fastFigureUiBridge.readGraphPalette(),
           graphObjects = fastFigureUiBridge.readGraphObjects(),
-          graphObject = fastFigureUiBridge.readGraphObject();
+          graphObject = fastFigureUiBridge.readGraphObject(),
+          [confirmation, setConfirmation] = React.useState(null),
+          runAssetAction = (item) => {
+            let model = fastFigureUiBridge.readAssetActionConfirmation(
+              item.key,
+              assetActions.context,
+            );
+            if (model) {
+              setConfirmation({
+                ...model,
+                key: item.key,
+                context: assetActions.context,
+              });
+              return;
+            }
+            fastFigureUiBridge.runAssetAction(item.key, assetActions.context);
+          },
+          confirmAssetAction = () => {
+            if (!confirmation) return;
+            fastFigureUiBridge.runAssetActionConfirmed(
+              confirmation.key,
+              confirmation.context,
+            );
+            setConfirmation(null);
+          };
         return React.createElement(
           Box,
           {
@@ -3698,8 +3766,7 @@
                           key: item.key,
                           disabled: item.disabled,
                           title: item.disabled ? item.disabledTitle : undefined,
-                          onClick: () =>
-                            fastFigureUiBridge.runAssetAction(item.key, assetActions.context),
+                          onClick: () => runAssetAction(item),
                         },
                         item.label,
                       ),
@@ -3707,6 +3774,11 @@
                   : React.createElement(Menu.Item, { disabled: true }, "사용 가능한 작업 없음"),
               ),
             ),
+            React.createElement(FastFigureConfirmationStaging, {
+              confirmation,
+              onClose: () => setConfirmation(null),
+              onConfirm: confirmAssetAction,
+            }),
           ),
         );
       }
@@ -5996,6 +6068,15 @@
         handler(context);
         return true;
       }
+      function assetTreeActionConfirmation(key, context) {
+        if (!context) return null;
+        if (key === "empty-trash") return emptyProjectTrashConfirmation();
+        return null;
+      }
+      function runAssetTreeActionConfirmed(key, context) {
+        if (key === "empty-trash") return emptyProjectTrashConfirmed();
+        return runAssetTreeAction(key, context);
+      }
       function renderAssetTreeActionMenu(nodeType = null, context = null) {
         let trigger = $("assetActions"),
           menu = $("assetActionMenu"),
@@ -6085,7 +6166,7 @@
           slots: projectObjects.read("slots"),
         };
       }
-      function emptyProjectTrash() {
+      function emptyProjectTrashConfirmation() {
         let csvIds = new Set(
             activeProject.csvFiles
               .filter((csv) => projectVfs.isTrashed(projectAssetPath(csv)))
@@ -6100,7 +6181,13 @@
           warning = referenceCount
             ? `휴지통 자산에 남아 있는 참조 ${referenceCount}개도 함께 제거됩니다.\n\n`
             : "";
-        if (!window.confirm(`${warning}휴지통의 폴더와 파일을 영구적으로 비우시겠습니까?`)) return;
+        return Object.freeze({
+          title: "휴지통 비우기",
+          message: `${warning}휴지통의 폴더와 파일을 영구적으로 비우시겠습니까?`,
+          confirmLabel: "영구 삭제",
+        });
+      }
+      function emptyProjectTrashConfirmed() {
         let payload = { direction: "ui-to-fsm" };
         try {
           appFSM.send("PROJECT_TRASH_EMPTIED", payload);
@@ -6112,6 +6199,11 @@
         } catch (error) {
           status(`휴지통 비우기 오류: ${error.message}`);
         }
+      }
+      function emptyProjectTrash() {
+        let confirmation = emptyProjectTrashConfirmation();
+        if (!window.confirm(confirmation.message)) return;
+        return emptyProjectTrashConfirmed();
       }
       function renderProjectDataTree(objects = {}) {
         let tree = $("assetTree");
