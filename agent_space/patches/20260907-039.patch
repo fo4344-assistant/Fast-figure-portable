@@ -1,0 +1,143 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+index 7bd735b..0000000 100644
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11403,7 +11403,7 @@
+             connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.30-alpha</code></p>
++          <p><code>1.1.31-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+@@ -12031,6 +12031,7 @@
+       </main>
+     </div>
+     <script src="./fast-figure.js"></script>
++    <script src="./fast-figure-ui.js"></script>
+   </body>
+ </html>
+diff --git a/fast-figure.js b/fast-figure.js
+index 5e5d6e9..0000000 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,6 +1,6 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.30-alpha";
++      const APP_BUILD = "1.1.31-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+         folder: '<path d="M2 11V4.6C2 4.26863 2 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/fast-figure-ui.js
+@@ -0,0 +1,106 @@
++(() => {
++  const runtime = window.FastFigureUiRuntime;
++  if (!runtime) throw new Error("Fast Figure UI runtime failed to load");
++  if (!window.fastFigureUiRoot) throw new Error("Fast Figure React root is not initialized");
++
++  const { React, MantineCore } = runtime;
++  const { AppShell, Button, Group, MantineProvider, Text } = MantineCore;
++  const { useSyncExternalStore } = React;
++
++  function subscribeAppState(onStoreChange) {
++    return appFSM.subscribe(onStoreChange);
++  }
++
++  function getAppStateSnapshot() {
++    return appFSM.state;
++  }
++
++  function useAppState() {
++    return useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
++  }
++
++  function selectedTargetText(state) {
++    if (state.workspace === "project") return "빈 슬롯 또는 그래프를 선택하세요.";
++    const slot = typeof getSelectedSlot === "function" ? getSelectedSlot() : null;
++    return slot ? `선택한 슬롯: ${slot.row}행 ${slot.col}열` : "빈 슬롯 또는 그래프를 선택하세요.";
++  }
++
++  function toggleOverlay(overlay) {
++    appFSM.send("TOGGLE_OVERLAY", { overlay, source: "mantine" });
++  }
++
++  function FastFigureToolbar() {
++    const state = useAppState();
++    const activeOverlay = state.overlay;
++    const buttonProps = (overlay) => ({
++      variant: activeOverlay === overlay ? "filled" : "light",
++      "aria-expanded": activeOverlay === overlay,
++      onClick: () => toggleOverlay(overlay),
++    });
++
++    return React.createElement(
++      Group,
++      { gap: "xs", wrap: "nowrap", role: "toolbar", "aria-label": "Fast figure 도구" },
++      React.createElement(Button, { ...buttonProps("layout") }, "레이아웃"),
++      React.createElement(Button, { ...buttonProps("label") }, "레이블"),
++      React.createElement(Button, { ...buttonProps("caption") }, "캡션"),
++      React.createElement(
++        Text,
++        {
++          size: "sm",
++          c: "dimmed",
++          style: { flex: "1 1 auto", minWidth: 0 },
++        },
++        selectedTargetText(state),
++      ),
++      React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트" }, "프린트"),
++    );
++  }
++
++  function FastFigureShell() {
++    return React.createElement(
++      AppShell,
++      { header: { height: 57 }, padding: 0 },
++      React.createElement(
++        AppShell.Header,
++        null,
++        React.createElement(
++          Group,
++          { h: "100%", px: "md", gap: "md", wrap: "nowrap" },
++          React.createElement(Text, { fw: 700, size: "xl", style: { flex: "0 0 auto" } }, "Fast figure"),
++          React.createElement("div", { style: { flex: "1 1 auto", minWidth: 0 } }, React.createElement(FastFigureToolbar)),
++        ),
++      ),
++    );
++  }
++
++  window.FastFigureMantineUi = Object.freeze({
++    FastFigureShell,
++    FastFigureToolbar,
++    getAppStateSnapshot,
++    selectedTargetText,
++  });
++
++  window.fastFigureUiRoot.render(
++    React.createElement(
++      MantineProvider,
++      { defaultColorScheme: "light" },
++      React.createElement(FastFigureShell),
++    ),
++  );
++})();
+diff --git a/scripts/build-portable.py b/scripts/build-portable.py
+index fc6575e..0000000 100755
+--- a/scripts/build-portable.py
++++ b/scripts/build-portable.py
+@@ -21,6 +21,11 @@ SCRIPTS = (
+         ROOT / "fast-figure.js",
+         b'<script>',
+     ),
++    (
++        b'<script src="./fast-figure-ui.js"></script>',
++        ROOT / "fast-figure-ui.js",
++        b'<script>',
++    ),
+ )
