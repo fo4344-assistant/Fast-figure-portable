@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.119-alpha";
+      const APP_BUILD = "1.1.120-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -1600,7 +1600,7 @@
           $("dashboard").closest("main").classList.remove("layout-open");
         if (state === "readme" && $("readmeDialog").open) $("readmeDialog").close();
       }
-      function enterLifecycleState({ state, payload }) {
+      function syncLegacyLifecyclePresentation({ state }) {
         let busy = state === "importing" || state === "exporting";
         document.body.classList.toggle("app-busy", busy);
         document.body.setAttribute("aria-busy", String(busy));
@@ -1624,7 +1624,10 @@
             delete control.dataset.fsmWasDisabled;
           }
         });
-        applyLifecycleDomainState({ state, payload });
+      }
+      function enterLifecycleState(context) {
+        syncLegacyLifecyclePresentation(context);
+        applyLifecycleDomainState(context);
       }
       const SHARED_WORKSPACE_EVENTS = {
           SELECT_SLOT: {
