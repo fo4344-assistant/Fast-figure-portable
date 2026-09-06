@@ -1,0 +1,91 @@
+(() => {
+  const runtime = window.FastFigureUiRuntime;
+  if (!runtime) throw new Error("Fast Figure UI runtime failed to load");
+  if (!window.fastFigureUiRoot) throw new Error("Fast Figure React root is not initialized");
+
+  const { React, MantineCore } = runtime;
+  const { AppShell, Button, Group, MantineProvider, Text } = MantineCore;
+  const { useSyncExternalStore } = React;
+
+  function subscribeAppState(onStoreChange) {
+    return appFSM.subscribe(onStoreChange);
+  }
+
+  function getAppStateSnapshot() {
+    return appFSM.state;
+  }
+
+  function useAppState() {
+    return useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
+  }
+
+  function selectedTargetText(state) {
+    if (state.workspace === "project") return "빈 슬롯 또는 그래프를 선택하세요.";
+    const slot = typeof getSelectedSlot === "function" ? getSelectedSlot() : null;
+    return slot ? `선택한 슬롯: ${slot.row}행 ${slot.col}열` : "빈 슬롯 또는 그래프를 선택하세요.";
+  }
+
+  function toggleOverlay(overlay) {
+    appFSM.send("TOGGLE_OVERLAY", { overlay, source: "mantine" });
+  }
+
+  function FastFigureToolbar() {
+    const state = useAppState();
+    const activeOverlay = state.overlay;
+    const buttonProps = (overlay) => ({
+      variant: activeOverlay === overlay ? "filled" : "light",
+      "aria-expanded": activeOverlay === overlay,
+      onClick: () => toggleOverlay(overlay),
+    });
+
+    return React.createElement(
+      Group,
+      { gap: "xs", wrap: "nowrap", role: "toolbar", "aria-label": "Fast figure 도구" },
+      React.createElement(Button, { ...buttonProps("layout") }, "레이아웃"),
+      React.createElement(Button, { ...buttonProps("label") }, "레이블"),
+      React.createElement(Button, { ...buttonProps("caption") }, "캡션"),
+      React.createElement(
+        Text,
+        {
+          size: "sm",
+          c: "dimmed",
+          style: { flex: "1 1 auto", minWidth: 0 },
+        },
+        selectedTargetText(state),
+      ),
+      React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트" }, "프린트"),
+    );
+  }
+
+  function FastFigureShell() {
+    return React.createElement(
+      AppShell,
+      { header: { height: 57 }, padding: 0 },
+      React.createElement(
+        AppShell.Header,
+        null,
+        React.createElement(
+          Group,
+          { h: "100%", px: "md", gap: "md", wrap: "nowrap" },
+          React.createElement(Text, { fw: 700, size: "xl", style: { flex: "0 0 auto" } }, "Fast figure"),
+          React.createElement("div", { style: { flex: "1 1 auto", minWidth: 0 } }, React.createElement(FastFigureToolbar)),
+        ),
+      ),
+    );
+  }
+
+  window.FastFigureMantineUi = Object.freeze({
+    FastFigureShell,
+    FastFigureToolbar,
+    getAppStateSnapshot,
+    selectedTargetText,
+  });
+
+  window.fastFigureUiRoot.render(
+    React.createElement(
+      MantineProvider,
+      { defaultColorScheme: "light" },
+      React.createElement(FastFigureShell),
+    ),
+  );
+})();

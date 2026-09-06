@@ -23,6 +23,11 @@ SCRIPTS = (
         ROOT / "fast-figure.js",
         b'<script>',
     ),
+    (
+        b'<script src="./fast-figure-ui.js"></script>',
+        ROOT / "fast-figure-ui.js",
+        b'<script>',
+    ),
 )
 
 
