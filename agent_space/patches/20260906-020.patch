@@ -26,7 +26,7 @@ diff --git a/fast-figure.js b/fast-figure.js
          setProjectName(value, commit = false) {
            let name = setProjectNameFromValue(value, commit);
            publishFastFigureUiStore(appFSM.state, commit ? "project:name-commit" : "project:name-input");
-@@ -2275,6 +2287,16 @@
+@@ -2277,4 +2289,14 @@
              "프린트",
            ),
 +          snapshot.selectedSlot
