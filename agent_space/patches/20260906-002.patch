@@ -1,0 +1,246 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11442,24 +11442,36 @@
+           <p><strong>About Fast figure</strong></p>
+           <p>
+-            Fast figure is a single-file workspace for quickly assembling scientific figure drafts
+-            from tabular data and images.
++            Fast figure is a workspace for quickly assembling scientific figure drafts from
++            tabular data and images. Repository development source keeps application and vendored
++            JavaScript in separate files so the source can be inspected and patched without
++            traversing large inline bundles.
+           </p>
+           <p>
+             It combines graph creation, image placement, slot-based figure layout, labels, captions,
+             project packaging, and image and Plotly export.
+           </p>
+           <p>
+-            Fast figure runs as a self-contained HTML file and processes loaded data and images
+-            locally in the browser. Ordinary use does not require a server, account, or network
+-            connection.
++            The portable build combines the split source back into one self-contained HTML file.
++            Both forms process loaded data and images locally in the browser. Ordinary use does not
++            require a server, account, or network connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.110-alpha</code></p>
++          <p><code>1.1.111-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+           </ul>
+           <p><strong>Distribution</strong></p>
++          <p>
++            Repository development source consists of <code>Fast-figure.html</code>,
++            <code>fast-figure.js</code>, and the JavaScript files under <code>vendor/</code>.
++            Opening <code>Fast-figure.html</code> with those sibling files present keeps the
++            existing local-browser workflow.
++          </p>
++          <p>
++            Run <code>python scripts/build-portable.py</code> to generate the single-file portable
++            build at <code>dist/Fast-figure.html</code>.
++          </p>
+           <p>
+             Repository:
+             <a
+@@ -11562,3 +11573,7 @@
+           <p><strong>Bundled third-party software</strong></p>
+           <p><strong>React / ReactDOM 19.2.8</strong></p>
+-          <p>Fast figure bundles React and ReactDOM directly in this HTML file as part of the UI runtime. No external React runtime is required.</p>
++          <p>
++            Development source loads the vendored React/ReactDOM runtime from
++            <code>vendor/fast-figure-ui-runtime.js</code>. The portable build embeds the same bytes
++            directly in the generated HTML. No network React runtime is required.
++          </p>
+@@ -11600,3 +11614,7 @@
+ SOFTWARE.</pre>
+           <p><strong>Mantine 9.5.2</strong></p>
+-          <p>Fast figure bundles <code>@mantine/core</code> and <code>@mantine/hooks</code> directly in this HTML file.</p>
++          <p>
++            Development source keeps <code>@mantine/core</code> and <code>@mantine/hooks</code> in
++            <code>vendor/fast-figure-ui-runtime.js</code>; the portable build embeds the same runtime
++            directly in the generated HTML.
++          </p>
+@@ -11617,7 +11634,8 @@
+           <p><strong>Iconoir 7.11.1</strong></p>
+           <p>
+             Fast figure uses selected Iconoir SVG paths for the project data tree, its toolbar and
+-            action menu, and the print/save/capture controls. The selected SVG definitions are
+-            embedded directly in this HTML file; the Iconoir package, CDN, and external SVG files
+-            are not required at runtime.
++            action menu, and the print/save/capture controls. Development source keeps those
++            definitions in <code>fast-figure.js</code>; the portable build embeds them in the
++            generated HTML. The Iconoir package, CDN, and external SVG files are not required at
++            runtime.
+           </p>
+@@ -11648,6 +11666,7 @@
+ SOFTWARE.</pre>
+           <p><strong>Plotly.js 2.35.2</strong></p>
+           <p>
+-            Fast figure bundles the minified Plotly.js 2.35.2 distribution directly inside the HTML
+-            file. No separate Plotly.js installation is required.
++            Development source keeps the minified Plotly.js 2.35.2 distribution in
++            <code>vendor/plotly.min.js</code>; the portable build embeds the same bytes directly
++            inside the generated HTML. No separate Plotly.js installation is required.
+           </p>
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,3 +1,3 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.110-alpha";
++      const APP_BUILD = "1.1.111-alpha";
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1,11 +1,37 @@
+ # Fast Figure
+ 
+-Fast Figure is a single-file workspace for quickly assembling scientific figure drafts from tabular data and images.
++Fast Figure is a workspace for quickly assembling scientific figure drafts from tabular data and images.
+ 
+ It combines graph creation, image placement, slot-based figure layout, labels, captions, project packaging, and image and Plotly export.
+ 
+-Fast Figure runs as a self-contained HTML file and processes loaded data and images locally in the browser. Ordinary use does not require a server, account, or network connection.
++The repository keeps application and vendored JavaScript separate so development work can inspect and patch Fast Figure source without traversing multi-megabyte inline bundles. The portable build combines the same source back into one self-contained HTML file.
++
++Both forms process loaded data and images locally in the browser. Ordinary use does not require a server, account, or network connection.
+ 
+ ## Download and use
+ 
+-The portable application is distributed as:
++### Portable build
++
++The end-user portable application remains a single file:
+ 
+ ```text
+ Fast-figure.html
+ ```
+ 
+-Download `Fast-figure.html` and open it directly in a modern web browser.
++Release packaging generates that file from the split repository source. It can be opened directly in a modern web browser without the development JavaScript files beside it.
++
++### Repository development source
++
++The checked-in development source is:
++
++```text
++Fast-figure.html
++fast-figure.js
++vendor/
++  plotly.min.js
++  fast-figure-ui-runtime.js
++```
++
++Open the repository `Fast-figure.html` with those sibling files present for local development.
++
++To generate the single-file portable build:
++
++```bash
++python scripts/build-portable.py
++```
++
++The default output is `dist/Fast-figure.html`.
+ 
+ The current application version, detailed project-format documentation, and bundled third-party software information are available from the README built into the application.
+@@ -103,7 +121,7 @@
+ 
+ ## Bundled third-party software
+ 
+-The portable HTML currently incorporates:
++Development source keeps the vendored JavaScript separately, while the portable build embeds the same runtime bytes into its generated HTML. It incorporates:
+ 
+ - **Iconoir 7.11.1**
+ - **Plotly.js 2.35.2**
+ 
+-Selected Iconoir SVG definitions are embedded directly in `Fast-figure.html`. The Iconoir package, CDN, and external SVG files are not required at runtime.
++Selected Iconoir SVG definitions are stored in `fast-figure.js` during development and embedded in the portable HTML build. The Iconoir package, CDN, and external SVG files are not required at runtime.
+ 
+-The minified Plotly.js distribution is also bundled directly inside `Fast-figure.html`. No separate Plotly.js installation is required.
++The minified Plotly.js distribution is stored in `vendor/plotly.min.js` during development and embedded directly in the portable HTML build. No separate Plotly.js installation is required.
+ 
+ Third-party copyright and license notices are retained in the distributed HTML and reproduced in the repository `LICENSE` file.
+diff --git a/scripts/build-portable.py b/scripts/build-portable.py
+new file mode 100755
+--- /dev/null
++++ b/scripts/build-portable.py
+@@ -0,0 +1,77 @@
++#!/usr/bin/env python3
++from __future__ import annotations
++
++import argparse
++import hashlib
++from pathlib import Path
++
++
++ROOT = Path(__file__).resolve().parents[1]
++DEFAULT_OUTPUT = ROOT / "dist" / "Fast-figure.html"
++SCRIPTS = (
++    (
++        '<script src="./vendor/plotly.min.js"></script>',
++        ROOT / "vendor" / "plotly.min.js",
++        "<script>{body}</script>",
++    ),
++    (
++        '<script id="ff-mantine-runtime" src="./vendor/fast-figure-ui-runtime.js"></script>',
++        ROOT / "vendor" / "fast-figure-ui-runtime.js",
++        '<script id="ff-mantine-runtime">{body}</script>',
++    ),
++    (
++        '<script src="./fast-figure.js"></script>',
++        ROOT / "fast-figure.js",
++        "<script>{body}</script>",
++    ),
++)
++
++
++def embed_script(html: str, tag: str, source: Path, template: str) -> str:
++    if html.count(tag) != 1:
++        raise RuntimeError(f"expected exactly one script tag: {tag}")
++    body = source.read_text(encoding="utf-8")
++    return html.replace(tag, template.format(body=body), 1)
++
++
++def build(output: Path) -> None:
++    source_html = (ROOT / "Fast-figure.html").read_text(encoding="utf-8")
++    portable = source_html
++    for tag, source, template in SCRIPTS:
++        if not source.is_file():
++            raise FileNotFoundError(source)
++        portable = embed_script(portable, tag, source, template)
++
++    for tag, _, _ in SCRIPTS:
++        if tag in portable:
++            raise RuntimeError(f"external script tag remains in portable build: {tag}")
++    if "const PACKAGE_FORMAT_VERSION" not in portable:
++        raise RuntimeError("Fast Figure application source was not embedded")
++    if "Plotly.setPlotConfig" not in portable:
++        raise RuntimeError("Plotly bootstrap is missing from portable build")
++
++    output.parent.mkdir(parents=True, exist_ok=True)
++    output.write_text(portable, encoding="utf-8")
++    payload = output.read_bytes()
++    print(
++        f"built {output}: bytes={len(payload)} "
++        f"sha256={hashlib.sha256(payload).hexdigest()}"
++    )
++
++
++def parse_args() -> argparse.Namespace:
++    parser = argparse.ArgumentParser(
++        description="Build the single-file Fast Figure portable HTML from split development source."
++    )
++    parser.add_argument(
++        "--output",
++        type=Path,
++        default=DEFAULT_OUTPUT,
++        help="output HTML path (default: dist/Fast-figure.html)",
++    )
++    return parser.parse_args()
++
++
++if __name__ == "__main__":
++    args = parse_args()
++    build(args.output.resolve())
