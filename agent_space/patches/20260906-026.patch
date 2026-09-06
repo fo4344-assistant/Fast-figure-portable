@@ -42,10 +42,10 @@ diff --git a/fast-figure.js b/fast-figure.js
 +        if (fastFigureUiStoreReady)
 +          publishFastFigureUiStore(appFSM.state, "debug:log");
        }
-@@ -2088,4 +2097,16 @@
+@@ -2088,5 +2097,17 @@
          resetUiPalette() {
            return resetUiPaletteFromValues();
-+        },
+         },
 +        readDebug() {
 +          return readDebugState();
 +        },
@@ -57,7 +57,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 +        },
 +        saveDebug() {
 +          return saveDebugLog();
-         },
++        },
          applyLayoutSettings(values) {
            return applyLayoutSettingsFromValues(values);
 @@ -3154,1 +3175,67 @@
