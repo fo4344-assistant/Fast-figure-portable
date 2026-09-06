@@ -7,8 +7,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 -      const APP_BUILD = "1.1.120-alpha";
 +      const APP_BUILD = "1.1.121-alpha";
        const ICONOIR_GLYPHS = Object.freeze({
-@@ -4238,12 +4238,14 @@
-         });
+@@ -4247,11 +4247,13 @@
        }
 -      function auditApp(context = "manual") {
 +      function auditApp(context = "manual", { requireLegacyControls = true } = {}) {
@@ -22,3 +21,4 @@ diff --git a/fast-figure.js b/fast-figure.js
            missingFunctions = REQUIRED_APP_FUNCTIONS.filter(([, check]) => !check()).map(
              ([name]) => name,
            );
+         if (missingFunctions.length)
