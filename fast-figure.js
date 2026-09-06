@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.123-alpha";
+      const APP_BUILD = "1.1.124-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -2129,6 +2129,18 @@
         runAssetAction(key, context) {
           return runAssetTreeAction(key, context);
         },
+        createAssetDirectory() {
+          return createAssetDirectory();
+        },
+        downloadSelectedAsset() {
+          return downloadProjectAsset();
+        },
+        deleteSelectedAsset() {
+          return deleteSelectedAsset();
+        },
+        resetSelectedSlot() {
+          return $("resetSelectedSlot").click();
+        },
         setProjectName(value, commit = false) {
           let name = setProjectNameFromValue(value, commit);
           publishFastFigureUiStore(appFSM.state, commit ? "project:name-commit" : "project:name-input");
@@ -2281,6 +2293,16 @@
             },
             "프린트",
           ),
+          snapshot.selectedSlot
+            ? null
+            : React.createElement(
+                Button,
+                {
+                  variant: overlay === "readme" ? "filled" : "default",
+                  onClick: () => toggleOverlay("readme"),
+                },
+                "README",
+              ),
         );
       }
       function FastFigureGraphAxisStaging({ chartLayout, axisKey, label }) {
@@ -2920,6 +2942,49 @@
             : null,
         );
       }
+      function FastFigureSidebarCompatibilityStaging() {
+        let runtime = window.FastFigureUiRuntime;
+        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+        let { React, MantineCore } = runtime,
+          { Box, Divider, Stack, Text } = MantineCore,
+          treeHost = React.useRef(null),
+          feedbackHost = React.useRef(null),
+          toolsHost = React.useRef(null);
+        React.useLayoutEffect(() => {
+          let placements = [
+              [$("assetTree"), treeHost.current],
+              [$("status"), feedbackHost.current],
+              [$("tableWrap"), feedbackHost.current],
+              [document.querySelector("aside > details.palette"), toolsHost.current],
+              [document.querySelector("aside > details.debug-box"), toolsHost.current],
+            ].filter(([node, host]) => node && host),
+            originals = placements.map(([node]) => ({
+              node,
+              parent: node.parentNode,
+              next: node.nextSibling,
+            }));
+          placements.forEach(([node, host]) => host.append(node));
+          return () =>
+            originals
+              .slice()
+              .reverse()
+              .forEach(({ node, parent, next }) => {
+                if (!parent) return;
+                if (next?.parentNode === parent) parent.insertBefore(node, next);
+                else parent.append(node);
+              });
+        }, []);
+        return React.createElement(
+          Stack,
+          { gap: "xs", "data-fast-figure-ui": "compatibility" },
+          React.createElement(Text, { size: "xs", fw: 700 }, "PROJECT DATA"),
+          React.createElement(Box, { ref: treeHost, className: "asset-tree-shell" }),
+          React.createElement(Box, { ref: feedbackHost }),
+          React.createElement(Divider),
+          React.createElement(Text, { size: "xs", c: "dimmed" }, "호환 도구"),
+          React.createElement(Box, { ref: toolsHost }),
+        );
+      }
       function FastFigureSidebarStaging() {
         useFastFigureFsmSnapshot();
         let runtime = window.FastFigureUiRuntime,
@@ -3014,6 +3079,43 @@
                 ),
             ),
             React.createElement(Text, { size: "xs", c: "dimmed" }, fileInput.hint),
+            React.createElement(FastFigureSidebarCompatibilityStaging),
+            React.createElement(
+              SimpleGrid,
+              { cols: 2, spacing: "xs" },
+              React.createElement(
+                Button,
+                { variant: "default", onClick: () => fastFigureUiBridge.createAssetDirectory() },
+                "새 폴더",
+              ),
+              React.createElement(
+                Button,
+                {
+                  variant: "default",
+                  disabled: !["csv", "image"].includes(assetSelection),
+                  onClick: () => fastFigureUiBridge.downloadSelectedAsset(),
+                },
+                "에셋 다운로드",
+              ),
+              React.createElement(
+                Button,
+                {
+                  variant: "default",
+                  disabled: !["csv", "image"].includes(assetSelection),
+                  onClick: () => fastFigureUiBridge.deleteSelectedAsset(),
+                },
+                "에셋 삭제",
+              ),
+              React.createElement(
+                Button,
+                {
+                  variant: "default",
+                  disabled: !slot,
+                  onClick: () => fastFigureUiBridge.resetSelectedSlot(),
+                },
+                "슬롯 초기화",
+              ),
+            ),
             slot?.contentType === "image"
               ? React.createElement(
                   Stack,
