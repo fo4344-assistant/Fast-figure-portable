@@ -89,7 +89,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 +        );
 +      }
        function FastFigureSidebarStaging() {
-@@ -2999,6 +3064,43 @@
+@@ -2999,5 +3064,42 @@
              ),
              React.createElement(Text, { size: "xs", c: "dimmed" }, fileInput.hint),
 +            React.createElement(FastFigureSidebarCompatibilityStaging),
@@ -131,4 +131,3 @@ diff --git a/fast-figure.js b/fast-figure.js
 +            ),
              slot?.contentType === "image"
                ? React.createElement(
-                   Stack,
