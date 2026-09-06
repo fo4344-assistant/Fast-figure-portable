@@ -96,7 +96,7 @@ jobs:
           )
           current = current.replace(
               plotly_bootstrap,
-              plotly_bootstrap + runtime_external + style_block + b'\n',
+              plotly_bootstrap + runtime_external + b'    ' + style_block + b'\n',
               1,
           )
 
