@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.127-alpha";
+      const APP_BUILD = "1.1.128-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -358,8 +358,17 @@
         dashboardZoomLockedWidth = null,
         selectedExplorerDirectory = "/assets",
         selectedObjectIndex = null;
+      let uiStatusMessage = "",
+        fastFigureUiStoreReady = false;
       const $ = (id) => document.getElementById(id),
-        status = (t) => ($("status").textContent = t);
+        status = (value) => {
+          uiStatusMessage = String(value ?? "");
+          let output = $("status");
+          if (output) output.textContent = uiStatusMessage;
+          if (fastFigureUiStoreReady)
+            publishFastFigureUiStore(appFSM.state, "status:changed");
+          return uiStatusMessage;
+        };
       let debugEnabled = false,
         debugSequence = 0;
       function debugValue(value) {
@@ -2011,6 +2020,7 @@
         return Object.freeze({
           fsm: appFSM.state,
           projectName: activeProject.projectName,
+          statusMessage: uiStatusMessage,
           selectedSlot: slot
             ? Object.freeze({
                 id: slot.id,
@@ -2039,6 +2049,7 @@
         state: appFSM.state,
         event: "init",
       });
+      fastFigureUiStoreReady = true;
       function publishFastFigureUiStore(state = appFSM.state, event = "domain-update") {
         fastFigureUiStoreSnapshot = Object.freeze({
           version: fastFigureUiStoreSnapshot.version + 1,
@@ -3229,6 +3240,13 @@
                 ),
             ),
             React.createElement(Text, { size: "xs", c: "dimmed" }, fileInput.hint),
+            snapshot.statusMessage
+              ? React.createElement(
+                  Text,
+                  { size: "sm", role: "status", "aria-live": "polite" },
+                  snapshot.statusMessage,
+                )
+              : null,
             React.createElement(FastFigureAssetTreeStaging, {
               tree: assetTree,
               selectedPath: assetActions.context?.path || null,
