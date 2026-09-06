@@ -29,16 +29,20 @@
     appFSM.send("TOGGLE_OVERLAY", { overlay, source: "mantine" });
   }
 
-  function exportProjectFromMantine() {
+  function runLifecycleTask(lifecycle, eventName, task) {
     return appFSM
-      .run("exporting", "PROJECT_EXPORT", () => downloadProject())
+      .run(lifecycle, eventName, task)
       .catch((error) => {
         debugLog(
           "fsm:lifecycle-task-error",
-          { event: "PROJECT_EXPORT", message: error.message },
+          { event: eventName, message: error.message },
           "error",
         );
       });
+  }
+
+  function exportProjectFromMantine() {
+    return runLifecycleTask("exporting", "PROJECT_EXPORT", () => downloadProject());
   }
 
   function openProjectImportPicker() {
@@ -49,6 +53,20 @@
 
   function openDataPicker() {
     document.getElementById("file").click();
+  }
+
+  function exportSlotFfsxFromMantine() {
+    return runLifecycleTask("exporting", "SLOT_EXPORT", () => downloadSlotFfsx());
+  }
+
+  function exportPlotlyJsonFromMantine() {
+    return runLifecycleTask("exporting", "PLOTLY_EXPORT", () => downloadPlotlyJson());
+  }
+
+  function openSlotImportPicker() {
+    if (!getSelectedSlot())
+      return status("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");
+    document.getElementById("importSlotJsonFile").click();
   }
 
   function FastFigureToolbar() {
@@ -145,6 +163,37 @@
     );
   }
 
+  function FastFigureGraphFileActions() {
+    const state = useAppState();
+    const busy = state.lifecycle !== "ready";
+    if (state.workspace !== "slot.graph") return null;
+
+    return React.createElement(
+      Stack,
+      { gap: "xs", p: "md" },
+      React.createElement(Text, { fw: 600 }, "그래프 파일"),
+      React.createElement(
+        Group,
+        { gap: "xs", grow: true },
+        React.createElement(
+          Button,
+          { variant: "light", disabled: busy, onClick: exportSlotFfsxFromMantine },
+          "FFSX 내보내기",
+        ),
+        React.createElement(
+          Button,
+          { variant: "light", disabled: busy, onClick: exportPlotlyJsonFromMantine },
+          "Plotly JSON 내보내기",
+        ),
+      ),
+      React.createElement(
+        Button,
+        { variant: "light", disabled: busy, onClick: openSlotImportPicker },
+        "FFSX/Plotly JSON 불러오기",
+      ),
+    );
+  }
+
   function FastFigureUtilityActions() {
     const state = useAppState();
     return React.createElement(
@@ -181,6 +230,7 @@
         { p: 0 },
         React.createElement(FastFigureDataActions),
         React.createElement(FastFigureProjectActions),
+        React.createElement(FastFigureGraphFileActions),
         React.createElement(FastFigureUtilityActions),
       ),
       React.createElement(AppShell.Main, null),
@@ -192,6 +242,7 @@
     FastFigureToolbar,
     FastFigureDataActions,
     FastFigureProjectActions,
+    FastFigureGraphFileActions,
     FastFigureUtilityActions,
     getAppStateSnapshot,
     selectedTargetText,
