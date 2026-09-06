@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.137-alpha";
+      const APP_BUILD = "1.1.138-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -2233,7 +2233,7 @@
           };
           return assetTreeDropPolicy(dataTransfer, node);
         },
-        async dropAsset(dataTransfer, target) {
+        async dropAsset(dataTransfer, target, resolveImportChoice = null) {
           let node = {
               dataset: {
                 explorerTarget: target?.kind || "",
@@ -2248,6 +2248,7 @@
           }
           await executeAssetTreeDrop(dataTransfer, node, policy, {
             preserveLegacyOpenState: false,
+            resolveImportChoice,
           });
           publishFastFigureUiStore(appFSM.state, "asset:drop");
           return true;
@@ -3094,7 +3095,12 @@
             : null,
         );
       }
-      function FastFigureAssetTreeStaging({ tree, selectedPath, onDropConfirmation }) {
+      function FastFigureAssetTreeStaging({
+        tree,
+        selectedPath,
+        onDropConfirmation,
+        resolveImportChoice,
+      }) {
         let runtime = window.FastFigureUiRuntime;
         if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
         let { React, MantineCore } = runtime,
@@ -3125,7 +3131,11 @@
               if (!request.allowed) return status(request.reason);
               if (request.confirmation && request.moveRequest)
                 return onDropConfirmation?.(request);
-              await fastFigureUiBridge.dropAsset(event.dataTransfer, dropTarget);
+              await fastFigureUiBridge.dropAsset(
+                event.dataTransfer,
+                dropTarget,
+                resolveImportChoice,
+              );
             },
           }),
           dragProps = (path) => ({
@@ -3734,6 +3744,7 @@
               tree: assetTree,
               selectedPath: assetActions.context?.path || null,
               onDropConfirmation: openAssetDropConfirmation,
+              resolveImportChoice: requestImportChoice,
             }),
             React.createElement(
               SimpleGrid,
@@ -6864,7 +6875,7 @@
         dataTransfer,
         target,
         policy,
-        { preserveLegacyOpenState = true } = {},
+        { preserveLegacyOpenState = true, resolveImportChoice = null } = {},
       ) {
         let internal = dataTransfer.getData(ASSET_TREE_DRAG_TYPE);
         if (internal) {
@@ -6889,27 +6900,51 @@
           slot = target.dataset.explorerTarget === "slot"
             ? slotAt(Number(target.dataset.slotId))
             : null;
-        if (policy.operation === "import-slot")
-          return appFSM.run("importing", "ASSET_TREE_DROP", () => loadFileIntoSlot(files[0], slot));
+        if (policy.operation === "import-slot") {
+          let file = files[0],
+            kind = slotFileKind(file),
+            assetPlan = ["data", "image"].includes(kind)
+              ? await resolveProjectAssetImportChoice(
+                  file,
+                  kind === "image"
+                    ? PROJECT_ASSET_DIRECTORIES.image
+                    : PROJECT_ASSET_DIRECTORIES.csv,
+                  resolveImportChoice,
+                )
+              : null;
+          return appFSM.run("importing", "ASSET_TREE_DROP", () =>
+            loadFileIntoSlot(file, slot, { assetPlan }),
+          );
+        }
         let directory = target.dataset.path,
           reserved = new Set([
             ...activeProject.fileSystem.directories,
             ...activeProject.csvFiles.map(projectAssetPath),
             ...activeProject.images.map(projectAssetPath),
           ]),
-          staged = files.map((file) => {
-            let plan = planProjectAssetImport(file, directory, reserved);
-            reserved.add(plan.path);
-            return { file, kind: slotFileKind(file), ...plan };
-          }),
-          csvIds = new Set(activeProject.csvFiles.map((asset) => asset.id)),
-          imageIds = new Set(activeProject.images.map((asset) => asset.id)),
-          replacedCsv = new Map(
+          staged = [],
+          csvIds,
+          imageIds,
+          replacedCsv,
+          replacedImages;
+        for (let file of files) {
+          let plan = await resolveProjectAssetImportChoice(
+            file,
+            directory,
+            resolveImportChoice,
+            reserved,
+          );
+          reserved.add(plan.path);
+          staged.push({ file, kind: slotFileKind(file), ...plan });
+        }
+        csvIds = new Set(activeProject.csvFiles.map((asset) => asset.id));
+        imageIds = new Set(activeProject.images.map((asset) => asset.id));
+        replacedCsv = new Map(
             staged
               .filter((item) => item.kind === "data" && Number.isInteger(item.replaceId))
               .map((item) => [item.replaceId, projectClone(getProjectCsv(item.replaceId))]),
-          ),
-          replacedImages = new Map(
+          );
+        replacedImages = new Map(
             staged
               .filter((item) => item.kind === "image" && Number.isInteger(item.replaceId))
               .map((item) => [item.replaceId, projectClone(getProjectImage(item.replaceId))]),
