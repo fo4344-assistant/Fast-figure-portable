@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.135-alpha";
+      const APP_BUILD = "1.1.136-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -6056,34 +6056,76 @@
           return model;
         },
       });
-      function planProjectAssetImport(file, directory, reservedPaths = null) {
+      function projectAssetImportCollisionModel(file, directory, reservedPaths = null) {
         let kind = slotFileKind(file),
           assetKind = kind === "data" ? "csv" : kind === "image" ? "image" : null;
         if (!assetKind) throw Error(`${file?.name || "파일"}: 지원하지 않는 파일 형식입니다.`);
         let parent = normalizeProjectPath(directory, { directory: true }),
           name = projectCsvName(file.name, assetKind === "csv" ? "data.csv" : "image.bin"),
           path = normalizeProjectPath(`${parent}/${name}`),
-          collision = projectVfs.resolve(path);
-        if (!collision && !reservedPaths?.has(path)) return { path, replaceId: null };
-        if (collision?.kind === assetKind && collision.asset.isDefaultEmpty !== true) {
-          let replace = window.confirm(
-            `${path}에 같은 이름의 파일이 이미 있습니다.\n\n` +
-              "[확인] 기존 파일을 교체하고 참조를 유지합니다.\n" +
-              "[취소] 이름을 바꿔 새 파일로 추가합니다.",
-          );
-          if (replace) return { path, replaceId: collision.asset.id };
-        } else if (collision) {
-          window.alert(
-            collision.asset?.isDefaultEmpty === true
+          collision = projectVfs.resolve(path),
+          reserved = reservedPaths?.has(path) === true,
+          replaceId =
+            collision?.kind === assetKind && collision.asset.isDefaultEmpty !== true
+              ? collision.asset.id
+              : null,
+          mode = !collision && !reserved
+            ? "available"
+            : Number.isInteger(replaceId)
+              ? "replace-or-rename"
+              : "rename-only",
+          message =
+            mode === "replace-or-rename"
+              ? `${path}에 같은 이름의 파일이 이미 있습니다.\n\n` +
+                "[확인] 기존 파일을 교체하고 참조를 유지합니다.\n" +
+                "[취소] 이름을 바꿔 새 파일로 추가합니다."
+              : "",
+          notice = collision && mode === "rename-only"
+            ? collision.asset?.isDefaultEmpty === true
               ? `${path}는 프로젝트 기본 CSV이므로 교체할 수 없습니다. 이름을 바꿔 추가합니다.`
-              : `${path}의 기존 항목은 종류가 달라 참조를 유지한 채 교체할 수 없습니다. 이름을 바꿔 추가합니다.`,
-          );
-        }
-        let unique = projectVfs.uniquePath(parent, name, activeProject._state, reservedPaths);
+              : `${path}의 기존 항목은 종류가 달라 참조를 유지한 채 교체할 수 없습니다. 이름을 바꿔 추가합니다.`
+            : "";
+        return Object.freeze({
+          assetKind,
+          parent,
+          name,
+          path,
+          mode,
+          replaceId,
+          message,
+          notice,
+        });
+      }
+      function resolveProjectAssetImportPlan(model, choice = "rename", reservedPaths = null) {
+        if (!model || typeof model !== "object")
+          throw Error("프로젝트 자산 가져오기 계획이 올바르지 않습니다.");
+        if (model.mode === "available")
+          return { path: model.path, replaceId: null };
+        if (choice === "replace" && Number.isInteger(model.replaceId))
+          return { path: model.path, replaceId: model.replaceId };
+        let unique = projectVfs.uniquePath(
+          model.parent,
+          model.name,
+          activeProject._state,
+          reservedPaths,
+        );
         return {
           path: unique,
           replaceId: null,
         };
+      }
+      function planProjectAssetImport(file, directory, reservedPaths = null) {
+        let model = projectAssetImportCollisionModel(file, directory, reservedPaths);
+        if (model.mode === "replace-or-rename") {
+          let replace = window.confirm(model.message);
+          return resolveProjectAssetImportPlan(
+            model,
+            replace ? "replace" : "rename",
+            reservedPaths,
+          );
+        }
+        if (model.notice) window.alert(model.notice);
+        return resolveProjectAssetImportPlan(model, "rename", reservedPaths);
       }
       const ASSET_TREE_INDENT_PX = 16;
       function assetTreeDepth(path) {
