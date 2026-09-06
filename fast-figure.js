@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.118-alpha";
+      const APP_BUILD = "1.1.119-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -1548,10 +1548,11 @@
           $("readmeDialog").focus({ preventScroll: true });
           requestAnimationFrame(() => ($("readmeDialog").scrollTop = 0));
         }
-        applyOverlayOpenPolicy(name);
       }
-      function enterOverlayState({ state, objects }) {
-        setOverlayDomState(state);
+      function enterOverlayDomainState({ state }) {
+        return applyOverlayOpenPolicy(state);
+      }
+      function syncLegacyOverlayPresentation({ state, objects }) {
         if (state === "layout") {
           renderLayout();
           requestAnimationFrame(() => {
@@ -1570,6 +1571,11 @@
           $("printHeight").value = "";
           syncPopupBounds();
         }
+      }
+      function enterOverlayState(context) {
+        setOverlayDomState(context.state);
+        enterOverlayDomainState(context);
+        syncLegacyOverlayPresentation(context);
       }
       function exitOverlayState({ state }) {
         let panelId = {
