@@ -11,27 +11,34 @@ SCRIPTS = (
     (
         b'<script src="./vendor/plotly.min.js"></script>',
         ROOT / "vendor" / "plotly.min.js",
+        b'<script>',
+    ),
+    (
+        b'<script id="ff-mantine-runtime" src="./vendor/fast-figure-ui-runtime.js"></script>',
+        ROOT / "vendor" / "fast-figure-ui-runtime.js",
+        b'<script id="ff-mantine-runtime">',
     ),
     (
         b'<script src="./fast-figure.js"></script>',
         ROOT / "fast-figure.js",
+        b'<script>',
     ),
 )
 
 
 def build(output: Path) -> None:
     portable = (ROOT / "Fast-figure.html").read_bytes()
-    for tag, source in SCRIPTS:
+    for tag, source, open_tag in SCRIPTS:
         if portable.count(tag) != 1:
             raise RuntimeError(f"expected exactly one external script tag: {tag!r}")
         if not source.is_file():
             raise FileNotFoundError(source)
         portable = portable.replace(
             tag,
-            b"<script>" + source.read_bytes() + b"</script>",
+            open_tag + source.read_bytes() + b"</script>",
             1,
         )
-    for tag, _ in SCRIPTS:
+    for tag, _, _ in SCRIPTS:
         if tag in portable:
             raise RuntimeError(f"external script tag remains: {tag!r}")
     output.parent.mkdir(parents=True, exist_ok=True)
