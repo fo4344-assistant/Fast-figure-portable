@@ -9,7 +9,7 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
    const { useState, useSyncExternalStore } = React;
  
    function subscribeAppState(onStoreChange) {
-@@ -153,6 +153,13 @@
+@@ -153,9 +153,49 @@
      const state = useAppState();
      const snapshot = projectDataTreeSnapshot(projectDataTreeObjects());
      const [expanded, setExpanded] = useState(() => new Set(["/assets", "/slots"]));
@@ -21,9 +21,6 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
 +    });
 +    const busy = state.lifecycle !== "ready";
      const directories = [...new Set(snapshot.directories)]
-       .filter((path) => path === "/assets" || path.startsWith("/assets/"))
-       .sort((a, b) => a.localeCompare(b));
-@@ -160,6 +167,39 @@
        .filter((path) => path === "/assets" || path.startsWith("/assets/"))
        .sort((a, b) => a.localeCompare(b));
  
@@ -62,7 +59,6 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
 +    };
      const toggleExpanded = (path) => {
        setExpanded((current) => {
-         const next = new Set(current);
 @@ -226,5 +266,6 @@
              "aria-expanded": open,
              onClick: () => {
