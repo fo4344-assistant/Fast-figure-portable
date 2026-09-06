@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.121-alpha";
+      const APP_BUILD = "1.1.122-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -2134,6 +2134,12 @@
           publishFastFigureUiStore(appFSM.state, commit ? "project:name-commit" : "project:name-input");
           return name;
         },
+        exportProject() {
+          return appFSM.run("exporting", "PROJECT_EXPORT", () => downloadProjectFromValue());
+        },
+        importProjectFile(file) {
+          return appFSM.run("importing", "PROJECT_IMPORT", () => loadProjectFile(file));
+        },
         changeSlotContentType(type) {
           if (type !== "graph" && type !== "image") return false;
           let hasSlot = !!getSelectedSlot();
@@ -2954,6 +2960,36 @@
               onBlur: (event) =>
                 fastFigureUiBridge.setProjectName(event.currentTarget.value, true),
             }),
+            React.createElement(
+              Group,
+              { grow: true },
+              React.createElement(
+                Button,
+                {
+                  variant: "default",
+                  disabled: !!slot || snapshot.fsm.lifecycle !== "ready",
+                  onClick: () => fastFigureUiBridge.exportProject(),
+                },
+                "FFPX 내보내기",
+              ),
+              React.createElement(
+                FileButton,
+                {
+                  accept: ".ffpx,.json,application/json,application/vnd.fast-figure-project",
+                  onChange: (file) => file && fastFigureUiBridge.importProjectFile(file),
+                },
+                (props) =>
+                  React.createElement(
+                    Button,
+                    {
+                      ...props,
+                      variant: "default",
+                      disabled: !!slot || snapshot.fsm.lifecycle !== "ready",
+                    },
+                    "FFPX 불러오기",
+                  ),
+              ),
+            ),
             React.createElement(SegmentedControl, {
               fullWidth: true,
               value: slot ? slot.contentType : snapshot.pendingSlotContentType,
@@ -9988,12 +10024,11 @@
         if (commit) debugLog("project:name", { projectName: name });
         return name;
       }
-      function downloadProject() {
+      function downloadProjectFromValue(projectName = activeProject.projectName) {
         if (getSelectedSlot())
           return status("프로젝트 내보내기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
         try {
-          activeProject.projectName = fastFigureUiBridge.setProjectName($("projectName").value, true);
-          $("projectName").value = activeProject.projectName;
+          activeProject.projectName = setProjectNameFromValue(projectName, true);
           let project = ffpxBuildProject(),
             blob = new Blob([ffpxZipStore(project.assets)], {
               type: "application/vnd.fast-figure-project",
@@ -10016,6 +10051,11 @@
           debugLog("project:export-error", { message: error.message });
         }
       }
+      function downloadProject() {
+        let result = downloadProjectFromValue($("projectName").value);
+        $("projectName").value = activeProject.projectName;
+        return result;
+      }
       $("projectName").addEventListener("input", (event) => {
         fastFigureUiBridge.setProjectName(event.target.value);
       });
@@ -10028,9 +10068,12 @@
           return status("프로젝트 불러오기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
         $("importProjectFile").click();
       };
-      $("importProjectFile").onchange = async (event) => {
-        let file = event.target.files[0];
-        if (!file) return;
+      async function loadProjectFile(file) {
+        if (!file) return false;
+        if (getSelectedSlot()) {
+          status("프로젝트 불러오기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
+          return false;
+        }
         try {
           let header = new Uint8Array(await file.slice(0, 4).arrayBuffer()),
             payload;
@@ -10038,13 +10081,18 @@
             payload = await ffpxReadProject(file);
           else payload = JSON.parse(await file.text());
           importProject(payload, file.name);
-          status(`${file.name} 프로젝트를 불러왔습니다.`);
+          return true;
         } catch (error) {
           status("프로젝트 불러오기 오류: " + error.message);
           debugLog("project:import-error", { message: error.message });
-        } finally {
-          event.target.value = "";
+          return false;
         }
+      }
+      $("importProjectFile").onchange = async (event) => {
+        let file = event.target.files[0];
+        if (!file) return;
+        await loadProjectFile(file);
+        event.target.value = "";
       };
       $("filePick").onclick = () => {
         $("file").click();
