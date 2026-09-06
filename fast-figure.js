@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.129-alpha";
+      const APP_BUILD = "1.1.130-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -370,7 +370,17 @@
           return uiStatusMessage;
         };
       let debugEnabled = false,
-        debugSequence = 0;
+        debugSequence = 0,
+        debugLines = [];
+      function debugText() {
+        return debugLines.length ? debugLines.join("\n") + "\n" : "";
+      }
+      function syncLegacyDebugLog() {
+        let out = $("debugLog");
+        if (!out) return;
+        out.textContent = debugText();
+        out.scrollTop = out.scrollHeight;
+      }
       function debugValue(value) {
         if (value instanceof Error)
           return { name: value.name, message: value.message, stack: value.stack };
@@ -386,13 +396,12 @@
           line = `${String(++debugSequence).padStart(4, "0")} ${new Date().toISOString().slice(11, 23)} ${level.toUpperCase()} ${event} ${JSON.stringify(payload)}`;
         let method = console[level] || console.debug;
         method.call(console, "[chart-builder]", event, payload);
-        let out = $("debugLog");
-        if (out) {
-          out.textContent += line + "\n";
-          let lines = out.textContent.split("\n");
-          if (lines.length > 501) out.textContent = lines.slice(-501).join("\n");
-          out.scrollTop = out.scrollHeight;
-        }
+        debugLines.push(line);
+        if (debugLines.length > 500)
+          debugLines.splice(0, debugLines.length - 500);
+        syncLegacyDebugLog();
+        if (fastFigureUiStoreReady)
+          publishFastFigureUiStore(appFSM.state, "debug:log");
       }
       class ProjectObjectRegistry {
         constructor(projectProvider) {
@@ -2088,6 +2097,18 @@
         resetUiPalette() {
           return resetUiPaletteFromValues();
         },
+        readDebug() {
+          return readDebugState();
+        },
+        setDebugEnabled(enabled) {
+          return setDebugEnabled(enabled);
+        },
+        clearDebug() {
+          return clearDebugLog();
+        },
+        saveDebug() {
+          return saveDebugLog();
+        },
         applyLayoutSettings(values) {
           return applyLayoutSettingsFromValues(values);
         },
@@ -3151,6 +3172,72 @@
           ),
         );
       }
+      function FastFigureDebugStaging({ debugState }) {
+        let runtime = window.FastFigureUiRuntime;
+        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
+        let { React, MantineCore } = runtime,
+          { Accordion, Button, Code, Group, ScrollArea, Stack, Switch, Text } = MantineCore;
+        return React.createElement(
+          Accordion,
+          { variant: "contained" },
+          React.createElement(
+            Accordion.Item,
+            { value: "debug" },
+            React.createElement(Accordion.Control, null, "디버그"),
+            React.createElement(
+              Accordion.Panel,
+              null,
+              React.createElement(
+                Stack,
+                { gap: "xs" },
+                React.createElement(Switch, {
+                  label: "디버깅 로그",
+                  checked: debugState.enabled,
+                  onChange: (event) =>
+                    fastFigureUiBridge.setDebugEnabled(event.currentTarget.checked),
+                }),
+                React.createElement(
+                  Group,
+                  { grow: true },
+                  React.createElement(
+                    Button,
+                    {
+                      variant: "default",
+                      disabled: !debugState.lineCount,
+                      onClick: () => fastFigureUiBridge.saveDebug(),
+                    },
+                    "로그 저장",
+                  ),
+                  React.createElement(
+                    Button,
+                    {
+                      variant: "default",
+                      disabled: !debugState.lineCount,
+                      onClick: () => fastFigureUiBridge.clearDebug(),
+                    },
+                    "지우기",
+                  ),
+                ),
+                debugState.enabled
+                  ? React.createElement(
+                      ScrollArea,
+                      { h: 180, type: "auto" },
+                      React.createElement(
+                        Code,
+                        { block: true, style: { whiteSpace: "pre-wrap" } },
+                        debugState.text || "(로그 없음)",
+                      ),
+                    )
+                  : React.createElement(
+                      Text,
+                      { size: "xs", c: "dimmed" },
+                      "디버깅을 켜면 최대 500줄의 세션 로그를 보관합니다.",
+                    ),
+              ),
+            ),
+          ),
+        );
+      }
       function FastFigureUiPaletteStaging({ palette }) {
         let runtime = window.FastFigureUiRuntime;
         if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
@@ -3329,6 +3416,7 @@
                 )
               : null,
             React.createElement(FastFigureUiPaletteStaging, { palette: snapshot.appearance.uiPalette }),
+            React.createElement(FastFigureDebugStaging, { debugState: fastFigureUiBridge.readDebug() }),
             React.createElement(FastFigureAssetTreeStaging, {
               tree: assetTree,
               selectedPath: assetActions.context?.path || null,
@@ -13308,33 +13396,55 @@
         });
         requestAnimationFrame(refreshSidebarMinimum);
       }
-      $("saveDebug").onclick = () => {
+      function readDebugState() {
+        return Object.freeze({
+          enabled: debugEnabled,
+          text: debugText(),
+          lineCount: debugLines.length,
+        });
+      }
+      function syncLegacyDebugUi() {
+        let button = $("toggleDebug"),
+          out = $("debugLog");
+        if (button) {
+          syncSettingToggle(button, debugEnabled);
+          button.textContent = debugEnabled ? "디버깅 끄기" : "디버깅 켜기";
+        }
+        if (out) out.classList.toggle("hidden", !debugEnabled);
+        syncLegacyDebugLog();
+      }
+      function setDebugEnabled(enabled) {
+        debugEnabled = !!enabled;
+        syncLegacyDebugUi();
+        if (fastFigureUiStoreReady)
+          publishFastFigureUiStore(appFSM.state, "debug:enabled");
+        return debugEnabled;
+      }
+      function clearDebugLog() {
+        debugLines.length = 0;
+        debugSequence = 0;
+        syncLegacyDebugLog();
+        if (fastFigureUiStoreReady)
+          publishFastFigureUiStore(appFSM.state, "debug:cleared");
+      }
+      function saveDebugLog() {
         auditApp("debug:save");
         debugLog("debugLog:save", {
           build: projectObjects.read("project").appBuild,
           userAgent: navigator.userAgent,
           location: location.href,
         });
-        let blob = new Blob([$("debugLog").textContent], { type: "text/plain;charset=utf-8" }),
+        let blob = new Blob([debugText()], { type: "text/plain;charset=utf-8" }),
           a = document.createElement("a"),
           stamp = new Date().toISOString().replace(/[:.]/g, "-");
         a.href = URL.createObjectURL(blob);
         a.download = `chart-builder-debug-${stamp}.log`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 0);
-      };
-      $("clearDebug").onclick = () => {
-        $("debugLog").textContent = "";
-        debugSequence = 0;
-      };
-      $("toggleDebug").onclick = () => {
-        let button = $("toggleDebug"),
-          enabled = button.dataset.active !== "true";
-        debugEnabled = enabled;
-        syncSettingToggle(button, enabled);
-        button.textContent = enabled ? "디버깅 끄기" : "디버깅 켜기";
-        $("debugLog").classList.toggle("hidden", !enabled);
-      };
+      }
+      $("saveDebug").onclick = saveDebugLog;
+      $("clearDebug").onclick = clearDebugLog;
+      $("toggleDebug").onclick = () => setDebugEnabled(!debugEnabled);
       window.addEventListener("error", (event) =>
         debugLog("window:error", {
           message: event.message,
