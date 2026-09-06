@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   apply:
-    if: startsWith(github.event.head_commit.message, 'Queue Fast Figure HTML patch')
+    if: startsWith(github.event.head_commit.message, 'Queue Fast Figure')
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -41,12 +41,26 @@ jobs:
             exit 1
           fi
           mapfile -t targets < <(sed -n 's|^+++ b/||p' "$patch" | sort -u)
-          if [ "${#targets[@]}" -ne 1 ] || [ "${targets[0]}" != "Fast-figure.html" ]; then
-            echo "Patch target must be Fast-figure.html only." >&2
-            printf 'Targets: %s\n' "${targets[*]:-none}" >&2
+          if [ "${#targets[@]}" -lt 1 ]; then
+            echo "Patch has no targets." >&2
             exit 1
           fi
+          for target in "${targets[@]}"; do
+            case "$target" in
+              Fast-figure.html|fast-figure.js|vendor/plotly.min.js|vendor/fast-figure-ui-runtime.js) ;;
+              *)
+                echo "Unsupported Fast Figure patch target: $target" >&2
+                exit 1
+                ;;
+            esac
+          done
+          if grep -Fxq 'Migration: split-inline-js' "${base}.md"; then
+            echo "split_inline_js=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "split_inline_js=false" >> "$GITHUB_OUTPUT"
+          fi
           echo "path=$patch" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$base")" >> "$GITHUB_OUTPUT"
 
       - name: Check and apply patch
@@ -57,11 +71,123 @@ jobs:
           git apply "${{ steps.patch.outputs.path }}"
           git diff --check
 
-      - name: Check JavaScript syntax
+      - name: Split inline JavaScript
+        if: steps.patch.outputs.split_inline_js == 'true'
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import re
+
+          html_path = Path("Fast-figure.html")
+          text = html_path.read_text(encoding="utf-8")
+          script_re = re.compile(r"<script\b[^>]*>[\s\S]*?</script>", re.IGNORECASE)
+          open_re = re.compile(r"^<script\b[^>]*>", re.IGNORECASE)
+          blocks = []
+          for match in script_re.finditer(text):
+              block = match.group(0)
+              open_tag = open_re.match(block).group(0)
+              body = block[len(open_tag):-len("</script>")]
+              blocks.append({
+                  "start": match.start(),
+                  "end": match.end(),
+                  "open": open_tag,
+                  "body": body,
+              })
+
+          inline = [block for block in blocks if not re.search(r"\bsrc\s*=", block["open"], re.IGNORECASE)]
+          app = [
+              block for block in inline
+              if "const PACKAGE_FORMAT_VERSION" in block["body"] and "const APP_BUILD" in block["body"]
+          ]
+          if len(app) != 1:
+              raise SystemExit(f"Expected one Fast Figure application script, found {len(app)}")
+          app = app[0]
+
+          mantine = [
+              block for block in inline
+              if re.search(r"\bid\s*=\s*(['\"])ff-mantine-runtime\1", block["open"], re.IGNORECASE)
+          ]
+          if len(mantine) != 1:
+              raise SystemExit(f"Expected one Mantine runtime script, found {len(mantine)}")
+          mantine = mantine[0]
+
+          plotly = [
+              block for block in inline
+              if block is not app
+              and block is not mantine
+              and len(block["body"]) > 1_000_000
+              and "Plotly" in block["body"]
+          ]
+          if len(plotly) != 1:
+              raise SystemExit(f"Expected one large Plotly runtime script, found {len(plotly)}")
+          plotly = plotly[0]
+
+          outputs = [
+              (plotly, Path("vendor/plotly.min.js"), '<script src="./vendor/plotly.min.js"></script>'),
+              (mantine, Path("vendor/fast-figure-ui-runtime.js"), '<script id="ff-mantine-runtime" src="./vendor/fast-figure-ui-runtime.js"></script>'),
+              (app, Path("fast-figure.js"), '<script src="./fast-figure.js"></script>'),
+          ]
+
+          for block, path, _ in outputs:
+              if path.exists():
+                  raise SystemExit(f"Refusing to overwrite existing split source: {path}")
+              path.parent.mkdir(parents=True, exist_ok=True)
+              payload = block["body"].encode("utf-8")
+              path.write_bytes(payload)
+              written = path.read_bytes()
+              if written != payload:
+                  raise SystemExit(f"Byte mismatch after extracting {path}")
+              print(f"split {path}: bytes={len(payload)} sha256={hashlib.sha256(payload).hexdigest()}")
+
+          replacements = sorted(
+              [(block["start"], block["end"], replacement) for block, _, replacement in outputs],
+              reverse=True,
+          )
+          for start, end, replacement in replacements:
+              text = text[:start] + replacement + text[end:]
+          html_path.write_text(text, encoding="utf-8")
+
+          split_text = html_path.read_text(encoding="utf-8")
+          expected_tags = [
+              '<script src="./vendor/plotly.min.js"></script>',
+              '<script id="ff-mantine-runtime" src="./vendor/fast-figure-ui-runtime.js"></script>',
+              '<script src="./fast-figure.js"></script>',
+          ]
+          for tag in expected_tags:
+              if split_text.count(tag) != 1:
+                  raise SystemExit(f"Expected exactly one external script tag: {tag}")
+          positions = [split_text.index(tag) for tag in expected_tags]
+          if positions != sorted(positions):
+              raise SystemExit("External script execution order changed during split")
+          if "Plotly.setPlotConfig" not in split_text:
+              raise SystemExit("Plotly configuration bootstrap disappeared")
+          if "const PACKAGE_FORMAT_VERSION" in split_text:
+              raise SystemExit("Fast Figure application body still appears inline")
+
+          app_text = Path("fast-figure.js").read_text(encoding="utf-8")
+          forbidden = {
+              "document.currentScript": r"\bdocument\.currentScript\b",
+              "import.meta": r"\bimport\.meta\b",
+          }
+          for label, pattern in forbidden.items():
+              if re.search(pattern, app_text):
+                  raise SystemExit(f"Externalization-sensitive construct found: {label}")
+          PY
+          git diff --check
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f fast-figure.js ]; then
+            node --check fast-figure.js
+            [ ! -f vendor/plotly.min.js ] || node --check vendor/plotly.min.js
+            [ ! -f vendor/fast-figure-ui-runtime.js ] || node --check vendor/fast-figure-ui-runtime.js
+          else
+            python - <<'PY'
           from pathlib import Path
           import re
 
@@ -71,18 +197,40 @@ jobs:
               raise SystemExit("No inline script found.")
           Path("/tmp/fast-figure-main.js").write_text(scripts[-1], encoding="utf-8")
           PY
-          node --check /tmp/fast-figure-main.js
+            node --check /tmp/fast-figure-main.js
+          fi
+
+      - name: Record split migration patch
+        if: steps.patch.outputs.split_inline_js == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch="${{ steps.patch.outputs.path }}"
+          attrs="$(mktemp)"
+          cat > "$attrs" <<'EOF'
+          Fast-figure.html -diff
+          fast-figure.js -diff
+          vendor/plotly.min.js -diff
+          vendor/fast-figure-ui-runtime.js -diff
+          EOF
+          GIT_ATTR_NOSYSTEM=1 git -c core.attributesfile="$attrs" diff --binary -- Fast-figure.html fast-figure.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js > /tmp/source-split.patch
+          if [ ! -s /tmp/source-split.patch ]; then
+            echo "Source split produced no recorded diff." >&2
+            exit 1
+          fi
+          cat /tmp/source-split.patch > "$patch"
 
       - name: Commit applied patch
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- Fast-figure.html; then
-            echo "Patch produced no Fast-figure.html change." >&2
+          mapfile -t changed < <(git status --short -- Fast-figure.html fast-figure.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js)
+          if [ "${#changed[@]}" -eq 0 ]; then
+            echo "Patch produced no Fast Figure source change." >&2
             exit 1
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Fast-figure.html
+          git add -- Fast-figure.html fast-figure.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js "${{ steps.patch.outputs.path }}"
           git commit -m "Apply agent patch ${{ steps.patch.outputs.name }}"
           git push
