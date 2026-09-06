@@ -110,7 +110,9 @@ diff --git a/fast-figure.js b/fast-figure.js
                    description: references.length ? references.join(" · ") : "(에셋 없음)",
 +                  ...dropProps(target("slot", "", slot.id)),
                  },
-@@ -6093,1 +6174,6 @@
+@@ -6091,4 +6172,9 @@
+         status("프로젝트 파일을 슬롯에 연결했습니다.");
+       }
 -      async function executeAssetTreeDrop(dataTransfer, target, policy) {
 +      async function executeAssetTreeDrop(
 +        dataTransfer,
@@ -118,6 +120,9 @@ diff --git a/fast-figure.js b/fast-figure.js
 +        policy,
 +        { preserveLegacyOpenState = true } = {},
 +      ) {
-@@ -6100,1 +6186,1 @@
+         let internal = dataTransfer.getData(ASSET_TREE_DRAG_TYPE);
+@@ -6099,3 +6185,3 @@
+           if (policy.operation === "move") {
 -            let movedOpen = dragged.kind === "directory"
 +            let movedOpen = preserveLegacyOpenState && dragged.kind === "directory"
+                 ? [...$("assetTree").querySelectorAll("details[data-path]")]
