@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.126-alpha";
+      const APP_BUILD = "1.1.127-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -2140,6 +2140,54 @@
           else return false;
           return true;
         },
+        canDragAsset(path) {
+          let match = projectVfs.resolve(path);
+          return !!match && !(match.kind === "directory" && projectVfs.isFixedDirectory(match.path));
+        },
+        beginAssetDrag(path, dataTransfer) {
+          let match = projectVfs.resolve(path);
+          if (!match || !dataTransfer) return false;
+          if (match.kind === "directory" && projectVfs.isFixedDirectory(match.path)) return false;
+          let resolvedPath = match.kind === "directory" ? match.path : projectAssetPath(match.asset);
+          dataTransfer.effectAllowed = "all";
+          dataTransfer.setData(
+            ASSET_TREE_DRAG_TYPE,
+            JSON.stringify({ kind: match.kind, path: resolvedPath }),
+          );
+          if (match.kind === "csv" && match.asset.isDefaultEmpty === true)
+            dataTransfer.setData(ASSET_TREE_LOCKED_TYPE, "1");
+          dataTransfer.setData("text/plain", resolvedPath);
+          return true;
+        },
+        readAssetDropPolicy(dataTransfer, target) {
+          let node = {
+            dataset: {
+              explorerTarget: target?.kind || "",
+              path: target?.path || "",
+              slotId: target?.slotId == null ? "" : String(target.slotId),
+            },
+          };
+          return assetTreeDropPolicy(dataTransfer, node);
+        },
+        async dropAsset(dataTransfer, target) {
+          let node = {
+              dataset: {
+                explorerTarget: target?.kind || "",
+                path: target?.path || "",
+                slotId: target?.slotId == null ? "" : String(target.slotId),
+              },
+            },
+            policy = assetTreeDropPolicy(dataTransfer, node);
+          if (!policy.allowed) {
+            status(policy.reason);
+            return false;
+          }
+          await executeAssetTreeDrop(dataTransfer, node, policy, {
+            preserveLegacyOpenState: false,
+          });
+          publishFastFigureUiStore(appFSM.state, "asset:drop");
+          return true;
+        },
         createAssetDirectory() {
           return createAssetDirectory();
         },
@@ -2958,6 +3006,35 @@
         if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
         let { React, MantineCore } = runtime,
           { NavLink, Stack, Text } = MantineCore,
+          target = (kind, path = "", slotId = null) => ({ kind, path, slotId }),
+          dropProps = (dropTarget) => ({
+            onDragOver: (event) => {
+              let policy = fastFigureUiBridge.readAssetDropPolicy(
+                event.dataTransfer,
+                dropTarget,
+              );
+              if (!policy.allowed) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect =
+                policy.operation === "link"
+                  ? "link"
+                  : policy.operation === "move"
+                    ? "move"
+                    : "copy";
+            },
+            onDrop: async (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              await fastFigureUiBridge.dropAsset(event.dataTransfer, dropTarget);
+            },
+          }),
+          dragProps = (path) => ({
+            draggable: fastFigureUiBridge.canDragAsset(path),
+            onDragStart: (event) => {
+              if (!fastFigureUiBridge.beginAssetDrag(path, event.dataTransfer))
+                event.preventDefault();
+            },
+          }),
           directories = tree.directories
             .filter((path) => path === "/assets" || path.startsWith("/assets/"))
             .sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b)),
@@ -2997,6 +3074,7 @@
                     description: asset.meta,
                     active: selectedPath === asset.path,
                     onClick: () => fastFigureUiBridge.selectAssetPath(asset.path),
+                    ...dragProps(asset.path),
                   },
                 ),
               ),
@@ -3009,6 +3087,8 @@
                 active: selectedPath === path,
                 defaultOpened: path === "/assets",
                 onClick: () => fastFigureUiBridge.selectAssetPath(path),
+                ...dragProps(path),
+                ...dropProps(target("folder", path)),
               },
               children,
             );
@@ -3036,6 +3116,7 @@
                   key: `slot:${slot.id}`,
                   label: `[row=${slot.row},col=${slot.col}]`,
                   description: references.length ? references.join(" · ") : "(에셋 없음)",
+                  ...dropProps(target("slot", "", slot.id)),
                 },
               );
             });
@@ -6090,14 +6171,19 @@
         renderDashboard();
         status("프로젝트 파일을 슬롯에 연결했습니다.");
       }
-      async function executeAssetTreeDrop(dataTransfer, target, policy) {
+      async function executeAssetTreeDrop(
+        dataTransfer,
+        target,
+        policy,
+        { preserveLegacyOpenState = true } = {},
+      ) {
         let internal = dataTransfer.getData(ASSET_TREE_DRAG_TYPE);
         if (internal) {
           let dragged = JSON.parse(internal),
             match = projectVfs.resolve(dragged.path);
           if (!match || match.kind !== dragged.kind) throw Error("드래그한 프로젝트 항목이 없습니다.");
           if (policy.operation === "move") {
-            let movedOpen = dragged.kind === "directory"
+            let movedOpen = preserveLegacyOpenState && dragged.kind === "directory"
                 ? [...$("assetTree").querySelectorAll("details[data-path]")]
                     .filter((branch) => projectPathInDirectory(branch.dataset.path, dragged.path))
                     .map((branch) => ({
