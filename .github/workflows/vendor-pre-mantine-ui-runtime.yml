@@ -105,7 +105,7 @@ jobs:
               raise SystemExit('Current body marker is not unique')
           current = current.replace(
               body_marker,
-              body_marker + b'    ' + bootstrap_block.replace(b'\n', b'\n    ') + b'\n',
+              body_marker + b'    ' + bootstrap_block + b'\n',
               1,
           )
 
