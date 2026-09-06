@@ -1,0 +1,118 @@
+diff --git a/.github/workflows/apply-fast-figure-patch.yml b/.github/workflows/apply-fast-figure-patch.yml
+index ea8822d..0a04cda 100644
+--- a/.github/workflows/apply-fast-figure-patch.yml
++++ b/.github/workflows/apply-fast-figure-patch.yml
+@@ -16,7 +16,7 @@ concurrency:
+ 
+ jobs:
+   apply:
+-    if: startsWith(github.event.head_commit.message, 'Queue Fast Figure HTML patch')
++    if: startsWith(github.event.head_commit.message, 'Queue Fast Figure')
+     runs-on: ubuntu-latest
+     steps:
+       - name: Check out repository
+@@ -41,11 +41,19 @@ jobs:
+             exit 1
+           fi
+           mapfile -t targets < <(sed -n 's|^+++ b/||p' "$patch" | sort -u)
+-          if [ "${#targets[@]}" -ne 1 ] || [ "${targets[0]}" != "Fast-figure.html" ]; then
+-            echo "Patch target must be Fast-figure.html only." >&2
+-            printf 'Targets: %s\n' "${targets[*]:-none}" >&2
++          if [ "${#targets[@]}" -lt 1 ]; then
++            echo "Patch has no targets." >&2
+             exit 1
+           fi
++          for target in "${targets[@]}"; do
++            case "$target" in
++              Fast-figure.html|fast-figure.js|vendor/plotly.min.js|README.md|scripts/build-portable.py) ;;
++              *)
++                echo "Unsupported Fast Figure patch target: $target" >&2
++                exit 1
++                ;;
++            esac
++          done
+           echo "path=$patch" >> "$GITHUB_OUTPUT"
+           echo "name=$(basename "$base")" >> "$GITHUB_OUTPUT"
+ 
+@@ -61,28 +69,70 @@ jobs:
+         shell: bash
+         run: |
+           set -euo pipefail
+-          python - <<'PY'
++          node --check fast-figure.js
++          if git diff --name-only | grep -Fxq 'vendor/plotly.min.js'; then
++            node --check vendor/plotly.min.js
++          fi
++
++      - name: Build portable HTML
++        shell: bash
++        run: |
++          set -euo pipefail
++          mkdir -p /tmp/fast-figure-portable
++          python scripts/build-portable.py --output /tmp/fast-figure-portable/Fast-figure.html
++          test -s /tmp/fast-figure-portable/Fast-figure.html
++
++      - name: Smoke test split and portable file URLs
++        shell: bash
++        run: |
++          set -euo pipefail
++          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
++          if [ -z "$browser" ]; then
++            echo "No Chrome/Chromium binary is available for file:// smoke testing." >&2
++            exit 1
++          fi
++          smoke_dir="$(mktemp -d)"
++          mkdir -p "$smoke_dir/split/vendor" "$smoke_dir/portable"
++          cp Fast-figure.html fast-figure.js "$smoke_dir/split/"
++          cp vendor/plotly.min.js "$smoke_dir/split/vendor/"
++          cp /tmp/fast-figure-portable/Fast-figure.html "$smoke_dir/portable/Fast-figure.html"
++          python - "$smoke_dir/split/Fast-figure.html" "$smoke_dir/portable/Fast-figure.html" <<'PY'
+           from pathlib import Path
+-          import re
++          import sys
+ 
+-          text = Path("Fast-figure.html").read_text(encoding="utf-8")
+-          scripts = re.findall(r"<script(?:\s[^>]*)?>([\s\S]*?)</script>", text)
+-          if not scripts:
+-              raise SystemExit("No inline script found.")
+-          Path("/tmp/fast-figure-main.js").write_text(scripts[-1], encoding="utf-8")
++          probe = r'''<script>
++          (() => {
++            const state = [
++              typeof Plotly !== "undefined",
++              typeof appFSM !== "undefined",
++              typeof appFSM !== "undefined" && appFSM.state?.lifecycle === "ready",
++            ];
++            document.documentElement.setAttribute("data-fast-figure-smoke", state.join(","));
++          })();
++          </script>'''
++          for value in sys.argv[1:]:
++              path = Path(value)
++              text = path.read_text(encoding="utf-8")
++              if "</body>" not in text:
++                  raise SystemExit(f"Missing body close tag in {path}")
++              path.write_text(text.replace("</body>", probe + "\n</body>", 1), encoding="utf-8")
+           PY
+-          node --check /tmp/fast-figure-main.js
++          for html in "$smoke_dir/split/Fast-figure.html" "$smoke_dir/portable/Fast-figure.html"; do
++            "$browser" --headless=new --no-sandbox --disable-gpu --allow-file-access-from-files --virtual-time-budget=3000 --dump-dom "file://$html" > "$html.dom"
++            grep -q 'data-fast-figure-smoke="true,true,true"' "$html.dom"
++          done
+ 
+       - name: Commit applied patch
+         shell: bash
+         run: |
+           set -euo pipefail
+-          if git diff --quiet -- Fast-figure.html; then
+-            echo "Patch produced no Fast-figure.html change." >&2
++          mapfile -t changed < <(git status --short -- Fast-figure.html fast-figure.js vendor/plotly.min.js README.md scripts/build-portable.py)
++          if [ "${#changed[@]}" -eq 0 ]; then
++            echo "Patch produced no Fast Figure source change." >&2
+             exit 1
+           fi
+           git config user.name "github-actions[bot]"
+           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+-          git add Fast-figure.html
++          git add -- Fast-figure.html fast-figure.js vendor/plotly.min.js README.md scripts/build-portable.py "${{ steps.patch.outputs.path }}"
+           git commit -m "Apply agent patch ${{ steps.patch.outputs.name }}"
+           git push
