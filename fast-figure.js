@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.133-alpha";
+      const APP_BUILD = "1.1.134-alpha";
       const ICONOIR_GLYPHS = Object.freeze({
         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -2250,6 +2250,12 @@
         deleteSelectedAsset() {
           return deleteSelectedAsset();
         },
+        readSelectedAssetDeletion() {
+          return selectedAssetDeletionModel();
+        },
+        deleteSelectedAssetConfirmed(kind, id) {
+          return deleteSelectedAssetConfirmed(kind, id);
+        },
         resetSelectedSlot() {
           return resetSelectedSlotLegacy();
         },
@@ -3456,6 +3462,20 @@
           graphObject = fastFigureUiBridge.readGraphObject(),
           [confirmation, setConfirmation] = React.useState(null),
           [inputDialog, setInputDialog] = React.useState(null),
+          openAssetDeletionConfirmation = () => {
+            let model = fastFigureUiBridge.readSelectedAssetDeletion();
+            if (!model) return;
+            if (model.protected || !model.confirmation) {
+              fastFigureUiBridge.deleteSelectedAssetConfirmed(model.kind, model.id);
+              return;
+            }
+            setConfirmation({
+              ...model.confirmation,
+              kind: "asset-delete",
+              assetKind: model.kind,
+              assetId: model.id,
+            });
+          },
           openSlotResetConfirmation = () => {
             let model = fastFigureUiBridge.readSlotResetConfirmation();
             if (!model) {
@@ -3504,6 +3524,11 @@
             if (!confirmation) return;
             if (confirmation.kind === "slot-reset")
               fastFigureUiBridge.resetSelectedSlotConfirmed(confirmation.slotId);
+            else if (confirmation.kind === "asset-delete")
+              fastFigureUiBridge.deleteSelectedAssetConfirmed(
+                confirmation.assetKind,
+                confirmation.assetId,
+              );
             else
               fastFigureUiBridge.runAssetActionConfirmed(
                 confirmation.key,
@@ -3634,7 +3659,7 @@
                 {
                   variant: "default",
                   disabled: !["csv", "image"].includes(assetSelection),
-                  onClick: () => fastFigureUiBridge.deleteSelectedAsset(),
+                  onClick: openAssetDeletionConfirmation,
                 },
                 "에셋 삭제",
               ),
@@ -10872,24 +10897,48 @@
         if (selection) syncLegacyCsvAssetSelection(selection);
         return selection;
       }
-      function deleteProjectCsv(csvIdToDelete = activeCsvId) {
+      function projectCsvDeletionModel(csvIdToDelete = activeCsvId) {
         let id = csvIdToDelete,
           csv = getProjectCsv(id),
-          references = activeProject.charts.flatMap((chart) =>
-            (chart.editor?.objects || [])
-              .map((object, index) => ({ chart, object, index }))
-              .filter(({ object }) => object.csvId === id),
-          );
-        if (!csv) return;
-        if (csv.isDefaultEmpty === true)
-          return status("프로젝트 기본 빈 CSV는 삭제할 수 없습니다.");
-        if (
-          references.length &&
-          !window.confirm(
-            `${csv.name}을 ${references.length}개 그래프 오브젝트가 참조 중입니다. 참조 중인 그래프 오브젝트와 CSV를 함께 삭제할까요?`,
-          )
-        )
-          return;
+          referenceCount = csv
+            ? activeProject.charts.reduce(
+                (count, chart) =>
+                  count +
+                  (chart.editor?.objects || []).filter((object) => object.csvId === id).length,
+                0,
+              )
+            : 0;
+        if (!csv) return null;
+        return Object.freeze({
+          kind: "csv",
+          id,
+          name: csv.name,
+          protected: csv.isDefaultEmpty === true,
+          referenceCount,
+          confirmation:
+            referenceCount > 0
+              ? Object.freeze({
+                  title: "CSV 삭제",
+                  message: `${csv.name}을 ${referenceCount}개 그래프 오브젝트가 참조 중입니다. 참조 중인 그래프 오브젝트와 CSV를 함께 삭제할까요?`,
+                  confirmLabel: "삭제",
+                })
+              : null,
+        });
+      }
+      function deleteProjectCsvConfirmed(csvIdToDelete = activeCsvId) {
+        let model = projectCsvDeletionModel(csvIdToDelete),
+          id = model?.id,
+          csv = id == null ? null : getProjectCsv(id);
+        if (!model || !csv) return false;
+        if (model.protected) {
+          status("프로젝트 기본 빈 CSV는 삭제할 수 없습니다.");
+          return false;
+        }
+        let references = activeProject.charts.flatMap((chart) =>
+          (chart.editor?.objects || [])
+            .map((object, index) => ({ chart, object, index }))
+            .filter(({ object }) => object.csvId === id),
+        );
         if (references.length) {
           activeProject.charts.forEach((chart) => {
             if (!Array.isArray(chart.editor?.objects)) return;
@@ -10916,6 +10965,14 @@
             ? `${csv.name}과 이를 참조하던 그래프 오브젝트 ${references.length}개를 삭제했습니다.`
             : `${csv.name}을 프로젝트에서 삭제했습니다.`,
         );
+        return true;
+      }
+      function deleteProjectCsv(csvIdToDelete = activeCsvId) {
+        let model = projectCsvDeletionModel(csvIdToDelete);
+        if (!model) return false;
+        if (model.protected) return deleteProjectCsvConfirmed(model.id);
+        if (model.confirmation && !window.confirm(model.confirmation.message)) return false;
+        return deleteProjectCsvConfirmed(model.id);
       }
       function selectImageAsset(path) {
         let slot = getSelectedSlot(),
@@ -10959,18 +11016,35 @@
         if (selection) syncLegacyImageAssetSelection(selection);
         return selection;
       }
-      function deleteProjectImage(imageIdToDelete = activeImageId) {
+      function projectImageDeletionModel(imageIdToDelete = activeImageId) {
         let id = Number(imageIdToDelete),
           image = getProjectImage(id),
-          references = activeProject.slots.filter((slot) => slot.imageId === id);
-        if (!image) return;
-        if (
-          references.length &&
-          !window.confirm(
-            `${image.name}을 ${references.length}개 이미지 슬롯이 참조 중입니다. 참조 슬롯을 초기화하고 이미지를 삭제할까요?`,
-          )
-        )
-          return;
+          referenceCount = image
+            ? activeProject.slots.filter((slot) => slot.imageId === id).length
+            : 0;
+        if (!image) return null;
+        return Object.freeze({
+          kind: "image",
+          id,
+          name: image.name,
+          protected: false,
+          referenceCount,
+          confirmation:
+            referenceCount > 0
+              ? Object.freeze({
+                  title: "이미지 삭제",
+                  message: `${image.name}을 ${referenceCount}개 이미지 슬롯이 참조 중입니다. 참조 슬롯을 초기화하고 이미지를 삭제할까요?`,
+                  confirmLabel: "삭제",
+                })
+              : null,
+        });
+      }
+      function deleteProjectImageConfirmed(imageIdToDelete = activeImageId) {
+        let model = projectImageDeletionModel(imageIdToDelete),
+          id = model?.id,
+          image = id == null ? null : getProjectImage(id);
+        if (!model || !image) return false;
+        let references = activeProject.slots.filter((slot) => slot.imageId === id);
         if (references.length)
           appFSM.send("SLOTS_RESET", {
             slotIds: references.map((slot) => slot.id),
@@ -10989,13 +11063,40 @@
             ? `${image.name}을 삭제하고 참조 슬롯 ${references.length}개를 초기화했습니다.`
             : `${image.name}을 프로젝트에서 삭제했습니다.`,
         );
+        return true;
       }
-      function deleteSelectedAsset() {
+      function deleteProjectImage(imageIdToDelete = activeImageId) {
+        let model = projectImageDeletionModel(imageIdToDelete);
+        if (!model) return false;
+        if (model.confirmation && !window.confirm(model.confirmation.message)) return false;
+        return deleteProjectImageConfirmed(model.id);
+      }
+      function selectedAssetDeletionModel() {
         let selected = appFSM.state.assetPath
           ? projectVfs.resolve(appFSM.state.assetPath)
           : null;
-        if (selected?.kind === "csv") deleteProjectCsv(selected.asset.id);
-        else if (selected?.kind === "image") deleteProjectImage(selected.asset.id);
+        if (selected?.kind === "csv") return projectCsvDeletionModel(selected.asset.id);
+        if (selected?.kind === "image") return projectImageDeletionModel(selected.asset.id);
+        return null;
+      }
+      function deleteSelectedAssetConfirmed(kind, id) {
+        let selected = selectedAssetDeletionModel();
+        if (!selected || selected.kind !== kind || selected.id !== id) {
+          status("선택한 에셋이 변경되었습니다.");
+          return false;
+        }
+        return kind === "csv"
+          ? deleteProjectCsvConfirmed(id)
+          : kind === "image"
+            ? deleteProjectImageConfirmed(id)
+            : false;
+      }
+      function deleteSelectedAsset() {
+        let model = selectedAssetDeletionModel();
+        if (!model) return false;
+        if (model.protected) return deleteSelectedAssetConfirmed(model.kind, model.id);
+        if (model.confirmation && !window.confirm(model.confirmation.message)) return false;
+        return deleteSelectedAssetConfirmed(model.kind, model.id);
       }
       $("deleteSelectedAsset").onclick = deleteSelectedAsset;
       function createAssetDirectoryInputModel(parent = selectedExplorerDirectory) {
