@@ -1,0 +1,67 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.112-alpha";
++      const APP_BUILD = "1.1.113-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -1454,10 +1454,10 @@
+       }
+       function syncProjectWorkspaceState({ objects } = {}) {
++        let { availability } = syncProjectWorkspaceDomainState();
+         $("targetInfo").textContent = "빈 슬롯 또는 그래프를 선택하세요.";
+         setFileName();
+         clearPreview();
+-        updateFileAvailability();
+-        refreshCsvControls();
++        updateFileAvailability(availability);
+         refreshImageControls();
+         renderProjectDataTree(objects);
+         syncLabelControlsFromObject(objects?.labels || projectObjects.read("labels"));
+@@ -1470,11 +1470,12 @@
+         $("imageBox").classList.add("hidden");
+       }
+       function syncGraphWorkspaceState({ objects } = {}) {
+-        let slot = getSelectedSlot();
+-        if (!slot) return;
++        let domain = syncGraphWorkspaceDomainState();
++        if (!domain) return;
++        let { slot, availability, selection } = domain;
+         $("targetInfo").textContent = `선택한 슬롯: ${slot.row}행 ${slot.col}열`;
+-        updateFileAvailability();
+-        if (slot.chart && editing?.id !== slot.chart) editChart(slot.chart);
++        updateFileAvailability(availability);
++        if (selection) syncLegacyGraphEditorSelection(selection);
+         else if (!slot.chart) {
+           setFileName();
+           clearPreview();
+@@ -1483,13 +1484,13 @@
+         }
+-        refreshCsvControls();
+         renderProjectDataTree(objects);
+         syncCaptionControlsFromObject(projectObjects.read("captions"));
+       }
+       function syncImageWorkspaceState({ objects } = {}) {
+-        let slot = getSelectedSlot();
+-        if (!slot) return;
++        let domain = syncImageWorkspaceDomainState();
++        if (!domain) return;
++        let { slot, availability } = domain;
+         $("targetInfo").textContent = `선택한 슬롯: ${slot.row}행 ${slot.col}열`;
+-        updateFileAvailability();
++        updateFileAvailability(availability);
+         setFileName(slotImage(slot)?.name);
+         clearPreview();
+         $("buildBox").classList.add("hidden");
+@@ -1506,8 +1507,8 @@
+         syncCaptionControlsFromObject(projectObjects.read("captions"));
+       }
+       function exitGraphWorkspaceState() {
++        exitGraphWorkspaceDomainState();
+         $("buildBox").classList.add("hidden");
+-        selectedObjectIndex = null;
+       }
+       function exitImageWorkspaceState() {
+         $("imageBox").classList.add("hidden");

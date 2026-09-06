@@ -1,0 +1,50 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.127-alpha";
++      const APP_BUILD = "1.1.128-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -356,9 +356,18 @@
+         dashboardZoomIntent = 100,
+         dashboardZoomLocked = false,
+         dashboardZoomLockedWidth = null,
+         selectedExplorerDirectory = "/assets",
+         selectedObjectIndex = null;
++      let uiStatusMessage = "",
++        fastFigureUiStoreReady = false;
+       const $ = (id) => document.getElementById(id),
+-        status = (t) => ($("status").textContent = t);
++        status = (value) => {
++          uiStatusMessage = String(value ?? "");
++          let output = $("status");
++          if (output) output.textContent = uiStatusMessage;
++          if (fastFigureUiStoreReady)
++            publishFastFigureUiStore(appFSM.state, "status:changed");
++          return uiStatusMessage;
++        };
+       let debugEnabled = false,
+         debugSequence = 0;
+@@ -2012,3 +2021,4 @@
+           fsm: appFSM.state,
+           projectName: activeProject.projectName,
++          statusMessage: uiStatusMessage,
+           selectedSlot: slot
+@@ -2040,3 +2050,4 @@
+         event: "init",
+       });
++      fastFigureUiStoreReady = true;
+       function publishFastFigureUiStore(state = appFSM.state, event = "domain-update") {
+@@ -3230,3 +3241,10 @@
+             ),
+             React.createElement(Text, { size: "xs", c: "dimmed" }, fileInput.hint),
++            snapshot.statusMessage
++              ? React.createElement(
++                  Text,
++                  { size: "sm", role: "status", "aria-live": "polite" },
++                  snapshot.statusMessage,
++                )
++              : null,
+             React.createElement(FastFigureAssetTreeStaging, {

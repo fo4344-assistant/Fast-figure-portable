@@ -1,0 +1,48 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.78-alpha</code></p>
++          <p><code>1.1.79-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.78-alpha";
++      const APP_BUILD = "1.1.79-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14617,1 +14617,21 @@
++      function FastFigureGraphObjectAddStaging({ graphObjectAdd }) {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Button } = MantineCore;
++        return React.createElement(
++          Button,
++          {
++            variant: "light",
++            fullWidth: true,
++            disabled: graphObjectAdd.editable === false,
++            onClick: () =>
++              fastFigureUiBridge.addGraphObject(
++                graphObjectAdd.slotId,
++                graphObjectAdd.chartId,
++              ),
++          },
++          "그래프 오브젝트 추가",
++        );
++      }
+       function FastFigureGraphObjectListStaging({ graphObjects }) {
+@@ -15087,4 +15107,5 @@
+           csvHeader = fastFigureUiBridge.readCsvHeader(),
+           chartLayout = fastFigureUiBridge.readChartLayout(),
++          graphObjectAdd = fastFigureUiBridge.readGraphObjectAdd(),
+           graphObjects = fastFigureUiBridge.readGraphObjects(),
+           graphObject = fastFigureUiBridge.readGraphObject();
+@@ -15339,3 +15360,6 @@
++            graphObjectAdd
++              ? React.createElement(FastFigureGraphObjectAddStaging, { graphObjectAdd })
++              : null,
+             graphObjects
+               ? React.createElement(FastFigureGraphObjectListStaging, { graphObjects })
+               : null,

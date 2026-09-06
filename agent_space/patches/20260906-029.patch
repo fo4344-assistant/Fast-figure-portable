@@ -1,0 +1,145 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.132-alpha";
++      const APP_BUILD = "1.1.133-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -2240,4 +2240,13 @@
+         resetSelectedSlot() {
+-          return $("resetSelectedSlot").click();
++          return resetSelectedSlotLegacy();
++        },
++        readSlotResetConfirmation() {
++          return selectedSlotResetConfirmation();
++        },
++        resetSelectedSlotConfirmed(slotId = null) {
++          return resetSelectedSlotConfirmed(slotId);
++        },
++        cancelSlotReset(slotId = null) {
++          return cancelSelectedSlotReset(slotId);
+         },
+         setProjectName(value, commit = false) {
+@@ -3448,3 +3457,11 @@
+           [confirmation, setConfirmation] = React.useState(null),
+           [inputDialog, setInputDialog] = React.useState(null),
++          openSlotResetConfirmation = () => {
++            let model = fastFigureUiBridge.readSlotResetConfirmation();
++            if (!model) {
++              fastFigureUiBridge.resetSelectedSlotConfirmed();
++              return;
++            }
++            setConfirmation({ ...model, kind: "slot-reset" });
++          },
+           openCreateDirectoryInput = (parent = null) => {
+@@ -3480,5 +3497,6 @@
+               setConfirmation({
+                 ...model,
++                kind: "asset-action",
+                 key: item.key,
+                 context: assetActions.context,
+               });
+@@ -3490,9 +3508,17 @@
+           confirmAssetAction = () => {
+             if (!confirmation) return;
+-            fastFigureUiBridge.runAssetActionConfirmed(
+-              confirmation.key,
+-              confirmation.context,
+-            );
++            if (confirmation.kind === "slot-reset")
++              fastFigureUiBridge.resetSelectedSlotConfirmed(confirmation.slotId);
++            else
++              fastFigureUiBridge.runAssetActionConfirmed(
++                confirmation.key,
++                confirmation.context,
++              );
+             setConfirmation(null);
++          },
++          closeConfirmation = () => {
++            if (confirmation?.kind === "slot-reset")
++              fastFigureUiBridge.cancelSlotReset(confirmation.slotId);
++            setConfirmation(null);
+           },
+           submitAssetInput = (value) => {
+@@ -3615,6 +3641,6 @@
+                 {
+                   variant: "default",
+                   disabled: !slot,
+-                  onClick: () => fastFigureUiBridge.resetSelectedSlot(),
++                  onClick: openSlotResetConfirmation,
+                 },
+                 "슬롯 초기화",
+@@ -3860,5 +3886,5 @@
+             React.createElement(FastFigureConfirmationStaging, {
+               confirmation,
+-              onClose: () => setConfirmation(null),
++              onClose: closeConfirmation,
+               onConfirm: confirmAssetAction,
+             }),
+@@ -11355,31 +11381,58 @@
+       $("file").onchange = async (e) => {
+         await loadProjectFiles(e.target.files);
+         e.target.value = "";
+       };
+-      $("resetSelectedSlot").onclick = () => {
++      function selectedSlotResetConfirmation(slot = getSelectedSlot()) {
++        if (!slot) return null;
++        return Object.freeze({
++          title: "슬롯 초기화",
++          message: "데이터를 잃습니다.",
++          confirmLabel: "초기화",
++          slotId: slot.id,
++        });
++      }
++      function cancelSelectedSlotReset(expectedSlotId = null) {
++        let slot = getSelectedSlot();
++        if (slot && (expectedSlotId === null || slot.id === expectedSlotId))
++          debugLog("slotReset:cancel", { slotId: slot.id });
++        return false;
++      }
++      function resetSelectedSlotConfirmed(expectedSlotId = null) {
+         let slot = getSelectedSlot();
+         if (!slot) {
+           status("초기화할 슬롯을 먼저 선택하세요.");
+           debugLog("slotReset:no-selection");
+-          return;
++          return false;
+         }
+-        if (!window.confirm("데이터를 잃습니다.")) {
+-          debugLog("slotReset:cancel", { slotId: slot.id });
+-          return;
++        if (expectedSlotId !== null && slot.id !== expectedSlotId) {
++          debugLog("slotReset:stale", {
++            expectedSlotId,
++            actualSlotId: slot.id,
++          });
++          return false;
+         }
+         let payload = {
+           slotIds: [slot.id],
+           direction: "fsm-to-model",
+         };
+         appFSM.send("SLOTS_RESET", payload);
+         appFSM.send("CLEAR_ASSET_SELECTION", {
+           direction: "fsm-to-model",
+         });
+         renderDashboard();
+         status("선택한 슬롯을 초기화했습니다.");
+         debugLog("slotReset:complete", {
+           slotId: slot.id,
+           removedChartIds: payload.removedChartIds,
+         });
+-      };
++        return true;
++      }
++      function resetSelectedSlotLegacy() {
++        let confirmation = selectedSlotResetConfirmation();
++        if (!confirmation) return resetSelectedSlotConfirmed();
++        if (!window.confirm(confirmation.message))
++          return cancelSelectedSlotReset(confirmation.slotId);
++        return resetSelectedSlotConfirmed(confirmation.slotId);
++      }
++      $("resetSelectedSlot").onclick = resetSelectedSlotLegacy;
+       function baseGraphObject(chart, csv = getProjectCsv(activeCsvId)) {

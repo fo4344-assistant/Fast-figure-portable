@@ -1,0 +1,60 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -15638,3 +15638,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.46-alpha</code></p>
++          <p><code>1.1.47-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -16267,3 +16267,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.46-alpha";
++      const APP_BUILD = "1.1.47-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -18346,5 +18346,12 @@
+         exportTarget(values, statusTarget) {
+           return exportDashboardTargetFromValues(values, statusTarget);
+         },
++        readReadmeHtml() {
++          let source = document.querySelector("#readmeDialog .readme-content");
++          if (!source) return "";
++          let clone = source.cloneNode(true);
++          clone.querySelector("#closeReadme")?.remove();
++          return clone.innerHTML;
++        },
+       });
+       function useFastFigureFsmSnapshot() {
+@@ -18911,2 +18918,17 @@
+       }
++      function FastFigureReadmeContentStaging() {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Box, ScrollArea } = MantineCore;
++        return React.createElement(
++          ScrollArea,
++          { h: "70vh", type: "auto" },
++          React.createElement(Box, {
++            pr: "sm",
++            style: { fontSize: 14, lineHeight: 1.5 },
++            dangerouslySetInnerHTML: { __html: fastFigureUiBridge.readReadmeHtml() },
++          }),
++        );
++      }
+       function FastFigureOverlayHostStaging() {
+@@ -18949,9 +18971,7 @@
+           React.createElement(
+             FastFigureOverlayModalStaging,
+             { opened: snapshot.fsm.overlay === "readme", title: "README" },
+             React.createElement(
+-              Text,
+-              { size: "sm", c: "dimmed" },
+-              "README 본문 renderer는 shell cutover 전까지 기존 문서를 재사용합니다.",
+-            ),
++              FastFigureReadmeContentStaging,
++            ),
+           ),
+@@ -19000,2 +19020,3 @@
+         FastFigurePrintModalStaging,
++        FastFigureReadmeContentStaging,
+         FastFigureOverlayHostStaging,

@@ -1,0 +1,63 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+index fdfaecf..0000000 100644
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
+             connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.55-alpha</code></p>
++          <p><code>1.1.56-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
+     </div>
+     <script>
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.55-alpha";
++      const APP_BUILD = "1.1.56-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+@@ -17744,23 +17744,28 @@ THE SOFTWARE.</pre
+       function setFileName(name = "") {
+         let output = $("fileName");
+         if (output) output.textContent = name || "선택된 파일 없음";
+       }
++      function normalizedImageSettingsValues(settings) {
++        let source = settings && typeof settings === "object" ? settings : {},
++          fit = ["contain", "cover", "manual"].includes(source.fit) ? source.fit : "contain",
++          number = (value, fallback, min, max) =>
++            Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : fallback));
++        return {
++          ...source,
++          fit,
++          scale: number(source.scale, 100, 1, 1000),
++          x: number(source.x, 50, -100, 200),
++          y: number(source.y, 50, -100, 200),
++        };
++      }
+       function normalizeImageSettings(image) {
+         if (!image) return null;
+-        let settings = image.settings && typeof image.settings === "object" ? image.settings : {},
+-          fit = ["contain", "cover", "manual"].includes(settings.fit) ? settings.fit : "contain",
+-          number = (value, fallback, min, max) =>
+-            Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : fallback));
+-        image.settings = {
+-          ...settings,
+-          fit,
+-          scale: number(settings.scale, 100, 1, 1000),
+-          x: number(settings.x, 50, -100, 200),
+-          y: number(settings.y, 50, -100, 200),
+-        };
++        image.settings = normalizedImageSettingsValues(image.settings);
+         return image.settings;
+       }
+       function selectedImageSettingsModel(slot = getSelectedSlot()) {
+         let image = slotImage(slot),
+-          settings = normalizeImageSettings(image);
++          settings = image ? normalizedImageSettingsValues(image.settings) : null;
+         return settings
+           ? Object.freeze({
+               fit: settings.fit,

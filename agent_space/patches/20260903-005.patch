@@ -1,0 +1,105 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.106-alpha</code></p>
++          <p><code>1.1.107-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.106-alpha";
++      const APP_BUILD = "1.1.107-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -16955,3 +16955,2 @@
+-      function updateFileAvailability() {
+-        let { hasSlot, selectedAsset, hasAsset, canDeleteAsset } =
+-          applyWorkspaceAvailabilityPolicy();
++      function updateFileAvailability(model = applyWorkspaceAvailabilityPolicy()) {
++        let { hasSlot, selectedAsset, hasAsset, canDeleteAsset } = model;
+@@ -13679,45 +13678,72 @@
++      function syncProjectWorkspaceDomainState() {
++        let availability = applyWorkspaceAvailabilityPolicy();
++        refreshCsvControls();
++        setActiveImageFromId();
++        return { availability };
++      }
+       function syncProjectWorkspaceState({ objects } = {}) {
++        let { availability } = syncProjectWorkspaceDomainState();
+         $("targetInfo").textContent = "빈 슬롯 또는 그래프를 선택하세요.";
+         setFileName();
+         clearPreview();
+-        updateFileAvailability();
+-        refreshCsvControls();
+-        refreshImageControls();
++        updateFileAvailability(availability);
++        $("insertEmptyImage").disabled = getSelectedSlot()?.contentType !== "image";
+         renderProjectDataTree(objects);
+         syncLabelControlsFromObject(objects?.labels || projectObjects.read("labels"));
+         syncCaptionControlsFromObject(objects?.captions || projectObjects.read("captions"));
+         $("buildBox").classList.add("hidden");
+         $("imageBox").classList.add("hidden");
+       }
++      function syncGraphWorkspaceDomainState() {
++        let slot = getSelectedSlot();
++        if (!slot) return null;
++        let availability = applyWorkspaceAvailabilityPolicy(),
++          selection = slot.chart && editing?.id !== slot.chart
++            ? selectChartForEditing(slot.chart)
++            : null;
++        refreshCsvControls();
++        return { slot, availability, selection };
++      }
+       function syncGraphWorkspaceState({ objects } = {}) {
+-        let slot = getSelectedSlot();
+-        if (!slot) return;
++        let state = syncGraphWorkspaceDomainState();
++        if (!state) return;
++        let { slot, availability, selection } = state;
+         $("targetInfo").textContent = `선택한 슬롯: ${slot.row}행 ${slot.col}열`;
+-        updateFileAvailability();
+-        if (slot.chart && editing?.id !== slot.chart) editChart(slot.chart);
++        updateFileAvailability(availability);
++        if (selection) syncLegacyGraphEditorSelection(selection);
+         else if (!slot.chart) {
+           setFileName();
+           clearPreview();
+           $("buildBox").classList.add("hidden");
+         }
+-        refreshCsvControls();
+         renderProjectDataTree(objects);
+         syncCaptionControlsFromObject(projectObjects.read("captions"));
+       }
++      function syncImageWorkspaceDomainState() {
++        let slot = getSelectedSlot();
++        if (!slot) return null;
++        let availability = applyWorkspaceAvailabilityPolicy();
++        setActiveImageFromId(slot.imageId);
++        return { slot, availability };
++      }
+       function syncImageWorkspaceState({ objects } = {}) {
+-        let slot = getSelectedSlot();
+-        if (!slot) return;
++        let state = syncImageWorkspaceDomainState();
++        if (!state) return;
++        let { slot, availability } = state;
+         $("targetInfo").textContent = `선택한 슬롯: ${slot.row}행 ${slot.col}열`;
+-        updateFileAvailability();
++        updateFileAvailability(availability);
+         setFileName(slotImage(slot)?.name);
+         clearPreview();
+         $("buildBox").classList.add("hidden");
+-        refreshImageControls(slot.imageId);
++        $("insertEmptyImage").disabled = getSelectedSlot()?.contentType !== "image";
+         renderProjectDataTree(objects);
+         syncCaptionControlsFromObject(projectObjects.read("captions"));
+       }
++      function exitGraphWorkspaceDomainState() {
++        selectedObjectIndex = null;
++      }
+       function exitGraphWorkspaceState() {
++        exitGraphWorkspaceDomainState();
+         $("buildBox").classList.add("hidden");
+-        selectedObjectIndex = null;
+       }
+       function exitImageWorkspaceState() {

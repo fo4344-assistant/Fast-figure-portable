@@ -1,0 +1,56 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.105-alpha</code></p>
++          <p><code>1.1.106-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.105-alpha";
++      const APP_BUILD = "1.1.106-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -16937,20 +16937,28 @@
+-      function updateFileAvailability() {
++      function workspaceAvailabilityModel() {
+         let hasSlot = !!getSelectedSlot(),
+           selectedAsset = appFSM.state.assetPath
+             ? projectVfs.resolve(appFSM.state.assetPath)
+             : null,
+           hasAsset = selectedAsset?.kind === appFSM.state.assetSelection,
+           canDeleteAsset =
+             hasAsset &&
+             ["csv", "image"].includes(selectedAsset.kind) &&
+             !(selectedAsset.kind === "csv" && selectedAsset.asset.isDefaultEmpty === true);
++        return { hasSlot, selectedAsset, hasAsset, canDeleteAsset };
++      }
++      function applyWorkspaceAvailabilityPolicy(model = workspaceAvailabilityModel()) {
++        if (model.hasSlot && appFSM.state.overlay === "readme")
++          appFSM.send("CLOSE_OVERLAY", { reason: "slot-selected" });
++        return model;
++      }
++      function updateFileAvailability() {
++        let { hasSlot, selectedAsset, hasAsset, canDeleteAsset } =
++          applyWorkspaceAvailabilityPolicy();
+         $("resetSelectedSlot").classList.toggle("hidden", !hasSlot);
+         $("assetDownload").disabled = !hasAsset || !["csv", "image"].includes(selectedAsset.kind);
+         $("deleteSelectedAsset").disabled = !canDeleteAsset;
+         $("readmeToggle").classList.toggle("hidden", hasSlot);
+         $("projectBox").classList.toggle("hidden", hasSlot);
+         syncAssetTreeActionMenu();
+-        if (hasSlot && appFSM.state.overlay === "readme")
+-          appFSM.send("CLOSE_OVERLAY", { reason: "slot-selected" });
+         syncSlotContentTypeUi();
+       }
+@@ -16285,5 +16293,9 @@
+-      function refreshImageControls(selected = activeImageId ?? getSelectedSlot()?.imageId) {
++      function setActiveImageFromId(selected = activeImageId ?? getSelectedSlot()?.imageId) {
+         if (getProjectImage(selected)) activeImageId = Number(selected);
+         else activeImageId = null;
++        return activeImageId;
++      }
++      function refreshImageControls(selected = activeImageId ?? getSelectedSlot()?.imageId) {
++        setActiveImageFromId(selected);
+         $("insertEmptyImage").disabled = getSelectedSlot()?.contentType !== "image";
+       }

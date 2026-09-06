@@ -1,0 +1,41 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11016,2 +11016,17 @@
+       }
++      function setGraphObjectColorsFromPalette(colors, expectedChartId = null) {
++        let chart = selectedGraphObjectListTarget(expectedChartId),
++          objects = Array.isArray(chart?.editor?.objects) ? chart.editor.objects : [],
++          palette = Array.isArray(colors)
++            ? colors.filter((color) => typeof color === "string" && color)
++            : [];
++        if (!chart || !palette.length) return false;
++        return !!replaceGraphObjects(
++          objects.map((object, index) => ({
++            ...object,
++            color: palette[index % palette.length],
++          })),
++          chart.id,
++        );
++      }
+       function setGraphObjectColorFromIndex(index, color, expectedChartId = null) {
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.80-alpha</code></p>
++          <p><code>1.1.81-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.80-alpha";
++      const APP_BUILD = "1.1.81-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14291,6 +14291,9 @@
+         setGraphObjectColor(index, color, chartId) {
+           return setGraphObjectColorFromIndex(index, color, chartId);
+         },
++        setGraphObjectColors(colors, chartId) {
++          return setGraphObjectColorsFromPalette(colors, chartId);
++        },
+         removeGraphObject(index, chartId) {
+           return removeGraphObjectFromIndex(index, chartId);
+         },

@@ -1,0 +1,39 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.63-alpha</code></p>
++          <p><code>1.1.64-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.63-alpha";
++      const APP_BUILD = "1.1.64-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -17900,4 +17900,11 @@
+           next.barLineWidth = Math.max(0, Math.min(10, Number(values.barLineWidth) || 0));
+         return next;
+       }
++      function graphObjectTypeVisibility(type) {
++        return {
++          line: ["scatter", "lines+markers", "hidden"].includes(type),
++          marker: ["markers", "lines+markers"].includes(type),
++          bar: type === "bar",
++        };
++      }
+       function applySelectedGraphObjectFromValues(
+@@ -20000,9 +20000,6 @@
+       function updateTypeSpecificOptions() {
+-        let type = $("chartType").value,
+-          showLine = ["scatter", "lines+markers", "hidden"].includes(type),
+-          showMarker = ["markers", "lines+markers"].includes(type),
+-          showBar = type === "bar";
+-        $("lineOptions").classList.toggle("hidden", !showLine);
+-        $("markerOptions").classList.toggle("hidden", !showMarker);
+-        $("barOptions").classList.toggle("hidden", !showBar);
++        let visibility = graphObjectTypeVisibility($("chartType").value);
++        $("lineOptions").classList.toggle("hidden", !visibility.line);
++        $("markerOptions").classList.toggle("hidden", !visibility.marker);
++        $("barOptions").classList.toggle("hidden", !visibility.bar);
+       }

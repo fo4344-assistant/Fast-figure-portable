@@ -1,0 +1,20 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.106-alpha</code></p>
++          <p><code>1.1.107-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.106-alpha";
++      const APP_BUILD = "1.1.107-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -16952,4 +16952,3 @@
+-      function updateFileAvailability() {
+-        let { hasSlot, selectedAsset, hasAsset, canDeleteAsset } =
+-          applyWorkspaceAvailabilityPolicy();
++      function updateFileAvailability(model = applyWorkspaceAvailabilityPolicy()) {
++        let { hasSlot, selectedAsset, hasAsset, canDeleteAsset } = model;
+         $("resetSelectedSlot").classList.toggle("hidden", !hasSlot);

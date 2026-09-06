@@ -1,0 +1,75 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.88-alpha</code></p>
++          <p><code>1.1.89-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.88-alpha";
++      const APP_BUILD = "1.1.89-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -15400,1 +15400,42 @@
++      function FastFigureWorkspaceStaging() {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Box } = MantineCore;
++        return React.createElement(
++          Box,
++          {
++            component: "main",
++            p: "sm",
++            style: { flex: "1 1 auto", minWidth: 0 },
++            "data-fast-figure-ui": "workspace",
++          },
++          React.createElement(
++            "div",
++            { id: "graphArea", className: "graph-area" },
++            React.createElement("div", {
++              id: "dashboard",
++              className: "dashboard",
++              style: { "--grid-cols": 2, "--grid-rows": 2 },
++            }),
++            React.createElement(
++              "div",
++              { id: "dashboardCaption", className: "dashboard-caption hidden" },
++              React.createElement("span", {
++                id: "captionPrefix",
++                className: "caption-prefix hidden",
++              }),
++              React.createElement("span", {
++                id: "captionText",
++                className: "caption-body",
++                contentEditable: true,
++                suppressContentEditableWarning: true,
++                role: "textbox",
++                "aria-multiline": "true",
++                "data-placeholder": "전체 그래프 캡션을 입력하세요.",
++              }),
++            ),
++          ),
++        );
++      }
+       function FastFigureShellStaging() {
+@@ -15422,12 +15463,4 @@
+             { align: "stretch", gap: 0, wrap: "nowrap" },
+             React.createElement(FastFigureSidebarStaging),
+-            React.createElement(
+-              Box,
+-              { component: "main", p: "sm", style: { flex: "1 1 auto" } },
+-              React.createElement(
+-                Text,
+-                { size: "xs", c: "dimmed" },
+-                `UI staging · ${snapshot.projectName || "새 프로젝트"}`,
+-              ),
+-            ),
++            React.createElement(FastFigureWorkspaceStaging),
+           ),
+@@ -15436,3 +15467,4 @@
+         FastFigureOverlayModalStaging,
+         FastFigureOverlayHostStaging,
++        FastFigureWorkspaceStaging,
+         FastFigureShellStaging,

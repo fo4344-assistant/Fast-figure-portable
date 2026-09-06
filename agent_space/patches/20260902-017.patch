@@ -1,0 +1,195 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.64-alpha</code></p>
++          <p><code>1.1.65-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.64-alpha";
++      const APP_BUILD = "1.1.65-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14530,1 +14530,181 @@
++      function FastFigureGraphObjectStaging({ graphObject }) {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { NumberInput, Select, SimpleGrid, Stack, Text, TextInput, Title } = MantineCore,
++          object = graphObject.object || {},
++          disabled = graphObject.editable === false,
++          visibility = graphObjectTypeVisibility(object.type),
++          columnData = graphObject.columns.map(({ id, label }) => ({ value: id, label })),
++          apply = (changes) =>
++            fastFigureUiBridge.applyGraphObject(
++              changes,
++              graphObject.chartId,
++              graphObject.objectIndex,
++            ),
++          commitOnEnter = (event) => {
++            if (event.key !== "Enter") return;
++            event.preventDefault();
++            event.currentTarget.blur();
++          },
++          textProps = (key) => ({
++            key: `${key}-${graphObject.chartId}-${graphObject.objectIndex}-${object[key] ?? ""}`,
++            defaultValue: object[key] ?? "",
++            disabled,
++            onBlur: (event) => apply({ [key]: event.currentTarget.value }),
++            onKeyDown: commitOnEnter,
++          }),
++          numberProps = (key) => ({
++            key: `${key}-${graphObject.chartId}-${graphObject.objectIndex}-${object[key] ?? ""}`,
++            defaultValue: object[key],
++            disabled,
++            onBlur: (event) => apply({ [key]: event.currentTarget.value }),
++            onKeyDown: commitOnEnter,
++          });
++        return React.createElement(
++          Stack,
++          { gap: "xs" },
++          React.createElement(Title, { order: 3, size: "h6" }, "그래프 오브젝트 설정"),
++          React.createElement(
++            Text,
++            { size: "xs", c: "dimmed" },
++            graphObject.csvName ? `CSV: ${graphObject.csvName}` : "참조 CSV 없음",
++          ),
++          React.createElement(
++            SimpleGrid,
++            { cols: 2, spacing: "xs" },
++            React.createElement(Select, {
++              label: "X축 열",
++              value: object.x || "",
++              data: columnData,
++              allowDeselect: false,
++              disabled,
++              onChange: (value) => apply({ x: value ?? "" }),
++            }),
++            React.createElement(Select, {
++              label: "X축 위치",
++              value: object.xAxisSide || "bottom",
++              data: [
++                { value: "bottom", label: "아래" },
++                { value: "top", label: "위" },
++              ],
++              allowDeselect: false,
++              disabled,
++              onChange: (value) => apply({ xAxisSide: value ?? "bottom" }),
++            }),
++            React.createElement(Select, {
++              label: "Y축 열",
++              value: object.y || "",
++              data: columnData,
++              allowDeselect: false,
++              disabled,
++              onChange: (value) => apply({ y: value ?? "" }),
++            }),
++            React.createElement(Select, {
++              label: "Y축 위치",
++              value: object.yAxisSide || "left",
++              data: [
++                { value: "left", label: "왼쪽" },
++                { value: "right", label: "오른쪽" },
++              ],
++              allowDeselect: false,
++              disabled,
++              onChange: (value) => apply({ yAxisSide: value ?? "left" }),
++            }),
++          ),
++          React.createElement(Select, {
++            label: "그래프 종류",
++            value: object.type || "scatter",
++            data: [
++              { value: "scatter", label: "선 그래프" },
++              { value: "markers", label: "산점도" },
++              { value: "lines+markers", label: "선 + 점" },
++              { value: "bar", label: "막대 그래프" },
++              { value: "hidden", label: "표시 안 함" },
++            ],
++            allowDeselect: false,
++            disabled,
++            onChange: (value) => apply({ type: value ?? "scatter" }),
++          }),
++          React.createElement(TextInput, {
++            label: "범례 이름",
++            ...textProps("legendName"),
++          }),
++          visibility.line
++            ? React.createElement(
++                SimpleGrid,
++                { cols: 2, spacing: "xs" },
++                React.createElement(NumberInput, {
++                  label: "선 굵기(px)",
++                  min: 0.1,
++                  max: 20,
++                  step: 0.1,
++                  ...numberProps("lineWidth"),
++                }),
++                React.createElement(Select, {
++                  label: "선 스타일",
++                  value: object.lineDash || "solid",
++                  data: [
++                    { value: "solid", label: "실선" },
++                    { value: "dot", label: "점선" },
++                    { value: "dash", label: "파선" },
++                    { value: "dashdot", label: "일점쇄선" },
++                  ],
++                  allowDeselect: false,
++                  disabled,
++                  onChange: (value) => apply({ lineDash: value ?? "solid" }),
++                }),
++              )
++            : null,
++          visibility.marker
++            ? React.createElement(
++                SimpleGrid,
++                { cols: 2, spacing: "xs" },
++                React.createElement(Select, {
++                  label: "점 모양",
++                  value: object.markerSymbol || "circle",
++                  data: [
++                    { value: "circle", label: "원" },
++                    { value: "square", label: "사각형" },
++                    { value: "diamond", label: "마름모" },
++                    { value: "cross", label: "십자" },
++                    { value: "x", label: "X" },
++                    { value: "triangle-up", label: "위 삼각형" },
++                    { value: "triangle-down", label: "아래 삼각형" },
++                  ],
++                  allowDeselect: false,
++                  disabled,
++                  onChange: (value) => apply({ markerSymbol: value ?? "circle" }),
++                }),
++                React.createElement(NumberInput, {
++                  label: "점 크기(px)",
++                  min: 1,
++                  max: 40,
++                  step: 1,
++                  ...numberProps("markerSize"),
++                }),
++              )
++            : null,
++          visibility.bar
++            ? React.createElement(
++                SimpleGrid,
++                { cols: 2, spacing: "xs" },
++                React.createElement(NumberInput, {
++                  label: "막대 투명도",
++                  min: 0.05,
++                  max: 1,
++                  step: 0.05,
++                  ...numberProps("barOpacity"),
++                }),
++                React.createElement(NumberInput, {
++                  label: "막대 외곽선(px)",
++                  min: 0,
++                  max: 10,
++                  step: 0.5,
++                  ...numberProps("barLineWidth"),
++                }),
++              )
++            : null,
++        );
++      }
+       function FastFigureSidebarStaging() {

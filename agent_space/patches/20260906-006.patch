@@ -1,0 +1,31 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11584,1 +11584,5 @@
+-          <p>Fast figure bundles React and ReactDOM directly in this HTML file as part of the UI runtime. No external React runtime is required.</p>
++          <p>
++            Development source loads the vendored React/ReactDOM runtime from
++            <code>vendor/fast-figure-ui-runtime.js</code>. The portable build embeds the same bytes
++            directly in the generated HTML. No network React runtime is required.
++          </p>
+@@ -11622,1 +11626,5 @@
+-          <p>Fast figure bundles <code>@mantine/core</code> and <code>@mantine/hooks</code> directly in this HTML file.</p>
++          <p>
++            Development source keeps <code>@mantine/core</code> and <code>@mantine/hooks</code> in
++            <code>vendor/fast-figure-ui-runtime.js</code>; the portable build embeds the same runtime
++            directly in the generated HTML.
++          </p>
+@@ -11641,3 +11649,4 @@
+-            action menu, and the print/save/capture controls. The selected SVG definitions are
+-            embedded directly in this HTML file; the Iconoir package, CDN, and external SVG files
+-            are not required at runtime.
++            action menu, and the print/save/capture controls. Development source keeps those
++            definitions in <code>fast-figure.js</code>; the portable build embeds them in the
++            generated HTML. The Iconoir package, CDN, and external SVG files are not required at
++            runtime.
+@@ -11672,2 +11681,3 @@
+-            Fast figure bundles the minified Plotly.js 2.35.2 distribution directly inside the HTML
+-            file. No separate Plotly.js installation is required.
++            Development source keeps the minified Plotly.js 2.35.2 distribution in
++            <code>vendor/plotly.min.js</code>; the portable build embeds the same bytes directly
++            inside the generated HTML. No separate Plotly.js installation is required.

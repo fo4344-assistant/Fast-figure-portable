@@ -1,0 +1,150 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.128-alpha";
++      const APP_BUILD = "1.1.129-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -2082,5 +2082,11 @@
+         run(lifecycle, event, task) {
+           return appFSM.run(lifecycle, event, task);
++        },
++        applyUiPalette(values) {
++          return applyUiPaletteFromValues(values);
++        },
++        resetUiPalette() {
++          return resetUiPaletteFromValues();
+         },
+         applyLayoutSettings(values) {
+           return applyLayoutSettingsFromValues(values);
+@@ -3148,1 +3154,76 @@
++      function FastFigureUiPaletteStaging({ palette }) {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Accordion, Button, ColorInput, Group, SimpleGrid, Stack, Text } = MantineCore,
++          signature = JSON.stringify(palette),
++          [draft, setDraft] = React.useState(() => ({ ...palette })),
++          fields = [
++            ["uiColor", "강조색"],
++            ["uiBackgroundColor", "배경"],
++            ["uiSurfaceColor", "표면"],
++            ["uiMutedColor", "보조 텍스트"],
++            ["uiSubtleColor", "약한 요소"],
++            ["uiDisabledBgColor", "비활성 배경"],
++            ["uiDisabledTextColor", "비활성 텍스트"],
++            ["uiShadowColor", "그림자"],
++            ["paperColor", "그래프 배경"],
++            ["fontColor", "그래프 글자"],
++          ];
++        React.useEffect(() => setDraft({ ...palette }), [signature]);
++        return React.createElement(
++          Accordion,
++          { variant: "contained" },
++          React.createElement(
++            Accordion.Item,
++            { value: "ui-palette" },
++            React.createElement(Accordion.Control, null, "UI 색상"),
++            React.createElement(
++              Accordion.Panel,
++              null,
++              React.createElement(
++                Stack,
++                { gap: "xs" },
++                React.createElement(
++                  Text,
++                  { size: "xs", c: "dimmed" },
++                  "프로젝트에 저장되는 UI 및 그래프 기본 색상입니다.",
++                ),
++                React.createElement(
++                  SimpleGrid,
++                  { cols: 2, spacing: "xs" },
++                  ...fields.map(([key, label]) =>
++                    React.createElement(ColorInput, {
++                      key,
++                      label,
++                      value: draft[key] || "",
++                      format: "hex",
++                      withEyeDropper: false,
++                      onChange: (value) =>
++                        setDraft((current) => ({ ...current, [key]: value })),
++                    }),
++                  ),
++                ),
++                React.createElement(
++                  Group,
++                  { justify: "flex-end" },
++                  React.createElement(
++                    Button,
++                    {
++                      variant: "default",
++                      onClick: () => fastFigureUiBridge.resetUiPalette(),
++                    },
++                    "기본값",
++                  ),
++                  React.createElement(
++                    Button,
++                    { onClick: () => fastFigureUiBridge.applyUiPalette(draft) },
++                    "적용",
++                  ),
++                ),
++              ),
++            ),
++          ),
++        );
++      }
+       function FastFigureSidebarStaging() {
+@@ -3249,2 +3330,3 @@
+               : null,
++            React.createElement(FastFigureUiPaletteStaging, { palette: snapshot.appearance.uiPalette }),
+             React.createElement(FastFigureAssetTreeStaging, {
+@@ -13098,9 +13180,16 @@
+-      function uiPaletteFromControls() {
++      function uiPaletteFromValues(values = {}) {
+         return Object.fromEntries(
+           Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
+             key,
+-            projectColor($(key)?.value, fallback),
++            projectColor(values[key], fallback),
+           ]),
++        );
++      }
++      function uiPaletteFromControls() {
++        return uiPaletteFromValues(
++          Object.fromEntries(
++            Object.keys(DEFAULT_UI_PALETTE).map((key) => [key, $(key)?.value]),
++          ),
+         );
+       }
+       function applyUiPalette(fromControls = true, notify = true) {
+@@ -13141,4 +13230,12 @@
+         renderDashboard();
+         if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
+       }
++      function applyUiPaletteFromValues(values, notify = true) {
++        activeProject.appearance.uiPalette = uiPaletteFromValues(values);
++        applyUiPalette(false, notify);
++        return projectClone(activeProject.appearance.uiPalette);
++      }
++      function resetUiPaletteFromValues(notify = true) {
++        return applyUiPaletteFromValues(DEFAULT_UI_PALETTE, notify);
++      }
+       $("applyUiPalette").onclick = applyUiPalette;
+@@ -13145,14 +13242,2 @@
+-      $("resetUiPalette").onclick = () => {
+-        $("uiColor").value = "#B0CFCE";
+-        $("uiBackgroundColor").value = "#FAFAFA";
+-        $("uiSurfaceColor").value = "#FFFFFF";
+-        $("uiMutedColor").value = "#4F525D";
+-        $("uiSubtleColor").value = "#94A3B8";
+-        $("uiDisabledBgColor").value = "#E5E7EB";
+-        $("uiDisabledTextColor").value = "#64748B";
+-        $("uiShadowColor").value = "#383A42";
+-        $("paperColor").value = "#FFFFFF";
+-        $("fontColor").value = "#383A42";
+-        applyUiPalette();
+-      };
++      $("resetUiPalette").onclick = () => resetUiPaletteFromValues();
+       function syncHeaderHeight() {

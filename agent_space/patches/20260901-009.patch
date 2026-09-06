@@ -1,0 +1,97 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11569,7 +11569,7 @@ <h1>Fast figure</h1>
+             connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.38-alpha</code></p>
++          <p><code>1.1.39-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+@@ -12198,5 +12198,5 @@ <h1>Fast figure</h1>
+     <script>
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.38-alpha";
++      const APP_BUILD = "1.1.39-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+@@ -14258,6 +14258,12 @@
+         applyLabelPosition(values) {
+           return applyLabelPositionFromValues(values);
+         },
++        setAnnotationEnabled(kind, enabled) {
++          return applyAnnotationVisibilityFromValues(kind, enabled);
++        },
++        resetLabelPosition() {
++          return resetLabelPositionFromValues();
++        },
+       });
+       function useFastFigureFsmSnapshot() {
+         let React = window.FastFigureUiRuntime?.React;
+@@ -21131,13 +21137,20 @@
+-      function setAnnotationEnabled(kind, enabled) {
+-        let button = $(`${kind}Enabled`);
+-        syncSettingToggle(button, enabled, ["표시 안 함", "표시"]);
++      function applyAnnotationVisibilityFromValues(kind, enabled) {
++        if (!["label", "caption"].includes(kind)) return null;
++        enabled = !!enabled;
+         if (kind === "label") activeProject.labelsEnabled = enabled;
+         else activeProject.captionsEnabled = enabled;
+         renderDashboard();
+         debugLog(`annotation:${kind}`, { enabled });
+         appFSM.notify(
+           kind === "label" ? "labels" : "captions",
+           "ANNOTATION_VISIBILITY_CHANGED",
+         );
++        return enabled;
++      }
++      function setAnnotationEnabled(kind, enabled) {
++        let applied = applyAnnotationVisibilityFromValues(kind, enabled);
++        if (applied == null) return false;
++        syncSettingToggle(`${kind}Enabled`, applied, ["표시 안 함", "표시"]);
++        return true;
+       }
+       function finiteLabelPosition(value) {
+@@ -21218,18 +21231,24 @@
+-      function applyLabelPositionFromValues(values = {}) {
++      function commitLabelPosition(values, event, debugEvent) {
+         activeProject.labelSettings.x = finiteLabelPosition(Number(values.x));
+         activeProject.labelSettings.y = finiteLabelPosition(Number(values.y));
+         renderLabelPreview();
+         renderDashboard();
+         schedulePlotResize();
+-        debugLog("annotation:label-position", {
++        debugLog(debugEvent, {
+           x: activeProject.labelSettings.x,
+           y: activeProject.labelSettings.y,
+         });
+-        appFSM.notify("labels", "LABEL_POSITION_CHANGED");
++        appFSM.notify("labels", event);
+         return {
+           x: activeProject.labelSettings.x,
+           y: activeProject.labelSettings.y,
+         };
++      }
++      function applyLabelPositionFromValues(values = {}) {
++        return commitLabelPosition(values, "LABEL_POSITION_CHANGED", "annotation:label-position");
++      }
++      function resetLabelPositionFromValues() {
++        return commitLabelPosition({ x: 0, y: 0 }, "LABEL_POSITION_RESET", "annotation:label-position-reset");
+       }
+       function applyLabelPosition() {
+         applyLabelPositionFromValues({
+@@ -21255,10 +21274,4 @@
+         );
+         $("labelPositionReset").onclick = () => {
+-          activeProject.labelSettings.x = 0;
+-          activeProject.labelSettings.y = 0;
+-          renderLabelPreview();
+-          renderDashboard();
+-          schedulePlotResize();
+-          debugLog("annotation:label-position-reset", { x: 0, y: 0 });
+-          appFSM.notify("labels", "LABEL_POSITION_RESET");
++          resetLabelPositionFromValues();
+         };
+         let preview = $("labelPreview"),

@@ -1,0 +1,53 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.100-alpha</code></p>
++          <p><code>1.1.101-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.100-alpha";
++      const APP_BUILD = "1.1.101-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14316,6 +14316,12 @@
+         readGraphPalette() {
+           return selectedGraphPaletteModel();
+         },
++        readGraphFileActions() {
++          return selectedGraphFileActionsModel();
++        },
++        setGraphEditorEditable(editable, chartId) {
++          return setGraphEditorEditableFromValue(editable, chartId);
++        },
+         readGraphObjectAdd() {
+           return selectedGraphObjectAddModel();
+         },
+@@ -18224,14 +18230,26 @@
+       function selectedGraphPaletteModel(slot = getSelectedSlot()) {
+         let chart = slot?.chart ? getChart(slot.chart) : null;
+         if (!slot || slot.contentType === "image" || !chart?.editor) return null;
+         let colors = (Array.isArray(chart.editor.objects) ? chart.editor.objects : [])
+           .map((object) => object?.color)
+           .filter(Boolean);
+         return Object.freeze({
+           slotId: slot.id,
+           chartId: chart.id,
+           editable: chart.editor.editable !== false,
+           colors: Object.freeze(colors.length ? [...colors] : [...DEFAULT_COLORS]),
+         });
+       }
++      function selectedGraphFileActionsModel(slot = getSelectedSlot()) {
++        if (!slot) return null;
++        let chart = slot.chart ? getChart(slot.chart) : null,
++          editor = chart?.editor || null;
++        return Object.freeze({
++          slotId: slot.id,
++          chartId: chart?.id ?? null,
++          canExport: !!chart,
++          canToggleEditable: !!editor,
++          editable: editor ? editor.editable !== false : null,
++        });
++      }
+       function graphObjectControlValues() {

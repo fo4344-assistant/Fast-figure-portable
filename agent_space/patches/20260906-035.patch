@@ -1,0 +1,48 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11437 +11437 @@
+-        <div class="readme-content">
++        <template id="readmeContentTemplate">
+@@ -11775,2 +11775,3 @@
+-          <button id="closeReadme" type="button" class="light">Close</button>
+-        </div>
++        </template>
++        <div class="readme-content"></div>
++        <button id="closeReadme" type="button" class="light">Close</button>
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.138-alpha";
++      const APP_BUILD = "1.1.139-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -2154,10 +2154,6 @@
+         exportTarget(values, statusTarget) {
+           return exportDashboardTargetFromValues(values, statusTarget);
+         },
+         readReadmeHtml() {
+-          let source = document.querySelector("#readmeDialog .readme-content");
+-          if (!source) return "";
+-          let clone = source.cloneNode(true);
+-          clone.querySelector("#closeReadme")?.remove();
+-          return clone.innerHTML;
++          return $("readmeContentTemplate")?.innerHTML || "";
+         },
+@@ -9175,6 +9171,14 @@
+         status(`${selected.length}개 슬롯을 나눴습니다.`);
+         appFSM.notify("layout", "SLOTS_SPLIT");
+       }
++      function syncLegacyReadmeContent() {
++        let source = $("readmeContentTemplate"),
++          target = document.querySelector("#readmeDialog .readme-content");
++        if (!source || !target) return false;
++        target.replaceChildren(source.content.cloneNode(true));
++        return true;
++      }
++      syncLegacyReadmeContent();
+       $("readmeToggle").onclick = () => {
+         appFSM.send("TOGGLE_OVERLAY", { overlay: "readme", source: "toggle" });
+       };

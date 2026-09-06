@@ -1,0 +1,31 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.118-alpha";
++      const APP_BUILD = "1.1.119-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -1549,7 +1549,8 @@
+           requestAnimationFrame(() => ($("readmeDialog").scrollTop = 0));
+         }
+-        applyOverlayOpenPolicy(name);
+       }
+-      function enterOverlayState({ state, objects }) {
+-        setOverlayDomState(state);
++      function enterOverlayDomainState({ state }) {
++        return applyOverlayOpenPolicy(state);
++      }
++      function syncLegacyOverlayPresentation({ state, objects }) {
+         if (state === "layout") {
+@@ -1571,4 +1572,9 @@
+           syncPopupBounds();
+         }
+       }
++      function enterOverlayState(context) {
++        setOverlayDomState(context.state);
++        enterOverlayDomainState(context);
++        syncLegacyOverlayPresentation(context);
++      }
+       function exitOverlayState({ state }) {

@@ -1,0 +1,92 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.89-alpha</code></p>
++          <p><code>1.1.90-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.89-alpha";
++      const APP_BUILD = "1.1.90-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14252,4 +14252,13 @@
+         applyLayoutSettings(values) {
+           return applyLayoutSettingsFromValues(values);
+         },
++        renderLayoutPreview() {
++          return renderLayout();
++        },
++        mergeSelectedSlots() {
++          return mergeSelected();
++        },
++        splitSelectedSlots() {
++          return splitSelected();
++        },
+         applyLabelSettings(values) {
+@@ -14433,7 +14442,11 @@
+         let setLayoutValue = (key, value) => setDraft((current) => ({ ...current, [key]: value })),
+           setSlotStyleValue = (key, value) =>
+             setDraft((current) => ({
+               ...current,
+               slotStyle: { ...current.slotStyle, [key]: value },
+             }));
++        React.useEffect(() => {
++          if (!opened) return;
++          requestAnimationFrame(() => fastFigureUiBridge.renderLayoutPreview());
++        });
+         return React.createElement(
+@@ -14508,15 +14521,51 @@
+               React.createElement(Switch, {
+                 label: "기본 경계선",
+                 checked: !!draft.slotStyle.showBorders,
+                 onChange: (event) => setSlotStyleValue("showBorders", event.currentTarget.checked),
+               }),
++              React.createElement(
++                Button,
++                {
++                  variant: "light",
++                  onClick: () => setSlotStyleValue("aspect", 1.618),
++                },
++                "종횡비 초기화",
++              ),
+             ),
++            React.createElement("div", {
++              id: "layoutMap",
++              className: "layout-map",
++              style: {
++                width: "100%",
++                aspectRatio: `${draft.slotStyle.aspect || 1.618} / 1`,
++              },
++            }),
+             React.createElement(
+               Group,
+-              { justify: "flex-end" },
++              { justify: "space-between", wrap: "wrap" },
++              React.createElement(
++                Group,
++                { gap: "xs" },
++                React.createElement(
++                  Button,
++                  {
++                    variant: "light",
++                    onClick: () => fastFigureUiBridge.mergeSelectedSlots(),
++                  },
++                  "선택 슬롯 합치기",
++                ),
++                React.createElement(
++                  Button,
++                  {
++                    variant: "light",
++                    onClick: () => fastFigureUiBridge.splitSelectedSlots(),
++                  },
++                  "선택 슬롯 나누기",
++                ),
++              ),
+               React.createElement(
+                 Button,
+                 { onClick: () => fastFigureUiBridge.applyLayoutSettings(draft) },
+                 "레이아웃 적용",
+               ),
+             ),

@@ -1,0 +1,34 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.94-alpha</code></p>
++          <p><code>1.1.95-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.94-alpha";
++      const APP_BUILD = "1.1.95-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -21910,1 +21910,20 @@
++      async function captureDashboardTargetFromValues(
++        values = {},
++        statusOut = { textContent: "" },
++      ) {
++        let dashboard = $("dashboard"),
++          rect = dashboard?.getBoundingClientRect();
++        if (!rect?.width) {
++          statusOut.textContent = "캡처할 그래프 영역이 없습니다.";
++          return { outcome: "rejected", reason: "empty-dashboard" };
++        }
++        return exportDashboardTargetFromValues(
++          {
++            ...values,
++            width: Math.round(rect.width),
++            height: "",
++          },
++          statusOut,
++        );
++      }
+       async function exportDashboardTargetFromValues(values = {}, statusOut = { textContent: "" }) {

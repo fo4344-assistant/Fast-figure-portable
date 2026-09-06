@@ -1,0 +1,119 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+index cb368e6..fdfaecf 100644
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
+             connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.54-alpha</code></p>
++          <p><code>1.1.55-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
+     </div>
+     <script>
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.54-alpha";
++      const APP_BUILD = "1.1.55-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+@@ -14317,6 +14317,12 @@ THE SOFTWARE.</pre
+         insertEmptyImage() {
+           return insertEmptySlotImage();
+         },
++        readCsvHeader() {
++          return selectedCsvHeaderModel();
++        },
++        applyCsvHeader(value, csvId) {
++          return applyCsvHeaderLinesFromValue(value, csvId);
++        },
+       });
+       function useFastFigureFsmSnapshot() {
+         let React = window.FastFigureUiRuntime?.React;
+@@ -14399,7 +14405,8 @@ THE SOFTWARE.</pre
+           slot = snapshot.selectedSlot,
+           workspace = snapshot.fsm.workspace,
+           assetSelection = snapshot.fsm.assetSelection,
+-          imageSettings = fastFigureUiBridge.readImageSettings();
++          imageSettings = fastFigureUiBridge.readImageSettings(),
++          csvHeader = fastFigureUiBridge.readCsvHeader();
+         return React.createElement(
+           Box,
+           {
+@@ -14501,6 +14508,18 @@ THE SOFTWARE.</pre
+                       ),
+                 )
+               : null,
++            csvHeader
++              ? React.createElement(NumberInput, {
++                  label: "선택 CSV 헤더 줄 수",
++                  description: "선택한 프로젝트 CSV에서 헤더로 취급할 줄 수입니다.",
++                  min: 0,
++                  max: csvHeader.max,
++                  step: 1,
++                  value: csvHeader.headerLines,
++                  onChange: (value) =>
++                    fastFigureUiBridge.applyCsvHeader(value, csvHeader.csvId),
++                })
++              : null,
+             React.createElement(Divider),
+             React.createElement(Title, { order: 2, size: "h5" }, "선택"),
+             React.createElement(
+@@ -17232,6 +17251,17 @@ THE SOFTWARE.</pre
+         let count = Math.max(0, Math.trunc(Number(value) || 0));
+         return Math.min(count, Array.isArray(table) ? table.length : 0);
+       }
++      function selectedCsvHeaderModel() {
++        let slot = getSelectedSlot(),
++          csv = getProjectCsv(activeCsvId),
++          visible = slot ? slot.contentType !== "image" : appFSM.state.assetSelection === "csv";
++        if (!visible || !csv) return null;
++        return Object.freeze({
++          csvId: csv.id,
++          headerLines: headerLineCount(csv.headerLines, csv.rows),
++          max: Array.isArray(csv.rows) ? csv.rows.length : 0,
++        });
++      }
+       function columnIndex(column) {
+         let match = /^C([1-9]\d*)$/.exec(String(column || ""));
+         return match ? Number(match[1]) - 1 : -1;
+@@ -23262,24 +23292,30 @@ THE SOFTWARE.</pre
+         else commitDashboardScale("unlock-reset-100");
+         debugLog("dashboard:zoom-lock", { locked, width: dashboardZoomLockedWidth });
+       }
+-      $("headerLines").onchange = () => {
+-        let count = headerLineCount($("headerLines").value, rows);
++      function applyCsvHeaderLinesFromValue(value, csvId = activeCsvId) {
++        let csv = getProjectCsv(csvId);
++        if (!csv || csv.id !== activeCsvId) return false;
++        let count = headerLineCount(value, csv.rows);
+         $("headerLines").value = count;
+-        let csv = getProjectCsv(activeCsvId);
+-        if (csv) csv.headerLines = count;
++        csv.headerLines = count;
+         refreshColumnControls();
+         activeProject.charts.forEach((chart) => {
+           if (
+             chart.editor?.editable !== false &&
+-            chartCsvIds(chart).includes(activeCsvId)
++            chartCsvIds(chart).includes(csv.id)
+           )
+             rebuildEditableGraph(chart);
+         });
+         renderDashboard();
+         debugLog("csv:header-lines", {
+-          csvId: activeCsvId,
++          csvId: csv.id,
+           headerLines: count,
+         });
++        publishFastFigureUiStore(appFSM.state, "csv:header-lines");
++        return true;
++      }
++      $("headerLines").onchange = () => {
++        applyCsvHeaderLinesFromValue($("headerLines").value);
+       };
+       $("dashboardZoom").oninput = (event) => applyDashboardZoom(false, event.target.value);
+       $("dashboardZoom").onchange = () => commitDashboardScale("slider-change");

@@ -1,0 +1,26 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.75-alpha</code></p>
++          <p><code>1.1.76-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.75-alpha";
++      const APP_BUILD = "1.1.76-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -15081,3 +15081,4 @@
+           csvHeader = fastFigureUiBridge.readCsvHeader(),
+           chartLayout = fastFigureUiBridge.readChartLayout(),
++          graphObjects = fastFigureUiBridge.readGraphObjects(),
+           graphObject = fastFigureUiBridge.readGraphObject();
+@@ -15332,4 +15333,7 @@
++            graphObjects
++              ? React.createElement(FastFigureGraphObjectListStaging, { graphObjects })
++              : null,
+             graphObject
+               ? React.createElement(FastFigureGraphObjectStaging, { graphObject })
+               : null,
+             React.createElement(Divider),

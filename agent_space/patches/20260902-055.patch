@@ -1,0 +1,30 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.91-alpha</code></p>
++          <p><code>1.1.92-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.91-alpha";
++      const APP_BUILD = "1.1.92-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14771,4 +14771,15 @@
+             React.createElement(
+               Group,
+-              { justify: "flex-end" },
++              { justify: "space-between" },
++              React.createElement(
++                Button,
++                {
++                  variant: "light",
++                  onClick: () => {
++                    fastFigureUiBridge.insertSlotCaptions();
++                    setDraft(readDraft());
++                  },
++                },
++                "슬롯별 캡션 추가",
++              ),
+               React.createElement(Button, { onClick: applyDraft }, "캡션 적용"),

@@ -1,0 +1,26 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.114-alpha";
++      const APP_BUILD = "1.1.115-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -10349,4 +10349,3 @@
+         }
+-        syncImageSettingsUi();
+         syncSlotImageElement(slot, image);
+         debugLog("slot:image-settings", { slotId: selectedSlotId, settings });
+@@ -10356,8 +10355,10 @@
+       function applyImageSettings() {
+-        return applyImageSettingsFromValues({
++        let changed = applyImageSettingsFromValues({
+           fit: $("imageFitMode").value,
+           scale: $("imageScale").value,
+           x: $("imagePositionX").value,
+           y: $("imagePositionY").value,
+         });
++        if (changed) syncImageSettingsUi();
++        return changed;
+       }

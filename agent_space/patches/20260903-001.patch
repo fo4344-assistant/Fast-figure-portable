@@ -1,0 +1,49 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.103-alpha</code></p>
++          <p><code>1.1.104-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.103-alpha";
++      const APP_BUILD = "1.1.104-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -17675,21 +17675,27 @@
+-      function editChart(id) {
+-        let c = getChart(id);
+-        if (!c) {
++      function selectChartForEditing(id) {
++        let chart = getChart(id);
++        if (!chart) {
+           debugLog("editChart:missing", { chartId: id });
+-          return;
++          return null;
+         }
+         let csv =
+-          getProjectCsv(c.editor?.objects?.[0]?.csvId) ||
+-          (c.editor?.editable === false ? ensureDefaultCsv() : null);
++          getProjectCsv(chart.editor?.objects?.[0]?.csvId) ||
++          (chart.editor?.editable === false ? ensureDefaultCsv() : null);
+         if (!csv) throw Error("차트가 참조하는 프로젝트 CSV가 없습니다.");
+         debugLog("editChart", {
+           chartId: id,
+           sourceName: csv.name,
+         });
+-        setFileName(csv.name);
+-        editing = c;
++        editing = chart;
+         activeDataName = csv.name || "선택한 그래프 데이터";
+         activeCsvId = csv.id;
+         refreshCsvControls(csv.id);
+         selectedObjectIndex = null;
++        return { chart, csv };
++      }
++      function editChart(id) {
++        let selection = selectChartForEditing(id);
++        if (!selection) return;
++        let { chart: c, csv } = selection;
++        setFileName(csv.name);
+         $("headerLines").value = csv.headerLines;

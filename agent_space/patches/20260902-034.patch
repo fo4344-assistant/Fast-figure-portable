@@ -1,0 +1,53 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.76-alpha</code></p>
++          <p><code>1.1.77-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.76-alpha";
++      const APP_BUILD = "1.1.77-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14316,6 +14316,9 @@
+         readGraphObjects() {
+           return selectedGraphObjectsModel();
+         },
++        readGraphObjectAdd() {
++          return selectedGraphObjectAddModel();
++        },
+         selectGraphObject(index, chartId) {
+           return selectGraphObjectFromIndex(index, chartId);
+         },
+@@ -18195,2 +18195,29 @@
+       }
++      function selectedGraphObjectAddModel(slot = getSelectedSlot()) {
++        let csv = activeCsvId != null ? getProjectCsv(activeCsvId) : null;
++        if (!slot || slot.contentType === "image" || !csv) return null;
++        let chart = slot.chart ? getChart(slot.chart) : null;
++        if (chart && !chart.editor) return null;
++        let objects = Array.isArray(chart?.editor?.objects) ? chart.editor.objects : [],
++          selectedIndex = Number.isInteger(selectedObjectIndex) ? selectedObjectIndex : null,
++          source =
++            selectedIndex !== null && objects[selectedIndex]
++              ? objects[selectedIndex]
++              : chart?.editor || {},
++          object = baseGraphObject({ editor: source }, csv),
++          columns = columnDefinitions(csv.rows, csv.headerLines ?? 1).map(({ id, label }) =>
++            Object.freeze({ id, label }),
++          );
++        object.color = DEFAULT_COLORS[objects.length % DEFAULT_COLORS.length];
++        return Object.freeze({
++          slotId: slot.id,
++          chartId: chart?.id ?? null,
++          hasChart: !!chart,
++          editable: chart ? chart.editor.editable !== false : true,
++          csvId: csv.id,
++          csvName: csv.name,
++          columns: Object.freeze(columns),
++          object: projectClone(object),
++        });
++      }
+       function graphObjectControlValues() {

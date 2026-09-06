@@ -1,0 +1,232 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.131-alpha";
++      const APP_BUILD = "1.1.132-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -2230,4 +2230,13 @@
+         createAssetDirectory() {
+           return createAssetDirectory();
++        },
++        readCreateDirectoryInput(parent = null) {
++          return createAssetDirectoryInputModel(parent ?? selectedExplorerDirectory);
++        },
++        readAssetActionInput(key, context) {
++          return assetTreeActionInput(key, context);
++        },
++        runAssetActionInput(key, context, value) {
++          return runAssetTreeActionInput(key, context, value);
+         },
+         downloadSelectedAsset() {
+@@ -3360,2 +3369,60 @@
+       }
++      function FastFigureTextInputModalStaging({ dialog, onClose, onSubmit }) {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Button, Group, Modal, Stack, Text, TextInput } = MantineCore,
++          signature = dialog
++            ? `${dialog.title}|${dialog.parent || ""}|${dialog.initialValue || ""}`
++            : "",
++          [value, setValue] = React.useState(dialog?.initialValue || "");
++        React.useEffect(() => {
++          if (dialog) setValue(dialog.initialValue || "");
++        }, [signature]);
++        let submit = () => {
++          if (!dialog) return;
++          onSubmit(value);
++        };
++        return React.createElement(
++          Modal,
++          {
++            opened: !!dialog,
++            onClose,
++            title: dialog?.title || "입력",
++            centered: true,
++          },
++          React.createElement(
++            Stack,
++            { gap: "sm" },
++            dialog?.description
++              ? React.createElement(Text, { size: "sm", c: "dimmed" }, dialog.description)
++              : null,
++            React.createElement(TextInput, {
++              label: dialog?.label || "값",
++              value,
++              autoFocus: true,
++              onChange: (event) => setValue(event.currentTarget.value),
++              onKeyDown: (event) => {
++                if (event.key !== "Enter") return;
++                event.preventDefault();
++                submit();
++              },
++            }),
++            React.createElement(
++              Group,
++              { justify: "flex-end" },
++              React.createElement(
++                Button,
++                { variant: "default", onClick: onClose },
++                "취소",
++              ),
++              React.createElement(
++                Button,
++                { onClick: submit },
++                dialog?.submitLabel || "확인",
++              ),
++            ),
++          ),
++        );
++      }
+       function FastFigureSidebarStaging() {
+@@ -3380,8 +3447,29 @@
+           graphObjects = fastFigureUiBridge.readGraphObjects(),
+           graphObject = fastFigureUiBridge.readGraphObject(),
+           [confirmation, setConfirmation] = React.useState(null),
++          [inputDialog, setInputDialog] = React.useState(null),
++          openCreateDirectoryInput = (parent = null) => {
++            let model = fastFigureUiBridge.readCreateDirectoryInput(parent);
++            setInputDialog({
++              ...model,
++              key: "create-directory",
++              context: { path: model.parent },
++            });
++          },
+           runAssetAction = (item) => {
+-            let model = fastFigureUiBridge.readAssetActionConfirmation(
++            let input = fastFigureUiBridge.readAssetActionInput(
++              item.key,
++              assetActions.context,
++            );
++            if (input) {
++              setInputDialog({
++                ...input,
++                key: item.key,
++                context: assetActions.context,
++              });
++              return;
++            }
++            let model = fastFigureUiBridge.readAssetActionConfirmation(
+               item.key,
+               assetActions.context,
+             );
+@@ -3410,3 +3498,12 @@
+             setConfirmation(null);
++          },
++          submitAssetInput = (value) => {
++            if (!inputDialog) return;
++            fastFigureUiBridge.runAssetActionInput(
++              inputDialog.key,
++              inputDialog.context,
++              value,
++            );
++            setInputDialog(null);
+           };
+         return React.createElement(
+@@ -3500,5 +3597,5 @@
+               React.createElement(
+                 Button,
+-                { variant: "default", onClick: () => fastFigureUiBridge.createAssetDirectory() },
++                { variant: "default", onClick: () => openCreateDirectoryInput() },
+                 "새 폴더",
+               ),
+@@ -3720,7 +3817,12 @@
+             React.createElement(FastFigureConfirmationStaging, {
+               confirmation,
+               onClose: () => setConfirmation(null),
+               onConfirm: confirmAssetAction,
+             }),
++            React.createElement(FastFigureTextInputModalStaging, {
++              dialog: inputDialog,
++              onClose: () => setInputDialog(null),
++              onSubmit: submitAssetInput,
++            }),
+           ),
+         );
+@@ -6070,6 +6172,17 @@
+       function assetTreeActionConfirmation(key, context) {
+         if (!context) return null;
+         if (key === "empty-trash") return emptyProjectTrashConfirmation();
+         return null;
+       }
++      function assetTreeActionInput(key, context) {
++        if (!context) return null;
++        if (key === "create-directory")
++          return createAssetDirectoryInputModel(context.path);
++        return null;
++      }
++      function runAssetTreeActionInput(key, context, value) {
++        if (key === "create-directory")
++          return createAssetDirectoryFromValue(context?.path, value);
++        return false;
++      }
+       function runAssetTreeActionConfirmed(key, context) {
+@@ -10830,25 +10943,45 @@
+       $("deleteSelectedAsset").onclick = deleteSelectedAsset;
++      function createAssetDirectoryInputModel(parent = selectedExplorerDirectory) {
++        parent =
++          parent === "/assets" || parent.startsWith("/assets/") ? parent : "/assets";
++        return Object.freeze({
++          title: "새 폴더",
++          label: "폴더 이름",
++          description: `위치: ${parent}`,
++          initialValue: "New Folder",
++          submitLabel: "만들기",
++          parent,
++        });
++      }
++      function createAssetDirectoryFromValue(parent, name) {
++        let model = createAssetDirectoryInputModel(parent),
++          payload = {
++            parent: model.parent,
++            name,
++            direction: "ui-to-fsm",
++          };
++        try {
++          appFSM.send("PROJECT_DIRECTORY_CREATED", payload);
++          selectedExplorerDirectory = payload.path;
++          appFSM.send("SELECT_ASSET", {
++            kind: "directory",
++            path: payload.path,
++            direction: "ui-to-fsm",
++          });
++          status(`${payload.path} 폴더를 만들었습니다.`);
++          return payload.path;
++        } catch (error) {
++          status(`폴더 생성 오류: ${error.message}`);
++          return false;
++        }
++      }
+       function createAssetDirectory(parent = selectedExplorerDirectory) {
+-        parent =
+-          parent === "/assets" || parent.startsWith("/assets/") ? parent : "/assets";
+-        let name = window.prompt(`새 폴더 이름\n위치: ${parent}`, "New Folder");
++        let model = createAssetDirectoryInputModel(parent),
++          name = window.prompt(
++            `새 ${model.label}\n${model.description}`,
++            model.initialValue,
++          );
+         if (name === null) return;
+-        let payload = {
+-          parent,
+-          name,
+-          direction: "ui-to-fsm",
+-        };
+-        try {
+-          appFSM.send("PROJECT_DIRECTORY_CREATED", payload);
+-          selectedExplorerDirectory = payload.path;
+-          appFSM.send("SELECT_ASSET", {
+-            kind: "directory",
+-            path: payload.path,
+-            direction: "ui-to-fsm",
+-          });
+-          status(`${payload.path} 폴더를 만들었습니다.`);
+-        } catch (error) {
+-          status(`폴더 생성 오류: ${error.message}`);
+-        }
++        return createAssetDirectoryFromValue(model.parent, name);
+       }
+       $("newAssetFolder").onclick = () => createAssetDirectory();

@@ -1,0 +1,88 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -2089,7 +2089,7 @@
+             connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.31-alpha</code></p>
++          <p><code>1.1.32-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+@@ -2670,7 +2670,7 @@
+     </div>
+     <script>
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.31-alpha";
++      const APP_BUILD = "1.1.32-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+@@ -4581,6 +4581,66 @@
+           }),
+         });
+       const appFSM = new ApplicationStateMachine(projectObjects, APP_STATE_DEFINITIONS);
++      function buildFastFigureUiSnapshot() {
++        let slot = getSelectedSlot();
++        return Object.freeze({
++          fsm: appFSM.state,
++          projectName: activeProject.projectName,
++          selectedSlot: slot
++            ? Object.freeze({
++                id: slot.id,
++                row: slot.row,
++                col: slot.col,
++                contentType: slot.contentType,
++                hasChart: !!slot.chart,
++                hasImage: !!slot.imageId,
++                caption: typeof slot.caption === "string" ? slot.caption : null,
++              })
++            : null,
++          pendingSlotContentType,
++          selectedObjectIndex,
++          activeCsvId,
++          activeImageId,
++          activeAssetKind,
++          layout: projectClone(projectObjects.read("layout")),
++          labels: projectClone(projectObjects.read("labels")),
++          captions: projectClone(projectObjects.read("captions")),
++          appearance: projectClone(projectObjects.read("appearance")),
++        });
++      }
++      const fastFigureUiBridge = Object.freeze({
++        subscribe(listener) {
++          return appFSM.subscribe(() => listener());
++        },
++        getSnapshot() {
++          return appFSM.state;
++        },
++        getServerSnapshot() {
++          return appFSM.state;
++        },
++        read() {
++          return buildFastFigureUiSnapshot();
++        },
++        send(event, payload = {}) {
++          return appFSM.send(event, payload);
++        },
++        notify(object, event, payload = {}) {
++          return appFSM.notify(object, event, payload);
++        },
++        run(lifecycle, event, task) {
++          return appFSM.run(lifecycle, event, task);
++        },
++      });
++      function useFastFigureFsmSnapshot() {
++        let React = window.FastFigureUiRuntime?.React;
++        if (!React) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        return React.useSyncExternalStore(
++          fastFigureUiBridge.subscribe,
++          fastFigureUiBridge.getSnapshot,
++          fastFigureUiBridge.getServerSnapshot,
++        );
++      }
++      window.FastFigureUiBridge = fastFigureUiBridge;
+       const REQUIRED_CONTROL_IDS = [
+         "addGraphObject",
+         "assetActions",

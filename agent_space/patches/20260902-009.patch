@@ -1,0 +1,155 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11569,7 +11569,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
+             connection.
+           </p>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.58-alpha</code></p>
++          <p><code>1.1.59-alpha</code></p>
+           <p><strong>Developer</strong></p>
+           <ul>
+             <li>Name: 노대권 (Daegwon Noh)</li>
+@@ -12198,7 +12198,7 @@ THE SOFTWARE.</pre
+     </div>
+     <script>
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.58-alpha";
++      const APP_BUILD = "1.1.59-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+         "nav-arrow-right": '<path d="M9 6L15 12L9 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+         folder: '<path d="M2 11V4.6C2 4.26863 2.26863 4 2.6 4H8.77805C8.92127 4 9.05977 4.05124 9.16852 4.14445L12.3315 6.85555C12.4402 6.94876 12.5787 7 12.722 7H21.4C21.7314 7 22 7.26863 22 7.6V11M2 11V19.4C2 19.7314 2.26863 20 2.6 20H21.4C21.7314 20 22 19.7314 22 19.4V11M2 11H22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>',
+@@ -14390,1 +14390,133 @@ THE SOFTWARE.</pre
++      function FastFigureGraphAxisStaging({ chartLayout, axisKey, label }) {
++        let runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw Error("Fast Figure UI runtime이 준비되지 않았습니다.");
++        let { React, MantineCore } = runtime,
++          { Accordion, Button, NumberInput, Select, SimpleGrid, Stack, Switch, TextInput } =
++            MantineCore,
++          axis = chartLayout.globalSettings.axes?.[axisKey] || {},
++          isLog = axis.scaleType === "log",
++          tickMode = !isLog && axis.tickMode === "increment" ? "increment" : "plotly",
++          commit = (changes) =>
++            fastFigureUiBridge.applyChartLayout(
++              { axes: { [axisKey]: changes } },
++              chartLayout.chartId,
++            ),
++          commitBlur = (key) => (event) => commit({ [key]: event.currentTarget.value }),
++          blurOnEnter = (event) => {
++            if (event.key !== "Enter") return;
++            event.preventDefault();
++            event.currentTarget.blur();
++          },
++          numberInput = (key, inputLabel, options = {}) =>
++            React.createElement(NumberInput, {
++              key: `${axisKey}-${key}-${chartLayout.chartId}-${axis[key] ?? ""}`,
++              label: inputLabel,
++              defaultValue: axis[key] ?? "",
++              onBlur: commitBlur(key),
++              onKeyDown: blurOnEnter,
++              ...options,
++            });
++        return React.createElement(
++          Accordion.Item,
++          { value: axisKey },
++          React.createElement(Accordion.Control, null, label),
++          React.createElement(
++            Accordion.Panel,
++            null,
++            React.createElement(
++              Stack,
++              { gap: "xs" },
++              React.createElement(TextInput, {
++                key: `${axisKey}-title-${chartLayout.chartId}-${axis.title ?? ""}`,
++                label: "축 이름",
++                defaultValue: axis.title ?? "",
++                onBlur: commitBlur("title"),
++                onKeyDown: blurOnEnter,
++              }),
++              React.createElement(
++                SimpleGrid,
++                { cols: 2, spacing: "xs" },
++                numberInput("min", "최소"),
++                numberInput("max", "최대"),
++              ),
++              React.createElement(
++                Button,
++                {
++                  variant: "default",
++                  onClick: () =>
++                    isLog
++                      ? commit({
++                          tickMode: "plotly",
++                          minorTicks: axis.minorTicks !== true,
++                        })
++                      : commit({
++                          tickMode: tickMode === "increment" ? "plotly" : "increment",
++                        }),
++                },
++                isLog
++                  ? axis.minorTicks === true
++                    ? "minor tick 해제"
++                    : "minor tick 표시"
++                  : tickMode === "increment"
++                    ? "increment"
++                    : "tick 간격",
++              ),
++              isLog ? null : numberInput("tick", "tick 간격", { placeholder: "자동" }),
++              React.createElement(Select, {
++                label: "표기",
++                value: axis.notation || "none",
++                data: [
++                  { value: "none", label: "숫자" },
++                  { value: "power", label: "지수" },
++                  { value: "e", label: "과학 표기" },
++                ],
++                allowDeselect: false,
++                onChange: (value) => value && commit({ notation: value }),
++              }),
++              React.createElement(Select, {
++                label: "축 유형",
++                value: axis.scaleType || "linear",
++                data: [
++                  { value: "linear", label: "선형" },
++                  { value: "log", label: "로그" },
++                  { value: "reciprocal", label: "역수" },
++                ],
++                allowDeselect: false,
++                onChange: (value) => {
++                  if (!value) return;
++                  commit(
++                    value === "log"
++                      ? { scaleType: value, tickMode: "plotly" }
++                      : { scaleType: value },
++                  );
++                },
++              }),
++              numberInput("divide", "값 나누기"),
++              React.createElement(
++                SimpleGrid,
++                { cols: 2, spacing: "xs" },
++                numberInput("titleSize", "축 이름 크기"),
++                numberInput("fontSize", "숫자 크기"),
++              ),
++              numberInput("lineWidth", "축선 굵기", { min: 0 }),
++              React.createElement(
++                SimpleGrid,
++                { cols: 3, spacing: "xs" },
++                [
++                  ["showGrid", "격자 표시"],
++                  ["visible", "축 표시"],
++                  ["showValues", "값 표시"],
++                ].map(([key, switchLabel]) =>
++                  React.createElement(Switch, {
++                    key,
++                    label: switchLabel,
++                    checked: axis[key] === true,
++                    onChange: (event) => commit({ [key]: event.currentTarget.checked }),
++                  }),
++                ),
++              ),
++            ),
++          ),
++        );
++      }
+       function FastFigureSidebarStaging() {

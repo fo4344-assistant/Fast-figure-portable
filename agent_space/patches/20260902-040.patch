@@ -1,0 +1,43 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.81-alpha</code></p>
++          <p><code>1.1.82-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.81-alpha";
++      const APP_BUILD = "1.1.82-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -12213,11 +12213,8 @@
+       $("resetGraphPalette").onclick = () => {
+         let chart = getSelectedSlot()?.chart && getChart(getSelectedSlot().chart);
+         if (!chart) return status("그래프 슬롯을 먼저 선택하세요.");
+-        saveGraphObjects(
+-          ensureGraphObjects(chart).map((object, index) => ({
+-            ...object,
+-            color: DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+-          })),
+-        );
++        if (!setGraphObjectColorsFromPalette(DEFAULT_COLORS, chart.id))
++          return status("그래프 색상 구성을 초기화하지 못했습니다.");
++        renderGraphObjects(ensureGraphObjects(editing));
+         debugLog("graphPalette:reset", { slotId: selectedSlotId });
+       };
+@@ -12251,11 +12248,8 @@
+           );
+           if (!valid.length) throw Error("유효한 HEX 색상이 없습니다.");
+           let chart = getSelectedSlot()?.chart && getChart(getSelectedSlot().chart);
+           if (!chart) throw Error("그래프 슬롯을 먼저 선택하세요.");
+-          saveGraphObjects(
+-            ensureGraphObjects(chart).map((object, index) => ({
+-              ...object,
+-              color: valid[index % valid.length],
+-            })),
+-          );
++          if (!setGraphObjectColorsFromPalette(valid, chart.id))
++            throw Error("색상 구성을 적용하지 못했습니다.");
++          renderGraphObjects(ensureGraphObjects(editing));
+           status(`${file.name} 색상 구성을 덮어썼습니다.`);

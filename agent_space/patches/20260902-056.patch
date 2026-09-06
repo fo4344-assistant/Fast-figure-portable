@@ -1,0 +1,88 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.92-alpha</code></p>
++          <p><code>1.1.93-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.92-alpha";
++      const APP_BUILD = "1.1.93-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14258,4 +14258,10 @@
+         applyLabelPosition(values) {
+           return applyLabelPositionFromValues(values);
+         },
++        renderLabelPreview(values) {
++          return renderLabelPreviewFromValues(values, false);
++        },
++        labelPreviewPosition(clientX, clientY, offsetX = 0, offsetY = 0) {
++          return labelPreviewPositionFromPointer(clientX, clientY, offsetX, offsetY);
++        },
+         setAnnotationEnabled(kind, enabled) {
+@@ -21204,27 +21210,52 @@
+       function constrainLabelPreviewPosition(x, y, geometry = labelPreviewGeometry()) {
+         let label = $("labelPreviewLabel"),
+           width = label.getBoundingClientRect().width / geometry.scale,
+           height = label.getBoundingClientRect().height / geometry.scale;
+         return {
+           x: Math.min(Math.max(0, x), Math.max(0, geometry.reference.width - width)),
+           y: Math.min(Math.max(0, y), Math.max(0, geometry.reference.height - height)),
+         };
+       }
+-      function renderLabelPreview() {
+-        let label = $("labelPreviewLabel"),
+-          slot = $("labelPreview").querySelector(".label-preview-slot"),
+-          geometry = labelPreviewGeometry();
+-        label.textContent = displayedSlotIdentifier(0);
++      function labelPreviewPositionFromPointer(clientX, clientY, offsetX = 0, offsetY = 0) {
++        let preview = $("labelPreview");
++        if (!preview) return null;
++        let rect = preview.getBoundingClientRect(),
++          geometry = labelPreviewGeometry();
++        return constrainLabelPreviewPosition(
++          (clientX - rect.left - geometry.left - offsetX) / geometry.scale,
++          (clientY - rect.top - geometry.top - offsetY) / geometry.scale,
++          geometry,
++        );
++      }
++      function renderLabelPreviewFromValues(values = {}, syncControls = false) {
++        let preview = $("labelPreview"),
++          label = $("labelPreviewLabel"),
++          slot = preview?.querySelector(".label-preview-slot");
++        if (!preview || !label || !slot) return null;
++        let settings = { ...activeProject.labelSettings, ...values },
++          geometry = labelPreviewGeometry(),
++          x = finiteLabelPosition(Number(settings.x)),
++          y = finiteLabelPosition(Number(settings.y)),
++          identifier = targetSlotIdentifier(0, settings);
++        label.textContent = settings.parentheses ? `(${identifier})` : identifier;
+         slot.style.left = `${geometry.left}px`;
+         slot.style.top = `${geometry.top}px`;
+         slot.style.width = `${geometry.width}px`;
+         slot.style.height = `${geometry.height}px`;
+-        label.style.left = `${geometry.left + activeProject.labelSettings.x * geometry.scale}px`;
+-        label.style.top = `${geometry.top + activeProject.labelSettings.y * geometry.scale}px`;
+-        label.style.fontFamily = activeProject.labelSettings.fontFamily;
+-        label.style.fontSize = `${activeProject.labelSettings.fontSize * geometry.scale}px`;
++        label.style.left = `${geometry.left + x * geometry.scale}px`;
++        label.style.top = `${geometry.top + y * geometry.scale}px`;
++        label.style.fontFamily = settings.fontFamily;
++        label.style.fontSize = `${settings.fontSize * geometry.scale}px`;
+         label.style.minWidth = `${20 * geometry.scale}px`;
+         label.style.padding = `${2 * geometry.scale}px ${6 * geometry.scale}px`;
+-        $("labelPositionX").value = Number(activeProject.labelSettings.x.toFixed(2));
+-        $("labelPositionY").value = Number(activeProject.labelSettings.y.toFixed(2));
++        if (syncControls) {
++          let xControl = $("labelPositionX"),
++            yControl = $("labelPositionY");
++          if (xControl) xControl.value = Number(x.toFixed(2));
++          if (yControl) yControl.value = Number(y.toFixed(2));
++        }
++        return { x, y, geometry };
++      }
++      function renderLabelPreview() {
++        return renderLabelPreviewFromValues(activeProject.labelSettings, true);
+       }

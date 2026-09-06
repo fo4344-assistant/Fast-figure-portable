@@ -1,0 +1,23 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.67-alpha</code></p>
++          <p><code>1.1.68-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.67-alpha";
++      const APP_BUILD = "1.1.68-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14332,6 +14332,9 @@
+         readGraphObject() {
+           return selectedGraphObjectModel();
+         },
++        readGraphObjects() {
++          return selectedGraphObjectsModel();
++        },
+         applyGraphObject(values, chartId, objectIndex) {
+           return applySelectedGraphObjectFromValues(values, chartId, objectIndex);
+         },

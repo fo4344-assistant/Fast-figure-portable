@@ -1,0 +1,30 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.104-alpha</code></p>
++          <p><code>1.1.105-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.104-alpha";
++      const APP_BUILD = "1.1.105-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -17696,5 +17696,3 @@
+-      function editChart(id) {
+-        let selection = selectChartForEditing(id);
+-        if (!selection) return;
++      function syncLegacyGraphEditorSelection(selection) {
+         let { chart: c, csv } = selection;
+         setFileName(csv.name);
+@@ -17776,4 +17774,9 @@
+         syncEditableUi(c);
+         status(`“${c.editor.title}” 그래프의 설정을 불러왔습니다.`);
+       }
++      function editChart(id) {
++        let selection = selectChartForEditing(id);
++        if (!selection) return;
++        syncLegacyGraphEditorSelection(selection);
++      }
+       function applyGraphLayoutSettings(values = chartLayoutControlValues(), expectedChartId = null) {

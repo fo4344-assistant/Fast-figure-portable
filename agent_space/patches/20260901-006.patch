@@ -1,0 +1,105 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11571,3 +11571,3 @@ <h1>Fast figure</h1>
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.35-alpha</code></p>
++          <p><code>1.1.36-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@ <h1>Fast figure</h1>
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.35-alpha";
++      const APP_BUILD = "1.1.36-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14250,6 +14250,9 @@ <h1>Fast figure</h1>
+         run(lifecycle, event, task) {
+           return appFSM.run(lifecycle, event, task);
+         },
++        applyLayoutSettings(values) {
++          return applyLayoutSettingsFromValues(values);
++        },
+       });
+       function useFastFigureFsmSnapshot() {
+         let React = window.FastFigureUiRuntime?.React;
+@@ -14969,38 +14972,49 @@ <h1>Fast figure</h1>
+-      function slotStyleFromControls() {
++      function slotStyleFromValues(values = {}) {
+         return {
+           referenceWidth: readProjectNumber(
+-            $("dashboardReferenceWidth")?.value,
++            values.referenceWidth,
+             DEFAULT_SLOT_STYLE.referenceWidth,
+             100,
+             20000,
+           ),
+           gap: readProjectNumber(
+-            $("slotGap")?.value,
++            values.gap,
+             DEFAULT_SLOT_STYLE.gap,
+             0,
+             2000,
+           ),
+           outerMargin: readProjectNumber(
+-            $("dashboardOuterMargin")?.value,
++            values.outerMargin,
+             DEFAULT_SLOT_STYLE.outerMargin,
+             0,
+             5000,
+           ),
+           radius: readProjectNumber(
+-            $("slotRadius")?.value,
++            values.radius,
+             DEFAULT_SLOT_STYLE.radius,
+             0,
+             2000,
+           ),
+           aspect: readProjectNumber(
+-            $("dashboardAspect")?.value,
++            values.aspect,
+             DEFAULT_SLOT_STYLE.aspect,
+             0.1,
+             10,
+           ),
+-          showBorders: $("showSlotBorders").dataset.active === "true",
++          showBorders:
++            values.showBorders == null ? DEFAULT_SLOT_STYLE.showBorders : !!values.showBorders,
+         };
+       }
++      function slotStyleFromControls() {
++        return slotStyleFromValues({
++          referenceWidth: $("dashboardReferenceWidth")?.value,
++          gap: $("slotGap")?.value,
++          outerMargin: $("dashboardOuterMargin")?.value,
++          radius: $("slotRadius")?.value,
++          aspect: $("dashboardAspect")?.value,
++          showBorders: $("showSlotBorders").dataset.active === "true",
++        });
++      }
+       function dashboardReferenceWidth() {
+         return activeProject.layout.slotStyle.referenceWidth;
+       }
+@@ -22280,9 +22290,20 @@ <h1>Fast figure</h1>
+-      $("applyGrid").onclick = () => {
+-        let r = +$("gridRows").value,
+-          c = +$("gridCols").value;
++      function applyLayoutSettingsFromValues(values = {}) {
++        let r = +values.gridRows,
++          c = +values.gridCols;
+         if (r < 1 || c < 1 || r > 8 || c > 8) return status("행과 열은 1~8 사이여야 합니다.");
+         makeSlots(r, c);
+-        applySlotStyle();
++        activeProject.layout.slotStyle = slotStyleFromValues(
++          values.slotStyle || activeProject.layout.slotStyle,
++        );
++        applySlotStyle(false);
++        return true;
++      }
++      $("applyGrid").onclick = () => {
++        applyLayoutSettingsFromValues({
++          gridRows: $("gridRows").value,
++          gridCols: $("gridCols").value,
++          slotStyle: slotStyleFromControls(),
++        });
+       };
+       $("showSlotBorders").onclick = () => {
+         let button = $("showSlotBorders"),

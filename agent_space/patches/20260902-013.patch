@@ -1,0 +1,124 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11568,3 +11568,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.61-alpha</code></p>
++          <p><code>1.1.62-alpha</code></p>
+           <p><strong>Developer</strong></p>
+@@ -12197,3 +12197,3 @@
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.61-alpha";
++      const APP_BUILD = "1.1.62-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -14329,4 +14329,7 @@
+         readGraphObject() {
+           return selectedGraphObjectModel();
+         },
++        applyGraphObject(values, chartId, objectIndex) {
++          return applySelectedGraphObjectFromValues(values, chartId, objectIndex);
++        },
+       });
+@@ -17752,9 +17752,76 @@
+           object: projectClone(object),
+         });
+       }
++      function graphObjectControlValues() {
++        return {
++          x: $("xCol").value,
++          y: $("yCol").value,
++          xAxisSide: $("xAxisSide").value,
++          yAxisSide: $("yAxisSide").value,
++          legendName: $("legendName").value,
++          type: $("chartType").value,
++          lineWidth: $("lineWidth").value,
++          lineDash: $("lineDash").value,
++          markerSymbol: $("markerSymbol").value,
++          markerSize: $("markerSize").value,
++          barOpacity: $("barOpacity").value,
++          barLineWidth: $("barLineWidth").value,
++        };
++      }
++      function graphObjectSettingsFromValues(current, values = {}) {
++        let next = { ...(current || {}) },
++          has = (key) => Object.prototype.hasOwnProperty.call(values, key);
++        ["x", "y", "xAxisSide", "yAxisSide", "legendName", "type"].forEach((key) => {
++          if (has(key)) next[key] = String(values[key] ?? "");
++        });
++        if (has("lineWidth"))
++          next.lineWidth = Math.max(0.1, Math.min(20, Number(values.lineWidth) || 2));
++        if (has("lineDash")) next.lineDash = values.lineDash || "solid";
++        if (has("markerSymbol")) next.markerSymbol = values.markerSymbol || "circle";
++        if (has("markerSize"))
++          next.markerSize = Math.max(1, Math.min(40, Number(values.markerSize) || 6));
++        if (has("barOpacity"))
++          next.barOpacity = Math.max(0.05, Math.min(1, Number(values.barOpacity) || 1));
++        if (has("barLineWidth"))
++          next.barLineWidth = Math.max(0, Math.min(10, Number(values.barLineWidth) || 0));
++        return next;
++      }
++      function applySelectedGraphObjectFromValues(
++        values,
++        expectedChartId = null,
++        expectedObjectIndex = null,
++      ) {
++        let target = getSelectedSlot(),
++          chart = target?.chart ? getChart(target.chart) : null;
++        if (expectedChartId != null && chart?.id !== expectedChartId) return false;
++        if (
++          expectedObjectIndex != null &&
++          (!Number.isInteger(selectedObjectIndex) || selectedObjectIndex !== expectedObjectIndex)
++        )
++          return false;
++        if (!target || target.contentType === "image" || !chart || !selectedGraphObjectGuard()) {
++          status("변경할 그래프 오브젝트를 먼저 선택하세요.");
++          return false;
++        }
++        if (chart.editor?.editable === false) {
++          status("편집 가능 토글을 켠 뒤 설정을 변경하세요.");
++          return false;
++        }
++        let objects = Array.isArray(chart.editor?.objects) ? chart.editor.objects : [],
++          current = objects[selectedObjectIndex];
++        if (!current) return false;
++        let next = [...objects];
++        next[selectedObjectIndex] = graphObjectSettingsFromValues(current, values);
++        saveGraphObjects(next);
++        return true;
++      }
+       function configFromForm() {
+         let target = getSelectedSlot(),
+           previous = editing;
+         if (!previous) throw Error("선택한 슬롯의 그래프가 없습니다.");
+         let previousAxes = previous.editor.globalSettings?.axes || {},
++          objectValues = graphObjectSettingsFromValues(
++            previous.editor,
++            graphObjectControlValues(),
++          ),
+           axes = {
+@@ -17880,13 +17880,13 @@
+-            x: $("xCol").value,
+-            y: $("yCol").value,
+-            xAxisSide: $("xAxisSide").value,
+-            yAxisSide: $("yAxisSide").value,
+-            legendName: $("legendName").value,
+-            type: $("chartType").value,
+-            lineWidth: Math.max(0.1, Math.min(20, Number($("lineWidth").value) || 2)),
+-            lineDash: $("lineDash").value || "solid",
+-            markerSymbol: $("markerSymbol").value || "circle",
+-            markerSize: Math.max(1, Math.min(40, Number($("markerSize").value) || 6)),
+-            barOpacity: Math.max(0.05, Math.min(1, Number($("barOpacity").value) || 1)),
+-            barLineWidth: Math.max(0, Math.min(10, Number($("barLineWidth").value) || 0)),
++            x: objectValues.x,
++            y: objectValues.y,
++            xAxisSide: objectValues.xAxisSide,
++            yAxisSide: objectValues.yAxisSide,
++            legendName: objectValues.legendName,
++            type: objectValues.type,
++            lineWidth: objectValues.lineWidth,
++            lineDash: objectValues.lineDash,
++            markerSymbol: objectValues.markerSymbol,
++            markerSize: objectValues.markerSize,
++            barOpacity: objectValues.barOpacity,
++            barLineWidth: objectValues.barLineWidth,
+             xDivide: 1,

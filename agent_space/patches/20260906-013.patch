@@ -1,0 +1,47 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.116-alpha";
++      const APP_BUILD = "1.1.117-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -12904,20 +12904,23 @@
+       debugLog("app:init", {
+         build: projectObjects.read("project").appBuild,
+         userAgent: navigator.userAgent,
+         location: location.href,
+       });
+-      syncHeaderHeight();
+-      syncPopupBounds();
+-      applyDashboardZoom();
+-      ["showLegend", "showTitle", "showZeroLine", "showSlotBorders"].forEach((id) =>
+-        syncSettingToggle(id, $(id).dataset.active === "true"),
+-      );
+-      installHelpPopups();
+-      installSidebarControls();
+-      installAssetTreeInteractions();
+-      connectLifecycleTasksToFSM();
+-      installLayoutResizer();
+-      axisFields();
+-      graphColorInputs();
+-      renderGraphObjects();
++      function installLegacyUiInfrastructure() {
++        syncHeaderHeight();
++        syncPopupBounds();
++        applyDashboardZoom();
++        ["showLegend", "showTitle", "showZeroLine", "showSlotBorders"].forEach((id) =>
++          syncSettingToggle(id, $(id).dataset.active === "true"),
++        );
++        installHelpPopups();
++        installSidebarControls();
++        installAssetTreeInteractions();
++        connectLifecycleTasksToFSM();
++        installLayoutResizer();
++        axisFields();
++        graphColorInputs();
++        renderGraphObjects();
++      }
++      installLegacyUiInfrastructure();
+       ensureDefaultCsv();
