@@ -107,7 +107,7 @@ diff --git a/fast-figure.js b/fast-figure.js
 -              renderLayout();
 +              renderLayout(map);
              };
-@@ -11155,8 +11161,7 @@
+@@ -11085,9 +11085,8 @@
        function finiteLabelPosition(value) {
          return Number.isFinite(value) ? value : 0;
        }
@@ -118,24 +118,37 @@ diff --git a/fast-figure.js b/fast-figure.js
 +        let referenceGeometry = dashboardGeometry(dashboardReferenceWidth()),
            reference = gridSlotGeometry(
              activeProject.layout,
-@@ -11182,8 +11187,7 @@
+             referenceGeometry,
+@@ -11107,31 +11106,45 @@
            reference,
          };
        }
 -      function constrainLabelPreviewPosition(x, y, geometry = labelPreviewGeometry()) {
 -        let label = $("labelPreviewLabel"),
 -          width = label.getBoundingClientRect().width / geometry.scale,
-+      function constrainLabelPreviewPosition(x, y, geometry = labelPreviewGeometry(), label = $("labelPreviewLabel")) {
++      function constrainLabelPreviewPosition(
++        x,
++        y,
++        geometry = labelPreviewGeometry(),
++        label = $("labelPreviewLabel"),
++      ) {
 +        let width = label.getBoundingClientRect().width / geometry.scale,
            height = label.getBoundingClientRect().height / geometry.scale;
          return {
-@@ -11194,21 +11198,19 @@
+           x: Math.min(Math.max(0, x), Math.max(0, geometry.reference.width - width)),
            y: Math.min(Math.max(0, y), Math.max(0, geometry.reference.height - height)),
          };
        }
 -      function labelPreviewPositionFromPointer(clientX, clientY, offsetX = 0, offsetY = 0) {
 -        let preview = $("labelPreview");
-+      function labelPreviewPositionFromPointer(clientX, clientY, offsetX = 0, offsetY = 0, preview = $("labelPreview"), label = $("labelPreviewLabel")) {
++      function labelPreviewPositionFromPointer(
++        clientX,
++        clientY,
++        offsetX = 0,
++        offsetY = 0,
++        preview = $("labelPreview"),
++        label = $("labelPreviewLabel"),
++      ) {
          if (!preview) return null;
          let rect = preview.getBoundingClientRect(),
 -          geometry = labelPreviewGeometry();
@@ -151,9 +164,15 @@ diff --git a/fast-figure.js b/fast-figure.js
 -        let preview = $("labelPreview"),
 -          label = $("labelPreviewLabel"),
 -          slot = preview?.querySelector(".label-preview-slot");
-+      function renderLabelPreviewFromValues(values = {}, syncControls = false, preview = $("labelPreview"), label = $("labelPreviewLabel")) {
++      function renderLabelPreviewFromValues(
++        values = {},
++        syncControls = false,
++        preview = $("labelPreview"),
++        label = $("labelPreviewLabel"),
++      ) {
 +        let slot = preview?.querySelector(".label-preview-slot");
          if (!preview || !label || !slot) return null;
          let settings = { ...activeProject.labelSettings, ...values },
 -          geometry = labelPreviewGeometry(),
 +          geometry = labelPreviewGeometry(preview),
+           x = finiteLabelPosition(Number(settings.x)),
