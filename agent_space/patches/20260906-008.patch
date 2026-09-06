@@ -1,0 +1,26 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,4 +1,4 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.111-alpha";
++      const APP_BUILD = "1.1.112-alpha";
+       const ICONOIR_GLYPHS = Object.freeze({
+@@ -1535,8 +1535,8 @@
+         if (name === "readme" && !$("readmeDialog").open) {
+           $("readmeDialog").showModal();
+           $("readmeDialog").focus({ preventScroll: true });
+           requestAnimationFrame(() => ($("readmeDialog").scrollTop = 0));
+         }
+-        if (popup) clearAllSlotSelections();
++        applyOverlayOpenPolicy(name);
+       }
+       function enterOverlayState({ state, objects }) {
+@@ -1606,5 +1606,4 @@
+         });
+-        if (state === "error" && payload.error)
+-          debugLog("fsm:lifecycle-error", payload.error, "error");
++        applyLifecycleDomainState({ state, payload });
+       }
+       const SHARED_WORKSPACE_EVENTS = {
