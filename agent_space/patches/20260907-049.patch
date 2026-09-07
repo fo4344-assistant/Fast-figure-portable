@@ -1,7 +1,7 @@
 diff --git a/fast-figure-ui.js b/fast-figure-ui.js
 --- a/fast-figure-ui.js
 +++ b/fast-figure-ui.js
-@@ -357,7 +357,8 @@
+@@ -357,8 +357,9 @@
      const [folderDialog, setFolderDialog] = useState({
        opened: false,
        parent: "/assets",
@@ -11,7 +11,7 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
      const busy = state.lifecycle !== "ready";
      const directories = [...new Set(snapshot.directories)]
        .filter((path) => path === "/assets" || path.startsWith("/assets/"))
-@@ -396,6 +397,40 @@
+@@ -396,7 +397,41 @@
        } catch (error) {
          status(`폴더 생성 오류: ${error.message}`);
        }
@@ -53,7 +53,7 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
      const toggleExpanded = (path) => {
        setExpanded((current) => {
          const next = new Set(current);
-@@ -507,6 +542,45 @@
+@@ -507,6 +542,46 @@
            ),
          ),
        ),
