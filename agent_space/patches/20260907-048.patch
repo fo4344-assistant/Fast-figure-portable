@@ -1,17 +1,19 @@
 diff --git a/fast-figure-ui.js b/fast-figure-ui.js
 --- a/fast-figure-ui.js
 +++ b/fast-figure-ui.js
-@@ -102,6 +102,109 @@
+@@ -100,105 +100,252 @@
+   function FastFigureDataActions() {
+     const state = useAppState();
+     const busy = state.lifecycle !== "ready";
      const slot = state.workspace === "project" ? null : getSelectedSlot();
      const slotType = slot?.contentType || "graph";
      const [resetSlotId, setResetSlotId] = useState(null);
-
 +    const selectedAsset = state.assetPath ? projectVfs.resolve(state.assetPath) : null;
 +    const selectedAssetDeletable =
 +      ["csv", "image"].includes(selectedAsset?.kind) &&
 +      !(selectedAsset.kind === "csv" && selectedAsset.asset.isDefaultEmpty === true);
 +    const [deleteTarget, setDeleteTarget] = useState(null);
-+
+ 
 +    const deletionDescriptor = () => {
 +      if (!selectedAssetDeletable) return null;
 +      if (selectedAsset.kind === "csv") {
@@ -111,7 +113,66 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
 +    };
      const closeResetDialog = () => setResetSlotId(null);
      const confirmSlotReset = () => {
-@@ -169,6 +272,51 @@
+       if (!Number.isInteger(resetSlotId)) return;
+       const payload = {
+         slotIds: [resetSlotId],
+         direction: "fsm-to-model",
+       };
+       try {
+         appFSM.send("SLOTS_RESET", payload);
+         appFSM.send("CLEAR_ASSET_SELECTION", {
+           direction: "fsm-to-model",
+         });
+         renderDashboard();
+         status("선택한 슬롯을 초기화했습니다.");
+         debugLog("slotReset:complete", {
+           slotId: resetSlotId,
+           removedChartIds: payload.removedChartIds,
+         });
+         closeResetDialog();
+       } catch (error) {
+         status(`슬롯 초기화 오류: ${error.message}`);
+       }
+     };
+     return React.createElement(
+       Stack,
+       { gap: "xs", p: "md" },
+       React.createElement(Text, { fw: 600 }, "데이터"),
+       slot
+         ? React.createElement(
+             Group,
+             { gap: "xs", grow: true },
+             React.createElement(
+               Button,
+               {
+                 variant: slotType === "graph" ? "filled" : "light",
+                 disabled: busy,
+                 onClick: () => setSlotContentType("graph"),
+               },
+               "그래프",
+             ),
+             React.createElement(
+               Button,
+               {
+                 variant: slotType === "image" ? "filled" : "light",
+                 disabled: busy,
+                 onClick: () => setSlotContentType("image"),
+               },
+               "이미지",
+             ),
+           )
+         : null,
+       React.createElement(
+         Button,
+         { variant: "light", disabled: busy, onClick: openDataPicker },
+         "데이터 추가",
+       ),
+       React.createElement(
+         Button,
+         {
+           variant: "light",
+           disabled: busy || !["csv", "image"].includes(state.assetSelection),
+           onClick: () => downloadProjectAsset(),
          },
          "선택 에셋 다운로드",
        ),
@@ -162,4 +223,34 @@ diff --git a/fast-figure-ui.js b/fast-figure-ui.js
 +      ),
        slot
          ? React.createElement(
-            Button,
+             Button,
+             {
+               variant: "light",
+               disabled: busy,
+               onClick: () => setResetSlotId(slot.id),
+             },
+             "선택 슬롯 초기화",
+           )
+         : null,
+       React.createElement(
+         Modal,
+         {
+           opened: Number.isInteger(resetSlotId),
+           onClose: closeResetDialog,
+           title: "선택 슬롯 초기화",
+           centered: true,
+         },
+         React.createElement(
+           Stack,
+           { gap: "sm" },
+           React.createElement(Text, null, "데이터를 잃습니다."),
+           React.createElement(
+             Group,
+             { justify: "flex-end", gap: "xs" },
+             React.createElement(Button, { variant: "light", onClick: closeResetDialog }, "취소"),
+             React.createElement(Button, { onClick: confirmSlotReset }, "초기화"),
+           ),
+         ),
+       ),
+     );
+   }
