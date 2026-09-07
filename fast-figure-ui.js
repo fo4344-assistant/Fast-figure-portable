@@ -5,7 +5,7 @@
 
   const { React, MantineCore } = runtime;
   const { AppShell, Button, Group, MantineProvider, Modal, Stack, Text, TextInput } = MantineCore;
-  const { useState, useSyncExternalStore } = React;
+  const { useRef, useState, useSyncExternalStore } = React;
 
   function subscribeAppState(onStoreChange) {
     return appFSM.subscribe(onStoreChange);
@@ -43,12 +43,6 @@
 
   function exportProjectFromMantine() {
     return runLifecycleTask("exporting", "PROJECT_EXPORT", () => downloadProject());
-  }
-
-  function openProjectImportPicker() {
-    if (getSelectedSlot())
-      return status("프로젝트 불러오기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
-    document.getElementById("importProjectFile").click();
   }
 
   function openDataPicker() {
@@ -651,10 +645,42 @@
   function FastFigureProjectActions() {
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
+    const importInputRef = useRef(null);
+
+    const openProjectImportPicker = () => {
+      if (getSelectedSlot())
+        return status("프로젝트 불러오기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
+      importInputRef.current?.click();
+    };
+    const importProjectFileFromMantine = async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        const header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+        const payload =
+          header.length === 4 && header[0] === 0x50 && header[1] === 0x4b
+            ? await ffpxReadProject(file)
+            : JSON.parse(await file.text());
+        importProject(payload, file.name);
+        status(`${file.name} 프로젝트를 불러왔습니다.`);
+      } catch (error) {
+        status("프로젝트 불러오기 오류: " + error.message);
+        debugLog("project:import-error", { message: error.message });
+      } finally {
+        event.target.value = "";
+      }
+    };
+
     return React.createElement(
       Stack,
       { gap: "xs", p: "md" },
       React.createElement(Text, { fw: 600 }, "프로젝트"),
+      React.createElement("input", {
+        ref: importInputRef,
+        type: "file",
+        hidden: true,
+        onChange: importProjectFileFromMantine,
+      }),
       React.createElement(
         Group,
         { gap: "xs" },
