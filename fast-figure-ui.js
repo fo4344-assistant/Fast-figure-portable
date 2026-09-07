@@ -669,6 +669,20 @@
       Stack,
       { gap: "xs", p: "md" },
       React.createElement(Text, { fw: 600 }, "프로젝트"),
+      React.createElement(TextInput, {
+        key: `project-name-${activeProject.projectName}`,
+        label: "프로젝트 이름",
+        defaultValue: activeProject.projectName,
+        disabled: busy,
+        onChange: (event) => {
+          activeProject.projectName = event.target.value.slice(0, 120);
+        },
+        onBlur: (event) => {
+          activeProject.projectName = event.target.value.trim().slice(0, 120);
+          event.target.value = activeProject.projectName;
+          debugLog("project:name", { projectName: activeProject.projectName });
+        },
+      }),
       React.createElement("input", {
         ref: importInputRef,
         type: "file",
