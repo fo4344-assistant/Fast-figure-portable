@@ -45,10 +45,6 @@
     return runLifecycleTask("exporting", "PROJECT_EXPORT", () => downloadProject());
   }
 
-  function openDataPicker() {
-    document.getElementById("file").click();
-  }
-
   function exportSlotFfsxFromMantine() {
     return runLifecycleTask("exporting", "SLOT_EXPORT", () => downloadSlotFfsx());
   }
@@ -96,6 +92,101 @@
       ["csv", "image"].includes(selectedAsset?.kind) &&
       !(selectedAsset.kind === "csv" && selectedAsset.asset.isDefaultEmpty === true);
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const fileInputRef = useRef(null);
+    const importChoiceResolverRef = useRef(null);
+    const [importCollision, setImportCollision] = useState(null);
+
+    const closeImportCollision = (choice = "rename") => {
+      const resolve = importChoiceResolverRef.current;
+      importChoiceResolverRef.current = null;
+      setImportCollision(null);
+      resolve?.(choice);
+    };
+    const chooseProjectAssetImportPlan = async (file, directory) => {
+      const model = projectAssetImportCollisionModel(file, directory);
+      if (model.mode === "available")
+        return resolveProjectAssetImportPlan(model, "rename");
+      const choice = await new Promise((resolve) => {
+        importChoiceResolverRef.current = resolve;
+        setImportCollision(model);
+      });
+      return resolveProjectAssetImportPlan(model, choice || "rename");
+    };
+    const importFilesFromMantine = async (event) => {
+      const input = event.target;
+      const files = [...(input.files || [])];
+      if (!files.length) return;
+      const target = getSelectedSlot();
+      try {
+        await runLifecycleTask("importing", "ASSET_IMPORT", async () => {
+          try {
+            if (target && (target.contentType || "graph") === "image") {
+              const file = files[0];
+              const kind = slotFileKind(file);
+              if (kind === "slot") await importSlotFile(file, target);
+              else if (kind === "image") {
+                const plan = await chooseProjectAssetImportPlan(
+                  file,
+                  PROJECT_ASSET_DIRECTORIES.image,
+                );
+                await loadImageFile(file, target, {
+                  assetPath: plan.path,
+                  replaceAssetId: plan.replaceId,
+                });
+              } else if (kind === "data") {
+                const plan = await chooseProjectAssetImportPlan(
+                  file,
+                  PROJECT_ASSET_DIRECTORIES.csv,
+                );
+                await loadDataFile(file, target, {
+                  replaceSlotContent: true,
+                  assetPath: plan.path,
+                  replaceAssetId: plan.replaceId,
+                });
+              } else throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
+            } else if (target) {
+              for (const file of files) {
+                const plan = await chooseProjectAssetImportPlan(
+                  file,
+                  PROJECT_ASSET_DIRECTORIES.csv,
+                );
+                await loadDataFile(file, target, {
+                  assetPath: plan.path,
+                  replaceAssetId: plan.replaceId,
+                });
+              }
+            } else {
+              for (const file of files) {
+                const kind = slotFileKind(file);
+                if (kind === "image") {
+                  const plan = await chooseProjectAssetImportPlan(
+                    file,
+                    PROJECT_ASSET_DIRECTORIES.image,
+                  );
+                  await loadImageFile(file, null, {
+                    assetPath: plan.path,
+                    replaceAssetId: plan.replaceId,
+                  });
+                } else if (kind === "data") {
+                  const plan = await chooseProjectAssetImportPlan(
+                    file,
+                    PROJECT_ASSET_DIRECTORIES.csv,
+                  );
+                  await loadDataFile(file, null, {
+                    assetPath: plan.path,
+                    replaceAssetId: plan.replaceId,
+                  });
+                } else throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
+              }
+            }
+          } catch (error) {
+            status("불러오기 실패: " + error.message);
+          }
+        });
+      } finally {
+        input.value = "";
+      }
+    };
 
     const deletionDescriptor = () => {
       if (!selectedAssetDeletable) return null;
@@ -245,10 +336,64 @@
             ),
           )
         : null,
+      React.createElement("input", {
+        ref: fileInputRef,
+        type: "file",
+        accept: ".csv,.tsv,.json",
+        multiple: true,
+        hidden: true,
+        onChange: importFilesFromMantine,
+      }),
       React.createElement(
         Button,
-        { variant: "light", disabled: busy, onClick: openDataPicker },
+        {
+          variant: "light",
+          disabled: busy,
+          onClick: () => fileInputRef.current?.click(),
+        },
         "데이터 추가",
+      ),
+      React.createElement(
+        Modal,
+        {
+          opened: !!importCollision,
+          onClose: () => closeImportCollision("rename"),
+          title:
+            importCollision?.mode === "replace-or-rename"
+              ? "같은 이름의 파일"
+              : "파일 이름 충돌",
+          centered: true,
+        },
+        importCollision
+          ? React.createElement(
+              Stack,
+              { gap: "sm" },
+              React.createElement(
+                Text,
+                { style: { whiteSpace: "pre-wrap" } },
+                importCollision.mode === "replace-or-rename"
+                  ? importCollision.message
+                  : importCollision.notice ||
+                      `${importCollision.path}에 같은 이름의 항목이 있습니다.`,
+              ),
+              React.createElement(
+                Group,
+                { justify: "flex-end", gap: "xs" },
+                React.createElement(
+                  Button,
+                  { variant: "light", onClick: () => closeImportCollision("rename") },
+                  "새 이름으로 추가",
+                ),
+                importCollision.mode === "replace-or-rename"
+                  ? React.createElement(
+                      Button,
+                      { onClick: () => closeImportCollision("replace") },
+                      "기존 파일 교체",
+                    )
+                  : null,
+              ),
+            )
+          : null,
       ),
       React.createElement(
         Button,
