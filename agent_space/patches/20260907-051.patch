@@ -1,0 +1,55 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -57,7 +57,1 @@
+-  function openSlotImportPicker() {
+-    if (!getSelectedSlot())
+-      return status("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");
+-    document.getElementById("importSlotJsonFile").click();
+-  }
+-
+   function FastFigureToolbar() {
+@@ -702,9 +696,33 @@
+   function FastFigureGraphFileActions() {
+     const state = useAppState();
+     const busy = state.lifecycle !== "ready";
++    const importInputRef = useRef(null);
+     if (state.workspace !== "slot.graph") return null;
+ 
++    const openSlotImportPicker = () => {
++      if (!getSelectedSlot())
++        return status("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");
++      importInputRef.current?.click();
++    };
++    const importSlotFileFromMantine = async (event) => {
++      const file = event.target.files?.[0];
++      if (!file) return;
++      const slot = getSelectedSlot();
++      try {
++        await runLifecycleTask("importing", "SLOT_IMPORT", async () => {
++          try {
++            await importSlotFile(file, slot);
++          } catch (error) {
++            refreshCsvControls();
++            status("슬롯 불러오기 오류: " + error.message);
++            debugLog("slot:import-error", { message: error.message });
++          }
++        });
++      } finally {
++        event.target.value = "";
++      }
++    };
++
+     return React.createElement(
+       Stack,
+       { gap: "xs", p: "md" },
+       React.createElement(Text, { fw: 600 }, "그래프 파일"),
++      React.createElement("input", {
++        ref: importInputRef,
++        type: "file",
++        hidden: true,
++        onChange: importSlotFileFromMantine,
++      }),
+       React.createElement(
+         Group,
+         { gap: "xs", grow: true },
