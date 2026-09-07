@@ -360,6 +360,7 @@
       parent: "/assets",
       name: "New Folder",
     });
+    const [trashDialog, setTrashDialog] = useState(null);
     const busy = state.lifecycle !== "ready";
     const directories = [...new Set(snapshot.directories)]
       .filter((path) => path === "/assets" || path.startsWith("/assets/"))
@@ -396,6 +397,40 @@
         closeFolderDialog();
       } catch (error) {
         status(`폴더 생성 오류: ${error.message}`);
+      }
+    };
+    const trashSelected =
+      state.assetSelection === "directory" && state.assetPath === PROJECT_TRASH_DIRECTORY;
+    const trashedCsvIds = new Set(
+      snapshot.data.filter((asset) => projectVfs.isTrashed(asset.path)).map((asset) => asset.id),
+    );
+    const trashedImageIds = new Set(
+      snapshot.images.filter((asset) => projectVfs.isTrashed(asset.path)).map((asset) => asset.id),
+    );
+    const trashHasContents =
+      directories.some(
+        (path) => path !== PROJECT_TRASH_DIRECTORY && projectVfs.isTrashed(path),
+      ) ||
+      trashedCsvIds.size > 0 ||
+      trashedImageIds.size > 0;
+    const openTrashDialog = () => {
+      if (!trashSelected || !trashHasContents) return;
+      setTrashDialog({
+        referenceCount: projectAssetReferenceCount(trashedCsvIds, trashedImageIds),
+      });
+    };
+    const closeTrashDialog = () => setTrashDialog(null);
+    const emptyTrashFromMantine = () => {
+      const payload = { direction: "ui-to-fsm" };
+      try {
+        appFSM.send("PROJECT_TRASH_EMPTIED", payload);
+        updateFileAvailability();
+        status(
+          `휴지통을 비웠습니다. 폴더 ${payload.directoryCount}개, CSV ${payload.csvCount}개, 이미지 ${payload.imageCount}개를 삭제했습니다.`,
+        );
+        closeTrashDialog();
+      } catch (error) {
+        status(`휴지통 비우기 오류: ${error.message}`);
       }
     };
     const toggleExpanded = (path) => {
@@ -542,6 +577,46 @@
             React.createElement(Button, { onClick: createFolderFromMantine }, "만들기"),
           ),
         ),
+      ),
+      trashSelected
+        ? React.createElement(
+            Button,
+            {
+              variant: "light",
+              size: "xs",
+              disabled: busy || !trashHasContents,
+              onClick: openTrashDialog,
+            },
+            "휴지통 비우기",
+          )
+        : null,
+      React.createElement(
+        Modal,
+        {
+          opened: !!trashDialog,
+          onClose: closeTrashDialog,
+          title: "휴지통 비우기",
+          centered: true,
+        },
+        trashDialog
+          ? React.createElement(
+              Stack,
+              { gap: "sm" },
+              React.createElement(
+                Text,
+                null,
+                trashDialog.referenceCount
+                  ? `휴지통 자산에 남아 있는 참조 ${trashDialog.referenceCount}개도 함께 제거됩니다. 휴지통의 폴더와 파일을 영구적으로 비우시겠습니까?`
+                  : "휴지통의 폴더와 파일을 영구적으로 비우시겠습니까?",
+              ),
+              React.createElement(
+                Group,
+                { justify: "flex-end", gap: "xs" },
+                React.createElement(Button, { variant: "light", onClick: closeTrashDialog }, "취소"),
+                React.createElement(Button, { onClick: emptyTrashFromMantine }, "비우기"),
+              ),
+            )
+          : null,
       ),
       directoryNode("/assets"),
       React.createElement(
