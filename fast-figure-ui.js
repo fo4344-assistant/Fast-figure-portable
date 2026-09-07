@@ -650,16 +650,20 @@
       const file = event.target.files?.[0];
       if (!file) return;
       try {
-        const header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
-        const payload =
-          header.length === 4 && header[0] === 0x50 && header[1] === 0x4b
-            ? await ffpxReadProject(file)
-            : JSON.parse(await file.text());
-        importProject(payload, file.name);
-        status(`${file.name} 프로젝트를 불러왔습니다.`);
-      } catch (error) {
-        status("프로젝트 불러오기 오류: " + error.message);
-        debugLog("project:import-error", { message: error.message });
+        await runLifecycleTask("importing", "PROJECT_IMPORT", async () => {
+          try {
+            const header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+            const payload =
+              header.length === 4 && header[0] === 0x50 && header[1] === 0x4b
+                ? await ffpxReadProject(file)
+                : JSON.parse(await file.text());
+            importProject(payload, file.name);
+            status(`${file.name} 프로젝트를 불러왔습니다.`);
+          } catch (error) {
+            status("프로젝트 불러오기 오류: " + error.message);
+            debugLog("project:import-error", { message: error.message });
+          }
+        });
       } finally {
         event.target.value = "";
       }
