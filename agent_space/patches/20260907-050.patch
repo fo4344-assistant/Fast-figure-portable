@@ -1,9 +1,15 @@
 diff --git a/fast-figure-ui.js b/fast-figure-ui.js
 --- a/fast-figure-ui.js
 +++ b/fast-figure-ui.js
-@@ -8,1 +8,1 @@
+@@ -5,7 +5,7 @@
+ 
+   const { React, MantineCore } = runtime;
+   const { AppShell, Button, Group, MantineProvider, Modal, Stack, Text, TextInput } = MantineCore;
 -  const { useState, useSyncExternalStore } = React;
 +  const { useRef, useState, useSyncExternalStore } = React;
+ 
+   function subscribeAppState(onStoreChange) {
+     return appFSM.subscribe(onStoreChange);
 @@ -48,7 +48,1 @@
 -  function openProjectImportPicker() {
 -    if (getSelectedSlot())
