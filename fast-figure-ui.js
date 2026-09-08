@@ -524,6 +524,15 @@
             { size: "sm", c: "dimmed" },
             "이미지를 추가하거나 프로젝트 이미지 에셋을 연결하세요.",
           ),
+      React.createElement(
+        Button,
+        {
+          variant: "light",
+          disabled: busy,
+          onClick: insertEmptyImageIntoSelectedSlot,
+        },
+        "빈 이미지 삽입",
+      ),
       React.createElement(Select, {
         label: "맞춤",
         value: settings?.fit || "contain",

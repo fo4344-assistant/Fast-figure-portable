@@ -7818,7 +7818,7 @@
           direction: "ui-to-fsm",
         });
       });
-      $("insertEmptyImage").onclick = () => {
+      function insertEmptyImageIntoSelectedSlot() {
         let slot = getSelectedSlot();
         if (!slot || slot.contentType !== "image")
           return status("빈 이미지를 삽입할 이미지 슬롯을 먼저 선택하세요.");
@@ -7839,7 +7839,9 @@
         updateFileAvailability();
         renderDashboard();
         status("선택 슬롯에 빈 이미지를 삽입했습니다.");
-      };
+        return image;
+      }
+      $("insertEmptyImage").onclick = insertEmptyImageIntoSelectedSlot;
       function setSlotContentType(type) {
         let slot = getSelectedSlot();
         if (!slot) {
