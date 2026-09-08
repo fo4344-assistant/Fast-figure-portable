@@ -1,0 +1,1 @@
+Session resumed from plan-006 / review-010 / patch 20260907-055. Temporary working branch: agent/20260908-mantine-continue. This note only records branch context; application changes must still be represented by the matching patch pair.
