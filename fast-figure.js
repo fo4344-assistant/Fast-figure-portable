@@ -7878,21 +7878,33 @@
         } else element.style.objectFit = settings.fit;
         return true;
       }
-      function applyImageSettings() {
+      function applyImageSettingsFromValues(values = {}) {
         let slot = getSelectedSlot(),
           image = slotImage(slot);
-        if (!image) return;
+        if (!image) return false;
         let settings = normalizeImageSettings(image);
-        settings.fit = $("imageFitMode").value;
+        settings.fit = ["contain", "cover", "manual"].includes(values.fit)
+          ? values.fit
+          : settings.fit;
         if (settings.fit === "manual") {
-          settings.scale = Math.max(1, Math.min(1000, Number($("imageScale").value) || 100));
-          settings.x = Math.max(-100, Math.min(200, Number($("imagePositionX").value) || 0));
-          settings.y = Math.max(-100, Math.min(200, Number($("imagePositionY").value) || 0));
+          settings.scale = Math.max(1, Math.min(1000, Number(values.scale) || 100));
+          settings.x = Math.max(-100, Math.min(200, Number(values.x) || 0));
+          settings.y = Math.max(-100, Math.min(200, Number(values.y) || 0));
         }
-        syncImageSettingsUi();
         syncSlotImageElement(slot, image);
         debugLog("slot:image-settings", { slotId: selectedSlotId, settings });
         appFSM.notify("images", "IMAGE_SETTINGS_CHANGED");
+        return true;
+      }
+      function applyImageSettings() {
+        let changed = applyImageSettingsFromValues({
+          fit: $("imageFitMode").value,
+          scale: $("imageScale").value,
+          x: $("imagePositionX").value,
+          y: $("imagePositionY").value,
+        });
+        if (changed) syncImageSettingsUi();
+        return changed;
       }
       $("imageFitMode").onchange = applyImageSettings;
       ["imageScale", "imagePositionX", "imagePositionY"].forEach((id) => {

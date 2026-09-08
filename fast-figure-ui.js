@@ -4,7 +4,19 @@
   if (!window.fastFigureUiRoot) throw new Error("Fast Figure React root is not initialized");
 
   const { React, MantineCore } = runtime;
-  const { AppShell, Button, Group, MantineProvider, Modal, Stack, Text, TextInput } = MantineCore;
+  const {
+    AppShell,
+    Button,
+    Group,
+    Image,
+    MantineProvider,
+    Modal,
+    NumberInput,
+    Select,
+    Stack,
+    Text,
+    TextInput,
+  } = MantineCore;
   const { useRef, useState, useSyncExternalStore } = React;
 
   function subscribeAppState(onStoreChange) {
@@ -483,6 +495,84 @@
     );
   }
 
+  function FastFigureImageEditor() {
+    const state = useAppState();
+    if (state.workspace !== "slot.image") return null;
+    const busy = state.lifecycle !== "ready";
+    const slot = getSelectedSlot();
+    const image = slotImage(slot);
+    const settings = normalizeImageSettings(image);
+    const updateSettings = (patch) => {
+      if (!settings) return;
+      applyImageSettingsFromValues({ ...settings, ...patch });
+    };
+
+    return React.createElement(
+      Stack,
+      { gap: "xs", px: "md", pb: "md" },
+      React.createElement(Text, { fw: 600, size: "sm" }, "이미지"),
+      image
+        ? React.createElement(Image, {
+            src: projectImageDisplayUrl(image),
+            alt: image.name || "선택 이미지",
+            h: 160,
+            fit: "contain",
+            radius: "sm",
+          })
+        : React.createElement(
+            Text,
+            { size: "sm", c: "dimmed" },
+            "이미지를 추가하거나 프로젝트 이미지 에셋을 연결하세요.",
+          ),
+      React.createElement(Select, {
+        label: "맞춤",
+        value: settings?.fit || "contain",
+        data: [
+          { value: "contain", label: "맞춰 넣기" },
+          { value: "cover", label: "채우기" },
+          { value: "manual", label: "수동" },
+        ],
+        disabled: busy || !image,
+        allowDeselect: false,
+        onChange: (value) => updateSettings({ fit: value || settings?.fit || "contain" }),
+      }),
+      settings?.fit === "manual"
+        ? React.createElement(
+            Stack,
+            { gap: "xs" },
+            React.createElement(NumberInput, {
+              label: "크기 (%)",
+              value: settings.scale,
+              min: 1,
+              max: 1000,
+              disabled: busy,
+              onChange: (value) => updateSettings({ scale: value }),
+            }),
+            React.createElement(
+              Group,
+              { gap: "xs", grow: true },
+              React.createElement(NumberInput, {
+                label: "X (%)",
+                value: settings.x,
+                min: -100,
+                max: 200,
+                disabled: busy,
+                onChange: (value) => updateSettings({ x: value }),
+              }),
+              React.createElement(NumberInput, {
+                label: "Y (%)",
+                value: settings.y,
+                min: -100,
+                max: 200,
+                disabled: busy,
+                onChange: (value) => updateSettings({ y: value }),
+              }),
+            ),
+          )
+        : null,
+    );
+  }
+
   function FastFigureProjectDataTree() {
     const state = useAppState();
     const snapshot = projectDataTreeSnapshot(projectDataTreeObjects());
@@ -952,6 +1042,7 @@
         AppShell.Navbar,
         { p: 0 },
         React.createElement(FastFigureDataActions),
+        React.createElement(FastFigureImageEditor),
         React.createElement(FastFigureProjectDataTree),
         React.createElement(FastFigureProjectActions),
         React.createElement(FastFigureGraphFileActions),
@@ -965,6 +1056,7 @@
     FastFigureShell,
     FastFigureToolbar,
     FastFigureDataActions,
+    FastFigureImageEditor,
     FastFigureProjectDataTree,
     FastFigureProjectActions,
     FastFigureGraphFileActions,
