@@ -1,0 +1,181 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -7877,20 +7877,33 @@
+       function syncSlotImageElement(slot, image) {
+         let element = slot && document.querySelector(`.slot[data-slot="${slot.id}"] .slot-image`);
+         if (!element || !image) return false;
+         let settings = normalizeImageSettings(image);
+         element.classList.toggle("manual", settings.fit === "manual");
+         element.removeAttribute("style");
+         if (settings.fit === "manual") {
+           element.style.width = `${settings.scale}%`;
+           element.style.left = `${settings.x}%`;
+           element.style.top = `${settings.y}%`;
+         } else element.style.objectFit = settings.fit;
+         return true;
+       }
+-      function applyImageSettings() {
++      function applyImageSettingsFromValues(values = {}) {
+         let slot = getSelectedSlot(),
+           image = slotImage(slot);
+-        if (!image) return;
++        if (!image) return false;
+         let settings = normalizeImageSettings(image);
+-        settings.fit = $("imageFitMode").value;
++        settings.fit = ["contain", "cover", "manual"].includes(values.fit)
++          ? values.fit
++          : settings.fit;
+         if (settings.fit === "manual") {
+-          settings.scale = Math.max(1, Math.min(1000, Number($("imageScale").value) || 100));
+-          settings.x = Math.max(-100, Math.min(200, Number($("imagePositionX").value) || 0));
+-          settings.y = Math.max(-100, Math.min(200, Number($("imagePositionY").value) || 0));
++          settings.scale = Math.max(1, Math.min(1000, Number(values.scale) || 100));
++          settings.x = Math.max(-100, Math.min(200, Number(values.x) || 0));
++          settings.y = Math.max(-100, Math.min(200, Number(values.y) || 0));
+         }
+-        syncImageSettingsUi();
+         syncSlotImageElement(slot, image);
+         debugLog("slot:image-settings", { slotId: selectedSlotId, settings });
+         appFSM.notify("images", "IMAGE_SETTINGS_CHANGED");
++        return true;
++      }
++      function applyImageSettings() {
++        let changed = applyImageSettingsFromValues({
++          fit: $("imageFitMode").value,
++          scale: $("imageScale").value,
++          x: $("imagePositionX").value,
++          y: $("imagePositionY").value,
++        });
++        if (changed) syncImageSettingsUi();
++        return changed;
+       }
+       $("imageFitMode").onchange = applyImageSettings;
+       ["imageScale", "imagePositionX", "imagePositionY"].forEach((id) => {
+         let control = $(id);
+         control.addEventListener("change", applyImageSettings);
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -4,7 +4,17 @@
+   if (!window.fastFigureUiRoot) throw new Error("Fast Figure React root is not initialized");
+ 
+   const { React, MantineCore } = runtime;
+-  const { AppShell, Button, Group, MantineProvider, Modal, Stack, Text, TextInput } = MantineCore;
++  const {
++    AppShell,
++    Button,
++    Group,
++    Image,
++    MantineProvider,
++    Modal,
++    NumberInput,
++    Select,
++    Stack,
++    Text,
++    TextInput,
++  } = MantineCore;
+   const { useRef, useState, useSyncExternalStore } = React;
+ 
+   function subscribeAppState(onStoreChange) {
+@@ -480,6 +490,86 @@
+     );
+   }
+ 
++  function FastFigureImageEditor() {
++    const state = useAppState();
++    if (state.workspace !== "slot.image") return null;
++    const busy = state.lifecycle !== "ready";
++    const slot = getSelectedSlot();
++    const image = slotImage(slot);
++    const settings = normalizeImageSettings(image);
++    const updateSettings = (patch) => {
++      if (!settings) return;
++      applyImageSettingsFromValues({ ...settings, ...patch });
++    };
++
++    return React.createElement(
++      Stack,
++      { gap: "xs", px: "md", pb: "md" },
++      React.createElement(Text, { fw: 600, size: "sm" }, "이미지"),
++      image
++        ? React.createElement(Image, {
++            src: projectImageDisplayUrl(image),
++            alt: image.name || "선택 이미지",
++            h: 160,
++            fit: "contain",
++            radius: "sm",
++          })
++        : React.createElement(
++            Text,
++            { size: "sm", c: "dimmed" },
++            "이미지를 추가하거나 프로젝트 이미지 에셋을 연결하세요.",
++          ),
++      React.createElement(Select, {
++        label: "맞춤",
++        value: settings?.fit || "contain",
++        data: [
++          { value: "contain", label: "맞춰 넣기" },
++          { value: "cover", label: "채우기" },
++          { value: "manual", label: "수동" },
++        ],
++        disabled: busy || !image,
++        allowDeselect: false,
++        onChange: (value) => updateSettings({ fit: value || settings?.fit || "contain" }),
++      }),
++      settings?.fit === "manual"
++        ? React.createElement(
++            Stack,
++            { gap: "xs" },
++            React.createElement(NumberInput, {
++              label: "크기 (%)",
++              value: settings.scale,
++              min: 1,
++              max: 1000,
++              disabled: busy,
++              onChange: (value) => updateSettings({ scale: value }),
++            }),
++            React.createElement(
++              Group,
++              { gap: "xs", grow: true },
++              React.createElement(NumberInput, {
++                label: "X (%)",
++                value: settings.x,
++                min: -100,
++                max: 200,
++                disabled: busy,
++                onChange: (value) => updateSettings({ x: value }),
++              }),
++              React.createElement(NumberInput, {
++                label: "Y (%)",
++                value: settings.y,
++                min: -100,
++                max: 200,
++                disabled: busy,
++                onChange: (value) => updateSettings({ y: value }),
++              }),
++            ),
++          )
++        : null,
++    );
++  }
++
+   function FastFigureProjectDataTree() {
+     const state = useAppState();
+     const snapshot = projectDataTreeSnapshot(projectDataTreeObjects());
+@@ -949,6 +1039,7 @@
+         AppShell.Navbar,
+         { p: 0 },
+         React.createElement(FastFigureDataActions),
++        React.createElement(FastFigureImageEditor),
+         React.createElement(FastFigureProjectDataTree),
+         React.createElement(FastFigureProjectActions),
+         React.createElement(FastFigureGraphFileActions),
+@@ -960,6 +1051,7 @@
+     FastFigureShell,
+     FastFigureToolbar,
+     FastFigureDataActions,
++    FastFigureImageEditor,
+     FastFigureProjectDataTree,
+     FastFigureProjectActions,
+     FastFigureGraphFileActions,
