@@ -955,6 +955,142 @@
     );
   }
 
+  function FastFigureGraphDataEditor() {
+    const state = useAppState();
+    const busy = state.lifecycle !== "ready";
+    const dragRef = useRef(null);
+    if (state.workspace !== "slot.graph") return null;
+    const chart = graphEditorChart();
+    const objects = chart ? ensureGraphObjects(chart) : [];
+    const selectedIndex = Number.isInteger(selectedObjectIndex) && objects[selectedObjectIndex] ? selectedObjectIndex : null;
+    const selected = selectedIndex === null ? null : objects[selectedIndex];
+    const activeCsv = getProjectCsv(selected?.csvId) || getProjectCsv(activeCsvId) || activeProject.csvFiles[0] || null;
+    const csvOptions = activeProject.csvFiles.map((csv) => ({ value: String(csv.id), label: csv.name }));
+    const columns = activeCsv ? columnDefinitions(activeCsv.rows, activeCsv.headerLines) : [];
+    const columnOptions = columns.map((column) => ({ value: column.id, label: column.label }));
+    const update = (values) => selectedIndex !== null && graphEditorObjectValues(selectedIndex, values);
+    const selectField = (label, key, data) => React.createElement(Select, {
+      label, data, value: selected?.[key] ?? null, disabled: busy,
+      onChange: (value) => value !== null && update({ [key]: value }),
+    });
+    const numberField = (label, key, min, max, step = 1) => React.createElement(NumberInput, {
+      label, value: selected?.[key], min, max, step, disabled: busy,
+      onChange: (value) => update({ [key]: value }),
+    });
+    return React.createElement(
+      Stack,
+      { gap: "xs", p: "md" },
+      React.createElement(Text, { fw: 600 }, "그래프 / 데이터"),
+      React.createElement(Select, {
+        label: "사용할 CSV", data: csvOptions, value: activeCsv ? String(activeCsv.id) : null,
+        disabled: busy || !csvOptions.length,
+        onChange: (value) => value !== null && graphEditorSelectCsv(Number(value)),
+      }),
+      activeCsv ? React.createElement(NumberInput, {
+        label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rows.length,
+        allowDecimal: false, disabled: busy,
+        onChange: (value) => graphEditorHeaderLines(activeCsv.id, value),
+      }) : null,
+      activeCsv && columns.length ? React.createElement(
+        "div",
+        { style: { maxHeight: 220, overflow: "auto" } },
+        React.createElement(
+          "table",
+          { style: { width: "100%", borderCollapse: "collapse", fontSize: "var(--mantine-font-size-xs)" } },
+          React.createElement("thead", null, React.createElement("tr", null,
+            ...columns.map((column) => React.createElement("th", { key: column.id, style: { textAlign: "left", padding: 4 } }, column.label)),
+          )),
+          React.createElement("tbody", null,
+            ...activeCsv.rows.slice(0, 30).map((row, rowIndex) => React.createElement("tr", { key: rowIndex },
+              ...columns.map((column) => React.createElement("td", {
+                key: column.id,
+                style: { padding: 4, fontWeight: rowIndex < activeCsv.headerLines ? 600 : 400 },
+              }, String(row?.[column.index] ?? ""))),
+            )),
+          ),
+        ),
+      ) : null,
+      React.createElement(Group, { gap: "xs", grow: true },
+        React.createElement(Button, {
+          variant: chart?.editor?.editable !== false ? "filled" : "light", disabled: busy || !chart,
+          onClick: () => graphEditorSetEditable(chart?.editor?.editable === false),
+        }, chart?.editor?.editable !== false ? "편집 가능" : "원본 JSON"),
+        React.createElement(Button, {
+          variant: "light", disabled: busy || !activeCsv,
+          onClick: () => activeCsv && graphEditorAdd(activeCsv.id),
+        }, "오브젝트 추가"),
+      ),
+      React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
+      objects.length ? React.createElement(Stack, { gap: 4 },
+        ...objects.map((object, index) => React.createElement(Group, {
+          key: `${chart.id}-${index}`, gap: 4, wrap: "nowrap", draggable: true,
+          onDragStart: () => { dragRef.current = index; },
+          onDragEnd: () => { dragRef.current = null; },
+          onDragOver: (event) => event.preventDefault(),
+          onDrop: (event) => {
+            event.preventDefault();
+            if (Number.isInteger(dragRef.current)) graphEditorMove(dragRef.current, index);
+            dragRef.current = null;
+          },
+        },
+          React.createElement(Button, {
+            size: "xs", variant: selectedIndex === index ? "filled" : "light",
+            style: { flex: "1 1 auto", minWidth: 0 },
+            onClick: () => graphEditorSelectObject(index),
+          }, `${index + 1}. ${object.legendName || `${object.x} · ${object.y}`}`),
+          React.createElement(ColorInput, {
+            size: "xs", value: object.color, style: { width: 72 }, disabled: busy,
+            onChange: (color) => graphEditorObjectValues(index, { color }),
+          }),
+          React.createElement(Button, {
+            size: "xs", variant: "subtle", disabled: busy,
+            "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
+            onClick: () => graphEditorDelete(index),
+          }, "×"),
+        )),
+      ) : React.createElement(Text, { size: "xs", c: "dimmed" }, "추가된 그래프 오브젝트가 없습니다."),
+      selected && activeCsv && chart?.editor?.editable !== false ? React.createElement(Stack, { gap: "xs" },
+        React.createElement(Select, {
+          label: "오브젝트 CSV", data: csvOptions, value: String(selected.csvId), disabled: busy,
+          onChange: (value) => value !== null && update({ csvId: Number(value) }),
+        }),
+        React.createElement(Group, { gap: "xs", grow: true },
+          selectField("X 열", "x", columnOptions), selectField("Y 열", "y", columnOptions),
+        ),
+        React.createElement(Group, { gap: "xs", grow: true },
+          selectField("X 축", "xAxisSide", [{ value: "bottom", label: "아래" }, { value: "top", label: "위" }]),
+          selectField("Y 축", "yAxisSide", [{ value: "left", label: "왼쪽" }, { value: "right", label: "오른쪽" }]),
+        ),
+        selectField("유형", "type", [
+          { value: "scatter", label: "선" }, { value: "markers", label: "마커" },
+          { value: "lines+markers", label: "선 + 마커" }, { value: "bar", label: "막대" },
+          { value: "hidden", label: "숨김" },
+        ]),
+        React.createElement(TextInput, {
+          label: "범례 이름", value: selected.legendName, disabled: busy,
+          onChange: (event) => update({ legendName: event.target.value }),
+        }),
+        ["scatter", "lines+markers", "hidden"].includes(selected.type) ? React.createElement(Group, { gap: "xs", grow: true },
+          numberField("선 굵기", "lineWidth", 0.1, 20, 0.1),
+          React.createElement(TextInput, {
+            label: "선 스타일", value: selected.lineDash, disabled: busy,
+            onChange: (event) => update({ lineDash: event.target.value }),
+          }),
+        ) : null,
+        ["markers", "lines+markers"].includes(selected.type) ? React.createElement(Group, { gap: "xs", grow: true },
+          React.createElement(TextInput, {
+            label: "마커", value: selected.markerSymbol, disabled: busy,
+            onChange: (event) => update({ markerSymbol: event.target.value }),
+          }),
+          numberField("마커 크기", "markerSize", 1, 40),
+        ) : null,
+        selected.type === "bar" ? React.createElement(Group, { gap: "xs", grow: true },
+          numberField("막대 불투명도", "barOpacity", 0.05, 1, 0.05),
+          numberField("막대 테두리", "barLineWidth", 0, 10, 0.1),
+        ) : null,
+      ) : null,
+    );
+  }
   function FastFigureGraphFileActions() {
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
@@ -1200,6 +1336,7 @@
         React.createElement(FastFigureImageEditor),
         React.createElement(FastFigureProjectDataTree),
         React.createElement(FastFigureProjectActions),
+        React.createElement(FastFigureGraphDataEditor),
         React.createElement(FastFigureGraphFileActions),
         React.createElement(FastFigurePaletteActions),
         React.createElement(FastFigureUtilityActions),
@@ -1233,6 +1370,7 @@
     FastFigureImageEditor,
     FastFigureProjectDataTree,
     FastFigureProjectActions,
+    FastFigureGraphDataEditor,
     FastFigureGraphFileActions,
     FastFigureUtilityActions,
     getAppStateSnapshot,

@@ -8197,6 +8197,140 @@
         });
         return chart.editor.objects;
       }
+      function graphEditorChart() {
+        let slot = getSelectedSlot();
+        return slot?.chart ? getChart(slot.chart) : null;
+      }
+      function graphEditorCommit(objects, index = null) {
+        let chart = graphEditorChart();
+        if (!chart) return null;
+        let payload = { chartId: chart.id, objects: [...objects], index, direction: "fsm-to-model" };
+        appFSM.send("GRAPH_OBJECTS_REPLACED", payload);
+        chart = payload.chart;
+        editing = chart;
+        let selected = Number.isInteger(index) && index >= 0 && index < chart.editor.objects.length ? index : null;
+        appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
+        renderGraphObjects(chart.editor.objects);
+        if (chart.editor.editable !== false) rebuildEditableGraph(chart);
+        renderDashboard();
+        updateFileAvailability();
+        appFSM.notify("charts", payload.recovered ? "GRAPH_OBJECTS_DEFAULT_CREATED" : "GRAPH_OBJECTS_CHANGED");
+        return chart;
+      }
+      function graphEditorSelectCsv(csvId) {
+        let csv = getProjectCsv(Number(csvId));
+        if (!csv) return null;
+        activeCsvId = csv.id;
+        activeDataName = csv.name;
+        activeDataReady = true;
+        appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(csv), direction: "ui-to-fsm" });
+        appFSM.notify("data", "CSV_SELECTION_CHANGED");
+        return csv;
+      }
+      function graphEditorSelectObject(index) {
+        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
+        let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
+        appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
+        if (selected !== null) graphEditorSelectCsv(objects[selected].csvId);
+        renderGraphObjects(objects);
+        appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
+        return selected;
+      }
+      function graphEditorObjectValues(index, values = {}) {
+        let chart = graphEditorChart(), objects = ensureGraphObjects(chart), current = objects[index];
+        if (!chart || !current) return null;
+        let csv = getProjectCsv(Number(values.csvId)) || getProjectCsv(current.csvId);
+        if (!csv) return null;
+        let defaults = baseGraphObject(chart, csv), columns = new Set(columnDefinitions(csv.rows, csv.headerLines).map((column) => column.id));
+        let clamp = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(max, Number(value))) : fallback;
+        let next = { ...defaults, ...current, csvId: csv.id };
+        next.x = columns.has(values.x) ? values.x : columns.has(next.x) ? next.x : defaults.x;
+        next.y = columns.has(values.y) ? values.y : columns.has(next.y) ? next.y : defaults.y;
+        if (["bottom", "top"].includes(values.xAxisSide)) next.xAxisSide = values.xAxisSide;
+        if (["left", "right"].includes(values.yAxisSide)) next.yAxisSide = values.yAxisSide;
+        if (["scatter", "markers", "lines+markers", "bar", "hidden"].includes(values.type)) next.type = values.type;
+        if (values.legendName !== undefined) next.legendName = String(values.legendName);
+        if (values.lineDash !== undefined) next.lineDash = String(values.lineDash || "solid");
+        if (values.markerSymbol !== undefined) next.markerSymbol = String(values.markerSymbol || "circle");
+        if (/^#[0-9a-f]{6}$/i.test(values.color || "")) next.color = values.color;
+        next.lineWidth = clamp(values.lineWidth, next.lineWidth, 0.1, 20);
+        next.markerSize = clamp(values.markerSize, next.markerSize, 1, 40);
+        next.barOpacity = clamp(values.barOpacity, next.barOpacity, 0.05, 1);
+        next.barLineWidth = clamp(values.barLineWidth, next.barLineWidth, 0, 10);
+        let updated = [...objects];
+        updated[index] = next;
+        return graphEditorCommit(updated, index);
+      }
+      function graphEditorAdd(csvId = activeCsvId) {
+        let slot = getSelectedSlot(), csv = getProjectCsv(Number(csvId));
+        if (!slot || slot.contentType === "image" || !csv) return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
+        graphEditorSelectCsv(csv.id);
+        let chart = graphEditorChart();
+        if (!chart) {
+          let payload = { slotId: slot.id, csvId: csv.id, direction: "fsm-to-model" };
+          appFSM.send("SLOT_DATA_CONNECTED", payload);
+          chart = payload.chart;
+          if (!chart) return status("빈 슬롯에 그래프를 추가하지 못했습니다.");
+          editing = chart;
+          return graphEditorCommit(ensureGraphObjects(chart), 0);
+        }
+        let objects = ensureGraphObjects(chart);
+        return graphEditorCommit([...objects, baseGraphObject(chart, csv)], objects.length);
+      }
+      function graphEditorMove(from, to) {
+        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
+        if (!chart || !objects[from] || !objects[to] || from === to) return chart;
+        let next = [...objects], moved = next.splice(from, 1)[0];
+        next.splice(to, 0, moved);
+        return graphEditorCommit(next, to);
+      }
+      function graphEditorDelete(index) {
+        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
+        if (!chart || !objects[index]) return null;
+        return graphEditorCommit(objects.filter((_, objectIndex) => objectIndex !== index), null);
+      }
+      function graphEditorHeaderLines(csvId, value) {
+        let csv = getProjectCsv(Number(csvId));
+        if (!csv) return null;
+        csv.headerLines = headerLineCount(value, csv.rows);
+        if (activeCsvId === csv.id) {
+          $("headerLines").value = csv.headerLines;
+          rows = csv.rows;
+          columns = columnDefinitions(csv.rows, csv.headerLines);
+          refreshColumnControls();
+          preview();
+        }
+        activeProject.charts.forEach((chart) => {
+          if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id)) rebuildEditableGraph(chart);
+        });
+        renderDashboard();
+        debugLog("csv:header-lines", { csvId: csv.id, headerLines: csv.headerLines });
+        appFSM.notify("data", "CSV_HEADER_LINES_CHANGED");
+        return csv.headerLines;
+      }
+      function graphEditorSetEditable(editable = null) {
+        let chart = graphEditorChart();
+        if (!chart) return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
+        let next = typeof editable === "boolean" ? editable : chart.editor.editable === false;
+        if (next && chartCsvIds(chart).length === 0) {
+          let conversionRows = chart.editor.conversionRows || parsePlotlyToEditor(chart.graph.imported, chart.id).editor.conversionRows;
+          if (!Array.isArray(conversionRows) || !conversionRows.length) conversionRows = [["X", "Y"], ["", ""]];
+          let csv = createProjectCsv(conversionRows, "Plotly JSON.csv");
+          chart.editor.objects.forEach((object) => { object.csvId = csv.id; });
+          delete chart.editor.conversionRows;
+          graphEditorSelectCsv(csv.id);
+          setFileName(csv.name);
+          refreshCsvControls(csv.id);
+        }
+        chart.editor.editable = next;
+        if (next) rebuildEditableGraph(chart);
+        syncEditableUi(chart);
+        renderDashboard();
+        status(next ? "가져온 JSON을 편집기 설정으로 재구성했습니다." : "가져온 원본 Plotly JSON 표시로 전환했습니다.");
+        debugLog("editor:editable", { chartId: chart.id, editable: next });
+        appFSM.notify("charts", "GRAPH_EDITABLE_CHANGED");
+        return next;
+      }
       function populateObjectForm(object) {
         if (!object) return;
         [
@@ -9799,49 +9933,7 @@
       }
       $("exportSlotJson").onclick = downloadSlotFfsx;
       $("exportPlotlyJson").onclick = downloadPlotlyJson;
-      $("editorEditable").onclick = () => {
-        let chart = editing;
-        if (!chart) return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
-        let next = chart.editor.editable === false;
-        if (next && chartCsvIds(chart).length === 0) {
-          let conversionRows =
-              chart.editor.conversionRows ||
-              parsePlotlyToEditor(chart.graph.imported, chart.id).editor.conversionRows,
-            fallbackRows = [
-              ["X", "Y"],
-              ["", ""],
-            ];
-          if (!Array.isArray(conversionRows) || !conversionRows.length)
-            conversionRows = fallbackRows;
-          let csv = createProjectCsv(
-            conversionRows,
-            "Plotly JSON.csv",
-          );
-          chart.editor.objects.forEach((object) => {
-            object.csvId = csv.id;
-          });
-          if (Array.isArray(chart.editor.conversionRows)) chart.editor.conversionRows.length = 0;
-          delete chart.editor.conversionRows;
-          fallbackRows.length = 0;
-          conversionRows = null;
-          activeCsvId = csv.id;
-          activeDataName = csv.name;
-          $("headerLines").value = csv.headerLines;
-          loadData(csv.rows, csv.name);
-          setFileName(csv.name);
-          refreshCsvControls(csv.id);
-        }
-        chart.editor.editable = next;
-        if (next) rebuildEditableGraph(chart);
-        syncEditableUi(chart);
-        renderDashboard();
-        status(
-          next
-            ? "가져온 JSON을 편집기 설정으로 재구성했습니다."
-            : "가져온 원본 Plotly JSON 표시로 전환했습니다.",
-        );
-        debugLog("editor:editable", { chartId: chart.id, editable: next });
-      };
+      $("editorEditable").onclick = () => graphEditorSetEditable();
       $("importSlotJson").onclick = () => {
         if (!getSelectedSlot())
           return status("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");
@@ -9990,23 +10082,8 @@
         debugLog("dashboard:zoom-lock", { locked, width: dashboardZoomLockedWidth });
       }
       $("headerLines").onchange = () => {
-        let count = headerLineCount($("headerLines").value, rows);
-        $("headerLines").value = count;
-        let csv = getProjectCsv(activeCsvId);
-        if (csv) csv.headerLines = count;
-        refreshColumnControls();
-        activeProject.charts.forEach((chart) => {
-          if (
-            chart.editor?.editable !== false &&
-            chartCsvIds(chart).includes(activeCsvId)
-          )
-            rebuildEditableGraph(chart);
-        });
-        renderDashboard();
-        debugLog("csv:header-lines", {
-          csvId: activeCsvId,
-          headerLines: count,
-        });
+        let count = graphEditorHeaderLines(activeCsvId, $("headerLines").value);
+        if (count !== null) $("headerLines").value = count;
       };
       $("dashboardZoom").oninput = (event) => applyDashboardZoom(false, event.target.value);
       $("dashboardZoom").onchange = () => commitDashboardScale("slider-change");
