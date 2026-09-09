@@ -1091,6 +1091,229 @@
       ) : null,
     );
   }
+  function FastFigureGraphLayoutEditor() {
+    const state = useAppState();
+    const busy = state.lifecycle !== "ready";
+    if (state.workspace !== "slot.graph") return null;
+    const slot = getSelectedSlot();
+    const chart = slot?.chart ? getChart(slot.chart) : null;
+    if (!chart) return null;
+    const settings = readGlobalSettings(chart);
+    const editable = chart.editor?.editable !== false;
+    const axisLabels = {
+      xBottom: "아래 X축",
+      xTop: "위 X축",
+      yLeft: "왼쪽 Y축",
+      yRight: "오른쪽 Y축",
+    };
+    const commit = (title, globalSettings) => {
+      if (!editable) return status("편집 가능 토글을 켠 뒤 설정을 변경하세요.");
+      const payload = {
+        slotId: slot.id,
+        chartId: chart.id,
+        title,
+        globalSettings,
+        direction: "fsm-to-model",
+      };
+      appFSM.send("CHART_LAYOUT_CHANGED", payload);
+      renderDashboard();
+      debugLog("mantine:graph-layout", { slotId: slot.id, chartId: chart.id });
+    };
+    const updateGlobal = (values) =>
+      commit(chart.editor.title, { ...readGlobalSettings(chart), ...values });
+    const updateTitle = (title) => commit(title, readGlobalSettings(chart));
+    const updateAxis = (key, values) => {
+      const current = readGlobalSettings(chart);
+      commit(chart.editor.title, {
+        ...current,
+        axes: {
+          ...current.axes,
+          [key]: { ...current.axes[key], ...values },
+        },
+      });
+    };
+    const toggleGlobal = (key, label) =>
+      React.createElement(
+        Button,
+        {
+          size: "xs",
+          variant: settings[key] ? "filled" : "light",
+          disabled: busy || !editable,
+          "aria-pressed": settings[key],
+          onClick: () => updateGlobal({ [key]: !settings[key] }),
+        },
+        label,
+      );
+    const axisNumber = (key, axis, field, label, options = {}) =>
+      React.createElement(NumberInput, {
+        label,
+        value: axis[field],
+        disabled: busy || !editable,
+        ...options,
+        onChange: (value) =>
+          updateAxis(key, {
+            [field]: value === "" ? "" : String(value),
+          }),
+      });
+    const axisToggle = (key, axis, field, label) =>
+      React.createElement(
+        Button,
+        {
+          size: "xs",
+          variant: axis[field] ? "filled" : "light",
+          disabled: busy || !editable,
+          "aria-pressed": axis[field],
+          onClick: () => updateAxis(key, { [field]: !axis[field] }),
+        },
+        label,
+      );
+    const axisEditor = (key) => {
+      const axis = settings.axes[key];
+      const logScale = axis.scaleType === "log";
+      return React.createElement(
+        Stack,
+        { key, gap: "xs" },
+        React.createElement(Text, { size: "sm", fw: 600 }, axisLabels[key]),
+        React.createElement(TextInput, {
+          label: "축 이름",
+          value: axis.title,
+          disabled: busy || !editable,
+          onChange: (event) => updateAxis(key, { title: event.target.value }),
+        }),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          axisNumber(key, axis, "min", "최소"),
+          axisNumber(key, axis, "max", "최대"),
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(
+            Button,
+            {
+              variant:
+                logScale
+                  ? axis.minorTicks
+                    ? "filled"
+                    : "light"
+                  : axis.tickMode === "increment"
+                    ? "filled"
+                    : "light",
+              disabled: busy || !editable,
+              "aria-pressed": logScale ? axis.minorTicks : axis.tickMode === "increment",
+              onClick: () =>
+                logScale
+                  ? updateAxis(key, { minorTicks: !axis.minorTicks, tickMode: "plotly" })
+                  : updateAxis(key, {
+                      tickMode: axis.tickMode === "increment" ? "plotly" : "increment",
+                    }),
+            },
+            logScale
+              ? axis.minorTicks
+                ? "minor tick 표시"
+                : "minor tick 숨김"
+              : axis.tickMode === "increment"
+                ? "increment"
+                : "Plotly tick",
+          ),
+          logScale
+            ? null
+            : axisNumber(key, axis, "tick", "tick 간격"),
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(Select, {
+            label: "표기",
+            data: [
+              { value: "none", label: "숫자" },
+              { value: "power", label: "지수" },
+              { value: "e", label: "과학 표기" },
+            ],
+            value: axis.notation,
+            disabled: busy || !editable,
+            onChange: (value) => value !== null && updateAxis(key, { notation: value }),
+          }),
+          React.createElement(Select, {
+            label: "축 유형",
+            data: [
+              { value: "linear", label: "선형" },
+              { value: "log", label: "로그" },
+              { value: "reciprocal", label: "역수" },
+            ],
+            value: axis.scaleType,
+            disabled: busy || !editable,
+            onChange: (value) =>
+              value !== null &&
+              updateAxis(key, {
+                scaleType: value,
+                tickMode: value === "log" ? "plotly" : axis.tickMode,
+              }),
+          }),
+        ),
+        axisNumber(key, axis, "divide", "값 나누기"),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          axisNumber(key, axis, "titleSize", "축 이름 크기"),
+          axisNumber(key, axis, "fontSize", "숫자 크기"),
+        ),
+        axisNumber(key, axis, "lineWidth", "축선 굵기", { min: 0 }),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          axisToggle(key, axis, "showGrid", "격자"),
+          axisToggle(key, axis, "visible", "축"),
+          axisToggle(key, axis, "showValues", "값"),
+        ),
+      );
+    };
+
+    return React.createElement(
+      Stack,
+      { gap: "xs", p: "md" },
+      React.createElement(Text, { fw: 600 }, "그래프 전역 / 축"),
+      React.createElement(TextInput, {
+        label: "그래프 제목",
+        value: chart.editor.title,
+        disabled: busy || !editable,
+        onChange: (event) => updateTitle(event.target.value),
+      }),
+      React.createElement(
+        Group,
+        { gap: "xs", grow: true },
+        toggleGlobal("showLegend", "범례"),
+        toggleGlobal("showTitle", "제목"),
+        toggleGlobal("showZeroLine", "0선"),
+      ),
+      React.createElement(TextInput, {
+        label: "그래프 글꼴",
+        value: settings.graphFontFamily,
+        disabled: busy || !editable,
+        onChange: (event) => updateGlobal({ graphFontFamily: event.target.value }),
+      }),
+      React.createElement(
+        Group,
+        { gap: "xs", grow: true },
+        React.createElement(NumberInput, {
+          label: "제목 크기",
+          value: settings.titleFontSize,
+          disabled: busy || !editable,
+          onChange: (value) =>
+            updateGlobal({ titleFontSize: value === "" ? "" : String(value) }),
+        }),
+        React.createElement(NumberInput, {
+          label: "범례 크기",
+          value: settings.legendFontSize,
+          disabled: busy || !editable,
+          onChange: (value) =>
+            updateGlobal({ legendFontSize: value === "" ? "" : String(value) }),
+        }),
+      ),
+      ...Object.keys(axisLabels).map(axisEditor),
+    );
+  }
   function FastFigureGraphFileActions() {
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
@@ -1337,6 +1560,7 @@
         React.createElement(FastFigureProjectDataTree),
         React.createElement(FastFigureProjectActions),
         React.createElement(FastFigureGraphDataEditor),
+        React.createElement(FastFigureGraphLayoutEditor),
         React.createElement(FastFigureGraphFileActions),
         React.createElement(FastFigurePaletteActions),
         React.createElement(FastFigureUtilityActions),
@@ -1371,6 +1595,7 @@
     FastFigureProjectDataTree,
     FastFigureProjectActions,
     FastFigureGraphDataEditor,
+    FastFigureGraphLayoutEditor,
     FastFigureGraphFileActions,
     FastFigureUtilityActions,
     getAppStateSnapshot,
