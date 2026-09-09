@@ -1366,25 +1366,28 @@
       if (!file) return;
       try {
         await runLifecycleTask("importing", "PALETTE_IMPORT", async () => {
-          const parsed = JSON.parse(await file.text());
-          const colors = Array.isArray(parsed) ? parsed : parsed.colors;
-          if (!Array.isArray(colors) || !colors.length)
-            throw Error("colors 배열이 없습니다.");
-          const valid = colors.filter(
-            (color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color),
-          );
-          if (!valid.length) throw Error("유효한 HEX 색상이 없습니다.");
-          commitColors(valid);
-          status(`${file.name} 색상 구성을 덮어썼습니다.`);
-          debugLog("graphPalette:load", {
-            slotId: getSelectedSlot()?.id ?? null,
-            name: file.name,
-            colors: valid.length,
-          });
+          try {
+            const parsed = JSON.parse(await file.text());
+            const colors = Array.isArray(parsed) ? parsed : parsed.colors;
+            if (!Array.isArray(colors) || !colors.length)
+              throw Error("colors 배열이 없습니다.");
+            const valid = colors.filter(
+              (color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color),
+            );
+            if (!valid.length) throw Error("유효한 HEX 색상이 없습니다.");
+            commitColors(valid);
+            status(`${file.name} 색상 구성을 덮어썼습니다.`);
+            debugLog("graphPalette:load", {
+              slotId: getSelectedSlot()?.id ?? null,
+              name: file.name,
+              colors: valid.length,
+            });
+          } catch (error) {
+            status("팔레트 불러오기 실패: " + error.message);
+            debugLog("graphPalette:load-error", { message: error.message });
+            throw error;
+          }
         });
-      } catch (error) {
-        status("팔레트 불러오기 실패: " + error.message);
-        debugLog("graphPalette:load-error", { message: error.message });
       } finally {
         event.target.value = "";
       }
