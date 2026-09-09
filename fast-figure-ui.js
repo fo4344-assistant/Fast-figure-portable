@@ -1314,6 +1314,118 @@
       ...Object.keys(axisLabels).map(axisEditor),
     );
   }
+  function FastFigureGraphPaletteActions() {
+    const state = useAppState();
+    const busy = state.lifecycle !== "ready";
+    const importRef = useRef(null);
+    if (state.workspace !== "slot.graph") return null;
+    const chart = graphEditorChart();
+    const objects = chart ? ensureGraphObjects(chart) : [];
+    const selected =
+      Number.isInteger(selectedObjectIndex) &&
+      selectedObjectIndex >= 0 &&
+      selectedObjectIndex < objects.length
+        ? selectedObjectIndex
+        : null;
+    const canEdit = !!chart && chart.editor?.editable !== false;
+    const commitColors = (colors) => {
+      if (!canEdit) return status("편집 가능 토글을 켠 뒤 색상 구성을 변경하세요.");
+      if (!Array.isArray(colors) || !colors.length)
+        throw Error("적용할 색상 배열이 없습니다.");
+      const next = objects.map((object, index) => ({
+        ...object,
+        color: colors[index % colors.length],
+      }));
+      graphEditorCommit(next, selected);
+      return next;
+    };
+    const resetPalette = () => {
+      if (!chart) return status("그래프 슬롯을 먼저 선택하세요.");
+      commitColors(DEFAULT_COLORS);
+      debugLog("graphPalette:reset", { slotId: getSelectedSlot()?.id ?? null });
+    };
+    const savePalette = () => {
+      if (!chart) return status("그래프 슬롯을 먼저 선택하세요.");
+      const colors = objects.map((object) => object.color).filter(Boolean);
+      const blob = new Blob([JSON.stringify({ colors }, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const link = document.createElement("a");
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      link.href = URL.createObjectURL(blob);
+      link.download = `chart-palette-${stamp}.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 0);
+      debugLog("graphPalette:save", {
+        slotId: getSelectedSlot()?.id ?? null,
+        colors: colors.length,
+      });
+    };
+    const loadPalette = async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        await runLifecycleTask("importing", "PALETTE_IMPORT", async () => {
+          const parsed = JSON.parse(await file.text());
+          const colors = Array.isArray(parsed) ? parsed : parsed.colors;
+          if (!Array.isArray(colors) || !colors.length)
+            throw Error("colors 배열이 없습니다.");
+          const valid = colors.filter(
+            (color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color),
+          );
+          if (!valid.length) throw Error("유효한 HEX 색상이 없습니다.");
+          commitColors(valid);
+          status(`${file.name} 색상 구성을 덮어썼습니다.`);
+          debugLog("graphPalette:load", {
+            slotId: getSelectedSlot()?.id ?? null,
+            name: file.name,
+            colors: valid.length,
+          });
+        });
+      } catch (error) {
+        status("팔레트 불러오기 실패: " + error.message);
+        debugLog("graphPalette:load-error", { message: error.message });
+      } finally {
+        event.target.value = "";
+      }
+    };
+
+    return React.createElement(
+      Stack,
+      { gap: "xs", px: "md", pb: "md" },
+      React.createElement(Text, { fw: 600 }, "그래프 색상 구성"),
+      React.createElement("input", {
+        ref: importRef,
+        type: "file",
+        accept: ".json,application/json",
+        hidden: true,
+        onChange: loadPalette,
+      }),
+      React.createElement(
+        Group,
+        { gap: "xs", grow: true },
+        React.createElement(
+          Button,
+          { variant: "light", disabled: busy || !canEdit, onClick: resetPalette },
+          "기본색",
+        ),
+        React.createElement(
+          Button,
+          { variant: "light", disabled: busy || !chart, onClick: savePalette },
+          "저장",
+        ),
+        React.createElement(
+          Button,
+          {
+            variant: "light",
+            disabled: busy || !canEdit,
+            onClick: () => importRef.current?.click(),
+          },
+          "불러오기",
+        ),
+      ),
+    );
+  }
   function FastFigureGraphFileActions() {
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
@@ -1561,6 +1673,7 @@
         React.createElement(FastFigureProjectActions),
         React.createElement(FastFigureGraphDataEditor),
         React.createElement(FastFigureGraphLayoutEditor),
+        React.createElement(FastFigureGraphPaletteActions),
         React.createElement(FastFigureGraphFileActions),
         React.createElement(FastFigurePaletteActions),
         React.createElement(FastFigureUtilityActions),
@@ -1596,6 +1709,7 @@
     FastFigureProjectActions,
     FastFigureGraphDataEditor,
     FastFigureGraphLayoutEditor,
+    FastFigureGraphPaletteActions,
     FastFigureGraphFileActions,
     FastFigureUtilityActions,
     getAppStateSnapshot,
