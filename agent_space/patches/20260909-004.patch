@@ -1,0 +1,9 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -7506,4 +7506,3 @@
+         try {
+-          activeProject.projectName = $("projectName").value.trim().slice(0, 120);
+-          $("projectName").value = activeProject.projectName;
++          activeProject.projectName = String(activeProject.projectName || "").trim().slice(0, 120);
+           let project = ffpxBuildProject(),
