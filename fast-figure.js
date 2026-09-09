@@ -10136,6 +10136,16 @@
         renderDashboard();
         if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
       }
+      function applyUiPaletteValues(values, notify = true) {
+        activeProject.appearance.uiPalette = Object.fromEntries(
+          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
+            key,
+            projectColor(values?.[key], fallback),
+          ]),
+        );
+        applyUiPalette(false, notify);
+        return activeProject.appearance.uiPalette;
+      }
       $("applyUiPalette").onclick = applyUiPalette;
       $("resetUiPalette").onclick = () => {
         $("uiColor").value = "#B0CFCE";

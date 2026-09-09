@@ -7,6 +7,7 @@
   const {
     AppShell,
     Button,
+    ColorInput,
     Group,
     Image,
     MantineProvider,
@@ -1016,6 +1017,97 @@
     );
   }
 
+  function FastFigurePaletteActions() {
+    const state = useAppState();
+    const busy = state.lifecycle !== "ready";
+    const [opened, setOpened] = useState(false);
+    const [draft, setDraft] = useState(() => ({
+      ...activeProject.appearance.uiPalette,
+    }));
+    const fields = [
+      ["uiColor", "강조색"],
+      ["uiBackgroundColor", "UI 배경"],
+      ["uiSurfaceColor", "UI 표면"],
+      ["uiMutedColor", "보조 텍스트"],
+      ["uiSubtleColor", "약한 텍스트"],
+      ["uiDisabledBgColor", "비활성 배경"],
+      ["uiDisabledTextColor", "비활성 텍스트"],
+      ["uiShadowColor", "그림자"],
+      ["paperColor", "그래프 배경"],
+      ["fontColor", "그래프 글자"],
+    ];
+    const openPalette = () => {
+      setDraft({ ...activeProject.appearance.uiPalette });
+      setOpened(true);
+    };
+    const applyPalette = () => {
+      applyUiPaletteValues(draft);
+      setOpened(false);
+    };
+    const resetPalette = () => {
+      const defaults = { ...DEFAULT_UI_PALETTE };
+      setDraft(defaults);
+      applyUiPaletteValues(defaults);
+    };
+
+    return React.createElement(
+      Stack,
+      { gap: "xs", px: "md", pb: "md" },
+      React.createElement(
+        Button,
+        { variant: "light", disabled: busy, onClick: openPalette },
+        "UI 색상",
+      ),
+      React.createElement(
+        Modal,
+        {
+          opened,
+          onClose: () => setOpened(false),
+          title: "UI 색상",
+          centered: true,
+          size: "lg",
+        },
+        React.createElement(
+          Stack,
+          { gap: "sm" },
+          ...fields.map(([key, label]) =>
+            React.createElement(ColorInput, {
+              key,
+              label,
+              value: draft[key],
+              disabled: busy,
+              onChange: (value) =>
+                setDraft((current) => ({ ...current, [key]: value })),
+            }),
+          ),
+          React.createElement(
+            Group,
+            { justify: "space-between", gap: "xs" },
+            React.createElement(
+              Button,
+              { variant: "light", disabled: busy, onClick: resetPalette },
+              "기본값",
+            ),
+            React.createElement(
+              Group,
+              { gap: "xs" },
+              React.createElement(
+                Button,
+                { variant: "light", onClick: () => setOpened(false) },
+                "취소",
+              ),
+              React.createElement(
+                Button,
+                { disabled: busy, onClick: applyPalette },
+                "적용",
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   function FastFigureUtilityActions() {
     const state = useAppState();
     return React.createElement(
@@ -1109,6 +1201,7 @@
         React.createElement(FastFigureProjectDataTree),
         React.createElement(FastFigureProjectActions),
         React.createElement(FastFigureGraphFileActions),
+        React.createElement(FastFigurePaletteActions),
         React.createElement(FastFigureUtilityActions),
         React.createElement("div", {
           role: "separator",
