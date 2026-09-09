@@ -1,0 +1,366 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -8164,4 +8164,138 @@
+         });
+         return chart.editor.objects;
+       }
++      function graphEditorChart() {
++        let slot = getSelectedSlot();
++        return slot?.chart ? getChart(slot.chart) : null;
++      }
++      function graphEditorCommit(objects, index = null) {
++        let chart = graphEditorChart();
++        if (!chart) return null;
++        let payload = { chartId: chart.id, objects: [...objects], index, direction: "fsm-to-model" };
++        appFSM.send("GRAPH_OBJECTS_REPLACED", payload);
++        chart = payload.chart;
++        editing = chart;
++        let selected = Number.isInteger(index) && index >= 0 && index < chart.editor.objects.length ? index : null;
++        appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
++        renderGraphObjects(chart.editor.objects);
++        if (chart.editor.editable !== false) rebuildEditableGraph(chart);
++        renderDashboard();
++        updateFileAvailability();
++        appFSM.notify("charts", payload.recovered ? "GRAPH_OBJECTS_DEFAULT_CREATED" : "GRAPH_OBJECTS_CHANGED");
++        return chart;
++      }
++      function graphEditorSelectCsv(csvId) {
++        let csv = getProjectCsv(Number(csvId));
++        if (!csv) return null;
++        activeCsvId = csv.id;
++        activeDataName = csv.name;
++        activeDataReady = true;
++        appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(csv), direction: "ui-to-fsm" });
++        appFSM.notify("data", "CSV_SELECTION_CHANGED");
++        return csv;
++      }
++      function graphEditorSelectObject(index) {
++        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
++        let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
++        appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
++        if (selected !== null) graphEditorSelectCsv(objects[selected].csvId);
++        renderGraphObjects(objects);
++        appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
++        return selected;
++      }
++      function graphEditorObjectValues(index, values = {}) {
++        let chart = graphEditorChart(), objects = ensureGraphObjects(chart), current = objects[index];
++        if (!chart || !current) return null;
++        let csv = getProjectCsv(Number(values.csvId)) || getProjectCsv(current.csvId);
++        if (!csv) return null;
++        let defaults = baseGraphObject(chart, csv), columns = new Set(columnDefinitions(csv.rows, csv.headerLines).map((column) => column.id));
++        let clamp = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(max, Number(value))) : fallback;
++        let next = { ...defaults, ...current, csvId: csv.id };
++        next.x = columns.has(values.x) ? values.x : columns.has(next.x) ? next.x : defaults.x;
++        next.y = columns.has(values.y) ? values.y : columns.has(next.y) ? next.y : defaults.y;
++        if (["bottom", "top"].includes(values.xAxisSide)) next.xAxisSide = values.xAxisSide;
++        if (["left", "right"].includes(values.yAxisSide)) next.yAxisSide = values.yAxisSide;
++        if (["scatter", "markers", "lines+markers", "bar", "hidden"].includes(values.type)) next.type = values.type;
++        if (values.legendName !== undefined) next.legendName = String(values.legendName);
++        if (values.lineDash !== undefined) next.lineDash = String(values.lineDash || "solid");
++        if (values.markerSymbol !== undefined) next.markerSymbol = String(values.markerSymbol || "circle");
++        if (/^#[0-9a-f]{6}$/i.test(values.color || "")) next.color = values.color;
++        next.lineWidth = clamp(values.lineWidth, next.lineWidth, 0.1, 20);
++        next.markerSize = clamp(values.markerSize, next.markerSize, 1, 40);
++        next.barOpacity = clamp(values.barOpacity, next.barOpacity, 0.05, 1);
++        next.barLineWidth = clamp(values.barLineWidth, next.barLineWidth, 0, 10);
++        let updated = [...objects];
++        updated[index] = next;
++        return graphEditorCommit(updated, index);
++      }
++      function graphEditorAdd(csvId = activeCsvId) {
++        let slot = getSelectedSlot(), csv = getProjectCsv(Number(csvId));
++        if (!slot || slot.contentType === "image" || !csv) return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
++        graphEditorSelectCsv(csv.id);
++        let chart = graphEditorChart();
++        if (!chart) {
++          let payload = { slotId: slot.id, csvId: csv.id, direction: "fsm-to-model" };
++          appFSM.send("SLOT_DATA_CONNECTED", payload);
++          chart = payload.chart;
++          if (!chart) return status("빈 슬롯에 그래프를 추가하지 못했습니다.");
++          editing = chart;
++          return graphEditorCommit(ensureGraphObjects(chart), 0);
++        }
++        let objects = ensureGraphObjects(chart);
++        return graphEditorCommit([...objects, baseGraphObject(chart, csv)], objects.length);
++      }
++      function graphEditorMove(from, to) {
++        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
++        if (!chart || !objects[from] || !objects[to] || from === to) return chart;
++        let next = [...objects], moved = next.splice(from, 1)[0];
++        next.splice(to, 0, moved);
++        return graphEditorCommit(next, to);
++      }
++      function graphEditorDelete(index) {
++        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
++        if (!chart || !objects[index]) return null;
++        return graphEditorCommit(objects.filter((_, objectIndex) => objectIndex !== index), null);
++      }
++      function graphEditorHeaderLines(csvId, value) {
++        let csv = getProjectCsv(Number(csvId));
++        if (!csv) return null;
++        csv.headerLines = headerLineCount(value, csv.rows);
++        if (activeCsvId === csv.id) {
++          $("headerLines").value = csv.headerLines;
++          rows = csv.rows;
++          columns = columnDefinitions(csv.rows, csv.headerLines);
++          refreshColumnControls();
++          preview();
++        }
++        activeProject.charts.forEach((chart) => {
++          if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id)) rebuildEditableGraph(chart);
++        });
++        renderDashboard();
++        debugLog("csv:header-lines", { csvId: csv.id, headerLines: csv.headerLines });
++        appFSM.notify("data", "CSV_HEADER_LINES_CHANGED");
++        return csv.headerLines;
++      }
++      function graphEditorSetEditable(editable = null) {
++        let chart = graphEditorChart();
++        if (!chart) return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
++        let next = typeof editable === "boolean" ? editable : chart.editor.editable === false;
++        if (next && chartCsvIds(chart).length === 0) {
++          let conversionRows = chart.editor.conversionRows || parsePlotlyToEditor(chart.graph.imported, chart.id).editor.conversionRows;
++          if (!Array.isArray(conversionRows) || !conversionRows.length) conversionRows = [["X", "Y"], ["", ""]];
++          let csv = createProjectCsv(conversionRows, "Plotly JSON.csv");
++          chart.editor.objects.forEach((object) => { object.csvId = csv.id; });
++          delete chart.editor.conversionRows;
++          graphEditorSelectCsv(csv.id);
++          setFileName(csv.name);
++          refreshCsvControls(csv.id);
++        }
++        chart.editor.editable = next;
++        if (next) rebuildEditableGraph(chart);
++        syncEditableUi(chart);
++        renderDashboard();
++        status(next ? "가져온 JSON을 편집기 설정으로 재구성했습니다." : "가져온 원본 Plotly JSON 표시로 전환했습니다.");
++        debugLog("editor:editable", { chartId: chart.id, editable: next });
++        appFSM.notify("charts", "GRAPH_EDITABLE_CHANGED");
++        return next;
++      }
+       function populateObjectForm(object) {
+@@ -9800,46 +9934,4 @@
+       $("exportSlotJson").onclick = downloadSlotFfsx;
+       $("exportPlotlyJson").onclick = downloadPlotlyJson;
+-      $("editorEditable").onclick = () => {
+-        let chart = editing;
+-        if (!chart) return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
+-        let next = chart.editor.editable === false;
+-        if (next && chartCsvIds(chart).length === 0) {
+-          let conversionRows =
+-              chart.editor.conversionRows ||
+-              parsePlotlyToEditor(chart.graph.imported, chart.id).editor.conversionRows,
+-            fallbackRows = [
+-              ["X", "Y"],
+-              ["", ""],
+-            ];
+-          if (!Array.isArray(conversionRows) || !conversionRows.length)
+-            conversionRows = fallbackRows;
+-          let csv = createProjectCsv(
+-            conversionRows,
+-            "Plotly JSON.csv",
+-          );
+-          chart.editor.objects.forEach((object) => {
+-            object.csvId = csv.id;
+-          });
+-          if (Array.isArray(chart.editor.conversionRows)) chart.editor.conversionRows.length = 0;
+-          delete chart.editor.conversionRows;
+-          fallbackRows.length = 0;
+-          conversionRows = null;
+-          activeCsvId = csv.id;
+-          activeDataName = csv.name;
+-          $("headerLines").value = csv.headerLines;
+-          loadData(csv.rows, csv.name);
+-          setFileName(csv.name);
+-          refreshCsvControls(csv.id);
+-        }
+-        chart.editor.editable = next;
+-        if (next) rebuildEditableGraph(chart);
+-        syncEditableUi(chart);
+-        renderDashboard();
+-        status(
+-          next
+-            ? "가져온 JSON을 편집기 설정으로 재구성했습니다."
+-            : "가져온 원본 Plotly JSON 표시로 전환했습니다.",
+-        );
+-        debugLog("editor:editable", { chartId: chart.id, editable: next });
+-      };
++      $("editorEditable").onclick = () => graphEditorSetEditable();
+       $("importSlotJson").onclick = () => {
+@@ -9980,20 +10072,5 @@
+       $("headerLines").onchange = () => {
+-        let count = headerLineCount($("headerLines").value, rows);
+-        $("headerLines").value = count;
+-        let csv = getProjectCsv(activeCsvId);
+-        if (csv) csv.headerLines = count;
+-        refreshColumnControls();
+-        activeProject.charts.forEach((chart) => {
+-          if (
+-            chart.editor?.editable !== false &&
+-            chartCsvIds(chart).includes(activeCsvId)
+-          )
+-            rebuildEditableGraph(chart);
+-        });
+-        renderDashboard();
+-        debugLog("csv:header-lines", {
+-          csvId: activeCsvId,
+-          headerLines: count,
+-        });
++        let count = graphEditorHeaderLines(activeCsvId, $("headerLines").value);
++        if (count !== null) $("headerLines").value = count;
+       };
+       $("dashboardZoom").oninput = (event) => applyDashboardZoom(false, event.target.value);
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -956 +956,137 @@
++  function FastFigureGraphDataEditor() {
++    const state = useAppState();
++    const busy = state.lifecycle !== "ready";
++    const dragRef = useRef(null);
++    if (state.workspace !== "slot.graph") return null;
++    const chart = graphEditorChart();
++    const objects = chart ? ensureGraphObjects(chart) : [];
++    const selectedIndex = Number.isInteger(selectedObjectIndex) && objects[selectedObjectIndex] ? selectedObjectIndex : null;
++    const selected = selectedIndex === null ? null : objects[selectedIndex];
++    const activeCsv = getProjectCsv(selected?.csvId) || getProjectCsv(activeCsvId) || activeProject.csvFiles[0] || null;
++    const csvOptions = activeProject.csvFiles.map((csv) => ({ value: String(csv.id), label: csv.name }));
++    const columns = activeCsv ? columnDefinitions(activeCsv.rows, activeCsv.headerLines) : [];
++    const columnOptions = columns.map((column) => ({ value: column.id, label: column.label }));
++    const update = (values) => selectedIndex !== null && graphEditorObjectValues(selectedIndex, values);
++    const selectField = (label, key, data) => React.createElement(Select, {
++      label, data, value: selected?.[key] ?? null, disabled: busy,
++      onChange: (value) => value !== null && update({ [key]: value }),
++    });
++    const numberField = (label, key, min, max, step = 1) => React.createElement(NumberInput, {
++      label, value: selected?.[key], min, max, step, disabled: busy,
++      onChange: (value) => update({ [key]: value }),
++    });
++    return React.createElement(
++      Stack,
++      { gap: "xs", p: "md" },
++      React.createElement(Text, { fw: 600 }, "그래프 / 데이터"),
++      React.createElement(Select, {
++        label: "사용할 CSV", data: csvOptions, value: activeCsv ? String(activeCsv.id) : null,
++        disabled: busy || !csvOptions.length,
++        onChange: (value) => value !== null && graphEditorSelectCsv(Number(value)),
++      }),
++      activeCsv ? React.createElement(NumberInput, {
++        label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rows.length,
++        allowDecimal: false, disabled: busy,
++        onChange: (value) => graphEditorHeaderLines(activeCsv.id, value),
++      }) : null,
++      activeCsv && columns.length ? React.createElement(
++        "div",
++        { style: { maxHeight: 220, overflow: "auto" } },
++        React.createElement(
++          "table",
++          { style: { width: "100%", borderCollapse: "collapse", fontSize: "var(--mantine-font-size-xs)" } },
++          React.createElement("thead", null, React.createElement("tr", null,
++            ...columns.map((column) => React.createElement("th", { key: column.id, style: { textAlign: "left", padding: 4 } }, column.label)),
++          )),
++          React.createElement("tbody", null,
++            ...activeCsv.rows.slice(0, 30).map((row, rowIndex) => React.createElement("tr", { key: rowIndex },
++              ...columns.map((column) => React.createElement("td", {
++                key: column.id,
++                style: { padding: 4, fontWeight: rowIndex < activeCsv.headerLines ? 600 : 400 },
++              }, String(row?.[column.index] ?? ""))),
++            )),
++          ),
++        ),
++      ) : null,
++      React.createElement(Group, { gap: "xs", grow: true },
++        React.createElement(Button, {
++          variant: chart?.editor?.editable !== false ? "filled" : "light", disabled: busy || !chart,
++          onClick: () => graphEditorSetEditable(chart?.editor?.editable === false),
++        }, chart?.editor?.editable !== false ? "편집 가능" : "원본 JSON"),
++        React.createElement(Button, {
++          variant: "light", disabled: busy || !activeCsv,
++          onClick: () => activeCsv && graphEditorAdd(activeCsv.id),
++        }, "오브젝트 추가"),
++      ),
++      React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
++      objects.length ? React.createElement(Stack, { gap: 4 },
++        ...objects.map((object, index) => React.createElement(Group, {
++          key: `${chart.id}-${index}`, gap: 4, wrap: "nowrap", draggable: true,
++          onDragStart: () => { dragRef.current = index; },
++          onDragEnd: () => { dragRef.current = null; },
++          onDragOver: (event) => event.preventDefault(),
++          onDrop: (event) => {
++            event.preventDefault();
++            if (Number.isInteger(dragRef.current)) graphEditorMove(dragRef.current, index);
++            dragRef.current = null;
++          },
++        },
++          React.createElement(Button, {
++            size: "xs", variant: selectedIndex === index ? "filled" : "light",
++            style: { flex: "1 1 auto", minWidth: 0 },
++            onClick: () => graphEditorSelectObject(index),
++          }, `${index + 1}. ${object.legendName || `${object.x} · ${object.y}`}`),
++          React.createElement(ColorInput, {
++            size: "xs", value: object.color, style: { width: 72 }, disabled: busy,
++            onChange: (color) => graphEditorObjectValues(index, { color }),
++          }),
++          React.createElement(Button, {
++            size: "xs", variant: "subtle", disabled: busy,
++            "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
++            onClick: () => graphEditorDelete(index),
++          }, "×"),
++        )),
++      ) : React.createElement(Text, { size: "xs", c: "dimmed" }, "추가된 그래프 오브젝트가 없습니다."),
++      selected && activeCsv && chart?.editor?.editable !== false ? React.createElement(Stack, { gap: "xs" },
++        React.createElement(Select, {
++          label: "오브젝트 CSV", data: csvOptions, value: String(selected.csvId), disabled: busy,
++          onChange: (value) => value !== null && update({ csvId: Number(value) }),
++        }),
++        React.createElement(Group, { gap: "xs", grow: true },
++          selectField("X 열", "x", columnOptions), selectField("Y 열", "y", columnOptions),
++        ),
++        React.createElement(Group, { gap: "xs", grow: true },
++          selectField("X 축", "xAxisSide", [{ value: "bottom", label: "아래" }, { value: "top", label: "위" }]),
++          selectField("Y 축", "yAxisSide", [{ value: "left", label: "왼쪽" }, { value: "right", label: "오른쪽" }]),
++        ),
++        selectField("유형", "type", [
++          { value: "scatter", label: "선" }, { value: "markers", label: "마커" },
++          { value: "lines+markers", label: "선 + 마커" }, { value: "bar", label: "막대" },
++          { value: "hidden", label: "숨김" },
++        ]),
++        React.createElement(TextInput, {
++          label: "범례 이름", value: selected.legendName, disabled: busy,
++          onChange: (event) => update({ legendName: event.target.value }),
++        }),
++        ["scatter", "lines+markers", "hidden"].includes(selected.type) ? React.createElement(Group, { gap: "xs", grow: true },
++          numberField("선 굵기", "lineWidth", 0.1, 20, 0.1),
++          React.createElement(TextInput, {
++            label: "선 스타일", value: selected.lineDash, disabled: busy,
++            onChange: (event) => update({ lineDash: event.target.value }),
++          }),
++        ) : null,
++        ["markers", "lines+markers"].includes(selected.type) ? React.createElement(Group, { gap: "xs", grow: true },
++          React.createElement(TextInput, {
++            label: "마커", value: selected.markerSymbol, disabled: busy,
++            onChange: (event) => update({ markerSymbol: event.target.value }),
++          }),
++          numberField("마커 크기", "markerSize", 1, 40),
++        ) : null,
++        selected.type === "bar" ? React.createElement(Group, { gap: "xs", grow: true },
++          numberField("막대 불투명도", "barOpacity", 0.05, 1, 0.05),
++          numberField("막대 테두리", "barLineWidth", 0, 10, 0.1),
++        ) : null,
++      ) : null,
++    );
++  }
+   function FastFigureGraphFileActions() {
+@@ -1210,4 +1346,5 @@
+         React.createElement(FastFigureProjectDataTree),
+         React.createElement(FastFigureProjectActions),
++        React.createElement(FastFigureGraphDataEditor),
+         React.createElement(FastFigureGraphFileActions),
+         React.createElement(FastFigurePaletteActions),
+@@ -1240,4 +1377,5 @@
+     FastFigureProjectDataTree,
+     FastFigureProjectActions,
++    FastFigureGraphDataEditor,
+     FastFigureGraphFileActions,
+     FastFigureUtilityActions,
