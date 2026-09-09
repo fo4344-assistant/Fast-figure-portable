@@ -7513,8 +7513,7 @@
         if (getSelectedSlot())
           return status("프로젝트 내보내기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
         try {
-          activeProject.projectName = $("projectName").value.trim().slice(0, 120);
-          $("projectName").value = activeProject.projectName;
+          activeProject.projectName = String(activeProject.projectName || "").trim().slice(0, 120);
           let project = ffpxBuildProject(),
             blob = new Blob([ffpxZipStore(project.assets)], {
               type: "application/vnd.fast-figure-project",
