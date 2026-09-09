@@ -1,0 +1,104 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -1036,26 +1036,98 @@
+   function FastFigureShell() {
++    const [navbarWidth, setNavbarWidth] = useState(370);
++    const [navbarCollapsed, setNavbarCollapsed] = useState(false);
++    const navbarDragRef = useRef(null);
++    const clampNavbarWidth = (value) => Math.max(360, Math.min(620, value));
++    const refreshDashboardAfterNavbarChange = () => {
++      requestAnimationFrame(() => {
++        syncLayoutMapSize();
++        schedulePlotResize();
++      });
++    };
++    const toggleNavbar = () => {
++      setNavbarCollapsed((collapsed) => !collapsed);
++      refreshDashboardAfterNavbarChange();
++    };
++    const startNavbarResize = (event) => {
++      if (navbarCollapsed) return;
++      navbarDragRef.current = event.pointerId;
++      event.currentTarget.setPointerCapture?.(event.pointerId);
++      document.body.style.userSelect = "none";
++      document.body.style.cursor = "col-resize";
++    };
++    const resizeNavbar = (event) => {
++      if (navbarDragRef.current !== event.pointerId) return;
++      const width = clampNavbarWidth(event.clientX);
++      setNavbarWidth(width);
++      syncLayoutMapSize();
++      schedulePlotResize();
++    };
++    const stopNavbarResize = (event) => {
++      if (navbarDragRef.current !== event.pointerId) return;
++      navbarDragRef.current = null;
++      event.currentTarget.releasePointerCapture?.(event.pointerId);
++      document.body.style.userSelect = "";
++      document.body.style.cursor = "";
++      debugLog("mantine:sidebar-resize", { width: navbarWidth });
++    };
++
+     return React.createElement(
+       AppShell,
+-      { header: { height: 57 }, navbar: { width: 370, breakpoint: "sm" }, padding: 0 },
++      {
++        header: { height: 57 },
++        navbar: {
++          width: navbarWidth,
++          breakpoint: "sm",
++          collapsed: { desktop: navbarCollapsed, mobile: navbarCollapsed },
++        },
++        padding: 0,
++      },
+       React.createElement(
+         AppShell.Header,
+         null,
+         React.createElement(
+           Group,
+           { h: "100%", px: "md", gap: "md", wrap: "nowrap" },
++          React.createElement(
++            Button,
++            {
++              variant: "light",
++              "aria-expanded": !navbarCollapsed,
++              onClick: toggleNavbar,
++            },
++            navbarCollapsed ? "사이드바 표시" : "사이드바 숨기기",
++          ),
+           React.createElement(Text, { fw: 700, size: "xl", style: { flex: "0 0 auto" } }, "Fast figure"),
+           React.createElement("div", { style: { flex: "1 1 auto", minWidth: 0 } }, React.createElement(FastFigureToolbar)),
+         ),
+       ),
+       React.createElement(
+         AppShell.Navbar,
+-        { p: 0 },
++        { p: 0, style: { position: "relative" } },
+         React.createElement(FastFigureDataActions),
+         React.createElement(FastFigureImageEditor),
+         React.createElement(FastFigureProjectDataTree),
+         React.createElement(FastFigureProjectActions),
+         React.createElement(FastFigureGraphFileActions),
+         React.createElement(FastFigureUtilityActions),
++        React.createElement("div", {
++          role: "separator",
++          "aria-orientation": "vertical",
++          "aria-label": "사이드바 너비 조절",
++          onPointerDown: startNavbarResize,
++          onPointerMove: resizeNavbar,
++          onPointerUp: stopNavbarResize,
++          onPointerCancel: stopNavbarResize,
++          style: {
++            position: "absolute",
++            top: 0,
++            right: -4,
++            bottom: 0,
++            width: 8,
++            cursor: "col-resize",
++            touchAction: "none",
++          },
++        }),
+       ),
+       React.createElement(AppShell.Main, null),
+     );
