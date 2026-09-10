@@ -7676,20 +7676,6 @@
         status(`${asset.name} 원본 에셋을 다운로드했습니다.`);
         return true;
       }
-      $("assetDownload").onclick = () => downloadProjectAsset();
-      $("assetActions").onclick = (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if ($("assetActions").disabled) return;
-        let menu = $("assetActionMenu"),
-          open = menu.hidden;
-        closeAssetTreeActionMenus();
-        if (!open) return;
-        syncAssetTreeActionMenu();
-        menu.hidden = false;
-        $("assetActions").setAttribute("aria-expanded", "true");
-        menu.querySelector("button:not(:disabled)")?.focus();
-      };
       function selectDirectoryFromTree(path) {
         let match = projectVfs.resolve(path);
         if (match?.kind !== "directory") return status("프로젝트 폴더를 선택할 수 없습니다.");
@@ -7847,7 +7833,6 @@
         if (selected?.kind === "csv") deleteProjectCsv(selected.asset.id);
         else if (selected?.kind === "image") deleteProjectImage(selected.asset.id);
       }
-      $("deleteSelectedAsset").onclick = deleteSelectedAsset;
       function createAssetDirectory(parent = selectedExplorerDirectory) {
         parent =
           parent === "/assets" || parent.startsWith("/assets/") ? parent : "/assets";
@@ -7871,37 +7856,6 @@
           status(`폴더 생성 오류: ${error.message}`);
         }
       }
-      $("newAssetFolder").onclick = () => createAssetDirectory();
-      $("assetTree").addEventListener("click", (event) => {
-        if (event.target.closest(".asset-tree-button")) return;
-        let summary = event.target.closest("summary[data-path]");
-        if (summary) {
-          let path = summary.dataset.path;
-          if (path === "/assets" || path.startsWith("/assets/")) {
-            selectedExplorerDirectory = path;
-            setTimeout(() => selectDirectoryFromTree(path), 0);
-            return;
-          }
-        }
-        setTimeout(() =>
-          appFSM.send("CLEAR_ASSET_SELECTION", {
-            direction: "ui-to-fsm",
-          }),
-          0,
-        );
-      });
-      document.addEventListener("click", (event) => {
-        if (appFSM.state.assetSelection === "none") return;
-        if (
-          event.target.closest(
-            ".asset-tree-button, .asset-tree-directory, #assetActions, #assetActionMenu, #csvSelectionPanel, #imageSelectionPanel, #deleteSelectedAsset",
-          )
-        )
-          return;
-        appFSM.send("CLEAR_ASSET_SELECTION", {
-          direction: "ui-to-fsm",
-        });
-      });
       function insertEmptyImageIntoSelectedSlot() {
         let slot = getSelectedSlot();
         if (!slot || slot.contentType !== "image")
@@ -10487,7 +10441,6 @@
       );
       installHelpPopups();
       installSidebarControls();
-      installAssetTreeInteractions();
       connectLifecycleTasksToFSM();
       installLayoutResizer();
       axisFields();
