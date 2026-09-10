@@ -1504,6 +1504,10 @@
       function exitImageWorkspaceState() {
         $("imageBox").classList.add("hidden");
       }
+      function readmeContentHtml() {
+        let template = $("readmeContent");
+        return template ? template.innerHTML.replaceAll("{{APP_BUILD}}", APP_BUILD) : "";
+      }
       function setOverlayDomState(name) {
         let panels = {
             layout: "layoutPanel",
@@ -1531,12 +1535,7 @@
         main.classList.toggle("layout-open", name === "layout");
         main.classList.toggle("dashboard-popup-open", popup);
         $("layoutToggle").textContent = "레이아웃";
-        if (name !== "readme" && $("readmeDialog").open) $("readmeDialog").close();
-        if (name === "readme" && !$("readmeDialog").open) {
-          $("readmeDialog").showModal();
-          $("readmeDialog").focus({ preventScroll: true });
-          requestAnimationFrame(() => ($("readmeDialog").scrollTop = 0));
-        }
+        if ($("readmeDialog").open) $("readmeDialog").close();
         if (popup) clearAllSlotSelections();
       }
       function enterOverlayState({ state, objects }) {
@@ -2341,11 +2340,10 @@
             kind: "fsm-layout-highlight-out-of-sync",
             overlay: appFSM.state.overlay,
           });
-        if ($("readmeDialog").open !== (appFSM.state.overlay === "readme"))
+        if ($("readmeDialog").open)
           issues.push({
-            kind: "fsm-readme-out-of-sync",
-            overlay: appFSM.state.overlay,
-            open: $("readmeDialog").open,
+            kind: "legacy-readme-dialog-open",
+            open: true,
           });
         try {
           validateProjectObject(activeProject, { requireSlots: true });

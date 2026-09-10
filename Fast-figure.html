@@ -11387,6 +11387,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       </aside>
       <dialog id="readmeDialog" tabindex="-1">
         <div class="popup-heading"><strong>Fast figure README</strong></div>
+        <template id="readmeContent">
         <div class="readme-content">
           <p><strong>About Fast figure</strong></p>
           <p>
@@ -11403,7 +11404,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             connection.
           </p>
           <p><strong>Application version</strong></p>
-          <p><code>1.1.31-alpha</code></p>
+          <p><code>{{APP_BUILD}}</code></p>
           <p><strong>Developer</strong></p>
           <ul>
             <li>Name: 노대권 (Daegwon Noh)</li>
@@ -11703,8 +11704,9 @@ THE SOFTWARE.</pre
             OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
             OTHER DEALINGS IN THE SOFTWARE.
           </p>
-          <button id="closeReadme" type="button" class="light">Close</button>
         </div>
+        </template>
+        <button id="closeReadme" type="button" class="light">Close</button>
       </dialog>
       <div id="sidebarResizer" class="sidebar-resizer">
         <button

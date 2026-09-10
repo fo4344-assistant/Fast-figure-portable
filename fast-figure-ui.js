@@ -1600,6 +1600,29 @@
     );
   }
 
+  function FastFigureReadmeOverlay() {
+    const state = useAppState();
+    if (state.overlay !== "readme") return null;
+    return React.createElement(
+      Modal,
+      {
+        opened: true,
+        onClose: () =>
+          appFSM.send("CLOSE_OVERLAY", { reason: "mantine-readme" }),
+        title: "Fast figure README",
+        size: "xl",
+        centered: true,
+        closeOnClickOutside: true,
+        closeOnEscape: true,
+        styles: { body: { maxHeight: "75vh", overflowY: "auto" } },
+        "data-fastfigure-overlay": "readme",
+      },
+      React.createElement("div", {
+        dangerouslySetInnerHTML: { __html: readmeContentHtml() },
+      }),
+    );
+  }
+
   function FastFigureLabelOverlay() {
     const state = useAppState();
     if (state.overlay !== "label") return null;
@@ -2411,6 +2434,7 @@
       React.createElement(FastFigureCaptionOverlay),
       React.createElement(FastFigureLayoutOverlay),
       React.createElement(FastFigurePrintOverlay),
+      React.createElement(FastFigureReadmeOverlay),
     );
   }
 
@@ -2429,6 +2453,7 @@
     FastFigureCaptionOverlay,
     FastFigureLayoutOverlay,
     FastFigurePrintOverlay,
+    FastFigureReadmeOverlay,
     FastFigureUtilityActions,
     getAppStateSnapshot,
     selectedTargetText,
