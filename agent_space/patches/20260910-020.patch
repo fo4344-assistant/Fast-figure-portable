@@ -1,0 +1,87 @@
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -3719,84 +3719,6 @@
+         } else appendAssetTreeItem(slotRoot.list, "(표시 슬롯 없음)", "", 1);
+         tree.replaceChildren(assetRoot.branch, slotRoot.branch);
+       }
+-      const ASSET_TREE_DRAG_TYPE = "application/x-fast-figure-path";
+-      const ASSET_TREE_LOCKED_TYPE = "application/x-fast-figure-locked";
+-      function assetTreeDropTarget(event) {
+-        return event.target.closest?.("#assetTree [data-explorer-target]") || null;
+-      }
+-      function assetTreeDropPolicy(dataTransfer, target) {
+-        let targetKind = target?.dataset.explorerTarget,
+-          types = new Set(Array.from(dataTransfer?.types || []));
+-        if (!targetKind) return { allowed: false, reason: "드롭 대상이 없습니다." };
+-        if (types.has(ASSET_TREE_DRAG_TYPE)) {
+-          let dragged = null;
+-          try {
+-            dragged = JSON.parse(dataTransfer.getData(ASSET_TREE_DRAG_TYPE) || "null");
+-          } catch (_) {}
+-          let match = dragged?.path ? projectVfs.resolve(dragged.path) : null,
+-            protectedDefaultCsv =
+-              types.has(ASSET_TREE_LOCKED_TYPE) ||
+-              (match?.kind === "csv" && match.asset.isDefaultEmpty === true),
+-            fixedDirectory = match?.kind === "directory" && projectVfs.isFixedDirectory(match.path),
+-            trashed = dragged?.path && projectVfs.isTrashed(dragged.path);
+-          if (targetKind === "slot")
+-            return {
+-              allowed: !!match && match.kind !== "directory" && !trashed,
+-              operation: "link",
+-              reason: trashed
+-                ? "휴지통의 파일은 슬롯에 연결할 수 없습니다."
+-                : match?.kind === "directory"
+-                  ? "폴더는 슬롯에 연결할 수 없습니다."
+-                  : "",
+-            };
+-          let sameFolder = dragged?.path && projectParentPath(dragged.path) === target.dataset.path,
+-            recursive = match?.kind === "directory" && projectPathInDirectory(target.dataset.path, match.path);
+-          return {
+-            allowed: !!match && !protectedDefaultCsv && !fixedDirectory && !sameFolder && !recursive,
+-            operation: "move",
+-            reason: protectedDefaultCsv
+-              ? "프로젝트 기본 빈 CSV는 이동할 수 없습니다."
+-              : fixedDirectory
+-                ? "기본 프로젝트 폴더는 이동할 수 없습니다."
+-                : recursive
+-                  ? "폴더를 자기 자신 또는 하위 폴더로 이동할 수 없습니다."
+-              : sameFolder
+-                ? "이미 같은 폴더에 있습니다."
+-                : "",
+-          };
+-        }
+-        if (!dataTransferHasFiles(dataTransfer))
+-          return { allowed: false, reason: "지원하는 드래그 데이터가 아닙니다." };
+-        if (targetKind === "folder" && projectVfs.isTrashed(target.dataset.path))
+-          return { allowed: false, reason: "외부 파일은 휴지통으로 직접 가져올 수 없습니다." };
+-        let files = Array.from(dataTransfer.files || []);
+-        if (!files.length)
+-          return {
+-            allowed: true,
+-            operation: targetKind === "slot" ? "import-slot" : "import-folder",
+-            reason: "",
+-          };
+-        let kinds = files.map(slotFileKind);
+-        if (kinds.some((kind) => !kind))
+-          return { allowed: false, reason: "지원하지 않는 파일 형식이 포함되어 있습니다." };
+-        if (targetKind === "slot")
+-          return {
+-            allowed: files.length === 1,
+-            operation: "import-slot",
+-            reason: files.length === 1 ? "" : "슬롯에는 한 번에 파일 하나만 놓을 수 있습니다.",
+-          };
+-        let allowed = kinds.every((kind) => kind === "data" || kind === "image");
+-        return {
+-          allowed,
+-          operation: "import-folder",
+-          reason: allowed ? "" : "FFSX는 슬롯에만 놓을 수 있습니다.",
+-        };
+-      }
+-      function clearAssetTreeDropState() {
+-        $("assetTree")
+-          .querySelectorAll(".drop-allowed, .drop-denied")
+-          .forEach((node) => node.classList.remove("drop-allowed", "drop-denied"));
+-      }
+       function connectProjectAssetToSlot(path, kind, slot) {
+         let match = projectVfs.resolve(path);
+         if (!match || match.kind !== kind || match.kind === "directory")
