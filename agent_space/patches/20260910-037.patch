@@ -1,0 +1,150 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -10754,43 +10754,2 @@
+         </fieldset>
+-        <fieldset id="imageBox" class="hidden">
+-          <legend>2. 이미지 설정</legend>
+-          <label
+-            >이미지 설정 유형<select id="imageFitMode">
+-              <option value="contain">슬롯에 맞춰 축소</option>
+-              <option value="cover">슬롯에 맞춰 자르기</option>
+-              <option value="manual">수동 설정</option>
+-            </select></label
+-          >
+-          <div id="imageManualFields" class="hidden">
+-            <label
+-              >크기 비율(%)<input
+-                id="imageScale"
+-                type="number"
+-                min="1"
+-                max="1000"
+-                step="1"
+-                value="100"
+-            /></label>
+-            <div class="row">
+-              <label
+-                >X 위치(%)<input
+-                  id="imagePositionX"
+-                  type="number"
+-                  min="-100"
+-                  max="200"
+-                  step="1"
+-                  value="50" /></label
+-              ><label
+-                >Y 위치(%)<input
+-                  id="imagePositionY"
+-                  type="number"
+-                  min="-100"
+-                  max="200"
+-                  step="1"
+-                  value="50"
+-              /></label>
+-            </div>
+-          </div>
+-          <img id="imagePreview" class="image-preview hidden" alt="선택 이미지 미리보기" />
+-        </fieldset>
+         <fieldset id="buildBox" class="hidden">
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1470,6 +1470,5 @@
+         syncLabelControlsFromObject(objects?.labels || projectObjects.read("labels"));
+         syncCaptionControlsFromObject(objects?.captions || projectObjects.read("captions"));
+         $("buildBox").classList.add("hidden");
+-        $("imageBox").classList.add("hidden");
+       }
+       function syncGraphWorkspaceState({ objects } = {}) {
+@@ -1506,8 +1505,5 @@
+       function exitGraphWorkspaceState() {
+         $("buildBox").classList.add("hidden");
+         selectedObjectIndex = null;
+       }
+-      function exitImageWorkspaceState() {
+-        $("imageBox").classList.add("hidden");
+-      }
+       function readmeContentHtml() {
+@@ -1912,5 +1908,4 @@
+               ],
+               entry: syncImageWorkspaceState,
+-              exit: exitImageWorkspaceState,
+               update: syncImageWorkspaceState,
+               on: SHARED_WORKSPACE_EVENTS,
+@@ -2032,10 +2027,3 @@
+         "gridCols",
+         "gridRows",
+-        "imageBox",
+-        "imageFitMode",
+-        "imageManualFields",
+-        "imagePositionX",
+-        "imagePositionY",
+-        "imagePreview",
+-        "imageScale",
+         "insertSlotCaptions",
+@@ -2875,7 +2863,6 @@
+         activeAssetKind = null;
+         layoutSelected.clear();
+         $("file").value = "";
+         $("buildBox").classList.add("hidden");
+-        $("imageBox").classList.add("hidden");
+       }
+       function renderProjectObject(project = activeProject) {
+@@ -3026,4 +3013,4 @@
+         ["makeSlots", () => typeof makeSlots === "function"],
+         ["applyGraphSettings", () => typeof applyGraphSettings === "function"],
+-        ["applyImageSettings", () => typeof applyImageSettings === "function"],
++        ["applyImageSettingsFromValues", () => typeof applyImageSettingsFromValues === "function"],
+         ["projectClone", () => typeof projectClone === "function"],
+@@ -4083,32 +4070,12 @@
+-      function syncImageSettingsUi() {
+-        let slot = getSelectedSlot(),
+-          image = slotImage(slot),
+-          settings = normalizeImageSettings(image),
+-          manual = settings?.fit === "manual";
+-        $("imageManualFields").classList.toggle("hidden", !manual);
+-        ["imageScale", "imagePositionX", "imagePositionY"].forEach(
+-          (id) => ($(id).disabled = !manual),
+-        );
+-        if (!settings) return;
+-        $("imageFitMode").value = settings.fit;
+-        $("imageScale").value = settings.scale;
+-        $("imagePositionX").value = settings.x;
+-        $("imagePositionY").value = settings.y;
+-      }
+       function syncSlotContentTypeUi() {
+         let slot = getSelectedSlot(),
+           has = !!slot,
+-          image = slotImage(slot),
+           isImage = slot?.contentType === "image";
+         let showCsvPanel = has ? !isImage : activeAssetKind === "csv";
+         $("csvSelectionPanel").classList.toggle("hidden", !showCsvPanel);
+-        $("imageBox").classList.toggle("hidden", !has || !isImage || !image);
+         if (isImage) $("buildBox").classList.add("hidden");
+-        $("imagePreview").classList.toggle("hidden", !image);
+-        if (image) $("imagePreview").src = projectImageDisplayUrl(image);
+         refreshCsvControls();
+         refreshImageControls();
+-        syncImageSettingsUi();
+       }
+       function updateFileAvailability() {
+         let hasSlot = !!getSelectedSlot();
+@@ -7054,19 +7021,1 @@
+-      function applyImageSettings() {
+-        let changed = applyImageSettingsFromValues({
+-          fit: $("imageFitMode").value,
+-          scale: $("imageScale").value,
+-          x: $("imagePositionX").value,
+-          y: $("imagePositionY").value,
+-        });
+-        if (changed) syncImageSettingsUi();
+-        return changed;
+-      }
+-      $("imageFitMode").onchange = applyImageSettings;
+-      ["imageScale", "imagePositionX", "imagePositionY"].forEach((id) => {
+-        let control = $(id);
+-        control.addEventListener("change", applyImageSettings);
+-        control.addEventListener("keydown", (event) => {
+-          if (event.key === "Enter") event.target.blur();
+-        });
+-      });
+       async function loadImageFile(
