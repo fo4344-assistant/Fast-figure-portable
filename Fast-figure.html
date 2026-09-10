@@ -9537,21 +9537,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         margin: 8px 0 4px;
         font-weight: 600;
       }
-      .slot-type-controls {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin: 0 0 10px;
-      }
-      .slot-type-controls span {
-        font-weight: 700;
-        font-size: 12px;
-      }
-      .slot-type-controls button {
-        width: auto;
-        margin: 0;
-        white-space: nowrap;
-      }
       .slot-image-frame {
         position: absolute;
         inset: 0;
@@ -10726,24 +10711,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       <aside>
         <fieldset>
           <legend>1. 데이터</legend>
-          <div id="slotTypeControls" class="slot-type-controls hidden">
-            <span>슬롯 유형</span
-            ><button
-              id="slotTypeGraph"
-              type="button"
-              class="light setting-toggle active"
-              data-active="true"
-            >
-              그래프</button
-            ><button
-              id="slotTypeImage"
-              type="button"
-              class="light setting-toggle"
-              data-active="false"
-            >
-              이미지
-            </button>
-          </div>
           <div class="file-picker">
             <span id="fileName" class="file-name">선택된 파일 없음</span>
           </div>
@@ -10765,9 +10732,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             <button id="insertEmptyImage" type="button" class="light data-action-button">
               빈 이미지 삽입
             </button>
-          </div>
-          <div id="fileTypeHint" class="hint">
-            CSV/TSV 또는 JSON 객체 배열을 지원합니다. 데이터는 오프라인으로 처리됩니다.
           </div>
           <div id="status" class="status">파일을 선택하세요.</div>
           <div id="tableWrap" class="table-wrap hidden"><table id="preview"></table></div>

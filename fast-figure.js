@@ -2027,7 +2027,6 @@
         "exportProject",
         "exportSlotJson",
         "fileName",
-        "fileTypeHint",
         "fontColor",
         "graphArea",
         "graphObjects",
@@ -2103,9 +2102,6 @@
         "slotGap",
         "slotCaptionMode",
         "slotRadius",
-        "slotTypeControls",
-        "slotTypeGraph",
-        "slotTypeImage",
         "splitSlot",
         "status",
         "tableWrap",
@@ -4112,18 +4108,9 @@
       }
       function syncSlotContentTypeUi() {
         let slot = getSelectedSlot(),
-          type = slot?.contentType || "none",
           has = !!slot,
           image = slotImage(slot),
-          isImage = type === "image";
-        $("slotTypeControls").classList.toggle("hidden", !has);
-        syncSettingToggle("slotTypeGraph", type === "graph");
-        syncSettingToggle("slotTypeImage", isImage);
-        $("fileTypeHint").textContent = isImage
-          ? "이미지 파일을 선택하세요. 이미지는 선택한 슬롯에서 그래프를 대체해 표시됩니다."
-          : has
-            ? "CSV/TSV 또는 JSON 객체 배열을 지원합니다. 데이터는 오프라인으로 처리됩니다."
-            : "슬롯을 선택하지 않으면 파일을 프로젝트 오브젝트로만 추가합니다.";
+          isImage = slot?.contentType === "image";
         let showCsvPanel = has ? !isImage : activeAssetKind === "csv",
           showImagePanel = has ? isImage : activeAssetKind === "image";
         $("csvSelectionPanel").classList.toggle("hidden", !showCsvPanel);
@@ -7048,8 +7035,6 @@
           direction: "fsm-to-model",
         });
       }
-      $("slotTypeGraph").onclick = () => setSlotContentType("graph");
-      $("slotTypeImage").onclick = () => setSlotContentType("image");
       function syncSlotImageElement(slot, image) {
         let element = slot && document.querySelector(`.slot[data-slot="${slot.id}"] .slot-image`);
         if (!element || !image) return false;
