@@ -1020,6 +1020,31 @@
         .map((csv) => `${csv.name} · ${csv.path}`);
       return references.length ? references.join(", ") : "(에셋 없음)";
     };
+    const draggedProjectAsset = (event) => {
+      const path =
+        dragNodeRef.current?.path || event.dataTransfer?.getData("text/plain") || "";
+      const match = path ? projectVfs.resolve(path) : null;
+      if (!match || match.kind === "directory" || projectVfs.isTrashed(path)) return null;
+      return { path, kind: match.kind };
+    };
+    const allowProjectAssetSlotDrop = (event) => {
+      const dragged = draggedProjectAsset(event);
+      if (!dragged) return false;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "link";
+      return true;
+    };
+    const dropProjectAssetOnSlot = (event, slot) => {
+      const dragged = draggedProjectAsset(event);
+      dragNodeRef.current = null;
+      if (!dragged) return;
+      event.preventDefault();
+      try {
+        connectProjectAssetToSlot(dragged.path, dragged.kind, slot);
+      } catch (error) {
+        status(`슬롯 연결 오류: ${error.message}`);
+      }
+    };
 
     return React.createElement(
       Stack,
@@ -1232,8 +1257,18 @@
             ...(visibleSlots.length
               ? visibleSlots.map((slot) =>
                   React.createElement(
-                    Text,
-                    { key: slot.id, size: "xs" },
+                    Button,
+                    {
+                      key: slot.id,
+                      variant: state.workspace !== "project" && getSelectedSlot()?.id === slot.id ? "filled" : "subtle",
+                      size: "xs",
+                      fullWidth: true,
+                      justify: "flex-start",
+                      disabled: busy,
+                      onClick: () => setSelectedSlot(slot.id),
+                      onDragOver: allowProjectAssetSlotDrop,
+                      onDrop: (event) => dropProjectAssetOnSlot(event, slot),
+                    },
                     `[row=${slot.row},col=${slot.col}] — ${slotReference(slot)}`,
                   ),
                 )
