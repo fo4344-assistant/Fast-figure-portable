@@ -1993,10 +1993,6 @@
       const appFSM = new ApplicationStateMachine(projectObjects, APP_STATE_DEFINITIONS);
       const REQUIRED_CONTROL_IDS = [
         "addGraphObject",
-        "assetActions",
-        "assetActionMenu",
-        "assetDownload",
-        "assetTree",
         "csvSelectionPanel",
         "imageSelectionPanel",
         "deleteSelectedAsset",
@@ -2031,9 +2027,7 @@
         "exportPlotlyJson",
         "exportProject",
         "exportSlotJson",
-        "file",
         "fileName",
-        "filePick",
         "fileTypeHint",
         "fontColor",
         "graphArea",
@@ -4127,10 +4121,6 @@
         $("slotTypeControls").classList.toggle("hidden", !has);
         syncSettingToggle("slotTypeGraph", type === "graph");
         syncSettingToggle("slotTypeImage", isImage);
-        let filePickLabel = isImage ? "이미지 추가" : has ? "CSV 추가" : "파일 추가";
-        $("filePick").title = filePickLabel;
-        $("filePick").setAttribute("aria-label", filePickLabel);
-        $("file").accept = isImage ? "image/*" : has ? ".csv,.tsv,.json" : ".csv,.tsv,.json,image/*";
         $("fileTypeHint").textContent = isImage
           ? "이미지 파일을 선택하세요. 이미지는 선택한 슬롯에서 그래프를 대체해 표시됩니다."
           : has
@@ -6956,9 +6946,6 @@
           event.target.value = "";
         }
       };
-      $("filePick").onclick = () => {
-        $("file").click();
-      };
       function downloadProjectAsset(path = appFSM.state.assetPath) {
         let selected = path ? projectVfs.resolve(path) : null,
           asset = ["csv", "image"].includes(selected?.kind) ? selected.asset : null;
@@ -7343,28 +7330,6 @@
           body +
           "</tbody>";
       }
-      $("file").onchange = async (e) => {
-        let files = [...e.target.files],
-          target = getSelectedSlot();
-        if (!files.length) return;
-        try {
-          if (target && (target.contentType || "graph") === "image")
-            await loadFileIntoSlot(files[0], target);
-          else if (target)
-            for (let file of files) await loadDataFile(file, target);
-          else
-            for (let file of files) {
-              let kind = slotFileKind(file);
-              if (kind === "image") await loadImageFile(file, null);
-              else if (kind === "data") await loadDataFile(file, null);
-              else throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
-            }
-        } catch (error) {
-          status("불러오기 실패: " + error.message);
-        } finally {
-          e.target.value = "";
-        }
-      };
       $("resetSelectedSlot").onclick = () => {
         let slot = getSelectedSlot();
         if (!slot) {
@@ -9599,7 +9564,6 @@
         [
           ["importProjectFile", "onchange", "importing", "PROJECT_IMPORT"],
           ["importSlotJsonFile", "onchange", "importing", "SLOT_IMPORT"],
-          ["file", "onchange", "importing", "ASSET_IMPORT"],
           ["loadGraphPaletteFile", "onchange", "importing", "PALETTE_IMPORT"],
           ["exportProject", "onclick", "exporting", "PROJECT_EXPORT"],
           ["exportSlotJson", "onclick", "exporting", "SLOT_EXPORT"],
