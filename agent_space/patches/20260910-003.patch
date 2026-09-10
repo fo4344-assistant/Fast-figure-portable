@@ -1,0 +1,213 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -7000,7 +7000,9 @@
+-      async function exportDashboard(capture = false) {
++      async function exportDashboard(capture = false, options = null) {
+         let dashboard = $("dashboard"),
+           caption = $("dashboardCaption"),
+-          statusOut = $("printStatus"),
++          statusOut = options?.onStatus
++            ? { set textContent(value) { options.onStatus(value); } }
++            : $("printStatus"),
+           bordersVisible = activeProject.layout.slotStyle.showBorders,
+           captionView = activeCaptionView(),
+           dashboardRect = dashboard.getBoundingClientRect();
+@@ -7050,5 +7050,10 @@
+-          dpi = Math.max(36, Math.min(1200, Number($("printDpi").value) || 300)),
+-          format = $("printFormat").value;
+-        $("printWidth").value = width;
+-        $("printHeight").value = height;
+-        $("printDpi").value = dpi;
++          dpi = Math.max(
++            36,
++            Math.min(1200, Number(options?.dpi ?? $("printDpi").value) || 300),
++          ),
++          format = options?.format || $("printFormat").value;
++        if (!options) {
++          $("printWidth").value = width;
++          $("printHeight").value = height;
++          $("printDpi").value = dpi;
++        }
+@@ -7300,14 +7300,24 @@
+-      async function exportDashboardTarget() {
+-        let statusOut = $("printStatus"),
++      async function exportDashboardTarget(options = null) {
++        let statusOut = options?.onStatus
++            ? { set textContent(value) { options.onStatus(value); } }
++            : $("printStatus"),
+           snapshot = createTargetExportSnapshot(),
+           captionView = snapshot.captionView,
+-          width = Math.max(100, Math.min(20000, Number($("printWidth").value) || 1000)),
+-          requestedHeight = Number($("printHeight").value),
+-          dpi = Math.max(36, Math.min(1200, Number($("printDpi").value) || 300)),
++          width = Math.max(
++            100,
++            Math.min(20000, Number(options?.width ?? $("printWidth").value) || 1000),
++          ),
++          requestedHeight = Number(options?.height ?? $("printHeight").value),
++          dpi = Math.max(
++            36,
++            Math.min(1200, Number(options?.dpi ?? $("printDpi").value) || 300),
++          ),
+           rasterScale = 1,
+-          format = $("printFormat").value,
++          format = options?.format || $("printFormat").value,
+           bordersVisible = snapshot.bordersVisible,
+           visibleSlots = snapshot.slots.filter((slot) => !slot.hidden),
+           captionShown = captionView.enabled;
+-        $("printWidth").value = width;
+-        $("printDpi").value = dpi;
++        if (!options) {
++          $("printWidth").value = width;
++          $("printDpi").value = dpi;
++        }
+@@ -7340,1 +7340,1 @@
+-        if (!automaticHeight) $("printHeight").value = height;
++        if (!options && !automaticHeight) $("printHeight").value = height;
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -20,1 +20,1 @@
+-  const { useRef, useState, useSyncExternalStore } = React;
++  const { useEffect, useRef, useState, useSyncExternalStore } = React;
+@@ -1960,1 +1960,129 @@
++  function FastFigurePrintOverlay() {
++    const state = useAppState();
++    const [width, setWidth] = useState(() =>
++      Math.max(100, Math.round(dashboardReferenceWidth())),
++    );
++    const [height, setHeight] = useState("");
++    const [dpi, setDpi] = useState(300);
++    const [format, setFormat] = useState("png");
++    const [message, setMessage] = useState("");
++    const opened = state.overlay === "print";
++    const busy = state.lifecycle !== "ready";
++
++    useEffect(() => {
++      if (!opened) return;
++      setWidth(Math.max(100, Math.round(dashboardReferenceWidth())));
++      setHeight("");
++      setMessage("");
++    }, [opened]);
++
++    if (!opened) return null;
++
++    const close = () =>
++      appFSM.send("CLOSE_OVERLAY", { reason: "mantine-print" });
++    const normalized = () => ({
++      width: Math.max(100, Math.min(20000, Number(width) || 1000)),
++      height:
++        height === "" || height === null
++          ? ""
++          : Math.max(100, Math.min(20000, Number(height) || 100)),
++      dpi: Math.max(36, Math.min(1200, Number(dpi) || 300)),
++      format: format === "jpeg" ? "jpeg" : "png",
++      onStatus: setMessage,
++    });
++    const save = () =>
++      runLifecycleTask("exporting", "PRINT_EXPORT", () =>
++        exportDashboardTarget(normalized()),
++      );
++    const capture = () =>
++      runLifecycleTask("exporting", "CAPTURE_EXPORT", () => {
++        const values = normalized();
++        return exportDashboard(true, {
++          dpi: values.dpi,
++          format: values.format,
++          onStatus: setMessage,
++        });
++      });
++
++    return React.createElement(
++      Modal,
++      {
++        opened: true,
++        onClose: close,
++        title: "프린트 / 내보내기",
++        size: "lg",
++        centered: true,
++        closeOnClickOutside: true,
++        closeOnEscape: true,
++        "data-fastfigure-overlay": "print",
++      },
++      React.createElement(
++        Stack,
++        { gap: "md" },
++        React.createElement(
++          Group,
++          { gap: "xs", grow: true },
++          React.createElement(Select, {
++            label: "형식",
++            value: format,
++            data: [
++              { value: "png", label: "PNG" },
++              { value: "jpeg", label: "JPEG" },
++            ],
++            disabled: busy,
++            onChange: (value) => value !== null && setFormat(value),
++          }),
++          React.createElement(NumberInput, {
++            label: "DPI",
++            value: dpi,
++            min: 36,
++            max: 1200,
++            disabled: busy,
++            onChange: setDpi,
++          }),
++        ),
++        React.createElement(
++          Group,
++          { gap: "xs", grow: true },
++          React.createElement(NumberInput, {
++            label: "가로 (px)",
++            value: width,
++            min: 100,
++            max: 20000,
++            disabled: busy,
++            onChange: setWidth,
++          }),
++          React.createElement(NumberInput, {
++            label: "세로 (px, 비우면 자동)",
++            value: height,
++            min: 100,
++            max: 20000,
++            disabled: busy,
++            onChange: setHeight,
++          }),
++        ),
++        React.createElement(
++          Group,
++          { gap: "xs", grow: true },
++          React.createElement(
++            Button,
++            { disabled: busy, onClick: save },
++            "설정 크기로 저장",
++          ),
++          React.createElement(
++            Button,
++            { variant: "light", disabled: busy, onClick: capture },
++            "현재 화면 캡처",
++          ),
++        ),
++        React.createElement(
++          Text,
++          { size: "sm", c: "dimmed", "aria-live": "polite" },
++          message ||
++            "PNG/JPEG, 36–1200 DPI. 세로를 비우면 현재 레이아웃과 캡션에 맞춰 자동 계산합니다.",
++        ),
++      ),
++    );
++  }
++
+   function FastFigureLayoutOverlay() {
+@@ -2340,3 +2340,4 @@
+       React.createElement(FastFigureLabelOverlay),
+       React.createElement(FastFigureCaptionOverlay),
+       React.createElement(FastFigureLayoutOverlay),
++      React.createElement(FastFigurePrintOverlay),
+@@ -2370,3 +2370,4 @@
+     FastFigureCaptionOverlay,
+     FastFigureLayoutOverlay,
++    FastFigurePrintOverlay,
+     FastFigureUtilityActions,
