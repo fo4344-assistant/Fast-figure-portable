@@ -1,0 +1,78 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -8984,7 +8984,9 @@
+-      async function exportDashboard(capture = false) {
++      async function exportDashboard(capture = false, options = null) {
+         let dashboard = $("dashboard"),
+           caption = $("dashboardCaption"),
+-          statusOut = $("printStatus"),
++          statusOut = options?.onStatus
++            ? { set textContent(value) { options.onStatus(value); } }
++            : $("printStatus"),
+           bordersVisible = activeProject.layout.slotStyle.showBorders,
+           captionView = activeCaptionView(),
+           dashboardRect = dashboard.getBoundingClientRect();
+@@ -9023,7 +9025,12 @@
+-          dpi = Math.max(36, Math.min(1200, Number($("printDpi").value) || 300)),
+-          format = $("printFormat").value;
+-        $("printWidth").value = width;
+-        $("printHeight").value = height;
+-        $("printDpi").value = dpi;
++          dpi = Math.max(
++            36,
++            Math.min(1200, Number(options?.dpi ?? $("printDpi").value) || 300),
++          ),
++          format = options?.format || $("printFormat").value;
++        if (!options) {
++          $("printWidth").value = width;
++          $("printHeight").value = height;
++          $("printDpi").value = dpi;
++        }
+         let canvas = document.createElement("canvas"),
+           ctx = canvas.getContext("2d"),
+@@ -9345,4 +9352,6 @@
+-      async function exportDashboardTarget() {
+-        let statusOut = $("printStatus"),
++      async function exportDashboardTarget(options = null) {
++        let statusOut = options?.onStatus
++            ? { set textContent(value) { options.onStatus(value); } }
++            : $("printStatus"),
+           snapshot = createTargetExportSnapshot(),
+           captionView = snapshot.captionView,
+@@ -9349,5 +9358,11 @@
+-          width = Math.max(100, Math.min(20000, Number($("printWidth").value) || 1000)),
+-          requestedHeight = Number($("printHeight").value),
+-          dpi = Math.max(36, Math.min(1200, Number($("printDpi").value) || 300)),
++          width = Math.max(
++            100,
++            Math.min(20000, Number(options?.width ?? $("printWidth").value) || 1000),
++          ),
++          requestedHeight = Number(options?.height ?? $("printHeight").value),
++          dpi = Math.max(
++            36,
++            Math.min(1200, Number(options?.dpi ?? $("printDpi").value) || 300),
++          ),
+           rasterScale = 1,
+-          format = $("printFormat").value,
++          format = options?.format || $("printFormat").value,
+@@ -9354,7 +9369,9 @@
+           bordersVisible = snapshot.bordersVisible,
+           visibleSlots = snapshot.slots.filter((slot) => !slot.hidden),
+           captionShown = captionView.enabled;
+-        $("printWidth").value = width;
+-        $("printDpi").value = dpi;
++        if (!options) {
++          $("printWidth").value = width;
++          $("printDpi").value = dpi;
++        }
+         let canvas = document.createElement("canvas"),
+           ctx = canvas.getContext("2d"),
+@@ -9368,6 +9385,6 @@
+           rasterWidth = Math.round(width),
+           rasterHeight = Math.round(height),
+           maxRasterDimension = 16384,
+           maxRasterArea = 64000000;
+-        if (!automaticHeight) $("printHeight").value = height;
++        if (!options && !automaticHeight) $("printHeight").value = height;
+         if (
