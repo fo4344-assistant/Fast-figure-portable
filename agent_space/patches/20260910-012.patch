@@ -1,0 +1,99 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11388,4 +11388,5 @@
+       <dialog id="readmeDialog" tabindex="-1">
+         <div class="popup-heading"><strong>Fast figure README</strong></div>
++        <template id="readmeContent">
+         <div class="readme-content">
+           <p><strong>About Fast figure</strong></p>
+@@ -11405,3 +11406,3 @@
+           <p><strong>Application version</strong></p>
+-          <p><code>1.1.31-alpha</code></p>
++          <p><code>{{APP_BUILD}}</code></p>
+           <p><strong>Developer</strong></p>
+@@ -11705,5 +11706,6 @@
+           </p>
+-          <button id="closeReadme" type="button" class="light">Close</button>
+         </div>
++        </template>
++        <button id="closeReadme" type="button" class="light">Close</button>
+       </dialog>
+       <div id="sidebarResizer" class="sidebar-resizer">
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1504,4 +1504,8 @@
+       function exitImageWorkspaceState() {
+         $("imageBox").classList.add("hidden");
+       }
++      function readmeContentHtml() {
++        let template = $("readmeContent");
++        return template ? template.innerHTML.replaceAll("{{APP_BUILD}}", APP_BUILD) : "";
++      }
+       function setOverlayDomState(name) {
+@@ -1533,8 +1537,3 @@
+         $("layoutToggle").textContent = "레이아웃";
+-        if (name !== "readme" && $("readmeDialog").open) $("readmeDialog").close();
+-        if (name === "readme" && !$("readmeDialog").open) {
+-          $("readmeDialog").showModal();
+-          $("readmeDialog").focus({ preventScroll: true });
+-          requestAnimationFrame(() => ($("readmeDialog").scrollTop = 0));
+-        }
++        if ($("readmeDialog").open) $("readmeDialog").close();
+         if (popup) clearAllSlotSelections();
+@@ -2344,6 +2343,5 @@
+-        if ($("readmeDialog").open !== (appFSM.state.overlay === "readme"))
++        if ($("readmeDialog").open)
+           issues.push({
+-            kind: "fsm-readme-out-of-sync",
+-            overlay: appFSM.state.overlay,
+-            open: $("readmeDialog").open,
++            kind: "legacy-readme-dialog-open",
++            open: true,
+           });
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -1600,4 +1600,27 @@
+     );
+   }
+ 
++  function FastFigureReadmeOverlay() {
++    const state = useAppState();
++    if (state.overlay !== "readme") return null;
++    return React.createElement(
++      Modal,
++      {
++        opened: true,
++        onClose: () =>
++          appFSM.send("CLOSE_OVERLAY", { reason: "mantine-readme" }),
++        title: "Fast figure README",
++        size: "xl",
++        centered: true,
++        closeOnClickOutside: true,
++        closeOnEscape: true,
++        styles: { body: { maxHeight: "75vh", overflowY: "auto" } },
++        "data-fastfigure-overlay": "readme",
++      },
++      React.createElement("div", {
++        dangerouslySetInnerHTML: { __html: readmeContentHtml() },
++      }),
++    );
++  }
++
+   function FastFigureLabelOverlay() {
+@@ -2408,7 +2431,8 @@
+       ),
+       React.createElement(AppShell.Main, null),
+       React.createElement(FastFigureLabelOverlay),
+       React.createElement(FastFigureCaptionOverlay),
+       React.createElement(FastFigureLayoutOverlay),
+       React.createElement(FastFigurePrintOverlay),
++      React.createElement(FastFigureReadmeOverlay),
+     );
+@@ -2430,3 +2454,4 @@
+     FastFigureLayoutOverlay,
+     FastFigurePrintOverlay,
++    FastFigureReadmeOverlay,
+     FastFigureUtilityActions,
