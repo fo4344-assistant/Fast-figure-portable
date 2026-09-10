@@ -1,0 +1,43 @@
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1980,5 +1980,4 @@
+       }
+       function syncAssetSelectionState() {
+         updateFileAvailability();
+-        renderProjectDataTree(projectDataTreeObjects());
+       }
+@@ -2050,7 +2049,6 @@
+         updateFileAvailability();
+         refreshCsvControls();
+         refreshImageControls();
+-        renderProjectDataTree(objects);
+         syncLabelControlsFromObject(objects?.labels || projectObjects.read("labels"));
+         syncCaptionControlsFromObject(objects?.captions || projectObjects.read("captions"));
+         $("buildBox").classList.add("hidden");
+@@ -2070,5 +2068,4 @@
+         }
+         refreshCsvControls();
+-        renderProjectDataTree(objects);
+         syncCaptionControlsFromObject(projectObjects.read("captions"));
+       }
+@@ -2080,6 +2077,5 @@
+         clearPreview();
+         $("buildBox").classList.add("hidden");
+         refreshImageControls(slot.imageId);
+-        renderProjectDataTree(objects);
+         syncCaptionControlsFromObject(projectObjects.read("captions"));
+       }
+@@ -7350,6 +7346,5 @@
+         loadData(csv.rows, csv.name, { showGraphControls: !!slot });
+         setFileName(csv.name);
+         updateFileAvailability();
+-        renderProjectDataTree(projectDataTreeObjects());
+         activeDataReady = true;
+         if (!slot) {
+@@ -7390,6 +7385,5 @@
+         });
+         setFileName(image.name);
+         updateFileAvailability();
+-        renderProjectDataTree(projectDataTreeObjects());
+         if (!slot) {
+           status(`${image.name}을 선택했습니다.`);
