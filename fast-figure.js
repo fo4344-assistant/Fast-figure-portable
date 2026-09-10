@@ -1418,7 +1418,6 @@
       }
       function syncAssetSelectionState() {
         updateFileAvailability();
-        renderProjectDataTree(projectDataTreeObjects());
       }
       function requestedOverlayState({ state, payload }) {
         return state === payload.overlay ? "none" : payload.overlay;
@@ -1473,7 +1472,6 @@
         updateFileAvailability();
         refreshCsvControls();
         refreshImageControls();
-        renderProjectDataTree(objects);
         syncLabelControlsFromObject(objects?.labels || projectObjects.read("labels"));
         syncCaptionControlsFromObject(objects?.captions || projectObjects.read("captions"));
         $("buildBox").classList.add("hidden");
@@ -1491,7 +1489,6 @@
           $("buildBox").classList.add("hidden");
         }
         refreshCsvControls();
-        renderProjectDataTree(objects);
         syncCaptionControlsFromObject(projectObjects.read("captions"));
       }
       function syncImageWorkspaceState({ objects } = {}) {
@@ -1503,7 +1500,6 @@
         clearPreview();
         $("buildBox").classList.add("hidden");
         refreshImageControls(slot.imageId);
-        renderProjectDataTree(objects);
         syncCaptionControlsFromObject(projectObjects.read("captions"));
       }
       function exitGraphWorkspaceState() {
@@ -7257,7 +7253,6 @@
         loadData(csv.rows, csv.name, { showGraphControls: !!slot });
         setFileName(csv.name);
         updateFileAvailability();
-        renderProjectDataTree(projectDataTreeObjects());
         activeDataReady = true;
         if (!slot) {
           status(`${csv.name}을 선택했습니다.`);
@@ -7284,7 +7279,6 @@
         });
         setFileName(image.name);
         updateFileAvailability();
-        renderProjectDataTree(projectDataTreeObjects());
         if (!slot) {
           status(`${image.name}을 선택했습니다.`);
           return;
