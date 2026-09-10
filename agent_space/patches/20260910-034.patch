@@ -1,0 +1,45 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -10729,8 +10729,2 @@
+           </div>
+-          <div id="imageSelectionPanel" class="asset-selection-panel hidden">
+-            <span class="asset-selection-title">이미지 슬롯 데이터</span>
+-            <button id="insertEmptyImage" type="button" class="light data-action-button">
+-              빈 이미지 삽입
+-            </button>
+-          </div>
+           <div id="status" class="status">파일을 선택하세요.</div>
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1994,4 +1994,3 @@
+         "addGraphObject",
+         "csvSelectionPanel",
+-        "imageSelectionPanel",
+         "applyGrid",
+@@ -2039,5 +2038,4 @@
+         "imagePositionY",
+         "imagePreview",
+         "imageScale",
+-        "insertEmptyImage",
+         "insertSlotCaptions",
+@@ -3596,6 +3594,5 @@
+       function refreshImageControls(selected = activeImageId ?? getSelectedSlot()?.imageId) {
+         if (getProjectImage(selected)) activeImageId = Number(selected);
+         else activeImageId = null;
+-        $("insertEmptyImage").disabled = getSelectedSlot()?.contentType !== "image";
+       }
+       function headerLineCount(value, table = rows) {
+@@ -4113,5 +4110,3 @@
+-        let showCsvPanel = has ? !isImage : activeAssetKind === "csv",
+-          showImagePanel = has ? isImage : activeAssetKind === "image";
++        let showCsvPanel = has ? !isImage : activeAssetKind === "csv";
+         $("csvSelectionPanel").classList.toggle("hidden", !showCsvPanel);
+-        $("imageSelectionPanel").classList.toggle("hidden", !showImagePanel);
+         $("imageBox").classList.toggle("hidden", !has || !isImage || !image);
+@@ -7019,4 +7015,3 @@
+         return image;
+       }
+-      $("insertEmptyImage").onclick = insertEmptyImageIntoSelectedSlot;
+       function setSlotContentType(type) {
