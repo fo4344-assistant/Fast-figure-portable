@@ -1,0 +1,72 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -10769,10 +10769,4 @@
+           <div id="fileTypeHint" class="hint">
+             CSV/TSV 또는 JSON 객체 배열을 지원합니다. 데이터는 오프라인으로 처리됩니다.
+           </div>
+-          <button id="resetSelectedSlot" type="button" class="light data-action-button hidden">
+-            선택 슬롯 초기화
+-          </button>
+-          <button id="deleteSelectedAsset" type="button" class="light data-action-button" disabled>
+-            선택 에셋 삭제
+-          </button>
+           <div id="status" class="status">파일을 선택하세요.</div>
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1995,7 +1995,6 @@
+         "addGraphObject",
+         "csvSelectionPanel",
+         "imageSelectionPanel",
+-        "deleteSelectedAsset",
+         "applyGrid",
+         "applyUiPalette",
+         "barLineWidth",
+@@ -2090,7 +2089,6 @@
+         "readmeToggle",
+         "resetDashboardAspect",
+         "resetGraphPalette",
+-        "resetSelectedSlot",
+         "resetUiPalette",
+         "saveDebug",
+         "saveGraphPalette",
+@@ -4140,7 +4138,6 @@
+       }
+       function updateFileAvailability() {
+         let hasSlot = !!getSelectedSlot();
+-        $("resetSelectedSlot").classList.toggle("hidden", !hasSlot);
+         $("readmeToggle").classList.toggle("hidden", hasSlot);
+         $("projectBox").classList.toggle("hidden", hasSlot);
+         if (hasSlot && appFSM.state.overlay === "readme")
+@@ -7332,30 +7329,4 @@
+           body +
+           "</tbody>";
+       }
+-      $("resetSelectedSlot").onclick = () => {
+-        let slot = getSelectedSlot();
+-        if (!slot) {
+-          status("초기화할 슬롯을 먼저 선택하세요.");
+-          debugLog("slotReset:no-selection");
+-          return;
+-        }
+-        if (!window.confirm("데이터를 잃습니다.")) {
+-          debugLog("slotReset:cancel", { slotId: slot.id });
+-          return;
+-        }
+-        let payload = {
+-          slotIds: [slot.id],
+-          direction: "fsm-to-model",
+-        };
+-        appFSM.send("SLOTS_RESET", payload);
+-        appFSM.send("CLEAR_ASSET_SELECTION", {
+-          direction: "fsm-to-model",
+-        });
+-        renderDashboard();
+-        status("선택한 슬롯을 초기화했습니다.");
+-        debugLog("slotReset:complete", {
+-          slotId: slot.id,
+-          removedChartIds: payload.removedChartIds,
+-        });
+-      };
+       function baseGraphObject(chart, csv = getProjectCsv(activeCsvId)) {
