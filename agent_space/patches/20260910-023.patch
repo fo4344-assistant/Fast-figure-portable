@@ -1,0 +1,252 @@
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -3427,102 +3427,2 @@
+       }
+-      const ASSET_TREE_INDENT_PX = 16;
+-      function assetTreeDepth(path) {
+-        return Math.max(0, String(path || "").split("/").filter(Boolean).length - 1);
+-      }
+-      function setAssetTreeRowDepth(row, path, baseIndent = 0) {
+-        row.style.paddingLeft = `${baseIndent + assetTreeDepth(path) * ASSET_TREE_INDENT_PX}px`;
+-      }
+-      function appendAssetTreeItem(list, name, meta = "", depth = 0) {
+-        let item = document.createElement("div"),
+-          icon = document.createElement("span"),
+-          label = document.createElement("span");
+-        item.className = "asset-tree-row asset-tree-item";
+-        item.style.paddingLeft = `${32 + Math.max(0, Number(depth) || 0) * ASSET_TREE_INDENT_PX}px`;
+-        icon.className = "asset-tree-icon file";
+-        icon.setAttribute("aria-hidden", "true");
+-        setIconoirIcon(icon, "page");
+-        label.className = "asset-tree-label";
+-        label.textContent = name;
+-        item.append(icon, label);
+-        if (meta) {
+-          let detail = document.createElement("span");
+-          detail.className = "asset-tree-meta";
+-          detail.textContent = meta;
+-          item.append(detail);
+-        }
+-        list.append(item);
+-      }
+-      function appendAssetTreeButton(list, name, meta, options = {}) {
+-        let button = document.createElement("div"),
+-          icon = document.createElement("span"),
+-          label = document.createElement("span");
+-        button.className = "asset-tree-row asset-tree-button";
+-        button.setAttribute("role", "treeitem");
+-        button.tabIndex = 0;
+-        button.classList.toggle("active", options.active === true);
+-        button.classList.toggle("inactive", options.inactive === true);
+-        button.setAttribute("aria-selected", String(options.active === true));
+-        if (options.path) setAssetTreeRowDepth(button, options.path);
+-        if (options.inactive === true) button.setAttribute("aria-disabled", "true");
+-        if (options.path && options.assetKind) {
+-          button.draggable = true;
+-          button.dataset.assetPath = options.path;
+-          button.dataset.assetKind = options.assetKind;
+-        }
+-        button.title = name;
+-        icon.className = `asset-tree-icon ${options.assetKind === "image" ? "image" : "file"}`;
+-        icon.setAttribute("aria-hidden", "true");
+-        setIconoirIcon(icon, options.assetKind === "image" ? "media-image" : "page");
+-        label.className = "asset-tree-label";
+-        label.textContent = name;
+-        button.append(icon, label);
+-        if (meta) {
+-          let detail = document.createElement("span");
+-          detail.className = "asset-tree-meta";
+-          detail.textContent = meta;
+-          button.append(detail);
+-        }
+-        if (typeof options.onclick === "function" && options.inactive !== true)
+-          button.onclick = options.onclick;
+-        if (typeof options.onclick === "function" && options.inactive !== true)
+-          button.addEventListener("keydown", (event) => {
+-            if (event.key !== "Enter" && event.key !== " ") return;
+-            event.preventDefault();
+-            options.onclick(event);
+-          });
+-        list.append(button);
+-      }
+-      function createAssetTreeBranch(label, open = true, path = "") {
+-        let branch = document.createElement("details"),
+-          summary = document.createElement("summary"),
+-          twistie = document.createElement("span"),
+-          icon = document.createElement("span"),
+-          name = document.createElement("span"),
+-          list = document.createElement("div");
+-        branch.open = open;
+-        summary.className = "asset-tree-row asset-tree-directory";
+-        if (path) setAssetTreeRowDepth(summary, path);
+-        twistie.className = "asset-tree-twistie";
+-        twistie.setAttribute("aria-hidden", "true");
+-        setIconoirIcon(twistie, "nav-arrow-right");
+-        icon.className = `asset-tree-icon ${path.startsWith("/slots") ? "slot" : "folder"}`;
+-        icon.setAttribute("aria-hidden", "true");
+-        setIconoirIcon(icon, path.startsWith("/slots") ? "view-grid" : "folder");
+-        name.className = "asset-tree-label";
+-        name.textContent = label;
+-        summary.append(twistie, icon, name);
+-        if (path) {
+-          branch.dataset.path = path;
+-          summary.dataset.path = path;
+-        }
+-        summary.setAttribute("role", "treeitem");
+-        summary.setAttribute("aria-expanded", String(open));
+-        list.className = "asset-tree-list";
+-        list.setAttribute("role", "group");
+-        branch.addEventListener("toggle", () =>
+-          summary.setAttribute("aria-expanded", String(branch.open)),
+-        );
+-        branch.append(summary, list);
+-        return { branch, list };
+-      }
+       function projectDataTreeSnapshot(objects = {}) {
+@@ -3574,146 +3474,2 @@
+       }
+-      function renderProjectDataTree(objects = {}) {
+-        let tree = $("assetTree");
+-        if (!tree) return;
+-        let previousBranchState = new Map(
+-            [...tree.querySelectorAll("details")].map((branch) => [
+-              branch.dataset.path || branch.querySelector(":scope > summary")?.textContent || "",
+-              branch.open,
+-            ]),
+-          ),
+-          branch = (path, label, initiallyOpen = true) =>
+-            createAssetTreeBranch(
+-              label,
+-              previousBranchState.has(path)
+-                ? previousBranchState.get(path)
+-                : initiallyOpen,
+-              path,
+-            ),
+-          snapshot = projectDataTreeSnapshot(objects),
+-          csvObjects = snapshot.data,
+-          imageObjects = snapshot.images,
+-          chartObjects = snapshot.charts,
+-          slotObjects = snapshot.slots,
+-          directoryPaths = [...new Set(snapshot.directories)]
+-            .filter((path) => path === "/assets" || path.startsWith("/assets/"))
+-            .sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b)),
+-          directoryBranches = new Map();
+-        if (!snapshot.directories.includes(selectedExplorerDirectory))
+-          selectedExplorerDirectory = "/assets";
+-        for (let path of directoryPaths) {
+-          let node = branch(
+-            path,
+-            path === "/assets" ? "/assets" : projectPathName(path),
+-            path === "/assets",
+-          );
+-          node.branch.dataset.explorerTarget = "folder";
+-          let summary = node.branch.firstElementChild,
+-            inactive = projectVfs.isTrashed(path),
+-            movable = !projectVfs.isFixedDirectory(path);
+-          summary?.classList.add("asset-tree-directory");
+-          node.branch.classList.toggle("inactive", inactive);
+-          if (summary) {
+-            let active =
+-              appFSM.state.assetSelection === "directory" &&
+-              appFSM.state.assetPath === path;
+-            summary.classList.toggle("active", active);
+-            summary.setAttribute("aria-selected", String(active));
+-          }
+-          if (movable && summary) {
+-            summary.draggable = true;
+-            summary.dataset.assetPath = path;
+-            summary.dataset.assetKind = "directory";
+-          }
+-          directoryBranches.set(path, node);
+-          let parent = projectParentPath(path);
+-          if (directoryBranches.has(parent)) directoryBranches.get(parent).list.append(node.branch);
+-        }
+-        let assetRoot = directoryBranches.get("/assets") || branch("/assets", "/assets"),
+-          slotRoot = branch("/slots", "/slots");
+-        csvObjects
+-          .slice()
+-          .sort((a, b) => a.path.localeCompare(b.path))
+-          .forEach((csv) => {
+-            let references = chartObjects.reduce(
+-              (count, chart) =>
+-                count + chart.csvReferences.filter((id) => id === csv.id).length,
+-              0,
+-              ),
+-              parent = directoryBranches.get(projectParentPath(csv.path));
+-            if (!parent) return;
+-            appendAssetTreeButton(
+-              parent.list,
+-              projectPathName(csv.path),
+-              csv.readable
+-                ? `${csv.rowCount}행 · 참조 ${references}`
+-                : `읽기 실패 · 참조 ${references}`,
+-              {
+-                path: csv.path,
+-                assetKind: "csv",
+-                inactive: projectVfs.isTrashed(csv.path),
+-                active:
+-                  appFSM.state.assetSelection === "csv" &&
+-                  csv.path === appFSM.state.assetPath,
+-                onclick: () => selectCsvFromTree(csv.path),
+-              },
+-            );
+-          });
+-        imageObjects
+-          .slice()
+-          .sort((a, b) => a.path.localeCompare(b.path))
+-          .forEach((image) => {
+-            let references = slotObjects.filter((slot) => slot.imageId === image.id).length,
+-              parent = directoryBranches.get(projectParentPath(image.path));
+-            if (!parent) return;
+-            appendAssetTreeButton(
+-              parent.list,
+-              projectPathName(image.path),
+-              `참조 ${references}`,
+-              {
+-                path: image.path,
+-                assetKind: "image",
+-                inactive: projectVfs.isTrashed(image.path),
+-                active:
+-                  appFSM.state.assetSelection === "image" &&
+-                  image.path === appFSM.state.assetPath,
+-                onclick: () => selectImageFromTree(image.path),
+-              },
+-            );
+-          });
+-        let visibleSlots = slotObjects
+-          .filter((slot) => !slot.hidden)
+-          .sort((a, b) => a.row - b.row || a.col - b.col);
+-        if (visibleSlots.length) {
+-          visibleSlots.forEach((slot) => {
+-            let slotBranch = branch(
+-              `/slots/[row=${slot.row},col=${slot.col}]`,
+-              `[row=${slot.row},col=${slot.col}]`,
+-              false,
+-            ),
+-              references = [];
+-            slotBranch.branch.dataset.explorerTarget = "slot";
+-            slotBranch.branch.dataset.slotId = String(slot.id);
+-            if (slot.contentType === "image") {
+-              let image = slotImage(slot, imageObjects);
+-              if (image) references.push({ name: image.name, meta: image.path });
+-            } else {
+-              let chart = slot.chart && chartObjects.find((item) => item.id === slot.chart);
+-              if (chart?.editable === false)
+-                references.push({ name: "Plotly JSON 내부 데이터", meta: "외부 참조 없음" });
+-              else
+-                (chart?.csvIds || []).forEach((id) => {
+-                  let csv = getProjectCsv(id, csvObjects);
+-                  if (csv) references.push({ name: csv.name, meta: csv.path });
+-                });
+-            }
+-            if (references.length)
+-              references.forEach((reference) =>
+-                appendAssetTreeItem(slotBranch.list, reference.name, reference.meta, 2),
+-              );
+-            else appendAssetTreeItem(slotBranch.list, "(에셋 없음)", "", 2);
+-            slotRoot.list.append(slotBranch.branch);
+-          });
+-        } else appendAssetTreeItem(slotRoot.list, "(표시 슬롯 없음)", "", 1);
+-        tree.replaceChildren(assetRoot.branch, slotRoot.branch);
+-      }
+       function connectProjectAssetToSlot(path, kind, slot) {
