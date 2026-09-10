@@ -24,3 +24,14 @@
 - source of truth를 읽거나 변경하기 위해 만든 snapshot, draft, cache, selector 결과, adapter-local value 등 임시값은 해당 작업 범위 안에서만 사용할 것. 다른 기능이나 다른 로직이 그 임시값을 다시 참조하거나 권위 상태처럼 사용하게 만들지 말 것.
 - 임시값을 여러 부분에서 공유해야 한다면 임시값 자체를 공유하지 말고 원래 source of truth에서 다시 읽거나, 정말 공용 상태가 필요한 경우 하나의 명시적인 source of truth로 승격할 것.
 - source of truth와 임시값 사이를 양방향으로 동기화하거나 어느 쪽이 최신인지 판정해야 하는 구조를 만들지 말 것.
+
+## WIP 포팅 및 통합 작업
+
+- 기존 구현을 다른 UI 프레임워크, 런타임, 모듈 구조 또는 공통 컴포넌트 체계로 포팅하거나, 분산된 구현을 하나의 일관된 구조로 통합하는 작업에서는 개별 단계가 당장 완전히 동작하는지보다 최종 구조의 일관성, 독립성, source of truth의 명확성을 우선할 것.
+- 이러한 작업은 필요하면 `wip` 버전으로 명시하고, 중간 단계에서 일부 기능이 일시적으로 불완전하거나 legacy UI와 새 UI가 공존하는 것을 허용할 것. 중간 상태의 완전한 사용 가능성을 유지하기 위해 최종 구조와 맞지 않는 임시 계층을 추가하지 말 것.
+- 특히 새 구현이 기존 DOM control, legacy dialog, 숨은 input, `.click()`, `.value`, 임시 bridge 또는 중복 상태를 통해 기존 구현을 우회 호출하도록 만들지 말 것. 최종 구조에서 직접 사용할 source of truth, 명시적 command, EFSM/UI-FSM event, renderer 경계를 우선 사용할 것.
+- 필요한 command 추출, state ownership 정리, renderer-neutral 경계 생성은 해당 ownership 단위의 포팅과 같은 변경 안에서 함께 수행할 것. 이를 별도의 선행 조사·준비·중간 패치로 반복 분리하지 말 것.
+- 일관성이 요구되는 기능군은 가능한 한 하나의 coherent ownership 단위로 구현할 것. 예를 들어 같은 editor 또는 overlay의 입력, 상태 변경, validation, preview, apply/reset, keyboard/focus 규칙을 서로 다른 임시 구조로 나누기보다 하나의 공통 UI 체계 안에서 함께 옮길 것.
+- WIP 단계에서는 기능 등가성 검증, legacy 제거, 세부 interaction parity, 시각적 미세 조정을 구현 진행의 선행 조건으로 삼지 말 것. 주요 기능 면적과 올바른 구조를 먼저 구현한 뒤, 후속 parity/cutover 단계에서 한꺼번에 검증하고 정리할 것.
+- 다만 WIP를 이유로 영속 데이터 손상, schema 불일치, 잘못된 source of truth, 되돌리기 어려운 migration을 허용하지 말 것. 중간 버전이 불완전할 수는 있어도 구조적 책임 경계와 rollback 가능성은 유지할 것.
+- WIP 단계에서 기존 기능을 의도적으로 임시 중단하거나 불완전하게 만드는 경우, 해당 패치 설명 Markdown에 그 범위와 이유, 후속 완료 조건을 명시할 것.
