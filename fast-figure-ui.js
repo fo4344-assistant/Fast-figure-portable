@@ -17,6 +17,7 @@
     Stack,
     Text,
     TextInput,
+    Textarea,
   } = MantineCore;
   const { useRef, useState, useSyncExternalStore } = React;
 
@@ -1599,6 +1600,334 @@
     );
   }
 
+  function FastFigureLabelOverlay() {
+    const state = useAppState();
+    if (state.overlay !== "label") return null;
+    const busy = state.lifecycle !== "ready";
+    const settings = activeProject.labelSettings;
+    const reference = gridSlotGeometry(
+      activeProject.layout,
+      dashboardGeometry(dashboardReferenceWidth()),
+      getSelectedSlot(),
+    );
+    const previewWidth = 420;
+    const previewScale = previewWidth / Math.max(1, reference.width);
+    const previewHeight = Math.max(120, reference.height * previewScale);
+    const commit = (patch, eventName = "LABEL_SETTINGS_CHANGED") => {
+      Object.assign(activeProject.labelSettings, patch);
+      renderLabelPreview();
+      renderDashboard();
+      schedulePlotResize();
+      debugLog("mantine:label-settings", { ...activeProject.labelSettings });
+      appFSM.notify("labels", eventName);
+    };
+    const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-label" });
+
+    return React.createElement(
+      Modal,
+      {
+        opened: true,
+        onClose: close,
+        title: "레이블",
+        size: "lg",
+        centered: true,
+        closeOnClickOutside: true,
+        closeOnEscape: true,
+        "data-fastfigure-overlay": "label",
+      },
+      React.createElement(
+        Stack,
+        { gap: "md" },
+        React.createElement(
+          Button,
+          {
+            variant: activeProject.labelsEnabled ? "filled" : "light",
+            disabled: busy,
+            "aria-pressed": activeProject.labelsEnabled,
+            onClick: () => setAnnotationEnabled("label", !activeProject.labelsEnabled),
+          },
+          activeProject.labelsEnabled ? "레이블 표시" : "레이블 숨김",
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(Select, {
+            label: "형식",
+            value: settings.format,
+            data: [
+              { value: "lower-alpha", label: "a, b, c" },
+              { value: "upper-alpha", label: "A, B, C" },
+              { value: "decimal", label: "1, 2, 3" },
+              { value: "lower-roman", label: "i, ii, iii" },
+              { value: "upper-roman", label: "I, II, III" },
+            ],
+            disabled: busy,
+            onChange: (value) => value !== null && commit({ format: value }),
+          }),
+          React.createElement(Select, {
+            label: "순서",
+            value: settings.order,
+            data: [
+              { value: "row-major", label: "행 우선" },
+              { value: "column-major", label: "열 우선" },
+            ],
+            disabled: busy,
+            onChange: (value) => value !== null && commit({ order: value }),
+          }),
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(
+            Button,
+            {
+              variant: settings.parentheses ? "filled" : "light",
+              disabled: busy,
+              "aria-pressed": settings.parentheses,
+              onClick: () => commit({ parentheses: !settings.parentheses }),
+            },
+            "괄호",
+          ),
+          React.createElement(TextInput, {
+            label: "글꼴",
+            value: settings.fontFamily,
+            disabled: busy,
+            onChange: (event) => commit({ fontFamily: event.target.value }),
+          }),
+          React.createElement(NumberInput, {
+            label: "크기",
+            value: settings.fontSize,
+            min: 6,
+            disabled: busy,
+            onChange: (value) => {
+              const number = Number(value);
+              commit({ fontSize: Number.isFinite(number) ? Math.max(6, number) : 14 });
+            },
+          }),
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(NumberInput, {
+            label: "X (px)",
+            value: settings.x,
+            disabled: busy,
+            onChange: (value) =>
+              commit({ x: Number.isFinite(Number(value)) ? Number(value) : 0 }, "LABEL_POSITION_CHANGED"),
+          }),
+          React.createElement(NumberInput, {
+            label: "Y (px)",
+            value: settings.y,
+            disabled: busy,
+            onChange: (value) =>
+              commit({ y: Number.isFinite(Number(value)) ? Number(value) : 0 }, "LABEL_POSITION_CHANGED"),
+          }),
+          React.createElement(
+            Button,
+            {
+              variant: "light",
+              disabled: busy,
+              onClick: () => commit({ x: 0, y: 0 }, "LABEL_POSITION_RESET"),
+            },
+            "위치 초기화",
+          ),
+        ),
+        React.createElement(
+          "div",
+          {
+            style: {
+              position: "relative",
+              width: "100%",
+              maxWidth: previewWidth,
+              height: previewHeight,
+              border: "1px solid var(--mantine-color-default-border)",
+              borderRadius: "var(--mantine-radius-sm)",
+              overflow: "hidden",
+            },
+          },
+          React.createElement(
+            "div",
+            {
+              style: {
+                position: "absolute",
+                left: settings.x * previewScale,
+                top: settings.y * previewScale,
+                fontFamily: settings.fontFamily,
+                fontSize: settings.fontSize * previewScale,
+                fontWeight: 800,
+                padding: `${2 * previewScale}px ${6 * previewScale}px`,
+              },
+            },
+            displayedSlotIdentifier(0),
+          ),
+        ),
+      ),
+    );
+  }
+
+  function FastFigureCaptionOverlay() {
+    const state = useAppState();
+    if (state.overlay !== "caption") return null;
+    const busy = state.lifecycle !== "ready";
+    const slotMode = activeProject.slotCaptionsEnabled;
+    const slot = slotMode ? getSelectedSlot() : null;
+    const text = slot ? initializeSlotCaption(slot) : activeProject.captionText;
+    const settings = activeProject.captionSettings;
+    const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-caption" });
+    const commitSettings = (patch) => {
+      Object.assign(activeProject.captionSettings, patch);
+      applyCaptionSettings(false);
+    };
+    const changeText = (value) => {
+      appFSM.send("CAPTION_TEXT_INPUT", {
+        text: value,
+        region: "body",
+        direction: "fsm-to-model",
+      });
+      syncDashboardCaption();
+    };
+
+    return React.createElement(
+      Modal,
+      {
+        opened: true,
+        onClose: close,
+        title: "캡션",
+        size: "lg",
+        centered: true,
+        closeOnClickOutside: true,
+        closeOnEscape: true,
+        "data-fastfigure-overlay": "caption",
+      },
+      React.createElement(
+        Stack,
+        { gap: "md" },
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(
+            Button,
+            {
+              variant: activeProject.captionsEnabled ? "filled" : "light",
+              disabled: busy,
+              "aria-pressed": activeProject.captionsEnabled,
+              onClick: () => setAnnotationEnabled("caption", !activeProject.captionsEnabled),
+            },
+            activeProject.captionsEnabled ? "캡션 표시" : "캡션 숨김",
+          ),
+          React.createElement(
+            Button,
+            {
+              variant: slotMode ? "filled" : "light",
+              disabled: busy,
+              "aria-pressed": slotMode,
+              onClick: () =>
+                appFSM.send("SLOT_CAPTION_MODE_CHANGED", {
+                  enabled: !slotMode,
+                  direction: "fsm-to-model",
+                }),
+            },
+            "슬롯별 캡션",
+          ),
+          React.createElement(
+            Button,
+            {
+              variant: "light",
+              disabled: busy,
+              onClick: () => {
+                appFSM.send("SLOT_CAPTIONS_INSERTED", { direction: "fsm-to-model" });
+                syncDashboardCaption();
+              },
+            },
+            "슬롯 캡션 삽입",
+          ),
+        ),
+        React.createElement(
+          Text,
+          { size: "sm", c: "dimmed" },
+          slotMode
+            ? slot
+              ? `대상: ${slot.row}행 ${slot.col}열`
+              : "대상 슬롯을 선택하세요."
+            : "대상: 전체 캡션",
+        ),
+        React.createElement(Textarea, {
+          label: "내용",
+          value: text,
+          minRows: 5,
+          autosize: true,
+          disabled: busy || (slotMode && !slot),
+          onChange: (event) => changeText(event.target.value),
+        }),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(TextInput, {
+            label: "이름",
+            value: activeProject.captionName,
+            disabled: busy || slotMode,
+            onChange: (event) => {
+              activeProject.captionName = event.target.value;
+              syncDashboardCaption();
+              appFSM.notify("captions", "CAPTION_NAME_CHANGED");
+            },
+          }),
+          React.createElement(
+            Button,
+            {
+              variant: activeProject.captionNameBold ? "filled" : "light",
+              disabled: busy || slotMode,
+              "aria-pressed": activeProject.captionNameBold,
+              onClick: () => {
+                activeProject.captionNameBold = !activeProject.captionNameBold;
+                syncDashboardCaption();
+                appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
+              },
+            },
+            "이름 굵게",
+          ),
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(TextInput, {
+            label: "글꼴",
+            value: settings.fontFamily,
+            disabled: busy,
+            onChange: (event) => commitSettings({ fontFamily: event.target.value }),
+          }),
+          React.createElement(NumberInput, {
+            label: "크기",
+            value: settings.fontSize,
+            min: 6,
+            max: 96,
+            disabled: busy,
+            onChange: (value) => {
+              const number = Number(value);
+              commitSettings({
+                fontSize: Number.isFinite(number) ? Math.max(6, Math.min(96, number)) : 14,
+              });
+            },
+          }),
+          React.createElement(NumberInput, {
+            label: "줄 간격",
+            value: settings.lineHeight,
+            min: 0.8,
+            max: 4,
+            step: 0.05,
+            disabled: busy,
+            onChange: (value) => {
+              const number = Number(value);
+              commitSettings({
+                lineHeight: Number.isFinite(number) ? Math.max(0.8, Math.min(4, number)) : 1.45,
+              });
+            },
+          }),
+        ),
+      ),
+    );
+  }
+
   function FastFigureLayoutOverlay() {
     const state = useAppState();
     const [selectionRevision, setSelectionRevision] = useState(0);
@@ -1959,6 +2288,8 @@
         }),
       ),
       React.createElement(AppShell.Main, null),
+      React.createElement(FastFigureLabelOverlay),
+      React.createElement(FastFigureCaptionOverlay),
       React.createElement(FastFigureLayoutOverlay),
     );
   }
@@ -1974,6 +2305,8 @@
     FastFigureGraphLayoutEditor,
     FastFigureGraphPaletteActions,
     FastFigureGraphFileActions,
+    FastFigureLabelOverlay,
+    FastFigureCaptionOverlay,
     FastFigureLayoutOverlay,
     FastFigureUtilityActions,
     getAppStateSnapshot,
