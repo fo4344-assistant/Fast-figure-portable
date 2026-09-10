@@ -1,0 +1,155 @@
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -3518,100 +3518,4 @@
+         branch.append(summary, list);
+         return { branch, list };
+       }
+-      const ASSET_TREE_ACTION_SCHEMA = Object.freeze({
+-        directory: Object.freeze([
+-          Object.freeze({
+-            key: "create-directory",
+-            label: "새 폴더",
+-            when: (context) =>
+-              context.path !== PROJECT_TRASH_DIRECTORY && context.inactive !== true,
+-          }),
+-          Object.freeze({
+-            key: "empty-trash",
+-            label: "비우기",
+-            when: (context) => context.path === PROJECT_TRASH_DIRECTORY,
+-            disabled: (context) => context.hasTrashContents !== true,
+-            disabledTitle: "휴지통이 비어 있습니다.",
+-          }),
+-        ]),
+-        csv: Object.freeze([
+-          Object.freeze({
+-            key: "select-csv",
+-            label: "선택",
+-            disabled: (context) => context.inactive === true,
+-          }),
+-        ]),
+-        image: Object.freeze([
+-          Object.freeze({
+-            key: "select-image",
+-            label: "선택",
+-            disabled: (context) => context.inactive === true,
+-          }),
+-        ]),
+-      });
+-      const ASSET_TREE_ACTION_HANDLERS = Object.freeze({
+-        "create-directory": (context) => createAssetDirectory(context.path),
+-        "empty-trash": () => emptyProjectTrash(),
+-        "select-csv": (context) => selectCsvFromTree(context.path),
+-        "select-image": (context) => selectImageFromTree(context.path),
+-      });
+-      function renderAssetTreeActionMenu(nodeType = null, context = null) {
+-        let trigger = $("assetActions"),
+-          menu = $("assetActionMenu"),
+-          definitions = (ASSET_TREE_ACTION_SCHEMA[nodeType] || []).filter(
+-            (definition) => !definition.when || definition.when(context),
+-          );
+-        if (!trigger || !menu) return;
+-        trigger.disabled = !nodeType || !context;
+-        trigger.title = context?.path ? `${context.path} 작업` : "선택 항목 작업";
+-        trigger.setAttribute("aria-label", trigger.title);
+-        menu.hidden = true;
+-        trigger.setAttribute("aria-expanded", "false");
+-        menu.replaceChildren();
+-        if (!definitions.length) {
+-          let empty = document.createElement("button");
+-          empty.type = "button";
+-          empty.disabled = true;
+-          empty.textContent = "사용 가능한 작업 없음";
+-          empty.setAttribute("role", "menuitem");
+-          menu.append(empty);
+-        } else {
+-          definitions.forEach((definition) => {
+-            let item = document.createElement("button"),
+-              disabled = definition.disabled?.(context) === true;
+-            item.type = "button";
+-            item.className = "tree-node-action";
+-            item.textContent = definition.label;
+-            item.disabled = disabled;
+-            item.setAttribute("role", "menuitem");
+-            if (disabled && definition.disabledTitle) item.title = definition.disabledTitle;
+-            item.addEventListener("click", (event) => {
+-              event.preventDefault();
+-              event.stopPropagation();
+-              if (item.disabled) return;
+-              closeAssetTreeActionMenus();
+-              ASSET_TREE_ACTION_HANDLERS[definition.key]?.(context);
+-            });
+-            menu.append(item);
+-          });
+-        }
+-      }
+-      function syncAssetTreeActionMenu() {
+-        let match = appFSM.state.assetPath ? projectVfs.resolve(appFSM.state.assetPath) : null;
+-        if (!match || match.kind !== appFSM.state.assetSelection)
+-          return renderAssetTreeActionMenu();
+-        let path = match.kind === "directory" ? match.path : projectAssetPath(match.asset),
+-          context = {
+-            path,
+-            inactive: projectVfs.isTrashed(path),
+-            hasTrashContents:
+-              path === PROJECT_TRASH_DIRECTORY &&
+-              (activeProject.fileSystem.directories.some(
+-                (item) => item !== PROJECT_TRASH_DIRECTORY && projectVfs.isTrashed(item),
+-              ) ||
+-                activeProject.csvFiles.some((asset) => projectVfs.isTrashed(projectAssetPath(asset))) ||
+-                activeProject.images.some((asset) => projectVfs.isTrashed(projectAssetPath(asset)))),
+-          };
+-        renderAssetTreeActionMenu(match.kind, context);
+-      }
+       function projectDataTreeSnapshot(objects = {}) {
+@@ -3660,32 +3564,4 @@
+           slots: projectObjects.read("slots"),
+         };
+       }
+-      function emptyProjectTrash() {
+-        let csvIds = new Set(
+-            activeProject.csvFiles
+-              .filter((csv) => projectVfs.isTrashed(projectAssetPath(csv)))
+-              .map((csv) => csv.id),
+-          ),
+-          imageIds = new Set(
+-            activeProject.images
+-              .filter((image) => projectVfs.isTrashed(projectAssetPath(image)))
+-              .map((image) => image.id),
+-          ),
+-          referenceCount = projectAssetReferenceCount(csvIds, imageIds),
+-          warning = referenceCount
+-            ? `휴지통 자산에 남아 있는 참조 ${referenceCount}개도 함께 제거됩니다.\n\n`
+-            : "";
+-        if (!window.confirm(`${warning}휴지통의 폴더와 파일을 영구적으로 비우시겠습니까?`)) return;
+-        let payload = { direction: "ui-to-fsm" };
+-        try {
+-          appFSM.send("PROJECT_TRASH_EMPTIED", payload);
+-          renderProjectDataTree(projectDataTreeObjects());
+-          updateFileAvailability();
+-          status(
+-            `휴지통을 비웠습니다. 폴더 ${payload.directoryCount}개, CSV ${payload.csvCount}개, 이미지 ${payload.imageCount}개를 삭제했습니다.`,
+-          );
+-        } catch (error) {
+-          status(`휴지통 비우기 오류: ${error.message}`);
+-        }
+-      }
+       function renderProjectDataTree(objects = {}) {
+@@ -5200,17 +5076,6 @@
+       function updateFileAvailability() {
+-        let hasSlot = !!getSelectedSlot(),
+-          selectedAsset = appFSM.state.assetPath
+-            ? projectVfs.resolve(appFSM.state.assetPath)
+-            : null,
+-          hasAsset = selectedAsset?.kind === appFSM.state.assetSelection,
+-          canDeleteAsset =
+-            hasAsset &&
+-            ["csv", "image"].includes(selectedAsset.kind) &&
+-            !(selectedAsset.kind === "csv" && selectedAsset.asset.isDefaultEmpty === true);
++        let hasSlot = !!getSelectedSlot();
+         $("resetSelectedSlot").classList.toggle("hidden", !hasSlot);
+-        $("assetDownload").disabled = !hasAsset || !["csv", "image"].includes(selectedAsset.kind);
+-        $("deleteSelectedAsset").disabled = !canDeleteAsset;
+         $("readmeToggle").classList.toggle("hidden", hasSlot);
+         $("projectBox").classList.toggle("hidden", hasSlot);
+-        syncAssetTreeActionMenu();
+         if (hasSlot && appFSM.state.overlay === "readme")
