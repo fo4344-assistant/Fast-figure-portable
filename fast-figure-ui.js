@@ -1928,6 +1928,125 @@
     );
   }
 
+  function FastFigurePrintOverlay() {
+    const state = useAppState();
+    const [width, setWidth] = useState(() =>
+      Math.max(100, Math.round(dashboardReferenceWidth())),
+    );
+    const [height, setHeight] = useState("");
+    const [dpi, setDpi] = useState(300);
+    const [format, setFormat] = useState("png");
+    const [message, setMessage] = useState("");
+    if (state.overlay !== "print") return null;
+    const busy = state.lifecycle !== "ready";
+
+    const close = () =>
+      appFSM.send("CLOSE_OVERLAY", { reason: "mantine-print" });
+    const options = () => ({
+      width: Math.max(100, Math.min(20000, Number(width) || 1000)),
+      height:
+        height === "" || height === null
+          ? ""
+          : Math.max(100, Math.min(20000, Number(height) || 100)),
+      dpi: Math.max(36, Math.min(1200, Number(dpi) || 300)),
+      format: format === "jpeg" ? "jpeg" : "png",
+      onStatus: setMessage,
+    });
+    const save = () =>
+      runLifecycleTask("exporting", "PRINT_EXPORT", () =>
+        exportDashboardTarget(options()),
+      );
+    const capture = () =>
+      runLifecycleTask("exporting", "CAPTURE_EXPORT", () => {
+        const values = options();
+        return exportDashboard(true, {
+          dpi: values.dpi,
+          format: values.format,
+          onStatus: setMessage,
+        });
+      });
+
+    return React.createElement(
+      Modal,
+      {
+        opened: true,
+        onClose: close,
+        title: "프린트 / 내보내기",
+        size: "lg",
+        centered: true,
+        closeOnClickOutside: true,
+        closeOnEscape: true,
+        "data-fastfigure-overlay": "print",
+      },
+      React.createElement(
+        Stack,
+        { gap: "md" },
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(Select, {
+            label: "형식",
+            value: format,
+            data: [
+              { value: "png", label: "PNG" },
+              { value: "jpeg", label: "JPEG" },
+            ],
+            disabled: busy,
+            onChange: (value) => value !== null && setFormat(value),
+          }),
+          React.createElement(NumberInput, {
+            label: "DPI",
+            value: dpi,
+            min: 36,
+            max: 1200,
+            disabled: busy,
+            onChange: setDpi,
+          }),
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(NumberInput, {
+            label: "가로 (px)",
+            value: width,
+            min: 100,
+            max: 20000,
+            disabled: busy,
+            onChange: setWidth,
+          }),
+          React.createElement(NumberInput, {
+            label: "세로 (px, 비우면 자동)",
+            value: height,
+            min: 100,
+            max: 20000,
+            disabled: busy,
+            onChange: setHeight,
+          }),
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(
+            Button,
+            { disabled: busy, onClick: save },
+            "설정 크기로 저장",
+          ),
+          React.createElement(
+            Button,
+            { variant: "light", disabled: busy, onClick: capture },
+            "현재 화면 캡처",
+          ),
+        ),
+        React.createElement(
+          Text,
+          { size: "sm", c: "dimmed", "aria-live": "polite" },
+          message ||
+            "PNG/JPEG, 36–1200 DPI. 세로를 비우면 레이아웃과 캡션에 맞춰 자동 계산합니다.",
+        ),
+      ),
+    );
+  }
+
   function FastFigureLayoutOverlay() {
     const state = useAppState();
     const [selectionRevision, setSelectionRevision] = useState(0);
@@ -2291,6 +2410,7 @@
       React.createElement(FastFigureLabelOverlay),
       React.createElement(FastFigureCaptionOverlay),
       React.createElement(FastFigureLayoutOverlay),
+      React.createElement(FastFigurePrintOverlay),
     );
   }
 
@@ -2308,6 +2428,7 @@
     FastFigureLabelOverlay,
     FastFigureCaptionOverlay,
     FastFigureLayoutOverlay,
+    FastFigurePrintOverlay,
     FastFigureUtilityActions,
     getAppStateSnapshot,
     selectedTargetText,

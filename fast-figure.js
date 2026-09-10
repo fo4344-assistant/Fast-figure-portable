@@ -8981,10 +8981,12 @@
             mime === "image/png" ? exportSetPngDpi(bytes, dpi) : exportSetJpegDpi(bytes, dpi);
         return new Blob([withDpi], { type: mime });
       }
-      async function exportDashboard(capture = false) {
+      async function exportDashboard(capture = false, options = null) {
         let dashboard = $("dashboard"),
           caption = $("dashboardCaption"),
-          statusOut = $("printStatus"),
+          statusOut = options?.onStatus
+            ? { set textContent(value) { options.onStatus(value); } }
+            : $("printStatus"),
           bordersVisible = activeProject.layout.slotStyle.showBorders,
           captionView = activeCaptionView(),
           dashboardRect = dashboard.getBoundingClientRect();
@@ -9020,11 +9022,16 @@
                 100,
                 Math.min(20000, Number($("printHeight").value) || Math.round(sourceHeight)),
               ),
-          dpi = Math.max(36, Math.min(1200, Number($("printDpi").value) || 300)),
-          format = $("printFormat").value;
-        $("printWidth").value = width;
-        $("printHeight").value = height;
-        $("printDpi").value = dpi;
+          dpi = Math.max(
+            36,
+            Math.min(1200, Number(options?.dpi ?? $("printDpi").value) || 300),
+          ),
+          format = options?.format || $("printFormat").value;
+        if (!options) {
+          $("printWidth").value = width;
+          $("printHeight").value = height;
+          $("printDpi").value = dpi;
+        }
         let canvas = document.createElement("canvas"),
           ctx = canvas.getContext("2d"),
           scaleX = width / sourceWidth,
