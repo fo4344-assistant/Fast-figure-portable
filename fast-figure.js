@@ -9342,20 +9342,30 @@
           },
         });
       }
-      async function exportDashboardTarget() {
-        let statusOut = $("printStatus"),
+      async function exportDashboardTarget(options = null) {
+        let statusOut = options?.onStatus
+            ? { set textContent(value) { options.onStatus(value); } }
+            : $("printStatus"),
           snapshot = createTargetExportSnapshot(),
           captionView = snapshot.captionView,
-          width = Math.max(100, Math.min(20000, Number($("printWidth").value) || 1000)),
-          requestedHeight = Number($("printHeight").value),
-          dpi = Math.max(36, Math.min(1200, Number($("printDpi").value) || 300)),
+          width = Math.max(
+            100,
+            Math.min(20000, Number(options?.width ?? $("printWidth").value) || 1000),
+          ),
+          requestedHeight = Number(options?.height ?? $("printHeight").value),
+          dpi = Math.max(
+            36,
+            Math.min(1200, Number(options?.dpi ?? $("printDpi").value) || 300),
+          ),
           rasterScale = 1,
-          format = $("printFormat").value,
+          format = options?.format || $("printFormat").value,
           bordersVisible = snapshot.bordersVisible,
           visibleSlots = snapshot.slots.filter((slot) => !slot.hidden),
           captionShown = captionView.enabled;
-        $("printWidth").value = width;
-        $("printDpi").value = dpi;
+        if (!options) {
+          $("printWidth").value = width;
+          $("printDpi").value = dpi;
+        }
         let canvas = document.createElement("canvas"),
           ctx = canvas.getContext("2d"),
           baseReference = targetExportGeometry(snapshot.layout, width),
@@ -9369,7 +9379,7 @@
           rasterHeight = Math.round(height),
           maxRasterDimension = 16384,
           maxRasterArea = 64000000;
-        if (!automaticHeight) $("printHeight").value = height;
+        if (!options && !automaticHeight) $("printHeight").value = height;
         if (
           rasterWidth > maxRasterDimension ||
           rasterHeight > maxRasterDimension ||
