@@ -7582,51 +7582,6 @@
         renderGraphObjects(ensureGraphObjects(editing));
         status(`${csv.name}을 선택했습니다. 기존 그래프 데이터는 변경하지 않았습니다.`);
       }
-      function deleteProjectCsv(csvIdToDelete = activeCsvId) {
-        let id = csvIdToDelete,
-          csv = getProjectCsv(id),
-          references = activeProject.charts.flatMap((chart) =>
-            (chart.editor?.objects || [])
-              .map((object, index) => ({ chart, object, index }))
-              .filter(({ object }) => object.csvId === id),
-          );
-        if (!csv) return;
-        if (csv.isDefaultEmpty === true)
-          return status("프로젝트 기본 빈 CSV는 삭제할 수 없습니다.");
-        if (
-          references.length &&
-          !window.confirm(
-            `${csv.name}을 ${references.length}개 그래프 오브젝트가 참조 중입니다. 참조 중인 그래프 오브젝트와 CSV를 함께 삭제할까요?`,
-          )
-        )
-          return;
-        if (references.length) {
-          activeProject.charts.forEach((chart) => {
-            if (!Array.isArray(chart.editor?.objects)) return;
-            let objects = chart.editor.objects.filter((object) => object.csvId !== id);
-            if (objects.length === chart.editor.objects.length) return;
-            appFSM.send("GRAPH_OBJECTS_REPLACED", {
-              chartId: chart.id,
-              objects,
-              direction: "fsm-to-model",
-            });
-          });
-          selectedObjectIndex = null;
-        }
-        appFSM.send("DATA_OBJECT_DELETED", {
-          csvId: id,
-          direction: "fsm-to-model",
-        });
-        appFSM.send("CLEAR_ASSET_SELECTION", {
-          direction: "fsm-to-model",
-        });
-        renderDashboard();
-        status(
-          references.length
-            ? `${csv.name}과 이를 참조하던 그래프 오브젝트 ${references.length}개를 삭제했습니다.`
-            : `${csv.name}을 프로젝트에서 삭제했습니다.`,
-        );
-      }
       function selectImageFromTree(path) {
         let slot = getSelectedSlot(),
           match = projectVfs.resolve(path),
@@ -7659,67 +7614,6 @@
         updateFileAvailability();
         renderDashboard();
         status(`${image.name}을 선택 슬롯에 연결했습니다.`);
-      }
-      function deleteProjectImage(imageIdToDelete = activeImageId) {
-        let id = Number(imageIdToDelete),
-          image = getProjectImage(id),
-          references = activeProject.slots.filter((slot) => slot.imageId === id);
-        if (!image) return;
-        if (
-          references.length &&
-          !window.confirm(
-            `${image.name}을 ${references.length}개 이미지 슬롯이 참조 중입니다. 참조 슬롯을 초기화하고 이미지를 삭제할까요?`,
-          )
-        )
-          return;
-        if (references.length)
-          appFSM.send("SLOTS_RESET", {
-            slotIds: references.map((slot) => slot.id),
-            direction: "fsm-to-model",
-          });
-        appFSM.send("IMAGE_OBJECT_DELETED", {
-          imageId: id,
-          direction: "fsm-to-model",
-        });
-        appFSM.send("CLEAR_ASSET_SELECTION", {
-          direction: "fsm-to-model",
-        });
-        renderDashboard();
-        status(
-          references.length
-            ? `${image.name}을 삭제하고 참조 슬롯 ${references.length}개를 초기화했습니다.`
-            : `${image.name}을 프로젝트에서 삭제했습니다.`,
-        );
-      }
-      function deleteSelectedAsset() {
-        let selected = appFSM.state.assetPath
-          ? projectVfs.resolve(appFSM.state.assetPath)
-          : null;
-        if (selected?.kind === "csv") deleteProjectCsv(selected.asset.id);
-        else if (selected?.kind === "image") deleteProjectImage(selected.asset.id);
-      }
-      function createAssetDirectory(parent = selectedExplorerDirectory) {
-        parent =
-          parent === "/assets" || parent.startsWith("/assets/") ? parent : "/assets";
-        let name = window.prompt(`새 폴더 이름\n위치: ${parent}`, "New Folder");
-        if (name === null) return;
-        let payload = {
-          parent,
-          name,
-          direction: "ui-to-fsm",
-        };
-        try {
-          appFSM.send("PROJECT_DIRECTORY_CREATED", payload);
-          selectedExplorerDirectory = payload.path;
-          appFSM.send("SELECT_ASSET", {
-            kind: "directory",
-            path: payload.path,
-            direction: "ui-to-fsm",
-          });
-          status(`${payload.path} 폴더를 만들었습니다.`);
-        } catch (error) {
-          status(`폴더 생성 오류: ${error.message}`);
-        }
       }
       function insertEmptyImageIntoSelectedSlot() {
         let slot = getSelectedSlot();
