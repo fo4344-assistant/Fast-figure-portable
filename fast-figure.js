@@ -1995,7 +1995,6 @@
         "addGraphObject",
         "csvSelectionPanel",
         "imageSelectionPanel",
-        "deleteSelectedAsset",
         "applyGrid",
         "applyUiPalette",
         "barLineWidth",
@@ -2091,7 +2090,6 @@
         "readmeToggle",
         "resetDashboardAspect",
         "resetGraphPalette",
-        "resetSelectedSlot",
         "resetUiPalette",
         "saveDebug",
         "saveGraphPalette",
@@ -4140,7 +4138,6 @@
       }
       function updateFileAvailability() {
         let hasSlot = !!getSelectedSlot();
-        $("resetSelectedSlot").classList.toggle("hidden", !hasSlot);
         $("readmeToggle").classList.toggle("hidden", hasSlot);
         $("projectBox").classList.toggle("hidden", hasSlot);
         if (hasSlot && appFSM.state.overlay === "readme")
@@ -7330,32 +7327,6 @@
           body +
           "</tbody>";
       }
-      $("resetSelectedSlot").onclick = () => {
-        let slot = getSelectedSlot();
-        if (!slot) {
-          status("초기화할 슬롯을 먼저 선택하세요.");
-          debugLog("slotReset:no-selection");
-          return;
-        }
-        if (!window.confirm("데이터를 잃습니다.")) {
-          debugLog("slotReset:cancel", { slotId: slot.id });
-          return;
-        }
-        let payload = {
-          slotIds: [slot.id],
-          direction: "fsm-to-model",
-        };
-        appFSM.send("SLOTS_RESET", payload);
-        appFSM.send("CLEAR_ASSET_SELECTION", {
-          direction: "fsm-to-model",
-        });
-        renderDashboard();
-        status("선택한 슬롯을 초기화했습니다.");
-        debugLog("slotReset:complete", {
-          slotId: slot.id,
-          removedChartIds: payload.removedChartIds,
-        });
-      };
       function baseGraphObject(chart, csv = getProjectCsv(activeCsvId)) {
         let editor = chart.editor || {};
         if (!csv) throw Error("그래프 오브젝트에 연결할 프로젝트 CSV가 없습니다.");
