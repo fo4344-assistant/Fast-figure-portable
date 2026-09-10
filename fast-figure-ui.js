@@ -1599,6 +1599,265 @@
     );
   }
 
+  function FastFigureLayoutOverlay() {
+    const state = useAppState();
+    const [selectionRevision, setSelectionRevision] = useState(0);
+    const [zoom, setZoom] = useState(() =>
+      Number.isFinite(dashboardZoomIntent) ? dashboardZoomIntent : 100,
+    );
+    if (state.overlay !== "layout") return null;
+    const busy = state.lifecycle !== "ready";
+    const style = activeProject.layout.slotStyle;
+    const visibleSlots = activeProject.slots.filter((slot) => !slot.hidden);
+    void selectionRevision;
+
+    const clamp = (value, fallback, min, max) => {
+      const number = Number(value);
+      return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+    };
+    const commitStyle = (patch) => {
+      activeProject.layout.slotStyle = { ...style, ...patch };
+      applySlotStyle(false);
+      applyDashboardZoom(false);
+      schedulePlotResize();
+    };
+    const changeGrid = (patch) => {
+      const rows = patch.rows ?? activeProject.gridRows;
+      const cols = patch.cols ?? activeProject.gridCols;
+      makeSlots(rows, cols);
+      applySlotStyle(false);
+      schedulePlotResize();
+    };
+    const toggleSlot = (slotId) => {
+      if (layoutSelected.has(slotId)) layoutSelected.delete(slotId);
+      else layoutSelected.add(slotId);
+      setSelectionRevision((revision) => revision + 1);
+      renderLayout();
+    };
+    const runLayoutCommand = (command) => {
+      command();
+      setSelectionRevision((revision) => revision + 1);
+    };
+    const changeZoom = (value) => {
+      const next = clamp(value, 100, 50, 200);
+      setZoom(next);
+      applyDashboardZoom(false, next);
+    };
+    const commitZoom = () => commitDashboardScale("mantine-layout");
+    const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-layout" });
+
+    return React.createElement(
+      Modal,
+      {
+        opened: true,
+        onClose: close,
+        title: "레이아웃",
+        size: "xl",
+        centered: true,
+        closeOnClickOutside: true,
+        closeOnEscape: true,
+        "data-fastfigure-overlay": "layout",
+      },
+      React.createElement(
+        Stack,
+        { gap: "md" },
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(NumberInput, {
+            label: "행",
+            value: activeProject.gridRows,
+            min: 1,
+            max: 8,
+            allowDecimal: false,
+            disabled: busy,
+            onChange: (value) =>
+              changeGrid({ rows: clamp(value, activeProject.gridRows, 1, 8) }),
+          }),
+          React.createElement(NumberInput, {
+            label: "열",
+            value: activeProject.gridCols,
+            min: 1,
+            max: 8,
+            allowDecimal: false,
+            disabled: busy,
+            onChange: (value) =>
+              changeGrid({ cols: clamp(value, activeProject.gridCols, 1, 8) }),
+          }),
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(NumberInput, {
+            label: "기준 폭",
+            value: style.referenceWidth,
+            min: 100,
+            max: 20000,
+            disabled: busy,
+            onChange: (value) =>
+              commitStyle({ referenceWidth: clamp(value, style.referenceWidth, 100, 20000) }),
+          }),
+          React.createElement(NumberInput, {
+            label: "간격",
+            value: style.gap,
+            min: 0,
+            max: 2000,
+            disabled: busy,
+            onChange: (value) => commitStyle({ gap: clamp(value, style.gap, 0, 2000) }),
+          }),
+          React.createElement(NumberInput, {
+            label: "바깥 여백",
+            value: style.outerMargin,
+            min: 0,
+            max: 5000,
+            disabled: busy,
+            onChange: (value) => commitStyle({ outerMargin: clamp(value, style.outerMargin, 0, 5000) }),
+          }),
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(NumberInput, {
+            label: "모서리 반경",
+            value: style.radius,
+            min: 0,
+            max: 2000,
+            disabled: busy,
+            onChange: (value) => commitStyle({ radius: clamp(value, style.radius, 0, 2000) }),
+          }),
+          React.createElement(NumberInput, {
+            label: "종횡비",
+            value: style.aspect,
+            min: 0.1,
+            max: 10,
+            step: 0.01,
+            disabled: busy,
+            onChange: (value) => commitStyle({ aspect: clamp(value, style.aspect, 0.1, 10) }),
+          }),
+          React.createElement(
+            Button,
+            {
+              variant: style.showBorders ? "filled" : "light",
+              disabled: busy,
+              "aria-pressed": style.showBorders,
+              onClick: () => commitStyle({ showBorders: !style.showBorders }),
+            },
+            "슬롯 외곽선",
+          ),
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(NumberInput, {
+            label: "확대 비율 (%)",
+            value: zoom,
+            min: 50,
+            max: 200,
+            disabled: busy || dashboardZoomLocked,
+            onChange: changeZoom,
+            onBlur: commitZoom,
+          }),
+          React.createElement(
+            Button,
+            {
+              variant: dashboardZoomLocked ? "filled" : "light",
+              disabled: busy,
+              "aria-pressed": dashboardZoomLocked,
+              onClick: () => {
+                const nextLocked = !dashboardZoomLocked;
+                setDashboardZoomLocked(nextLocked);
+                if (!nextLocked) setZoom(100);
+              },
+            },
+            dashboardZoomLocked ? "크기 고정" : "크기 고정 해제",
+          ),
+          React.createElement(
+            Button,
+            {
+              variant: "light",
+              disabled: busy,
+              onClick: () => {
+                if (dashboardZoomLocked) setDashboardZoomLocked(false);
+                setZoom(100);
+                applyDashboardZoom(false, 100);
+                commitDashboardScale("mantine-layout-reset");
+              },
+            },
+            "100% 초기화",
+          ),
+        ),
+        React.createElement(
+          "div",
+          {
+            role: "grid",
+            "aria-label": "레이아웃 슬롯 선택",
+            style: {
+              display: "grid",
+              gridTemplateColumns: `repeat(${activeProject.gridCols}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${activeProject.gridRows}, minmax(48px, 1fr))`,
+              gap: 6,
+              minHeight: 260,
+              padding: 8,
+              border: "1px solid var(--mantine-color-default-border)",
+              borderRadius: "var(--mantine-radius-sm)",
+            },
+          },
+          ...visibleSlots.map((slot) =>
+            React.createElement(
+              Button,
+              {
+                key: slot.id,
+                variant: layoutSelected.has(slot.id) ? "filled" : "light",
+                disabled: busy,
+                onClick: () => toggleSlot(slot.id),
+                style: {
+                  gridColumn: `${slot.col} / span ${slot.colSpan}`,
+                  gridRow: `${slot.row} / span ${slot.rowSpan}`,
+                  minHeight: 48,
+                },
+              },
+              `${slot.row},${slot.col}`,
+            ),
+          ),
+        ),
+        React.createElement(
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(
+            Button,
+            {
+              disabled: busy || layoutSelected.size < 2,
+              onClick: () => runLayoutCommand(mergeSelected),
+            },
+            "선택 슬롯 합치기",
+          ),
+          React.createElement(
+            Button,
+            {
+              variant: "light",
+              disabled: busy || layoutSelected.size < 1,
+              onClick: () => runLayoutCommand(splitSelected),
+            },
+            "선택 슬롯 나누기",
+          ),
+          React.createElement(
+            Button,
+            {
+              variant: "subtle",
+              disabled: busy || layoutSelected.size < 1,
+              onClick: () => {
+                layoutSelected.clear();
+                setSelectionRevision((revision) => revision + 1);
+                renderLayout();
+              },
+            },
+            "선택 해제",
+          ),
+        ),
+      ),
+    );
+  }
+
   function FastFigureShell() {
     const [navbarWidth, setNavbarWidth] = useState(370);
     const [navbarCollapsed, setNavbarCollapsed] = useState(false);
@@ -1700,6 +1959,7 @@
         }),
       ),
       React.createElement(AppShell.Main, null),
+      React.createElement(FastFigureLayoutOverlay),
     );
   }
 
@@ -1714,6 +1974,7 @@
     FastFigureGraphLayoutEditor,
     FastFigureGraphPaletteActions,
     FastFigureGraphFileActions,
+    FastFigureLayoutOverlay,
     FastFigureUtilityActions,
     getAppStateSnapshot,
     selectedTargetText,
