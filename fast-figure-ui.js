@@ -56,6 +56,69 @@
       });
   }
 
+  function useProjectAssetImportCollision() {
+    const resolverRef = useRef(null);
+    const [collision, setCollision] = useState(null);
+    const resolveCollision = (choice = "rename") => {
+      const resolve = resolverRef.current;
+      resolverRef.current = null;
+      setCollision(null);
+      resolve?.(choice);
+    };
+    const choosePlan = async (file, directory, reservedPaths = null) => {
+      const model = projectAssetImportCollisionModel(file, directory, reservedPaths);
+      if (model.mode === "available")
+        return resolveProjectAssetImportPlan(model, "rename", reservedPaths);
+      const choice = await new Promise((resolve) => {
+        resolverRef.current = resolve;
+        setCollision(model);
+      });
+      return resolveProjectAssetImportPlan(model, choice || "rename", reservedPaths);
+    };
+    const modal = React.createElement(
+      Modal,
+      {
+        opened: !!collision,
+        onClose: () => resolveCollision("rename"),
+        title:
+          collision?.mode === "replace-or-rename"
+            ? "같은 이름의 파일"
+            : "파일 이름 충돌",
+        centered: true,
+      },
+      collision
+        ? React.createElement(
+            Stack,
+            { gap: "sm" },
+            React.createElement(
+              Text,
+              { style: { whiteSpace: "pre-wrap" } },
+              collision.mode === "replace-or-rename"
+                ? collision.message
+                : collision.notice || `${collision.path}에 같은 이름의 항목이 있습니다.`,
+            ),
+            React.createElement(
+              Group,
+              { justify: "flex-end", gap: "xs" },
+              React.createElement(
+                Button,
+                { variant: "light", onClick: () => resolveCollision("rename") },
+                "새 이름으로 추가",
+              ),
+              collision.mode === "replace-or-rename"
+                ? React.createElement(
+                    Button,
+                    { onClick: () => resolveCollision("replace") },
+                    "기존 파일 교체",
+                  )
+                : null,
+            ),
+          )
+        : null,
+    );
+    return { choosePlan, modal };
+  }
+
   function exportProjectFromMantine() {
     return runLifecycleTask("exporting", "PROJECT_EXPORT", () => downloadProject());
   }
@@ -108,25 +171,8 @@
       !(selectedAsset.kind === "csv" && selectedAsset.asset.isDefaultEmpty === true);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const fileInputRef = useRef(null);
-    const importChoiceResolverRef = useRef(null);
-    const [importCollision, setImportCollision] = useState(null);
-
-    const closeImportCollision = (choice = "rename") => {
-      const resolve = importChoiceResolverRef.current;
-      importChoiceResolverRef.current = null;
-      setImportCollision(null);
-      resolve?.(choice);
-    };
-    const chooseProjectAssetImportPlan = async (file, directory) => {
-      const model = projectAssetImportCollisionModel(file, directory);
-      if (model.mode === "available")
-        return resolveProjectAssetImportPlan(model, "rename");
-      const choice = await new Promise((resolve) => {
-        importChoiceResolverRef.current = resolve;
-        setImportCollision(model);
-      });
-      return resolveProjectAssetImportPlan(model, choice || "rename");
-    };
+    const { choosePlan: chooseProjectAssetImportPlan, modal: importCollisionModal } =
+      useProjectAssetImportCollision();
     const importFilesFromMantine = async (event) => {
       const input = event.target;
       const files = [...(input.files || [])];
@@ -368,48 +414,7 @@
         },
         "데이터 추가",
       ),
-      React.createElement(
-        Modal,
-        {
-          opened: !!importCollision,
-          onClose: () => closeImportCollision("rename"),
-          title:
-            importCollision?.mode === "replace-or-rename"
-              ? "같은 이름의 파일"
-              : "파일 이름 충돌",
-          centered: true,
-        },
-        importCollision
-          ? React.createElement(
-              Stack,
-              { gap: "sm" },
-              React.createElement(
-                Text,
-                { style: { whiteSpace: "pre-wrap" } },
-                importCollision.mode === "replace-or-rename"
-                  ? importCollision.message
-                  : importCollision.notice ||
-                      `${importCollision.path}에 같은 이름의 항목이 있습니다.`,
-              ),
-              React.createElement(
-                Group,
-                { justify: "flex-end", gap: "xs" },
-                React.createElement(
-                  Button,
-                  { variant: "light", onClick: () => closeImportCollision("rename") },
-                  "새 이름으로 추가",
-                ),
-                importCollision.mode === "replace-or-rename"
-                  ? React.createElement(
-                      Button,
-                      { onClick: () => closeImportCollision("replace") },
-                      "기존 파일 교체",
-                    )
-                  : null,
-              ),
-            )
-          : null,
-      ),
+      importCollisionModal,
       React.createElement(
         Button,
         {
@@ -599,6 +604,8 @@
     const [movePicker, setMovePicker] = useState(null);
     const [moveConfirm, setMoveConfirm] = useState(null);
     const dragNodeRef = useRef(null);
+    const { choosePlan: chooseTreeImportPlan, modal: treeImportCollisionModal } =
+      useProjectAssetImportCollision();
     const busy = state.lifecycle !== "ready";
     const directories = [...new Set(snapshot.directories)]
       .filter((path) => path === "/assets" || path.startsWith("/assets/"))
@@ -917,19 +924,8 @@
           onDragEnd: () => {
             dragNodeRef.current = null;
           },
-          onDragOver: (event) => {
-            const source = dragNodeRef.current?.path;
-            if (!source || source === path) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-          },
-          onDrop: (event) => {
-            const source = dragNodeRef.current?.path || event.dataTransfer.getData("text/plain");
-            dragNodeRef.current = null;
-            if (!source || source === path) return;
-            event.preventDefault();
-            requestProjectNodeMove(source, path);
-          },
+          onDragOver: (event) => allowTreeFolderDrop(event, path),
+          onDrop: (event) => dropOnTreeFolder(event, path),
         },
         React.createElement(
           Group,
@@ -1044,6 +1040,79 @@
       } catch (error) {
         status(`슬롯 연결 오류: ${error.message}`);
       }
+    };
+    const externalFiles = (event) => Array.from(event.dataTransfer?.files || []);
+    const allowExternalFileDrop = (event) => {
+      if (!dataTransferHasFiles(event.dataTransfer)) return false;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      return true;
+    };
+    const importExternalFilesToDirectory = async (event, directory) => {
+      const files = externalFiles(event);
+      if (!files.length) return;
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        await importProjectFilesToDirectory(files, directory, chooseTreeImportPlan);
+        status(`${directory}에 외부 파일 ${files.length}개를 가져왔습니다.`);
+      } catch (error) {
+        status(`폴더 가져오기 실패: ${error.message}`);
+        debugLog("mantine:folder-drop-error", { directory, message: error.message }, "error");
+      }
+    };
+    const importExternalFileToSlot = async (event, slot) => {
+      const files = externalFiles(event);
+      event.preventDefault();
+      event.stopPropagation();
+      if (files.length !== 1)
+        return status("슬롯에는 한 번에 외부 파일 하나만 놓을 수 있습니다.");
+      const file = files[0],
+        kind = slotFileKind(file);
+      if (!kind) return status(`${file.name}: 지원하지 않는 파일 형식입니다.`);
+      await runLifecycleTask("importing", "ASSET_TREE_DROP", async () => {
+        if (kind === "slot") return importSlotFile(file, slot);
+        if (kind === "image") {
+          const plan = await chooseTreeImportPlan(
+            file,
+            PROJECT_ASSET_DIRECTORIES.image,
+          );
+          return loadImageFile(file, slot, {
+            assetPath: plan.path,
+            replaceAssetId: plan.replaceId,
+          });
+        }
+        const plan = await chooseTreeImportPlan(file, PROJECT_ASSET_DIRECTORIES.csv);
+        return loadDataFile(file, slot, {
+          replaceSlotContent: slot.contentType === "image",
+          assetPath: plan.path,
+          replaceAssetId: plan.replaceId,
+        });
+      });
+    };
+    const allowTreeFolderDrop = (event, path) => {
+      if (dataTransferHasFiles(event.dataTransfer)) {
+        if (projectVfs.isTrashed(path)) return false;
+        return allowExternalFileDrop(event);
+      }
+      const source = dragNodeRef.current?.path;
+      if (!source || source === path) return false;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "move";
+      return true;
+    };
+    const dropOnTreeFolder = (event, path) => {
+      if (dataTransferHasFiles(event.dataTransfer))
+        return importExternalFilesToDirectory(event, path);
+      const source =
+        dragNodeRef.current?.path || event.dataTransfer.getData("text/plain");
+      dragNodeRef.current = null;
+      if (!source || source === path) return;
+      event.preventDefault();
+      event.stopPropagation();
+      requestProjectNodeMove(source, path);
     };
 
     return React.createElement(
@@ -1237,6 +1306,7 @@
             )
           : null,
       ),
+      treeImportCollisionModal,
       directoryNode("/assets"),
       React.createElement(
         Button,
@@ -1266,8 +1336,16 @@
                       justify: "flex-start",
                       disabled: busy,
                       onClick: () => setSelectedSlot(slot.id),
-                      onDragOver: allowProjectAssetSlotDrop,
-                      onDrop: (event) => dropProjectAssetOnSlot(event, slot),
+                      onDragOver: (event) => {
+                        if (dataTransferHasFiles(event.dataTransfer))
+                          return allowExternalFileDrop(event);
+                        return allowProjectAssetSlotDrop(event);
+                      },
+                      onDrop: (event) => {
+                        if (dataTransferHasFiles(event.dataTransfer))
+                          return importExternalFileToSlot(event, slot);
+                        return dropProjectAssetOnSlot(event, slot);
+                      },
                     },
                     `[row=${slot.row},col=${slot.col}] — ${slotReference(slot)}`,
                   ),

@@ -3351,6 +3351,84 @@
         if (model.notice) window.alert(model.notice);
         return resolveProjectAssetImportPlan(model, "rename", reservedPaths);
       }
+      async function importProjectFilesToDirectory(
+        files,
+        directory,
+        planImport = planProjectAssetImport,
+      ) {
+        let targetDirectory = normalizeProjectPath(directory, { directory: true }),
+          list = Array.from(files || []);
+        if (!activeProject.fileSystem.directories.includes(targetDirectory))
+          throw Error("대상 폴더가 없습니다.");
+        if (projectVfs.isTrashed(targetDirectory))
+          throw Error("외부 파일은 휴지통으로 직접 가져올 수 없습니다.");
+        let reserved = new Set([
+            ...activeProject.fileSystem.directories,
+            ...activeProject.csvFiles.map(projectAssetPath),
+            ...activeProject.images.map(projectAssetPath),
+          ]),
+          staged = [];
+        for (let file of list) {
+          let kind = slotFileKind(file);
+          if (kind !== "data" && kind !== "image")
+            throw Error(`${file.name}: 폴더에는 CSV/TSV/JSON 또는 이미지만 가져올 수 있습니다.`);
+          let plan = await planImport(file, targetDirectory, reserved);
+          reserved.add(plan.path);
+          staged.push({ file, kind, ...plan });
+        }
+        let csvIds = new Set(activeProject.csvFiles.map((asset) => asset.id)),
+          imageIds = new Set(activeProject.images.map((asset) => asset.id)),
+          replacedCsv = new Map(
+            staged
+              .filter((item) => item.kind === "data" && Number.isInteger(item.replaceId))
+              .map((item) => [item.replaceId, projectClone(getProjectCsv(item.replaceId))]),
+          ),
+          replacedImages = new Map(
+            staged
+              .filter((item) => item.kind === "image" && Number.isInteger(item.replaceId))
+              .map((item) => [item.replaceId, projectClone(getProjectImage(item.replaceId))]),
+          );
+        try {
+          await appFSM.run("importing", "ASSET_TREE_DROP", async () => {
+            for (let item of staged) {
+              if (item.kind === "data")
+                await loadDataFile(item.file, null, {
+                  assetPath: item.path,
+                  replaceAssetId: item.replaceId,
+                });
+              else
+                await loadImageFile(item.file, null, {
+                  assetPath: item.path,
+                  replaceAssetId: item.replaceId,
+                });
+            }
+          });
+        } catch (error) {
+          activeProject.csvFiles
+            .filter((asset) => !csvIds.has(asset.id))
+            .forEach((asset) =>
+              appFSM.send("DATA_OBJECT_DELETED", {
+                csvId: asset.id,
+                direction: "fsm-to-model",
+              }),
+            );
+          activeProject.images
+            .filter((asset) => !imageIds.has(asset.id))
+            .forEach((asset) =>
+              appFSM.send("IMAGE_OBJECT_DELETED", {
+                imageId: asset.id,
+                direction: "fsm-to-model",
+              }),
+            );
+          replacedCsv.forEach((model) =>
+            appFSM.send("DATA_OBJECT_REPLACED", { model, direction: "fsm-to-model" }),
+          );
+          replacedImages.forEach((model) =>
+            appFSM.send("IMAGE_OBJECT_REPLACED", { model, direction: "fsm-to-model" }),
+          );
+          throw error;
+        }
+      }
       const ASSET_TREE_INDENT_PX = 16;
       function assetTreeDepth(path) {
         return Math.max(0, String(path || "").split("/").filter(Boolean).length - 1);
