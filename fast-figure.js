@@ -1328,7 +1328,13 @@
           machine.assertWritable("data", "PROJECT_NODE_MOVED");
         if (movingAssets.some(({ kind }) => kind === "image"))
           machine.assertWritable("images", "PROJECT_NODE_MOVED");
-        let destination = normalizeProjectPath(`${directory}/${projectPathName(source)}`, {
+        let requestedName =
+            payload.name === undefined ? projectPathName(source) : String(payload.name || "").trim(),
+          safeName = projectCsvName(requestedName, ""),
+          destination;
+        if (!safeName || safeName !== requestedName || /[\\/]/.test(requestedName))
+          throw Error("이동할 항목의 새 이름이 올바르지 않습니다.");
+        destination = normalizeProjectPath(`${directory}/${safeName}`, {
           directory: match.kind === "directory",
         });
         if (destination === source) return;
@@ -1350,7 +1356,10 @@
           movingAssets.forEach(({ asset }) => {
             asset.directory = projectParentPath(rewritePath(projectAssetPath(asset)));
           });
-        } else match.asset.directory = directory;
+        } else {
+          match.asset.directory = directory;
+          match.asset.name = safeName;
+        }
         if (enteringTrash) {
           let csvIds = new Set(
               movingAssets.filter(({ kind }) => kind === "csv").map(({ asset }) => asset.id),

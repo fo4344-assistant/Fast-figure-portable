@@ -11,6 +11,7 @@
     Group,
     Image,
     MantineProvider,
+    Menu,
     Modal,
     NumberInput,
     Select,
@@ -595,6 +596,9 @@
       name: "New Folder",
     });
     const [trashDialog, setTrashDialog] = useState(null);
+    const [movePicker, setMovePicker] = useState(null);
+    const [moveConfirm, setMoveConfirm] = useState(null);
+    const dragNodeRef = useRef(null);
     const busy = state.lifecycle !== "ready";
     const directories = [...new Set(snapshot.directories)]
       .filter((path) => path === "/assets" || path.startsWith("/assets/"))
@@ -667,6 +671,116 @@
         status(`휴지통 비우기 오류: ${error.message}`);
       }
     };
+    const movableProjectNode = (path) => {
+      const match = path ? projectVfs.resolve(path) : null;
+      if (!match || projectVfs.isTrashed(path)) return false;
+      if (match.kind === "directory") return !projectVfs.isFixedDirectory(path);
+      return !(match.kind === "csv" && match.asset.isDefaultEmpty === true);
+    };
+    const projectNodeReferenceCount = (path) => {
+      const match = projectVfs.resolve(path);
+      if (!match) return 0;
+      const movingAssets =
+        match.kind === "directory"
+          ? projectVfs.descendants(path)
+          : [{ kind: match.kind, asset: match.asset }];
+      const csvIds = new Set(
+        movingAssets.filter(({ kind }) => kind === "csv").map(({ asset }) => asset.id),
+      );
+      const imageIds = new Set(
+        movingAssets.filter(({ kind }) => kind === "image").map(({ asset }) => asset.id),
+      );
+      return projectAssetReferenceCount(csvIds, imageIds);
+    };
+    const buildMovePlan = (path, directory) => {
+      const match = projectVfs.resolve(path);
+      if (!match || !movableProjectNode(path)) throw Error("이동할 수 없는 프로젝트 항목입니다.");
+      const source =
+        match.kind === "directory" ? match.path : projectAssetPath(match.asset);
+      const targetDirectory = normalizeProjectPath(directory, { directory: true });
+      if (!directories.includes(targetDirectory)) throw Error("대상 폴더가 없습니다.");
+      if (
+        match.kind === "directory" &&
+        projectPathInDirectory(targetDirectory, source)
+      )
+        throw Error("폴더를 자기 자신 또는 하위 폴더로 이동할 수 없습니다.");
+      const destination = normalizeProjectPath(
+        `${targetDirectory}/${projectPathName(source)}`,
+        { directory: match.kind === "directory" },
+      );
+      if (destination === source) return null;
+      const collision = projectVfs.exists(destination);
+      const uniquePath = collision
+        ? projectVfs.uniquePath(targetDirectory, projectPathName(source))
+        : destination;
+      const enteringTrash =
+        projectVfs.isTrashed(destination) && !projectVfs.isTrashed(source);
+      return {
+        path: source,
+        kind: match.kind,
+        directory: targetDirectory,
+        destination,
+        collision,
+        uniqueName: projectPathName(uniquePath),
+        enteringTrash,
+        referenceCount: enteringTrash ? projectNodeReferenceCount(source) : 0,
+      };
+    };
+    const rewriteExpandedAfterMove = (source, destination) => {
+      setExpanded((current) => {
+        const next = new Set();
+        current.forEach((path) => {
+          next.add(
+            projectPathInDirectory(path, source)
+              ? `${destination}${path.slice(source.length)}`
+              : path,
+          );
+        });
+        return next;
+      });
+      setLastDirectory((current) =>
+        projectPathInDirectory(current, source)
+          ? `${destination}${current.slice(source.length)}`
+          : current,
+      );
+    };
+    const executeProjectNodeMove = (plan, useUniqueName = false) => {
+      if (!plan) return;
+      const payload = {
+        path: plan.path,
+        directory: plan.directory,
+        direction: "ui-to-fsm",
+      };
+      if (useUniqueName) payload.name = plan.uniqueName;
+      try {
+        appFSM.send("PROJECT_NODE_MOVED", payload);
+        if (plan.kind === "directory" && !payload.trashed)
+          rewriteExpandedAfterMove(plan.path, payload.path);
+        status(
+          payload.trashed
+            ? `${projectPathName(plan.path)}을 휴지통으로 이동했습니다.`
+            : `${projectPathName(plan.path)}을 ${projectParentPath(payload.path)}로 이동했습니다.`,
+        );
+        setMovePicker(null);
+        setMoveConfirm(null);
+      } catch (error) {
+        status(`프로젝트 항목 이동 오류: ${error.message}`);
+      }
+    };
+    const requestProjectNodeMove = (path, directory) => {
+      try {
+        const plan = buildMovePlan(path, directory);
+        if (!plan) {
+          setMovePicker(null);
+          return;
+        }
+        if (plan.collision || (plan.enteringTrash && plan.referenceCount > 0))
+          setMoveConfirm(plan);
+        else executeProjectNodeMove(plan);
+      } catch (error) {
+        status(`프로젝트 항목 이동 오류: ${error.message}`);
+      }
+    };
     const toggleExpanded = (path) => {
       setExpanded((current) => {
         const next = new Set(current);
@@ -685,28 +799,97 @@
     const assetRow = (asset, kind) => {
       const inactive = projectVfs.isTrashed(asset.path);
       const selected = state.assetSelection === kind && state.assetPath === asset.path;
+      const movable = movableProjectNode(asset.path);
       const meta =
         kind === "csv"
           ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${csvReferenceCount(asset.id)}`
           : `참조 ${imageReferenceCount(asset.id)}`;
       return React.createElement(
-        Button,
+        Group,
         {
           key: `${kind}:${asset.path}`,
-          variant: selected ? "filled" : "subtle",
-          size: "xs",
-          fullWidth: true,
-          disabled: inactive,
-          justify: "space-between",
-          onClick: () =>
-            kind === "csv" ? selectCsvFromTree(asset.path) : selectImageFromTree(asset.path),
+          gap: 2,
+          wrap: "nowrap",
+          draggable: movable,
+          onDragStart: (event) => {
+            if (!movable) return event.preventDefault();
+            dragNodeRef.current = { path: asset.path };
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", asset.path);
+          },
+          onDragEnd: () => {
+            dragNodeRef.current = null;
+          },
         },
-        React.createElement("span", null, projectPathName(asset.path)),
-        React.createElement("span", { style: { opacity: 0.7 } }, meta),
+        React.createElement(
+          Button,
+          {
+            variant: selected ? "filled" : "subtle",
+            size: "xs",
+            fullWidth: true,
+            disabled: inactive,
+            justify: "space-between",
+            onClick: () =>
+              kind === "csv" ? selectCsvFromTree(asset.path) : selectImageFromTree(asset.path),
+          },
+          React.createElement("span", null, projectPathName(asset.path)),
+          React.createElement("span", { style: { opacity: 0.7 } }, meta),
+        ),
+        React.createElement(
+          Menu,
+          { position: "bottom-end", withinPortal: true },
+          React.createElement(
+            Menu.Target,
+            null,
+            React.createElement(
+              Button,
+              {
+                variant: "subtle",
+                size: "xs",
+                disabled: inactive,
+                "aria-label": `${projectPathName(asset.path)} 작업`,
+              },
+              "···",
+            ),
+          ),
+          React.createElement(
+            Menu.Dropdown,
+            null,
+            React.createElement(
+              Menu.Item,
+              { onClick: () => downloadProjectAsset(asset.path) },
+              "다운로드",
+            ),
+            movable
+              ? React.createElement(
+                  Menu.Item,
+                  {
+                    onClick: () =>
+                      setMovePicker({
+                        path: asset.path,
+                        directory: projectParentPath(asset.path),
+                      }),
+                  },
+                  "이동…",
+                )
+              : null,
+            movable
+              ? React.createElement(
+                  Menu.Item,
+                  {
+                    onClick: () =>
+                      requestProjectNodeMove(asset.path, PROJECT_TRASH_DIRECTORY),
+                  },
+                  "휴지통으로 이동",
+                )
+              : null,
+          ),
+        ),
       );
     };
     const directoryNode = (path) => {
       const selected = state.assetSelection === "directory" && state.assetPath === path;
+      const movable = movableProjectNode(path);
       const childDirectories = directories.filter(
         (candidate) => candidate !== path && projectParentPath(candidate) === path,
       );
@@ -721,22 +904,94 @@
       const open = expanded.has(path);
       return React.createElement(
         Stack,
-        { key: path, gap: 2 },
-        React.createElement(
-          Button,
-          {
-            variant: selected ? "filled" : "subtle",
-            size: "xs",
-            fullWidth: true,
-            justify: "flex-start",
-            "aria-expanded": open,
-            onClick: () => {
-              setLastDirectory(path);
-              selectDirectoryFromTree(path);
-              toggleExpanded(path);
-            },
+        {
+          key: path,
+          gap: 2,
+          draggable: movable,
+          onDragStart: (event) => {
+            if (!movable) return event.preventDefault();
+            dragNodeRef.current = { path };
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", path);
           },
-          `${open ? "▾" : "▸"} ${path === "/assets" ? "/assets" : projectPathName(path)}`,
+          onDragEnd: () => {
+            dragNodeRef.current = null;
+          },
+          onDragOver: (event) => {
+            const source = dragNodeRef.current?.path;
+            if (!source || source === path) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          },
+          onDrop: (event) => {
+            const source = dragNodeRef.current?.path || event.dataTransfer.getData("text/plain");
+            dragNodeRef.current = null;
+            if (!source || source === path) return;
+            event.preventDefault();
+            requestProjectNodeMove(source, path);
+          },
+        },
+        React.createElement(
+          Group,
+          { gap: 2, wrap: "nowrap" },
+          React.createElement(
+            Button,
+            {
+              variant: selected ? "filled" : "subtle",
+              size: "xs",
+              fullWidth: true,
+              justify: "flex-start",
+              "aria-expanded": open,
+              onClick: () => {
+                setLastDirectory(path);
+                selectDirectoryFromTree(path);
+                toggleExpanded(path);
+              },
+            },
+            `${open ? "▾" : "▸"} ${path === "/assets" ? "/assets" : projectPathName(path)}`,
+          ),
+          movable
+            ? React.createElement(
+                Menu,
+                { position: "bottom-end", withinPortal: true },
+                React.createElement(
+                  Menu.Target,
+                  null,
+                  React.createElement(
+                    Button,
+                    {
+                      variant: "subtle",
+                      size: "xs",
+                      "aria-label": `${projectPathName(path)} 폴더 작업`,
+                    },
+                    "···",
+                  ),
+                ),
+                React.createElement(
+                  Menu.Dropdown,
+                  null,
+                  React.createElement(
+                    Menu.Item,
+                    {
+                      onClick: () =>
+                        setMovePicker({
+                          path,
+                          directory: projectParentPath(path),
+                        }),
+                    },
+                    "이동…",
+                  ),
+                  React.createElement(
+                    Menu.Item,
+                    {
+                      onClick: () =>
+                        requestProjectNodeMove(path, PROJECT_TRASH_DIRECTORY),
+                    },
+                    "휴지통으로 이동",
+                  ),
+                ),
+              )
+            : null,
         ),
         open
           ? React.createElement(
@@ -848,6 +1103,111 @@
                 { justify: "flex-end", gap: "xs" },
                 React.createElement(Button, { variant: "light", onClick: closeTrashDialog }, "취소"),
                 React.createElement(Button, { onClick: emptyTrashFromMantine }, "비우기"),
+              ),
+            )
+          : null,
+      ),
+      React.createElement(
+        Modal,
+        {
+          opened: !!movePicker,
+          onClose: () => setMovePicker(null),
+          title: "프로젝트 항목 이동",
+          centered: true,
+        },
+        movePicker
+          ? React.createElement(
+              Stack,
+              { gap: "sm" },
+              React.createElement(
+                Text,
+                { size: "sm", c: "dimmed" },
+                `이동: ${movePicker.path}`,
+              ),
+              React.createElement(Select, {
+                label: "대상 폴더",
+                value: movePicker.directory,
+                data: directories
+                  .filter(
+                    (directory) =>
+                      !projectVfs.isTrashed(directory) &&
+                      !(
+                        projectVfs.resolve(movePicker.path)?.kind === "directory" &&
+                        projectPathInDirectory(directory, movePicker.path)
+                      ),
+                  )
+                  .map((directory) => ({ value: directory, label: directory })),
+                allowDeselect: false,
+                searchable: true,
+                onChange: (value) =>
+                  value &&
+                  setMovePicker((current) => ({
+                    ...current,
+                    directory: value,
+                  })),
+              }),
+              React.createElement(
+                Group,
+                { justify: "flex-end", gap: "xs" },
+                React.createElement(
+                  Button,
+                  { variant: "light", onClick: () => setMovePicker(null) },
+                  "취소",
+                ),
+                React.createElement(
+                  Button,
+                  {
+                    onClick: () =>
+                      requestProjectNodeMove(movePicker.path, movePicker.directory),
+                  },
+                  "이동",
+                ),
+              ),
+            )
+          : null,
+      ),
+      React.createElement(
+        Modal,
+        {
+          opened: !!moveConfirm,
+          onClose: () => setMoveConfirm(null),
+          title: moveConfirm?.collision ? "이름 충돌" : "휴지통으로 이동",
+          centered: true,
+        },
+        moveConfirm
+          ? React.createElement(
+              Stack,
+              { gap: "sm" },
+              React.createElement(
+                Text,
+                { style: { whiteSpace: "pre-wrap" } },
+                [
+                  moveConfirm.collision
+                    ? `${moveConfirm.destination}가 이미 존재합니다.\n${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.`
+                    : null,
+                  moveConfirm.enteringTrash && moveConfirm.referenceCount > 0
+                    ? `이 항목을 휴지통으로 이동하면 그래프·슬롯 참조 ${moveConfirm.referenceCount}개가 제거됩니다.`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join("\n\n"),
+              ),
+              React.createElement(
+                Group,
+                { justify: "flex-end", gap: "xs" },
+                React.createElement(
+                  Button,
+                  { variant: "light", onClick: () => setMoveConfirm(null) },
+                  "취소",
+                ),
+                React.createElement(
+                  Button,
+                  {
+                    onClick: () =>
+                      executeProjectNodeMove(moveConfirm, moveConfirm.collision),
+                  },
+                  moveConfirm.collision ? "새 이름으로 이동" : "이동",
+                ),
               ),
             )
           : null,
