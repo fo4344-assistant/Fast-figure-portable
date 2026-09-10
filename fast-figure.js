@@ -1475,7 +1475,6 @@
         syncLabelControlsFromObject(objects?.labels || projectObjects.read("labels"));
         syncCaptionControlsFromObject(objects?.captions || projectObjects.read("captions"));
         $("buildBox").classList.add("hidden");
-        $("imageBox").classList.add("hidden");
       }
       function syncGraphWorkspaceState({ objects } = {}) {
         let slot = getSelectedSlot();
@@ -1505,9 +1504,6 @@
       function exitGraphWorkspaceState() {
         $("buildBox").classList.add("hidden");
         selectedObjectIndex = null;
-      }
-      function exitImageWorkspaceState() {
-        $("imageBox").classList.add("hidden");
       }
       function readmeContentHtml() {
         let template = $("readmeContent");
@@ -1883,7 +1879,6 @@
                 "ui",
               ],
               entry: syncImageWorkspaceState,
-              exit: exitImageWorkspaceState,
               update: syncImageWorkspaceState,
               on: SHARED_WORKSPACE_EVENTS,
             },
@@ -2033,13 +2028,6 @@
         "headerLinesLabel",
         "gridCols",
         "gridRows",
-        "imageBox",
-        "imageFitMode",
-        "imageManualFields",
-        "imagePositionX",
-        "imagePositionY",
-        "imagePreview",
-        "imageScale",
         "insertSlotCaptions",
         "importProject",
         "importProjectFile",
@@ -2165,7 +2153,7 @@
         ["renderDashboard", () => typeof renderDashboard === "function"],
         ["makeSlots", () => typeof makeSlots === "function"],
         ["applyGraphSettings", () => typeof applyGraphSettings === "function"],
-        ["applyImageSettings", () => typeof applyImageSettings === "function"],
+        ["applyImageSettingsFromValues", () => typeof applyImageSettingsFromValues === "function"],
         ["projectClone", () => typeof projectClone === "function"],
         ["ProjectObject", () => activeProject instanceof ProjectObject],
         ["buildProjectObject", () => typeof buildProjectObject === "function"],
@@ -4088,35 +4076,15 @@
         };
         return image.settings;
       }
-      function syncImageSettingsUi() {
-        let slot = getSelectedSlot(),
-          image = slotImage(slot),
-          settings = normalizeImageSettings(image),
-          manual = settings?.fit === "manual";
-        $("imageManualFields").classList.toggle("hidden", !manual);
-        ["imageScale", "imagePositionX", "imagePositionY"].forEach(
-          (id) => ($(id).disabled = !manual),
-        );
-        if (!settings) return;
-        $("imageFitMode").value = settings.fit;
-        $("imageScale").value = settings.scale;
-        $("imagePositionX").value = settings.x;
-        $("imagePositionY").value = settings.y;
-      }
       function syncSlotContentTypeUi() {
         let slot = getSelectedSlot(),
           has = !!slot,
-          image = slotImage(slot),
           isImage = slot?.contentType === "image";
         let showCsvPanel = has ? !isImage : activeAssetKind === "csv";
         $("csvSelectionPanel").classList.toggle("hidden", !showCsvPanel);
-        $("imageBox").classList.toggle("hidden", !has || !isImage || !image);
         if (isImage) $("buildBox").classList.add("hidden");
-        $("imagePreview").classList.toggle("hidden", !image);
-        if (image) $("imagePreview").src = projectImageDisplayUrl(image);
         refreshCsvControls();
         refreshImageControls();
-        syncImageSettingsUi();
       }
       function updateFileAvailability() {
         let hasSlot = !!getSelectedSlot();
@@ -6023,7 +5991,6 @@
         layoutSelected.clear();
         $("file").value = "";
         $("buildBox").classList.add("hidden");
-        $("imageBox").classList.add("hidden");
       }
       function renderProjectObject(project = activeProject) {
         syncProjectControlsFromObject(project);
@@ -7060,24 +7027,6 @@
         appFSM.notify("images", "IMAGE_SETTINGS_CHANGED");
         return true;
       }
-      function applyImageSettings() {
-        let changed = applyImageSettingsFromValues({
-          fit: $("imageFitMode").value,
-          scale: $("imageScale").value,
-          x: $("imagePositionX").value,
-          y: $("imagePositionY").value,
-        });
-        if (changed) syncImageSettingsUi();
-        return changed;
-      }
-      $("imageFitMode").onchange = applyImageSettings;
-      ["imageScale", "imagePositionX", "imagePositionY"].forEach((id) => {
-        let control = $(id);
-        control.addEventListener("change", applyImageSettings);
-        control.addEventListener("keydown", (event) => {
-          if (event.key === "Enter") event.target.blur();
-        });
-      });
       async function loadImageFile(
         file,
         slot,
