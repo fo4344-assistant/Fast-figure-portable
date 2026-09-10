@@ -1,0 +1,91 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -10969,28 +10969,4 @@
+           <div class="file-picker">
+-            <span id="fileName" class="file-name">선택된 파일 없음</span
+-            ><input id="file" type="file" accept=".csv,.tsv,.json" class="hidden" multiple />
+-          </div>
+-          <div class="asset-tree-shell">
+-            <div class="asset-tree-toolbar">
+-              <span class="asset-tree-toolbar-title">PROJECT DATA</span>
+-              <button id="filePick" type="button" title="데이터 추가" aria-label="데이터 추가">
+-                <span class="asset-tree-toolbar-icon iconoir-mount" data-iconoir="upload" aria-hidden="true"></span>
+-              </button>
+-              <button id="assetDownload" type="button" title="선택 에셋 다운로드" aria-label="선택 에셋 다운로드" disabled>
+-                <span class="asset-tree-toolbar-icon iconoir-mount" data-iconoir="download" aria-hidden="true"></span>
+-              </button>
+-              <button id="newAssetFolder" type="button" title="새 폴더" aria-label="새 폴더"><span class="asset-tree-toolbar-icon iconoir-mount" data-iconoir="folder-plus" aria-hidden="true"></span></button>
+-              <button id="assetActions" type="button" title="선택 항목 작업" aria-label="선택 항목 작업" aria-haspopup="menu" aria-expanded="false" disabled>
+-                <span class="asset-tree-toolbar-icon iconoir-mount" data-iconoir="more-vert" aria-hidden="true"></span>
+-              </button>
+-              <span id="assetActionMenu" class="asset-tree-action-menu" role="menu" hidden></span>
+-            </div>
+-            <div
+-              id="assetTree"
+-              class="asset-tree"
+-              role="tree"
+-              tabindex="0"
+-              aria-label="프로젝트 데이터 탐색기"
+-            ></div>
++            <span id="fileName" class="file-name">선택된 파일 없음</span>
+           </div>
+           <div id="csvSelectionPanel" class="asset-selection-panel hidden">
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1993,10 +1993,6 @@
+       const appFSM = new ApplicationStateMachine(projectObjects, APP_STATE_DEFINITIONS);
+       const REQUIRED_CONTROL_IDS = [
+         "addGraphObject",
+-        "assetActions",
+-        "assetActionMenu",
+-        "assetDownload",
+-        "assetTree",
+         "csvSelectionPanel",
+         "imageSelectionPanel",
+         "deleteSelectedAsset",
+@@ -2025,9 +2021,7 @@
+         "exportPlotlyJson",
+         "exportProject",
+         "exportSlotJson",
+-        "file",
+         "fileName",
+-        "filePick",
+         "fileTypeHint",
+         "fontColor",
+         "graphArea",
+@@ -6948,4 +6942,1 @@
+-      $("filePick").onclick = () => {
+-        $("file").click();
+-      };
+       function downloadProjectAsset(path = appFSM.state.assetPath) {
+@@ -7346,23 +7337,1 @@
+-      $("file").onchange = async (e) => {
+-        let files = [...e.target.files],
+-          target = getSelectedSlot();
+-        if (!files.length) return;
+-        try {
+-          if (target && (target.contentType || "graph") === "image")
+-            await loadFileIntoSlot(files[0], target);
+-          else if (target)
+-            for (let file of files) await loadDataFile(file, target);
+-          else
+-            for (let file of files) {
+-              let kind = slotFileKind(file);
+-              if (kind === "image") await loadImageFile(file, null);
+-              else if (kind === "data") await loadDataFile(file, null);
+-              else throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
+-            }
+-        } catch (error) {
+-          status("불러오기 실패: " + error.message);
+-        } finally {
+-          e.target.value = "";
+-        }
+-      };
+       $("resetSelectedSlot").onclick = () => {
+@@ -9600,4 +9569,3 @@
+           ["importProjectFile", "onchange", "importing", "PROJECT_IMPORT"],
+           ["importSlotJsonFile", "onchange", "importing", "SLOT_IMPORT"],
+-          ["file", "onchange", "importing", "ASSET_IMPORT"],
+           ["loadGraphPaletteFile", "onchange", "importing", "PALETTE_IMPORT"],
