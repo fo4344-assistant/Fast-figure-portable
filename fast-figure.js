@@ -1994,7 +1994,6 @@
       const REQUIRED_CONTROL_IDS = [
         "addGraphObject",
         "csvSelectionPanel",
-        "imageSelectionPanel",
         "applyGrid",
         "applyUiPalette",
         "barLineWidth",
@@ -2041,7 +2040,6 @@
         "imagePositionY",
         "imagePreview",
         "imageScale",
-        "insertEmptyImage",
         "insertSlotCaptions",
         "importProject",
         "importProjectFile",
@@ -3493,7 +3491,6 @@
       function refreshImageControls(selected = activeImageId ?? getSelectedSlot()?.imageId) {
         if (getProjectImage(selected)) activeImageId = Number(selected);
         else activeImageId = null;
-        $("insertEmptyImage").disabled = getSelectedSlot()?.contentType !== "image";
       }
       function headerLineCount(value, table = rows) {
         let count = Math.max(0, Math.trunc(Number(value) || 0));
@@ -4111,10 +4108,8 @@
           has = !!slot,
           image = slotImage(slot),
           isImage = slot?.contentType === "image";
-        let showCsvPanel = has ? !isImage : activeAssetKind === "csv",
-          showImagePanel = has ? isImage : activeAssetKind === "image";
+        let showCsvPanel = has ? !isImage : activeAssetKind === "csv";
         $("csvSelectionPanel").classList.toggle("hidden", !showCsvPanel);
-        $("imageSelectionPanel").classList.toggle("hidden", !showImagePanel);
         $("imageBox").classList.toggle("hidden", !has || !isImage || !image);
         if (isImage) $("buildBox").classList.add("hidden");
         $("imagePreview").classList.toggle("hidden", !image);
@@ -7011,7 +7006,6 @@
         status("선택 슬롯에 빈 이미지를 삽입했습니다.");
         return image;
       }
-      $("insertEmptyImage").onclick = insertEmptyImageIntoSelectedSlot;
       function setSlotContentType(type) {
         let slot = getSelectedSlot();
         if (!slot) {
