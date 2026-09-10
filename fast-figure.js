@@ -4217,23 +4217,7 @@
         });
         dashboard.addEventListener("dragover", (e) => {
           let el = e.target.closest?.(".slot"),
-            target = el && slotAt(+el.dataset.slot),
-            types = new Set(Array.from(e.dataTransfer?.types || []));
-          if (types.has(ASSET_TREE_DRAG_TYPE)) {
-            if (!target || target.hidden) return;
-            let dragged = null;
-            try {
-              dragged = JSON.parse(e.dataTransfer.getData(ASSET_TREE_DRAG_TYPE) || "null");
-            } catch (_) {}
-            if (dragged?.kind === "directory" || projectVfs.isTrashed(dragged?.path || "/")) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "link";
-            dashboard.querySelectorAll(".slot.drag-over").forEach((slot) => {
-              if (slot !== el) slot.classList.remove("drag-over");
-            });
-            el.classList.add("drag-over");
-            return;
-          }
+            target = el && slotAt(+el.dataset.slot);
           if (dataTransferHasFiles(e.dataTransfer)) {
             if (!target || target.hidden) return;
             e.preventDefault();
@@ -4260,25 +4244,7 @@
         dashboard.addEventListener("drop", async (e) => {
           let el = e.target.closest?.(".slot"),
             target = el && slotAt(+el.dataset.slot),
-            internal = e.dataTransfer?.getData(ASSET_TREE_DRAG_TYPE),
             file = e.dataTransfer?.files?.[0];
-          if (internal) {
-            e.preventDefault();
-            e.stopPropagation();
-            el?.classList.remove("drag-over");
-            clearSlotDragState();
-            try {
-              let dragged = JSON.parse(internal);
-              connectProjectAssetToSlot(dragged.path, dragged.kind, target);
-            } catch (error) {
-              status("프로젝트 파일 연결 실패: " + error.message);
-            } finally {
-              setTimeout(() => {
-                slotDragSuppressClick = false;
-              }, 0);
-            }
-            return;
-          }
           if (file) {
             if (!target || target.hidden) {
               clearSlotDragState();
