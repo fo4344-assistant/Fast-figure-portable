@@ -358,10 +358,67 @@
         dashboardZoomLockedWidth = null,
         selectedExplorerDirectory = "/assets",
         selectedObjectIndex = null;
-      const $ = (id) => document.getElementById(id),
-        status = (t) => ($("status").textContent = t);
+      const $ = (id) => document.getElementById(id);
+      const uiTelemetryListeners = new Set();
+      let uiTelemetryState = Object.freeze({
+        revision: 0,
+        status: "",
+        debugEnabled: false,
+        debugLines: [],
+      });
+      function publishUiTelemetry(patch = {}) {
+        uiTelemetryState = Object.freeze({
+          ...uiTelemetryState,
+          ...patch,
+          revision: uiTelemetryState.revision + 1,
+        });
+        uiTelemetryListeners.forEach((listener) => listener());
+        return uiTelemetryState;
+      }
+      function subscribeUiTelemetry(listener) {
+        uiTelemetryListeners.add(listener);
+        return () => uiTelemetryListeners.delete(listener);
+      }
+      function getUiTelemetrySnapshot() {
+        return uiTelemetryState;
+      }
+      function status(message) {
+        let text = String(message ?? ""),
+          control = $("status");
+        if (control) control.textContent = text;
+        publishUiTelemetry({ status: text });
+        return text;
+      }
       let debugEnabled = false,
         debugSequence = 0;
+      function setDebugEnabled(enabled) {
+        debugEnabled = enabled === true;
+        publishUiTelemetry({ debugEnabled });
+        return debugEnabled;
+      }
+      function clearDebugOutput() {
+        debugSequence = 0;
+        let control = $("debugLog");
+        if (control) control.textContent = "";
+        publishUiTelemetry({ debugLines: [] });
+      }
+      function saveDebugOutput() {
+        auditApp("debug:save");
+        debugLog("debugLog:save", {
+          build: projectObjects.read("project").appBuild,
+          userAgent: navigator.userAgent,
+          location: location.href,
+        });
+        let blob = new Blob([getUiTelemetrySnapshot().debugLines.join("\n")], {
+            type: "text/plain;charset=utf-8",
+          }),
+          link = document.createElement("a"),
+          stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        link.href = URL.createObjectURL(blob);
+        link.download = `chart-builder-debug-${stamp}.log`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 0);
+      }
       function debugValue(value) {
         if (value instanceof Error)
           return { name: value.name, message: value.message, stack: value.stack };
@@ -377,11 +434,11 @@
           line = `${String(++debugSequence).padStart(4, "0")} ${new Date().toISOString().slice(11, 23)} ${level.toUpperCase()} ${event} ${JSON.stringify(payload)}`;
         let method = console[level] || console.debug;
         method.call(console, "[chart-builder]", event, payload);
+        let lines = [...uiTelemetryState.debugLines, line].slice(-500);
+        publishUiTelemetry({ debugEnabled, debugLines: lines });
         let out = $("debugLog");
         if (out) {
-          out.textContent += line + "\n";
-          let lines = out.textContent.split("\n");
-          if (lines.length > 501) out.textContent = lines.slice(-501).join("\n");
+          out.textContent = lines.join("\n") + (lines.length ? "\n" : "");
           out.scrollTop = out.scrollHeight;
         }
       }

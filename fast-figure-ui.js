@@ -34,6 +34,14 @@
     return useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
   }
 
+  function useUiTelemetry() {
+    return useSyncExternalStore(
+      subscribeUiTelemetry,
+      getUiTelemetrySnapshot,
+      getUiTelemetrySnapshot,
+    );
+  }
+
   function selectedTargetText(state) {
     if (state.workspace === "project") return "빈 슬롯 또는 그래프를 선택하세요.";
     const slot = typeof getSelectedSlot === "function" ? getSelectedSlot() : null;
@@ -2073,6 +2081,80 @@
     );
   }
 
+  function FastFigureStatusDebug() {
+    const telemetry = useUiTelemetry();
+    const state = useAppState();
+    const busy = state.lifecycle !== "ready";
+    return React.createElement(
+      Stack,
+      { gap: "xs", px: "md", pb: "md" },
+      React.createElement(
+        Text,
+        {
+          size: "sm",
+          c: "dimmed",
+          "aria-live": "polite",
+          style: { whiteSpace: "pre-wrap" },
+        },
+        telemetry.status || "준비됨",
+      ),
+      React.createElement(
+        Group,
+        { gap: "xs", grow: true },
+        React.createElement(
+          Button,
+          {
+            size: "xs",
+            variant: telemetry.debugEnabled ? "filled" : "light",
+            disabled: busy,
+            "aria-pressed": telemetry.debugEnabled,
+            onClick: () => setDebugEnabled(!telemetry.debugEnabled),
+          },
+          telemetry.debugEnabled ? "디버깅 끄기" : "디버깅 켜기",
+        ),
+        React.createElement(
+          Button,
+          {
+            size: "xs",
+            variant: "light",
+            disabled: busy || !telemetry.debugLines.length,
+            onClick: saveDebugOutput,
+          },
+          "로그 저장",
+        ),
+        React.createElement(
+          Button,
+          {
+            size: "xs",
+            variant: "light",
+            disabled: busy || !telemetry.debugLines.length,
+            onClick: clearDebugOutput,
+          },
+          "로그 지우기",
+        ),
+      ),
+      telemetry.debugEnabled
+        ? React.createElement(
+            "pre",
+            {
+              style: {
+                maxHeight: 220,
+                overflow: "auto",
+                margin: 0,
+                padding: 8,
+                border: "1px solid var(--mantine-color-default-border)",
+                borderRadius: "var(--mantine-radius-sm)",
+                fontSize: "var(--mantine-font-size-xs)",
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+              },
+            },
+            telemetry.debugLines.join("\n"),
+          )
+        : null,
+    );
+  }
+
   function FastFigureReadmeOverlay() {
     const state = useAppState();
     if (state.overlay !== "readme") return null;
@@ -2098,6 +2180,9 @@
 
   function FastFigureLabelOverlay() {
     const state = useAppState();
+    const previewRef = useRef(null);
+    const dragRef = useRef(null);
+    const [, setPreviewRevision] = useState(0);
     if (state.overlay !== "label") return null;
     const busy = state.lifecycle !== "ready";
     const settings = activeProject.labelSettings;
@@ -2116,6 +2201,51 @@
       schedulePlotResize();
       debugLog("mantine:label-settings", { ...activeProject.labelSettings });
       appFSM.notify("labels", eventName);
+    };
+    const startPreviewDrag = (event) => {
+      if (busy) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      dragRef.current = {
+        pointerId: event.pointerId,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+      };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    };
+    const movePreviewDrag = (event) => {
+      const drag = dragRef.current;
+      const preview = previewRef.current;
+      if (!drag || drag.pointerId !== event.pointerId || !preview) return;
+      const previewRect = preview.getBoundingClientRect();
+      const labelRect = event.currentTarget.getBoundingClientRect();
+      const labelWidth = labelRect.width / previewScale;
+      const labelHeight = labelRect.height / previewScale;
+      const nextX =
+        (event.clientX - previewRect.left - drag.offsetX) / previewScale;
+      const nextY =
+        (event.clientY - previewRect.top - drag.offsetY) / previewScale;
+      activeProject.labelSettings.x = Math.max(
+        0,
+        Math.min(Math.max(0, reference.width - labelWidth), nextX),
+      );
+      activeProject.labelSettings.y = Math.max(
+        0,
+        Math.min(Math.max(0, reference.height - labelHeight), nextY),
+      );
+      renderDashboard();
+      schedulePlotResize();
+      setPreviewRevision((revision) => revision + 1);
+    };
+    const stopPreviewDrag = (event) => {
+      if (dragRef.current?.pointerId !== event.pointerId) return;
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      dragRef.current = null;
+      debugLog("mantine:label-position", {
+        x: activeProject.labelSettings.x,
+        y: activeProject.labelSettings.y,
+      });
+      appFSM.notify("labels", "LABEL_POSITION_DRAGGED");
     };
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-label" });
 
@@ -2231,19 +2361,28 @@
         React.createElement(
           "div",
           {
+            ref: previewRef,
             style: {
               position: "relative",
-              width: "100%",
-              maxWidth: previewWidth,
+              width: previewWidth,
+              maxWidth: "100%",
               height: previewHeight,
               border: "1px solid var(--mantine-color-default-border)",
               borderRadius: "var(--mantine-radius-sm)",
               overflow: "hidden",
+              touchAction: "none",
             },
           },
           React.createElement(
             "div",
             {
+              role: "button",
+              tabIndex: 0,
+              "aria-label": "레이블 위치 드래그",
+              onPointerDown: startPreviewDrag,
+              onPointerMove: movePreviewDrag,
+              onPointerUp: stopPreviewDrag,
+              onPointerCancel: stopPreviewDrag,
               style: {
                 position: "absolute",
                 left: settings.x * previewScale,
@@ -2252,6 +2391,9 @@
                 fontSize: settings.fontSize * previewScale,
                 fontWeight: 800,
                 padding: `${2 * previewScale}px ${6 * previewScale}px`,
+                cursor: busy ? "default" : "grab",
+                userSelect: "none",
+                touchAction: "none",
               },
             },
             displayedSlotIdentifier(0),
@@ -2882,6 +3024,7 @@
         React.createElement(FastFigureGraphPaletteActions),
         React.createElement(FastFigureGraphFileActions),
         React.createElement(FastFigurePaletteActions),
+        React.createElement(FastFigureStatusDebug),
         React.createElement(FastFigureUtilityActions),
         React.createElement("div", {
           role: "separator",
@@ -2927,6 +3070,7 @@
     FastFigureLayoutOverlay,
     FastFigurePrintOverlay,
     FastFigureReadmeOverlay,
+    FastFigureStatusDebug,
     FastFigureUtilityActions,
     getAppStateSnapshot,
     selectedTargetText,
