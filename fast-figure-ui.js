@@ -2691,10 +2691,13 @@
     const [zoom, setZoom] = useState(() =>
       Number.isFinite(dashboardZoomIntent) ? dashboardZoomIntent : 100,
     );
+    const [previewWidth, setPreviewWidth] = useState(600);
+    const previewResizeRef = useRef(null);
     if (state.overlay !== "layout") return null;
     const busy = state.lifecycle !== "ready";
     const style = activeProject.layout.slotStyle;
     const visibleSlots = activeProject.slots.filter((slot) => !slot.hidden);
+    const previewGeometry = dashboardGeometry(previewWidth);
     void selectionRevision;
 
     const clamp = (value, fallback, min, max) => {
@@ -2730,6 +2733,27 @@
       applyDashboardZoom(false, next);
     };
     const commitZoom = () => commitDashboardScale("mantine-layout");
+    const startPreviewResize = (event) => {
+      if (busy) return;
+      previewResizeRef.current = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startWidth: previewWidth,
+      };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    };
+    const movePreviewResize = (event) => {
+      const drag = previewResizeRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const deltaY = event.clientY - drag.startY;
+      setPreviewWidth(clamp(drag.startWidth + deltaY * style.aspect, 600, 360, 900));
+    };
+    const stopPreviewResize = (event) => {
+      if (previewResizeRef.current?.pointerId !== event.pointerId) return;
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      previewResizeRef.current = null;
+    };
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-layout" });
 
     return React.createElement(
@@ -2879,13 +2903,17 @@
             "aria-label": "레이아웃 슬롯 선택",
             style: {
               display: "grid",
+              boxSizing: "border-box",
+              width: previewGeometry.width,
+              maxWidth: "100%",
+              height: previewGeometry.height,
               gridTemplateColumns: `repeat(${activeProject.gridCols}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${activeProject.gridRows}, minmax(48px, 1fr))`,
-              gap: 6,
-              minHeight: 260,
-              padding: 8,
+              gridTemplateRows: `repeat(${activeProject.gridRows}, minmax(0, 1fr))`,
+              gap: previewGeometry.gap,
+              padding: previewGeometry.outerMargin,
               border: "1px solid var(--mantine-color-default-border)",
-              borderRadius: "var(--mantine-radius-sm)",
+              borderRadius: previewGeometry.radius,
+              overflow: "hidden",
             },
           },
           ...visibleSlots.map((slot) =>
@@ -2899,13 +2927,32 @@
                 style: {
                   gridColumn: `${slot.col} / span ${slot.colSpan}`,
                   gridRow: `${slot.row} / span ${slot.rowSpan}`,
-                  minHeight: 48,
+                  minWidth: 0,
+                  minHeight: 0,
+                  borderStyle: style.showBorders ? "solid" : "dashed",
                 },
               },
               `${slot.row},${slot.col}`,
             ),
           ),
         ),
+        React.createElement("div", {
+          role: "separator",
+          "aria-orientation": "horizontal",
+          "aria-label": "레이아웃 미리보기 크기 조절",
+          onPointerDown: startPreviewResize,
+          onPointerMove: movePreviewResize,
+          onPointerUp: stopPreviewResize,
+          onPointerCancel: stopPreviewResize,
+          style: {
+            width: Math.min(previewGeometry.width, 900),
+            maxWidth: "100%",
+            height: 10,
+            cursor: "ns-resize",
+            touchAction: "none",
+            borderTop: "1px solid var(--mantine-color-default-border)",
+          },
+        }),
         React.createElement(
           Group,
           { gap: "xs", grow: true },
