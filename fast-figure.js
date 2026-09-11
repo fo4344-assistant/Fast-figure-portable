@@ -1474,7 +1474,6 @@
         return "none";
       }
       function syncAssetSelectionState() {
-        updateFileAvailability();
       }
       function requestedOverlayState({ state, payload }) {
         return state === payload.overlay ? "none" : payload.overlay;
@@ -1522,38 +1521,16 @@
         $("captionLineHeight").value = caption.settings.lineHeight;
         syncDashboardCaption(view);
       }
-      function syncProjectWorkspaceState({ objects } = {}) {
-        $("targetInfo").textContent = "빈 슬롯 또는 그래프를 선택하세요.";
-        setFileName();
-        clearPreview();
-        updateFileAvailability();
-        refreshCsvControls();
-        refreshImageControls();
-        syncLabelControlsFromObject(objects?.labels || projectObjects.read("labels"));
-        syncCaptionControlsFromObject(objects?.captions || projectObjects.read("captions"));
-      }
-      function syncGraphWorkspaceState({ objects } = {}) {
+      function syncProjectWorkspaceState() {}
+      function syncGraphWorkspaceState() {
         let slot = getSelectedSlot();
         if (!slot) return;
-        $("targetInfo").textContent = `선택한 슬롯: ${slot.row}행 ${slot.col}열`;
-        updateFileAvailability();
         if (slot.chart && editing?.id !== slot.chart) activateChartModel(slot.chart);
-        else if (!slot.chart) {
-          setFileName();
-          clearPreview();
-        }
-        refreshCsvControls();
-        syncCaptionControlsFromObject(projectObjects.read("captions"));
       }
-      function syncImageWorkspaceState({ objects } = {}) {
+      function syncImageWorkspaceState() {
         let slot = getSelectedSlot();
         if (!slot) return;
-        $("targetInfo").textContent = `선택한 슬롯: ${slot.row}행 ${slot.col}열`;
-        updateFileAvailability();
-        setFileName(slotImage(slot)?.name);
-        clearPreview();
         refreshImageControls(slot.imageId);
-        syncCaptionControlsFromObject(projectObjects.read("captions"));
       }
       function exitGraphWorkspaceState() {
         selectedObjectIndex = null;
@@ -1640,26 +1617,6 @@
         let busy = state === "importing" || state === "exporting";
         document.body.classList.toggle("app-busy", busy);
         document.body.setAttribute("aria-busy", String(busy));
-        [
-          "importProject",
-          "importSlotJson",
-          "exportProject",
-          "exportSlotJson",
-          "exportPlotlyJson",
-          "savePrint",
-          "capturePrint",
-        ].forEach((id) => {
-          let control = $(id);
-          if (!control) return;
-          if (busy) {
-            if (!Object.prototype.hasOwnProperty.call(control.dataset, "fsmWasDisabled"))
-              control.dataset.fsmWasDisabled = String(control.disabled);
-            control.disabled = true;
-          } else if (Object.prototype.hasOwnProperty.call(control.dataset, "fsmWasDisabled")) {
-            control.disabled = control.dataset.fsmWasDisabled === "true";
-            delete control.dataset.fsmWasDisabled;
-          }
-        });
         if (state === "error" && payload.error)
           debugLog("fsm:lifecycle-error", payload.error, "error");
       }
