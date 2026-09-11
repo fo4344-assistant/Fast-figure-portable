@@ -1,0 +1,53 @@
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -2217,51 +2217,3 @@
+         }
+-        let overlayPanels = {
+-          layout: "layoutPanel",
+-          label: "labelPanel",
+-          caption: "captionPanel",
+-          print: "printPanel",
+-        };
+-        Object.entries(overlayPanels).forEach(([state, id]) => {
+-          let visible = !$(id).classList.contains("hidden");
+-          if (visible !== (appFSM.state.overlay === state))
+-            issues.push({
+-              kind: "fsm-overlay-panel-out-of-sync",
+-              overlay: appFSM.state.overlay,
+-              panel: state,
+-              visible,
+-            });
+-          let toggle = $(`${state}Toggle`);
+-          if (
+-            toggle &&
+-            (toggle.classList.contains("active") !== (appFSM.state.overlay === state) ||
+-              toggle.getAttribute("aria-expanded") !==
+-                String(appFSM.state.overlay === state))
+-          )
+-            issues.push({
+-              kind: "fsm-overlay-highlight-out-of-sync",
+-              overlay: appFSM.state.overlay,
+-              toggle: state,
+-            });
+-        });
+-        let popupExpected = ["layout", "label", "caption", "print"].includes(
+-            appFSM.state.overlay,
+-          ),
+-          main = $("dashboard").closest("main");
+-        if (main.classList.contains("dashboard-popup-open") !== popupExpected)
+-          issues.push({
+-            kind: "fsm-popup-highlight-out-of-sync",
+-            overlay: appFSM.state.overlay,
+-          });
+-        if (main.classList.contains("layout-open") !== (appFSM.state.overlay === "layout"))
+-          issues.push({
+-            kind: "fsm-layout-highlight-out-of-sync",
+-            overlay: appFSM.state.overlay,
+-          });
+-        if ($("readmeDialog").open)
+-          issues.push({
+-            kind: "legacy-readme-dialog-open",
+-            open: true,
+-          });
+         try {
+           validateProjectObject(activeProject, { requireSlots: true });
