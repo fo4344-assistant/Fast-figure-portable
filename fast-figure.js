@@ -2152,7 +2152,9 @@
         let issues = [],
           ids = [...document.querySelectorAll("[id]")].map((node) => node.id),
           duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))],
-          missingControls = REQUIRED_CONTROL_IDS.filter((id) => !document.getElementById(id)),
+          missingControls = ["dashboard", "dashboardCaption", "graphArea", "readmeContent"].filter(
+            (id) => !document.getElementById(id),
+          ),
           missingFunctions = REQUIRED_APP_FUNCTIONS.filter(([, check]) => !check()).map(
             ([name]) => name,
           );
