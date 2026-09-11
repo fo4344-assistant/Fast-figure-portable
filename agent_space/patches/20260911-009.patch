@@ -1,0 +1,384 @@
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -340,5 +340,62 @@
+-      const $ = (id) => document.getElementById(id),
+-        status = (t) => ($("status").textContent = t);
++      const $ = (id) => document.getElementById(id);
++      const uiTelemetryListeners = new Set();
++      let uiTelemetryState = Object.freeze({
++        revision: 0,
++        status: "",
++        debugEnabled: false,
++        debugLines: [],
++      });
++      function publishUiTelemetry(patch = {}) {
++        uiTelemetryState = Object.freeze({
++          ...uiTelemetryState,
++          ...patch,
++          revision: uiTelemetryState.revision + 1,
++        });
++        uiTelemetryListeners.forEach((listener) => listener());
++        return uiTelemetryState;
++      }
++      function subscribeUiTelemetry(listener) {
++        uiTelemetryListeners.add(listener);
++        return () => uiTelemetryListeners.delete(listener);
++      }
++      function getUiTelemetrySnapshot() {
++        return uiTelemetryState;
++      }
++      function status(message) {
++        let text = String(message ?? ""),
++          control = $("status");
++        if (control) control.textContent = text;
++        publishUiTelemetry({ status: text });
++        return text;
++      }
+       let debugEnabled = false,
+         debugSequence = 0;
++      function setDebugEnabled(enabled) {
++        debugEnabled = enabled === true;
++        publishUiTelemetry({ debugEnabled });
++        return debugEnabled;
++      }
++      function clearDebugOutput() {
++        debugSequence = 0;
++        let control = $("debugLog");
++        if (control) control.textContent = "";
++        publishUiTelemetry({ debugLines: [] });
++      }
++      function saveDebugOutput() {
++        auditApp("debug:save");
++        debugLog("debugLog:save", {
++          build: projectObjects.read("project").appBuild,
++          userAgent: navigator.userAgent,
++          location: location.href,
++        });
++        let blob = new Blob([getUiTelemetrySnapshot().debugLines.join("\n")], {
++            type: "text/plain;charset=utf-8",
++          }),
++          link = document.createElement("a"),
++          stamp = new Date().toISOString().replace(/[:.]/g, "-");
++        link.href = URL.createObjectURL(blob);
++        link.download = `chart-builder-debug-${stamp}.log`;
++        link.click();
++        setTimeout(() => URL.revokeObjectURL(link.href), 0);
++      }
+       function debugValue(value) {
+@@ -400,11 +400,11 @@
+           line = `${String(++debugSequence).padStart(4, "0")} ${new Date().toISOString().slice(11, 23)} ${level.toUpperCase()} ${event} ${JSON.stringify(payload)}`;
+         let method = console[level] || console.debug;
+         method.call(console, "[chart-builder]", event, payload);
++        let lines = [...uiTelemetryState.debugLines, line].slice(-500);
++        publishUiTelemetry({ debugEnabled, debugLines: lines });
+         let out = $("debugLog");
+         if (out) {
+-          out.textContent += line + "\n";
+-          let lines = out.textContent.split("\n");
+-          if (lines.length > 501) out.textContent = lines.slice(-501).join("\n");
++          out.textContent = lines.join("\n") + (lines.length ? "\n" : "");
+           out.scrollTop = out.scrollHeight;
+         }
+       }
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -25,4 +25,12 @@
+     return useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
+   }
+ 
++  function useUiTelemetry() {
++    return useSyncExternalStore(
++      subscribeUiTelemetry,
++      getUiTelemetrySnapshot,
++      getUiTelemetrySnapshot,
++    );
++  }
++
+   function selectedTargetText(state) {
+@@ -2050,4 +2050,78 @@
+     );
+   }
+ 
++  function FastFigureStatusDebug() {
++    const telemetry = useUiTelemetry();
++    const state = useAppState();
++    const busy = state.lifecycle !== "ready";
++    return React.createElement(
++      Stack,
++      { gap: "xs", px: "md", pb: "md" },
++      React.createElement(
++        Text,
++        {
++          size: "sm",
++          c: "dimmed",
++          "aria-live": "polite",
++          style: { whiteSpace: "pre-wrap" },
++        },
++        telemetry.status || "준비됨",
++      ),
++      React.createElement(
++        Group,
++        { gap: "xs", grow: true },
++        React.createElement(
++          Button,
++          {
++            size: "xs",
++            variant: telemetry.debugEnabled ? "filled" : "light",
++            disabled: busy,
++            "aria-pressed": telemetry.debugEnabled,
++            onClick: () => setDebugEnabled(!telemetry.debugEnabled),
++          },
++          telemetry.debugEnabled ? "디버깅 끄기" : "디버깅 켜기",
++        ),
++        React.createElement(
++          Button,
++          {
++            size: "xs",
++            variant: "light",
++            disabled: busy || !telemetry.debugLines.length,
++            onClick: saveDebugOutput,
++          },
++          "로그 저장",
++        ),
++        React.createElement(
++          Button,
++          {
++            size: "xs",
++            variant: "light",
++            disabled: busy || !telemetry.debugLines.length,
++            onClick: clearDebugOutput,
++          },
++          "로그 지우기",
++        ),
++      ),
++      telemetry.debugEnabled
++        ? React.createElement(
++            "pre",
++            {
++              style: {
++                maxHeight: 220,
++                overflow: "auto",
++                margin: 0,
++                padding: 8,
++                border: "1px solid var(--mantine-color-default-border)",
++                borderRadius: "var(--mantine-radius-sm)",
++                fontSize: "var(--mantine-font-size-xs)",
++                whiteSpace: "pre-wrap",
++                overflowWrap: "anywhere",
++              },
++            },
++            telemetry.debugLines.join("\n"),
++          )
++        : null,
++    );
++  }
++
+   function FastFigureReadmeOverlay() {
+@@ -2120,5 +2120,8 @@
+   function FastFigureLabelOverlay() {
+     const state = useAppState();
++    const previewRef = useRef(null);
++    const dragRef = useRef(null);
++    const [, setPreviewRevision] = useState(0);
+     if (state.overlay !== "label") return null;
+     const busy = state.lifecycle !== "ready";
+     const settings = activeProject.labelSettings;
+@@ -2140,6 +2140,51 @@
+       debugLog("mantine:label-settings", { ...activeProject.labelSettings });
+       appFSM.notify("labels", eventName);
+     };
++    const startPreviewDrag = (event) => {
++      if (busy) return;
++      const rect = event.currentTarget.getBoundingClientRect();
++      dragRef.current = {
++        pointerId: event.pointerId,
++        offsetX: event.clientX - rect.left,
++        offsetY: event.clientY - rect.top,
++      };
++      event.currentTarget.setPointerCapture?.(event.pointerId);
++      event.preventDefault();
++    };
++    const movePreviewDrag = (event) => {
++      const drag = dragRef.current;
++      const preview = previewRef.current;
++      if (!drag || drag.pointerId !== event.pointerId || !preview) return;
++      const previewRect = preview.getBoundingClientRect();
++      const labelRect = event.currentTarget.getBoundingClientRect();
++      const labelWidth = labelRect.width / previewScale;
++      const labelHeight = labelRect.height / previewScale;
++      const nextX =
++        (event.clientX - previewRect.left - drag.offsetX) / previewScale;
++      const nextY =
++        (event.clientY - previewRect.top - drag.offsetY) / previewScale;
++      activeProject.labelSettings.x = Math.max(
++        0,
++        Math.min(Math.max(0, reference.width - labelWidth), nextX),
++      );
++      activeProject.labelSettings.y = Math.max(
++        0,
++        Math.min(Math.max(0, reference.height - labelHeight), nextY),
++      );
++      renderDashboard();
++      schedulePlotResize();
++      setPreviewRevision((revision) => revision + 1);
++    };
++    const stopPreviewDrag = (event) => {
++      if (dragRef.current?.pointerId !== event.pointerId) return;
++      event.currentTarget.releasePointerCapture?.(event.pointerId);
++      dragRef.current = null;
++      debugLog("mantine:label-position", {
++        x: activeProject.labelSettings.x,
++        y: activeProject.labelSettings.y,
++      });
++      appFSM.notify("labels", "LABEL_POSITION_DRAGGED");
++    };
+     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-label" });
+ 
+     return React.createElement(
+@@ -2260,19 +2260,28 @@
+         React.createElement(
+           "div",
+           {
++            ref: previewRef,
+             style: {
+               position: "relative",
+-              width: "100%",
+-              maxWidth: previewWidth,
++              width: previewWidth,
++              maxWidth: "100%",
+               height: previewHeight,
+               border: "1px solid var(--mantine-color-default-border)",
+               borderRadius: "var(--mantine-radius-sm)",
+               overflow: "hidden",
++              touchAction: "none",
+             },
+           },
+           React.createElement(
+             "div",
+             {
++              role: "button",
++              tabIndex: 0,
++              "aria-label": "레이블 위치 드래그",
++              onPointerDown: startPreviewDrag,
++              onPointerMove: movePreviewDrag,
++              onPointerUp: stopPreviewDrag,
++              onPointerCancel: stopPreviewDrag,
+               style: {
+                 position: "absolute",
+                 left: settings.x * previewScale,
+@@ -2290,6 +2290,9 @@
+                 fontSize: settings.fontSize * previewScale,
+                 fontWeight: 800,
+                 padding: `${2 * previewScale}px ${6 * previewScale}px`,
++                cursor: busy ? "default" : "grab",
++                userSelect: "none",
++                touchAction: "none",
+               },
+             },
+             displayedSlotIdentifier(0),
+@@ -2510,8 +2510,11 @@
+     const [zoom, setZoom] = useState(() =>
+       Number.isFinite(dashboardZoomIntent) ? dashboardZoomIntent : 100,
+     );
++    const [previewWidth, setPreviewWidth] = useState(600);
++    const previewResizeRef = useRef(null);
+     if (state.overlay !== "layout") return null;
+     const busy = state.lifecycle !== "ready";
+     const style = activeProject.layout.slotStyle;
+     const visibleSlots = activeProject.slots.filter((slot) => !slot.hidden);
++    const previewGeometry = dashboardGeometry(previewWidth);
+     void selectionRevision;
+@@ -2550,6 +2550,27 @@
+       applyDashboardZoom(false, next);
+     };
+     const commitZoom = () => commitDashboardScale("mantine-layout");
++    const startPreviewResize = (event) => {
++      if (busy) return;
++      previewResizeRef.current = {
++        pointerId: event.pointerId,
++        startY: event.clientY,
++        startWidth: previewWidth,
++      };
++      event.currentTarget.setPointerCapture?.(event.pointerId);
++      event.preventDefault();
++    };
++    const movePreviewResize = (event) => {
++      const drag = previewResizeRef.current;
++      if (!drag || drag.pointerId !== event.pointerId) return;
++      const deltaY = event.clientY - drag.startY;
++      setPreviewWidth(clamp(drag.startWidth + deltaY * style.aspect, 600, 360, 900));
++    };
++    const stopPreviewResize = (event) => {
++      if (previewResizeRef.current?.pointerId !== event.pointerId) return;
++      event.currentTarget.releasePointerCapture?.(event.pointerId);
++      previewResizeRef.current = null;
++    };
+     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-layout" });
+ 
+     return React.createElement(
+@@ -2720,13 +2720,17 @@
+             "aria-label": "레이아웃 슬롯 선택",
+             style: {
+               display: "grid",
++              boxSizing: "border-box",
++              width: previewGeometry.width,
++              maxWidth: "100%",
++              height: previewGeometry.height,
+               gridTemplateColumns: `repeat(${activeProject.gridCols}, minmax(0, 1fr))`,
+-              gridTemplateRows: `repeat(${activeProject.gridRows}, minmax(48px, 1fr))`,
+-              gap: 6,
+-              minHeight: 260,
+-              padding: 8,
++              gridTemplateRows: `repeat(${activeProject.gridRows}, minmax(0, 1fr))`,
++              gap: previewGeometry.gap,
++              padding: previewGeometry.outerMargin,
+               border: "1px solid var(--mantine-color-default-border)",
+-              borderRadius: "var(--mantine-radius-sm)",
++              borderRadius: previewGeometry.radius,
++              overflow: "hidden",
+             },
+           },
+           ...visibleSlots.map((slot) =>
+@@ -2750,10 +2750,29 @@
+                 style: {
+                   gridColumn: `${slot.col} / span ${slot.colSpan}`,
+                   gridRow: `${slot.row} / span ${slot.rowSpan}`,
+-                  minHeight: 48,
++                  minWidth: 0,
++                  minHeight: 0,
++                  borderStyle: style.showBorders ? "solid" : "dashed",
+                 },
+               },
+               `${slot.row},${slot.col}`,
+             ),
+           ),
+         ),
++        React.createElement("div", {
++          role: "separator",
++          "aria-orientation": "horizontal",
++          "aria-label": "레이아웃 미리보기 크기 조절",
++          onPointerDown: startPreviewResize,
++          onPointerMove: movePreviewResize,
++          onPointerUp: stopPreviewResize,
++          onPointerCancel: stopPreviewResize,
++          style: {
++            width: Math.min(previewGeometry.width, 900),
++            maxWidth: "100%",
++            height: 10,
++            cursor: "ns-resize",
++            touchAction: "none",
++            borderTop: "1px solid var(--mantine-color-default-border)",
++          },
++        }),
+@@ -2860,4 +2860,5 @@
+         React.createElement(FastFigureGraphFileActions),
+         React.createElement(FastFigurePaletteActions),
++        React.createElement(FastFigureStatusDebug),
+         React.createElement(FastFigureUtilityActions),
+         React.createElement("div", {
+@@ -2900,4 +2900,5 @@
+     FastFigurePrintOverlay,
+     FastFigureReadmeOverlay,
++    FastFigureStatusDebug,
+     FastFigureUtilityActions,
+     getAppStateSnapshot,
