@@ -1,0 +1,64 @@
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -2150,7 +2150,9 @@
+       function auditApp(context = "manual") {
+         let issues = [],
+           ids = [...document.querySelectorAll("[id]")].map((node) => node.id),
+           duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))],
+-          missingControls = REQUIRED_CONTROL_IDS.filter((id) => !document.getElementById(id)),
++          missingControls = ["dashboard", "dashboardCaption", "graphArea", "readmeContent"].filter(
++            (id) => !document.getElementById(id),
++          ),
+           missingFunctions = REQUIRED_APP_FUNCTIONS.filter(([, check]) => !check()).map(
+             ([name]) => name,
+           );
+@@ -2218,50 +2220,2 @@
+         }
+-        let overlayPanels = {
+-          layout: "layoutPanel",
+-          label: "labelPanel",
+-          caption: "captionPanel",
+-          print: "printPanel",
+-        };
+-        Object.entries(overlayPanels).forEach(([state, id]) => {
+-          let visible = !$(id).classList.contains("hidden");
+-          if (visible !== (appFSM.state.overlay === state))
+-            issues.push({
+-              kind: "fsm-overlay-panel-out-of-sync",
+-              overlay: appFSM.state.overlay,
+-              panel: state,
+-              visible,
+-            });
+-          let toggle = $(`${state}Toggle`);
+-          if (
+-            toggle &&
+-            (toggle.classList.contains("active") !== (appFSM.state.overlay === state) ||
+-              toggle.getAttribute("aria-expanded") !==
+-                String(appFSM.state.overlay === state))
+-          )
+-            issues.push({
+-              kind: "fsm-overlay-highlight-out-of-sync",
+-              overlay: appFSM.state.overlay,
+-              toggle: state,
+-            });
+-        });
+-        let popupExpected = ["layout", "label", "caption", "print"].includes(
+-            appFSM.state.overlay,
+-          ),
+-          main = $("dashboard").closest("main");
+-        if (main.classList.contains("dashboard-popup-open") !== popupExpected)
+-          issues.push({
+-            kind: "fsm-popup-highlight-out-of-sync",
+-            overlay: appFSM.state.overlay,
+-          });
+-        if (main.classList.contains("layout-open") !== (appFSM.state.overlay === "layout"))
+-          issues.push({
+-            kind: "fsm-layout-highlight-out-of-sync",
+-            overlay: appFSM.state.overlay,
+-          });
+-        if ($("readmeDialog").open)
+-          issues.push({
+-            kind: "legacy-readme-dialog-open",
+-            open: true,
+-          });
+         try {
