@@ -1473,8 +1473,6 @@
         if (match?.kind === payload.kind) return payload.kind;
         return "none";
       }
-      function syncAssetSelectionState() {
-      }
       function requestedOverlayState({ state, payload }) {
         return state === payload.overlay ? "none" : payload.overlay;
       }
@@ -1521,7 +1519,6 @@
         $("captionLineHeight").value = caption.settings.lineHeight;
         syncDashboardCaption(view);
       }
-      function syncProjectWorkspaceState() {}
       function syncGraphWorkspaceState() {
         let slot = getSelectedSlot();
         if (!slot) return;
@@ -1539,8 +1536,6 @@
         let template = $("readmeContent");
         return template ? template.innerHTML.replaceAll("{{APP_BUILD}}", APP_BUILD) : "";
       }
-      function enterOverlayState() {}
-      function exitOverlayState() {}
       function enterLifecycleState({ state, payload }) {
         let busy = state === "importing" || state === "exporting";
         document.body.classList.toggle("app-busy", busy);
@@ -1783,8 +1778,6 @@
                 "slots",
                 "ui",
               ],
-              entry: syncProjectWorkspaceState,
-              update: syncProjectWorkspaceState,
               on: SHARED_WORKSPACE_EVENTS,
             },
             "slot.graph": {
@@ -1824,69 +1817,44 @@
           overlay: {
             none: {
               objects: ["ui"],
-              entry: enterOverlayState,
               on: SHARED_OVERLAY_EVENTS,
             },
             layout: {
               objects: ["layout", "slots", "ui"],
-              entry: enterOverlayState,
-              exit: exitOverlayState,
-              update: () => {
-                renderLayout();
-                syncLayoutMapSize();
-              },
               on: SHARED_OVERLAY_EVENTS,
             },
             label: {
               objects: ["labels", "slots", "ui"],
-              entry: enterOverlayState,
-              exit: exitOverlayState,
-              update: ({ objects }) => syncLabelControlsFromObject(objects.labels),
               on: SHARED_OVERLAY_EVENTS,
             },
             caption: {
               objects: ["captions", "slots", "labels", "ui"],
-              entry: enterOverlayState,
-              exit: exitOverlayState,
-              update: ({ objects }) => syncCaptionControlsFromObject(objects.captions),
               on: SHARED_OVERLAY_EVENTS,
             },
             print: {
               objects: ["project", "layout", "labels", "captions", "charts", "images", "slots", "ui"],
-              entry: enterOverlayState,
-              exit: exitOverlayState,
               on: SHARED_OVERLAY_EVENTS,
             },
             readme: {
               objects: ["project", "ui"],
-              entry: enterOverlayState,
-              exit: exitOverlayState,
               on: SHARED_OVERLAY_EVENTS,
             },
           },
           assetSelection: {
             none: {
               objects: ["data", "images", "ui"],
-              entry: syncAssetSelectionState,
-              update: syncAssetSelectionState,
               on: ASSET_SELECTION_EVENTS,
             },
             csv: {
               objects: ["data", "images", "ui"],
-              entry: syncAssetSelectionState,
-              update: syncAssetSelectionState,
               on: ASSET_SELECTION_EVENTS,
             },
             image: {
               objects: ["data", "images", "ui"],
-              entry: syncAssetSelectionState,
-              update: syncAssetSelectionState,
               on: ASSET_SELECTION_EVENTS,
             },
             directory: {
               objects: ["data", "images", "ui"],
-              entry: syncAssetSelectionState,
-              update: syncAssetSelectionState,
               on: ASSET_SELECTION_EVENTS,
             },
           },
