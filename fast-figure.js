@@ -1474,18 +1474,16 @@
         refreshImageControls();
         syncLabelControlsFromObject(objects?.labels || projectObjects.read("labels"));
         syncCaptionControlsFromObject(objects?.captions || projectObjects.read("captions"));
-        $("buildBox").classList.add("hidden");
       }
       function syncGraphWorkspaceState({ objects } = {}) {
         let slot = getSelectedSlot();
         if (!slot) return;
         $("targetInfo").textContent = `선택한 슬롯: ${slot.row}행 ${slot.col}열`;
         updateFileAvailability();
-        if (slot.chart && editing?.id !== slot.chart) editChart(slot.chart);
+        if (slot.chart && editing?.id !== slot.chart) activateChartModel(slot.chart);
         else if (!slot.chart) {
           setFileName();
           clearPreview();
-          $("buildBox").classList.add("hidden");
         }
         refreshCsvControls();
         syncCaptionControlsFromObject(projectObjects.read("captions"));
@@ -1497,12 +1495,10 @@
         updateFileAvailability();
         setFileName(slotImage(slot)?.name);
         clearPreview();
-        $("buildBox").classList.add("hidden");
         refreshImageControls(slot.imageId);
         syncCaptionControlsFromObject(projectObjects.read("captions"));
       }
       function exitGraphWorkspaceState() {
-        $("buildBox").classList.add("hidden");
         selectedObjectIndex = null;
       }
       function readmeContentHtml() {
@@ -3606,7 +3602,7 @@
           };
         appFSM.send("SLOT_DATA_CONNECTED", payload);
         if (!payload.chart) throw Error("슬롯 그래프 오브젝트를 만들지 못했습니다.");
-        editChart(payload.chart.id);
+        activateChartModel(payload.chart.id);
         renderDashboard();
         return payload.chart;
       }
@@ -4547,16 +4543,12 @@
                     let settings = normalizeGlobalSettings(c),
                       full = plot._fullLayout,
                       changed = Object.keys(event),
-                      copyRange = (plotlyAxis, key, kind, side) => {
+                      copyRange = (plotlyAxis, key) => {
                         let range = full?.[plotlyAxis]?.range;
                         if (!Array.isArray(range) || range.length !== 2) return;
                         let setting = settings.axes[key];
                         setting.min = axisRangeValueFromPlotly(range[0], setting.scaleType);
                         setting.max = axisRangeValueFromPlotly(range[1], setting.scaleType);
-                        if (editing?.id === c.id && $(kind + "AxisSide").value === side) {
-                          $(`${key}Min`).value = setting.min;
-                          $(`${key}Max`).value = setting.max;
-                        }
                       },
                       axisChanged = (plotlyAxis) =>
                         all ||
@@ -4566,12 +4558,12 @@
                             name.startsWith(`${plotlyAxis}.range[`),
                         );
                     [
-                      ["xaxis", "xBottom", "x", "bottom"],
-                      ["xaxis2", "xTop", "x", "top"],
-                      ["yaxis", "yLeft", "y", "left"],
-                      ["yaxis2", "yRight", "y", "right"],
-                    ].forEach(([plotlyAxis, key, kind, side]) => {
-                      if (axisChanged(plotlyAxis)) copyRange(plotlyAxis, key, kind, side);
+                      ["xaxis", "xBottom"],
+                      ["xaxis2", "xTop"],
+                      ["yaxis", "yLeft"],
+                      ["yaxis2", "yRight"],
+                    ].forEach(([plotlyAxis, key]) => {
+                      if (axisChanged(plotlyAxis)) copyRange(plotlyAxis, key);
                     });
                     c.editor.globalSettings = settings;
                     if (editing?.id === c.id) editing = c;
@@ -4740,6 +4732,30 @@
             };
             map.append(e);
           });
+      }
+      function activateChartModel(id) {
+        let chart = getChart(id);
+        if (!chart) {
+          debugLog("chart:activate-missing", { chartId: id });
+          return null;
+        }
+        let csv =
+          getProjectCsv(chart.editor?.objects?.[0]?.csvId) ||
+          (chart.editor?.editable === false ? ensureDefaultCsv() : null);
+        if (!csv) throw Error("차트가 참조하는 프로젝트 CSV가 없습니다.");
+        editing = chart;
+        activeDataName = csv.name || "선택한 그래프 데이터";
+        activeCsvId = csv.id;
+        activeDataReady = true;
+        rows = csv.rows;
+        columns = columnDefinitions(csv.rows, csv.headerLines);
+        refreshCsvControls(csv.id);
+        selectedObjectIndex = null;
+        debugLog("chart:activate", {
+          chartId: id,
+          sourceName: csv.name,
+        });
+        return chart;
       }
       function editChart(id) {
         let c = getChart(id);
@@ -7274,7 +7290,6 @@
         editing = chart;
         let selected = Number.isInteger(index) && index >= 0 && index < chart.editor.objects.length ? index : null;
         appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
-        renderGraphObjects(chart.editor.objects);
         if (chart.editor.editable !== false) rebuildEditableGraph(chart);
         renderDashboard();
         updateFileAvailability();
@@ -7296,7 +7311,6 @@
         let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
         appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
         if (selected !== null) graphEditorSelectCsv(objects[selected].csvId);
-        renderGraphObjects(objects);
         appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
         return selected;
       }
@@ -7358,11 +7372,8 @@
         if (!csv) return null;
         csv.headerLines = headerLineCount(value, csv.rows);
         if (activeCsvId === csv.id) {
-          $("headerLines").value = csv.headerLines;
           rows = csv.rows;
           columns = columnDefinitions(csv.rows, csv.headerLines);
-          refreshColumnControls();
-          preview();
         }
         activeProject.charts.forEach((chart) => {
           if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id)) rebuildEditableGraph(chart);
@@ -7388,7 +7399,6 @@
         }
         chart.editor.editable = next;
         if (next) rebuildEditableGraph(chart);
-        syncEditableUi(chart);
         renderDashboard();
         status(next ? "가져온 JSON을 편집기 설정으로 재구성했습니다." : "가져온 원본 Plotly JSON 표시로 전환했습니다.");
         debugLog("editor:editable", { chartId: chart.id, editable: next });
