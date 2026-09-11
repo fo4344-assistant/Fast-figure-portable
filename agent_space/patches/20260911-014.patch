@@ -1,0 +1,79 @@
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1542,74 +1542,2 @@
+-      function setOverlayDomState(name) {
+-        let panels = {
+-            layout: "layoutPanel",
+-            label: "labelPanel",
+-            caption: "captionPanel",
+-            print: "printPanel",
+-          },
+-          toggles = {
+-            layout: "layoutToggle",
+-            label: "labelToggle",
+-            caption: "captionToggle",
+-            print: "printToggle",
+-          };
+-        Object.entries(panels).forEach(([key, id]) => {
+-          $(id).classList.toggle("hidden", key !== name);
+-        });
+-        Object.entries(toggles).forEach(([key, id]) => {
+-          let active = key === name;
+-          $(id).classList.toggle("active", active);
+-          $(id).dataset.active = String(active);
+-          $(id).setAttribute("aria-expanded", String(active));
+-        });
+-        let main = $("dashboard").closest("main"),
+-          popup = Object.prototype.hasOwnProperty.call(panels, name);
+-        main.classList.toggle("layout-open", name === "layout");
+-        main.classList.toggle("dashboard-popup-open", popup);
+-        $("layoutToggle").textContent = "레이아웃";
+-        if ($("readmeDialog").open) $("readmeDialog").close();
+-        if (popup) clearAllSlotSelections();
+-      }
+-      function enterOverlayState({ state, objects }) {
+-        setOverlayDomState(state);
+-        if (state === "layout") {
+-          renderLayout();
+-          requestAnimationFrame(() => {
+-            syncLayoutMapSize();
+-            let map = $("layoutMap");
+-            debugLog("layoutPanel:open", {
+-              mapWidth: Math.round(map.getBoundingClientRect().width),
+-              mapHeight: Math.round(map.getBoundingClientRect().height),
+-              panelHeight: Math.round($("layoutPanel").getBoundingClientRect().height),
+-            });
+-          });
+-        } else if (state === "label") syncLabelControlsFromObject(objects.labels);
+-        else if (state === "caption") syncCaptionControlsFromObject(objects.captions);
+-        else if (state === "print") {
+-          $("printWidth").value = Math.max(100, Math.round(dashboardReferenceWidth()));
+-          $("printHeight").value = "";
+-          syncPopupBounds();
+-        }
+-      }
+-      function exitOverlayState({ state }) {
+-        let panelId = {
+-            layout: "layoutPanel",
+-            label: "labelPanel",
+-            caption: "captionPanel",
+-            print: "printPanel",
+-          }[state],
+-          toggleId = {
+-            layout: "layoutToggle",
+-            label: "labelToggle",
+-            caption: "captionToggle",
+-            print: "printToggle",
+-          }[state];
+-        if (panelId) $(panelId).classList.add("hidden");
+-        if (toggleId) {
+-          $(toggleId).classList.remove("active");
+-          $(toggleId).dataset.active = "false";
+-          $(toggleId).setAttribute("aria-expanded", "false");
+-        }
+-        if (state === "layout")
+-          $("dashboard").closest("main").classList.remove("layout-open");
+-        if (state === "readme" && $("readmeDialog").open) $("readmeDialog").close();
+-      }
++      function enterOverlayState() {}
++      function exitOverlayState() {}
