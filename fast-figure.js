@@ -7812,7 +7812,6 @@
         $(`${kind}Enabled`).onclick = () =>
           setAnnotationEnabled(kind, kind === "label" ? !activeProject.labelsEnabled : !activeProject.captionsEnabled);
       }
-      fillGraphFontSelect("graphFontFamily");
       installLabelSettings();
       installCaptionSettings();
       installAnnotationPopup("label");
@@ -8981,10 +8980,6 @@
         else commitDashboardScale("unlock-reset-100");
         debugLog("dashboard:zoom-lock", { locked, width: dashboardZoomLockedWidth });
       }
-      $("headerLines").onchange = () => {
-        let count = graphEditorHeaderLines(activeCsvId, $("headerLines").value);
-        if (count !== null) $("headerLines").value = count;
-      };
       $("dashboardZoom").oninput = (event) => applyDashboardZoom(false, event.target.value);
       $("dashboardZoom").onchange = () => commitDashboardScale("slider-change");
       $("dashboardZoomLock").onclick = () => setDashboardZoomLocked(!dashboardZoomLocked);
@@ -9023,46 +9018,6 @@
         applySlotStyle();
         schedulePlotResize();
       };
-      ["showLegend", "showTitle", "showZeroLine"].forEach(
-        (id) =>
-          ($(id).onclick = () => {
-            syncSettingToggle(id, $(id).dataset.active !== "true");
-            applyGraphLayoutSettings();
-          }),
-      );
-      let axisCommitRevision = 0;
-      function applyAxisSetting(control) {
-        if (!control?.closest(".axis-fields")) return;
-        axisCommitRevision += 1;
-        applyGraphLayoutSettings();
-      }
-      document.addEventListener("change", (e) => {
-        let control = e.target;
-        if (
-          control.closest(".axis-fields") &&
-          (control.matches("input") || control.matches("select"))
-        )
-          applyAxisSetting(control);
-      });
-      document.addEventListener("keydown", (e) => {
-        if (
-          e.key === "Enter" &&
-          e.target.closest(".axis-fields") &&
-          e.target.matches("input")
-        ) {
-          e.preventDefault();
-          let revision = axisCommitRevision;
-          e.target.blur();
-          if (revision === axisCommitRevision) applyAxisSetting(e.target);
-        }
-      });
-      document.addEventListener("click", (e) => {
-        let b = e.target.closest(".axis-fields .setting-toggle");
-        if (b) {
-          syncSettingToggle(b, b.dataset.active !== "true");
-          applyGraphLayoutSettings();
-        }
-      });
       $("mergeSlots").onclick = mergeSelected;
       $("splitSlot").onclick = splitSelected;
       function uiPaletteFromControls() {
@@ -9247,11 +9202,7 @@
       function connectLifecycleTasksToFSM() {
         [
           ["importProjectFile", "onchange", "importing", "PROJECT_IMPORT"],
-          ["importSlotJsonFile", "onchange", "importing", "SLOT_IMPORT"],
-          ["loadGraphPaletteFile", "onchange", "importing", "PALETTE_IMPORT"],
           ["exportProject", "onclick", "exporting", "PROJECT_EXPORT"],
-          ["exportSlotJson", "onclick", "exporting", "SLOT_EXPORT"],
-          ["exportPlotlyJson", "onclick", "exporting", "PLOTLY_EXPORT"],
           ["savePrint", "onclick", "exporting", "PRINT_EXPORT"],
           ["capturePrint", "onclick", "exporting", "CAPTURE_EXPORT"],
         ].forEach(([id, property, lifecycle, eventName]) => {
@@ -9279,22 +9230,17 @@
       syncHeaderHeight();
       syncPopupBounds();
       applyDashboardZoom();
-      ["showLegend", "showTitle", "showZeroLine", "showSlotBorders"].forEach((id) =>
-        syncSettingToggle(id, $(id).dataset.active === "true"),
-      );
+      syncSettingToggle("showSlotBorders", $("showSlotBorders").dataset.active === "true");
       installHelpPopups();
       installSidebarControls();
       connectLifecycleTasksToFSM();
       installLayoutResizer();
-      axisFields();
-      graphColorInputs();
       ensureDefaultCsv();
       refreshCsvControls();
       installSlotClickController();
       makeSlots();
       applySlotStyle();
       $("projectName").value = activeProject.projectName;
-      syncEditableUi(null);
       appFSM.ready();
       debugLog(
         "app:init-complete",
