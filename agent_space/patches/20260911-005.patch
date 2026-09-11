@@ -1,0 +1,141 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -7445,30 +7445,6 @@
+         updateTypeSpecificOptions();
+         renderGraphObjects(objects);
+       }
+-      document.addEventListener(
+-        "pointerdown",
+-        (event) => {
+-          let active = document.activeElement;
+-          if (
+-            active !== event.target &&
+-            active?.matches("#title,#legendName,.axis-fields input")
+-          )
+-            active.blur();
+-          if (
+-            appFSM.state.graphObject !== "selected" ||
+-            event.target.closest(
+-              ".graph-object,button,input,select,textarea,[contenteditable='true'],.tree-node-action",
+-            )
+-          )
+-            return;
+-          appFSM.send("CLEAR_GRAPH_OBJECT", {
+-            index: null,
+-            direction: "fsm-to-model",
+-          });
+-          renderGraphObjects(ensureGraphObjects(editing));
+-        },
+-        true,
+-      );
+       function saveGraphObjects(objects) {
+         let target = getSelectedSlot(),
+           chart = target?.chart && getChart(target.chart);
+@@ -7592,75 +7568,6 @@
+           };
+         });
+       }
+-      $("addGraphObject").onclick = () => {
+-        let target = getSelectedSlot();
+-        if (!target || !activeDataReady) return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
+-        if (!target.chart) {
+-          let csv = getProjectCsv(activeCsvId);
+-          if (target.contentType === "image" || !csv)
+-            return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
+-          let payload = {
+-            slotId: target.id,
+-            csvId: csv.id,
+-            direction: "fsm-to-model",
+-          };
+-          appFSM.send("SLOT_DATA_CONNECTED", payload);
+-          if (!payload.chart) return status("빈 슬롯에 그래프를 추가하지 못했습니다.");
+-          editChart(payload.chart.id);
+-          selectedObjectIndex = 0;
+-          appFSM.send("SELECT_GRAPH_OBJECT", {
+-            index: selectedObjectIndex,
+-            direction: "fsm-to-model",
+-          });
+-          renderGraphObjects(payload.chart.editor.objects);
+-          updateGraphView();
+-          return;
+-        }
+-        let c = configFromForm(),
+-          object = {
+-            csvId: activeCsvId,
+-            x: c.editor.x,
+-            y: c.editor.y,
+-            xAxisSide: c.editor.xAxisSide,
+-            yAxisSide: c.editor.yAxisSide,
+-            type: c.editor.type,
+-            color: DEFAULT_COLORS[(editing?.editor?.objects?.length || 0) % DEFAULT_COLORS.length],
+-            legendName: c.editor.legendName,
+-            lineWidth: c.editor.lineWidth,
+-            lineDash: c.editor.lineDash,
+-            markerSymbol: c.editor.markerSymbol,
+-            markerSize: c.editor.markerSize,
+-            barOpacity: c.editor.barOpacity,
+-            barLineWidth: c.editor.barLineWidth,
+-          };
+-        c.editor.objects = [...ensureGraphObjects(editing || c), object];
+-        let xKey = axisKey("x", c.editor.xAxisSide),
+-          yKey = axisKey("y", c.editor.yAxisSide);
+-        if (!c.editor.globalSettings.axes[xKey].title) {
+-          c.editor.globalSettings.axes[xKey].title = c.editor.x;
+-          $(`${xKey}Title`).value = c.editor.x;
+-        }
+-        if (!c.editor.globalSettings.axes[yKey].title) {
+-          c.editor.globalSettings.axes[yKey].title = c.editor.y;
+-          $(`${yKey}Title`).value = c.editor.y;
+-        }
+-        c.id = target.chart;
+-        let payload = {
+-          slotId: target.id,
+-          chartId: target.chart,
+-          chart: c,
+-          direction: "fsm-to-model",
+-        };
+-        appFSM.send("CHART_MODEL_REPLACED", payload);
+-        editing = payload.chart;
+-        selectedObjectIndex = c.editor.objects.length - 1;
+-        appFSM.send("SELECT_GRAPH_OBJECT", {
+-          index: selectedObjectIndex,
+-          direction: "fsm-to-model",
+-        });
+-        renderGraphObjects(c.editor.objects);
+-        updateGraphView();
+-      };
+       function updateTypeSpecificOptions() {
+         let type = $("chartType").value,
+           showLine = ["scatter", "lines+markers", "hidden"].includes(type),
+@@ -7692,22 +7599,6 @@
+           });
+         });
+       }
+-      ["xCol", "yCol", "xAxisSide", "yAxisSide", "chartType", "lineDash", "markerSymbol"].forEach(
+-        (id) =>
+-          $(id).addEventListener("change", () => {
+-            if (id === "chartType") updateTypeSpecificOptions();
+-            applyGraphSettings();
+-          }),
+-      );
+-      $("graphFontFamily").addEventListener("change", applyGraphLayoutSettings);
+-      bindGraphTextInputs(["legendName"], applyGraphSettings);
+-      bindGraphTextInputs(["title"], applyGraphLayoutSettings);
+-      bindGraphNumberInputs(
+-        ["lineWidth", "markerSize", "barOpacity", "barLineWidth"],
+-        applyGraphSettings,
+-      );
+-      bindGraphNumberInputs(["titleFontSize", "legendFontSize"], applyGraphLayoutSettings);
+-      updateTypeSpecificOptions();
+       function clearAllSlotSelections() {
+         setSelectedSlot(null);
+         layoutSelected.clear();
+@@ -9482,7 +9373,6 @@
+       connectLifecycleTasksToFSM();
+       installLayoutResizer();
+       axisFields();
+       graphColorInputs();
+-      renderGraphObjects();
+       ensureDefaultCsv();
+       refreshCsvControls();
