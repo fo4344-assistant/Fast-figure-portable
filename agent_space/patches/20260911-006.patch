@@ -1,0 +1,106 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -8631,67 +8631,6 @@
+         syncDashboardCaption();
+         appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
+       };
+-      $("resetGraphPalette").onclick = () => {
+-        let chart = getSelectedSlot()?.chart && getChart(getSelectedSlot().chart);
+-        if (!chart) return status("그래프 슬롯을 먼저 선택하세요.");
+-        saveGraphObjects(
+-          ensureGraphObjects(chart).map((object, index) => ({
+-            ...object,
+-            color: DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+-          })),
+-        );
+-        debugLog("graphPalette:reset", { slotId: selectedSlotId });
+-      };
+-      $("saveGraphPalette").onclick = () => {
+-        let slot = getSelectedSlot();
+-        if (!slot) return status("그래프 슬롯을 먼저 선택하세요.");
+-        let blob = new Blob([JSON.stringify({ colors: graphPalette() }, null, 2)], {
+-            type: "application/json",
+-          }),
+-          a = document.createElement("a"),
+-          stamp = new Date().toISOString().replace(/[:.]/g, "-");
+-        a.href = URL.createObjectURL(blob);
+-        a.download = `chart-palette-${stamp}.json`;
+-        a.click();
+-        setTimeout(() => URL.revokeObjectURL(a.href), 0);
+-        debugLog("graphPalette:save", { slotId: slot.id });
+-      };
+-      $("loadGraphPalette").onclick = () => {
+-        if (!getSelectedSlot()) return status("그래프 슬롯을 먼저 선택하세요.");
+-        $("loadGraphPaletteFile").click();
+-      };
+-      $("loadGraphPaletteFile").onchange = async (e) => {
+-        let file = e.target.files[0];
+-        if (!file) return;
+-        try {
+-          let parsed = JSON.parse(await file.text()),
+-            colors = Array.isArray(parsed) ? parsed : parsed.colors;
+-          if (!Array.isArray(colors) || !colors.length) throw Error("colors 배열이 없습니다.");
+-          let valid = colors.filter(
+-            (color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color),
+-          );
+-          if (!valid.length) throw Error("유효한 HEX 색상이 없습니다.");
+-          let chart = getSelectedSlot()?.chart && getChart(getSelectedSlot().chart);
+-          if (!chart) throw Error("그래프 슬롯을 먼저 선택하세요.");
+-          saveGraphObjects(
+-            ensureGraphObjects(chart).map((object, index) => ({
+-              ...object,
+-              color: valid[index % valid.length],
+-            })),
+-          );
+-          status(`${file.name} 색상 구성을 덮어썼습니다.`);
+-          debugLog("graphPalette:load", {
+-            slotId: selectedSlotId,
+-            name: file.name,
+-            colors: valid.length,
+-          });
+-        } catch (error) {
+-          status("팔레트 불러오기 실패: " + error.message);
+-          debugLog("graphPalette:load-error", { message: error.message });
+-        } finally {
+-          e.target.value = "";
+-        }
+-      };
+       function downloadJsonFile(payload, name) {
+         let blob = new Blob([JSON.stringify(payload, null, 2)], {
+             type: "application/json;charset=utf-8",
+@@ -8907,14 +8846,6 @@
+         downloadJsonFile(figure, `plotly-figure-${slot.id}-${stamp}.json`);
+         status("선택한 슬롯의 Plotly JSON을 내보냈습니다.");
+       }
+-      $("exportSlotJson").onclick = downloadSlotFfsx;
+-      $("exportPlotlyJson").onclick = downloadPlotlyJson;
+-      $("editorEditable").onclick = () => graphEditorSetEditable();
+-      $("importSlotJson").onclick = () => {
+-        if (!getSelectedSlot())
+-          return status("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");
+-        $("importSlotJsonFile").click();
+-      };
+       async function importSlotFile(file, slot) {
+         if (!slot) throw Error("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");
+         let header = new Uint8Array(await file.slice(0, 4).arrayBuffer()),
+@@ -8997,19 +8928,6 @@
+           schema: payload?.schema || "plotly",
+         });
+       }
+-      $("importSlotJsonFile").onchange = async (e) => {
+-        let file = e.target.files[0];
+-        if (!file) return;
+-        try {
+-          await importSlotFile(file, getSelectedSlot());
+-        } catch (error) {
+-          refreshCsvControls();
+-          status("슬롯 불러오기 오류: " + error.message);
+-          debugLog("slot:import-error", { message: error.message });
+-        } finally {
+-          e.target.value = "";
+-        }
+-      };
+       $("applyGrid").onclick = () => {
+         let r = +$("gridRows").value,
+           c = +$("gridCols").value;
