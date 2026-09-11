@@ -1539,36 +1539,6 @@
         let template = $("readmeContent");
         return template ? template.innerHTML.replaceAll("{{APP_BUILD}}", APP_BUILD) : "";
       }
-      function setOverlayDomState(name) {
-        let panels = {
-            layout: "layoutPanel",
-            label: "labelPanel",
-            caption: "captionPanel",
-            print: "printPanel",
-          },
-          toggles = {
-            layout: "layoutToggle",
-            label: "labelToggle",
-            caption: "captionToggle",
-            print: "printToggle",
-          };
-        Object.entries(panels).forEach(([key, id]) => {
-          $(id).classList.toggle("hidden", key !== name);
-        });
-        Object.entries(toggles).forEach(([key, id]) => {
-          let active = key === name;
-          $(id).classList.toggle("active", active);
-          $(id).dataset.active = String(active);
-          $(id).setAttribute("aria-expanded", String(active));
-        });
-        let main = $("dashboard").closest("main"),
-          popup = Object.prototype.hasOwnProperty.call(panels, name);
-        main.classList.toggle("layout-open", name === "layout");
-        main.classList.toggle("dashboard-popup-open", popup);
-        $("layoutToggle").textContent = "레이아웃";
-        if ($("readmeDialog").open) $("readmeDialog").close();
-        if (popup) clearAllSlotSelections();
-      }
       function enterOverlayState() {}
       function exitOverlayState() {}
       function enterLifecycleState({ state, payload }) {
