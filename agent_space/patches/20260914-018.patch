@@ -1,0 +1,51 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11272,47 +11272,7 @@
+           </p>
+         </div>
+         </template>
+       <main>
+-        <section id="printPanel" class="print-panel hidden">
+-          <div class="caption-heading"><strong>이미지 저장</strong></div>
+-          <div class="print-controls">
+-            <label
+-              >형식<select id="printFormat">
+-                <option value="png">PNG</option>
+-                <option value="jpeg">JPEG</option>
+-              </select></label
+-            ><label
+-              >DPI<input
+-                id="printDpi"
+-                type="number"
+-                min="36"
+-                max="1200"
+-                step="1"
+-                value="300" /></label
+-            ><label
+-              >가로(px)<input
+-                id="printWidth"
+-                type="number"
+-                min="100"
+-                max="20000"
+-                step="1"
+-                value="1600" /></label
+-            ><label
+-              >세로(px)<input
+-                id="printHeight"
+-                type="number"
+-                min="100"
+-                max="20000"
+-                step="1"
+-                placeholder="비우면 비율에 따라 자동"
+-            /></label>
+-          </div>
+-          <div class="print-actions">
+-            <button id="savePrint" type="button" class="icon-only" title="저장" aria-label="저장"><span class="iconoir-mount" data-iconoir="download" aria-hidden="true"></span></button
+-            ><button id="capturePrint" type="button" class="light icon-only" title="캡처" aria-label="캡처"><span class="iconoir-mount" data-iconoir="camera" aria-hidden="true"></span></button
+-            ><span id="printStatus" class="hint"></span>
+-          </div>
+-        </section>
+         <div id="graphArea" class="graph-area">
+           <div id="dashboard" class="dashboard" style="--grid-cols: 2; --grid-rows: 2"></div>
+           <div id="dashboardCaption" class="dashboard-caption hidden"><span id="captionPrefix" class="caption-prefix hidden"></span
