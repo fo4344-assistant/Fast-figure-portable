@@ -8678,18 +8678,13 @@
         appFSM.notify("layout", "DASHBOARD_SCALE_COMMITTED");
       }
       function setDashboardZoomLocked(locked) {
-        let dashboard = $("dashboard"),
-          slider = $("dashboardZoom"),
-          lock = $("dashboardZoomLock");
+        let dashboard = $("dashboard");
         dashboardZoomLocked = locked;
         if (locked) dashboardZoomLockedWidth = dashboard.getBoundingClientRect().width;
         else {
           dashboardZoomLockedWidth = null;
           dashboardZoomIntent = 100;
         }
-        slider.disabled = locked;
-        lock.setAttribute("aria-pressed", String(locked));
-        lock.title = locked ? "대시보드 크기 고정 해제" : "현재 대시보드 크기 고정";
         applyDashboardZoom(false);
         if (locked) schedulePlotResize();
         else commitDashboardScale("unlock-reset-100");
