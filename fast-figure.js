@@ -2349,41 +2349,6 @@
           editing?.editor?.objects?.map((object) => object.color).filter(Boolean) || DEFAULT_COLORS
         );
       }
-      function slotStyleFromControls() {
-        return {
-          referenceWidth: readProjectNumber(
-            $("dashboardReferenceWidth")?.value,
-            DEFAULT_SLOT_STYLE.referenceWidth,
-            100,
-            20000,
-          ),
-          gap: readProjectNumber(
-            $("slotGap")?.value,
-            DEFAULT_SLOT_STYLE.gap,
-            0,
-            2000,
-          ),
-          outerMargin: readProjectNumber(
-            $("dashboardOuterMargin")?.value,
-            DEFAULT_SLOT_STYLE.outerMargin,
-            0,
-            5000,
-          ),
-          radius: readProjectNumber(
-            $("slotRadius")?.value,
-            DEFAULT_SLOT_STYLE.radius,
-            0,
-            2000,
-          ),
-          aspect: readProjectNumber(
-            $("dashboardAspect")?.value,
-            DEFAULT_SLOT_STYLE.aspect,
-            0.1,
-            10,
-          ),
-          showBorders: $("showSlotBorders").dataset.active === "true",
-        };
-      }
       function dashboardReferenceWidth() {
         return activeProject.layout.slotStyle.referenceWidth;
       }
@@ -2458,21 +2423,13 @@
         caption.style.width = `${width}px`;
         caption.style.minWidth = `${width}px`;
       }
-      function applySlotStyle(fromControls = true, notify = true) {
-        if (fromControls) activeProject.layout.slotStyle = slotStyleFromControls();
+      function applySlotStyle(_fromControls = false, notify = true) {
         let style = activeProject.layout.slotStyle,
-          outerMargin = style.outerMargin,
           bordersVisible = style.showBorders,
           border = bordersVisible ? "var(--ui-color)" : "transparent",
           aspect = style.aspect,
           hasAspect = Number.isFinite(aspect) && aspect > 0,
           dashboard = $("dashboard");
-        $("dashboardReferenceWidth").value = style.referenceWidth;
-        $("slotGap").value = style.gap;
-        $("dashboardOuterMargin").value = outerMargin;
-        $("slotRadius").value = style.radius;
-        $("dashboardAspect").value = style.aspect;
-        syncSettingToggle("showSlotBorders", bordersVisible);
         ["dashboard", "layoutMap", "dashboardCaption"].forEach((id) => {
           let el = $(id);
           if (el) {
@@ -8734,33 +8691,6 @@
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
-      $("saveDebug").onclick = () => {
-        auditApp("debug:save");
-        debugLog("debugLog:save", {
-          build: projectObjects.read("project").appBuild,
-          userAgent: navigator.userAgent,
-          location: location.href,
-        });
-        let blob = new Blob([$("debugLog").textContent], { type: "text/plain;charset=utf-8" }),
-          a = document.createElement("a"),
-          stamp = new Date().toISOString().replace(/[:.]/g, "-");
-        a.href = URL.createObjectURL(blob);
-        a.download = `chart-builder-debug-${stamp}.log`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 0);
-      };
-      $("clearDebug").onclick = () => {
-        $("debugLog").textContent = "";
-        debugSequence = 0;
-      };
-      $("toggleDebug").onclick = () => {
-        let button = $("toggleDebug"),
-          enabled = button.dataset.active !== "true";
-        debugEnabled = enabled;
-        syncSettingToggle(button, enabled);
-        button.textContent = enabled ? "디버깅 끄기" : "디버깅 켜기";
-        $("debugLog").classList.toggle("hidden", !enabled);
-      };
       window.addEventListener("error", (event) =>
         debugLog("window:error", {
           message: event.message,
