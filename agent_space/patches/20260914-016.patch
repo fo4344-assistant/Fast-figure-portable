@@ -1,0 +1,88 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11272,84 +11272,7 @@
+           </p>
+         </div>
+         </template>
+       <main>
+-        <section id="labelPanel" class="annotation-panel hidden">
+-          <div class="annotation-controls">
+-            <strong>레이블</strong
+-            ><button
+-              id="labelEnabled"
+-              type="button"
+-              class="light setting-toggle"
+-              data-active="false"
+-            >
+-              표시 안 함
+-            </button>
+-          </div>
+-          <span class="hint annotation-hint"
+-            >미리보기의 레이블을 드래그해 슬롯 왼쪽 위 기준 위치(px)를 정합니다.</span
+-          >
+-          <div class="label-settings">
+-            <div id="labelPreview" class="label-preview" aria-label="레이블 위치 미리보기">
+-              <div class="label-preview-slot" aria-hidden="true"></div>
+-              <span id="labelPreviewLabel" class="label-preview-label">a</span>
+-            </div>
+-            <div class="label-setting-fields">
+-              <div class="label-format-setting">
+-                <label
+-                  >레이블 형식<select id="labelFormat">
+-                    <option value="lower-alpha">a, b, c</option>
+-                    <option value="upper-alpha">A, B, C</option>
+-                    <option value="decimal">1, 2, 3</option>
+-                    <option value="lower-roman">i, ii, iii</option>
+-                    <option value="upper-roman">I, II, III</option>
+-                  </select></label
+-                ><button
+-                  id="labelParentheses"
+-                  type="button"
+-                  class="light setting-toggle"
+-                  data-active="false"
+-                  aria-pressed="false"
+-                >
+-                  괄호 사용
+-                </button>
+-              </div>
+-              <label
+-                >순서<select id="labelOrder">
+-                  <option value="row-major">행 방향 우선</option>
+-                  <option value="column-major">열 방향 우선</option>
+-                </select></label
+-              ><label
+-                >글꼴<select id="labelFontFamily">
+-                  <option value="system-ui, sans-serif">기본</option>
+-                  <option value="Arial, sans-serif">Arial</option>
+-                  <option value="Times New Roman, serif">Times New Roman</option>
+-                  <option value="Georgia, serif">Georgia</option>
+-                  <option value="Courier New, monospace">Courier New</option>
+-                </select></label
+-              ><label
+-                >글자 크기(px)<input
+-                  id="labelFontSize"
+-                  type="number"
+-                  min="6"
+-                  value="14" /></label
+-              ><label
+-                >X 위치(px)<input
+-                  id="labelPositionX"
+-                  type="number"
+-                  step="0.1"
+-                  value="0" /></label
+-              ><label
+-                >Y 위치(px)<input
+-                  id="labelPositionY"
+-                  type="number"
+-                  step="0.1"
+-                  value="0" /></label
+-              ><button id="labelPositionReset" type="button" class="light label-position-reset">
+-                위치 초기화
+-              </button>
+-            </div>
+-          </div>
+-        </section>
+         <section id="captionPanel" class="annotation-panel hidden">
+           <div class="caption-popup">
+             <div class="caption-heading">
