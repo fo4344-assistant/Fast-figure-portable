@@ -1,0 +1,199 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -2418,7 +2418,7 @@
+           aspect = style.aspect,
+           hasAspect = Number.isFinite(aspect) && aspect > 0,
+           dashboard = $("dashboard");
+-        ["dashboard", "layoutMap", "dashboardCaption"].forEach((id) => {
++        ["dashboard", "dashboardCaption"].forEach((id) => {
+           let el = $(id);
+           if (el) {
+             el.style.setProperty("--slot-border-color", border);
+@@ -2430,7 +2430,6 @@
+         else dashboard.style.removeProperty("--dashboard-aspect");
+         requestAnimationFrame(() => {
+           applyReferenceGeometry(dashboard);
+-          applyReferenceGeometry($("layoutMap"));
+         });
+         let width =
+             dashboard.getBoundingClientRect().width ||
+@@ -4288,138 +4287,8 @@
+         schedulePlotResize();
+         updateFileAvailability();
+         syncDashboardCaption();
+-        renderLayout();
+-      }
+-      function syncPopupBounds() {
+-        let main = document.querySelector("main");
+-        if (!main) return;
+-        let rect = main.getBoundingClientRect(),
+-          inset = 18,
+-          width = Math.max(0, rect.width - inset * 2);
+-        document
+-          .querySelectorAll(".layout-panel,.annotation-panel,.print-panel")
+-          .forEach((panel) => {
+-            panel.style.left = `${Math.round(rect.left + inset)}px`;
+-            panel.style.width = `${Math.round(width)}px`;
+-            panel.style.right = "auto";
+-          });
+-      }
+-      function syncLayoutMapSize(requestedHeight = null) {
+-        syncPopupBounds();
+-        let panel = $("layoutPanel"),
+-          map = $("layoutMap");
+-        if (!panel || panel.classList.contains("hidden")) return;
+-        let header = panel.querySelector(".popup-heading"),
+-          zoom = $("dashboardZoom")?.closest(".dashboard-zoom-control"),
+-          resize = $("layoutResize"),
+-          style = getComputedStyle(panel),
+-          mapStyle = getComputedStyle(map),
+-          resizeStyle = getComputedStyle(resize),
+-          zoomStyle = zoom ? getComputedStyle(zoom) : null,
+-          paddingX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight),
+-          paddingBottom = parseFloat(style.paddingBottom),
+-          resizeMarginTop = parseFloat(resizeStyle.marginTop) || 0,
+-          zoomHeight = zoom?.offsetHeight || 0,
+-          zoomMarginTop = zoomStyle ? parseFloat(zoomStyle.marginTop) || 0 : 0,
+-          resizeHeight = resize.offsetHeight || 0,
+-          aspect = activeProject.layout.slotStyle.aspect,
+-          cssMinWidth = parseFloat(mapStyle.minWidth) || 0,
+-          visibleWidth = Math.max(1, panel.clientWidth - paddingX),
+-          contentWidth = Math.max(visibleWidth, cssMinWidth),
+-          minMapHeight = Math.max(96, activeProject.gridRows * 24),
+-          minWidth = Math.max(cssMinWidth, minMapHeight * aspect),
+-          maxWidth = Math.max(minWidth, contentWidth),
+-          viewportBottom = window.innerHeight - 10,
+-          mapTop = map.getBoundingClientRect().top,
+-          mapOverheadAfter =
+-            zoomMarginTop + zoomHeight + resizeMarginTop + resizeHeight + paddingBottom,
+-          maxMapHeight = Math.max(minMapHeight, viewportBottom - mapTop - mapOverheadAfter),
+-          heightLimitedWidth = maxMapHeight * aspect,
+-          initial = !Number.isFinite(activeProject.layoutMapWidth);
+-        if (requestedHeight !== null) {
+-          activeProject.layoutMapWidth = Math.max(minMapHeight, requestedHeight) * aspect;
+-          initial = false;
+-        }
+-        if (initial) {
+-          let graphHeight = $("dashboard").getBoundingClientRect().height,
+-            targetPanelHeight = graphHeight / 2 + (header?.offsetHeight || 0),
+-            mapOverhead =
+-              map.offsetTop +
+-              zoomMarginTop +
+-              zoomHeight +
+-              resizeMarginTop +
+-              resizeHeight +
+-              paddingBottom,
+-            targetMapHeight = Math.max(minMapHeight, targetPanelHeight - mapOverhead);
+-          activeProject.layoutMapWidth = targetMapHeight * aspect;
+-        }
+-        activeProject.layoutMapWidth = Math.max(
+-          Math.min(minWidth, heightLimitedWidth),
+-          Math.min(maxWidth, heightLimitedWidth, activeProject.layoutMapWidth),
+-        );
+-        let height = activeProject.layoutMapWidth / aspect;
+-        map.style.width = `${activeProject.layoutMapWidth}px`;
+-        map.style.height = `${height}px`;
+-        map.style.aspectRatio = `${aspect} / 1`;
+-        applyReferenceGeometry(map);
+-        panel.style.removeProperty("height");
+-      }
+-      function installLayoutResizer() {
+-        let resize = $("layoutResize"),
+-          map = $("layoutMap"),
+-          dragging = false,
+-          startY = 0,
+-          startHeight = 0;
+-        resize.addEventListener("pointerdown", (e) => {
+-          if ($("layoutPanel").classList.contains("hidden")) return;
+-          dragging = true;
+-          startY = e.clientY;
+-          startHeight = map.getBoundingClientRect().height;
+-          resize.setPointerCapture(e.pointerId);
+-          document.body.style.userSelect = "none";
+-        });
+-        resize.addEventListener("pointermove", (e) => {
+-          if (dragging) syncLayoutMapSize(startHeight + e.clientY - startY);
+-        });
+-        resize.addEventListener("pointerup", (e) => {
+-          if (!dragging) return;
+-          dragging = false;
+-          resize.releasePointerCapture?.(e.pointerId);
+-          document.body.style.userSelect = "";
+-          debugLog("layoutResize:end", {
+-            mapWidth: Math.round(map.getBoundingClientRect().width),
+-            mapHeight: Math.round(map.getBoundingClientRect().height),
+-            panelHeight: Math.round($("layoutPanel").getBoundingClientRect().height),
+-          });
+-        });
+-      }
+-      function renderLayout() {
+-        let map = $("layoutMap");
+-        if (!map) return;
+-        map.style.gridTemplateColumns = `repeat(${activeProject.gridCols},minmax(0,1fr))`;
+-        map.style.gridTemplateRows = `repeat(${activeProject.gridRows},minmax(0,1fr))`;
+-        map.innerHTML = "";
+-        activeProject.slots
+-          .filter((s) => !s.hidden)
+-          .forEach((s) => {
+-            let e = document.createElement("div");
+-            let hasContent =
+-              (s.contentType === "image" && !!s.imageId && !!getProjectImage(s.imageId)) ||
+-              (s.contentType !== "image" && !!s.chart && !!getChart(s.chart));
+-            e.className =
+-              "layout-slot" +
+-              (hasContent ? " has-content" : "") +
+-              (layoutSelected.has(s.id) ? " selected" : "");
+-            e.style.gridArea = `${s.row} / ${s.col} / span ${s.rowSpan} / span ${s.colSpan}`;
+-            e.setAttribute("aria-label", `${s.row}행 ${s.col}열${hasContent ? " · 콘텐츠 있음" : ""}`);
+-            e.onclick = () => {
+-              layoutSelected.has(s.id) ? layoutSelected.delete(s.id) : layoutSelected.add(s.id);
+-              renderLayout();
+-            };
+-            map.append(e);
+-          });
+       }
+       function activateChartModel(id) {
+         let chart = getChart(id);
+@@ -5688,7 +5557,6 @@
+         applySlotStyle(false, false);
+         applyUiPalette(false, false);
+         syncDashboardCaption();
+-        renderLayout();
+         updateFileAvailability();
+         refreshCsvControls();
+         refreshImageControls();
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2717,7 +2717,6 @@
+       if (layoutSelected.has(slotId)) layoutSelected.delete(slotId);
+       else layoutSelected.add(slotId);
+       setSelectionRevision((revision) => revision + 1);
+-      renderLayout();
+     };
+     const runLayoutCommand = (command) => {
+       command();
+@@ -2972,7 +2971,6 @@
+               onClick: () => {
+                 layoutSelected.clear();
+                 setSelectionRevision((revision) => revision + 1);
+-                renderLayout();
+               },
+             },
+             "선택 해제",
+@@ -2991,7 +2989,6 @@
+     const clampNavbarWidth = (value) => Math.max(360, Math.min(620, value));
+     const refreshDashboardAfterNavbarChange = () => {
+       requestAnimationFrame(() => {
+-        syncLayoutMapSize();
+         schedulePlotResize();
+       });
+     };
+@@ -3009,7 +3006,6 @@
+       if (navbarDragRef.current !== event.pointerId) return;
+       const width = clampNavbarWidth(event.clientX);
+       setNavbarWidth(width);
+-      syncLayoutMapSize();
+       schedulePlotResize();
+     };
