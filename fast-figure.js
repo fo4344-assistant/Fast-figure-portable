@@ -8734,74 +8734,6 @@
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
-      function syncHeaderHeight() {
-        let header = document.querySelector("header");
-        if (header)
-          document.documentElement.style.setProperty(
-            "--header-height",
-            `${header.getBoundingClientRect().height}px`,
-          );
-      }
-      function installSidebarControls() {
-        let app = document.querySelector(".app"),
-          aside = document.querySelector("aside"),
-          resizer = $("sidebarResizer"),
-          toggle = $("sidebarToggle"),
-          width = 370,
-          minWidth = 360,
-          dragging = false;
-        function refreshSidebarMinimum() {
-          if (app.classList.contains("sidebar-collapsed")) return;
-          app.classList.add("sidebar-measuring");
-          minWidth = Math.max(360, Math.ceil(aside.scrollWidth));
-          app.classList.remove("sidebar-measuring");
-          app.style.setProperty("--sidebar-min-width", `${minWidth}px`);
-          width = Math.max(width, minWidth);
-          app.style.setProperty("--sidebar-width", `${width}px`);
-        }
-        function setCollapsed(collapsed) {
-          app.classList.toggle("sidebar-collapsed", collapsed);
-          toggle.textContent = collapsed ? "›" : "‹";
-          toggle.title = collapsed ? "설정 패널 펼치기" : "설정 패널 접기";
-          toggle.setAttribute("aria-label", toggle.title);
-          toggle.setAttribute("aria-expanded", String(!collapsed));
-          schedulePlotResize();
-        }
-        toggle.onclick = (e) => {
-          e.stopPropagation();
-          setCollapsed(!app.classList.contains("sidebar-collapsed"));
-        };
-        resizer.addEventListener("pointerdown", (e) => {
-          if (e.target.closest("button") || app.classList.contains("sidebar-collapsed")) return;
-          dragging = true;
-          resizer.setPointerCapture(e.pointerId);
-          document.body.style.userSelect = "none";
-          document.body.style.cursor = "col-resize";
-        });
-        resizer.addEventListener("pointermove", (e) => {
-          if (!dragging) return;
-          width = Math.max(minWidth, Math.min(620, e.clientX));
-          app.style.setProperty("--sidebar-width", `${width}px`);
-          syncLayoutMapSize();
-          schedulePlotResize();
-        });
-        resizer.addEventListener("pointerup", (e) => {
-          if (!dragging) return;
-          dragging = false;
-          resizer.releasePointerCapture?.(e.pointerId);
-          document.body.style.userSelect = "";
-          document.body.style.cursor = "";
-          debugLog("sidebar:resize", { width });
-        });
-        window.addEventListener("resize", () => {
-          syncHeaderHeight();
-          refreshSidebarMinimum();
-          applyDashboardZoom(false);
-          syncLayoutMapSize();
-          schedulePlotResize();
-        });
-        requestAnimationFrame(refreshSidebarMinimum);
-      }
       $("saveDebug").onclick = () => {
         auditApp("debug:save");
         debugLog("debugLog:save", {
@@ -8842,48 +8774,17 @@
           message: event.reason?.message || String(event.reason),
         }),
       );
-      function connectLifecycleTasksToFSM() {
-        [
-          ["importProjectFile", "onchange", "importing", "PROJECT_IMPORT"],
-          ["exportProject", "onclick", "exporting", "PROJECT_EXPORT"],
-          ["savePrint", "onclick", "exporting", "PRINT_EXPORT"],
-          ["capturePrint", "onclick", "exporting", "CAPTURE_EXPORT"],
-        ].forEach(([id, property, lifecycle, eventName]) => {
-          let control = $(id),
-            handler = control?.[property];
-          if (typeof handler !== "function") return;
-          control[property] = function (event) {
-            return appFSM
-              .run(lifecycle, eventName, () => handler.call(this, event))
-              .catch((error) => {
-                debugLog(
-                  "fsm:lifecycle-task-error",
-                  { event: eventName, message: error.message },
-                  "error",
-                );
-              });
-          };
-        });
-      }
       debugLog("app:init", {
         build: projectObjects.read("project").appBuild,
         userAgent: navigator.userAgent,
         location: location.href,
       });
-      syncHeaderHeight();
-      syncPopupBounds();
       applyDashboardZoom();
-      syncSettingToggle("showSlotBorders", $("showSlotBorders").dataset.active === "true");
-      installHelpPopups();
-      installSidebarControls();
-      connectLifecycleTasksToFSM();
-      installLayoutResizer();
       ensureDefaultCsv();
       refreshCsvControls();
       installSlotClickController();
       makeSlots();
       applySlotStyle();
-      $("projectName").value = activeProject.projectName;
       appFSM.ready();
       debugLog(
         "app:init-complete",
