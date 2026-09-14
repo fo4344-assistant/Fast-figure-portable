@@ -4761,30 +4761,6 @@
         status(`${selected.length}개 슬롯을 나눴습니다.`);
         appFSM.notify("layout", "SLOTS_SPLIT");
       }
-      $("readmeToggle").onclick = () => {
-        appFSM.send("TOGGLE_OVERLAY", { overlay: "readme", source: "toggle" });
-      };
-      $("closeReadme").onclick = () =>
-        appFSM.send("CLOSE_OVERLAY", { reason: "readme-close" });
-      $("readmeDialog").addEventListener("cancel", (event) => {
-        event.preventDefault();
-        appFSM.send("ESCAPE", { reason: "readme-cancel" });
-      });
-      $("readmeDialog").addEventListener("click", (event) => {
-        let dialog = $("readmeDialog"),
-          bounds = dialog.getBoundingClientRect(),
-          outside =
-            event.clientX < bounds.left ||
-            event.clientX > bounds.right ||
-            event.clientY < bounds.top ||
-            event.clientY > bounds.bottom;
-        if (event.target === dialog && outside)
-          appFSM.send("CLOSE_OVERLAY", { reason: "readme-backdrop-click" });
-      });
-      $("readmeDialog").addEventListener("close", () => {
-        if (appFSM.state.overlay === "readme")
-          appFSM.send("CLOSE_OVERLAY", { reason: "readme-native-close" });
-      });
       function createChartModel({ id = null, editor = {}, graph = {} } = {}) {
         let model = {
           id,
@@ -5694,13 +5670,9 @@
         $("buildBox").classList.add("hidden");
       }
       function renderProjectObject(project = activeProject) {
-        syncProjectControlsFromObject(project);
         setFileName();
-        clearPreview();
         applySlotStyle(false, false);
         applyUiPalette(false, false);
-        renderLabelPreview();
-        applyCaptionSettings(false, false);
         syncDashboardCaption();
         renderLayout();
         updateFileAvailability();
@@ -6527,38 +6499,6 @@
           debugLog("project:export-error", { message: error.message });
         }
       }
-      $("projectName").addEventListener("input", (event) => {
-        activeProject.projectName = event.target.value.slice(0, 120);
-      });
-      $("projectName").addEventListener("change", (event) => {
-        activeProject.projectName = event.target.value.trim().slice(0, 120);
-        event.target.value = activeProject.projectName;
-        debugLog("project:name", { projectName: activeProject.projectName });
-      });
-      $("exportProject").onclick = downloadProject;
-      $("importProject").onclick = () => {
-        if (getSelectedSlot())
-          return status("프로젝트 불러오기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
-        $("importProjectFile").click();
-      };
-      $("importProjectFile").onchange = async (event) => {
-        let file = event.target.files[0];
-        if (!file) return;
-        try {
-          let header = new Uint8Array(await file.slice(0, 4).arrayBuffer()),
-            payload;
-          if (header.length === 4 && header[0] === 0x50 && header[1] === 0x4b)
-            payload = await ffpxReadProject(file);
-          else payload = JSON.parse(await file.text());
-          importProject(payload, file.name);
-          status(`${file.name} 프로젝트를 불러왔습니다.`);
-        } catch (error) {
-          status("프로젝트 불러오기 오류: " + error.message);
-          debugLog("project:import-error", { message: error.message });
-        } finally {
-          event.target.value = "";
-        }
-      };
       function downloadProjectAsset(path = appFSM.state.assetPath) {
         let selected = path ? projectVfs.resolve(path) : null,
           asset = ["csv", "image"].includes(selected?.kind) ? selected.asset : null;
@@ -7497,25 +7437,6 @@
         $(`${kind}Enabled`).onclick = () =>
           setAnnotationEnabled(kind, kind === "label" ? !activeProject.labelsEnabled : !activeProject.captionsEnabled);
       }
-      installLabelSettings();
-      installCaptionSettings();
-      installAnnotationPopup("label");
-      installAnnotationPopup("caption");
-      $("slotCaptionMode").onclick = () =>
-        appFSM.send("SLOT_CAPTION_MODE_CHANGED", {
-          enabled: !activeProject.slotCaptionsEnabled,
-          direction: "fsm-to-model",
-        });
-      $("insertSlotCaptions").onclick = () => {
-        clearAllSlotSelections();
-        let before = activeProject.captionText;
-        appFSM.send("SLOT_CAPTIONS_INSERTED", { direction: "fsm-to-model" });
-        if (activeProject.captionText === before) return status("추가할 슬롯별 캡션이 없습니다.");
-        syncCaptionControlsFromObject(projectObjects.read("captions"));
-        debugLog("annotation:slot-captions-inserted", {
-          length: activeProject.captionText.length - before.length,
-        });
-      };
       function exportImageLoad(src) {
         return new Promise((resolve, reject) => {
           let image = new Image();
@@ -8205,118 +8126,6 @@
           throw error;
         }
       }
-      $("printToggle").onclick = (e) => {
-        e.stopPropagation();
-        appFSM.send("TOGGLE_OVERLAY", { overlay: "print", source: "toggle" });
-      };
-      $("savePrint").onclick = exportDashboardTarget;
-      $("capturePrint").onclick = () => exportDashboard(true);
-      $("layoutToggle").onclick = (e) => {
-        e.stopPropagation();
-        appFSM.send("TOGGLE_OVERLAY", { overlay: "layout", source: "toggle" });
-      };
-      document.addEventListener(
-        "keydown",
-        (event) => {
-          if (event.key !== "Escape" || appFSM.state.overlay === "none") return;
-          event.preventDefault();
-          event.stopPropagation();
-          appFSM.send("ESCAPE", { reason: "keyboard" });
-        },
-        true,
-      );
-      document.addEventListener(
-        "pointerdown",
-        (e) => {
-          let path = e.composedPath(),
-            aside = document.querySelector("aside"),
-            inAside = path.includes(aside);
-          if (
-            appFSM.state.overlay !== "layout" &&
-            !path.includes($("dashboard")) &&
-            !path.includes($("dashboardCaption")) &&
-            !path.some((node) => node?.classList?.contains("dragcover")) &&
-            !path.includes($("labelPanel")) &&
-            !path.includes($("captionPanel")) &&
-            !path.includes($("printPanel")) &&
-            !path.includes($("labelToggle")) &&
-            !path.includes($("captionToggle")) &&
-            !path.includes($("printToggle")) &&
-            !inAside
-          )
-            clearAllSlotSelections();
-          if (inAside) return;
-          let active = document.activeElement;
-          if (active?.matches('input[type="number"]')) active.blur();
-        },
-        true,
-      );
-      document.addEventListener("click", (e) => {
-        let path = e.composedPath(),
-          overlay = appFSM.state.overlay,
-          overlayPanel = {
-            layout: $("layoutPanel"),
-            label: $("labelPanel"),
-            caption: $("captionPanel"),
-            print: $("printPanel"),
-          }[overlay],
-          overlayToggle = {
-            layout: $("layoutToggle"),
-            label: $("labelToggle"),
-            caption: $("captionToggle"),
-            print: $("printToggle"),
-          }[overlay],
-          panel = $("layoutPanel"),
-          dashboard = $("dashboard"),
-          aside = document.querySelector("aside"),
-          inPanel = path.includes(panel),
-          inAnnotation =
-            path.includes($("labelPanel")) ||
-            path.includes($("captionPanel")) ||
-            path.includes($("printPanel")) ||
-            path.includes($("labelToggle")) ||
-            path.includes($("captionToggle")) ||
-            path.includes($("printToggle")),
-          inDashboard = path.includes(dashboard),
-          inCaption = path.includes($("dashboardCaption")),
-          inAside = path.includes(aside),
-          inLayoutSlot = path.some((node) => node?.classList?.contains("layout-slot")),
-          inControl = path.some((node) => ["BUTTON", "INPUT", "LABEL"].includes(node?.tagName));
-        if (overlayPanel && !path.includes(overlayPanel) && !path.includes(overlayToggle))
-          appFSM.send("OUTSIDE_CLICK", { reason: "popup-outside" });
-        if (inDashboard || inCaption || inAnnotation) return;
-        if (overlay === "layout") {
-          if (inPanel && !inLayoutSlot && !inControl) {
-            layoutSelected.clear();
-            renderLayout();
-          }
-        }
-      });
-      $("captionText").addEventListener("input", (event) => {
-        let region = event.target.closest?.("[data-caption-region]")?.dataset.captionRegion;
-        if (region === "sections") return;
-        appFSM.send("CAPTION_TEXT_INPUT", {
-          text: event.target.textContent || "",
-          region: region || "body",
-          direction: "fsm-to-model",
-        });
-      });
-      $("captionName").addEventListener("input", (event) => {
-        activeProject.captionName = event.target.value;
-        syncDashboardCaption();
-        appFSM.notify("captions", "CAPTION_NAME_CHANGED");
-      });
-      $("captionName").addEventListener("change", applyCaptionSettings);
-      $("captionName").addEventListener("keydown", (event) => {
-        if (event.key === "Enter") event.target.blur();
-      });
-      $("captionNameBold").onclick = () => {
-        activeProject.captionNameBold = !activeProject.captionNameBold;
-        let button = $("captionNameBold");
-        syncSettingToggle(button, activeProject.captionNameBold);
-        syncDashboardCaption();
-        appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
-      };
       function downloadJsonFile(payload, name) {
         let blob = new Blob([JSON.stringify(payload, null, 2)], {
             type: "application/json;charset=utf-8",
