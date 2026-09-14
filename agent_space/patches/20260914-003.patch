@@ -1,0 +1,103 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -8675,20 +8675,15 @@
+         appFSM.notify("layout", "DASHBOARD_SCALE_COMMITTED");
+       }
+       function setDashboardZoomLocked(locked) {
+-        let dashboard = $("dashboard"),
+-          slider = $("dashboardZoom"),
+-          lock = $("dashboardZoomLock");
++        let dashboard = $("dashboard");
+         dashboardZoomLocked = locked;
+         if (locked) dashboardZoomLockedWidth = dashboard.getBoundingClientRect().width;
+         else {
+           dashboardZoomLockedWidth = null;
+           dashboardZoomIntent = 100;
+         }
+-        slider.disabled = locked;
+-        lock.setAttribute("aria-pressed", String(locked));
+-        lock.title = locked ? "대시보드 크기 고정 해제" : "현재 대시보드 크기 고정";
+         applyDashboardZoom(false);
+         if (locked) schedulePlotResize();
+         else commitDashboardScale("unlock-reset-100");
+         debugLog("dashboard:zoom-lock", { locked, width: dashboardZoomLockedWidth });
+       }
+@@ -8695,50 +8690,2 @@
+-      $("dashboardZoom").oninput = (event) => applyDashboardZoom(false, event.target.value);
+-      $("dashboardZoom").onchange = () => commitDashboardScale("slider-change");
+-      $("dashboardZoomLock").onclick = () => setDashboardZoomLocked(!dashboardZoomLocked);
+-      $("dashboardZoomReset").onclick = () => {
+-        if (dashboardZoomLocked) return setDashboardZoomLocked(false);
+-        dashboardZoomIntent = 100;
+-        applyDashboardZoom(false);
+-        commitDashboardScale("reset-100");
+-      };
+-      function commitLayoutNumberInput(id) {
+-        applySlotStyle();
+-        if (id === "dashboardReferenceWidth") applyDashboardZoom(true);
+-        else if (id === "slotGap" || id === "dashboardOuterMargin") {
+-          applyDashboardZoom(false);
+-          schedulePlotResize();
+-        } else if (id === "dashboardAspect") schedulePlotResize();
+-        if (id !== "slotRadius") syncLayoutMapSize();
+-      }
+-      [
+-        "dashboardReferenceWidth",
+-        "slotGap",
+-        "dashboardOuterMargin",
+-        "slotRadius",
+-        "dashboardAspect",
+-      ].forEach((id) => {
+-        let control = $(id);
+-        control.addEventListener("change", () => commitLayoutNumberInput(id));
+-        control.addEventListener("keydown", (event) => {
+-          if (event.key !== "Enter") return;
+-          event.preventDefault();
+-          event.target.blur();
+-        });
+-      });
+-      $("resetDashboardAspect").onclick = () => {
+-        $("dashboardAspect").value = "1.618";
+-        applySlotStyle();
+-        schedulePlotResize();
+-      };
+-      $("mergeSlots").onclick = mergeSelected;
+-      $("splitSlot").onclick = splitSelected;
+-      function uiPaletteFromControls() {
+-        return Object.fromEntries(
+-          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
+-            key,
+-            projectColor($(key)?.value, fallback),
+-          ]),
+-        );
+-      }
+       function applyUiPalette(fromControls = true, notify = true) {
+@@ -8745,9 +8692,4 @@
+-      function applyUiPalette(fromControls = true, notify = true) {
+-        if (fromControls) activeProject.appearance.uiPalette = uiPaletteFromControls();
++      function applyUiPalette(_fromControls = false, notify = true) {
+         let palette = activeProject.appearance.uiPalette;
+-        Object.entries(palette).forEach(([key, value]) => {
+-          let control = $(key);
+-          if (control) control.value = value;
+-        });
+         document.documentElement.style.setProperty("--ui-color", palette.uiColor);
+@@ -8802,16 +8744,2 @@
+         return activeProject.appearance.uiPalette;
+       }
+-      $("applyUiPalette").onclick = applyUiPalette;
+-      $("resetUiPalette").onclick = () => {
+-        $("uiColor").value = "#B0CFCE";
+-        $("uiBackgroundColor").value = "#FAFAFA";
+-        $("uiSurfaceColor").value = "#FFFFFF";
+-        $("uiMutedColor").value = "#4F525D";
+-        $("uiSubtleColor").value = "#94A3B8";
+-        $("uiDisabledBgColor").value = "#E5E7EB";
+-        $("uiDisabledTextColor").value = "#64748B";
+-        $("uiShadowColor").value = "#383A42";
+-        $("paperColor").value = "#FFFFFF";
+-        $("fontColor").value = "#383A42";
+-        applyUiPalette();
+-      };
+       function syncHeaderHeight() {
