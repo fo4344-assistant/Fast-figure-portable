@@ -8690,61 +8690,8 @@
         else commitDashboardScale("unlock-reset-100");
         debugLog("dashboard:zoom-lock", { locked, width: dashboardZoomLockedWidth });
       }
-      $("dashboardZoom").oninput = (event) => applyDashboardZoom(false, event.target.value);
-      $("dashboardZoom").onchange = () => commitDashboardScale("slider-change");
-      $("dashboardZoomLock").onclick = () => setDashboardZoomLocked(!dashboardZoomLocked);
-      $("dashboardZoomReset").onclick = () => {
-        if (dashboardZoomLocked) return setDashboardZoomLocked(false);
-        dashboardZoomIntent = 100;
-        applyDashboardZoom(false);
-        commitDashboardScale("reset-100");
-      };
-      function commitLayoutNumberInput(id) {
-        applySlotStyle();
-        if (id === "dashboardReferenceWidth") applyDashboardZoom(true);
-        else if (id === "slotGap" || id === "dashboardOuterMargin") {
-          applyDashboardZoom(false);
-          schedulePlotResize();
-        } else if (id === "dashboardAspect") schedulePlotResize();
-        if (id !== "slotRadius") syncLayoutMapSize();
-      }
-      [
-        "dashboardReferenceWidth",
-        "slotGap",
-        "dashboardOuterMargin",
-        "slotRadius",
-        "dashboardAspect",
-      ].forEach((id) => {
-        let control = $(id);
-        control.addEventListener("change", () => commitLayoutNumberInput(id));
-        control.addEventListener("keydown", (event) => {
-          if (event.key !== "Enter") return;
-          event.preventDefault();
-          event.target.blur();
-        });
-      });
-      $("resetDashboardAspect").onclick = () => {
-        $("dashboardAspect").value = "1.618";
-        applySlotStyle();
-        schedulePlotResize();
-      };
-      $("mergeSlots").onclick = mergeSelected;
-      $("splitSlot").onclick = splitSelected;
-      function uiPaletteFromControls() {
-        return Object.fromEntries(
-          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
-            key,
-            projectColor($(key)?.value, fallback),
-          ]),
-        );
-      }
-      function applyUiPalette(fromControls = true, notify = true) {
-        if (fromControls) activeProject.appearance.uiPalette = uiPaletteFromControls();
+      function applyUiPalette(_fromControls = false, notify = true) {
         let palette = activeProject.appearance.uiPalette;
-        Object.entries(palette).forEach(([key, value]) => {
-          let control = $(key);
-          if (control) control.value = value;
-        });
         document.documentElement.style.setProperty("--ui-color", palette.uiColor);
         document.documentElement.style.setProperty("--line", palette.uiColor);
         document.documentElement.style.setProperty("--accent", palette.uiColor);
@@ -8787,20 +8734,6 @@
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
-      $("applyUiPalette").onclick = applyUiPalette;
-      $("resetUiPalette").onclick = () => {
-        $("uiColor").value = "#B0CFCE";
-        $("uiBackgroundColor").value = "#FAFAFA";
-        $("uiSurfaceColor").value = "#FFFFFF";
-        $("uiMutedColor").value = "#4F525D";
-        $("uiSubtleColor").value = "#94A3B8";
-        $("uiDisabledBgColor").value = "#E5E7EB";
-        $("uiDisabledTextColor").value = "#64748B";
-        $("uiShadowColor").value = "#383A42";
-        $("paperColor").value = "#FFFFFF";
-        $("fontColor").value = "#383A42";
-        applyUiPalette();
-      };
       function syncHeaderHeight() {
         let header = document.querySelector("header");
         if (header)
