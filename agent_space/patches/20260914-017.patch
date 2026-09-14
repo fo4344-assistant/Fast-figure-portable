@@ -1,0 +1,83 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -11272,79 +11272,7 @@
+           </p>
+         </div>
+         </template>
+       <main>
+-        <section id="captionPanel" class="annotation-panel hidden">
+-          <div class="caption-popup">
+-            <div class="caption-heading">
+-              <strong>캡션</strong
+-              ><button
+-                id="captionEnabled"
+-                type="button"
+-                class="light setting-toggle"
+-                data-active="false"
+-              >
+-                표시 안 함
+-              </button
+-              ><button
+-                id="slotCaptionMode"
+-                type="button"
+-                class="light setting-toggle"
+-                data-active="false"
+-              >
+-                슬롯별 캡션
+-              </button>
+-            </div>
+-            <div class="caption-actions">
+-              <button id="insertSlotCaptions" type="button" class="light">
+-                슬롯별 캡션 추가
+-              </button>
+-            </div>
+-            <span id="captionTargetInfo" class="hint">전체 캡션 편집</span>
+-            <div class="caption-settings">
+-              <label class="caption-name-setting"
+-                >캡션 이름<input
+-                  id="captionName"
+-                  type="text"
+-                  placeholder="예: Figure 1. 또는 Fig. 1."
+-              /></label>
+-              <div class="caption-toggle-setting">
+-                <button
+-                  id="captionNameBold"
+-                  type="button"
+-                  class="light setting-toggle"
+-                  data-active="false"
+-                >
+-                  이름 굵게
+-                </button>
+-              </div>
+-              <label
+-                >글꼴<select id="captionFontFamily">
+-                  <option value="system-ui, sans-serif">기본</option>
+-                  <option value="Arial, sans-serif">Arial</option>
+-                  <option value="Times New Roman, serif">Times New Roman</option>
+-                  <option value="Georgia, serif">Georgia</option>
+-                  <option value="Courier New, monospace">Courier New</option>
+-                </select></label
+-              ><label
+-                >글자 크기(px)<input
+-                  id="captionFontSize"
+-                  type="number"
+-                  min="6"
+-                  max="96"
+-                  value="14" /></label
+-              ><label
+-                >줄간격<input
+-                  id="captionLineHeight"
+-                  type="number"
+-                  min="0.8"
+-                  max="4"
+-                  step="0.05"
+-                  value="1.45"
+-              /></label>
+-            </div>
+-            <span class="hint">전체 그래프 영역 아래에 캡션 입력 블록을 표시합니다.</span>
+-          </div>
+-        </section>
+         <section id="printPanel" class="print-panel hidden">
+           <div class="caption-heading"><strong>이미지 저장</strong></div>
+           <div class="print-controls">
