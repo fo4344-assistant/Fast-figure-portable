@@ -1,0 +1,123 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -10685,16 +10685,6 @@
+         window.fastFigureUiRoot = root;
+       })();
+     </script>
+-    <header>
+-      <h1>Fast figure</h1>
+-      <div class="toolbar">
+-        <button id="layoutToggle" class="light">레이아웃</button
+-        ><button id="labelToggle" class="light" aria-expanded="false">레이블</button
+-        ><button id="captionToggle" class="light" aria-expanded="false">캡션</button
+-        ><span id="targetInfo" class="hint">빈 슬롯 또는 그래프를 선택하세요.</span
+-        ><button id="printToggle" class="light icon-only" type="button" aria-expanded="false" title="프린트" aria-label="프린트"><span class="iconoir-mount" data-iconoir="printer" aria-hidden="true"></span></button>
+-      </div>
+-    </header>
+     <div class="app">
+       <aside>
+         <fieldset>
+@@ -10720,30 +10710,5 @@
+           <div id="status" class="status">파일을 선택하세요.</div>
+           <div id="tableWrap" class="table-wrap hidden"><table id="preview"></table></div>
+         </fieldset>
+-        <fieldset id="projectBox" class="hidden">
+-          <legend>2. 프로젝트</legend>
+-          <label
+-            >프로젝트 이름<input
+-              id="projectName"
+-              type="text"
+-              maxlength="120"
+-              placeholder="새 프로젝트"
+-              autocomplete="off"
+-          /></label>
+-          <div class="row">
+-            <button id="exportProject" type="button" class="light">FFPX 내보내기</button
+-            ><button id="importProject" type="button" class="light">FFPX 불러오기</button>
+-          </div>
+-          <input
+-            id="importProjectFile"
+-            type="file"
+-            accept=".ffpx,application/zip"
+-            class="hidden"
+-          />
+-          <div class="hint">
+-            프로젝트 이름과 설정은 project.xml에, 그래프 데이터는 CSV에, 이미지는 원본 파일로
+-            저장합니다.
+-          </div>
+-        </fieldset>
+         <fieldset id="buildBox" class="hidden">
+           <legend>2. 그래프 설정</legend>
+@@ -10985,45 +10950,3 @@
+           <div class="hint">선택한 슬롯의 설정은 변경 즉시 적용됩니다.</div>
+         </fieldset>
+-        <details class="palette">
+-          <summary>UI 색상</summary>
+-          <div id="paletteControls">
+-            <label>UI 강조색</label><input id="uiColor" type="color" value="#B0CFCE" /><label
+-              >UI 배경색</label
+-            ><input id="uiBackgroundColor" type="color" value="#FAFAFA" /><label
+-              >표면·입력 배경색</label
+-            ><input id="uiSurfaceColor" type="color" value="#FFFFFF" /><label>보조 글자색</label
+-            ><input id="uiMutedColor" type="color" value="#4F525D" /><label
+-              >약한 글자·아이콘색</label
+-            ><input id="uiSubtleColor" type="color" value="#94A3B8" /><label>비활성 배경색</label
+-            ><input id="uiDisabledBgColor" type="color" value="#E5E7EB" /><label
+-              >비활성 글자색</label
+-            ><input id="uiDisabledTextColor" type="color" value="#64748B" /><label
+-              >팝업·그림자색</label
+-            ><input id="uiShadowColor" type="color" value="#383A42" /><label>그래프 배경</label
+-            ><input id="paperColor" type="color" value="#FFFFFF" /><label>글자색</label
+-            ><input id="fontColor" type="color" value="#383A42" /><button
+-              id="applyUiPalette"
+-              class="light"
+-            >
+-              UI 색상 적용</button
+-            ><button id="resetUiPalette" class="light">UI 기본값으로 초기화</button>
+-          </div>
+-        </details>
+-        <details class="debug-box">
+-          <summary>디버그 로그</summary>
+-          <div class="row">
+-            <button
+-              id="toggleDebug"
+-              type="button"
+-              class="light setting-toggle"
+-              data-active="false"
+-              aria-pressed="false"
+-            >
+-              디버깅 켜기</button
+-            ><button id="saveDebug" type="button" class="light">로그 파일 저장</button
+-            ><button id="clearDebug" type="button" class="light">로그 지우기</button>
+-          </div>
+-          <pre id="debugLog" class="debug-log hidden"></pre>
+-        </details>
+-        <button id="readmeToggle" type="button" class="light">README</button>
+       </aside>
+@@ -11030,5 +10953,3 @@
+       </aside>
+-      <dialog id="readmeDialog" tabindex="-1">
+-        <div class="popup-heading"><strong>Fast figure README</strong></div>
+         <template id="readmeContent">
+         <div class="readme-content">
+@@ -11345,19 +11266,5 @@
+           </p>
+         </div>
+         </template>
+-        <button id="closeReadme" type="button" class="light">Close</button>
+-      </dialog>
+-      <div id="sidebarResizer" class="sidebar-resizer">
+-        <button
+-          id="sidebarToggle"
+-          class="sidebar-toggle"
+-          type="button"
+-          title="설정 패널 접기"
+-          aria-label="설정 패널 접기"
+-          aria-expanded="true"
+-        >
+-          ‹
+-        </button>
+-      </div>
+       <main>
+         <section id="layoutPanel" class="layout-panel hidden">
