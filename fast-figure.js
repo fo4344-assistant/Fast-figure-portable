@@ -3756,17 +3756,12 @@
         let dashboard = $("dashboard"),
           dashboardWidth = dashboard?.getBoundingClientRect().width || 0;
         if (!dashboardWidth) return;
-        let actual = dashboardZoomLocked
-            ? Math.max(
-                50,
-                Math.min(200, Math.round((dashboardWidth / dashboardReferenceWidth()) * 100)),
-              )
-            : Math.round(dashboardZoomIntent),
-          slider = $("dashboardZoom"),
-          output = $("dashboardZoomReset");
-        if (!dashboardZoomLocked) slider.value = actual;
-        output.textContent = `${actual}%`;
-        output.title = "기준 크기 100%로 복귀";
+        return dashboardZoomLocked
+          ? Math.max(
+              50,
+              Math.min(200, Math.round((dashboardWidth / dashboardReferenceWidth()) * 100)),
+            )
+          : Math.round(dashboardZoomIntent);
       }
       function installResizeObserver() {
         if (dashboardObserver) return;
@@ -3816,23 +3811,12 @@
         };
         return image.settings;
       }
-      function syncSlotContentTypeUi() {
-        let slot = getSelectedSlot(),
-          has = !!slot,
-          isImage = slot?.contentType === "image";
-        let showCsvPanel = has ? !isImage : activeAssetKind === "csv";
-        $("csvSelectionPanel").classList.toggle("hidden", !showCsvPanel);
-        if (isImage) $("buildBox").classList.add("hidden");
-        refreshCsvControls();
-        refreshImageControls();
-      }
       function updateFileAvailability() {
         let hasSlot = !!getSelectedSlot();
-        $("readmeToggle").classList.toggle("hidden", hasSlot);
-        $("projectBox").classList.toggle("hidden", hasSlot);
         if (hasSlot && appFSM.state.overlay === "readme")
           appFSM.send("CLOSE_OVERLAY", { reason: "slot-selected" });
-        syncSlotContentTypeUi();
+        refreshCsvControls();
+        refreshImageControls();
       }
       function updateGraphView() {
         debugLog("updateGraphView", { selectedSlotId });
@@ -8667,19 +8651,6 @@
           schema: payload?.schema || "plotly",
         });
       }
-      $("applyGrid").onclick = () => {
-        let r = +$("gridRows").value,
-          c = +$("gridCols").value;
-        if (r < 1 || c < 1 || r > 8 || c > 8) return status("행과 열은 1~8 사이여야 합니다.");
-        makeSlots(r, c);
-        applySlotStyle();
-      };
-      $("showSlotBorders").onclick = () => {
-        let button = $("showSlotBorders"),
-          active = button.dataset.active !== "true";
-        syncSettingToggle(button, active);
-        applySlotStyle();
-      };
       function applyDashboardZoom(resize = true, requestedValue = null) {
         if (requestedValue !== null && !dashboardZoomLocked)
           dashboardZoomIntent = Math.max(50, Math.min(200, Number(requestedValue) || 100));
