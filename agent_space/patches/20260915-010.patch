@@ -1,0 +1,222 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9828,3 +9828,2 @@
+       .layout-panel,
+-      .annotation-panel,
+       .print-panel {
+@@ -9851,3 +9850,2 @@
+       .layout-panel > *,
+-      .annotation-panel > *,
+       .print-panel > * {
+@@ -9862,3 +9860,1 @@
+-      .annotation-controls,
+-      .caption-heading,
+       .popup-heading {
+@@ -9874,85 +9870,4 @@
+-      .annotation-controls {
+-        justify-content: flex-start;
+-      }
+-      .annotation-controls strong,
+-      .caption-heading strong,
+-      .popup-heading strong {
++      .popup-heading strong {
+         font-size: var(--popup-heading-font-size);
+         line-height: 1;
+       }
+-      .annotation-controls button,
+-      .caption-heading button {
+-        box-sizing: border-box;
+-        width: auto;
+-        height: var(--toolbar-control-height);
+-        margin: 0;
+-        white-space: nowrap;
+-      }
+-      .annotation-hint {
+-        display: block;
+-        margin-top: var(--popup-divider-content-space);
+-      }
+-      .caption-popup {
+-        display: grid;
+-        gap: var(--popup-divider-content-space);
+-      }
+-      .caption-heading {
+-        justify-content: flex-start;
+-      }
+-      .caption-heading button,
+-      .caption-toggle-setting button {
+-        width: auto !important;
+-        min-width: 0;
+-        white-space: nowrap;
+-      }
+-      .caption-actions {
+-        display: flex;
+-        flex-wrap: wrap;
+-        gap: 8px;
+-      }
+-      .caption-actions button {
+-        width: auto;
+-        margin: 0;
+-      }
+-      .caption-settings {
+-        display: grid;
+-        grid-template-columns: repeat(2, minmax(0, 1fr));
+-        gap: 10px 12px;
+-      }
+-      .caption-settings label,
+-      .caption-toggle-setting {
+-        display: grid;
+-        gap: 4px;
+-        margin: 0;
+-        font-size: 12px;
+-        font-weight: 600;
+-      }
+-      .caption-settings input,
+-      .caption-settings select {
+-        box-sizing: border-box;
+-        height: var(--toolbar-control-height);
+-        margin: 0;
+-      }
+-      .caption-settings .caption-name-setting {
+-        grid-column: 1/-1;
+-      }
+-      .caption-toggle-setting button {
+-        box-sizing: border-box;
+-        width: auto;
+-        height: var(--toolbar-control-height);
+-        margin: 0;
+-        padding: 8px 12px;
+-        justify-self: start;
+-      }
+-      .caption-settings label,
+-      .caption-toggle-setting {
+-        align-content: start;
+-      }
+-      .caption-settings label > select,
+-      .caption-settings label > input,
+-      .caption-toggle-setting button {
+-        align-self: end;
+-      }
+-      .caption-popup > .hint {
+-        margin: 0;
+-      }
+@@ -9992,106 +9907,1 @@
+-      .label-settings {
+-        display: grid;
+-        grid-template-columns: minmax(0, 1fr) minmax(190px, 260px);
+-        gap: 16px;
+-        margin-top: 12px;
+-      }
+-      .label-setting-fields {
+-        order: 1;
+-      }
+-      .label-preview {
+-        order: 2;
+-      }
+-      .label-preview {
+-        position: relative;
+-        border: 1px dashed var(--line);
+-        border-radius: var(--slot-radius, 0px);
+-        background: var(--panel);
+-        overflow: hidden;
+-      }
+-      .label-preview-slot {
+-        position: absolute;
+-        box-sizing: border-box;
+-        border: 1px dashed var(--ui-color);
+-        border-radius: var(--slot-radius, 0px);
+-        background: var(--graph-bg, #fff);
+-        display: grid;
+-        place-items: center;
+-        color: #94a3b8;
+-        font-size: 11px;
+-        pointer-events: none;
+-      }
+-      .label-preview-slot::after {
+-        content: "슬롯 · 이동 가능 영역";
+-      }
+-      .label-preview-label {
+-        position: absolute;
+-        z-index: 2;
+-        border-radius: 4px;
+-        background: rgba(255, 255, 255, 0.94);
+-        color: var(--ink);
+-        font-weight: 800;
+-        line-height: 1.2;
+-        cursor: grab;
+-        touch-action: none;
+-        user-select: none;
+-        box-shadow: 0 1px 3px rgba(56, 58, 66, 0.18);
+-      }
+-      .label-preview-label.dragging {
+-        cursor: grabbing;
+-      }
+-      .label-setting-fields {
+-        display: grid;
+-        grid-template-columns: repeat(2, minmax(0, 1fr));
+-        gap: 8px;
+-        align-content: start;
+-      }
+-      .label-setting-fields label {
+-        margin: 0;
+-        font-size: 12px;
+-      }
+-      .label-setting-fields select,
+-      .label-setting-fields input {
+-        box-sizing: border-box;
+-        height: var(--toolbar-control-height);
+-        margin-top: 3px;
+-      }
+-      .label-format-setting {
+-        grid-column: 1/-1;
+-        display: grid;
+-        grid-template-columns: minmax(0, 1fr) auto;
+-        gap: 8px;
+-        align-items: end;
+-      }
+-      .label-format-setting > label {
+-        min-width: 0;
+-      }
+-      .label-format-setting #labelFormat {
+-        width: calc(100% - 18px);
+-      }
+-      .label-format-setting button {
+-        box-sizing: border-box;
+-        width: auto;
+-        height: var(--toolbar-control-height);
+-        margin: 0;
+-        padding: 8px 12px;
+-        white-space: nowrap;
+-      }
+-      .label-position-readout {
+-        grid-column: 1/-1;
+-        color: #64748b;
+-        font:
+-          12px/1.4 Consolas,
+-          monospace;
+-      }
+-      .label-position-reset {
+-        box-sizing: border-box;
+-        grid-column: 2;
+-        justify-self: end;
+-        align-self: start;
+-        width: auto;
+-        height: var(--toolbar-control-height);
+-        margin: 0;
+-        padding: 8px 12px;
+-        white-space: nowrap;
+-      }
+       .layout-controls {
+@@ -10645,3 +10455,2 @@
+-      .label-preview::after,
+       .preview-more td,
+       .dashboard-zoom-lock[aria-pressed="true"] {
+@@ -10665,3 +10474,2 @@
+       .layout-panel,
+-      .annotation-panel,
+       .print-panel {
+@@ -10674,4 +10482,0 @@
+-      .label-preview-label {
+-        background: color-mix(in srgb, var(--ui-surface) 94%, transparent);
+-        box-shadow: 0 1px 3px color-mix(in srgb, var(--ui-shadow) 18%, transparent);
+-      }
