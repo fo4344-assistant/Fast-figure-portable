@@ -1,0 +1,83 @@
+# 2026-09-15 ChatGPT 세션 중단 기록
+
+## 목적
+
+Mantine 전환 후 legacy UI 정리 작업을 계속하던 중 발생한 ChatGPT 웹 세션 연결 불안정과, 실제 GitHub 저장소 기준 작업 진행 지점을 기록합니다. 이 문서는 설계 결정 문서가 아니라 재개 및 복구용 실행 기록입니다.
+
+## 세션 문제 상황
+
+- 긴 GitHub/tool 연속 작업 중 ChatGPT 웹 세션이 반복적으로 끊기거나 한 응답이 끝까지 이어지지 않는 현상이 발생했습니다.
+- ChatGPT 연결이 끊겨도 이미 시작된 GitHub 작업과 GitHub Actions가 서버에서 계속 진행되는 경우가 실제로 확인되었습니다.
+- 이번에는 사용자가 세션 문제를 확인하는 동안에도 이전 작업 흐름에서 `20260915-005`와 `20260915-006` 기록/queue가 저장소에 추가되었고, `006` workflow까지 완료되었습니다.
+- 따라서 재접속 후에는 마지막 ChatGPT 화면 상태만 보고 작업 성공/실패를 판단하지 말고 GitHub `main`, patch 문서, 적용 커밋, workflow 결과를 다시 확인해야 합니다.
+- 이번 저장소 작업만으로 ChatGPT 측 정확한 장애 원인은 확정하지 못했습니다. Fast Figure 소스 실패와는 별개의 외부 세션/실행 안정성 문제로 취급합니다.
+
+## 이번 세션에서 복구 및 적용된 작업
+
+### 20260915-001
+
+- `20260914-019`~`20260914-024`에서 반복 실패했던 dead legacy layout helper cleanup을 현재 소스 기준으로 다시 작성해 정상 적용했습니다.
+- patch 적용, JavaScript syntax 검사, portable build, split/portable Chromium `file://` smoke test를 모두 통과했습니다.
+
+### 20260915-002
+
+- `20260915-001`에서 `syncLayoutMapSize()` 정의를 제거한 뒤 `installResizeObserver()`에 남아 있던 호출 2개를 제거했습니다.
+- 특정 resize callback에서만 `ReferenceError`가 발생할 수 있던 잔여 참조였습니다.
+- 전체 자동 검증을 통과했습니다.
+
+### 20260915-003
+
+- `20260915-001`에서 `renderLayout()`을 제거한 뒤 `clearAllSlotSelections()`에 남아 있던 호출 1개를 제거했습니다.
+- 특정 경로에서만 실행될 수 있던 잔여 참조였습니다.
+- 전체 자동 검증을 통과했습니다.
+
+### 20260915-004
+
+- 이미 제거된 native annotation DOM을 active Mantine annotation 경로가 다시 참조하지 않도록 분리했습니다.
+- Mantine label 설정 변경 경로에서 legacy native `renderLabelPreview()` projector 호출을 제거했습니다.
+- `applyCaptionSettings(false)`가 제거된 native caption control에 writeback하지 않도록 했고, 실제 dashboard caption 렌더링과 기존 EFSM notification은 유지했습니다.
+- 적용 커밋: `4fa58075cf3304e844c0ea83356ae77c2aea9a1f`.
+
+### 20260915-005
+
+- annotation ownership cleanup을 한 번에 수행하려던 patch입니다.
+- GitHub workflow의 `git apply --check`에서 실패했으며 source에는 적용되지 않았습니다.
+- patch와 설명 문서는 감사 기록으로 유지합니다.
+- source rollback은 필요하지 않습니다.
+
+### 20260915-006
+
+- 실패한 `005`를 더 작은 ownership/call-site 단위로 분리해 재작성한 첫 복구 patch입니다.
+- 제거된 native annotation control로 상태를 투영하던 `syncLabelControlsFromObject`, `syncCaptionControlsFromObject`와 관련 call site를 제거했습니다.
+- `renderDashboard()`의 absent `labelPreview` hook과 `setAnnotationEnabled()`의 native button writeback도 제거했습니다.
+- 전체 자동 검증을 통과했습니다.
+- 적용 커밋: `5e0760a6adad3ec8f054adf78219c610495bf545`.
+
+## 확인된 현재 중단 지점
+
+현재 기준점은 **`20260915-006` 적용 완료 상태**입니다.
+
+`20260915-005`는 실패 기록이므로 다시 적용하려고 하지 말고, `006` 이후의 작은 patch 단위로 계속 진행해야 합니다.
+
+다음 작업은 `agent_space/patches/20260915-006.md`의 Follow-up에 기록된 순서입니다.
+
+1. dead native label editor 함수 제거
+2. caption settings API 단순화 및 native caption installer 제거
+3. orphaned annotation CSS 제거
+4. 이후 print/export fallback DOM cleanup 진행
+
+## 구현 경계
+
+- `activeProject` annotation 상태, 기존 EFSM event/notification, 실제 dashboard label 렌더링, 실제 dashboard caption 렌더링, export 동작, Mantine overlay가 사용하는 geometry 계산은 유지합니다.
+- Mantine으로 이미 대체된 native control ownership과 DOM projection 경로만 제거합니다.
+- 제거된 native control을 hidden element로 다시 만들거나 obsolete 함수를 살리기 위한 임시 bridge를 추가하지 않습니다.
+- helper를 삭제하기 전에 executable reference를 다시 전수 검색합니다. 앞선 layout cleanup에서 syntax/build smoke test만으로 특정 interaction callback의 stale reference를 놓친 사례가 있었습니다.
+
+## 세션이 다시 끊길 때의 재개 절차
+
+1. 새 작업 전에 현재 `main`을 다시 읽습니다.
+2. 마지막 patch 문서와 queue commit 이후 `Apply agent patch ...` 커밋이 생성됐는지 확인합니다.
+3. 해당 GitHub Actions workflow의 최종 conclusion과 각 검증 단계 결과를 확인합니다.
+4. ChatGPT 연결이 끊긴 뒤 workflow가 완료된 경우 같은 patch를 다시 queue하지 않고 적용 커밋에서 이어갑니다.
+5. source 적용 전에 실패한 patch는 감사 기록으로 보존하고 현재 소스를 기준으로 새 번호의 patch를 작성합니다.
+6. 이전 ChatGPT 응답에서 보이지 않았던 새 patch/commit이 생겼을 가능성도 있으므로 다음 번호를 정하기 전에 `agent_space/patches`와 최근 commit을 다시 확인합니다.
