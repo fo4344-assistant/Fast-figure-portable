@@ -2196,7 +2196,6 @@
     const previewHeight = Math.max(120, reference.height * previewScale);
     const commit = (patch, eventName = "LABEL_SETTINGS_CHANGED") => {
       Object.assign(activeProject.labelSettings, patch);
-      renderLabelPreview();
       renderDashboard();
       schedulePlotResize();
       debugLog("mantine:label-settings", { ...activeProject.labelSettings });

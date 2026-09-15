@@ -7268,11 +7268,13 @@
             Math.min(4, Number($("captionLineHeight").value) || 1.45),
           );
         }
-        $("captionName").value = activeProject.captionName;
-        syncSettingToggle("captionNameBold", activeProject.captionNameBold);
-        $("captionFontFamily").value = activeProject.captionSettings.fontFamily;
-        $("captionFontSize").value = activeProject.captionSettings.fontSize;
-        $("captionLineHeight").value = activeProject.captionSettings.lineHeight;
+        if (fromControls) {
+          $("captionName").value = activeProject.captionName;
+          syncSettingToggle("captionNameBold", activeProject.captionNameBold);
+          $("captionFontFamily").value = activeProject.captionSettings.fontFamily;
+          $("captionFontSize").value = activeProject.captionSettings.fontSize;
+          $("captionLineHeight").value = activeProject.captionSettings.lineHeight;
+        }
         syncDashboardCaption();
         debugLog("annotation:caption-settings", {
           name: activeProject.captionName,
