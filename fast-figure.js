@@ -7093,7 +7093,6 @@
       function clearAllSlotSelections() {
         setSelectedSlot(null);
         layoutSelected.clear();
-        renderLayout();
       }
       function setAnnotationEnabled(kind, enabled) {
         let button = $(`${kind}Enabled`);
