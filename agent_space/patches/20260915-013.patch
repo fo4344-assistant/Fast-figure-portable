@@ -1,0 +1,53 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9826,7 +9826,6 @@
+         margin-left: auto;
+       }
+       .layout-panel,
+-      .annotation-panel,
+       .print-panel {
+         position: fixed;
+         z-index: 1000;
+@@ -9849,7 +9848,6 @@
+         overflow-y: hidden;
+       }
+       .layout-panel > *,
+-      .annotation-panel > *,
+       .print-panel > * {
+         min-width: var(--popup-min-content-width);
+       }
+@@ -9859,7 +9857,6 @@
+       .layout-panel > * {
+         min-width: 220px;
+       }
+-      .annotation-controls,
+       .caption-heading,
+       .popup-heading {
+         display: flex;
+@@ -9871,16 +9868,11 @@
+         padding-bottom: var(--popup-heading-divider-space);
+         border-bottom: 1px solid var(--line);
+       }
+-      .annotation-controls {
+-        justify-content: flex-start;
+-      }
+-      .annotation-controls strong,
+       .caption-heading strong,
+       .popup-heading strong {
+         font-size: var(--popup-heading-font-size);
+         line-height: 1;
+       }
+-      .annotation-controls button,
+       .caption-heading button {
+         box-sizing: border-box;
+         width: auto;
+@@ -9888,8 +9880,4 @@
+         margin: 0;
+         white-space: nowrap;
+       }
+-      .annotation-hint {
+-        display: block;
+-        margin-top: var(--popup-divider-content-space);
+-      }
+       .caption-popup {
