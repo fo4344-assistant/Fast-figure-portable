@@ -1,0 +1,45 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9828,3 +9828,2 @@
+       .layout-panel,
+-      .annotation-panel,
+       .print-panel {
+@@ -9851,3 +9850,2 @@
+       .layout-panel > *,
+-      .annotation-panel > *,
+       .print-panel > * {
+@@ -9862,33 +9860,23 @@
+-      .annotation-controls,
+       .caption-heading,
+       .popup-heading {
+         display: flex;
+         align-items: center;
+         gap: var(--popup-heading-gap);
+         height: calc(var(--toolbar-control-height) + var(--popup-heading-divider-space));
+         min-height: 0;
+         box-sizing: border-box;
+         padding-bottom: var(--popup-heading-divider-space);
+         border-bottom: 1px solid var(--line);
+       }
+-      .annotation-controls {
+-        justify-content: flex-start;
+-      }
+-      .annotation-controls strong,
+       .caption-heading strong,
+       .popup-heading strong {
+         font-size: var(--popup-heading-font-size);
+         line-height: 1;
+       }
+-      .annotation-controls button,
+       .caption-heading button {
+         box-sizing: border-box;
+         width: auto;
+         height: var(--toolbar-control-height);
+         margin: 0;
+         white-space: nowrap;
+       }
+-      .annotation-hint {
+-        display: block;
+-        margin-top: var(--popup-divider-content-space);
+-      }
