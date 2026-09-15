@@ -1,0 +1,31 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -7270,7 +7270,9 @@
+         }
+-        $("captionName").value = activeProject.captionName;
+-        syncSettingToggle("captionNameBold", activeProject.captionNameBold);
+-        $("captionFontFamily").value = activeProject.captionSettings.fontFamily;
+-        $("captionFontSize").value = activeProject.captionSettings.fontSize;
+-        $("captionLineHeight").value = activeProject.captionSettings.lineHeight;
++        if (fromControls) {
++          $("captionName").value = activeProject.captionName;
++          syncSettingToggle("captionNameBold", activeProject.captionNameBold);
++          $("captionFontFamily").value = activeProject.captionSettings.fontFamily;
++          $("captionFontSize").value = activeProject.captionSettings.fontSize;
++          $("captionLineHeight").value = activeProject.captionSettings.lineHeight;
++        }
+         syncDashboardCaption();
+         debugLog("annotation:caption-settings", {
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2197,8 +2197,7 @@
+     const commit = (patch, eventName = "LABEL_SETTINGS_CHANGED") => {
+       Object.assign(activeProject.labelSettings, patch);
+-      renderLabelPreview();
+       renderDashboard();
+       schedulePlotResize();
+       debugLog("mantine:label-settings", { ...activeProject.labelSettings });
+       appFSM.notify("labels", eventName);
+     };
