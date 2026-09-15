@@ -7067,27 +7067,7 @@
           "ANNOTATION_VISIBILITY_CHANGED",
         );
       }
-      function applyCaptionSettings(fromControls = true, notify = true) {
-        if (fromControls) {
-          activeProject.captionName = $("captionName").value;
-          activeProject.captionNameBold = $("captionNameBold").dataset.active === "true";
-          activeProject.captionSettings.fontFamily = $("captionFontFamily").value;
-          activeProject.captionSettings.fontSize = Math.max(
-            6,
-            Math.min(96, Number($("captionFontSize").value) || 14),
-          );
-          activeProject.captionSettings.lineHeight = Math.max(
-            0.8,
-            Math.min(4, Number($("captionLineHeight").value) || 1.45),
-          );
-        }
-        if (fromControls) {
-          $("captionName").value = activeProject.captionName;
-          syncSettingToggle("captionNameBold", activeProject.captionNameBold);
-          $("captionFontFamily").value = activeProject.captionSettings.fontFamily;
-          $("captionFontSize").value = activeProject.captionSettings.fontSize;
-          $("captionLineHeight").value = activeProject.captionSettings.lineHeight;
-        }
+      function applyCaptionSettings(notify = true) {
         syncDashboardCaption();
         debugLog("annotation:caption-settings", {
           name: activeProject.captionName,
@@ -7095,27 +7075,6 @@
           ...activeProject.captionSettings,
         });
         if (notify) appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
-      }
-      function installCaptionSettings() {
-        $("captionFontFamily").addEventListener("change", applyCaptionSettings);
-        ["captionFontSize", "captionLineHeight"].forEach((id) => {
-          let control = $(id);
-          control.addEventListener("change", applyCaptionSettings);
-          control.addEventListener("keydown", (event) => {
-            if (event.key === "Enter") event.target.blur();
-          });
-        });
-        applyCaptionSettings();
-      }
-      function installAnnotationPopup(kind) {
-        let toggle = $(`${kind}Toggle`);
-        toggle.onclick = (e) => {
-          e.stopPropagation();
-          syncPopupBounds();
-          appFSM.send("TOGGLE_OVERLAY", { overlay: kind, source: "toggle" });
-        };
-        $(`${kind}Enabled`).onclick = () =>
-          setAnnotationEnabled(kind, kind === "label" ? !activeProject.labelsEnabled : !activeProject.captionsEnabled);
       }
       function exportImageLoad(src) {
         return new Promise((resolve, reject) => {

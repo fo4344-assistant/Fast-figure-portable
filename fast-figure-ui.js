@@ -2413,7 +2413,7 @@
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-caption" });
     const commitSettings = (patch) => {
       Object.assign(activeProject.captionSettings, patch);
-      applyCaptionSettings(false);
+      applyCaptionSettings();
     };
     const changeText = (value) => {
       appFSM.send("CAPTION_TEXT_INPUT", {
