@@ -1485,40 +1485,6 @@
         button.setAttribute("aria-pressed", String(active));
         if (labels) button.textContent = labels[active ? 1 : 0];
       }
-      function syncLabelControlsFromObject(label) {
-        if (!label) return;
-        syncSettingToggle("labelEnabled", label.enabled, ["표시 안 함", "표시"]);
-        $("labelFormat").value = label.settings.format;
-        syncSettingToggle("labelParentheses", label.settings.parentheses === true);
-        $("labelOrder").value = label.settings.order;
-        $("labelFontFamily").value = label.settings.fontFamily;
-        $("labelFontSize").value = label.settings.fontSize;
-        $("labelPositionX").value = label.settings.x;
-        $("labelPositionY").value = label.settings.y;
-        renderLabelPreview();
-      }
-      function syncCaptionControlsFromObject(caption) {
-        if (!caption) return;
-        let slot = activeSlotCaptionTarget(),
-          view = activeCaptionView(caption);
-        syncSettingToggle("captionEnabled", caption.enabled, ["표시 안 함", "표시"]);
-        syncSettingToggle(
-          "slotCaptionMode",
-          caption.slotMode,
-          ["슬롯별 캡션", "슬롯별 캡션 사용 중"],
-        );
-        $("captionTargetInfo").textContent = slot
-          ? `${slotLabel(slot)} 슬롯 캡션 편집`
-          : "전체 캡션 편집";
-        $("captionName").value = caption.name;
-        $("captionName").disabled = !!slot;
-        syncSettingToggle("captionNameBold", caption.nameBold, ["이름 굵게", "이름 굵게"]);
-        $("captionNameBold").disabled = !!slot;
-        $("captionFontFamily").value = caption.settings.fontFamily;
-        $("captionFontSize").value = caption.settings.fontSize;
-        $("captionLineHeight").value = caption.settings.lineHeight;
-        syncDashboardCaption(view);
-      }
       function syncGraphWorkspaceState() {
         let slot = getSelectedSlot();
         if (!slot) return;
@@ -4122,7 +4088,6 @@
       }
       function renderDashboard() {
         let renderGeneration = ++dashboardRenderGeneration;
-        if ($("labelPreview")) renderLabelPreview();
         debugLog("renderDashboard", {
           selectedSlotId,
           charts: activeProject.charts.length,
@@ -5490,8 +5455,6 @@
           let control = $(key);
           if (control) control.value = value;
         });
-        syncLabelControlsFromObject(project.annotations.labels);
-        syncCaptionControlsFromObject(project.annotations.captions);
       }
       function captureProjectRuntimeState() {
         return {
@@ -7095,8 +7058,6 @@
         layoutSelected.clear();
       }
       function setAnnotationEnabled(kind, enabled) {
-        let button = $(`${kind}Enabled`);
-        syncSettingToggle(button, enabled, ["표시 안 함", "표시"]);
         if (kind === "label") activeProject.labelsEnabled = enabled;
         else activeProject.captionsEnabled = enabled;
         renderDashboard();
