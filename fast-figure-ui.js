@@ -2721,7 +2721,6 @@
       if (layoutSelected.has(slotId)) layoutSelected.delete(slotId);
       else layoutSelected.add(slotId);
       setSelectionRevision((revision) => revision + 1);
-      renderLayout();
     };
     const runLayoutCommand = (command) => {
       command();
@@ -2981,7 +2980,6 @@
               onClick: () => {
                 layoutSelected.clear();
                 setSelectionRevision((revision) => revision + 1);
-                renderLayout();
               },
             },
             "선택 해제",
@@ -2998,7 +2996,6 @@
     const clampNavbarWidth = (value) => Math.max(360, Math.min(620, value));
     const refreshDashboardAfterNavbarChange = () => {
       requestAnimationFrame(() => {
-        syncLayoutMapSize();
         schedulePlotResize();
       });
     };
@@ -3017,7 +3014,6 @@
       if (navbarDragRef.current !== event.pointerId) return;
       const width = clampNavbarWidth(event.clientX);
       setNavbarWidth(width);
-      syncLayoutMapSize();
       schedulePlotResize();
     };
     const stopNavbarResize = (event) => {
