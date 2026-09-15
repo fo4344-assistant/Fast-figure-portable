@@ -1,0 +1,23 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -3722,19 +3722,17 @@
+       function installResizeObserver() {
+         if (dashboardObserver) return;
+         let target = $("dashboard"),
+           area = $("graphArea"),
+           handleResize = () => {
+             applyDashboardZoom(false);
+             syncDashboardZoomDisplay();
+-            syncLayoutMapSize();
+             schedulePlotResize();
+           };
+         if (window.ResizeObserver) {
+           dashboardObserver = new ResizeObserver(() => {
+             applyReferenceGeometry(target);
+             syncDashboardZoomDisplay();
+-            syncLayoutMapSize();
+             schedulePlotResize();
+           });
+           dashboardObserver.observe(target);
+           graphAreaObserver = new ResizeObserver(handleResize);
