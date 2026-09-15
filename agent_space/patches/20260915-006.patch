@@ -1,0 +1,59 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1487,36 +1487,2 @@
+       }
+-      function syncLabelControlsFromObject(label) {
+-        if (!label) return;
+-        syncSettingToggle("labelEnabled", label.enabled, ["표시 안 함", "표시"]);
+-        $("labelFormat").value = label.settings.format;
+-        syncSettingToggle("labelParentheses", label.settings.parentheses === true);
+-        $("labelOrder").value = label.settings.order;
+-        $("labelFontFamily").value = label.settings.fontFamily;
+-        $("labelFontSize").value = label.settings.fontSize;
+-        $("labelPositionX").value = label.settings.x;
+-        $("labelPositionY").value = label.settings.y;
+-        renderLabelPreview();
+-      }
+-      function syncCaptionControlsFromObject(caption) {
+-        if (!caption) return;
+-        let slot = activeSlotCaptionTarget(),
+-          view = activeCaptionView(caption);
+-        syncSettingToggle("captionEnabled", caption.enabled, ["표시 안 함", "표시"]);
+-        syncSettingToggle(
+-          "slotCaptionMode",
+-          caption.slotMode,
+-          ["슬롯별 캡션", "슬롯별 캡션 사용 중"],
+-        );
+-        $("captionTargetInfo").textContent = slot
+-          ? `${slotLabel(slot)} 슬롯 캡션 편집`
+-          : "전체 캡션 편집";
+-        $("captionName").value = caption.name;
+-        $("captionName").disabled = !!slot;
+-        syncSettingToggle("captionNameBold", caption.nameBold, ["이름 굵게", "이름 굵게"]);
+-        $("captionNameBold").disabled = !!slot;
+-        $("captionFontFamily").value = caption.settings.fontFamily;
+-        $("captionFontSize").value = caption.settings.fontSize;
+-        $("captionLineHeight").value = caption.settings.lineHeight;
+-        syncDashboardCaption(view);
+-      }
+       function syncGraphWorkspaceState() {
+@@ -4123,4 +4089,3 @@
+       function renderDashboard() {
+         let renderGeneration = ++dashboardRenderGeneration;
+-        if ($("labelPreview")) renderLabelPreview();
+         debugLog("renderDashboard", {
+@@ -5489,7 +5454,5 @@
+         Object.entries(palette).forEach(([key, value]) => {
+           let control = $(key);
+           if (control) control.value = value;
+         });
+-        syncLabelControlsFromObject(project.annotations.labels);
+-        syncCaptionControlsFromObject(project.annotations.captions);
+       }
+@@ -7097,5 +7060,3 @@
+       function setAnnotationEnabled(kind, enabled) {
+-        let button = $(`${kind}Enabled`);
+-        syncSettingToggle(button, enabled, ["표시 안 함", "표시"]);
+         if (kind === "label") activeProject.labelsEnabled = enabled;
+         else activeProject.captionsEnabled = enabled;
