@@ -1,0 +1,11 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -4439,7 +4439,6 @@
+       function clearAllSlotSelections() {
+         setSelectedSlot(null);
+         layoutSelected.clear();
+-        renderLayout();
+       }
+       function setAnnotationEnabled(kind, enabled) {
+         let button = $(`${kind}Enabled`);
