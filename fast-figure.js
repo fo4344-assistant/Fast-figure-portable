@@ -3726,14 +3726,12 @@
           handleResize = () => {
             applyDashboardZoom(false);
             syncDashboardZoomDisplay();
-            syncLayoutMapSize();
             schedulePlotResize();
           };
         if (window.ResizeObserver) {
           dashboardObserver = new ResizeObserver(() => {
             applyReferenceGeometry(target);
             syncDashboardZoomDisplay();
-            syncLayoutMapSize();
             schedulePlotResize();
           });
           dashboardObserver.observe(target);
