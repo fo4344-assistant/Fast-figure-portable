@@ -1,0 +1,130 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9503,33 +9503,7 @@
+       details.palette[open] summary {
+         border-bottom: 1px solid var(--line);
+       }
+-      #buildBox > details {
+-        margin: 13px 0 0;
+-        padding: 11px 0 0;
+-        border-top: 2px solid var(--line);
+-      }
+-      #buildBox > details > summary {
+-        font-size: 16px;
+-        font-weight: 800;
+-        cursor: pointer;
+-      }
+-      #buildBox > details + details {
+-        margin-top: 15px;
+-      }
+-      #buildBox details details {
+-        margin: 9px 0 0 12px;
+-        padding: 0 0 0 11px;
+-        border-left: 2px solid var(--line);
+-      }
+-      #buildBox details details > summary {
+-        font-weight: 700;
+-        cursor: pointer;
+-      }
+-      #buildBox details details details {
+-        margin-left: 10px;
+-        border-left-style: dashed;
+-      }
+       #paletteControls {
+         padding: 0 11px 11px;
+       }
+@@ -9708,77 +9682,6 @@
+         grid-template-columns: 1fr 1fr;
+         gap: 5px;
+       }
+-      .axis-choice {
+-        display: flex;
+-        gap: 4px;
+-      }
+-      .axis-choice select:first-child {
+-        min-width: 0;
+-        flex: 1;
+-      }
+-      .axis-choice select:last-child {
+-        width: 64px;
+-      }
+-      .graph-objects {
+-        max-height: 150px;
+-        overflow: auto;
+-        margin-top: 8px;
+-        border: 1px solid var(--line);
+-        border-radius: 6px;
+-        background: #fff;
+-      }
+-      .graph-object {
+-        display: flex;
+-        align-items: center;
+-        gap: 7px;
+-        padding: 7px 8px;
+-        border-bottom: 1px solid var(--line);
+-        font-size: 12px;
+-        cursor: grab;
+-      }
+-      .graph-object.dragging {
+-        opacity: 0.45;
+-      }
+-      .graph-object.selected {
+-        outline: 2px solid var(--ui-color);
+-        outline-offset: -2px;
+-        background: color-mix(in srgb, var(--ui-color) 12%, #fff);
+-      }
+-      .graph-object:last-child {
+-        border-bottom: 0;
+-      }
+-      .graph-object-order {
+-        flex: 0 0 18px;
+-        height: 18px;
+-        border-radius: 50%;
+-        background: var(--object-color, var(--ui-color));
+-        font-size: 0;
+-      }
+-      .graph-object-text {
+-        flex: 1;
+-        min-width: 0;
+-      }
+-      .graph-object-color {
+-        flex: 0 0 auto;
+-        width: 24px !important;
+-        height: 24px !important;
+-        padding: 1px !important;
+-      }
+-      .graph-object-delete {
+-        flex: 0 0 auto !important;
+-        width: 20px !important;
+-        height: 20px !important;
+-        margin: 0 !important;
+-        padding: 0 !important;
+-        border: 0 !important;
+-        background: transparent !important;
+-        color: #64748b !important;
+-        font-size: 18px !important;
+-        line-height: 1;
+-      }
+-      .graph-object.empty {
+-        color: #64748b;
+-      }
+       .color {
+         display: flex;
+         align-items: center;
+@@ -10396,7 +10299,6 @@
+       button.light,
+       .help,
+       .help-popup,
+-      .graph-objects,
+       .debug-log,
+       .sidebar-toggle {
+         background: var(--ui-surface) !important;
+@@ -10431,7 +10333,4 @@
+       #readmeDialog::backdrop {
+         background: color-mix(in srgb, var(--ui-shadow) 28%, transparent);
+       }
+-      .graph-object.selected {
+-        background: color-mix(in srgb, var(--ui-color) 12%, var(--ui-surface));
+-      }
+     </style>
