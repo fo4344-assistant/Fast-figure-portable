@@ -1,0 +1,13 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -12280,8 +12280,6 @@
+         editing = null;
+         selectedSlotId = null;
+         selectedObjectIndex = null;
+         layoutSelected.clear();
+-        $("file").value = "";
+-        $("buildBox").classList.add("hidden");
+       }
+       function renderProjectObject(project = activeProject) {
+         setFileName();
