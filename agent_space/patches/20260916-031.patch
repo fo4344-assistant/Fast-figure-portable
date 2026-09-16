@@ -1,0 +1,42 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -10763,6 +10763,2 @@
+       }
+-      function setFileName(name = "") {
+-        let output = $("fileName");
+-        if (output) output.textContent = name || "선택된 파일 없음";
+-      }
+       function normalizeImageSettings(image) {
+@@ -12284,3 +12280,2 @@
+       function renderProjectObject(project = activeProject) {
+-        setFileName();
+         applySlotStyle(false, false);
+@@ -13158,3 +13153,2 @@
+         });
+-        setFileName(csv.name);
+         updateFileAvailability();
+@@ -13182,3 +13176,2 @@
+         });
+-        setFileName(image.name);
+         updateFileAvailability();
+@@ -13195,3 +13188,2 @@
+         });
+-        setFileName(image.name);
+         updateFileAvailability();
+@@ -13217,3 +13209,2 @@
+         });
+-        setFileName(image.name);
+         updateFileAvailability();
+@@ -13315,3 +13306,2 @@
+           } else image = createProjectImage(bytes, file.name, file.type, null, null, plan.path);
+-          setFileName(file.name);
+           refreshImageControls(image.id);
+@@ -13392,3 +13382,2 @@
+           }
+-          setFileName(file.name);
+           status(
+@@ -13581,3 +13570,2 @@
+           graphEditorSelectCsv(csv.id);
+-          setFileName(csv.name);
+         }
