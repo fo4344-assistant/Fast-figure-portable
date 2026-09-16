@@ -686,7 +686,6 @@
         selectedSlotId = !slot || (!hydrating && same) ? null : slot.id;
         editing = null;
         activeDataReady = false;
-        activeCsvId = null;
         activeImageId = null;
         activeAssetKind = null;
         selectedObjectIndex = null;
@@ -715,7 +714,6 @@
         slot.contentType = payload.type === "image" ? "image" : "graph";
         editing = null;
         activeDataReady = false;
-        activeCsvId = null;
         activeImageId = null;
         activeAssetKind = null;
         selectedObjectIndex = null;
@@ -814,7 +812,6 @@
         if (csv?.isDefaultEmpty === true)
           throw Error("프로젝트 기본 빈 CSV는 삭제할 수 없습니다.");
         activeProject.csvFiles = activeProject.csvFiles.filter((item) => item.id !== payload.csvId);
-        if (activeCsvId === payload.csvId) activeCsvId = null;
       }
       function applyImageObjectCreatedAction({ machine, payload }) {
         machine.assertWritable("images", "IMAGE_OBJECT_CREATED");
@@ -871,7 +868,6 @@
         columns = [];
         activeDataName = "";
         activeDataReady = false;
-        activeCsvId = null;
         activeImageId = null;
         activeAssetKind = null;
         $("file").value = "";
@@ -893,7 +889,6 @@
             editing,
             selectedObjectIndex,
             activeDataReady,
-            activeCsvId,
             activeImageId,
             activeAssetKind,
           };
@@ -905,7 +900,6 @@
           editing = null;
           selectedObjectIndex = null;
           activeDataReady = false;
-          activeCsvId = null;
           activeImageId = null;
           activeAssetKind = null;
           validateProjectObject(activeProject, { requireSlots: true });
@@ -916,7 +910,6 @@
           editing = previous.editing;
           selectedObjectIndex = previous.selectedObjectIndex;
           activeDataReady = previous.activeDataReady;
-          activeCsvId = previous.activeCsvId;
           activeImageId = previous.activeImageId;
           activeAssetKind = previous.activeAssetKind;
           throw error;
@@ -992,7 +985,6 @@
               slotContentType: slot.contentType,
               editing,
               selectedObjectIndex,
-              activeCsvId,
             }
           : null;
         try {
@@ -1015,7 +1007,6 @@
             slot.contentType = previous.slotContentType;
             editing = previous.editing;
             selectedObjectIndex = previous.selectedObjectIndex;
-            activeCsvId = previous.activeCsvId;
           }
           throw error;
         }
@@ -1428,7 +1419,6 @@
             removedGraphReference = removedReferences.removedGraphReferenceCount > 0,
             resetImageSlot = removedReferences.resetImageSlotCount > 0;
           selectedObjectIndex = null;
-          if (csvIds.has(activeCsvId)) activeCsvId = null;
           if (imageIds.has(activeImageId)) activeImageId = null;
           if (machine.state.assetPath && projectVfs.isTrashed(rewritePath(machine.state.assetPath))) {
             payload.clearAssetSelection = true;
@@ -1454,13 +1444,10 @@
         }
         activeAssetKind = kind;
         if (kind === "csv") {
-          activeCsvId = asset.id;
           activeImageId = null;
         } else if (kind === "image") {
-          activeCsvId = null;
           activeImageId = asset.id;
         } else {
-          activeCsvId = null;
           activeImageId = null;
         }
         machine.state = Object.freeze({
