@@ -1,0 +1,51 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9578,18 +9578,17 @@
+       aside .row button {
+         width: 100%;
+         max-width: 100%;
+         min-width: 0;
+         white-space: normal;
+         overflow-wrap: anywhere;
+         line-height: 1.25;
+       }
+       aside fieldset,
+       aside details,
+-      aside .row,
+-      aside .colors {
++      aside .row {
+         max-width: 100%;
+         min-width: 0;
+       }
+       .setting-toggle.active {
+         background: var(--accent) !important;
+       }
+@@ -9640,27 +9639,8 @@
+       .readme-content button {
+         width: auto;
+         height: var(--toolbar-control-height);
+         margin: 0;
+       }
+-      .colors {
+-        display: grid;
+-        grid-template-columns: 1fr 1fr;
+-        gap: 5px;
+-      }
+-      .color {
+-        display: flex;
+-        align-items: center;
+-        gap: 5px;
+-        font-size: 12px;
+-      }
+-      .color input {
+-        width: 35px;
+-        height: 27px;
+-        padding: 1px;
+-      }
+-      .color code {
+-        font-size: 11px;
+-      }
+       .toolbar {
+         display: flex;
+         flex-wrap: nowrap;
