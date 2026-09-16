@@ -9807,8 +9807,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
       .toolbar #layoutToggle,
       .toolbar #labelToggle,
-      .toolbar #captionToggle,
-      .toolbar #printToggle {
+      .toolbar #captionToggle {
         min-width: var(--toolbar-primary-control-min-width);
       }
       .toolbar #targetInfo {
@@ -9822,11 +9821,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         padding: 8px 12px;
         white-space: nowrap;
       }
-      #printToggle {
-        margin-left: auto;
-      }
-      .layout-panel,
-      .print-panel {
+      .layout-panel {
         position: fixed;
         z-index: 1000;
         top: calc(var(--header-height) + 10px);
@@ -9847,8 +9842,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       .layout-panel {
         overflow-y: hidden;
       }
-      .layout-panel > *,
-      .print-panel > * {
+      .layout-panel > * {
         min-width: var(--popup-min-content-width);
       }
       .layout-panel > #layoutMap {
@@ -9870,39 +9864,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       .popup-heading strong {
         font-size: var(--popup-heading-font-size);
         line-height: 1;
-      }
-      .print-controls {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px 12px;
-        margin-top: var(--popup-divider-content-space);
-      }
-      .print-controls label {
-        margin: 0;
-        font-size: 12px;
-        font-weight: 600;
-      }
-      .print-controls input,
-      .print-controls select {
-        box-sizing: border-box;
-        height: 38px;
-        margin-top: 4px;
-      }
-      .print-actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-top: 12px;
-      }
-      .print-actions button {
-        box-sizing: border-box;
-        width: auto;
-        height: var(--toolbar-control-height);
-        margin: 0;
-        white-space: nowrap;
-      }
-      .print-actions .hint {
-        margin: 0;
       }
       .layout-controls {
         position: relative;
@@ -10134,13 +10095,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         display: block;
         width: var(--icon-action-glyph-size);
         height: var(--icon-action-glyph-size);
-      }
-      .toolbar #printToggle.icon-only,
-      .print-actions button.icon-only {
-        width: var(--icon-action-button-size);
-        min-width: var(--icon-action-button-size);
-        height: var(--icon-action-button-size);
-        padding: 0;
       }
       .asset-selection-panel {
         margin-top: 10px;
@@ -10470,8 +10424,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       .help-popup {
         box-shadow: 0 8px 20px color-mix(in srgb, var(--ui-shadow) 20%, transparent);
       }
-      .layout-panel,
-      .print-panel {
+      .layout-panel {
         background: color-mix(in srgb, var(--ui-bg) 92%, transparent);
         box-shadow: 0 12px 28px color-mix(in srgb, var(--ui-shadow) 25%, transparent);
       }
