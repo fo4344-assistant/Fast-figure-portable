@@ -342,7 +342,6 @@
         layoutSelected = new Set(),
         activeDataName = "",
         activeDataReady = false,
-        activeCsvId = null,
         activeImageId = null,
         activeAssetKind = null,
         dashboardObserver = null,
@@ -3125,11 +3124,8 @@
         renderDashboard();
         status("프로젝트 파일을 슬롯에 연결했습니다.");
       }
-      function refreshCsvControls(selected = activeCsvId) {
-        let slot = getSelectedSlot(),
-          graphSlot = !!slot && slot.contentType !== "image";
-        if (getProjectCsv(selected)) activeCsvId = selected;
-        else if (graphSlot) activeCsvId = null;
+      function refreshCsvControls(selected = selectedProjectCsv()?.id) {
+        return getProjectCsv(selected) || null;
       }
       function refreshImageControls(selected = activeImageId ?? getSelectedSlot()?.imageId) {
         if (getProjectImage(selected)) activeImageId = Number(selected);
@@ -3224,7 +3220,6 @@
           chart = slot.chart ? getChart(slot.chart) : null,
           csv = projectCsv || createProjectCsv(matrix, sourceName),
           headerLines = headerLineCount(csv.headerLines, matrix);
-        activeCsvId = csv.id;
         if (chart) {
           let selection = graphDataSelection(matrix, headerLines, chart.editor);
           chart.editor.x = selection.x;
@@ -4255,11 +4250,9 @@
         if (!csv) throw Error("차트가 참조하는 프로젝트 CSV가 없습니다.");
         editing = chart;
         activeDataName = csv.name || "선택한 그래프 데이터";
-        activeCsvId = csv.id;
         activeDataReady = true;
         rows = csv.rows;
         columns = columnDefinitions(csv.rows, csv.headerLines);
-        refreshCsvControls(csv.id);
         selectedObjectIndex = null;
         debugLog("chart:activate", {
           chartId: id,
@@ -5375,7 +5368,6 @@
           selectedObjectIndex,
           activeDataName,
           activeDataReady,
-          activeCsvId,
           activeImageId,
           activeAssetKind,
           layoutSelected: new Set(layoutSelected),
@@ -5389,7 +5381,6 @@
         selectedObjectIndex = snapshot.selectedObjectIndex;
         activeDataName = snapshot.activeDataName;
         activeDataReady = snapshot.activeDataReady;
-        activeCsvId = snapshot.activeCsvId;
         activeImageId = snapshot.activeImageId;
         activeAssetKind = snapshot.activeAssetKind;
         layoutSelected = new Set(snapshot.layoutSelected);
@@ -5402,7 +5393,6 @@
         selectedObjectIndex = null;
         activeDataName = "";
         activeDataReady = false;
-        activeCsvId = null;
         activeImageId = null;
         activeAssetKind = null;
         layoutSelected.clear();
@@ -6484,7 +6474,6 @@
           previousRuntime = {
             activeDataName,
             activeDataReady,
-            activeCsvId,
           };
         try {
           let bytes = new Uint8Array(await file.arrayBuffer()),
@@ -6519,7 +6508,6 @@
               1,
               plan.path,
             );
-          refreshCsvControls(csv.id);
           if (slot) {
             activeDataName = file.name;
             activeDataReady = true;
@@ -6541,7 +6529,6 @@
         } catch (error) {
           activeDataName = previousRuntime.activeDataName;
           activeDataReady = previousRuntime.activeDataReady;
-          activeCsvId = previousRuntime.activeCsvId;
           if (
             csv &&
             !activeProject.charts.some((chart) => chartCsvIds(chart).includes(csv.id))
@@ -6786,11 +6773,10 @@
           let object = objects[selectedObjectIndex],
             csv = getProjectCsv(object.csvId);
           if (csv) {
-            activeCsvId = csv.id;
+            graphEditorSelectCsv(csv.id);
             activeDataName = csv.name;
             $("headerLines").value = csv.headerLines;
             loadData(csv.rows, csv.name);
-            refreshCsvControls(csv.id);
           }
           populateObjectForm(object);
         }

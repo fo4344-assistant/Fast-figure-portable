@@ -1446,7 +1446,7 @@
     const objects = chart ? ensureGraphObjects(chart) : [];
     const selectedIndex = Number.isInteger(selectedObjectIndex) && objects[selectedObjectIndex] ? selectedObjectIndex : null;
     const selected = selectedIndex === null ? null : objects[selectedIndex];
-    const activeCsv = getProjectCsv(selected?.csvId) || selectedProjectCsv() || activeProject.csvFiles[0] || null;
+    const activeCsv = getProjectCsv(selected?.csvId) || getProjectCsv(objects[0]?.csvId) || selectedProjectCsv() || activeProject.csvFiles[0] || null;
     const csvOptions = activeProject.csvFiles.map((csv) => ({ value: String(csv.id), label: csv.name }));
     const columns = activeCsv ? columnDefinitions(activeCsv.rows, activeCsv.headerLines) : [];
     const columnOptions = columns.map((column) => ({ value: column.id, label: column.label }));
