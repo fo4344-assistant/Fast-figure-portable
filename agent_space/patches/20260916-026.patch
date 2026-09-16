@@ -1,0 +1,31 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9625,17 +9625,6 @@
+       .hidden {
+         display: none !important;
+       }
+-      #readmeDialog {
+-        width: min(620px, calc(100vw - 32px));
+-        padding: 12px;
+-        border: 1px solid var(--line);
+-        border-radius: 9px;
+-        color: var(--ink);
+-        background: var(--panel);
+-      }
+-      #readmeDialog::backdrop {
+-        background: rgba(56, 58, 66, 0.28);
+-      }
+       .readme-content {
+         padding-top: var(--popup-divider-content-space);
+       }
+@@ -10254,8 +10243,5 @@
+       .layout-panel {
+         background: color-mix(in srgb, var(--ui-bg) 92%, transparent);
+         box-shadow: 0 12px 28px color-mix(in srgb, var(--ui-shadow) 25%, transparent);
+       }
+-      #readmeDialog::backdrop {
+-        background: color-mix(in srgb, var(--ui-shadow) 28%, transparent);
+-      }
+     </style>
+   </head>
