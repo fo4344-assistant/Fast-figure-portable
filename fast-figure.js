@@ -2064,37 +2064,6 @@
         issues.forEach((issue) => debugLog("audit:issue", issue, "warn"));
         return { summary, issues };
       }
-      function installHelpPopups() {
-        let popup = document.createElement("div");
-        popup.id = "helpPopup";
-        popup.className = "help-popup hidden";
-        document.body.append(popup);
-        document.addEventListener(
-          "click",
-          (e) => {
-            let label = e.target.closest?.("label");
-            if (label && label.querySelector(".help") && !e.target.closest?.(".help"))
-              e.preventDefault();
-          },
-          true,
-        );
-        document.addEventListener("click", (e) => {
-          let button = e.target.closest?.(".help");
-          if (!button) {
-            popup.classList.add("hidden");
-            popup.dataset.owner = "";
-            return;
-          }
-          e.preventDefault();
-          e.stopPropagation();
-          let rect = button.getBoundingClientRect();
-          popup.textContent = button.dataset.help || "";
-          popup.style.left = `${Math.min(rect.left, window.innerWidth - 276)}px`;
-          popup.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 100)}px`;
-          popup.classList.toggle("hidden", popup.dataset.owner === button.dataset.help);
-          popup.dataset.owner = popup.classList.contains("hidden") ? "" : button.dataset.help;
-        });
-      }
       function currentAxes(settings = {}) {
         let saved = settings.axes && typeof settings.axes === "object" ? settings.axes : {},
           axis = (key, savedAxis = {}) => ({
