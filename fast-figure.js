@@ -343,9 +343,7 @@
         return uiTelemetryState;
       }
       function status(message) {
-        let text = String(message ?? ""),
-          control = $("status");
-        if (control) control.textContent = text;
+        let text = String(message ?? "");
         publishUiTelemetry({ status: text });
         return text;
       }
