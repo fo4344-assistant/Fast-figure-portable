@@ -340,8 +340,6 @@
         selectedSlotId = null,
         pendingSlotContentType = "graph",
         layoutSelected = new Set(),
-        activeDataName = "",
-        activeDataReady = false,
         activeImageId = null,
         activeAssetKind = null,
         dashboardObserver = null,
@@ -684,7 +682,6 @@
         machine.assertWritable("workspace", "SELECT_SLOT");
         selectedSlotId = !slot || (!hydrating && same) ? null : slot.id;
         editing = null;
-        activeDataReady = false;
         activeImageId = null;
         activeAssetKind = null;
         selectedObjectIndex = null;
@@ -712,7 +709,6 @@
         }
         slot.contentType = payload.type === "image" ? "image" : "graph";
         editing = null;
-        activeDataReady = false;
         activeImageId = null;
         activeAssetKind = null;
         selectedObjectIndex = null;
@@ -863,10 +859,6 @@
         });
         if (editing && chartIds.has(editing.id)) editing = null;
         selectedObjectIndex = null;
-        rows = [];
-        columns = [];
-        activeDataName = "";
-        activeDataReady = false;
         activeImageId = null;
         activeAssetKind = null;
         $("file").value = "";
@@ -887,7 +879,6 @@
             selectedSlotId,
             editing,
             selectedObjectIndex,
-            activeDataReady,
             activeImageId,
             activeAssetKind,
           };
@@ -898,7 +889,6 @@
           else if (selectedSlotId === target.id) selectedSlotId = source.id;
           editing = null;
           selectedObjectIndex = null;
-          activeDataReady = false;
           activeImageId = null;
           activeAssetKind = null;
           validateProjectObject(activeProject, { requireSlots: true });
@@ -908,7 +898,6 @@
           selectedSlotId = previous.selectedSlotId;
           editing = previous.editing;
           selectedObjectIndex = previous.selectedObjectIndex;
-          activeDataReady = previous.activeDataReady;
           activeImageId = previous.activeImageId;
           activeAssetKind = previous.activeAssetKind;
           throw error;
@@ -3131,7 +3120,7 @@
         if (getProjectImage(selected)) activeImageId = Number(selected);
         else activeImageId = null;
       }
-      function headerLineCount(value, table = rows) {
+      function headerLineCount(value, table = []) {
         let count = Math.max(0, Math.trunc(Number(value) || 0));
         return Math.min(count, Array.isArray(table) ? table.length : 0);
       }
@@ -3139,7 +3128,7 @@
         let match = /^C([1-9]\d*)$/.exec(String(column || ""));
         return match ? Number(match[1]) - 1 : -1;
       }
-      function columnDefinitions(table = rows, headerLines = $("headerLines")?.value ?? 1) {
+      function columnDefinitions(table = [], headerLines = 1) {
         let width = (table || []).reduce(
             (max, row) => Math.max(max, Array.isArray(row) ? row.length : 0),
             0,
@@ -3152,7 +3141,7 @@
           return { id, index, name, label: name ? `${id} — ${name}` : id };
         });
       }
-      function dataRows(table = rows, headerLines = $("headerLines")?.value ?? 1) {
+      function dataRows(table = [], headerLines = 1) {
         return (table || []).slice(headerLineCount(headerLines, table));
       }
       function esc(v) {
@@ -3397,7 +3386,7 @@
           xIndex = columnIndex(c.x),
           yIndex = columnIndex(c.y);
         if (xIndex < 0 || yIndex < 0) return [];
-        dataRows(c.rows || rows, c.headerLines ?? 1).forEach((r) => {
+        dataRows(c.rows || [], c.headerLines ?? 1).forEach((r) => {
           let x = value(r?.[xIndex]),
             y = Number(r?.[yIndex]);
           if (x === "" || x === undefined || !Number.isFinite(y)) return;
@@ -4249,10 +4238,6 @@
           (chart.editor?.editable === false ? ensureDefaultCsv() : null);
         if (!csv) throw Error("차트가 참조하는 프로젝트 CSV가 없습니다.");
         editing = chart;
-        activeDataName = csv.name || "선택한 그래프 데이터";
-        activeDataReady = true;
-        rows = csv.rows;
-        columns = columnDefinitions(csv.rows, csv.headerLines);
         selectedObjectIndex = null;
         debugLog("chart:activate", {
           chartId: id,
@@ -4327,13 +4312,14 @@
         }
       }
       function applyGraphSettings() {
-        let target = getSelectedSlot();
-        if (!activeDataReady || !target) {
+        let target = getSelectedSlot(),
+          dataReady = rows.length > 0 && columns.length > 0;
+        if (!dataReady || !target) {
           debugLog("graph:apply-blocked", {
-            activeDataReady,
+            dataReady,
             slotId: target?.id ?? null,
             chartId: editing?.id ?? null,
-            reason: !activeDataReady ? "data-not-ready" : "slot-not-selected",
+            reason: !dataReady ? "data-not-ready" : "slot-not-selected",
           }, "warn");
           return;
         }
@@ -5361,38 +5347,26 @@
       }
       function captureProjectRuntimeState() {
         return {
-          rows,
-          columns,
           editing,
           selectedSlotId,
           selectedObjectIndex,
-          activeDataName,
-          activeDataReady,
           activeImageId,
           activeAssetKind,
           layoutSelected: new Set(layoutSelected),
         };
       }
       function restoreProjectRuntimeState(snapshot) {
-        rows = snapshot.rows;
-        columns = snapshot.columns;
         editing = snapshot.editing;
         selectedSlotId = snapshot.selectedSlotId;
         selectedObjectIndex = snapshot.selectedObjectIndex;
-        activeDataName = snapshot.activeDataName;
-        activeDataReady = snapshot.activeDataReady;
         activeImageId = snapshot.activeImageId;
         activeAssetKind = snapshot.activeAssetKind;
         layoutSelected = new Set(snapshot.layoutSelected);
       }
       function resetProjectRuntimeState() {
-        rows = [];
-        columns = [];
         editing = null;
         selectedSlotId = null;
         selectedObjectIndex = null;
-        activeDataName = "";
-        activeDataReady = false;
         activeImageId = null;
         activeAssetKind = null;
         layoutSelected.clear();
@@ -6470,11 +6444,7 @@
           slotId: slot?.id ?? null,
           source: "shared-loader",
         });
-        let csv = null,
-          previousRuntime = {
-            activeDataName,
-            activeDataReady,
-          };
+        let csv = null;
         try {
           let bytes = new Uint8Array(await file.arrayBuffer()),
             text = new TextDecoder().decode(bytes),
@@ -6509,8 +6479,6 @@
               plan.path,
             );
           if (slot) {
-            activeDataName = file.name;
-            activeDataReady = true;
             connectDataToSlot(slot, data, file.name, csv, { replaceSlotContent });
           }
           setFileName(file.name);
@@ -6521,14 +6489,12 @@
           );
           debugLog("fileLoad:complete", {
             name: file.name,
-            rows: rows.length,
+            rows: csv.rows.length,
             slotId: slot?.id ?? null,
             chartId: slot?.chart || null,
             csvId: csv.id,
           });
         } catch (error) {
-          activeDataName = previousRuntime.activeDataName;
-          activeDataReady = previousRuntime.activeDataReady;
           if (
             csv &&
             !activeProject.charts.some((chart) => chartCsvIds(chart).includes(csv.id))
@@ -6774,7 +6740,6 @@
             csv = getProjectCsv(object.csvId);
           if (csv) {
             graphEditorSelectCsv(csv.id);
-            activeDataName = csv.name;
             $("headerLines").value = csv.headerLines;
             loadData(csv.rows, csv.name);
           }
