@@ -1,0 +1,99 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9617,35 +9617,6 @@
+         color: #4f525d;
+         line-height: 1.4;
+       }
+-      .help {
+-        display: inline-grid !important;
+-        place-items: center;
+-        width: 18px !important;
+-        height: 18px !important;
+-        min-height: 0;
+-        margin: 0 0 0 4px !important;
+-        padding: 0 !important;
+-        border: 1px solid var(--line) !important;
+-        border-radius: 50% !important;
+-        background: #fff !important;
+-        color: var(--ink) !important;
+-        font-size: 12px !important;
+-        line-height: 1;
+-        vertical-align: middle;
+-      }
+-      .help-popup {
+-        position: fixed;
+-        z-index: 2147483647;
+-        max-width: 260px;
+-        padding: 9px 11px;
+-        border: 1px solid var(--line);
+-        border-radius: 7px;
+-        background: #fff;
+-        color: var(--ink);
+-        box-shadow: 0 8px 20px rgba(56, 58, 66, 0.2);
+-        font-size: 12px;
+-        line-height: 1.45;
+-      }
+       .status {
+         margin-top: 9px;
+         padding: 8px;
+@@ -10260,8 +10231,6 @@
+       select,
+       textarea,
+       button.light,
+-      .help,
+-      .help-popup,
+       .debug-log,
+       .sidebar-toggle {
+         background: var(--ui-surface) !important;
+@@ -10285,9 +10254,6 @@
+       .layout-map {
+         background: var(--ui-disabled-bg);
+       }
+-      .help-popup {
+-        box-shadow: 0 8px 20px color-mix(in srgb, var(--ui-shadow) 20%, transparent);
+-      }
+       .layout-panel {
+         background: color-mix(in srgb, var(--ui-bg) 92%, transparent);
+         box-shadow: 0 12px 28px color-mix(in srgb, var(--ui-shadow) 25%, transparent);
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -2064,37 +2064,6 @@
+         issues.forEach((issue) => debugLog("audit:issue", issue, "warn"));
+         return { summary, issues };
+       }
+-      function installHelpPopups() {
+-        let popup = document.createElement("div");
+-        popup.id = "helpPopup";
+-        popup.className = "help-popup hidden";
+-        document.body.append(popup);
+-        document.addEventListener(
+-          "click",
+-          (e) => {
+-            let label = e.target.closest?.("label");
+-            if (label && label.querySelector(".help") && !e.target.closest?.(".help"))
+-              e.preventDefault();
+-          },
+-          true,
+-        );
+-        document.addEventListener("click", (e) => {
+-          let button = e.target.closest?.(".help");
+-          if (!button) {
+-            popup.classList.add("hidden");
+-            popup.dataset.owner = "";
+-            return;
+-          }
+-          e.preventDefault();
+-          e.stopPropagation();
+-          let rect = button.getBoundingClientRect();
+-          popup.textContent = button.dataset.help || "";
+-          popup.style.left = `${Math.min(rect.left, window.innerWidth - 276)}px`;
+-          popup.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 100)}px`;
+-          popup.classList.toggle("hidden", popup.dataset.owner === button.dataset.help);
+-          popup.dataset.owner = popup.classList.contains("hidden") ? "" : button.dataset.help;
+-        });
+-      }
+       function currentAxes(settings = {}) {
+         let saved = settings.axes && typeof settings.axes === "object" ? settings.axes : {},
+           axis = (key, savedAxis = {}) => ({
