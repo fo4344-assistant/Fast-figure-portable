@@ -301,9 +301,7 @@
         }
       }
       const activeProject = new ProjectObject();
-      let rows = [],
-        columns = [],
-        editing = null,
+      let editing = null,
         selectedSlotId = null,
         pendingSlotContentType = "graph",
         layoutSelected = new Set(),
@@ -3117,27 +3115,6 @@
         activateChartModel(payload.chart.id);
         renderDashboard();
         return payload.chart;
-      }
-      function loadData(data, name, { showGraphControls = true } = {}) {
-        rows = dataTable(data);
-        columns = columnDefinitions(rows, $("headerLines")?.value ?? 1);
-        let options = columns
-          .map((column) => `<option value="${column.id}">${esc(column.label)}</option>`)
-          .join("");
-        $("xCol").innerHTML = options;
-        $("yCol").innerHTML = options;
-        let body = dataRows(rows, $("headerLines")?.value ?? 1),
-          numeric = columns.filter((column) =>
-            body.some(
-              (row) => row?.[column.index] !== "" && Number.isFinite(Number(row?.[column.index])),
-            ),
-          );
-        $("xCol").value = numeric[0]?.id || columns[0]?.id || "";
-        $("yCol").value =
-          numeric.find((column) => column.id !== $("xCol").value)?.id || columns[0]?.id || "";
-        $("buildBox").classList.toggle("hidden", !showGraphControls);
-        preview();
-        status(`${name}: ${body.length.toLocaleString()}행, ${columns.length}열`);
       }
       function tracesSingle(c) {
         let b = {},
@@ -6119,35 +6096,6 @@
         return loadDataFile(file, slot, {
           replaceSlotContent: slot?.contentType === "image",
         });
-      }
-      function clearPreview() {
-        $("tableWrap").classList.add("hidden");
-        $("preview").innerHTML = "";
-      }
-      function preview() {
-        if (!rows.length || !columns.length) return clearPreview();
-        $("tableWrap").classList.remove("hidden");
-        let body = rows
-          .slice(0, 30)
-          .map(
-            (row, rowIndex) =>
-              "<tr" +
-              (rowIndex < headerLineCount($("headerLines").value, rows)
-                ? ' class="preview-header"'
-                : "") +
-              ">" +
-              columns.map((column) => `<td>${esc(row?.[column.index] ?? "")}</td>`).join("") +
-              "</tr>",
-          )
-          .join("");
-        if (rows.length > 30)
-          body += `<tr class="preview-more"><td colspan="${columns.length}">...</td></tr>`;
-        $("preview").innerHTML =
-          "<thead><tr>" +
-          columns.map((column) => `<th>${esc(column.label)}</th>`).join("") +
-          "</tr></thead><tbody>" +
-          body +
-          "</tbody>";
       }
       function baseGraphObject(chart, csv = selectedProjectCsv()) {
         let editor = chart.editor || {};
