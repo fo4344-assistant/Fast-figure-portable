@@ -1,0 +1,177 @@
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -6310,174 +6310,4 @@
+         return next;
+       }
+-      function populateObjectForm(object) {
+-        if (!object) return;
+-        [
+-          ["xCol", "x"],
+-          ["yCol", "y"],
+-          ["xAxisSide", "xAxisSide"],
+-          ["yAxisSide", "yAxisSide"],
+-          ["chartType", "type"],
+-          ["legendName", "legendName"],
+-          ["lineWidth", "lineWidth"],
+-          ["lineDash", "lineDash"],
+-          ["markerSymbol", "markerSymbol"],
+-          ["markerSize", "markerSize"],
+-          ["barOpacity", "barOpacity"],
+-          ["barLineWidth", "barLineWidth"],
+-        ].forEach(([id, key]) => {
+-          $(id).value = object[key] ?? "";
+-        });
+-      }
+-      function selectGraphObject(index) {
+-        let objects = ensureGraphObjects(editing);
+-        let next = selectedObjectIndex === index ? null : index;
+-        appFSM.send(next === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", {
+-          index: next,
+-          direction: "fsm-to-model",
+-        });
+-        if (selectedObjectIndex !== null) {
+-          let object = objects[selectedObjectIndex],
+-            csv = getProjectCsv(object.csvId);
+-          if (csv) {
+-            graphEditorSelectCsv(csv.id);
+-            $("headerLines").value = csv.headerLines;
+-            loadData(csv.rows, csv.name);
+-          }
+-          populateObjectForm(object);
+-        }
+-        updateTypeSpecificOptions();
+-        renderGraphObjects(objects);
+-      }
+-      function saveGraphObjects(objects) {
+-        let target = getSelectedSlot(),
+-          chart = target?.chart && getChart(target.chart);
+-        if (!chart) {
+-          debugLog(
+-            "graph:objects-save-skipped",
+-            { slotId: target?.id ?? null, reason: "chart-not-found" },
+-            "warn",
+-          );
+-          return;
+-        }
+-        if (!selectedGraphObjectGuard()) {
+-          status("변경할 그래프 오브젝트를 먼저 선택하세요.");
+-          return;
+-        }
+-        debugLog("graph:objects-save", {
+-          slotId: target.id,
+-          chartId: chart.id,
+-          count: objects.length,
+-        });
+-        let payload = {
+-          chartId: chart.id,
+-          objects,
+-          index: selectedObjectIndex,
+-          direction: "fsm-to-model",
+-        };
+-        appFSM.send("GRAPH_OBJECTS_REPLACED", payload);
+-        chart = payload.chart;
+-        editing = chart;
+-        renderGraphObjects(chart.editor.objects);
+-        updateGraphView();
+-        appFSM.notify(
+-          "charts",
+-          payload.recovered
+-            ? "GRAPH_OBJECTS_DEFAULT_CREATED"
+-            : "GRAPH_OBJECTS_CHANGED",
+-        );
+-      }
+-      function renderGraphObjects(objects = []) {
+-        let box = $("graphObjects");
+-        box.replaceChildren();
+-        if (!objects.length) {
+-          let empty = document.createElement("div");
+-          empty.className = "graph-object empty";
+-          empty.textContent = "추가된 그래프 객체가 없습니다.";
+-          box.append(empty);
+-        } else
+-          objects.forEach((object, index) => {
+-            let fallback = DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+-              color = typeof object.color === "string" ? object.color : fallback,
+-              colorInputValue = /^#[0-9a-f]{6}$/i.test(color) ? color : fallback,
+-              item = document.createElement("div"),
+-              order = document.createElement("span"),
+-              text = document.createElement("span"),
+-              colorInput = document.createElement("input"),
+-              deleteButton = document.createElement("button");
+-            item.className =
+-              "graph-object" + (selectedObjectIndex === index ? " selected" : "");
+-            item.draggable = true;
+-            item.dataset.index = index;
+-            item.style.setProperty("--object-color", color);
+-            order.className = "graph-object-order";
+-            text.className = "graph-object-text";
+-            text.textContent = `${index + 1}. ${object.legendName || `${object.x} · ${object.y}`} · ${getProjectCsv(object.csvId)?.name || "CSV 없음"} · ${object.xAxisSide === "top" ? "위" : "아래"} X / ${object.yAxisSide === "right" ? "오른쪽" : "왼쪽"} Y`;
+-            colorInput.className = "graph-object-color";
+-            colorInput.type = "color";
+-            colorInput.value = colorInputValue;
+-            colorInput.setAttribute("aria-label", "그래프 객체 색상");
+-            deleteButton.className = "graph-object-delete";
+-            deleteButton.type = "button";
+-            deleteButton.setAttribute("aria-label", "그래프 객체 삭제");
+-            deleteButton.textContent = "×";
+-            item.append(order, text, colorInput, deleteButton);
+-            box.append(item);
+-          });
+-        let dragging = null;
+-        box.querySelectorAll(".graph-object[draggable]").forEach((item) => {
+-          item.onclick = (e) => {
+-            if (e.target.closest("input,button")) return;
+-            selectGraphObject(+item.dataset.index);
+-          };
+-          item.ondragstart = (e) => {
+-            dragging = +item.dataset.index;
+-            item.classList.add("dragging");
+-            e.dataTransfer.effectAllowed = "move";
+-          };
+-          item.ondragend = () => item.classList.remove("dragging");
+-          item.ondragover = (e) => e.preventDefault();
+-          item.ondrop = (e) => {
+-            e.preventDefault();
+-            let to = +item.dataset.index;
+-            if (dragging === null || dragging === to) return;
+-            let next = [...objects],
+-              moved = next.splice(dragging, 1)[0];
+-            next.splice(to, 0, moved);
+-            if (selectedObjectIndex === dragging) selectedObjectIndex = to;
+-            else if (dragging < selectedObjectIndex && selectedObjectIndex <= to)
+-              selectedObjectIndex--;
+-            else if (to <= selectedObjectIndex && selectedObjectIndex < dragging)
+-              selectedObjectIndex++;
+-            appFSM.send("SELECT_GRAPH_OBJECT", {
+-              index: selectedObjectIndex,
+-              direction: "fsm-to-model",
+-            });
+-            saveGraphObjects(next);
+-          };
+-          item.querySelector(".graph-object-color").oninput = (e) => {
+-            let next = [...objects];
+-            next[+item.dataset.index] = { ...next[+item.dataset.index], color: e.target.value };
+-            saveGraphObjects(next);
+-          };
+-          item.querySelector(".graph-object-delete").onclick = (e) => {
+-            e.stopPropagation();
+-            saveGraphObjects(objects.filter((_, index) => index !== +item.dataset.index));
+-            appFSM.send("CLEAR_GRAPH_OBJECT", {
+-              index: null,
+-              direction: "fsm-to-model",
+-            });
+-            renderGraphObjects(ensureGraphObjects(editing));
+-          };
+-        });
+-      }
+-      function updateTypeSpecificOptions() {
+-        let type = $("chartType").value,
+-          showLine = ["scatter", "lines+markers", "hidden"].includes(type),
+-          showMarker = ["markers", "lines+markers"].includes(type),
+-          showBar = type === "bar";
+-        $("lineOptions").classList.toggle("hidden", !showLine);
+-        $("markerOptions").classList.toggle("hidden", !showMarker);
+-        $("barOptions").classList.toggle("hidden", !showBar);
+-      }
+       function clearAllSlotSelections() {
+         setSelectedSlot(null);
