@@ -6291,18 +6291,17 @@
           direction: "ui-to-fsm",
         });
         activeDataName = csv.name;
-        $("headerLines").value = csv.headerLines;
-        loadData(csv.rows, csv.name, { showGraphControls: !!slot });
+        activeDataReady = true;
+        rows = csv.rows;
+        columns = columnDefinitions(csv.rows, csv.headerLines);
         setFileName(csv.name);
         updateFileAvailability();
-        activeDataReady = true;
         if (!slot) {
           status(`${csv.name}을 선택했습니다.`);
           return;
         }
         if (slot.contentType === "image")
           return status(`${csv.name}을 선택했습니다. 그래프 슬롯에서만 새 그래프를 추가할 수 있습니다.`);
-        renderGraphObjects(ensureGraphObjects(editing));
         status(`${csv.name}을 선택했습니다. 기존 그래프 데이터는 변경하지 않았습니다.`);
       }
       function selectImageFromTree(path) {
