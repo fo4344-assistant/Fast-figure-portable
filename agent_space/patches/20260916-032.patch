@@ -1,0 +1,90 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9531,35 +9531,2 @@
+       }
+-      :root {
+-        --data-action-button-width: 100%;
+-      }
+-      .file-picker {
+-        display: grid;
+-        width: 100%;
+-        min-width: 0;
+-        grid-template-columns: minmax(0, 1fr);
+-        gap: 8px;
+-      }
+-      .file-picker button {
+-        width: var(--data-action-button-width);
+-        max-width: 100%;
+-        margin: 0;
+-        white-space: normal;
+-      }
+-      .data-action-button {
+-        width: var(--data-action-button-width);
+-        max-width: 100%;
+-      }
+-      .file-picker button:disabled {
+-        background: #e5e7eb !important;
+-        color: #94a3b8 !important;
+-        cursor: not-allowed;
+-      }
+-      .file-name {
+-        flex: 1 1 0;
+-        min-width: 0;
+-        overflow-wrap: anywhere;
+-        color: #4f525d;
+-        font-size: 12px;
+-        line-height: 1.35;
+-      }
+       input,
+@@ -9614,6 +9581,5 @@
+-      .hint,
+-      .status {
++      .hint {
+         font-size: 12px;
+         color: #4f525d;
+         line-height: 1.4;
+       }
+@@ -9620,7 +9586,1 @@
+-      .status {
+-        margin-top: 9px;
+-        padding: 8px;
+-        background: transparent;
+-        border-radius: 0;
+-      }
+       .hidden {
+@@ -10194,5 +10154,3 @@
+-      .hint,
+-      .status,
+-      .file-name {
++      .hint {
+         color: var(--ui-muted) !important;
+       }
+@@ -10201,3 +10159,2 @@
+       }
+-      .file-picker button:disabled,
+       button:disabled,
+@@ -10231,11 +10188,2 @@
+     <div class="app">
+-      <aside>
+-        <fieldset>
+-          <legend>1. 데이터</legend>
+-          <div class="file-picker">
+-            <span id="fileName" class="file-name">선택된 파일 없음</span>
+-          </div>
+-          <div id="status" class="status">파일을 선택하세요.</div>
+-        </fieldset>
+-      </aside>
+         <template id="readmeContent">
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -7688,7 +7688,5 @@
+       function status(message) {
+-        let text = String(message ?? ""),
+-          control = $("status");
+-        if (control) control.textContent = text;
++        let text = String(message ?? "");
+         publishUiTelemetry({ status: text });
+         return text;
+       }
