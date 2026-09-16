@@ -1,0 +1,175 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -338,7 +338,5 @@
+         pendingSlotContentType = "graph",
+         layoutSelected = new Set(),
+-        activeDataName = "",
+-        activeDataReady = false,
+         activeImageId = null,
+         activeAssetKind = null,
+         dashboardObserver = null,
+@@ -681,7 +681,6 @@
+         machine.assertWritable("workspace", "SELECT_SLOT");
+         selectedSlotId = !slot || (!hydrating && same) ? null : slot.id;
+         editing = null;
+-        activeDataReady = false;
+         activeImageId = null;
+         activeAssetKind = null;
+         selectedObjectIndex = null;
+@@ -709,7 +709,6 @@
+         }
+         slot.contentType = payload.type === "image" ? "image" : "graph";
+         editing = null;
+-        activeDataReady = false;
+         activeImageId = null;
+         activeAssetKind = null;
+         selectedObjectIndex = null;
+@@ -858,9 +858,5 @@
+         if (editing && chartIds.has(editing.id)) editing = null;
+         selectedObjectIndex = null;
+-        rows = [];
+-        columns = [];
+-        activeDataName = "";
+-        activeDataReady = false;
+         activeImageId = null;
+         activeAssetKind = null;
+         $("file").value = "";
+@@ -884,7 +884,6 @@
+             selectedSlotId,
+             editing,
+             selectedObjectIndex,
+-            activeDataReady,
+             activeImageId,
+             activeAssetKind,
+           };
+@@ -895,6 +895,5 @@
+           editing = null;
+           selectedObjectIndex = null;
+-          activeDataReady = false;
+           activeImageId = null;
+           activeAssetKind = null;
+           validateProjectObject(activeProject, { requireSlots: true });
+@@ -905,6 +905,5 @@
+           editing = previous.editing;
+           selectedObjectIndex = previous.selectedObjectIndex;
+-          activeDataReady = previous.activeDataReady;
+           activeImageId = previous.activeImageId;
+           activeAssetKind = previous.activeAssetKind;
+           throw error;
+@@ -3128,4 +3128,4 @@
+-      function headerLineCount(value, table = rows) {
++      function headerLineCount(value, table = []) {
+         let count = Math.max(0, Math.trunc(Number(value) || 0));
+         return Math.min(count, Array.isArray(table) ? table.length : 0);
+       }
+@@ -3138,2 +3138,2 @@
+-      function columnDefinitions(table = rows, headerLines = $("headerLines")?.value ?? 1) {
++      function columnDefinitions(table = [], headerLines = 1) {
+         let width = (table || []).reduce(
+@@ -3151,3 +3151,3 @@
+-      function dataRows(table = rows, headerLines = $("headerLines")?.value ?? 1) {
++      function dataRows(table = [], headerLines = 1) {
+         return (table || []).slice(headerLineCount(headerLines, table));
+       }
+@@ -3650,3 +3650,3 @@
+         if (xIndex < 0 || yIndex < 0) return [];
+-        dataRows(c.rows || rows, c.headerLines ?? 1).forEach((r) => {
++        dataRows(c.rows || [], c.headerLines ?? 1).forEach((r) => {
+           let x = value(r?.[xIndex]),
+@@ -4245,8 +4245,4 @@
+         if (!csv) throw Error("차트가 참조하는 프로젝트 CSV가 없습니다.");
+         editing = chart;
+-        activeDataName = csv.name || "선택한 그래프 데이터";
+-        activeDataReady = true;
+-        rows = csv.rows;
+-        columns = columnDefinitions(csv.rows, csv.headerLines);
+         selectedObjectIndex = null;
+         debugLog("chart:activate", {
+@@ -4300,11 +4300,12 @@
+       function applyGraphSettings() {
+-        let target = getSelectedSlot();
+-        if (!activeDataReady || !target) {
++        let target = getSelectedSlot(),
++          dataReady = rows.length > 0 && columns.length > 0;
++        if (!dataReady || !target) {
+           debugLog("graph:apply-blocked", {
+-            activeDataReady,
++            dataReady,
+             slotId: target?.id ?? null,
+             chartId: editing?.id ?? null,
+-            reason: !activeDataReady ? "data-not-ready" : "slot-not-selected",
++            reason: !dataReady ? "data-not-ready" : "slot-not-selected",
+           }, "warn");
+           return;
+         }
+@@ -5360,12 +5360,8 @@
+       function captureProjectRuntimeState() {
+         return {
+-          rows,
+-          columns,
+           editing,
+           selectedSlotId,
+           selectedObjectIndex,
+-          activeDataName,
+-          activeDataReady,
+           activeImageId,
+           activeAssetKind,
+           layoutSelected: new Set(layoutSelected),
+@@ -5375,11 +5375,7 @@
+       function restoreProjectRuntimeState(snapshot) {
+-        rows = snapshot.rows;
+-        columns = snapshot.columns;
+         editing = snapshot.editing;
+         selectedSlotId = snapshot.selectedSlotId;
+         selectedObjectIndex = snapshot.selectedObjectIndex;
+-        activeDataName = snapshot.activeDataName;
+-        activeDataReady = snapshot.activeDataReady;
+         activeImageId = snapshot.activeImageId;
+         activeAssetKind = snapshot.activeAssetKind;
+         layoutSelected = new Set(snapshot.layoutSelected);
+@@ -5388,11 +5388,7 @@
+       function resetProjectRuntimeState() {
+-        rows = [];
+-        columns = [];
+         editing = null;
+         selectedSlotId = null;
+         selectedObjectIndex = null;
+-        activeDataName = "";
+-        activeDataReady = false;
+         activeImageId = null;
+         activeAssetKind = null;
+         layoutSelected.clear();
+@@ -6465,6 +6465,2 @@
+-        let csv = null,
+-          previousRuntime = {
+-            activeDataName,
+-            activeDataReady,
+-          };
++        let csv = null;
+         try {
+@@ -6498,5 +6498,2 @@
+-          if (slot) {
+-            activeDataName = file.name;
+-            activeDataReady = true;
++          if (slot)
+             connectDataToSlot(slot, data, file.name, csv, { replaceSlotContent });
+-          }
+@@ -6515,4 +6515,4 @@
+           debugLog("fileLoad:complete", {
+             name: file.name,
+-            rows: rows.length,
++            rows: csv.rows.length,
+             slotId: slot?.id ?? null,
+@@ -6525,4 +6525,2 @@
+         } catch (error) {
+-          activeDataName = previousRuntime.activeDataName;
+-          activeDataReady = previousRuntime.activeDataReady;
+           if (
+@@ -6765,6 +6765,5 @@
+           if (csv) {
+             graphEditorSelectCsv(csv.id);
+-            activeDataName = csv.name;
+             $("headerLines").value = csv.headerLines;
+             loadData(csv.rows, csv.name);
+           }
