@@ -3183,29 +3183,6 @@
           showValues: $(key + "Values").dataset.active === "true",
         };
       }
-      function chartLayoutSettingsFromForm(chart) {
-        if (!chart?.editor) throw Error("선택한 슬롯의 그래프가 없습니다.");
-        let previous = readGlobalSettings(chart),
-          previousAxes = previous.axes || {};
-        return {
-          title: $("title").value,
-          globalSettings: {
-            ...previous,
-            showLegend: $("showLegend").dataset.active === "true",
-            showTitle: $("showTitle").dataset.active === "true",
-            showZeroLine: $("showZeroLine").dataset.active === "true",
-            graphFontFamily: $("graphFontFamily").value.trim(),
-            titleFontSize: $("titleFontSize").value,
-            legendFontSize: $("legendFontSize").value,
-            axes: {
-              xBottom: { ...(previousAxes.xBottom || {}), ...readAxis("xBottom") },
-              xTop: { ...(previousAxes.xTop || {}), ...readAxis("xTop") },
-              yLeft: { ...(previousAxes.yLeft || {}), ...readAxis("yLeft") },
-              yRight: { ...(previousAxes.yRight || {}), ...readAxis("yRight") },
-            },
-          },
-        };
-      }
       function configFromForm() {
         let target = getSelectedSlot(),
           previous = editing;
@@ -4120,72 +4097,6 @@
           sourceName: csv.name,
         });
         return chart;
-      }
-      function applyGraphLayoutSettings() {
-        let target = getSelectedSlot(),
-          chart = target?.chart ? getChart(target.chart) : null;
-        if (!target || target.contentType === "image" || !chart) {
-          debugLog("graph:layout-apply-blocked", {
-            slotId: target?.id ?? null,
-            chartId: chart?.id ?? null,
-            reason: !target
-              ? "slot-not-selected"
-              : target.contentType === "image"
-                ? "graph-slot-not-selected"
-                : "chart-not-found",
-          }, "warn");
-          return;
-        }
-        try {
-          let form = chartLayoutSettingsFromForm(chart),
-            payload = {
-              slotId: target.id,
-              chartId: chart.id,
-              title: form.title,
-              globalSettings: form.globalSettings,
-              direction: "fsm-to-model",
-            };
-          appFSM.send("CHART_LAYOUT_CHANGED", payload);
-          let plot = $(`plot-${target.id}`);
-          if (plot) {
-            let renderGeneration = dashboardRenderGeneration,
-              currentPlot = () =>
-                renderGeneration === dashboardRenderGeneration &&
-                plot.isConnected &&
-                plot === document.getElementById(`plot-${target.id}`) &&
-                getSelectedSlot()?.id === target.id &&
-                getChart(target.chart) === chart;
-            let figure = chartFigure(chart);
-            programmaticPlotlyRelayout.set(
-              plot,
-              (programmaticPlotlyRelayout.get(plot) || 0) + 1,
-            );
-            Promise.resolve(Plotly.react(
-              plot,
-              figure.data,
-              figure.layout,
-              plotlyConfig(chart, { ...figure.config, staticPlot: false }),
-            ))
-              .catch((error) => {
-                if (!currentPlot()) return;
-                debugLog("plotly:relayout-error", {
-                  slotId: target.id,
-                  chartId: chart.id,
-                  message: error?.message || String(error),
-                });
-                status("그래프 레이아웃 변경 오류: " + (error?.message || error));
-              })
-              .finally(() => {
-                let pending = (programmaticPlotlyRelayout.get(plot) || 1) - 1;
-                if (pending > 0) programmaticPlotlyRelayout.set(plot, pending);
-                else programmaticPlotlyRelayout.delete(plot);
-              });
-          }
-          debugLog("graph:layout-apply", { slotId: target.id, chartId: chart.id });
-        } catch (error) {
-          debugLog("graph:layout-apply-error", error, "error");
-          status(error.message);
-        }
       }
       function applyGraphSettings() {
         let target = getSelectedSlot(),
