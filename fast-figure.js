@@ -1852,12 +1852,18 @@
             selectedSlotId,
             pendingSlotContentType,
             selectedObjectIndex,
-            activeCsvId,
-            activeDataName,
             palette: project.appearance.uiPalette,
           }),
         });
       const appFSM = new ApplicationStateMachine(projectObjects, APP_STATE_DEFINITIONS);
+      function selectedProjectAsset() {
+        let path = appFSM.state.assetPath;
+        return path ? projectVfs.resolve(path) : null;
+      }
+      function selectedProjectCsv() {
+        let selected = selectedProjectAsset();
+        return selected?.kind === "csv" ? selected.asset : null;
+      }
       const ALLOWED_CHART_TYPES = new Set(["scatter", "markers", "lines+markers", "bar", "hidden"]);
       const ALLOWED_LINE_DASHES = new Set(["solid", "dot", "dash", "dashdot"]);
       const ALLOWED_MARKER_SYMBOLS = new Set([
@@ -6290,10 +6296,6 @@
           path: projectAssetPath(csv),
           direction: "ui-to-fsm",
         });
-        activeDataName = csv.name;
-        activeDataReady = true;
-        rows = csv.rows;
-        columns = columnDefinitions(csv.rows, csv.headerLines);
         setFileName(csv.name);
         updateFileAvailability();
         if (!slot) {
@@ -6607,7 +6609,7 @@
           body +
           "</tbody>";
       }
-      function baseGraphObject(chart, csv = getProjectCsv(activeCsvId)) {
+      function baseGraphObject(chart, csv = selectedProjectCsv()) {
         let editor = chart.editor || {};
         if (!csv) throw Error("그래프 오브젝트에 연결할 프로젝트 CSV가 없습니다.");
         let selection = graphDataSelection(csv.rows, csv.headerLines, editor);
@@ -6633,7 +6635,7 @@
         chart.editor = chart.editor || {};
         if (!Array.isArray(chart.editor.objects)) chart.editor.objects = [];
         chart.editor.objects = chart.editor.objects.map((object, index) => {
-          let csv = getProjectCsv(object?.csvId) || getProjectCsv(activeCsvId) || activeProject.csvFiles[0];
+          let csv = getProjectCsv(object?.csvId) || selectedProjectCsv() || activeProject.csvFiles[0];
           if (!csv)
             throw Error(`그래프 객체 ${index + 1}에 연결할 프로젝트 CSV가 없습니다.`);
           let selection = graphDataSelection(csv.rows, csv.headerLines, object || {});
@@ -6669,9 +6671,6 @@
       function graphEditorSelectCsv(csvId) {
         let csv = getProjectCsv(Number(csvId));
         if (!csv) return null;
-        activeCsvId = csv.id;
-        activeDataName = csv.name;
-        activeDataReady = true;
         appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(csv), direction: "ui-to-fsm" });
         appFSM.notify("data", "CSV_SELECTION_CHANGED");
         return csv;
@@ -6709,7 +6708,7 @@
         updated[index] = next;
         return graphEditorCommit(updated, index);
       }
-      function graphEditorAdd(csvId = activeCsvId) {
+      function graphEditorAdd(csvId = selectedProjectCsv()?.id) {
         let slot = getSelectedSlot(), csv = getProjectCsv(Number(csvId));
         if (!slot || slot.contentType === "image" || !csv) return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
         graphEditorSelectCsv(csv.id);
@@ -6741,10 +6740,6 @@
         let csv = getProjectCsv(Number(csvId));
         if (!csv) return null;
         csv.headerLines = headerLineCount(value, csv.rows);
-        if (activeCsvId === csv.id) {
-          rows = csv.rows;
-          columns = columnDefinitions(csv.rows, csv.headerLines);
-        }
         activeProject.charts.forEach((chart) => {
           if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id)) rebuildEditableGraph(chart);
         });
@@ -6765,7 +6760,6 @@
           delete chart.editor.conversionRows;
           graphEditorSelectCsv(csv.id);
           setFileName(csv.name);
-          refreshCsvControls(csv.id);
         }
         chart.editor.editable = next;
         if (next) rebuildEditableGraph(chart);
