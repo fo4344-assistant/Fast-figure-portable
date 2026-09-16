@@ -1,0 +1,171 @@
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1820,10 +1820,8 @@
+         ["normalizeGlobalSettings", () => typeof normalizeGlobalSettings === "function"],
+         ["normalizeImageSettings", () => typeof normalizeImageSettings === "function"],
+-        ["configFromForm", () => typeof configFromForm === "function"],
+         ["traces", () => typeof traces === "function"],
+         ["layout", () => typeof layout === "function"],
+         ["renderDashboard", () => typeof renderDashboard === "function"],
+         ["makeSlots", () => typeof makeSlots === "function"],
+-        ["applyGraphSettings", () => typeof applyGraphSettings === "function"],
+         ["applyImageSettingsFromValues", () => typeof applyImageSettingsFromValues === "function"],
+         ["projectClone", () => typeof projectClone === "function"],
+@@ -2170,7 +2168,2 @@
+       }
+-      function graphPalette() {
+-        return (
+-          editing?.editor?.objects?.map((object) => object.color).filter(Boolean) || DEFAULT_COLORS
+-        );
+-      }
+       function dashboardReferenceWidth() {
+@@ -3166,68 +3159,2 @@
+       }
+-      function readAxis(key) {
+-        return {
+-          title: $(key + "Title").value,
+-          min: $(key + "Min").value,
+-          max: $(key + "Max").value,
+-          tick: $(key + "Tick").value,
+-          tickMode: $(key + "TickMode").dataset.mode,
+-          minorTicks: $(key + "TickMode").dataset.minorTicks === "true",
+-          notation: $(key + "Notation").value,
+-          scaleType: $(key + "ScaleType").value,
+-          divide: $(key + "Divide").value,
+-          titleSize: $(key + "TitleSize").value,
+-          fontSize: $(key + "FontSize").value,
+-          lineWidth: $(key + "LineWidth").value,
+-          showGrid: $(key + "Grid").dataset.active === "true",
+-          visible: $(key + "Visible").dataset.active === "true",
+-          showValues: $(key + "Values").dataset.active === "true",
+-        };
+-      }
+-      function configFromForm() {
+-        let target = getSelectedSlot(),
+-          previous = editing;
+-        if (!previous) throw Error("선택한 슬롯의 그래프가 없습니다.");
+-        let previousAxes = previous.editor.globalSettings?.axes || {},
+-          axes = {
+-            xBottom: { ...(previousAxes.xBottom || {}), ...readAxis("xBottom") },
+-            xTop: { ...(previousAxes.xTop || {}), ...readAxis("xTop") },
+-            yLeft: { ...(previousAxes.yLeft || {}), ...readAxis("yLeft") },
+-            yRight: { ...(previousAxes.yRight || {}), ...readAxis("yRight") },
+-          },
+-          editor = {
+-            ...(previous.editor || {}),
+-            colors: graphPalette(),
+-            objects: previous.editor.objects || [],
+-            globalSettings: {
+-              ...(previous.editor.globalSettings || {}),
+-              showLegend: $("showLegend").dataset.active === "true",
+-              showTitle: $("showTitle").dataset.active === "true",
+-              showZeroLine: $("showZeroLine").dataset.active === "true",
+-              graphFontFamily: $("graphFontFamily").value.trim(),
+-              titleFontSize: $("titleFontSize").value,
+-              legendFontSize: $("legendFontSize").value,
+-              axes,
+-            },
+-            x: $("xCol").value,
+-            y: $("yCol").value,
+-            xAxisSide: $("xAxisSide").value,
+-            yAxisSide: $("yAxisSide").value,
+-            legendName: $("legendName").value,
+-            type: $("chartType").value,
+-            lineWidth: Math.max(0.1, Math.min(20, Number($("lineWidth").value) || 2)),
+-            lineDash: $("lineDash").value || "solid",
+-            markerSymbol: $("markerSymbol").value || "circle",
+-            markerSize: Math.max(1, Math.min(40, Number($("markerSize").value) || 6)),
+-            barOpacity: Math.max(0.05, Math.min(1, Number($("barOpacity").value) || 1)),
+-            barLineWidth: Math.max(0, Math.min(10, Number($("barLineWidth").value) || 0)),
+-            xDivide: 1,
+-            yDivide: 1,
+-            title: $("title").value || $("yCol").value,
+-          };
+-        return {
+-          ...previous,
+-          id: previous.id || activeProject.chartId++,
+-          editor,
+-        };
+-      }
+       function tracesSingle(c) {
+@@ -4100,80 +4027,2 @@
+       }
+-      function applyGraphSettings() {
+-        let target = getSelectedSlot(),
+-          dataReady = rows.length > 0 && columns.length > 0;
+-        if (!dataReady || !target) {
+-          debugLog("graph:apply-blocked", {
+-            dataReady,
+-            slotId: target?.id ?? null,
+-            chartId: editing?.id ?? null,
+-            reason: !dataReady ? "data-not-ready" : "slot-not-selected",
+-          }, "warn");
+-          return;
+-        }
+-        if (target.chart && !selectedGraphObjectGuard()) {
+-          debugLog("graph:apply-blocked", {
+-            activeDataReady,
+-            slotId: target.id,
+-            chartId: editing?.id ?? target.chart,
+-            reason: "graph-object-not-selected",
+-          }, "warn");
+-          return status("설정을 변경할 그래프 오브젝트를 먼저 선택하세요.");
+-        }
+-        try {
+-          if (editing && editing.editor.editable === false)
+-            return status("편집 가능 토글을 켠 뒤 설정을 변경하세요.");
+-          debugLog("graph:apply-start", {
+-            slotId: target.id,
+-            chartId: target.chart,
+-            selectedObjectIndex,
+-          });
+-          let c = configFromForm(),
+-            objects = ensureGraphObjects(editing),
+-            objectIndex = selectedGraphObjectGuard() ? selectedObjectIndex : null;
+-          if (objectIndex !== null && objects[objectIndex]) {
+-            objects = [...objects];
+-            let previous = objects[objectIndex];
+-            objects[objectIndex] = {
+-              ...previous,
+-              x: c.editor.x,
+-              y: c.editor.y,
+-              xAxisSide: c.editor.xAxisSide,
+-              yAxisSide: c.editor.yAxisSide,
+-              type: c.editor.type,
+-              legendName: c.editor.legendName,
+-              lineWidth: c.editor.lineWidth,
+-              lineDash: c.editor.lineDash,
+-              markerSymbol: c.editor.markerSymbol,
+-              markerSize: c.editor.markerSize,
+-              barOpacity: c.editor.barOpacity,
+-              barLineWidth: c.editor.barLineWidth,
+-            };
+-            c.editor.objects = objects;
+-          }
+-          if (!target.chart)
+-            throw Error("설정을 적용할 차트가 없습니다.");
+-          c.id = target.chart;
+-          c.editor.editable = true;
+-          let payload = {
+-            slotId: target.id,
+-            chartId: target.chart,
+-            chart: c,
+-            direction: "fsm-to-model",
+-          };
+-          appFSM.send("CHART_MODEL_REPLACED", payload);
+-          editing = payload.chart;
+-          renderGraphObjects(ensureGraphObjects(editing));
+-          updateGraphView();
+-          debugLog("graph:apply-complete", {
+-            slotId: target.id,
+-            chartId: c.id,
+-            objects: c.editor.objects?.length || 0,
+-            selectedObjectIndex,
+-          });
+-          auditApp("graph:apply");
+-        } catch (e) {
+-          debugLog("graph:apply-error", e, "error");
+-          status(e.message);
+-        }
+-      }
+       function mergeSelected() {
