@@ -3139,24 +3139,6 @@
         preview();
         status(`${name}: ${body.length.toLocaleString()}행, ${columns.length}열`);
       }
-      function refreshColumnControls() {
-        if (!rows.length) return;
-        let oldX = $("xCol").value,
-          oldY = $("yCol").value;
-        columns = columnDefinitions(rows, $("headerLines").value);
-        let options = columns
-          .map((column) => `<option value="${column.id}">${esc(column.label)}</option>`)
-          .join("");
-        $("xCol").innerHTML = options;
-        $("yCol").innerHTML = options;
-        $("xCol").value = columns.some((column) => column.id === oldX)
-          ? oldX
-          : columns[0]?.id || "";
-        $("yCol").value = columns.some((column) => column.id === oldY)
-          ? oldY
-          : columns[1]?.id || columns[0]?.id || "";
-        preview();
-      }
       function tracesSingle(c) {
         let b = {},
           colors = c.colors?.length ? c.colors : DEFAULT_COLORS,
@@ -4398,18 +4380,6 @@
           chart.editor.colors = objects.map((object) => object.color);
         }
         return chart;
-      }
-      function syncEditableUi(chart) {
-        let editable = chart ? chart.editor.editable !== false : true,
-          button = $("editorEditable");
-        syncSettingToggle(button, editable, ["원본 JSON", "편집 가능"]);
-        document
-          .querySelectorAll(
-            "#buildBox details input,#buildBox details select,#buildBox details button",
-          )
-          .forEach((control) => {
-            if (control.id !== "editorEditable") control.disabled = !editable;
-          });
       }
       function projectClone(value) {
         return JSON.parse(JSON.stringify(value));
@@ -6508,28 +6478,6 @@
         $("lineOptions").classList.toggle("hidden", !showLine);
         $("markerOptions").classList.toggle("hidden", !showMarker);
         $("barOptions").classList.toggle("hidden", !showBar);
-      }
-      function bindGraphNumberInputs(ids, apply) {
-        ids.forEach((id) => {
-          let control = $(id);
-          control.addEventListener("change", apply);
-          control.addEventListener("keydown", (event) => {
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            event.target.blur();
-          });
-        });
-      }
-      function bindGraphTextInputs(ids, apply) {
-        ids.forEach((id) => {
-          let control = $(id);
-          control.addEventListener("change", apply);
-          control.addEventListener("keydown", (event) => {
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            event.target.blur();
-          });
-        });
       }
       function clearAllSlotSelections() {
         setSelectedSlot(null);
