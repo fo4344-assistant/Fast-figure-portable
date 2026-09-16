@@ -1,0 +1,132 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -340,7 +340,5 @@
+         selectedSlotId = null,
+         pendingSlotContentType = "graph",
+         layoutSelected = new Set(),
+-        activeImageId = null,
+-        activeAssetKind = null,
+         dashboardObserver = null,
+         graphAreaObserver = null,
+@@ -682,7 +680,5 @@
+         machine.assertWritable("workspace", "SELECT_SLOT");
+         selectedSlotId = !slot || (!hydrating && same) ? null : slot.id;
+         editing = null;
+-        activeImageId = null;
+-        activeAssetKind = null;
+         selectedObjectIndex = null;
+         machine.state = Object.freeze({
+@@ -710,7 +706,5 @@
+         }
+         slot.contentType = payload.type === "image" ? "image" : "graph";
+         editing = null;
+-        activeImageId = null;
+-        activeAssetKind = null;
+         selectedObjectIndex = null;
+         machine.state = Object.freeze({
+@@ -860,7 +854,5 @@
+         });
+         if (editing && chartIds.has(editing.id)) editing = null;
+         selectedObjectIndex = null;
+-        activeImageId = null;
+-        activeAssetKind = null;
+         $("file").value = "";
+         payload.resetCount = targets.length;
+@@ -878,8 +870,6 @@
+           previous = {
+             selectedSlotId,
+             editing,
+             selectedObjectIndex,
+-            activeImageId,
+-            activeAssetKind,
+           };
+         try {
+@@ -888,17 +878,13 @@
+           if (selectedSlotId === source.id) selectedSlotId = target.id;
+           else if (selectedSlotId === target.id) selectedSlotId = source.id;
+           editing = null;
+           selectedObjectIndex = null;
+-          activeImageId = null;
+-          activeAssetKind = null;
+           validateProjectObject(activeProject, { requireSlots: true });
+         } catch (error) {
+           source.content = sourceContent;
+           target.content = targetContent;
+           selectedSlotId = previous.selectedSlotId;
+           editing = previous.editing;
+           selectedObjectIndex = previous.selectedObjectIndex;
+-          activeImageId = previous.activeImageId;
+-          activeAssetKind = previous.activeAssetKind;
+           throw error;
+         }
+@@ -1407,7 +1393,6 @@
+             removedGraphReference = removedReferences.removedGraphReferenceCount > 0,
+             resetImageSlot = removedReferences.resetImageSlotCount > 0;
+           selectedObjectIndex = null;
+-          if (imageIds.has(activeImageId)) activeImageId = null;
+           if (machine.state.assetPath && projectVfs.isTrashed(rewritePath(machine.state.assetPath))) {
+             payload.clearAssetSelection = true;
+           }
+@@ -1425,21 +1410,10 @@
+       function applyAssetSelectionAction({ machine, payload }) {
+         let kind = ["csv", "image", "directory"].includes(payload.kind) ? payload.kind : null,
+           match = payload.path ? projectVfs.resolve(payload.path) : null,
+           asset = match?.kind === kind ? match.asset : null,
+           path = kind === "directory" && match?.kind === "directory" ? match.path : asset ? projectAssetPath(asset) : null;
+-        if (!path) {
+-          kind = null;
+-        }
+-        activeAssetKind = kind;
+-        if (kind === "csv") {
+-          activeImageId = null;
+-        } else if (kind === "image") {
+-          activeImageId = asset.id;
+-        } else {
+-          activeImageId = null;
+-        }
+         machine.state = Object.freeze({
+           ...machine.state,
+           assetPath: path ?? null,
+         });
+       }
+@@ -3116,8 +3090,7 @@
+       function refreshCsvControls(selected = selectedProjectCsv()?.id) {
+         return getProjectCsv(selected) || null;
+       }
+-      function refreshImageControls(selected = activeImageId ?? getSelectedSlot()?.imageId) {
+-        if (getProjectImage(selected)) activeImageId = Number(selected);
+-        else activeImageId = null;
++      function refreshImageControls(selected = getSelectedSlot()?.imageId) {
++        return getProjectImage(selected) || null;
+       }
+       function headerLineCount(value, table = []) {
+@@ -5348,28 +5321,22 @@
+       function captureProjectRuntimeState() {
+         return {
+           editing,
+           selectedSlotId,
+           selectedObjectIndex,
+-          activeImageId,
+-          activeAssetKind,
+           layoutSelected: new Set(layoutSelected),
+         };
+       }
+       function restoreProjectRuntimeState(snapshot) {
+         editing = snapshot.editing;
+         selectedSlotId = snapshot.selectedSlotId;
+         selectedObjectIndex = snapshot.selectedObjectIndex;
+-        activeImageId = snapshot.activeImageId;
+-        activeAssetKind = snapshot.activeAssetKind;
+         layoutSelected = new Set(snapshot.layoutSelected);
+       }
+       function resetProjectRuntimeState() {
+         editing = null;
+         selectedSlotId = null;
+         selectedObjectIndex = null;
+-        activeImageId = null;
+-        activeAssetKind = null;
+         layoutSelected.clear();
+         $("file").value = "";
+         $("buildBox").classList.add("hidden");
+       }
