@@ -4916,8 +4916,6 @@
         selectedSlotId = null;
         selectedObjectIndex = null;
         layoutSelected.clear();
-        $("file").value = "";
-        $("buildBox").classList.add("hidden");
       }
       function renderProjectObject(project = activeProject) {
         setFileName();
