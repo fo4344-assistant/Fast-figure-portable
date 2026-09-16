@@ -1,0 +1,51 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -69,37 +69,4 @@
+         "#0997B3",
+         "#FAFAFA",
+       ];
+-      const GRAPH_FONT_OPTIONS = [
+-        ["", "자동"],
+-        ["Arial, sans-serif", "Arial"],
+-        ["Helvetica, Arial, sans-serif", "Helvetica"],
+-        ["Open Sans, Arial, sans-serif", "Open Sans"],
+-        ["Verdana, sans-serif", "Verdana"],
+-        ["Times New Roman, serif", "Times New Roman"],
+-        ["Georgia, serif", "Georgia"],
+-        ["Courier New, monospace", "Courier New"],
+-      ];
+-      function fillGraphFontSelect(id) {
+-        let control = $(id);
+-        if (!control) return;
+-        control.innerHTML = GRAPH_FONT_OPTIONS.map(
+-          ([value, label]) => `<option value="${value}">${label}</option>`,
+-        ).join("");
+-      }
+-      function setGraphFontSelectValue(id, value) {
+-        let control = $(id),
+-          normalized = typeof value === "string" ? value : "";
+-        if (!control) return;
+-        if (
+-          normalized &&
+-          !Array.from(control.options).some((option) => option.value === normalized)
+-        ) {
+-          let option = document.createElement("option");
+-          option.value = normalized;
+-          option.textContent = `기존: ${normalized}`;
+-          option.dataset.custom = "true";
+-          control.append(option);
+-        }
+-        control.value = normalized;
+-      }
+       function createProjectState() {
+         return {
+           kind: "fast-figure-project-object",
+@@ -2309,7 +2276,6 @@
+           );
+         });
+       }
+-      function graphColorInputs() {}
+       function graphPalette() {
+         return (
+           editing?.editor?.objects?.map((object) => object.color).filter(Boolean) || DEFAULT_COLORS
