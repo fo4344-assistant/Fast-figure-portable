@@ -1,0 +1,115 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -69,37 +69,4 @@
+         "#0997B3",
+         "#FAFAFA",
+       ];
+-      const GRAPH_FONT_OPTIONS = [
+-        ["", "자동"],
+-        ["Arial, sans-serif", "Arial"],
+-        ["Helvetica, Arial, sans-serif", "Helvetica"],
+-        ["Open Sans, Arial, sans-serif", "Open Sans"],
+-        ["Verdana, sans-serif", "Verdana"],
+-        ["Times New Roman, serif", "Times New Roman"],
+-        ["Georgia, serif", "Georgia"],
+-        ["Courier New, monospace", "Courier New"],
+-      ];
+-      function fillGraphFontSelect(id) {
+-        let control = $(id);
+-        if (!control) return;
+-        control.innerHTML = GRAPH_FONT_OPTIONS.map(
+-          ([value, label]) => `<option value="${value}">${label}</option>`,
+-        ).join("");
+-      }
+-      function setGraphFontSelectValue(id, value) {
+-        let control = $(id),
+-          normalized = typeof value === "string" ? value : "";
+-        if (!control) return;
+-        if (
+-          normalized &&
+-          !Array.from(control.options).some((option) => option.value === normalized)
+-        ) {
+-          let option = document.createElement("option");
+-          option.value = normalized;
+-          option.textContent = `기존: ${normalized}`;
+-          option.dataset.custom = "true";
+-          control.append(option);
+-        }
+-        control.value = normalized;
+-      }
+       function createProjectState() {
+@@ -1853,5 +1820,4 @@
+         ["normalizeGlobalSettings", () => typeof normalizeGlobalSettings === "function"],
+         ["normalizeImageSettings", () => typeof normalizeImageSettings === "function"],
+         ["configFromForm", () => typeof configFromForm === "function"],
+-        ["axisFields", () => typeof axisFields === "function"],
+         ["traces", () => typeof traces === "function"],
+@@ -2202,67 +2168,4 @@
+             ? "yRight"
+             : "yLeft";
+       }
+-      function syncAxisTickModeControl(key, mode, minorTicks = false) {
+-        let button = $(key + "TickMode"),
+-          tickInput = $(key + "Tick"),
+-          logScale = $(key + "ScaleType")?.value === "log",
+-          normalized = !logScale && mode === "increment" ? "increment" : "plotly";
+-        if (!button) return;
+-        button.dataset.mode = normalized;
+-        button.dataset.minorTicks = String(minorTicks === true);
+-        if (logScale) {
+-          button.textContent = minorTicks === true ? "minor tick 해제" : "minor tick 표시";
+-          button.setAttribute("aria-pressed", String(minorTicks === true));
+-          button.title = "major tick은 유지하고 로그축의 minor tick과 보조 격자만 전환";
+-        } else {
+-          button.textContent = normalized === "increment" ? "increment" : "tick 간격";
+-          button.setAttribute("aria-pressed", String(normalized === "increment"));
+-          button.title =
+-            normalized === "increment"
+-              ? "divide 적용 후 표시되는 축 값의 등간격"
+-              : "Plotly dtick 좌표 간격";
+-        }
+-        if (tickInput) {
+-          tickInput.hidden = logScale;
+-          tickInput.disabled = logScale;
+-        }
+-      }
+-      function axisFields() {
+-        let labels = {
+-          xBottom: "아래 X축",
+-          xTop: "위 X축",
+-          yLeft: "왼쪽 Y축",
+-          yRight: "오른쪽 Y축",
+-        };
+-        Object.entries(labels).forEach(([key, label]) => {
+-          let visible = key === "xBottom" || key === "yLeft",
+-            box = $(key + "Fields");
+-          if (!box) return;
+-          box.innerHTML = `<label>축 이름</label><input id="${key}Title" placeholder="${label}"><div class="row"><input id="${key}Min" type="number" placeholder="최소"><input id="${key}Max" type="number" placeholder="최대"></div><button id="${key}TickMode" type="button" class="light axis-tick-mode" data-mode="plotly" aria-pressed="false">tick 간격</button><input id="${key}Tick" type="number" step="any" placeholder="자동"><label>표기</label><select id="${key}Notation"><option value="none">숫자</option><option value="power">지수</option><option value="e">과학 표기</option></select><label>축 유형</label><select id="${key}ScaleType"><option value="linear">선형</option><option value="log">로그</option><option value="reciprocal">역수</option></select><label>값 나누기</label><input id="${key}Divide" type="number" value="1" step="any"><div class="row"><div><label>축 이름 크기</label><input id="${key}TitleSize" type="number" value="14"></div><div><label>숫자 크기</label><input id="${key}FontSize" type="number" value="12"></div></div><div class="row"><div><label>축선 굵기</label><input id="${key}LineWidth" type="number" value="1" min="0"></div><button id="${key}Grid" type="button" class="light setting-toggle active" data-active="true" aria-pressed="true">격자 표시</button><button id="${key}Visible" type="button" class="light setting-toggle${visible ? " active" : ""}" data-active="${visible}" aria-pressed="${visible}">축 표시</button><button id="${key}Values" type="button" class="light setting-toggle active" data-active="true" aria-pressed="true">값 표시</button></div>`;
+-          let tickMode = $(key + "TickMode");
+-          syncAxisTickModeControl(key, "plotly");
+-          tickMode.onclick = () => {
+-            if ($(key + "ScaleType").value === "log") {
+-              syncAxisTickModeControl(
+-                key,
+-                "plotly",
+-                tickMode.dataset.minorTicks !== "true",
+-              );
+-              applyGraphLayoutSettings();
+-              return;
+-            }
+-            let next = tickMode.dataset.mode === "increment" ? "plotly" : "increment";
+-            syncAxisTickModeControl(key, next);
+-            applyGraphLayoutSettings();
+-          };
+-          $(key + "ScaleType").addEventListener("change", () =>
+-            syncAxisTickModeControl(
+-              key,
+-              tickMode.dataset.mode,
+-              tickMode.dataset.minorTicks === "true",
+-            ),
+-          );
+-        });
+-      }
+-      function graphColorInputs() {}
+       function graphPalette() {
