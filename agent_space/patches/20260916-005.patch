@@ -1,0 +1,93 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -4274,89 +4274,6 @@
+         });
+         return chart;
+       }
+-      function editChart(id) {
+-        let c = getChart(id);
+-        if (!c) {
+-          debugLog("editChart:missing", { chartId: id });
+-          return;
+-        }
+-        let csv =
+-          getProjectCsv(c.editor?.objects?.[0]?.csvId) ||
+-          (c.editor?.editable === false ? ensureDefaultCsv() : null);
+-        if (!csv) throw Error("차트가 참조하는 프로젝트 CSV가 없습니다.");
+-        debugLog("editChart", {
+-          chartId: id,
+-          sourceName: csv.name,
+-        });
+-        setFileName(csv.name);
+-        editing = c;
+-        activeDataName = csv.name || "선택한 그래프 데이터";
+-        activeCsvId = csv.id;
+-        refreshCsvControls(csv.id);
+-        selectedObjectIndex = null;
+-        $("headerLines").value = csv.headerLines;
+-        loadData(csv.rows, activeDataName);
+-        activeDataReady = true;
+-        let map = { x: "xCol", y: "yCol", type: "chartType" };
+-        for (let k of [
+-          "x",
+-          "y",
+-          "xAxisSide",
+-          "yAxisSide",
+-          "type",
+-          "title",
+-          "legendName",
+-          "lineWidth",
+-          "lineDash",
+-          "markerSymbol",
+-          "markerSize",
+-          "barOpacity",
+-          "barLineWidth",
+-        ]) {
+-          let control = $(map[k] || k);
+-          if (control) control.value = c.editor[k];
+-          else debugLog("editChart:missing-control", { key: k, id: map[k] || k });
+-        }
+-        graphColorInputs(c.editor.colors);
+-        let settings = normalizeGlobalSettings(c),
+-          xAxis = settings.axes[axisKey("x", c.editor.xAxisSide)],
+-          yAxis = settings.axes[axisKey("y", c.editor.yAxisSide)];
+-        ["showLegend", "showTitle", "showZeroLine"].forEach((id) => {
+-          let active = settings[id] !== false;
+-          syncSettingToggle(id, active);
+-        });
+-        setGraphFontSelectValue("graphFontFamily", settings.graphFontFamily);
+-        ["titleFontSize", "legendFontSize"].forEach((id) => {
+-          $(id).value = settings[id] ?? "";
+-        });
+-        Object.entries(settings.axes).forEach(([key, axis]) =>
+-          Object.entries(axis).forEach(([name, value]) => {
+-            let suffix =
+-                { showGrid: "Grid", visible: "Visible", showValues: "Values" }[name] ||
+-                name[0].toUpperCase() + name.slice(1),
+-              control = $(key + suffix);
+-            if (control) {
+-              if (["showGrid", "visible", "showValues"].includes(name)) {
+-                let active = name === "showGrid" ? value === true : value !== false;
+-                syncSettingToggle(control, active);
+-              } else if (name === "tickMode" || name === "minorTicks")
+-                syncAxisTickModeControl(
+-                  key,
+-                  axis.tickMode,
+-                  axis.minorTicks === true,
+-                );
+-              else control.value = value ?? "";
+-            }
+-          }),
+-        );
+-        Object.entries(settings.axes).forEach(([key, axis]) =>
+-          syncAxisTickModeControl(key, axis.tickMode, axis.minorTicks === true),
+-        );
+-        renderGraphObjects(ensureGraphObjects(c));
+-        updateTypeSpecificOptions();
+-        syncEditableUi(c);
+-        status(`“${c.editor.title}” 그래프의 설정을 불러왔습니다.`);
+-      }
+       function applyGraphLayoutSettings() {
+         let target = getSelectedSlot(),
+           chart = target?.chart ? getChart(target.chart) : null;
