@@ -3397,10 +3397,6 @@
         let slot = selectedSlotId === null ? null : slotAt(selectedSlotId);
         return slot && !slot.hidden ? slot : null;
       }
-      function setFileName(name = "") {
-        let output = $("fileName");
-        if (output) output.textContent = name || "선택된 파일 없음";
-      }
       function normalizeImageSettings(image) {
         if (!image) return null;
         let settings = image.settings && typeof image.settings === "object" ? image.settings : {},
@@ -4918,7 +4914,6 @@
         layoutSelected.clear();
       }
       function renderProjectObject(project = activeProject) {
-        setFileName();
         applySlotStyle(false, false);
         applyUiPalette(false, false);
         syncDashboardCaption();
@@ -5791,7 +5786,6 @@
           path: projectAssetPath(csv),
           direction: "ui-to-fsm",
         });
-        setFileName(csv.name);
         updateFileAvailability();
         if (!slot) {
           status(`${csv.name}을 선택했습니다.`);
@@ -5815,7 +5809,6 @@
           path: projectAssetPath(image),
           direction: "ui-to-fsm",
         });
-        setFileName(image.name);
         updateFileAvailability();
         if (!slot) {
           status(`${image.name}을 선택했습니다.`);
@@ -5828,7 +5821,6 @@
           imageId: image.id,
           direction: "fsm-to-model",
         });
-        setFileName(image.name);
         updateFileAvailability();
         renderDashboard();
         status(`${image.name}을 선택 슬롯에 연결했습니다.`);
@@ -5850,7 +5842,6 @@
           model: image,
           direction: "fsm-to-model",
         });
-        setFileName(image.name);
         updateFileAvailability();
         renderDashboard();
         status("선택 슬롯에 빈 이미지를 삽입했습니다.");
@@ -5948,7 +5939,6 @@
               direction: "fsm-to-model",
             });
           } else image = createProjectImage(bytes, file.name, file.type, null, null, plan.path);
-          setFileName(file.name);
           refreshImageControls(image.id);
           updateFileAvailability();
           renderDashboard();
@@ -6025,7 +6015,6 @@
           if (slot) {
             connectDataToSlot(slot, data, file.name, csv, { replaceSlotContent });
           }
-          setFileName(file.name);
           status(
             Number.isInteger(plan.replaceId)
               ? `${file.name}을 기존 참조를 유지한 채 교체했습니다.`
@@ -6214,7 +6203,6 @@
           chart.editor.objects.forEach((object) => { object.csvId = csv.id; });
           delete chart.editor.conversionRows;
           graphEditorSelectCsv(csv.id);
-          setFileName(csv.name);
         }
         chart.editor.editable = next;
         if (next) rebuildEditableGraph(chart);
