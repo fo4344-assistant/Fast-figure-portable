@@ -2187,22 +2187,14 @@
     const [, setPreviewRevision] = useState(0);
     if (state.overlay !== "label") return null;
     const busy = state.lifecycle !== "ready";
-    const settings = activeProject.labelSettings;
-    const reference = gridSlotGeometry(
-      activeProject.layout,
-      dashboardGeometry(dashboardReferenceWidth()),
-      getSelectedSlot(),
-    );
+    const labelApi = window.FastFigureApi.labels;
+    const label = labelApi.readState();
+    const settings = label.settings;
+    const reference = label.reference;
     const previewWidth = 420;
     const previewScale = previewWidth / Math.max(1, reference.width);
     const previewHeight = Math.max(120, reference.height * previewScale);
-    const commit = (patch, eventName = "LABEL_SETTINGS_CHANGED") => {
-      Object.assign(activeProject.labelSettings, patch);
-      renderDashboard();
-      schedulePlotResize();
-      debugLog("mantine:label-settings", { ...activeProject.labelSettings });
-      appFSM.notify("labels", eventName);
-    };
+    const commit = (patch) => labelApi.setSettings(patch);
     const startPreviewDrag = (event) => {
       if (busy) return;
       const rect = event.currentTarget.getBoundingClientRect();
@@ -2226,27 +2218,17 @@
         (event.clientX - previewRect.left - drag.offsetX) / previewScale;
       const nextY =
         (event.clientY - previewRect.top - drag.offsetY) / previewScale;
-      activeProject.labelSettings.x = Math.max(
-        0,
-        Math.min(Math.max(0, reference.width - labelWidth), nextX),
+      labelApi.previewPosition(
+        Math.max(0, Math.min(Math.max(0, reference.width - labelWidth), nextX)),
+        Math.max(0, Math.min(Math.max(0, reference.height - labelHeight), nextY)),
       );
-      activeProject.labelSettings.y = Math.max(
-        0,
-        Math.min(Math.max(0, reference.height - labelHeight), nextY),
-      );
-      renderDashboard();
-      schedulePlotResize();
       setPreviewRevision((revision) => revision + 1);
     };
     const stopPreviewDrag = (event) => {
       if (dragRef.current?.pointerId !== event.pointerId) return;
       event.currentTarget.releasePointerCapture?.(event.pointerId);
       dragRef.current = null;
-      debugLog("mantine:label-position", {
-        x: activeProject.labelSettings.x,
-        y: activeProject.labelSettings.y,
-      });
-      appFSM.notify("labels", "LABEL_POSITION_DRAGGED");
+      labelApi.commitPosition();
     };
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-label" });
 
@@ -2268,12 +2250,12 @@
         React.createElement(
           Button,
           {
-            variant: activeProject.labelsEnabled ? "filled" : "light",
+            variant: label.enabled ? "filled" : "light",
             disabled: busy,
-            "aria-pressed": activeProject.labelsEnabled,
-            onClick: () => setAnnotationEnabled("label", !activeProject.labelsEnabled),
+            "aria-pressed": label.enabled,
+            onClick: () => labelApi.setEnabled(!label.enabled),
           },
-          activeProject.labelsEnabled ? "레이블 표시" : "레이블 숨김",
+          label.enabled ? "레이블 표시" : "레이블 숨김",
         ),
         React.createElement(
           Group,
@@ -2340,21 +2322,27 @@
             value: settings.x,
             disabled: busy,
             onChange: (value) =>
-              commit({ x: Number.isFinite(Number(value)) ? Number(value) : 0 }, "LABEL_POSITION_CHANGED"),
+              labelApi.setPosition(
+                Number.isFinite(Number(value)) ? Number(value) : 0,
+                settings.y,
+              ),
           }),
           React.createElement(NumberInput, {
             label: "Y (px)",
             value: settings.y,
             disabled: busy,
             onChange: (value) =>
-              commit({ y: Number.isFinite(Number(value)) ? Number(value) : 0 }, "LABEL_POSITION_CHANGED"),
+              labelApi.setPosition(
+                settings.x,
+                Number.isFinite(Number(value)) ? Number(value) : 0,
+              ),
           }),
           React.createElement(
             Button,
             {
               variant: "light",
               disabled: busy,
-              onClick: () => commit({ x: 0, y: 0 }, "LABEL_POSITION_RESET"),
+              onClick: () => labelApi.resetPosition(),
             },
             "위치 초기화",
           ),
@@ -2397,7 +2385,7 @@
                 touchAction: "none",
               },
             },
-            displayedSlotIdentifier(0),
+            label.sampleText,
           ),
         ),
       ),

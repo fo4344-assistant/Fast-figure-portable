@@ -7248,6 +7248,88 @@
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
+      function readLabelsApiState() {
+        let reference = gridSlotGeometry(
+          activeProject.layout,
+          dashboardGeometry(dashboardReferenceWidth()),
+          getSelectedSlot(),
+        );
+        return Object.freeze({
+          enabled: activeProject.labelsEnabled,
+          settings: Object.freeze({ ...activeProject.labelSettings }),
+          reference: Object.freeze({
+            width: reference.width,
+            height: reference.height,
+          }),
+          sampleText: displayedSlotIdentifier(0),
+        });
+      }
+      function setLabelsApiEnabled(enabled) {
+        setAnnotationEnabled("label", enabled === true);
+        return readLabelsApiState();
+      }
+      function setLabelsApiSettings(patch = {}) {
+        let current = activeProject.labelSettings,
+          next = { ...current };
+        if (Object.prototype.hasOwnProperty.call(patch, "format")) {
+          let format = String(patch.format || "");
+          if (
+            ["lower-alpha", "upper-alpha", "decimal", "lower-roman", "upper-roman"].includes(
+              format,
+            )
+          )
+            next.format = format;
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, "order")) {
+          let order = String(patch.order || "");
+          if (["row-major", "column-major"].includes(order)) next.order = order;
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, "parentheses"))
+          next.parentheses = patch.parentheses === true;
+        if (Object.prototype.hasOwnProperty.call(patch, "fontFamily"))
+          next.fontFamily = String(patch.fontFamily ?? "");
+        if (Object.prototype.hasOwnProperty.call(patch, "fontSize")) {
+          let fontSize = Number(patch.fontSize);
+          next.fontSize = Number.isFinite(fontSize) ? Math.max(6, fontSize) : current.fontSize;
+        }
+        activeProject.labelSettings = next;
+        renderDashboard();
+        schedulePlotResize();
+        debugLog("mantine:label-settings", { ...next });
+        appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
+        return readLabelsApiState();
+      }
+      function updateLabelsApiPosition(x, y, eventName = null) {
+        let current = activeProject.labelSettings,
+          nextX = Number(x),
+          nextY = Number(y);
+        current.x = Number.isFinite(nextX) ? nextX : current.x;
+        current.y = Number.isFinite(nextY) ? nextY : current.y;
+        renderDashboard();
+        schedulePlotResize();
+        if (eventName) {
+          debugLog("mantine:label-settings", { ...current });
+          appFSM.notify("labels", eventName);
+        }
+        return readLabelsApiState();
+      }
+      function setLabelsApiPosition(x, y) {
+        return updateLabelsApiPosition(x, y, "LABEL_POSITION_CHANGED");
+      }
+      function previewLabelsApiPosition(x, y) {
+        return updateLabelsApiPosition(x, y);
+      }
+      function commitLabelsApiPosition() {
+        debugLog("mantine:label-position", {
+          x: activeProject.labelSettings.x,
+          y: activeProject.labelSettings.y,
+        });
+        appFSM.notify("labels", "LABEL_POSITION_DRAGGED");
+        return readLabelsApiState();
+      }
+      function resetLabelsApiPosition() {
+        return updateLabelsApiPosition(0, 0, "LABEL_POSITION_RESET");
+      }
       function readAppearanceApiPalette() {
         return Object.freeze({ ...activeProject.appearance.uiPalette });
       }
@@ -7356,6 +7438,15 @@
         return readLayoutApiState();
       }
       window.FastFigureApi = Object.freeze({
+        labels: Object.freeze({
+          readState: readLabelsApiState,
+          setEnabled: setLabelsApiEnabled,
+          setSettings: setLabelsApiSettings,
+          setPosition: setLabelsApiPosition,
+          previewPosition: previewLabelsApiPosition,
+          commitPosition: commitLabelsApiPosition,
+          resetPosition: resetLabelsApiPosition,
+        }),
         appearance: Object.freeze({
           readPalette: readAppearanceApiPalette,
           setPalette: setAppearanceApiPalette,
