@@ -816,7 +816,6 @@
         });
         if (editing && chartIds.has(editing.id)) editing = null;
         selectedObjectIndex = null;
-        $("file").value = "";
         payload.resetCount = targets.length;
         payload.removedChartIds = [...chartIds];
       }
