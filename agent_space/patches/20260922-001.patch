@@ -1,0 +1,129 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9387,14 +9387,11 @@
+         margin: 0;
+       }
+-      .app {
+-        --sidebar-width: 370px;
+-        --sidebar-min-width: 360px;
+-        display: grid;
+-        grid-template-columns: minmax(var(--sidebar-min-width), var(--sidebar-width)) 10px minmax(
+-            0,
+-            1fr
+-          );
+-        height: calc(100vh - var(--header-height));
+-      }
++      .app {
++        --sidebar-width: 370px;
++        display: grid;
++        grid-template-columns: minmax(0, var(--sidebar-width)) minmax(0, 1fr);
++        margin-top: var(--header-height);
++        height: calc(100vh - var(--header-height));
++      }
+       .app.sidebar-measuring {
+         grid-template-columns: 1px 10px minmax(0, 1fr) !important;
+@@ -9435,6 +9432,7 @@
+         min-width: 0;
+       }
+-      main {
+-        position: relative;
++      .app > main {
++        grid-column: 2;
++        position: relative;
+         padding: 18px;
+         min-width: 0;
+@@ -10166,9 +10164,15 @@
+         background: var(--ui-disabled-bg);
+       }
+-      .layout-panel {
+-        background: color-mix(in srgb, var(--ui-bg) 92%, transparent);
+-        box-shadow: 0 12px 28px color-mix(in srgb, var(--ui-shadow) 25%, transparent);
+-      }
+-    </style>
++      .layout-panel {
++        background: color-mix(in srgb, var(--ui-bg) 92%, transparent);
++        box-shadow: 0 12px 28px color-mix(in srgb, var(--ui-shadow) 25%, transparent);
++      }
++      #ff-react-bootstrap-root {
++        position: fixed;
++        inset: 0;
++        z-index: 100;
++        pointer-events: none;
++      }
++    </style>
+   </head>
+   <body>
+@@ -10173,5 +10177,5 @@
+   </head>
+   <body>
+-    <div id="ff-react-bootstrap-root" hidden></div>
++    <div id="ff-react-bootstrap-root"></div>
+     <script id="ff-mantine-bootstrap">
+       (() => {
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -21,5 +21,5 @@
+     Textarea,
+   } = MantineCore;
+-  const { useRef, useState, useSyncExternalStore } = React;
++  const { useEffect, useRef, useState, useSyncExternalStore } = React;
+ 
+   function subscribeAppState(onStoreChange) {
+@@ -2993,14 +2993,17 @@
+     const [navbarCollapsed, setNavbarCollapsed] = useState(false);
+     const navbarDragRef = useRef(null);
+-    const clampNavbarWidth = (value) => Math.max(360, Math.min(620, value));
+-    const refreshDashboardAfterNavbarChange = () => {
+-      requestAnimationFrame(() => {
+-        schedulePlotResize();
+-      });
+-    };
+-    const toggleNavbar = () => {
+-      setNavbarCollapsed((collapsed) => !collapsed);
+-      refreshDashboardAfterNavbarChange();
+-    };
++    const clampNavbarWidth = (value) => Math.max(360, Math.min(620, value));
++    useEffect(() => {
++      const app = document.querySelector(".app");
++      if (!app) return;
++      app.style.setProperty(
++        "--sidebar-width",
++        navbarCollapsed ? "0px" : `${navbarWidth}px`,
++      );
++      requestAnimationFrame(() => schedulePlotResize());
++    }, [navbarWidth, navbarCollapsed]);
++    const toggleNavbar = () => {
++      setNavbarCollapsed((collapsed) => !collapsed);
++    };
+     const startNavbarResize = (event) => {
+       if (navbarCollapsed) return;
+@@ -3012,7 +3015,6 @@
+     const resizeNavbar = (event) => {
+       if (navbarDragRef.current !== event.pointerId) return;
+-      const width = clampNavbarWidth(event.clientX);
+-      setNavbarWidth(width);
+-      schedulePlotResize();
++      const width = clampNavbarWidth(event.clientX);
++      setNavbarWidth(width);
+     };
+     const stopNavbarResize = (event) => {
+@@ -3037,6 +3039,6 @@
+       },
+       React.createElement(
+-        AppShell.Header,
+-        null,
++        AppShell.Header,
++        { style: { pointerEvents: "auto" } },
+         React.createElement(
+           Group,
+@@ -3056,6 +3058,6 @@
+       ),
+       React.createElement(
+-        AppShell.Navbar,
+-        { p: 0, style: { position: "relative" } },
++        AppShell.Navbar,
++        { p: 0, style: { position: "relative", pointerEvents: "auto" } },
+         React.createElement(FastFigureDataActions),
+         React.createElement(FastFigureImageEditor),
