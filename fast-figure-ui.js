@@ -1979,9 +1979,10 @@
   function FastFigurePaletteActions() {
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
+    const appearanceApi = window.FastFigureApi.appearance;
     const [opened, setOpened] = useState(false);
     const [draft, setDraft] = useState(() => ({
-      ...activeProject.appearance.uiPalette,
+      ...appearanceApi.readPalette(),
     }));
     const fields = [
       ["uiColor", "강조색"],
@@ -1996,17 +1997,15 @@
       ["fontColor", "그래프 글자"],
     ];
     const openPalette = () => {
-      setDraft({ ...activeProject.appearance.uiPalette });
+      setDraft({ ...appearanceApi.readPalette() });
       setOpened(true);
     };
     const applyPalette = () => {
-      applyUiPaletteValues(draft);
+      appearanceApi.setPalette(draft);
       setOpened(false);
     };
     const resetPalette = () => {
-      const defaults = { ...DEFAULT_UI_PALETTE };
-      setDraft(defaults);
-      applyUiPaletteValues(defaults);
+      setDraft({ ...appearanceApi.resetPalette() });
     };
 
     return React.createElement(

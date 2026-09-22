@@ -7272,6 +7272,17 @@
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
+      function readAppearanceApiPalette() {
+        return Object.freeze({ ...activeProject.appearance.uiPalette });
+      }
+      function setAppearanceApiPalette(values) {
+        applyUiPaletteValues(values);
+        return readAppearanceApiPalette();
+      }
+      function resetAppearanceApiPalette() {
+        applyUiPaletteValues(DEFAULT_UI_PALETTE);
+        return readAppearanceApiPalette();
+      }
       function readLayoutApiState(previewWidth = 600) {
         let width = readProjectNumber(previewWidth, 600, 1, 20000),
           geometry = dashboardGeometry(width);
@@ -7369,6 +7380,11 @@
         return readLayoutApiState();
       }
       window.FastFigureApi = Object.freeze({
+        appearance: Object.freeze({
+          readPalette: readAppearanceApiPalette,
+          setPalette: setAppearanceApiPalette,
+          resetPalette: resetAppearanceApiPalette,
+        }),
         layout: Object.freeze({
           readState: readLayoutApiState,
           setStyle: setLayoutApiStyle,
