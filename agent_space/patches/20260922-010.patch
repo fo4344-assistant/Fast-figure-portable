@@ -1,0 +1,228 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -7248,6 +7248,88 @@
+         applyUiPalette(false, notify);
+         return activeProject.appearance.uiPalette;
+       }
++      function readLabelsApiState() {
++        let reference = gridSlotGeometry(
++          activeProject.layout,
++          dashboardGeometry(dashboardReferenceWidth()),
++          getSelectedSlot(),
++        );
++        return Object.freeze({
++          enabled: activeProject.labelsEnabled,
++          settings: Object.freeze({ ...activeProject.labelSettings }),
++          reference: Object.freeze({
++            width: reference.width,
++            height: reference.height,
++          }),
++          sampleText: displayedSlotIdentifier(0),
++        });
++      }
++      function setLabelsApiEnabled(enabled) {
++        setAnnotationEnabled("label", enabled === true);
++        return readLabelsApiState();
++      }
++      function setLabelsApiSettings(patch = {}) {
++        let current = activeProject.labelSettings,
++          next = { ...current };
++        if (Object.prototype.hasOwnProperty.call(patch, "format")) {
++          let format = String(patch.format || "");
++          if (
++            ["lower-alpha", "upper-alpha", "decimal", "lower-roman", "upper-roman"].includes(
++              format,
++            )
++          )
++            next.format = format;
++        }
++        if (Object.prototype.hasOwnProperty.call(patch, "order")) {
++          let order = String(patch.order || "");
++          if (["row-major", "column-major"].includes(order)) next.order = order;
++        }
++        if (Object.prototype.hasOwnProperty.call(patch, "parentheses"))
++          next.parentheses = patch.parentheses === true;
++        if (Object.prototype.hasOwnProperty.call(patch, "fontFamily"))
++          next.fontFamily = String(patch.fontFamily ?? "");
++        if (Object.prototype.hasOwnProperty.call(patch, "fontSize")) {
++          let fontSize = Number(patch.fontSize);
++          next.fontSize = Number.isFinite(fontSize) ? Math.max(6, fontSize) : current.fontSize;
++        }
++        activeProject.labelSettings = next;
++        renderDashboard();
++        schedulePlotResize();
++        debugLog("mantine:label-settings", { ...next });
++        appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
++        return readLabelsApiState();
++      }
++      function updateLabelsApiPosition(x, y, eventName = null) {
++        let current = activeProject.labelSettings,
++          nextX = Number(x),
++          nextY = Number(y);
++        current.x = Number.isFinite(nextX) ? nextX : current.x;
++        current.y = Number.isFinite(nextY) ? nextY : current.y;
++        renderDashboard();
++        schedulePlotResize();
++        if (eventName) {
++          debugLog("mantine:label-settings", { ...current });
++          appFSM.notify("labels", eventName);
++        }
++        return readLabelsApiState();
++      }
++      function setLabelsApiPosition(x, y) {
++        return updateLabelsApiPosition(x, y, "LABEL_POSITION_CHANGED");
++      }
++      function previewLabelsApiPosition(x, y) {
++        return updateLabelsApiPosition(x, y);
++      }
++      function commitLabelsApiPosition() {
++        debugLog("mantine:label-position", {
++          x: activeProject.labelSettings.x,
++          y: activeProject.labelSettings.y,
++        });
++        appFSM.notify("labels", "LABEL_POSITION_DRAGGED");
++        return readLabelsApiState();
++      }
++      function resetLabelsApiPosition() {
++        return updateLabelsApiPosition(0, 0, "LABEL_POSITION_RESET");
++      }
+       function readAppearanceApiPalette() {
+         return Object.freeze({ ...activeProject.appearance.uiPalette });
+       }
+@@ -7356,6 +7438,15 @@
+         return readLayoutApiState();
+       }
+       window.FastFigureApi = Object.freeze({
++        labels: Object.freeze({
++          readState: readLabelsApiState,
++          setEnabled: setLabelsApiEnabled,
++          setSettings: setLabelsApiSettings,
++          setPosition: setLabelsApiPosition,
++          previewPosition: previewLabelsApiPosition,
++          commitPosition: commitLabelsApiPosition,
++          resetPosition: resetLabelsApiPosition,
++        }),
+         appearance: Object.freeze({
+           readPalette: readAppearanceApiPalette,
+           setPalette: setAppearanceApiPalette,
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2187,22 +2187,14 @@
+     const [, setPreviewRevision] = useState(0);
+     if (state.overlay !== "label") return null;
+     const busy = state.lifecycle !== "ready";
+-    const settings = activeProject.labelSettings;
+-    const reference = gridSlotGeometry(
+-      activeProject.layout,
+-      dashboardGeometry(dashboardReferenceWidth()),
+-      getSelectedSlot(),
+-    );
++    const labelApi = window.FastFigureApi.labels;
++    const label = labelApi.readState();
++    const settings = label.settings;
++    const reference = label.reference;
+     const previewWidth = 420;
+     const previewScale = previewWidth / Math.max(1, reference.width);
+     const previewHeight = Math.max(120, reference.height * previewScale);
+-    const commit = (patch, eventName = "LABEL_SETTINGS_CHANGED") => {
+-      Object.assign(activeProject.labelSettings, patch);
+-      renderDashboard();
+-      schedulePlotResize();
+-      debugLog("mantine:label-settings", { ...activeProject.labelSettings });
+-      appFSM.notify("labels", eventName);
+-    };
++    const commit = (patch) => labelApi.setSettings(patch);
+     const startPreviewDrag = (event) => {
+       if (busy) return;
+       const rect = event.currentTarget.getBoundingClientRect();
+@@ -2226,27 +2218,17 @@
+         (event.clientX - previewRect.left - drag.offsetX) / previewScale;
+       const nextY =
+         (event.clientY - previewRect.top - drag.offsetY) / previewScale;
+-      activeProject.labelSettings.x = Math.max(
+-        0,
+-        Math.min(Math.max(0, reference.width - labelWidth), nextX),
++      labelApi.previewPosition(
++        Math.max(0, Math.min(Math.max(0, reference.width - labelWidth), nextX)),
++        Math.max(0, Math.min(Math.max(0, reference.height - labelHeight), nextY)),
+       );
+-      activeProject.labelSettings.y = Math.max(
+-        0,
+-        Math.min(Math.max(0, reference.height - labelHeight), nextY),
+-      );
+-      renderDashboard();
+-      schedulePlotResize();
+       setPreviewRevision((revision) => revision + 1);
+     };
+     const stopPreviewDrag = (event) => {
+       if (dragRef.current?.pointerId !== event.pointerId) return;
+       event.currentTarget.releasePointerCapture?.(event.pointerId);
+       dragRef.current = null;
+-      debugLog("mantine:label-position", {
+-        x: activeProject.labelSettings.x,
+-        y: activeProject.labelSettings.y,
+-      });
+-      appFSM.notify("labels", "LABEL_POSITION_DRAGGED");
++      labelApi.commitPosition();
+     };
+     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-label" });
+ 
+@@ -2268,12 +2250,12 @@
+         React.createElement(
+           Button,
+           {
+-            variant: activeProject.labelsEnabled ? "filled" : "light",
++            variant: label.enabled ? "filled" : "light",
+             disabled: busy,
+-            "aria-pressed": activeProject.labelsEnabled,
+-            onClick: () => setAnnotationEnabled("label", !activeProject.labelsEnabled),
++            "aria-pressed": label.enabled,
++            onClick: () => labelApi.setEnabled(!label.enabled),
+           },
+-          activeProject.labelsEnabled ? "레이블 표시" : "레이블 숨김",
++          label.enabled ? "레이블 표시" : "레이블 숨김",
+         ),
+         React.createElement(
+           Group,
+@@ -2340,21 +2322,27 @@
+             value: settings.x,
+             disabled: busy,
+             onChange: (value) =>
+-              commit({ x: Number.isFinite(Number(value)) ? Number(value) : 0 }, "LABEL_POSITION_CHANGED"),
++              labelApi.setPosition(
++                Number.isFinite(Number(value)) ? Number(value) : 0,
++                settings.y,
++              ),
+           }),
+           React.createElement(NumberInput, {
+             label: "Y (px)",
+             value: settings.y,
+             disabled: busy,
+             onChange: (value) =>
+-              commit({ y: Number.isFinite(Number(value)) ? Number(value) : 0 }, "LABEL_POSITION_CHANGED"),
++              labelApi.setPosition(
++                settings.x,
++                Number.isFinite(Number(value)) ? Number(value) : 0,
++              ),
+           }),
+           React.createElement(
+             Button,
+             {
+               variant: "light",
+               disabled: busy,
+-              onClick: () => commit({ x: 0, y: 0 }, "LABEL_POSITION_RESET"),
++              onClick: () => labelApi.resetPosition(),
+             },
+             "위치 초기화",
+           ),
+@@ -2397,7 +2385,7 @@
+                 touchAction: "none",
+               },
+             },
+-            displayedSlotIdentifier(0),
++            label.sampleText,
+           ),
+         ),
+       ),
