@@ -1,0 +1,69 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -7272,6 +7272,17 @@
+         applyUiPalette(false, notify);
+         return activeProject.appearance.uiPalette;
+       }
++      function readAppearanceApiPalette() {
++        return Object.freeze({ ...activeProject.appearance.uiPalette });
++      }
++      function setAppearanceApiPalette(values) {
++        applyUiPaletteValues(values);
++        return readAppearanceApiPalette();
++      }
++      function resetAppearanceApiPalette() {
++        applyUiPaletteValues(DEFAULT_UI_PALETTE);
++        return readAppearanceApiPalette();
++      }
+       function readLayoutApiState(previewWidth = 600) {
+         let width = readProjectNumber(previewWidth, 600, 1, 20000),
+           geometry = dashboardGeometry(width);
+@@ -7369,6 +7380,11 @@
+         return readLayoutApiState();
+       }
+       window.FastFigureApi = Object.freeze({
++        appearance: Object.freeze({
++          readPalette: readAppearanceApiPalette,
++          setPalette: setAppearanceApiPalette,
++          resetPalette: resetAppearanceApiPalette,
++        }),
+         layout: Object.freeze({
+           readState: readLayoutApiState,
+           setStyle: setLayoutApiStyle,
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -1979,9 +1979,10 @@
+   function FastFigurePaletteActions() {
+     const state = useAppState();
+     const busy = state.lifecycle !== "ready";
++    const appearanceApi = window.FastFigureApi.appearance;
+     const [opened, setOpened] = useState(false);
+     const [draft, setDraft] = useState(() => ({
+-      ...activeProject.appearance.uiPalette,
++      ...appearanceApi.readPalette(),
+     }));
+     const fields = [
+       ["uiColor", "강조색"],
+@@ -1996,17 +1997,15 @@
+       ["fontColor", "그래프 글자"],
+     ];
+     const openPalette = () => {
+-      setDraft({ ...activeProject.appearance.uiPalette });
++      setDraft({ ...appearanceApi.readPalette() });
+       setOpened(true);
+     };
+     const applyPalette = () => {
+-      applyUiPaletteValues(draft);
++      appearanceApi.setPalette(draft);
+       setOpened(false);
+     };
+     const resetPalette = () => {
+-      const defaults = { ...DEFAULT_UI_PALETTE };
+-      setDraft(defaults);
+-      applyUiPaletteValues(defaults);
++      setDraft({ ...appearanceApi.resetPalette() });
+     };
+ 
+     return React.createElement(
