@@ -304,7 +304,6 @@
       let editing = null,
         selectedSlotId = null,
         pendingSlotContentType = "graph",
-        layoutSelected = new Set(),
         dashboardObserver = null,
         graphAreaObserver = null,
         resizePending = false,
@@ -2292,7 +2291,6 @@
         });
         if (activeProject.slotCaptionsEnabled) initializeSlotCaptions();
         selectedSlotId = null;
-        layoutSelected.clear();
         renderDashboard();
       }
       function makeSlots(r = activeProject.gridRows, c = activeProject.gridCols) {
@@ -3926,8 +3924,14 @@
         });
         return chart;
       }
-      function mergeSelected() {
-        let selected = [...layoutSelected].map(slotAt).filter(Boolean);
+      function mergeSlots(slotIds = []) {
+        let selected = [
+          ...new Set(
+            (Array.isArray(slotIds) ? slotIds : []).filter(Number.isInteger),
+          ),
+        ]
+          .map(slotAt)
+          .filter((slot) => slot && !slot.hidden);
         if (selected.length < 2) return status("합칠 슬롯을 둘 이상 선택하세요.");
         let top = Math.min(...selected.map((s) => s.row)),
           left = Math.min(...selected.map((s) => s.col)),
@@ -3981,7 +3985,6 @@
         cells.filter((s) => s !== anchor).forEach((s) => (s.hidden = true));
         if (selectedSlotId !== null && cells.some((s) => s.id === selectedSlotId))
           selectedSlotId = anchor.id;
-        layoutSelected.clear();
         renderDashboard();
         status("직사각형 영역의 슬롯을 합쳤습니다.");
         appFSM.send("SELECT_SLOT", {
@@ -3990,11 +3993,16 @@
           direction: "model-to-fsm",
         });
         appFSM.notify("layout", "SLOTS_MERGED");
+        return [];
       }
-      function splitSelected() {
-        let selected = [...layoutSelected]
+      function splitSlots(slotIds = []) {
+        let selected = [
+            ...new Set(
+              (Array.isArray(slotIds) ? slotIds : []).filter(Number.isInteger),
+            ),
+          ]
           .map(slotAt)
-          .filter((s) => s && (s.rowSpan > 1 || s.colSpan > 1));
+          .filter((s) => s && !s.hidden && (s.rowSpan > 1 || s.colSpan > 1));
         if (!selected.length) return status("나눌 합쳐진 슬롯을 선택하세요.");
         let restored = new Set();
         selected.forEach((s) => {
@@ -4013,11 +4021,10 @@
             }
           });
         });
-        layoutSelected.clear();
-        restored.forEach((id) => layoutSelected.add(id));
         renderDashboard();
         status(`${selected.length}개 슬롯을 나눴습니다.`);
         appFSM.notify("layout", "SLOTS_SPLIT");
+        return [...restored];
       }
       function createChartModel({ id = null, editor = {}, graph = {} } = {}) {
         let model = {
@@ -4876,13 +4883,11 @@
           selectedSlotId,
           graphObject: machine.state.graphObject,
           graphObjectIndex: machine.state.graphObjectIndex,
-          layoutSelected: new Set(layoutSelected),
         };
       }
       function restoreProjectRuntimeState(snapshot, machine) {
         editing = snapshot.editing;
         selectedSlotId = snapshot.selectedSlotId;
-        layoutSelected = new Set(snapshot.layoutSelected);
         machine.state = Object.freeze({
           ...machine.state,
           graphObject: snapshot.graphObject,
@@ -4892,7 +4897,6 @@
       function resetProjectRuntimeState(machine) {
         editing = null;
         selectedSlotId = null;
-        layoutSelected.clear();
         machine.state = Object.freeze({
           ...machine.state,
           graphObject: "none",
@@ -6198,10 +6202,6 @@
         appFSM.notify("charts", "GRAPH_EDITABLE_CHANGED");
         return next;
       }
-      function clearAllSlotSelections() {
-        setSelectedSlot(null);
-        layoutSelected.clear();
-      }
       function setAnnotationEnabled(kind, enabled) {
         if (kind === "label") activeProject.labelsEnabled = enabled;
         else activeProject.captionsEnabled = enabled;
@@ -7272,6 +7272,12 @@
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
+      window.FastFigureApi = Object.freeze({
+        layout: Object.freeze({
+          mergeSlots,
+          splitSlots,
+        }),
+      });
       window.addEventListener("error", (event) =>
         debugLog("window:error", {
           message: event.message,

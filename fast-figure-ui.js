@@ -2689,18 +2689,21 @@
 
   function FastFigureLayoutOverlay() {
     const state = useAppState();
-    const [selectionRevision, setSelectionRevision] = useState(0);
+    const [layoutSelection, setLayoutSelection] = useState(() => new Set());
     const [zoom, setZoom] = useState(() =>
       Number.isFinite(dashboardZoomIntent) ? dashboardZoomIntent : 100,
     );
     const [previewWidth, setPreviewWidth] = useState(600);
     const previewResizeRef = useRef(null);
+    useEffect(() => {
+      if (state.overlay !== "layout") setLayoutSelection(new Set());
+    }, [state.overlay]);
     if (state.overlay !== "layout") return null;
     const busy = state.lifecycle !== "ready";
+    const layoutApi = window.FastFigureApi.layout;
     const style = activeProject.layout.slotStyle;
     const visibleSlots = activeProject.slots.filter((slot) => !slot.hidden);
     const previewGeometry = dashboardGeometry(previewWidth);
-    void selectionRevision;
 
     const clamp = (value, fallback, min, max) => {
       const number = Number(value);
@@ -2716,17 +2719,22 @@
       const rows = patch.rows ?? activeProject.gridRows;
       const cols = patch.cols ?? activeProject.gridCols;
       makeSlots(rows, cols);
+      setLayoutSelection(new Set());
       applySlotStyle(false);
       schedulePlotResize();
     };
     const toggleSlot = (slotId) => {
-      if (layoutSelected.has(slotId)) layoutSelected.delete(slotId);
-      else layoutSelected.add(slotId);
-      setSelectionRevision((revision) => revision + 1);
+      setLayoutSelection((current) => {
+        const next = new Set(current);
+        if (next.has(slotId)) next.delete(slotId);
+        else next.add(slotId);
+        return next;
+      });
     };
     const runLayoutCommand = (command) => {
-      command();
-      setSelectionRevision((revision) => revision + 1);
+      const nextSelection = command([...layoutSelection]);
+      if (Array.isArray(nextSelection))
+        setLayoutSelection(new Set(nextSelection));
     };
     const changeZoom = (value) => {
       const next = clamp(value, 100, 50, 200);
@@ -2922,7 +2930,7 @@
               Button,
               {
                 key: slot.id,
-                variant: layoutSelected.has(slot.id) ? "filled" : "light",
+                variant: layoutSelection.has(slot.id) ? "filled" : "light",
                 disabled: busy,
                 onClick: () => toggleSlot(slot.id),
                 style: {
@@ -2960,8 +2968,8 @@
           React.createElement(
             Button,
             {
-              disabled: busy || layoutSelected.size < 2,
-              onClick: () => runLayoutCommand(mergeSelected),
+              disabled: busy || layoutSelection.size < 2,
+              onClick: () => runLayoutCommand(layoutApi.mergeSlots),
             },
             "선택 슬롯 합치기",
           ),
@@ -2969,8 +2977,8 @@
             Button,
             {
               variant: "light",
-              disabled: busy || layoutSelected.size < 1,
-              onClick: () => runLayoutCommand(splitSelected),
+              disabled: busy || layoutSelection.size < 1,
+              onClick: () => runLayoutCommand(layoutApi.splitSlots),
             },
             "선택 슬롯 나누기",
           ),
@@ -2978,11 +2986,8 @@
             Button,
             {
               variant: "subtle",
-              disabled: busy || layoutSelected.size < 1,
-              onClick: () => {
-                layoutSelected.clear();
-                setSelectionRevision((revision) => revision + 1);
-              },
+              disabled: busy || layoutSelection.size < 1,
+              onClick: () => setLayoutSelection(new Set()),
             },
             "선택 해제",
           ),
