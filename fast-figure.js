@@ -316,8 +316,7 @@
         dashboardZoomIntent = 100,
         dashboardZoomLocked = false,
         dashboardZoomLockedWidth = null,
-        selectedExplorerDirectory = "/assets",
-        selectedObjectIndex = null;
+        selectedExplorerDirectory = "/assets";
       const $ = (id) => document.getElementById(id);
       const uiTelemetryListeners = new Set();
       let uiTelemetryState = Object.freeze({
@@ -643,7 +642,6 @@
         machine.assertWritable("workspace", "SELECT_SLOT");
         selectedSlotId = !slot || (!hydrating && same) ? null : slot.id;
         editing = null;
-        selectedObjectIndex = null;
         machine.state = Object.freeze({
           ...machine.state,
           graphObject: "none",
@@ -668,7 +666,6 @@
         }
         slot.contentType = payload.type === "image" ? "image" : "graph";
         editing = null;
-        selectedObjectIndex = null;
         machine.state = Object.freeze({
           ...machine.state,
           graphObject: "none",
@@ -683,7 +680,6 @@
           index = Number.isInteger(payload.index) ? payload.index : null;
         if (!slot || slot.contentType === "image" || !chart || index < 0 || index >= objects.length)
           index = null;
-        selectedObjectIndex = index;
         machine.state = Object.freeze({
           ...machine.state,
           graphObjectIndex: index,
@@ -692,8 +688,7 @@
       function selectedGraphObjectGuard() {
         return (
           appFSM?.state.graphObject === "selected" &&
-          Number.isInteger(appFSM.state.graphObjectIndex) &&
-          appFSM.state.graphObjectIndex === selectedObjectIndex
+          Number.isInteger(appFSM.state.graphObjectIndex)
         );
       }
       function applySlotCaptionModeAction({ machine, payload }) {
@@ -815,7 +810,6 @@
           slot.contentType = "graph";
         });
         if (editing && chartIds.has(editing.id)) editing = null;
-        selectedObjectIndex = null;
         payload.resetCount = targets.length;
         payload.removedChartIds = [...chartIds];
       }
@@ -832,7 +826,6 @@
           previous = {
             selectedSlotId,
             editing,
-            selectedObjectIndex,
           };
         try {
           source.content = targetContent;
@@ -840,14 +833,12 @@
           if (selectedSlotId === source.id) selectedSlotId = target.id;
           else if (selectedSlotId === target.id) selectedSlotId = source.id;
           editing = null;
-          selectedObjectIndex = null;
           validateProjectObject(activeProject, { requireSlots: true });
         } catch (error) {
           source.content = sourceContent;
           target.content = targetContent;
           selectedSlotId = previous.selectedSlotId;
           editing = previous.editing;
-          selectedObjectIndex = previous.selectedObjectIndex;
           throw error;
         }
         [source, target].forEach((slot) => {
@@ -880,20 +871,17 @@
           slotChart: slot.chart,
           slotImageId: slot.imageId,
           editing,
-          selectedObjectIndex,
         };
         try {
           detachSlotChart(slot);
           slot.imageId = payload.imageId;
           editing = null;
-          selectedObjectIndex = null;
           validateProjectObject(activeProject, { requireSlots: true });
         } catch (error) {
           activeProject.charts = previous.charts;
           slot.chart = previous.slotChart;
           slot.imageId = previous.slotImageId;
           editing = previous.editing;
-          selectedObjectIndex = previous.selectedObjectIndex;
           throw error;
         }
         machine.state = Object.freeze({
@@ -920,7 +908,6 @@
               slotImageId: slot.imageId,
               slotContentType: slot.contentType,
               editing,
-              selectedObjectIndex,
             }
           : null;
         try {
@@ -929,9 +916,13 @@
             detachSlotChart(slot);
             slot.imageId = null;
             slot.contentType = "graph";
-            selectedObjectIndex = null;
           }
           payload.chart = connectDataToSlotModel(slot, csv.rows, csv.name, csv);
+          machine.state = Object.freeze({
+            ...machine.state,
+            graphObject: "none",
+            graphObjectIndex: null,
+          });
           if (payload.replaceSlotContent)
             validateProjectObject(activeProject, { requireSlots: true });
         } catch (error) {
@@ -942,7 +933,6 @@
             slot.imageId = previous.slotImageId;
             slot.contentType = previous.slotContentType;
             editing = previous.editing;
-            selectedObjectIndex = previous.selectedObjectIndex;
           }
           throw error;
         }
@@ -968,11 +958,6 @@
         chart.editor.objects = objects;
         ensureGraphObjects(chart);
         if (editing?.id === chart.id) editing = chart;
-        if (
-          selectedObjectIndex !== null &&
-          selectedObjectIndex >= chart.editor.objects.length
-        )
-          selectedObjectIndex = null;
         rebuildEditableGraph(chart);
         payload.chart = chart;
       }
@@ -1054,7 +1039,6 @@
           slotImageId: slot.imageId,
           slotContentType: slot.contentType,
           editing,
-          selectedObjectIndex,
         };
         try {
           if (model) {
@@ -1067,7 +1051,6 @@
           slot.imageId = image.id;
           if (slot.id === selectedSlotId) {
             editing = null;
-            selectedObjectIndex = null;
           }
           validateProjectObject(activeProject, { requireSlots: true });
         } catch (error) {
@@ -1079,7 +1062,6 @@
           slot.imageId = previous.slotImageId;
           slot.contentType = previous.slotContentType;
           editing = previous.editing;
-          selectedObjectIndex = previous.selectedObjectIndex;
           throw error;
         }
         payload.image = image;
@@ -1150,7 +1132,6 @@
           slotContentType: slot.contentType,
           slotCaption: slot.caption,
           editing,
-          selectedObjectIndex,
         };
         try {
           csvModels.forEach((model) => {
@@ -1174,7 +1155,6 @@
                 ? "슬롯 캡션"
                 : payload.slotCaption;
           editing = chart;
-          selectedObjectIndex = null;
           validateProjectObject(activeProject, { requireSlots: true });
         } catch (error) {
           activeProject.fileSystem = previous.fileSystem;
@@ -1187,7 +1167,6 @@
           slot.contentType = previous.slotContentType;
           slot.caption = previous.slotCaption;
           editing = previous.editing;
-          selectedObjectIndex = previous.selectedObjectIndex;
           throw error;
         }
         machine.state = Object.freeze({
@@ -1354,7 +1333,6 @@
             removedReferences = removeProjectAssetReferences(csvIds, imageIds),
             removedGraphReference = removedReferences.removedGraphReferenceCount > 0,
             resetImageSlot = removedReferences.resetImageSlotCount > 0;
-          selectedObjectIndex = null;
           if (machine.state.assetPath && projectVfs.isTrashed(rewritePath(machine.state.assetPath))) {
             payload.clearAssetSelection = true;
           }
@@ -1406,8 +1384,12 @@
         if (!slot) return;
         refreshImageControls(slot.imageId);
       }
-      function exitGraphWorkspaceState() {
-        selectedObjectIndex = null;
+      function exitGraphWorkspaceState({ machine }) {
+        machine.state = Object.freeze({
+          ...machine.state,
+          graphObject: "none",
+          graphObjectIndex: null,
+        });
       }
       function readmeContentHtml() {
         let template = $("readmeContent");
@@ -1562,7 +1544,8 @@
           },
           GRAPH_OBJECTS_REPLACED: {
             action: applyGraphObjectSelectionAction,
-            target: () => Number.isInteger(selectedObjectIndex) ? "selected" : "none",
+            target: ({ machine }) =>
+              Number.isInteger(machine.state.graphObjectIndex) ? "selected" : "none",
           },
           PROJECT_NODE_MOVED: ({ state, payload }) =>
             payload.clearGraphSelection
@@ -1762,7 +1745,6 @@
           read: (project) => ({
             selectedSlotId,
             pendingSlotContentType,
-            selectedObjectIndex,
             palette: project.appearance.uiPalette,
           }),
         });
@@ -3047,7 +3029,6 @@
           chart.editor.x = selection.x;
           chart.editor.y = selection.y;
           chart.editor.objects = [...ensureGraphObjects(chart), baseGraphObject(chart, csv)];
-          selectedObjectIndex = null;
           if (chart.editor.editable !== false) rebuildEditableGraph(chart);
         } else {
           chart = createChartModel({
@@ -3939,7 +3920,6 @@
           (chart.editor?.editable === false ? ensureDefaultCsv() : null);
         if (!csv) throw Error("차트가 참조하는 프로젝트 CSV가 없습니다.");
         editing = chart;
-        selectedObjectIndex = null;
         debugLog("chart:activate", {
           chartId: id,
           sourceName: csv.name,
@@ -4890,25 +4870,34 @@
           if (control) control.value = value;
         });
       }
-      function captureProjectRuntimeState() {
+      function captureProjectRuntimeState(machine) {
         return {
           editing,
           selectedSlotId,
-          selectedObjectIndex,
+          graphObject: machine.state.graphObject,
+          graphObjectIndex: machine.state.graphObjectIndex,
           layoutSelected: new Set(layoutSelected),
         };
       }
-      function restoreProjectRuntimeState(snapshot) {
+      function restoreProjectRuntimeState(snapshot, machine) {
         editing = snapshot.editing;
         selectedSlotId = snapshot.selectedSlotId;
-        selectedObjectIndex = snapshot.selectedObjectIndex;
         layoutSelected = new Set(snapshot.layoutSelected);
+        machine.state = Object.freeze({
+          ...machine.state,
+          graphObject: snapshot.graphObject,
+          graphObjectIndex: snapshot.graphObjectIndex,
+        });
       }
-      function resetProjectRuntimeState() {
+      function resetProjectRuntimeState(machine) {
         editing = null;
         selectedSlotId = null;
-        selectedObjectIndex = null;
         layoutSelected.clear();
+        machine.state = Object.freeze({
+          ...machine.state,
+          graphObject: "none",
+          graphObjectIndex: null,
+        });
       }
       function renderProjectObject(project = activeProject) {
         applySlotStyle(false, false);
@@ -4940,17 +4929,17 @@
           previousState = activeProject._state,
           previousImages = activeProject.images,
           candidateImages = candidate.images,
-          previousRuntime = captureProjectRuntimeState();
+          previousRuntime = captureProjectRuntimeState(machine);
         try {
           activeProject.initialize(candidate);
           projectObjectGeneration += 1;
-          resetProjectRuntimeState();
+          resetProjectRuntimeState(machine);
           renderProjectObject(activeProject);
         } catch (error) {
           releaseProjectImageDisplayUrls(candidateImages);
           activeProject.initialize(previousState);
           projectObjectGeneration += 1;
-          restoreProjectRuntimeState(previousRuntime);
+          restoreProjectRuntimeState(previousRuntime, machine);
           try {
             renderProjectObject(activeProject);
           } catch (rollbackError) {

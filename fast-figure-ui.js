@@ -1444,7 +1444,10 @@
     if (state.workspace !== "slot.graph") return null;
     const chart = graphEditorChart();
     const objects = chart ? ensureGraphObjects(chart) : [];
-    const selectedIndex = Number.isInteger(selectedObjectIndex) && objects[selectedObjectIndex] ? selectedObjectIndex : null;
+    const selectedIndex =
+      Number.isInteger(state.graphObjectIndex) && objects[state.graphObjectIndex]
+        ? state.graphObjectIndex
+        : null;
     const selected = selectedIndex === null ? null : objects[selectedIndex];
     const activeCsv = getProjectCsv(selected?.csvId) || getProjectCsv(objects[0]?.csvId) || selectedProjectCsv() || activeProject.csvFiles[0] || null;
     const csvOptions = activeProject.csvFiles.map((csv) => ({ value: String(csv.id), label: csv.name }));
@@ -1804,10 +1807,10 @@
     const chart = graphEditorChart();
     const objects = chart ? ensureGraphObjects(chart) : [];
     const selected =
-      Number.isInteger(selectedObjectIndex) &&
-      selectedObjectIndex >= 0 &&
-      selectedObjectIndex < objects.length
-        ? selectedObjectIndex
+      Number.isInteger(state.graphObjectIndex) &&
+      state.graphObjectIndex >= 0 &&
+      state.graphObjectIndex < objects.length
+        ? state.graphObjectIndex
         : null;
     const canEdit = !!chart && chart.editor?.editable !== false;
     const commitColors = (colors) => {
