@@ -20,7 +20,7 @@
     TextInput,
     Textarea,
   } = MantineCore;
-  const { useRef, useState, useSyncExternalStore } = React;
+  const { useEffect, useRef, useState, useSyncExternalStore } = React;
 
   function subscribeAppState(onStoreChange) {
     return appFSM.subscribe(onStoreChange);
@@ -2993,14 +2993,17 @@
     const [navbarCollapsed, setNavbarCollapsed] = useState(false);
     const navbarDragRef = useRef(null);
     const clampNavbarWidth = (value) => Math.max(360, Math.min(620, value));
-    const refreshDashboardAfterNavbarChange = () => {
-      requestAnimationFrame(() => {
-        schedulePlotResize();
-      });
-    };
+    useEffect(() => {
+      const app = document.querySelector(".app");
+      if (!app) return;
+      app.style.setProperty(
+        "--sidebar-width",
+        navbarCollapsed ? "0px" : `${navbarWidth}px`,
+      );
+      requestAnimationFrame(() => schedulePlotResize());
+    }, [navbarWidth, navbarCollapsed]);
     const toggleNavbar = () => {
       setNavbarCollapsed((collapsed) => !collapsed);
-      refreshDashboardAfterNavbarChange();
     };
     const startNavbarResize = (event) => {
       if (navbarCollapsed) return;
@@ -3013,7 +3016,6 @@
       if (navbarDragRef.current !== event.pointerId) return;
       const width = clampNavbarWidth(event.clientX);
       setNavbarWidth(width);
-      schedulePlotResize();
     };
     const stopNavbarResize = (event) => {
       if (navbarDragRef.current !== event.pointerId) return;
@@ -3037,7 +3039,7 @@
       },
       React.createElement(
         AppShell.Header,
-        null,
+        { style: { pointerEvents: "auto" } },
         React.createElement(
           Group,
           { h: "100%", px: "md", gap: "md", wrap: "nowrap" },
@@ -3056,7 +3058,7 @@
       ),
       React.createElement(
         AppShell.Navbar,
-        { p: 0, style: { position: "relative" } },
+        { p: 0, style: { position: "relative", pointerEvents: "auto" } },
         React.createElement(FastFigureDataActions),
         React.createElement(FastFigureImageEditor),
         React.createElement(FastFigureProjectDataTree),
