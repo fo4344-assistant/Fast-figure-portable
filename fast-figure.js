@@ -7272,8 +7272,111 @@
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
+      function readLayoutApiState(previewWidth = 600) {
+        let width = readProjectNumber(previewWidth, 600, 1, 20000),
+          geometry = dashboardGeometry(width);
+        return Object.freeze({
+          gridRows: activeProject.gridRows,
+          gridCols: activeProject.gridCols,
+          slotStyle: Object.freeze({ ...activeProject.layout.slotStyle }),
+          visibleSlots: Object.freeze(
+            activeProject.slots
+              .filter((slot) => !slot.hidden)
+              .map((slot) =>
+                Object.freeze({
+                  id: slot.id,
+                  row: slot.row,
+                  col: slot.col,
+                  rowSpan: slot.rowSpan,
+                  colSpan: slot.colSpan,
+                }),
+              ),
+          ),
+          previewGeometry: Object.freeze({ ...geometry }),
+          zoom: dashboardZoomIntent,
+          zoomLocked: dashboardZoomLocked,
+        });
+      }
+      function setLayoutApiStyle(patch = {}) {
+        let current = activeProject.layout.slotStyle,
+          next = { ...current };
+        if (Object.prototype.hasOwnProperty.call(patch, "referenceWidth"))
+          next.referenceWidth = readProjectNumber(
+            patch.referenceWidth,
+            current.referenceWidth,
+            100,
+            20000,
+          );
+        if (Object.prototype.hasOwnProperty.call(patch, "gap"))
+          next.gap = readProjectNumber(patch.gap, current.gap, 0, 2000);
+        if (Object.prototype.hasOwnProperty.call(patch, "outerMargin"))
+          next.outerMargin = readProjectNumber(
+            patch.outerMargin,
+            current.outerMargin,
+            0,
+            5000,
+          );
+        if (Object.prototype.hasOwnProperty.call(patch, "radius"))
+          next.radius = readProjectNumber(patch.radius, current.radius, 0, 2000);
+        if (Object.prototype.hasOwnProperty.call(patch, "aspect"))
+          next.aspect = readProjectNumber(patch.aspect, current.aspect, 0.1, 10);
+        if (Object.prototype.hasOwnProperty.call(patch, "showBorders"))
+          next.showBorders = patch.showBorders === true;
+        activeProject.layout.slotStyle = next;
+        applySlotStyle(false);
+        applyDashboardZoom(false);
+        schedulePlotResize();
+        return readLayoutApiState();
+      }
+      function setLayoutApiGrid(rows, cols) {
+        let nextRows = Number(rows),
+          nextCols = Number(cols);
+        if (
+          !Number.isInteger(nextRows) ||
+          !Number.isInteger(nextCols) ||
+          nextRows < 1 ||
+          nextRows > 8 ||
+          nextCols < 1 ||
+          nextCols > 8
+        )
+          throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
+        makeSlots(nextRows, nextCols);
+        applySlotStyle(false);
+        schedulePlotResize();
+        return readLayoutApiState();
+      }
+      function setLayoutApiZoom(value) {
+        applyDashboardZoom(false, readProjectNumber(value, 100, 50, 200));
+        appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
+        return readLayoutApiState();
+      }
+      function commitLayoutApiZoom() {
+        commitDashboardScale("layout-api");
+        return readLayoutApiState();
+      }
+      function setLayoutApiZoomLocked(locked) {
+        setDashboardZoomLocked(locked === true);
+        if (locked === true)
+          appFSM.notify("layout", "DASHBOARD_ZOOM_LOCK_CHANGED");
+        return readLayoutApiState();
+      }
+      function resetLayoutApiZoom() {
+        if (dashboardZoomLocked) setDashboardZoomLocked(false);
+        else {
+          applyDashboardZoom(false, 100);
+          commitDashboardScale("layout-api-reset");
+        }
+        return readLayoutApiState();
+      }
       window.FastFigureApi = Object.freeze({
         layout: Object.freeze({
+          readState: readLayoutApiState,
+          setStyle: setLayoutApiStyle,
+          setGrid: setLayoutApiGrid,
+          setZoom: setLayoutApiZoom,
+          commitZoom: commitLayoutApiZoom,
+          setZoomLocked: setLayoutApiZoomLocked,
+          resetZoom: resetLayoutApiZoom,
           mergeSlots,
           splitSlots,
         }),

@@ -2690,9 +2690,6 @@
   function FastFigureLayoutOverlay() {
     const state = useAppState();
     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
-    const [zoom, setZoom] = useState(() =>
-      Number.isFinite(dashboardZoomIntent) ? dashboardZoomIntent : 100,
-    );
     const [previewWidth, setPreviewWidth] = useState(600);
     const previewResizeRef = useRef(null);
     useEffect(() => {
@@ -2701,27 +2698,21 @@
     if (state.overlay !== "layout") return null;
     const busy = state.lifecycle !== "ready";
     const layoutApi = window.FastFigureApi.layout;
-    const style = activeProject.layout.slotStyle;
-    const visibleSlots = activeProject.slots.filter((slot) => !slot.hidden);
-    const previewGeometry = dashboardGeometry(previewWidth);
+    const layout = layoutApi.readState(previewWidth);
+    const style = layout.slotStyle;
+    const visibleSlots = layout.visibleSlots;
+    const previewGeometry = layout.previewGeometry;
 
     const clamp = (value, fallback, min, max) => {
       const number = Number(value);
       return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
     };
-    const commitStyle = (patch) => {
-      activeProject.layout.slotStyle = { ...style, ...patch };
-      applySlotStyle(false);
-      applyDashboardZoom(false);
-      schedulePlotResize();
-    };
+    const commitStyle = (patch) => layoutApi.setStyle(patch);
     const changeGrid = (patch) => {
-      const rows = patch.rows ?? activeProject.gridRows;
-      const cols = patch.cols ?? activeProject.gridCols;
-      makeSlots(rows, cols);
+      const rows = patch.rows ?? layout.gridRows;
+      const cols = patch.cols ?? layout.gridCols;
+      layoutApi.setGrid(rows, cols);
       setLayoutSelection(new Set());
-      applySlotStyle(false);
-      schedulePlotResize();
     };
     const toggleSlot = (slotId) => {
       setLayoutSelection((current) => {
@@ -2736,12 +2727,9 @@
       if (Array.isArray(nextSelection))
         setLayoutSelection(new Set(nextSelection));
     };
-    const changeZoom = (value) => {
-      const next = clamp(value, 100, 50, 200);
-      setZoom(next);
-      applyDashboardZoom(false, next);
-    };
-    const commitZoom = () => commitDashboardScale("mantine-layout");
+    const changeZoom = (value) =>
+      layoutApi.setZoom(clamp(value, 100, 50, 200));
+    const commitZoom = () => layoutApi.commitZoom();
     const startPreviewResize = (event) => {
       if (busy) return;
       previewResizeRef.current = {
@@ -2785,23 +2773,23 @@
           { gap: "xs", grow: true },
           React.createElement(NumberInput, {
             label: "행",
-            value: activeProject.gridRows,
+            value: layout.gridRows,
             min: 1,
             max: 8,
             allowDecimal: false,
             disabled: busy,
             onChange: (value) =>
-              changeGrid({ rows: clamp(value, activeProject.gridRows, 1, 8) }),
+              changeGrid({ rows: clamp(value, layout.gridRows, 1, 8) }),
           }),
           React.createElement(NumberInput, {
             label: "열",
-            value: activeProject.gridCols,
+            value: layout.gridCols,
             min: 1,
             max: 8,
             allowDecimal: false,
             disabled: busy,
             onChange: (value) =>
-              changeGrid({ cols: clamp(value, activeProject.gridCols, 1, 8) }),
+              changeGrid({ cols: clamp(value, layout.gridCols, 1, 8) }),
           }),
         ),
         React.createElement(
@@ -2869,38 +2857,29 @@
           { gap: "xs", grow: true },
           React.createElement(NumberInput, {
             label: "확대 비율 (%)",
-            value: zoom,
+            value: layout.zoom,
             min: 50,
             max: 200,
-            disabled: busy || dashboardZoomLocked,
+            disabled: busy || layout.zoomLocked,
             onChange: changeZoom,
             onBlur: commitZoom,
           }),
           React.createElement(
             Button,
             {
-              variant: dashboardZoomLocked ? "filled" : "light",
+              variant: layout.zoomLocked ? "filled" : "light",
               disabled: busy,
-              "aria-pressed": dashboardZoomLocked,
-              onClick: () => {
-                const nextLocked = !dashboardZoomLocked;
-                setDashboardZoomLocked(nextLocked);
-                if (!nextLocked) setZoom(100);
-              },
+              "aria-pressed": layout.zoomLocked,
+              onClick: () => layoutApi.setZoomLocked(!layout.zoomLocked),
             },
-            dashboardZoomLocked ? "크기 고정" : "크기 고정 해제",
+            layout.zoomLocked ? "크기 고정" : "크기 고정 해제",
           ),
           React.createElement(
             Button,
             {
               variant: "light",
               disabled: busy,
-              onClick: () => {
-                if (dashboardZoomLocked) setDashboardZoomLocked(false);
-                setZoom(100);
-                applyDashboardZoom(false, 100);
-                commitDashboardScale("mantine-layout-reset");
-              },
+              onClick: () => layoutApi.resetZoom(),
             },
             "100% 초기화",
           ),
@@ -2916,8 +2895,8 @@
               width: previewGeometry.width,
               maxWidth: "100%",
               height: previewGeometry.height,
-              gridTemplateColumns: `repeat(${activeProject.gridCols}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${activeProject.gridRows}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${layout.gridCols}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${layout.gridRows}, minmax(0, 1fr))`,
               gap: previewGeometry.gap,
               padding: previewGeometry.outerMargin,
               border: "1px solid var(--mantine-color-default-border)",
