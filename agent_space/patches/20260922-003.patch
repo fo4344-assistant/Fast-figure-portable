@@ -1,0 +1,11 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -816,7 +816,6 @@
+         });
+         if (editing && chartIds.has(editing.id)) editing = null;
+         selectedObjectIndex = null;
+-        $("file").value = "";
+         payload.resetCount = targets.length;
+         payload.removedChartIds = [...chartIds];
+       }
