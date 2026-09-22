@@ -4860,23 +4860,6 @@
         validateProjectObject(candidate, { requireSlots: true });
         return candidate;
       }
-      function syncProjectControlsFromObject(project = activeProject) {
-        let style = project.layout.slotStyle,
-          palette = project.appearance.uiPalette;
-        $("projectName").value = project.projectName;
-        $("gridRows").value = project.gridRows;
-        $("gridCols").value = project.gridCols;
-        $("dashboardReferenceWidth").value = style.referenceWidth;
-        $("slotGap").value = style.gap;
-        $("dashboardOuterMargin").value = style.outerMargin;
-        $("slotRadius").value = style.radius;
-        $("dashboardAspect").value = style.aspect;
-        syncSettingToggle("showSlotBorders", style.showBorders);
-        Object.entries(palette).forEach(([key, value]) => {
-          let control = $(key);
-          if (control) control.value = value;
-        });
-      }
       function captureProjectRuntimeState(machine) {
         return {
           editing,
