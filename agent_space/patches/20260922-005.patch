@@ -1,0 +1,223 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -304,7 +304,6 @@
+       let editing = null,
+         selectedSlotId = null,
+         pendingSlotContentType = "graph",
+-        layoutSelected = new Set(),
+         dashboardObserver = null,
+         graphAreaObserver = null,
+         resizePending = false,
+@@ -2292,7 +2291,6 @@
+         });
+         if (activeProject.slotCaptionsEnabled) initializeSlotCaptions();
+         selectedSlotId = null;
+-        layoutSelected.clear();
+         renderDashboard();
+       }
+       function makeSlots(r = activeProject.gridRows, c = activeProject.gridCols) {
+@@ -3926,8 +3924,14 @@
+         });
+         return chart;
+       }
+-      function mergeSelected() {
+-        let selected = [...layoutSelected].map(slotAt).filter(Boolean);
++      function mergeSlots(slotIds = []) {
++        let selected = [
++          ...new Set(
++            (Array.isArray(slotIds) ? slotIds : []).filter(Number.isInteger),
++          ),
++        ]
++          .map(slotAt)
++          .filter((slot) => slot && !slot.hidden);
+         if (selected.length < 2) return status("합칠 슬롯을 둘 이상 선택하세요.");
+         let top = Math.min(...selected.map((s) => s.row)),
+           left = Math.min(...selected.map((s) => s.col)),
+@@ -3981,7 +3985,6 @@
+         cells.filter((s) => s !== anchor).forEach((s) => (s.hidden = true));
+         if (selectedSlotId !== null && cells.some((s) => s.id === selectedSlotId))
+           selectedSlotId = anchor.id;
+-        layoutSelected.clear();
+         renderDashboard();
+         status("직사각형 영역의 슬롯을 합쳤습니다.");
+         appFSM.send("SELECT_SLOT", {
+@@ -3990,11 +3993,16 @@
+           direction: "model-to-fsm",
+         });
+         appFSM.notify("layout", "SLOTS_MERGED");
++        return [];
+       }
+-      function splitSelected() {
+-        let selected = [...layoutSelected]
++      function splitSlots(slotIds = []) {
++        let selected = [
++            ...new Set(
++              (Array.isArray(slotIds) ? slotIds : []).filter(Number.isInteger),
++            ),
++          ]
+           .map(slotAt)
+-          .filter((s) => s && (s.rowSpan > 1 || s.colSpan > 1));
++          .filter((s) => s && !s.hidden && (s.rowSpan > 1 || s.colSpan > 1));
+         if (!selected.length) return status("나눌 합쳐진 슬롯을 선택하세요.");
+         let restored = new Set();
+         selected.forEach((s) => {
+@@ -4013,11 +4021,10 @@
+             }
+           });
+         });
+-        layoutSelected.clear();
+-        restored.forEach((id) => layoutSelected.add(id));
+         renderDashboard();
+         status(`${selected.length}개 슬롯을 나눴습니다.`);
+         appFSM.notify("layout", "SLOTS_SPLIT");
++        return [...restored];
+       }
+       function createChartModel({ id = null, editor = {}, graph = {} } = {}) {
+         let model = {
+@@ -4876,13 +4883,11 @@
+           selectedSlotId,
+           graphObject: machine.state.graphObject,
+           graphObjectIndex: machine.state.graphObjectIndex,
+-          layoutSelected: new Set(layoutSelected),
+         };
+       }
+       function restoreProjectRuntimeState(snapshot, machine) {
+         editing = snapshot.editing;
+         selectedSlotId = snapshot.selectedSlotId;
+-        layoutSelected = new Set(snapshot.layoutSelected);
+         machine.state = Object.freeze({
+           ...machine.state,
+           graphObject: snapshot.graphObject,
+@@ -4892,7 +4897,6 @@
+       function resetProjectRuntimeState(machine) {
+         editing = null;
+         selectedSlotId = null;
+-        layoutSelected.clear();
+         machine.state = Object.freeze({
+           ...machine.state,
+           graphObject: "none",
+@@ -6198,10 +6202,6 @@
+         appFSM.notify("charts", "GRAPH_EDITABLE_CHANGED");
+         return next;
+       }
+-      function clearAllSlotSelections() {
+-        setSelectedSlot(null);
+-        layoutSelected.clear();
+-      }
+       function setAnnotationEnabled(kind, enabled) {
+         if (kind === "label") activeProject.labelsEnabled = enabled;
+         else activeProject.captionsEnabled = enabled;
+@@ -7272,6 +7272,12 @@
+         applyUiPalette(false, notify);
+         return activeProject.appearance.uiPalette;
+       }
++      window.FastFigureApi = Object.freeze({
++        layout: Object.freeze({
++          mergeSlots,
++          splitSlots,
++        }),
++      });
+       window.addEventListener("error", (event) =>
+         debugLog("window:error", {
+           message: event.message,
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2689,18 +2689,21 @@
+ 
+   function FastFigureLayoutOverlay() {
+     const state = useAppState();
+-    const [selectionRevision, setSelectionRevision] = useState(0);
++    const [layoutSelection, setLayoutSelection] = useState(() => new Set());
+     const [zoom, setZoom] = useState(() =>
+       Number.isFinite(dashboardZoomIntent) ? dashboardZoomIntent : 100,
+     );
+     const [previewWidth, setPreviewWidth] = useState(600);
+     const previewResizeRef = useRef(null);
++    useEffect(() => {
++      if (state.overlay !== "layout") setLayoutSelection(new Set());
++    }, [state.overlay]);
+     if (state.overlay !== "layout") return null;
+     const busy = state.lifecycle !== "ready";
++    const layoutApi = window.FastFigureApi.layout;
+     const style = activeProject.layout.slotStyle;
+     const visibleSlots = activeProject.slots.filter((slot) => !slot.hidden);
+     const previewGeometry = dashboardGeometry(previewWidth);
+-    void selectionRevision;
+ 
+     const clamp = (value, fallback, min, max) => {
+       const number = Number(value);
+@@ -2716,17 +2719,22 @@
+       const rows = patch.rows ?? activeProject.gridRows;
+       const cols = patch.cols ?? activeProject.gridCols;
+       makeSlots(rows, cols);
++      setLayoutSelection(new Set());
+       applySlotStyle(false);
+       schedulePlotResize();
+     };
+     const toggleSlot = (slotId) => {
+-      if (layoutSelected.has(slotId)) layoutSelected.delete(slotId);
+-      else layoutSelected.add(slotId);
+-      setSelectionRevision((revision) => revision + 1);
++      setLayoutSelection((current) => {
++        const next = new Set(current);
++        if (next.has(slotId)) next.delete(slotId);
++        else next.add(slotId);
++        return next;
++      });
+     };
+     const runLayoutCommand = (command) => {
+-      command();
+-      setSelectionRevision((revision) => revision + 1);
++      const nextSelection = command([...layoutSelection]);
++      if (Array.isArray(nextSelection))
++        setLayoutSelection(new Set(nextSelection));
+     };
+     const changeZoom = (value) => {
+       const next = clamp(value, 100, 50, 200);
+@@ -2922,7 +2930,7 @@
+               Button,
+               {
+                 key: slot.id,
+-                variant: layoutSelected.has(slot.id) ? "filled" : "light",
++                variant: layoutSelection.has(slot.id) ? "filled" : "light",
+                 disabled: busy,
+                 onClick: () => toggleSlot(slot.id),
+                 style: {
+@@ -2960,8 +2968,8 @@
+           React.createElement(
+             Button,
+             {
+-              disabled: busy || layoutSelected.size < 2,
+-              onClick: () => runLayoutCommand(mergeSelected),
++              disabled: busy || layoutSelection.size < 2,
++              onClick: () => runLayoutCommand(layoutApi.mergeSlots),
+             },
+             "선택 슬롯 합치기",
+           ),
+@@ -2969,8 +2977,8 @@
+             Button,
+             {
+               variant: "light",
+-              disabled: busy || layoutSelected.size < 1,
+-              onClick: () => runLayoutCommand(splitSelected),
++              disabled: busy || layoutSelection.size < 1,
++              onClick: () => runLayoutCommand(layoutApi.splitSlots),
+             },
+             "선택 슬롯 나누기",
+           ),
+@@ -2978,11 +2986,8 @@
+             Button,
+             {
+               variant: "subtle",
+-              disabled: busy || layoutSelected.size < 1,
+-              onClick: () => {
+-                layoutSelected.clear();
+-                setSelectionRevision((revision) => revision + 1);
+-              },
++              disabled: busy || layoutSelection.size < 1,
++              onClick: () => setLayoutSelection(new Set()),
+             },
+             "선택 해제",
+           ),
