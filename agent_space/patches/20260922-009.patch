@@ -1,0 +1,24 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -354,8 +354,6 @@
+       }
+       function clearDebugOutput() {
+         debugSequence = 0;
+-        let control = $("debugLog");
+-        if (control) control.textContent = "";
+         publishUiTelemetry({ debugLines: [] });
+       }
+       function saveDebugOutput() {
+@@ -392,11 +390,6 @@
+         method.call(console, "[chart-builder]", event, payload);
+         let lines = [...uiTelemetryState.debugLines, line].slice(-500);
+         publishUiTelemetry({ debugEnabled, debugLines: lines });
+-        let out = $("debugLog");
+-        if (out) {
+-          out.textContent = lines.join("\n") + (lines.length ? "\n" : "");
+-          out.scrollTop = out.scrollHeight;
+-        }
+       }
+       class ProjectObjectRegistry {
+         constructor(projectProvider) {
