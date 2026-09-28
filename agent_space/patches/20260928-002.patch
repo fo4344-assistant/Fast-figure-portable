@@ -1,0 +1,11 @@
+diff --git a/.github/workflows/apply-fast-figure-patch.yml b/.github/workflows/apply-fast-figure-patch.yml
+--- a/.github/workflows/apply-fast-figure-patch.yml
++++ b/.github/workflows/apply-fast-figure-patch.yml
+@@ -141,6 +141,6 @@
+           git config user.name "github-actions[bot]"
+           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+           git add -- Fast-figure.html fast-figure.js fast-figure-ui.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js README.md scripts/build-portable.py "${{ steps.patch.outputs.path }}"
+-          git commit -m "Apply agent patch ${{ steps.patch.outputs.name }}"
++          git commit -m "Apply agent patch ${{ steps.patch.outputs.name }} — 불안정 chatgpt 작업본"
+           git push
+ 
