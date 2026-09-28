@@ -7248,6 +7248,83 @@
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
+      function readCaptionsApiState() {
+        let slotMode = activeProject.slotCaptionsEnabled,
+          slot = slotMode ? getSelectedSlot() : null;
+        return Object.freeze({
+          enabled: activeProject.captionsEnabled,
+          slotMode,
+          target: slot
+            ? Object.freeze({
+                id: slot.id,
+                row: slot.row,
+                col: slot.col,
+              })
+            : null,
+          text: slot ? slot.caption ?? "슬롯 캡션" : activeProject.captionText,
+          name: activeProject.captionName,
+          nameBold: activeProject.captionNameBold,
+          settings: Object.freeze({ ...activeProject.captionSettings }),
+        });
+      }
+      function setCaptionsApiEnabled(enabled) {
+        setAnnotationEnabled("caption", enabled === true);
+        return readCaptionsApiState();
+      }
+      function setCaptionsApiSlotMode(enabled) {
+        appFSM.send("SLOT_CAPTION_MODE_CHANGED", {
+          enabled: enabled === true,
+          direction: "fsm-to-model",
+        });
+        return readCaptionsApiState();
+      }
+      function insertCaptionsApiSlotCaptions() {
+        appFSM.send("SLOT_CAPTIONS_INSERTED", { direction: "fsm-to-model" });
+        syncDashboardCaption();
+        return readCaptionsApiState();
+      }
+      function setCaptionsApiText(text) {
+        appFSM.send("CAPTION_TEXT_INPUT", {
+          text: String(text ?? ""),
+          region: "body",
+          direction: "fsm-to-model",
+        });
+        syncDashboardCaption();
+        return readCaptionsApiState();
+      }
+      function setCaptionsApiName(name) {
+        activeProject.captionName = String(name ?? "");
+        syncDashboardCaption();
+        appFSM.notify("captions", "CAPTION_NAME_CHANGED");
+        return readCaptionsApiState();
+      }
+      function setCaptionsApiNameBold(bold) {
+        activeProject.captionNameBold = bold === true;
+        syncDashboardCaption();
+        appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
+        return readCaptionsApiState();
+      }
+      function setCaptionsApiSettings(patch = {}) {
+        let current = activeProject.captionSettings,
+          next = { ...current };
+        if (Object.prototype.hasOwnProperty.call(patch, "fontFamily"))
+          next.fontFamily = String(patch.fontFamily ?? "");
+        if (Object.prototype.hasOwnProperty.call(patch, "fontSize")) {
+          let fontSize = Number(patch.fontSize);
+          next.fontSize = Number.isFinite(fontSize)
+            ? Math.max(6, Math.min(96, fontSize))
+            : 14;
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, "lineHeight")) {
+          let lineHeight = Number(patch.lineHeight);
+          next.lineHeight = Number.isFinite(lineHeight)
+            ? Math.max(0.8, Math.min(4, lineHeight))
+            : 1.45;
+        }
+        activeProject.captionSettings = next;
+        applyCaptionSettings();
+        return readCaptionsApiState();
+      }
       function readLabelsApiState() {
         let reference = gridSlotGeometry(
           activeProject.layout,
@@ -7438,6 +7515,16 @@
         return readLayoutApiState();
       }
       window.FastFigureApi = Object.freeze({
+        captions: Object.freeze({
+          readState: readCaptionsApiState,
+          setEnabled: setCaptionsApiEnabled,
+          setSlotMode: setCaptionsApiSlotMode,
+          insertSlotCaptions: insertCaptionsApiSlotCaptions,
+          setText: setCaptionsApiText,
+          setName: setCaptionsApiName,
+          setNameBold: setCaptionsApiNameBold,
+          setSettings: setCaptionsApiSettings,
+        }),
         labels: Object.freeze({
           readState: readLabelsApiState,
           setEnabled: setLabelsApiEnabled,

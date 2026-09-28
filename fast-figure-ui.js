@@ -2396,23 +2396,13 @@
     const state = useAppState();
     if (state.overlay !== "caption") return null;
     const busy = state.lifecycle !== "ready";
-    const slotMode = activeProject.slotCaptionsEnabled;
-    const slot = slotMode ? getSelectedSlot() : null;
-    const text = slot ? initializeSlotCaption(slot) : activeProject.captionText;
-    const settings = activeProject.captionSettings;
+    const captionApi = window.FastFigureApi.captions;
+    const caption = captionApi.readState();
+    const slotMode = caption.slotMode;
+    const target = caption.target;
+    const settings = caption.settings;
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-caption" });
-    const commitSettings = (patch) => {
-      Object.assign(activeProject.captionSettings, patch);
-      applyCaptionSettings();
-    };
-    const changeText = (value) => {
-      appFSM.send("CAPTION_TEXT_INPUT", {
-        text: value,
-        region: "body",
-        direction: "fsm-to-model",
-      });
-      syncDashboardCaption();
-    };
+    const commitSettings = (patch) => captionApi.setSettings(patch);
 
     return React.createElement(
       Modal,
@@ -2435,12 +2425,12 @@
           React.createElement(
             Button,
             {
-              variant: activeProject.captionsEnabled ? "filled" : "light",
+              variant: caption.enabled ? "filled" : "light",
               disabled: busy,
-              "aria-pressed": activeProject.captionsEnabled,
-              onClick: () => setAnnotationEnabled("caption", !activeProject.captionsEnabled),
+              "aria-pressed": caption.enabled,
+              onClick: () => captionApi.setEnabled(!caption.enabled),
             },
-            activeProject.captionsEnabled ? "캡션 표시" : "캡션 숨김",
+            caption.enabled ? "캡션 표시" : "캡션 숨김",
           ),
           React.createElement(
             Button,
@@ -2448,11 +2438,7 @@
               variant: slotMode ? "filled" : "light",
               disabled: busy,
               "aria-pressed": slotMode,
-              onClick: () =>
-                appFSM.send("SLOT_CAPTION_MODE_CHANGED", {
-                  enabled: !slotMode,
-                  direction: "fsm-to-model",
-                }),
+              onClick: () => captionApi.setSlotMode(!slotMode),
             },
             "슬롯별 캡션",
           ),
@@ -2461,10 +2447,7 @@
             {
               variant: "light",
               disabled: busy,
-              onClick: () => {
-                appFSM.send("SLOT_CAPTIONS_INSERTED", { direction: "fsm-to-model" });
-                syncDashboardCaption();
-              },
+              onClick: () => captionApi.insertSlotCaptions(),
             },
             "슬롯 캡션 삽입",
           ),
@@ -2473,43 +2456,35 @@
           Text,
           { size: "sm", c: "dimmed" },
           slotMode
-            ? slot
-              ? `대상: ${slot.row}행 ${slot.col}열`
+            ? target
+              ? `대상: ${target.row}행 ${target.col}열`
               : "대상 슬롯을 선택하세요."
             : "대상: 전체 캡션",
         ),
         React.createElement(Textarea, {
           label: "내용",
-          value: text,
+          value: caption.text,
           minRows: 5,
           autosize: true,
-          disabled: busy || (slotMode && !slot),
-          onChange: (event) => changeText(event.target.value),
+          disabled: busy || (slotMode && !target),
+          onChange: (event) => captionApi.setText(event.target.value),
         }),
         React.createElement(
           Group,
           { gap: "xs", grow: true },
           React.createElement(TextInput, {
             label: "이름",
-            value: activeProject.captionName,
+            value: caption.name,
             disabled: busy || slotMode,
-            onChange: (event) => {
-              activeProject.captionName = event.target.value;
-              syncDashboardCaption();
-              appFSM.notify("captions", "CAPTION_NAME_CHANGED");
-            },
+            onChange: (event) => captionApi.setName(event.target.value),
           }),
           React.createElement(
             Button,
             {
-              variant: activeProject.captionNameBold ? "filled" : "light",
+              variant: caption.nameBold ? "filled" : "light",
               disabled: busy || slotMode,
-              "aria-pressed": activeProject.captionNameBold,
-              onClick: () => {
-                activeProject.captionNameBold = !activeProject.captionNameBold;
-                syncDashboardCaption();
-                appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
-              },
+              "aria-pressed": caption.nameBold,
+              onClick: () => captionApi.setNameBold(!caption.nameBold),
             },
             "이름 굵게",
           ),
@@ -2529,12 +2504,7 @@
             min: 6,
             max: 96,
             disabled: busy,
-            onChange: (value) => {
-              const number = Number(value);
-              commitSettings({
-                fontSize: Number.isFinite(number) ? Math.max(6, Math.min(96, number)) : 14,
-              });
-            },
+            onChange: (value) => commitSettings({ fontSize: value }),
           }),
           React.createElement(NumberInput, {
             label: "줄 간격",
@@ -2543,12 +2513,7 @@
             max: 4,
             step: 0.05,
             disabled: busy,
-            onChange: (value) => {
-              const number = Number(value);
-              commitSettings({
-                lineHeight: Number.isFinite(number) ? Math.max(0.8, Math.min(4, number)) : 1.45,
-              });
-            },
+            onChange: (value) => commitSettings({ lineHeight: value }),
           }),
         ),
       ),
