@@ -73,7 +73,10 @@
       }),
       Modal: Modal.extend({
         defaultProps: {
-              },
+          centered: true,
+          closeOnClickOutside: true,
+          closeOnEscape: true,
+        },
       }),
     },
   });
