@@ -1509,18 +1509,16 @@
     const busy = state.lifecycle !== "ready";
     const dragRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
-    const chart = graphEditorChart();
-    const objects = chart ? ensureGraphObjects(chart) : [];
-    const selectedIndex =
-      Number.isInteger(state.graphObjectIndex) && objects[state.graphObjectIndex]
-        ? state.graphObjectIndex
-        : null;
+    const graphApi = window.FastFigureApi.graphs;
+    const editor = graphApi.readData();
+    const objects = editor.objects;
+    const selectedIndex = editor.selectedIndex;
     const selected = selectedIndex === null ? null : objects[selectedIndex];
-    const activeCsv = getProjectCsv(selected?.csvId) || getProjectCsv(objects[0]?.csvId) || selectedProjectCsv() || activeProject.csvFiles[0] || null;
-    const csvOptions = activeProject.csvFiles.map((csv) => ({ value: String(csv.id), label: csv.name }));
-    const columns = activeCsv ? columnDefinitions(activeCsv.rows, activeCsv.headerLines) : [];
+    const activeCsv = editor.csv;
+    const csvOptions = editor.csvOptions;
+    const columns = activeCsv?.columns || [];
     const columnOptions = columns.map((column) => ({ value: column.id, label: column.label }));
-    const update = (values) => selectedIndex !== null && graphEditorObjectValues(selectedIndex, values);
+    const update = (values) => selectedIndex !== null && graphApi.setObjectValues(selectedIndex, values);
     const selectField = (label, key, data) => React.createElement(Select, {
       label, data, value: selected?.[key] ?? null, disabled: busy,
       onChange: (value) => value !== null && update({ [key]: value }),
@@ -1536,12 +1534,12 @@
       React.createElement(Select, {
         label: "사용할 CSV", data: csvOptions, value: activeCsv ? String(activeCsv.id) : null,
         disabled: busy || !csvOptions.length,
-        onChange: (value) => value !== null && graphEditorSelectCsv(Number(value)),
+        onChange: (value) => value !== null && graphApi.selectCsv(Number(value)),
       }),
       activeCsv ? React.createElement(NumberInput, {
-        label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rows.length,
+        label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rowCount,
         allowDecimal: false, disabled: busy,
-        onChange: (value) => graphEditorHeaderLines(activeCsv.id, value),
+        onChange: (value) => graphApi.setHeaderLines(activeCsv.id, value),
       }) : null,
       activeCsv && columns.length
         ? React.createElement(
@@ -1564,7 +1562,7 @@
               React.createElement(
                 TableTbody,
                 null,
-                ...activeCsv.rows.slice(0, 30).map((row, rowIndex) =>
+                ...activeCsv.rows.map((row, rowIndex) =>
                   React.createElement(
                     TableTr,
                     { key: rowIndex },
@@ -1586,44 +1584,44 @@
         : null,
       React.createElement(Group, { gap: "xs", grow: true },
         React.createElement(Button, {
-          variant: chart?.editor?.editable !== false ? "filled" : "light", disabled: busy || !chart,
-          onClick: () => graphEditorSetEditable(chart?.editor?.editable === false),
-        }, chart?.editor?.editable !== false ? "편집 가능" : "원본 JSON"),
+          variant: editor.editable ? "filled" : "light", disabled: busy || !editor.chartId,
+          onClick: () => graphApi.setEditable(!editor.editable),
+        }, editor.editable ? "편집 가능" : "원본 JSON"),
         React.createElement(Button, {
           variant: "light", disabled: busy || !activeCsv,
-          onClick: () => activeCsv && graphEditorAdd(activeCsv.id),
+          onClick: () => activeCsv && graphApi.addObject(activeCsv.id),
         }, "오브젝트 추가"),
       ),
       React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
       objects.length ? React.createElement(Stack, { gap: 4 },
         ...objects.map((object, index) => React.createElement(Group, {
-          key: `${chart.id}-${index}`, gap: 4, wrap: "nowrap", draggable: true,
+          key: `${editor.chartId}-${index}`, gap: 4, wrap: "nowrap", draggable: true,
           onDragStart: () => { dragRef.current = index; },
           onDragEnd: () => { dragRef.current = null; },
           onDragOver: (event) => event.preventDefault(),
           onDrop: (event) => {
             event.preventDefault();
-            if (Number.isInteger(dragRef.current)) graphEditorMove(dragRef.current, index);
+            if (Number.isInteger(dragRef.current)) graphApi.moveObject(dragRef.current, index);
             dragRef.current = null;
           },
         },
           React.createElement(Button, {
             size: "xs", variant: selectedIndex === index ? "filled" : "light",
             style: { flex: "1 1 auto", minWidth: 0 },
-            onClick: () => graphEditorSelectObject(index),
+            onClick: () => graphApi.selectObject(index),
           }, `${index + 1}. ${object.legendName || `${object.x} · ${object.y}`}`),
           React.createElement(ColorInput, {
             size: "xs", value: object.color, style: { width: 72 }, disabled: busy,
-            onChange: (color) => graphEditorObjectValues(index, { color }),
+            onChange: (color) => graphApi.setObjectValues(index, { color }),
           }),
           React.createElement(ActionIcon, {
             size: "sm", variant: "subtle", disabled: busy,
             "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
-            onClick: () => graphEditorDelete(index),
+            onClick: () => graphApi.deleteObject(index),
           }, "×"),
         )),
       ) : React.createElement(Text, { size: "xs", c: "dimmed" }, "추가된 그래프 오브젝트가 없습니다."),
-      selected && activeCsv && chart?.editor?.editable !== false ? React.createElement(Stack, { gap: "xs" },
+      selected && activeCsv && editor.editable ? React.createElement(Stack, { gap: "xs" },
         React.createElement(Select, {
           label: "오브젝트 CSV", data: csvOptions, value: String(selected.csvId), disabled: busy,
           onChange: (value) => value !== null && update({ csvId: Number(value) }),
@@ -1669,43 +1667,20 @@
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
     if (state.workspace !== "slot.graph") return null;
-    const slot = getSelectedSlot();
-    const chart = slot?.chart ? getChart(slot.chart) : null;
-    if (!chart) return null;
-    const settings = readGlobalSettings(chart);
-    const editable = chart.editor?.editable !== false;
+    const graphApi = window.FastFigureApi.graphs;
+    const editor = graphApi.readLayout();
+    if (!editor) return null;
+    const settings = editor.settings;
+    const editable = editor.editable;
     const axisLabels = {
       xBottom: "아래 X축",
       xTop: "위 X축",
       yLeft: "왼쪽 Y축",
       yRight: "오른쪽 Y축",
     };
-    const commit = (title, globalSettings) => {
-      if (!editable) return status("편집 가능 토글을 켠 뒤 설정을 변경하세요.");
-      const payload = {
-        slotId: slot.id,
-        chartId: chart.id,
-        title,
-        globalSettings,
-        direction: "fsm-to-model",
-      };
-      appFSM.send("CHART_LAYOUT_CHANGED", payload);
-      renderDashboard();
-      debugLog("mantine:graph-layout", { slotId: slot.id, chartId: chart.id });
-    };
-    const updateGlobal = (values) =>
-      commit(chart.editor.title, { ...readGlobalSettings(chart), ...values });
-    const updateTitle = (title) => commit(title, readGlobalSettings(chart));
-    const updateAxis = (key, values) => {
-      const current = readGlobalSettings(chart);
-      commit(chart.editor.title, {
-        ...current,
-        axes: {
-          ...current.axes,
-          [key]: { ...current.axes[key], ...values },
-        },
-      });
-    };
+    const updateGlobal = (values) => graphApi.updateLayout({ globalSettings: values });
+    const updateTitle = (title) => graphApi.updateLayout({ title });
+    const updateAxis = (key, values) => graphApi.updateLayout({ axisKey: key, axisValues: values });
     const toggleGlobal = (key, label) =>
       React.createElement(
         Button,
@@ -1850,7 +1825,7 @@
       React.createElement(Text, { fw: 600 }, "그래프 전역 / 축"),
       React.createElement(TextInput, {
         label: "그래프 제목",
-        value: chart.editor.title,
+        value: editor.title,
         disabled: busy || !editable,
         onChange: (event) => updateTitle(event.target.value),
       }),
@@ -1893,34 +1868,18 @@
     const busy = state.lifecycle !== "ready";
     const importResetRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
-    const chart = graphEditorChart();
-    const objects = chart ? ensureGraphObjects(chart) : [];
-    const selected =
-      Number.isInteger(state.graphObjectIndex) &&
-      state.graphObjectIndex >= 0 &&
-      state.graphObjectIndex < objects.length
-        ? state.graphObjectIndex
-        : null;
-    const canEdit = !!chart && chart.editor?.editable !== false;
-    const commitColors = (colors) => {
-      if (!canEdit) return status("편집 가능 토글을 켠 뒤 색상 구성을 변경하세요.");
-      if (!Array.isArray(colors) || !colors.length)
-        throw Error("적용할 색상 배열이 없습니다.");
-      const next = objects.map((object, index) => ({
-        ...object,
-        color: colors[index % colors.length],
-      }));
-      graphEditorCommit(next, selected);
-      return next;
-    };
+    const graphApi = window.FastFigureApi.graphs;
+    const editor = graphApi.readPalette();
+    const canEdit = !!editor.chartId && editor.editable;
+    const commitColors = (colors) => graphApi.applyPalette(colors);
     const resetPalette = () => {
-      if (!chart) return status("그래프 슬롯을 먼저 선택하세요.");
-      commitColors(DEFAULT_COLORS);
-      debugLog("graphPalette:reset", { slotId: getSelectedSlot()?.id ?? null });
+      if (!editor.chartId) return status("그래프 슬롯을 먼저 선택하세요.");
+      commitColors(graphApi.defaultColors());
+      debugLog("graphPalette:reset", { slotId: editor.slotId });
     };
     const savePalette = () => {
-      if (!chart) return status("그래프 슬롯을 먼저 선택하세요.");
-      const colors = objects.map((object) => object.color).filter(Boolean);
+      if (!editor.chartId) return status("그래프 슬롯을 먼저 선택하세요.");
+      const colors = editor.colors.filter(Boolean);
       const blob = new Blob([JSON.stringify({ colors }, null, 2)], {
         type: "application/json;charset=utf-8",
       });
@@ -1931,7 +1890,7 @@
       link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 0);
       debugLog("graphPalette:save", {
-        slotId: getSelectedSlot()?.id ?? null,
+        slotId: editor.slotId,
         colors: colors.length,
       });
     };
@@ -1951,7 +1910,7 @@
             commitColors(valid);
             status(`${file.name} 색상 구성을 덮어썼습니다.`);
             debugLog("graphPalette:load", {
-              slotId: getSelectedSlot()?.id ?? null,
+              slotId: editor.slotId,
               name: file.name,
               colors: valid.length,
             });
@@ -1980,7 +1939,7 @@
         ),
         React.createElement(
           Button,
-          { variant: "light", disabled: busy || !chart, onClick: savePalette },
+          { variant: "light", disabled: busy || !editor.chartId, onClick: savePalette },
           "저장",
         ),
         React.createElement(

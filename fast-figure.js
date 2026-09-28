@@ -6015,11 +6015,9 @@
           barLineWidth: Math.max(0, Math.min(10, Number(editor.barLineWidth) || 0)),
         };
       }
-      function ensureGraphObjects(chart) {
+      function normalizedGraphObjects(chart) {
         if (!chart) return [];
-        chart.editor = chart.editor || {};
-        if (!Array.isArray(chart.editor.objects)) chart.editor.objects = [];
-        chart.editor.objects = chart.editor.objects.map((object, index) => {
+        return (Array.isArray(chart.editor?.objects) ? chart.editor.objects : []).map((object, index) => {
           let csv = getProjectCsv(object?.csvId) || selectedProjectCsv() || activeProject.csvFiles[0];
           if (!csv)
             throw Error(`그래프 객체 ${index + 1}에 연결할 프로젝트 CSV가 없습니다.`);
@@ -6032,6 +6030,11 @@
             y: selection.y,
           };
         });
+      }
+      function ensureGraphObjects(chart) {
+        if (!chart) return [];
+        chart.editor = chart.editor || {};
+        chart.editor.objects = normalizedGraphObjects(chart);
         return chart.editor.objects;
       }
       function graphEditorChart() {
@@ -6152,6 +6155,80 @@
         debugLog("editor:editable", { chartId: chart.id, editable: next });
         appFSM.notify("charts", "GRAPH_EDITABLE_CHANGED");
         return next;
+      }
+      function readGraphDataApi() {
+        let chart = graphEditorChart(), objects = normalizedGraphObjects(chart);
+        let index = appFSM.state.graphObjectIndex;
+        let selectedIndex = Number.isInteger(index) && objects[index] ? index : null;
+        let csv = getProjectCsv(objects[selectedIndex]?.csvId) ||
+          getProjectCsv(objects[0]?.csvId) || selectedProjectCsv() ||
+          activeProject.csvFiles[0] || null;
+        return {
+          chartId: chart?.id ?? null,
+          editable: chart?.editor?.editable !== false,
+          objects: projectClone(objects),
+          selectedIndex,
+          csv: csv ? {
+            id: csv.id, headerLines: csv.headerLines, rowCount: csv.rows.length,
+            rows: projectClone(csv.rows.slice(0, 30)),
+            columns: columnDefinitions(csv.rows, csv.headerLines),
+          } : null,
+          csvOptions: activeProject.csvFiles.map((item) => ({
+            value: String(item.id), label: item.name,
+          })),
+        };
+      }
+      function readGraphLayoutApi() {
+        let chart = graphEditorChart();
+        return chart ? {
+          chartId: chart.id,
+          editable: chart.editor?.editable !== false,
+          title: chart.editor?.title ?? "",
+          settings: projectClone(readGlobalSettings(chart)),
+        } : null;
+      }
+      function readGraphPaletteApi() {
+        let chart = graphEditorChart();
+        return {
+          slotId: getSelectedSlot()?.id ?? null,
+          chartId: chart?.id ?? null,
+          editable: chart?.editor?.editable !== false,
+          colors: normalizedGraphObjects(chart).map((object) => object.color),
+        };
+      }
+      function updateGraphLayoutApi({ title, globalSettings, axisKey, axisValues } = {}) {
+        let slot = getSelectedSlot(), chart = graphEditorChart();
+        if (!slot || !chart) return null;
+        if (chart.editor?.editable === false)
+          return status("편집 가능 토글을 켠 뒤 설정을 변경하세요.");
+        let settings = readGlobalSettings(chart);
+        if (globalSettings) settings = { ...settings, ...globalSettings };
+        if (axisKey && settings.axes[axisKey])
+          settings = { ...settings, axes: {
+            ...settings.axes,
+            [axisKey]: { ...settings.axes[axisKey], ...axisValues },
+          } };
+        appFSM.send("CHART_LAYOUT_CHANGED", {
+          slotId: slot.id, chartId: chart.id,
+          title: title === undefined ? chart.editor.title : title,
+          globalSettings: settings, direction: "fsm-to-model",
+        });
+        renderDashboard();
+        debugLog("mantine:graph-layout", { slotId: slot.id, chartId: chart.id });
+        return readGraphLayoutApi();
+      }
+      function applyGraphPaletteApi(colors) {
+        let chart = graphEditorChart();
+        if (!chart || chart.editor?.editable === false)
+          return status("편집 가능 토글을 켠 뒤 색상 구성을 변경하세요.");
+        if (!Array.isArray(colors) || !colors.length)
+          throw Error("적용할 색상 배열이 없습니다.");
+        let objects = ensureGraphObjects(chart);
+        let index = appFSM.state.graphObjectIndex;
+        let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
+        return graphEditorCommit(objects.map((object, objectIndex) => ({
+          ...object, color: colors[objectIndex % colors.length],
+        })), selected);
       }
       function setAnnotationEnabled(kind, enabled) {
         if (kind === "label") activeProject.labelsEnabled = enabled;
@@ -7480,6 +7557,22 @@
         return readLayoutApiState();
       }
       window.FastFigureApi = Object.freeze({
+        graphs: Object.freeze({
+          readData: readGraphDataApi,
+          readLayout: readGraphLayoutApi,
+          readPalette: readGraphPaletteApi,
+          selectCsv: graphEditorSelectCsv,
+          setHeaderLines: graphEditorHeaderLines,
+          setEditable: graphEditorSetEditable,
+          addObject: graphEditorAdd,
+          moveObject: graphEditorMove,
+          selectObject: graphEditorSelectObject,
+          setObjectValues: graphEditorObjectValues,
+          deleteObject: graphEditorDelete,
+          updateLayout: updateGraphLayoutApi,
+          applyPalette: applyGraphPaletteApi,
+          defaultColors: () => [...DEFAULT_COLORS],
+        }),
         print: Object.freeze({
           readDefaults: readPrintApiDefaults,
           save: savePrintApi,
