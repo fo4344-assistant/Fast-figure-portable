@@ -1,0 +1,27 @@
+name: Fast Figure regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agent_space/tests/browser-regression.js'
+      - 'agent_space/tests/run-browser-regression.py'
+      - '.github/workflows/fast-figure-regression.yml'
+      - 'Fast-figure.html'
+      - 'fast-figure.js'
+      - 'fast-figure-ui.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check syntax
+        run: node --check agent_space/tests/browser-regression.js
+      - name: Run split and portable regression
+        run: python agent_space/tests/run-browser-regression.py
