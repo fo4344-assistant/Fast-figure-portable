@@ -2099,7 +2099,7 @@
       setOpened(false);
     };
     const resetPalette = () => {
-      setDraft({ ...appearanceApi.resetPalette() });
+      setDraft({ ...appearanceApi.readDefaultPalette() });
     };
 
     return React.createElement(

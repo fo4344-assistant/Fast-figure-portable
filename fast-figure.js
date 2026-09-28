@@ -7375,6 +7375,9 @@
       function readAppearanceApiPalette() {
         return Object.freeze({ ...activeProject.appearance.uiPalette });
       }
+      function readAppearanceApiDefaultPalette() {
+        return Object.freeze({ ...DEFAULT_UI_PALETTE });
+      }
       function setAppearanceApiPalette(values) {
         applyUiPaletteValues(values);
         return readAppearanceApiPalette();
@@ -7506,6 +7509,7 @@
         }),
         appearance: Object.freeze({
           readPalette: readAppearanceApiPalette,
+          readDefaultPalette: readAppearanceApiDefaultPalette,
           setPalette: setAppearanceApiPalette,
           resetPalette: resetAppearanceApiPalette,
         }),
