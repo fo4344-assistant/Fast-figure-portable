@@ -6196,6 +6196,71 @@
           colors: normalizedGraphObjects(chart).map((object) => object.color),
         };
       }
+      function importSelectedGraphFile(file) {
+        return importSlotFile(file, getSelectedSlot());
+      }
+      function readAssetDeletionTarget() {
+        let selected = appFSM.state.assetPath
+          ? projectVfs.resolve(appFSM.state.assetPath) : null;
+        if (!["csv", "image"].includes(selected?.kind) ||
+          (selected.kind === "csv" && selected.asset.isDefaultEmpty === true))
+          return null;
+        let id = selected.asset.id;
+        return {
+          kind: selected.kind, id, name: selected.asset.name,
+          referenceCount: selected.kind === "csv"
+            ? activeProject.charts.reduce((count, chart) =>
+                count + (chart.editor?.objects || []).filter((object) => object.csvId === id).length, 0)
+            : activeProject.slots.filter((slot) => slot.imageId === id).length,
+        };
+      }
+      function deleteProjectAsset(target) {
+        if (!target) return null;
+        if (target.kind === "csv") {
+          let csv = getProjectCsv(target.id);
+          if (!csv || csv.isDefaultEmpty === true) return null;
+          let references = activeProject.charts.flatMap((chart) =>
+            (chart.editor?.objects || []).filter((object) => object.csvId === csv.id));
+          if (references.length) {
+            appFSM.send("CLEAR_GRAPH_OBJECT", {
+              index: null, direction: "ui-to-fsm",
+            });
+            activeProject.charts.forEach((chart) => {
+              if (!Array.isArray(chart.editor?.objects)) return;
+              let objects = chart.editor.objects.filter((object) => object.csvId !== csv.id);
+              if (objects.length === chart.editor.objects.length) return;
+              appFSM.send("GRAPH_OBJECTS_REPLACED", {
+                chartId: chart.id, objects, direction: "fsm-to-model",
+              });
+            });
+          }
+          appFSM.send("DATA_OBJECT_DELETED", {
+            csvId: csv.id, direction: "fsm-to-model",
+          });
+          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "fsm-to-model" });
+          renderDashboard();
+          status(references.length
+            ? `${csv.name}과 이를 참조하던 그래프 오브젝트 ${references.length}개를 삭제했습니다.`
+            : `${csv.name}을 프로젝트에서 삭제했습니다.`);
+        } else if (target.kind === "image") {
+          let image = getProjectImage(target.id);
+          if (!image) return null;
+          let references = activeProject.slots.filter((slot) => slot.imageId === image.id);
+          if (references.length)
+            appFSM.send("SLOTS_RESET", {
+              slotIds: references.map((slot) => slot.id), direction: "fsm-to-model",
+            });
+          appFSM.send("IMAGE_OBJECT_DELETED", {
+            imageId: image.id, direction: "fsm-to-model",
+          });
+          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "fsm-to-model" });
+          renderDashboard();
+          status(references.length
+            ? `${image.name}을 삭제하고 참조 슬롯 ${references.length}개를 초기화했습니다.`
+            : `${image.name}을 프로젝트에서 삭제했습니다.`);
+        }
+        return null;
+      }
       function updateGraphLayoutApi({ title, globalSettings, axisKey, axisValues } = {}) {
         let slot = getSelectedSlot(), chart = graphEditorChart();
         if (!slot || !chart) return null;
@@ -7557,6 +7622,10 @@
         return readLayoutApiState();
       }
       window.FastFigureApi = Object.freeze({
+        assets: Object.freeze({
+          readDeletionTarget: readAssetDeletionTarget,
+          delete: deleteProjectAsset,
+        }),
         graphs: Object.freeze({
           readData: readGraphDataApi,
           readLayout: readGraphLayoutApi,
@@ -7572,6 +7641,10 @@
           updateLayout: updateGraphLayoutApi,
           applyPalette: applyGraphPaletteApi,
           defaultColors: () => [...DEFAULT_COLORS],
+          hasSelectedSlot: () => !!getSelectedSlot(),
+          importFile: importSelectedGraphFile,
+          exportFfsx: downloadSlotFfsx,
+          exportPlotlyJson: downloadPlotlyJson,
         }),
         print: Object.freeze({
           readDefaults: readPrintApiDefaults,

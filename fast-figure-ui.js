@@ -200,11 +200,11 @@
   }
 
   function exportSlotFfsxFromMantine() {
-    return runLifecycleTask("exporting", "SLOT_EXPORT", () => downloadSlotFfsx());
+    return runLifecycleTask("exporting", "SLOT_EXPORT", () => window.FastFigureApi.graphs.exportFfsx());
   }
 
   function exportPlotlyJsonFromMantine() {
-    return runLifecycleTask("exporting", "PLOTLY_EXPORT", () => downloadPlotlyJson());
+    return runLifecycleTask("exporting", "PLOTLY_EXPORT", () => window.FastFigureApi.graphs.exportPlotlyJson());
   }
 
   function FastFigureToolbar() {
@@ -241,10 +241,8 @@
     const slot = state.workspace === "project" ? null : getSelectedSlot();
     const slotType = slot?.contentType || "graph";
     const [resetSlotId, setResetSlotId] = useState(null);
-    const selectedAsset = state.assetPath ? projectVfs.resolve(state.assetPath) : null;
-    const selectedAssetDeletable =
-      ["csv", "image"].includes(selectedAsset?.kind) &&
-      !(selectedAsset.kind === "csv" && selectedAsset.asset.isDefaultEmpty === true);
+    const assetApi = window.FastFigureApi.assets;
+    const selectedAssetDeletable = !!assetApi.readDeletionTarget();
     const [deleteTarget, setDeleteTarget] = useState(null);
     const fileResetRef = useRef(null);
     const { choosePlan: chooseProjectAssetImportPlan, modal: importCollisionModal } =
@@ -324,99 +322,16 @@
       }
     };
 
-    const deletionDescriptor = () => {
-      if (!selectedAssetDeletable) return null;
-      if (selectedAsset.kind === "csv") {
-        const referenceCount = activeProject.charts.reduce(
-          (count, chart) =>
-            count +
-            (chart.editor?.objects || []).filter(
-              (object) => object.csvId === selectedAsset.asset.id,
-            ).length,
-          0,
-        );
-        return {
-          kind: "csv",
-          id: selectedAsset.asset.id,
-          name: selectedAsset.asset.name,
-          referenceCount,
-        };
-      }
-      return {
-        kind: "image",
-        id: selectedAsset.asset.id,
-        name: selectedAsset.asset.name,
-        referenceCount: activeProject.slots.filter(
-          (candidate) => candidate.imageId === selectedAsset.asset.id,
-        ).length,
-      };
-    };
     const performAssetDelete = (target) => {
-      if (!target) return;
       try {
-        if (target.kind === "csv") {
-          const csv = getProjectCsv(target.id);
-          if (!csv || csv.isDefaultEmpty === true) return setDeleteTarget(null);
-          const references = activeProject.charts.flatMap((chart) =>
-            (chart.editor?.objects || [])
-              .map((object) => ({ chart, object }))
-              .filter(({ object }) => object.csvId === target.id),
-          );
-          if (references.length) {
-            appFSM.send("CLEAR_GRAPH_OBJECT", {
-              index: null,
-              direction: "ui-to-fsm",
-            });
-            activeProject.charts.forEach((chart) => {
-              if (!Array.isArray(chart.editor?.objects)) return;
-              const objects = chart.editor.objects.filter((object) => object.csvId !== target.id);
-              if (objects.length === chart.editor.objects.length) return;
-              appFSM.send("GRAPH_OBJECTS_REPLACED", {
-                chartId: chart.id,
-                objects,
-                direction: "fsm-to-model",
-              });
-            });
-          }
-          appFSM.send("DATA_OBJECT_DELETED", {
-            csvId: target.id,
-            direction: "fsm-to-model",
-          });
-          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "fsm-to-model" });
-          renderDashboard();
-          status(
-            references.length
-              ? `${csv.name}과 이를 참조하던 그래프 오브젝트 ${references.length}개를 삭제했습니다.`
-              : `${csv.name}을 프로젝트에서 삭제했습니다.`,
-          );
-        } else {
-          const image = getProjectImage(target.id);
-          if (!image) return setDeleteTarget(null);
-          const references = activeProject.slots.filter((candidate) => candidate.imageId === target.id);
-          if (references.length)
-            appFSM.send("SLOTS_RESET", {
-              slotIds: references.map((candidate) => candidate.id),
-              direction: "fsm-to-model",
-            });
-          appFSM.send("IMAGE_OBJECT_DELETED", {
-            imageId: target.id,
-            direction: "fsm-to-model",
-          });
-          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "fsm-to-model" });
-          renderDashboard();
-          status(
-            references.length
-              ? `${image.name}을 삭제하고 참조 슬롯 ${references.length}개를 초기화했습니다.`
-              : `${image.name}을 프로젝트에서 삭제했습니다.`,
-          );
-        }
+        assetApi.delete(target);
         setDeleteTarget(null);
       } catch (error) {
         status(`에셋 삭제 오류: ${error.message}`);
       }
     };
     const requestAssetDelete = () => {
-      const target = deletionDescriptor();
+      const target = assetApi.readDeletionTarget();
       if (!target) return;
       if (target.referenceCount > 0) setDeleteTarget(target);
       else performAssetDelete(target);
@@ -1965,21 +1880,20 @@
     const busy = state.lifecycle !== "ready";
     const importResetRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
+    const graphApi = window.FastFigureApi.graphs;
 
     const openSlotImportPicker = (open) => {
-      if (!getSelectedSlot())
+      if (!graphApi.hasSelectedSlot())
         return status("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");
       open();
     };
     const importSlotFileFromMantine = async (file) => {
       if (!file) return;
-      const slot = getSelectedSlot();
       try {
         await runLifecycleTask("importing", "SLOT_IMPORT", async () => {
           try {
-            await importSlotFile(file, slot);
+            await graphApi.importFile(file);
           } catch (error) {
-            refreshCsvControls();
             status("슬롯 불러오기 오류: " + error.message);
             debugLog("slot:import-error", { message: error.message });
           }
