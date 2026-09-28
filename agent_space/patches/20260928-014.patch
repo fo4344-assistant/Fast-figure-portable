@@ -1,0 +1,59 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+index 87c0730..516424a 100644
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9326,17 +9326,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
+         --ink: #383a42;
+         --paper: #fff;
+         --graph-bg: #fff;
+-        --panel: #fafafa;
+-        --ui-bg: #fafafa;
+         --ui-color: #b0cfce;
+-        --ui-surface: #ffffff;
+-        --ui-muted: #4f525d;
+         --ui-subtle: #94a3b8;
+-        --ui-disabled-bg: #e5e7eb;
+-        --ui-disabled-text: #64748b;
+-        --ui-shadow: #383a42;
+-        --line: var(--ui-color);
+-        --accent: var(--ui-color);
+         --dashboard-slot-min-width: 280px;
+       }
+       * {
+diff --git a/fast-figure.js b/fast-figure.js
+index a03353e..60e01c5 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -7207,32 +7207,11 @@
+       function applyUiPalette(_fromControls = false, notify = true) {
+         let palette = activeProject.appearance.uiPalette;
+         document.documentElement.style.setProperty("--ui-color", palette.uiColor);
+-        document.documentElement.style.setProperty("--line", palette.uiColor);
+-        document.documentElement.style.setProperty("--accent", palette.uiColor);
+-        document.documentElement.style.setProperty(
+-          "--ui-bg",
+-          palette.uiBackgroundColor,
+-        );
+-        document.documentElement.style.setProperty(
+-          "--panel",
+-          palette.uiBackgroundColor,
+-        );
+         document.documentElement.style.setProperty(
+           "--paper",
+           palette.uiBackgroundColor,
+         );
+-        document.documentElement.style.setProperty("--ui-surface", palette.uiSurfaceColor);
+-        document.documentElement.style.setProperty("--ui-muted", palette.uiMutedColor);
+         document.documentElement.style.setProperty("--ui-subtle", palette.uiSubtleColor);
+-        document.documentElement.style.setProperty(
+-          "--ui-disabled-bg",
+-          palette.uiDisabledBgColor,
+-        );
+-        document.documentElement.style.setProperty(
+-          "--ui-disabled-text",
+-          palette.uiDisabledTextColor,
+-        );
+-        document.documentElement.style.setProperty("--ui-shadow", palette.uiShadowColor);
+         document.documentElement.style.setProperty("--ink", palette.fontColor);
+         document.documentElement.style.setProperty("--graph-bg", palette.paperColor);
+         renderDashboard();
