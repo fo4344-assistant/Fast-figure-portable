@@ -1,0 +1,24 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+index 3fb19a7..6ab054d 100644
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2259,12 +2259,15 @@
+           appFSM.send("CLOSE_OVERLAY", { reason: "mantine-readme" }),
+         title: "Fast figure README",
+         size: "xl",
+-        styles: { body: { maxHeight: "75vh", overflowY: "auto" } },
+         "data-fastfigure-overlay": "readme",
+       },
+-      React.createElement(Box, {
+-        dangerouslySetInnerHTML: { __html: readmeContentHtml() },
+-      }),
++      React.createElement(
++        ScrollArea.Autosize,
++        { mah: "75vh", type: "auto" },
++        React.createElement(Box, {
++          dangerouslySetInnerHTML: { __html: readmeContentHtml() },
++        }),
++      ),
+     );
+   }
+ 
