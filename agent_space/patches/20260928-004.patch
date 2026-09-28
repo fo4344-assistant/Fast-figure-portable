@@ -1,0 +1,209 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -5,11 +5,13 @@
+ 
+   const { React, MantineCore } = runtime;
+   const {
++    ActionIcon,
+     AppShell,
+     Button,
+     ColorInput,
+     Group,
+     Image,
++    Input,
+     MantineProvider,
+     Menu,
+     Modal,
+@@ -19,9 +21,54 @@
+     Text,
+     TextInput,
+     Textarea,
++    createTheme,
+   } = MantineCore;
+   const { useEffect, useRef, useState, useSyncExternalStore } = React;
+ 
++  const fastFigureTheme = createTheme({
++    fontFamily: 'system-ui, "Segoe UI", sans-serif',
++    fontSizes: { ff: "14px" },
++    radius: { ff: "6px" },
++    defaultRadius: "ff",
++    components: {
++      Button: Button.extend({
++        defaultProps: { size: "ff" },
++        vars: (_theme, props) =>
++          props.size === "ff"
++            ? {
++                root: {
++                  "--button-height": "38px",
++                  "--button-padding-x": "12px",
++                  "--button-fz": "14px",
++                },
++              }
++            : { root: {} },
++      }),
++      ActionIcon: ActionIcon.extend({
++        defaultProps: { size: "ff" },
++        vars: (_theme, props) =>
++          props.size === "ff" ? { root: { "--ai-size": "38px" } } : { root: {} },
++      }),
++      Input: Input.extend({
++        defaultProps: { size: "ff" },
++        vars: (_theme, props) =>
++          props.size === "ff"
++            ? {
++                wrapper: {
++                  "--input-height": "38px",
++                  "--input-fz": "14px",
++                  "--input-radius": "6px",
++                },
++              }
++            : { wrapper: {} },
++      }),
++      Modal: Modal.extend({
++        defaultProps: {
++              },
++      }),
++    },
++  });
++
+   function subscribeAppState(onStoreChange) {
+     return appFSM.subscribe(onStoreChange);
+   }
+@@ -92,7 +139,6 @@
+           collision?.mode === "replace-or-rename"
+             ? "같은 이름의 파일"
+             : "파일 이름 충돌",
+-        centered: true,
+       },
+       collision
+         ? React.createElement(
+@@ -447,8 +493,7 @@
+           opened: !!deleteTarget,
+           onClose: () => setDeleteTarget(null),
+           title: "선택 에셋 삭제",
+-          centered: true,
+-        },
++          },
+         deleteTarget
+           ? React.createElement(
+               Stack,
+@@ -494,8 +539,7 @@
+           opened: Number.isInteger(resetSlotId),
+           onClose: closeResetDialog,
+           title: "선택 슬롯 초기화",
+-          centered: true,
+-        },
++          },
+         React.createElement(
+           Stack,
+           { gap: "sm" },
+@@ -1143,8 +1187,7 @@
+           opened: folderDialog.opened,
+           onClose: closeFolderDialog,
+           title: "새 폴더",
+-          centered: true,
+-        },
++          },
+         React.createElement(
+           Stack,
+           { gap: "sm" },
+@@ -1187,8 +1230,7 @@
+           opened: !!trashDialog,
+           onClose: closeTrashDialog,
+           title: "휴지통 비우기",
+-          centered: true,
+-        },
++          },
+         trashDialog
+           ? React.createElement(
+               Stack,
+@@ -1215,8 +1257,7 @@
+           opened: !!movePicker,
+           onClose: () => setMovePicker(null),
+           title: "프로젝트 항목 이동",
+-          centered: true,
+-        },
++          },
+         movePicker
+           ? React.createElement(
+               Stack,
+@@ -1274,8 +1315,7 @@
+           opened: !!moveConfirm,
+           onClose: () => setMoveConfirm(null),
+           title: moveConfirm?.collision ? "이름 충돌" : "휴지통으로 이동",
+-          centered: true,
+-        },
++          },
+         moveConfirm
+           ? React.createElement(
+               Stack,
+@@ -2022,8 +2062,7 @@
+           opened,
+           onClose: () => setOpened(false),
+           title: "UI 색상",
+-          centered: true,
+-          size: "lg",
++            size: "lg",
+         },
+         React.createElement(
+           Stack,
+@@ -2168,9 +2207,6 @@
+           appFSM.send("CLOSE_OVERLAY", { reason: "mantine-readme" }),
+         title: "Fast figure README",
+         size: "xl",
+-        centered: true,
+-        closeOnClickOutside: true,
+-        closeOnEscape: true,
+         styles: { body: { maxHeight: "75vh", overflowY: "auto" } },
+         "data-fastfigure-overlay": "readme",
+       },
+@@ -2239,9 +2275,6 @@
+         onClose: close,
+         title: "레이블",
+         size: "lg",
+-        centered: true,
+-        closeOnClickOutside: true,
+-        closeOnEscape: true,
+         "data-fastfigure-overlay": "label",
+       },
+       React.createElement(
+@@ -2411,9 +2444,6 @@
+         onClose: close,
+         title: "캡션",
+         size: "lg",
+-        centered: true,
+-        closeOnClickOutside: true,
+-        closeOnEscape: true,
+         "data-fastfigure-overlay": "caption",
+       },
+       React.createElement(
+@@ -2562,9 +2592,6 @@
+         onClose: close,
+         title: "프린트 / 내보내기",
+         size: "lg",
+-        centered: true,
+-        closeOnClickOutside: true,
+-        closeOnEscape: true,
+         "data-fastfigure-overlay": "print",
+       },
+       React.createElement(
+@@ -2709,9 +2736,6 @@
+         onClose: close,
+         title: "레이아웃",
+         size: "xl",
+-        centered: true,
+-        closeOnClickOutside: true,
+-        closeOnEscape: true,
+         "data-fastfigure-overlay": "layout",
+       },
+       React.createElement(
+@@ -3059,7 +3083,7 @@
+   window.fastFigureUiRoot.render(
+     React.createElement(
+       MantineProvider,
+-      { defaultColorScheme: "light" },
++      { defaultColorScheme: "light", theme: fastFigureTheme },
+       React.createElement(FastFigureShell),
+     ),
+   );
