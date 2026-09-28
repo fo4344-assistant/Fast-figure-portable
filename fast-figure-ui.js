@@ -39,6 +39,15 @@
     fontSizes: { ff: "14px" },
     radius: { ff: "6px" },
     defaultRadius: "ff",
+    other: {
+      shell: {
+        headerHeight: 57,
+        navbarWidth: 370,
+        navbarMinWidth: 360,
+        navbarMaxWidth: 620,
+        resizeHandleWidth: 8,
+      },
+    },
     components: {
       Button: Button.extend({
         defaultProps: { size: "ff" },
@@ -2993,15 +3002,17 @@
   }
 
   function FastFigureShell() {
-    const [navbarWidth, setNavbarWidth] = useState(370);
+    const shellGeometry = fastFigureTheme.other.shell;
+    const [navbarWidth, setNavbarWidth] = useState(shellGeometry.navbarWidth);
     const [navbarCollapsed, setNavbarCollapsed] = useState(false);
     const navbarDragRef = useRef(null);
-    const clampNavbarWidth = (value) => Math.max(360, Math.min(620, value));
+    const clampNavbarWidth = (value) =>
+      Math.max(shellGeometry.navbarMinWidth, Math.min(shellGeometry.navbarMaxWidth, value));
     useEffect(() => {
       const app = document.querySelector(".app");
       if (!app) return;
       app.style.setProperty(
-        "--sidebar-width",
+        "--ff-renderer-navbar-width",
         navbarCollapsed ? "0px" : `${navbarWidth}px`,
       );
       requestAnimationFrame(() => schedulePlotResize());
@@ -3033,7 +3044,7 @@
     return React.createElement(
       AppShell,
       {
-        header: { height: 57 },
+        header: { height: shellGeometry.headerHeight },
         navbar: {
           width: navbarWidth,
           breakpoint: "sm",
@@ -3092,9 +3103,9 @@
           onPointerCancel: stopNavbarResize,
           pos: "absolute",
           top: 0,
-          right: -4,
+          right: -shellGeometry.resizeHandleWidth / 2,
           bottom: 0,
-          w: 8,
+          w: shellGeometry.resizeHandleWidth,
           style: {
             cursor: "col-resize",
             touchAction: "none",
@@ -3135,7 +3146,18 @@
   window.fastFigureUiRoot.render(
     React.createElement(
       MantineProvider,
-      { defaultColorScheme: "light", theme: fastFigureTheme },
+      {
+        defaultColorScheme: "light",
+        theme: fastFigureTheme,
+        cssVariablesResolver: (theme) => ({
+          variables: {
+            "--ff-header-height": `${theme.other.shell.headerHeight}px`,
+            "--ff-navbar-width": `${theme.other.shell.navbarWidth}px`,
+          },
+          light: {},
+          dark: {},
+        }),
+      },
       React.createElement(FastFigureShell),
     ),
   );
