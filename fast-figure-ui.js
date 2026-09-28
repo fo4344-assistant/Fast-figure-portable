@@ -3145,8 +3145,18 @@
     selectedTargetText,
   });
 
-  window.fastFigureUiRoot.render(
-    React.createElement(
+  function FastFigureApp() {
+    useAppState();
+    const palette = window.FastFigureApi.appearance.readPalette();
+    const channels = [1, 3, 5].map((index) => {
+      const value = parseInt(palette.uiColor.slice(index, index + 2), 16) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    const contrast =
+      0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2] > 0.179
+        ? "#000000"
+        : "#FFFFFF";
+    return React.createElement(
       MantineProvider,
       {
         defaultColorScheme: "light",
@@ -3155,12 +3165,40 @@
           variables: {
             "--ff-header-height": `${theme.other.shell.headerHeight}px`,
             "--ff-navbar-width": `${theme.other.shell.navbarWidth}px`,
+            ...Object.fromEntries(
+              Object.entries(theme.shadows).map(([size, shadow]) => [
+                `--mantine-shadow-${size}`,
+                shadow.replace(/rgba\(0, 0, 0, (0?\.\d+)\)/g, (_match, opacity) =>
+                  `color-mix(in srgb, ${palette.uiShadowColor} ${Number(opacity) * 100}%, transparent)`,
+                ),
+              ]),
+            ),
           },
-          light: {},
+          light: {
+            "--mantine-color-body": palette.uiBackgroundColor,
+            "--mantine-color-text": palette.fontColor,
+            "--mantine-color-default": palette.uiSurfaceColor,
+            "--mantine-color-default-hover": `color-mix(in srgb, ${palette.uiColor} 12%, ${palette.uiSurfaceColor})`,
+            "--mantine-color-default-color": palette.fontColor,
+            "--mantine-color-default-border": palette.uiColor,
+            "--mantine-color-dimmed": palette.uiMutedColor,
+            "--mantine-color-placeholder": palette.uiSubtleColor,
+            "--mantine-color-disabled": palette.uiDisabledBgColor,
+            "--mantine-color-disabled-color": palette.uiDisabledTextColor,
+            "--mantine-color-disabled-border": palette.uiDisabledBgColor,
+            "--mantine-primary-color-filled": palette.uiColor,
+            "--mantine-primary-color-filled-hover": `color-mix(in srgb, ${palette.uiColor} 75%, #64748b)`,
+            "--mantine-primary-color-light": `color-mix(in srgb, ${palette.uiColor} 18%, transparent)`,
+            "--mantine-primary-color-light-hover": `color-mix(in srgb, ${palette.uiColor} 24%, transparent)`,
+            "--mantine-primary-color-light-color": palette.fontColor,
+            "--mantine-primary-color-contrast": contrast,
+          },
           dark: {},
         }),
       },
       React.createElement(FastFigureShell),
-    ),
-  );
+    );
+  }
+
+  window.fastFigureUiRoot.render(React.createElement(FastFigureApp));
 })();
