@@ -1,0 +1,1790 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9337,16 +9337,9 @@
+         --ui-shadow: #383a42;
+         --line: var(--ui-color);
+         --accent: var(--ui-color);
+-        --toolbar-control-height: 38px;
+-        --icon-action-button-size: var(--toolbar-control-height);
+-        --icon-action-glyph-size: 18px;
+-        --popup-heading-font-size: 15px;
+-        --popup-heading-gap: 8px;
+-        --popup-heading-divider-space: 10px;
+-        --popup-divider-content-space: 11px;
+-        --popup-min-content-width: 620px;
++
+         --header-height: 57px;
+-        --toolbar-primary-control-min-width: 100px;
++
+         --dashboard-slot-min-width: 280px;
+       }
+       * {
+@@ -9356,1174 +9349,656 @@
+         margin: 0;
+         background: var(--paper);
+         color: var(--ink);
+-        font:
+-          14px system-ui,
+-          "Segoe UI",
+-          sans-serif;
+         overflow: hidden;
+       }
+-      header {
+-        position: sticky;
+-        top: 0;
+-        z-index: 2000;
+-        display: flex;
+-        align-items: center;
+-        gap: 18px;
+-        padding: 17px 24px;
+-        border-bottom: 1px solid var(--line);
+-        background: var(--paper);
++      .app {
++        --sidebar-width: 370px;
++        display: grid;
++        grid-template-columns: minmax(0, var(--sidebar-width)) minmax(0, 1fr);
++        margin-top: var(--header-height);
++        height: calc(100vh - var(--header-height));
+       }
+-      header h1 {
+-        flex: 0 0 auto;
+-        white-space: nowrap;
+-      }
+-      header .toolbar {
+-        flex: 1 1 auto;
++      .app > main {
++        grid-column: 2;
++        position: relative;
++        padding: 18px;
+         min-width: 0;
+-        margin: 0;
++        min-height: 0;
++        overflow-x: hidden;
++        overflow-y: auto;
++        overscroll-behavior: contain;
++        scrollbar-gutter: stable;
++        font:
++          14px system-ui,
++          "Segoe UI",
++          sans-serif;
+       }
+-      h1 {
+-        font-size: 20px;
+-        margin: 0;
++      details.palette[open] summary {
++        border-bottom: 1px solid var(--line);
+       }
+-      .app {
+-        --sidebar-width: 370px;
+-        display: grid;
+-        grid-template-columns: minmax(0, var(--sidebar-width)) minmax(0, 1fr);
+-        margin-top: var(--header-height);
+-        height: calc(100vh - var(--header-height));
++      .slot-image-frame {
++        position: absolute;
++        inset: 0;
++        overflow: hidden;
+       }
+-      .app.sidebar-measuring {
+-        grid-template-columns: 1px 10px minmax(0, 1fr) !important;
++      .slot-image {
++        width: 100%;
++        height: 100%;
++        display: block;
++        object-fit: contain;
+       }
+-      aside {
+-        position: sticky;
+-        top: var(--header-height);
+-        align-self: start;
+-        height: calc(100vh - var(--header-height));
+-        min-width: 0;
+-        padding: 16px;
+-        border-right: 1px solid var(--line);
+-        background: var(--panel);
+-        overflow-x: hidden;
+-        overflow-y: auto;
+-        scrollbar-width: thin;
+-        scrollbar-color: var(--ui-color) transparent;
++      .slot-image.manual {
++        position: absolute;
++        max-width: none;
++        height: auto;
++        transform: translate(-50%, -50%);
+       }
+-      aside::-webkit-scrollbar {
+-        width: 8px;
++      .hidden {
++        display: none !important;
+       }
+-      aside::-webkit-scrollbar-track {
+-        background: transparent;
++      .iconoir {
++        display: block;
++        width: 100%;
++        height: 100%;
++        overflow: visible;
++        color: currentColor;
+       }
+-      aside::-webkit-scrollbar-thumb {
+-        border: 2px solid transparent;
+-        border-radius: 99px;
+-        background: var(--ui-color);
+-        background-clip: padding-box;
++      .graph-area {
++        position: relative;
++        z-index: 0;
++        width: 100%;
++        overflow-x: auto;
++        overflow-y: hidden;
+       }
+-      aside::-webkit-scrollbar-thumb:hover {
+-        background-color: color-mix(in srgb, var(--ui-color) 75%, #64748b);
+-        background-clip: padding-box;
++      .dashboard {
++        box-sizing: border-box;
++        display: grid;
++        gap: var(--slot-gap, 0px);
++        margin-top: 30px;
++        min-height: 540px;
++        grid-template-columns: repeat(
++          var(--grid-cols),
++          minmax(var(--dashboard-effective-slot-min-width, var(--dashboard-slot-min-width)), 1fr)
++        );
++        grid-template-rows: repeat(var(--grid-rows), minmax(250px, 1fr));
++        background: var(--graph-bg, #fff);
++        padding: var(--dashboard-outer-margin, 0px);
++        border-radius: 0;
+       }
+-      aside > fieldset,
+-      aside > details {
++      .dashboard.fixed-aspect {
+         width: 100%;
+-        min-width: 0;
++        height: auto;
++        min-height: 0;
++        grid-template-rows: repeat(var(--grid-rows), minmax(0, 1fr));
++        aspect-ratio: var(--dashboard-aspect);
++        align-self: start;
+       }
+-      .app > main {
+-        grid-column: 2;
++      .slot {
+         position: relative;
+-        padding: 18px;
++        display: flex;
++        align-items: center;
++        justify-content: center;
+         min-width: 0;
+         min-height: 0;
+-        overflow-x: hidden;
+-        overflow-y: auto;
+-        overscroll-behavior: contain;
+-        scrollbar-gutter: stable;
++        overflow: visible;
++        border: 1px solid var(--slot-border-color, var(--ui-color));
++        border-radius: var(--slot-radius, 0px);
++        background: var(--graph-bg, #fff);
+       }
+-      .sidebar-resizer {
+-        position: relative;
+-        cursor: col-resize;
+-        background: var(--panel);
+-        border-right: 1px solid var(--line);
++      .dashboard-caption {
++        display: block;
++        box-sizing: border-box;
++        width: 100%;
++        min-height: 0;
++        margin-top: 10px;
++        padding: 8px 16px;
++        border: 1px solid var(--slot-border-color, var(--ui-color));
++        border-radius: var(--slot-radius, 0px);
++        background: var(--graph-bg, #fff);
++        color: var(--ink);
++        font: inherit;
++        line-height: 1.45;
++        white-space: pre-wrap;
++        overflow-wrap: anywhere;
+       }
+-      .sidebar-toggle {
+-        position: absolute;
+-        z-index: 3;
+-        top: 14px;
+-        left: 50%;
+-        width: 24px !important;
+-        height: 30px;
+-        margin: 0 !important;
+-        padding: 0 !important;
+-        transform: translateX(-50%);
+-        border: 1px solid var(--line) !important;
+-        background: #fff !important;
+-        color: var(--ink) !important;
++      .caption-prefix {
++        display: inline;
++        white-space: pre-wrap;
+       }
+-      .app.sidebar-collapsed {
+-        grid-template-columns: 0 10px minmax(0, 1fr);
++      .caption-prefix:not(.hidden)::after {
++        content: " ";
+       }
+-      .app.sidebar-collapsed aside {
+-        visibility: hidden;
+-        padding: 0;
+-        border: 0;
+-        pointer-events: none;
++      .caption-prefix.bold {
++        font-weight: 700;
+       }
+-      .app.sidebar-collapsed .sidebar-resizer {
+-        cursor: default;
++      .caption-body {
++        display: inline;
++        outline: 0;
++        white-space: pre-wrap;
++        overflow-wrap: anywhere;
+       }
+-      .app.sidebar-collapsed .sidebar-toggle {
+-        cursor: pointer;
++      .dashboard-caption.slot-caption-view {
++        display: block;
+       }
+-      main.dashboard-popup-open #dashboard {
+-        pointer-events: none;
++      .caption-section + .caption-section {
++        margin-left: 0.65em;
+       }
+-      fieldset,
+-      details.palette {
+-        margin: 0 0 13px;
+-        padding: 11px;
+-        border: 1px solid var(--line);
+-        border-radius: 8px;
++      .caption-edit-region {
++        display: inline-block;
++        min-width: 1ch;
+       }
+-      legend {
+-        font-weight: 700;
++      [data-caption-region="sections"] {
++        display: inline;
+       }
+-      details.palette {
+-        padding: 0;
++      .caption-edit-region:not(:empty) + [data-caption-region="sections"],
++      [data-caption-region="sections"]:not(:empty) + .caption-edit-region:not(:empty) {
++        margin-left: 0.65em;
+       }
+-      details.palette summary {
+-        padding: 11px;
+-        font-weight: 700;
+-        cursor: pointer;
++      .caption-edit-region:focus {
++        outline: 1px solid var(--ui-color);
+       }
+-      details.palette[open] summary {
+-        border-bottom: 1px solid var(--line);
++      [data-caption-region="before"]:empty::before {
++        content: "앞 설명";
++        color: var(--ui-subtle);
+       }
+-      #paletteControls {
+-        padding: 0 11px 11px;
++      [data-caption-region="after"]:empty::before {
++        content: "뒤 설명";
++        color: var(--ui-subtle);
+       }
+-      label {
+-        display: block;
+-        margin: 8px 0 4px;
+-        font-weight: 600;
++      .caption-section-label {
++        margin-right: 0.3em;
++        font-weight: 700;
++        white-space: nowrap;
++        user-select: none;
+       }
+-      .slot-image-frame {
+-        position: absolute;
+-        inset: 0;
+-        overflow: hidden;
++      .caption-body:empty:before {
++        content: attr(data-placeholder);
++        color: #94a3b8;
++        pointer-events: none;
+       }
+-      .slot-image {
+-        width: 100%;
+-        height: 100%;
+-        display: block;
+-        object-fit: contain;
++      .caption-body:focus {
++        outline: 1px solid var(--ui-color);
+       }
+-      .slot-image.manual {
++      .slot-label {
+         position: absolute;
+-        max-width: none;
+-        height: auto;
+-        transform: translate(-50%, -50%);
++        z-index: 60;
++        top: 6px;
++        left: 7px;
++        min-width: 20px;
++        padding: 2px 6px;
++        border-radius: 3px;
++        background: transparent;
++        color: var(--ink);
++        font-weight: 800;
++        font-size: 14px;
++        line-height: 1.2;
++        pointer-events: none;
+       }
+-      input,
+-      select,
+-      button {
+-        width: 100%;
+-        padding: 8px;
+-        border: 1px solid var(--line);
+-        border-radius: 6px;
+-        background: #fff;
+-        color: var(--ink);
+-        font: inherit;
++      .slot.selected {
++        outline: none;
++        overflow: visible;
++        z-index: 10;
++        border: 1px solid var(--slot-border-color, var(--ui-color));
+       }
+-      button {
+-        margin-top: 9px;
+-        background: var(--accent);
+-        color: var(--ink);
+-        border: 0;
+-        font-weight: 700;
+-        cursor: pointer;
++      .slot.empty.selected {
++        border: 4px solid var(--ui-color);
+       }
+-      button.light {
+-        color: var(--ink);
+-        background: #fff;
+-        border: 1px solid var(--line);
++      .slot.empty {
++        cursor: pointer;
+       }
+-      .row {
++      .slot.empty:after {
++        content: "빈 슬롯";
++        position: absolute;
++        inset: 0;
+         display: grid;
+-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+-        gap: 8px;
++        place-items: center;
++        color: #64748b;
++        font-size: 12px;
++        pointer-events: none;
+       }
+-      .row > * {
++      .chart-card {
++        position: relative;
++        z-index: 0;
++        width: 100%;
++        height: 100%;
+         min-width: 0;
++        overflow: hidden;
++        border-radius: var(--slot-radius, 0px);
++        background: var(--graph-bg, #fff);
+       }
+-      aside .row button {
++      .plot-item {
+         width: 100%;
+-        max-width: 100%;
+-        min-width: 0;
+-        white-space: normal;
+-        overflow-wrap: anywhere;
+-        line-height: 1.25;
++        height: 100%;
++        min-height: 190px;
+       }
+-      aside fieldset,
+-      aside details,
+-      aside .row {
+-        max-width: 100%;
+-        min-width: 0;
++      .slot:not(.selected),
++      .slot:not(.selected) .chart-card,
++      .slot:not(.selected) .slot-image-frame,
++      .slot:not(.selected) .slot-image {
++        cursor: pointer;
+       }
+-      .setting-toggle.active {
+-        background: var(--accent) !important;
++      .slot:not(.selected)::before {
++        content: "";
++        position: absolute;
++        z-index: 55;
++        inset: 0;
++        border: 3px solid transparent;
++        border-radius: inherit;
++        background: transparent;
++        pointer-events: none;
++        box-sizing: border-box;
+       }
+-      .hint {
+-        font-size: 12px;
+-        color: #4f525d;
+-        line-height: 1.4;
++      .slot:not(.selected):hover::before,
++      .slot:not(.selected).drag-over::before {
++        border-color: var(--ui-color);
++        background: color-mix(in srgb, var(--ui-color) 25%, transparent);
+       }
+-      .hidden {
+-        display: none !important;
++      .slot:not(.selected) .plot-item,
++      .slot:not(.selected) .plot-item * {
++        pointer-events: none !important;
++        user-select: none !important;
+       }
+-      .readme-content {
+-        padding-top: var(--popup-divider-content-space);
++      .slot.selected .plot-item {
++        pointer-events: auto;
+       }
+-      .readme-content p {
+-        margin-top: 0;
+-      }
+-      .readme-content button {
+-        width: auto;
+-        height: var(--toolbar-control-height);
++      .slot-tab {
++        position: absolute;
++        z-index: 2147483646;
++        left: 6px;
++        top: -30px;
++        width: 60px;
++        height: 30px;
+         margin: 0;
++        padding: 0;
++        border: 0;
++        border-radius: 0;
++        background: transparent;
++        color: transparent;
++        cursor: pointer;
++        pointer-events: none;
+       }
+-      .toolbar {
+-        display: flex;
+-        flex-wrap: nowrap;
+-        align-items: center;
+-        gap: 8px;
+-        overflow-x: auto;
+-        overflow-y: hidden;
+-        margin-bottom: 12px;
++      .slot-tab-shape {
++        position: absolute;
++        left: 6px;
++        bottom: 0;
++        width: 48px;
++        height: 18px;
++        border: 1px solid var(--ui-color);
++        border-bottom: 0;
++        border-radius: 4px 4px 0 0;
++        background: var(--ui-color);
++        opacity: 0;
++        pointer-events: none;
+       }
+-      .toolbar > * {
+-        flex: 0 0 auto;
++      .slot.selected .slot-tab {
++        pointer-events: auto;
+       }
+-      .toolbar #layoutToggle,
+-      .toolbar #labelToggle,
+-      .toolbar #captionToggle {
+-        min-width: var(--toolbar-primary-control-min-width);
++      .slot.selected .slot-tab[draggable="true"] {
++        cursor: grab;
+       }
+-      .toolbar #targetInfo {
+-        white-space: nowrap;
++      .slot.selected .slot-tab[draggable="true"]:active {
++        cursor: grabbing;
+       }
+-      .toolbar button {
+-        box-sizing: border-box;
+-        width: auto;
+-        height: var(--toolbar-control-height);
+-        margin: 0;
+-        padding: 8px 12px;
+-        white-space: nowrap;
++      .slot.selected .slot-tab-shape {
++        opacity: 1;
+       }
+-      .layout-panel {
++      #ff-react-bootstrap-root {
+         position: fixed;
+-        z-index: 1000;
+-        top: calc(var(--header-height) + 10px);
+-        left: 0;
+-        right: auto;
+-        overflow-x: auto;
+-        overflow-y: auto;
+-        margin: 0;
+-        padding: 12px;
+-        border: 1px solid var(--line);
+-        border-radius: 9px;
+-        background: rgba(250, 250, 250, 0.92);
+-        box-shadow: 0 12px 28px rgba(56, 58, 66, 0.25);
+-        backdrop-filter: blur(4px);
+-        max-height: calc(100vh - var(--header-height) - 20px);
+-        box-sizing: border-box;
++        inset: 0;
++        z-index: 100;
++        pointer-events: none;
+       }
+-      .layout-panel {
+-        overflow-y: hidden;
+-      }
+-      .layout-panel > * {
+-        min-width: var(--popup-min-content-width);
+-      }
+-      .layout-panel > #layoutMap {
+-        min-width: 220px;
+-      }
+-      .layout-panel > * {
+-        min-width: 220px;
+-      }
+-      .popup-heading {
+-        display: flex;
+-        align-items: center;
+-        gap: var(--popup-heading-gap);
+-        height: calc(var(--toolbar-control-height) + var(--popup-heading-divider-space));
+-        min-height: 0;
+-        box-sizing: border-box;
+-        padding-bottom: var(--popup-heading-divider-space);
+-        border-bottom: 1px solid var(--line);
+-      }
+-      .popup-heading strong {
+-        font-size: var(--popup-heading-font-size);
+-        line-height: 1;
+-      }
+-      .layout-controls {
+-        position: relative;
+-        display: flex;
+-        flex-direction: column;
+-        align-items: stretch;
+-        gap: 8px;
+-      }
+-      .layout-primary-controls {
+-        display: flex;
+-        flex-wrap: wrap;
+-        justify-content: center;
+-        align-items: end;
+-        gap: 8px;
+-        width: 100%;
+-      }
+-      .layout-panel .layout-controls {
+-        margin-top: var(--popup-divider-content-space);
+-      }
+-      .layout-actions {
+-        display: flex;
+-        flex: none;
+-        flex-wrap: wrap;
+-        justify-content: center;
+-        align-items: center;
+-        gap: 8px;
+-        width: 100%;
+-        min-height: var(--toolbar-control-height);
+-        margin: 0;
+-      }
+-      .layout-actions > button {
+-        box-sizing: border-box;
+-        width: auto;
+-        height: var(--toolbar-control-height);
+-        margin: 0;
+-        white-space: nowrap;
+-      }
+-      .layout-controls label {
+-        width: 76px;
+-        margin: 0;
+-        font-size: 12px;
+-        text-align: center;
+-      }
+-      .layout-controls label input {
+-        text-align: center;
+-      }
+-      .layout-controls button {
+-        box-sizing: border-box;
+-        height: var(--toolbar-control-height);
+-      }
+-      .layout-controls label.toggle {
+-        width: auto;
+-        display: flex;
+-        align-items: center;
+-        gap: 5px;
+-        padding-bottom: 8px;
+-        white-space: nowrap;
+-      }
+-      .layout-controls label.toggle input {
+-        width: auto;
+-        margin: 0;
+-      }
+-      .layout-controls input {
+-        box-sizing: border-box;
+-        height: var(--toolbar-control-height);
+-        margin-top: 3px;
+-      }
+-      .layout-controls button {
+-        width: auto;
+-        margin: 0;
+-      }
+-      .layout-controls label.ratio-label {
+-        text-align: left;
+-      }
+-      .ratio-label > span {
+-        display: block;
+-        width: calc(100% - 34px);
+-        text-align: center;
+-      }
+-      .ratio-control {
+-        display: flex;
+-        gap: 4px;
+-        align-items: center;
+-        height: var(--toolbar-control-height);
+-        margin-top: 3px;
+-      }
+-      .ratio-control input {
+-        width: 100%;
+-        height: 100%;
+-        margin-top: 0;
+-        -moz-appearance: textfield;
+-      }
+-      .ratio-control input::-webkit-outer-spin-button,
+-      .ratio-control input::-webkit-inner-spin-button {
+-        -webkit-appearance: none;
+-        margin: 0;
+-      }
+-      .ratio-reset {
+-        display: grid !important;
+-        place-items: center;
+-        width: var(--toolbar-control-height) !important;
+-        min-width: var(--toolbar-control-height) !important;
+-        height: var(--toolbar-control-height);
+-        margin-top: 0 !important;
+-        padding: 0 !important;
+-        border: 0 !important;
+-        background: transparent !important;
+-        color: var(--ink) !important;
+-        font-size: 20px !important;
+-        line-height: 1;
+-      }
+-      .layout-map {
+-        box-sizing: border-box;
+-        display: grid;
+-        gap: var(--slot-gap, 0px);
+-        margin: 12px auto 0;
+-        padding: var(--dashboard-outer-margin, 0px);
+-        background: #e5e7eb;
+-        border-radius: var(--slot-radius, 0px);
+-        min-height: 0;
+-      }
+-      .dashboard-zoom-control {
+-        display: flex;
+-        align-items: center;
+-        gap: 10px;
+-        min-width: 0;
+-        margin: 8px auto 0;
+-      }
+-      .dashboard-zoom-lock {
+-        flex: 0 0 auto;
+-        width: auto !important;
+-        height: auto !important;
+-        margin: 0 !important;
+-        padding: 0 !important;
+-        border: 0 !important;
+-        background: transparent !important;
+-        color: var(--ink) !important;
+-        font-size: 12px !important;
+-        font-weight: 600 !important;
+-        white-space: nowrap;
+-      }
+-      .dashboard-zoom-lock[aria-pressed="true"] {
+-        color: #64748b !important;
+-      }
+-      .dashboard-zoom-control input {
+-        flex: 1;
+-        min-width: 100px;
+-        margin: 0;
+-        accent-color: var(--ui-color);
+-      }
+-      .dashboard-zoom-control input:disabled {
+-        filter: grayscale(1);
+-        opacity: 0.45;
+-        cursor: not-allowed;
+-      }
+-      .dashboard-zoom-reset {
+-        flex: 0 0 42px;
+-        width: auto !important;
+-        margin: 0 !important;
+-        padding: 0 !important;
+-        border: 0 !important;
+-        background: transparent !important;
+-        color: var(--ink) !important;
+-        font:
+-          12px/1.4 Consolas,
+-          monospace !important;
+-        text-align: right;
+-      }
+-      .layout-panel {
+-        padding-bottom: 0;
+-      }
+-      .layout-resize {
+-        position: relative;
+-        z-index: 2;
+-        height: 32px;
+-        margin-top: 8px;
+-        cursor: ns-resize;
+-        touch-action: none;
+-        display: grid;
+-        place-items: center;
+-        border-top: 1px solid var(--line);
+-      }
+-      .layout-resize:after {
+-        content: "";
+-        width: 42px;
+-        height: 4px;
+-        border-radius: 99px;
+-        background: var(--ui-color);
+-      }
+-      .layout-slot {
+-        position: relative;
+-        min-width: 0;
+-        min-height: 0;
+-        overflow: hidden;
+-        border: 1px var(--layout-slot-border-style, dashed) var(--ui-color);
+-        border-radius: var(--slot-radius, 0px);
+-        background: #fff;
+-        display: grid;
+-        place-items: center;
+-        font-size: 12px;
+-        color: #4f525d;
+-      }
+-      .layout-slot.has-content {
+-        background: color-mix(in srgb, var(--ui-color) 10%, #fff);
+-      }
+-      .layout-slot.selected {
+-        outline: 3px solid var(--ui-color);
+-        outline-offset: -3px;
+-      }
+-      .layout-slot {
+-        cursor: pointer;
+-      }
+-      .iconoir {
+-        display: block;
+-        width: 100%;
+-        height: 100%;
+-        overflow: visible;
+-        color: currentColor;
+-      }
+-      .icon-only {
+-        display: inline-grid;
+-        place-items: center;
+-        width: var(--icon-action-button-size);
+-        min-width: var(--icon-action-button-size);
+-        height: var(--icon-action-button-size);
+-        padding: 0;
+-      }
+-      .icon-only > .iconoir-mount {
+-        display: block;
+-        width: var(--icon-action-glyph-size);
+-        height: var(--icon-action-glyph-size);
+-      }
+-      .graph-area {
+-        position: relative;
+-        z-index: 0;
+-        width: 100%;
+-        overflow-x: auto;
+-        overflow-y: hidden;
+-      }
+-      .dashboard {
+-        box-sizing: border-box;
+-        display: grid;
+-        gap: var(--slot-gap, 0px);
+-        margin-top: 30px;
+-        min-height: 540px;
+-        grid-template-columns: repeat(
+-          var(--grid-cols),
+-          minmax(var(--dashboard-effective-slot-min-width, var(--dashboard-slot-min-width)), 1fr)
+-        );
+-        grid-template-rows: repeat(var(--grid-rows), minmax(250px, 1fr));
+-        background: var(--graph-bg, #fff);
+-        padding: var(--dashboard-outer-margin, 0px);
+-        border-radius: 0;
+-      }
+-      .dashboard.fixed-aspect {
+-        width: 100%;
+-        height: auto;
+-        min-height: 0;
+-        grid-template-rows: repeat(var(--grid-rows), minmax(0, 1fr));
+-        aspect-ratio: var(--dashboard-aspect);
+-        align-self: start;
+-      }
+-      .slot {
+-        position: relative;
+-        display: flex;
+-        align-items: center;
+-        justify-content: center;
+-        min-width: 0;
+-        min-height: 0;
+-        overflow: visible;
+-        border: 1px solid var(--slot-border-color, var(--ui-color));
+-        border-radius: var(--slot-radius, 0px);
+-        background: var(--graph-bg, #fff);
+-      }
+-      .dashboard-caption {
+-        display: block;
+-        box-sizing: border-box;
+-        width: 100%;
+-        min-height: 0;
+-        margin-top: 10px;
+-        padding: 8px 16px;
+-        border: 1px solid var(--slot-border-color, var(--ui-color));
+-        border-radius: var(--slot-radius, 0px);
+-        background: var(--graph-bg, #fff);
+-        color: var(--ink);
+-        font: inherit;
+-        line-height: 1.45;
+-        white-space: pre-wrap;
+-        overflow-wrap: anywhere;
+-      }
+-      .caption-prefix {
+-        display: inline;
+-        white-space: pre-wrap;
+-      }
+-      .caption-prefix:not(.hidden)::after {
+-        content: " ";
+-      }
+-      .caption-prefix.bold {
+-        font-weight: 700;
+-      }
+-      .caption-body {
+-        display: inline;
+-        outline: 0;
+-        white-space: pre-wrap;
+-        overflow-wrap: anywhere;
+-      }
+-      .dashboard-caption.slot-caption-view {
+-        display: block;
+-      }
+-      .caption-section + .caption-section {
+-        margin-left: 0.65em;
+-      }
+-      .caption-edit-region {
+-        display: inline-block;
+-        min-width: 1ch;
+-      }
+-      [data-caption-region="sections"] {
+-        display: inline;
+-      }
+-      .caption-edit-region:not(:empty) + [data-caption-region="sections"],
+-      [data-caption-region="sections"]:not(:empty) + .caption-edit-region:not(:empty) {
+-        margin-left: 0.65em;
+-      }
+-      .caption-edit-region:focus {
+-        outline: 1px solid var(--ui-color);
+-      }
+-      [data-caption-region="before"]:empty::before {
+-        content: "앞 설명";
+-        color: var(--ui-subtle);
+-      }
+-      [data-caption-region="after"]:empty::before {
+-        content: "뒤 설명";
+-        color: var(--ui-subtle);
+-      }
+-      .caption-section-label {
+-        margin-right: 0.3em;
+-        font-weight: 700;
+-        white-space: nowrap;
+-        user-select: none;
+-      }
+-      .caption-body:empty:before {
+-        content: attr(data-placeholder);
+-        color: #94a3b8;
+-        pointer-events: none;
+-      }
+-      .caption-body:focus {
+-        outline: 1px solid var(--ui-color);
+-      }
+-      .slot-label {
+-        position: absolute;
+-        z-index: 60;
+-        top: 6px;
+-        left: 7px;
+-        min-width: 20px;
+-        padding: 2px 6px;
+-        border-radius: 3px;
+-        background: transparent;
+-        color: var(--ink);
+-        font-weight: 800;
+-        font-size: 14px;
+-        line-height: 1.2;
+-        pointer-events: none;
+-      }
+-      .slot.selected {
+-        outline: none;
+-        overflow: visible;
+-        z-index: 10;
+-        border: 1px solid var(--slot-border-color, var(--ui-color));
+-      }
+-      .slot.empty.selected {
+-        border: 4px solid var(--ui-color);
+-      }
+-      .slot.empty {
+-        cursor: pointer;
+-      }
+-      .slot.empty:after {
+-        content: "빈 슬롯";
+-        position: absolute;
+-        inset: 0;
+-        display: grid;
+-        place-items: center;
+-        color: #64748b;
+-        font-size: 12px;
+-        pointer-events: none;
+-      }
+-      .chart-card {
+-        position: relative;
+-        z-index: 0;
+-        width: 100%;
+-        height: 100%;
+-        min-width: 0;
+-        overflow: hidden;
+-        border-radius: var(--slot-radius, 0px);
+-        background: var(--graph-bg, #fff);
+-      }
+-      .plot-item {
+-        width: 100%;
+-        height: 100%;
+-        min-height: 190px;
+-      }
+-      .slot:not(.selected),
+-      .slot:not(.selected) .chart-card,
+-      .slot:not(.selected) .slot-image-frame,
+-      .slot:not(.selected) .slot-image {
+-        cursor: pointer;
+-      }
+-      .slot:not(.selected)::before {
+-        content: "";
+-        position: absolute;
+-        z-index: 55;
+-        inset: 0;
+-        border: 3px solid transparent;
+-        border-radius: inherit;
+-        background: transparent;
+-        pointer-events: none;
+-        box-sizing: border-box;
+-      }
+-      .slot:not(.selected):hover::before,
+-      .slot:not(.selected).drag-over::before {
+-        border-color: var(--ui-color);
+-        background: color-mix(in srgb, var(--ui-color) 25%, transparent);
+-      }
+-      .slot:not(.selected) .plot-item,
+-      .slot:not(.selected) .plot-item * {
+-        pointer-events: none !important;
+-        user-select: none !important;
+-      }
+-      .slot.selected .plot-item {
+-        pointer-events: auto;
+-      }
+-      .slot-tab {
+-        position: absolute;
+-        z-index: 2147483646;
+-        left: 6px;
+-        top: -30px;
+-        width: 60px;
+-        height: 30px;
+-        margin: 0;
+-        padding: 0;
+-        border: 0;
+-        border-radius: 0;
+-        background: transparent;
+-        color: transparent;
+-        cursor: pointer;
+-        pointer-events: none;
+-      }
+-      .slot-tab-shape {
+-        position: absolute;
+-        left: 6px;
+-        bottom: 0;
+-        width: 48px;
+-        height: 18px;
+-        border: 1px solid var(--ui-color);
+-        border-bottom: 0;
+-        border-radius: 4px 4px 0 0;
+-        background: var(--ui-color);
+-        opacity: 0;
+-        pointer-events: none;
+-      }
+-      .slot.selected .slot-tab {
+-        pointer-events: auto;
+-      }
+-      .slot.selected .slot-tab[draggable="true"] {
+-        cursor: grab;
+-      }
+-      .slot.selected .slot-tab[draggable="true"]:active {
+-        cursor: grabbing;
+-      }
+-      .slot.selected .slot-tab-shape {
+-        opacity: 1;
+-      }
+-      .layout-open .slot-tab-shape {
+-        opacity: 0 !important;
+-      }
+-      /* Centralized UI palette colors */
+-      input:not([type="color"]),
+-      select,
+-      textarea,
+-      button.light,
+-      .sidebar-toggle {
+-        background: var(--ui-surface) !important;
+-      }
+-      .hint {
+-        color: var(--ui-muted) !important;
+-      }
+-      .dashboard-zoom-lock[aria-pressed="true"] {
+-        color: var(--ui-subtle) !important;
+-      }
+-      button:disabled,
+-      input:disabled,
+-      select:disabled,
+-      textarea:disabled {
+-        background: var(--ui-disabled-bg) !important;
+-        color: var(--ui-disabled-text) !important;
+-      }
+-      .layout-map {
+-        background: var(--ui-disabled-bg);
+-      }
+-      .layout-panel {
+-        background: color-mix(in srgb, var(--ui-bg) 92%, transparent);
+-        box-shadow: 0 12px 28px color-mix(in srgb, var(--ui-shadow) 25%, transparent);
+-      }
+-      #ff-react-bootstrap-root {
+-        position: fixed;
+-        inset: 0;
+-        z-index: 100;
+-        pointer-events: none;
+-      }
+-    </style>
+-  </head>
+-  <body>
+-    <div id="ff-react-bootstrap-root"></div>
+-    <script id="ff-mantine-bootstrap">
+-      (() => {
+-        const runtime = window.FastFigureUiRuntime;
+-        if (!runtime) throw new Error("Fast Figure UI runtime failed to load");
+-        const root = runtime.createRoot(document.getElementById("ff-react-bootstrap-root"));
+-        root.render(runtime.React.createElement(runtime.MantineCore.MantineProvider, { defaultColorScheme: "light" }, runtime.React.createElement(runtime.React.Fragment, null)));
+-        window.fastFigureUiRoot = root;
+-      })();
+-    </script>
+-    <div class="app">
+-        <template id="readmeContent">
+-        <div class="readme-content">
+-          <p><strong>About Fast figure</strong></p>
+-          <p>
+-            Fast figure is a single-file workspace for quickly assembling scientific figure drafts
+-            from tabular data and images.
+-          </p>
+-          <p>
+-            It combines graph creation, image placement, slot-based figure layout, labels, captions,
+-            project packaging, and image and Plotly export.
+-          </p>
+-          <p>
+-            Fast figure runs as a self-contained HTML file and processes loaded data and images
+-            locally in the browser. Ordinary use does not require a server, account, or network
+-            connection.
+-          </p>
+-          <p><strong>Application version</strong></p>
+-          <p><code>{{APP_BUILD}}</code></p>
+-          <p><strong>Developer</strong></p>
+-          <ul>
+-            <li>Name: 노대권 (Daegwon Noh)</li>
+-          </ul>
+-          <p><strong>Distribution</strong></p>
+-          <p>
+-            Repository:
+-            <a
+-              href="https://github.com/fo4344-assistant/Fast-figure-portable"
+-              target="_blank"
+-              rel="noopener noreferrer"
+-              >github.com/fo4344-assistant/Fast-figure-portable</a
+-            >
+-          </p>
+-          <p>
+-            The <code>agent_space</code> directory is reserved for AI agent development work and
+-            is not required to run or use Fast figure. End users should not download this
+-            directory.
+-          </p>
+-          <p><strong>Project structure</strong></p>
+-          <p>
+-            A Fast figure project contains the complete persistent state of one figure, including
+-            the project name, dashboard dimensions, slot arrangement, merged and split slots, graph
+-            and image contents, labels, captions, display settings, UI palette, and export settings.
+-          </p>
+-          <p>Project CSV files and graph charts are stored separately:</p>
+-          <ul>
+-            <li><code>csvFiles</code>: project-level tabular data snapshots with original names</li>
+-            <li>
+-              <code>csvId</code>: each graph object's direct reference to one project CSV object
+-            </li>
+-            <li><code>editor</code>: Fast figure graph objects and editable settings</li>
+-            <li>
+-              <code>graph</code>: the Plotly figure state, including <code>data</code>,
+-              <code>layout</code>, <code>config</code>, <code>frames</code>, and an imported
+-              original Plotly figure where applicable
+-            </li>
+-          </ul>
+-          <p>
+-            The CSV stored in a Fast figure file is intended for sharing, storage, transport, and
+-            reopening. Fast figure does not edit the original CSV file. Edit source data in an
+-            external CSV editor and load the file again when the data changes.
+-          </p>
+-          <p><strong>Basic workflow</strong></p>
+-          <ol>
+-            <li>Load CSV, TSV, supported JSON data, Plotly JSON, or an image.</li>
+-            <li>Create and configure graph objects from the loaded columns.</li>
+-            <li>Arrange graphs and images in the slot-based dashboard.</li>
+-            <li>Merge or split slots as needed.</li>
+-            <li>Add labels and captions.</li>
+-            <li>Export one graph, one slot, or the entire project.</li>
+-          </ol>
+-          <p><strong>Export formats</strong></p>
+-          <p>
+-            Fast figure provides three project and graph interchange formats. They serve different
+-            purposes and are not interchangeable.
+-          </p>
+-          <p><strong>Plotly JSON</strong></p>
+-          <p>
+-            Plotly JSON exports the selected graph as a Plotly figure. It may include Plotly
+-            <code>data</code>, <code>layout</code>, <code>config</code>, and <code>frames</code>,
+-            but it does not contain the Fast figure dashboard, packaged CSV assets, other slots,
+-            images, project labels, captions, UI settings, or project export settings.
+-          </p>
+-          <p><strong>FFSX slot format</strong></p>
+-          <p>
+-            <code>.ffsx</code> means <strong>Fast figure Slot XML</strong>. FFSX is a ZIP-based
+-            container for transferring one graph slot together with every CSV referenced by its
+-            graph objects, Plotly state, and Fast figure editor settings.
+-          </p>
+-          <ul>
+-            <li>
+-              <code>slot.xml</code>: slot metadata, slot graph settings, graph-object CSV
+-              references, and packaged project CSV metadata
+-            </li>
+-            <li>
+-              <code>data/&lt;csv-id&gt;/&lt;original-name&gt;</code>: each referenced original CSV,
+-              TSV, or JSON file without reserialization
+-            </li>
+-          </ul>
+-          <p>
+-            FFSX contains only one graph slot. It does not contain the project name, dashboard grid,
+-            other slots, image assets, project labels, project-level captions, UI palette, or project
+-            export settings. The exported slot caption is included. Importing an FFSX file places its
+-            graph, slot caption, and associated settings into the selected slot.
+-          </p>
+-          <p><strong>FFPX project format</strong></p>
+-          <p>
+-            <code>.ffpx</code> means <strong>Fast figure Project XML</strong>. FFPX is the complete
+-            Fast figure project container and is intended for saving, reopening, transferring, or
+-            archiving an entire working figure.
+-          </p>
+-          <ul>
+-            <li>
+-              <code>project.xml</code>: project name, project metadata, dashboard dimensions, slot
+-              layout, chart metadata, labels, captions, display settings, UI palette, and export
+-              settings
+-            </li>
+-            <li>
+-              <code>data/&lt;csv-id&gt;/&lt;original-name&gt;</code>: one asset for each project CSV
+-              object, stored as original bytes and referenced directly by graph objects through
+-              <code>csvId</code>
+-            </li>
+-            <li><code>media/</code>: packaged binary assets used by image slots</li>
+-          </ul>
+-          <p>
+-            FFPX stores copied project assets rather than external file paths. A transferred FFPX
+-            file therefore does not depend on the original locations of CSV or image files.
+-          </p>
+-          <p>
+-            Exporting an FFPX file copies the current project state for packaging. It does not edit
+-            the active project objects, original CSV files, or original image files.
+-          </p>
+-          <p><strong>Format version</strong></p>
+-          <p>
+-            FFSX and FFPX record a format identifier and one format version. This application reads
+-            only its current format; conversion from earlier development files is handled outside
+-            the application.
+-          </p>
+-          <p><strong>Bundled third-party software</strong></p>
+-          <p><strong>React / ReactDOM 19.2.8</strong></p>
+-          <p>Fast figure bundles React and ReactDOM directly in this HTML file as part of the UI runtime. No external React runtime is required.</p>
+-          <ul><li>Source repository: <a href="https://github.com/facebook/react" target="_blank" rel="noopener noreferrer">github.com/facebook/react</a></li><li>Package version used: <code>19.2.8</code></li><li>License: MIT</li></ul>
+-          <p><strong>React license</strong></p><pre>MIT License
+-
+-Copyright (c) Meta Platforms, Inc. and affiliates.
+-
+-Permission is hereby granted, free of charge, to any person obtaining a copy
+-of this software and associated documentation files (the "Software"), to deal
+-in the Software without restriction, including without limitation the rights
+-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-copies of the Software, and to permit persons to whom the Software is
+-furnished to do so, subject to the following conditions:
+-
+-The above copyright notice and this permission notice shall be included in all
+-copies or substantial portions of the Software.
+-
+-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-SOFTWARE.</pre>
+-          <p><strong>Mantine 9.5.2</strong></p>
+-          <p>Fast figure bundles <code>@mantine/core</code> and <code>@mantine/hooks</code> directly in this HTML file.</p>
+-          <ul><li>Source repository: <a href="https://github.com/mantinedev/mantine" target="_blank" rel="noopener noreferrer">github.com/mantinedev/mantine</a></li><li>Package version used: <code>9.5.2</code></li><li>License: MIT</li></ul>
+-          <p><strong>Mantine license</strong></p><pre>MIT License
+-
+-Copyright (c) 2021 Vitaly Rtishchev
+-
+-Permission is hereby granted, free of charge, to any person obtaining a copy
+-of this software and associated documentation files (the "Software"), to deal
+-in the Software without restriction, including without limitation the rights
+-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-copies of the Software, and to permit persons to whom the Software is
+-furnished to do so, subject to the following conditions:
+-
+-The above copyright notice and this permission notice shall be included in all
+-copies or substantial portions of the Software.
+-
+-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-SOFTWARE.</pre>
+-          <p><strong>Iconoir 7.11.1</strong></p>
+-          <p>
+-            Fast figure uses selected Iconoir SVG paths for the project data tree, its toolbar and
+-            action menu, and the print/save/capture controls. The selected SVG definitions are
+-            embedded directly in this HTML file; the Iconoir package, CDN, and external SVG files
+-            are not required at runtime.
+-          </p>
+-          <ul>
+-            <li>
+-              Source repository:
+-              <a href="https://github.com/iconoir-icons/iconoir" target="_blank" rel="noopener noreferrer">github.com/iconoir-icons/iconoir</a>
+-            </li>
+-            <li>Package version used: <code>7.11.1</code></li>
+-            <li>License: MIT</li>
+-          </ul>
+-          <p><strong>Iconoir license</strong></p>
+-          <pre>MIT License
+-
+-Copyright (c) 2021 Luca Burgio
+-
+-Permission is hereby granted, free of charge, to any person obtaining a copy
+-of this software and associated documentation files (the "Software"), to deal
+-in the Software without restriction, including without limitation the rights
+-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-copies of the Software, and to permit persons to whom the Software is
+-furnished to do so, subject to the following conditions:
+-
+-The above copyright notice and this permission notice shall be included in all
+-copies or substantial portions of the Software.
+-
+-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-SOFTWARE.</pre>
+-          <p><strong>Plotly.js 2.35.2</strong></p>
+-          <p>
+-            Fast figure bundles the minified Plotly.js 2.35.2 distribution directly inside the HTML
+-            file. No separate Plotly.js installation is required.
+-          </p>
+-          <ul>
+-            <li>
+-              Bundled distribution:
+-              <a
+-                href="https://cdn.plot.ly/plotly-2.35.2.min.js"
+-                target="_blank"
+-                rel="noopener noreferrer"
+-                >plotly-2.35.2.min.js</a
+-              >
+-            </li>
+-            <li>
+-              Source repository:
+-              <a
+-                href="https://github.com/plotly/plotly.js"
+-                target="_blank"
+-                rel="noopener noreferrer"
+-                >github.com/plotly/plotly.js</a
+-              >
+-            </li>
+-            <li>
+-              Documentation:
+-              <a href="https://plotly.com/javascript/" target="_blank" rel="noopener noreferrer"
+-                >plotly.com/javascript</a
+-              >
+-            </li>
+-            <li>
+-              License for version 2.35.2:
+-              <a
+-                href="https://github.com/plotly/plotly.js/blob/v2.35.2/LICENSE"
+-                target="_blank"
+-                rel="noopener noreferrer"
+-                >Plotly.js v2.35.2 LICENSE</a
+-              >
+-            </li>
+-          </ul>
+-          <p>
+-            Plotly.js is a third-party component distributed under its own copyright notice and MIT
+-            License. The bundled minified distribution retains its version, copyright, and license
+-            header inside the Fast figure HTML file.
+-          </p>
+-          <p><strong>Plotly.js license</strong></p>
+-          <p>
+-            The following license text is reproduced from the <code>LICENSE</code> file in the
+-            Plotly.js <code>v2.35.2</code> source tag.
+-          </p>
+-          <pre>
+-The MIT License (MIT)
+-
+-Copyright (c) 2021 Plotly, Inc
+-
+-Permission is hereby granted, free of charge, to any person obtaining a copy
+-of this software and associated documentation files (the "Software"), to deal
+-in the Software without restriction, including without limitation the rights
+-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-copies of the Software, and to permit persons to whom the Software is
+-furnished to do so, subject to the following conditions:
+-The above copyright notice and this permission notice shall be included in
+-all copies or substantial portions of the Software.
+-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+-THE SOFTWARE.</pre
+-          >
+-          <p><strong>Fast figure license</strong></p>
+-          <p>Fast figure is provided under the MIT License.</p>
+-          <p>Copyright (c) 2026 Daegwon Noh</p>
+-          <p>
+-            Permission is hereby granted, free of charge, to any person obtaining a copy of this
+-            software and associated documentation files (the "Software"), to deal in the Software
+-            without restriction, including without limitation the rights to use, copy, modify,
+-            merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+-            permit persons to whom the Software is furnished to do so, subject to the following
+-            conditions:
+-          </p>
+-          <p>
+-            The above copyright notice and this permission notice shall be included in all copies or
+-            substantial portions of the Software.
+-          </p>
+-          <p>
+-            THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+-            INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+-            PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+-            LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
+-            OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+-            OTHER DEALINGS IN THE SOFTWARE.
+-          </p>
+-        </div>
+-        </template>
+-      <main>
+-        <div id="graphArea" class="graph-area">
+-          <div id="dashboard" class="dashboard" style="--grid-cols: 2; --grid-rows: 2"></div>
+-          <div id="dashboardCaption" class="dashboard-caption hidden"><span id="captionPrefix" class="caption-prefix hidden"></span
+-            ><span
+-              id="captionText"
+-              class="caption-body"
+-              contenteditable="true"
+-              role="textbox"
+-              aria-multiline="true"
+-              data-placeholder="전체 그래프 캡션을 입력하세요."
+-            ></span>
+-          </div>
+-        </div>
+-      </main>
+-    </div>
+-    <script src="./fast-figure.js"></script>
+-    <script src="./fast-figure-ui.js"></script>
+-  </body>
+-</html>
+-
++    </style>
++  </head>
++  <body>
++    <div id="ff-react-bootstrap-root"></div>
++    <script id="ff-mantine-bootstrap">
++      (() => {
++        const runtime = window.FastFigureUiRuntime;
++        if (!runtime) throw new Error("Fast Figure UI runtime failed to load");
++        const root = runtime.createRoot(document.getElementById("ff-react-bootstrap-root"));
++        root.render(runtime.React.createElement(runtime.MantineCore.MantineProvider, { defaultColorScheme: "light" }, runtime.React.createElement(runtime.React.Fragment, null)));
++        window.fastFigureUiRoot = root;
++      })();
++    </script>
++    <div class="app">
++        <template id="readmeContent">
++        <div class="readme-content">
++          <p><strong>About Fast figure</strong></p>
++          <p>
++            Fast figure is a single-file workspace for quickly assembling scientific figure drafts
++            from tabular data and images.
++          </p>
++          <p>
++            It combines graph creation, image placement, slot-based figure layout, labels, captions,
++            project packaging, and image and Plotly export.
++          </p>
++          <p>
++            Fast figure runs as a self-contained HTML file and processes loaded data and images
++            locally in the browser. Ordinary use does not require a server, account, or network
++            connection.
++          </p>
++          <p><strong>Application version</strong></p>
++          <p><code>{{APP_BUILD}}</code></p>
++          <p><strong>Developer</strong></p>
++          <ul>
++            <li>Name: 노대권 (Daegwon Noh)</li>
++          </ul>
++          <p><strong>Distribution</strong></p>
++          <p>
++            Repository:
++            <a
++              href="https://github.com/fo4344-assistant/Fast-figure-portable"
++              target="_blank"
++              rel="noopener noreferrer"
++              >github.com/fo4344-assistant/Fast-figure-portable</a
++            >
++          </p>
++          <p>
++            The <code>agent_space</code> directory is reserved for AI agent development work and
++            is not required to run or use Fast figure. End users should not download this
++            directory.
++          </p>
++          <p><strong>Project structure</strong></p>
++          <p>
++            A Fast figure project contains the complete persistent state of one figure, including
++            the project name, dashboard dimensions, slot arrangement, merged and split slots, graph
++            and image contents, labels, captions, display settings, UI palette, and export settings.
++          </p>
++          <p>Project CSV files and graph charts are stored separately:</p>
++          <ul>
++            <li><code>csvFiles</code>: project-level tabular data snapshots with original names</li>
++            <li>
++              <code>csvId</code>: each graph object's direct reference to one project CSV object
++            </li>
++            <li><code>editor</code>: Fast figure graph objects and editable settings</li>
++            <li>
++              <code>graph</code>: the Plotly figure state, including <code>data</code>,
++              <code>layout</code>, <code>config</code>, <code>frames</code>, and an imported
++              original Plotly figure where applicable
++            </li>
++          </ul>
++          <p>
++            The CSV stored in a Fast figure file is intended for sharing, storage, transport, and
++            reopening. Fast figure does not edit the original CSV file. Edit source data in an
++            external CSV editor and load the file again when the data changes.
++          </p>
++          <p><strong>Basic workflow</strong></p>
++          <ol>
++            <li>Load CSV, TSV, supported JSON data, Plotly JSON, or an image.</li>
++            <li>Create and configure graph objects from the loaded columns.</li>
++            <li>Arrange graphs and images in the slot-based dashboard.</li>
++            <li>Merge or split slots as needed.</li>
++            <li>Add labels and captions.</li>
++            <li>Export one graph, one slot, or the entire project.</li>
++          </ol>
++          <p><strong>Export formats</strong></p>
++          <p>
++            Fast figure provides three project and graph interchange formats. They serve different
++            purposes and are not interchangeable.
++          </p>
++          <p><strong>Plotly JSON</strong></p>
++          <p>
++            Plotly JSON exports the selected graph as a Plotly figure. It may include Plotly
++            <code>data</code>, <code>layout</code>, <code>config</code>, and <code>frames</code>,
++            but it does not contain the Fast figure dashboard, packaged CSV assets, other slots,
++            images, project labels, captions, UI settings, or project export settings.
++          </p>
++          <p><strong>FFSX slot format</strong></p>
++          <p>
++            <code>.ffsx</code> means <strong>Fast figure Slot XML</strong>. FFSX is a ZIP-based
++            container for transferring one graph slot together with every CSV referenced by its
++            graph objects, Plotly state, and Fast figure editor settings.
++          </p>
++          <ul>
++            <li>
++              <code>slot.xml</code>: slot metadata, slot graph settings, graph-object CSV
++              references, and packaged project CSV metadata
++            </li>
++            <li>
++              <code>data/&lt;csv-id&gt;/&lt;original-name&gt;</code>: each referenced original CSV,
++              TSV, or JSON file without reserialization
++            </li>
++          </ul>
++          <p>
++            FFSX contains only one graph slot. It does not contain the project name, dashboard grid,
++            other slots, image assets, project labels, project-level captions, UI palette, or project
++            export settings. The exported slot caption is included. Importing an FFSX file places its
++            graph, slot caption, and associated settings into the selected slot.
++          </p>
++          <p><strong>FFPX project format</strong></p>
++          <p>
++            <code>.ffpx</code> means <strong>Fast figure Project XML</strong>. FFPX is the complete
++            Fast figure project container and is intended for saving, reopening, transferring, or
++            archiving an entire working figure.
++          </p>
++          <ul>
++            <li>
++              <code>project.xml</code>: project name, project metadata, dashboard dimensions, slot
++              layout, chart metadata, labels, captions, display settings, UI palette, and export
++              settings
++            </li>
++            <li>
++              <code>data/&lt;csv-id&gt;/&lt;original-name&gt;</code>: one asset for each project CSV
++              object, stored as original bytes and referenced directly by graph objects through
++              <code>csvId</code>
++            </li>
++            <li><code>media/</code>: packaged binary assets used by image slots</li>
++          </ul>
++          <p>
++            FFPX stores copied project assets rather than external file paths. A transferred FFPX
++            file therefore does not depend on the original locations of CSV or image files.
++          </p>
++          <p>
++            Exporting an FFPX file copies the current project state for packaging. It does not edit
++            the active project objects, original CSV files, or original image files.
++          </p>
++          <p><strong>Format version</strong></p>
++          <p>
++            FFSX and FFPX record a format identifier and one format version. This application reads
++            only its current format; conversion from earlier development files is handled outside
++            the application.
++          </p>
++          <p><strong>Bundled third-party software</strong></p>
++          <p><strong>React / ReactDOM 19.2.8</strong></p>
++          <p>Fast figure bundles React and ReactDOM directly in this HTML file as part of the UI runtime. No external React runtime is required.</p>
++          <ul><li>Source repository: <a href="https://github.com/facebook/react" target="_blank" rel="noopener noreferrer">github.com/facebook/react</a></li><li>Package version used: <code>19.2.8</code></li><li>License: MIT</li></ul>
++          <p><strong>React license</strong></p><pre>MIT License
++
++Copyright (c) Meta Platforms, Inc. and affiliates.
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.</pre>
++          <p><strong>Mantine 9.5.2</strong></p>
++          <p>Fast figure bundles <code>@mantine/core</code> and <code>@mantine/hooks</code> directly in this HTML file.</p>
++          <ul><li>Source repository: <a href="https://github.com/mantinedev/mantine" target="_blank" rel="noopener noreferrer">github.com/mantinedev/mantine</a></li><li>Package version used: <code>9.5.2</code></li><li>License: MIT</li></ul>
++          <p><strong>Mantine license</strong></p><pre>MIT License
++
++Copyright (c) 2021 Vitaly Rtishchev
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.</pre>
++          <p><strong>Iconoir 7.11.1</strong></p>
++          <p>
++            Fast figure uses selected Iconoir SVG paths for the project data tree, its toolbar and
++            action menu, and the print/save/capture controls. The selected SVG definitions are
++            embedded directly in this HTML file; the Iconoir package, CDN, and external SVG files
++            are not required at runtime.
++          </p>
++          <ul>
++            <li>
++              Source repository:
++              <a href="https://github.com/iconoir-icons/iconoir" target="_blank" rel="noopener noreferrer">github.com/iconoir-icons/iconoir</a>
++            </li>
++            <li>Package version used: <code>7.11.1</code></li>
++            <li>License: MIT</li>
++          </ul>
++          <p><strong>Iconoir license</strong></p>
++          <pre>MIT License
++
++Copyright (c) 2021 Luca Burgio
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.</pre>
++          <p><strong>Plotly.js 2.35.2</strong></p>
++          <p>
++            Fast figure bundles the minified Plotly.js 2.35.2 distribution directly inside the HTML
++            file. No separate Plotly.js installation is required.
++          </p>
++          <ul>
++            <li>
++              Bundled distribution:
++              <a
++                href="https://cdn.plot.ly/plotly-2.35.2.min.js"
++                target="_blank"
++                rel="noopener noreferrer"
++                >plotly-2.35.2.min.js</a
++              >
++            </li>
++            <li>
++              Source repository:
++              <a
++                href="https://github.com/plotly/plotly.js"
++                target="_blank"
++                rel="noopener noreferrer"
++                >github.com/plotly/plotly.js</a
++              >
++            </li>
++            <li>
++              Documentation:
++              <a href="https://plotly.com/javascript/" target="_blank" rel="noopener noreferrer"
++                >plotly.com/javascript</a
++              >
++            </li>
++            <li>
++              License for version 2.35.2:
++              <a
++                href="https://github.com/plotly/plotly.js/blob/v2.35.2/LICENSE"
++                target="_blank"
++                rel="noopener noreferrer"
++                >Plotly.js v2.35.2 LICENSE</a
++              >
++            </li>
++          </ul>
++          <p>
++            Plotly.js is a third-party component distributed under its own copyright notice and MIT
++            License. The bundled minified distribution retains its version, copyright, and license
++            header inside the Fast figure HTML file.
++          </p>
++          <p><strong>Plotly.js license</strong></p>
++          <p>
++            The following license text is reproduced from the <code>LICENSE</code> file in the
++            Plotly.js <code>v2.35.2</code> source tag.
++          </p>
++          <pre>
++The MIT License (MIT)
++
++Copyright (c) 2021 Plotly, Inc
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++The above copyright notice and this permission notice shall be included in
++all copies or substantial portions of the Software.
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++THE SOFTWARE.</pre
++          >
++          <p><strong>Fast figure license</strong></p>
++          <p>Fast figure is provided under the MIT License.</p>
++          <p>Copyright (c) 2026 Daegwon Noh</p>
++          <p>
++            Permission is hereby granted, free of charge, to any person obtaining a copy of this
++            software and associated documentation files (the "Software"), to deal in the Software
++            without restriction, including without limitation the rights to use, copy, modify,
++            merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
++            permit persons to whom the Software is furnished to do so, subject to the following
++            conditions:
++          </p>
++          <p>
++            The above copyright notice and this permission notice shall be included in all copies or
++            substantial portions of the Software.
++          </p>
++          <p>
++            THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
++            INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
++            PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
++            LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
++            OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
++            OTHER DEALINGS IN THE SOFTWARE.
++          </p>
++        </div>
++        </template>
++      <main>
++        <div id="graphArea" class="graph-area">
++          <div id="dashboard" class="dashboard" style="--grid-cols: 2; --grid-rows: 2"></div>
++          <div id="dashboardCaption" class="dashboard-caption hidden"><span id="captionPrefix" class="caption-prefix hidden"></span
++            ><span
++              id="captionText"
++              class="caption-body"
++              contenteditable="true"
++              role="textbox"
++              aria-multiline="true"
++              data-placeholder="전체 그래프 캡션을 입력하세요."
++            ></span>
++          </div>
++        </div>
++      </main>
++    </div>
++    <script src="./fast-figure.js"></script>
++    <script src="./fast-figure-ui.js"></script>
++  </body>
++</html>
++
