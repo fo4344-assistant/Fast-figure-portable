@@ -6261,6 +6261,165 @@
         }
         return null;
       }
+      function movableProjectNode(path) {
+        let match = path ? projectVfs.resolve(path) : null;
+        if (!match || projectVfs.isTrashed(path)) return false;
+        if (match.kind === "directory") return !projectVfs.isFixedDirectory(path);
+        return !(match.kind === "csv" && match.asset.isDefaultEmpty === true);
+      }
+      function projectNodeReferenceCount(path) {
+        let match = projectVfs.resolve(path);
+        if (!match) return 0;
+        let movingAssets = match.kind === "directory"
+          ? projectVfs.descendants(path)
+          : [{ kind: match.kind, asset: match.asset }];
+        return projectAssetReferenceCount(
+          new Set(movingAssets.filter(({ kind }) => kind === "csv").map(({ asset }) => asset.id)),
+          new Set(movingAssets.filter(({ kind }) => kind === "image").map(({ asset }) => asset.id)),
+        );
+      }
+      function readProjectTrash() {
+        let snapshot = projectDataTreeSnapshot(projectDataTreeObjects());
+        let csvIds = new Set(snapshot.data.filter((asset) =>
+          projectVfs.isTrashed(asset.path)).map((asset) => asset.id));
+        let imageIds = new Set(snapshot.images.filter((asset) =>
+          projectVfs.isTrashed(asset.path)).map((asset) => asset.id));
+        return {
+          hasContents: snapshot.directories.some((path) =>
+            path !== PROJECT_TRASH_DIRECTORY && projectVfs.isTrashed(path)) ||
+            csvIds.size > 0 || imageIds.size > 0,
+          referenceCount: projectAssetReferenceCount(csvIds, imageIds),
+        };
+      }
+      function projectNodeMoveOptions(path) {
+        let match = path ? projectVfs.resolve(path) : null;
+        return activeProject.fileSystem.directories.filter((directory) =>
+          (directory === "/assets" || directory.startsWith("/assets/")) &&
+          !projectVfs.isTrashed(directory) &&
+          !(match?.kind === "directory" && projectPathInDirectory(directory, path)));
+      }
+      function planProjectNodeMove(path, directory) {
+        let match = projectVfs.resolve(path);
+        if (!match || !movableProjectNode(path))
+          throw Error("이동할 수 없는 프로젝트 항목입니다.");
+        let source = match.kind === "directory" ? match.path : projectAssetPath(match.asset);
+        let targetDirectory = normalizeProjectPath(directory, { directory: true });
+        if (!activeProject.fileSystem.directories.includes(targetDirectory))
+          throw Error("대상 폴더가 없습니다.");
+        if (match.kind === "directory" && projectPathInDirectory(targetDirectory, source))
+          throw Error("폴더를 자기 자신 또는 하위 폴더로 이동할 수 없습니다.");
+        let destination = normalizeProjectPath(
+          `${targetDirectory}/${projectPathName(source)}`,
+          { directory: match.kind === "directory" },
+        );
+        if (destination === source) return null;
+        let collision = projectVfs.exists(destination);
+        let uniquePath = collision
+          ? projectVfs.uniquePath(targetDirectory, projectPathName(source))
+          : destination;
+        let enteringTrash =
+          projectVfs.isTrashed(destination) && !projectVfs.isTrashed(source);
+        return {
+          path: source, kind: match.kind, directory: targetDirectory,
+          destination, collision, uniqueName: projectPathName(uniquePath),
+          enteringTrash,
+          referenceCount: enteringTrash ? projectNodeReferenceCount(source) : 0,
+        };
+      }
+      function moveProjectNode(plan, useUniqueName = false) {
+        if (!plan) return null;
+        let payload = {
+          path: plan.path, directory: plan.directory, direction: "ui-to-fsm",
+        };
+        if (useUniqueName) payload.name = plan.uniqueName;
+        appFSM.send("PROJECT_NODE_MOVED", payload);
+        status(payload.trashed
+          ? `${projectPathName(plan.path)}을 휴지통으로 이동했습니다.`
+          : `${projectPathName(plan.path)}을 ${projectParentPath(payload.path)}로 이동했습니다.`);
+        return { path: payload.path, trashed: payload.trashed };
+      }
+      function createProjectDirectory(parent, name) {
+        let payload = { parent, name, direction: "ui-to-fsm" };
+        appFSM.send("PROJECT_DIRECTORY_CREATED", payload);
+        appFSM.send("SELECT_ASSET", {
+          kind: "directory", path: payload.path, direction: "ui-to-fsm",
+        });
+        status(`${payload.path} 폴더를 만들었습니다.`);
+        return payload.path;
+      }
+      function emptyProjectTrash() {
+        let payload = { direction: "ui-to-fsm" };
+        appFSM.send("PROJECT_TRASH_EMPTIED", payload);
+        updateFileAvailability();
+        status(`휴지통을 비웠습니다. 폴더 ${payload.directoryCount}개, CSV ${payload.csvCount}개, 이미지 ${payload.imageCount}개를 삭제했습니다.`);
+      }
+      function draggableProjectAsset(path) {
+        let match = path ? projectVfs.resolve(path) : null;
+        return match && match.kind !== "directory" && !projectVfs.isTrashed(path)
+          ? { path, kind: match.kind } : null;
+      }
+      function connectProjectAssetPathToSlot(path, kind, slotId) {
+        return connectProjectAssetToSlot(path, kind, slotAt(slotId));
+      }
+      async function importProjectFileToSlot(file, slotId, choosePlan) {
+        let slot = slotAt(slotId), kind = slotFileKind(file);
+        if (!kind) throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
+        if (kind === "slot") return importSlotFile(file, slot);
+        let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES[kind === "image" ? "image" : "csv"]);
+        if (kind === "image")
+          return loadImageFile(file, slot, {
+            assetPath: plan.path, replaceAssetId: plan.replaceId,
+          });
+        return loadDataFile(file, slot, {
+          replaceSlotContent: slot.contentType === "image",
+          assetPath: plan.path, replaceAssetId: plan.replaceId,
+        });
+      }
+      async function importProjectAssetFiles(files, choosePlan) {
+        let selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
+        let target = getSelectedSlot();
+        if (target && (target.contentType || "graph") === "image") {
+          let file = selectedFiles[0], kind = slotFileKind(file);
+          if (kind === "slot") return importSlotFile(file, target);
+          if (kind === "image") {
+            let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.image);
+            return loadImageFile(file, target, {
+              assetPath: plan.path, replaceAssetId: plan.replaceId,
+            });
+          }
+          if (kind === "data") {
+            let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.csv);
+            return loadDataFile(file, target, {
+              replaceSlotContent: true,
+              assetPath: plan.path, replaceAssetId: plan.replaceId,
+            });
+          }
+          throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
+        }
+        if (target) {
+          for (let file of selectedFiles) {
+            let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.csv);
+            await loadDataFile(file, target, {
+              assetPath: plan.path, replaceAssetId: plan.replaceId,
+            });
+          }
+          return;
+        }
+        for (let file of selectedFiles) {
+          let kind = slotFileKind(file);
+          if (kind !== "image" && kind !== "data")
+            throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
+          let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES[kind === "image" ? "image" : "csv"]);
+          if (kind === "image")
+            await loadImageFile(file, null, {
+              assetPath: plan.path, replaceAssetId: plan.replaceId,
+            });
+          else
+            await loadDataFile(file, null, {
+              assetPath: plan.path, replaceAssetId: plan.replaceId,
+            });
+        }
+      }
       function updateGraphLayoutApi({ title, globalSettings, axisKey, axisValues } = {}) {
         let slot = getSelectedSlot(), chart = graphEditorChart();
         if (!slot || !chart) return null;
@@ -7625,6 +7784,26 @@
         assets: Object.freeze({
           readDeletionTarget: readAssetDeletionTarget,
           delete: deleteProjectAsset,
+          readTree: () => projectDataTreeSnapshot(projectDataTreeObjects()),
+          isTrashed: (path) => projectVfs.isTrashed(path),
+          movable: movableProjectNode,
+          readTrash: readProjectTrash,
+          moveOptions: projectNodeMoveOptions,
+          planMove: planProjectNodeMove,
+          move: moveProjectNode,
+          createDirectory: createProjectDirectory,
+          emptyTrash: emptyProjectTrash,
+          draggableAsset: draggableProjectAsset,
+          connectToSlot: connectProjectAssetPathToSlot,
+          importToDirectory: importProjectFilesToDirectory,
+          importToSlot: importProjectFileToSlot,
+          importFiles: importProjectAssetFiles,
+          collisionModel: projectAssetImportCollisionModel,
+          resolveImportPlan: resolveProjectAssetImportPlan,
+          selectDirectory: selectDirectoryFromTree,
+          selectCsv: selectCsvFromTree,
+          selectImage: selectImageFromTree,
+          download: downloadProjectAsset,
         }),
         graphs: Object.freeze({
           readData: readGraphDataApi,
