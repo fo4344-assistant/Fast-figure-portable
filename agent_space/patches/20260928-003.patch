@@ -1,0 +1,473 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -7325,196 +7325,212 @@
+         applyCaptionSettings();
+         return readCaptionsApiState();
+       }
+-      function readLabelsApiState() {
+-        let reference = gridSlotGeometry(
+-          activeProject.layout,
+-          dashboardGeometry(dashboardReferenceWidth()),
+-          getSelectedSlot(),
+-        );
+-        return Object.freeze({
+-          enabled: activeProject.labelsEnabled,
+-          settings: Object.freeze({ ...activeProject.labelSettings }),
+-          reference: Object.freeze({
+-            width: reference.width,
+-            height: reference.height,
+-          }),
+-          sampleText: displayedSlotIdentifier(0),
+-        });
+-      }
+-      function setLabelsApiEnabled(enabled) {
+-        setAnnotationEnabled("label", enabled === true);
+-        return readLabelsApiState();
+-      }
+-      function setLabelsApiSettings(patch = {}) {
+-        let current = activeProject.labelSettings,
+-          next = { ...current };
+-        if (Object.prototype.hasOwnProperty.call(patch, "format")) {
+-          let format = String(patch.format || "");
+-          if (
+-            ["lower-alpha", "upper-alpha", "decimal", "lower-roman", "upper-roman"].includes(
+-              format,
+-            )
+-          )
+-            next.format = format;
+-        }
+-        if (Object.prototype.hasOwnProperty.call(patch, "order")) {
+-          let order = String(patch.order || "");
+-          if (["row-major", "column-major"].includes(order)) next.order = order;
+-        }
+-        if (Object.prototype.hasOwnProperty.call(patch, "parentheses"))
+-          next.parentheses = patch.parentheses === true;
+-        if (Object.prototype.hasOwnProperty.call(patch, "fontFamily"))
+-          next.fontFamily = String(patch.fontFamily ?? "");
+-        if (Object.prototype.hasOwnProperty.call(patch, "fontSize")) {
+-          let fontSize = Number(patch.fontSize);
+-          next.fontSize = Number.isFinite(fontSize) ? Math.max(6, fontSize) : current.fontSize;
+-        }
+-        activeProject.labelSettings = next;
+-        renderDashboard();
+-        schedulePlotResize();
+-        debugLog("mantine:label-settings", { ...next });
+-        appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
+-        return readLabelsApiState();
+-      }
+-      function updateLabelsApiPosition(x, y, eventName = null) {
+-        let current = activeProject.labelSettings,
+-          nextX = Number(x),
+-          nextY = Number(y);
+-        current.x = Number.isFinite(nextX) ? nextX : current.x;
+-        current.y = Number.isFinite(nextY) ? nextY : current.y;
+-        renderDashboard();
+-        schedulePlotResize();
+-        if (eventName) {
+-          debugLog("mantine:label-settings", { ...current });
+-          appFSM.notify("labels", eventName);
+-        }
+-        return readLabelsApiState();
+-      }
+-      function setLabelsApiPosition(x, y) {
+-        return updateLabelsApiPosition(x, y, "LABEL_POSITION_CHANGED");
+-      }
+-      function previewLabelsApiPosition(x, y) {
+-        return updateLabelsApiPosition(x, y);
+-      }
+-      function commitLabelsApiPosition() {
+-        debugLog("mantine:label-position", {
+-          x: activeProject.labelSettings.x,
+-          y: activeProject.labelSettings.y,
+-        });
+-        appFSM.notify("labels", "LABEL_POSITION_DRAGGED");
+-        return readLabelsApiState();
+-      }
+-      function resetLabelsApiPosition() {
+-        return updateLabelsApiPosition(0, 0, "LABEL_POSITION_RESET");
+-      }
+-      function readAppearanceApiPalette() {
+-        return Object.freeze({ ...activeProject.appearance.uiPalette });
+-      }
+-      function setAppearanceApiPalette(values) {
+-        applyUiPaletteValues(values);
+-        return readAppearanceApiPalette();
+-      }
+-      function resetAppearanceApiPalette() {
+-        applyUiPaletteValues(DEFAULT_UI_PALETTE);
+-        return readAppearanceApiPalette();
+-      }
+-      function readLayoutApiState(previewWidth = 600) {
+-        let width = readProjectNumber(previewWidth, 600, 1, 20000),
+-          geometry = dashboardGeometry(width);
+-        return Object.freeze({
+-          gridRows: activeProject.gridRows,
+-          gridCols: activeProject.gridCols,
+-          slotStyle: Object.freeze({ ...activeProject.layout.slotStyle }),
+-          visibleSlots: Object.freeze(
+-            activeProject.slots
+-              .filter((slot) => !slot.hidden)
+-              .map((slot) =>
+-                Object.freeze({
+-                  id: slot.id,
+-                  row: slot.row,
+-                  col: slot.col,
+-                  rowSpan: slot.rowSpan,
+-                  colSpan: slot.colSpan,
+-                }),
+-              ),
+-          ),
+-          previewGeometry: Object.freeze({ ...geometry }),
+-          zoom: dashboardZoomIntent,
+-          zoomLocked: dashboardZoomLocked,
+-        });
+-      }
+-      function setLayoutApiStyle(patch = {}) {
+-        let current = activeProject.layout.slotStyle,
+-          next = { ...current };
+-        if (Object.prototype.hasOwnProperty.call(patch, "referenceWidth"))
+-          next.referenceWidth = readProjectNumber(
+-            patch.referenceWidth,
+-            current.referenceWidth,
+-            100,
+-            20000,
+-          );
+-        if (Object.prototype.hasOwnProperty.call(patch, "gap"))
+-          next.gap = readProjectNumber(patch.gap, current.gap, 0, 2000);
+-        if (Object.prototype.hasOwnProperty.call(patch, "outerMargin"))
+-          next.outerMargin = readProjectNumber(
+-            patch.outerMargin,
+-            current.outerMargin,
+-            0,
+-            5000,
+-          );
+-        if (Object.prototype.hasOwnProperty.call(patch, "radius"))
+-          next.radius = readProjectNumber(patch.radius, current.radius, 0, 2000);
+-        if (Object.prototype.hasOwnProperty.call(patch, "aspect"))
+-          next.aspect = readProjectNumber(patch.aspect, current.aspect, 0.1, 10);
+-        if (Object.prototype.hasOwnProperty.call(patch, "showBorders"))
+-          next.showBorders = patch.showBorders === true;
+-        activeProject.layout.slotStyle = next;
+-        applySlotStyle(false);
+-        applyDashboardZoom(false);
+-        schedulePlotResize();
+-        return readLayoutApiState();
+-      }
+-      function setLayoutApiGrid(rows, cols) {
+-        let nextRows = Number(rows),
+-          nextCols = Number(cols);
+-        if (
+-          !Number.isInteger(nextRows) ||
+-          !Number.isInteger(nextCols) ||
+-          nextRows < 1 ||
+-          nextRows > 8 ||
+-          nextCols < 1 ||
+-          nextCols > 8
+-        )
+-          throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
+-        makeSlots(nextRows, nextCols);
+-        applySlotStyle(false);
+-        schedulePlotResize();
+-        return readLayoutApiState();
+-      }
+-      function setLayoutApiZoom(value) {
+-        applyDashboardZoom(false, readProjectNumber(value, 100, 50, 200));
+-        appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
+-        return readLayoutApiState();
+-      }
+-      function commitLayoutApiZoom() {
+-        commitDashboardScale("layout-api");
+-        return readLayoutApiState();
+-      }
+-      function setLayoutApiZoomLocked(locked) {
+-        setDashboardZoomLocked(locked === true);
+-        if (locked === true)
+-          appFSM.notify("layout", "DASHBOARD_ZOOM_LOCK_CHANGED");
+-        return readLayoutApiState();
+-      }
+-      function resetLayoutApiZoom() {
+-        if (dashboardZoomLocked) setDashboardZoomLocked(false);
+-        else {
+-          applyDashboardZoom(false, 100);
+-          commitDashboardScale("layout-api-reset");
+-        }
+-        return readLayoutApiState();
+-      }
+-      window.FastFigureApi = Object.freeze({
++      function readPrintApiDefaults() {
++        return Object.freeze({
++          width: Math.max(100, Math.round(dashboardReferenceWidth())),
++        });
++      }
++      function savePrintApi(options = {}) {
++        return exportDashboardTarget(options);
++      }
++      function capturePrintApi(options = {}) {
++        return exportDashboard(true, options);
++      }
++      function readLabelsApiState() {
++        let reference = gridSlotGeometry(
++          activeProject.layout,
++          dashboardGeometry(dashboardReferenceWidth()),
++          getSelectedSlot(),
++        );
++        return Object.freeze({
++          enabled: activeProject.labelsEnabled,
++          settings: Object.freeze({ ...activeProject.labelSettings }),
++          reference: Object.freeze({
++            width: reference.width,
++            height: reference.height,
++          }),
++          sampleText: displayedSlotIdentifier(0),
++        });
++      }
++      function setLabelsApiEnabled(enabled) {
++        setAnnotationEnabled("label", enabled === true);
++        return readLabelsApiState();
++      }
++      function setLabelsApiSettings(patch = {}) {
++        let current = activeProject.labelSettings,
++          next = { ...current };
++        if (Object.prototype.hasOwnProperty.call(patch, "format")) {
++          let format = String(patch.format || "");
++          if (
++            ["lower-alpha", "upper-alpha", "decimal", "lower-roman", "upper-roman"].includes(
++              format,
++            )
++          )
++            next.format = format;
++        }
++        if (Object.prototype.hasOwnProperty.call(patch, "order")) {
++          let order = String(patch.order || "");
++          if (["row-major", "column-major"].includes(order)) next.order = order;
++        }
++        if (Object.prototype.hasOwnProperty.call(patch, "parentheses"))
++          next.parentheses = patch.parentheses === true;
++        if (Object.prototype.hasOwnProperty.call(patch, "fontFamily"))
++          next.fontFamily = String(patch.fontFamily ?? "");
++        if (Object.prototype.hasOwnProperty.call(patch, "fontSize")) {
++          let fontSize = Number(patch.fontSize);
++          next.fontSize = Number.isFinite(fontSize) ? Math.max(6, fontSize) : current.fontSize;
++        }
++        activeProject.labelSettings = next;
++        renderDashboard();
++        schedulePlotResize();
++        debugLog("mantine:label-settings", { ...next });
++        appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
++        return readLabelsApiState();
++      }
++      function updateLabelsApiPosition(x, y, eventName = null) {
++        let current = activeProject.labelSettings,
++          nextX = Number(x),
++          nextY = Number(y);
++        current.x = Number.isFinite(nextX) ? nextX : current.x;
++        current.y = Number.isFinite(nextY) ? nextY : current.y;
++        renderDashboard();
++        schedulePlotResize();
++        if (eventName) {
++          debugLog("mantine:label-settings", { ...current });
++          appFSM.notify("labels", eventName);
++        }
++        return readLabelsApiState();
++      }
++      function setLabelsApiPosition(x, y) {
++        return updateLabelsApiPosition(x, y, "LABEL_POSITION_CHANGED");
++      }
++      function previewLabelsApiPosition(x, y) {
++        return updateLabelsApiPosition(x, y);
++      }
++      function commitLabelsApiPosition() {
++        debugLog("mantine:label-position", {
++          x: activeProject.labelSettings.x,
++          y: activeProject.labelSettings.y,
++        });
++        appFSM.notify("labels", "LABEL_POSITION_DRAGGED");
++        return readLabelsApiState();
++      }
++      function resetLabelsApiPosition() {
++        return updateLabelsApiPosition(0, 0, "LABEL_POSITION_RESET");
++      }
++      function readAppearanceApiPalette() {
++        return Object.freeze({ ...activeProject.appearance.uiPalette });
++      }
++      function setAppearanceApiPalette(values) {
++        applyUiPaletteValues(values);
++        return readAppearanceApiPalette();
++      }
++      function resetAppearanceApiPalette() {
++        applyUiPaletteValues(DEFAULT_UI_PALETTE);
++        return readAppearanceApiPalette();
++      }
++      function readLayoutApiState(previewWidth = 600) {
++        let width = readProjectNumber(previewWidth, 600, 1, 20000),
++          geometry = dashboardGeometry(width);
++        return Object.freeze({
++          gridRows: activeProject.gridRows,
++          gridCols: activeProject.gridCols,
++          slotStyle: Object.freeze({ ...activeProject.layout.slotStyle }),
++          visibleSlots: Object.freeze(
++            activeProject.slots
++              .filter((slot) => !slot.hidden)
++              .map((slot) =>
++                Object.freeze({
++                  id: slot.id,
++                  row: slot.row,
++                  col: slot.col,
++                  rowSpan: slot.rowSpan,
++                  colSpan: slot.colSpan,
++                }),
++              ),
++          ),
++          previewGeometry: Object.freeze({ ...geometry }),
++          zoom: dashboardZoomIntent,
++          zoomLocked: dashboardZoomLocked,
++        });
++      }
++      function setLayoutApiStyle(patch = {}) {
++        let current = activeProject.layout.slotStyle,
++          next = { ...current };
++        if (Object.prototype.hasOwnProperty.call(patch, "referenceWidth"))
++          next.referenceWidth = readProjectNumber(
++            patch.referenceWidth,
++            current.referenceWidth,
++            100,
++            20000,
++          );
++        if (Object.prototype.hasOwnProperty.call(patch, "gap"))
++          next.gap = readProjectNumber(patch.gap, current.gap, 0, 2000);
++        if (Object.prototype.hasOwnProperty.call(patch, "outerMargin"))
++          next.outerMargin = readProjectNumber(
++            patch.outerMargin,
++            current.outerMargin,
++            0,
++            5000,
++          );
++        if (Object.prototype.hasOwnProperty.call(patch, "radius"))
++          next.radius = readProjectNumber(patch.radius, current.radius, 0, 2000);
++        if (Object.prototype.hasOwnProperty.call(patch, "aspect"))
++          next.aspect = readProjectNumber(patch.aspect, current.aspect, 0.1, 10);
++        if (Object.prototype.hasOwnProperty.call(patch, "showBorders"))
++          next.showBorders = patch.showBorders === true;
++        activeProject.layout.slotStyle = next;
++        applySlotStyle(false);
++        applyDashboardZoom(false);
++        schedulePlotResize();
++        return readLayoutApiState();
++      }
++      function setLayoutApiGrid(rows, cols) {
++        let nextRows = Number(rows),
++          nextCols = Number(cols);
++        if (
++          !Number.isInteger(nextRows) ||
++          !Number.isInteger(nextCols) ||
++          nextRows < 1 ||
++          nextRows > 8 ||
++          nextCols < 1 ||
++          nextCols > 8
++        )
++          throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
++        makeSlots(nextRows, nextCols);
++        applySlotStyle(false);
++        schedulePlotResize();
++        return readLayoutApiState();
++      }
++      function setLayoutApiZoom(value) {
++        applyDashboardZoom(false, readProjectNumber(value, 100, 50, 200));
++        appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
++        return readLayoutApiState();
++      }
++      function commitLayoutApiZoom() {
++        commitDashboardScale("layout-api");
++        return readLayoutApiState();
++      }
++      function setLayoutApiZoomLocked(locked) {
++        setDashboardZoomLocked(locked === true);
++        if (locked === true)
++          appFSM.notify("layout", "DASHBOARD_ZOOM_LOCK_CHANGED");
++        return readLayoutApiState();
++      }
++      function resetLayoutApiZoom() {
++        if (dashboardZoomLocked) setDashboardZoomLocked(false);
++        else {
++          applyDashboardZoom(false, 100);
++          commitDashboardScale("layout-api-reset");
++        }
++        return readLayoutApiState();
++      }
++      window.FastFigureApi = Object.freeze({
++        print: Object.freeze({
++          readDefaults: readPrintApiDefaults,
++          save: savePrintApi,
++          capture: capturePrintApi,
++        }),
+         captions: Object.freeze({
+           readState: readCaptionsApiState,
+           setEnabled: setCaptionsApiEnabled,
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2522,36 +2522,33 @@
+ 
+   function FastFigurePrintOverlay() {
+     const state = useAppState();
+-    const [width, setWidth] = useState(() =>
+-      Math.max(100, Math.round(dashboardReferenceWidth())),
+-    );
+-    const [height, setHeight] = useState("");
+-    const [dpi, setDpi] = useState(300);
+-    const [format, setFormat] = useState("png");
+-    const [message, setMessage] = useState("");
+-    if (state.overlay !== "print") return null;
+-    const busy = state.lifecycle !== "ready";
+-
+-    const close = () =>
+-      appFSM.send("CLOSE_OVERLAY", { reason: "mantine-print" });
+-    const options = () => ({
+-      width: Math.max(100, Math.min(20000, Number(width) || 1000)),
+-      height:
+-        height === "" || height === null
+-          ? ""
+-          : Math.max(100, Math.min(20000, Number(height) || 100)),
+-      dpi: Math.max(36, Math.min(1200, Number(dpi) || 300)),
+-      format: format === "jpeg" ? "jpeg" : "png",
+-      onStatus: setMessage,
+-    });
+-    const save = () =>
+-      runLifecycleTask("exporting", "PRINT_EXPORT", () =>
+-        exportDashboardTarget(options()),
+-      );
+-    const capture = () =>
+-      runLifecycleTask("exporting", "CAPTURE_EXPORT", () => {
+-        const values = options();
+-        return exportDashboard(true, {
++    const printApi = window.FastFigureApi.print;
++    const [width, setWidth] = useState(() => printApi.readDefaults().width);
++    const [height, setHeight] = useState("");
++    const [dpi, setDpi] = useState(300);
++    const [format, setFormat] = useState("png");
++    const [message, setMessage] = useState("");
++    if (state.overlay !== "print") return null;
++    const busy = state.lifecycle !== "ready";
++
++    const close = () =>
++      appFSM.send("CLOSE_OVERLAY", { reason: "mantine-print" });
++    const options = () => ({
++      width: Math.max(100, Math.min(20000, Number(width) || 1000)),
++      height:
++        height === "" || height === null
++          ? ""
++          : Math.max(100, Math.min(20000, Number(height) || 100)),
++      dpi: Math.max(36, Math.min(1200, Number(dpi) || 300)),
++      format: format === "jpeg" ? "jpeg" : "png",
++      onStatus: setMessage,
++    });
++    const save = () =>
++      runLifecycleTask("exporting", "PRINT_EXPORT", () => printApi.save(options()));
++    const capture = () =>
++      runLifecycleTask("exporting", "CAPTURE_EXPORT", () => {
++        const values = options();
++        return printApi.capture({
+           dpi: values.dpi,
+           format: values.format,
+           onStatus: setMessage,
