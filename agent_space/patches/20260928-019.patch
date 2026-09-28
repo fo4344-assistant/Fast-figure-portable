@@ -1,0 +1,35 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+index 2272bf1..6051e47 100644
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2099,7 +2099,7 @@
+       setOpened(false);
+     };
+     const resetPalette = () => {
+-      setDraft({ ...appearanceApi.resetPalette() });
++      setDraft({ ...appearanceApi.readDefaultPalette() });
+     };
+ 
+     return React.createElement(
+diff --git a/fast-figure.js b/fast-figure.js
+index 14184e1..92d0cd1 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -7375,6 +7375,9 @@
+       function readAppearanceApiPalette() {
+         return Object.freeze({ ...activeProject.appearance.uiPalette });
+       }
++      function readAppearanceApiDefaultPalette() {
++        return Object.freeze({ ...DEFAULT_UI_PALETTE });
++      }
+       function setAppearanceApiPalette(values) {
+         applyUiPaletteValues(values);
+         return readAppearanceApiPalette();
+@@ -7506,6 +7509,7 @@
+         }),
+         appearance: Object.freeze({
+           readPalette: readAppearanceApiPalette,
++          readDefaultPalette: readAppearanceApiDefaultPalette,
+           setPalette: setAppearanceApiPalette,
+           resetPalette: resetAppearanceApiPalette,
+         }),
