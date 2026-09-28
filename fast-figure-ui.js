@@ -7,6 +7,7 @@
   const {
     ActionIcon,
     AppShell,
+    Box,
     Button,
     ColorInput,
     FileButton,
@@ -897,8 +898,8 @@
             onClick: () =>
               kind === "csv" ? selectCsvFromTree(asset.path) : selectImageFromTree(asset.path),
           },
-          React.createElement("span", null, projectPathName(asset.path)),
-          React.createElement("span", { style: { opacity: 0.7 } }, meta),
+          React.createElement(Text, { component: "span" }, projectPathName(asset.path)),
+          React.createElement(Text, { component: "span", c: "dimmed" }, meta),
         ),
         React.createElement(
           Menu,
@@ -2250,7 +2251,7 @@
         styles: { body: { maxHeight: "75vh", overflowY: "auto" } },
         "data-fastfigure-overlay": "readme",
       },
-      React.createElement("div", {
+      React.createElement(Box, {
         dangerouslySetInnerHTML: { __html: readmeContentHtml() },
       }),
     );
@@ -2937,7 +2938,7 @@
             ),
           ),
         ),
-        React.createElement("div", {
+        React.createElement(Box, {
           role: "separator",
           "aria-orientation": "horizontal",
           "aria-label": "레이아웃 미리보기 크기 조절",
@@ -2945,10 +2946,10 @@
           onPointerMove: movePreviewResize,
           onPointerUp: stopPreviewResize,
           onPointerCancel: stopPreviewResize,
+          w: Math.min(previewGeometry.width, 900),
+          maw: "100%",
+          h: 10,
           style: {
-            width: Math.min(previewGeometry.width, 900),
-            maxWidth: "100%",
-            height: 10,
             cursor: "ns-resize",
             touchAction: "none",
             borderTop: "1px solid var(--mantine-color-default-border)",
@@ -3053,7 +3054,11 @@
             navbarCollapsed ? "사이드바 표시" : "사이드바 숨기기",
           ),
           React.createElement(Text, { fw: 700, size: "xl", style: { flex: "0 0 auto" } }, "Fast figure"),
-          React.createElement("div", { style: { flex: "1 1 auto", minWidth: 0 } }, React.createElement(FastFigureToolbar)),
+          React.createElement(
+            Box,
+            { style: { flex: "1 1 auto", minWidth: 0 } },
+            React.createElement(FastFigureToolbar),
+          ),
         ),
       ),
       React.createElement(
@@ -3070,7 +3075,7 @@
         React.createElement(FastFigurePaletteActions),
         React.createElement(FastFigureStatusDebug),
         React.createElement(FastFigureUtilityActions),
-        React.createElement("div", {
+        React.createElement(Box, {
           role: "separator",
           "aria-orientation": "vertical",
           "aria-label": "사이드바 너비 조절",
@@ -3078,12 +3083,12 @@
           onPointerMove: resizeNavbar,
           onPointerUp: stopNavbarResize,
           onPointerCancel: stopNavbarResize,
+          pos: "absolute",
+          top: 0,
+          right: -4,
+          bottom: 0,
+          w: 8,
           style: {
-            position: "absolute",
-            top: 0,
-            right: -4,
-            bottom: 0,
-            width: 8,
             cursor: "col-resize",
             touchAction: "none",
           },
