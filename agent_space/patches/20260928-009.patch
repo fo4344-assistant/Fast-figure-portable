@@ -1,0 +1,40 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -908,10 +908,10 @@
+             Menu.Target,
+             null,
+             React.createElement(
+-              Button,
++              ActionIcon,
+               {
+                 variant: "subtle",
+-                size: "xs",
++                size: "sm",
+                 disabled: inactive,
+                 "aria-label": `${projectPathName(asset.path)} 작업`,
+               },
+@@ -1013,10 +1013,10 @@
+                   Menu.Target,
+                   null,
+                   React.createElement(
+-                    Button,
++                    ActionIcon,
+                     {
+                       variant: "subtle",
+-                      size: "xs",
++                      size: "sm",
+                       "aria-label": `${projectPathName(path)} 폴더 작업`,
+                     },
+                     "···",
+@@ -1603,8 +1603,8 @@
+             size: "xs", value: object.color, style: { width: 72 }, disabled: busy,
+             onChange: (color) => graphEditorObjectValues(index, { color }),
+           }),
+-          React.createElement(Button, {
+-            size: "xs", variant: "subtle", disabled: busy,
++          React.createElement(ActionIcon, {
++            size: "sm", variant: "subtle", disabled: busy,
+             "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
+             onClick: () => graphEditorDelete(index),
+           }, "×"),
