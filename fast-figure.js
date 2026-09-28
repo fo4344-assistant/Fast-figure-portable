@@ -3343,18 +3343,22 @@
       }
       function normalizeImageSettings(image) {
         if (!image) return null;
+        image.settings = readImageSettings(image);
+        return image.settings;
+      }
+      function readImageSettings(image) {
+        if (!image) return null;
         let settings = image.settings && typeof image.settings === "object" ? image.settings : {},
           fit = ["contain", "cover", "manual"].includes(settings.fit) ? settings.fit : "contain",
           number = (value, fallback, min, max) =>
             Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : fallback));
-        image.settings = {
+        return {
           ...settings,
           fit,
           scale: number(settings.scale, 100, 1, 1000),
           x: number(settings.x, 50, -100, 200),
           y: number(settings.y, 50, -100, 200),
         };
-        return image.settings;
       }
       function updateFileAvailability() {
         let hasSlot = !!getSelectedSlot();
@@ -4933,6 +4937,14 @@
         });
         return activeProject;
       }
+      async function importProjectFile(file) {
+        let header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+        let payload =
+          header.length === 4 && header[0] === 0x50 && header[1] === 0x4b
+            ? await ffpxReadProject(file)
+            : JSON.parse(await file.text());
+        return importProject(payload, file.name);
+      }
       function ffpxBytesToBase64(bytes) {
         let text = "",
           step = 0x8000;
@@ -5841,6 +5853,36 @@
         debugLog("slot:image-settings", { slotId: selectedSlotId, settings });
         appFSM.notify("images", "IMAGE_SETTINGS_CHANGED");
         return true;
+      }
+      function readSelectedSlotApi() {
+        let slot = getSelectedSlot();
+        return slot ? {
+          id: slot.id, row: slot.row, col: slot.col,
+          contentType: slot.contentType, chart: slot.chart, imageId: slot.imageId,
+        } : null;
+      }
+      function resetSlotApi(slotId) {
+        let payload = { slotIds: [slotId], direction: "fsm-to-model" };
+        appFSM.send("SLOTS_RESET", payload);
+        appFSM.send("CLEAR_ASSET_SELECTION", { direction: "fsm-to-model" });
+        renderDashboard();
+        status("선택한 슬롯을 초기화했습니다.");
+        debugLog("slotReset:complete", {
+          slotId, removedChartIds: payload.removedChartIds,
+        });
+      }
+      function readImageEditorApi() {
+        let image = slotImage(getSelectedSlot());
+        return image ? {
+          name: image.name,
+          src: projectImageDisplayUrl(image),
+          settings: readImageSettings(image),
+        } : null;
+      }
+      function setProjectName(value, trim = false) {
+        activeProject.projectName = (trim ? String(value).trim() : String(value)).slice(0, 120);
+        if (trim) debugLog("project:name", { projectName: activeProject.projectName });
+        return activeProject.projectName;
       }
       async function loadImageFile(
         file,
@@ -7781,6 +7823,23 @@
         return readLayoutApiState();
       }
       window.FastFigureApi = Object.freeze({
+        project: Object.freeze({
+          readName: () => activeProject.projectName,
+          setName: setProjectName,
+          importFile: importProjectFile,
+          exportFile: downloadProject,
+        }),
+        slots: Object.freeze({
+          readSelected: readSelectedSlotApi,
+          select: setSelectedSlot,
+          setContentType: setSlotContentType,
+          reset: resetSlotApi,
+        }),
+        images: Object.freeze({
+          readEditor: readImageEditorApi,
+          setSettings: applyImageSettingsFromValues,
+          insertEmpty: insertEmptyImageIntoSelectedSlot,
+        }),
         assets: Object.freeze({
           readDeletionTarget: readAssetDeletionTarget,
           delete: deleteProjectAsset,

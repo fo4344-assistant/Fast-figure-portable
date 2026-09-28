@@ -113,7 +113,7 @@
 
   function selectedTargetText(state) {
     if (state.workspace === "project") return "빈 슬롯 또는 그래프를 선택하세요.";
-    const slot = typeof getSelectedSlot === "function" ? getSelectedSlot() : null;
+    const slot = window.FastFigureApi.slots.readSelected();
     return slot ? `선택한 슬롯: ${slot.row}행 ${slot.col}열` : "빈 슬롯 또는 그래프를 선택하세요.";
   }
 
@@ -196,7 +196,7 @@
   }
 
   function exportProjectFromMantine() {
-    return runLifecycleTask("exporting", "PROJECT_EXPORT", () => downloadProject());
+    return runLifecycleTask("exporting", "PROJECT_EXPORT", () => window.FastFigureApi.project.exportFile());
   }
 
   function exportSlotFfsxFromMantine() {
@@ -238,7 +238,8 @@
   function FastFigureDataActions() {
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
-    const slot = state.workspace === "project" ? null : getSelectedSlot();
+    const slotApi = window.FastFigureApi.slots;
+    const slot = state.workspace === "project" ? null : slotApi.readSelected();
     const slotType = slot?.contentType || "graph";
     const [resetSlotId, setResetSlotId] = useState(null);
     const assetApi = window.FastFigureApi.assets;
@@ -280,21 +281,8 @@
     const closeResetDialog = () => setResetSlotId(null);
     const confirmSlotReset = () => {
       if (!Number.isInteger(resetSlotId)) return;
-      const payload = {
-        slotIds: [resetSlotId],
-        direction: "fsm-to-model",
-      };
       try {
-        appFSM.send("SLOTS_RESET", payload);
-        appFSM.send("CLEAR_ASSET_SELECTION", {
-          direction: "fsm-to-model",
-        });
-        renderDashboard();
-        status("선택한 슬롯을 초기화했습니다.");
-        debugLog("slotReset:complete", {
-          slotId: resetSlotId,
-          removedChartIds: payload.removedChartIds,
-        });
+        slotApi.reset(resetSlotId);
         closeResetDialog();
       } catch (error) {
         status(`슬롯 초기화 오류: ${error.message}`);
@@ -313,7 +301,7 @@
               {
                 variant: slotType === "graph" ? "filled" : "light",
                 disabled: busy,
-                onClick: () => setSlotContentType("graph"),
+                onClick: () => slotApi.setContentType("graph"),
               },
               "그래프",
             ),
@@ -322,7 +310,7 @@
               {
                 variant: slotType === "image" ? "filled" : "light",
                 disabled: busy,
-                onClick: () => setSlotContentType("image"),
+                onClick: () => slotApi.setContentType("image"),
               },
               "이미지",
             ),
@@ -435,12 +423,12 @@
     const state = useAppState();
     if (state.workspace !== "slot.image") return null;
     const busy = state.lifecycle !== "ready";
-    const slot = getSelectedSlot();
-    const image = slotImage(slot);
-    const settings = normalizeImageSettings(image);
+    const imageApi = window.FastFigureApi.images;
+    const image = imageApi.readEditor();
+    const settings = image?.settings;
     const updateSettings = (patch) => {
       if (!settings) return;
-      applyImageSettingsFromValues({ ...settings, ...patch });
+      imageApi.setSettings({ ...settings, ...patch });
     };
 
     return React.createElement(
@@ -449,7 +437,7 @@
       React.createElement(Text, { fw: 600, size: "sm" }, "이미지"),
       image
         ? React.createElement(Image, {
-            src: projectImageDisplayUrl(image),
+            src: image.src,
             alt: image.name || "선택 이미지",
             h: 160,
             fit: "contain",
@@ -465,7 +453,7 @@
         {
           variant: "light",
           disabled: busy,
-          onClick: insertEmptyImageIntoSelectedSlot,
+          onClick: imageApi.insertEmpty,
         },
         "빈 이미지 삽입",
       ),
@@ -522,6 +510,7 @@
     const state = useAppState();
     const assetApi = window.FastFigureApi.assets;
     const snapshot = assetApi.readTree();
+    const selectedSlotId = window.FastFigureApi.slots.readSelected()?.id;
     const [expanded, setExpanded] = useState(() => new Set(["/assets", "/slots"]));
     const [lastDirectory, setLastDirectory] = useState("/assets");
     const [folderDialog, setFolderDialog] = useState({
@@ -1130,12 +1119,12 @@
                     Button,
                     {
                       key: slot.id,
-                      variant: state.workspace !== "project" && getSelectedSlot()?.id === slot.id ? "filled" : "subtle",
+                      variant: state.workspace !== "project" && selectedSlotId === slot.id ? "filled" : "subtle",
                       size: "xs",
                       fullWidth: true,
                       justify: "flex-start",
                       disabled: busy,
-                      onClick: () => setSelectedSlot(slot.id),
+                      onClick: () => window.FastFigureApi.slots.select(slot.id),
                       onDragOver: (event) => {
                         if (dataTransferHasFiles(event.dataTransfer))
                           return allowExternalFileDrop(event);
@@ -1159,9 +1148,10 @@
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
     const importResetRef = useRef(null);
+    const projectApi = window.FastFigureApi.project;
 
     const openProjectImportPicker = (open) => {
-      if (getSelectedSlot())
+      if (window.FastFigureApi.slots.readSelected())
         return status("프로젝트 불러오기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
       open();
     };
@@ -1170,12 +1160,7 @@
       try {
         await runLifecycleTask("importing", "PROJECT_IMPORT", async () => {
           try {
-            const header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
-            const payload =
-              header.length === 4 && header[0] === 0x50 && header[1] === 0x4b
-                ? await ffpxReadProject(file)
-                : JSON.parse(await file.text());
-            importProject(payload, file.name);
+            await projectApi.importFile(file);
             status(`${file.name} 프로젝트를 불러왔습니다.`);
           } catch (error) {
             status("프로젝트 불러오기 오류: " + error.message);
@@ -1192,17 +1177,15 @@
       { gap: "xs", p: "md" },
       React.createElement(Text, { fw: 600 }, "프로젝트"),
       React.createElement(TextInput, {
-        key: `project-name-${activeProject.projectName}`,
+        key: `project-name-${projectApi.readName()}`,
         label: "프로젝트 이름",
-        defaultValue: activeProject.projectName,
+        defaultValue: projectApi.readName(),
         disabled: busy,
         onChange: (event) => {
-          activeProject.projectName = event.target.value.slice(0, 120);
+          projectApi.setName(event.target.value);
         },
         onBlur: (event) => {
-          activeProject.projectName = event.target.value.trim().slice(0, 120);
-          event.target.value = activeProject.projectName;
-          debugLog("project:name", { projectName: activeProject.projectName });
+          event.target.value = projectApi.setName(event.target.value, true);
         },
       }),
       React.createElement(
