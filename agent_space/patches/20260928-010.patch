@@ -1,0 +1,36 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -3064,17 +3064,21 @@
+       React.createElement(
+         AppShell.Navbar,
+         { p: 0, style: { position: "relative", pointerEvents: "auto" } },
+-        React.createElement(FastFigureDataActions),
+-        React.createElement(FastFigureImageEditor),
+-        React.createElement(FastFigureProjectDataTree),
+-        React.createElement(FastFigureProjectActions),
+-        React.createElement(FastFigureGraphDataEditor),
+-        React.createElement(FastFigureGraphLayoutEditor),
+-        React.createElement(FastFigureGraphPaletteActions),
+-        React.createElement(FastFigureGraphFileActions),
+-        React.createElement(FastFigurePaletteActions),
+-        React.createElement(FastFigureStatusDebug),
+-        React.createElement(FastFigureUtilityActions),
++        React.createElement(
++          ScrollArea,
++          { h: "100%", type: "auto" },
++          React.createElement(FastFigureDataActions),
++          React.createElement(FastFigureImageEditor),
++          React.createElement(FastFigureProjectDataTree),
++          React.createElement(FastFigureProjectActions),
++          React.createElement(FastFigureGraphDataEditor),
++          React.createElement(FastFigureGraphLayoutEditor),
++          React.createElement(FastFigureGraphPaletteActions),
++          React.createElement(FastFigureGraphFileActions),
++          React.createElement(FastFigurePaletteActions),
++          React.createElement(FastFigureStatusDebug),
++          React.createElement(FastFigureUtilityActions),
++        ),
+         React.createElement(Box, {
+           role: "separator",
+           "aria-orientation": "vertical",
