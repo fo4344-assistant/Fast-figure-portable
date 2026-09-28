@@ -7325,6 +7325,17 @@
         applyCaptionSettings();
         return readCaptionsApiState();
       }
+      function readPrintApiDefaults() {
+        return Object.freeze({
+          width: Math.max(100, Math.round(dashboardReferenceWidth())),
+        });
+      }
+      function savePrintApi(options = {}) {
+        return exportDashboardTarget(options);
+      }
+      function capturePrintApi(options = {}) {
+        return exportDashboard(true, options);
+      }
       function readLabelsApiState() {
         let reference = gridSlotGeometry(
           activeProject.layout,
@@ -7515,6 +7526,11 @@
         return readLayoutApiState();
       }
       window.FastFigureApi = Object.freeze({
+        print: Object.freeze({
+          readDefaults: readPrintApiDefaults,
+          save: savePrintApi,
+          capture: capturePrintApi,
+        }),
         captions: Object.freeze({
           readState: readCaptionsApiState,
           setEnabled: setCaptionsApiEnabled,

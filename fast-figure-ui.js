@@ -2522,9 +2522,8 @@
 
   function FastFigurePrintOverlay() {
     const state = useAppState();
-    const [width, setWidth] = useState(() =>
-      Math.max(100, Math.round(dashboardReferenceWidth())),
-    );
+    const printApi = window.FastFigureApi.print;
+    const [width, setWidth] = useState(() => printApi.readDefaults().width);
     const [height, setHeight] = useState("");
     const [dpi, setDpi] = useState(300);
     const [format, setFormat] = useState("png");
@@ -2545,13 +2544,11 @@
       onStatus: setMessage,
     });
     const save = () =>
-      runLifecycleTask("exporting", "PRINT_EXPORT", () =>
-        exportDashboardTarget(options()),
-      );
+      runLifecycleTask("exporting", "PRINT_EXPORT", () => printApi.save(options()));
     const capture = () =>
       runLifecycleTask("exporting", "CAPTURE_EXPORT", () => {
         const values = options();
-        return exportDashboard(true, {
+        return printApi.capture({
           dpi: values.dpi,
           format: values.format,
           onStatus: setMessage,
