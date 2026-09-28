@@ -289,8 +289,7 @@
         slotDragSuppressClick = false,
         dashboardZoomIntent = 100,
         dashboardZoomLocked = false,
-        dashboardZoomLockedWidth = null,
-        selectedExplorerDirectory = "/assets";
+        dashboardZoomLockedWidth = null;
       const $ = (id) => document.getElementById(id);
       const uiTelemetryListeners = new Set();
       let uiTelemetryState = Object.freeze({
@@ -1332,24 +1331,10 @@
       function requestedOverlayState({ state, payload }) {
         return state === payload.overlay ? "none" : payload.overlay;
       }
-      function syncSettingToggle(idOrButton, active, labels = null) {
-        let button =
-          typeof idOrButton === "string" ? $(idOrButton) : idOrButton;
-        if (!button) return;
-        button.dataset.active = String(active);
-        button.classList.toggle("active", active);
-        button.setAttribute("aria-pressed", String(active));
-        if (labels) button.textContent = labels[active ? 1 : 0];
-      }
       function syncGraphWorkspaceState() {
         let slot = getSelectedSlot();
         if (!slot) return;
         if (slot.chart && editing?.id !== slot.chart) activateChartModel(slot.chart);
-      }
-      function syncImageWorkspaceState() {
-        let slot = getSelectedSlot();
-        if (!slot) return;
-        refreshImageControls(slot.imageId);
       }
       function exitGraphWorkspaceState({ machine }) {
         machine.state = Object.freeze({
@@ -1636,8 +1621,6 @@
                 "captions",
                 "ui",
               ],
-              entry: syncImageWorkspaceState,
-              update: syncImageWorkspaceState,
               on: SHARED_WORKSPACE_EVENTS,
             },
           },
@@ -2733,24 +2716,13 @@
           replaceId: null,
         };
       }
-      function planProjectAssetImport(file, directory, reservedPaths = null) {
-        let model = projectAssetImportCollisionModel(file, directory, reservedPaths);
-        if (model.mode === "replace-or-rename") {
-          let replace = window.confirm(model.message);
-          return resolveProjectAssetImportPlan(
-            model,
-            replace ? "replace" : "rename",
-            reservedPaths,
-          );
-        }
-        if (model.notice) window.alert(model.notice);
-        return resolveProjectAssetImportPlan(model, "rename", reservedPaths);
-      }
       async function importProjectFilesToDirectory(
         files,
         directory,
-        planImport = planProjectAssetImport,
+        planImport,
       ) {
+        if (typeof planImport !== "function")
+          throw Error("프로젝트 자산 가져오기 계획이 없습니다.");
         let targetDirectory = normalizeProjectPath(directory, { directory: true }),
           list = Array.from(files || []);
         if (!activeProject.fileSystem.directories.includes(targetDirectory))
@@ -2894,12 +2866,6 @@
         setSelectedSlot(slot.id, "model-to-fsm");
         renderDashboard();
         status("프로젝트 파일을 슬롯에 연결했습니다.");
-      }
-      function refreshCsvControls(selected = selectedProjectCsv()?.id) {
-        return getProjectCsv(selected) || null;
-      }
-      function refreshImageControls(selected = getSelectedSlot()?.imageId) {
-        return getProjectImage(selected) || null;
       }
       function headerLineCount(value, table = []) {
         let count = Math.max(0, Math.trunc(Number(value) || 0));
@@ -3364,8 +3330,6 @@
         let hasSlot = !!getSelectedSlot();
         if (hasSlot && appFSM.state.overlay === "readme")
           appFSM.send("CLOSE_OVERLAY", { reason: "slot-selected" });
-        refreshCsvControls();
-        refreshImageControls();
       }
       function updateGraphView() {
         debugLog("updateGraphView", { selectedSlotId });
@@ -3464,38 +3428,10 @@
           let el = e.target.closest?.(".slot");
           if (el && !el.contains(e.relatedTarget)) el.classList.remove("drag-over");
         });
-        dashboard.addEventListener("drop", async (e) => {
+        dashboard.addEventListener("drop", (e) => {
           let el = e.target.closest?.(".slot"),
-            target = el && slotAt(+el.dataset.slot),
-            file = e.dataTransfer?.files?.[0];
-          if (file) {
-            if (!target || target.hidden) {
-              clearSlotDragState();
-              return;
-            }
-            e.preventDefault();
-            e.stopPropagation();
-            el.classList.remove("drag-over");
-            clearSlotDragState();
-            if (!isSlotSelected(target)) setSelectedSlot(target.id);
-            try {
-              await appFSM.run("importing", "SLOT_DROP_IMPORT", () =>
-                loadFileIntoSlot(file, target),
-              );
-              debugLog("slot:file-drop", {
-                slotId: target.id,
-                name: file.name,
-                kind: slotFileKind(file),
-              });
-            } catch (error) {
-              status("불러오기 실패: " + error.message);
-            } finally {
-              setTimeout(() => {
-                slotDragSuppressClick = false;
-              }, 0);
-            }
-            return;
-          }
+            target = el && slotAt(+el.dataset.slot);
+          if (dataTransferHasFiles(e.dataTransfer)) return;
           let source = slotDragSourceId === null ? null : slotAt(slotDragSourceId);
           if (!source || !target || target.hidden || source === target) {
             clearSlotDragState();
@@ -4863,8 +4799,6 @@
         applyUiPalette(false, false);
         syncDashboardCaption();
         updateFileAvailability();
-        refreshCsvControls();
-        refreshImageControls();
       }
       function applyProjectLoadedAction({ machine, payload }) {
         for (let scope of [
@@ -5717,7 +5651,6 @@
       function selectDirectoryFromTree(path) {
         let match = projectVfs.resolve(path);
         if (match?.kind !== "directory") return status("프로젝트 폴더를 선택할 수 없습니다.");
-        selectedExplorerDirectory = match.path;
         appFSM.send("SELECT_ASSET", {
           kind: "directory",
           path: match.path,
@@ -5871,6 +5804,16 @@
           slotId, removedChartIds: payload.removedChartIds,
         });
       }
+      function prepareDashboardFileDrop(slotId) {
+        let slot = slotAt(slotId);
+        clearSlotDragState();
+        if (!slot || slot.hidden) return false;
+        if (!isSlotSelected(slot)) setSelectedSlot(slot.id);
+        return true;
+      }
+      function finishDashboardFileDrop() {
+        setTimeout(() => { slotDragSuppressClick = false; }, 0);
+      }
       function readImageEditorApi() {
         let image = slotImage(getSelectedSlot());
         return image ? {
@@ -5887,13 +5830,15 @@
       async function loadImageFile(
         file,
         slot,
-        { assetPath = null, replaceAssetId = null } = {},
+        { assetPath = null, replaceAssetId = null, planImport = null } = {},
       ) {
         try {
+          if (!assetPath && typeof planImport !== "function")
+            throw Error("프로젝트 이미지 가져오기 계획이 없습니다.");
           let bytes = new Uint8Array(await file.arrayBuffer()),
             plan = assetPath
               ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
-              : planProjectAssetImport(file, PROJECT_ASSET_DIRECTORIES.image),
+              : await planImport(file, PROJECT_ASSET_DIRECTORIES.image),
             image;
           if (Number.isInteger(plan.replaceId)) {
             image = buildProjectImageModel(
@@ -5922,7 +5867,6 @@
               direction: "fsm-to-model",
             });
           } else image = createProjectImage(bytes, file.name, file.type, null, null, plan.path);
-          refreshImageControls(image.id);
           updateFileAvailability();
           renderDashboard();
           status(
@@ -5953,7 +5897,7 @@
       async function loadDataFile(
         file,
         slot,
-        { replaceSlotContent = false, assetPath = null, replaceAssetId = null } = {},
+        { replaceSlotContent = false, assetPath = null, replaceAssetId = null, planImport = null } = {},
       ) {
         debugLog("fileLoad:start", {
           name: file.name,
@@ -5968,9 +5912,11 @@
             data = file.name.toLowerCase().endsWith(".json") ? JSON.parse(text) : parseCSV(text);
           if (!Array.isArray(data) && Array.isArray(data.data)) data = data.data;
           if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
+          if (!assetPath && typeof planImport !== "function")
+            throw Error("프로젝트 데이터 가져오기 계획이 없습니다.");
           let plan = assetPath
             ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
-            : planProjectAssetImport(file, PROJECT_ASSET_DIRECTORIES.csv);
+            : await planImport(file, PROJECT_ASSET_DIRECTORIES.csv);
           if (Number.isInteger(plan.replaceId)) {
             csv = buildProjectCsvModel(
               data,
@@ -6026,15 +5972,6 @@
           });
           throw error;
         }
-      }
-      async function loadFileIntoSlot(file, slot) {
-        let kind = slotFileKind(file);
-        if (!kind) throw Error("지원하지 않는 파일 형식입니다.");
-        if (kind === "slot") return importSlotFile(file, slot);
-        if (kind === "image") return loadImageFile(file, slot);
-        return loadDataFile(file, slot, {
-          replaceSlotContent: slot?.contentType === "image",
-        });
       }
       function baseGraphObject(chart, csv = selectedProjectCsv()) {
         let editor = chart.editor || {};
@@ -6407,14 +6344,13 @@
         let slot = slotAt(slotId), kind = slotFileKind(file);
         if (!kind) throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
         if (kind === "slot") return importSlotFile(file, slot);
-        let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES[kind === "image" ? "image" : "csv"]);
         if (kind === "image")
           return loadImageFile(file, slot, {
-            assetPath: plan.path, replaceAssetId: plan.replaceId,
+            planImport: choosePlan,
           });
         return loadDataFile(file, slot, {
           replaceSlotContent: slot.contentType === "image",
-          assetPath: plan.path, replaceAssetId: plan.replaceId,
+          planImport: choosePlan,
         });
       }
       async function importProjectAssetFiles(files, choosePlan) {
@@ -7834,6 +7770,8 @@
           select: setSelectedSlot,
           setContentType: setSlotContentType,
           reset: resetSlotApi,
+          prepareFileDrop: prepareDashboardFileDrop,
+          finishFileDrop: finishDashboardFileDrop,
         }),
         images: Object.freeze({
           readEditor: readImageEditorApi,
@@ -7856,6 +7794,7 @@
           connectToSlot: connectProjectAssetPathToSlot,
           importToDirectory: importProjectFilesToDirectory,
           importToSlot: importProjectFileToSlot,
+          fileKind: slotFileKind,
           importFiles: importProjectAssetFiles,
           collisionModel: projectAssetImportCollisionModel,
           resolveImportPlan: resolveProjectAssetImportPlan,
@@ -7945,7 +7884,6 @@
       });
       applyDashboardZoom();
       ensureDefaultCsv();
-      refreshCsvControls();
       installSlotClickController();
       makeSlots();
       applySlotStyle();

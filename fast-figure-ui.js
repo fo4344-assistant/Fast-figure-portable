@@ -2676,6 +2676,42 @@
     );
   }
 
+  function FastFigureDashboardFileDrop() {
+    const { choosePlan, modal } = useProjectAssetImportCollision();
+    useEffect(() => {
+      const dashboard = document.getElementById("dashboard");
+      if (!dashboard) return;
+      const handleDrop = async (event) => {
+        const file = event.dataTransfer?.files?.[0];
+        if (!file) return;
+        const element = event.target.closest?.(".slot");
+        const slotId = element ? Number(element.dataset.slot) : NaN;
+        event.preventDefault();
+        event.stopPropagation();
+        const slotApi = window.FastFigureApi.slots;
+        if (!slotApi.prepareFileDrop(slotId)) {
+          slotApi.finishFileDrop();
+          return;
+        }
+        try {
+          await appFSM.run("importing", "SLOT_DROP_IMPORT", () =>
+            window.FastFigureApi.assets.importToSlot(file, slotId, choosePlan));
+          debugLog("slot:file-drop", {
+            slotId, name: file.name,
+            kind: window.FastFigureApi.assets.fileKind(file),
+          });
+        } catch (error) {
+          status("불러오기 실패: " + error.message);
+        } finally {
+          slotApi.finishFileDrop();
+        }
+      };
+      dashboard.addEventListener("drop", handleDrop, true);
+      return () => dashboard.removeEventListener("drop", handleDrop, true);
+    }, [choosePlan]);
+    return modal;
+  }
+
   function FastFigureShell() {
     const shellGeometry = fastFigureTheme.other.shell;
     const [navbarWidth, setNavbarWidth] = useState(shellGeometry.navbarWidth);
@@ -2793,6 +2829,7 @@
       React.createElement(FastFigureLayoutOverlay),
       React.createElement(FastFigurePrintOverlay),
       React.createElement(FastFigureReadmeOverlay),
+      React.createElement(FastFigureDashboardFileDrop),
     );
   }
 
