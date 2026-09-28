@@ -7207,32 +7207,11 @@
       function applyUiPalette(_fromControls = false, notify = true) {
         let palette = activeProject.appearance.uiPalette;
         document.documentElement.style.setProperty("--ui-color", palette.uiColor);
-        document.documentElement.style.setProperty("--line", palette.uiColor);
-        document.documentElement.style.setProperty("--accent", palette.uiColor);
-        document.documentElement.style.setProperty(
-          "--ui-bg",
-          palette.uiBackgroundColor,
-        );
-        document.documentElement.style.setProperty(
-          "--panel",
-          palette.uiBackgroundColor,
-        );
         document.documentElement.style.setProperty(
           "--paper",
           palette.uiBackgroundColor,
         );
-        document.documentElement.style.setProperty("--ui-surface", palette.uiSurfaceColor);
-        document.documentElement.style.setProperty("--ui-muted", palette.uiMutedColor);
         document.documentElement.style.setProperty("--ui-subtle", palette.uiSubtleColor);
-        document.documentElement.style.setProperty(
-          "--ui-disabled-bg",
-          palette.uiDisabledBgColor,
-        );
-        document.documentElement.style.setProperty(
-          "--ui-disabled-text",
-          palette.uiDisabledTextColor,
-        );
-        document.documentElement.style.setProperty("--ui-shadow", palette.uiShadowColor);
         document.documentElement.style.setProperty("--ink", palette.fontColor);
         document.documentElement.style.setProperty("--graph-bg", palette.paperColor);
         renderDashboard();
