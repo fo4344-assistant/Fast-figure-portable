@@ -9,6 +9,7 @@
     AppShell,
     Button,
     ColorInput,
+    FileButton,
     Group,
     Image,
     Input,
@@ -16,8 +17,15 @@
     Menu,
     Modal,
     NumberInput,
+    ScrollArea,
     Select,
     Stack,
+    Table,
+    TableTbody,
+    TableTd,
+    TableTh,
+    TableThead,
+    TableTr,
     Text,
     TextInput,
     Textarea,
@@ -224,19 +232,18 @@
       ["csv", "image"].includes(selectedAsset?.kind) &&
       !(selectedAsset.kind === "csv" && selectedAsset.asset.isDefaultEmpty === true);
     const [deleteTarget, setDeleteTarget] = useState(null);
-    const fileInputRef = useRef(null);
+    const fileResetRef = useRef(null);
     const { choosePlan: chooseProjectAssetImportPlan, modal: importCollisionModal } =
       useProjectAssetImportCollision();
-    const importFilesFromMantine = async (event) => {
-      const input = event.target;
-      const files = [...(input.files || [])];
-      if (!files.length) return;
+    const importFilesFromMantine = async (files) => {
+      const selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
+      if (!selectedFiles.length) return;
       const target = getSelectedSlot();
       try {
         await runLifecycleTask("importing", "ASSET_IMPORT", async () => {
           try {
             if (target && (target.contentType || "graph") === "image") {
-              const file = files[0];
+              const file = selectedFiles[0];
               const kind = slotFileKind(file);
               if (kind === "slot") await importSlotFile(file, target);
               else if (kind === "image") {
@@ -260,7 +267,7 @@
                 });
               } else throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
             } else if (target) {
-              for (const file of files) {
+              for (const file of selectedFiles) {
                 const plan = await chooseProjectAssetImportPlan(
                   file,
                   PROJECT_ASSET_DIRECTORIES.csv,
@@ -271,7 +278,7 @@
                 });
               }
             } else {
-              for (const file of files) {
+              for (const file of selectedFiles) {
                 const kind = slotFileKind(file);
                 if (kind === "image") {
                   const plan = await chooseProjectAssetImportPlan(
@@ -299,7 +306,7 @@
           }
         });
       } finally {
-        input.value = "";
+        fileResetRef.current?.();
       }
     };
 
@@ -451,22 +458,21 @@
             ),
           )
         : null,
-      React.createElement("input", {
-        ref: fileInputRef,
-        type: "file",
-        accept: ".csv,.tsv,.json",
-        multiple: true,
-        hidden: true,
-        onChange: importFilesFromMantine,
-      }),
       React.createElement(
-        Button,
+        FileButton,
         {
-          variant: "light",
+          onChange: importFilesFromMantine,
+          accept: ".csv,.tsv,.json",
+          multiple: true,
+          resetRef: fileResetRef,
           disabled: busy,
-          onClick: () => fileInputRef.current?.click(),
         },
-        "데이터 추가",
+        (props) =>
+          React.createElement(
+            Button,
+            { ...props, variant: "light", disabled: busy },
+            "데이터 추가",
+          ),
       ),
       importCollisionModal,
       React.createElement(
@@ -1406,15 +1412,14 @@
   function FastFigureProjectActions() {
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
-    const importInputRef = useRef(null);
+    const importResetRef = useRef(null);
 
-    const openProjectImportPicker = () => {
+    const openProjectImportPicker = (open) => {
       if (getSelectedSlot())
         return status("프로젝트 불러오기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
-      importInputRef.current?.click();
+      open();
     };
-    const importProjectFileFromMantine = async (event) => {
-      const file = event.target.files?.[0];
+    const importProjectFileFromMantine = async (file) => {
       if (!file) return;
       try {
         await runLifecycleTask("importing", "PROJECT_IMPORT", async () => {
@@ -1432,7 +1437,7 @@
           }
         });
       } finally {
-        event.target.value = "";
+        importResetRef.current?.();
       }
     };
 
@@ -1454,12 +1459,6 @@
           debugLog("project:name", { projectName: activeProject.projectName });
         },
       }),
-      React.createElement("input", {
-        ref: importInputRef,
-        type: "file",
-        hidden: true,
-        onChange: importProjectFileFromMantine,
-      }),
       React.createElement(
         Group,
         { gap: "xs" },
@@ -1469,9 +1468,23 @@
           "FFPX 내보내기",
         ),
         React.createElement(
-          Button,
-          { variant: "light", disabled: busy, onClick: openProjectImportPicker },
-          "FFPX 불러오기",
+          FileButton,
+          {
+            onChange: importProjectFileFromMantine,
+            resetRef: importResetRef,
+            disabled: busy,
+          },
+          (props) =>
+            React.createElement(
+              Button,
+              {
+                ...props,
+                variant: "light",
+                disabled: busy,
+                onClick: () => openProjectImportPicker(props.onClick),
+              },
+              "FFPX 불러오기",
+            ),
         ),
       ),
     );
@@ -1516,25 +1529,47 @@
         allowDecimal: false, disabled: busy,
         onChange: (value) => graphEditorHeaderLines(activeCsv.id, value),
       }) : null,
-      activeCsv && columns.length ? React.createElement(
-        "div",
-        { style: { maxHeight: 220, overflow: "auto" } },
-        React.createElement(
-          "table",
-          { style: { width: "100%", borderCollapse: "collapse", fontSize: "var(--mantine-font-size-xs)" } },
-          React.createElement("thead", null, React.createElement("tr", null,
-            ...columns.map((column) => React.createElement("th", { key: column.id, style: { textAlign: "left", padding: 4 } }, column.label)),
-          )),
-          React.createElement("tbody", null,
-            ...activeCsv.rows.slice(0, 30).map((row, rowIndex) => React.createElement("tr", { key: rowIndex },
-              ...columns.map((column) => React.createElement("td", {
-                key: column.id,
-                style: { padding: 4, fontWeight: rowIndex < activeCsv.headerLines ? 600 : 400 },
-              }, String(row?.[column.index] ?? ""))),
-            )),
-          ),
-        ),
-      ) : null,
+      activeCsv && columns.length
+        ? React.createElement(
+            ScrollArea,
+            { h: 220, type: "auto" },
+            React.createElement(
+              Table,
+              { fz: "xs" },
+              React.createElement(
+                TableThead,
+                null,
+                React.createElement(
+                  TableTr,
+                  null,
+                  ...columns.map((column) =>
+                    React.createElement(TableTh, { key: column.id }, column.label),
+                  ),
+                ),
+              ),
+              React.createElement(
+                TableTbody,
+                null,
+                ...activeCsv.rows.slice(0, 30).map((row, rowIndex) =>
+                  React.createElement(
+                    TableTr,
+                    { key: rowIndex },
+                    ...columns.map((column) =>
+                      React.createElement(
+                        TableTd,
+                        {
+                          key: column.id,
+                          fw: rowIndex < activeCsv.headerLines ? 600 : 400,
+                        },
+                        String(row?.[column.index] ?? ""),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          )
+        : null,
       React.createElement(Group, { gap: "xs", grow: true },
         React.createElement(Button, {
           variant: chart?.editor?.editable !== false ? "filled" : "light", disabled: busy || !chart,
@@ -1842,7 +1877,7 @@
   function FastFigureGraphPaletteActions() {
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
-    const importRef = useRef(null);
+    const importResetRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
     const chart = graphEditorChart();
     const objects = chart ? ensureGraphObjects(chart) : [];
@@ -1886,8 +1921,7 @@
         colors: colors.length,
       });
     };
-    const loadPalette = async (event) => {
-      const file = event.target.files?.[0];
+    const loadPalette = async (file) => {
       if (!file) return;
       try {
         await runLifecycleTask("importing", "PALETTE_IMPORT", async () => {
@@ -1914,7 +1948,7 @@
           }
         });
       } finally {
-        event.target.value = "";
+        importResetRef.current?.();
       }
     };
 
@@ -1922,13 +1956,6 @@
       Stack,
       { gap: "xs", px: "md", pb: "md" },
       React.createElement(Text, { fw: 600 }, "그래프 색상 구성"),
-      React.createElement("input", {
-        ref: importRef,
-        type: "file",
-        accept: ".json,application/json",
-        hidden: true,
-        onChange: loadPalette,
-      }),
       React.createElement(
         Group,
         { gap: "xs", grow: true },
@@ -1943,13 +1970,19 @@
           "저장",
         ),
         React.createElement(
-          Button,
+          FileButton,
           {
-            variant: "light",
+            onChange: loadPalette,
+            accept: ".json,application/json",
+            resetRef: importResetRef,
             disabled: busy || !canEdit,
-            onClick: () => importRef.current?.click(),
           },
-          "불러오기",
+          (props) =>
+            React.createElement(
+              Button,
+              { ...props, variant: "light", disabled: busy || !canEdit },
+              "불러오기",
+            ),
         ),
       ),
     );
@@ -1957,16 +1990,15 @@
   function FastFigureGraphFileActions() {
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
-    const importInputRef = useRef(null);
+    const importResetRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
 
-    const openSlotImportPicker = () => {
+    const openSlotImportPicker = (open) => {
       if (!getSelectedSlot())
         return status("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");
-      importInputRef.current?.click();
+      open();
     };
-    const importSlotFileFromMantine = async (event) => {
-      const file = event.target.files?.[0];
+    const importSlotFileFromMantine = async (file) => {
       if (!file) return;
       const slot = getSelectedSlot();
       try {
@@ -1980,7 +2012,7 @@
           }
         });
       } finally {
-        event.target.value = "";
+        importResetRef.current?.();
       }
     };
 
@@ -1988,12 +2020,6 @@
       Stack,
       { gap: "xs", p: "md" },
       React.createElement(Text, { fw: 600 }, "그래프 파일"),
-      React.createElement("input", {
-        ref: importInputRef,
-        type: "file",
-        hidden: true,
-        onChange: importSlotFileFromMantine,
-      }),
       React.createElement(
         Group,
         { gap: "xs", grow: true },
@@ -2009,9 +2035,23 @@
         ),
       ),
       React.createElement(
-        Button,
-        { variant: "light", disabled: busy, onClick: openSlotImportPicker },
-        "FFSX/Plotly JSON 불러오기",
+        FileButton,
+        {
+          onChange: importSlotFileFromMantine,
+          resetRef: importResetRef,
+          disabled: busy,
+        },
+        (props) =>
+          React.createElement(
+            Button,
+            {
+              ...props,
+              variant: "light",
+              disabled: busy,
+              onClick: () => openSlotImportPicker(props.onClick),
+            },
+            "FFSX/Plotly JSON 불러오기",
+          ),
       ),
     );
   }
