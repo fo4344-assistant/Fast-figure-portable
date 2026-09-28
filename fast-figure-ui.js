@@ -9,6 +9,7 @@
     AppShell,
     Box,
     Button,
+    Code,
     ColorInput,
     FileButton,
     Group,
@@ -2229,21 +2230,19 @@
       ),
       telemetry.debugEnabled
         ? React.createElement(
-            "pre",
-            {
-              style: {
-                maxHeight: 220,
-                overflow: "auto",
-                margin: 0,
-                padding: 8,
-                border: "1px solid var(--mantine-color-default-border)",
-                borderRadius: "var(--mantine-radius-sm)",
-                fontSize: "var(--mantine-font-size-xs)",
-                whiteSpace: "pre-wrap",
-                overflowWrap: "anywhere",
+            ScrollArea,
+            { h: 220, type: "auto" },
+            React.createElement(
+              Code,
+              {
+                block: true,
+                style: {
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere",
+                },
               },
-            },
-            telemetry.debugLines.join("\n"),
+              telemetry.debugLines.join("\n"),
+            ),
           )
         : null,
     );
