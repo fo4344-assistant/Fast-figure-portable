@@ -1,0 +1,15 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -73,7 +73,10 @@
+       }),
+       Modal: Modal.extend({
+         defaultProps: {
+-              },
++          centered: true,
++          closeOnClickOutside: true,
++          closeOnEscape: true,
++        },
+       }),
+     },
+   });
