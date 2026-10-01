@@ -1,0 +1,28 @@
+diff --git a/sourcescript/assets_files.py b/sourcescript/assets_files.py
+--- a/sourcescript/assets_files.py
++++ b/sourcescript/assets_files.py
+@@ -39,7 +39,7 @@ FFPX_STRUCTURE = {
+     "project.xml": "project metadata, fileSystem, appearance와 다른 문서 ref",
+     "assets/assets.xml": "CSV/image metadata와 binary data ref 목록",
+     "layout/layout.xml": "grid와 slot placement",
+-    "caption/caption.xml": "global/slot caption configuration",
++    "caption/caption.xml": "project-level global caption configuration",
+     "labels/labels.xml": "label configuration",
+     "slots/slot-<id>.xml": "slot content, slot-local caption, chart state/objects 또는 slot-local image settings",
+     "assets/data/...": "CSV/TSV/JSON 원본 data bytes",
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "On semantic conflict, the highest current layer wins. A lower layer may be current only when it records the exact current fingerprints of every required upstream layer.",
+   "layers": {
+     "source-script": {
+-      "revision": 10,
++      "revision": 11,
+       "status": "current",
+       "path_rule": "sourcescript/**/*.py",
+-      "fingerprint": "sha256:46f23426b290308e95dbec3e05181d727acd8b297f3e371bff185d35d62353d1",
++      "fingerprint": "sha256:87de91d0acbdfaa50217036b037f1dcdcb8dd5217d3fb2e6b3f84871afb57cfa",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null

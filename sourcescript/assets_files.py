@@ -39,7 +39,7 @@ FFPX_STRUCTURE = {
     "project.xml": "project metadata, fileSystem, appearance와 다른 문서 ref",
     "assets/assets.xml": "CSV/image metadata와 binary data ref 목록",
     "layout/layout.xml": "grid와 slot placement",
-    "caption/caption.xml": "global/slot caption configuration",
+    "caption/caption.xml": "project-level global caption configuration",
     "labels/labels.xml": "label configuration",
     "slots/slot-<id>.xml": "slot content, slot-local caption, chart state/objects 또는 slot-local image settings",
     "assets/data/...": "CSV/TSV/JSON 원본 data bytes",
