@@ -369,7 +369,7 @@ SafetyInvariant ==
   ValidateSlotLayoutProjection(activeProject)
 
 (*
---algorithm FastFigureSlotCore {
+--algorithm FastFigureSlotCore
 variables
   activeProject = InitialProject,
   lastResult = "initialized";
@@ -570,61 +570,53 @@ end procedure;
 
 begin
 VerificationHarness:
-  while (TRUE) {
-    either {
-      with (slotIds \in SUBSET DOMAIN activeProject.slots) {
+  while TRUE do
+    either
+      with slotIds \in SUBSET (DOMAIN activeProject.slots) do
         call applySlotsResetAction(slotIds);
-      };
-    }
-    or {
-      with (sourceId \in VisibleSlotIds(activeProject)) {
-        with (targetId \in VisibleSlotIds(activeProject) \ {sourceId}) {
+      end with;
+    or
+      with sourceId \in VisibleSlotIds(activeProject) do
+        with targetId \in VisibleSlotIds(activeProject) \ {sourceId} do
           call applySlotsSwappedAction(sourceId, targetId);
-        };
-      };
-    }
-    or {
-      with (rows \in 1..MaxRows) {
-        with (cols \in 1..MaxCols) {
+        end with;
+      end with;
+    or
+      with rows \in 1..MaxRows do
+        with cols \in 1..MaxCols do
           call applyGridLayoutAction(rows, cols);
-        };
-      };
-    }
-    or {
-      with (slotIds \in SUBSET VisibleSlotIds(activeProject)) {
+        end with;
+      end with;
+    or
+      with slotIds \in SUBSET VisibleSlotIds(activeProject) do
         call mergeSlots(slotIds);
-      };
-    }
-    or {
-      with (slotIds \in SUBSET VisibleSlotIds(activeProject)) {
+      end with;
+    or
+      with slotIds \in SUBSET VisibleSlotIds(activeProject) do
         call splitSlots(slotIds);
-      };
-    }
-    or {
-      with (slotId \in VisibleSlotIds(activeProject)) {
-        with (chartId \in ChartIds) {
+      end with;
+    or
+      with slotId \in VisibleSlotIds(activeProject) do
+        with chartId \in ChartIds do
           call VerificationHarnessSeedChart(slotId, chartId);
-        };
-      };
-    }
-    or {
-      with (slotId \in VisibleSlotIds(activeProject)) {
-        with (imageId \in ImageIds) {
+        end with;
+      end with;
+    or
+      with slotId \in VisibleSlotIds(activeProject) do
+        with imageId \in ImageIds do
           call VerificationHarnessSeedImage(slotId, imageId);
-        };
-      };
-    }
-    or {
-      with (slotId \in VisibleSlotIds(activeProject)) {
+        end with;
+      end with;
+    or
+      with slotId \in VisibleSlotIds(activeProject) do
         call VerificationHarnessSeedCaption(slotId);
-      };
-    }
-    or {
-      with (slotId \in VisibleSlotIds(activeProject)) {
+      end with;
+    or
+      with slotId \in VisibleSlotIds(activeProject) do
         call VerificationHarnessSeedImageSettings(slotId);
-      };
-    };
-  };
+      end with;
+    end either;
+  end while;
 end algorithm;
 *)
 
