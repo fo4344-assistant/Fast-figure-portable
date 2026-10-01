@@ -1,0 +1,412 @@
+# Review 013 — Source Script closure audit
+
+기준 commit: `7a2bc8ab96694255c95b74f63a464361f01e8656`
+
+## 목적
+
+`sourcescript/`가 다음 세 기준에서 pseudocode 단계로 내려갈 만큼 구조적으로 닫혔는지 검토한다.
+
+1. 알고리즘이 논리적으로 완결되어 있는가
+2. Fast Figure 프로젝트 목적에 부합하는가
+3. 중복 제거, 통합 또는 확장이 필요한 부분이 남아 있는가
+
+닫힘의 실질 기준은 다음 단계인 pseudocode에서 새로운 도메인 의미, 참조 규칙, 상태 변경 순서 또는 실패 의미를 임의로 결정하지 않아도 되는지 여부다.
+
+## 결론
+
+현재 Source Script는 **닫혀 있지 않다**.
+
+큰 책임 경계와 Source of Truth 방향은 정리되어 있지만, 핵심 사용자 기능의 몇몇 알고리즘이 요약 수준에 머물고 있고, 현재 source code 자체에 서로 충돌하는 상태/참조 규칙이 존재한다.
+
+따라서 현재 상태에서 pseudocode를 작성하면 pseudocode가 Source Script에 없는 의미를 새로 결정하거나, source code의 현재 동작을 임의로 정당화해야 한다.
+
+## 1. 알고리즘 완결성
+
+### 1.1 현재 코드와 Source Script가 불일치하는 grid 축소
+
+`sourcescript/layout_annotations_export.py::setLayoutApiGrid`는 기존 content가 새 좌표에 들어가지 않을 경우 visible slot 순서 기준으로 content를 새 grid에 재배치한다고 기술한다.
+
+현재 `rebuildGridSlots` 구현은 실제로는 새 slot 수만큼 `old[i]`를 그대로 복사한다.
+
+예:
+
+```text
+기존 2 x 2
+slot 0: empty
+slot 1: empty
+slot 2: empty
+slot 3: chart A
+
+1 x 1로 축소
+→ 새 slot 0에는 old[0]만 복사
+→ chart A는 activeProject.charts에는 남지만 어떤 slot에서도 참조하지 않음
+```
+
+`validateProjectObjectState`는 orphan chart 자체를 거부하지 않으므로 이 상태는 검증을 통과할 수 있다.
+
+이 문제는 Source Script 설명을 현재 코드에 맞추는 것으로 닫을 수 없다. grid 축소에서 콘텐츠 보존/거부/재배치 중 어떤 의미가 맞는지 Source Script 단계에서 결정해야 한다.
+
+### 1.2 chart 공유 허용 규칙과 slot reset 규칙 충돌
+
+현재 validator는 둘 이상의 slot이 같은 chart id를 참조하는 것을 금지하지 않는다.
+
+또한 `detachSlotChart`와 FFSX import 경로는 shared chart 가능성을 명시적으로 고려한다.
+
+반면 `applySlotsResetAction`은 reset 대상 slot이 참조하는 chart id를 모아 다른 slot의 참조 여부와 관계없이 `activeProject.charts`에서 삭제한다.
+
+따라서 다음 두 규칙 중 하나를 먼저 확정해야 한다.
+
+- chart는 slot당 독점 소유이며 shared reference 자체를 invalid state로 금지한다.
+- chart shared reference를 허용하며 reset은 다른 slot이 참조하는 chart를 유지한다.
+
+현재 상태에서는 참조 cardinality가 닫혀 있지 않다.
+
+### 1.3 slot.content와 merge caption 의미 불일치
+
+`project_state.py`는 slot content를 다음 하나의 구조로 정의한다.
+
+- chart
+- imageId
+- contentType
+- caption
+
+`SLOTS_SWAPPED`는 실제로 이 `slot.content` 전체를 교환한다.
+
+반면 `mergeSlots`는 source slot이 anchor가 아닐 때 chart/image/contentType만 anchor로 옮기고 caption은 옮기지 않는다.
+
+따라서 caption이
+
+- slot 위치에 귀속되는 annotation인지
+- graph/image와 함께 이동하는 slot content인지
+
+연산마다 의미가 달라진다.
+
+merge/split/swap/reset 전체에서 caption ownership을 하나의 규칙으로 확정해야 한다.
+
+### 1.4 label preview/commit 의미 미확정
+
+기존 `UNRESOLVED_REVIEW_ITEMS`에 기록한 문제는 실제 closure blocker다.
+
+`previewLabelsApiPosition`은 현재 authoritative `activeProject.labelSettings.x/y`를 즉시 변경한다.
+`commitLabelsApiPosition`은 값 변경이 아니라 notify만 수행한다.
+
+다음 중 하나를 확정해야 한다.
+
+- pointer move 자체가 연속적인 authoritative edit
+- preview는 draft이고 pointer commit에서만 authoritative state 변경
+
+미확정 상태 그대로 pseudocode로 내려가면 preview/commit 책임을 새로 설계하게 된다.
+
+### 1.5 project 생성과 기본 상태 알고리즘 누락
+
+`project_state.py`는 project shape와 범위를 기록하지만 현재 구현의 `createProjectState`에 대응하는 Source Script 함수가 없다.
+
+pseudocode에서 현재 동작을 재구성하려면 최소한 다음을 새로 결정해야 한다.
+
+- 초기 grid 크기
+- 초기 slot style 값
+- label/caption 기본 상태
+- UI palette 기본 상태
+- next id 초기값
+- 기본 fixed directories
+- 보호된 기본 빈 CSV의 생성 시점과 내용
+
+특히 기본 빈 CSV는 graph object가 0개가 되었을 때 복구 reference로 사용되므로 단순 UI default가 아니라 graph invariant의 일부다.
+
+### 1.6 ProjectObject import normalization 누락
+
+`ffpxReadProject`는 package를 payload로 복원하는 단계까지만 기술되어 있고, 실제 `buildProjectObject`가 수행하는 normalization과 reference remap은 Source Script에 없다.
+
+누락된 주요 의미:
+
+- imported project name fallback
+- grid 범위 검증
+- CSV/image id normalization
+- default CSV reuse/remap
+- chart validation/normalization
+- slot geometry와 chart/image reference 확인
+- nextId 계산
+- legacy caption normalization
+- slotStyle/palette fallback
+- 최종 whole-project validation
+
+이는 FFPX roundtrip과 직접 연결되므로 필수 closure 항목이다.
+
+### 1.7 CSV/TSV/JSON parsing 및 load transaction 누락
+
+`assets_files.py`는 CSV/TSV/JSON을 지원한다고 적지만 실제 parsing 규칙을 정의하지 않는다.
+
+현재 source code에는 다음 의미가 존재한다.
+
+- 첫 줄에 tab이 있으면 TSV, 아니면 comma delimiter
+- quote 내부 delimiter/newline 허용
+- doubled quote 처리
+- 완전히 빈 row 제거
+- JSON array 또는 `data` array 허용
+- 원본 bytes를 project asset에 보존
+- load 실패 시 생성된 미참조 CSV rollback
+
+이 규칙이 Source Script에 없으므로 file import pseudocode가 현재 동작을 보존할 수 없다.
+
+### 1.8 Plotly import conversion 규칙 누락
+
+`graphs.py::importSelectedGraphFile`은 `parsePlotlyToEditor`를 이름으로만 참조한다.
+
+하지만 실제 변환에는 다음 의미가 있다.
+
+- 각 Plotly trace의 x/y를 독립 project table column으로 구성
+- x/y axis side mapping
+- bar/hidden/scatter type mapping
+- line/marker/color/legend mapping
+- 원래 trace의 비편집 field를 `plotlyTrace`에 보존
+- layout title/font/legend/axis를 Fast Figure global settings로 변환
+- 원본 Plotly data/layout/config/frames를 imported representation으로 보존
+- 처음에는 non-editable로 유지하고 editable 전환 시 project CSV를 생성
+
+Plotly interoperability는 Fast Figure의 주요 기능이므로 Source Script에 실제 변환 규칙이 있어야 한다.
+
+### 1.9 graph global/axis schema 누락
+
+`graphs.py`는 graph object는 상세히 정의하지만 `globalSettings.axes`의 데이터 형태와 normalization 규칙을 정의하지 않는다.
+
+현재 source code의 axis title, min/max, tick mode, divide, scale type, notation, visibility, font, line, minor tick 규칙을 pseudocode에서 다시 설계해야 한다.
+
+### 1.10 FFPX/FFSX format semantics 일부 누락
+
+ZIP STORE와 entry layout은 기술되어 있지만 현재 FFPX XML value encoding grammar는 Source Script에 없다.
+
+현재 format은 단순 XML element 배치뿐 아니라 `value type="null|array|object|boolean|number|string"` 재귀 encoding을 사용한다.
+
+현재 format version만 읽는 프로젝트라도 같은 version의 writer/reader를 다시 만들기 위해서는 이 grammar가 authoritative spec에 있어야 한다.
+
+또한 FFSX read 뒤 실제 project에 적용할 때 발생하는 package-local CSV id → project id remap, 기존 chart 교체/추가 판단, slot caption 적용, rollback 규칙도 Source Script에 없다.
+
+### 1.11 FSM event map과 mutation action이 요약 수준
+
+`application_fsm.py`는 event 이름은 대부분 나열하지만 전체 region별 transition map과 mutation action의 실패/rollback 의미를 명세하지 않는다.
+
+특히 다음 event는 한 줄 설명만으로 pseudocode가 닫히지 않는다.
+
+- SLOT_TYPE_CHANGED
+- SLOT_CAPTION_MODE_CHANGED
+- CAPTION_TEXT_INPUT
+- SLOT_CAPTIONS_INSERTED
+- DATA/IMAGE OBJECT CREATED/REPLACED/DELETED
+- SLOTS_RESET
+- SLOTS_SWAPPED
+- SLOT_IMAGE_LINKED
+- SLOT_DATA_CONNECTED
+- CHART_LAYOUT_CHANGED
+- CHART_MODEL_REPLACED
+- SLOT_IMAGE_IMPORTED
+- SLOT_CHART_IMPORTED
+- GRID_LAYOUT_CHANGED
+- PROJECT_DIRECTORY_CREATED
+- PROJECT_TRASH_EMPTIED
+
+모든 action을 별도 함수로 복사할 필요는 없지만, 동일한 공통 mutation primitive로 묶거나 각 event의 입력/검증/변경/rollback 관계를 명시해야 한다.
+
+### 1.12 FastFigureApi contract가 category 수준
+
+`api_ui.py`의 `FastFigureApi`는 project/assets/graphs 등의 category 역할만 기록한다.
+
+그러나 UI와 core 사이의 실제 public contract는 method 단위다.
+
+예:
+
+- assets.planMove / move / importToDirectory / importToSlot
+- graphs.addObject / setObjectValues / updateLayout / importFile
+- labels.previewPosition / commitPosition
+- layout.setGrid / setZoom / mergeSlots / splitSlots
+
+method 이름, read/mutation 구분, 입력/출력과 책임 source가 Source Script에 없으면 pseudocode 단계에서 API surface를 다시 설계하게 된다.
+
+## 2. 프로젝트 목적 부합성
+
+### 2.1 전체 목적 invariant가 Source Script에 없음
+
+현재 repository README는 Fast Figure를 다음 용도로 정의한다.
+
+- tabular data와 image에서 scientific figure draft를 빠르게 조립
+- graph/image/slot layout/label/caption 조합
+- project packaging
+- image와 Plotly export
+- browser local processing
+- portable single HTML 사용
+- 일반 사용에 server/account/network 불필요
+
+현재 `system.py`는 구현 source와 load order는 기록하지만 이 목적을 시스템 invariant로 선언하지 않는다.
+
+따라서 이후 구현에서 외부 network dependency, 원본 파일 reference 의존, 기능 축소 등이 들어와도 Source Script 자체만으로 목적 위반을 판정하기 어렵다.
+
+### 2.2 grid 축소의 orphan content는 목적에 직접 배치
+
+figure workspace에서 grid 편집은 배치 변경 기능이다.
+
+단순 grid 축소가 chart를 project collection에 고립시키고 UI에서 접근할 수 없게 만들 수 있다면 사용자가 조립한 figure content를 보존하는 workspace 목적과 맞지 않는다.
+
+grid resize 의미를 Source Script에서 먼저 확정해야 한다.
+
+### 2.3 project의 “완전한 persistent state”와 export settings 불일치
+
+README는 project가 export settings를 포함한 complete persistent state라고 설명한다.
+
+현재 실제 print/export width, height, DPI, format은 `FastFigurePrintOverlay`의 React local state이며 FFPX project state에 저장되지 않는다.
+
+따라서 둘 중 하나를 결정해야 한다.
+
+- export form settings는 project persistent state가 아니며 README의 해당 표현을 수정
+- export settings를 project state에 포함
+
+현재 Source Script는 이 불일치를 언급하지 않는다.
+
+### 2.4 원본 asset 독립성은 명시적 system invariant로 올릴 필요
+
+현재 구현은 CSV/image bytes를 project asset으로 복사하고 FFPX에 package한다.
+
+이는 transferred project가 원본 파일 위치에 의존하지 않는다는 중요한 프로젝트 목적이다.
+
+현재 `assets_files.py`에서 결과적으로 드러나지만 `system.py` 수준의 invariant로 고정되어 있지 않다.
+
+## 3. 중복, 통합, 확장 필요성
+
+### 3.1 `editing` runtime pointer 통합 후보 — 높음
+
+`editing`은 chart copy가 아니라 `activeProject.charts`의 같은 chart object를 다시 가리키는 pointer다.
+
+선택 변경, slot reset/swap, image 전환, chart mutation, import rollback마다 `editing`을 별도로 null/set/restore한다.
+
+현재 확인 범위에서는 독립적인 기능 자유도를 제공하기보다
+
+```text
+selectedSlotId
+→ selected slot.chart
+→ activeProject.charts resolve
+```
+
+결과를 cache하는 역할에 가깝다.
+
+pseudocode 전에 다음을 검토한다.
+
+- 항상 selected graph slot의 chart를 resolve하는 것으로 대체 가능한가
+- Plotly event callback 때문에 안정적인 object reference가 반드시 필요한가
+
+필수성이 없으면 제거하는 편이 상태 동기화와 rollback 복잡도를 줄인다.
+
+### 3.2 slot reset은 `detachSlotChart` 의미와 통합 필요 — 높음
+
+`detachSlotChart`는 다른 slot이 같은 chart를 참조하면 chart를 유지한다.
+
+`applySlotsResetAction`은 같은 책임을 별도로 구현하면서 공유 reference 확인을 생략한다.
+
+chart sharing을 허용한다면 reset은 공통 detach primitive를 사용하도록 통합하는 편이 참조 규칙을 하나로 만든다.
+
+chart sharing을 금지한다면 validator에서 cardinality를 먼저 강제해야 한다.
+
+### 3.3 asset reference cascade 중복 — 중간~높음
+
+직접 asset delete는 각 chart에 `GRAPH_OBJECTS_REPLACED`를 보내 reference를 제거한다.
+
+trash move/empty는 `removeProjectAssetReferences`가 chart object를 직접 filter하고 비면 default CSV를 복구한다.
+
+동일한 “asset 제거 시 reference cascade” 의미가 두 경로에 구현되어 있다.
+
+현재도 reference count 계산 방식이 다르다.
+
+- `readAssetDeletionTarget`: 실제 graph object 개수
+- `projectAssetReferenceCount`: chart마다 unique CSV id 기준 count
+
+따라서 referenceCount가 “graph object 수”인지 “chart/slot reference 수”인지도 통일할 필요가 있다.
+
+### 3.4 `layoutMapWidth` persistent dead state 후보 — 높음
+
+현재 `layoutMapWidth`는
+
+- 초기 state에 존재
+- validation
+- import/export
+
+에는 참여하지만 실제 runtime layout calculation이나 UI write path에서 사용되지 않는다.
+
+producer/consumer 의미가 없는 persistent field를 유지할 이유가 없다면 제거 후보이다.
+
+반대로 실제 layout map width를 영속해야 한다면 writer와 consumer를 Source Script에서 정의해야 한다.
+
+### 3.5 `debugEnabled` + telemetry projection — 낮음
+
+현재 `debugEnabled`가 runtime authority이고 `uiTelemetryState.debugEnabled`가 one-way projection인 구조는 SoT 위반은 아니다.
+
+다만 별도 primitive state 없이 telemetry state 하나로 충분한지는 최소복잡도 관점에서 검토할 수 있다.
+
+이는 현재 closure blocker는 아니다.
+
+### 3.6 ProjectObject access layer 중첩 — 중간
+
+현재 project state 접근에는 다음이 함께 존재한다.
+
+- ProjectObject getter/setter
+- generic `ProjectObject.read(path)`
+- PROJECT_OBJECT_PATHS
+- ProjectObjectRegistry
+- FastFigureApi read function
+
+이들은 같은 persistent 값을 독립적으로 저장하지 않으므로 SoT 중복은 아니다.
+
+다만 Source Script에서 각 계층의 고유 책임을 더 명확히 하지 않으면 단순 access alias가 반복될 수 있다.
+
+현재 확인되는 실질적 역할은 다음과 같다.
+
+- ProjectObject: authoritative state와 compatibility property
+- Registry: FSM/export가 이름으로 object subtree를 읽는 adapter
+- FastFigureApi: frontend public read/mutation boundary
+
+이 세 역할로 설명되지 않는 getter/path duplication은 구현 단계에서 축소할 수 있다.
+
+## 4. 닫힘을 위한 선행 순서
+
+pseudocode 작성 전에 다음 순서를 권장한다.
+
+### 단계 A — 의미 충돌 확정
+
+1. grid 축소 시 content 처리
+2. chart reference cardinality
+3. merge/split/swap에서 caption ownership
+4. label preview/commit
+5. export settings persistence 여부
+
+이 다섯 항목은 구현을 그대로 기술해서 해결할 수 없다. project semantics를 먼저 결정해야 한다.
+
+### 단계 B — 빠진 핵심 Source Script 보완
+
+1. project initialization/default CSV
+2. project import normalization
+3. VFS interface와 unique/prepare/resolve semantics
+4. CSV/TSV/JSON parsing과 load transaction
+5. full graph global/axis schema
+6. Plotly import/editable conversion
+7. FFPX typed XML + FFSX apply/remap
+8. layout merge/split/grid exact algorithm
+9. export image/chart/caption geometry
+10. FSM mutation groups와 public API method contract
+
+### 단계 C — 중복 구조 정리
+
+1. editing 필요성 판정
+2. chart detach/reset 공통화
+3. asset reference cascade 공통화
+4. layoutMapWidth 유지 여부 판정
+5. 필요하면 read/access alias 축소
+
+### 단계 D — 재검토
+
+Source Script만 읽고 다음 질문에 모두 답할 수 있어야 한다.
+
+- 입력 파일이 어떤 project asset/model로 바뀌는가
+- 모든 id/reference가 어디에서 생성되고 어떻게 검증되는가
+- 모든 mutation은 어떤 권한/rollback 경로를 거치는가
+- grid/merge/split/reset에서 content가 정확히 어디로 이동하는가
+- Plotly/FFSX/FFPX roundtrip에서 어떤 정보가 보존되는가
+- export 결과의 geometry와 annotation 위치가 어떻게 결정되는가
+- UI가 어떤 public command를 호출하고 어떤 값은 local draft인가
+
+이 상태가 된 뒤에 pseudocode 번역을 시작하는 것이 맞다.
