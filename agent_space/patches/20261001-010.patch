@@ -1,0 +1,126 @@
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -13,7 +13,9 @@
+       "status": "current",
+       "path_rule": "sourcescript/**/*.py",
+       "fingerprint": "sha256:ae0aab59232d5d82c532ffd59b5e0d1e5d89b9b351baf931ebcc29d865e7e47a",
++      "derived_from": null,
++      "closure": "open",
++      "closure_review": null
+-      "derived_from": null
+     },
+     "pseudocode": {
+       "revision": 0,
+@@ -22,7 +24,8 @@
+       "fingerprint": null,
+       "derived_from": {
+         "source-script": null
++      },
++      "validation": "pending"
+-      }
+     },
+     "source-code": {
+       "revision": 0,
+diff --git a/scripts/check-development-layer-versions.py b/scripts/check-development-layer-versions.py
+--- a/scripts/check-development-layer-versions.py
++++ b/scripts/check-development-layer-versions.py
+@@ -100,6 +100,17 @@
+         raise VersionError("Source Script must always be the current authority layer")
+     if not isinstance(source.get("revision"), int) or source["revision"] < 1:
+         raise VersionError("source-script revision must be a positive integer")
++    source_closure = source.get("closure")
++    if source_closure not in {"open", "closed"}:
++        raise VersionError("source-script closure must be open or closed")
++    closure_review = source.get("closure_review")
++    if source_closure == "closed":
++        if not isinstance(closure_review, str) or not closure_review.startswith("agent_space/reviews/"):
++            raise VersionError("closed Source Script must name a closure review")
++        if not (ROOT / closure_review).is_file():
++            raise VersionError(f"Source Script closure review is missing: {closure_review}")
++    elif closure_review is not None:
++        raise VersionError("open Source Script must not name a closure review")
+     source_fp = layer_fingerprint(source_script_paths())
+     if source.get("fingerprint") != source_fp:
+         raise VersionError(
+@@ -108,6 +119,9 @@
+ 
+     pseudo_paths = pseudocode_paths()
+     pseudo_status = pseudo.get("status")
++    pseudo_validation = pseudo.get("validation")
++    if pseudo_validation not in {"pending", "passed"}:
++        raise VersionError("pseudocode validation must be pending or passed")
+     pseudo_fp = None
+     if pseudo_status == "missing":
+         if pseudo_paths:
+@@ -116,6 +130,8 @@
+             )
+         if pseudo.get("fingerprint") is not None:
+             raise VersionError("missing pseudocode layer must not have a fingerprint")
++        if pseudo_validation != "pending":
++            raise VersionError("missing pseudocode must have pending validation")
+     elif pseudo_status in {"stale", "current"}:
+         if not pseudo_paths:
+             raise VersionError(f"pseudocode layer is {pseudo_status} but has no files")
+@@ -125,6 +141,8 @@
+                 "pseudocode fingerprint changed without updating development-versions.json"
+             )
+         if pseudo_status == "current":
++            if source_closure != "closed":
++                raise VersionError("pseudocode cannot be current before Source Script is closed")
+             if pseudo.get("derived_from", {}).get("source-script") != source_fp:
+                 raise VersionError(
+                     "current pseudocode does not derive from the current Source Script"
+@@ -143,6 +161,8 @@
+     if code_status == "current":
+         if pseudo_status != "current" or pseudo_fp is None:
+             raise VersionError("source code cannot be current before pseudocode is current")
++        if pseudo_validation != "passed":
++            raise VersionError("source code cannot be current before pseudocode validation passes")
+         derived = code.get("derived_from", {})
+         if derived.get("source-script") != source_fp:
+             raise VersionError(
+@@ -284,12 +304,29 @@
+         require_increment("source-script")
+         validate_source_script_patch_record(changed, base)
+ 
++    base_source = base_layers.get("source-script", {})
++    if (
++        base_source.get("closure") != "closed"
++        and current_layers["source-script"].get("closure") == "closed"
++    ):
++        review_path = current_layers["source-script"].get("closure_review")
++        if not isinstance(review_path, str) or review_path not in changed:
++            raise VersionError(
++                "closing Source Script requires a newly changed closure review"
++            )
++        if path_exists_at_revision(base, review_path):
++            raise VersionError(
++                "Source Script closure review must be new for this closure transition"
++            )
++
+     if pseudo_changed:
+         require_increment("pseudocode")
+         if current_layers["pseudocode"].get("status") != "current":
+             raise VersionError(
+                 "modified pseudocode must finish as current against the latest Source Script"
+             )
++        if current_layers["source-script"].get("closure") != "closed":
++            raise VersionError("pseudocode cannot change before Source Script is closed")
+ 
+     if code_changed:
+         require_increment("source-code")
+@@ -325,9 +362,11 @@
+         "development-layer-version: PASS\n"
+         f"  priority: {' > '.join(EXPECTED_PRECEDENCE)}\n"
+         f"  source-script: r{layers['source-script']['revision']} "
++        f"{layers['source-script']['status']}/{layers['source-script']['closure']} "
++        f"{fingerprints['source-script']}\n"
+-        f"{layers['source-script']['status']} {fingerprints['source-script']}\n"
+         f"  pseudocode: r{layers['pseudocode']['revision']} "
++        f"{layers['pseudocode']['status']}/{layers['pseudocode']['validation']} "
++        f"{fingerprints['pseudocode'] or '-'}\n"
+-        f"{layers['pseudocode']['status']} {fingerprints['pseudocode'] or '-'}\n"
+         f"  source-code: r{layers['source-code']['revision']} "
+         f"{layers['source-code']['status']} {fingerprints['source-code']}"
+     )
