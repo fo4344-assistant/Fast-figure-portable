@@ -1,7 +1,7 @@
 """
 Fast Figure Source Script — portable single-file build
 
-현재 구현 원천:
+하위 build 구현 검증 원천:
 - ../scripts/build-portable.py
 - ../Fast-figure.html
 - ../vendor/plotly.min.js

@@ -141,14 +141,13 @@ def installSlotClickController():
 def swapSlotContents(source, target):
     """
     변경:
-    - 검증된 candidate를 통해 source/target의 renderable content와 필요 시 selectedSlotId.
+    - 검증된 candidate를 통해 source/target GUI 위치의 slot-local properties와 필요 시 selectedSlotId.
 
     처리:
     1. source/target을 current project에서 다시 resolve한다.
-    2. row/col geometry는 바꾸지 않고 chart/image/contentType candidate를 교환한다.
-    3. chart ownership은 교환된 target slot에 맞춰 그대로 1:1을 유지한다.
-    4. explicit caption이 있으면 확정된 SLOT_OPERATION_CAPTION_RULES["swap"]을 적용해야 한다.
-       현재 미확정 rule을 renderer가 임의로 선택하지 않는다.
+    2. row/col/span geometry는 각 GUI 위치에 유지한다.
+    3. chart/image/contentType/caption 등 slot-local properties 전체를 한 단위로 교환한다.
+    4. chart ownership은 교환된 target slot에 맞춰 1:1을 유지한다.
     5. project candidate를 검증한 뒤 한 번 commit한다.
     """
     return "swap candidate commit 결과"

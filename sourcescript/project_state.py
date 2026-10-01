@@ -1,7 +1,7 @@
 """
 Fast Figure Source Script — authoritative project state and references
 
-현재 구현 원천:
+하위 구현 검증 원천:
 - ../fast-figure.js
   createProjectState, ProjectObject, ProjectObjectRegistry,
   normalizeSlotContent, validateProjectObjectState, projectVfs,

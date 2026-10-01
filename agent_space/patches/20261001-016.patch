@@ -1,0 +1,62 @@
+diff --git a/sourcescript/renderer_runtime.py b/sourcescript/renderer_runtime.py
+--- a/sourcescript/renderer_runtime.py
++++ b/sourcescript/renderer_runtime.py
+@@ -141,14 +141,13 @@
+ def swapSlotContents(source, target):
+     """
+     변경:
++    - 검증된 candidate를 통해 source/target GUI 위치의 slot-local properties와 필요 시 selectedSlotId.
+-    - 검증된 candidate를 통해 source/target의 renderable content와 필요 시 selectedSlotId.
+ 
+     처리:
+     1. source/target을 current project에서 다시 resolve한다.
++    2. row/col/span geometry는 각 GUI 위치에 유지한다.
++    3. chart/image/contentType/caption 등 slot-local properties 전체를 한 단위로 교환한다.
++    4. chart ownership은 교환된 target slot에 맞춰 1:1을 유지한다.
+-    2. row/col geometry는 바꾸지 않고 chart/image/contentType candidate를 교환한다.
+-    3. chart ownership은 교환된 target slot에 맞춰 그대로 1:1을 유지한다.
+-    4. explicit caption이 있으면 확정된 SLOT_OPERATION_CAPTION_RULES["swap"]을 적용해야 한다.
+-       현재 미확정 rule을 renderer가 임의로 선택하지 않는다.
+     5. project candidate를 검증한 뒤 한 번 commit한다.
+     """
+     return "swap candidate commit 결과"
+diff --git a/sourcescript/project_state.py b/sourcescript/project_state.py
+--- a/sourcescript/project_state.py
++++ b/sourcescript/project_state.py
+@@ -1,7 +1,7 @@
+ """
+ Fast Figure Source Script — authoritative project state and references
+ 
++하위 구현 검증 원천:
+-현재 구현 원천:
+ - ../fast-figure.js
+   createProjectState, ProjectObject, ProjectObjectRegistry,
+   normalizeSlotContent, validateProjectObjectState, projectVfs,
+diff --git a/sourcescript/portable_build.py b/sourcescript/portable_build.py
+--- a/sourcescript/portable_build.py
++++ b/sourcescript/portable_build.py
+@@ -1,7 +1,7 @@
+ """
+ Fast Figure Source Script — portable single-file build
+ 
++하위 build 구현 검증 원천:
+-현재 구현 원천:
+ - ../scripts/build-portable.py
+ - ../Fast-figure.html
+ - ../vendor/plotly.min.js
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "On semantic conflict, the highest current layer wins. A lower layer may be current only when it records the exact current fingerprints of every required upstream layer.",
+   "layers": {
+     "source-script": {
++      "revision": 7,
+-      "revision": 6,
+       "status": "current",
+       "path_rule": "sourcescript/**/*.py",
++      "fingerprint": "sha256:c4cdec289ba51dde3dd61a713077620940c871c65ec52ad910e9324e6c30fbd1",
+-      "fingerprint": "sha256:481222d855667d5d1e15a91a91fa142af64f9c36e598eedd20726739e6a1a267",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
