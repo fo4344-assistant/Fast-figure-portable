@@ -1,5 +1,8 @@
 # 계획 007 — Source Script 닫힘 복구와 하위 계층 재생성
 
+> 상태: **대체됨 / 실행안으로 채택하지 않음**  
+> 2026-10-01 재검토에서 일부 해결안이 기존 요구보다 구현 현황을 우선하거나 불필요한 상태·특수 사례를 추가하는 것으로 확인되었다. 세부 근거는 `review-014-plan-007-validity.md`, 대체 실행안은 `plan-008.md`를 따른다.
+
 ## 1. 목적
 
 이 계획은 `review-013-sourcescript-closure.md`에서 확인된 Source Script 미완결 사항과 현재 source code의 규칙 충돌을 Source Script 단계에서 먼저 해결한 뒤, 닫힘 판정을 다시 수행하고 pseudocode와 source code를 순서대로 재생성하기 위한 실행 계획이다.
