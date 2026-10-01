@@ -1,0 +1,14 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -15,7 +15,9 @@
+     [ffpxZipStore(ffsxBuildSlot(slot, slot.chart ? getChart(slot.chart) : null).assets)],
+     "roundtrip.ffsx",
+   );
+-  const select = (slot) => api.slots.select(slot.id);
++  const select = (slot) => {
++    if (api.slots.readSelected()?.id !== slot.id) api.slots.select(slot.id);
++  };
+   const csv = (name, body) => new File([body], name, { type: "text/csv" });
+   const choose = (choice) => async (file, directory) =>
+     api.assets.resolveImportPlan(api.assets.collisionModel(file, directory), choice);

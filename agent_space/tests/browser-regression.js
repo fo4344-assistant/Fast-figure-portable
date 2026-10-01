@@ -18,7 +18,9 @@
     [ffpxZipStore(ffsxBuildSlot(slot, slot.chart ? getChart(slot.chart) : null).assets)],
     "roundtrip.ffsx",
   );
-  const select = (slot) => api.slots.select(slot.id);
+  const select = (slot) => {
+    if (api.slots.readSelected()?.id !== slot.id) api.slots.select(slot.id);
+  };
   const csv = (name, body) => new File([body], name, { type: "text/csv" });
   const choose = (choice) => async (file, directory) =>
     api.assets.resolveImportPlan(api.assets.collisionModel(file, directory), choice);
