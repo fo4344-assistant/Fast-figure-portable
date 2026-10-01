@@ -1,5 +1,5 @@
 # 개발 작업 정책
-# v0.2.1
+# v0.2.2
 
 ## 0. 정책의 성격과 변경 권한
 
@@ -22,32 +22,36 @@
 작업은 다음 순서로 진행한다.
 
 1. 소스 스크립트
-2. PlusCal/TLA+ 검증 모델
-3. TLC 모델 검사
+2. PlusCal/TLA+ verification code
+3. TLC 검사
 4. 대상 언어 구현
 
 앞 단계가 구조적으로 닫히거나 검증을 통과하기 전에 다음 단계로 넘어가지 않는다.
 
 여기서 소스 스크립트가 구조적으로 닫힌다는 것은 모든 세부사항이 결정되었다는 뜻이 아니다.
-다음 단계에서 새로운 의미나 책임을 임의로 결정하지 않고 검증 모델과 구현으로 옮길 수 있을 만큼,
+다음 단계에서 새로운 의미나 책임을 임의로 결정하지 않고 verification code와 구현으로 직접 옮길 수 있을 만큼,
 해당 단계가 소유하는 데이터 형태, 책임, 참조 관계, 의미 있는 처리 순서와 확정된 규칙이 결정되고,
 미확정 사항은 미확정 상태로 명시되어 있다는 뜻이다.
 소스 스크립트의 닫힘 여부는 아래 "소스 스크립트 닫힘 판정"에 따라 판정한다.
 
-PlusCal/TLA+ 단계는 일반 소스코드 컴파일러가 주로 검사하는 구문·이름·타입 오류를 반복하는 것이 목적이 아니다.
-소스 스크립트의 핵심 알고리즘을 실행 가능한 상태전이 모델로 옮기고,
+PlusCal/TLA+ 단계는 일반 소스코드 컴파일러가 주로 검사하는 구문·이름·타입 오류를 다시 검사하기 위해 두는 단계가 아니다.
+같은 종류의 검사를 뒤에서 다시 수행하기보다, 소스 스크립트를 직접 실행형 verification code로 번역하여
 호출 순서, 상태 조합, 참조 무결성, mutation 원자성, 실패 경로, lifecycle, lock/동시성처럼
-개별 함수가 문법적으로 올바른 것만으로는 보장되지 않는 전역 논리의 충돌을 검사하는 정식 중간 단계다.
+일반 컴파일러가 충분히 검사하지 못하는 전역 논리의 충돌을 추가로 검사하는 정식 중간 단계다.
 
-PlusCal은 알고리즘과 상태전이의 절차 표현에 사용하고,
-TLA+는 상태, action, invariant, safety/liveness property와 필요한 환경 제약을 표현하는 검증 명세로 사용한다.
+PlusCal은 소스 스크립트에 이미 정의된 알고리즘과 상태전이를 직접 절차 표현으로 옮기는 데 사용하고,
+TLA+는 그 동일한 의미의 state, action, invariant, safety/liveness property와 필요한 환경 제약을 표현하는 데 사용한다.
 TLC는 유한하게 구성한 상태공간에서 가능한 실행 경로와 반례를 탐색하는 필수 검증 단계다.
+
+이 단계는 소스 스크립트를 다시 분석해 더 나은 구조로 재설계하거나 별도의 모델을 만드는 단계가 아니다.
+개발 흐름은 `Source Script -> verification code -> source code`이며,
+verification code는 Source Script와 독립된 설계 권위를 갖지 않는다.
 
 대상 구현 언어는 프로젝트에 따라 TypeScript, Python, C 등으로 달라질 수 있다.
 
 ### 소스 스크립트 닫힘 판정
 
-소스 스크립트는 PlusCal/TLA+ 검증 모델과 대상 언어 구현의 원천일 뿐 아니라, 그 자체가 평가 대상이다.
+소스 스크립트는 PlusCal/TLA+ verification code와 대상 언어 구현의 원천일 뿐 아니라, 그 자체가 평가 대상이다.
 소스 스크립트 단계의 목적은 알고리즘이 논리적으로 완결되어 있는지, 프로젝트 목적에 부합하는지, 불필요한 중복이나 논리적 확장·통합이 필요한 부분이 없는지를 평가하는 것이다.
 이 평가는 하위 단계로 미룰 수 없다. 코드가 동작하더라도 중복 구조, 목적 이탈, 통합 기회는 드러나지 않으며, 코드가 만들어진 뒤에는 이를 고치는 비용이 커지기 때문이다.
 
@@ -77,28 +81,38 @@ TLC는 유한하게 구성한 상태공간에서 가능한 실행 경로와 반�
 
 ### 작업 루프
 
-작업은 한 방향으로만 흐르지 않고, 검증 모델과 구현 단계의 결과가 소스 스크립트로 되돌아오는 루프로 진행한다.
+기본 개발 흐름은 다음의 한 방향 pipeline이다.
+
+```text
+Source Script
+-> verification code
+-> TLC verification
+-> source code
+```
 
 1. 소스 스크립트를 작성하고, 위 기준으로 닫힘을 판정한다.
-2. 닫힌 소스 스크립트를 PlusCal/TLA+ 검증 모델로 번역한다.
-   - 핵심 알고리즘, 상태전이, mutation 순서, 참조 변화, 실패 경로와 상호작용을 가능한 한 모델에 포함한다.
+2. 닫힌 소스 스크립트를 PlusCal/TLA+ verification code로 **직접 번역**한다.
+   - 핵심 알고리즘, 상태전이, mutation 순서, 참조 변화, 실패 경로와 상호작용을 원래 의미와 순서를 보존해 옮긴다.
+   - verification code를 만들기 위해 소스 스크립트의 책임을 다시 분류하거나 알고리즘을 재구성하지 않는다.
    - 상태공간을 유한하게 만들기 위한 값/개수의 축약은 §12의 추상화 원칙을 따른다.
-3. TLC로 모델을 검사한다.
+3. 번역 충실도를 먼저 확인한다.
+   - Source Script와 verification code의 의미, branch, reference, 처리 순서, failure 의미가 충돌하면 verification code가 잘못된 것이다.
+   - 이 경우 Source Script를 verification code에 맞추지 않고 verification code를 수정한다.
+4. TLC로 verification code를 검사한다.
    - 최소한 핵심 invariant와 safety property를 검사한다.
    - lifecycle, 대기, 완료 보장이 의미가 있는 경우 liveness와 deadlock도 검사한다.
    - 검사에 사용한 범위, 환경 가정, 추상화와 생략 항목을 기록한다.
-4. TLC가 반례나 충돌을 찾으면 원인을 분류한다.
-   - 검증 모델의 번역 오류이면 소스 스크립트 의미를 바꾸지 않고 모델을 수정한다.
-   - 소스 스크립트의 모순, 누락, 책임 불명확, 실행 순서 문제이면 모델에서 임의로 해결하지 않고 소스 스크립트로 돌아가 수정한다.
-5. 소스 스크립트가 수정되면 다시 닫힘 판정하고 검증 모델을 재생성·재검사한다.
-6. TLC 검증을 통과한 모델을 기준으로 대상 언어를 구현한다.
-7. 구현 과정에서 상위 단계에 없던 상태전이·공유상태·실패 의미가 필요해지면 구현에서 임의로 정하지 않고 해당 상위 단계로 돌아간다.
-8. 소스 스크립트로 돌아올 때마다 이전 닫힘/검증에서 무엇을 놓쳤는지와 그 원인을 기록한다.
+5. TLC가 반례를 찾으면 먼저 verification code가 Source Script를 정확히 번역했는지 다시 확인한다.
+   - 번역·추상화·environment assumption 오류이면 verification code를 수정한다.
+   - Source Script와 verification code 사이의 의미 충돌을 Source Script 수정으로 해결하지 않는다.
+   - 번역이 충실한 상태에서 반례가 Source Script 알고리즘 자체의 실제 논리 오류를 재현하는 경우에만 Source Script 단계의 별도 문제로 기록하고 수정한 뒤 다시 닫힘 판정한다.
+6. TLC 검증을 통과한 verification code를 기준으로 대상 언어를 구현한다.
+7. source code 단계에서는 검증된 고수준 알고리즘을 재설계하지 않고, 대상 언어·OS·디바이스의 저수준 구현만 구체화한다.
+8. 구현 과정에서 상위 단계에 존재하지 않는 새로운 고수준 의미가 필요해 보이면 먼저 구현의 저수준 선택 문제인지 확인한다. 실제로 새 고수준 요구라면 별도 요구 변경으로 Source Script부터 수정한다.
 
-대상 언어의 컴파일러, 정적 분석, 단위 테스트와 통합 테스트는 추가 검증 수단이지만
-PlusCal/TLA+ + TLC 검증을 생략하는 대체 경로로 사용하지 않는다.
-
-소스 스크립트로 돌아오는 것은 정상적인 루프의 일부이지만, 닫힘 판정을 느슨하게 해도 된다는 근거가 되지 않는다.
+대상 언어의 컴파일러, 정적 분석, 단위 테스트와 통합 테스트는 추가 검증 수단이다.
+PlusCal/TLA+를 선택한 이유는 이들이 이미 잘 검사하는 항목을 중복하는 것이 아니라,
+그들이 놓치는 전역 상태·순서·불변식 문제를 앞 단계에서 추가로 검사하기 위해서다.
 
 ---
 
@@ -238,7 +252,7 @@ def f(arg1):
 - `Args`와 `Return`은 모든 함수에 기계적으로 넣는 항목이 아니라, 데이터 구조 또는 역할을 명확히 해야 할 때 사용한다.
 - docstring에는 함수가 무엇을 변경하는지 명확히 적는다.
 - docstring의 처리 부분에는 자연어 알고리즘을 적는다.
-- 구조 설명은 PlusCal/TLA+ 검증 모델이나 실제 구현을 대신하지 않으며, 해당 함수가 어떤 형태의 데이터를 받거나 반환하는지 명확하게 하는 용도로만 사용한다.
+- 구조 설명은 PlusCal/TLA+ verification code나 실제 구현을 대신하지 않으며, 해당 함수가 어떤 형태의 데이터를 받거나 반환하는지 명확하게 하는 용도로만 사용한다.
 
 ---
 
@@ -473,7 +487,7 @@ tags.json
 
 이미 확정된 규칙은 다음 단계에서 다시 해석하거나 새로 설계하지 않는다. 반대로 아직 확정되지 않은 규칙은 임의로 채우지 않는다.
 
-- 확정된 규칙은 소스 스크립트와 PlusCal/TLA+ 검증 모델에서 추적 가능하게 연결한다.
+- 확정된 규칙은 소스 스크립트에서 verification code로 직접 추적 가능하게 연결한다.
 - 미확정 규칙은 확장 지점 또는 미정 상태로 유지한다.
 - 구현 편의를 이유로 새로운 도메인 규칙을 임의로 만들지 않는다.
 - 구현 과정에서 결정이 필요하지만 상위 단계에서 결정되지 않은 사항을 발견하면 필요한 상위 단계로 돌아가 결정한다.
@@ -495,10 +509,22 @@ tags.json
 
 ---
 
-## 12. PlusCal/TLA+ 번역과 TLC 검증
+## 12. PlusCal/TLA+ verification code와 TLC 검증
 
-PlusCal/TLA+ 검증 모델은 소스 스크립트의 핵심 알고리즘을 상태와 action의 실행 가능한 관계로 번역하고,
+PlusCal/TLA+ verification code는 소스 스크립트의 핵심 알고리즘을 상태와 action의 실행 가능한 관계로 **직접 번역**하고,
 TLC로 가능한 상태전이 조합과 invariant 위반을 탐색하기 위한 정식 검증 단계다.
+
+verification code는 Source Script의 하위 표현이며 별도의 설계 모델이 아니다.
+Source Script를 검증하기 좋게 다시 구성하거나, 책임을 합치거나 나누거나, 알고리즘을 다른 형태로 재설계하는 것을 기본 작업으로 삼지 않는다.
+
+TLA+ 문법에 맞추기 위한 변수, operator, state 표현의 기계적 변환은 허용하지만 다음 조건을 만족해야 한다.
+
+- 각 verification state/action/operator가 어느 Source Script 상태·함수·단계에서 왔는지 추적할 수 있다.
+- Source Script에 없는 새로운 domain state, branch, 책임, mutation source를 추가하지 않는다.
+- Source Script에 존재하는 의미 있는 branch, 처리 순서, reference relation, failure path를 제거하거나 다른 의미로 합치지 않는다.
+- 표현을 바꾸더라도 Source Script와 동일한 입력에서 동일한 허용/거부 및 상태변화 의미를 나타낸다.
+
+Source Script와 verification code가 충돌할 경우 Source Script가 원천이며 verification code가 잘못 번역된 것이다.
 
 이 단계의 목적은 대상 언어 컴파일러가 이미 잘 검사하는 구문, 함수 존재 여부, 단순 타입 일치만을 다시 확인하는 것이 아니다.
 개별 호출이 각각 유효하더라도 호출 순서와 상태 조합 때문에 발생할 수 있는 전역 논리 오류를 가능한 한 검사하는 것이 목적이다.
@@ -522,15 +548,15 @@ TLC로 가능한 상태전이 조합과 invariant 위반을 탐색하기 위한 
 - safety invariant와, 필요한 경우 liveness/deadlock 조건
 - 확정된 계산 규칙 중 상태전이 또는 property 판정에 영향을 주는 부분
 
-소스 스크립트의 핵심 알고리즘은 기본적으로 검증 모델의 대상이다.
+소스 스크립트의 핵심 알고리즘은 기본적으로 verification code의 대상이다.
 상태공간이 커지거나 실제 데이터가 복잡하다는 이유만으로 핵심 알고리즘 전체를 생략하지 않는다.
 
-### 검증 모델의 pseudocode 역할과 저수준 경계
+### verification code의 pseudocode 역할과 저수준 경계
 
-PlusCal/TLA+ 검증 모델은 기존 pseudocode 단계의 역할을 대체하며,
-**소스 스크립트의 고수준 알고리즘을 실행 가능한 수준으로 연결해 보는 중간 명세**다.
+PlusCal/TLA+ verification code는 기존 pseudocode 단계의 역할을 대체하며,
+**소스 스크립트의 고수준 알고리즘을 실행 가능한 형태로 직접 옮긴 중간 코드**다.
 
-검증 모델을 기준으로 대상 언어 구현자가 작업할 때:
+verification code를 기준으로 대상 언어 구현자가 작업할 때:
 
 - 새로운 고수준 알고리즘을 설계하지 않아야 한다.
 - operation의 순서, branch, 상태전이, reference 변경, transaction 경계와 실패 의미를 새로 결정하지 않아야 한다.
@@ -538,7 +564,7 @@ PlusCal/TLA+ 검증 모델은 기존 pseudocode 단계의 역할을 대체하며
 - 실제 언어와 디바이스에 필요한 저수준 실행 기법만 선택·작성하면 되어야 한다.
 
 소스 스크립트에서 의도적으로 생략한 언어·디바이스 종속 저수준 알고리즘은
-검증 모델에서도 실제 platform 구현으로 확정할 필요가 없다.
+verification code에서도 실제 platform 구현으로 확정할 필요가 없다.
 대신 고수준 알고리즘이 그 저수준 기능을 호출했을 때 실행 가능하고 모순이 없는지 확인할 수 있도록
 필요한 interface, precondition, result, failure, atomicity 또는 environment assumption을 모델에 표현한다.
 
@@ -555,7 +581,7 @@ PlusCal/TLA+ 검증 모델은 기존 pseudocode 단계의 역할을 대체하며
 즉 저수준 구현을 abstract action으로 바꿀 수는 있지만,
 그 action을 호출하는 **고수준 알고리즘 자체를 abstract success 하나로 치환하여 제거해서는 안 된다.**
 
-검증 모델의 완성 기준은 모든 platform-specific detail을 포함하는 것이 아니라,
+verification code의 완성 기준은 모든 platform-specific detail을 포함하는 것이 아니라,
 **Source Script의 고수준 알고리즘을 따라가면 실제 target implementation을 위한 control/data flow가 끊기지 않고,
 남은 미구현 부분이 오직 환경 종속 저수준 구현이라는 점을 확인할 수 있는 것**이다.
 
@@ -579,7 +605,7 @@ TLC가 탐색 가능한 유한 상태공간을 만들기 위해 세부 값을 �
 
 ### 생략 허용 범위
 
-소스 스크립트의 동작을 검증 모델에서 완전히 생략하는 것은 예외로 제한한다.
+소스 스크립트의 동작을 verification code에서 완전히 생략하는 것은 예외로 제한한다.
 
 다음 조건을 모두 만족한다고 판단할 수 있는 부분만 생략할 수 있다.
 
@@ -594,7 +620,7 @@ TLC가 탐색 가능한 유한 상태공간을 만들기 위해 세부 값을 �
 
 생략 여부가 불확실하면 생략하지 않고 최소한 atomic action, 환경 action 또는 symbolic result로 모델링한다.
 
-모델에서 생략하거나 크게 추상화한 Source Script 항목은 검증 기록에 다음을 남긴다.
+verification code에서 생략하거나 크게 추상화한 Source Script 항목은 검증 기록에 다음을 남긴다.
 
 - 생략/추상화 대상
 - 그렇게 한 이유
@@ -617,14 +643,17 @@ TLC가 탐색한 유한 범위는 무한 상태공간 전체에 대한 일반 �
 대신 사용한 bound와 abstraction을 기록하고,
 핵심 invariant를 깨는 작은 반례를 적극적으로 찾는 실행 가능한 검증으로 사용한다.
 
-PlusCal/TLA+로 번역하는 과정이나 TLC 반례에서 소스 스크립트의 모순, 누락, 책임 불명확, 실행 순서 문제를 발견하면
-검증 모델에서 임의로 새 도메인 규칙을 추가해 해결하지 않고 소스 스크립트 또는 그보다 상위의 해당 원천으로 돌아가 수정한다.
+PlusCal/TLA+ 번역 과정에서 Source Script와 verification code 사이에 모순, 누락, 책임 불일치, 실행 순서 차이가 발견되면 verification code의 번역 오류로 처리한다.
+verification code에서 임의로 새 도메인 규칙을 추가하거나 Source Script를 verification code에 맞춰 수정하지 않는다.
+
+TLC 반례가 발생하면 먼저 번역 충실도와 추상화가 Source Script 의미를 보존하는지 확인한다.
+그 확인을 통과한 뒤에도 동일한 반례가 Source Script 알고리즘의 직접적인 결과로 재현될 때만 Source Script 자체의 논리 문제로 분류할 수 있다.
 
 ---
 
 ## 13. 대상 언어 구현
 
-구현 단계에서는 닫힌 소스 스크립트와 TLC 검증을 통과한 PlusCal/TLA+ 모델을 대상 언어의 실제 구조로 구체화한다.
+구현 단계에서는 닫힌 소스 스크립트와 TLC 검증을 통과한 PlusCal/TLA+ verification code를 대상 언어의 실제 구조로 구체화한다.
 
 이 단계에서 새로 작성·결정하는 것은 **대상 언어와 실제 디바이스에서 고수준 알고리즘을 실행하기 위한 저수준 구현**이다.
 source code 단계는 기능 의미나 고수준 알고리즘을 추가 개발하는 단계가 아니다.
@@ -633,23 +662,23 @@ source code 단계는 기능 의미나 고수준 알고리즘을 추가 개발�
 - 실제 자료구조와 오류 표현을 결정한다.
 - 필요한 경우 메모리 표현, 소유권, 라이브러리, 프레임워크 등 언어와 실행 환경의 세부사항을 결정한다.
 - OS/browser/device API, concrete I/O primitive, concurrency primitive, buffer/memory strategy처럼 환경 종속적인 저수준 알고리즘을 선택하고 구현한다.
-- Source Script와 검증 모델에서 이미 정한 데이터 형태, schema, file/package contract, reference 관계, 처리 순서, transaction/failure 의미는 구현 편의를 이유로 다시 설계하지 않는다.
+- Source Script와 verification code에서 이미 정한 데이터 형태, schema, file/package contract, reference 관계, 처리 순서, transaction/failure 의미는 구현 편의를 이유로 다시 설계하지 않는다.
 - 환경 종속 구현을 위해 representation을 바꾸더라도 상위 단계의 동일한 의미와 관계를 추적할 수 있어야 한다.
-- 이러한 구현 결정은 소스 스크립트와 검증 모델의 의미를 변경해서는 안 된다.
-- 핵심 상태전이와 mutation 경로는 구현의 어느 동작이 검증 모델의 어떤 action/state/property에 대응하는지 추적할 수 있어야 한다.
-- 컴파일러나 정적 타입 검사기가 통과했다는 사실만으로 검증 모델에서 확인한 invariant가 구현에서도 자동 보장된다고 간주하지 않는다.
-- 구현 세부가 새로운 공유상태, lock, callback 순서, resource lifetime, 실패 경로처럼 기존 모델의 property에 영향을 줄 수 있는 의미를 추가하면 검증 모델을 보완하고 필요하면 소스 스크립트까지 돌아간다.
+- 이러한 구현 결정은 소스 스크립트와 verification code의 의미를 변경해서는 안 된다.
+- 핵심 상태전이와 mutation 경로는 구현의 어느 동작이 verification code의 어떤 action/state/property에 대응하는지 추적할 수 있어야 한다.
+- 컴파일러나 정적 타입 검사기가 통과했다는 사실만으로 verification code에서 확인한 invariant가 구현에서도 자동 보장된다고 간주하지 않는다.
+- 구현 세부가 새로운 공유상태, lock, callback 순서, resource lifetime, 실패 경로처럼 기존 verification code의 property에 영향을 줄 수 있는 의미를 추가하면 verification code를 보완하고 필요하면 소스 스크립트까지 돌아간다.
 - 구현 중 상위 명세에서 결정되지 않은 의미적 문제가 발견되면 구현 코드에서 임의로 해결하지 않고 해당 상위 단계로 돌아간다.
 
 구현 후 전체 명세와 코드를 다시 대조하는 역검증은 공통 필수 절차로 두지 않는다.
-다만 검증 모델의 action과 실제 구현 사이의 핵심 대응 관계가 사라질 정도로 구조가 달라진 경우에는
-기존 TLC 결과를 그대로 적용하지 말고 모델 또는 구현의 대응을 다시 확인한다.
+다만 verification code의 action과 실제 구현 사이의 핵심 대응 관계가 사라질 정도로 구조가 달라진 경우에는
+기존 TLC 결과를 그대로 적용하지 말고 verification code 또는 구현의 대응을 다시 확인한다.
 
 ---
 
 ## 14. 소스 스크립트의 목적
 
-소스 스크립트는 자연어 설명서나 실행 가능한 소스코드가 아니라, PlusCal/TLA+ 검증 모델과 대상 언어 구현의 원천이 되는 구조화된 구현 명세다.
+소스 스크립트는 자연어 설명서나 실행 가능한 소스코드가 아니라, PlusCal/TLA+ verification code와 대상 언어 구현의 원천이 되는 구조화된 구현 명세다.
 
 따라서:
 
@@ -664,4 +693,4 @@ source code 단계는 기능 의미나 고수준 알고리즘을 추가 개발�
 - 데이터 형태·종류, schema/contract, 의미 있는 파일 위치·경로·확장자와 외부 형식처럼 고수준 알고리즘의 의미를 결정하는 정보는 저수준 구현으로 오인해 생략하지 않는다.
 - 구현자가 다음 단계에서 새로운 고수준 알고리즘이나 도메인 규칙을 발명할 필요가 없도록 한다.
 
-최종 목표는 복잡한 시스템의 platform-specific 구현까지 소스 스크립트에서 미리 결정하는 것이 아니라, 고수준 알고리즘과 데이터·파일·schema·contract 의미를 충분히 닫고 PlusCal/TLA+와 TLC로 그것이 실행 가능한 구조인지 검증한 뒤, 대상 언어와 디바이스에 맞는 저수준 알고리즘만 추가하여 자연스럽게 구현할 수 있게 하는 것이다.
+최종 목표는 복잡한 시스템의 platform-specific 구현까지 소스 스크립트에서 미리 결정하는 것이 아니라, 고수준 알고리즘과 데이터·파일·schema·contract 의미를 충분히 닫고 이를 PlusCal/TLA+ verification code로 직접 번역하여 TLC로 검증한 뒤, 대상 언어와 디바이스에 맞는 저수준 알고리즘만 추가하여 자연스럽게 구현할 수 있게 하는 것이다.
