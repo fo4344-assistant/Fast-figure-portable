@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'sourcescript/**'
+      - 'verification/**'
       - 'pseudocode/**'
       - 'development-versions.json'
       - 'Fast-figure.html'
@@ -13,6 +14,8 @@ on:
       - 'scripts/build-portable.py'
       - 'scripts/check-development-layer-versions.py'
       - 'agent_space/AGENT.md'
+      - 'agent_space/policies/source-script-policy.md'
+      - 'agent_space/reviews/**'
       - '.github/workflows/development-layer-version.yml'
   workflow_dispatch:
 

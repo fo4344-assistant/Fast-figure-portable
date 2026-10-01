@@ -27,7 +27,7 @@
 
 ## 정책 원천
 
-- Source Script, pseudocode, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
+- Source Script, PlusCal/TLA+ 검증 모델, TLC 검증, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
 - 해당 정책 원문은 사용자가 명시적으로 정책 변경을 지시한 경우에만 수정한다.
 - 프로젝트 고유의 데이터 구조, 책임 배치, 식별자, 파일 형식, 해결 방안은 정책 문서에 추가하지 않고 `sourcescript/`, `agent_space/plans/`, `agent_space/docs/` 중 해당 책임 경로에 기록한다.
 
@@ -59,14 +59,14 @@
 
 ## 개발 계층 버전 우선순위
 
-- 개발 의미의 권위 순서는 반드시 `Source Script > pseudocode > source code`로 유지할 것.
+- 개발 의미의 권위 순서는 반드시 `Source Script > verification-model > source code`로 유지할 것.
 - 계층 버전과 파생 관계의 단일 메타데이터 원천은 저장소 루트의 `development-versions.json`으로 둘 것.
 - `development-versions.json`은 의미 자체를 정의하는 문서가 아니라 각 계층의 revision, 실제 내용 fingerprint, 상위 계층 파생 버전을 기록하는 lineage metadata다.
-- Source Script는 항상 최상위 권위 계층이다. pseudocode 또는 source code와 의미가 충돌하면 Source Script를 기준으로 하위 계층을 수정할 것.
-- Source Script의 의미 파일이 바뀌면 source-script revision과 fingerprint를 갱신할 것. 기존 pseudocode와 source code는 새 Source Script fingerprint를 정확히 반영하기 전까지 `current`로 표시하지 말 것.
-- pseudocode를 생성하거나 수정할 때는 현재 Source Script fingerprint를 `derived_from.source-script`에 기록하고 pseudocode revision을 증가시킬 것. 최신 Source Script와 정확히 일치하지 않는 pseudocode는 `current`가 될 수 없다.
-- application source code를 수정할 때는 pseudocode가 먼저 `current`여야 하고, source code의 `derived_from.source-script`와 `derived_from.pseudocode`가 각각 현재 상위 계층 fingerprint와 정확히 일치해야 한다. source-code revision도 증가시킬 것.
-- 현재 동작하는 source code가 있더라도 최신 pseudocode에서 내려온 lineage가 확인되지 않으면 설계 계층에서는 `stale`로 취급할 것. 실행 가능성과 계층 최신성은 같은 의미가 아니다.
+- Source Script는 항상 최상위 권위 계층이다. verification-model 또는 source code와 의미가 충돌하면 Source Script를 기준으로 하위 계층을 수정할 것.
+- Source Script의 의미 파일이 바뀌면 source-script revision과 fingerprint를 갱신할 것. 기존 verification-model과 source code는 새 Source Script fingerprint를 정확히 반영하기 전까지 `current`로 표시하지 말 것.
+- verification-model을 생성하거나 수정할 때는 현재 Source Script fingerprint를 `derived_from.source-script`에 기록하고 verification-model revision을 증가시킬 것. 최신 Source Script와 정확히 일치하지 않는 verification-model은 `current`가 될 수 없다. TLC가 `passed`가 되려면 새 validation review가 있어야 한다.
+- application source code를 수정할 때는 verification-model이 먼저 `current`이고 TLC가 `passed`여야 하며, source code의 `derived_from.source-script`와 `derived_from.verification-model`이 각각 현재 상위 계층 fingerprint와 정확히 일치해야 한다. source-code revision도 증가시킬 것.
+- 현재 동작하는 source code가 있더라도 최신 TLC-passed verification-model에서 내려온 lineage가 확인되지 않으면 설계 계층에서는 `stale`로 취급할 것. 실행 가능성과 계층 최신성은 같은 의미가 아니다.
 - 하위 계층의 구현 편의 때문에 상위 계층을 암묵적으로 수정하지 말 것. source code에서 새 의미가 필요하다고 판단되면 Source Script 단계로 돌아가 먼저 반영하고 version chain을 다시 아래로 전파할 것.
 - `scripts/check-development-layer-versions.py` 검사를 통과하지 않은 계층 버전 변경은 완료로 취급하지 말 것.
-- main의 CI는 Source Script, pseudocode, application source 또는 version metadata가 변경될 때 version chain을 검사해야 한다.
+- main의 CI는 Source Script, verification-model, archived pseudocode, application source, 정책 또는 version metadata가 변경될 때 version chain을 검사해야 한다.

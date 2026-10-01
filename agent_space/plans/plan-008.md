@@ -33,7 +33,9 @@ agent_space/policies/source-script-policy.md
         ↓
 Source Script
         ↓
-pseudocode
+PlusCal/TLA+ verification model
+        ↓
+TLC model checking
         ↓
 source code
 ```
@@ -76,7 +78,7 @@ Source Script 보완은 current function 목록을 Python notation으로 옮기�
    - Source Script에서 미정으로 남기고 임의로 구현하지 않음
 3. **하위 구현 정리**
    - 의미는 동일하지만 source code가 중복/특수 경로를 가짐
-   - Source Script 의미 확정 뒤 pseudocode/source code에서 통합
+   - Source Script 의미 확정 뒤 verification-model/source code에서 통합
 
 ### 2.3 mutation은 candidate-first를 기본으로 한다
 
@@ -120,21 +122,29 @@ closure = open
 - pseudocode가 current가 되려면 Source Script가 current + closed여야 한다.
 - closed 전환에는 closure review가 있어야 한다.
 
-### 3.2 pseudocode validation gate
+### 3.2 verification-model + TLC gate
 
-pseudocode layer에 다음 의미를 둔다.
+정책 v0.2.0에 따라 기존 pseudocode gate는 verification-model gate로 대체한다.
+
+verification-model layer에 다음 의미를 둔다.
 
 ```text
-validation = pending | passed
+status = missing | stale | current
+tlc = pending | passed
 ```
 
 source code가 current가 되려면:
 
 - Source Script current + closed
-- pseudocode current + passed
+- verification-model current
+- TLC passed
 - 정확한 derived_from fingerprint
+- TLC passed 전환을 근거로 하는 validation review
 
 를 모두 만족해야 한다.
+
+기존 `pseudocode/` r2는 삭제하지 않고 legacy 참고 산출물로 보존하지만,
+새 정책의 verification-model/TLC gate를 충족하지 않는다.
 
 이 변경은 development lineage metadata의 강화이며 Source Script 의미 revision 자체를 올리지 않는다.
 
@@ -604,28 +614,35 @@ README와 사용자 요구를 대조한다.
 
 ---
 
-## 10. Phase 7 — pseudocode와 source code
+## 10. Phase 7 — PlusCal/TLA+ + TLC와 source code
 
-### pseudocode
+### verification model
 
-Source Script가 current + closed일 때만 시작한다.
+Source Script가 current + closed일 때 시작한다.
 
-pseudocode는 의미를 추가하지 않고:
+PlusCal/TLA+ 모델은 Source Script의 핵심 알고리즘을 가능한 한 보존하고:
 
-- 실행 순서
-- branch
-- candidate 생성
-- reference resolve
-- failure
-- commit
+- authoritative/shared state
+- action과 precondition
+- candidate / validation / commit 순서
+- reference 생성·이동·삭제
+- FSM/lifecycle
+- 실패/취소/부분 결과
+- operation 조합
+- 필요한 lock/concurrency/interleaving
+- invariant, safety와 필요한 liveness/deadlock
 
-을 언어 중립적으로 정규화한다.
+을 검증 가능한 상태전이로 표현한다.
 
-검증 통과 후 `validation=passed`.
+상태공간 축약과 생략은 `agent_space/policies/source-script-policy.md` §12를 따른다.
+독립적인 단순 조회/표시 projection은 근거를 기록하고 생략할 수 있지만,
+핵심 알고리즘은 상태공간 크기를 이유로 임의 생략하지 않는다.
+
+TLC 검증 통과 후 `tlc=passed`로 전환하고 validation review를 남긴다.
 
 ### source code
 
-pseudocode가 current + passed일 때만 시작한다.
+verification-model이 current이고 TLC가 passed일 때만 시작한다.
 
 source code 단계에서:
 
@@ -634,7 +651,9 @@ source code 단계에서:
 - data structure concrete representation
 - browser side effect
 
-을 결정하되 상위 의미는 바꾸지 않는다.
+을 결정하되 Source Script와 검증 모델의 의미는 바꾸지 않는다.
+
+핵심 구현 경로는 검증 모델의 action/state/property와 대응 관계를 추적할 수 있어야 한다.
 
 ---
 

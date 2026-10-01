@@ -1,12 +1,12 @@
 {
-  "schema": 1,
+  "schema": 2,
   "precedence": [
     "source-script",
-    "pseudocode",
+    "verification-model",
     "source-code"
   ],
   "fingerprint_algorithm": "sha256(sorted path + NUL + git-blob-sha1 + LF)",
-  "authority_rule": "On semantic conflict, the highest current layer wins. A lower layer may be current only when it records the exact current fingerprints of every required upstream layer.",
+  "authority_rule": "On semantic conflict, Source Script wins. Source code may be current only when the current verification model derives from the current closed Source Script and its TLC validation has passed.",
   "layers": {
     "source-script": {
       "revision": 12,
@@ -17,15 +17,16 @@
       "closure": "closed",
       "closure_review": "agent_space/reviews/review-015-sourcescript-closure-r12.md"
     },
-    "pseudocode": {
-      "revision": 2,
-      "status": "current",
-      "path_rule": "pseudocode/**/*",
-      "fingerprint": "sha256:39d7bccaa29c116b5e8db207a2d604742ab726711d37fe7b86f3ddb92f025759",
+    "verification-model": {
+      "revision": 0,
+      "status": "missing",
+      "path_rule": "verification/**/*",
+      "fingerprint": null,
       "derived_from": {
-        "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
+        "source-script": null
       },
-      "validation": "passed"
+      "tlc": "pending",
+      "validation_review": null
     },
     "source-code": {
       "revision": 0,
@@ -39,9 +40,23 @@
       "fingerprint": "sha256:0849c334254c8d3a183c03c240f532893a659932347c4e765d66c3b8383a8a7a",
       "derived_from": {
         "source-script": null,
-        "pseudocode": null
+        "verification-model": null
       },
       "lineage": "pre-version-chain"
+    }
+  },
+  "legacy_artifacts": {
+    "pseudocode": {
+      "revision": 2,
+      "status": "archived",
+      "path_rule": "pseudocode/**/*",
+      "fingerprint": "sha256:39d7bccaa29c116b5e8db207a2d604742ab726711d37fe7b86f3ddb92f025759",
+      "derived_from": {
+        "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
+      },
+      "validation": "passed",
+      "policy_version": "v0.1.1",
+      "role": "non-authoritative reference artifact; does not satisfy the v0.2.0 verification-model/TLC gate"
     }
   }
 }

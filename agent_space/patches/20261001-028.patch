@@ -1,0 +1,562 @@
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -1,12 +1,12 @@
+ {
++  "schema": 2,
+-  "schema": 1,
+   "precedence": [
+     "source-script",
++    "verification-model",
+-    "pseudocode",
+     "source-code"
+   ],
+   "fingerprint_algorithm": "sha256(sorted path + NUL + git-blob-sha1 + LF)",
++  "authority_rule": "On semantic conflict, Source Script wins. Source code may be current only when the current verification model derives from the current closed Source Script and its TLC validation has passed.",
+-  "authority_rule": "On semantic conflict, the highest current layer wins. A lower layer may be current only when it records the exact current fingerprints of every required upstream layer.",
+   "layers": {
+     "source-script": {
+       "revision": 12,
+@@ -17,15 +17,16 @@
+       "closure": "closed",
+       "closure_review": "agent_space/reviews/review-015-sourcescript-closure-r12.md"
+     },
++    "verification-model": {
++      "revision": 0,
++      "status": "missing",
++      "path_rule": "verification/**/*",
++      "fingerprint": null,
+-    "pseudocode": {
+-      "revision": 2,
+-      "status": "current",
+-      "path_rule": "pseudocode/**/*",
+-      "fingerprint": "sha256:39d7bccaa29c116b5e8db207a2d604742ab726711d37fe7b86f3ddb92f025759",
+       "derived_from": {
++        "source-script": null
+-        "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
+       },
++      "tlc": "pending",
++      "validation_review": null
+-      "validation": "passed"
+     },
+     "source-code": {
+       "revision": 0,
+@@ -39,10 +40,24 @@
+       "fingerprint": "sha256:0849c334254c8d3a183c03c240f532893a659932347c4e765d66c3b8383a8a7a",
+       "derived_from": {
+         "source-script": null,
++        "verification-model": null
+-        "pseudocode": null
+       },
+       "lineage": "pre-version-chain"
+     }
++  },
++  "legacy_artifacts": {
++    "pseudocode": {
++      "revision": 2,
++      "status": "archived",
++      "path_rule": "pseudocode/**/*",
++      "fingerprint": "sha256:39d7bccaa29c116b5e8db207a2d604742ab726711d37fe7b86f3ddb92f025759",
++      "derived_from": {
++        "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
++      },
++      "validation": "passed",
++      "policy_version": "v0.1.1",
++      "role": "non-authoritative reference artifact; does not satisfy the v0.2.0 verification-model/TLC gate"
++    }
+   }
+ }
+ 
+diff --git a/scripts/check-development-layer-versions.py b/scripts/check-development-layer-versions.py
+--- a/scripts/check-development-layer-versions.py
++++ b/scripts/check-development-layer-versions.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
++"""Validate Source Script > verification model/TLC > source code lineage."""
+-"""Validate Source Script > pseudocode > source code version precedence."""
+ 
+ from __future__ import annotations
+ 
+@@ -13,8 +13,9 @@
+ ROOT = Path(__file__).resolve().parents[1]
+ MANIFEST_PATH = ROOT / "development-versions.json"
+ SOURCE_SCRIPT_DIR = ROOT / "sourcescript"
++VERIFICATION_DIR = ROOT / "verification"
+ PSEUDOCODE_DIR = ROOT / "pseudocode"
++EXPECTED_PRECEDENCE = ["source-script", "verification-model", "source-code"]
+-EXPECTED_PRECEDENCE = ["source-script", "pseudocode", "source-code"]
+ 
+ 
+ class VersionError(RuntimeError):
+@@ -49,7 +50,17 @@
+     return paths
+ 
+ 
++def verification_model_paths() -> list[Path]:
++    if not VERIFICATION_DIR.is_dir():
++        return []
++    return [
++        path
++        for path in VERIFICATION_DIR.rglob("*")
++        if path.is_file() and "__pycache__" not in path.parts
++    ]
++
++
++def legacy_pseudocode_paths() -> list[Path]:
+-def pseudocode_paths() -> list[Path]:
+     if not PSEUDOCODE_DIR.is_dir():
+         return []
+     return [
+@@ -78,22 +89,30 @@
+         raise VersionError(f"version manifest is missing: {path.relative_to(ROOT)}") from error
+     except json.JSONDecodeError as error:
+         raise VersionError(f"invalid version manifest: {error}") from error
++    if manifest.get("schema") != 2:
+-    if manifest.get("schema") != 1:
+         raise VersionError("unsupported development version schema")
+     if manifest.get("precedence") != EXPECTED_PRECEDENCE:
+         raise VersionError(
++            "development precedence must be source-script > verification-model > source-code"
+-            "development precedence must be source-script > pseudocode > source-code"
+         )
+     return manifest
+ 
+ 
++def validate_review_path(value: object, label: str) -> str:
++    if not isinstance(value, str) or not value.startswith("agent_space/reviews/"):
++        raise VersionError(f"{label} must name an agent_space/reviews/ file")
++    if not (ROOT / value).is_file():
++        raise VersionError(f"{label} is missing: {value}")
++    return value
++
++
+ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
+     layers = manifest.get("layers")
+     if not isinstance(layers, dict):
+         raise VersionError("layers object is missing")
+ 
+     source = layers.get("source-script", {})
++    verification = layers.get("verification-model", {})
+-    pseudo = layers.get("pseudocode", {})
+     code = layers.get("source-code", {})
+ 
+     if source.get("status") != "current":
+@@ -105,50 +124,87 @@
+         raise VersionError("source-script closure must be open or closed")
+     closure_review = source.get("closure_review")
+     if source_closure == "closed":
++        validate_review_path(closure_review, "Source Script closure review")
+-        if not isinstance(closure_review, str) or not closure_review.startswith("agent_space/reviews/"):
+-            raise VersionError("closed Source Script must name a closure review")
+-        if not (ROOT / closure_review).is_file():
+-            raise VersionError(f"Source Script closure review is missing: {closure_review}")
+     elif closure_review is not None:
+         raise VersionError("open Source Script must not name a closure review")
++
+     source_fp = layer_fingerprint(source_script_paths())
+     if source.get("fingerprint") != source_fp:
+         raise VersionError(
+             "Source Script fingerprint changed without updating development-versions.json"
+         )
+ 
++    verification_paths = verification_model_paths()
++    verification_status = verification.get("status")
++    tlc_status = verification.get("tlc")
++    if tlc_status not in {"pending", "passed"}:
++        raise VersionError("verification-model tlc must be pending or passed")
++
++    verification_fp = None
++    if verification_status == "missing":
++        if verification_paths:
++            raise VersionError(
++                "verification files exist but verification-model is marked missing"
++            )
++        if verification.get("fingerprint") is not None:
++            raise VersionError("missing verification-model must not have a fingerprint")
++        if verification.get("revision") != 0:
++            raise VersionError("missing verification-model must have revision 0")
++        if verification.get("derived_from", {}).get("source-script") is not None:
++            raise VersionError(
++                "missing verification-model must not record a Source Script derivation"
++            )
++        if tlc_status != "pending":
++            raise VersionError("missing verification-model must have pending TLC status")
++        if verification.get("validation_review") is not None:
++            raise VersionError("missing verification-model must not name a validation review")
++    elif verification_status in {"stale", "current"}:
++        if not isinstance(verification.get("revision"), int) or verification["revision"] < 1:
++            raise VersionError("verification-model revision must be a positive integer")
++        if not verification_paths:
+-    pseudo_paths = pseudocode_paths()
+-    pseudo_status = pseudo.get("status")
+-    pseudo_validation = pseudo.get("validation")
+-    if pseudo_validation not in {"pending", "passed"}:
+-        raise VersionError("pseudocode validation must be pending or passed")
+-    pseudo_fp = None
+-    if pseudo_status == "missing":
+-        if pseudo_paths:
+             raise VersionError(
++                f"verification-model is {verification_status} but has no files"
+-                "pseudocode files exist but pseudocode layer is marked missing"
+             )
++        verification_fp = layer_fingerprint(verification_paths)
++        if verification.get("fingerprint") != verification_fp:
+-        if pseudo.get("fingerprint") is not None:
+-            raise VersionError("missing pseudocode layer must not have a fingerprint")
+-        if pseudo_validation != "pending":
+-            raise VersionError("missing pseudocode must have pending validation")
+-    elif pseudo_status in {"stale", "current"}:
+-        if not pseudo_paths:
+-            raise VersionError(f"pseudocode layer is {pseudo_status} but has no files")
+-        pseudo_fp = layer_fingerprint(pseudo_paths)
+-        if pseudo.get("fingerprint") != pseudo_fp:
+             raise VersionError(
++                "verification-model fingerprint changed without updating development-versions.json"
+-                "pseudocode fingerprint changed without updating development-versions.json"
+             )
++        if verification_status == "current":
+-        if pseudo_status == "current":
+             if source_closure != "closed":
++                raise VersionError(
++                    "verification-model cannot be current before Source Script is closed"
++                )
++            if verification.get("derived_from", {}).get("source-script") != source_fp:
+-                raise VersionError("pseudocode cannot be current before Source Script is closed")
+-            if pseudo.get("derived_from", {}).get("source-script") != source_fp:
+                 raise VersionError(
++                    "current verification-model does not derive from the current Source Script"
+-                    "current pseudocode does not derive from the current Source Script"
+                 )
++        if tlc_status == "passed":
++            if verification_status != "current":
++                raise VersionError("TLC cannot be passed for a stale verification-model")
++            validate_review_path(
++                verification.get("validation_review"),
++                "verification-model validation review",
++            )
++        elif verification.get("validation_review") is not None:
++            raise VersionError(
++                "pending verification-model must not name a validation review"
++            )
+     else:
++        raise VersionError(f"invalid verification-model status: {verification_status!r}")
++
++    legacy = manifest.get("legacy_artifacts", {}).get("pseudocode")
++    if legacy is not None:
++        legacy_paths = legacy_pseudocode_paths()
++        if legacy.get("status") != "archived":
++            raise VersionError("legacy pseudocode artifact must be marked archived")
++        if not legacy_paths:
++            raise VersionError("legacy pseudocode artifact is recorded but files are missing")
++        legacy_fp = layer_fingerprint(legacy_paths)
++        if legacy.get("fingerprint") != legacy_fp:
++            raise VersionError(
++                "archived pseudocode changed; update or restore the explicit legacy record"
++            )
+-        raise VersionError(f"invalid pseudocode status: {pseudo_status!r}")
+ 
+     code_status = code.get("status")
+     if code_status not in {"stale", "current"}:
+@@ -159,23 +215,27 @@
+             "source-code fingerprint changed without updating development-versions.json"
+         )
+     if code_status == "current":
++        if verification_status != "current" or verification_fp is None:
++            raise VersionError(
++                "source code cannot be current before verification-model is current"
++            )
++        if tlc_status != "passed":
++            raise VersionError(
++                "source code cannot be current before TLC validation passes"
++            )
+-        if pseudo_status != "current" or pseudo_fp is None:
+-            raise VersionError("source code cannot be current before pseudocode is current")
+-        if pseudo_validation != "passed":
+-            raise VersionError("source code cannot be current before pseudocode validation passes")
+         derived = code.get("derived_from", {})
+         if derived.get("source-script") != source_fp:
+             raise VersionError(
+                 "current source code does not derive from the current Source Script"
+             )
++        if derived.get("verification-model") != verification_fp:
+-        if derived.get("pseudocode") != pseudo_fp:
+             raise VersionError(
++                "current source code does not derive from the current verification-model"
+-                "current source code does not derive from the current pseudocode"
+             )
+ 
+     return {
+         "source-script": source_fp,
++        "verification-model": verification_fp,
+-        "pseudocode": pseudo_fp,
+         "source-code": code_fp,
+     }
+ 
+@@ -283,7 +343,7 @@
+         path.startswith("sourcescript/") and path.endswith(".py")
+         for path in changed
+     )
++    verification_changed = any(path.startswith("verification/") for path in changed)
+-    pseudo_changed = any(path.startswith("pseudocode/") for path in changed)
+ 
+     source_paths = set(current_layers["source-code"].get("paths", []))
+     source_paths.update(base_layers.get("source-code", {}).get("paths", []))
+@@ -292,8 +352,13 @@
+     def require_increment(layer_name: str) -> None:
+         current_revision = current_layers[layer_name].get("revision")
+         base_revision = base_layers.get(layer_name, {}).get("revision")
++        if not isinstance(current_revision, int):
++            raise VersionError(f"{layer_name} current revision is not comparable")
++        if not isinstance(base_revision, int):
++            if base_manifest.get("schema") == 1 and layer_name == "verification-model":
++                base_revision = 0
++            else:
++                raise VersionError(f"{layer_name} base revision is not comparable")
+-        if not isinstance(current_revision, int) or not isinstance(base_revision, int):
+-            raise VersionError(f"{layer_name} revision is not comparable")
+         if current_revision <= base_revision:
+             raise VersionError(
+                 f"{layer_name} changed without increasing its revision "
+@@ -319,24 +384,48 @@
+                 "Source Script closure review must be new for this closure transition"
+             )
+ 
++    if verification_changed:
++        require_increment("verification-model")
++        verification = current_layers["verification-model"]
++        if verification.get("status") != "current":
+-    if pseudo_changed:
+-        require_increment("pseudocode")
+-        if current_layers["pseudocode"].get("status") != "current":
+             raise VersionError(
++                "modified verification-model must finish as current against the latest Source Script"
+-                "modified pseudocode must finish as current against the latest Source Script"
+             )
+         if current_layers["source-script"].get("closure") != "closed":
++            raise VersionError(
++                "verification-model cannot change before Source Script is closed"
++            )
++
++    base_verification = base_layers.get("verification-model", {})
++    current_verification = current_layers.get("verification-model", {})
++    if (
++        base_verification.get("tlc") != "passed"
++        and current_verification.get("tlc") == "passed"
++    ):
++        review_path = current_verification.get("validation_review")
++        if not isinstance(review_path, str) or review_path not in changed:
++            raise VersionError(
++                "passing TLC validation requires a newly changed validation review"
++            )
++        if path_exists_at_revision(base, review_path):
++            raise VersionError(
++                "TLC validation review must be new for this validation transition"
++            )
+-            raise VersionError("pseudocode cannot change before Source Script is closed")
+ 
+     if code_changed:
+         require_increment("source-code")
++        verification = current_layers["verification-model"]
++        if verification.get("status") != "current":
++            raise VersionError(
++                "source code cannot change while verification-model is missing or stale"
++            )
++        if verification.get("tlc") != "passed":
+-        if current_layers["pseudocode"].get("status") != "current":
+             raise VersionError(
++                "source code cannot change before TLC validation passes"
+-                "source code cannot change while pseudocode is missing or stale"
+             )
+         if current_layers["source-code"].get("status") != "current":
+             raise VersionError(
++                "modified source code must finish as current against the latest verification-model"
+-                "modified source code must finish as current against the latest pseudocode"
+             )
+ 
+ 
+@@ -364,9 +453,9 @@
+         f"  source-script: r{layers['source-script']['revision']} "
+         f"{layers['source-script']['status']}/{layers['source-script']['closure']} "
+         f"{fingerprints['source-script']}\n"
++        f"  verification-model: r{layers['verification-model']['revision']} "
++        f"{layers['verification-model']['status']}/{layers['verification-model']['tlc']} "
++        f"{fingerprints['verification-model'] or '-'}\n"
+-        f"  pseudocode: r{layers['pseudocode']['revision']} "
+-        f"{layers['pseudocode']['status']}/{layers['pseudocode']['validation']} "
+-        f"{fingerprints['pseudocode'] or '-'}\n"
+         f"  source-code: r{layers['source-code']['revision']} "
+         f"{layers['source-code']['status']} {fingerprints['source-code']}"
+     )
+diff --git a/.github/workflows/development-layer-version.yml b/.github/workflows/development-layer-version.yml
+--- a/.github/workflows/development-layer-version.yml
++++ b/.github/workflows/development-layer-version.yml
+@@ -5,6 +5,7 @@
+     branches: [main]
+     paths:
+       - 'sourcescript/**'
++      - 'verification/**'
+       - 'pseudocode/**'
+       - 'development-versions.json'
+       - 'Fast-figure.html'
+@@ -13,6 +14,8 @@
+       - 'scripts/build-portable.py'
+       - 'scripts/check-development-layer-versions.py'
+       - 'agent_space/AGENT.md'
++      - 'agent_space/policies/source-script-policy.md'
++      - 'agent_space/reviews/**'
+       - '.github/workflows/development-layer-version.yml'
+   workflow_dispatch:
+ 
+diff --git a/agent_space/AGENT.md b/agent_space/AGENT.md
+--- a/agent_space/AGENT.md
++++ b/agent_space/AGENT.md
+@@ -27,7 +27,7 @@
+ 
+ ## 정책 원천
+ 
++- Source Script, PlusCal/TLA+ 검증 모델, TLC 검증, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
+-- Source Script, pseudocode, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
+ - 해당 정책 원문은 사용자가 명시적으로 정책 변경을 지시한 경우에만 수정한다.
+ - 프로젝트 고유의 데이터 구조, 책임 배치, 식별자, 파일 형식, 해결 방안은 정책 문서에 추가하지 않고 `sourcescript/`, `agent_space/plans/`, `agent_space/docs/` 중 해당 책임 경로에 기록한다.
+ 
+@@ -59,15 +59,15 @@
+ 
+ ## 개발 계층 버전 우선순위
+ 
++- 개발 의미의 권위 순서는 반드시 `Source Script > verification-model > source code`로 유지할 것.
+-- 개발 의미의 권위 순서는 반드시 `Source Script > pseudocode > source code`로 유지할 것.
+ - 계층 버전과 파생 관계의 단일 메타데이터 원천은 저장소 루트의 `development-versions.json`으로 둘 것.
+ - `development-versions.json`은 의미 자체를 정의하는 문서가 아니라 각 계층의 revision, 실제 내용 fingerprint, 상위 계층 파생 버전을 기록하는 lineage metadata다.
++- Source Script는 항상 최상위 권위 계층이다. verification-model 또는 source code와 의미가 충돌하면 Source Script를 기준으로 하위 계층을 수정할 것.
++- Source Script의 의미 파일이 바뀌면 source-script revision과 fingerprint를 갱신할 것. 기존 verification-model과 source code는 새 Source Script fingerprint를 정확히 반영하기 전까지 `current`로 표시하지 말 것.
++- verification-model을 생성하거나 수정할 때는 현재 Source Script fingerprint를 `derived_from.source-script`에 기록하고 verification-model revision을 증가시킬 것. 최신 Source Script와 정확히 일치하지 않는 verification-model은 `current`가 될 수 없다. TLC가 `passed`가 되려면 새 validation review가 있어야 한다.
++- application source code를 수정할 때는 verification-model이 먼저 `current`이고 TLC가 `passed`여야 하며, source code의 `derived_from.source-script`와 `derived_from.verification-model`이 각각 현재 상위 계층 fingerprint와 정확히 일치해야 한다. source-code revision도 증가시킬 것.
++- 현재 동작하는 source code가 있더라도 최신 TLC-passed verification-model에서 내려온 lineage가 확인되지 않으면 설계 계층에서는 `stale`로 취급할 것. 실행 가능성과 계층 최신성은 같은 의미가 아니다.
+-- Source Script는 항상 최상위 권위 계층이다. pseudocode 또는 source code와 의미가 충돌하면 Source Script를 기준으로 하위 계층을 수정할 것.
+-- Source Script의 의미 파일이 바뀌면 source-script revision과 fingerprint를 갱신할 것. 기존 pseudocode와 source code는 새 Source Script fingerprint를 정확히 반영하기 전까지 `current`로 표시하지 말 것.
+-- pseudocode를 생성하거나 수정할 때는 현재 Source Script fingerprint를 `derived_from.source-script`에 기록하고 pseudocode revision을 증가시킬 것. 최신 Source Script와 정확히 일치하지 않는 pseudocode는 `current`가 될 수 없다.
+-- application source code를 수정할 때는 pseudocode가 먼저 `current`여야 하고, source code의 `derived_from.source-script`와 `derived_from.pseudocode`가 각각 현재 상위 계층 fingerprint와 정확히 일치해야 한다. source-code revision도 증가시킬 것.
+-- 현재 동작하는 source code가 있더라도 최신 pseudocode에서 내려온 lineage가 확인되지 않으면 설계 계층에서는 `stale`로 취급할 것. 실행 가능성과 계층 최신성은 같은 의미가 아니다.
+ - 하위 계층의 구현 편의 때문에 상위 계층을 암묵적으로 수정하지 말 것. source code에서 새 의미가 필요하다고 판단되면 Source Script 단계로 돌아가 먼저 반영하고 version chain을 다시 아래로 전파할 것.
+ - `scripts/check-development-layer-versions.py` 검사를 통과하지 않은 계층 버전 변경은 완료로 취급하지 말 것.
++- main의 CI는 Source Script, verification-model, archived pseudocode, application source, 정책 또는 version metadata가 변경될 때 version chain을 검사해야 한다.
+-- main의 CI는 Source Script, pseudocode, application source 또는 version metadata가 변경될 때 version chain을 검사해야 한다.
+ 
+diff --git a/agent_space/plans/plan-008.md b/agent_space/plans/plan-008.md
+--- a/agent_space/plans/plan-008.md
++++ b/agent_space/plans/plan-008.md
+@@ -33,7 +33,9 @@
+         ↓
+ Source Script
+         ↓
++PlusCal/TLA+ verification model
++        ↓
++TLC model checking
+-pseudocode
+         ↓
+ source code
+ ```
+@@ -76,7 +78,7 @@
+    - Source Script에서 미정으로 남기고 임의로 구현하지 않음
+ 3. **하위 구현 정리**
+    - 의미는 동일하지만 source code가 중복/특수 경로를 가짐
++   - Source Script 의미 확정 뒤 verification-model/source code에서 통합
+-   - Source Script 의미 확정 뒤 pseudocode/source code에서 통합
+ 
+ ### 2.3 mutation은 candidate-first를 기본으로 한다
+ 
+@@ -120,22 +122,30 @@
+ - pseudocode가 current가 되려면 Source Script가 current + closed여야 한다.
+ - closed 전환에는 closure review가 있어야 한다.
+ 
++### 3.2 verification-model + TLC gate
++
++정책 v0.2.0에 따라 기존 pseudocode gate는 verification-model gate로 대체한다.
+-### 3.2 pseudocode validation gate
+ 
++verification-model layer에 다음 의미를 둔다.
+-pseudocode layer에 다음 의미를 둔다.
+ 
+ ```text
++status = missing | stale | current
++tlc = pending | passed
+-validation = pending | passed
+ ```
+ 
+ source code가 current가 되려면:
+ 
+ - Source Script current + closed
++- verification-model current
++- TLC passed
+-- pseudocode current + passed
+ - 정확한 derived_from fingerprint
++- TLC passed 전환을 근거로 하는 validation review
+ 
+ 를 모두 만족해야 한다.
+ 
++기존 `pseudocode/` r2는 삭제하지 않고 legacy 참고 산출물로 보존하지만,
++새 정책의 verification-model/TLC gate를 충족하지 않는다.
++
+ 이 변경은 development lineage metadata의 강화이며 Source Script 의미 revision 자체를 올리지 않는다.
+ 
+ ---
+@@ -604,28 +614,35 @@
+ 
+ ---
+ 
++## 10. Phase 7 — PlusCal/TLA+ + TLC와 source code
++
++### verification model
+-## 10. Phase 7 — pseudocode와 source code
+ 
++Source Script가 current + closed일 때 시작한다.
+-### pseudocode
+ 
++PlusCal/TLA+ 모델은 Source Script의 핵심 알고리즘을 가능한 한 보존하고:
+-Source Script가 current + closed일 때만 시작한다.
+ 
++- authoritative/shared state
++- action과 precondition
++- candidate / validation / commit 순서
++- reference 생성·이동·삭제
++- FSM/lifecycle
++- 실패/취소/부분 결과
++- operation 조합
++- 필요한 lock/concurrency/interleaving
++- invariant, safety와 필요한 liveness/deadlock
+-pseudocode는 의미를 추가하지 않고:
+ 
++을 검증 가능한 상태전이로 표현한다.
+-- 실행 순서
+-- branch
+-- candidate 생성
+-- reference resolve
+-- failure
+-- commit
+ 
++상태공간 축약과 생략은 `agent_space/policies/source-script-policy.md` §12를 따른다.
++독립적인 단순 조회/표시 projection은 근거를 기록하고 생략할 수 있지만,
++핵심 알고리즘은 상태공간 크기를 이유로 임의 생략하지 않는다.
+-을 언어 중립적으로 정규화한다.
+ 
++TLC 검증 통과 후 `tlc=passed`로 전환하고 validation review를 남긴다.
+-검증 통과 후 `validation=passed`.
+ 
+ ### source code
+ 
++verification-model이 current이고 TLC가 passed일 때만 시작한다.
+-pseudocode가 current + passed일 때만 시작한다.
+ 
+ source code 단계에서:
+ 
+@@ -634,7 +651,9 @@
+ - data structure concrete representation
+ - browser side effect
+ 
++을 결정하되 Source Script와 검증 모델의 의미는 바꾸지 않는다.
++
++핵심 구현 경로는 검증 모델의 action/state/property와 대응 관계를 추적할 수 있어야 한다.
+-을 결정하되 상위 의미는 바꾸지 않는다.
+ 
+ ---
+ 
