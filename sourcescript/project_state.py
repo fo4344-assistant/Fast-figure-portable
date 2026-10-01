@@ -236,7 +236,7 @@ def normalizeSlotContent(slot):
     return slot
 
 
-def validateProjectObjectState(state, requireSlots=False):
+def validateProjectObjectState(state, requireSlots):
     """
     Return:
     - state:

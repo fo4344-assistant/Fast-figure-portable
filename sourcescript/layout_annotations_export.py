@@ -62,7 +62,7 @@ EXPORT_LIMITS = {
 }
 
 
-def dashboardGeometry(width, heightOverride=None):
+def dashboardGeometry(width, heightOverride):
     """
     Return:
     - geometry:
@@ -83,7 +83,7 @@ def dashboardGeometry(width, heightOverride=None):
     return geometry
 
 
-def gridSlotGeometry(layout, geometry, slot=None):
+def gridSlotGeometry(layout, geometry, slot):
     """
     Return:
     - slotGeometry:

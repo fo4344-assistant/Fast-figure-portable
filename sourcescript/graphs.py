@@ -120,7 +120,7 @@ def graphDataSelection(matrix, headerLines, editor):
     return selection
 
 
-def connectDataToSlotModel(slot, data, sourceName, projectCsv=None):
+def connectDataToSlotModel(slot, data, sourceName, projectCsv):
     """
     Return:
     - chart:
@@ -162,7 +162,7 @@ def graphEditorAdd(csvId):
     return chart
 
 
-def graphEditorCommit(objects, index=None):
+def graphEditorCommit(objects, index):
     """
     Return:
     - chart:

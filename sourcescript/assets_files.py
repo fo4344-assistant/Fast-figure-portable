@@ -66,7 +66,7 @@ EXPORT_TRASH_RULE = (
 )
 
 
-def normalizeProjectPath(value, directory=False):
+def normalizeProjectPath(value, directory):
     """
     Return:
     - path:
@@ -101,7 +101,7 @@ def projectAssetPath(asset):
     return path
 
 
-def projectAssetImportCollisionModel(file, directory, reservedPaths=None):
+def projectAssetImportCollisionModel(file, directory, reservedPaths):
     """
     Return:
     - collisionModel:
@@ -121,7 +121,7 @@ def projectAssetImportCollisionModel(file, directory, reservedPaths=None):
     return collisionModel
 
 
-def resolveProjectAssetImportPlan(model, choice="rename", reservedPaths=None):
+def resolveProjectAssetImportPlan(model, choice, reservedPaths):
     """
     Return:
     - plan:
@@ -158,7 +158,7 @@ def importProjectFilesToDirectory(files, directory, planImport):
     return "전체 import가 성공한 경우의 완료 결과"
 
 
-def createProjectCsv(data, name, id=None, bytesBase64="", mime="text/csv", headerLines=1, path=None):
+def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
     """
     Return:
     - csv:
@@ -175,7 +175,7 @@ def createProjectCsv(data, name, id=None, bytesBase64="", mime="text/csv", heade
     return csv
 
 
-def createProjectImage(bytes, name, mime, id=None, settings=None, path=None):
+def createProjectImage(bytes, name, mime, id, settings, path):
     """
     Return:
     - image:
@@ -219,7 +219,7 @@ def planProjectNodeMove(path, directory):
     return movePlan
 
 
-def moveProjectNode(plan, useUniqueName=False):
+def moveProjectNode(plan, useUniqueName):
     """
     변경:
     - PROJECT_NODE_MOVED event를 통해 project VFS와 필요 시 reference를 변경한다.

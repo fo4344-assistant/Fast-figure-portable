@@ -1,0 +1,171 @@
+diff --git a/sourcescript/project_state.py b/sourcescript/project_state.py
+--- a/sourcescript/project_state.py
++++ b/sourcescript/project_state.py
+@@ -237,4 +237,4 @@
+ 
+ 
++def validateProjectObjectState(state, requireSlots):
+-def validateProjectObjectState(state, requireSlots=False):
+     """
+@@ -238,4 +238,4 @@
+ 
++def validateProjectObjectState(state, requireSlots):
+-def validateProjectObjectState(state, requireSlots=False):
+     """
+     Return:
+diff --git a/sourcescript/assets_files.py b/sourcescript/assets_files.py
+--- a/sourcescript/assets_files.py
++++ b/sourcescript/assets_files.py
+@@ -67,4 +67,4 @@
+ 
+ 
++def normalizeProjectPath(value, directory):
+-def normalizeProjectPath(value, directory=False):
+     """
+@@ -68,4 +68,4 @@
+ 
++def normalizeProjectPath(value, directory):
+-def normalizeProjectPath(value, directory=False):
+     """
+     Return:
+@@ -102,4 +102,4 @@
+ 
+ 
++def projectAssetImportCollisionModel(file, directory, reservedPaths):
+-def projectAssetImportCollisionModel(file, directory, reservedPaths=None):
+     """
+@@ -103,4 +103,4 @@
+ 
++def projectAssetImportCollisionModel(file, directory, reservedPaths):
+-def projectAssetImportCollisionModel(file, directory, reservedPaths=None):
+     """
+     Return:
+@@ -122,4 +122,4 @@
+ 
+ 
++def resolveProjectAssetImportPlan(model, choice, reservedPaths):
+-def resolveProjectAssetImportPlan(model, choice="rename", reservedPaths=None):
+     """
+@@ -123,4 +123,4 @@
+ 
++def resolveProjectAssetImportPlan(model, choice, reservedPaths):
+-def resolveProjectAssetImportPlan(model, choice="rename", reservedPaths=None):
+     """
+     Return:
+@@ -159,4 +159,4 @@
+ 
+ 
++def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
+-def createProjectCsv(data, name, id=None, bytesBase64="", mime="text/csv", headerLines=1, path=None):
+     """
+@@ -160,4 +160,4 @@
+ 
++def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
+-def createProjectCsv(data, name, id=None, bytesBase64="", mime="text/csv", headerLines=1, path=None):
+     """
+     Return:
+@@ -176,4 +176,4 @@
+ 
+ 
++def createProjectImage(bytes, name, mime, id, settings, path):
+-def createProjectImage(bytes, name, mime, id=None, settings=None, path=None):
+     """
+@@ -177,4 +177,4 @@
+ 
++def createProjectImage(bytes, name, mime, id, settings, path):
+-def createProjectImage(bytes, name, mime, id=None, settings=None, path=None):
+     """
+     Return:
+@@ -220,4 +220,4 @@
+ 
+ 
++def moveProjectNode(plan, useUniqueName):
+-def moveProjectNode(plan, useUniqueName=False):
+     """
+@@ -221,4 +221,4 @@
+ 
++def moveProjectNode(plan, useUniqueName):
+-def moveProjectNode(plan, useUniqueName=False):
+     """
+     변경:
+diff --git a/sourcescript/graphs.py b/sourcescript/graphs.py
+--- a/sourcescript/graphs.py
++++ b/sourcescript/graphs.py
+@@ -121,4 +121,4 @@
+ 
+ 
++def connectDataToSlotModel(slot, data, sourceName, projectCsv):
+-def connectDataToSlotModel(slot, data, sourceName, projectCsv=None):
+     """
+@@ -122,4 +122,4 @@
+ 
++def connectDataToSlotModel(slot, data, sourceName, projectCsv):
+-def connectDataToSlotModel(slot, data, sourceName, projectCsv=None):
+     """
+     Return:
+@@ -163,4 +163,4 @@
+ 
+ 
++def graphEditorCommit(objects, index):
+-def graphEditorCommit(objects, index=None):
+     """
+@@ -164,4 +164,4 @@
+ 
++def graphEditorCommit(objects, index):
+-def graphEditorCommit(objects, index=None):
+     """
+     Return:
+diff --git a/sourcescript/layout_annotations_export.py b/sourcescript/layout_annotations_export.py
+--- a/sourcescript/layout_annotations_export.py
++++ b/sourcescript/layout_annotations_export.py
+@@ -63,4 +63,4 @@
+ 
+ 
++def dashboardGeometry(width, heightOverride):
+-def dashboardGeometry(width, heightOverride=None):
+     """
+@@ -64,4 +64,4 @@
+ 
++def dashboardGeometry(width, heightOverride):
+-def dashboardGeometry(width, heightOverride=None):
+     """
+     Return:
+@@ -84,4 +84,4 @@
+ 
+ 
++def gridSlotGeometry(layout, geometry, slot):
+-def gridSlotGeometry(layout, geometry, slot=None):
+     """
+@@ -85,4 +85,4 @@
+ 
++def gridSlotGeometry(layout, geometry, slot):
+-def gridSlotGeometry(layout, geometry, slot=None):
+     """
+     Return:
+diff --git a/sourcescript/renderer_runtime.py b/sourcescript/renderer_runtime.py
+--- a/sourcescript/renderer_runtime.py
++++ b/sourcescript/renderer_runtime.py
+@@ -108,4 +108,4 @@
+ 
+ 
++def setSelectedSlot(slotId, direction):
+-def setSelectedSlot(slotId, direction="fsm-to-model"):
+     """
+@@ -109,4 +109,4 @@
+ 
++def setSelectedSlot(slotId, direction):
+-def setSelectedSlot(slotId, direction="fsm-to-model"):
+     """
+     변경:
+@@ -167,4 +167,4 @@
+ 
+ 
++def applySlotStyle(notify):
+-def applySlotStyle(notify=True):
+     """
+@@ -168,4 +168,4 @@
+ 
++def applySlotStyle(notify):
+-def applySlotStyle(notify=True):
+     """
+     변경:

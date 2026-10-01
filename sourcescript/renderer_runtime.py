@@ -107,7 +107,7 @@ def renderDashboard():
     return "현재 project에서 다시 생성된 dashboard projection"
 
 
-def setSelectedSlot(slotId, direction="fsm-to-model"):
+def setSelectedSlot(slotId, direction):
     """
     변경:
     - SELECT_SLOT event를 통한 runtime selection/workspace.
@@ -166,7 +166,7 @@ def prepareDashboardFileDrop(slotId):
     return accepted
 
 
-def applySlotStyle(notify=True):
+def applySlotStyle(notify):
     """
     변경:
     - dashboard/caption renderer CSS projection.
