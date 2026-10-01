@@ -5,9 +5,10 @@
 현재 정책 원천:
 
 - `source-script-policy.md`
-  - 사용자 제공 `v0.1.1`
-  - Source Script → pseudocode → 대상 언어 구현 순서
+  - 사용자 지시에 따라 개정된 `v0.2.0`
+  - Source Script → PlusCal/TLA+ 검증 모델 → TLC 모델 검사 → 대상 언어 구현 순서
   - Source Script 닫힘 판정
+  - 핵심 알고리즘의 형식 모델링, 제한적 생략/추상화 규칙, TLC 검증 기록
   - Source of Truth, 참조 무결성, 최소 구현, 확정/미확정 규칙, 단계 간 번역 원칙
 
 정책 문서 자체의 추가·수정·삭제는 사용자의 명시적 정책 변경 지시가 있을 때만 수행한다.
