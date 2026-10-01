@@ -2,26 +2,21 @@
 Fast Figure Source Script — system boundary and reverse-review index
 
 작성 단계:
-- 현재 JavaScript/HTML/Python 구현에서 Source Script로 역작성하는 첫 검토 단계다.
+- 기존 구현을 검증 자료로 사용해 Source Script의 의미를 정규화하는 단계다.
 - 이 파일은 실행 가능한 Python 구현이 아니라 Python 문법을 작성 표기법으로 사용하는 구현 명세다.
 
-권위 원천:
-- ../fast-figure.js:
-  ProjectObject, ApplicationStateMachine, FastFigureApi, domain command,
-  functional renderer, FFPX/FFSX와 export 동작의 현재 구현 원천.
-- ../fast-figure-ui.js:
-  React + Mantine frontend, UI draft, Modal, shell, UI FSM 호출의 현재 구현 원천.
-- ../Fast-figure.html:
-  renderer host DOM, Mantine CSS, Fast Figure renderer CSS, script load order의 현재 구현 원천.
-- ../vendor/plotly.min.js:
-  graph renderer 외부 라이브러리 원천.
-- ../vendor/fast-figure-ui-runtime.js:
-  React/ReactDOM/Mantine runtime 원천.
+권위와 검증 원천:
+- ../agent_space/policies/source-script-policy.md:
+  Source Script 작성·닫힘·Source of Truth·참조·최소 구현 원칙의 상위 정책 원천.
+- ../README.md:
+  Fast Figure의 공개 목적과 project/FFPX/FFSX/Plotly 계약을 확인하는 프로젝트 문서.
+- ../fast-figure.js, ../fast-figure-ui.js, ../Fast-figure.html:
+  현재 하위 구현의 동작, 누락, 중복, 호환 상태를 조사하는 검증 자료.
+  Source Script와 충돌할 때 구현 현황을 이유로 Source Script 의미를 자동 결정하지 않는다.
+- ../vendor/plotly.min.js, ../vendor/fast-figure-ui-runtime.js:
+  renderer/runtime 외부 dependency의 실제 제공 원천.
 - ../scripts/build-portable.py:
-  split source를 단일 portable HTML로 결합하는 build 원천.
-- user-provided development_policy.md:
-  Source Script 작성 순서와 상태/참조/최소 구현 원칙의 authoritative policy.
-  저장소 구현 원천은 아니며 이 폴더에서 내용을 재정의하지 않는다.
+  split source를 단일 portable HTML로 결합하는 현재 build 검증 자료.
 """
 
 IMPLEMENTATION_SOURCES = {
@@ -59,32 +54,28 @@ AUTHORITATIVE_STATE_RULE = (
 )
 
 RUNTIME_STATE_RULE = (
-    "selectedSlotId, editing, dashboard zoom/drag state, telemetry와 같은 값은 "
+    "selectedSlotId, editing 후보, dashboard zoom/drag state, telemetry와 같은 값은 "
     "영속 project state가 아닌 runtime state다. 각 값의 책임 범위를 벗어나 "
     "project state의 대체 읽기 원천으로 사용하지 않는다."
 )
 
 UNRESOLVED_REVIEW_ITEMS = [
     (
-        "previewLabelsApiPosition은 이름상 preview이지만 현재 구현에서는 "
-        "activeProject.labelSettings.x/y를 즉시 변경하고 commitLabelsApiPosition은 "
-        "후속 notify만 수행한다. drag 중 값 변경을 authoritative edit로 볼지, "
-        "임시 preview로 볼지는 다음 Source Script 검토에서 명시적으로 결정해야 한다."
+        "slot caption은 renderable graph/image content와 별도 annotation으로 확정했지만 "
+        "swap/merge/split/reset에서 caption이 content를 따라 이동하는지 slot 위치에 남는지는 "
+        "현재 프로젝트 계약만으로 하나로 결정되지 않았다. layout operation matrix에서 해결하기 전까지 closure blocker다."
     ),
     (
-        "debugEnabled와 uiTelemetryState.debugEnabled는 현재 구현에서 함께 존재한다. "
-        "Source Script에서는 debugEnabled를 runtime authority, uiTelemetryState를 read projection으로 "
-        "해석하지만, projection 값이 mutation 입력의 일반 원천으로 확장되지 않는지 다음 단계에서 확인한다."
+        "editing은 선택 chart를 다시 가리키는 runtime pointer/cache 후보다. "
+        "selectedSlotId -> slot.chart -> chart resolve로 완전히 대체 가능한지 FSM/API 검토에서 확인한다."
     ),
     (
-        "selectedSlotId와 appFSM.state.workspace는 같은 값의 복사본이 아니라 "
-        "선택 대상과 그로부터 결정되는 workspace region이라는 관계로 해석한다. "
-        "현재 auditApp이 둘의 일치 관계를 검사한다. 다음 단계에서도 이 참조 관계를 보존한다."
+        "layoutMapWidth는 하위 구현의 persistent field지만 실제 producer/consumer가 확인되지 않았다. "
+        "기능 의미가 없으면 Source Script와 하위 구현에서 제거하고, 필요하면 먼저 의미를 정의한다."
     ),
     (
-        "editing은 선택 chart의 runtime pointer/cache 역할을 하지만 project에 저장되지 않는다. "
-        "현재 UI에 노출되지 않으며 core 내부에서만 사용된다. pseudocode 단계에서 "
-        "필수 runtime state인지 단순 파생값인지 다시 검사한다."
+        "debugEnabled와 uiTelemetryState.debugEnabled는 runtime authority와 one-way projection으로 해석한다. "
+        "projection이 mutation 입력 원천으로 재유입되지 않는지 최종 중복 검토에서 확인한다."
     ),
 ]
 
@@ -96,22 +87,22 @@ def initializeFastFigure():
       기본 프로젝트와 슬롯, FSM, renderer, Mantine UI가 사용 가능한 상태.
 
     변경:
-    - activeProject에 기본 빈 CSV와 초기 grid slot을 만든다.
+    - activeProject를 createProjectState가 만든 검증된 기본 project로 시작한다.
     - renderer DOM/CSS 상태를 현재 project 값에 맞춘다.
     - appFSM lifecycle을 ready로 전환한다.
     - React root에 Mantine frontend를 mount한다.
 
     처리:
-    1. core runtime과 필요한 renderer host가 존재하는지 확인한다.
-    2. dashboard zoom projection을 적용한다.
-    3. 프로젝트에 보호된 기본 빈 CSV가 없으면 만든다.
-    4. slot click/drag controller를 설치한다.
-    5. 현재 gridRows/gridCols에 맞는 slot 구조를 준비한다.
-    6. slot style과 dashboard geometry를 적용한다.
-    7. appFSM을 ready로 전환하고 workspace/overlay 초기 상태를 동기화한다.
-    8. FastFigureApi를 frontend 변경 경계로 공개한다.
-    9. MantineProvider와 FastFigureShell을 기존 React root에 mount한다.
-    10. 현재 구현에서는 auditApp으로 초기 참조/상태 무결성을 검사한다.
+    1. createProjectState가 만든 project candidate가 invariant를 만족하는지 확인한다.
+    2. core runtime과 필요한 renderer host가 존재하는지 확인한다.
+    3. dashboard zoom projection과 slot interaction controller를 준비한다.
+    4. project에 이미 존재하는 초기 empty slot을 renderer에 투영한다.
+    5. slot style과 dashboard geometry를 적용한다.
+    6. appFSM을 ready로 전환하고 workspace/overlay 초기 상태를 동기화한다.
+    7. FastFigureApi를 frontend 변경 경계로 공개한다.
+    8. MantineProvider와 FastFigureShell을 기존 React root에 mount한다.
+    9. startup 과정은 default CSV나 fake graph object를 생성하지 않는다.
+    10. 마지막에 project/reference/runtime invariant를 검사한다.
     """
     initialized_runtime = "현재 Fast Figure 실행 세션"
     return initialized_runtime

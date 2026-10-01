@@ -1,0 +1,364 @@
+diff --git a/sourcescript/project_state.py b/sourcescript/project_state.py
+--- a/sourcescript/project_state.py
++++ b/sourcescript/project_state.py
+@@ -20,6 +20,7 @@
+     "slots": "slot collection의 공식 read path",
+     "sequences": "CSV/image/chart next-id sequence의 공식 read path",
+     "appearance": "persistent UI palette의 공식 read path",
++    "export": "persistent raster export settings의 공식 read path",
+ }
+ 
+ projectState = {
+@@ -31,7 +32,11 @@
+     "layout": {
+         "gridRows": "1..8 범위의 grid 행 수",
+         "gridCols": "1..8 범위의 grid 열 수",
++        "layoutMapWidth": (
++            "현재 하위 구현에 남아 있는 optional layout preview width. "
++            "Source Script에서는 실제 producer/consumer가 확인될 때까지 제거 검토 대상이며 "
++            "figure 의미를 결정하는 값으로 사용하지 않는다."
++        ),
+-        "layoutMapWidth": "layout preview가 저장하는 optional width 값",
+         "slotStyle": {
+             "referenceWidth": "dashboard 기준 폭; 현재 허용 범위 100..20000",
+             "gap": "slot 사이 기준 간격; 현재 허용 범위 0..2000",
+@@ -76,6 +81,13 @@
+     "appearance": {
+         "uiPalette": "프로젝트에 영속되는 Fast Figure UI 색상 palette",
+     },
++    "export": {
++        "width": "target raster width; 허용 범위 100..20000",
++        "heightMode": "auto 또는 explicit",
++        "height": "heightMode가 explicit일 때 target raster height; 허용 범위 100..20000",
++        "dpi": "raster metadata DPI; 허용 범위 36..1200",
++        "format": "png 또는 jpeg",
++    },
+ }
+ 
+ csvAsset = {
+@@ -86,7 +98,6 @@
+     "bytesBase64": "원본 asset bytes의 base64 표현",
+     "mime": "원본 또는 정규화된 MIME",
+     "headerLines": "table 선두에서 header로 취급할 행 수",
+-    "isDefaultEmpty": "보호된 기본 빈 CSV인지 여부; 해당 asset에만 사용",
+ }
+ 
+ imageAsset = {
+@@ -109,23 +120,44 @@
+         "chart": "activeProject.charts의 chart id 또는 없음",
+         "imageId": "activeProject.images의 image id 또는 없음",
+         "contentType": "graph 또는 image",
+-        "caption": "slot별 caption text 또는 없음",
+     },
++    "caption": (
++        "slot annotation text 또는 없음. graph/image renderable content와 의미적으로 분리한다. "
++        "UI placeholder 문자열은 authoritative caption 값으로 저장하지 않는다."
++    ),
+ }
+ 
++SLOT_REPRESENTATION_RULE = (
++    "renderable content(chart/image/contentType)와 slot caption annotation은 서로 다른 의미다. "
++    "하위 구현이 compatibility를 위해 flat property 또는 nested content alias를 사용할 수는 있지만 "
++    "그 representation이 caption ownership이나 이동 semantics를 결정하지 않는다."
++)
++
++EMPTY_GRAPH_RULE = (
++    "editable chart는 editor.objects가 빈 배열인 상태를 직접 표현할 수 있다. "
++    "빈 graph를 표현하기 위한 보호 CSV 또는 가짜 graph object를 만들지 않는다."
++)
++
++CHART_OWNERSHIP_RULE = (
++    "존재하는 chart는 정확히 하나의 slot이 소유한다. slot은 chart를 0개 또는 1개 참조할 수 있고 "
++    "두 slot이 같은 chart를 공유하거나 아무 slot도 chart를 참조하지 않는 상태는 valid project가 아니다."
++)
++
++SLOT_CAPTION_PLACEHOLDER_RULE = (
++    "caption이 설정되지 않은 slot의 authoritative 값은 null 또는 empty다. "
++    "예시/안내 문자열은 UI projection에서만 생성하며 project state에 자동 기록하지 않는다."
+-SLOT_COMPATIBILITY_RULE = (
+-    "현재 구현은 slot.content를 내부 구조로 사용하면서 slot.chart, slot.imageId, "
+-    "slot.contentType, slot.caption property를 같은 content의 alias로 제공한다. "
+-    "이 alias는 별도 저장값이 아니라 동일한 원천을 읽고 쓴다. "
+-    "toJSON은 기존 flat slot representation을 출력해 파일 호환성을 유지한다."
+ )
+ 
+ REFERENCE_RELATIONS = {
++    "slot.chart": (
++        "activeProject.charts에서 같은 chart id를 resolve해야 하며 "
++        "각 chart id는 정확히 하나의 slot에서만 나타나야 한다."
++    ),
+-    "slot.chart": "activeProject.charts에서 같은 chart id를 resolve해야 한다.",
+     "slot.imageId": "activeProject.images에서 같은 image id를 resolve해야 한다.",
+     "chart.editor.objects[].csvId": "activeProject.csvFiles에서 같은 CSV id를 resolve해야 한다.",
+     "asset path": "asset.directory와 asset.name을 projectVfs에서 결합해 resolve한다.",
+     "nextId": "각 collection에 존재하는 최대 id보다 커야 한다.",
++    "slot.caption": "slot 자체의 annotation이며 graph/image object id와 별도 reference를 만들지 않는다.",
+ }
+ 
+ activeProject = (
+@@ -174,13 +206,15 @@
+     def initialize(self, source):
+         """
+         변경:
++        - 현재 ProjectObject의 전체 authoritative state를 검증된 candidate state로 한 번 교체한다.
+-        - 현재 ProjectObject의 전체 authoritative state를 검증된 source state로 교체한다.
+ 
+         처리:
++        1. source를 active authority 밖의 candidate로 다룬다.
++        2. slot representation을 정규화한다.
++        3. validateProjectObjectState로 전체 구조와 참조를 검증한다.
++        4. 검증 성공 후에만 내부 authoritative state reference를 한 번 교체한다.
++        5. 이전 state는 기존 runtime resource release처럼 교체 후 처리가 필요한 경우에만 반환한다.
++           mutation 실패를 전제로 authority를 먼저 바꾼 뒤 복구하는 일반 패턴으로 사용하지 않는다.
+-        1. source slot을 normalizeSlotContent 규칙에 맞춘다.
+-        2. validateProjectObjectState로 전체 구조와 참조를 검증한다.
+-        3. 검증 성공 후에만 내부 state reference를 교체한다.
+-        4. 이전 state를 rollback용 반환값으로 제공한다.
+         """
+         previous = "교체 전 authoritative project state"
+         return previous
+@@ -223,15 +257,17 @@
+     """
+     Return:
+     - slot:
++      renderable content와 caption annotation이 의미적으로 분리된 동일 slot object.
+-      content 구조와 compatibility alias가 연결된 동일 slot object.
+ 
+     변경:
++    - 전달된 candidate slot representation만 정규화한다.
+-    - 전달된 slot의 내부 representation을 정규화한다.
+-    - chart/image/contentType/caption의 별도 독립 값을 만들지 않는다.
+ 
+     처리:
++    1. chart/image/contentType은 하나의 renderable-content 원천으로 정규화한다.
++    2. caption은 slot annotation 원천으로 정규화한다.
++    3. legacy representation에서 caption이 nested content 안에 있으면 같은 caption annotation으로 이동한다.
++    4. UI placeholder 문자열을 새 authoritative caption 값으로 생성하지 않는다.
++    5. compatibility alias가 필요하더라도 같은 의미에 두 저장값을 두지 않는다.
+-    legacy flat field가 있고 content field가 없으면 content에 값을 이전한다.
+-    alias getter/setter는 항상 slot.content의 같은 값을 resolve한다.
+     """
+     return slot
+ 
+@@ -250,20 +286,85 @@
+     - gridRows/gridCols는 1..8 정수다.
+     - slotStyle 수치와 boolean이 허용 범위에 있다.
+     - label position은 finite이고 fontSize는 현재 최소 6이다.
++    - export width/height mode/height/dpi/format이 정의된 범위와 관계를 만족한다.
+     - persistent UI palette의 필수 색상은 유효한 6-digit hex다.
+     - VFS directory path는 정규화되어 있고 중복이 없으며 고정 directory가 존재한다.
+     - CSV/image id와 전체 asset path는 중복되지 않는다.
+     - asset directory는 VFS에 존재한다.
++    - chart id는 유일하다.
++    - editable chart는 graph object가 0개여도 유효하며, 존재하는 graph object의 CSV 참조는 모두 resolve된다.
+-    - chart id는 유일하고 chart 내부 CSV 참조가 유효하다.
+     - slot id와 geometry가 유효하고 grid 범위를 넘지 않는다.
+     - slot은 chart와 image를 동시에 참조하지 않는다.
+     - slot chart/image 참조 대상이 존재한다.
++    - 각 chart는 정확히 하나의 slot에서 참조되며 shared chart와 orphan chart가 없다.
++    - unset slot caption은 null/empty이고 UI placeholder를 project 값으로 요구하지 않는다.
+     - nextId는 해당 collection의 현재 최대 id보다 크다.
+     - requireSlots가 참이면 적어도 하나의 slot이 존재한다.
+     """
+     return state
+ 
+ 
++
++DEFAULT_PROJECT_RULES = {
++    "grid": "새 project는 2 x 2 grid에서 시작한다.",
++    "slots": "초기 grid의 각 cell은 1 x 1 empty slot이다.",
++    "assets": "초기 CSV/image collection은 비어 있으며 보호된 default CSV를 만들지 않는다.",
++    "charts": "초기 chart collection은 비어 있다.",
++    "labels": "초기에는 disabled, position은 reference origin, 기본 formatting/font settings를 사용한다.",
++    "captions": "초기에는 disabled, slot mode도 disabled, global/slot caption text는 비어 있다.",
++    "export": (
++        "target width는 초기 layout reference width를 기본으로 하고 height는 auto, "
++        "DPI는 300, raster format은 png로 시작한다."
++    ),
++    "vfs": "고정 directory /assets, /assets/csv, /assets/images, /assets/trash를 만든다.",
++    "nextId": "csv/image/chart 모두 collection의 첫 새 id를 가리키는 값에서 시작한다.",
++    "appearance": "기본 UI palette를 복사해 project persistent palette로 시작한다.",
++}
++
++
++def createProjectState():
++    """
++    Return:
++    - state:
++      모든 project invariant를 만족하는 새 candidate project state.
++
++    변경:
++    - activeProject를 직접 변경하지 않는다.
++
++    처리:
++    1. project meta와 2 x 2 layout/default slot style을 만든다.
++    2. label/caption authoritative state를 기본값으로 만든다.
++       slot caption placeholder는 저장하지 않는다.
++    3. CSV/image/chart collection은 empty로 시작한다.
++       빈 graph용 default CSV나 fake graph object를 만들지 않는다.
++    4. 고정 VFS directory와 next-id sequence를 만든다.
++    5. persistent appearance와 export settings를 만든다.
++    6. 2 x 2의 empty 1 x 1 slot 네 개를 만든다.
++    7. validateProjectObjectState를 통과한 candidate를 반환한다.
++    """
++    state = "새 project invariant를 만족하는 candidate ProjectObject state"
++    return state
++
++
++def resolveOwningSlot(chartId, state):
++    """
++    Return:
++    - owner:
++      chartId를 참조하는 유일한 slot.
++    - 없음:
++      chartId가 존재하지 않거나 valid ownership을 만들지 못하는 경우.
++
++    변경:
++    - 없음.
++
++    처리:
++    state.slots에서 chartId reference를 모두 수집한다.
++    정확히 하나일 때만 그 slot을 owner로 resolve한다.
++    shared/orphan 상태를 임의로 clone/drop하여 고치지 않는다.
++    """
++    owner = "chartId의 유일한 owning slot 또는 없음"
++    return owner
++
+ def getProjectCsv(csvId):
+     """
+     Return:
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -2,26 +2,21 @@
+ Fast Figure Source Script — system boundary and reverse-review index
+ 
+ 작성 단계:
++- 기존 구현을 검증 자료로 사용해 Source Script의 의미를 정규화하는 단계다.
+-- 현재 JavaScript/HTML/Python 구현에서 Source Script로 역작성하는 첫 검토 단계다.
+ - 이 파일은 실행 가능한 Python 구현이 아니라 Python 문법을 작성 표기법으로 사용하는 구현 명세다.
+ 
++권위와 검증 원천:
++- ../agent_space/policies/source-script-policy.md:
++  Source Script 작성·닫힘·Source of Truth·참조·최소 구현 원칙의 상위 정책 원천.
++- ../README.md:
++  Fast Figure의 공개 목적과 project/FFPX/FFSX/Plotly 계약을 확인하는 프로젝트 문서.
++- ../fast-figure.js, ../fast-figure-ui.js, ../Fast-figure.html:
++  현재 하위 구현의 동작, 누락, 중복, 호환 상태를 조사하는 검증 자료.
++  Source Script와 충돌할 때 구현 현황을 이유로 Source Script 의미를 자동 결정하지 않는다.
++- ../vendor/plotly.min.js, ../vendor/fast-figure-ui-runtime.js:
++  renderer/runtime 외부 dependency의 실제 제공 원천.
+-권위 원천:
+-- ../fast-figure.js:
+-  ProjectObject, ApplicationStateMachine, FastFigureApi, domain command,
+-  functional renderer, FFPX/FFSX와 export 동작의 현재 구현 원천.
+-- ../fast-figure-ui.js:
+-  React + Mantine frontend, UI draft, Modal, shell, UI FSM 호출의 현재 구현 원천.
+-- ../Fast-figure.html:
+-  renderer host DOM, Mantine CSS, Fast Figure renderer CSS, script load order의 현재 구현 원천.
+-- ../vendor/plotly.min.js:
+-  graph renderer 외부 라이브러리 원천.
+-- ../vendor/fast-figure-ui-runtime.js:
+-  React/ReactDOM/Mantine runtime 원천.
+ - ../scripts/build-portable.py:
++  split source를 단일 portable HTML로 결합하는 현재 build 검증 자료.
+-  split source를 단일 portable HTML로 결합하는 build 원천.
+-- user-provided development_policy.md:
+-  Source Script 작성 순서와 상태/참조/최소 구현 원칙의 authoritative policy.
+-  저장소 구현 원천은 아니며 이 폴더에서 내용을 재정의하지 않는다.
+ """
+ 
+ IMPLEMENTATION_SOURCES = {
+@@ -59,32 +54,28 @@
+ )
+ 
+ RUNTIME_STATE_RULE = (
++    "selectedSlotId, editing 후보, dashboard zoom/drag state, telemetry와 같은 값은 "
+-    "selectedSlotId, editing, dashboard zoom/drag state, telemetry와 같은 값은 "
+     "영속 project state가 아닌 runtime state다. 각 값의 책임 범위를 벗어나 "
+     "project state의 대체 읽기 원천으로 사용하지 않는다."
+ )
+ 
+ UNRESOLVED_REVIEW_ITEMS = [
+     (
++        "slot caption은 renderable graph/image content와 별도 annotation으로 확정했지만 "
++        "swap/merge/split/reset에서 caption이 content를 따라 이동하는지 slot 위치에 남는지는 "
++        "현재 프로젝트 계약만으로 하나로 결정되지 않았다. layout operation matrix에서 해결하기 전까지 closure blocker다."
+-        "previewLabelsApiPosition은 이름상 preview이지만 현재 구현에서는 "
+-        "activeProject.labelSettings.x/y를 즉시 변경하고 commitLabelsApiPosition은 "
+-        "후속 notify만 수행한다. drag 중 값 변경을 authoritative edit로 볼지, "
+-        "임시 preview로 볼지는 다음 Source Script 검토에서 명시적으로 결정해야 한다."
+     ),
+     (
++        "editing은 선택 chart를 다시 가리키는 runtime pointer/cache 후보다. "
++        "selectedSlotId -> slot.chart -> chart resolve로 완전히 대체 가능한지 FSM/API 검토에서 확인한다."
+-        "debugEnabled와 uiTelemetryState.debugEnabled는 현재 구현에서 함께 존재한다. "
+-        "Source Script에서는 debugEnabled를 runtime authority, uiTelemetryState를 read projection으로 "
+-        "해석하지만, projection 값이 mutation 입력의 일반 원천으로 확장되지 않는지 다음 단계에서 확인한다."
+     ),
+     (
++        "layoutMapWidth는 하위 구현의 persistent field지만 실제 producer/consumer가 확인되지 않았다. "
++        "기능 의미가 없으면 Source Script와 하위 구현에서 제거하고, 필요하면 먼저 의미를 정의한다."
+-        "selectedSlotId와 appFSM.state.workspace는 같은 값의 복사본이 아니라 "
+-        "선택 대상과 그로부터 결정되는 workspace region이라는 관계로 해석한다. "
+-        "현재 auditApp이 둘의 일치 관계를 검사한다. 다음 단계에서도 이 참조 관계를 보존한다."
+     ),
+     (
++        "debugEnabled와 uiTelemetryState.debugEnabled는 runtime authority와 one-way projection으로 해석한다. "
++        "projection이 mutation 입력 원천으로 재유입되지 않는지 최종 중복 검토에서 확인한다."
+-        "editing은 선택 chart의 runtime pointer/cache 역할을 하지만 project에 저장되지 않는다. "
+-        "현재 UI에 노출되지 않으며 core 내부에서만 사용된다. pseudocode 단계에서 "
+-        "필수 runtime state인지 단순 파생값인지 다시 검사한다."
+     ),
+ ]
+ 
+@@ -96,22 +87,22 @@
+       기본 프로젝트와 슬롯, FSM, renderer, Mantine UI가 사용 가능한 상태.
+ 
+     변경:
++    - activeProject를 createProjectState가 만든 검증된 기본 project로 시작한다.
+-    - activeProject에 기본 빈 CSV와 초기 grid slot을 만든다.
+     - renderer DOM/CSS 상태를 현재 project 값에 맞춘다.
+     - appFSM lifecycle을 ready로 전환한다.
+     - React root에 Mantine frontend를 mount한다.
+ 
+     처리:
++    1. createProjectState가 만든 project candidate가 invariant를 만족하는지 확인한다.
++    2. core runtime과 필요한 renderer host가 존재하는지 확인한다.
++    3. dashboard zoom projection과 slot interaction controller를 준비한다.
++    4. project에 이미 존재하는 초기 empty slot을 renderer에 투영한다.
++    5. slot style과 dashboard geometry를 적용한다.
++    6. appFSM을 ready로 전환하고 workspace/overlay 초기 상태를 동기화한다.
++    7. FastFigureApi를 frontend 변경 경계로 공개한다.
++    8. MantineProvider와 FastFigureShell을 기존 React root에 mount한다.
++    9. startup 과정은 default CSV나 fake graph object를 생성하지 않는다.
++    10. 마지막에 project/reference/runtime invariant를 검사한다.
+-    1. core runtime과 필요한 renderer host가 존재하는지 확인한다.
+-    2. dashboard zoom projection을 적용한다.
+-    3. 프로젝트에 보호된 기본 빈 CSV가 없으면 만든다.
+-    4. slot click/drag controller를 설치한다.
+-    5. 현재 gridRows/gridCols에 맞는 slot 구조를 준비한다.
+-    6. slot style과 dashboard geometry를 적용한다.
+-    7. appFSM을 ready로 전환하고 workspace/overlay 초기 상태를 동기화한다.
+-    8. FastFigureApi를 frontend 변경 경계로 공개한다.
+-    9. MantineProvider와 FastFigureShell을 기존 React root에 mount한다.
+-    10. 현재 구현에서는 auditApp으로 초기 참조/상태 무결성을 검사한다.
+     """
+     initialized_runtime = "현재 Fast Figure 실행 세션"
+     return initialized_runtime
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "On semantic conflict, the highest current layer wins. A lower layer may be current only when it records the exact current fingerprints of every required upstream layer.",
+   "layers": {
+     "source-script": {
++      "revision": 2,
+-      "revision": 1,
+       "status": "current",
+       "path_rule": "sourcescript/**/*.py",
++      "fingerprint": "sha256:01b22395351457256afb6e8e096492d84c19b7ca68f3426c9f9b33b56280158b",
+-      "fingerprint": "sha256:ae0aab59232d5d82c532ffd59b5e0d1e5d89b9b351baf931ebcc29d865e7e47a",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null

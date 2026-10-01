@@ -20,6 +20,7 @@ PROJECT_OBJECT_PATHS = {
     "slots": "slot collection의 공식 read path",
     "sequences": "CSV/image/chart next-id sequence의 공식 read path",
     "appearance": "persistent UI palette의 공식 read path",
+    "export": "persistent raster export settings의 공식 read path",
 }
 
 projectState = {
@@ -31,7 +32,11 @@ projectState = {
     "layout": {
         "gridRows": "1..8 범위의 grid 행 수",
         "gridCols": "1..8 범위의 grid 열 수",
-        "layoutMapWidth": "layout preview가 저장하는 optional width 값",
+        "layoutMapWidth": (
+            "현재 하위 구현에 남아 있는 optional layout preview width. "
+            "Source Script에서는 실제 producer/consumer가 확인될 때까지 제거 검토 대상이며 "
+            "figure 의미를 결정하는 값으로 사용하지 않는다."
+        ),
         "slotStyle": {
             "referenceWidth": "dashboard 기준 폭; 현재 허용 범위 100..20000",
             "gap": "slot 사이 기준 간격; 현재 허용 범위 0..2000",
@@ -76,6 +81,13 @@ projectState = {
     "appearance": {
         "uiPalette": "프로젝트에 영속되는 Fast Figure UI 색상 palette",
     },
+    "export": {
+        "width": "target raster width; 허용 범위 100..20000",
+        "heightMode": "auto 또는 explicit",
+        "height": "heightMode가 explicit일 때 target raster height; 허용 범위 100..20000",
+        "dpi": "raster metadata DPI; 허용 범위 36..1200",
+        "format": "png 또는 jpeg",
+    },
 }
 
 csvAsset = {
@@ -86,7 +98,6 @@ csvAsset = {
     "bytesBase64": "원본 asset bytes의 base64 표현",
     "mime": "원본 또는 정규화된 MIME",
     "headerLines": "table 선두에서 header로 취급할 행 수",
-    "isDefaultEmpty": "보호된 기본 빈 CSV인지 여부; 해당 asset에만 사용",
 }
 
 imageAsset = {
@@ -109,23 +120,44 @@ slot = {
         "chart": "activeProject.charts의 chart id 또는 없음",
         "imageId": "activeProject.images의 image id 또는 없음",
         "contentType": "graph 또는 image",
-        "caption": "slot별 caption text 또는 없음",
     },
+    "caption": (
+        "slot annotation text 또는 없음. graph/image renderable content와 의미적으로 분리한다. "
+        "UI placeholder 문자열은 authoritative caption 값으로 저장하지 않는다."
+    ),
 }
 
-SLOT_COMPATIBILITY_RULE = (
-    "현재 구현은 slot.content를 내부 구조로 사용하면서 slot.chart, slot.imageId, "
-    "slot.contentType, slot.caption property를 같은 content의 alias로 제공한다. "
-    "이 alias는 별도 저장값이 아니라 동일한 원천을 읽고 쓴다. "
-    "toJSON은 기존 flat slot representation을 출력해 파일 호환성을 유지한다."
+SLOT_REPRESENTATION_RULE = (
+    "renderable content(chart/image/contentType)와 slot caption annotation은 서로 다른 의미다. "
+    "하위 구현이 compatibility를 위해 flat property 또는 nested content alias를 사용할 수는 있지만 "
+    "그 representation이 caption ownership이나 이동 semantics를 결정하지 않는다."
+)
+
+EMPTY_GRAPH_RULE = (
+    "editable chart는 editor.objects가 빈 배열인 상태를 직접 표현할 수 있다. "
+    "빈 graph를 표현하기 위한 보호 CSV 또는 가짜 graph object를 만들지 않는다."
+)
+
+CHART_OWNERSHIP_RULE = (
+    "존재하는 chart는 정확히 하나의 slot이 소유한다. slot은 chart를 0개 또는 1개 참조할 수 있고 "
+    "두 slot이 같은 chart를 공유하거나 아무 slot도 chart를 참조하지 않는 상태는 valid project가 아니다."
+)
+
+SLOT_CAPTION_PLACEHOLDER_RULE = (
+    "caption이 설정되지 않은 slot의 authoritative 값은 null 또는 empty다. "
+    "예시/안내 문자열은 UI projection에서만 생성하며 project state에 자동 기록하지 않는다."
 )
 
 REFERENCE_RELATIONS = {
-    "slot.chart": "activeProject.charts에서 같은 chart id를 resolve해야 한다.",
+    "slot.chart": (
+        "activeProject.charts에서 같은 chart id를 resolve해야 하며 "
+        "각 chart id는 정확히 하나의 slot에서만 나타나야 한다."
+    ),
     "slot.imageId": "activeProject.images에서 같은 image id를 resolve해야 한다.",
     "chart.editor.objects[].csvId": "activeProject.csvFiles에서 같은 CSV id를 resolve해야 한다.",
     "asset path": "asset.directory와 asset.name을 projectVfs에서 결합해 resolve한다.",
     "nextId": "각 collection에 존재하는 최대 id보다 커야 한다.",
+    "slot.caption": "slot 자체의 annotation이며 graph/image object id와 별도 reference를 만들지 않는다.",
 }
 
 activeProject = (
@@ -174,13 +206,15 @@ class ProjectObject:
     def initialize(self, source):
         """
         변경:
-        - 현재 ProjectObject의 전체 authoritative state를 검증된 source state로 교체한다.
+        - 현재 ProjectObject의 전체 authoritative state를 검증된 candidate state로 한 번 교체한다.
 
         처리:
-        1. source slot을 normalizeSlotContent 규칙에 맞춘다.
-        2. validateProjectObjectState로 전체 구조와 참조를 검증한다.
-        3. 검증 성공 후에만 내부 state reference를 교체한다.
-        4. 이전 state를 rollback용 반환값으로 제공한다.
+        1. source를 active authority 밖의 candidate로 다룬다.
+        2. slot representation을 정규화한다.
+        3. validateProjectObjectState로 전체 구조와 참조를 검증한다.
+        4. 검증 성공 후에만 내부 authoritative state reference를 한 번 교체한다.
+        5. 이전 state는 기존 runtime resource release처럼 교체 후 처리가 필요한 경우에만 반환한다.
+           mutation 실패를 전제로 authority를 먼저 바꾼 뒤 복구하는 일반 패턴으로 사용하지 않는다.
         """
         previous = "교체 전 authoritative project state"
         return previous
@@ -223,15 +257,17 @@ def normalizeSlotContent(slot):
     """
     Return:
     - slot:
-      content 구조와 compatibility alias가 연결된 동일 slot object.
+      renderable content와 caption annotation이 의미적으로 분리된 동일 slot object.
 
     변경:
-    - 전달된 slot의 내부 representation을 정규화한다.
-    - chart/image/contentType/caption의 별도 독립 값을 만들지 않는다.
+    - 전달된 candidate slot representation만 정규화한다.
 
     처리:
-    legacy flat field가 있고 content field가 없으면 content에 값을 이전한다.
-    alias getter/setter는 항상 slot.content의 같은 값을 resolve한다.
+    1. chart/image/contentType은 하나의 renderable-content 원천으로 정규화한다.
+    2. caption은 slot annotation 원천으로 정규화한다.
+    3. legacy representation에서 caption이 nested content 안에 있으면 같은 caption annotation으로 이동한다.
+    4. UI placeholder 문자열을 새 authoritative caption 값으로 생성하지 않는다.
+    5. compatibility alias가 필요하더라도 같은 의미에 두 저장값을 두지 않는다.
     """
     return slot
 
@@ -250,19 +286,84 @@ def validateProjectObjectState(state, requireSlots):
     - gridRows/gridCols는 1..8 정수다.
     - slotStyle 수치와 boolean이 허용 범위에 있다.
     - label position은 finite이고 fontSize는 현재 최소 6이다.
+    - export width/height mode/height/dpi/format이 정의된 범위와 관계를 만족한다.
     - persistent UI palette의 필수 색상은 유효한 6-digit hex다.
     - VFS directory path는 정규화되어 있고 중복이 없으며 고정 directory가 존재한다.
     - CSV/image id와 전체 asset path는 중복되지 않는다.
     - asset directory는 VFS에 존재한다.
-    - chart id는 유일하고 chart 내부 CSV 참조가 유효하다.
+    - chart id는 유일하다.
+    - editable chart는 graph object가 0개여도 유효하며, 존재하는 graph object의 CSV 참조는 모두 resolve된다.
     - slot id와 geometry가 유효하고 grid 범위를 넘지 않는다.
     - slot은 chart와 image를 동시에 참조하지 않는다.
     - slot chart/image 참조 대상이 존재한다.
+    - 각 chart는 정확히 하나의 slot에서 참조되며 shared chart와 orphan chart가 없다.
+    - unset slot caption은 null/empty이고 UI placeholder를 project 값으로 요구하지 않는다.
     - nextId는 해당 collection의 현재 최대 id보다 크다.
     - requireSlots가 참이면 적어도 하나의 slot이 존재한다.
     """
     return state
 
+
+
+DEFAULT_PROJECT_RULES = {
+    "grid": "새 project는 2 x 2 grid에서 시작한다.",
+    "slots": "초기 grid의 각 cell은 1 x 1 empty slot이다.",
+    "assets": "초기 CSV/image collection은 비어 있으며 보호된 default CSV를 만들지 않는다.",
+    "charts": "초기 chart collection은 비어 있다.",
+    "labels": "초기에는 disabled, position은 reference origin, 기본 formatting/font settings를 사용한다.",
+    "captions": "초기에는 disabled, slot mode도 disabled, global/slot caption text는 비어 있다.",
+    "export": (
+        "target width는 초기 layout reference width를 기본으로 하고 height는 auto, "
+        "DPI는 300, raster format은 png로 시작한다."
+    ),
+    "vfs": "고정 directory /assets, /assets/csv, /assets/images, /assets/trash를 만든다.",
+    "nextId": "csv/image/chart 모두 collection의 첫 새 id를 가리키는 값에서 시작한다.",
+    "appearance": "기본 UI palette를 복사해 project persistent palette로 시작한다.",
+}
+
+
+def createProjectState():
+    """
+    Return:
+    - state:
+      모든 project invariant를 만족하는 새 candidate project state.
+
+    변경:
+    - activeProject를 직접 변경하지 않는다.
+
+    처리:
+    1. project meta와 2 x 2 layout/default slot style을 만든다.
+    2. label/caption authoritative state를 기본값으로 만든다.
+       slot caption placeholder는 저장하지 않는다.
+    3. CSV/image/chart collection은 empty로 시작한다.
+       빈 graph용 default CSV나 fake graph object를 만들지 않는다.
+    4. 고정 VFS directory와 next-id sequence를 만든다.
+    5. persistent appearance와 export settings를 만든다.
+    6. 2 x 2의 empty 1 x 1 slot 네 개를 만든다.
+    7. validateProjectObjectState를 통과한 candidate를 반환한다.
+    """
+    state = "새 project invariant를 만족하는 candidate ProjectObject state"
+    return state
+
+
+def resolveOwningSlot(chartId, state):
+    """
+    Return:
+    - owner:
+      chartId를 참조하는 유일한 slot.
+    - 없음:
+      chartId가 존재하지 않거나 valid ownership을 만들지 못하는 경우.
+
+    변경:
+    - 없음.
+
+    처리:
+    state.slots에서 chartId reference를 모두 수집한다.
+    정확히 하나일 때만 그 slot을 owner로 resolve한다.
+    shared/orphan 상태를 임의로 clone/drop하여 고치지 않는다.
+    """
+    owner = "chartId의 유일한 owning slot 또는 없음"
+    return owner
 
 def getProjectCsv(csvId):
     """
