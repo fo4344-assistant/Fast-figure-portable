@@ -76,13 +76,18 @@ RESOLVED_REVIEW_ITEMS = [
         "debugEnabled는 session runtime authority이고 uiTelemetryState.debugEnabled는 one-way UI projection이다. "
         "Source Script에는 projection에서 debug authority로 되돌아가는 mutation 경로를 두지 않는다."
     ),
+    (
+        "slot caption은 slot object의 local property로 확정했다. "
+        "slot object를 GUI layout position 사이에서 이동·교환하면 caption도 chart/image/contentType과 함께 이동한다. "
+        "global caption은 project-level property이며 slot caption editor target은 UI/runtime state다."
+    ),
 ]
 
 UNRESOLVED_REVIEW_ITEMS = [
     (
-        "slot caption은 renderable graph/image content와 별도 annotation으로 확정했지만 "
-        "swap/merge/split/reset에서 caption이 content를 따라 이동하는지 slot 위치에 남는지는 "
-        "현재 프로젝트 계약만으로 하나로 결정되지 않았다. SLOT_OPERATION_CAPTION_RULES를 확정하기 전까지 closure blocker다."
+        "Source Script의 project/file/layout 의미는 현재 확정되었지만 application_fsm.py와 api_ui.py의 "
+        "mutation/event/method contract 일부가 아직 하위 구현 중심 요약이다. "
+        "candidate-first 공통 mutation 규칙과 method-level public API contract를 완결한 뒤 closure review가 필요하다."
     ),
 ]
 

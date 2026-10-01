@@ -12,7 +12,7 @@ PROJECT_OBJECT_PATHS = {
     "project": "meta project information의 공식 read path",
     "layout": "grid와 slotStyle의 공식 read path",
     "labels": "label annotation state의 공식 read path",
-    "captions": "caption annotation state의 공식 read path",
+    "captions": "project-level global caption state의 공식 read path",
     "data": "CSV asset collection의 공식 read path",
     "images": "image asset collection의 공식 read path",
     "files": "virtual directory collection의 공식 read path",
@@ -47,13 +47,12 @@ projectState = {
             "settings": "label format/order/font/position 설정",
         },
         "captions": {
-            "enabled": "caption 표시 여부",
-            "slotMode": "전체 caption 대신 선택 slot caption을 편집하는지 여부",
-            "text": "전체 caption의 앞쪽 본문",
-            "afterText": "전체 caption의 뒤쪽 본문",
-            "name": "전체 caption 이름",
-            "nameBold": "전체 caption 이름 굵게 표시 여부",
-            "settings": "caption font/size/line-height 설정",
+            "enabled": "global caption 표시 여부",
+            "text": "global caption의 앞쪽 본문",
+            "afterText": "global caption의 뒤쪽 본문",
+            "name": "global caption 이름",
+            "nameBold": "global caption 이름 굵게 표시 여부",
+            "settings": "global caption의 공통 font/size/line-height 설정",
         },
     },
     "assets": {
@@ -117,15 +116,22 @@ slot = {
         "contentType": "graph 또는 image",
     },
     "caption": (
-        "slot annotation text 또는 없음. graph/image renderable content와 의미적으로 분리한다. "
+        "이 slot object에 귀속된 slot-local caption text 또는 없음. "
+        "UI에서 slot caption을 노출하거나 global caption text에 삽입할 때 읽는 authoritative 값이다. "
         "UI placeholder 문자열은 authoritative caption 값으로 저장하지 않는다."
     ),
 }
 
+SLOT_LOCAL_PROPERTY_RULE = (
+    "특정 slot에만 적용되는 영속 값은 그 slot object의 하위 속성으로 둔다. "
+    "chart/image/contentType과 slot caption은 의미가 서로 달라도 같은 slot object에 귀속된 local state다. "
+    "GUI layout에서 slot object를 다른 위치로 이동·교환하면 이 local state는 slot object 단위로 함께 이동한다. "
+    "global caption처럼 figure 전체에 적용되는 값만 project-level property로 둔다."
+)
+
 SLOT_REPRESENTATION_RULE = (
-    "renderable content(chart/image/contentType)와 slot caption annotation은 서로 다른 의미다. "
-    "하위 구현이 compatibility를 위해 flat property 또는 nested content alias를 사용할 수는 있지만 "
-    "그 representation이 caption ownership이나 이동 semantics를 결정하지 않는다."
+    "하위 구현이 compatibility를 위해 slot-local 값을 flat 또는 nested representation으로 표현할 수는 있지만 "
+    "각 값의 authoritative owner는 slot object 하나다. 같은 slot-local 의미를 별도 project property나 UI mode state에 복제하지 않는다."
 )
 
 EMPTY_GRAPH_RULE = (
@@ -159,7 +165,10 @@ REFERENCE_RELATIONS = {
     "chart.editor.objects[].csvId": "activeProject.csvFiles에서 같은 CSV id를 resolve해야 한다.",
     "asset path": "asset.directory와 asset.name을 projectVfs에서 결합해 resolve한다.",
     "nextId": "각 collection에 존재하는 최대 id보다 커야 한다.",
-    "slot.caption": "slot 자체의 annotation이며 graph/image object id와 별도 reference를 만들지 않는다.",
+    "slot.caption": (
+        "slot object 자체에 귀속된 local text다. 별도 project caption reference를 만들지 않으며 "
+        "slot object가 layout position 사이에서 이동하면 같은 slot-local state로 함께 이동한다."
+    ),
 }
 
 activeProject = (
@@ -308,7 +317,10 @@ DEFAULT_PROJECT_RULES = {
     "assets": "초기 CSV/image collection은 비어 있으며 보호된 default CSV를 만들지 않는다.",
     "charts": "초기 chart collection은 비어 있다.",
     "labels": "초기에는 disabled, position은 reference origin, 기본 formatting/font settings를 사용한다.",
-    "captions": "초기에는 disabled, slot mode도 disabled, global/slot caption text는 비어 있다.",
+    "captions": (
+        "project-level global caption은 초기 disabled/empty 상태다. "
+        "각 초기 slot.caption도 empty이며 slot caption editor mode는 project state에 저장하지 않는다."
+    ),
     "export": (
         "target width는 초기 layout reference width를 기본으로 하고 height는 auto, "
         "DPI는 300, raster format은 png로 시작한다."

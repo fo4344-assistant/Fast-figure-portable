@@ -26,7 +26,10 @@ FastFigureApi = {
     "assets": "VFS tree read, collision planning, import, move, trash, delete, select, download",
     "graphs": "graph data/layout/palette read와 object/layout/file mutation command",
     "print": "print/export defaults, save, capture",
-    "captions": "caption state read와 visibility/mode/text/name/settings mutation",
+    "captions": (
+        "project-level global caption read/mutation, selected slot의 slot-local caption read/mutation, "
+        "slot captions를 global caption text에 명시적으로 삽입하는 command"
+    ),
     "labels": "label state read와 visibility/settings/position mutation",
     "appearance": "persistent UI palette read/set/reset",
     "layout": "layout read, style/grid/zoom, merge/split command",
@@ -50,8 +53,12 @@ UI_LOCAL_STATE = {
     "palette": "사용자가 apply하기 전 ColorInput draft",
     "layout selection": "layout Modal 안에서 merge/split 대상으로 선택한 slot id set",
     "print inputs": "width/height/dpi/format form draft",
+    "caption editor target": (
+        "global caption 또는 selected slot caption 중 현재 UI가 노출하는 target. "
+        "project state에 slotMode로 저장하지 않는다."
+    ),
     "sidebar geometry": "현재 session의 navbar width/collapsed/drag state",
-    "pointer drag": "label/layout preview pointer interaction의 component-local state",
+    "pointer drag": "label/layout pointer interaction의 component-local state",
 }
 
 UI_LOCAL_STATE_RULE = (

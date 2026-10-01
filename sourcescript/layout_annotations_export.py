@@ -63,17 +63,37 @@ EXPORT_LIMITS = {
 
 
 SLOT_OPERATION_CAPTION_RULES = {
-    "swap": "미확정: source/target의 explicit slot caption을 renderable content와 함께 교환할지 위치에 남길지 결정 필요",
-    "merge": "미확정: non-anchor source caption을 anchor로 이동할지 위치 annotation으로 처리할지 결정 필요",
-    "split": "미확정: merged anchor caption을 anchor에만 남길지 restored cells에 다른 의미가 있는지 결정 필요",
-    "reset": "미확정: slot renderable content reset이 explicit slot caption도 제거하는지 결정 필요",
-    "ffsx": "확정: FFSX slot package는 slot caption을 포함하고 import target slot annotation에 적용한다.",
+    "swap": (
+        "source/target slot object의 local properties를 함께 교환한다. "
+        "따라서 caption은 chart/image/contentType과 함께 상대 GUI position으로 이동한다."
+    ),
+    "merge": (
+        "선택 영역에서 non-default slot-local state를 가진 slot object는 최대 하나여야 한다. "
+        "그 slot의 renderable content와 caption을 함께 top-left anchor에 귀속시키고 covered slot은 local defaults로 비운다."
+    ),
+    "split": (
+        "merged anchor slot object의 local properties를 anchor에 그대로 유지한다. "
+        "다시 드러나는 covered cells는 empty renderable content와 empty caption을 가진 default slot state로 복원한다."
+    ),
+    "reset": (
+        "slot reset은 해당 slot object의 local properties를 defaults로 되돌린다. "
+        "따라서 chart/image reference와 explicit slot caption을 함께 제거한다."
+    ),
+    "ffsx": (
+        "FFSX slot package는 slot-local caption을 chart와 함께 포함하고 import target slot object의 local caption으로 적용한다."
+    ),
 }
 
 CAPTION_OPERATION_RULE = (
-    "slot caption은 renderable content와 별도 annotation이다. "
-    "swap/merge/split/reset의 caption 이동·삭제 의미는 SLOT_OPERATION_CAPTION_RULES에서 독립적으로 결정한다. "
-    "미확정 rule이 영향을 주는 operation은 pseudocode 단계에서 임의로 채우지 않는다."
+    "slot caption은 global project caption과 분리된 slot-local property다. "
+    "slot object를 layout position 사이에서 이동·교환할 때 caption도 같은 object의 다른 local properties와 함께 이동한다. "
+    "slot caption을 UI에 노출하는 editor mode는 runtime/UI state일 뿐 project property가 아니다."
+)
+
+SLOT_CAPTION_UI_RULE = (
+    "slot caption 추가/편집 UI는 selected slot의 slot.caption을 읽고 쓸 수 있게 노출하는 기능이다. "
+    "slot caption을 global caption에 '추가'하는 command는 현재 slot captions를 text로 계산해 project-level global caption text에 명시적으로 삽입한다. "
+    "이 UI 동작 때문에 slot caption을 project-level collection이나 persistent slotMode로 복제하지 않는다."
 )
 
 GRID_RESIZE_RULE = (
@@ -179,13 +199,13 @@ def mergeSlots(slotIds):
 
     처리:
     1. current visible slot을 id로 resolve하고 선택 union이 빈칸 없는 하나의 직사각형인지 확인한다.
-    2. 선택 영역의 renderable content(chart/image)를 가진 visible slot이 1개 이하인지 확인한다.
-    3. source content가 있으면 chart/image/contentType을 top-left anchor candidate로 이동한다.
-       chart id 자체는 유지하되 owning slot reference만 anchor로 이동한다.
-    4. covered non-anchor slot의 renderable content를 empty로 만들고 hidden=true로 한다.
+    2. 선택 영역에서 non-default slot-local state를 가진 visible slot이 1개 이하인지 확인한다.
+       non-default local state는 chart/image reference 또는 non-empty explicit caption을 포함한다.
+    3. source slot이 있으면 chart/image/contentType/caption을 하나의 slot-local payload로 top-left anchor candidate에 이동한다.
+       chart id 자체는 유지하되 owning slot reference는 anchor로 이동한다.
+    4. covered non-anchor slot은 renderable content와 caption을 모두 defaults로 비우고 hidden=true로 한다.
     5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
-    6. explicit caption이 관련된 경우 SLOT_OPERATION_CAPTION_RULES["merge"]가 확정되어야 한다.
-       현재 rule이 미확정이므로 그 의미를 하위 단계에서 임의로 선택하지 않는다.
+    6. 두 개 이상의 selected slot object가 non-default local state를 가지면 implicit merge/concatenation 없이 거부한다.
     7. whole-project candidate를 검증한 뒤 한 번 commit한다.
     """
     return "merge candidate commit 결과"
@@ -198,10 +218,9 @@ def splitSlots(slotIds):
 
     처리:
     1. current merged visible anchor를 resolve한다.
-    2. anchor의 renderable content와 chart ownership은 anchor에 유지한다.
-    3. covered cell은 visible 1x1 empty renderable slot로 복원한다.
-    4. explicit caption이 관련된 경우 SLOT_OPERATION_CAPTION_RULES["split"]이 확정되어야 한다.
-    5. candidate 전체를 검증한 뒤 한 번 commit한다.
+    2. anchor slot object의 chart/image/contentType/caption 등 모든 slot-local properties를 anchor에 유지한다.
+    3. covered cell은 visible 1x1 slot로 복원하고 모든 slot-local properties를 defaults로 시작한다.
+    4. candidate 전체를 검증한 뒤 한 번 commit한다.
     """
     return "split candidate commit 결과"
 
@@ -274,33 +293,76 @@ def finishLabelsApiPositionInteraction():
     return "interaction completion 결과"
 
 
-def readCaptionsApiState():
+def readGlobalCaptionState():
     """
     Return:
     - captionState:
-      global/slot mode, 현재 target, text/name/settings read projection.
+      project-level global caption text/name/settings read projection.
 
     변경:
     - 없음.
 
     처리:
-    slotMode가 참이면 selected slot의 slot.caption을 text source로 사용한다.
-    아니면 global caption state를 사용한다.
+    activeProject.annotations.captions만 읽는다.
+    selected slot이나 UI editor target mode를 global caption의 persistent state와 혼합하지 않는다.
     """
-    captionState = "caption editor read projection"
+    captionState = "global caption read projection"
     return captionState
 
 
-def setCaptionsApiText(text):
+def readSlotCaptionState(slotId):
     """
+    Return:
+    - captionState:
+      지정 slot object의 id/position/caption text read projection.
+
     변경:
-    - CAPTION_TEXT_INPUT event를 통해 현재 caption target text.
+    - 없음.
 
     처리:
-    slotMode와 selectedSlotId를 current state에서 resolve해
-    global caption 또는 selected slot caption 중 하나만 변경한다.
+    slotId를 current project에서 resolve하고 그 slot.caption을 읽는다.
+    caption이 empty여도 UI는 placeholder를 별도 projection으로 표시할 수 있다.
     """
-    return "변경 후 caption state"
+    captionState = "slot-local caption read projection"
+    return captionState
+
+
+def setGlobalCaptionText(text):
+    """
+    변경:
+    - activeProject.annotations.captions.text.
+
+    처리:
+    global caption project property 하나만 변경한다.
+    slot caption 값은 변경하지 않는다.
+    """
+    return "변경 후 global caption state"
+
+
+def setSlotCaptionText(slotId, text):
+    """
+    변경:
+    - 지정 slot object의 slot.caption.
+
+    처리:
+    slotId를 current project에서 resolve하고 text를 slot-local property로 commit한다.
+    UI의 selected-slot caption editor는 이 command를 호출할 뿐 별도 persistent slotMode를 만들지 않는다.
+    """
+    return "변경 후 slot caption state"
+
+
+def insertSlotCaptionsIntoGlobalCaption(slotIds):
+    """
+    변경:
+    - project-level global caption text.
+
+    처리:
+    1. 지정 또는 현재 visible slot object를 layout order로 resolve한다.
+    2. non-empty slot.caption을 label/text projection으로 계산한다.
+    3. 계산한 text를 사용자 명령에 따라 global caption text에 삽입한다.
+    4. source slot.caption 값과 slot ownership은 변경하지 않는다.
+    """
+    return "변경 후 global caption state"
 
 
 def readExportSettings():
