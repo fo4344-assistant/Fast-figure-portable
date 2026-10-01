@@ -188,6 +188,68 @@ def changed_paths(base: str) -> set[str]:
     return {line.strip() for line in output.splitlines() if line.strip()}
 
 
+def path_exists_at_revision(revision: str, path: str) -> bool:
+    result = subprocess.run(
+        ["git", "cat-file", "-e", f"{revision}:{path}"],
+        cwd=ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return result.returncode == 0
+
+
+def validate_source_script_patch_record(changed: set[str], base: str) -> None:
+    source_paths = sorted(
+        path
+        for path in changed
+        if path.startswith("sourcescript/") and path.endswith(".py")
+    )
+    if not source_paths:
+        return
+
+    record_patches = sorted(
+        path
+        for path in changed
+        if path.startswith("agent_space/patches/")
+        and path.endswith(".patch")
+        and not path_exists_at_revision(base, path)
+    )
+    if not record_patches:
+        raise VersionError(
+            "Source Script changed without a new agent_space/patches/*.patch record"
+        )
+
+    record_docs = {
+        path
+        for path in changed
+        if path.startswith("agent_space/patches/")
+        and path.endswith(".md")
+        and not path_exists_at_revision(base, path)
+    }
+    for patch_path in record_patches:
+        doc_path = patch_path.removesuffix(".patch") + ".md"
+        if doc_path not in record_docs:
+            raise VersionError(
+                f"Source Script patch record has no paired explanation: {doc_path}"
+            )
+
+    combined_patch = "\n".join(
+        (ROOT / patch_path).read_text(encoding="utf-8")
+        for patch_path in record_patches
+    )
+    for source_path in source_paths:
+        marker = f"diff --git a/{source_path} b/{source_path}"
+        if marker not in combined_patch:
+            raise VersionError(
+                f"Source Script diff is missing from the new patch record: {source_path}"
+            )
+
+    if "development-versions.json" not in changed:
+        raise VersionError(
+            "Source Script changed without updating development-versions.json"
+        )
+
+
 def validate_revision_progression(manifest: dict, base: str) -> None:
     base_manifest = load_base_manifest(base)
     if base_manifest is None:
@@ -220,6 +282,7 @@ def validate_revision_progression(manifest: dict, base: str) -> None:
 
     if source_changed:
         require_increment("source-script")
+        validate_source_script_patch_record(changed, base)
 
     if pseudo_changed:
         require_increment("pseudocode")

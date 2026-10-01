@@ -25,6 +25,27 @@
 - 임시값을 여러 부분에서 공유해야 한다면 임시값 자체를 공유하지 말고 원래 source of truth에서 다시 읽거나, 정말 공용 상태가 필요한 경우 하나의 명시적인 source of truth로 승격할 것.
 - source of truth와 임시값 사이를 양방향으로 동기화하거나 어느 쪽이 최신인지 판정해야 하는 구조를 만들지 말 것.
 
+## 정책 원천
+
+- Source Script, pseudocode, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
+- 해당 정책 원문은 사용자가 명시적으로 정책 변경을 지시한 경우에만 수정한다.
+- 프로젝트 고유의 데이터 구조, 책임 배치, 식별자, 파일 형식, 해결 방안은 정책 문서에 추가하지 않고 `sourcescript/`, `agent_space/plans/`, `agent_space/docs/` 중 해당 책임 경로에 기록한다.
+
+## Source Script 변경 기록
+
+- `sourcescript/`의 모든 수정에도 application source와 동일한 변경 기록 원칙을 적용한다.
+- Source Script를 수정하는 변경에는 같은 commit 안에 `agent_space/patches/YYYYMMDD-NNN.patch`와 같은 basename의 `.md` 설명 문서를 새로 추가한다.
+- patch 파일에는 실제 `sourcescript/` 변경 diff를 반드시 포함한다. Source Script revision/fingerprint가 바뀌면 `development-versions.json` 변경도 같은 patch에 기록한다.
+- 설명 Markdown에는 일반 패치 설명 요건에 더해 다음을 기록한다.
+  - Source Script 변경을 발생시킨 요구, 검증 결과 또는 하위 단계 발견 사항
+  - 변경되는 알고리즘 의미, 책임 경계, 상태/참조 관계
+  - 선택한 해결 방향과 기각한 대안
+  - 닫힘 판정에 미치는 영향
+  - pseudocode와 source code에 다시 전파해야 하는 범위
+- 하위 단계 검증에서 Source Script로 되돌아온 수정이면, 이전 닫힘 판정에서 무엇을 놓쳤는지와 그 원인을 설명 문서에 함께 기록한다.
+- Source Script diff와 설명 문서가 없는 변경은 완료된 Source Script revision으로 취급하지 않는다.
+- Source Script 변경 기록을 위해 별도의 중복 이력 체계를 만들지 않고 기존 `agent_space/patches/`를 유일한 변경 기록 경로로 사용한다.
+
 ## WIP 포팅 및 통합 작업
 
 - 기존 구현을 다른 UI 프레임워크, 런타임, 모듈 구조 또는 공통 컴포넌트 체계로 포팅하거나, 분산된 구현을 하나의 일관된 구조로 통합하는 작업에서는 개별 단계가 당장 완전히 동작하는지보다 최종 구조의 일관성, 독립성, source of truth의 명확성을 우선할 것.
