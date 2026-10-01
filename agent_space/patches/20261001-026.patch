@@ -1,0 +1,305 @@
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -28,7 +28,7 @@
+       "derived_from": {
+         "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
+       },
+-      "validation": "pending"
++      "validation": "passed"
+     },
+diff --git a/agent_space/reviews/review-016-pseudocode-r2-validation.md b/agent_space/reviews/review-016-pseudocode-r2-validation.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-016-pseudocode-r2-validation.md
+@@ -0,0 +1,290 @@
++# Review 016 — pseudocode r2 validation
++
++기준 Source Script:
++
++- revision: r12
++- fingerprint: `sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db`
++- closure: closed
++
++검증 대상 pseudocode:
++
++- revision: r2
++- fingerprint: `sha256:39d7bccaa29c116b5e8db207a2d604742ab726711d37fe7b86f3ddb92f025759`
++- status: current
++
++## 1. 검증 목적
++
++pseudocode r2가 closed Source Script r12의 의미를 바꾸지 않고
++언어 중립 실행 절차로 번역했는지 확인한다.
++
++검증 기준:
++
++- 데이터 의미와 관계
++- 함수/구조 책임 경계
++- 입력/출력
++- 공통 식별자
++- 참조 원천
++- 값 생성 주체
++- 실행 순서
++- 거부/실패 경로
++- candidate/commit 경계
++- 확정 계산
++- Source Script에 없는 새 domain rule 추가 여부
++
++## 2. 구조 대응
++
++### module 대응
++
++9개 Source Script module 모두 1:1 pseudocode module을 가진다.
++
++- system
++- project_state
++- application_fsm
++- assets_files
++- graphs
++- layout_annotations_export
++- api_ui
++- renderer_runtime
++- portable_build
++
++추가 `pseudocode/README.md`는 lineage와 번역 규칙만 기록하며 별도 domain 의미를 소유하지 않는다.
++
++판정: **통과**
++
++### 함수 식별자
++
++Source Script의 모든 top-level function 이름을 각 대응 pseudocode에서 검색했다.
++
++결과:
++
++- 누락 function: 0
++
++판정: **통과**
++
++### 공통 식별자
++
++Source Script의 모든 top-level common identifier를 각 대응 pseudocode에서 다시 대조했다.
++
++r1에서는 일부 이름이 의미만 번역되고 이름 자체가 빠져 있었으나
++r2에서 `Source identifiers` 절로 보완했다.
++
++결과:
++
++- 누락 common identifier: 0
++
++판정: **통과**
++
++## 3. 의미 경로 검증
++
++### project state
++
++pseudocode는 다음을 그대로 보존한다.
++
++- activeProject 단일 persistent authority
++- projectState/csvAsset/imageAsset/slot 책임
++- SLOT_LOCAL_DEFAULTS
++- zero-object editable chart
++- chart ↔ slot 1:1 ownership
++- slot-local caption/imageSettings
++- project-global caption/export/appearance
++- legacy layoutMapWidth non-authority
++
++판정: **통과**
++
++### reference resolution
++
++보존된 경로:
++
++- slot.chart -> chart collection
++- chart.editor.objects[].csvId -> CSV collection
++- slot.imageId -> image collection
++- asset directory + name -> projectVfs
++- selectedSlotId -> slot -> chart
++- nextId -> collection id allocation
++
++shared/orphan chart를 clone/drop하는 새 보정 규칙은 추가하지 않았다.
++
++판정: **통과**
++
++### candidate-first mutation
++
++FSM/assets/layout pseudocode 모두:
++
++```text
++resolve
++-> precondition
++-> candidate
++-> validate
++-> commit once
++-> runtime/projection reconcile
++```
++
++순서를 유지한다.
++
++validation 실패 전 authoritative mutation을 수행하는 절차를 추가하지 않았다.
++
++판정: **통과**
++
++### empty state
++
++- default CSV 없음
++- fake graph object 없음
++- objects=[] valid
++- blank FFSX는 CSV 없이 valid
++- zero-trace Plotly -> CSV 없이 editable empty chart 가능
++
++판정: **통과**
++
++### slot-local ownership
++
++slot-local payload:
++
++- chart
++- imageId
++- contentType
++- imageSettings
++- caption
++
++grid shrink/merge는 SLOT_LOCAL_DEFAULTS/non-default guard를 사용한다.
++
++swap은 payload 전체를 교환한다.
++split은 anchor payload를 유지한다.
++reset은 payload 전체를 defaults로 돌린다.
++
++판정: **통과**
++
++### caption ownership
++
++- global caption: project property
++- slot caption: slot property
++- UI editor target: runtime/local
++- slot captions insertion: global text만 변경, source captions 유지
++
++persistent slotMode를 다시 만들지 않았다.
++
++판정: **통과**
++
++### image ownership
++
++- image bytes/name/MIME/location: image asset
++- fit/scale/x/y: slot-local imageSettings
++- same imageId를 여러 slot이 참조해도 display settings는 독립
++
++판정: **통과**
++
++### FFPX/FFSX
++
++FFPX:
++
++- complete project
++- copied bytes
++- global caption document
++- slot-local caption/imageSettings in slot document
++- persistent export settings
++- typed XML
++- trash exclusion
++
++FFSX:
++
++- one graph slot
++- referenced CSV
++- slot-local caption
++- zero-object chart
++
++원본 filesystem path dependency를 추가하지 않았다.
++
++판정: **통과**
++
++### Plotly
++
++- original imported representation 보존
++- conversion view는 non-authoritative
++- editable 전환 시에만 project CSV 생성
++- zero-trace path 유지
++
++판정: **통과**
++
++### export
++
++- persistent export settings와 computed geometry 분리
++- saved target export와 current-screen capture 분리
++- DOM measurement를 persistent figure authority로 사용하지 않음
++
++판정: **통과**
++
++### API
++
++PUBLIC_API_METHODS의 owner/mutation 의미를 보존했다.
++
++stale lower-layer API replacement도 그대로 유지한다.
++
++- print.readDefaults -> readSettings
++- captions.readState -> readGlobal/readSlot
++- captions.setSlotMode -> UI local
++- captions.setText -> explicit owner methods
++- label preview/commit duplicate surface 제거
++
++판정: **통과**
++
++## 4. 실패/부분 결과 검증
++
++다음 실패 의미가 Source Script와 동일하다.
++
++- invalid project candidate: activeProject 유지
++- unsafe grid shrink: original layout 유지
++- import parse/collision/validation failure: batch partial state를 authority에 남기지 않음
++- malformed FFPX/FFSX topology: clone/drop으로 자동 보정하지 않음
++- raster limit 초과: export rejected, project 유지
++- build source/tag 불일치: portable artifact를 정상 완성으로 취급하지 않음
++
++판정: **통과**
++
++## 5. 새 의미 추가 검사
++
++pseudocode r2에서 대상 언어 구현 결정을 미리 고정하지 않았다.
++
++추가하지 않은 항목:
++
++- JavaScript object/class 구체 표현
++- Promise/async 구현 방식
++- DOM event API
++- Plotly 호출 구문
++- ZIP/XML 라이브러리 선택
++- exception class
++- memory/cache implementation
++- target-language type system
++
++r2에서 추가된 것은 Source Script 식별자 이름의 추적성뿐이다.
++
++판정: **통과**
++
++## 6. Source Script로 되돌아갈 문제
++
++검증 과정에서 발견된 문제는 r1 pseudocode의 식별자 이름 생략 하나였다.
++
++이 문제는 Source Script에 이미 올바른 식별자가 존재했기 때문에
++Source Script의 기존 closure 판정이 놓친 domain/algorithm 문제에 해당하지 않는다.
++
++따라서 Source Script r12를 reopen할 필요가 없다.
++
++## 7. 최종 판정
++
++pseudocode r2는:
++
++- closed Source Script r12와 exact lineage를 가짐
++- 함수/공통 식별자 누락 없음
++- 의미 있는 순서/분기/참조/실패 경로를 보존
++- 새 domain rule을 추가하지 않음
++- 대상 언어 세부를 미리 결정하지 않음
++
++따라서:
++
++```text
++pseudocode.status = current
++pseudocode.validation = passed
++```
++
++로 판정한다.
++
++다음 단계는 pseudocode r2를 기준으로 application source code를 구체화하는 것이다.
++
