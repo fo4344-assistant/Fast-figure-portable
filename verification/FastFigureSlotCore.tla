@@ -1,5 +1,5 @@
 --------------------------- MODULE FastFigureSlotCore ---------------------------
-EXTENDS Integers, FiniteSets, TLC
+EXTENDS Integers, FiniteSets, Sequences, TLC
 
 (*
 Direct executable verification translation of the slot/layout/chart slice.
@@ -351,9 +351,9 @@ SplitSlotsCandidate(project, slotIds) ==
       THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
       ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
 
-TypeOK ==
-  /\ ValidateSlotLayoutProjection(activeProject)
-  /\ lastResult \in {
+TypeOK(project, result) ==
+  /\ ValidateSlotLayoutProjection(project)
+  /\ result \in {
        "initialized",
        "reset-committed", "reset-rejected",
        "swap-committed", "swap-rejected",
@@ -362,12 +362,6 @@ TypeOK ==
        "split-committed", "split-rejected",
        "harness-seeded"
      }
-
-ChartOwnershipInvariantSpec ==
-  ChartOwnershipInvariant(activeProject)
-
-SafetyInvariant ==
-  ValidateSlotLayoutProjection(activeProject)
 
 (*
 --algorithm FastFigureSlotCore
@@ -581,52 +575,61 @@ begin
 VerificationHarness:
   while TRUE do
     either
-      with slotIds \in SUBSET (DOMAIN activeProject.slots) do
-        call applySlotsResetAction(slotIds);
+      with chosenResetSlotIds \in SUBSET (DOMAIN activeProject.slots) do
+        call applySlotsResetAction(chosenResetSlotIds);
       end with;
     or
-      with sourceId \in VisibleSlotIds(activeProject) do
-        with targetId \in VisibleSlotIds(activeProject) \ {sourceId} do
-          call applySlotsSwappedAction(sourceId, targetId);
+      with chosenSourceId \in VisibleSlotIds(activeProject) do
+        with chosenTargetId \in VisibleSlotIds(activeProject) \ {chosenSourceId} do
+          call applySlotsSwappedAction(chosenSourceId, chosenTargetId);
         end with;
       end with;
     or
-      with rows \in 1..MaxRows do
-        with cols \in 1..MaxCols do
-          call applyGridLayoutAction(rows, cols);
+      with chosenRows \in 1..MaxRows do
+        with chosenCols \in 1..MaxCols do
+          call applyGridLayoutAction(chosenRows, chosenCols);
         end with;
       end with;
     or
-      with slotIds \in SUBSET VisibleSlotIds(activeProject) do
-        call mergeSlots(slotIds);
+      with chosenMergeSlotIds \in SUBSET VisibleSlotIds(activeProject) do
+        call mergeSlots(chosenMergeSlotIds);
       end with;
     or
-      with slotIds \in SUBSET VisibleSlotIds(activeProject) do
-        call splitSlots(slotIds);
+      with chosenSplitSlotIds \in SUBSET VisibleSlotIds(activeProject) do
+        call splitSlots(chosenSplitSlotIds);
       end with;
     or
-      with slotId \in VisibleSlotIds(activeProject) do
-        with chartId \in ChartIds do
-          call VerificationHarnessSeedChart(slotId, chartId);
+      with chosenChartSlotId \in VisibleSlotIds(activeProject) do
+        with chosenChartId \in ChartIds do
+          call VerificationHarnessSeedChart(chosenChartSlotId, chosenChartId);
         end with;
       end with;
     or
-      with slotId \in VisibleSlotIds(activeProject) do
-        with imageId \in ImageIds do
-          call VerificationHarnessSeedImage(slotId, imageId);
+      with chosenImageSlotId \in VisibleSlotIds(activeProject) do
+        with chosenImageId \in ImageIds do
+          call VerificationHarnessSeedImage(chosenImageSlotId, chosenImageId);
         end with;
       end with;
     or
-      with slotId \in VisibleSlotIds(activeProject) do
-        call VerificationHarnessSeedCaption(slotId);
+      with chosenCaptionSlotId \in VisibleSlotIds(activeProject) do
+        call VerificationHarnessSeedCaption(chosenCaptionSlotId);
       end with;
     or
-      with slotId \in VisibleSlotIds(activeProject) do
-        call VerificationHarnessSeedImageSettings(slotId);
+      with chosenSettingsSlotId \in VisibleSlotIds(activeProject) do
+        call VerificationHarnessSeedImageSettings(chosenSettingsSlotId);
       end with;
     end either;
   end while;
 end algorithm;
 *)
+
+TypeOKSpec ==
+  TypeOK(activeProject, lastResult)
+
+ChartOwnershipInvariantSpec ==
+  ChartOwnershipInvariant(activeProject)
+
+SafetyInvariant ==
+  ValidateSlotLayoutProjection(activeProject)
 
 =============================================================================
