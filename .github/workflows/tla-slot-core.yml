@@ -6,6 +6,8 @@ on:
     paths:
       - 'verification/FastFigureSlotCore.tla'
       - 'verification/FastFigureSlotCore.cfg'
+      - '.github/tlc/FastFigureSlotCore2x2.tla'
+      - '.github/tlc/FastFigureSlotCore2x2.cfg'
       - '.github/workflows/tla-slot-core.yml'
 
 jobs:
@@ -38,7 +40,8 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/fast-figure-tla
           cp verification/FastFigureSlotCore.tla /tmp/fast-figure-tla/
-          cp verification/FastFigureSlotCore.cfg /tmp/fast-figure-tla/
+          cp .github/tlc/FastFigureSlotCore2x2.tla /tmp/fast-figure-tla/
+          cp .github/tlc/FastFigureSlotCore2x2.cfg /tmp/fast-figure-tla/
           cd /tmp/fast-figure-tla
           java -cp /tmp/tla2tools.jar pcal.trans FastFigureSlotCore.tla
 
@@ -48,6 +51,7 @@ jobs:
           set -euo pipefail
           cd /tmp/fast-figure-tla
           java -cp /tmp/tla2tools.jar tla2sany.SANY FastFigureSlotCore.tla
+          java -cp /tmp/tla2tools.jar tla2sany.SANY FastFigureSlotCore2x2.tla
 
       - name: Model check
         shell: bash
@@ -56,5 +60,5 @@ jobs:
           cd /tmp/fast-figure-tla
           java -XX:+UseParallelGC -cp /tmp/tla2tools.jar tlc2.TLC \
             -workers auto \
-            -config FastFigureSlotCore.cfg \
-            FastFigureSlotCore.tla
+            -config FastFigureSlotCore2x2.cfg \
+            FastFigureSlotCore2x2.tla
