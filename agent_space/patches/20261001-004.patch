@@ -1,0 +1,2068 @@
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+new file mode 100644
+--- /dev/null
++++ b/sourcescript/system.py
+@@ -0,0 +1,117 @@
++"""
++Fast Figure Source Script — system boundary and reverse-review index
++
++작성 단계:
++- 현재 JavaScript/HTML/Python 구현에서 Source Script로 역작성하는 첫 검토 단계다.
++- 이 파일은 실행 가능한 Python 구현이 아니라 Python 문법을 작성 표기법으로 사용하는 구현 명세다.
++
++권위 원천:
++- ../fast-figure.js:
++  ProjectObject, ApplicationStateMachine, FastFigureApi, domain command,
++  functional renderer, FFPX/FFSX와 export 동작의 현재 구현 원천.
++- ../fast-figure-ui.js:
++  React + Mantine frontend, UI draft, Modal, shell, UI FSM 호출의 현재 구현 원천.
++- ../Fast-figure.html:
++  renderer host DOM, Mantine CSS, Fast Figure renderer CSS, script load order의 현재 구현 원천.
++- ../vendor/plotly.min.js:
++  graph renderer 외부 라이브러리 원천.
++- ../vendor/fast-figure-ui-runtime.js:
++  React/ReactDOM/Mantine runtime 원천.
++- ../scripts/build-portable.py:
++  split source를 단일 portable HTML로 결합하는 build 원천.
++- user-provided development_policy.md:
++  Source Script 작성 순서와 상태/참조/최소 구현 원칙의 authoritative policy.
++  저장소 구현 원천은 아니며 이 폴더에서 내용을 재정의하지 않는다.
++"""
++
++IMPLEMENTATION_SOURCES = {
++    "Fast-figure.html": "renderer host와 script/CSS loading 원천",
++    "fast-figure.js": "project/domain/FSM/API/renderer/file semantics 원천",
++    "fast-figure-ui.js": "Mantine frontend와 UI-local interaction 원천",
++    "vendor/plotly.min.js": "Plotly graph rendering 원천",
++    "vendor/fast-figure-ui-runtime.js": "React와 Mantine runtime 원천",
++    "scripts/build-portable.py": "portable single-file packaging 원천",
++}
++
++SOURCE_SCRIPT_MODULES = {
++    "project_state.py": "authoritative project state, runtime references, invariants",
++    "application_fsm.py": "application state regions, events, controlled transitions",
++    "assets_files.py": "VFS, asset lifecycle, FFPX/FFSX import/export",
++    "graphs.py": "CSV-to-chart semantics, graph objects, Plotly conversion",
++    "layout_annotations_export.py": "layout geometry, image/label/caption, raster export",
++    "api_ui.py": "FastFigureApi boundary and Mantine frontend responsibilities",
++    "renderer_runtime.py": "dashboard renderer, DOM interaction, telemetry and startup",
++    "portable_build.py": "split-to-portable build specification",
++}
++
++RUNTIME_LOAD_ORDER = [
++    "Fast-figure.html이 renderer host DOM과 스타일을 제공한다.",
++    "vendor/plotly.min.js가 Plotly renderer를 제공한다.",
++    "vendor/fast-figure-ui-runtime.js가 React와 Mantine runtime을 제공한다.",
++    "fast-figure.js가 project/domain/FSM/API와 functional renderer를 초기화한다.",
++    "fast-figure-ui.js가 기존 API와 UI FSM 위에 Mantine frontend를 mount한다.",
++]
++
++AUTHORITATIVE_STATE_RULE = (
++    "영속 프로젝트 상태의 권위 원천은 activeProject의 ProjectObject state다. "
++    "UI는 FastFigureApi 또는 appFSM event를 통해 변경한다. "
++    "renderer snapshot과 React local state는 독립적인 project authority가 아니다."
++)
++
++RUNTIME_STATE_RULE = (
++    "selectedSlotId, editing, dashboard zoom/drag state, telemetry와 같은 값은 "
++    "영속 project state가 아닌 runtime state다. 각 값의 책임 범위를 벗어나 "
++    "project state의 대체 읽기 원천으로 사용하지 않는다."
++)
++
++UNRESOLVED_REVIEW_ITEMS = [
++    (
++        "previewLabelsApiPosition은 이름상 preview이지만 현재 구현에서는 "
++        "activeProject.labelSettings.x/y를 즉시 변경하고 commitLabelsApiPosition은 "
++        "후속 notify만 수행한다. drag 중 값 변경을 authoritative edit로 볼지, "
++        "임시 preview로 볼지는 다음 Source Script 검토에서 명시적으로 결정해야 한다."
++    ),
++    (
++        "debugEnabled와 uiTelemetryState.debugEnabled는 현재 구현에서 함께 존재한다. "
++        "Source Script에서는 debugEnabled를 runtime authority, uiTelemetryState를 read projection으로 "
++        "해석하지만, projection 값이 mutation 입력의 일반 원천으로 확장되지 않는지 다음 단계에서 확인한다."
++    ),
++    (
++        "selectedSlotId와 appFSM.state.workspace는 같은 값의 복사본이 아니라 "
++        "선택 대상과 그로부터 결정되는 workspace region이라는 관계로 해석한다. "
++        "현재 auditApp이 둘의 일치 관계를 검사한다. 다음 단계에서도 이 참조 관계를 보존한다."
++    ),
++    (
++        "editing은 선택 chart의 runtime pointer/cache 역할을 하지만 project에 저장되지 않는다. "
++        "현재 UI에 노출되지 않으며 core 내부에서만 사용된다. pseudocode 단계에서 "
++        "필수 runtime state인지 단순 파생값인지 다시 검사한다."
++    ),
++]
++
++
++def initializeFastFigure():
++    """
++    Return:
++    - initialized_runtime:
++      기본 프로젝트와 슬롯, FSM, renderer, Mantine UI가 사용 가능한 상태.
++
++    변경:
++    - activeProject에 기본 빈 CSV와 초기 grid slot을 만든다.
++    - renderer DOM/CSS 상태를 현재 project 값에 맞춘다.
++    - appFSM lifecycle을 ready로 전환한다.
++    - React root에 Mantine frontend를 mount한다.
++
++    처리:
++    1. core runtime과 필요한 renderer host가 존재하는지 확인한다.
++    2. dashboard zoom projection을 적용한다.
++    3. 프로젝트에 보호된 기본 빈 CSV가 없으면 만든다.
++    4. slot click/drag controller를 설치한다.
++    5. 현재 gridRows/gridCols에 맞는 slot 구조를 준비한다.
++    6. slot style과 dashboard geometry를 적용한다.
++    7. appFSM을 ready로 전환하고 workspace/overlay 초기 상태를 동기화한다.
++    8. FastFigureApi를 frontend 변경 경계로 공개한다.
++    9. MantineProvider와 FastFigureShell을 기존 React root에 mount한다.
++    10. 현재 구현에서는 auditApp으로 초기 참조/상태 무결성을 검사한다.
++    """
++    initialized_runtime = "현재 Fast Figure 실행 세션"
++    return initialized_runtime
+diff --git a/sourcescript/project_state.py b/sourcescript/project_state.py
+new file mode 100644
+--- /dev/null
++++ b/sourcescript/project_state.py
+@@ -0,0 +1,303 @@
++"""
++Fast Figure Source Script — authoritative project state and references
++
++현재 구현 원천:
++- ../fast-figure.js
++  createProjectState, ProjectObject, ProjectObjectRegistry,
++  normalizeSlotContent, validateProjectObjectState, projectVfs,
++  getProjectCsv/getProjectImage/getChart/slotAt.
++"""
++
++PROJECT_OBJECT_PATHS = {
++    "project": "meta project information의 공식 read path",
++    "layout": "grid와 slotStyle의 공식 read path",
++    "labels": "label annotation state의 공식 read path",
++    "captions": "caption annotation state의 공식 read path",
++    "data": "CSV asset collection의 공식 read path",
++    "images": "image asset collection의 공식 read path",
++    "files": "virtual directory collection의 공식 read path",
++    "charts": "chart collection의 공식 read path",
++    "slots": "slot collection의 공식 read path",
++    "sequences": "CSV/image/chart next-id sequence의 공식 read path",
++    "appearance": "persistent UI palette의 공식 read path",
++}
++
++projectState = {
++    "kind": "Fast Figure project object schema 식별자",
++    "meta": {
++        "projectName": "사용자가 지정한 프로젝트 이름",
++        "appBuild": "이 project state를 생성/저장한 application build 표식",
++    },
++    "layout": {
++        "gridRows": "1..8 범위의 grid 행 수",
++        "gridCols": "1..8 범위의 grid 열 수",
++        "layoutMapWidth": "layout preview가 저장하는 optional width 값",
++        "slotStyle": {
++            "referenceWidth": "dashboard 기준 폭; 현재 허용 범위 100..20000",
++            "gap": "slot 사이 기준 간격; 현재 허용 범위 0..2000",
++            "outerMargin": "dashboard 기준 바깥 여백; 현재 허용 범위 0..5000",
++            "radius": "slot 기준 모서리 반경; 현재 허용 범위 0..2000",
++            "aspect": "dashboard 종횡비; 현재 허용 범위 0.1..10",
++            "showBorders": "slot 외곽선 표시 여부",
++        },
++    },
++    "annotations": {
++        "labels": {
++            "enabled": "slot label 표시 여부",
++            "settings": "label format/order/font/position 설정",
++        },
++        "captions": {
++            "enabled": "caption 표시 여부",
++            "slotMode": "전체 caption 대신 선택 slot caption을 편집하는지 여부",
++            "text": "전체 caption의 앞쪽 본문",
++            "afterText": "전체 caption의 뒤쪽 본문",
++            "name": "전체 caption 이름",
++            "nameBold": "전체 caption 이름 굵게 표시 여부",
++            "settings": "caption font/size/line-height 설정",
++        },
++    },
++    "assets": {
++        "csvFiles": "프로젝트 CSV asset의 authoritative collection",
++        "images": "프로젝트 image asset의 authoritative collection",
++    },
++    "fileSystem": {
++        "directories": (
++            "project VFS directory 목록. 현재 고정 root는 "
++            "/assets, /assets/csv, /assets/images, /assets/trash"
++        ),
++    },
++    "charts": "프로젝트 chart model의 authoritative collection",
++    "slots": "dashboard slot의 authoritative collection",
++    "nextId": {
++        "csv": "새 CSV에 사용할 다음 정수 id",
++        "image": "새 image에 사용할 다음 정수 id",
++        "chart": "새 chart에 사용할 다음 정수 id",
++    },
++    "appearance": {
++        "uiPalette": "프로젝트에 영속되는 Fast Figure UI 색상 palette",
++    },
++}
++
++csvAsset = {
++    "id": "project 안에서 유일한 양의 정수 CSV id",
++    "name": "VFS file name",
++    "directory": "projectVfs의 존재하는 directory path",
++    "rows": "파싱된 2차원 data table",
++    "bytesBase64": "원본 asset bytes의 base64 표현",
++    "mime": "원본 또는 정규화된 MIME",
++    "headerLines": "table 선두에서 header로 취급할 행 수",
++    "isDefaultEmpty": "보호된 기본 빈 CSV인지 여부; 해당 asset에만 사용",
++}
++
++imageAsset = {
++    "id": "project 안에서 유일한 양의 정수 image id",
++    "name": "VFS file name",
++    "directory": "projectVfs의 존재하는 directory path",
++    "mime": "image bytes MIME",
++    "bytesBase64": "image bytes의 base64 표현",
++    "settings": "fit/scale/x/y image renderer 설정",
++}
++
++slot = {
++    "id": "project slot collection 안에서 유일한 정수 id",
++    "row": "1-based grid row",
++    "col": "1-based grid column",
++    "rowSpan": "slot이 차지하는 행 수",
++    "colSpan": "slot이 차지하는 열 수",
++    "hidden": "다른 merged slot에 포함되어 직접 표시되지 않는지 여부",
++    "content": {
++        "chart": "activeProject.charts의 chart id 또는 없음",
++        "imageId": "activeProject.images의 image id 또는 없음",
++        "contentType": "graph 또는 image",
++        "caption": "slot별 caption text 또는 없음",
++    },
++}
++
++SLOT_COMPATIBILITY_RULE = (
++    "현재 구현은 slot.content를 내부 구조로 사용하면서 slot.chart, slot.imageId, "
++    "slot.contentType, slot.caption property를 같은 content의 alias로 제공한다. "
++    "이 alias는 별도 저장값이 아니라 동일한 원천을 읽고 쓴다. "
++    "toJSON은 기존 flat slot representation을 출력해 파일 호환성을 유지한다."
++)
++
++REFERENCE_RELATIONS = {
++    "slot.chart": "activeProject.charts에서 같은 chart id를 resolve해야 한다.",
++    "slot.imageId": "activeProject.images에서 같은 image id를 resolve해야 한다.",
++    "chart.editor.objects[].csvId": "activeProject.csvFiles에서 같은 CSV id를 resolve해야 한다.",
++    "asset path": "asset.directory와 asset.name을 projectVfs에서 결합해 resolve한다.",
++    "nextId": "각 collection에 존재하는 최대 id보다 커야 한다.",
++}
++
++activeProject = (
++    "현재 세션의 유일한 authoritative ProjectObject. "
++    "영속 project 값의 일반 읽기 원천이며 변경은 core command/API/FSM 경계를 통해 수행한다."
++)
++
++projectObjects = (
++    "ProjectObjectRegistry. 이름을 PROJECT_OBJECT_PATHS 또는 명시적 read adapter와 연결하고 "
++    "매 read 시 activeProject에서 값을 다시 읽는다. snapshot은 export 같은 단일 작업용 복사본이다."
++)
++
++projectVfs = (
++    "activeProject.fileSystem.directories와 asset directory/name을 함께 해석하는 VFS helper. "
++    "별도 파일 트리 SoT를 갖지 않고 activeProject state에서 resolve한다."
++)
++
++selectedSlotId = (
++    "영속 project state가 아닌 현재 UI/runtime slot 선택 id. "
++    "같은 slot을 UI 방향으로 다시 선택하면 현재 구현에서는 선택이 해제된다."
++)
++
++editing = (
++    "현재 활성 graph chart를 가리키는 core-internal runtime pointer. "
++    "project에 직렬화되지 않고 frontend read authority로 노출하지 않는다."
++)
++
++
++class ProjectObject:
++    def read(self, path):
++        """
++        Return:
++        - value:
++          PROJECT_OBJECT_PATHS 또는 등록된 project path가 가리키는 현재 authoritative 값.
++
++        변경:
++        - project state를 변경하지 않는다.
++
++        처리:
++        path를 active ProjectObject state에서 resolve한다.
++        경로가 없으면 실패한다.
++        """
++        value = "현재 ProjectObject의 path가 가리키는 값"
++        return value
++
++    def initialize(self, source):
++        """
++        변경:
++        - 현재 ProjectObject의 전체 authoritative state를 검증된 source state로 교체한다.
++
++        처리:
++        1. source slot을 normalizeSlotContent 규칙에 맞춘다.
++        2. validateProjectObjectState로 전체 구조와 참조를 검증한다.
++        3. 검증 성공 후에만 내부 state reference를 교체한다.
++        4. 이전 state를 rollback용 반환값으로 제공한다.
++        """
++        previous = "교체 전 authoritative project state"
++        return previous
++
++
++class ProjectObjectRegistry:
++    def read(self, name):
++        """
++        Return:
++        - object_value:
++          등록된 이름이 현재 activeProject에서 가리키는 값.
++
++        변경:
++        - 없음.
++
++        처리:
++        저장된 snapshot을 읽지 않고 project provider에서 현재 ProjectObject를 받아 resolve한다.
++        """
++        object_value = "현재 activeProject에서 resolve된 등록 object"
++        return object_value
++
++    def snapshot(self, names):
++        """
++        Return:
++        - snapshot:
++          지정된 project object들의 작업 시점 deep copy.
++
++        변경:
++        - authoritative state를 변경하지 않는다.
++
++        처리:
++        export/render 같은 단일 작업에서 일관된 입력을 사용하기 위한 복사본을 만든다.
++        복사본은 project 변경 경로의 일반 읽기 원천으로 승격하지 않는다.
++        """
++        snapshot = "지정 object들의 작업 범위 read-only copy"
++        return snapshot
++
++
++def normalizeSlotContent(slot):
++    """
++    Return:
++    - slot:
++      content 구조와 compatibility alias가 연결된 동일 slot object.
++
++    변경:
++    - 전달된 slot의 내부 representation을 정규화한다.
++    - chart/image/contentType/caption의 별도 독립 값을 만들지 않는다.
++
++    처리:
++    legacy flat field가 있고 content field가 없으면 content에 값을 이전한다.
++    alias getter/setter는 항상 slot.content의 같은 값을 resolve한다.
++    """
++    return slot
++
++
++def validateProjectObjectState(state, requireSlots=False):
++    """
++    Return:
++    - state:
++      모든 구조 및 참조 검증을 통과한 동일 state.
++
++    변경:
++    - 없음.
++
++    검증:
++    - project top-level structure와 필수 nested object가 존재한다.
++    - gridRows/gridCols는 1..8 정수다.
++    - slotStyle 수치와 boolean이 허용 범위에 있다.
++    - label position은 finite이고 fontSize는 현재 최소 6이다.
++    - persistent UI palette의 필수 색상은 유효한 6-digit hex다.
++    - VFS directory path는 정규화되어 있고 중복이 없으며 고정 directory가 존재한다.
++    - CSV/image id와 전체 asset path는 중복되지 않는다.
++    - asset directory는 VFS에 존재한다.
++    - chart id는 유일하고 chart 내부 CSV 참조가 유효하다.
++    - slot id와 geometry가 유효하고 grid 범위를 넘지 않는다.
++    - slot은 chart와 image를 동시에 참조하지 않는다.
++    - slot chart/image 참조 대상이 존재한다.
++    - nextId는 해당 collection의 현재 최대 id보다 크다.
++    - requireSlots가 참이면 적어도 하나의 slot이 존재한다.
++    """
++    return state
++
++
++def getProjectCsv(csvId):
++    """
++    Return:
++    - csv:
++      activeProject.csvFiles에서 csvId로 resolve한 asset 또는 없음.
++
++    변경:
++    - 없음.
++    """
++    csv = "csvId와 상관관계가 확인된 CSV asset 또는 없음"
++    return csv
++
++
++def getProjectImage(imageId):
++    """
++    Return:
++    - image:
++      activeProject.images에서 imageId로 resolve한 asset 또는 없음.
++
++    변경:
++    - 없음.
++    """
++    image = "imageId와 상관관계가 확인된 image asset 또는 없음"
++    return image
++
++
++def getChart(chartId):
++    """
++    Return:
++    - chart:
++      activeProject.charts에서 chartId로 resolve한 chart 또는 없음.
++
++    변경:
++    - 없음.
++    """
++    chart = "chartId와 상관관계가 확인된 chart model 또는 없음"
++    return chart
+diff --git a/sourcescript/application_fsm.py b/sourcescript/application_fsm.py
+new file mode 100644
+--- /dev/null
++++ b/sourcescript/application_fsm.py
+@@ -0,0 +1,238 @@
++"""
++Fast Figure Source Script — ApplicationStateMachine and controlled state transitions
++
++현재 구현 원천:
++- ../fast-figure.js
++  ApplicationStateMachine, APP_STATE_DEFINITIONS,
++  SHARED_WORKSPACE_EVENTS, SHARED_OVERLAY_EVENTS,
++  ASSET_SELECTION_EVENTS, GRAPH_OBJECT_EVENTS,
++  apply*Action functions.
++
++참조 Source Script:
++- project_state.py
++"""
++
++from project_state import activeProject, projectObjects, selectedSlotId, editing
++
++appState = {
++    "lifecycle": "booting/ready/importing/exporting/error 중 현재 application lifecycle",
++    "workspace": "project/slot.graph/slot.image 중 현재 workspace",
++    "overlay": "none/layout/label/caption/print/readme 중 현재 generic overlay",
++    "assetSelection": "none/csv/image/directory 중 현재 asset selection kind",
++    "assetPath": "projectVfs에서 resolve 가능한 선택 경로 또는 없음",
++    "graphObject": "none 또는 selected",
++    "graphObjectIndex": "선택 graph object index 또는 없음",
++    "direction": "fsm-to-model/model-to-fsm/model-to-ui 중 현재 전이 방향 표식",
++    "revision": "frontend external-store 갱신에 사용하는 증가 revision",
++    "error": "마지막 lifecycle task error 정보 또는 없음",
++}
++
++REGION_ORDER = [
++    "lifecycle",
++    "workspace",
++    "overlay",
++    "assetSelection",
++    "graphObject",
++]
++
++REGION_STATES = {
++    "lifecycle": "booting, ready, importing, exporting, error",
++    "workspace": "project, slot.graph, slot.image",
++    "overlay": "none, layout, label, caption, print, readme",
++    "assetSelection": "none, csv, image, directory",
++    "graphObject": "none, selected",
++}
++
++WORKSPACE_MUTATION_EVENTS = {
++    "SELECT_SLOT": "runtime slot selection과 workspace를 갱신한다.",
++    "SLOT_TYPE_CHANGED": "선택 slot 또는 pending slot type을 갱신한다.",
++    "SLOT_CAPTION_MODE_CHANGED": "persistent caption slotMode를 갱신한다.",
++    "CAPTION_TEXT_INPUT": "현재 caption target의 persistent text를 갱신한다.",
++    "SLOT_CAPTIONS_INSERTED": "slot caption text를 전체 caption text에 반영한다.",
++    "PROJECT_DIRECTORY_CREATED": "VFS directory를 추가한다.",
++    "PROJECT_NODE_MOVED": "VFS path와 필요 시 asset reference를 갱신한다.",
++    "PROJECT_TRASH_EMPTIED": "trash asset/directory와 그 참조를 제거한다.",
++    "DATA_OBJECT_CREATED": "CSV asset을 추가한다.",
++    "DATA_OBJECT_REPLACED": "같은 CSV id/path의 asset 내용을 교체한다.",
++    "DATA_OBJECT_DELETED": "참조가 정리된 CSV asset을 제거한다.",
++    "IMAGE_OBJECT_CREATED": "image asset을 추가한다.",
++    "IMAGE_OBJECT_REPLACED": "같은 image id/path의 asset 내용을 교체한다.",
++    "IMAGE_OBJECT_DELETED": "참조가 정리된 image asset을 제거한다.",
++    "SLOTS_RESET": "지정 slot의 chart/image content를 초기화한다.",
++    "SLOTS_SWAPPED": "두 slot의 content reference를 교환한다.",
++    "SLOT_IMAGE_LINKED": "기존 image asset을 image slot에 연결한다.",
++    "SLOT_DATA_CONNECTED": "CSV를 graph slot/chart object에 연결한다.",
++    "GRAPH_OBJECTS_REPLACED": "chart.editor.objects authoritative array를 교체한다.",
++    "CHART_LAYOUT_CHANGED": "chart editor title/global axis settings를 교체한다.",
++    "CHART_MODEL_REPLACED": "선택 slot의 editable chart model을 교체한다.",
++    "SLOT_IMAGE_IMPORTED": "새/기존 image model을 slot에 연결한다.",
++    "SLOT_CHART_IMPORTED": "FFSX/Plotly에서 만든 chart model을 slot에 연결한다.",
++    "GRID_LAYOUT_CHANGED": "grid와 slot arrangement를 변경한다.",
++    "PROJECT_LOADED": "검증된 ProjectObject 전체를 activeProject로 교체한다.",
++}
++
++OVERLAY_EVENTS = {
++    "TOGGLE_OVERLAY": "같은 overlay면 none, 다른 overlay면 요청 overlay로 전환한다.",
++    "CLOSE_OVERLAY": "overlay를 none으로 전환한다.",
++    "OUTSIDE_CLICK": "generic overlay close 의미",
++    "ESCAPE": "generic overlay close 의미",
++    "SELECT_SLOT": "slot 선택이 생기면 열린 overlay를 닫는다.",
++}
++
++SELECTION_INVARIANTS = {
++    "asset": (
++        "assetSelection이 none이면 assetPath는 resolve되지 않아야 한다. "
++        "선택 상태면 projectVfs.resolve(assetPath).kind와 assetSelection이 같아야 한다."
++    ),
++    "graphObject": (
++        "graphObject가 selected이면 graphObjectIndex가 선택 chart의 유효 object index여야 한다."
++    ),
++    "workspace": (
++        "workspace는 selectedSlotId가 없으면 project, 선택 slot contentType이 image면 slot.image, "
++        "그 외에는 slot.graph이어야 한다."
++    ),
++}
++
++
++class ApplicationStateMachine:
++    def send(self, event, payload):
++        """
++        Return:
++        - state:
++          event를 처리한 뒤의 appFSM state.
++
++        변경:
++        - 등록된 event action이 project/runtime state를 변경할 수 있다.
++        - 대상 region state를 변경할 수 있다.
++
++        처리:
++        1. REGION_ORDER 순서로 현재 region definition에서 event handler를 찾는다.
++        2. handler가 action을 가지면 해당 action을 먼저 실행한다.
++        3. handler가 target을 가지면 region transition을 수행한다.
++        4. 같은 event를 여러 region이 소유하면 각 region이 같은 payload를 순서대로 처리한다.
++        5. 처리 region이 없으면 debug warning만 남기고 state를 임의 변경하지 않는다.
++        """
++        state = "event 처리 후 appFSM.state"
++        return state
++
++    def transition(self, region, target, event, payload):
++        """
++        변경:
++        - region state와 direction을 변경한다.
++        - state entry/exit/update hook를 실행한다.
++
++        처리:
++        target이 현재 state와 같으면 reenter 요청이 없는 한 update hook만 수행한다.
++        model-to-fsm 방향의 workspace entry/update에서는 workspace/editor write lock을 걸어
++        UI hydration이 다시 같은 model을 쓰지 못하게 한다.
++        모든 전이 후 frontend subscriber에 state를 publish한다.
++        """
++        state = "transition 후 appFSM.state"
++        return state
++
++    def notify(self, objectName, event, payload):
++        """
++        Return:
++        - state:
++          model 변경을 UI/renderer에 알린 뒤의 appFSM state.
++
++        변경:
++        - project/domain state를 이 함수 자체에서 변경하지 않는다.
++        - revision과 direction=model-to-ui를 갱신한다.
++
++        처리:
++        현재 workspace/overlay가 objectName을 구독하면 해당 update hook를 실행한다.
++        booting 또는 다른 transition 도중이면 notify를 무시한다.
++        """
++        state = "notification publish 후 appFSM.state"
++        return state
++
++    def run(self, lifecycle, event, task):
++        """
++        Return:
++        - task_result:
++          task의 반환값.
++
++        변경:
++        - lifecycle을 ready -> 요청 lifecycle -> ready로 전환한다.
++        - 실패하면 error 정보와 error lifecycle을 거친 뒤 ready로 복구한다.
++        - task 자체는 별도의 공식 mutation command를 호출할 수 있다.
++
++        처리:
++        ready가 아니면 새 lifecycle task를 시작하지 않는다.
++        sync/async task를 동일한 lifecycle 규칙으로 감싼다.
++        """
++        task_result = "완료한 lifecycle task 결과"
++        return task_result
++
++
++appFSM = (
++    "projectObjects와 APP_STATE_DEFINITIONS를 사용하는 유일한 ApplicationStateMachine instance. "
++    "frontend는 상태 구독과 UI event에 사용할 수 있고 domain mutation은 등록된 action 또는 FastFigureApi command를 통한다."
++)
++
++
++def applySlotSelectionAction(payload):
++    """
++    변경:
++    - selectedSlotId
++    - graphObject selection runtime state
++    - 비어 있는 slot을 처음 선택할 때 pendingSlotContentType에 따라 slot.contentType
++
++    처리:
++    model-to-fsm hydration이 아닌 UI selection에서 현재 선택과 같은 slot id를 다시 보내면
++    selectedSlotId를 none으로 만든다.
++    """
++    return "선택 결과"
++
++
++def applyProjectLoadedAction(project):
++    """
++    Args:
++    - project:
++      전체 validation을 통과해야 하는 ProjectObject candidate.
++
++    변경:
++    - activeProject 전체 authoritative state
++    - selectedSlotId/editing/graph object runtime state
++    - projectObjectGeneration과 renderer projection
++
++    처리:
++    1. PROJECT_LOADED가 쓸 모든 model scope의 write 권한을 확인한다.
++    2. candidate 전체를 validation한다.
++    3. 이전 project/runtime state를 rollback용으로 보존한다.
++    4. candidate를 activeProject에 initialize하고 runtime selection을 초기화한다.
++    5. project renderer projection을 다시 적용한다.
++    6. 어느 단계든 실패하면 이전 project/runtime state를 복원하고 candidate image URL을 정리한다.
++    7. 성공 후 이전 project image display URL을 정리하고 revision을 증가시킨다.
++    """
++    return activeProject
++
++
++def applyProjectNodeMovedAction(payload):
++    """
++    변경:
++    - VFS directory 또는 asset directory/name
++    - trash 진입 시 chart CSV reference와 image slot reference
++    - 필요 시 asset/graph selection state
++
++    처리:
++    이동 대상과 destination을 실제 projectVfs에서 resolve한다.
++    고정 directory와 보호된 default CSV는 이동하지 않는다.
++    destination collision과 recursive directory move를 거부한다.
++    trash로 새로 진입하면 해당 asset을 참조하는 graph object를 제거하고 image slot을 reset한다.
++    이동 완료 후 전체 ProjectObject reference integrity를 validation한다.
++    """
++    return "최종 이동 path"
++
++
++def applyGraphObjectsReplacedAction(payload):
++    """
++    변경:
++    - payload.chartId가 가리키는 editable chart의 editor.objects.
++
++    처리:
++    빈 objects가 들어오면 보호된 기본 빈 CSV를 사용하는 기본 graph object 하나를 복구한다.
++    교체 후 object를 normalize하고 editable graph renderer를 rebuild한다.
++    """
++    return "변경된 chart"
+diff --git a/sourcescript/assets_files.py b/sourcescript/assets_files.py
+new file mode 100644
+--- /dev/null
++++ b/sourcescript/assets_files.py
+@@ -0,0 +1,337 @@
++"""
++Fast Figure Source Script — project VFS, assets, FFPX/FFSX and import transactions
++
++현재 구현 원천:
++- ../fast-figure.js
++  projectVfs, projectAssetPath, create/load asset functions,
++  projectAssetImportCollisionModel, resolveProjectAssetImportPlan,
++  importProjectFilesToDirectory, importProjectAssetFiles,
++  ffpxBuildProject/ffpxReadProject, ffsxBuildSlot/ffsxReadSlot.
++
++참조 Source Script:
++- project_state.py
++- application_fsm.py
++"""
++
++from project_state import activeProject, projectVfs, getProjectCsv, getProjectImage
++from application_fsm import appFSM
++
++PACKAGE_FORMAT_VERSION = "현재 FFPX/FFSX package format version 3"
++
++PROJECT_ASSET_DIRECTORIES = {
++    "csv": "CSV 기본 directory; 현재 구현 path /assets/csv",
++    "image": "image 기본 directory; 현재 구현 path /assets/images",
++}
++
++PROJECT_TRASH_DIRECTORY = "project trash root; 현재 구현 path /assets/trash"
++
++FIXED_DIRECTORY_RULE = (
++    "현재 구현의 고정 directory는 /assets, /assets/csv, /assets/images, /assets/trash다. "
++    "삭제 또는 이동 대상으로 취급하지 않는다."
++)
++
++assetImportPlan = {
++    "path": "새 asset이 사용할 collision-free project path",
++    "replaceId": "같은 종류의 기존 asset을 참조 유지 교체할 때 그 id, 아니면 없음",
++}
++
++FFPX_STRUCTURE = {
++    "project.xml": "project metadata, fileSystem, appearance와 다른 문서 ref",
++    "assets/assets.xml": "CSV/image metadata와 binary data ref 목록",
++    "layout/layout.xml": "grid와 slot placement",
++    "caption/caption.xml": "global/slot caption configuration",
++    "labels/labels.xml": "label configuration",
++    "slots/slot-<id>.xml": "slot content, caption, chart state/objects 또는 image settings",
++    "assets/data/...": "CSV/TSV/JSON 원본 data bytes",
++    "assets/media/...": "image bytes",
++}
++
++FFSX_STRUCTURE = {
++    "slot.xml": "single graph slot, chart state, graph object와 caption",
++    "assets/assets.xml": "slot이 참조하는 CSV metadata",
++    "assets/data/...": "slot이 참조하는 CSV bytes",
++}
++
++PACKAGE_CONTAINER_RULES = [
++    "FFPX와 FFSX는 현재 STORE 방식의 비압축 ZIP container만 지원한다.",
++    "분할 ZIP은 지원하지 않는다.",
++    "각 entry path는 absolute path 또는 .. segment를 포함할 수 없다.",
++    "entry CRC32를 읽을 때 검증한다.",
++    "현재 package version과 다른 project/slot package는 지원하지 않는다.",
++]
++
++EXPORT_TRASH_RULE = (
++    "FFPX export는 /assets/trash 아래의 CSV, image, directory를 package에 포함하지 않는다. "
++    "export 대상 chart/slot이 trash asset을 참조하면 실패한다."
++)
++
++
++def normalizeProjectPath(value, directory=False):
++    """
++    Return:
++    - path:
++      slash-normalized project path.
++
++    변경:
++    - 없음.
++
++    처리:
++    path segment에 . 또는 ..를 허용하지 않는다.
++    각 segment는 project file-name 정규화 규칙을 통과해야 한다.
++    file path에서 root 자체는 유효한 file이 아니다.
++    """
++    path = "정규화된 project path"
++    return path
++
++
++def projectAssetPath(asset):
++    """
++    Return:
++    - path:
++      asset.directory와 asset.name의 상관관계로 만들어진 canonical VFS path.
++
++    변경:
++    - 없음.
++
++    처리:
++    asset에 별도 path field를 저장하지 않는다.
++    directory와 name이 유효할 때마다 path를 다시 계산한다.
++    """
++    path = "projectVfs에서 resolve 가능한 asset path"
++    return path
++
++
++def projectAssetImportCollisionModel(file, directory, reservedPaths=None):
++    """
++    Return:
++    - collisionModel:
++      assetKind, parent, normalized name/path, mode, replaceId와 UI 안내 정보.
++
++    변경:
++    - project state를 변경하지 않는다.
++
++    처리:
++    1. file 종류를 data/image로 판별한다.
++    2. target directory와 file name으로 candidate path를 계산한다.
++    3. projectVfs 및 현재 batch reservedPaths와 collision을 검사한다.
++    4. 같은 asset kind이고 보호된 기본 CSV가 아니면 replace-or-rename을 허용한다.
++    5. 다른 kind, 보호 asset, batch reservation이면 rename-only로 처리한다.
++    """
++    collisionModel = "현재 project state에서 계산한 import collision decision input"
++    return collisionModel
++
++
++def resolveProjectAssetImportPlan(model, choice="rename", reservedPaths=None):
++    """
++    Return:
++    - plan:
++      최종 path와 optional replaceId.
++
++    변경:
++    - 없음.
++
++    처리:
++    available이면 candidate path를 그대로 사용한다.
++    replace 선택이 허용된 같은-kind asset이면 기존 id를 유지한다.
++    그 외에는 projectVfs.uniquePath로 새 이름을 계산한다.
++    """
++    plan = assetImportPlan
++    return plan
++
++
++def importProjectFilesToDirectory(files, directory, planImport):
++    """
++    변경:
++    - 여러 CSV/image asset을 하나의 importing lifecycle 안에서 추가 또는 교체한다.
++
++    처리:
++    1. target directory가 존재하고 trash가 아닌지 확인한다.
++    2. 전체 batch에 대해 collision plan을 먼저 계산하고 candidate path를 reserved한다.
++    3. 시작 전 CSV/image id set과 replace 대상 원본을 rollback용으로 저장한다.
++    4. appFSM.run(importing) 안에서 staged file을 순서대로 load한다.
++    5. 실패하면 새로 생긴 asset을 공식 delete event로 제거하고 교체 asset을 공식 replace event로 복구한다.
++    6. 실패를 호출자에 다시 전달한다.
++
++    의미:
++    batch import는 중간 성공을 권위 상태로 남기지 않도록 rollback 경로를 가진다.
++    """
++    return "전체 import가 성공한 경우의 완료 결과"
++
++
++def createProjectCsv(data, name, id=None, bytesBase64="", mime="text/csv", headerLines=1, path=None):
++    """
++    Return:
++    - csv:
++      activeProject에 등록된 CSV asset.
++
++    변경:
++    - DATA_OBJECT_CREATED event를 통해 activeProject.csvFiles와 next csv id를 변경한다.
++
++    처리:
++    data table과 bytes representation을 정규화하고 VFS location을 정한 뒤
++    appFSM의 공식 create event로 등록한다.
++    """
++    csv = "등록된 CSV asset"
++    return csv
++
++
++def createProjectImage(bytes, name, mime, id=None, settings=None, path=None):
++    """
++    Return:
++    - image:
++      activeProject에 등록된 image asset.
++
++    변경:
++    - IMAGE_OBJECT_CREATED event를 통해 activeProject.images와 next image id를 변경한다.
++    """
++    image = "등록된 image asset"
++    return image
++
++
++def deleteProjectAsset(target):
++    """
++    변경:
++    - target CSV/image와 target을 참조하던 graph object 또는 slot.
++
++    처리:
++    CSV는 보호된 기본 빈 CSV인지 검사한다.
++    CSV reference가 있으면 GRAPH_OBJECTS_REPLACED로 참조 object를 먼저 제거한다.
++    image reference가 있으면 SLOTS_RESET으로 참조 slot을 먼저 초기화한다.
++    참조 정리가 끝난 뒤 DATA_OBJECT_DELETED 또는 IMAGE_OBJECT_DELETED를 보낸다.
++    """
++    return "삭제 완료"
++
++
++def planProjectNodeMove(path, directory):
++    """
++    Return:
++    - movePlan:
++      source, kind, target directory, destination, collision, uniqueName,
++      trash 진입 여부와 현재 referenceCount.
++
++    변경:
++    - 없음.
++
++    처리:
++    실제 move 전에 VFS와 reference 상태를 읽어 UI confirmation에 필요한 값을 계산한다.
++    """
++    movePlan = "현재 project state에 대한 move 계획"
++    return movePlan
++
++
++def moveProjectNode(plan, useUniqueName=False):
++    """
++    변경:
++    - PROJECT_NODE_MOVED event를 통해 project VFS와 필요 시 reference를 변경한다.
++
++    처리:
++    plan의 최종 directory/name을 event payload로 전달한다.
++    실제 collision/reference 검증은 mutation action에서 다시 현재 state 기준으로 수행한다.
++    """
++    return "mutation action이 확정한 이동 결과"
++
++
++def emptyProjectTrash():
++    """
++    변경:
++    - trash 아래 directory/CSV/image와 해당 reference.
++
++    처리:
++    PROJECT_TRASH_EMPTIED event가 현재 trash 내용을 다시 resolve하고
++    reference를 정리한 뒤 asset과 directory를 제거한다.
++    """
++    return "삭제한 항목 수와 reference 정리 결과"
++
++
++def ffpxBuildProject():
++    """
++    Return:
++    - package:
++      FFPX manifest 의미와 ZIP entry 목록.
++
++    변경:
++    - activeProject를 변경하지 않는다.
++
++    처리:
++    1. activeProject 전체를 validation한다.
++    2. projectObjects 공식 read path에서 export snapshot을 읽는다.
++    3. trash asset/directory를 제외한다.
++    4. chart CSV reference와 slot image reference가 export 가능한지 재검사한다.
++    5. project/assets/layout/caption/labels/slot XML 문서와 binary asset entry를 구성한다.
++    6. CSV/image bytes는 metadata와 분리해 dataRef로 연결한다.
++    """
++    package = "검증된 FFPX entry 목록"
++    return package
++
++
++def ffpxReadProject(file):
++    """
++    Return:
++    - payload:
++      buildProjectObject가 검증/정규화할 project import payload.
++
++    변경:
++    - activeProject를 변경하지 않는다.
++
++    처리:
++    1. ZIP STORE 구조, entry path, CRC를 검증해 모든 entry를 읽는다.
++    2. 필수 XML 문서와 slot 문서를 읽는다.
++    3. slot placement와 chart/image reference를 재구성한다.
++    4. CSV/image dataRef가 허용 subtree를 가리키고 실제 entry가 존재하는지 확인한다.
++    5. raw bytes를 asset rows/base64 representation으로 복원한다.
++    6. package schema/version을 확인한 뒤 payload를 반환한다.
++    """
++    payload = "검증 가능한 project import payload"
++    return payload
++
++
++def importProjectFile(file):
++    """
++    Return:
++    - activeProject:
++      import 성공 후의 authoritative project.
++
++    변경:
++    - 최종 단계에서 PROJECT_LOADED event를 통해 activeProject 전체를 교체한다.
++
++    처리:
++    ZIP signature면 FFPX reader를 사용하고 아니면 현재 legacy JSON import 경로를 사용한다.
++    reader 결과를 ProjectObject.fromFFPX/buildProjectObject로 완전 검증한 뒤에만 project를 교체한다.
++    """
++    return activeProject
++
++
++def ffsxBuildSlot(slot, chart):
++    """
++    Return:
++    - package:
++      선택 graph slot과 그 chart가 참조하는 CSV만 포함한 FFSX entry 목록.
++
++    변경:
++    - 없음.
++
++    처리:
++    project-global CSV id를 package-local 연속 id로 remap한다.
++    chart object csvId도 같은 mapping으로 변경한다.
++    CSV bytes는 assets/data subtree에 별도 저장한다.
++    """
++    package = "single-slot FFSX package"
++    return package
++
++
++def ffsxReadSlot(file):
++    """
++    Return:
++    - slotPayload:
++      chart, slot caption, package-local CSV를 포함한 검증된 payload.
++
++    변경:
++    - activeProject를 변경하지 않는다.
++
++    처리:
++    package schema/version, chart object -> CSV reference, CSV dataRef와 bytes를 검증한다.
++    imported default CSV가 현재 protected default CSV와 동일하면 공통 default reference로 재사용한다.
++    validateChartModel을 통과한 payload만 반환한다.
++    """
++    slotPayload = "검증된 FFSX slot payload"
++    return slotPayload
+diff --git a/sourcescript/graphs.py b/sourcescript/graphs.py
+new file mode 100644
+--- /dev/null
++++ b/sourcescript/graphs.py
+@@ -0,0 +1,294 @@
++"""
++Fast Figure Source Script — CSV data, chart model, graph objects and Plotly rendering
++
++현재 구현 원천:
++- ../fast-figure.js
++  dataTable/columnDefinitions/graphDataSelection,
++  chart model validation/conversion,
++  graphEditor* command,
++  traces/layout/rebuildEditableGraph,
++  Plotly import/export.
++- ../vendor/plotly.min.js
++  최종 graph rendering library.
++
++참조 Source Script:
++- project_state.py
++- application_fsm.py
++- assets_files.py
++"""
++
++from project_state import activeProject, getProjectCsv, getChart
++from application_fsm import appFSM
++
++graphObject = {
++    "csvId": "activeProject.csvFiles의 CSV reference id",
++    "x": "C1, C2 형식의 x column identifier",
++    "y": "C1, C2 형식의 y column identifier",
++    "xAxisSide": "bottom 또는 top",
++    "yAxisSide": "left 또는 right",
++    "type": "scatter, markers, lines+markers, bar, hidden 중 하나",
++    "color": "현재 graph object color",
++    "legendName": "legend에서 사용할 optional 이름",
++    "lineWidth": "현재 허용 범위 0.1..20",
++    "lineDash": "solid, dot, dash, dashdot 중 하나",
++    "markerSymbol": "현재 지원 marker symbol",
++    "markerSize": "현재 허용 범위 1..40",
++    "barOpacity": "현재 허용 범위 0.05..1",
++    "barLineWidth": "현재 허용 범위 0..10",
++    "plotlyTrace": "imported Plotly trace에서 보존할 확장 속성의 optional copy",
++}
++
++chartModel = {
++    "id": "activeProject.charts 안에서 유일한 양의 정수 chart id",
++    "editor": {
++        "objects": "graphObject 목록; editable chart의 data reference 원천",
++        "editable": "Fast Figure editor로 수정 가능한지 여부",
++        "globalSettings": "title/legend/zero-line/font/4개 axis 설정",
++        "title": "chart title",
++        "plotlyExtensions": "imported Plotly layout/config 중 editor가 직접 소유하지 않는 보존 영역",
++    },
++    "graph": {
++        "data": "현재 chart에서 만들어진 Plotly trace projection",
++        "layout": "현재 chart에서 만들어진 Plotly layout projection",
++        "config": "Plotly config",
++        "frames": "imported Plotly frames",
++        "imported": "원본 Plotly figure를 보존해야 할 때의 representation",
++    },
++}
++
++AXIS_REFERENCE_RULE = (
++    "graph object의 xAxisSide/yAxisSide를 globalSettings.axes의 실제 axis 설정에 연결한다. "
++    "trace에는 Plotly x/x2 및 y/y2 reference를 계산해 사용한다."
++)
++
++GRAPH_PROJECTION_RULE = (
++    "chart.graph.data/layout은 project CSV와 chart.editor 설정에서 다시 만들 수 있는 renderer projection이다. "
++    "editable chart에서 graph.editor.objects와 project CSV reference가 편집 의미의 원천이다."
++)
++
++
++def dataTable(data):
++    """
++    Return:
++    - matrix:
++      모든 row가 값 배열인 2차원 table.
++
++    변경:
++    - 없음.
++
++    처리:
++    row-array 입력은 각 값을 보존해 table로 정규화한다.
++    object-array 입력은 전체 key union을 header로 만들고 같은 column 순서로 row를 만든다.
++    그 외 또는 빈 입력은 실패한다.
++    """
++    matrix = "정규화된 2차원 table"
++    return matrix
++
++
++def columnDefinitions(table, headerLines):
++    """
++    Return:
++    - columns:
++      각 column의 id(C1...), index, optional header name, 표시 label.
++
++    변경:
++    - 없음.
++
++    처리:
++    모든 row 중 최대 폭을 column 수로 사용한다.
++    headerLines가 1 이상이면 마지막 header row의 값을 column name으로 사용한다.
++    """
++    columns = "table column 정의 목록"
++    return columns
++
++
++def graphDataSelection(matrix, headerLines, editor):
++    """
++    Return:
++    - selection:
++      x와 y column identifier.
++
++    변경:
++    - 없음.
++
++    처리:
++    기존 editor.x/editor.y가 현재 table에 유효하면 유지한다.
++    아니면 numeric data가 실제로 존재하는 첫 column을 x로 우선 선택하고,
++    x와 다른 numeric 또는 다른 유효 column을 y로 선택한다.
++    """
++    selection = {"x": "선택된 x column id", "y": "선택된 y column id"}
++    return selection
++
++
++def connectDataToSlotModel(slot, data, sourceName, projectCsv=None):
++    """
++    Return:
++    - chart:
++      CSV가 연결된 기존 또는 새 chart model.
++
++    변경:
++    - activeProject chart collection과 slot.chart
++    - chart.editor.objects
++    - core-internal editing pointer
++
++    주의:
++    이 함수는 현재 FSM mutation action 내부에서 사용하는 model-level mutation helper다.
++    frontend의 직접 변경 경계가 아니다.
++
++    처리:
++    기존 chart가 있으면 새 CSV graph object를 추가한다.
++    chart가 없으면 next chart id로 chart를 만들고 slot.chart reference를 연결한다.
++    editable chart면 renderer projection을 rebuild한다.
++    """
++    chart = "CSV가 연결된 chart model"
++    return chart
++
++
++def graphEditorAdd(csvId):
++    """
++    Return:
++    - chart:
++      object 추가 후 chart.
++
++    변경:
++    - GRAPH_OBJECTS_REPLACED 또는 SLOT_DATA_CONNECTED 공식 event를 통해 chart/slot state를 변경한다.
++
++    처리:
++    선택 slot과 CSV를 실제 id로 resolve한다.
++    선택 slot에 chart가 없으면 SLOT_DATA_CONNECTED로 첫 chart/object를 만든다.
++    chart가 있으면 현재 object 목록에 새 base graph object를 추가해 commit한다.
++    """
++    chart = "변경된 chart"
++    return chart
++
++
++def graphEditorCommit(objects, index=None):
++    """
++    Return:
++    - chart:
++      object list commit 후 chart.
++
++    변경:
++    - GRAPH_OBJECTS_REPLACED event
++    - graph object selection state
++    - editable graph renderer projection
++
++    처리:
++    object array 자체를 UI/local state의 장기 원천으로 두지 않고 chart SoT에 commit한다.
++    """
++    chart = "commit된 chart"
++    return chart
++
++
++def graphEditorObjectValues(index, values):
++    """
++    Return:
++    - chart:
++      지정 object의 허용 field를 정규화해 commit한 chart.
++
++    변경:
++    - 최종적으로 graphEditorCommit을 통해 chart object state를 변경한다.
++
++    처리:
++    CSV와 column reference를 현재 project에서 다시 resolve한다.
++    enum 값과 numeric range를 검증/제한한다.
++    허용 field만 새 object에 반영한다.
++    """
++    chart = "object 변경 후 chart"
++    return chart
++
++
++def graphEditorSetEditable(editable):
++    """
++    Return:
++    - editable:
++      최종 editable 상태.
++
++    변경:
++    - 선택 chart.editor.editable.
++    - imported Plotly chart를 editable로 바꿀 때 project CSV와 object reference를 생성할 수 있다.
++
++    처리:
++    imported Plotly에 CSV reference가 없으면 보존된 conversion rows에서 project CSV를 만든다.
++    object csvId를 그 CSV와 연결한 뒤 editable projection을 rebuild한다.
++    """
++    editable = "선택 chart의 최종 editable boolean"
++    return editable
++
++
++def tracesSingle(objectView):
++    """
++    Return:
++    - plotlyTraces:
++      하나의 graph object와 CSV rows에서 계산한 Plotly trace 목록.
++
++    변경:
++    - 없음.
++
++    확정 계산:
++    - x/y divide 값으로 numeric data를 나눈다.
++    - reciprocal axis는 0을 제외하고 1/value를 사용한다.
++    - log axis는 0 이하 값을 제외한다.
++    - bar/scatter/hidden 의미와 line/marker style 범위를 보존한다.
++    """
++    plotlyTraces = "graph object에서 파생된 Plotly trace 목록"
++    return plotlyTraces
++
++
++def traces(chart):
++    """
++    Return:
++    - plotlyTraces:
++      chart.editor.objects 전체에서 계산한 Plotly trace 목록.
++
++    변경:
++    - 없음.
++
++    참조:
++    각 object.csvId는 getProjectCsv를 통해 authoritative CSV를 다시 resolve한다.
++    object에 저장된 row copy를 일반 원천으로 사용하지 않는다.
++    """
++    plotlyTraces = "chart의 Plotly data projection"
++    return plotlyTraces
++
++
++def rebuildEditableGraph(chart):
++    """
++    변경:
++    - chart.graph.data/layout/config renderer projection.
++
++    처리:
++    chart.editor와 referenced project CSV에서 traces/layout을 다시 계산한다.
++    project/domain 의미를 Plotly renderer 형식으로 투영한다.
++    """
++    return chart
++
++
++def importSelectedGraphFile(file):
++    """
++    변경:
++    - 선택 slot의 chart model과 package가 필요로 하는 CSV asset.
++
++    처리:
++    FFSX면 ffsxReadSlot 검증 결과를 import한다.
++    Plotly JSON이면 parsePlotlyToEditor를 통해 editable/non-editable chart 의미를 구성한다.
++    실제 project 변경은 SLOT_CHART_IMPORTED 등 기존 mutation 경로를 사용한다.
++    """
++    return "import 완료 chart"
++
++
++def chartFigure(chart):
++    """
++    Return:
++    - figure:
++      Plotly JSON export에 사용할 data/layout/config/frames representation.
++
++    변경:
++    - 없음.
++
++    처리:
++    editable chart는 현재 editor/CSV에서 figure를 계산한다.
++    imported non-editable chart는 보존된 Plotly semantics를 유지한다.
++    """
++    figure = "export 가능한 Plotly figure"
++    return figure
+diff --git a/sourcescript/layout_annotations_export.py b/sourcescript/layout_annotations_export.py
+new file mode 100644
+--- /dev/null
++++ b/sourcescript/layout_annotations_export.py
+@@ -0,0 +1,279 @@
++"""
++Fast Figure Source Script — layout geometry, image settings, annotations and raster export
++
++현재 구현 원천:
++- ../fast-figure.js
++  dashboardGeometry/gridSlotGeometry,
++  grid/merge/split/zoom commands,
++  image settings,
++  label/caption API,
++  createTargetExportSnapshot/exportDashboardTarget/exportDashboard.
++
++참조 Source Script:
++- project_state.py
++- application_fsm.py
++- graphs.py
++"""
++
++from project_state import activeProject, projectObjects, selectedSlotId
++from application_fsm import appFSM
++
++layoutRules = {
++    "gridRows": "1..8 integer",
++    "gridCols": "1..8 integer",
++    "referenceWidth": "100..20000",
++    "gap": "0..2000",
++    "outerMargin": "0..5000",
++    "radius": "0..2000",
++    "aspect": "0.1..10",
++    "zoom": "runtime dashboard zoom intent; 현재 UI/API 범위 50..200 percent",
++}
++
++imageSettings = {
++    "fit": "contain, cover, manual 중 하나",
++    "scale": "manual fit에서 현재 허용 범위 1..1000 percent",
++    "x": "manual image center x; 현재 허용 범위 -100..200 percent",
++    "y": "manual image center y; 현재 허용 범위 -100..200 percent",
++}
++
++labelSettings = {
++    "format": "lower/upper alpha, decimal, lower/upper roman",
++    "parentheses": "identifier에 괄호를 표시하는지 여부",
++    "x": "slot reference 좌표계의 label x position",
++    "y": "slot reference 좌표계의 label y position",
++    "order": "row-major 또는 column-major",
++    "fontFamily": "label font family",
++    "fontSize": "현재 최소 6; 구현상 별도 최대는 두지 않음",
++}
++
++captionSettings = {
++    "fontFamily": "caption font family",
++    "fontSize": "현재 6..96",
++    "lineHeight": "현재 0.8..4",
++}
++
++EXPORT_LIMITS = {
++    "logicalWidth": "현재 100..20000 px",
++    "logicalHeight": "빈 값이면 aspect/caption에서 자동 계산, 지정 시 현재 100..20000 px",
++    "dpi": "현재 36..1200",
++    "format": "png 또는 jpeg",
++    "rasterDimension": "현재 한 변 최대 16384 px",
++    "rasterArea": "현재 최대 64,000,000 pixels",
++}
++
++
++def dashboardGeometry(width, heightOverride=None):
++    """
++    Return:
++    - geometry:
++      referenceWidth, width, height, scale, aspect, outerMargin, gap, radius.
++
++    변경:
++    - 없음.
++
++    확정 계산:
++    scale = width / referenceWidth
++    naturalHeight = width / configuredAspect
++    height = 유효한 heightOverride가 있으면 override, 아니면 naturalHeight
++    outerMargin = min(configuredOuterMargin * scale, min(width, height) * 0.49)
++    gap = configuredGap * scale
++    radius = configuredRadius * scale
++    """
++    geometry = "dashboard reference geometry"
++    return geometry
++
++
++def gridSlotGeometry(layout, geometry, slot=None):
++    """
++    Return:
++    - slotGeometry:
++      colWidth, rowHeight와 target slot의 width/height.
++
++    변경:
++    - 없음.
++
++    확정 계산:
++    colWidth = (width - 2*outerMargin - gap*(gridCols-1)) / gridCols
++    rowHeight = (height - 2*outerMargin - gap*(gridRows-1)) / gridRows
++    merged slot width/height는 span 내부 gap까지 포함한다.
++    """
++    slotGeometry = "layout grid에서 계산한 slot geometry"
++    return slotGeometry
++
++
++def setLayoutApiGrid(rows, cols):
++    """
++    변경:
++    - GRID_LAYOUT_CHANGED event를 통해 activeProject grid/slot structure.
++
++    처리:
++    rows/cols가 1..8 정수인지 확인한다.
++    기존 content가 새 grid 좌표 안에 모두 들어가면 좌표/span을 보존한다.
++    그렇지 않으면 visible slot 순서 기준으로 content를 새 grid에 재배치하고 span을 1로 만든다.
++    grid 변경 후 selectedSlotId는 해제된다.
++    """
++    return "grid 변경 후 layout read state"
++
++
++def mergeSlots(slotIds):
++    """
++    변경:
++    - 선택한 연속 직사각형 영역의 대표 slot span과 covered slot.hidden.
++
++    처리:
++    현재 visible slot과 grid coordinate에서 merge 가능한 완전한 사각형인지 검증한다.
++    content를 잃지 않는 기존 merge 규칙을 적용하고 renderer를 갱신한다.
++    """
++    return "merge 후 선택 가능한 slot id 목록"
++
++
++def splitSlots(slotIds):
++    """
++    변경:
++    - merged slot을 1x1 slot 구조로 되돌리고 covered slot을 다시 visible하게 한다.
++
++    처리:
++    현재 project slot 구조를 기준으로 split 대상과 content 보존 규칙을 적용한다.
++    """
++    return "split 후 선택 가능한 slot id 목록"
++
++
++def readImageEditorApi():
++    """
++    Return:
++    - imageEditor:
++      선택 slot이 참조하는 image name/display URL과 settings의 read projection.
++
++    변경:
++    - authoritative image settings를 변경하지 않는다.
++    """
++    imageEditor = "선택 image의 read-only editor projection 또는 없음"
++    return imageEditor
++
++
++def applyImageSettingsFromValues(values):
++    """
++    변경:
++    - 선택 slot의 referenced image.settings.
++    - 현재 slot image renderer projection.
++
++    처리:
++    fit enum과 manual scale/x/y 범위를 정규화한다.
++    project image settings를 한 경로에서 변경한 뒤 IMAGE_SETTINGS_CHANGED를 notify한다.
++    """
++    return "설정 적용 성공 여부"
++
++
++def readLabelsApiState():
++    """
++    Return:
++    - labelState:
++      persistent label settings와 현재 선택 slot 기준 reference width/height.
++
++    변경:
++    - 없음.
++
++    처리:
++    reference geometry는 activeProject layout과 선택 slot span에서 계산한다.
++    """
++    labelState = "label editor read projection"
++    return labelState
++
++
++def previewLabelsApiPosition(x, y):
++    """
++    현재 구현 의미:
++    - activeProject.labelSettings.x/y를 즉시 변경한다.
++    - dashboard를 즉시 rerender한다.
++    - commit 전에는 appFSM notify만 생략한다.
++
++    미확정:
++    이 동작을 authoritative continuous edit로 정의할지,
++    preview용 edit copy를 두고 commit 시에만 authoritative state를 변경할지는
++    Source Script 다음 검토에서 결정해야 한다.
++
++    변경:
++    - 현재 구현 기준으로 authoritative label position.
++    """
++    return "현재 구현의 label position read state"
++
++
++def commitLabelsApiPosition():
++    """
++    현재 구현 의미:
++    label position 값 자체는 preview 단계에서 이미 activeProject에 들어가 있다.
++    이 함수는 최종 위치를 debug 기록하고 LABEL_POSITION_DRAGGED notify를 발생시킨다.
++    """
++    return "commit notification 후 label state"
++
++
++def readCaptionsApiState():
++    """
++    Return:
++    - captionState:
++      global/slot mode, 현재 target, text/name/settings read projection.
++
++    변경:
++    - 없음.
++
++    처리:
++    slotMode가 참이면 selected slot의 slot.caption을 text source로 사용한다.
++    아니면 global caption state를 사용한다.
++    """
++    captionState = "caption editor read projection"
++    return captionState
++
++
++def setCaptionsApiText(text):
++    """
++    변경:
++    - CAPTION_TEXT_INPUT event를 통해 현재 caption target text.
++
++    처리:
++    slotMode와 selectedSlotId를 current state에서 resolve해
++    global caption 또는 selected slot caption 중 하나만 변경한다.
++    """
++    return "변경 후 caption state"
++
++
++def createTargetExportSnapshot():
++    """
++    Return:
++    - snapshot:
++      하나의 export 작업 동안 사용할 layout/label/caption/image/chart/slot copy와
++      renderer에서 읽은 현재 color/style projection.
++
++    변경:
++    - authoritative project state를 변경하지 않는다.
++
++    처리:
++    projectObjects.snapshot으로 영속 입력을 한 시점에 복사한다.
++    DOM computed style은 export renderer에 필요한 색상 projection만 읽는다.
++    snapshot은 export 작업 범위를 벗어나 일반 read authority로 재사용하지 않는다.
++    """
++    snapshot = "단일 export 작업용 immutable input snapshot"
++    return snapshot
++
++
++def exportDashboardTarget(options):
++    """
++    Return:
++    - result:
++      saved 또는 rejected outcome과 관련 정보.
++
++    변경:
++    - project/domain state를 변경하지 않는다.
++    - output file download와 status projection만 발생한다.
++
++    처리:
++    1. export snapshot을 만든다.
++    2. requested logical width/height, dpi, format을 검증한다.
++    3. 자동 height면 dashboard aspect와 caption layout에서 계산한다.
++    4. raster dimension/area limit을 넘으면 project를 변경하지 않고 rejected를 반환한다.
++    5. grid geometry가 유효한지 확인한다.
++    6. 각 visible slot의 chart 또는 image를 target geometry로 다시 그린다.
++    7. label/caption을 같은 reference geometry로 그린다.
++    8. PNG/JPEG blob에 DPI metadata를 적용하고 다운로드한다.
++    """
++    result = "raster export outcome"
++    return result
+diff --git a/sourcescript/api_ui.py b/sourcescript/api_ui.py
+new file mode 100644
+--- /dev/null
++++ b/sourcescript/api_ui.py
+@@ -0,0 +1,176 @@
++"""
++Fast Figure Source Script — FastFigureApi boundary and Mantine frontend
++
++현재 구현 원천:
++- ../fast-figure.js
++  window.FastFigureApi.
++- ../fast-figure-ui.js
++  FastFigureApp, FastFigureShell, editor/action components,
++  Mantine theme and UI-local state.
++
++참조 Source Script:
++- project_state.py
++- application_fsm.py
++- assets_files.py
++- graphs.py
++- layout_annotations_export.py
++"""
++
++from project_state import activeProject
++from application_fsm import appFSM
++
++FastFigureApi = {
++    "project": "project name read/set과 FFPX import/export command",
++    "slots": "selected slot read, selection toggle, type/reset, dashboard file-drop preparation",
++    "images": "selected image read/settings mutation/empty image insertion",
++    "assets": "VFS tree read, collision planning, import, move, trash, delete, select, download",
++    "graphs": "graph data/layout/palette read와 object/layout/file mutation command",
++    "print": "print/export defaults, save, capture",
++    "captions": "caption state read와 visibility/mode/text/name/settings mutation",
++    "labels": "label state read와 visibility/settings/position mutation",
++    "appearance": "persistent UI palette read/set/reset",
++    "layout": "layout read, style/grid/zoom, merge/split command",
++}
++
++API_BOUNDARY_RULE = (
++    "Mantine frontend는 activeProject, projectVfs, getChart, getProjectCsv 같은 domain 구현을 "
++    "직접 일반 변경 경계로 사용하지 않는다. 영속/기능 변경은 FastFigureApi command 또는 "
++    "overlay/lifecycle 같은 appFSM UI event를 사용한다."
++)
++
++READ_RULE = (
++    "FastFigureApi read operation은 현재 Source of Truth에서 필요한 projection을 매번 계산한다. "
++    "React component가 받은 projection을 다른 subsystem의 장기 read authority로 배포하지 않는다."
++)
++
++UI_LOCAL_STATE = {
++    "asset collision": "Modal이 열려 있는 동안의 collision model과 Promise resolver",
++    "confirmations": "slot reset, asset delete, move/trash confirmation target",
++    "new folder": "Modal input 중인 folder name draft",
++    "palette": "사용자가 apply하기 전 ColorInput draft",
++    "layout selection": "layout Modal 안에서 merge/split 대상으로 선택한 slot id set",
++    "print inputs": "width/height/dpi/format form draft",
++    "sidebar geometry": "현재 session의 navbar width/collapsed/drag state",
++    "pointer drag": "label/layout preview pointer interaction의 component-local state",
++}
++
++UI_LOCAL_STATE_RULE = (
++    "UI local state는 입력 draft, Modal lifetime, pointer interaction처럼 component 범위에서만 사용한다. "
++    "apply/commit이 필요한 값은 공식 mutation API로 보내고 project read 원천으로 승격하지 않는다."
++)
++
++MANTINE_COMPONENT_OWNERSHIP = {
++    "FastFigureToolbar": "overlay toggle과 selected target 표시",
++    "FastFigureDataActions": "asset import와 slot reset/delete action",
++    "FastFigureImageEditor": "selected image preview/settings",
++    "FastFigureProjectDataTree": "VFS tree display/selection/move/drop/menu",
++    "FastFigureProjectActions": "project name과 FFPX import/export",
++    "FastFigureGraphDataEditor": "CSV/header/graph object editing",
++    "FastFigureGraphLayoutEditor": "chart title/global/axis settings",
++    "FastFigureGraphPaletteActions": "graph object colors",
++    "FastFigureGraphFileActions": "FFSX/Plotly import/export/editable toggle",
++    "FastFigurePaletteActions": "persistent UI palette edit/apply/reset",
++    "FastFigureStatusDebug": "status/debug telemetry display와 log action",
++    "FastFigureReadmeOverlay": "README Modal",
++    "FastFigureLabelOverlay": "label settings와 position interaction",
++    "FastFigureCaptionOverlay": "caption settings/text interaction",
++    "FastFigurePrintOverlay": "raster export form와 command",
++    "FastFigureLayoutOverlay": "grid/style/zoom/merge/split interaction",
++    "FastFigureDashboardFileDrop": "dashboard external file drop와 collision Modal 연결",
++    "FastFigureShell": "Mantine AppShell, navbar resize/collapse, component composition",
++}
++
++MANTINE_THEME_RULE = (
++    "generic Button, ActionIcon, Input 크기와 Modal centered/Escape/outside-click 기본값은 "
++    "fastFigureTheme에서 공통 정의한다. renderer surface CSS와 generic UI lifecycle을 분리한다."
++)
++
++
++def subscribeAppState(onStoreChange):
++    """
++    Return:
++    - unsubscribe:
++      appFSM subscriber 제거 함수.
++
++    변경:
++    - appFSM state를 변경하지 않는다.
++
++    처리:
++    React useSyncExternalStore가 appFSM.state revision/transition을 직접 구독한다.
++    별도 React project store를 만들지 않는다.
++    """
++    unsubscribe = "appFSM listener 해제 함수"
++    return unsubscribe
++
++
++def useProjectAssetImportCollision():
++    """
++    Return:
++    - choosePlan:
++      file/directory에 대해 user choice를 받아 core import plan을 반환하는 UI-local async function.
++    - modal:
++      collision이 있을 때만 표시하는 Mantine Modal.
++
++    변경:
++    - project state를 직접 변경하지 않는다.
++    - local collision/resolver state만 변경한다.
++
++    처리:
++    core collisionModel을 먼저 계산한다.
++    available이면 UI 없이 core resolveImportPlan을 호출한다.
++    user choice가 필요하면 Modal lifetime 동안 resolver를 보유하고
++    choice를 받은 뒤 core resolveImportPlan으로 최종 plan을 계산한다.
++    """
++    return "component-local collision chooser와 Modal"
++
++
++def runLifecycleTask(lifecycle, eventName, task):
++    """
++    Return:
++    - task result 또는 UI error 처리 결과.
++
++    변경:
++    - appFSM lifecycle.
++    - task가 호출하는 공식 command에 따른 domain state.
++
++    처리:
++    lifecycle sequencing은 appFSM.run에 위임한다.
++    UI layer는 error를 debug telemetry에 기록하되 별도 domain rollback 규칙을 만들지 않는다.
++    """
++    return "lifecycle task 결과"
++
++
++def FastFigureApp():
++    """
++    Return:
++    - uiTree:
++      MantineProvider 아래 FastFigureShell.
++
++    변경:
++    - project state를 render 자체에서 변경하지 않는다.
++
++    처리:
++    persistent appearance palette를 FastFigureApi에서 읽어 Mantine CSS variable로 투영한다.
++    UI color luminance에서 primary contrast text를 계산한다.
++    FastFigureShell을 하나의 기존 React root에 render한다.
++    """
++    uiTree = "Fast Figure Mantine application tree"
++    return uiTree
++
++
++def FastFigureShell():
++    """
++    Return:
++    - shell:
++      header/navbar/main과 overlay component를 포함한 AppShell.
++
++    변경:
++    - navbar width/collapsed 같은 session-local UI state.
++    - renderer host layout CSS variable.
++
++    처리:
++    sidebar resize는 renderer geometry에 반영하고 plot resize를 요청한다.
++    domain/project 값을 별도 local store로 복제하지 않는다.
++    """
++    shell = "Mantine AppShell tree"
++    return shell
+diff --git a/sourcescript/renderer_runtime.py b/sourcescript/renderer_runtime.py
+new file mode 100644
+--- /dev/null
++++ b/sourcescript/renderer_runtime.py
+@@ -0,0 +1,208 @@
++"""
++Fast Figure Source Script — dashboard renderer, DOM interaction, telemetry and startup
++
++현재 구현 원천:
++- ../Fast-figure.html
++  graphArea, dashboard, dashboardCaption, readmeContent renderer host와 renderer CSS.
++- ../fast-figure.js
++  renderDashboard, slot interaction, resize, status/debug telemetry, startup.
++- ../fast-figure-ui.js
++  dashboard external-file drop owner.
++
++참조 Source Script:
++- project_state.py
++- application_fsm.py
++- graphs.py
++- layout_annotations_export.py
++"""
++
++from project_state import activeProject, selectedSlotId, editing
++from application_fsm import appFSM
++
++RENDERER_HOSTS = {
++    "graphArea": "dashboard와 caption을 포함하는 scroll/render host",
++    "dashboard": "slot grid renderer host",
++    "dashboardCaption": "caption renderer host",
++    "captionPrefix": "global/slot caption prefix host",
++    "captionText": "contenteditable caption body host",
++    "readmeContent": "README HTML template source",
++    "ff-react-bootstrap-root": "React/Mantine shell root",
++}
++
++uiTelemetryState = {
++    "revision": "telemetry projection revision",
++    "status": "사용자에게 표시하는 최신 status text",
++    "debugEnabled": "debug runtime authority를 UI에 투영한 boolean",
++    "debugLines": "현재 session debug log line projection",
++}
++
++debugEnabled = (
++    "현재 session debug 기록 on/off의 runtime authority. "
++    "persistent project state가 아니며 uiTelemetryState에 표시용으로 projection한다."
++)
++
++RENDERER_RULE = (
++    "renderDashboard와 Plotly/image/caption renderer는 activeProject 또는 단일 작업 snapshot에서 읽어 "
++    "DOM/Plotly representation을 만든다. DOM은 project/domain Source of Truth가 아니다."
++)
++
++
++def publishUiTelemetry(patch):
++    """
++    Return:
++    - telemetry:
++      revision이 증가한 새 immutable telemetry projection.
++
++    변경:
++    - uiTelemetryState만 변경한다.
++    - project/domain state는 변경하지 않는다.
++
++    처리:
++    기존 projection에 patch를 합치고 revision을 증가시킨 뒤 subscriber에 알린다.
++    """
++    telemetry = "현재 UI telemetry projection"
++    return telemetry
++
++
++def setDebugEnabled(enabled):
++    """
++    변경:
++    - debugEnabled runtime authority.
++    - uiTelemetryState.debugEnabled projection.
++
++    처리:
++    입력을 boolean 의미로 정규화하고 projection을 즉시 publish한다.
++    """
++    return "최종 debugEnabled"
++
++
++def status(message):
++    """
++    변경:
++    - uiTelemetryState.status만 갱신한다.
++
++    Return:
++    - text:
++      표시한 status 문자열.
++    """
++    text = "정규화된 status text"
++    return text
++
++
++def renderDashboard():
++    """
++    변경:
++    - dashboard/slot/Plotly/image/label/caption DOM projection.
++    - project state 자체를 renderer 목적으로 변경하지 않는다.
++
++    처리:
++    1. activeProject grid와 style을 dashboard CSS geometry에 반영한다.
++    2. visible slot마다 slot container와 label/tab surface를 구성한다.
++    3. graph slot은 referenced chart를 resolve해 Plotly projection을 render한다.
++    4. image slot은 referenced image와 settings를 resolve해 image surface를 동기화한다.
++    5. selectedSlotId에 따라 selection/interaction class를 적용한다.
++    6. caption과 label projection을 동기화한다.
++    7. stale Plotly instance를 purge하고 resize generation을 관리한다.
++    """
++    return "현재 project에서 다시 생성된 dashboard projection"
++
++
++def setSelectedSlot(slotId, direction="fsm-to-model"):
++    """
++    변경:
++    - SELECT_SLOT event를 통한 runtime selection/workspace.
++    - graph view renderer projection.
++
++    중요 semantics:
++    기본 UI 방향에서 이미 선택된 동일 slot id를 다시 보내면 선택 해제된다.
++    caller가 '선택을 보장'해야 하면 현재 selected slot을 먼저 읽어야 한다.
++
++    처리:
++    appFSM event가 selection semantics를 결정한 뒤 graph view를 갱신하고 resize를 요청한다.
++    """
++    return "선택 후 runtime state"
++
++
++def installSlotClickController():
++    """
++    변경:
++    - dashboard DOM에 slot click/slot-to-slot drag event listener를 설치한다.
++    - project state 변경은 event handler 안에서 공식 command를 통해 수행한다.
++
++    처리:
++    slot background/tab click은 setSelectedSlot로 전달한다.
++    selected slot tab drag는 source/target slot content swap command를 사용한다.
++    file DataTransfer drop은 여기서 처리하지 않고 Mantine FastFigureDashboardFileDrop에 넘긴다.
++    """
++    return "설치된 dashboard interaction controller"
++
++
++def swapSlotContents(source, target):
++    """
++    변경:
++    - SLOTS_SWAPPED event를 통해 두 slot의 content reference와 필요 시 selectedSlotId.
++
++    처리:
++    row/col geometry는 바꾸지 않고 slot.content 전체를 교환한다.
++    mutation action 안에서 validation하고 실패하면 이전 content/selection으로 rollback한다.
++    """
++    return "swap 완료"
++
++
++def prepareDashboardFileDrop(slotId):
++    """
++    Return:
++    - accepted:
++      target slot이 외부 file drop을 받을 수 있는지 여부.
++
++    변경:
++    - 유효 target이 현재 선택이 아니면 해당 slot을 선택한다.
++    - drag runtime state를 정리한다.
++
++    처리:
++    실제 file import와 collision UI는 frontend가 소유한다.
++    """
++    accepted = "drop target 유효 여부"
++    return accepted
++
++
++def applySlotStyle(notify=True):
++    """
++    변경:
++    - dashboard/caption renderer CSS projection.
++    - notify가 참이면 layout model-to-ui notification.
++
++    처리:
++    activeProject.layout.slotStyle에서 border/aspect/outer-margin/gap/radius를 계산한다.
++    DOM computed state를 project authority로 되돌려 쓰지 않는다.
++    """
++    return "적용된 dashboard style projection"
++
++
++def updateGraphView():
++    """
++    변경:
++    - 선택 slot에 대응하는 graph/image workspace renderer projection.
++
++    처리:
++    selectedSlotId와 referenced project model을 현재 state에서 다시 resolve한다.
++    stale UI buffer를 project read 원천으로 사용하지 않는다.
++    """
++    return "갱신된 workspace projection"
++
++
++def startupCoreRuntime():
++    """
++    변경:
++    - 기본 project runtime, renderer controller, FSM lifecycle.
++
++    처리:
++    applyDashboardZoom
++    -> ensureDefaultCsv
++    -> installSlotClickController
++    -> makeSlots
++    -> applySlotStyle
++    -> appFSM.ready
++    -> auditApp 순서를 보존한다.
++    """
++    return "ready core runtime"
+diff --git a/sourcescript/portable_build.py b/sourcescript/portable_build.py
+new file mode 100644
+--- /dev/null
++++ b/sourcescript/portable_build.py
+@@ -0,0 +1,71 @@
++"""
++Fast Figure Source Script — portable single-file build
++
++현재 구현 원천:
++- ../scripts/build-portable.py
++- ../Fast-figure.html
++- ../vendor/plotly.min.js
++- ../vendor/fast-figure-ui-runtime.js
++- ../fast-figure.js
++- ../fast-figure-ui.js
++
++이 Source Script의 import는 최종 Python module 배치를 확정하지 않는다.
++"""
++
++ROOT = "repository root containing split Fast Figure source"
++
++DEFAULT_OUTPUT = "dist/Fast-figure.html"
++
++SCRIPTS = [
++    {
++        "externalTag": "Fast-figure.html 안의 vendor/plotly.min.js script tag",
++        "source": "vendor/plotly.min.js bytes",
++        "inlineTag": "일반 inline script",
++    },
++    {
++        "externalTag": "Fast-figure.html 안의 ff-mantine-runtime script tag",
++        "source": "vendor/fast-figure-ui-runtime.js bytes",
++        "inlineTag": "같은 ff-mantine-runtime id를 가진 inline script",
++    },
++    {
++        "externalTag": "Fast-figure.html 안의 fast-figure.js script tag",
++        "source": "fast-figure.js bytes",
++        "inlineTag": "일반 inline script",
++    },
++    {
++        "externalTag": "Fast-figure.html 안의 fast-figure-ui.js script tag",
++        "source": "fast-figure-ui.js bytes",
++        "inlineTag": "일반 inline script",
++    },
++]
++
++BUILD_SEMANTICS = (
++    "portable build는 split source의 application logic을 다시 작성하지 않는다. "
++    "Fast-figure.html의 정확한 external script tag를 동일 source bytes의 inline script로 한 번씩 치환한다."
++)
++
++
++def build(output):
++    """
++    Args:
++    - output:
++      생성할 single-file HTML 경로.
++
++    변경:
++    - output file만 생성/교체한다.
++    - split source를 변경하지 않는다.
++
++    처리:
++    1. Fast-figure.html bytes를 읽는다.
++    2. SCRIPTS 순서대로 각 expected external tag가 정확히 한 번 존재하는지 확인한다.
++    3. source file이 실제로 존재하는지 확인한다.
++    4. tag를 source bytes가 포함된 inline script로 정확히 한 번 치환한다.
++    5. 모든 외부 script tag가 최종 bytes에 남지 않았는지 검사한다.
++    6. output parent directory를 만들고 bytes를 기록한다.
++
++    실패:
++    - expected tag가 0개 또는 2개 이상이면 build를 중단한다.
++    - source file이 없으면 build를 중단한다.
++    - 치환 뒤 external tag가 남으면 build를 중단한다.
++    """
++    return "생성된 portable Fast-figure.html"
