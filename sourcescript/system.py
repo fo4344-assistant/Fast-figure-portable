@@ -39,6 +39,32 @@ SOURCE_SCRIPT_MODULES = {
     "portable_build.py": "split-to-portable build specification",
 }
 
+PROJECT_PURPOSE_INVARIANTS = {
+    "figure-workspace": (
+        "Fast Figure는 tabular data와 image에서 scientific figure draft를 빠르게 구성하는 slot-based workspace다. "
+        "graph, image placement, layout, label, caption, project packaging, raster/Plotly export가 같은 project 의미 위에서 동작한다."
+    ),
+    "local-processing": (
+        "ordinary use의 loaded data와 image 처리는 browser local runtime에서 수행한다. "
+        "core workflow에 server, account, mandatory network connection을 요구하지 않는다."
+    ),
+    "portable-runtime": (
+        "배포 artifact는 단일 Fast-figure.html로 실행 가능해야 하며 core runtime dependency는 portable artifact 안에 포함한다."
+    ),
+    "complete-project-state": (
+        "ProjectObject와 FFPX는 한 figure의 complete persistent state를 표현한다. "
+        "session-only selection, pointer/modal draft, telemetry는 persistent project에 포함하지 않는다."
+    ),
+    "copied-assets": (
+        "FFPX는 CSV/image의 project copy bytes를 package 내부에 보존한다. "
+        "저장·이동·재개방에 원본 filesystem path나 원본 file object가 필요하지 않아야 한다."
+    ),
+    "interchange-boundaries": (
+        "Plotly JSON은 one graph figure interchange, FFSX는 one graph slot + referenced CSV + slot-local caption, "
+        "FFPX는 complete project container 책임을 가진다. 서로의 책임을 암묵적으로 확대하지 않는다."
+    ),
+}
+
 RUNTIME_LOAD_ORDER = [
     "Fast-figure.html이 renderer host DOM과 스타일을 제공한다.",
     "vendor/plotly.min.js가 Plotly renderer를 제공한다.",

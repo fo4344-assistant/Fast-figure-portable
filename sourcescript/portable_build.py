@@ -41,7 +41,13 @@ SCRIPTS = [
 
 BUILD_SEMANTICS = (
     "portable build는 split source의 application logic을 다시 작성하지 않는다. "
-    "Fast-figure.html의 정확한 external script tag를 동일 source bytes의 inline script로 한 번씩 치환한다."
+    "Fast-figure.html의 정확한 external script tag를 동일 source bytes의 inline script로 한 번씩 치환한다. "
+    "결과 Fast-figure.html은 core workflow 실행을 위해 별도 script/runtime download를 요구하지 않는다."
+)
+
+PORTABLE_RUNTIME_RULE = (
+    "ordinary Fast Figure workflow는 single-file artifact 안에서 local browser processing으로 완결되어야 한다. "
+    "향후 optional external integration을 추가하더라도 project open/edit/export의 기본 기능을 network dependency로 바꾸지 않는다."
 )
 
 

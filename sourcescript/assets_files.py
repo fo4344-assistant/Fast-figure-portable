@@ -65,6 +65,12 @@ EXPORT_TRASH_RULE = (
     "export 대상 chart/slot이 trash asset을 참조하면 실패한다."
 )
 
+PACKAGE_ASSET_INDEPENDENCE_RULE = (
+    "FFPX/FFSX가 포함하는 data/image asset은 project/package가 소유한 copied bytes로 읽고 쓴다. "
+    "package 내부 metadata에 원본 local filesystem path를 재개방 필수 reference로 저장하지 않는다. "
+    "package를 다른 환경으로 이동해도 package entry만으로 asset을 복원할 수 있어야 한다."
+)
+
 VFS_RULES = {
     "canonical": (
         "모든 directory와 asset lookup은 하나의 slash-normalized absolute project path를 사용한다. "
