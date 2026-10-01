@@ -222,8 +222,9 @@ buildGridResizeCandidate(project, rows, cols) ==
 
 ChartsOwnedBySlotIds(project, slotIds) ==
   {project.slots[slotId].content.chart :
-    slotId \in slotIds,
-    project.slots[slotId].content.chart # NoChart}
+    slotId \in
+      {candidateSlotId \in slotIds :
+        project.slots[candidateSlotId].content.chart # NoChart}}
 
 ResetSlotsCandidate(project, slotIds) ==
   LET candidateSlots ==
