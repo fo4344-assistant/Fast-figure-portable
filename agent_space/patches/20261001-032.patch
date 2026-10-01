@@ -1,0 +1,1210 @@
+diff --git a/verification/FastFigureSlotCore.tla b/verification/FastFigureSlotCore.tla
+--- a/verification/FastFigureSlotCore.tla
++++ b/verification/FastFigureSlotCore.tla
+@@ -2,13 +2,18 @@
+ EXTENDS Integers, FiniteSets, TLC
+ 
+ (*
++Direct executable verification translation of the slot/layout/chart slice.
++
++Source Script authority:
+-Source Script lineage:
+ - sourcescript/project_state.py
++- sourcescript/application_fsm.py
+ - sourcescript/layout_annotations_export.py
+-- sourcescript/application_fsm.py
+ 
++The Source Script remains the design authority.
++This file preserves the Source Script function boundaries, data ownership,
++candidate -> validate -> commit order, branch meaning, and failure behavior.
++TLC-only state generators are explicitly named VerificationHarness* and are not
++Fast Figure domain commands.
+-This bounded model checks the slot/layout/chart-ownership slice.
+-The finite domain is an abstraction for TLC exploration, not a project limit.
+ *)
+ 
+ MaxRows == 3
+@@ -16,9 +21,6 @@
+ InitialRows == 2
+ InitialCols == 2
+ 
+-Cells == [row : 1..MaxRows, col : 1..MaxCols]
+-
+-NoCell == "no-cell"
+ NoChart == "no-chart"
+ NoImage == "no-image"
+ NoCaption == "no-caption"
+@@ -26,289 +28,600 @@
+ ChartIds == {"chart-1", "chart-2"}
+ ImageIds == {"image-1"}
+ 
++Cell(row, col) == [row |-> row, col |-> col]
++Cells == {Cell(row, col) : row \in 1..MaxRows, col \in 1..MaxCols}
++
++CellSlotId(row, col) == (row - 1) * MaxCols + col
++SlotIds == 1..(MaxRows * MaxCols)
++
++SlotRow(slotId) ==
++  CHOOSE row \in 1..MaxRows :
++    \E col \in 1..MaxCols : CellSlotId(row, col) = slotId
++
++SlotCol(slotId) ==
++  CHOOSE col \in 1..MaxCols :
++    \E row \in 1..MaxRows : CellSlotId(row, col) = slotId
++
++ExpectedSlotIds(rows, cols) ==
++  {CellSlotId(row, col) : row \in 1..rows, col \in 1..cols}
++
++DefaultImageSettings ==
++  [fit |-> "contain", scale |-> 100, x |-> 50, y |-> 50]
++
++SLOT_LOCAL_DEFAULTS ==
+-DefaultPayload ==
+   [ chart         |-> NoChart,
++    imageId       |-> NoImage,
+-    image         |-> NoImage,
+     contentType   |-> "graph",
++    imageSettings |-> DefaultImageSettings,
+-    imageSettings |-> "default",
+     caption       |-> NoCaption ]
+ 
++DefaultContent ==
++  [ chart         |-> SLOT_LOCAL_DEFAULTS.chart,
++    imageId       |-> SLOT_LOCAL_DEFAULTS.imageId,
++    contentType   |-> SLOT_LOCAL_DEFAULTS.contentType,
++    imageSettings |-> SLOT_LOCAL_DEFAULTS.imageSettings ]
++
++DefaultSlot(slotId) ==
++  [ id       |-> slotId,
++    row      |-> SlotRow(slotId),
++    col      |-> SlotCol(slotId),
++    rowSpan  |-> 1,
++    colSpan  |-> 1,
++    hidden   |-> FALSE,
++    content  |-> DefaultContent,
++    caption  |-> SLOT_LOCAL_DEFAULTS.caption ]
++
++InitialSlots ==
++  [slotId \in ExpectedSlotIds(InitialRows, InitialCols) |->
++    DefaultSlot(slotId)]
++
++InitialProject ==
++  [ layout |-> [gridRows |-> InitialRows, gridCols |-> InitialCols],
++    slots  |-> InitialSlots,
++    charts |-> {},
++    images |-> {} ]
++
++SlotLocalState(slot) ==
++  [ chart         |-> slot.content.chart,
++    imageId       |-> slot.content.imageId,
++    contentType   |-> slot.content.contentType,
++    imageSettings |-> slot.content.imageSettings,
++    caption       |-> slot.caption ]
++
++WithSlotLocalState(slot, localState) ==
++  [slot EXCEPT
++    !.content.chart = localState.chart,
++    !.content.imageId = localState.imageId,
++    !.content.contentType = localState.contentType,
++    !.content.imageSettings = localState.imageSettings,
++    !.caption = localState.caption]
++
++ResetSlotLocalState(slot) ==
++  WithSlotLocalState(slot, SLOT_LOCAL_DEFAULTS)
++
++slotHasNonDefaultLocalState(slot) ==
++  SlotLocalState(slot) # SLOT_LOCAL_DEFAULTS
++
++VisibleSlotIds(project) ==
++  {slotId \in DOMAIN project.slots : ~project.slots[slotId].hidden}
++
++ActiveCells(project) ==
++  {Cell(row, col) :
++    row \in 1..project.layout.gridRows,
++    col \in 1..project.layout.gridCols}
++
++SlotCells(slot) ==
++  {Cell(row, col) :
++    row \in slot.row..(slot.row + slot.rowSpan - 1),
++    col \in slot.col..(slot.col + slot.colSpan - 1)}
++
++CoveringVisibleSlots(project, cell) ==
++  {slotId \in VisibleSlotIds(project) :
++    cell \in SlotCells(project.slots[slotId])}
++
++SlotBaseCell(slot) == Cell(slot.row, slot.col)
+-CaptionPayload ==
+-  [DefaultPayload EXCEPT !.caption = "caption"]
+ 
++LayoutCoverageValid(project) ==
++  /\ \A cell \in ActiveCells(project) :
++       Cardinality(CoveringVisibleSlots(project, cell)) = 1
++  /\ \A slotId \in DOMAIN project.slots :
++       LET covering == CoveringVisibleSlots(
++                         project,
++                         SlotBaseCell(project.slots[slotId]))
++       IN
++         IF project.slots[slotId].hidden
++           THEN /\ Cardinality(covering) = 1
++                /\ slotId \notin covering
++           ELSE covering = {slotId}
+-CustomSettingsPayload ==
+-  [DefaultPayload EXCEPT !.imageSettings = "custom"]
+ 
++SlotReferenceIntegrity(project) ==
++  \A slotId \in DOMAIN project.slots :
++    LET local == SlotLocalState(project.slots[slotId])
++    IN
++      /\ (local.chart = NoChart \/ local.chart \in project.charts)
++      /\ (local.imageId = NoImage \/ local.imageId \in project.images)
++      /\ ~(local.chart # NoChart /\ local.imageId # NoImage)
++      /\ (local.chart # NoChart => local.contentType = "graph")
++      /\ (local.imageId # NoImage => local.contentType = "image")
+-ChartPayload(chartId) ==
+-  [DefaultPayload EXCEPT !.chart = chartId]
+ 
++ChartOwnershipInvariant(project) ==
++  \A chartId \in project.charts :
++    Cardinality(
++      {slotId \in DOMAIN project.slots :
++        project.slots[slotId].content.chart = chartId}
++    ) = 1
+-ImagePayload(imageId) ==
+-  [ chart         |-> NoChart,
+-    image         |-> imageId,
+-    contentType   |-> "image",
+-    imageSettings |-> "custom",
+-    caption       |-> NoCaption ]
+ 
++SlotGeometryValid(project) ==
++  /\ DOMAIN project.slots =
++       ExpectedSlotIds(project.layout.gridRows, project.layout.gridCols)
++  /\ \A slotId \in DOMAIN project.slots :
++       LET slot == project.slots[slotId]
++       IN
++         /\ slot.id = slotId
++         /\ slot.row = SlotRow(slotId)
++         /\ slot.col = SlotCol(slotId)
++         /\ slot.rowSpan >= 1
++         /\ slot.colSpan >= 1
++         /\ slot.row + slot.rowSpan - 1 <= project.layout.gridRows
++         /\ slot.col + slot.colSpan - 1 <= project.layout.gridCols
+-PayloadType ==
+-  {DefaultPayload, CaptionPayload, CustomSettingsPayload}
+-  \cup {ChartPayload(chartId) : chartId \in ChartIds}
+-  \cup {ImagePayload(imageId) : imageId \in ImageIds}
+ 
++ValidateSlotLayoutProjection(project) ==
++  /\ project.layout.gridRows \in 1..MaxRows
++  /\ project.layout.gridCols \in 1..MaxCols
++  /\ project.charts \subseteq ChartIds
++  /\ project.images \subseteq ImageIds
++  /\ SlotGeometryValid(project)
++  /\ LayoutCoverageValid(project)
++  /\ SlotReferenceIntegrity(project)
++  /\ ChartOwnershipInvariant(project)
+-OperationNames ==
+-  {"init", "seed-chart", "seed-image", "seed-caption", "seed-settings",
+-   "swap", "reset", "merge", "split", "resize"}
+ 
+ (*
++This slice models only the fields touched by the translated Source Script
++functions below. Other ProjectObject fields are assumed unchanged and already
++valid. Therefore a whole-project validation call in the Source Script is
++represented here by ValidateSlotLayoutProjection for this projection only.
++*)
++
++RemovedSlotIds(project, rows, cols) ==
++  DOMAIN project.slots \ ExpectedSlotIds(rows, cols)
++
++GridShrinkSafe(project, rows, cols) ==
++  /\ \A slotId \in RemovedSlotIds(project, rows, cols) :
++       /\ ~slotHasNonDefaultLocalState(project.slots[slotId])
++       /\ ~project.slots[slotId].hidden
++       /\ project.slots[slotId].rowSpan = 1
++       /\ project.slots[slotId].colSpan = 1
++  /\ \A slotId \in
++       ((DOMAIN project.slots \ RemovedSlotIds(project, rows, cols))
++         \cap VisibleSlotIds(project)) :
++       /\ project.slots[slotId].row + project.slots[slotId].rowSpan - 1 <= rows
++       /\ project.slots[slotId].col + project.slots[slotId].colSpan - 1 <= cols
++
++ResizeSlots(project, rows, cols) ==
++  [slotId \in ExpectedSlotIds(rows, cols) |->
++    IF slotId \in DOMAIN project.slots
++      THEN project.slots[slotId]
++      ELSE DefaultSlot(slotId)]
++
++buildGridResizeCandidate(project, rows, cols) ==
++  IF ~(rows \in 1..MaxRows /\ cols \in 1..MaxCols)
++    THEN [accepted |-> FALSE, project |-> project, reason |-> "invalid-grid-size"]
++  ELSE IF (rows < project.layout.gridRows \/ cols < project.layout.gridCols)
++          /\ ~GridShrinkSafe(project, rows, cols)
++    THEN [accepted |-> FALSE, project |-> project, reason |-> "unsafe-shrink"]
++  ELSE
++    LET candidate ==
++      [project EXCEPT
++        !.layout.gridRows = rows,
++        !.layout.gridCols = cols,
++        !.slots = ResizeSlots(project, rows, cols)]
++    IN
++      IF ValidateSlotLayoutProjection(candidate)
++        THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
++        ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
++
++ChartsOwnedBySlotIds(project, slotIds) ==
++  {project.slots[slotId].content.chart :
++    slotId \in slotIds,
++    project.slots[slotId].content.chart # NoChart}
++
++ResetSlotsCandidate(project, slotIds) ==
++  LET candidateSlots ==
++    [slotId \in DOMAIN project.slots |->
++      IF slotId \in slotIds
++        THEN ResetSlotLocalState(project.slots[slotId])
++        ELSE project.slots[slotId]]
++      removedCharts == ChartsOwnedBySlotIds(project, slotIds)
++  IN
++    [project EXCEPT
++      !.slots = candidateSlots,
++      !.charts = project.charts \ removedCharts]
++
++SwapSlotsCandidate(project, sourceId, targetId) ==
++  LET sourceLocal == SlotLocalState(project.slots[sourceId])
++      targetLocal == SlotLocalState(project.slots[targetId])
++      candidateSlots ==
++        [slotId \in DOMAIN project.slots |->
++          IF slotId = sourceId
++            THEN WithSlotLocalState(project.slots[slotId], targetLocal)
++          ELSE IF slotId = targetId
++            THEN WithSlotLocalState(project.slots[slotId], sourceLocal)
++          ELSE project.slots[slotId]]
++  IN [project EXCEPT !.slots = candidateSlots]
++
++RowsOfCells(cells) == {cell.row : cell \in cells}
++ColsOfCells(cells) == {cell.col : cell \in cells}
++
++MinRow(cells) ==
++  CHOOSE row \in RowsOfCells(cells) :
++    \A other \in RowsOfCells(cells) : row <= other
++
++MaxRow(cells) ==
++  CHOOSE row \in RowsOfCells(cells) :
++    \A other \in RowsOfCells(cells) : row >= other
++
++MinCol(cells) ==
++  CHOOSE col \in ColsOfCells(cells) :
++    \A other \in ColsOfCells(cells) : col <= other
++
++MaxCol(cells) ==
++  CHOOSE col \in ColsOfCells(cells) :
++    \A other \in ColsOfCells(cells) : col >= other
+---algorithm FastFigureSlotCore {
+-variables
+-  gridRows = InitialRows,
+-  gridCols = InitialCols,
+-  payload = [cell \in Cells |-> DefaultPayload],
+-  cover = [cell \in Cells |-> NoCell],
+-  charts = {},
+-  lastOp = "init";
+ 
++RectangleCells(cells) ==
++  {Cell(row, col) :
++    row \in MinRow(cells)..MaxRow(cells),
++    col \in MinCol(cells)..MaxCol(cells)}
+-define {
+-  Active(cell) ==
+-    /\ cell.row <= gridRows
+-    /\ cell.col <= gridCols
+ 
++SelectedCells(project, slotIds) ==
++  UNION {SlotCells(project.slots[slotId]) : slotId \in slotIds}
+-  ActiveCells ==
+-    {cell \in Cells : Active(cell)}
+ 
++NonDefaultSelectedSlotIds(project, slotIds) ==
++  {slotId \in slotIds :
++    slotHasNonDefaultLocalState(project.slots[slotId])}
+-  VisibleCells ==
+-    {cell \in ActiveCells : cover[cell] = NoCell}
+ 
++MergePrecondition(project, slotIds) ==
++  /\ slotIds \subseteq VisibleSlotIds(project)
++  /\ slotIds # {}
++  /\ Cardinality(slotIds) >= 2
++  /\ SelectedCells(project, slotIds) =
++       RectangleCells(SelectedCells(project, slotIds))
++  /\ Cardinality(NonDefaultSelectedSlotIds(project, slotIds)) <= 1
+-  Region(anchor) ==
+-    {anchor} \cup {cell \in ActiveCells : cover[cell] = anchor}
+ 
++MergeAnchorId(project, slotIds) ==
++  CHOOSE slotId \in slotIds :
++    /\ project.slots[slotId].row = MinRow(SelectedCells(project, slotIds))
++    /\ project.slots[slotId].col = MinCol(SelectedCells(project, slotIds))
+-  Owner(cell) ==
+-    IF cover[cell] = NoCell THEN cell ELSE cover[cell]
+ 
++MergeSourceId(project, slotIds) ==
++  IF NonDefaultSelectedSlotIds(project, slotIds) = {}
++    THEN MergeAnchorId(project, slotIds)
++    ELSE CHOOSE slotId \in NonDefaultSelectedSlotIds(project, slotIds) : TRUE
+-  RowsOf(cellSet) ==
+-    {cell.row : cell \in cellSet}
+ 
++MergeSlotsCandidate(project, slotIds) ==
++  LET cells == SelectedCells(project, slotIds)
++      anchorId == MergeAnchorId(project, slotIds)
++      sourceId == MergeSourceId(project, slotIds)
++      sourceLocal == SlotLocalState(project.slots[sourceId])
++      candidateSlots ==
++        [slotId \in DOMAIN project.slots |->
++          IF slotId = anchorId
++            THEN [WithSlotLocalState(project.slots[slotId], sourceLocal) EXCEPT
++                    !.rowSpan = MaxRow(cells) - MinRow(cells) + 1,
++                    !.colSpan = MaxCol(cells) - MinCol(cells) + 1,
++                    !.hidden = FALSE]
++          ELSE IF SlotBaseCell(project.slots[slotId]) \in cells
++            THEN [ResetSlotLocalState(project.slots[slotId]) EXCEPT !.hidden = TRUE]
++          ELSE project.slots[slotId]]
++      candidate == [project EXCEPT !.slots = candidateSlots]
++  IN
++    IF ValidateSlotLayoutProjection(candidate)
++      THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
++      ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
+-  ColsOf(cellSet) ==
+-    {cell.col : cell \in cellSet}
+ 
++SplitAnchorPrecondition(project, slotIds) ==
++  /\ Cardinality(slotIds) = 1
++  /\ slotIds \subseteq VisibleSlotIds(project)
++  /\ LET anchorId == CHOOSE slotId \in slotIds : TRUE
++     IN
++       \/ project.slots[anchorId].rowSpan > 1
++       \/ project.slots[anchorId].colSpan > 1
+-  IsRectangle(cellSet) ==
+-    /\ cellSet # {}
+-    /\ cellSet =
+-         {cell \in Cells :
+-            /\ cell.row \in RowsOf(cellSet)
+-            /\ cell.col \in ColsOf(cellSet)}
+ 
++SplitSlotsCandidate(project, slotIds) ==
++  LET anchorId == CHOOSE slotId \in slotIds : TRUE
++      anchor == project.slots[anchorId]
++      cells == SlotCells(anchor)
++      candidateSlots ==
++        [slotId \in DOMAIN project.slots |->
++          IF slotId = anchorId
++            THEN [project.slots[slotId] EXCEPT
++                    !.rowSpan = 1,
++                    !.colSpan = 1,
++                    !.hidden = FALSE]
++          ELSE IF SlotBaseCell(project.slots[slotId]) \in cells
++            THEN [ResetSlotLocalState(project.slots[slotId]) EXCEPT
++                    !.rowSpan = 1,
++                    !.colSpan = 1,
++                    !.hidden = FALSE]
++          ELSE project.slots[slotId]]
++      candidate == [project EXCEPT !.slots = candidateSlots]
++  IN
++    IF ValidateSlotLayoutProjection(candidate)
++      THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
++      ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
+-  SelectedRegion(selection) ==
+-    UNION {Region(anchor) : anchor \in selection}
+ 
++TypeOK ==
++  /\ ValidateSlotLayoutProjection(activeProject)
++  /\ lastResult \in {
++       "initialized",
++       "reset-committed", "reset-rejected",
++       "swap-committed", "swap-rejected",
++       "grid-committed", "grid-rejected",
++       "merge-committed", "merge-rejected",
++       "split-committed", "split-rejected",
++       "harness-seeded"
++     }
+-  NonDefaultSelected(selection) ==
+-    {anchor \in selection : payload[anchor] # DefaultPayload}
+ 
++ChartOwnershipInvariantSpec ==
++  ChartOwnershipInvariant(activeProject)
+-  MergeAnchor(selection) ==
+-    CHOOSE cell \in SelectedRegion(selection) :
+-      \A other \in SelectedRegion(selection) :
+-        /\ cell.row <= other.row
+-        /\ cell.col <= other.col
+ 
++SafetyInvariant ==
++  ValidateSlotLayoutProjection(activeProject)
+-  MergeSource(selection) ==
+-    IF NonDefaultSelected(selection) = {}
+-      THEN MergeAnchor(selection)
+-      ELSE CHOOSE anchor \in NonDefaultSelected(selection) : TRUE
+ 
++(*
++--algorithm FastFigureSlotCore {
++variables
++  activeProject = InitialProject,
++  lastResult = "initialized";
+-  MergeEnabled(selection) ==
+-    /\ selection \subseteq VisibleCells
+-    /\ Cardinality(selection) >= 2
+-    /\ IsRectangle(SelectedRegion(selection))
+-    /\ MergeAnchor(selection) \in selection
+-    /\ Cardinality(NonDefaultSelected(selection)) <= 1
+ 
++procedure applySlotsResetAction(slotIds)
++variables candidate = activeProject;
++begin
++ResetResolve:
++  if slotIds \subseteq DOMAIN activeProject.slots then
++    candidate := ResetSlotsCandidate(activeProject, slotIds);
++    if ValidateSlotLayoutProjection(candidate) then
++      activeProject := candidate ||
++      lastResult := "reset-committed";
++    else
++      lastResult := "reset-rejected";
++    end if;
++  else
++    lastResult := "reset-rejected";
++  end if;
++  return;
++end procedure;
+-  WillBeActive(cell, rows, cols) ==
+-    /\ cell.row <= rows
+-    /\ cell.col <= cols
+ 
++procedure applySlotsSwappedAction(sourceId, targetId)
++variables candidate = activeProject;
++begin
++SwapResolve:
++  if /\ sourceId \in VisibleSlotIds(activeProject)
++     /\ targetId \in VisibleSlotIds(activeProject)
++     /\ sourceId # targetId then
++    candidate := SwapSlotsCandidate(activeProject, sourceId, targetId);
++    if ValidateSlotLayoutProjection(candidate) then
++      activeProject := candidate ||
++      lastResult := "swap-committed";
++    else
++      lastResult := "swap-rejected";
++    end if;
++  else
++    lastResult := "swap-rejected";
++  end if;
++  return;
++end procedure;
+-  RemovedCells(rows, cols) ==
+-    {cell \in ActiveCells : ~WillBeActive(cell, rows, cols)}
+ 
++procedure setLayoutApiGrid(rows, cols)
++variables resizeResult = [accepted |-> FALSE,
++                          project |-> activeProject,
++                          reason |-> "not-run"];
++begin
++GridBuildCandidate:
++  resizeResult := buildGridResizeCandidate(activeProject, rows, cols);
++GridCommit:
++  if resizeResult.accepted then
++    activeProject := resizeResult.project ||
++    lastResult := "grid-committed";
++  else
++    lastResult := "grid-rejected";
++  end if;
++  return;
++end procedure;
+-  ResizeSafe(rows, cols) ==
+-    /\ rows \in 1..MaxRows
+-    /\ cols \in 1..MaxCols
+-    /\ (rows # gridRows \/ cols # gridCols)
+-    /\ \A cell \in RemovedCells(rows, cols) :
+-         /\ payload[Owner(cell)] = DefaultPayload
+-         /\ Cardinality(Region(Owner(cell))) = 1
+ 
++procedure applyGridLayoutAction(rows, cols)
++begin
++ApplyGrid:
++  call setLayoutApiGrid(rows, cols);
++  return;
++end procedure;
+-  TypeOK ==
+-    /\ gridRows \in 1..MaxRows
+-    /\ gridCols \in 1..MaxCols
+-    /\ payload \in [Cells -> PayloadType]
+-    /\ cover \in [Cells -> (Cells \cup {NoCell})]
+-    /\ charts \subseteq ChartIds
+-    /\ lastOp \in OperationNames
+ 
++procedure mergeSlots(slotIds)
++variables mergeResult = [accepted |-> FALSE,
++                         project |-> activeProject,
++                         reason |-> "not-run"];
++begin
++MergeResolve:
++  if MergePrecondition(activeProject, slotIds) then
++    mergeResult := MergeSlotsCandidate(activeProject, slotIds);
++    if mergeResult.accepted then
++      activeProject := mergeResult.project ||
++      lastResult := "merge-committed";
++    else
++      lastResult := "merge-rejected";
++    end if;
++  else
++    lastResult := "merge-rejected";
++  end if;
++  return;
++end procedure;
+-  InactiveCellsAreDefault ==
+-    \A cell \in Cells \ ActiveCells :
+-      /\ payload[cell] = DefaultPayload
+-      /\ cover[cell] = NoCell
+ 
++procedure splitSlots(slotIds)
++variables splitResult = [accepted |-> FALSE,
++                         project |-> activeProject,
++                         reason |-> "not-run"];
++begin
++SplitResolve:
++  if SplitAnchorPrecondition(activeProject, slotIds) then
++    splitResult := SplitSlotsCandidate(activeProject, slotIds);
++    if splitResult.accepted then
++      activeProject := splitResult.project ||
++      lastResult := "split-committed";
++    else
++      lastResult := "split-rejected";
++    end if;
++  else
++    lastResult := "split-rejected";
++  end if;
++  return;
++end procedure;
+-  CoverIntegrity ==
+-    \A cell \in ActiveCells :
+-      IF cover[cell] = NoCell
+-        THEN TRUE
+-        ELSE
+-          /\ cover[cell] \in ActiveCells
+-          /\ cover[cover[cell]] = NoCell
+-          /\ cover[cell] # cell
+ 
++\* Verification harness only.
++\* These procedures generate valid representative prestates so TLC can exercise
++\* the translated Source Script procedures with non-default slot-local state.
++\* They are not Fast Figure domain commands and do not participate in the
++\* Source Script -> verification code -> source code mapping.
+-  HiddenCellsAreDefault ==
+-    \A cell \in ActiveCells :
+-      cover[cell] # NoCell => payload[cell] = DefaultPayload
+ 
++procedure VerificationHarnessSeedChart(slotId, chartId)
++variables slot = DefaultSlot(1);
++begin
++HarnessChart:
++  if /\ slotId \in VisibleSlotIds(activeProject)
++     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId])
++     /\ chartId \in ChartIds \ activeProject.charts then
++    slot := WithSlotLocalState(
++              activeProject.slots[slotId],
++              [SLOT_LOCAL_DEFAULTS EXCEPT !.chart = chartId]);
++    activeProject :=
++      [activeProject EXCEPT
++        !.slots =
++          [sid \in DOMAIN activeProject.slots |->
++            IF sid = slotId THEN slot ELSE activeProject.slots[sid]],
++        !.charts = activeProject.charts \cup {chartId}] ||
++    lastResult := "harness-seeded";
++  end if;
++  return;
++end procedure;
+-  MergedRegionsAreRectangles ==
+-    \A anchor \in VisibleCells :
+-      IsRectangle(Region(anchor))
+ 
++procedure VerificationHarnessSeedImage(slotId, imageId)
++variables local = SLOT_LOCAL_DEFAULTS;
++begin
++HarnessImage:
++  if /\ slotId \in VisibleSlotIds(activeProject)
++     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId])
++     /\ imageId \in ImageIds then
++    local := [SLOT_LOCAL_DEFAULTS EXCEPT
++               !.imageId = imageId,
++               !.contentType = "image",
++               !.imageSettings =
++                 [fit |-> "manual", scale |-> 125, x |-> 40, y |-> 60]];
++    activeProject :=
++      [activeProject EXCEPT
++        !.slots =
++          [sid \in DOMAIN activeProject.slots |->
++            IF sid = slotId
++              THEN WithSlotLocalState(activeProject.slots[sid], local)
++              ELSE activeProject.slots[sid]],
++        !.images = activeProject.images \cup {imageId}] ||
++    lastResult := "harness-seeded";
++  end if;
++  return;
++end procedure;
+-  SlotReferenceIntegrity ==
+-    \A cell \in ActiveCells :
+-      /\ (payload[cell].chart = NoChart \/ payload[cell].chart \in charts)
+-      /\ (payload[cell].image = NoImage \/ payload[cell].image \in ImageIds)
+-      /\ ~(payload[cell].chart # NoChart /\ payload[cell].image # NoImage)
+-      /\ (payload[cell].chart # NoChart => payload[cell].contentType = "graph")
+-      /\ (payload[cell].image # NoImage => payload[cell].contentType = "image")
+ 
++procedure VerificationHarnessSeedCaption(slotId)
++variables local = SLOT_LOCAL_DEFAULTS;
++begin
++HarnessCaption:
++  if /\ slotId \in VisibleSlotIds(activeProject)
++     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId]) then
++    local := [SLOT_LOCAL_DEFAULTS EXCEPT !.caption = "caption"];
++    activeProject :=
++      [activeProject EXCEPT
++        !.slots =
++          [sid \in DOMAIN activeProject.slots |->
++            IF sid = slotId
++              THEN WithSlotLocalState(activeProject.slots[sid], local)
++              ELSE activeProject.slots[sid]]] ||
++    lastResult := "harness-seeded";
++  end if;
++  return;
++end procedure;
+-  ChartOwnershipInvariant ==
+-    \A chartId \in charts :
+-      Cardinality(
+-        {cell \in ActiveCells : payload[cell].chart = chartId}
+-      ) = 1
+ 
++procedure VerificationHarnessSeedImageSettings(slotId)
++variables local = SLOT_LOCAL_DEFAULTS;
++begin
++HarnessSettings:
++  if /\ slotId \in VisibleSlotIds(activeProject)
++     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId]) then
++    local := [SLOT_LOCAL_DEFAULTS EXCEPT
++               !.imageSettings =
++                 [fit |-> "manual", scale |-> 125, x |-> 40, y |-> 60]];
++    activeProject :=
++      [activeProject EXCEPT
++        !.slots =
++          [sid \in DOMAIN activeProject.slots |->
++            IF sid = slotId
++              THEN WithSlotLocalState(activeProject.slots[sid], local)
++              ELSE activeProject.slots[sid]]] ||
++    lastResult := "harness-seeded";
++  end if;
++  return;
++end procedure;
+-  SafetyInvariant ==
+-    /\ TypeOK
+-    /\ InactiveCellsAreDefault
+-    /\ CoverIntegrity
+-    /\ HiddenCellsAreDefault
+-    /\ MergedRegionsAreRectangles
+-    /\ SlotReferenceIntegrity
+-    /\ ChartOwnershipInvariant
+-}
+ 
+ begin
++VerificationHarness:
+-Main:
+   while (TRUE) {
+     either {
++      with (slotIds \in SUBSET DOMAIN activeProject.slots) {
++        call applySlotsResetAction(slotIds);
+-      with (cell \in {slot \in VisibleCells : payload[slot] = DefaultPayload}) {
+-        with (chartId \in ChartIds \ charts) {
+-          payload[cell] := ChartPayload(chartId)
+-          ||
+-          charts := charts \cup {chartId}
+-          ||
+-          lastOp := "seed-chart";
+-        };
+       };
+     }
+     or {
++      with (sourceId \in VisibleSlotIds(activeProject)) {
++        with (targetId \in VisibleSlotIds(activeProject) \ {sourceId}) {
++          call applySlotsSwappedAction(sourceId, targetId);
+-      with (cell \in {slot \in VisibleCells : payload[slot] = DefaultPayload}) {
+-        with (imageId \in ImageIds) {
+-          payload[cell] := ImagePayload(imageId)
+-          ||
+-          lastOp := "seed-image";
+         };
+       };
+     }
+     or {
++      with (rows \in 1..MaxRows) {
++        with (cols \in 1..MaxCols) {
++          call applyGridLayoutAction(rows, cols);
++        };
+-      with (cell \in {slot \in VisibleCells : payload[slot] = DefaultPayload}) {
+-        payload[cell] := CaptionPayload
+-        ||
+-        lastOp := "seed-caption";
+       };
+     }
+     or {
++      with (slotIds \in SUBSET VisibleSlotIds(activeProject)) {
++        call mergeSlots(slotIds);
+-      with (cell \in {slot \in VisibleCells : payload[slot] = DefaultPayload}) {
+-        payload[cell] := CustomSettingsPayload
+-        ||
+-        lastOp := "seed-settings";
+       };
+     }
+     or {
++      with (slotIds \in SUBSET VisibleSlotIds(activeProject)) {
++        call splitSlots(slotIds);
+-      with (source \in VisibleCells) {
+-        with (target \in VisibleCells \ {source}) {
+-          payload[source] := payload[target]
+-          ||
+-          payload[target] := payload[source]
+-          ||
+-          lastOp := "swap";
+-        };
+       };
+     }
+     or {
++      with (slotId \in VisibleSlotIds(activeProject)) {
++        with (chartId \in ChartIds) {
++          call VerificationHarnessSeedChart(slotId, chartId);
++        };
+-      with (cell \in VisibleCells) {
+-        payload[cell] := DefaultPayload
+-        ||
+-        charts := charts \ {payload[cell].chart}
+-        ||
+-        lastOp := "reset";
+       };
+     }
+     or {
++      with (slotId \in VisibleSlotIds(activeProject)) {
++        with (imageId \in ImageIds) {
++          call VerificationHarnessSeedImage(slotId, imageId);
++        };
+-      with (selection \in {s \in SUBSET(VisibleCells) : MergeEnabled(s)}) {
+-        payload :=
+-          [cell \in Cells |->
+-            IF cell = MergeAnchor(selection)
+-              THEN payload[MergeSource(selection)]
+-              ELSE IF cell \in SelectedRegion(selection)
+-                THEN DefaultPayload
+-                ELSE payload[cell]]
+-        ||
+-        cover :=
+-          [cell \in Cells |->
+-            IF cell = MergeAnchor(selection)
+-              THEN NoCell
+-              ELSE IF cell \in SelectedRegion(selection)
+-                THEN MergeAnchor(selection)
+-                ELSE cover[cell]]
+-        ||
+-        lastOp := "merge";
+       };
+     }
+     or {
++      with (slotId \in VisibleSlotIds(activeProject)) {
++        call VerificationHarnessSeedCaption(slotId);
+-      with (anchor \in
+-        {cell \in VisibleCells : Cardinality(Region(cell)) > 1}) {
+-        payload :=
+-          [cell \in Cells |->
+-            IF cell \in (Region(anchor) \ {anchor})
+-              THEN DefaultPayload
+-              ELSE payload[cell]]
+-        ||
+-        cover :=
+-          [cell \in Cells |->
+-            IF cell \in Region(anchor)
+-              THEN NoCell
+-              ELSE cover[cell]]
+-        ||
+-        lastOp := "split";
+       };
+     }
+     or {
++      with (slotId \in VisibleSlotIds(activeProject)) {
++        call VerificationHarnessSeedImageSettings(slotId);
+-      with (rows \in 1..MaxRows) {
+-        with (cols \in 1..MaxCols) {
+-          await ResizeSafe(rows, cols);
+-          payload :=
+-            [cell \in Cells |->
+-              IF Active(cell) /\ WillBeActive(cell, rows, cols)
+-                THEN payload[cell]
+-                ELSE DefaultPayload]
+-          ||
+-          cover :=
+-            [cell \in Cells |->
+-              IF Active(cell) /\ WillBeActive(cell, rows, cols)
+-                THEN cover[cell]
+-                ELSE NoCell]
+-          ||
+-          gridRows := rows
+-          ||
+-          gridCols := cols
+-          ||
+-          lastOp := "resize";
+-        };
+       };
+     };
+   };
+diff --git a/verification/FastFigureSlotCore.cfg b/verification/FastFigureSlotCore.cfg
+--- a/verification/FastFigureSlotCore.cfg
++++ b/verification/FastFigureSlotCore.cfg
+@@ -1,11 +1,6 @@
+ SPECIFICATION Spec
+ 
+ INVARIANT TypeOK
+-INVARIANT InactiveCellsAreDefault
+-INVARIANT CoverIntegrity
+-INVARIANT HiddenCellsAreDefault
+-INVARIANT MergedRegionsAreRectangles
+-INVARIANT SlotReferenceIntegrity
+-INVARIANT ChartOwnershipInvariant
+ INVARIANT SafetyInvariant
++INVARIANT ChartOwnershipInvariantSpec
+ 
+diff --git a/verification/README.md b/verification/README.md
+--- a/verification/README.md
++++ b/verification/README.md
+@@ -1,189 +1,186 @@
++# verification code r2 — slot/layout/chart direct translation
++
++## Purpose
+-# verification-model r1 — slot/layout/chart core
+ 
++This revision replaces the earlier state-model-style r1 with a direct executable
++translation of the corresponding Source Script algorithms.
+-## Scope
+ 
++The role is the original pseudocode role plus executable verification:
+-This revision models one coherent Source Script slice:
+ 
++```text
++Source Script
++-> verification code
++-> TLC
++-> source code
++```
+-- `SLOT_LOCAL_DEFAULTS` and the one-owner slot-local payload rule
+-- chart reference validity and exact-one-slot chart ownership
+-- `applySlotsSwappedAction`
+-- `applySlotsResetAction`
+-- `mergeSlots`
+-- `splitSlots`
+-- `buildGridResizeCandidate` / grid commit semantics
+ 
++The verification code is not a second design model.
+-Source Script inputs:
+ 
++It preserves the Source Script's:
+-- `sourcescript/project_state.py`
+-- `sourcescript/layout_annotations_export.py`
+-- `sourcescript/application_fsm.py`
+ 
++- data ownership
++- function boundaries
++- call relationship
++- execution order
++- branches
++- value generation and consumption
++- candidate/validation/commit boundary
++- failure/rejection behavior
+-The model is intentionally incomplete as a project-wide verification model.
+-Its manifest state remains `tlc=pending`.
+ 
++TLA+ operators are used where the Source Script describes pure calculation.
++PlusCal procedures are used where the Source Script describes an operation or
++mutation path.
+-## State representation
+ 
++## Source Script mapping
+-The persistent project slice is reduced to:
+ 
++### project_state.py
+-- current grid rows/columns
+-- one slot-local payload per bounded grid cell
+-- merge coverage relation
+-- current chart-id set
+ 
++Directly represented:
+-A slot-local payload keeps the Source Script ownership unit together:
+ 
++- `SLOT_LOCAL_DEFAULTS`
++- `slotHasNonDefaultLocalState`
++- slot-local ownership of chart/imageId/contentType/imageSettings/caption
++- chart/image reference validity for this slice
++- exact-one-slot chart ownership
+-- chart
+-- image
+-- contentType
+-- imageSettings
+-- caption
+ 
++`validateProjectObjectState` is not redefined as a smaller project validator.
++Instead this slice defines `ValidateSlotLayoutProjection`, which explicitly
++means only the projection of whole-project validation that can change in this
++translation. Unmodeled ProjectObject fields are assumed unchanged and valid.
+-The exact image-setting numbers and caption text are not relevant to this slice.
+-They are represented by equivalence classes such as `default/custom` and
+-`no-caption/caption`.
+ 
++### application_fsm.py
+-## Environment actions
+ 
++Direct PlusCal procedures:
+-The model contains four `seed-*` actions.
+ 
++- `applySlotsResetAction`
++- `applySlotsSwappedAction`
++- `applyGridLayoutAction`
+-They abstract already-validated upstream commands that can create a non-default
+-slot-local state:
+ 
++The candidate is calculated before authoritative mutation.
++A rejected/invalid candidate leaves `activeProject` unchanged.
+-- chart connection/creation
+-- image connection
+-- explicit slot caption
+-- custom slot-local image settings
+ 
++### layout_annotations_export.py
+-They are environment actions rather than new Fast Figure domain commands.
+-Their purpose is to make layout operations reachable with representative
+-non-default payloads.
+ 
++Direct translation:
+-## Candidate-first abstraction
+ 
++- `buildGridResizeCandidate` as a pure TLA+ operator
++- `setLayoutApiGrid` as a PlusCal procedure
++- `mergeSlots` as a PlusCal procedure
++- `splitSlots` as a PlusCal procedure
+-For grid resize and merge, invalid candidates are represented as disabled actions.
+-With TLA+ stuttering, an invalid request therefore has no persistent-state change.
+ 
++The call chain is preserved:
+-This preserves the Source Script rule:
+ 
+ ```text
++applyGridLayoutAction
++-> setLayoutApiGrid
++-> buildGridResizeCandidate
++-> projection validation
++-> commit or reject
+-resolve/precondition
+--> candidate
+--> validation
+--> commit once
+ ```
+ 
++## Data representation
++
++The verification code keeps the Source Script slot structure rather than
++replacing it with a separate `payload/cover` domain model.
++
++Each slot has:
++
++- id
++- row / col
++- rowSpan / colSpan
++- hidden
++- content.chart
++- content.imageId
++- content.contentType
++- content.imageSettings
++- caption
+-without introducing a second persistent candidate state into the model.
+ 
++The TLA+ function that maps slot id to slot record is a mechanical finite-state
++representation of the Source Script slot collection.
+-If later work needs to verify an asynchronous validator, lock, callback, or
+-multi-step transaction, candidate state must be made explicit instead of using
+-this atomic abstraction.
+ 
++## TLC bounds
+-## TLC bounds and abstractions
+ 
++For this slice TLC uses:
+-This r1 model uses deliberately small finite domains:
+ 
+ - maximum grid: 3 x 3
+ - initial grid: 2 x 2
+ - chart ids: 2
+ - image ids: 1
+-- caption: absent/present
+-- imageSettings: default/custom
+ 
++These are finite verification bounds, not application limits.
+-These are model-checking bounds, not application limits.
+ 
++Values such as caption text and manual image settings use representative values,
++but the field ownership and branches that distinguish default/non-default state
++are preserved.
+-The reduction keeps distinctions that affect the checked properties:
+ 
++## Verification harness
+-- default vs non-default slot-local state
+-- chart identity
+-- image-reference presence
+-- chart vs image mutual exclusion
+-- merged vs visible cell
+-- layout position
+-- chart owner movement
+ 
++`VerificationHarness*` procedures are deliberately separated from translated
++Fast Figure procedures.
+-## Invariants
+ 
++They are not domain commands and must not be copied into source code.
+-The model defines:
+ 
++Their only role is to construct valid representative prestates containing:
+-- `TypeOK`
+-- `InactiveCellsAreDefault`
+-- `CoverIntegrity`
+-- `HiddenCellsAreDefault`
+-- `MergedRegionsAreRectangles`
+-- `SlotReferenceIntegrity`
+-- `ChartOwnershipInvariant`
+-- `SafetyInvariant`
+ 
++- an owned chart
++- an image reference
++- a slot caption
++- non-default image settings
+-The most important domain property in this slice is:
+ 
++so TLC can execute reset/swap/merge/split/grid operations over the states that
++the real application can reach through other Source Script modules.
+-```text
+-every existing chart has exactly one active owning slot
+-```
+ 
++The earlier r1 mixed these state generators with the modeled operation set.
++r2 makes the separation explicit.
+-across arbitrary sequences of seed/swap/reset/merge/split/resize operations.
+ 
++## Invariants
+-## Omitted or deferred Source Script behavior
+ 
++The verification assertions for this slice check:
+-### Runtime selection
+ 
++- bounded slot/layout type validity
++- one slot record per active grid cell
++- valid visible/hidden merged coverage
++- chart/image reference validity
++- chart and image mutual exclusion
++- every existing chart has exactly one owning slot
++- every committed state remains a valid slot/layout projection
+-`selectedSlotId`, graph-object selection, and workspace selection are not in r1.
+ 
++These assertions are additional verification of the translated pseudocode.
++They do not replace or reinterpret Source Script behavior.
+-Reason:
+-this revision is limited to persistent slot/layout/chart integrity.
+ 
++## Deferred Source Script areas
+-Not checked:
+-safe grid shrink clearing a runtime selection that points to a removed slot.
+ 
++This file is still one verification-code module, not the complete project
++translation.
+-Re-add condition:
+-the FSM/runtime verification slice must model selection and lifecycle state.
+ 
++Not translated here:
+-### Pure reads and projections
+ 
++- asset/VFS algorithms
++- CSV/TSV/JSON parsing
++- graph/editor/Plotly algorithms
++- FFPX/FFSX serialization/import
++- caption/label/export algorithms outside the slot-local parts used here
++- complete application FSM/lifecycle
++- renderer/API/UI modules
+-Examples:
+ 
++Those high-level algorithms must be translated in additional verification-code
++modules before the project-wide TLC gate can pass.
+-- `ProjectObject.read`
+-- `resolveOwningSlot` as a read API
+-- `getProjectCsv`
+-- `getProjectImage`
+-- `getChart`
+-- dashboard pixel geometry
+-- renderer projections
+ 
++Pure reads may be omitted only under policy v0.2.2 conditions. Their data
++contracts and any read that influences mutation, ordering, reference selection,
++locking, stale-read behavior, or failure semantics must still be represented.
+-Reason:
+-they do not mutate this model's authority and their result does not decide the
+-modeled layout transactions.
+ 
++## Current validation state
+-If a read later participates in stale-read, lock, TOCTOU, or mutation-decision
+-logic, it must be brought into the model.
+ 
++This revision is executable verification code but has not yet been translated
++and run with TLC in this change.
+-### Asset/file/graph internals
+ 
++Therefore:
+-CSV objects, graph objects, VFS, FFPX/FFSX, Plotly conversion, export, file locks,
+-and external I/O are deferred to later verification slices.
+ 
++```text
++verification-model status = current
++tlc = pending
++```
+-They are not considered globally verified by this r1 model.
+ 
++The next step for this module is PlusCal translation and TLC execution.
+-### Application concurrency
+ 
+-The modeled layout mutations are synchronous atomic commits.
+-No lock or concurrent writer is assumed in this slice.
+-
+-If implementation introduces asynchronous validation, multiple writers,
+-resource locks, or callback-dependent commit ordering, this atomic model is no
+-longer sufficient and must be refined.
+-
+-## Next validation step
+-
+-Before `tlc=passed`:
+-
+-1. translate the embedded PlusCal algorithm,
+-2. run TLC with `FastFigureSlotCore.cfg`,
+-3. fix translation/model errors without changing Source Script semantics,
+-4. inspect any TLC counterexample,
+-5. record exact tool version, explored bounds, assumptions, state count,
+-   invariant results, and remaining omissions in a validation review.
+-
+-A TLC pass for this slice does not by itself permit source-code work.
+-The verification-model layer must eventually cover the other core Source Script
+-algorithms required by policy v0.2.0.
+-
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -18,10 +18,10 @@
+       "closure_review": "agent_space/reviews/review-015-sourcescript-closure-r12.md"
+     },
+     "verification-model": {
++      "revision": 2,
+-      "revision": 1,
+       "status": "current",
+       "path_rule": "verification/**/*",
++      "fingerprint": "sha256:b457e66fc837f3437187f5155793cb8a34a1a00391f0fab89159c9b5ec64c960",
+-      "fingerprint": "sha256:6a04b6d60ac02cacd47a600a34cce6e25c3a64196ea05d9b0420b9ffa4620553",
+       "derived_from": {
+         "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
+       },

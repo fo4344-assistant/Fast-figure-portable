@@ -1,188 +1,185 @@
-# verification-model r1 — slot/layout/chart core
+# verification code r2 — slot/layout/chart direct translation
 
-## Scope
+## Purpose
 
-This revision models one coherent Source Script slice:
+This revision replaces the earlier state-model-style r1 with a direct executable
+translation of the corresponding Source Script algorithms.
 
-- `SLOT_LOCAL_DEFAULTS` and the one-owner slot-local payload rule
-- chart reference validity and exact-one-slot chart ownership
-- `applySlotsSwappedAction`
-- `applySlotsResetAction`
-- `mergeSlots`
-- `splitSlots`
-- `buildGridResizeCandidate` / grid commit semantics
-
-Source Script inputs:
-
-- `sourcescript/project_state.py`
-- `sourcescript/layout_annotations_export.py`
-- `sourcescript/application_fsm.py`
-
-The model is intentionally incomplete as a project-wide verification model.
-Its manifest state remains `tlc=pending`.
-
-## State representation
-
-The persistent project slice is reduced to:
-
-- current grid rows/columns
-- one slot-local payload per bounded grid cell
-- merge coverage relation
-- current chart-id set
-
-A slot-local payload keeps the Source Script ownership unit together:
-
-- chart
-- image
-- contentType
-- imageSettings
-- caption
-
-The exact image-setting numbers and caption text are not relevant to this slice.
-They are represented by equivalence classes such as `default/custom` and
-`no-caption/caption`.
-
-## Environment actions
-
-The model contains four `seed-*` actions.
-
-They abstract already-validated upstream commands that can create a non-default
-slot-local state:
-
-- chart connection/creation
-- image connection
-- explicit slot caption
-- custom slot-local image settings
-
-They are environment actions rather than new Fast Figure domain commands.
-Their purpose is to make layout operations reachable with representative
-non-default payloads.
-
-## Candidate-first abstraction
-
-For grid resize and merge, invalid candidates are represented as disabled actions.
-With TLA+ stuttering, an invalid request therefore has no persistent-state change.
-
-This preserves the Source Script rule:
+The role is the original pseudocode role plus executable verification:
 
 ```text
-resolve/precondition
--> candidate
--> validation
--> commit once
+Source Script
+-> verification code
+-> TLC
+-> source code
 ```
 
-without introducing a second persistent candidate state into the model.
+The verification code is not a second design model.
 
-If later work needs to verify an asynchronous validator, lock, callback, or
-multi-step transaction, candidate state must be made explicit instead of using
-this atomic abstraction.
+It preserves the Source Script's:
 
-## TLC bounds and abstractions
+- data ownership
+- function boundaries
+- call relationship
+- execution order
+- branches
+- value generation and consumption
+- candidate/validation/commit boundary
+- failure/rejection behavior
 
-This r1 model uses deliberately small finite domains:
+TLA+ operators are used where the Source Script describes pure calculation.
+PlusCal procedures are used where the Source Script describes an operation or
+mutation path.
+
+## Source Script mapping
+
+### project_state.py
+
+Directly represented:
+
+- `SLOT_LOCAL_DEFAULTS`
+- `slotHasNonDefaultLocalState`
+- slot-local ownership of chart/imageId/contentType/imageSettings/caption
+- chart/image reference validity for this slice
+- exact-one-slot chart ownership
+
+`validateProjectObjectState` is not redefined as a smaller project validator.
+Instead this slice defines `ValidateSlotLayoutProjection`, which explicitly
+means only the projection of whole-project validation that can change in this
+translation. Unmodeled ProjectObject fields are assumed unchanged and valid.
+
+### application_fsm.py
+
+Direct PlusCal procedures:
+
+- `applySlotsResetAction`
+- `applySlotsSwappedAction`
+- `applyGridLayoutAction`
+
+The candidate is calculated before authoritative mutation.
+A rejected/invalid candidate leaves `activeProject` unchanged.
+
+### layout_annotations_export.py
+
+Direct translation:
+
+- `buildGridResizeCandidate` as a pure TLA+ operator
+- `setLayoutApiGrid` as a PlusCal procedure
+- `mergeSlots` as a PlusCal procedure
+- `splitSlots` as a PlusCal procedure
+
+The call chain is preserved:
+
+```text
+applyGridLayoutAction
+-> setLayoutApiGrid
+-> buildGridResizeCandidate
+-> projection validation
+-> commit or reject
+```
+
+## Data representation
+
+The verification code keeps the Source Script slot structure rather than
+replacing it with a separate `payload/cover` domain model.
+
+Each slot has:
+
+- id
+- row / col
+- rowSpan / colSpan
+- hidden
+- content.chart
+- content.imageId
+- content.contentType
+- content.imageSettings
+- caption
+
+The TLA+ function that maps slot id to slot record is a mechanical finite-state
+representation of the Source Script slot collection.
+
+## TLC bounds
+
+For this slice TLC uses:
 
 - maximum grid: 3 x 3
 - initial grid: 2 x 2
 - chart ids: 2
 - image ids: 1
-- caption: absent/present
-- imageSettings: default/custom
 
-These are model-checking bounds, not application limits.
+These are finite verification bounds, not application limits.
 
-The reduction keeps distinctions that affect the checked properties:
+Values such as caption text and manual image settings use representative values,
+but the field ownership and branches that distinguish default/non-default state
+are preserved.
 
-- default vs non-default slot-local state
-- chart identity
-- image-reference presence
-- chart vs image mutual exclusion
-- merged vs visible cell
-- layout position
-- chart owner movement
+## Verification harness
+
+`VerificationHarness*` procedures are deliberately separated from translated
+Fast Figure procedures.
+
+They are not domain commands and must not be copied into source code.
+
+Their only role is to construct valid representative prestates containing:
+
+- an owned chart
+- an image reference
+- a slot caption
+- non-default image settings
+
+so TLC can execute reset/swap/merge/split/grid operations over the states that
+the real application can reach through other Source Script modules.
+
+The earlier r1 mixed these state generators with the modeled operation set.
+r2 makes the separation explicit.
 
 ## Invariants
 
-The model defines:
+The verification assertions for this slice check:
 
-- `TypeOK`
-- `InactiveCellsAreDefault`
-- `CoverIntegrity`
-- `HiddenCellsAreDefault`
-- `MergedRegionsAreRectangles`
-- `SlotReferenceIntegrity`
-- `ChartOwnershipInvariant`
-- `SafetyInvariant`
+- bounded slot/layout type validity
+- one slot record per active grid cell
+- valid visible/hidden merged coverage
+- chart/image reference validity
+- chart and image mutual exclusion
+- every existing chart has exactly one owning slot
+- every committed state remains a valid slot/layout projection
 
-The most important domain property in this slice is:
+These assertions are additional verification of the translated pseudocode.
+They do not replace or reinterpret Source Script behavior.
+
+## Deferred Source Script areas
+
+This file is still one verification-code module, not the complete project
+translation.
+
+Not translated here:
+
+- asset/VFS algorithms
+- CSV/TSV/JSON parsing
+- graph/editor/Plotly algorithms
+- FFPX/FFSX serialization/import
+- caption/label/export algorithms outside the slot-local parts used here
+- complete application FSM/lifecycle
+- renderer/API/UI modules
+
+Those high-level algorithms must be translated in additional verification-code
+modules before the project-wide TLC gate can pass.
+
+Pure reads may be omitted only under policy v0.2.2 conditions. Their data
+contracts and any read that influences mutation, ordering, reference selection,
+locking, stale-read behavior, or failure semantics must still be represented.
+
+## Current validation state
+
+This revision is executable verification code but has not yet been translated
+and run with TLC in this change.
+
+Therefore:
 
 ```text
-every existing chart has exactly one active owning slot
+verification-model status = current
+tlc = pending
 ```
 
-across arbitrary sequences of seed/swap/reset/merge/split/resize operations.
-
-## Omitted or deferred Source Script behavior
-
-### Runtime selection
-
-`selectedSlotId`, graph-object selection, and workspace selection are not in r1.
-
-Reason:
-this revision is limited to persistent slot/layout/chart integrity.
-
-Not checked:
-safe grid shrink clearing a runtime selection that points to a removed slot.
-
-Re-add condition:
-the FSM/runtime verification slice must model selection and lifecycle state.
-
-### Pure reads and projections
-
-Examples:
-
-- `ProjectObject.read`
-- `resolveOwningSlot` as a read API
-- `getProjectCsv`
-- `getProjectImage`
-- `getChart`
-- dashboard pixel geometry
-- renderer projections
-
-Reason:
-they do not mutate this model's authority and their result does not decide the
-modeled layout transactions.
-
-If a read later participates in stale-read, lock, TOCTOU, or mutation-decision
-logic, it must be brought into the model.
-
-### Asset/file/graph internals
-
-CSV objects, graph objects, VFS, FFPX/FFSX, Plotly conversion, export, file locks,
-and external I/O are deferred to later verification slices.
-
-They are not considered globally verified by this r1 model.
-
-### Application concurrency
-
-The modeled layout mutations are synchronous atomic commits.
-No lock or concurrent writer is assumed in this slice.
-
-If implementation introduces asynchronous validation, multiple writers,
-resource locks, or callback-dependent commit ordering, this atomic model is no
-longer sufficient and must be refined.
-
-## Next validation step
-
-Before `tlc=passed`:
-
-1. translate the embedded PlusCal algorithm,
-2. run TLC with `FastFigureSlotCore.cfg`,
-3. fix translation/model errors without changing Source Script semantics,
-4. inspect any TLC counterexample,
-5. record exact tool version, explored bounds, assumptions, state count,
-   invariant results, and remaining omissions in a validation review.
-
-A TLC pass for this slice does not by itself permit source-code work.
-The verification-model layer must eventually cover the other core Source Script
-algorithms required by policy v0.2.0.
+The next step for this module is PlusCal translation and TLC execution.
