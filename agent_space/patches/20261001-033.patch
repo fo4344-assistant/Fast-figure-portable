@@ -1,0 +1,65 @@
+diff --git a/.github/workflows/tla-slot-core.yml b/.github/workflows/tla-slot-core.yml
+new file mode 100644
+--- /dev/null
++++ b/.github/workflows/tla-slot-core.yml
+@@ -0,0 +1,60 @@
++name: TLA Slot Core
++
++on:
++  workflow_dispatch:
++  push:
++    paths:
++      - 'verification/FastFigureSlotCore.tla'
++      - 'verification/FastFigureSlotCore.cfg'
++      - '.github/workflows/tla-slot-core.yml'
++
++jobs:
++  verify:
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++    steps:
++      - uses: actions/checkout@v4
++
++      - name: Set up Java
++        uses: actions/setup-java@v4
++        with:
++          distribution: temurin
++          java-version: '21'
++
++      - name: Download TLA+ tools
++        shell: bash
++        run: |
++          set -euo pipefail
++          curl -fL --retry 3 \
++            -o /tmp/tla2tools.jar \
++            https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
++          actual="$(sha1sum /tmp/tla2tools.jar | awk '{print $1}')"
++          expected="bee4a54f3ee3d4afc347c3240ec2d9e93b075104"
++          test "$actual" = "$expected"
++
++      - name: Translate PlusCal
++        shell: bash
++        run: |
++          set -euo pipefail
++          mkdir -p /tmp/fast-figure-tla
++          cp verification/FastFigureSlotCore.tla /tmp/fast-figure-tla/
++          cp verification/FastFigureSlotCore.cfg /tmp/fast-figure-tla/
++          cd /tmp/fast-figure-tla
++          java -cp /tmp/tla2tools.jar pcal.trans FastFigureSlotCore.tla
++
++      - name: Parse generated TLA+
++        shell: bash
++        run: |
++          set -euo pipefail
++          cd /tmp/fast-figure-tla
++          java -cp /tmp/tla2tools.jar tla2sany.SANY FastFigureSlotCore.tla
++
++      - name: Model check
++        shell: bash
++        run: |
++          set -euo pipefail
++          cd /tmp/fast-figure-tla
++          java -XX:+UseParallelGC -cp /tmp/tla2tools.jar tlc2.TLC \
++            -workers auto \
++            -config FastFigureSlotCore.cfg \
++            FastFigureSlotCore.tla
