@@ -134,6 +134,25 @@ SLOT_LOCAL_PROPERTY_RULE = (
     "global caption처럼 figure 전체에 적용되는 값만 project-level property로 둔다."
 )
 
+SLOT_LOCAL_DEFAULTS = {
+    "chart": None,
+    "imageId": None,
+    "contentType": "graph",
+    "imageSettings": {
+        "fit": "contain",
+        "scale": 100,
+        "x": 50,
+        "y": 50,
+    },
+    "caption": None,
+}
+
+SLOT_LOCAL_DEFAULT_RULE = (
+    "slot의 local state가 비어 있는지/보존해야 하는지를 판단할 때 개별 field를 다시 나열하지 않고 "
+    "SLOT_LOCAL_DEFAULTS 전체와 비교한다. 새로운 slot-local property가 추가되면 이 default 구조와 "
+    "slotHasNonDefaultLocalState 판정에 함께 포함되어야 한다."
+)
+
 SLOT_REPRESENTATION_RULE = (
     "하위 구현이 compatibility를 위해 slot-local 값을 flat 또는 nested representation으로 표현할 수는 있지만 "
     "각 값의 authoritative owner는 slot object 하나다. 같은 slot-local 의미를 별도 project property나 UI mode state에 복제하지 않는다."
@@ -263,6 +282,23 @@ class ProjectObjectRegistry:
         return snapshot
 
 
+def slotHasNonDefaultLocalState(slot):
+    """
+    Return:
+    - nonDefault:
+      slot-local property 중 하나라도 SLOT_LOCAL_DEFAULTS와 다른지 여부.
+
+    변경:
+    - 없음.
+
+    처리:
+    chart, imageId, contentType, imageSettings 전체, caption을 같은 normalized local state로 비교한다.
+    layout geometry(row/col/span/hidden)는 slot-local payload가 아니라 GUI layout placement이므로 이 판정에 포함하지 않는다.
+    """
+    nonDefault = "normalized slot-local state가 SLOT_LOCAL_DEFAULTS와 다른지"
+    return nonDefault
+
+
 def normalizeSlotContent(slot):
     """
     Return:
@@ -274,7 +310,8 @@ def normalizeSlotContent(slot):
 
     처리:
     1. chart/image/contentType/imageSettings는 하나의 slot-local renderable-content 원천으로 정규화한다.
-    2. imageSettings가 없으면 slot default imageSettings를 만든다.
+    2. 누락된 slot-local field는 SLOT_LOCAL_DEFAULTS에서 채운다.
+       imageSettings가 없으면 slot default imageSettings를 만든다.
        image asset 자체에서 display settings를 읽어 authority로 사용하지 않는다.
     3. caption은 slot-local caption 원천으로 정규화한다.
     4. legacy representation에서 caption이 nested content 안에 있으면 같은 caption property로 이동한다.

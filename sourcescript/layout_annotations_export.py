@@ -98,9 +98,10 @@ SLOT_CAPTION_UI_RULE = (
 )
 
 GRID_RESIZE_RULE = (
-    "grid resize는 content reflow command가 아니다. 확대는 기존 좌표/span/content/caption을 보존하며 빈 cell만 추가한다. "
-    "축소는 제거 영역과 교차하는 non-empty renderable content, explicit caption, 또는 merged span이 하나라도 있으면 거부한다. "
-    "허용되는 축소는 제거 영역의 empty 1x1 cell만 버린다."
+    "grid resize는 content reflow command가 아니다. 확대는 기존 좌표/span과 모든 slot-local properties를 보존하며 "
+    "새 cell에는 SLOT_LOCAL_DEFAULTS를 적용한다. 축소는 제거 영역과 교차하는 slot이 "
+    "slotHasNonDefaultLocalState=true이거나 merged span을 가지면 거부한다. "
+    "허용되는 축소는 local state가 default인 empty 1x1 cell만 버린다."
 )
 
 LABEL_POSITION_RULE = (
@@ -166,13 +167,12 @@ def buildGridResizeCandidate(rows, cols):
 
     처리:
     1. rows/cols가 1..8 정수인지 검증한다.
-    2. 확대면 기존 모든 grid cell/slot id/geometry/content/caption을 같은 좌표에 보존하고
-       새 좌표에만 empty 1x1 slot을 추가한다.
+    2. 확대면 기존 모든 grid cell/slot id/geometry와 모든 slot-local properties를 같은 좌표에 보존하고
+       새 좌표에만 SLOT_LOCAL_DEFAULTS를 가진 empty 1x1 slot을 추가한다.
     3. 축소면 삭제될 row/column과 교차하는 slot을 검사한다.
-       - chart 또는 image reference가 있으면 거부한다.
-       - null/empty가 아닌 explicit caption이 있으면 거부한다.
+       - slotHasNonDefaultLocalState(slot)이 참이면 거부한다.
        - rowSpan/colSpan이 새 boundary를 넘거나 제거되는 merged cell이 있으면 거부한다.
-    4. 위 조건을 통과한 경우 제거 영역의 empty 1x1 slot만 candidate에서 제거한다.
+    4. 위 조건을 통과한 경우 local state가 default인 empty 1x1 slot만 candidate에서 제거한다.
     5. 남은 slot geometry와 chart ownership을 whole-project candidate에서 다시 검증한다.
     6. content를 다른 좌표로 packing/reflow하지 않는다.
     """
@@ -200,11 +200,11 @@ def mergeSlots(slotIds):
 
     처리:
     1. current visible slot을 id로 resolve하고 선택 union이 빈칸 없는 하나의 직사각형인지 확인한다.
-    2. 선택 영역에서 non-default slot-local state를 가진 visible slot이 1개 이하인지 확인한다.
-       non-default local state는 chart/image reference 또는 non-empty explicit caption을 포함한다.
+    2. slotHasNonDefaultLocalState로 선택 영역의 non-default slot-local state를 가진 visible slot이 1개 이하인지 확인한다.
+       contentType, imageSettings처럼 reference 없이도 의미가 남는 local property도 같은 판정에 포함한다.
     3. source slot이 있으면 chart/image/contentType/imageSettings/caption을 하나의 slot-local payload로 top-left anchor candidate에 이동한다.
        chart id 자체는 유지하되 owning slot reference는 anchor로 이동한다.
-    4. covered non-anchor slot은 renderable content와 caption을 모두 defaults로 비우고 hidden=true로 한다.
+    4. covered non-anchor slot은 모든 local properties를 SLOT_LOCAL_DEFAULTS로 되돌리고 hidden=true로 한다.
     5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
     6. 두 개 이상의 selected slot object가 non-default local state를 가지면 implicit merge/concatenation 없이 거부한다.
     7. whole-project candidate를 검증한 뒤 한 번 commit한다.
@@ -219,7 +219,7 @@ def splitSlots(slotIds):
 
     처리:
     1. current merged visible anchor를 resolve한다.
-    2. anchor slot object의 chart/image/contentType/caption 등 모든 slot-local properties를 anchor에 유지한다.
+    2. anchor slot object의 chart/image/contentType/imageSettings/caption 등 모든 slot-local properties를 anchor에 유지한다.
     3. covered cell은 visible 1x1 slot로 복원하고 모든 slot-local properties를 defaults로 시작한다.
     4. candidate 전체를 검증한 뒤 한 번 commit한다.
     """
