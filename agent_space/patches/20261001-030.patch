@@ -1,0 +1,148 @@
+diff --git a/agent_space/policies/source-script-policy.md b/agent_space/policies/source-script-policy.md
+--- a/agent_space/policies/source-script-policy.md
++++ b/agent_space/policies/source-script-policy.md
+@@ -1,5 +1,5 @@
+ # 개발 작업 정책
++# v0.2.1
+-# v0.2.0
+ 
+ ## 0. 정책의 성격과 변경 권한
+ 
+@@ -121,6 +121,52 @@
+ 
+ 소스 스크립트는 알고리즘뿐 아니라 데이터 형태와 공통 식별자, 참조 관계, 책임 경계, 입력과 출력, 상태 변경 여부와 변경 경로, 의미가 있는 처리 순서, 확정된 계산 규칙, 구현자가 보존해야 하는 설계 의도를 표현할 수 있다.
+ 
++### 고수준 알고리즘과 저수준 구현의 경계
++
++소스 스크립트는 **대상 언어·운영체제·디바이스·런타임에 종속되지 않는 고수준 알고리즘과 계약을 완결하는 단계**다.
++
++소스 스크립트에서 생략할 수 있는 것은 실제 환경에 맞춰 뒤에서 결정해야 하는 저수준 구현 알고리즘이다.
++
++예를 들어 다음은 대상 언어·디바이스에 따라 달라질 수 있으므로 소스 스크립트에서 구체 구현을 정하지 않을 수 있다.
++
++- 실제 메모리 배치, allocation, ownership primitive와 buffer 관리 방식
++- thread, mutex, atomic, event loop, Promise/future, interrupt 같은 구체 동기화 primitive
++- OS syscall, 브라우저 API, 디바이스 driver, GPU/CPU 실행 방식
++- 실제 filesystem/network API 호출 순서의 저수준 plumbing
++- 특정 ZIP/XML/graphics/database/library의 호출 문법과 내부 사용법
++- SIMD, GPU kernel, device-specific I/O처럼 대상 장치에 종속되는 최적화
++- 대상 언어의 class/generic/type-system 표현과 예외 객체의 구체 형태
++
++그러나 **저수준 구현을 생략한다는 것은 고수준 알고리즘의 입력·데이터 계약·외부 형식·저장 구조를 생략한다는 뜻이 아니다.**
++
++다음 정보가 기능의 의미, 호환성, 참조 관계, 처리 순서 또는 검증 결과에 영향을 준다면 소스 스크립트에 명시해야 한다.
++
++- 데이터의 형태, 종류, 필드와 관계
++- schema와 contract 구조
++- 파일 또는 package의 논리적 위치와 문서 구성
++- 의미가 있는 파일명, 경로, 확장자, MIME/format 식별자
++- serialization/deserialization에서 보존해야 하는 구조와 관계
++- encoding, container, entry/path constraint처럼 상호운용성에 필요한 형식 조건
++- 외부 입력과 출력의 의미 및 허용/거부 조건
++- ID, reference, key, path가 어느 원천과 대상을 연결하는지
++- operation의 의미 있는 순서, transaction/commit 경계와 실패 결과
++- 어떤 외부 자원을 읽고 쓰는지와 그 결과가 이후 알고리즘에 어떻게 사용되는지
++- lock, ordering, stale-read, resource lifetime처럼 고수준 정확성에 영향을 주는 동시성 요구
++
++예를 들어 ZIP을 어느 라이브러리로 읽을지는 저수준 구현 문제지만,
++어떤 entry가 존재해야 하고 어떤 path가 허용되며 어떤 document가 어떤 데이터를 소유하는지는 고수준 계약이다.
++
++마찬가지로 실제 파일 API 호출 코드는 저수준 구현이지만,
++어느 논리적 파일을 어떤 확장자·형식으로 읽고 쓰며 그 결과가 어느 authoritative state와 연결되는지는 소스 스크립트의 책임이다.
++
++판별 기준은 다음과 같다.
++
++> 대상 언어와 디바이스를 바꾸더라도 유지되어야 하는 의미라면 소스 스크립트에 남긴다.  
++> 같은 고수준 의미를 보존하면서 환경에 맞게 선택할 수 있는 실행 기법이라면 구현 단계로 남길 수 있다.
++
++따라서 소스 스크립트가 닫혔다는 것은 실제 machine-level 또는 platform API 알고리즘까지 결정되었다는 뜻이 아니라,
++**대상 환경만 주어지면 새로운 고수준 기능·데이터 계약·처리 규칙을 발명하지 않고 구현할 수 있을 정도로 의미가 닫혀 있다는 뜻**이다.
++
+ ### 소스 스크립트 가이드: 외부 원천과 다른 소스 스크립트
+ 
+ 소스 스크립트는 하나의 파일 안에 모든 구조와 알고리즘을 반복해서 포함할 필요가 없다.
+@@ -479,6 +525,40 @@
+ 소스 스크립트의 핵심 알고리즘은 기본적으로 검증 모델의 대상이다.
+ 상태공간이 커지거나 실제 데이터가 복잡하다는 이유만으로 핵심 알고리즘 전체를 생략하지 않는다.
+ 
++### 검증 모델의 pseudocode 역할과 저수준 경계
++
++PlusCal/TLA+ 검증 모델은 기존 pseudocode 단계의 역할을 대체하며,
++**소스 스크립트의 고수준 알고리즘을 실행 가능한 수준으로 연결해 보는 중간 명세**다.
++
++검증 모델을 기준으로 대상 언어 구현자가 작업할 때:
++
++- 새로운 고수준 알고리즘을 설계하지 않아야 한다.
++- operation의 순서, branch, 상태전이, reference 변경, transaction 경계와 실패 의미를 새로 결정하지 않아야 한다.
++- 데이터/schema/file/package contract를 다시 추론하거나 임의로 보완하지 않아야 한다.
++- 실제 언어와 디바이스에 필요한 저수준 실행 기법만 선택·작성하면 되어야 한다.
++
++소스 스크립트에서 의도적으로 생략한 언어·디바이스 종속 저수준 알고리즘은
++검증 모델에서도 실제 platform 구현으로 확정할 필요가 없다.
++대신 고수준 알고리즘이 그 저수준 기능을 호출했을 때 실행 가능하고 모순이 없는지 확인할 수 있도록
++필요한 interface, precondition, result, failure, atomicity 또는 environment assumption을 모델에 표현한다.
++
++예를 들어 실제 filesystem API의 syscall 순서를 모델링하지 않더라도:
++
++- 요청한 논리적 path가 무엇인지
++- 성공/실패가 어떤 상태를 만드는지
++- 읽기 결과가 어느 다음 action의 입력인지
++- write가 어느 commit 경계에서 외부에 관찰되는지
++- concurrent access나 lock이 고수준 correctness에 영향을 주는지
++
++는 필요한 수준까지 모델링해야 한다.
++
++즉 저수준 구현을 abstract action으로 바꿀 수는 있지만,
++그 action을 호출하는 **고수준 알고리즘 자체를 abstract success 하나로 치환하여 제거해서는 안 된다.**
++
++검증 모델의 완성 기준은 모든 platform-specific detail을 포함하는 것이 아니라,
++**Source Script의 고수준 알고리즘을 따라가면 실제 target implementation을 위한 control/data flow가 끊기지 않고,
++남은 미구현 부분이 오직 환경 종속 저수준 구현이라는 점을 확인할 수 있는 것**이다.
++
+ ### 추상화 원칙
+ 
+ TLC가 탐색 가능한 유한 상태공간을 만들기 위해 세부 값을 축약할 수 있다.
+@@ -546,9 +626,15 @@
+ 
+ 구현 단계에서는 닫힌 소스 스크립트와 TLC 검증을 통과한 PlusCal/TLA+ 모델을 대상 언어의 실제 구조로 구체화한다.
+ 
++이 단계에서 새로 작성·결정하는 것은 **대상 언어와 실제 디바이스에서 고수준 알고리즘을 실행하기 위한 저수준 구현**이다.
++source code 단계는 기능 의미나 고수준 알고리즘을 추가 개발하는 단계가 아니다.
++
+ - 대상 언어의 타입 체계는 구현 단계에서 적용한다.
+ - 실제 자료구조와 오류 표현을 결정한다.
+ - 필요한 경우 메모리 표현, 소유권, 라이브러리, 프레임워크 등 언어와 실행 환경의 세부사항을 결정한다.
++- OS/browser/device API, concrete I/O primitive, concurrency primitive, buffer/memory strategy처럼 환경 종속적인 저수준 알고리즘을 선택하고 구현한다.
++- Source Script와 검증 모델에서 이미 정한 데이터 형태, schema, file/package contract, reference 관계, 처리 순서, transaction/failure 의미는 구현 편의를 이유로 다시 설계하지 않는다.
++- 환경 종속 구현을 위해 representation을 바꾸더라도 상위 단계의 동일한 의미와 관계를 추적할 수 있어야 한다.
+ - 이러한 구현 결정은 소스 스크립트와 검증 모델의 의미를 변경해서는 안 된다.
+ - 핵심 상태전이와 mutation 경로는 구현의 어느 동작이 검증 모델의 어떤 action/state/property에 대응하는지 추적할 수 있어야 한다.
+ - 컴파일러나 정적 타입 검사기가 통과했다는 사실만으로 검증 모델에서 확인한 invariant가 구현에서도 자동 보장된다고 간주하지 않는다.
+@@ -574,7 +660,8 @@
+ - 참조 관계가 원천과 대상 사이의 상관관계를 잃지 않고 추적·검증 가능한 형태로 표현되어야 한다.
+ - 함수와 데이터의 책임 경계가 보여야 한다.
+ - 의미가 있는 처리 순서와 확정된 계산 규칙을 표현할 수 있어야 한다.
++- 대상 언어·OS·디바이스에 종속되는 저수준 실행 알고리즘은 뒤 단계로 남긴다.
++- 데이터 형태·종류, schema/contract, 의미 있는 파일 위치·경로·확장자와 외부 형식처럼 고수준 알고리즘의 의미를 결정하는 정보는 저수준 구현으로 오인해 생략하지 않는다.
++- 구현자가 다음 단계에서 새로운 고수준 알고리즘이나 도메인 규칙을 발명할 필요가 없도록 한다.
+-- 대상 언어에 종속되는 세부 구현은 뒤 단계로 남긴다.
+-- 구현자가 다음 단계에서 새로운 도메인 규칙을 발명할 필요가 없도록 한다.
+ 
++최종 목표는 복잡한 시스템의 platform-specific 구현까지 소스 스크립트에서 미리 결정하는 것이 아니라, 고수준 알고리즘과 데이터·파일·schema·contract 의미를 충분히 닫고 PlusCal/TLA+와 TLC로 그것이 실행 가능한 구조인지 검증한 뒤, 대상 언어와 디바이스에 맞는 저수준 알고리즘만 추가하여 자연스럽게 구현할 수 있게 하는 것이다.
+-최종 목표는 복잡한 시스템을 미리 완성하는 것이 아니라, 설계 의미를 잃지 않은 상태에서 가장 기본적인 구조를 정확하게 만들고 PlusCal/TLA+와 TLC로 핵심 상태전이와 전역 논리를 검증한 뒤 여러 대상 언어로 자연스럽게 구현할 수 있게 하는 것이다.
+diff --git a/agent_space/policies/policies.md b/agent_space/policies/policies.md
+--- a/agent_space/policies/policies.md
++++ b/agent_space/policies/policies.md
+@@ -5,10 +5,11 @@
+ 현재 정책 원천:
+ 
+ - `source-script-policy.md`
++  - 사용자 지시에 따라 개정된 `v0.2.1`
+-  - 사용자 지시에 따라 개정된 `v0.2.0`
+   - Source Script → PlusCal/TLA+ 검증 모델 → TLC 모델 검사 → 대상 언어 구현 순서
+   - Source Script 닫힘 판정
+   - 핵심 알고리즘의 형식 모델링, 제한적 생략/추상화 규칙, TLC 검증 기록
++  - 고수준 알고리즘·데이터/schema/file contract와 언어·디바이스 종속 저수준 구현의 단계 경계
+   - Source of Truth, 참조 무결성, 최소 구현, 확정/미확정 규칙, 단계 간 번역 원칙
+ 
+ 정책 문서 자체의 추가·수정·삭제는 사용자의 명시적 정책 변경 지시가 있을 때만 수행한다.
