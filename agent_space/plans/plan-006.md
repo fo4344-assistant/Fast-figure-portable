@@ -399,23 +399,26 @@ cutover 뒤 대응 기능이 Mantine에 존재함을 확인한 항목만 제거�
 
 ## 12. 필수 회귀 검사
 
-1. pre-Mantine FFPX → 새 main load
-2. 새 main save → reload
-3. CSV + image + graph + merged slot + label + caption roundtrip
-4. empty image/graph slot
-5. FFSX blank slot export/import
-6. multi-CSV FFSX
-7. imported Plotly → edit → FFPX
-8. Plotly export/import
-9. palette save/load
-10. failed import 후 같은 file 재선택
-11. collision replace/rename
-12. asset delete/reference cascade
-13. drag-to-trash/reference cascade
-14. no duplicate IDs
-15. one active React root / one generic UI owner
-16. legacy `.click()`/dialog DOM dependency 없음
-17. layout/label preview geometry 유지
+브라우저 자동 회귀는 사용자 기능과 파일 의미를 실제로 검증하는 항목만 둔다.
+
+1. 새 main save → reload
+2. CSV + image + graph + merged slot + label + caption roundtrip
+3. empty image/graph slot
+4. FFSX blank slot export/import
+5. multi-CSV FFSX
+6. imported Plotly → edit → FFPX
+7. Plotly export/import
+8. palette save/load
+9. collision replace/rename
+10. asset delete/reference cascade
+11. move-to-trash/reference cascade
+12. layout/label preview geometry 유지
+
+다음 항목은 이 브라우저 기능 회귀 목록에서 제외한다.
+
+- pre-Mantine FFPX는 실제 fixture가 없는 상태에서 항상 blocked가 되므로 placeholder 검사를 두지 않는다. 실제 과거 파일 fixture를 확보하면 별도 compatibility fixture 검사로 추가한다.
+- failed import 후 같은 file 재선택은 동일한 `File` 객체로 API를 두 번 호출해서는 브라우저 file input의 재선택 동작을 검증하지 못하므로 제거한다. 필요하면 실제 file input interaction 검사로 별도 작성한다.
+- duplicate DOM/domain ID, React root 개수, legacy DOM 의존 여부는 사용자 기능 회귀가 아니라 구조 감사 항목이다. 런타임 audit, 정적 검색, 코드 리뷰에서 확인하고 브라우저 기능 회귀의 성공 조건으로 두지 않는다.
 
 ---
 

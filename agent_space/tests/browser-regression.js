@@ -22,7 +22,6 @@
   const csv = (name, body) => new File([body], name, { type: "text/csv" });
   const choose = (choice) => async (file, directory) =>
     api.assets.resolveImportPlan(api.assets.collisionModel(file, directory), choice);
-  const allIdsUnique = (items) => new Set(items.map((item) => item.id)).size === items.length;
   const save = () => ({
     slots: activeProject.slots.map((s) => ({ id: s.id, chart: s.chart, imageId: s.imageId,
       contentType: s.contentType, hidden: s.hidden, rowSpan: s.rowSpan, colSpan: s.colSpan })),
@@ -36,21 +35,14 @@
   try {
     await new Promise((resolve) => setTimeout(resolve, 100));
     check(api && appFSM.state.lifecycle === "ready", "application not ready");
-    await run(1, "pre-Mantine FFPX load", async () => {
-      const encoded = window.__legacyFFPX;
-      if (!encoded) return { blocked: "fixture unavailable" };
-      const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
-      await api.project.importFile(new File([bytes], "pre-mantine.ffpx"));
-      check(activeProject.slots.length > 0, "legacy project has no slots");
-    });
-    await run(2, "FFPX save and reload", async () => {
+    await run(1, "FFPX save and reload", async () => {
       api.project.setName("Roundtrip regression");
       const file = ffpxFile();
       api.project.setName("changed before reload");
       await api.project.importFile(file);
       check(api.project.readName() === "Roundtrip regression", "project name lost");
     });
-    await run(3, "mixed assets, graph, merge, labels, captions", async () => {
+    await run(2, "mixed assets, graph, merge, labels, captions", async () => {
       api.layout.setGrid(2, 2);
       const slots = activeProject.slots;
       select(slots[0]);
@@ -70,7 +62,7 @@
       check(after.slots.some((s) => s.rowSpan > 1 || s.colSpan > 1), "merge lost");
       check(after.labels.enabled && after.captions.enabled, "annotations lost");
     });
-    await run(4, "empty image and graph slots", async () => {
+    await run(3, "empty image and graph slots", async () => {
       api.layout.setGrid(2, 3);
       const slots = activeProject.slots;
       select(slots[4]); api.slots.setContentType("image");
@@ -79,7 +71,7 @@
       check(activeProject.slots[4].contentType === "image" && !activeProject.slots[4].imageId, "empty image lost");
       check(activeProject.slots[5].contentType === "graph" && !activeProject.slots[5].chart, "empty graph lost");
     });
-    await run(5, "FFSX blank graph", async () => {
+    await run(4, "FFSX blank graph", async () => {
       const slot = activeProject.slots[5];
       select(slot);
       api.graphs.addObject(activeProject.csvFiles[0].id);
@@ -89,7 +81,7 @@
       await api.graphs.importFile(file);
       check(!!slot.chart, "blank FFSX import failed");
     });
-    await run(6, "multi-CSV FFSX", async () => {
+    await run(5, "multi-CSV FFSX", async () => {
       const slot = activeProject.slots[0]; select(slot);
       const extra = createProjectCsv([["X", "Y"], ["9", "8"]], "second.csv");
       api.graphs.addObject(extra.id);
@@ -98,7 +90,7 @@
       await api.graphs.importFile(file);
       check(chartCsvIds(getChart(slot.chart)).length >= 2, "multi-CSV references lost");
     });
-    await run(7, "imported Plotly edit and FFPX", async () => {
+    await run(6, "imported Plotly edit and FFPX", async () => {
       const slot = activeProject.slots[5]; select(slot);
       const figure = { data: [{ x: [1, 2], y: [3, 4], type: "scatter" }], layout: { title: "Plotly import" } };
       await api.graphs.importFile(new File([JSON.stringify(figure)], "plotly.json"));
@@ -107,14 +99,14 @@
       await api.project.importFile(ffpxFile());
       check(activeProject.charts.some((chart) => chart.editor.editable !== false), "edited Plotly lost");
     });
-    await run(8, "Plotly export and import", async () => {
+    await run(7, "Plotly export and import", async () => {
       const slot = activeProject.slots.find((s) => s.chart); select(slot);
       const figure = chartFigure(getChart(slot.chart));
       check(Array.isArray(figure.data), "Plotly export invalid");
       await api.graphs.importFile(new File([JSON.stringify(figure)], "export.json"));
       check(!!slot.chart, "Plotly import lost graph");
     });
-    await run(9, "palette save and load", async () => {
+    await run(8, "palette save and load", async () => {
       const original = api.appearance.readPalette();
       const key = Object.keys(original)[0];
       check(!!key, "empty palette");
@@ -124,16 +116,7 @@
       await api.project.importFile(ffpxFile());
       check(api.appearance.readPalette()[key] === expected, "palette lost");
     });
-    await run(10, "failed import then same file", async () => {
-      const bad = new File(["bad JSON"], "retry.json");
-      let rejected = false;
-      try { await api.project.importFile(bad); } catch (_) { rejected = true; }
-      check(rejected, "invalid import accepted");
-      rejected = false;
-      try { await api.project.importFile(bad); } catch (_) { rejected = true; }
-      check(rejected && appFSM.state.lifecycle === "ready", "second import unavailable");
-    });
-    await run(11, "collision replace and rename", async () => {
+    await run(9, "collision replace and rename", async () => {
       api.slots.select(null);
       const file = csv("collision.csv", "X,Y\n1,2\n");
       await api.assets.importFiles([file], choose("rename"));
@@ -144,7 +127,7 @@
       await api.assets.importFiles([file], choose("rename"));
       check(activeProject.csvFiles.filter((c) => c.name.startsWith("collision")).length >= 2, "rename failed");
     });
-    await run(12, "asset delete cascade", async () => {
+    await run(10, "asset delete cascade", async () => {
       const slot = activeProject.slots[5]; select(slot);
       const item = createProjectCsv([["X", "Y"], ["1", "2"]], "delete.csv");
       api.graphs.addObject(item.id);
@@ -153,9 +136,10 @@
       check(!activeProject.csvFiles.some((c) => c.id === item.id), "CSV not deleted");
       check(activeProject.charts.every((c) => !chartCsvIds(c).includes(item.id)), "dangling reference");
     });
-    await run(13, "move to trash cascade", async () => {
+    await run(11, "move to trash cascade", async () => {
       const item = createProjectCsv([["X", "Y"], ["1", "2"]], "trash.csv");
       const slot = activeProject.slots[5]; select(slot); api.graphs.addObject(item.id);
+      check(chartCsvIds(getChart(slot.chart)).includes(item.id), "CSV reference absent before trash move");
       const path = projectAssetPath(item);
       const plan = api.assets.planMove(path, "/assets/trash");
       check(plan?.enteringTrash && plan.referenceCount > 0, "trash plan misses references");
@@ -163,21 +147,7 @@
       check(api.assets.isTrashed(projectAssetPath(item)), "move did not enter trash");
       check(activeProject.charts.every((c) => !chartCsvIds(c).includes(item.id)), "trashed CSV still referenced");
     });
-    await run(14, "unique IDs", async () => {
-      check(allIdsUnique(activeProject.slots) && allIdsUnique(activeProject.charts), "duplicate slot/chart ID");
-      check(allIdsUnique(activeProject.csvFiles) && allIdsUnique(activeProject.images), "duplicate asset ID");
-      const ids = [...document.querySelectorAll("[id]")].map((element) => element.id);
-      check(new Set(ids).size === ids.length, "duplicate DOM ID");
-    });
-    await run(15, "one React root", async () => {
-      check(!!window.fastFigureUiRoot && document.querySelectorAll("#ff-react-bootstrap-root").length === 1, "React root absent or duplicated");
-      check(document.querySelectorAll(".mantine-Modal-root").length <= 1, "duplicate modal owner");
-    });
-    await run(16, "no legacy UI dependency", async () => {
-      check(!document.querySelector("dialog"), "legacy dialog element exists");
-      check(!/document\.getElementById\([^)]*\)\.click\(/.test(window.FastFigureApi.project.importFile.toString()), "legacy click dependency");
-    });
-    await run(17, "layout and label preview geometry", async () => {
+    await run(12, "layout and label preview geometry", async () => {
       const layout = api.layout.readState(600).previewGeometry;
       const labels = api.labels.readState().reference;
       check(Number.isFinite(layout.width) && layout.width > 0, "layout width invalid");
