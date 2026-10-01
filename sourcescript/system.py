@@ -113,12 +113,7 @@ RESOLVED_REVIEW_ITEMS = [
     ),
 ]
 
-UNRESOLVED_REVIEW_ITEMS = [
-    (
-        "Source Script의 의미와 public mutation/API contract는 현재 작성되었다. "
-        "전체 모듈 간 모순, unresolved marker, 중복 authority, project 목적 부합 여부를 closure review에서 재검증해야 한다."
-    ),
-]
+UNRESOLVED_REVIEW_ITEMS = []
 
 
 def initializeFastFigure():

@@ -1,0 +1,33 @@
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -113,12 +113,7 @@
+     ),
+ ]
+ 
++UNRESOLVED_REVIEW_ITEMS = []
+-UNRESOLVED_REVIEW_ITEMS = [
+-    (
+-        "Source Script의 의미와 public mutation/API contract는 현재 작성되었다. "
+-        "전체 모듈 간 모순, unresolved marker, 중복 authority, project 목적 부합 여부를 closure review에서 재검증해야 한다."
+-    ),
+-]
+ 
+ 
+ def initializeFastFigure():
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "On semantic conflict, the highest current layer wins. A lower layer may be current only when it records the exact current fingerprints of every required upstream layer.",
+   "layers": {
+     "source-script": {
++      "revision": 10,
+-      "revision": 9,
+       "status": "current",
+       "path_rule": "sourcescript/**/*.py",
++      "fingerprint": "sha256:46f23426b290308e95dbec3e05181d727acd8b297f3e371bff185d35d62353d1",
+-      "fingerprint": "sha256:da8e9ce42f42d192523ba60cd787ee463f3da0f8fb4e894749522a02d939ae49",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
