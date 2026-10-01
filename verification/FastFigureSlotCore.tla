@@ -389,6 +389,7 @@ ResetResolve:
   else
     lastResult := "reset-rejected";
   end if;
+ResetReturn:
   return;
 end procedure;
 
@@ -409,6 +410,7 @@ SwapResolve:
   else
     lastResult := "swap-rejected";
   end if;
+SwapReturn:
   return;
 end procedure;
 
@@ -453,6 +455,7 @@ MergeResolve:
   else
     lastResult := "merge-rejected";
   end if;
+MergeReturn:
   return;
 end procedure;
 
@@ -473,6 +476,7 @@ SplitResolve:
   else
     lastResult := "split-rejected";
   end if;
+SplitReturn:
   return;
 end procedure;
 
@@ -500,6 +504,7 @@ HarnessChart:
         !.charts = activeProject.charts \cup {chartId}] ||
     lastResult := "harness-seeded";
   end if;
+HarnessChartReturn:
   return;
 end procedure;
 
@@ -525,6 +530,7 @@ HarnessImage:
         !.images = activeProject.images \cup {imageId}] ||
     lastResult := "harness-seeded";
   end if;
+HarnessImageReturn:
   return;
 end procedure;
 
@@ -544,6 +550,7 @@ HarnessCaption:
               ELSE activeProject.slots[sid]]] ||
     lastResult := "harness-seeded";
   end if;
+HarnessCaptionReturn:
   return;
 end procedure;
 
@@ -565,6 +572,7 @@ HarnessSettings:
               ELSE activeProject.slots[sid]]] ||
     lastResult := "harness-seeded";
   end if;
+HarnessSettingsReturn:
   return;
 end procedure;
 

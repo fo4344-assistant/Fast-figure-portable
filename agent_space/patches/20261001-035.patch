@@ -1,0 +1,56 @@
+diff --git a/verification/FastFigureSlotCore.tla b/verification/FastFigureSlotCore.tla
+--- a/verification/FastFigureSlotCore.tla
++++ b/verification/FastFigureSlotCore.tla
+@@
+   else
+     lastResult := "reset-rejected";
+   end if;
++ResetReturn:
+   return;
+@@
+   else
+     lastResult := "swap-rejected";
+   end if;
++SwapReturn:
+   return;
+@@
+   else
+     lastResult := "merge-rejected";
+   end if;
++MergeReturn:
+   return;
+@@
+   else
+     lastResult := "split-rejected";
+   end if;
++SplitReturn:
+   return;
+@@
+     lastResult := "harness-seeded";
+   end if;
++HarnessChartReturn:
+   return;
+@@
+     lastResult := "harness-seeded";
+   end if;
++HarnessImageReturn:
+   return;
+@@
+     lastResult := "harness-seeded";
+   end if;
++HarnessCaptionReturn:
+   return;
+@@
+     lastResult := "harness-seeded";
+   end if;
++HarnessSettingsReturn:
+   return;
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@
+-      "revision": 3,
++      "revision": 4,
+@@
+-      "fingerprint": "sha256:dd0cd767347e118dfc2242c60e25bc5b52d1ae626beeb0f13096e5bf75094598",
++      "fingerprint": "sha256:3580a66d344daa50e7da1729aaf3ca9135f77c938723ce0256cff984192e8379",
