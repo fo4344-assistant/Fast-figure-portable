@@ -1,0 +1,38 @@
+name: Development layer versions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sourcescript/**'
+      - 'pseudocode/**'
+      - 'development-versions.json'
+      - 'Fast-figure.html'
+      - 'fast-figure.js'
+      - 'fast-figure-ui.js'
+      - 'scripts/build-portable.py'
+      - 'scripts/check-development-layer-versions.py'
+      - 'agent_space/AGENT.md'
+      - '.github/workflows/development-layer-version.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate development layer versions
+        env:
+          BASE_SHA: ${{ github.event.before }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            python scripts/check-development-layer-versions.py --base "$BASE_SHA"
+          else
+            python scripts/check-development-layer-versions.py
+          fi

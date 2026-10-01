@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "precedence": [
+    "source-script",
+    "pseudocode",
+    "source-code"
+  ],
+  "fingerprint_algorithm": "sha256(sorted path + NUL + git-blob-sha1 + LF)",
+  "authority_rule": "On semantic conflict, the highest current layer wins. A lower layer may be current only when it records the exact current fingerprints of every required upstream layer.",
+  "layers": {
+    "source-script": {
+      "revision": 1,
+      "status": "current",
+      "path_rule": "sourcescript/**/*.py",
+      "fingerprint": "sha256:ae0aab59232d5d82c532ffd59b5e0d1e5d89b9b351baf931ebcc29d865e7e47a",
+      "derived_from": null
+    },
+    "pseudocode": {
+      "revision": 0,
+      "status": "missing",
+      "path_rule": "pseudocode/**/*",
+      "fingerprint": null,
+      "derived_from": {
+        "source-script": null
+      }
+    },
+    "source-code": {
+      "revision": 0,
+      "status": "stale",
+      "paths": [
+        "Fast-figure.html",
+        "fast-figure-ui.js",
+        "fast-figure.js",
+        "scripts/build-portable.py"
+      ],
+      "fingerprint": "sha256:0849c334254c8d3a183c03c240f532893a659932347c4e765d66c3b8383a8a7a",
+      "derived_from": {
+        "source-script": null,
+        "pseudocode": null
+      },
+      "lineage": "pre-version-chain"
+    }
+  }
+}
