@@ -1,5 +1,13 @@
 # portable_build
 
+## Source identifiers
+
+- `ROOT`: split-source project root used by the build specification.
+- `DEFAULT_OUTPUT`: default portable artifact path.
+- `SCRIPTS`: ordered external-tag -> local-source replacement list.
+- `BUILD_SEMANTICS`: exact source-byte inlining rule.
+- `PORTABLE_RUNTIME_RULE`: core single-file local/offline runtime rule.
+
 ## Build semantics
 
 1. Portable build does not rewrite application logic.

@@ -1,5 +1,17 @@
 # application_fsm
 
+## Source identifiers
+
+- `appState`: application runtime FSM state.
+- `REGION_ORDER`: region processing order.
+- `REGION_STATES`: allowed states by region.
+- `WORKSPACE_MUTATION_EVENTS`: domain/runtime mutation event responsibilities.
+- `OVERLAY_EVENTS`: overlay lifecycle events.
+- `SELECTION_INVARIANTS`: asset/graph/workspace runtime selection rules.
+- `CANDIDATE_MUTATION_CONTRACT`: resolve -> candidate -> validate -> commit contract.
+- `MUTATION_GROUPS`: project/slot/assets/graphs/layout/captions responsibility grouping.
+- `appFSM`: the one application FSM instance.
+
 ## Runtime state
 
 appState stores:

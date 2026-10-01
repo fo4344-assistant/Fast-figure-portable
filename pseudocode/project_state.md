@@ -1,5 +1,27 @@
 # project_state
 
+## Source identifiers
+
+- `PROJECT_OBJECT_PATHS`: official project read paths.
+- `projectState`: complete persistent project schema.
+- `csvAsset`: copied tabular asset schema.
+- `imageAsset`: copied image asset schema.
+- `slot`: GUI slot object schema.
+- `SLOT_LOCAL_PROPERTY_RULE`: ownership rule for slot-specific persistent state.
+- `SLOT_LOCAL_DEFAULTS`: one default local-state definition.
+- `SLOT_LOCAL_DEFAULT_RULE`: all empty/non-default checks reuse SLOT_LOCAL_DEFAULTS.
+- `SLOT_REPRESENTATION_RULE`: representation may vary but each slot-local meaning has one owner.
+- `EMPTY_GRAPH_RULE`: zero-object editable chart is valid.
+- `CHART_OWNERSHIP_RULE`: each chart has exactly one owning slot.
+- `SLOT_CAPTION_PLACEHOLDER_RULE`: placeholder text is UI-only.
+- `LEGACY_PROJECT_FIELDS`: accepted legacy no-op fields such as layoutMapWidth.
+- `REFERENCE_RELATIONS`: project reference-resolution rules.
+- `activeProject`: persistent project authority.
+- `projectObjects`: current-project read adapter/snapshot provider.
+- `projectVfs`: VFS resolver over activeProject.
+- `selectedSlotId`: session/runtime selected slot id.
+- `DEFAULT_PROJECT_RULES`: new-project defaults.
+
 ## Authoritative structures
 
 PROJECT_OBJECT_PATHS resolve these persistent subtrees from the current ProjectObject:

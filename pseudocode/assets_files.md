@@ -1,5 +1,22 @@
 # assets_files
 
+## Source identifiers
+
+- `PACKAGE_FORMAT_VERSION`: current FFPX/FFSX package version.
+- `PROJECT_ASSET_DIRECTORIES`: default CSV/image directories.
+- `PROJECT_TRASH_DIRECTORY`: project trash root.
+- `FIXED_DIRECTORY_RULE`: fixed-directory immutability rule.
+- `assetImportPlan`: resolved import path + optional replace id.
+- `FFPX_STRUCTURE`: complete-project package document map.
+- `FFSX_STRUCTURE`: one-graph-slot package document map.
+- `PACKAGE_CONTAINER_RULES`: ZIP container/path/CRC/version constraints.
+- `EXPORT_TRASH_RULE`: trash exclusion rule.
+- `PACKAGE_ASSET_INDEPENDENCE_RULE`: copied-byte independence from original filesystem path.
+- `VFS_RULES`: canonical/resolve/unique/descendant/fixed/trash semantics.
+- `TABULAR_PARSE_RULES`: CSV/TSV/JSON parse semantics.
+- `TYPED_XML_RULES`: recursive typed-value grammar.
+- `FORMAT_EVOLUTION_RULE`: additive same-version vs incompatible-version change rule.
+
 ## Package and VFS rules
 
 - FFPX/FFSX use current package format version 3.

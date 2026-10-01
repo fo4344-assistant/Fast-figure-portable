@@ -1,5 +1,19 @@
 # layout_annotations_export
 
+## Source identifiers
+
+- `layoutRules`: layout field ranges.
+- `imageSettings`: slot-local image display settings.
+- `labelSettings`: persistent label configuration.
+- `captionSettings`: project/shared caption presentation settings.
+- `EXPORT_LIMITS`: logical/raster size, DPI and format limits.
+- `SLOT_OPERATION_CAPTION_RULES`: caption behavior for swap/merge/split/reset/FFSX.
+- `CAPTION_OPERATION_RULE`: slot caption follows slot-local ownership.
+- `SLOT_CAPTION_UI_RULE`: slot caption editor/insertion is UI/command behavior, not a second owner.
+- `GRID_RESIZE_RULE`: no implicit reflow; preserve/reject semantics.
+- `LABEL_POSITION_RULE`: one authoritative x/y path.
+- `EXPORT_SETTINGS_RULE`: persistent export inputs vs transient geometry.
+
 ## Rules
 
 SLOT_OPERATION_CAPTION_RULES

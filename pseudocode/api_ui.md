@@ -1,5 +1,17 @@
 # api_ui
 
+## Source identifiers
+
+- `FastFigureApi`: frontend public API namespace.
+- `PUBLIC_API_METHODS`: authoritative method-level contract.
+- `LOWER_LAYER_API_REPLACEMENTS`: stale lower-layer method replacements.
+- `API_BOUNDARY_RULE`: frontend mutation boundary.
+- `READ_RULE`: reads reproject from current authority.
+- `UI_LOCAL_STATE`: modal/input/pointer/editor-target state.
+- `UI_LOCAL_STATE_RULE`: UI-local values are not project authority.
+- `MANTINE_COMPONENT_OWNERSHIP`: UI component responsibility map.
+- `MANTINE_THEME_RULE`: shared generic Mantine UI defaults.
+
 ## API boundary
 
 1. Mantine frontend does not directly mutate activeProject, projectVfs, chart collection or CSV collection.

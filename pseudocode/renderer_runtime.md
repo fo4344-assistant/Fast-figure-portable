@@ -1,5 +1,12 @@
 # renderer_runtime
 
+## Source identifiers
+
+- `RENDERER_HOSTS`: required dashboard/graph/image/status host surfaces.
+- `uiTelemetryState`: one-way UI telemetry projection.
+- `debugEnabled`: session debug authority.
+- `RENDERER_RULE`: renderer/DOM/Plotly state is projection, not project authority.
+
 ## Renderer rule
 
 Renderer hosts, DOM state, Plotly instances and telemetry are projections/runtime state.

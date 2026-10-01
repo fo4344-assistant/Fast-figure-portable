@@ -1,5 +1,16 @@
 # graphs
 
+## Source identifiers
+
+- `axisSettings`: one axis editor schema.
+- `globalSettings`: chart-wide settings and four axes.
+- `GRAPH_EMPTY_RULE`: zero-object chart rule.
+- `PLOTLY_IMPORT_RULE`: original Plotly preservation vs conversion-view rule.
+- `graphObject`: one editable graph-object schema.
+- `chartModel`: chart editor + renderer projection schema.
+- `AXIS_REFERENCE_RULE`: graph-object side -> actual axis reference rule.
+- `GRAPH_PROJECTION_RULE`: editor/CSV authority -> Plotly projection rule.
+
 ## Graph model
 
 axisSettings defines min/max/tick/tickMode/minorTicks/notation/scaleType/divide/title/font/line/grid/visibility/value display.

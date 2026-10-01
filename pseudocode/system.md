@@ -1,5 +1,16 @@
 # system
 
+## Source identifiers
+
+- `IMPLEMENTATION_SOURCES`: lower-layer implementation references used only for verification.
+- `SOURCE_SCRIPT_MODULES`: Source Script responsibility map.
+- `PROJECT_PURPOSE_INVARIANTS`: project-purpose constraints preserved below.
+- `RUNTIME_LOAD_ORDER`: runtime initialization dependency order.
+- `AUTHORITATIVE_STATE_RULE`: persistent authority rule.
+- `RUNTIME_STATE_RULE`: session/runtime authority rule.
+- `RESOLVED_REVIEW_ITEMS`: already-decided Source Script review conclusions.
+- `UNRESOLVED_REVIEW_ITEMS`: empty in closed r12.
+
 ## System invariants
 
 AUTHORITATIVE_STATE_RULE
