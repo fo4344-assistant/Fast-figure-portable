@@ -20,9 +20,9 @@ Fast Figure Source Script — system boundary and reverse-review index
 """
 
 IMPLEMENTATION_SOURCES = {
-    "Fast-figure.html": "renderer host와 script/CSS loading 원천",
-    "fast-figure.js": "project/domain/FSM/API/renderer/file semantics 원천",
-    "fast-figure-ui.js": "Mantine frontend와 UI-local interaction 원천",
+    "Fast-figure.html": "renderer host와 script/CSS loading의 하위 구현 검증 자료",
+    "fast-figure.js": "project/domain/FSM/API/renderer/file semantics의 하위 구현 검증 자료",
+    "fast-figure-ui.js": "Mantine frontend와 UI-local interaction의 하위 구현 검증 자료",
     "vendor/plotly.min.js": "Plotly graph rendering 원천",
     "vendor/fast-figure-ui-runtime.js": "React와 Mantine runtime 원천",
     "scripts/build-portable.py": "portable single-file packaging 원천",
@@ -54,28 +54,35 @@ AUTHORITATIVE_STATE_RULE = (
 )
 
 RUNTIME_STATE_RULE = (
-    "selectedSlotId, editing 후보, dashboard zoom/drag state, telemetry와 같은 값은 "
-    "영속 project state가 아닌 runtime state다. 각 값의 책임 범위를 벗어나 "
-    "project state의 대체 읽기 원천으로 사용하지 않는다."
+    "selectedSlotId, dashboard zoom/drag state, telemetry와 같은 값은 영속 project state가 아닌 runtime state다. "
+    "선택 chart는 selectedSlotId -> slot.chart -> chart로 resolve하며 별도 global editing pointer를 Source Script 상태로 두지 않는다. "
+    "각 runtime 값은 책임 범위를 벗어나 project state의 대체 읽기 원천으로 사용하지 않는다."
 )
+
+RESOLVED_REVIEW_ITEMS = [
+    (
+        "label position은 별도 preview draft 없이 하나의 authoritative persistent x/y를 연속 갱신하는 것으로 확정했다. "
+        "interaction finish는 position의 두 번째 commit이 아니다."
+    ),
+    (
+        "editing global pointer는 독립 기능 의미가 없고 selectedSlotId -> slot.chart -> chart로 resolve 가능하므로 "
+        "Source Script runtime state에서 제거했다."
+    ),
+    (
+        "layoutMapWidth는 실제 producer/consumer가 없으므로 authoritative persistent state에서 제거했다. "
+        "기존 v3 input의 field는 legacy no-op으로 무시할 수 있다."
+    ),
+    (
+        "debugEnabled는 session runtime authority이고 uiTelemetryState.debugEnabled는 one-way UI projection이다. "
+        "Source Script에는 projection에서 debug authority로 되돌아가는 mutation 경로를 두지 않는다."
+    ),
+]
 
 UNRESOLVED_REVIEW_ITEMS = [
     (
         "slot caption은 renderable graph/image content와 별도 annotation으로 확정했지만 "
         "swap/merge/split/reset에서 caption이 content를 따라 이동하는지 slot 위치에 남는지는 "
-        "현재 프로젝트 계약만으로 하나로 결정되지 않았다. layout operation matrix에서 해결하기 전까지 closure blocker다."
-    ),
-    (
-        "editing은 선택 chart를 다시 가리키는 runtime pointer/cache 후보다. "
-        "selectedSlotId -> slot.chart -> chart resolve로 완전히 대체 가능한지 FSM/API 검토에서 확인한다."
-    ),
-    (
-        "layoutMapWidth는 하위 구현의 persistent field지만 실제 producer/consumer가 확인되지 않았다. "
-        "기능 의미가 없으면 Source Script와 하위 구현에서 제거하고, 필요하면 먼저 의미를 정의한다."
-    ),
-    (
-        "debugEnabled와 uiTelemetryState.debugEnabled는 runtime authority와 one-way projection으로 해석한다. "
-        "projection이 mutation 입력 원천으로 재유입되지 않는지 최종 중복 검토에서 확인한다."
+        "현재 프로젝트 계약만으로 하나로 결정되지 않았다. SLOT_OPERATION_CAPTION_RULES를 확정하기 전까지 closure blocker다."
     ),
 ]
 

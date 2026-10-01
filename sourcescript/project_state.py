@@ -32,11 +32,6 @@ projectState = {
     "layout": {
         "gridRows": "1..8 범위의 grid 행 수",
         "gridCols": "1..8 범위의 grid 열 수",
-        "layoutMapWidth": (
-            "현재 하위 구현에 남아 있는 optional layout preview width. "
-            "Source Script에서는 실제 producer/consumer가 확인될 때까지 제거 검토 대상이며 "
-            "figure 의미를 결정하는 값으로 사용하지 않는다."
-        ),
         "slotStyle": {
             "referenceWidth": "dashboard 기준 폭; 현재 허용 범위 100..20000",
             "gap": "slot 사이 기준 간격; 현재 허용 범위 0..2000",
@@ -148,6 +143,13 @@ SLOT_CAPTION_PLACEHOLDER_RULE = (
     "예시/안내 문자열은 UI projection에서만 생성하며 project state에 자동 기록하지 않는다."
 )
 
+LEGACY_PROJECT_FIELDS = {
+    "layout.layoutMapWidth": (
+        "현재 v3 하위 구현이 기록할 수 있으나 figure 의미의 producer/consumer가 없는 legacy field. "
+        "import에서는 존재해도 무시할 수 있고 새 authoritative project state에는 보존하지 않는다."
+    ),
+}
+
 REFERENCE_RELATIONS = {
     "slot.chart": (
         "activeProject.charts에서 같은 chart id를 resolve해야 하며 "
@@ -179,12 +181,6 @@ selectedSlotId = (
     "영속 project state가 아닌 현재 UI/runtime slot 선택 id. "
     "같은 slot을 UI 방향으로 다시 선택하면 현재 구현에서는 선택이 해제된다."
 )
-
-editing = (
-    "현재 활성 graph chart를 가리키는 core-internal runtime pointer. "
-    "project에 직렬화되지 않고 frontend read authority로 노출하지 않는다."
-)
-
 
 class ProjectObject:
     def read(self, path):
@@ -287,6 +283,7 @@ def validateProjectObjectState(state, requireSlots):
     - slotStyle 수치와 boolean이 허용 범위에 있다.
     - label position은 finite이고 fontSize는 현재 최소 6이다.
     - export width/height mode/height/dpi/format이 정의된 범위와 관계를 만족한다.
+    - figure 의미가 없는 legacy layoutMapWidth를 authoritative state로 요구하지 않는다.
     - persistent UI palette의 필수 색상은 유효한 6-digit hex다.
     - VFS directory path는 정규화되어 있고 중복이 없으며 고정 directory가 존재한다.
     - CSV/image id와 전체 asset path는 중복되지 않는다.

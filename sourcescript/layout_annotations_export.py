@@ -1,7 +1,7 @@
 """
 Fast Figure Source Script — layout geometry, image settings, annotations and raster export
 
-현재 구현 원천:
+하위 구현 검증 원천:
 - ../fast-figure.js
   dashboardGeometry/gridSlotGeometry,
   grid/merge/split/zoom commands,
@@ -62,6 +62,37 @@ EXPORT_LIMITS = {
 }
 
 
+SLOT_OPERATION_CAPTION_RULES = {
+    "swap": "미확정: source/target의 explicit slot caption을 renderable content와 함께 교환할지 위치에 남길지 결정 필요",
+    "merge": "미확정: non-anchor source caption을 anchor로 이동할지 위치 annotation으로 처리할지 결정 필요",
+    "split": "미확정: merged anchor caption을 anchor에만 남길지 restored cells에 다른 의미가 있는지 결정 필요",
+    "reset": "미확정: slot renderable content reset이 explicit slot caption도 제거하는지 결정 필요",
+    "ffsx": "확정: FFSX slot package는 slot caption을 포함하고 import target slot annotation에 적용한다.",
+}
+
+CAPTION_OPERATION_RULE = (
+    "slot caption은 renderable content와 별도 annotation이다. "
+    "swap/merge/split/reset의 caption 이동·삭제 의미는 SLOT_OPERATION_CAPTION_RULES에서 독립적으로 결정한다. "
+    "미확정 rule이 영향을 주는 operation은 pseudocode 단계에서 임의로 채우지 않는다."
+)
+
+GRID_RESIZE_RULE = (
+    "grid resize는 content reflow command가 아니다. 확대는 기존 좌표/span/content/caption을 보존하며 빈 cell만 추가한다. "
+    "축소는 제거 영역과 교차하는 non-empty renderable content, explicit caption, 또는 merged span이 하나라도 있으면 거부한다. "
+    "허용되는 축소는 제거 영역의 empty 1x1 cell만 버린다."
+)
+
+LABEL_POSITION_RULE = (
+    "label x/y는 하나의 persistent authoritative state다. pointer drag 중 유효한 position edit도 같은 mutation path로 연속 갱신한다. "
+    "별도 preview draft/commit copy를 만들지 않는다."
+)
+
+EXPORT_SETTINGS_RULE = (
+    "target width, height mode/height, DPI, raster format은 persistent project export settings다. "
+    "계산된 target geometry, status callback, DOM bounds, generated blob은 persistent state가 아니다."
+)
+
+
 def dashboardGeometry(width, heightOverride):
     """
     Return:
@@ -101,41 +132,78 @@ def gridSlotGeometry(layout, geometry, slot):
     return slotGeometry
 
 
+def buildGridResizeCandidate(rows, cols):
+    """
+    Return:
+    - candidate:
+      requested grid size를 반영한 candidate layout/slot state.
+    - rejected:
+      안전한 resize가 아니면 거부 이유.
+
+    변경:
+    - authoritative project를 변경하지 않는다.
+
+    처리:
+    1. rows/cols가 1..8 정수인지 검증한다.
+    2. 확대면 기존 모든 grid cell/slot id/geometry/content/caption을 같은 좌표에 보존하고
+       새 좌표에만 empty 1x1 slot을 추가한다.
+    3. 축소면 삭제될 row/column과 교차하는 slot을 검사한다.
+       - chart 또는 image reference가 있으면 거부한다.
+       - null/empty가 아닌 explicit caption이 있으면 거부한다.
+       - rowSpan/colSpan이 새 boundary를 넘거나 제거되는 merged cell이 있으면 거부한다.
+    4. 위 조건을 통과한 경우 제거 영역의 empty 1x1 slot만 candidate에서 제거한다.
+    5. 남은 slot geometry와 chart ownership을 whole-project candidate에서 다시 검증한다.
+    6. content를 다른 좌표로 packing/reflow하지 않는다.
+    """
+    candidate = "안전한 grid resize candidate 또는 rejected result"
+    return candidate
+
+
 def setLayoutApiGrid(rows, cols):
     """
     변경:
-    - GRID_LAYOUT_CHANGED event를 통해 activeProject grid/slot structure.
+    - buildGridResizeCandidate가 성공한 경우에만 activeProject grid/slot structure를 한 번 commit한다.
 
     처리:
-    rows/cols가 1..8 정수인지 확인한다.
-    기존 content가 새 grid 좌표 안에 모두 들어가면 좌표/span을 보존한다.
-    그렇지 않으면 visible slot 순서 기준으로 content를 새 grid에 재배치하고 span을 1로 만든다.
-    grid 변경 후 selectedSlotId는 해제된다.
+    candidate를 먼저 만들고 전체 project invariant를 검증한다.
+    거부되면 원본 project와 selectedSlotId를 유지한다.
+    commit 후 selectedSlotId가 여전히 존재하는 slot이면 유지하고, 존재하지 않을 때만 해제한다.
     """
-    return "grid 변경 후 layout read state"
+    return "grid 변경 또는 rejected layout state"
 
 
 def mergeSlots(slotIds):
     """
     변경:
-    - 선택한 연속 직사각형 영역의 대표 slot span과 covered slot.hidden.
+    - 검증된 candidate에서 선택 직사각형의 top-left anchor span과 covered slot visibility/content를 변경한다.
 
     처리:
-    현재 visible slot과 grid coordinate에서 merge 가능한 완전한 사각형인지 검증한다.
-    content를 잃지 않는 기존 merge 규칙을 적용하고 renderer를 갱신한다.
+    1. current visible slot을 id로 resolve하고 선택 union이 빈칸 없는 하나의 직사각형인지 확인한다.
+    2. 선택 영역의 renderable content(chart/image)를 가진 visible slot이 1개 이하인지 확인한다.
+    3. source content가 있으면 chart/image/contentType을 top-left anchor candidate로 이동한다.
+       chart id 자체는 유지하되 owning slot reference만 anchor로 이동한다.
+    4. covered non-anchor slot의 renderable content를 empty로 만들고 hidden=true로 한다.
+    5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
+    6. explicit caption이 관련된 경우 SLOT_OPERATION_CAPTION_RULES["merge"]가 확정되어야 한다.
+       현재 rule이 미확정이므로 그 의미를 하위 단계에서 임의로 선택하지 않는다.
+    7. whole-project candidate를 검증한 뒤 한 번 commit한다.
     """
-    return "merge 후 선택 가능한 slot id 목록"
+    return "merge candidate commit 결과"
 
 
 def splitSlots(slotIds):
     """
     변경:
-    - merged slot을 1x1 slot 구조로 되돌리고 covered slot을 다시 visible하게 한다.
+    - merged anchor를 1x1로 되돌리고 covered cell을 visible empty slot로 복원한다.
 
     처리:
-    현재 project slot 구조를 기준으로 split 대상과 content 보존 규칙을 적용한다.
+    1. current merged visible anchor를 resolve한다.
+    2. anchor의 renderable content와 chart ownership은 anchor에 유지한다.
+    3. covered cell은 visible 1x1 empty renderable slot로 복원한다.
+    4. explicit caption이 관련된 경우 SLOT_OPERATION_CAPTION_RULES["split"]이 확정되어야 한다.
+    5. candidate 전체를 검증한 뒤 한 번 commit한다.
     """
-    return "split 후 선택 가능한 slot id 목록"
+    return "split candidate commit 결과"
 
 
 def readImageEditorApi():
@@ -180,31 +248,30 @@ def readLabelsApiState():
     return labelState
 
 
-def previewLabelsApiPosition(x, y):
+def setLabelsApiPosition(x, y):
     """
-    현재 구현 의미:
-    - activeProject.labelSettings.x/y를 즉시 변경한다.
-    - dashboard를 즉시 rerender한다.
-    - commit 전에는 appFSM notify만 생략한다.
-
-    미확정:
-    이 동작을 authoritative continuous edit로 정의할지,
-    preview용 edit copy를 두고 commit 시에만 authoritative state를 변경할지는
-    Source Script 다음 검토에서 결정해야 한다.
-
     변경:
-    - 현재 구현 기준으로 authoritative label position.
+    - activeProject의 유일한 authoritative label x/y position.
+
+    처리:
+    x/y를 finite position으로 정규화한다.
+    pointer drag 중 호출되더라도 같은 mutation path에서 persistent position을 연속 갱신한다.
+    renderer는 mutation 뒤 authoritative position을 다시 읽는다.
+    별도 preview position copy를 만들지 않는다.
     """
-    return "현재 구현의 label position read state"
+    return "변경 후 label position read state"
 
 
-def commitLabelsApiPosition():
+def finishLabelsApiPositionInteraction():
     """
-    현재 구현 의미:
-    label position 값 자체는 preview 단계에서 이미 activeProject에 들어가 있다.
-    이 함수는 최종 위치를 debug 기록하고 LABEL_POSITION_DRAGGED notify를 발생시킨다.
+    변경:
+    - persistent label position은 변경하지 않는다.
+    - 필요한 interaction completion telemetry/focus/history notification만 처리한다.
+
+    처리:
+    position 저장의 두 번째 commit 단계로 사용하지 않는다.
     """
-    return "commit notification 후 label state"
+    return "interaction completion 결과"
 
 
 def readCaptionsApiState():
@@ -236,26 +303,60 @@ def setCaptionsApiText(text):
     return "변경 후 caption state"
 
 
+def readExportSettings():
+    """
+    Return:
+    - settings:
+      activeProject의 persistent width/heightMode/height/dpi/format read projection.
+
+    변경:
+    - 없음.
+    """
+    settings = "현재 project export settings"
+    return settings
+
+
+def setExportSettings(values):
+    """
+    Return:
+    - settings:
+      commit된 normalized persistent export settings.
+
+    변경:
+    - activeProject.export만 변경한다.
+
+    처리:
+    1. current export settings에서 candidate를 만든다.
+    2. width 100..20000, dpi 36..1200, format png/jpeg를 검증한다.
+    3. heightMode가 auto면 height는 계산 입력으로 사용하지 않는다.
+       explicit이면 height 100..20000을 요구한다.
+    4. candidate를 검증한 뒤 export settings를 한 번 commit한다.
+    """
+    settings = "commit된 persistent export settings"
+    return settings
+
+
 def createTargetExportSnapshot():
     """
     Return:
     - snapshot:
-      하나의 export 작업 동안 사용할 layout/label/caption/image/chart/slot copy와
-      renderer에서 읽은 현재 color/style projection.
+      하나의 export 작업 동안 사용할 layout/label/caption/image/chart/slot/export-settings copy와
+      renderer에 필요한 read-only color/style projection.
 
     변경:
     - authoritative project state를 변경하지 않는다.
 
     처리:
     projectObjects.snapshot으로 영속 입력을 한 시점에 복사한다.
-    DOM computed style은 export renderer에 필요한 색상 projection만 읽는다.
-    snapshot은 export 작업 범위를 벗어나 일반 read authority로 재사용하지 않는다.
+    export target geometry는 snapshot.export에서 계산한다.
+    renderer style projection은 export 작업 범위를 벗어나 일반 authority로 재사용하지 않는다.
+    DOM 현재 크기는 target figure geometry의 Source of Truth로 사용하지 않는다.
     """
     snapshot = "단일 export 작업용 immutable input snapshot"
     return snapshot
 
 
-def exportDashboardTarget(options):
+def exportDashboardTarget(statusSink):
     """
     Return:
     - result:
@@ -267,13 +368,32 @@ def exportDashboardTarget(options):
 
     처리:
     1. export snapshot을 만든다.
-    2. requested logical width/height, dpi, format을 검증한다.
-    3. 자동 height면 dashboard aspect와 caption layout에서 계산한다.
-    4. raster dimension/area limit을 넘으면 project를 변경하지 않고 rejected를 반환한다.
-    5. grid geometry가 유효한지 확인한다.
-    6. 각 visible slot의 chart 또는 image를 target geometry로 다시 그린다.
-    7. label/caption을 같은 reference geometry로 그린다.
-    8. PNG/JPEG blob에 DPI metadata를 적용하고 다운로드한다.
+    2. snapshot의 persistent export settings에서 width/height mode/dpi/format을 읽는다.
+    3. auto height면 logical dashboard geometry와 caption layout에서 height를 계산한다.
+    4. explicit height면 persistent height를 사용한다.
+    5. raster dimension/area limit을 넘으면 project를 변경하지 않고 rejected를 반환한다.
+    6. grid geometry가 유효한지 확인한다.
+    7. 각 visible slot의 chart 또는 image를 target geometry로 다시 render한다.
+    8. label/caption을 같은 logical reference geometry에서 변환해 그린다.
+    9. PNG/JPEG blob에 DPI metadata를 적용하고 다운로드한다.
     """
-    result = "raster export outcome"
+    result = "persistent settings를 사용한 raster export outcome"
+    return result
+
+
+def captureDashboardCurrent(statusSink):
+    """
+    Return:
+    - result:
+      현재 화면 영역을 캡처한 one-shot raster outcome.
+
+    변경:
+    - persistent export settings를 변경하지 않는다.
+
+    처리:
+    capture는 project의 target width/height를 바꾸는 export preset이 아니다.
+    현재 rendered viewport geometry를 one-shot source size로 사용할 수 있으며
+    persistent dpi/format은 output encoding default로 읽을 수 있다.
+    """
+    result = "current-screen capture outcome"
     return result

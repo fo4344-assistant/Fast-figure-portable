@@ -1,7 +1,7 @@
 """
 Fast Figure Source Script — dashboard renderer, DOM interaction, telemetry and startup
 
-현재 구현 원천:
+하위 구현 검증 원천:
 - ../Fast-figure.html
   graphArea, dashboard, dashboardCaption, readmeContent renderer host와 renderer CSS.
 - ../fast-figure.js
@@ -16,7 +16,7 @@ Fast Figure Source Script — dashboard renderer, DOM interaction, telemetry and
 - layout_annotations_export.py
 """
 
-from project_state import activeProject, selectedSlotId, editing
+from project_state import activeProject, selectedSlotId
 from application_fsm import appFSM
 
 RENDERER_HOSTS = {
@@ -131,7 +131,8 @@ def installSlotClickController():
 
     처리:
     slot background/tab click은 setSelectedSlot로 전달한다.
-    selected slot tab drag는 source/target slot content swap command를 사용한다.
+    selected slot tab drag는 slot swap command를 사용한다.
+    renderable content와 caption의 이동 의미는 layout_annotations_export의 operation matrix를 따른다.
     file DataTransfer drop은 여기서 처리하지 않고 Mantine FastFigureDashboardFileDrop에 넘긴다.
     """
     return "설치된 dashboard interaction controller"
@@ -140,13 +141,17 @@ def installSlotClickController():
 def swapSlotContents(source, target):
     """
     변경:
-    - SLOTS_SWAPPED event를 통해 두 slot의 content reference와 필요 시 selectedSlotId.
+    - 검증된 candidate를 통해 source/target의 renderable content와 필요 시 selectedSlotId.
 
     처리:
-    row/col geometry는 바꾸지 않고 slot.content 전체를 교환한다.
-    mutation action 안에서 validation하고 실패하면 이전 content/selection으로 rollback한다.
+    1. source/target을 current project에서 다시 resolve한다.
+    2. row/col geometry는 바꾸지 않고 chart/image/contentType candidate를 교환한다.
+    3. chart ownership은 교환된 target slot에 맞춰 그대로 1:1을 유지한다.
+    4. explicit caption이 있으면 확정된 SLOT_OPERATION_CAPTION_RULES["swap"]을 적용해야 한다.
+       현재 미확정 rule을 renderer가 임의로 선택하지 않는다.
+    5. project candidate를 검증한 뒤 한 번 commit한다.
     """
-    return "swap 완료"
+    return "swap candidate commit 결과"
 
 
 def prepareDashboardFileDrop(slotId):
@@ -179,6 +184,23 @@ def applySlotStyle(notify):
     return "적용된 dashboard style projection"
 
 
+def resolveSelectedChart():
+    """
+    Return:
+    - chart:
+      selectedSlotId -> current slot.chart -> activeProject chart collection으로 resolve한 chart 또는 없음.
+
+    변경:
+    - 없음.
+
+    처리:
+    선택 chart를 별도 global editing pointer로 저장하지 않는다.
+    한 작업 안에서 얻은 local chart reference는 그 작업 범위를 넘겨 authoritative runtime state로 보존하지 않는다.
+    """
+    chart = "현재 selected slot의 chart 또는 없음"
+    return chart
+
+
 def updateGraphView():
     """
     변경:
@@ -197,12 +219,14 @@ def startupCoreRuntime():
     - 기본 project runtime, renderer controller, FSM lifecycle.
 
     처리:
-    applyDashboardZoom
-    -> ensureDefaultCsv
-    -> installSlotClickController
-    -> makeSlots
-    -> applySlotStyle
-    -> appFSM.ready
-    -> auditApp 순서를 보존한다.
+    1. createProjectState/loaded ProjectObject가 이미 valid slot structure를 소유한다.
+    2. dashboard zoom projection을 적용한다.
+    3. slot click/drop controller를 설치한다.
+    4. activeProject의 existing slots를 renderDashboard로 투영한다.
+    5. slot style을 적용한다.
+    6. appFSM을 ready로 전환한다.
+    7. project/reference/runtime invariant를 audit한다.
+
+    startup은 default CSV를 생성하거나 grid slot을 domain state에 다시 만드는 초기화 side effect를 수행하지 않는다.
     """
     return "ready core runtime"
