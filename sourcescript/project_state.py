@@ -100,7 +100,6 @@ imageAsset = {
     "directory": "projectVfs의 존재하는 directory path",
     "mime": "image bytes MIME",
     "bytesBase64": "image bytes의 base64 표현",
-    "settings": "fit/scale/x/y image renderer 설정",
 }
 
 slot = {
@@ -114,6 +113,12 @@ slot = {
         "chart": "activeProject.charts의 chart id 또는 없음",
         "imageId": "activeProject.images의 image id 또는 없음",
         "contentType": "graph 또는 image",
+        "imageSettings": {
+            "fit": "contain, cover, manual 중 하나",
+            "scale": "manual image scale percent",
+            "x": "manual image center x percent",
+            "y": "manual image center y percent",
+        },
     },
     "caption": (
         "이 slot object에 귀속된 slot-local caption text 또는 없음. "
@@ -124,7 +129,7 @@ slot = {
 
 SLOT_LOCAL_PROPERTY_RULE = (
     "특정 slot에만 적용되는 영속 값은 그 slot object의 하위 속성으로 둔다. "
-    "chart/image/contentType과 slot caption은 의미가 서로 달라도 같은 slot object에 귀속된 local state다. "
+    "chart/image/contentType, image display settings, slot caption은 의미가 서로 달라도 같은 slot object에 귀속된 local state다. "
     "GUI layout에서 slot object를 다른 위치로 이동·교환하면 이 local state는 slot object 단위로 함께 이동한다. "
     "global caption처럼 figure 전체에 적용되는 값만 project-level property로 둔다."
 )
@@ -268,11 +273,13 @@ def normalizeSlotContent(slot):
     - 전달된 candidate slot representation만 정규화한다.
 
     처리:
-    1. chart/image/contentType은 하나의 renderable-content 원천으로 정규화한다.
-    2. caption은 slot annotation 원천으로 정규화한다.
-    3. legacy representation에서 caption이 nested content 안에 있으면 같은 caption annotation으로 이동한다.
-    4. UI placeholder 문자열을 새 authoritative caption 값으로 생성하지 않는다.
-    5. compatibility alias가 필요하더라도 같은 의미에 두 저장값을 두지 않는다.
+    1. chart/image/contentType/imageSettings는 하나의 slot-local renderable-content 원천으로 정규화한다.
+    2. imageSettings가 없으면 slot default imageSettings를 만든다.
+       image asset 자체에서 display settings를 읽어 authority로 사용하지 않는다.
+    3. caption은 slot-local caption 원천으로 정규화한다.
+    4. legacy representation에서 caption이 nested content 안에 있으면 같은 caption property로 이동한다.
+    5. UI placeholder 문자열을 새 authoritative caption 값으로 생성하지 않는다.
+    6. compatibility alias가 필요하더라도 같은 의미에 두 저장값을 두지 않는다.
     """
     return slot
 
@@ -302,6 +309,8 @@ def validateProjectObjectState(state, requireSlots):
     - slot id와 geometry가 유효하고 grid 범위를 넘지 않는다.
     - slot은 chart와 image를 동시에 참조하지 않는다.
     - slot chart/image 참조 대상이 존재한다.
+    - slot.content.imageSettings는 fit/scale/x/y schema와 허용 범위를 만족한다.
+    - image asset에는 slot-local display settings를 요구하지 않는다.
     - 각 chart는 정확히 하나의 slot에서 참조되며 shared chart와 orphan chart가 없다.
     - unset slot caption은 null/empty이고 UI placeholder를 project 값으로 요구하지 않는다.
     - nextId는 해당 collection의 현재 최대 id보다 크다.
@@ -313,7 +322,10 @@ def validateProjectObjectState(state, requireSlots):
 
 DEFAULT_PROJECT_RULES = {
     "grid": "새 project는 2 x 2 grid에서 시작한다.",
-    "slots": "초기 grid의 각 cell은 1 x 1 empty slot이다.",
+    "slots": (
+        "초기 grid의 각 cell은 1 x 1 empty slot이며 chart/image reference, caption은 empty, "
+        "imageSettings는 slot-local default를 가진다."
+    ),
     "assets": "초기 CSV/image collection은 비어 있으며 보호된 default CSV를 만들지 않는다.",
     "charts": "초기 chart collection은 비어 있다.",
     "labels": "초기에는 disabled, position은 reference origin, 기본 formatting/font settings를 사용한다.",

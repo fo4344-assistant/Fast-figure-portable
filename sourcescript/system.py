@@ -107,6 +107,10 @@ RESOLVED_REVIEW_ITEMS = [
         "slot object를 GUI layout position 사이에서 이동·교환하면 caption도 chart/image/contentType과 함께 이동한다. "
         "global caption은 project-level property이며 slot caption editor target은 UI/runtime state다."
     ),
+    (
+        "image fit/scale/x/y는 image asset 자체가 아니라 slot-local display state로 확정했다. "
+        "image asset은 copied bytes/name/MIME/location을 소유하고, 같은 image를 여러 slot이 참조해도 각 slot의 imageSettings는 독립적이다."
+    ),
 ]
 
 UNRESOLVED_REVIEW_ITEMS = [

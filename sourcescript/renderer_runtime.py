@@ -99,7 +99,7 @@ def renderDashboard():
     1. activeProject grid와 style을 dashboard CSS geometry에 반영한다.
     2. visible slot마다 slot container와 label/tab surface를 구성한다.
     3. graph slot은 referenced chart를 resolve해 Plotly projection을 render한다.
-    4. image slot은 referenced image와 settings를 resolve해 image surface를 동기화한다.
+    4. image slot은 referenced image asset bytes와 같은 slot object의 imageSettings를 resolve해 image surface를 동기화한다.
     5. selectedSlotId에 따라 selection/interaction class를 적용한다.
     6. caption과 label projection을 동기화한다.
     7. stale Plotly instance를 purge하고 resize generation을 관리한다.
@@ -146,7 +146,7 @@ def swapSlotContents(source, target):
     처리:
     1. source/target을 current project에서 다시 resolve한다.
     2. row/col/span geometry는 각 GUI 위치에 유지한다.
-    3. chart/image/contentType/caption 등 slot-local properties 전체를 한 단위로 교환한다.
+    3. chart/image/contentType/imageSettings/caption 등 slot-local properties 전체를 한 단위로 교환한다.
     4. chart ownership은 교환된 target slot에 맞춰 1:1을 유지한다.
     5. project candidate를 검증한 뒤 한 번 commit한다.
     """

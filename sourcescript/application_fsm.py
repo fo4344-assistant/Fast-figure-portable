@@ -62,12 +62,12 @@ WORKSPACE_MUTATION_EVENTS = {
     "IMAGE_OBJECT_DELETED": "참조가 정리된 image asset을 제거한다.",
     "SLOTS_RESET": "지정 slot object의 local properties를 defaults로 초기화한다.",
     "SLOTS_SWAPPED": "두 GUI 위치의 slot-local properties 전체를 교환한다.",
-    "SLOT_IMAGE_LINKED": "기존 image asset을 image slot에 연결한다.",
+    "SLOT_IMAGE_LINKED": "기존 image asset을 slot에 연결하되 display settings는 slot-local imageSettings를 사용한다.",
     "SLOT_DATA_CONNECTED": "CSV를 graph slot/chart object에 연결한다.",
     "GRAPH_OBJECTS_REPLACED": "chart.editor.objects authoritative array를 교체한다.",
     "CHART_LAYOUT_CHANGED": "chart editor title/global axis settings를 교체한다.",
     "CHART_MODEL_REPLACED": "선택 slot의 editable chart model을 교체한다.",
-    "SLOT_IMAGE_IMPORTED": "새/기존 image model을 slot에 연결한다.",
+    "SLOT_IMAGE_IMPORTED": "새/기존 image asset을 slot에 연결하고 slot-local imageSettings를 유지/초기화 규칙에 따라 적용한다.",
     "SLOT_CHART_IMPORTED": "FFSX/Plotly에서 만든 chart model을 slot에 연결한다.",
     "GRID_LAYOUT_CHANGED": "grid와 slot arrangement를 변경한다.",
     "PROJECT_LOADED": "검증된 ProjectObject 전체를 activeProject로 교체한다.",
@@ -111,8 +111,8 @@ MUTATION_GROUPS = {
         "PROJECT_LOADED와 project metadata 변경. 전체 candidate ProjectObject를 먼저 검증하고 한 번 교체한다."
     ),
     "slot-local": (
-        "type/reset/swap/image-link/data-connect/chart-import. slot object의 local properties와 chart ownership을 "
-        "candidate에서 함께 계산해 partial slot state를 남기지 않는다."
+        "type/reset/swap/image-link/data-connect/chart-import. contentType/chart/image/imageSettings/caption 같은 "
+        "slot object의 local properties와 chart ownership을 candidate에서 함께 계산해 partial slot state를 남기지 않는다."
     ),
     "assets": (
         "CSV/image create/replace/delete, directory/move/trash. VFS와 affected references를 같은 candidate에서 검증한다."
@@ -295,7 +295,7 @@ def applySlotsResetAction(slotIds):
 
     처리:
     1. slot id들을 current project에서 resolve한다.
-    2. 각 slot의 chart/image/contentType/caption을 default slot-local state로 바꾸는 candidate를 만든다.
+    2. 각 slot의 chart/image/contentType/imageSettings/caption을 default slot-local state로 바꾸는 candidate를 만든다.
     3. reset slot이 유일하게 소유하던 chart는 candidate chart collection에서 제거한다.
     4. slot geometry/span/hidden state는 reset content command가 별도로 요구하지 않는 한 유지한다.
     5. whole-project candidate를 검증한 뒤 한 번 commit한다.
@@ -312,7 +312,7 @@ def applySlotsSwappedAction(sourceId, targetId):
     처리:
     1. 두 visible slot을 current project에서 resolve한다.
     2. row/col/span 같은 layout position geometry는 유지한다.
-    3. chart/image/contentType/caption 등 slot-local properties 전체를 한 단위로 교환한다.
+    3. chart/image/contentType/imageSettings/caption 등 slot-local properties 전체를 한 단위로 교환한다.
     4. chart id는 그대로 두고 새 owning slot reference가 1:1인지 candidate에서 검증한다.
     5. 검증 성공 후 한 번 commit한다.
     """

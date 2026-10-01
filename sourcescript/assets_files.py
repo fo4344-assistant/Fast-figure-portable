@@ -41,7 +41,7 @@ FFPX_STRUCTURE = {
     "layout/layout.xml": "grid와 slot placement",
     "caption/caption.xml": "global/slot caption configuration",
     "labels/labels.xml": "label configuration",
-    "slots/slot-<id>.xml": "slot content, caption, chart state/objects 또는 image settings",
+    "slots/slot-<id>.xml": "slot content, slot-local caption, chart state/objects 또는 slot-local image settings",
     "assets/data/...": "CSV/TSV/JSON 원본 data bytes",
     "assets/media/...": "image bytes",
 }
@@ -226,7 +226,7 @@ def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
     return csv
 
 
-def createProjectImage(bytes, name, mime, id, settings, path):
+def createProjectImage(bytes, name, mime, id, path):
     """
     Return:
     - image:
@@ -234,6 +234,10 @@ def createProjectImage(bytes, name, mime, id, settings, path):
 
     변경:
     - IMAGE_OBJECT_CREATED event를 통해 activeProject.images와 next image id를 변경한다.
+
+    처리:
+    image asset은 copied bytes/name/MIME/location만 소유한다.
+    fit/scale/x/y 같은 display settings는 연결 slot의 slot.content.imageSettings에 둔다.
     """
     image = "등록된 image asset"
     return image
@@ -542,9 +546,10 @@ def buildProjectObject(payload, fileName):
     처리:
     1. current schema/version과 project name/grid shape를 검증한다.
     2. CSV/image id, bytes, canonical VFS location을 candidate collection으로 정규화한다.
+       image asset에는 slot-local display settings를 두지 않는다.
     3. chart와 graph object를 정규화하고 CSV reference를 resolve한다.
        zero-object editable chart는 그대로 허용한다.
-    4. slot geometry와 chart/image reference를 정규화한다.
+    4. slot geometry, chart/image reference, slot-local imageSettings/caption을 정규화한다.
     5. chart마다 owning slot이 정확히 하나인지 확인한다.
        shared/orphan topology는 clone/drop하지 않고 실패한다.
     6. labels/captions/appearance/export settings를 정규화한다.

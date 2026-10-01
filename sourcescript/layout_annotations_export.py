@@ -30,6 +30,7 @@ layoutRules = {
 }
 
 imageSettings = {
+    "owner": "slot.content.imageSettings; image asset의 속성이 아니다.",
     "fit": "contain, cover, manual 중 하나",
     "scale": "manual fit에서 현재 허용 범위 1..1000 percent",
     "x": "manual image center x; 현재 허용 범위 -100..200 percent",
@@ -65,7 +66,7 @@ EXPORT_LIMITS = {
 SLOT_OPERATION_CAPTION_RULES = {
     "swap": (
         "source/target slot object의 local properties를 함께 교환한다. "
-        "따라서 caption은 chart/image/contentType과 함께 상대 GUI position으로 이동한다."
+        "따라서 caption과 imageSettings는 chart/image/contentType과 함께 상대 GUI position으로 이동한다."
     ),
     "merge": (
         "선택 영역에서 non-default slot-local state를 가진 slot object는 최대 하나여야 한다. "
@@ -201,7 +202,7 @@ def mergeSlots(slotIds):
     1. current visible slot을 id로 resolve하고 선택 union이 빈칸 없는 하나의 직사각형인지 확인한다.
     2. 선택 영역에서 non-default slot-local state를 가진 visible slot이 1개 이하인지 확인한다.
        non-default local state는 chart/image reference 또는 non-empty explicit caption을 포함한다.
-    3. source slot이 있으면 chart/image/contentType/caption을 하나의 slot-local payload로 top-left anchor candidate에 이동한다.
+    3. source slot이 있으면 chart/image/contentType/imageSettings/caption을 하나의 slot-local payload로 top-left anchor candidate에 이동한다.
        chart id 자체는 유지하되 owning slot reference는 anchor로 이동한다.
     4. covered non-anchor slot은 renderable content와 caption을 모두 defaults로 비우고 hidden=true로 한다.
     5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
@@ -229,10 +230,10 @@ def readImageEditorApi():
     """
     Return:
     - imageEditor:
-      선택 slot이 참조하는 image name/display URL과 settings의 read projection.
+      선택 slot이 참조하는 image name/display URL과 그 slot의 imageSettings read projection.
 
     변경:
-    - authoritative image settings를 변경하지 않는다.
+    - authoritative slot-local imageSettings를 변경하지 않는다.
     """
     imageEditor = "선택 image의 read-only editor projection 또는 없음"
     return imageEditor
@@ -241,12 +242,13 @@ def readImageEditorApi():
 def applyImageSettingsFromValues(values):
     """
     변경:
-    - 선택 slot의 referenced image.settings.
+    - 선택 slot의 slot.content.imageSettings.
     - 현재 slot image renderer projection.
 
     처리:
     fit enum과 manual scale/x/y 범위를 정규화한다.
-    project image settings를 한 경로에서 변경한 뒤 IMAGE_SETTINGS_CHANGED를 notify한다.
+    selected slot object의 local imageSettings candidate를 검증 후 commit하고 IMAGE_SETTINGS_CHANGED를 notify한다.
+    같은 image asset을 참조하는 다른 slot의 imageSettings는 변경하지 않는다.
     """
     return "설정 적용 성공 여부"
 

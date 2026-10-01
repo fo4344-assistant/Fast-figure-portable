@@ -48,8 +48,8 @@ PUBLIC_API_METHODS = {
         "finishFileDrop": "runtime completion; drag/drop interaction state 정리, domain payload 자체는 import command가 소유",
     },
     "images": {
-        "readEditor": "read; selected slot -> image reference -> image/settings projection",
-        "setSettings": "mutation; selected referenced image settings candidate validation/commit",
+        "readEditor": "read; selected slot -> image asset + slot-local imageSettings projection",
+        "setSettings": "mutation; selected slot.content.imageSettings candidate validation/commit",
         "insertEmpty": "mutation; 새 image asset + selected slot reference candidate를 함께 commit",
     },
     "assets": {
