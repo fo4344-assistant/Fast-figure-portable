@@ -1,0 +1,1612 @@
+diff --git a/pseudocode/README.md b/pseudocode/README.md
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/README.md
+@@ -0,0 +1,45 @@
++# Fast Figure pseudocode r1
++
++Derived exactly from:
++
++- Source Script revision: r12
++- Source Script fingerprint: `sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db`
++- Source Script closure review: `agent_space/reviews/review-015-sourcescript-closure-r12.md`
++
++## Translation rule
++
++This directory is the language-neutral execution translation of the closed Source Script.
++
++It preserves:
++
++- Source Script identifiers and responsibility boundaries
++- authoritative state and reference sources
++- inputs and outputs
++- meaningful execution order
++- candidate construction and commit boundaries
++- failure/rejection semantics
++- fixed calculations
++
++It does not decide:
++
++- JavaScript/React/Python-specific data structures
++- concrete exception classes
++- browser/library call syntax
++- implementation-only caching or memory layout
++- new domain rules
++
++If a required meaning is missing or contradictory, translation stops and the issue returns to Source Script.
++
++## Module mapping
++
++| Source Script | Pseudocode |
++| --- | --- |
++| `sourcescript/system.py` | `system.md` |
++| `sourcescript/project_state.py` | `project_state.md` |
++| `sourcescript/application_fsm.py` | `application_fsm.md` |
++| `sourcescript/assets_files.py` | `assets_files.md` |
++| `sourcescript/graphs.py` | `graphs.md` |
++| `sourcescript/layout_annotations_export.py` | `layout_annotations_export.md` |
++| `sourcescript/api_ui.py` | `api_ui.md` |
++| `sourcescript/renderer_runtime.py` | `renderer_runtime.md` |
++| `sourcescript/portable_build.py` | `portable_build.md` |
+diff --git a/pseudocode/api_ui.md b/pseudocode/api_ui.md
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/api_ui.md
+@@ -0,0 +1,170 @@
++# api_ui
++
++## API boundary
++
++1. Mantine frontend does not directly mutate activeProject, projectVfs, chart collection or CSV collection.
++2. Persistent/domain changes use declared public API commands or declared appFSM mutation events.
++3. Read methods recalculate projections from current authority.
++4. UI-local modal/input/pointer/editor-target state is not persistent project state.
++5. A UI-local draft becomes persistent only through its official mutation command.
++
++## Public API contracts
++
++### project
++
++- readName: read current project name.
++- setName: validate candidate name, commit or keep existing name.
++- importFile: FFPX -> validated ProjectObject candidate -> PROJECT_LOADED lifecycle mutation.
++- exportFile: snapshot current validated project -> FFPX; no project mutation.
++
++### slots
++
++- readSelected: resolve selectedSlotId to current slot projection.
++- select: runtime selection toggle.
++- setContentType: candidate-change slot-local contentType.
++- reset: reset complete slot-local payload and remove owned chart.
++- prepareFileDrop: runtime/calculation for drop target and acceptability.
++- finishFileDrop: end drag/drop runtime state; import command owns domain mutation.
++
++### images
++
++- readEditor: selected slot -> image asset + slot-local imageSettings.
++- setSettings: validate/commit selected slot imageSettings.
++- insertEmpty: create image asset + selected slot reference in one candidate mutation.
++
++### assets
++
++- readDeletionTarget: target + collectAssetReferences.
++- delete: reference detach + asset removal candidate.
++- readTree: VFS/assets -> tree projection.
++- isTrashed: calculate trash-subtree membership.
++- movable: calculate move eligibility.
++- readTrash: trash projection.
++- moveOptions: calculate target directory options.
++- planMove: calculate destination/collision/reference count.
++- move: revalidate against current VFS, then commit candidate.
++- createDirectory: canonical collision-free directory candidate.
++- emptyTrash: reference/assets/directories candidate removal.
++- draggableAsset: read drag payload projection.
++- connectToSlot: existing asset -> explicit/selected slot candidate.
++- importToDirectory: batch candidate import.
++- importToSlot: asset + target slot/chart candidate import.
++- fileKind: classify supported slot-import kind.
++- importFiles: route supported files to import contract.
++- collisionModel: calculate import collision.
++- resolveImportPlan: user choice -> path/replace-id plan.
++- selectDirectory/selectCsv/selectImage: runtime VFS-resolved selection.
++- download: output copied asset bytes without project mutation.
++
++### graphs
++
++- readData/readLayout/readPalette: current selected-chart projections.
++- selectCsv/selectObject: runtime editor selection.
++- setHeaderLines: candidate-change referenced CSV headerLines.
++- setEditable: imported-chart conversion candidate.
++- addObject/moveObject/setObjectValues/deleteObject: candidate-change editor.objects; empty list allowed.
++- updateLayout: chart title/global/axis candidate.
++- applyPalette: graph-object color candidate.
++- defaultColors: immutable default color sequence copy.
++- hasSelectedSlot: read current selection existence.
++- importFile: FFSX or Plotly -> new target-slot-owned chart candidate.
++- exportFfsx: selected graph slot snapshot -> FFSX.
++- exportPlotlyJson: selected chart -> Plotly figure.
++
++### print
++
++- readSettings: persistent project export settings.
++- setSettings: validate/commit export settings.
++- save: target raster export from persistent settings; no project mutation.
++- capture: one-shot current-screen export; no target-size mutation.
++
++### captions
++
++- readGlobal: project-global caption.
++- readSlot(slotId): explicit slot-local caption.
++- setEnabled: project global caption enabled flag.
++- setGlobalText: project global caption text.
++- setSlotText(slotId): explicit slot.caption.
++- insertSlotCaptions: calculate slot-caption text and insert into global caption.
++- setName/setNameBold/setSettings: project global/shared caption presentation settings.
++- No persistent setSlotMode method.
++
++### labels
++
++- readState: persistent settings + selected-slot reference geometry.
++- setEnabled/setSettings: persistent candidate mutation.
++- setPosition: single authoritative x/y mutation path.
++- finishPositionInteraction: runtime completion only.
++- resetPosition: set persistent x/y to default origin.
++- No separate preview authority or second commit.
++
++### appearance
++
++- readPalette: persistent palette projection.
++- setPalette: normalized candidate commit.
++- resetPalette: default palette commit.
++
++### layout
++
++- readState: persistent layout/style + visible-slot/logical geometry projection.
++- setStyle: slotStyle candidate.
++- setGrid: safe grid-resize candidate only.
++- setZoom/commitZoom/setZoomLocked/resetZoom: runtime zoom behavior, not second persistent layout state.
++- mergeSlots: one non-default slot-local payload -> anchor.
++- splitSlots: anchor keeps payload; restored slots get defaults.
++
++## Lower-layer API replacement rule
++
++If current stale source exposes older names:
++
++- print.readDefaults -> translate to readSettings
++- captions.readState -> split readGlobal/readSlot
++- captions.setSlotMode -> UI-local editor target, not domain method
++- captions.setText -> split setGlobalText/setSlotText
++- labels.previewPosition -> remove duplicate mutation surface
++- labels.commitPosition -> finishPositionInteraction
++
++Do not preserve old API names as new semantic authorities solely for compatibility.
++
++## subscribeAppState
++
++INPUT onStoreChange
++
++1. Subscribe React external-store listener directly to appFSM revisions/transitions.
++2. Do not create a second React project store.
++3. Return unsubscribe.
++
++## useProjectAssetImportCollision
++
++1. Ask core for collision model.
++2. If no user choice required, resolve plan immediately.
++3. Otherwise store model + resolver only for modal lifetime.
++4. On choice, call core resolveImportPlan.
++5. Clear local modal state.
++6. Return chooser and modal projection.
++7. Never mutate project directly.
++
++## runLifecycleTask
++
++INPUT lifecycle, eventName, task
++
++1. Delegate lifecycle sequencing to appFSM.run.
++2. Task performs domain mutation through official commands.
++3. UI may record error in telemetry.
++4. UI does not invent domain rollback.
++5. Return result/error projection.
++
++## FastFigureApp
++
++1. Read persistent appearance palette.
++2. Project it to Mantine theme/CSS variables.
++3. Compute display-only contrast values.
++4. Render FastFigureShell under one existing React root.
++5. Do not mutate project during render.
++
++## FastFigureShell
++
++1. Own AppShell composition and session-local navbar state.
++2. Project sidebar geometry to renderer host CSS variables.
++3. Request plot resize after UI geometry changes.
++4. Do not duplicate project/domain state.
+diff --git a/pseudocode/application_fsm.md b/pseudocode/application_fsm.md
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/application_fsm.md
+@@ -0,0 +1,181 @@
++# application_fsm
++
++## Runtime state
++
++appState stores:
++
++- lifecycle
++- workspace
++- overlay
++- assetSelection + assetPath
++- graphObject + graphObjectIndex
++- direction
++- revision
++- error
++
++It does not store persistent project duplicates.
++
++## Candidate mutation contract
++
++For every persistent mutation:
++
++1. Resolve current authoritative input and id/path references.
++2. Check writable scope and command preconditions.
++3. Build candidate state or candidate patch before changing authority.
++4. Validate local rules, cross-references, and whole-project invariants as required.
++5. On validation failure, leave authoritative state unchanged.
++6. On success, commit authoritative state once.
++7. Reconcile derived runtime selection against committed project.
++8. Notify/render by rereading committed authority.
++
++## ApplicationStateMachine.send
++
++INPUT event, payload
++
++1. Iterate regions in REGION_ORDER.
++2. In each region, find handler for event.
++3. If handler has action, execute action.
++4. If handler has target state, execute transition.
++5. If multiple regions own the event, process each in order with the same payload.
++6. If no region handles it, do not mutate domain state; debug warning is allowed.
++7. Return current FSM state.
++
++## transition
++
++INPUT region, target, event, payload
++
++1. If target equals current state and no reentry is requested, run update behavior only.
++2. Otherwise run exit, set target state, then entry behavior.
++3. During model-to-FSM hydration, prevent the hydrated UI path from writing the same model back.
++4. Publish resulting FSM state to frontend subscribers.
++5. Return state.
++
++## notify
++
++INPUT objectName, event, payload
++
++1. Do not mutate project state.
++2. Set direction to model-to-ui and advance revision.
++3. If current workspace/overlay subscribes to objectName, invoke its projection update.
++4. Ignore notification during booting or incompatible transition.
++5. Return state.
++
++## run
++
++INPUT lifecycle, event, task
++
++1. Require current lifecycle ready.
++2. Transition into requested lifecycle.
++3. Run sync or async task.
++4. On success, return to ready and return task result.
++5. On failure, record error, pass through error lifecycle, then return to ready.
++6. Domain rollback is not invented here; task mutations follow their own candidate contract.
++
++## applySlotSelectionAction
++
++INPUT payload
++
++1. Resolve payload slot in current project.
++2. Apply UI toggle semantics: selecting the currently selected slot may clear selection.
++3. Revalidate or clear graph-object runtime selection.
++4. Derive workspace from selection and slot contentType.
++5. Resolve selected chart on demand; do not store global editing pointer.
++6. Return selection result.
++
++## applyProjectLoadedAction
++
++INPUT fully validated ProjectObject candidate
++
++1. Check required write scopes.
++2. Validate candidate outside authority.
++3. If invalid, keep current project.
++4. If valid, replace activeProject once through ProjectObject.initialize.
++5. Clear/re-resolve runtime selections against new project.
++6. Release old project display resources after commit.
++7. Reproject renderer/UI from new authority.
++8. Do not use renderer projection failure as a generic domain rollback.
++9. Return activeProject.
++
++## applyProjectNodeMovedAction
++
++INPUT move payload
++
++1. Resolve source and destination in current VFS.
++2. Reject fixed-directory move, collision, and recursive directory move before commit.
++3. Build candidate directory/asset movement.
++4. If entering trash, collect and detach affected references in same candidate.
++5. Validate VFS/reference invariants.
++6. Commit once.
++7. Clear runtime selection only when its object no longer exists.
++8. Return final path.
++
++## applyGraphObjectsReplacedAction
++
++INPUT chartId + object list
++
++1. Resolve chart.
++2. Normalize candidate object list and validate CSV/column references.
++3. Permit empty object list.
++4. Rebuild editable graph projection on chart candidate.
++5. Validate chart ownership and project candidate.
++6. Commit chart once.
++7. Clear graphObjectIndex if it is out of range.
++8. Do not create fake object/default CSV.
++9. Return chart.
++
++## applySlotsResetAction
++
++INPUT slotIds
++
++1. Resolve all slots.
++2. For each slot, replace all slot-local properties with SLOT_LOCAL_DEFAULTS.
++3. Remove charts uniquely owned by reset slots.
++4. Preserve layout geometry/span/hidden unless the command separately changes layout.
++5. Validate whole project.
++6. Commit once.
++7. Reconcile graph-object selection.
++8. Return result.
++
++## applySlotsSwappedAction
++
++INPUT sourceId, targetId
++
++1. Resolve both visible slots.
++2. Keep each GUI placement geometry fixed.
++3. Exchange complete slot-local payload:
++   chart, imageId, contentType, imageSettings, caption.
++4. Validate chart ownership after exchange.
++5. Commit once.
++6. Return result.
++
++## applyCaptionTextAction
++
++INPUT explicit target, text
++
++1. If target is global, candidate-change project global caption text.
++2. If target is a slot id, resolve the slot and candidate-change slot.caption.
++3. Do not inspect persistent slotMode.
++4. Validate owner exists.
++5. Commit exactly one caption owner.
++6. Return result.
++
++## applySlotCaptionsInsertedAction
++
++INPUT slotIds or default visible slot set
++
++1. Resolve slots.
++2. Read non-empty slot.caption values in layout/label order.
++3. Build insertion text projection.
++4. Candidate-change only project global caption text.
++5. Leave source slot captions unchanged.
++6. Commit and return result.
++
++## applyGridLayoutAction
++
++INPUT rows, cols
++
++1. Call buildGridResizeCandidate.
++2. If resize is unsafe or needs implicit reflow, reject without mutation.
++3. Validate successful whole-project candidate.
++4. Commit once.
++5. Return layout result.
+diff --git a/pseudocode/assets_files.md b/pseudocode/assets_files.md
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/assets_files.md
+@@ -0,0 +1,305 @@
++# assets_files
++
++## Package and VFS rules
++
++- FFPX/FFSX use current package format version 3.
++- Container is non-split STORE ZIP.
++- Reject absolute entry paths and parent traversal.
++- Validate CRC.
++- Fixed VFS directories are /assets, /assets/csv, /assets/images, /assets/trash.
++- Fixed directories cannot be moved or deleted.
++- Asset canonical path is derived from directory + name.
++- FFPX excludes trash subtree.
++- Package assets are copied bytes; reopening never requires original filesystem path.
++
++FFPX document responsibility:
++
++- project.xml: project metadata, fileSystem, appearance, export settings, document refs
++- assets/assets.xml: asset metadata and binary refs
++- layout/layout.xml: grid and placement
++- caption/caption.xml: project-global caption only
++- labels/labels.xml: label configuration
++- slots/slot-<id>.xml: slot-local payload, slot caption, chart state or image settings
++- assets/data: copied tabular bytes
++- assets/media: copied image bytes
++
++FFSX responsibility:
++
++- one graph slot + chart state + graph objects + slot caption
++- referenced CSV metadata/bytes
++- blank zero-object chart may contain no CSV
++
++## normalizeProjectPath
++
++INPUT value, directory flag
++
++1. Normalize separators into project absolute path form.
++2. Reject "." and ".." segments.
++3. Validate each segment with project filename rules.
++4. Reject root itself when a file path is required.
++5. Return canonical path.
++
++## projectAssetPath
++
++INPUT asset
++
++1. Validate asset.directory and asset.name.
++2. Join and normalize them.
++3. Do not read a separately stored asset.path.
++4. Return canonical path.
++
++## projectAssetImportCollisionModel
++
++INPUT file, directory, reservedPaths
++
++1. Determine supported asset kind.
++2. Build normalized candidate path.
++3. Check current VFS and batch-reserved paths.
++4. If no collision: mode available.
++5. If same-kind existing asset: allow replace or rename.
++6. If other-kind or batch reservation: allow rename only.
++7. Return collision model without mutation.
++
++## resolveProjectAssetImportPlan
++
++INPUT collision model, user choice, reservedPaths
++
++1. If available, use candidate path.
++2. If replace was allowed and selected, preserve existing asset id.
++3. Otherwise compute collision-free path through projectVfsUniquePath.
++4. Return path + optional replaceId.
++
++## importProjectFilesToDirectory
++
++INPUT files, directory, planImport
++
++1. Resolve target directory; reject trash target.
++2. Read all file bytes.
++3. Build data/image candidates outside authority.
++4. Resolve all collision choices and reserve batch paths.
++5. Starting from current project snapshot, build candidate collections, locations and nextIds.
++6. If operation also targets a slot, include slot/chart candidate changes.
++7. Validate VFS, references, and whole project.
++8. If any read/parse/collision/validation fails, keep activeProject unchanged.
++9. If all pass, commit the candidate in importing lifecycle once.
++10. Return import result.
++
++## createProjectCsv
++
++INPUT data, name, id, bytesBase64, mime, headerLines, path
++
++1. Normalize table and copied bytes representation.
++2. Resolve VFS location.
++3. Build CSV model.
++4. Submit through controlled CSV create mutation.
++5. Update next csv id through that mutation.
++6. Return registered asset.
++
++## createProjectImage
++
++INPUT bytes, name, mime, id, path
++
++1. Build copied-bytes image asset with VFS location.
++2. Do not add display settings to asset.
++3. Submit through controlled image create mutation.
++4. Update next image id.
++5. Return registered asset.
++
++## collectAssetReferences
++
++INPUT csvIds, imageIds, state
++
++1. For each graph object whose csvId is selected, emit one CSV reference.
++2. For each slot whose imageId is selected, emit one image reference.
++3. Count repeated CSV use by different graph objects separately.
++4. Return the exact reference set used by confirmation and mutation.
++
++## deleteProjectAsset
++
++INPUT target
++
++1. Resolve target.
++2. Collect references.
++3. Build candidate removing target asset and its direct references.
++4. For CSV, remove referencing graph objects; zero-object chart remains valid.
++5. For image, clear the image reference from affected slot; do not invent unrelated slot reset.
++6. Validate candidate.
++7. Commit once or leave project unchanged.
++8. Return completion.
++
++## planProjectNodeMove
++
++INPUT path, directory
++
++1. Resolve source and target directory.
++2. Compute destination, collision, optional unique name, trash-entry flag.
++3. Collect current affected reference count.
++4. Return read-only move plan.
++
++## moveProjectNode
++
++INPUT plan, useUniqueName
++
++1. Re-resolve source and destination from current state.
++2. Recompute final destination; do not trust stale UI plan.
++3. If asset enters trash, collect/detach references in candidate.
++4. If directory moves, move all descendants in same candidate.
++5. Reject fixed directory, collision, recursive subtree cycle, invalid references.
++6. Validate candidate.
++7. Commit once.
++8. Return final path.
++
++## emptyProjectTrash
++
++1. Resolve current trash subtree.
++2. Collect remaining references.
++3. Build candidate removing those references, assets and trash directories.
++4. Validate.
++5. Commit once.
++6. Return deleted counts/reference result.
++
++## parseProjectDataAsset
++
++INPUT name, bytes
++
++1. Decode text as UTF-8.
++2. If JSON: accept top-level array or object.data array, then normalize to data table.
++3. If TSV: delimiter = tab.
++4. If CSV: delimiter = comma.
++5. Parse quoted delimiter/newline and doubled quote.
++6. Preserve row order and internal blank rows; ignore purely trailing physical empty line.
++7. Reject unsupported extension or invalid table shape.
++8. Return parsed rows; original bytes remain separate copied asset data.
++
++## projectVfsResolve
++
++INPUT path, state
++
++1. Canonicalize path.
++2. Resolve against fixed/project directories and CSV/image derived paths.
++3. If none, return none.
++4. If more than one object resolves to same path, fail invalid VFS.
++5. Return resolved object.
++
++## projectVfsUniquePath
++
++INPUT path, state, reservedPaths
++
++1. Keep parent and filename/extension meaning.
++2. Generate name suffix until neither current VFS nor reservedPaths contains it.
++3. Return path without mutation.
++
++## projectVfsDescendants
++
++INPUT directory, state
++
++1. Canonicalize directory.
++2. Compare path segments, not raw string prefix.
++3. Return all descendant directories/assets.
++
++## ffpxEncodeValue
++
++INPUT value
++
++1. Encode null, boolean, finite number, string, array or object.
++2. Preserve array order and object property names.
++3. Recursively encode children.
++4. Escape XML text/attributes.
++5. Reject unsupported runtime value.
++
++## ffpxDecodeValue
++
++INPUT element
++
++1. Validate declared typed-value shape.
++2. Decode recursively.
++3. Require finite numbers.
++4. Reject unknown type/invalid shape.
++5. Return value.
++
++## ffpxBuildProject
++
++1. Validate activeProject.
++2. Take one operation snapshot from projectObjects.
++3. Exclude trash directories/assets.
++4. Revalidate chart CSV refs, chart ownership and slot image refs.
++5. Write project.xml metadata/filesystem/appearance/export settings/document refs.
++6. Write layout, global caption, labels and each slot in their own responsibility documents.
++7. Use ffpxEncodeValue as the typed-value writer.
++8. Store CSV/image copied bytes by dataRef.
++9. Return package entries.
++
++## ffpxReadProject
++
++INPUT file
++
++1. Validate ZIP STORE structure, safe paths and CRC.
++2. Read required XML/slot documents using typed-value decoder.
++3. Reconstruct placement and chart/image refs.
++4. Validate asset dataRef subtrees and entry existence.
++5. Restore copied bytes and parse table assets.
++6. If additive export settings are absent in same-version older package, use project defaults.
++7. Do not clone/drop malformed shared/orphan charts.
++8. Validate package schema/version.
++9. Return payload for buildProjectObject.
++
++## buildProjectObject
++
++INPUT payload, fileName
++
++1. Validate current schema/version and project identity/grid shape.
++2. Normalize copied CSV/image assets, ids and canonical VFS locations.
++3. Normalize charts/graph objects and resolve CSV refs; keep zero-object charts.
++4. Normalize slots, geometry, chart/image refs, slot-local imageSettings and caption.
++5. Require each chart to have exactly one owning slot.
++6. Normalize labels, project-global captions, appearance and export settings.
++7. Derive nextId values above collection maxima.
++8. Run whole-project validation.
++9. Return candidate or fail without changing activeProject.
++
++## importProjectFile
++
++INPUT file
++
++1. Accept current FFPX project input.
++2. ffpxReadProject -> buildProjectObject.
++3. If candidate validation succeeds, submit PROJECT_LOADED.
++4. Otherwise leave current project unchanged.
++5. Legacy conversion, when needed, belongs to an explicit converter rather than guessed application import.
++
++## ffsxBuildSlot
++
++INPUT graph slot, owned chart
++
++1. Collect only CSV assets referenced by chart objects.
++2. Remap those CSV ids to package-local consecutive ids.
++3. Rewrite chart-object csvIds in package copy.
++4. If chart has zero objects, package no CSV.
++5. Include slot-local caption.
++6. Store copied CSV bytes.
++7. Return package.
++
++## ffsxReadSlot
++
++INPUT file
++
++1. Validate package schema/version.
++2. Read chart, slot-local caption and package CSVs.
++3. Validate graph-object -> package CSV refs and dataRefs.
++4. Allow zero-object chart with no CSV.
++5. Do not synthesize special id 0/default CSV.
++6. Validate chart model.
++7. Return slot payload.
++
++## applyFfsxSlot
++
++INPUT slotPayload, targetSlot
++
++1. Re-resolve target slot.
++2. Allocate new project CSV ids/paths for package CSVs.
++3. Remap chart-object csvIds to new project ids.
++4. Allocate independent new chart id.
++5. Candidate-set target slot to own that chart and apply package slot caption.
++6. Validate whole project.
++7. Commit CSV/chart/slot/nextId changes once.
++8. Return result.
+diff --git a/pseudocode/graphs.md b/pseudocode/graphs.md
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/graphs.md
+@@ -0,0 +1,231 @@
++# graphs
++
++## Graph model
++
++axisSettings defines min/max/tick/tickMode/minorTicks/notation/scaleType/divide/title/font/line/grid/visibility/value display.
++
++globalSettings owns legend/title/zero-line/font and four axes:
++xBottom, xTop, yLeft, yRight.
++
++graphObject references one project CSV and selected x/y columns plus axis sides and visual style.
++
++chartModel owns:
++
++- editor.objects
++- editor.editable
++- editor.globalSettings
++- editor.title
++- editor.plotlyExtensions
++- graph.data/layout/config/frames/imported
++
++Editable chart may contain zero objects.
++
++For editable charts, editor + project CSV references are semantic authority.
++graph.data/layout are renderer projections.
++
++## dataTable
++
++INPUT data
++
++1. If rows are arrays, normalize them as table rows.
++2. If rows are objects, compute union of keys as header and project each object to same column order.
++3. Reject unsupported or empty input where table semantics are unavailable.
++4. Return matrix.
++
++## columnDefinitions
++
++INPUT table, headerLines
++
++1. Find maximum row width.
++2. Create C1..Cn identifiers.
++3. If headerLines >= 1, use last header row values as column names.
++4. Return column definitions.
++
++## graphDataSelection
++
++INPUT matrix, headerLines, editor
++
++1. Compute valid columns.
++2. Keep existing editor x/y if still valid.
++3. Otherwise choose first column containing numeric data as x when possible.
++4. Choose a different numeric or otherwise valid column as y.
++5. Return x/y ids.
++
++## connectDataToSlotModel
++
++INPUT slot, data, sourceName, projectCsv
++
++1. Resolve slot and CSV.
++2. If slot owns chart, copy chart candidate and append graph object.
++3. Otherwise allocate chart id and create chart + slot.chart candidate.
++4. Choose valid x/y columns.
++5. Set graph object csvId to real project CSV id.
++6. Rebuild candidate renderer projection.
++7. Return candidate; do not commit here.
++
++## graphEditorAdd
++
++INPUT csvId
++
++1. Resolve selected slot and CSV.
++2. If no chart, use slot-data-connect mutation to create first chart/object.
++3. Else append base graph object to current object list and commit through graph-object replacement.
++4. Return chart.
++
++## graphEditorCommit
++
++INPUT objects, selected index
++
++1. Normalize object list.
++2. Validate every CSV/column/style reference.
++3. Permit empty list.
++4. Submit candidate object list through controlled mutation.
++5. Reconcile selected graph object index.
++6. Return chart.
++
++## graphEditorObjectValues
++
++INPUT index, values
++
++1. Resolve selected chart/object.
++2. Re-resolve referenced CSV/columns.
++3. Copy object and apply only supported fields.
++4. Normalize enums and numeric ranges.
++5. Commit through graphEditorCommit.
++6. Return chart.
++
++## graphEditorSetEditable
++
++INPUT editable
++
++1. Resolve selected chart.
++2. If requested state needs no conversion, candidate-change flag as allowed.
++3. For imported non-editable -> editable:
++   a. keep imported representation.
++   b. if conversion objects are empty, create no CSV.
++   c. otherwise create one project CSV candidate from conversion rows.
++   d. remap conversion objects to that CSV.
++   e. rebuild editable graph projection.
++   f. validate whole project.
++4. Commit candidate once.
++5. Return final editable state.
++
++## tracesSingle
++
++INPUT objectView
++
++1. Read referenced CSV values.
++2. Apply x/y divide values.
++3. For reciprocal axis, discard zero then use reciprocal.
++4. For log axis, discard values <= 0.
++5. Build bar/scatter/marker/line semantics from object type/style.
++6. Return Plotly trace projection(s).
++
++## traces
++
++INPUT chart
++
++1. For every editor object, re-resolve CSV from project authority.
++2. Call tracesSingle.
++3. Concatenate trace projections.
++4. Return traces.
++
++## normalizeAxisSettings
++
++INPUT axis, key
++
++1. Start with defaults; bottom x and left y visible, top x and right y hidden.
++2. Normalize numeric/empty fields and enums.
++3. Reject divide = 0.
++4. If scaleType is log, do not keep increment tick mode.
++5. Return normalized axis.
++
++## normalizeGlobalSettings
++
++INPUT settings
++
++1. Fill missing global defaults.
++2. Normalize all four axes.
++3. Keep editor-owned settings separate from imported Plotly extension fields.
++4. Return normalized settings.
++
++## rebuildEditableGraph
++
++INPUT chart
++
++1. Resolve editor objects and referenced CSVs.
++2. Recompute traces.
++3. Recompute Plotly layout from title/global/axis settings.
++4. If zero objects, data projection is empty but layout remains valid.
++5. Update only chart.graph renderer projection.
++6. Return chart.
++
++## validateChartModel
++
++INPUT chart, csvCollection
++
++Reject unless:
++
++1. chart id and editor/graph shapes are valid.
++2. objects is an array and may be empty.
++3. every object CSV ref resolves.
++4. x/y identifiers, enum/style numeric fields are valid.
++5. global settings and four axes normalize successfully.
++6. graph data/layout/config/frames/imported extensions have valid shapes.
++
++Return chart.
++
++## parsePlotlyToEditor
++
++INPUT Plotly figure, chartId
++
++1. Deep-copy original data/layout/config/frames into imported representation.
++2. For every trace, project x/y arrays into conversion columns in trace order.
++3. For traces with data, create conversion graphObjects:
++   - x2 -> top, otherwise bottom
++   - y2 -> right, otherwise left
++   - bar -> bar
++   - visible=false -> hidden
++   - otherwise normalize mode into supported scatter/markers/lines+markers
++   - map supported line/marker/name/opacity style
++   - preserve non-x/y trace extension fields
++4. Convert title/legend/font/axes into globalSettings.
++5. Preserve non-editor layout/config fields in plotlyExtensions.
++6. If no convertible traces, leave conversion rows/objects empty.
++7. Do not create fake rows/default CSV.
++8. Set editable=false.
++9. Return chart candidate.
++
++## convertImportedChartToEditable
++
++INPUT imported chart
++
++1. Preserve original imported representation.
++2. If conversion objects empty:
++   set editable=true without CSV.
++3. Else:
++   create project CSV candidate from conversion rows;
++   remap all conversion objects to that CSV id.
++4. Keep converted global/axis settings.
++5. Rebuild editable projection.
++6. Return project candidate for validation/commit.
++
++## importSelectedGraphFile
++
++INPUT file
++
++1. Resolve selected target slot.
++2. If FFSX, read validated FFSX payload and build target-slot candidate.
++3. If Plotly JSON, parse non-editable chart candidate.
++4. Allocate chart ownership so target slot uniquely owns new chart.
++5. Validate whole project.
++6. Commit once.
++7. Return imported chart.
++
++## chartFigure
++
++INPUT chart
++
++1. If editable, calculate current figure from editor + CSV authority.
++2. If imported non-editable, preserve imported Plotly semantics.
++3. Return data/layout/config/frames export representation.
+diff --git a/pseudocode/layout_annotations_export.md b/pseudocode/layout_annotations_export.md
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/layout_annotations_export.md
+@@ -0,0 +1,240 @@
++# layout_annotations_export
++
++## Rules
++
++SLOT_OPERATION_CAPTION_RULES
++
++- swap: caption and imageSettings move with the complete slot-local payload.
++- merge: at most one selected slot may have non-default local state; move that whole payload to anchor.
++- split: anchor keeps its local payload; restored cells start with defaults.
++- reset: reset complete slot-local payload.
++- FFSX: slot-local caption belongs to the slot package.
++
++GRID_RESIZE_RULE
++
++- resize is not reflow.
++- expansion preserves existing geometry/local state and adds default cells.
++- shrink rejects any removed/intersected slot with non-default local state or merged span.
++
++LABEL_POSITION_RULE
++
++- one persistent x/y authority.
++- drag updates use the same mutation path.
++- no preview copy + second commit.
++
++EXPORT_SETTINGS_RULE
++
++- persistent: width, heightMode/height, dpi, format.
++- transient: computed geometry, callbacks, DOM bounds, generated blob.
++
++## dashboardGeometry
++
++INPUT width, heightOverride
++
++1. scale = width / referenceWidth.
++2. naturalHeight = width / aspect.
++3. height = valid override else naturalHeight.
++4. outerMargin = minimum(configuredMargin * scale, 49% of smaller dimension).
++5. gap = configuredGap * scale.
++6. radius = configuredRadius * scale.
++7. Return geometry.
++
++## gridSlotGeometry
++
++INPUT layout, dashboard geometry, slot
++
++1. colWidth = usable width after margins/gaps divided by gridCols.
++2. rowHeight = usable height after margins/gaps divided by gridRows.
++3. For spans, include internal gaps in slot width/height.
++4. Return slot geometry.
++
++## buildGridResizeCandidate
++
++INPUT rows, cols
++
++1. Require integer range 1..8.
++2. Copy current layout/slots into candidate.
++3. If expanding:
++   preserve every existing slot placement and local payload;
++   add only new 1x1 slots using SLOT_LOCAL_DEFAULTS.
++4. If shrinking:
++   for every slot touching removed row/column:
++   a. reject if slotHasNonDefaultLocalState.
++   b. reject if merged span crosses/remains in removed area.
++5. Remove only default empty 1x1 cells.
++6. Do not pack/reflow content.
++7. Validate remaining geometry/chart ownership.
++8. Return candidate or rejected reason.
++
++## setLayoutApiGrid
++
++INPUT rows, cols
++
++1. Build resize candidate.
++2. If rejected, preserve project and selectedSlotId.
++3. Validate whole project.
++4. Commit candidate once.
++5. Keep selectedSlotId if referenced slot still exists, otherwise clear it.
++6. Return result.
++
++## mergeSlots
++
++INPUT slotIds
++
++1. Resolve selected visible slots.
++2. Require their union to be one gap-free rectangle.
++3. Count slots with non-default local state.
++4. If more than one, reject without mutation.
++5. Choose top-left anchor.
++6. If one payload source exists, move its chart/image/contentType/imageSettings/caption as one payload to anchor.
++7. Preserve chart id and update unique owning slot to anchor.
++8. Set covered non-anchor local state to SLOT_LOCAL_DEFAULTS and hidden=true.
++9. Set anchor rowSpan/colSpan to rectangle size.
++10. Validate whole project.
++11. Commit once.
++
++## splitSlots
++
++INPUT slotIds
++
++1. Resolve merged visible anchor.
++2. Keep complete anchor local payload at anchor.
++3. Set anchor span back to 1x1.
++4. Restore covered cells as visible 1x1 slots with SLOT_LOCAL_DEFAULTS.
++5. Validate whole project.
++6. Commit once.
++
++## readImageEditorApi
++
++1. Resolve selected slot.
++2. Resolve slot.imageId to image asset.
++3. Return asset identity/display URL plus selected slot.imageSettings.
++4. Do not mutate.
++
++## applyImageSettingsFromValues
++
++INPUT values
++
++1. Resolve selected slot.
++2. Normalize fit/scale/x/y ranges.
++3. Build slot-local imageSettings candidate only.
++4. Validate.
++5. Commit selected slot.
++6. Reproject image and notify.
++7. Do not change other slots referencing the same image asset.
++
++## readLabelsApiState
++
++1. Read persistent label settings.
++2. Compute current selected-slot reference geometry.
++3. Return settings + reference projection.
++
++## setLabelsApiPosition
++
++INPUT x, y
++
++1. Normalize finite values.
++2. Candidate-change the single persistent label x/y.
++3. Commit through the same path for click/drag updates.
++4. Reproject renderer from authority.
++5. Return label state.
++
++## finishLabelsApiPositionInteraction
++
++1. Do not change persistent x/y.
++2. Emit only interaction completion telemetry/focus/history behavior if needed.
++3. Return completion result.
++
++## readGlobalCaptionState
++
++1. Read project-level global caption properties.
++2. Do not inspect selected slot or UI editor target.
++3. Return projection.
++
++## readSlotCaptionState
++
++INPUT slotId
++
++1. Resolve slot.
++2. Return id/position/caption projection.
++3. UI may show placeholder when caption empty, but placeholder is not stored.
++
++## setGlobalCaptionText
++
++INPUT text
++
++1. Candidate-change project global caption text.
++2. Leave all slot captions unchanged.
++3. Commit and return global caption state.
++
++## setSlotCaptionText
++
++INPUT slotId, text
++
++1. Resolve slot.
++2. Candidate-change only slot.caption.
++3. Validate and commit.
++4. Return slot caption state.
++
++## insertSlotCaptionsIntoGlobalCaption
++
++INPUT slotIds or current visible slots
++
++1. Resolve slots in layout order.
++2. Read non-empty slot captions.
++3. Build label/text insertion projection.
++4. Candidate-append/insert text into project-global caption.
++5. Leave source slot captions unchanged.
++6. Commit and return global caption state.
++
++## readExportSettings
++
++Return current persistent export settings without mutation.
++
++## setExportSettings
++
++INPUT values
++
++1. Copy current export settings.
++2. Normalize width 100..20000.
++3. Normalize dpi 36..1200.
++4. Require format png or jpeg.
++5. If heightMode=auto, explicit height is not used for target geometry.
++6. If heightMode=explicit, require height 100..20000.
++7. Validate candidate.
++8. Commit once and return settings.
++
++## createTargetExportSnapshot
++
++1. Snapshot persistent layout, labels, captions, image/chart/slot state, appearance needed by renderer, and export settings.
++2. Compute no persistent mutations.
++3. Treat snapshot as immutable for this export only.
++4. Do not use current DOM dimensions as saved target figure authority.
++5. Return snapshot.
++
++## exportDashboardTarget
++
++INPUT statusSink
++
++1. Create export snapshot.
++2. Read persistent width/heightMode/dpi/format.
++3. If auto height, calculate from logical dashboard/caption layout.
++4. If explicit, use stored height.
++5. Reject raster dimensions > configured side/area limits.
++6. Validate grid geometry.
++7. Render each visible chart/image to target geometry.
++8. Transform labels and captions using same logical reference geometry.
++9. Encode PNG/JPEG and apply DPI metadata.
++10. Trigger output download/status projection.
++11. Do not mutate project.
++12. Return outcome.
++
++## captureDashboardCurrent
++
++INPUT statusSink
++
++1. Read current rendered viewport geometry as one-shot capture size.
++2. May use persistent dpi/format as encoding defaults.
++3. Do not modify persistent target width/height.
++4. Encode/download result.
++5. Return outcome.
+diff --git a/pseudocode/portable_build.md b/pseudocode/portable_build.md
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/portable_build.md
+@@ -0,0 +1,26 @@
++# portable_build
++
++## Build semantics
++
++1. Portable build does not rewrite application logic.
++2. It reads split Fast-figure.html and replaces each declared external script tag exactly once with the bytes of its matching local source.
++3. Script replacement follows declared SCRIPTS order.
++4. Final portable artifact must not require separate core script/runtime download for ordinary Fast Figure use.
++5. Optional future integrations may exist, but core project open/edit/export remains local/offline.
++
++## build
++
++INPUT output path
++
++1. Read Fast-figure.html bytes.
++2. For each declared script:
++   a. verify source file exists;
++   b. verify expected external tag occurs exactly once;
++   c. read exact source bytes;
++   d. replace that tag once with an inline script containing those bytes.
++3. After all replacements, verify no declared external script tag remains.
++4. If any source is missing, tag count is not one, or an external tag remains, fail without producing a falsely complete artifact.
++5. Ensure output parent exists.
++6. Write final bytes to output.
++7. Do not modify split source files.
++8. Return output path/artifact.
+diff --git a/pseudocode/project_state.md b/pseudocode/project_state.md
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/project_state.md
+@@ -0,0 +1,182 @@
++# project_state
++
++## Authoritative structures
++
++PROJECT_OBJECT_PATHS resolve these persistent subtrees from the current ProjectObject:
++
++- project metadata
++- layout
++- labels
++- project-global captions
++- CSV data assets
++- image assets
++- VFS directories
++- charts
++- slots
++- next-id sequences
++- appearance
++- export settings
++
++PROJECT STATE contains:
++
++- meta: projectName, appBuild
++- layout: gridRows, gridCols, slotStyle
++- annotations.labels
++- annotations.captions for project-global caption only
++- assets.csvFiles
++- assets.images
++- fileSystem.directories
++- charts
++- slots
++- nextId.csv/image/chart
++- appearance.uiPalette
++- export.width/heightMode/height/dpi/format
++
++CSV ASSET contains copied bytes, parsed rows, MIME, headerLines and VFS location.
++
++IMAGE ASSET contains copied bytes, MIME and VFS location.
++It does not own fit/scale/x/y display state.
++
++SLOT contains layout placement plus these slot-local properties:
++
++- content.chart
++- content.imageId
++- content.contentType
++- content.imageSettings = fit/scale/x/y
++- caption
++
++SLOT_LOCAL_DEFAULTS:
++
++- chart = none
++- imageId = none
++- contentType = graph
++- imageSettings = contain / 100 / 50 / 50
++- caption = none
++
++Global caption is project-level.
++Slot caption and image display settings are slot-local and move with the slot-local payload.
++
++## Reference invariants
++
++1. `slot.chart` resolves in chart collection.
++2. Every chart has exactly one owning slot.
++3. Shared chart and orphan chart are invalid.
++4. `slot.imageId` resolves in image assets.
++5. Every graph object `csvId` resolves in CSV assets.
++6. Asset path is derived from asset.directory + asset.name and resolves through projectVfs.
++7. nextId for each collection is greater than every current id.
++8. `layoutMapWidth` is legacy input only and is not authoritative state.
++
++## ProjectObject.read
++
++INPUT path
++
++1. Resolve path through current ProjectObject and declared project read paths.
++2. If path is invalid, fail.
++3. Return current authoritative value without mutation.
++
++## ProjectObject.initialize
++
++INPUT source candidate
++
++1. Treat source as non-authoritative candidate.
++2. Normalize every slot with `normalizeSlotContent`.
++3. Validate full candidate with `validateProjectObjectState`.
++4. If validation fails, keep current authoritative project unchanged.
++5. If validation succeeds, replace authoritative project once.
++6. Return previous project only for post-commit resource cleanup when needed.
++
++## ProjectObjectRegistry.read
++
++INPUT registered name
++
++1. Resolve the name against the current ProjectObject provider.
++2. Return the current value.
++3. Never return a stored long-lived project snapshot as authority.
++
++## ProjectObjectRegistry.snapshot
++
++INPUT names
++
++1. Read each requested value from current ProjectObject.
++2. Deep-copy them for one operation.
++3. Return a read-only operation snapshot.
++4. Do not use the snapshot as a later mutation authority.
++
++## slotHasNonDefaultLocalState
++
++INPUT slot
++
++1. Normalize slot-local state.
++2. Compare chart, imageId, contentType, complete imageSettings and caption against SLOT_LOCAL_DEFAULTS.
++3. Ignore row/col/span/hidden because they are layout placement.
++4. Return whether any slot-local property differs.
++
++## normalizeSlotContent
++
++INPUT slot candidate
++
++1. Normalize chart/image/contentType/imageSettings into one slot-local content source.
++2. Fill missing local fields from SLOT_LOCAL_DEFAULTS.
++3. Never take display settings from image asset authority.
++4. Normalize caption as slot-local caption.
++5. If legacy representation stores caption under nested content, move it to the same slot caption meaning.
++6. Do not create UI placeholder strings as stored caption.
++7. If compatibility aliases exist, make them resolve the same owner instead of duplicating state.
++8. Return normalized slot.
++
++## validateProjectObjectState
++
++INPUT state, requireSlots
++
++Reject unless all conditions hold:
++
++1. Required top-level/nested structures exist.
++2. gridRows/gridCols are integers in 1..8.
++3. slotStyle values and booleans are valid.
++4. label position and font rules are valid.
++5. export settings obey width/heightMode/height/dpi/format rules.
++6. VFS paths are canonical, unique, and fixed directories exist.
++7. CSV/image ids and asset paths are unique.
++8. Every asset directory exists.
++9. Chart ids are unique.
++10. Editable chart may contain zero graph objects.
++11. Every existing graph-object CSV reference resolves.
++12. Slot ids and geometry are valid and stay inside grid.
++13. A slot does not reference both chart and image.
++14. Slot chart/image references resolve.
++15. slot.imageSettings obey schema/ranges.
++16. Image assets do not need display settings.
++17. Every chart has exactly one owning slot.
++18. Unset caption is null/empty; placeholder is not required.
++19. nextId values exceed existing ids.
++20. If requireSlots, at least one slot exists.
++
++Return the same validated state.
++
++## createProjectState
++
++1. Create project metadata and default 2x2 layout/style.
++2. Create default global labels, global caption, appearance and export settings.
++3. Create empty CSV/image/chart collections.
++4. Create fixed VFS directories.
++5. Initialize id sequences.
++6. Create four visible 1x1 slots using SLOT_LOCAL_DEFAULTS.
++7. Do not create default CSV or fake graph object.
++8. Validate full candidate.
++9. Return candidate.
++
++## resolveOwningSlot
++
++INPUT chartId, state
++
++1. Collect slots referencing chartId.
++2. If exactly one exists, return it.
++3. Otherwise return no owner; do not clone/drop references.
++
++## getProjectCsv / getProjectImage / getChart
++
++INPUT id
++
++1. Resolve id in the corresponding authoritative collection.
++2. Return matching object or none.
+diff --git a/pseudocode/renderer_runtime.md b/pseudocode/renderer_runtime.md
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/renderer_runtime.md
+@@ -0,0 +1,116 @@
++# renderer_runtime
++
++## Renderer rule
++
++Renderer hosts, DOM state, Plotly instances and telemetry are projections/runtime state.
++They do not become persistent project authority.
++
++## publishUiTelemetry
++
++INPUT patch
++
++1. Merge allowed telemetry fields into UI telemetry projection.
++2. Publish to subscribers/debug UI.
++3. Do not use telemetry as mutation input for project state.
++
++## setDebugEnabled
++
++INPUT enabled
++
++1. Change session debug authority.
++2. Publish one-way telemetry projection.
++3. Do not persist in project.
++
++## status
++
++INPUT message
++
++1. Update status projection/telemetry.
++2. Do not mutate project.
++
++## renderDashboard
++
++1. Read current project layout/slots.
++2. Compute dashboard geometry.
++3. For each visible slot:
++   a. render chart from current chart projection; or
++   b. render image using asset bytes + that slot's imageSettings.
++4. Render labels/global caption/slot UI projections from current authority.
++5. Apply slot geometry/style.
++6. Keep Plotly/DOM objects as disposable renderer state.
++7. Do not write renderer-derived values back as project authority.
++
++## setSelectedSlot
++
++INPUT slotId, direction
++
++1. Resolve slot id in current project.
++2. Apply selection through appFSM selection action.
++3. Update workspace projection.
++4. Resolve selected chart on demand.
++5. Return selection.
++
++## installSlotClickController
++
++1. Attach one interaction controller to renderer host.
++2. Convert click/drag intent into public selection/swap/drop commands.
++3. Do not directly edit project model from DOM state.
++
++## swapSlotContents
++
++INPUT source, target
++
++1. Resolve source/target current slots.
++2. Request SLOTS_SWAPPED mutation.
++3. Keep layout position geometry fixed.
++4. Exchange complete slot-local payload:
++   chart, imageId, contentType, imageSettings, caption.
++5. Re-render from committed project.
++
++## prepareDashboardFileDrop
++
++INPUT slotId
++
++1. Resolve target slot.
++2. Set only runtime drop target/selection intent.
++3. Determine acceptable file kind through public calculation.
++4. Return drop plan/projection.
++5. Domain import occurs later through import command.
++
++## applySlotStyle
++
++INPUT notify flag
++
++1. Read project slotStyle.
++2. Project border/gap/margin/radius/reference geometry to renderer hosts.
++3. Request resize/re-render as needed.
++4. If requested, notify UI from committed state.
++5. Do not store renderer measurements as persistent layout meaning.
++
++## resolveSelectedChart
++
++1. Read selectedSlotId.
++2. Resolve current slot.
++3. Read slot.chart.
++4. Resolve chart in activeProject.
++5. Return chart or none.
++6. Do not cache as global editing pointer.
++
++## updateGraphView
++
++1. Re-resolve selected slot and current project model.
++2. Choose graph/image workspace projection from contentType and references.
++3. Discard stale UI buffer as read authority.
++4. Return/update projection.
++
++## startupCoreRuntime
++
++1. Require valid ProjectObject already containing slots.
++2. Apply dashboard zoom runtime projection.
++3. Install slot click/drop controller.
++4. Render existing project slots.
++5. Apply slot style.
++6. Transition appFSM to ready.
++7. Audit project/reference/runtime invariants.
++8. Do not create default CSV or recreate project grid slots.
++9. Return ready runtime.
+diff --git a/pseudocode/system.md b/pseudocode/system.md
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/system.md
+@@ -0,0 +1,47 @@
++# system
++
++## System invariants
++
++AUTHORITATIVE_STATE_RULE
++
++1. Treat `activeProject` ProjectObject state as the only persistent project authority.
++2. Persistent mutation enters through a declared FastFigureApi command or appFSM mutation path.
++3. Renderer snapshots and UI-local values are projections or drafts, never alternate project authorities.
++
++RUNTIME_STATE_RULE
++
++1. Keep session selection, zoom/drag state, and telemetry outside persistent project state.
++2. Resolve the selected chart each time through:
++   `selectedSlotId -> slot.chart -> chart collection`.
++3. Do not maintain a separate global `editing` authority.
++
++PROJECT_PURPOSE_INVARIANTS
++
++1. Support a slot-based scientific figure draft workspace.
++2. Keep ordinary loaded-data/image processing local to the browser.
++3. Keep core open/edit/export independent of server, account, or mandatory network connection.
++4. Produce a single-file portable runtime with core runtime dependencies included.
++5. Make ProjectObject/FFPX represent complete persistent figure state.
++6. Keep session-only UI/runtime state out of persistence.
++7. Store copied asset bytes so reopening does not depend on original filesystem paths.
++8. Keep interchange responsibilities separate:
++   Plotly JSON = one graph figure,
++   FFSX = one graph slot + referenced CSV + slot-local caption,
++   FFPX = complete project.
++
++## initializeFastFigure
++
++PROCEDURE initializeFastFigure
++
++1. Build a project candidate with `createProjectState`.
++2. Validate the candidate project.
++3. Verify required renderer hosts and core runtime dependencies.
++4. Prepare dashboard zoom projection and slot interaction controller.
++5. Render the slots already owned by the project; do not recreate domain slots in startup.
++6. Apply slot style and dashboard geometry.
++7. Transition appFSM to ready and synchronize workspace/overlay runtime state.
++8. Expose FastFigureApi as the frontend mutation boundary.
++9. Mount the Mantine frontend into the existing React root.
++10. Do not create default CSV or fake graph objects.
++11. Audit project references and runtime selection invariants.
++12. Return the initialized runtime.
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -21,14 +21,14 @@
+     },
+     "pseudocode": {
+-      "revision": 0,
+-      "status": "missing",
++      "revision": 1,
++      "status": "current",
+       "path_rule": "pseudocode/**/*",
+-      "fingerprint": null,
++      "fingerprint": "sha256:90cb55dfd9e7a704970dd82335e522cf6396d90de9bc1d0db67f5be7e771967a",
+       "derived_from": {
+-        "source-script": null
++        "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
+       },
+       "validation": "pending"
+     },
