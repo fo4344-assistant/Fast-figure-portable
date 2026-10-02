@@ -5230,24 +5230,6 @@
         appFSM.notify("images","IMAGE_SETTINGS_CHANGED");
         return readImageEditorApi();
       }
-) {
-        let slot = getSelectedSlot(),
-          image = slotImage(slot);
-        if (!image) return false;
-        let settings = normalizeImageSettings(slot);
-        settings.fit = ["contain", "cover", "manual"].includes(values.fit)
-          ? values.fit
-          : settings.fit;
-        if (settings.fit === "manual") {
-          settings.scale = Math.max(1, Math.min(1000, Number(values.scale) || 100));
-          settings.x = Math.max(-100, Math.min(200, Number(values.x) || 0));
-          settings.y = Math.max(-100, Math.min(200, Number(values.y) || 0));
-        }
-        syncSlotImageElement(slot, image);
-        debugLog("slot:image-settings", { slotId: selectedSlotId, settings });
-        appFSM.notify("images", "IMAGE_SETTINGS_CHANGED");
-        return true;
-      }
       function readSelectedSlotApi() {
         let slot = getSelectedSlot();
         return slot ? {
