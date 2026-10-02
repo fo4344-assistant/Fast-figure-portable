@@ -1,0 +1,565 @@
+diff --git a/Fast-figure.html b/Fast-figure.html
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9638,323 +9638,7 @@
+     </script>
+     <div class="app">
+         <template id="readmeContent">
+-        <div class="readme-content">
+-          <p><strong>About Fast figure</strong></p>
+-          <p>
+-            Fast figure is a single-file workspace for quickly assembling scientific figure drafts
+-            from tabular data and images.
+-          </p>
+-          <p>
+-            It combines graph creation, image placement, slot-based figure layout, labels, captions,
+-            project packaging, and image and Plotly export.
+-          </p>
+-          <p>
+-            Fast figure runs as a self-contained HTML file and processes loaded data and images
+-            locally in the browser. Ordinary use does not require a server, account, or network
+-            connection.
+-          </p>
+-          <p><strong>Application version</strong></p>
+-          <p><code>{{APP_BUILD}}</code></p>
+-          <p><strong>Developer</strong></p>
+-          <ul>
+-            <li>Name: 노대권 (Daegwon Noh)</li>
+-          </ul>
+-          <p><strong>Distribution</strong></p>
+-          <p>
+-            Repository:
+-            <a
+-              href="https://github.com/fo4344-assistant/Fast-figure-portable"
+-              target="_blank"
+-              rel="noopener noreferrer"
+-              >github.com/fo4344-assistant/Fast-figure-portable</a
+-            >
+-          </p>
+-          <p>
+-            The <code>agent_space</code> directory is reserved for AI agent development work and
+-            is not required to run or use Fast figure. End users should not download this
+-            directory.
+-          </p>
+-          <p><strong>Project structure</strong></p>
+-          <p>
+-            A Fast figure project contains the complete persistent state of one figure, including
+-            the project name, dashboard dimensions, slot arrangement, merged and split slots, graph
+-            and image contents, labels, captions, display settings, UI palette, and export settings.
+-          </p>
+-          <p>Project CSV files and graph charts are stored separately:</p>
+-          <ul>
+-            <li><code>csvFiles</code>: project-level tabular data snapshots with original names</li>
+-            <li>
+-              <code>csvId</code>: each graph object's direct reference to one project CSV object
+-            </li>
+-            <li><code>editor</code>: Fast figure graph objects and editable settings</li>
+-            <li>
+-              <code>graph</code>: the Plotly figure state, including <code>data</code>,
+-              <code>layout</code>, <code>config</code>, <code>frames</code>, and an imported
+-              original Plotly figure where applicable
+-            </li>
+-          </ul>
+-          <p>
+-            The CSV stored in a Fast figure file is intended for sharing, storage, transport, and
+-            reopening. Fast figure does not edit the original CSV file. Edit source data in an
+-            external CSV editor and load the file again when the data changes.
+-          </p>
+-          <p><strong>Basic workflow</strong></p>
+-          <ol>
+-            <li>Load CSV, TSV, supported JSON data, Plotly JSON, or an image.</li>
+-            <li>Create and configure graph objects from the loaded columns.</li>
+-            <li>Arrange graphs and images in the slot-based dashboard.</li>
+-            <li>Merge or split slots as needed.</li>
+-            <li>Add labels and captions.</li>
+-            <li>Export one graph, one slot, or the entire project.</li>
+-          </ol>
+-          <p><strong>Export formats</strong></p>
+-          <p>
+-            Fast figure provides three project and graph interchange formats. They serve different
+-            purposes and are not interchangeable.
+-          </p>
+-          <p><strong>Plotly JSON</strong></p>
+-          <p>
+-            Plotly JSON exports the selected graph as a Plotly figure. It may include Plotly
+-            <code>data</code>, <code>layout</code>, <code>config</code>, and <code>frames</code>,
+-            but it does not contain the Fast figure dashboard, packaged CSV assets, other slots,
+-            images, project labels, captions, UI settings, or project export settings.
+-          </p>
+-          <p><strong>FFSX slot format</strong></p>
+-          <p>
+-            <code>.ffsx</code> means <strong>Fast figure Slot XML</strong>. FFSX is a ZIP-based
+-            container for transferring one graph slot together with every CSV referenced by its
+-            graph objects, Plotly state, and Fast figure editor settings.
+-          </p>
+-          <ul>
+-            <li>
+-              <code>slot.xml</code>: slot metadata, slot graph settings, graph-object CSV
+-              references, and packaged project CSV metadata
+-            </li>
+-            <li>
+-              <code>data/&lt;csv-id&gt;/&lt;original-name&gt;</code>: each referenced original CSV,
+-              TSV, or JSON file without reserialization
+-            </li>
+-          </ul>
+-          <p>
+-            FFSX contains only one graph slot. It does not contain the project name, dashboard grid,
+-            other slots, image assets, project labels, project-level captions, UI palette, or project
+-            export settings. The exported slot caption is included. Importing an FFSX file places its
+-            graph, slot caption, and associated settings into the selected slot.
+-          </p>
+-          <p><strong>FFPX project format</strong></p>
+-          <p>
+-            <code>.ffpx</code> means <strong>Fast figure Project XML</strong>. FFPX is the complete
+-            Fast figure project container and is intended for saving, reopening, transferring, or
+-            archiving an entire working figure.
+-          </p>
+-          <ul>
+-            <li>
+-              <code>project.xml</code>: project name, project metadata, dashboard dimensions, slot
+-              layout, chart metadata, labels, captions, display settings, UI palette, and export
+-              settings
+-            </li>
+-            <li>
+-              <code>data/&lt;csv-id&gt;/&lt;original-name&gt;</code>: one asset for each project CSV
+-              object, stored as original bytes and referenced directly by graph objects through
+-              <code>csvId</code>
+-            </li>
+-            <li><code>media/</code>: packaged binary assets used by image slots</li>
+-          </ul>
+-          <p>
+-            FFPX stores copied project assets rather than external file paths. A transferred FFPX
+-            file therefore does not depend on the original locations of CSV or image files.
+-          </p>
+-          <p>
+-            Exporting an FFPX file copies the current project state for packaging. It does not edit
+-            the active project objects, original CSV files, or original image files.
+-          </p>
+-          <p><strong>Format version</strong></p>
+-          <p>
+-            FFSX and FFPX record a format identifier and one format version. This application reads
+-            only its current format; conversion from earlier development files is handled outside
+-            the application.
+-          </p>
+-          <p><strong>Bundled third-party software</strong></p>
+-          <p><strong>React / ReactDOM 19.2.8</strong></p>
+-          <p>Fast figure bundles React and ReactDOM directly in this HTML file as part of the UI runtime. No external React runtime is required.</p>
+-          <ul><li>Source repository: <a href="https://github.com/facebook/react" target="_blank" rel="noopener noreferrer">github.com/facebook/react</a></li><li>Package version used: <code>19.2.8</code></li><li>License: MIT</li></ul>
+-          <p><strong>React license</strong></p><pre>MIT License
+-
+-Copyright (c) Meta Platforms, Inc. and affiliates.
+-
+-Permission is hereby granted, free of charge, to any person obtaining a copy
+-of this software and associated documentation files (the "Software"), to deal
+-in the Software without restriction, including without limitation the rights
+-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-copies of the Software, and to permit persons to whom the Software is
+-furnished to do so, subject to the following conditions:
+-
+-The above copyright notice and this permission notice shall be included in all
+-copies or substantial portions of the Software.
+-
+-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-SOFTWARE.</pre>
+-          <p><strong>Mantine 9.5.2</strong></p>
+-          <p>Fast figure bundles <code>@mantine/core</code> and <code>@mantine/hooks</code> directly in this HTML file.</p>
+-          <ul><li>Source repository: <a href="https://github.com/mantinedev/mantine" target="_blank" rel="noopener noreferrer">github.com/mantinedev/mantine</a></li><li>Package version used: <code>9.5.2</code></li><li>License: MIT</li></ul>
+-          <p><strong>Mantine license</strong></p><pre>MIT License
+-
+-Copyright (c) 2021 Vitaly Rtishchev
+-
+-Permission is hereby granted, free of charge, to any person obtaining a copy
+-of this software and associated documentation files (the "Software"), to deal
+-in the Software without restriction, including without limitation the rights
+-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-copies of the Software, and to permit persons to whom the Software is
+-furnished to do so, subject to the following conditions:
+-
+-The above copyright notice and this permission notice shall be included in all
+-copies or substantial portions of the Software.
+-
+-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-SOFTWARE.</pre>
+-          <p><strong>Iconoir 7.11.1</strong></p>
+-          <p>
+-            Fast figure uses selected Iconoir SVG paths for the project data tree, its toolbar and
+-            action menu, and the print/save/capture controls. The selected SVG definitions are
+-            embedded directly in this HTML file; the Iconoir package, CDN, and external SVG files
+-            are not required at runtime.
+-          </p>
+-          <ul>
+-            <li>
+-              Source repository:
+-              <a href="https://github.com/iconoir-icons/iconoir" target="_blank" rel="noopener noreferrer">github.com/iconoir-icons/iconoir</a>
+-            </li>
+-            <li>Package version used: <code>7.11.1</code></li>
+-            <li>License: MIT</li>
+-          </ul>
+-          <p><strong>Iconoir license</strong></p>
+-          <pre>MIT License
+-
+-Copyright (c) 2021 Luca Burgio
+-
+-Permission is hereby granted, free of charge, to any person obtaining a copy
+-of this software and associated documentation files (the "Software"), to deal
+-in the Software without restriction, including without limitation the rights
+-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-copies of the Software, and to permit persons to whom the Software is
+-furnished to do so, subject to the following conditions:
+-
+-The above copyright notice and this permission notice shall be included in all
+-copies or substantial portions of the Software.
+-
+-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-SOFTWARE.</pre>
+-          <p><strong>Plotly.js 2.35.2</strong></p>
+-          <p>
+-            Fast figure bundles the minified Plotly.js 2.35.2 distribution directly inside the HTML
+-            file. No separate Plotly.js installation is required.
+-          </p>
+-          <ul>
+-            <li>
+-              Bundled distribution:
+-              <a
+-                href="https://cdn.plot.ly/plotly-2.35.2.min.js"
+-                target="_blank"
+-                rel="noopener noreferrer"
+-                >plotly-2.35.2.min.js</a
+-              >
+-            </li>
+-            <li>
+-              Source repository:
+-              <a
+-                href="https://github.com/plotly/plotly.js"
+-                target="_blank"
+-                rel="noopener noreferrer"
+-                >github.com/plotly/plotly.js</a
+-              >
+-            </li>
+-            <li>
+-              Documentation:
+-              <a href="https://plotly.com/javascript/" target="_blank" rel="noopener noreferrer"
+-                >plotly.com/javascript</a
+-              >
+-            </li>
+-            <li>
+-              License for version 2.35.2:
+-              <a
+-                href="https://github.com/plotly/plotly.js/blob/v2.35.2/LICENSE"
+-                target="_blank"
+-                rel="noopener noreferrer"
+-                >Plotly.js v2.35.2 LICENSE</a
+-              >
+-            </li>
+-          </ul>
+-          <p>
+-            Plotly.js is a third-party component distributed under its own copyright notice and MIT
+-            License. The bundled minified distribution retains its version, copyright, and license
+-            header inside the Fast figure HTML file.
+-          </p>
+-          <p><strong>Plotly.js license</strong></p>
+-          <p>
+-            The following license text is reproduced from the <code>LICENSE</code> file in the
+-            Plotly.js <code>v2.35.2</code> source tag.
+-          </p>
+-          <pre>
+-The MIT License (MIT)
+-
+-Copyright (c) 2021 Plotly, Inc
+-
+-Permission is hereby granted, free of charge, to any person obtaining a copy
+-of this software and associated documentation files (the "Software"), to deal
+-in the Software without restriction, including without limitation the rights
+-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-copies of the Software, and to permit persons to whom the Software is
+-furnished to do so, subject to the following conditions:
+-The above copyright notice and this permission notice shall be included in
+-all copies or substantial portions of the Software.
+-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+-THE SOFTWARE.</pre
+-          >
+-          <p><strong>Fast figure license</strong></p>
+-          <p>Fast figure is provided under the MIT License.</p>
+-          <p>Copyright (c) 2026 Daegwon Noh</p>
+-          <p>
+-            Permission is hereby granted, free of charge, to any person obtaining a copy of this
+-            software and associated documentation files (the "Software"), to deal in the Software
+-            without restriction, including without limitation the rights to use, copy, modify,
+-            merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+-            permit persons to whom the Software is furnished to do so, subject to the following
+-            conditions:
+-          </p>
+-          <p>
+-            The above copyright notice and this permission notice shall be included in all copies or
+-            substantial portions of the Software.
+-          </p>
+-          <p>
+-            THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+-            INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+-            PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+-            LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
+-            OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+-            OTHER DEALINGS IN THE SOFTWARE.
+-          </p>
+-        </div>
++          <!-- FAST_FIGURE_README -->
+         </template>
+       <main>
+         <div id="graphArea" class="graph-area">
+diff --git a/scripts/build-portable.py b/scripts/build-portable.py
+--- a/scripts/build-portable.py
++++ b/scripts/build-portable.py
+@@ -2,6 +2,8 @@
+ from __future__ import annotations
+ 
+ import argparse
++import html
++import re
+ from pathlib import Path
+ import zipfile
+ 
+@@ -11,6 +13,8 @@
+ INLINE_NAME = "Fast-figure.html"
+ SPLIT_ARCHIVE_NAME = "Fast-figure.zip"
+ SPLIT_ROOT = Path("Fast-figure")
++README_SOURCE = ROOT / "README.md"
++README_MARKER = b"<!-- FAST_FIGURE_README -->"
+ 
+ SCRIPTS = (
+     (
+@@ -44,15 +48,156 @@
+         ROOT / "vendor" / "fast-figure-ui-runtime.js",
+         Path("vendor/fast-figure-ui-runtime.js"),
+     ),
+-    (ROOT / "README.md", Path("README.md")),
++    (README_SOURCE, Path("README.md")),
+     (ROOT / "LICENSE", Path("LICENSE")),
+ )
+ 
+ ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+ 
+ 
++def _render_inline_markdown(text: str) -> str:
++    rendered: list[str] = []
++    index = 0
++    while index < len(text):
++        if text.startswith("`", index):
++            end = text.find("`", index + 1)
++            if end != -1:
++                rendered.append(f"<code>{html.escape(text[index + 1:end])}</code>")
++                index = end + 1
++                continue
++        if text.startswith("**", index):
++            end = text.find("**", index + 2)
++            if end != -1:
++                rendered.append(
++                    "<strong>"
++                    + _render_inline_markdown(text[index + 2:end])
++                    + "</strong>"
++                )
++                index = end + 2
++                continue
++        if text[index] == "[":
++            label_end = text.find("](", index + 1)
++            if label_end != -1:
++                href_end = text.find(")", label_end + 2)
++                if href_end != -1:
++                    label = _render_inline_markdown(text[index + 1:label_end])
++                    href = html.escape(text[label_end + 2:href_end], quote=True)
++                    rendered.append(f'<a href="{href}">{label}</a>')
++                    index = href_end + 1
++                    continue
++        rendered.append(html.escape(text[index]))
++        index += 1
++    return "".join(rendered)
++
++
++def _starts_block(line: str) -> bool:
++    stripped = line.lstrip()
++    return (
++        not stripped
++        or stripped.startswith("```")
++        or re.match(r"^#{1,6}\s+", stripped) is not None
++        or re.match(r"^-\s+", stripped) is not None
++        or re.match(r"^\d+\.\s+", stripped) is not None
++    )
++
++
++def render_readme_html(markdown: str) -> str:
++    lines = markdown.splitlines()
++    output = ['<div class="readme-content" data-source="README.md">']
++    index = 0
++    while index < len(lines):
++        line = lines[index]
++        stripped = line.strip()
++        if not stripped:
++            index += 1
++            continue
++
++        fence = re.match(r"^```([A-Za-z0-9_-]*)\s*$", stripped)
++        if fence:
++            language = fence.group(1)
++            index += 1
++            code_lines: list[str] = []
++            while index < len(lines) and lines[index].strip() != "```":
++                code_lines.append(lines[index])
++                index += 1
++            if index >= len(lines):
++                raise RuntimeError("unterminated fenced code block in README.md")
++            index += 1
++            class_name = (
++                f' class="language-{html.escape(language, quote=True)}"'
++                if language
++                else ""
++            )
++            output.append(
++                f"<pre><code{class_name}>"
++                + html.escape("\n".join(code_lines))
++                + "</code></pre>"
++            )
++            continue
++
++        heading = re.match(r"^(#{1,6})\s+(.+?)\s*$", stripped)
++        if heading:
++            level = len(heading.group(1))
++            output.append(
++                f"<h{level}>{_render_inline_markdown(heading.group(2))}</h{level}>"
++            )
++            index += 1
++            continue
++
++        unordered = re.match(r"^-\s+(.+)$", stripped)
++        if unordered:
++            output.append("<ul>")
++            while index < len(lines):
++                item = re.match(r"^-\s+(.+)$", lines[index].strip())
++                if not item:
++                    break
++                output.append(f"<li>{_render_inline_markdown(item.group(1))}</li>")
++                index += 1
++            output.append("</ul>")
++            continue
++
++        ordered = re.match(r"^\d+\.\s+(.+)$", stripped)
++        if ordered:
++            output.append("<ol>")
++            while index < len(lines):
++                item = re.match(r"^\d+\.\s+(.+)$", lines[index].strip())
++                if not item:
++                    break
++                output.append(f"<li>{_render_inline_markdown(item.group(1))}</li>")
++                index += 1
++            output.append("</ol>")
++            continue
++
++        paragraph = [stripped]
++        index += 1
++        while index < len(lines) and not _starts_block(lines[index]):
++            paragraph.append(lines[index].strip())
++            index += 1
++        output.append(f"<p>{_render_inline_markdown(' '.join(paragraph))}</p>")
++
++    output.append("</div>")
++    return "\n".join(output)
++
++
++def build_source_html() -> bytes:
++    source = ROOT / "Fast-figure.html"
++    if not source.is_file():
++        raise FileNotFoundError(source)
++    if not README_SOURCE.is_file():
++        raise FileNotFoundError(README_SOURCE)
++
++    document = source.read_bytes()
++    if document.count(README_MARKER) != 1:
++        raise RuntimeError("expected exactly one README build marker in Fast-figure.html")
++
++    readme_html = render_readme_html(
++        README_SOURCE.read_text(encoding="utf-8")
++    ).encode("utf-8")
++    return document.replace(README_MARKER, readme_html, 1)
++
++
+ def build_inline(output: Path) -> None:
+-    portable = (ROOT / "Fast-figure.html").read_bytes()
++    portable = build_source_html()
+     for tag, source, open_tag in SCRIPTS:
+         if portable.count(tag) != 1:
+             raise RuntimeError(f"expected exactly one external script tag: {tag!r}")
+@@ -81,6 +226,8 @@ def build_split_zip(output: Path) -> None:
+     for source, _ in SPLIT_FILES:
+         if not source.is_file():
+             raise FileNotFoundError(source)
++
++    built_html = build_source_html()
+     output.parent.mkdir(parents=True, exist_ok=True)
+     with zipfile.ZipFile(
+         output,
+@@ -89,9 +236,10 @@ def build_split_zip(output: Path) -> None:
+         compresslevel=9,
+     ) as archive:
+         for source, relative in SPLIT_FILES:
++            content = built_html if relative == Path("Fast-figure.html") else source.read_bytes()
+             archive.writestr(
+                 _zip_info(SPLIT_ROOT / relative),
+-                source.read_bytes(),
++                content,
+                 compress_type=zipfile.ZIP_DEFLATED,
+                 compresslevel=9,
+             )
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -45,7 +45,7 @@ After extracting the ZIP, open `Fast-figure/Fast-figure.html` directly in a
+ modern web browser. Both distributions are intended to work from `file://`
+ without a server or network connection.
+ 
+-The current application version, detailed project-format documentation, and bundled third-party software information are available from the README built into the application.
++The README shown inside both distributions is generated from this repository `README.md` during the distribution build.
+ 
+ ### `agent_space`
+ 
+diff --git a/agent_space/tests/run-browser-regression.py b/agent_space/tests/run-browser-regression.py
+--- a/agent_space/tests/run-browser-regression.py
++++ b/agent_space/tests/run-browser-regression.py
+@@ -99,9 +99,20 @@ def main():
+                     "unexpected split package members: "
+                     + repr(sorted(members ^ expected_members))
+                 )
++            if archive.read("Fast-figure/README.md") != (root / "README.md").read_bytes():
++                raise RuntimeError(
++                    "split package README.md differs from repository README.md"
++                )
+             archive.extractall(extracted)
+ 
+         split = extracted / "Fast-figure" / "Fast-figure.html"
++        for name, target in (("inline", inline), ("split-zip", split)):
++            contents = target.read_text(encoding="utf-8")
++            if "<!-- FAST_FIGURE_README -->" in contents:
++                raise RuntimeError(f"{name} HTML still contains the README build marker")
++            if 'data-source="README.md"' not in contents or "<h1>Fast Figure</h1>" not in contents:
++                raise RuntimeError(f"{name} HTML does not contain the built README.md content")
++
+         failed = False
+         for name, target in (("inline", inline), ("split-zip", split)):
+             results = run(browser, target, probe)
