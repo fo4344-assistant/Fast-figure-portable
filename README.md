@@ -8,13 +8,42 @@ Fast Figure runs as a self-contained HTML file and processes loaded data and ima
 
 ## Download and use
 
-The portable application is distributed as:
+The distribution builder creates two offline distributions under `dist/`:
 
 ```text
-Fast-figure.html
+dist/
+├─ inline/
+│  └─ Fast-figure.html
+└─ split/
+   └─ Fast-figure.zip
 ```
 
-Download `Fast-figure.html` and open it directly in a modern web browser.
+Run:
+
+```bash
+python scripts/build-portable.py
+```
+
+The inline build contains the application and all JavaScript dependencies in one
+HTML file.
+
+The split ZIP extracts to:
+
+```text
+Fast-figure/
+├─ Fast-figure.html
+├─ fast-figure.js
+├─ fast-figure-ui.js
+├─ vendor/
+│  ├─ plotly.min.js
+│  └─ fast-figure-ui-runtime.js
+├─ README.md
+└─ LICENSE
+```
+
+After extracting the ZIP, open `Fast-figure/Fast-figure.html` directly in a
+modern web browser. Both distributions are intended to work from `file://`
+without a server or network connection.
 
 The current application version, detailed project-format documentation, and bundled third-party software information are available from the README built into the application.
 
