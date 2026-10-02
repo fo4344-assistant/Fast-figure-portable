@@ -2,7 +2,7 @@
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   sourceScript: "r12",
   verificationModel: "r6",
-  sourceCode: "r6",
+  sourceCode: "r7",
   appBuild: "1.1.32-wip",
 });
 (async () => {
@@ -70,6 +70,30 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "layout preview cell does not fill its grid track",
       );
       appFSM.send("CLOSE_OVERLAY", { reason: "regression-layout-preview" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await run(17, "label preview typography matches dashboard label", async () => {
+      const wasEnabled = api.labels.readState().enabled;
+      api.labels.setEnabled(true);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const dashboardLabel = document.querySelector("#dashboard .slot-label");
+      check(!!dashboardLabel, "dashboard label absent");
+      appFSM.send("TOGGLE_OVERLAY", { overlay: "label", source: "regression" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const previewLabel = document.querySelector(
+        "[data-fastfigure-overlay='label'] [aria-label='레이블 위치 드래그']",
+      );
+      check(!!previewLabel, "label preview absent");
+      const metric = (element) => {
+        const computed = getComputedStyle(element);
+        return parseFloat(computed.lineHeight) / parseFloat(computed.fontSize);
+      };
+      check(
+        Math.abs(metric(previewLabel) - metric(dashboardLabel)) < 0.01,
+        "label preview line-height does not match dashboard label",
+      );
+      appFSM.send("CLOSE_OVERLAY", { reason: "regression-label-preview" });
+      if (!wasEnabled) api.labels.setEnabled(false);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await run(1, "FFPX save and reload", async () => {

@@ -1,0 +1,137 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2087,6 +2087,7 @@
+                 fontFamily: settings.fontFamily,
+                 fontSize: settings.fontSize * previewScale,
+                 fontWeight: 800,
++                lineHeight: 1.2,
+                 padding: `${2 * previewScale}px ${6 * previewScale}px`,
+                 cursor: busy ? "default" : "grab",
+                 userSelect: "none",
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2,7 +2,7 @@
+ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+   sourceScript: "r12",
+   verificationModel: "r6",
+-  sourceCode: "r6",
++  sourceCode: "r7",
+   appBuild: "1.1.32-wip",
+ });
+@@ -72,6 +72,29 @@
+       appFSM.send("CLOSE_OVERLAY", { reason: "regression-layout-preview" });
+       await new Promise((resolve) => setTimeout(resolve, 0));
+     });
++    await run(17, "label preview typography matches dashboard label", async () => {
++      const wasEnabled = api.labels.readState().enabled;
++      api.labels.setEnabled(true);
++      await new Promise((resolve) => setTimeout(resolve, 0));
++      const dashboardLabel = document.querySelector("#dashboard .slot-label");
++      check(!!dashboardLabel, "dashboard label absent");
++      appFSM.send("TOGGLE_OVERLAY", { overlay: "label", source: "regression" });
++      await new Promise((resolve) => setTimeout(resolve, 0));
++      const previewLabel = document.querySelector(
++        "[data-fastfigure-overlay='label'] [aria-label='레이블 위치 드래그']",
++      );
++      check(!!previewLabel, "label preview absent");
++      const metric = (element) => {
++        const computed = getComputedStyle(element);
++        return parseFloat(computed.lineHeight) / parseFloat(computed.fontSize);
++      };
++      check(
++        Math.abs(metric(previewLabel) - metric(dashboardLabel)) < 0.01,
++        "label preview line-height does not match dashboard label",
++      );
++      appFSM.send("CLOSE_OVERLAY", { reason: "regression-label-preview" });
++      if (!wasEnabled) api.labels.setEnabled(false);
++      await new Promise((resolve) => setTimeout(resolve, 0));
++    });
+     await run(1, "FFPX save and reload", async () => {
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -32,7 +32,7 @@
+     },
+     "source-code": {
+-      "revision": 6,
++      "revision": 7,
+       "status": "current",
+@@ -43,12 +43,12 @@
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:82c1bdc1853d7bf43ef843dbcdee09e2608dc26ac7ebbf4181bce6f7a6d98de7",
++      "fingerprint": "sha256:afbd3878736c6f01ea0fce5096605f8811861b850953d62b8dd4d7f084ffc3b8",
+       "derived_from": {
+         "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db",
+         "verification-model": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b"
+       },
+-      "validation_review": "agent_space/reviews/review-024-source-code-r6-layout-preview.md"
++      "validation_review": "agent_space/reviews/review-025-source-code-r7-label-preview.md"
+     }
+   },
+diff --git a/agent_space/reviews/review-025-source-code-r7-label-preview.md b/agent_space/reviews/review-025-source-code-r7-label-preview.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-025-source-code-r7-label-preview.md
+@@ -0,0 +1,58 @@
++# Source code r7 validation — label preview typography
++
++## 검토 대상
++
++- Source Script r12
++- verification-model r6
++- source code r7
++- source-code fingerprint:
++  `sha256:afbd3878736c6f01ea0fce5096605f8811861b850953d62b8dd4d7f084ffc3b8`
++- 기준 진단: `agent_space/reviews/review-022-mantine-ui-regression-qa.md` 2.4
++- UI specification: `agent_space/docs/ui-design-specification.md` §7
++
++## Source Script 판정
++
++label position, font family, font size와 reference geometry의 authoritative 의미는 이미 상위 계층에 있다.
++
++이번 문제는 label preview가 실제 dashboard label과 다른 line-height를 상속한
++renderer typography projection 불일치다.
++
++따라서 Source Script와 verification-model은 변경하지 않는다.
++
++## r7 수정
++
++label position preview의 draggable label에 `lineHeight: 1.2`를 추가했다.
++
++실제 dashboard `.slot-label`이 사용하는 line-height와 동일한 비율을 사용하므로
++preview에서 글자가 아래로 밀려 보이던 line box 차이와 drag bounding-box 차이를 제거한다.
++
++font size, padding, x/y authority와 drag mutation path는 변경하지 않는다.
++
++## 회귀 검사
++
++browser regression target을 source code r7로 올렸다.
++
++startup project에서 일시적으로 label 표시를 활성화한 뒤:
++
++1. 실제 dashboard label의 computed `line-height / font-size` 비율을 읽는다.
++2. label overlay를 열어 preview label의 같은 비율을 읽는다.
++3. 두 비율의 차이가 0.01 미만인지 확인한다.
++4. overlay를 닫고 원래 label visibility를 복원한다.
++
++따라서 단순 style literal 존재가 아니라 실제 renderer와 preview의 computed typography가 대응하는지 검사한다.
++
++## 의미 및 경계
++
++- project schema 변경 없음
++- label settings schema 변경 없음
++- label x/y mutation 변경 없음
++- drag interaction state 변경 없음
++- dashboard label renderer 변경 없음
++- Source Script r12 / verification-model r6 유지
++- preview typography projection만 수정
++
++## 결론
++
++source code r7은 기존 authoritative label settings를 바꾸지 않고
++preview와 실제 renderer의 line box geometry를 다시 일치시킨다.
++

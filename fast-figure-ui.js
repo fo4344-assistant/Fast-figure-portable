@@ -2141,6 +2141,7 @@
                 fontFamily: settings.fontFamily,
                 fontSize: settings.fontSize * previewScale,
                 fontWeight: 800,
+                lineHeight: 1.2,
                 padding: `${2 * previewScale}px ${6 * previewScale}px`,
                 cursor: busy ? "default" : "grab",
                 userSelect: "none",
