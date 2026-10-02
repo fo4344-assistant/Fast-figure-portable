@@ -2,7 +2,7 @@
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   sourceScript: "r12",
   verificationModel: "r6",
-  sourceCode: "r7",
+  sourceCode: "r8",
   appBuild: "1.1.32-wip",
 });
 (async () => {
@@ -96,6 +96,36 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       if (!wasEnabled) api.labels.setEnabled(false);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
+    await run(18, "annotation font selectors preserve predefined and custom values", async () => {
+      const selectInput = (kind) => {
+        const root = document.querySelector(`[data-fastfigure-font-select='${kind}']`);
+        return root?.tagName === "INPUT" ? root : root?.querySelector?.("input");
+      };
+      const labelOriginal = api.labels.readState().settings.fontFamily;
+      api.labels.setSettings({ fontFamily: "Arial, sans-serif" });
+      appFSM.send("TOGGLE_OVERLAY", { overlay: "label", source: "regression" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      let input = selectInput("label");
+      check(!!input && input.classList.contains("mantine-Select-input"), "label font is not a Select");
+      check(input.value === "Arial", "label predefined font option missing");
+      api.labels.setSettings({ fontFamily: "Legacy Label Font, sans-serif" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      input = selectInput("label");
+      check(input?.value === "기존: Legacy Label Font, sans-serif", "label custom font not preserved");
+      appFSM.send("CLOSE_OVERLAY", { reason: "regression-label-font" });
+      api.labels.setSettings({ fontFamily: labelOriginal });
+
+      const captionOriginal = api.captions.readGlobal().settings.fontFamily;
+      api.captions.setSettings({ fontFamily: "Legacy Caption Font, serif" });
+      appFSM.send("TOGGLE_OVERLAY", { overlay: "caption", source: "regression" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      input = selectInput("caption");
+      check(!!input && input.classList.contains("mantine-Select-input"), "caption font is not a Select");
+      check(input.value === "기존: Legacy Caption Font, serif", "caption custom font not preserved");
+      appFSM.send("CLOSE_OVERLAY", { reason: "regression-caption-font" });
+      api.captions.setSettings({ fontFamily: captionOriginal });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     await run(1, "FFPX save and reload", async () => {
       api.project.setName("Roundtrip regression");
       const file = ffpxFile();
@@ -153,6 +183,25 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       await api.graphs.importFile(file);
       currentSlot = slotAt(slot.id);
       check(!!currentSlot.chart && getChart(currentSlot.chart).editor.objects.length === 0, "blank FFSX import failed");
+    });
+    await run(19, "graph font selector preserves auto and custom values", async () => {
+      api.graphs.setEditable(true);
+      const original = api.graphs.readLayout().settings.graphFontFamily;
+      api.graphs.updateLayout({ globalSettings: { graphFontFamily: "" } });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const selectInput = () => {
+        const root = document.querySelector("[data-fastfigure-font-select='graph']");
+        return root?.tagName === "INPUT" ? root : root?.querySelector?.("input");
+      };
+      let input = selectInput();
+      check(!!input && input.classList.contains("mantine-Select-input"), "graph font is not a Select");
+      check(input.value === "자동", "graph automatic font option missing");
+      api.graphs.updateLayout({ globalSettings: { graphFontFamily: "Legacy Graph Font, sans-serif" } });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      input = selectInput();
+      check(input?.value === "기존: Legacy Graph Font, sans-serif", "graph custom font not preserved");
+      api.graphs.updateLayout({ globalSettings: { graphFontFamily: original } });
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await run(5, "multi-CSV FFSX", async () => {
       const slotId = activeProject.slots[0].id;

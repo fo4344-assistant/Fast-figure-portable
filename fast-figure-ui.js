@@ -92,6 +92,49 @@
     },
   });
 
+  const FONT_SELECT_PREFIX = "ff-font:";
+  const GRAPH_FONT_OPTIONS = Object.freeze([
+    { value: "", label: "자동" },
+    { value: "Arial, sans-serif", label: "Arial" },
+    { value: "Helvetica, Arial, sans-serif", label: "Helvetica" },
+    { value: "Open Sans, Arial, sans-serif", label: "Open Sans" },
+    { value: "Verdana, sans-serif", label: "Verdana" },
+    { value: "Times New Roman, serif", label: "Times New Roman" },
+    { value: "Georgia, serif", label: "Georgia" },
+    { value: "Courier New, monospace", label: "Courier New" },
+  ]);
+  const ANNOTATION_FONT_OPTIONS = Object.freeze([
+    { value: "system-ui, sans-serif", label: "기본" },
+    { value: "Arial, sans-serif", label: "Arial" },
+    { value: "Times New Roman, serif", label: "Times New Roman" },
+    { value: "Georgia, serif", label: "Georgia" },
+    { value: "Courier New, monospace", label: "Courier New" },
+  ]);
+  function fontSelectData(options, currentValue) {
+    const current = typeof currentValue === "string" ? currentValue : "";
+    const values = options.some((option) => option.value === current)
+      ? options
+      : [
+          ...options,
+          {
+            value: current,
+            label: current ? `기존: ${current}` : "기존: 빈 값",
+          },
+        ];
+    return values.map((option) => ({
+      value: FONT_SELECT_PREFIX + option.value,
+      label: option.label,
+    }));
+  }
+  function fontSelectValue(value) {
+    return FONT_SELECT_PREFIX + (typeof value === "string" ? value : "");
+  }
+  function fontValueFromSelect(value) {
+    return typeof value === "string" && value.startsWith(FONT_SELECT_PREFIX)
+      ? value.slice(FONT_SELECT_PREFIX.length)
+      : null;
+  }
+
   function subscribeAppState(onStoreChange) {
     return appFSM.subscribe(onStoreChange);
   }
@@ -1552,11 +1595,17 @@
         toggleGlobal("showTitle", "제목"),
         toggleGlobal("showZeroLine", "0선"),
       ),
-      React.createElement(TextInput, {
+      React.createElement(Select, {
         label: "그래프 글꼴",
-        value: settings.graphFontFamily,
+        data: fontSelectData(GRAPH_FONT_OPTIONS, settings.graphFontFamily),
+        value: fontSelectValue(settings.graphFontFamily),
         disabled: busy || !editable,
-        onChange: (event) => updateGlobal({ graphFontFamily: event.target.value }),
+        allowDeselect: false,
+        "data-fastfigure-font-select": "graph",
+        onChange: (value) => {
+          const fontFamily = fontValueFromSelect(value);
+          if (fontFamily !== null) updateGlobal({ graphFontFamily: fontFamily });
+        },
       }),
       React.createElement(
         Group,
@@ -2059,11 +2108,17 @@
             },
             "괄호",
           ),
-          React.createElement(TextInput, {
+          React.createElement(Select, {
             label: "글꼴",
-            value: settings.fontFamily,
+            data: fontSelectData(ANNOTATION_FONT_OPTIONS, settings.fontFamily),
+            value: fontSelectValue(settings.fontFamily),
             disabled: busy,
-            onChange: (event) => commit({ fontFamily: event.target.value }),
+            allowDeselect: false,
+            "data-fastfigure-font-select": "label",
+            onChange: (value) => {
+              const fontFamily = fontValueFromSelect(value);
+              if (fontFamily !== null) commit({ fontFamily });
+            },
           }),
           React.createElement(NumberInput, {
             label: "크기",
@@ -2265,11 +2320,17 @@
         React.createElement(
           Group,
           { gap: "xs", grow: true },
-          React.createElement(TextInput, {
+          React.createElement(Select, {
             label: "글꼴",
-            value: settings.fontFamily,
+            data: fontSelectData(ANNOTATION_FONT_OPTIONS, settings.fontFamily),
+            value: fontSelectValue(settings.fontFamily),
             disabled: busy,
-            onChange: (event) => commitSettings({ fontFamily: event.target.value }),
+            allowDeselect: false,
+            "data-fastfigure-font-select": "caption",
+            onChange: (value) => {
+              const fontFamily = fontValueFromSelect(value);
+              if (fontFamily !== null) commitSettings({ fontFamily });
+            },
           }),
           React.createElement(NumberInput, {
             label: "크기",

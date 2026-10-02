@@ -1,0 +1,304 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -73,6 +73,47 @@
+     },
+   });
+ 
++  const FONT_SELECT_PREFIX = "ff-font:";
++  const GRAPH_FONT_OPTIONS = Object.freeze([
++    { value: "", label: "자동" },
++    { value: "Arial, sans-serif", label: "Arial" },
++    { value: "Helvetica, Arial, sans-serif", label: "Helvetica" },
++    { value: "Open Sans, Arial, sans-serif", label: "Open Sans" },
++    { value: "Verdana, sans-serif", label: "Verdana" },
++    { value: "Times New Roman, serif", label: "Times New Roman" },
++    { value: "Georgia, serif", label: "Georgia" },
++    { value: "Courier New, monospace", label: "Courier New" },
++  ]);
++  const ANNOTATION_FONT_OPTIONS = Object.freeze([
++    { value: "system-ui, sans-serif", label: "기본" },
++    { value: "Arial, sans-serif", label: "Arial" },
++    { value: "Times New Roman, serif", label: "Times New Roman" },
++    { value: "Georgia, serif", label: "Georgia" },
++    { value: "Courier New, monospace", label: "Courier New" },
++  ]);
++  function fontSelectData(options, currentValue) {
++    const current = typeof currentValue === "string" ? currentValue : "";
++    const values = options.some((option) => option.value === current)
++      ? options
++      : [
++          ...options,
++          {
++            value: current,
++            label: current ? `기존: ${current}` : "기존: 빈 값",
++          },
++        ];
++    return values.map((option) => ({
++      value: FONT_SELECT_PREFIX + option.value,
++      label: option.label,
++    }));
++  }
++  function fontSelectValue(value) {
++    return FONT_SELECT_PREFIX + (typeof value === "string" ? value : "");
++  }
++  function fontValueFromSelect(value) {
++    return typeof value === "string" && value.startsWith(FONT_SELECT_PREFIX)
++      ? value.slice(FONT_SELECT_PREFIX.length)
++      : null;
++  }
++
+   function subscribeAppState(onStoreChange) {
+     return appFSM.subscribe(onStoreChange);
+   }
+@@ -1539,11 +1580,17 @@
+         toggleGlobal("showTitle", "제목"),
+         toggleGlobal("showZeroLine", "0선"),
+       ),
+-      React.createElement(TextInput, {
++      React.createElement(Select, {
+         label: "그래프 글꼴",
+-        value: settings.graphFontFamily,
++        data: fontSelectData(GRAPH_FONT_OPTIONS, settings.graphFontFamily),
++        value: fontSelectValue(settings.graphFontFamily),
+         disabled: busy || !editable,
+-        onChange: (event) => updateGlobal({ graphFontFamily: event.target.value }),
++        allowDeselect: false,
++        "data-fastfigure-font-select": "graph",
++        onChange: (value) => {
++          const fontFamily = fontValueFromSelect(value);
++          if (fontFamily !== null) updateGlobal({ graphFontFamily: fontFamily });
++        },
+       }),
+@@ -2016,11 +2063,17 @@
+             },
+             "괄호",
+           ),
+-          React.createElement(TextInput, {
++          React.createElement(Select, {
+             label: "글꼴",
+-            value: settings.fontFamily,
++            data: fontSelectData(ANNOTATION_FONT_OPTIONS, settings.fontFamily),
++            value: fontSelectValue(settings.fontFamily),
+             disabled: busy,
+-            onChange: (event) => commit({ fontFamily: event.target.value }),
++            allowDeselect: false,
++            "data-fastfigure-font-select": "label",
++            onChange: (value) => {
++              const fontFamily = fontValueFromSelect(value);
++              if (fontFamily !== null) commit({ fontFamily });
++            },
+           }),
+@@ -2169,11 +2222,17 @@
+         React.createElement(
+           Group,
+           { gap: "xs", grow: true },
+-          React.createElement(TextInput, {
++          React.createElement(Select, {
+             label: "글꼴",
+-            value: settings.fontFamily,
++            data: fontSelectData(ANNOTATION_FONT_OPTIONS, settings.fontFamily),
++            value: fontSelectValue(settings.fontFamily),
+             disabled: busy,
+-            onChange: (event) => commitSettings({ fontFamily: event.target.value }),
++            allowDeselect: false,
++            "data-fastfigure-font-select": "caption",
++            onChange: (value) => {
++              const fontFamily = fontValueFromSelect(value);
++              if (fontFamily !== null) commitSettings({ fontFamily });
++            },
+           }),
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2,7 +2,7 @@
+ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+   sourceScript: "r12",
+   verificationModel: "r6",
+-  sourceCode: "r7",
++  sourceCode: "r8",
+   appBuild: "1.1.32-wip",
+ });
+@@ -95,6 +95,37 @@
+       if (!wasEnabled) api.labels.setEnabled(false);
+       await new Promise((resolve) => setTimeout(resolve, 0));
+     });
++    await run(18, "annotation font selectors preserve predefined and custom values", async () => {
++      const selectInput = (kind) => {
++        const root = document.querySelector(`[data-fastfigure-font-select='${kind}']`);
++        return root?.tagName === "INPUT" ? root : root?.querySelector?.("input");
++      };
++      const labelOriginal = api.labels.readState().settings.fontFamily;
++      api.labels.setSettings({ fontFamily: "Arial, sans-serif" });
++      appFSM.send("TOGGLE_OVERLAY", { overlay: "label", source: "regression" });
++      await new Promise((resolve) => setTimeout(resolve, 0));
++      let input = selectInput("label");
++      check(!!input && input.classList.contains("mantine-Select-input"), "label font is not a Select");
++      check(input.value === "Arial", "label predefined font option missing");
++      api.labels.setSettings({ fontFamily: "Legacy Label Font, sans-serif" });
++      await new Promise((resolve) => setTimeout(resolve, 0));
++      input = selectInput("label");
++      check(input?.value === "기존: Legacy Label Font, sans-serif", "label custom font not preserved");
++      appFSM.send("CLOSE_OVERLAY", { reason: "regression-label-font" });
++      api.labels.setSettings({ fontFamily: labelOriginal });
++
++      const captionOriginal = api.captions.readGlobal().settings.fontFamily;
++      api.captions.setSettings({ fontFamily: "Legacy Caption Font, serif" });
++      appFSM.send("TOGGLE_OVERLAY", { overlay: "caption", source: "regression" });
++      await new Promise((resolve) => setTimeout(resolve, 0));
++      input = selectInput("caption");
++      check(!!input && input.classList.contains("mantine-Select-input"), "caption font is not a Select");
++      check(input.value === "기존: Legacy Caption Font, serif", "caption custom font not preserved");
++      appFSM.send("CLOSE_OVERLAY", { reason: "regression-caption-font" });
++      api.captions.setSettings({ fontFamily: captionOriginal });
++      await new Promise((resolve) => setTimeout(resolve, 0));
++    });
+     await run(1, "FFPX save and reload", async () => {
+@@ -147,6 +178,24 @@
+       currentSlot = slotAt(slot.id);
+       check(!!currentSlot.chart && getChart(currentSlot.chart).editor.objects.length === 0, "blank FFSX import failed");
+     });
++    await run(19, "graph font selector preserves auto and custom values", async () => {
++      api.graphs.setEditable(true);
++      const original = api.graphs.readLayout().settings.graphFontFamily;
++      api.graphs.updateLayout({ globalSettings: { graphFontFamily: "" } });
++      await new Promise((resolve) => setTimeout(resolve, 0));
++      const selectInput = () => {
++        const root = document.querySelector("[data-fastfigure-font-select='graph']");
++        return root?.tagName === "INPUT" ? root : root?.querySelector?.("input");
++      };
++      let input = selectInput();
++      check(!!input && input.classList.contains("mantine-Select-input"), "graph font is not a Select");
++      check(input.value === "자동", "graph automatic font option missing");
++      api.graphs.updateLayout({ globalSettings: { graphFontFamily: "Legacy Graph Font, sans-serif" } });
++      await new Promise((resolve) => setTimeout(resolve, 0));
++      input = selectInput();
++      check(input?.value === "기존: Legacy Graph Font, sans-serif", "graph custom font not preserved");
++      api.graphs.updateLayout({ globalSettings: { graphFontFamily: original } });
++      await new Promise((resolve) => setTimeout(resolve, 0));
++    });
+     await run(5, "multi-CSV FFSX", async () => {
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -32,7 +32,7 @@
+     },
+     "source-code": {
+-      "revision": 7,
++      "revision": 8,
+       "status": "current",
+@@ -43,12 +43,12 @@
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:afbd3878736c6f01ea0fce5096605f8811861b850953d62b8dd4d7f084ffc3b8",
++      "fingerprint": "sha256:f1a5fa8a4e80369457cbbe86193b8da5fcce00e05d63bb174e57669e2780316b",
+       "derived_from": {
+         "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db",
+         "verification-model": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b"
+       },
+-      "validation_review": "agent_space/reviews/review-025-source-code-r7-label-preview.md"
++      "validation_review": "agent_space/reviews/review-026-source-code-r8-font-selectors.md"
+     }
+   },
+diff --git a/agent_space/reviews/review-026-source-code-r8-font-selectors.md b/agent_space/reviews/review-026-source-code-r8-font-selectors.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-026-source-code-r8-font-selectors.md
+@@ -0,0 +1,96 @@
++# Source code r8 validation — font selectors
++
++## 검토 대상
++
++- Source Script r12
++- verification-model r6
++- source code r8
++- source-code fingerprint:
++  `sha256:f1a5fa8a4e80369457cbbe86193b8da5fcce00e05d63bb174e57669e2780316b`
++- 기준 진단: `agent_space/reviews/review-022-mantine-ui-regression-qa.md` 2.5
++- UI specification: `agent_space/docs/ui-design-specification.md` §8
++
++## Source Script 판정
++
++font family의 authoritative 값은 기존 settings 문자열이다.
++UI widget 종류와 predefined 목록은 Source Script domain 의미가 아니다.
++
++이번 변경은 TextInput으로 단순화되면서 사라진 선택 UX와 기존 custom font 보존 동작을
++Mantine UI에서 복원한다.
++
++Source Script와 verification-model은 변경하지 않는다.
++
++## r8 수정
++
++graph, label, caption의 font family control을 Mantine Select로 통일했다.
++
++### graph predefined 목록
++
++- 자동
++- Arial
++- Helvetica
++- Open Sans
++- Verdana
++- Times New Roman
++- Georgia
++- Courier New
++
++### label/caption predefined 목록
++
++- 기본(system-ui)
++- Arial
++- Times New Roman
++- Georgia
++- Courier New
++
++Select의 내부 value와 persistent font family 문자열을 분리하기 위해
++UI-local prefix encoding을 사용한다.
++
++이는 빈 문자열인 graph 자동 값을 Select option으로 표현하기 위한 adapter이며,
++project state에는 prefix가 저장되지 않는다.
++
++현재 값이 predefined 목록에 없으면 `기존: <font family>` option을 runtime에서 추가한다.
++따라서 imported Plotly나 이전 개발 버전에서 저장된 custom font family가 UI를 여는 것만으로
++손실되지 않는다.
++
++## source of truth
++
++- authoritative value: 기존 graph/label/caption settings의 fontFamily 문자열
++- predefined option 목록: UI specification을 구현하는 static UI data
++- Select token: component adapter-local value
++- custom option: 현재 authoritative 값에서 매 render 파생
++
++별도 persistent font state나 양방향 동기화 state는 추가하지 않았다.
++
++## 회귀 검사
++
++browser regression target을 source code r8로 올렸다.
++
++annotation 검사:
++
++1. label font를 Arial로 설정하면 Select가 Arial을 표시한다.
++2. custom label font를 설정하면 `기존: ...` 값으로 보존된다.
++3. caption custom font도 같은 Select/custom 보존 모델을 사용한다.
++4. 검사 후 원래 settings를 복원한다.
++
++graph 검사:
++
++1. 기존 blank graph regression 이후 editable chart에서 graph font를 자동 값으로 설정한다.
++2. Select가 `자동`을 표시한다.
++3. custom graph font를 설정하면 `기존: ...`로 보존된다.
++4. 원래 graph font를 복원한다.
++
++## 의미 및 경계
++
++- project schema 변경 없음
++- fontFamily stored value 형식 변경 없음
++- graph layout command 의미 변경 없음
++- label/caption settings command 의미 변경 없음
++- Source Script r12 / verification-model r6 유지
++- UI widget와 adapter projection만 변경
++
++## 결론
++
++source code r8은 기존 font family source of truth를 유지하면서
++pre-Mantine의 선택형 font UI와 custom historical value 보존 자유도를 복원한다.
++
