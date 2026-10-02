@@ -1,0 +1,170 @@
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2881,6 +2881,11 @@
+   function FastFigureApp() {
+     useAppState();
+     const palette = window.FastFigureApi.appearance.readPalette();
++    const theme = createTheme({
++      ...fastFigureTheme,
++      colors: { ffui: Array(10).fill(palette.uiColor) },
++      primaryColor: "ffui",
++    });
+     const channels = [1, 3, 5].map((index) => {
+       const value = parseInt(palette.uiColor.slice(index, index + 2), 16) / 255;
+       return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+@@ -2893,7 +2898,7 @@
+       MantineProvider,
+       {
+         defaultColorScheme: "light",
+-        theme: fastFigureTheme,
++        theme,
+         cssVariablesResolver: (theme) => ({
+           variables: {
+             "--ff-header-height": `${theme.other.shell.headerHeight}px`,
+@@ -2925,6 +2930,12 @@
+             "--mantine-primary-color-light-hover": `color-mix(in srgb, ${palette.uiColor} 24%, transparent)`,
+             "--mantine-primary-color-light-color": palette.fontColor,
+             "--mantine-primary-color-contrast": contrast,
++            "--mantine-color-ffui-filled": "var(--mantine-primary-color-filled)",
++            "--mantine-color-ffui-filled-hover": "var(--mantine-primary-color-filled-hover)",
++            "--mantine-color-ffui-light": "var(--mantine-primary-color-light)",
++            "--mantine-color-ffui-light-hover": "var(--mantine-primary-color-light-hover)",
++            "--mantine-color-ffui-light-color": "var(--mantine-primary-color-light-color)",
++            "--mantine-color-ffui-contrast": "var(--mantine-primary-color-contrast)",
+           },
+           dark: {},
+         }),
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2,7 +2,7 @@
+ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+   sourceScript: "r12",
+   verificationModel: "r6",
+-  sourceCode: "r3",
++  sourceCode: "r4",
+   appBuild: "1.1.32-wip",
+ });
+ (async () => {
+@@ -223,6 +223,20 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       const slot = document.querySelector(".slot:not(.hidden)");
+       check(slot && slot.getBoundingClientRect().width > 0, "rendered slot has no width");
+     });
++    await run(14, "Mantine primary button follows UI color", async () => {
++      await new Promise((resolve) => setTimeout(resolve, 0));
++      const button = document.querySelector(".mantine-Button-root[data-variant='filled']");
++      check(!!button, "filled Mantine button absent");
++      const probe = document.createElement("span");
++      probe.style.color = api.appearance.readPalette().uiColor;
++      document.body.appendChild(probe);
++      const expected = getComputedStyle(probe).color;
++      probe.remove();
++      check(
++        getComputedStyle(button).backgroundColor === expected,
++        "filled Mantine button does not use appearance uiColor",
++      );
++    });
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -29,20 +29,20 @@
+       "validation_review": "agent_space/reviews/review-017-tlc-slot-core-r6-2x2.md"
+     },
+     "source-code": {
+-      "revision": 3,
++      "revision": 4,
+       "status": "current",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:6977517c2d0232c4346f201d91b5f5db243710f3fc65c62d15a1e26751d3022a",
++      "fingerprint": "sha256:9339a9059161aa8a007c65a2ca62757e015056f6a71741d25bb4d5142436b094",
+       "derived_from": {
+         "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db",
+         "verification-model": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b"
+       },
+-      "validation_review": "agent_space/reviews/review-020-source-code-r3-readme-build.md"
++      "validation_review": "agent_space/reviews/review-021-source-code-r4-ui-primary-color.md"
+     }
+   },
+   "legacy_artifacts": {
+diff --git a/agent_space/reviews/review-021-source-code-r4-ui-primary-color.md b/agent_space/reviews/review-021-source-code-r4-ui-primary-color.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-021-source-code-r4-ui-primary-color.md
+@@ -0,0 +1,68 @@
++# Source code r4 validation — UI primary color
++
++## 검토 대상
++
++- Source Script r12
++- verification-model r6
++- source code r4
++- source-code fingerprint:
++  `sha256:9339a9059161aa8a007c65a2ca62757e015056f6a71741d25bb4d5142436b094`
++
++## Source Script 판정
++
++이번 문제는 Source Script 의미의 누락으로 판정하지 않는다.
++
++`sourcescript/api_ui.py`의 `FastFigureApp` 책임에는 이미 다음 의미가 있다.
++
++- persistent appearance palette를 FastFigureApi에서 읽는다.
++- 그 palette를 Mantine CSS variable로 투영한다.
++- UI color luminance에서 primary contrast text를 계산한다.
++
++따라서 Mantine의 generic primary UI가 별도의 기본 blue 상태를 독립적으로 소유하는 것은
++Source Script가 요구한 palette projection과 맞지 않는다.
++
++Source Script와 verification-model은 변경하지 않는다.
++
++## 구현 문제
++
++기존 구현은 `--mantine-primary-color-*` CSS variable을 `palette.uiColor`에서
++생성했지만 Mantine Button/ActionIcon의 vars resolver는 theme의
++`primaryColor` 기본값인 `blue`를 사용해 `--button-*` / `--ai-*` 변수를
++별도로 계산했다.
++
++그 결과 global primary CSS variable과 실제 generic button 색이 분리될 수 있었다.
++
++## r4 수정
++
++`FastFigureApp`에서 현재 `palette.uiColor`로 Mantine custom color
++`ffui`를 만들고 이를 provider theme의 `primaryColor`로 지정한다.
++
++`--mantine-color-ffui-*`는 기존 palette 기반
++`--mantine-primary-color-*` variable을 참조하도록 연결한다.
++
++따라서 별도 버튼 색 상태를 추가하지 않고 다음 경로로 단일화된다.
++
++`activeProject.appearance.uiPalette.uiColor`
++→ Mantine primary CSS variables
++→ Mantine `ffui` primary color
++→ Button / ActionIcon variant variables.
++
++## 회귀 검사
++
++browser regression target을 source code r4로 올리고 filled Mantine Button의
++computed background color가 현재 `appearance.uiColor`와 동일한지 확인하는 검사를
++추가했다.
++
++## 의미 및 경계
++
++- project schema 변경 없음
++- UI palette schema 변경 없음
++- Source Script 의미 변경 없음
++- verification model 의미 변경 없음
++- renderer/domain command 변경 없음
++- Mantine generic component의 appearance projection만 수정
++
++## 결론
++
++source code r4는 Source Script r12의 기존 appearance projection 책임을 더 정확히
++구현한다. 상위 계층 변경 없이 source-code revision만 증가시키는 것이 맞다.
