@@ -1,0 +1,67 @@
+name: Build distribution
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Fast-figure.html'
+      - 'fast-figure.js'
+      - 'fast-figure-ui.js'
+      - 'vendor/**'
+      - 'README.md'
+      - 'LICENSE'
+      - 'scripts/build-portable.py'
+      - '.github/workflows/build-distribution.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fast-figure-distribution-main
+  cancel-in-progress: true
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Build distribution
+        run: python scripts/build-portable.py
+
+      - name: Verify distribution
+        run: |
+          test -s dist/inline/Fast-figure.html
+          test -s dist/split/Fast-figure.zip
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          with ZipFile("dist/split/Fast-figure.zip") as archive:
+              assert archive.read("Fast-figure/README.md") == Path("README.md").read_bytes()
+              assert archive.read("Fast-figure/LICENSE") == Path("LICENSE").read_bytes()
+          PY
+
+      - name: Commit distribution artifacts
+        run: |
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD)" ]; then
+            echo "main advanced during this run; a newer workflow run will build it."
+            exit 0
+          fi
+
+          git add dist/inline/Fast-figure.html dist/split/Fast-figure.zip
+          if git diff --cached --quiet; then
+            echo "distribution artifacts are already current."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Build distribution artifacts"
+          git push origin HEAD:main
