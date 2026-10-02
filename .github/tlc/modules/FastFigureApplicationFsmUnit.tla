@@ -181,20 +181,20 @@ VerificationHarness:
     or
       with chosenSourceId \in SlotIds do
         with chosenTargetId \in SlotIds do
-          with sourceVisible \in {TRUE, FALSE} do
-            with targetVisible \in {TRUE, FALSE} do
+          with chosenSourceVisible \in {TRUE, FALSE} do
+            with chosenTargetVisible \in {TRUE, FALSE} do
               call applySlotsSwappedAction(
                 chosenSourceId,
                 chosenTargetId,
-                sourceVisible,
-                targetVisible);
+                chosenSourceVisible,
+                chosenTargetVisible);
             end with;
           end with;
         end with;
       end with;
     or
-      with layoutAccepted \in {TRUE, FALSE} do
-        call applyGridLayoutAction(layoutAccepted);
+      with chosenLayoutAccepted \in {TRUE, FALSE} do
+        call applyGridLayoutAction(chosenLayoutAccepted);
       end with;
     or
       with chosenSlotId \in SlotIds do
