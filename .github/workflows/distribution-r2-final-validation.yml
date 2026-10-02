@@ -1,0 +1,28 @@
+name: Distribution r2 Final Validation
+
+on:
+  push:
+    branches:
+      - 'agent/distribution-build-r2-final'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check syntax
+        run: |
+          python -m py_compile scripts/build-portable.py
+          python -m py_compile agent_space/tests/run-browser-regression.py
+          node --check agent_space/tests/browser-regression.js
+      - name: Run distribution regression
+        run: python agent_space/tests/run-browser-regression.py
+      - name: Validate development layer versions
+        run: python scripts/check-development-layer-versions.py --base 164fd1482eb17ba9780cb35b48efee2c0f84400b
