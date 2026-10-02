@@ -7391,6 +7391,7 @@
       applyDashboardZoom();
       installSlotClickController();
       applySlotStyle();
+      renderDashboard();
       appFSM.ready();
       debugLog(
         "app:init-complete",

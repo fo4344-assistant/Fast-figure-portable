@@ -2,7 +2,7 @@
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   sourceScript: "r12",
   verificationModel: "r6",
-  sourceCode: "r4",
+  sourceCode: "r5",
   appBuild: "1.1.32-wip",
 });
 (async () => {
@@ -44,6 +44,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   try {
     await new Promise((resolve) => setTimeout(resolve, 100));
     check(api && appFSM.state.lifecycle === "ready", "application not ready");
+    await run(15, "startup projects initial slots before interaction", async () => {
+      check(activeProject.slots.length === 4, "default project does not contain four slots");
+      const rendered = document.querySelectorAll("#dashboard .slot:not(.hidden)");
+      check(rendered.length === 4, "default 2x2 slots were not rendered before interaction");
+    });
     await run(1, "FFPX save and reload", async () => {
       api.project.setName("Roundtrip regression");
       const file = ffpxFile();
