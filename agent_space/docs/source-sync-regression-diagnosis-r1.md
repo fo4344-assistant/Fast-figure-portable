@@ -307,3 +307,51 @@ This applies to slot, chart, CSV, image, and VFS objects.
 The reviewed Source Script already specifies the required behavior for all four
 failure areas. No Source Script revision is required for the issues recorded
 here.
+
+## Resolution
+
+The implementation and regression corrections were completed without changing
+Source Script r12 or verification-model r6.
+
+Final work-branch regression:
+
+- workflow: `Source Sync Regression`
+- run: `36977694199`
+- job: `110744998840`
+- commit under test: `a2030d5f200b10111fe2e8bbe5c7a75e5674484b`
+- JavaScript syntax checks: passed
+- split file:// regression: 13/13 passed
+- portable file:// regression: 13/13 passed
+
+The failure classifications in this document were confirmed by the final run.
+
+### Resolved implementation defects
+
+- FFSX import and Plotly import now carry distinct import semantics.
+- package-local CSV remapping is applied only to FFSX.
+- Plotly `conversionRows` and conversion objects are preserved while the chart
+  remains non-editable.
+- imported Plotly → editable conversion now creates CSV/reference state in one
+  candidate project and commits only after whole-project validation.
+- zero-trace Plotly import keeps empty conversion rows; no fake X/Y row is
+  created.
+- non-editable Plotly conversion objects are not treated as authoritative
+  project-CSV references.
+- project-node move is now candidate → reference detach → validate → one commit
+  instead of mutating authoritative VFS/assets before validation.
+
+### Resolved test defects
+
+- browser regression records target versions explicitly.
+- tests keep stable ids across candidate commits and re-resolve current
+  slot/CSV/chart objects from the authoritative project.
+- multi-CSV FFSX verifies the post-import current chart.
+- Plotly import tests verify replacement chart identity and imported/editable
+  semantics.
+- trash move verifies the current CSV object/path rather than a stale
+  pre-commit object.
+
+### Source Script conclusion
+
+No failure required a Source Script change. The existing algorithms already
+specified the behavior implemented by these fixes.
