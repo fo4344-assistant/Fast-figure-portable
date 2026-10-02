@@ -31,6 +31,7 @@
     Text,
     TextInput,
     Textarea,
+    UnstyledButton,
     createTheme,
   } = MantineCore;
   const { useEffect, useRef, useState, useSyncExternalStore } = React;
@@ -2628,25 +2629,41 @@
               overflow: "hidden",
             },
           },
-          ...visibleSlots.map((slot) =>
-            React.createElement(
-              Button,
+          ...visibleSlots.map((slot) => {
+            const selected = layoutSelection.has(slot.id);
+            return React.createElement(
+              UnstyledButton,
               {
                 key: slot.id,
-                variant: layoutSelection.has(slot.id) ? "filled" : "light",
                 disabled: busy,
+                "aria-pressed": selected,
                 onClick: () => toggleSlot(slot.id),
                 style: {
                   gridColumn: `${slot.col} / span ${slot.colSpan}`,
                   gridRow: `${slot.row} / span ${slot.rowSpan}`,
+                  width: "100%",
+                  height: "100%",
                   minWidth: 0,
                   minHeight: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 0,
+                  borderWidth: 1,
                   borderStyle: style.showBorders ? "solid" : "dashed",
+                  borderColor: selected
+                    ? "var(--mantine-primary-color-filled)"
+                    : "var(--mantine-color-default-border)",
+                  background: selected
+                    ? "var(--mantine-primary-color-light)"
+                    : "transparent",
+                  color: "inherit",
+                  cursor: busy ? "default" : "pointer",
                 },
               },
               `${slot.row},${slot.col}`,
-            ),
-          ),
+            );
+          }),
         ),
         React.createElement(Box, {
           role: "separator",

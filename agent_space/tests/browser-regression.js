@@ -2,7 +2,7 @@
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   sourceScript: "r12",
   verificationModel: "r6",
-  sourceCode: "r5",
+  sourceCode: "r6",
   appBuild: "1.1.32-wip",
 });
 (async () => {
@@ -48,6 +48,29 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(activeProject.slots.length === 4, "default project does not contain four slots");
       const rendered = document.querySelectorAll("#dashboard .slot:not(.hidden)");
       check(rendered.length === 4, "default 2x2 slots were not rendered before interaction");
+    });
+    await run(16, "layout preview cells follow grid tracks", async () => {
+      appFSM.send("TOGGLE_OVERLAY", { overlay: "layout", source: "regression" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const grid = document.querySelector(
+        "[data-fastfigure-overlay='layout'] [role='grid']",
+      );
+      const cell = grid?.querySelector(":scope > button");
+      check(!!grid && !!cell, "layout preview grid or cell absent");
+      check(!cell.classList.contains("mantine-Button-root"), "layout preview cell uses sized Button");
+      const computed = getComputedStyle(grid);
+      const rowGap = parseFloat(computed.rowGap) || 0;
+      const paddingTop = parseFloat(computed.paddingTop) || 0;
+      const paddingBottom = parseFloat(computed.paddingBottom) || 0;
+      const expectedRowHeight =
+        (grid.clientHeight - paddingTop - paddingBottom - rowGap * (activeProject.gridRows - 1)) /
+        activeProject.gridRows;
+      check(
+        Math.abs(cell.getBoundingClientRect().height - expectedRowHeight) < 1.5,
+        "layout preview cell does not fill its grid track",
+      );
+      appFSM.send("CLOSE_OVERLAY", { reason: "regression-layout-preview" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await run(1, "FFPX save and reload", async () => {
       api.project.setName("Roundtrip regression");
