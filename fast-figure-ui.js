@@ -1982,7 +1982,7 @@
         (event.clientX - previewRect.left - drag.offsetX) / previewScale;
       const nextY =
         (event.clientY - previewRect.top - drag.offsetY) / previewScale;
-      labelApi.previewPosition(
+      labelApi.setPosition(
         Math.max(0, Math.min(Math.max(0, reference.width - labelWidth), nextX)),
         Math.max(0, Math.min(Math.max(0, reference.height - labelHeight), nextY)),
       );
@@ -1992,7 +1992,7 @@
       if (dragRef.current?.pointerId !== event.pointerId) return;
       event.currentTarget.releasePointerCapture?.(event.pointerId);
       dragRef.current = null;
-      labelApi.commitPosition();
+      labelApi.finishPositionInteraction();
     };
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-label" });
 
@@ -2155,15 +2155,24 @@
 
   function FastFigureCaptionOverlay() {
     const state = useAppState();
+    const [targetMode, setTargetMode] = useState("global");
+    useEffect(() => {
+      if (state.overlay !== "caption") setTargetMode("global");
+    }, [state.overlay]);
     if (state.overlay !== "caption") return null;
     const busy = state.lifecycle !== "ready";
     const captionApi = window.FastFigureApi.captions;
-    const caption = captionApi.readState();
-    const slotMode = caption.slotMode;
-    const target = caption.target;
-    const settings = caption.settings;
+    const slotApi = window.FastFigureApi.slots;
+    const globalCaption = captionApi.readGlobal();
+    const selectedSlot = slotApi.readSelected();
+    const slotCaption =
+      targetMode === "slot" && selectedSlot
+        ? captionApi.readSlot(selectedSlot.id)
+        : null;
+    const settings = globalCaption.settings;
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-caption" });
     const commitSettings = (patch) => captionApi.setSettings(patch);
+    const slotMode = targetMode === "slot";
 
     return React.createElement(
       Modal,
@@ -2183,20 +2192,20 @@
           React.createElement(
             Button,
             {
-              variant: caption.enabled ? "filled" : "light",
+              variant: globalCaption.enabled ? "filled" : "light",
               disabled: busy,
-              "aria-pressed": caption.enabled,
-              onClick: () => captionApi.setEnabled(!caption.enabled),
+              "aria-pressed": globalCaption.enabled,
+              onClick: () => captionApi.setEnabled(!globalCaption.enabled),
             },
-            caption.enabled ? "캡션 표시" : "캡션 숨김",
+            globalCaption.enabled ? "캡션 표시" : "캡션 숨김",
           ),
           React.createElement(
             Button,
             {
               variant: slotMode ? "filled" : "light",
-              disabled: busy,
+              disabled: busy || !selectedSlot,
               "aria-pressed": slotMode,
-              onClick: () => captionApi.setSlotMode(!slotMode),
+              onClick: () => setTargetMode(slotMode ? "global" : "slot"),
             },
             "슬롯별 캡션",
           ),
@@ -2214,35 +2223,39 @@
           Text,
           { size: "sm", c: "dimmed" },
           slotMode
-            ? target
-              ? `대상: ${target.row}행 ${target.col}열`
+            ? slotCaption
+              ? `대상: ${slotCaption.row}행 ${slotCaption.col}열`
               : "대상 슬롯을 선택하세요."
             : "대상: 전체 캡션",
         ),
         React.createElement(Textarea, {
           label: "내용",
-          value: caption.text,
+          value: slotMode ? slotCaption?.text ?? "" : globalCaption.text,
+          placeholder: slotMode ? "슬롯 캡션" : undefined,
           minRows: 5,
           autosize: true,
-          disabled: busy || (slotMode && !target),
-          onChange: (event) => captionApi.setText(event.target.value),
+          disabled: busy || (slotMode && !slotCaption),
+          onChange: (event) =>
+            slotMode
+              ? slotCaption && captionApi.setSlotText(slotCaption.id, event.target.value)
+              : captionApi.setGlobalText(event.target.value),
         }),
         React.createElement(
           Group,
           { gap: "xs", grow: true },
           React.createElement(TextInput, {
             label: "이름",
-            value: caption.name,
+            value: globalCaption.name,
             disabled: busy || slotMode,
             onChange: (event) => captionApi.setName(event.target.value),
           }),
           React.createElement(
             Button,
             {
-              variant: caption.nameBold ? "filled" : "light",
+              variant: globalCaption.nameBold ? "filled" : "light",
               disabled: busy || slotMode,
-              "aria-pressed": caption.nameBold,
-              onClick: () => captionApi.setNameBold(!caption.nameBold),
+              "aria-pressed": globalCaption.nameBold,
+              onClick: () => captionApi.setNameBold(!globalCaption.nameBold),
             },
             "이름 굵게",
           ),
@@ -2281,37 +2294,43 @@
   function FastFigurePrintOverlay() {
     const state = useAppState();
     const printApi = window.FastFigureApi.print;
-    const [width, setWidth] = useState(() => printApi.readDefaults().width);
-    const [height, setHeight] = useState("");
-    const [dpi, setDpi] = useState(300);
-    const [format, setFormat] = useState("png");
+    const initial = printApi.readSettings();
+    const [width, setWidth] = useState(initial.width);
+    const [height, setHeight] = useState(
+      initial.heightMode === "explicit" ? initial.height : "",
+    );
+    const [dpi, setDpi] = useState(initial.dpi);
+    const [format, setFormat] = useState(initial.format);
     const [message, setMessage] = useState("");
+    useEffect(() => {
+      if (state.overlay !== "print") return;
+      const saved = printApi.readSettings();
+      setWidth(saved.width);
+      setHeight(saved.heightMode === "explicit" ? saved.height : "");
+      setDpi(saved.dpi);
+      setFormat(saved.format);
+    }, [state.overlay]);
     if (state.overlay !== "print") return null;
     const busy = state.lifecycle !== "ready";
 
     const close = () =>
       appFSM.send("CLOSE_OVERLAY", { reason: "mantine-print" });
-    const options = () => ({
-      width: Math.max(100, Math.min(20000, Number(width) || 1000)),
-      height:
-        height === "" || height === null
-          ? ""
-          : Math.max(100, Math.min(20000, Number(height) || 100)),
-      dpi: Math.max(36, Math.min(1200, Number(dpi) || 300)),
-      format: format === "jpeg" ? "jpeg" : "png",
-      onStatus: setMessage,
-    });
+    const commit = (patch) => {
+      const next = printApi.setSettings(patch);
+      setWidth(next.width);
+      setHeight(next.heightMode === "explicit" ? next.height : "");
+      setDpi(next.dpi);
+      setFormat(next.format);
+      return next;
+    };
     const save = () =>
-      runLifecycleTask("exporting", "PRINT_EXPORT", () => printApi.save(options()));
+      runLifecycleTask("exporting", "PRINT_EXPORT", () =>
+        printApi.save({ onStatus: setMessage }),
+      );
     const capture = () =>
-      runLifecycleTask("exporting", "CAPTURE_EXPORT", () => {
-        const values = options();
-        return printApi.capture({
-          dpi: values.dpi,
-          format: values.format,
-          onStatus: setMessage,
-        });
-      });
+      runLifecycleTask("exporting", "CAPTURE_EXPORT", () =>
+        printApi.capture({ onStatus: setMessage }),
+      );
 
     return React.createElement(
       Modal,
@@ -2336,7 +2355,7 @@
               { value: "jpeg", label: "JPEG" },
             ],
             disabled: busy,
-            onChange: (value) => value !== null && setFormat(value),
+            onChange: (value) => value !== null && commit({ format: value }),
           }),
           React.createElement(NumberInput, {
             label: "DPI",
@@ -2344,7 +2363,7 @@
             min: 36,
             max: 1200,
             disabled: busy,
-            onChange: setDpi,
+            onChange: (value) => commit({ dpi: value }),
           }),
         ),
         React.createElement(
@@ -2356,7 +2375,7 @@
             min: 100,
             max: 20000,
             disabled: busy,
-            onChange: setWidth,
+            onChange: (value) => commit({ width: value }),
           }),
           React.createElement(NumberInput, {
             label: "세로 (px, 비우면 자동)",
@@ -2364,7 +2383,11 @@
             min: 100,
             max: 20000,
             disabled: busy,
-            onChange: setHeight,
+            onChange: (value) => {
+              if (value === "" || value === null)
+                commit({ heightMode: "auto" });
+              else commit({ heightMode: "explicit", height: value });
+            },
           }),
         ),
         React.createElement(

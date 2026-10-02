@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.31-wip";
+      const APP_BUILD = "1.1.32-wip";
       const PROJECT_OBJECT_PATHS = Object.freeze({
         project: "meta",
         layout: "layout",
@@ -13,6 +13,7 @@
         slots: "slots",
         sequences: "nextId",
         appearance: "appearance",
+        export: "export",
       });
       const DEFAULT_SLOT_STYLE = Object.freeze({
         referenceWidth: 1200,
@@ -44,17 +45,26 @@
         "#0997B3",
         "#FAFAFA",
       ];
+      const DEFAULT_IMAGE_SETTINGS = Object.freeze({
+        fit: "contain",
+        scale: 100,
+        x: 50,
+        y: 50,
+      });
+      const SLOT_LOCAL_DEFAULTS = Object.freeze({
+        chart: null,
+        imageId: null,
+        contentType: "graph",
+        imageSettings: DEFAULT_IMAGE_SETTINGS,
+        caption: null,
+      });
       function createProjectState() {
-        return {
+        let state = {
           kind: "fast-figure-project-object",
-          meta: {
-            projectName: "",
-            appBuild: APP_BUILD,
-          },
+          meta: { projectName: "", appBuild: APP_BUILD },
           layout: {
             gridRows: 2,
             gridCols: 2,
-            layoutMapWidth: null,
             slotStyle: { ...DEFAULT_SLOT_STYLE },
           },
           annotations: {
@@ -72,7 +82,6 @@
             },
             captions: {
               enabled: false,
-              slotMode: false,
               text: "",
               afterText: "",
               name: "",
@@ -84,24 +93,25 @@
               },
             },
           },
-          assets: {
-            csvFiles: [],
-            images: [],
-          },
+          assets: { csvFiles: [], images: [] },
           fileSystem: {
             directories: ["/assets", "/assets/csv", "/assets/images", "/assets/trash"],
           },
           charts: [],
           slots: [],
-          nextId: {
-            csv: 1,
-            image: 1,
-            chart: 1,
-          },
-          appearance: {
-            uiPalette: { ...DEFAULT_UI_PALETTE },
+          nextId: { csv: 1, image: 1, chart: 1 },
+          appearance: { uiPalette: { ...DEFAULT_UI_PALETTE } },
+          export: {
+            width: DEFAULT_SLOT_STYLE.referenceWidth,
+            heightMode: "auto",
+            height: null,
+            dpi: 300,
+            format: "png",
           },
         };
+        for (let index = 0; index < 4; index++)
+          state.slots.push(newGridSlot(index, Math.floor(index / 2) + 1, (index % 2) + 1));
+        return state;
       }
       function projectObjectPath(state, path) {
         return String(path)
@@ -165,12 +175,6 @@
         }
         set gridCols(value) {
           this.layout.gridCols = value;
-        }
-        get layoutMapWidth() {
-          return this.layout.layoutMapWidth;
-        }
-        set layoutMapWidth(value) {
-          this.layout.layoutMapWidth = value;
         }
         get csvFiles() {
           return this.assets.csvFiles;
@@ -238,12 +242,6 @@
         set captionsEnabled(value) {
           this.annotations.captions.enabled = value;
         }
-        get slotCaptionsEnabled() {
-          return this.annotations.captions.slotMode;
-        }
-        set slotCaptionsEnabled(value) {
-          this.annotations.captions.slotMode = value;
-        }
         get captionText() {
           return this.annotations.captions.text;
         }
@@ -274,10 +272,15 @@
         set captionSettings(value) {
           this.annotations.captions.settings = value;
         }
+        get exportSettings() {
+          return this._state.export;
+        }
+        set exportSettings(value) {
+          this._state.export = value;
+        }
       }
       const activeProject = new ProjectObject();
-      let editing = null,
-        selectedSlotId = null,
+      let selectedSlotId = null,
         pendingSlotContentType = "graph",
         dashboardObserver = null,
         graphAreaObserver = null,
@@ -607,14 +610,11 @@
           hydrating = payload.direction === "model-to-fsm";
         machine.assertWritable("workspace", "SELECT_SLOT");
         selectedSlotId = !slot || (!hydrating && same) ? null : slot.id;
-        editing = null;
         machine.state = Object.freeze({
           ...machine.state,
           graphObject: "none",
           graphObjectIndex: null,
         });
-        if (!hydrating && activeProject.slotCaptionsEnabled && selectedSlotId !== null)
-          initializeSlotCaption(slot);
         if (
           !hydrating &&
           selectedSlotId !== null &&
@@ -631,7 +631,6 @@
           return;
         }
         slot.contentType = payload.type === "image" ? "image" : "graph";
-        editing = null;
         machine.state = Object.freeze({
           ...machine.state,
           graphObject: "none",
@@ -657,19 +656,17 @@
           Number.isInteger(appFSM.state.graphObjectIndex)
         );
       }
-      function applySlotCaptionModeAction({ machine, payload }) {
-        machine.assertWritable("workspace", "SLOT_CAPTION_MODE_CHANGED");
-        activeProject.slotCaptionsEnabled = payload.enabled === true;
-        if (activeProject.slotCaptionsEnabled) {
-          activeProject.captionsEnabled = true;
-          initializeSlotCaptions();
-        }
-      }
+
       function applyCaptionTextAction({ machine, payload }) {
-        machine.assertWritable("workspace", "CAPTION_TEXT_INPUT");
-        let slot = activeSlotCaptionTarget();
-        if (slot) slot.caption = String(payload.text || "");
-        else activeProject.captionText = String(payload.text || "");
+        machine.assertWritable("workspace","CAPTION_TEXT_INPUT");
+        let target=payload.target;
+        if(target?.kind==="slot"){
+          let slot=slotAt(Number(target.id));
+          if(!slot)throw Error("캡션을 변경할 슬롯이 없습니다.");
+          slot.caption=String(payload.text??"")||null;
+        } else if(target?.kind==="global") {
+          activeProject.captionText=String(payload.text??"");
+        } else throw Error("캡션 변경 대상이 올바르지 않습니다.");
       }
       function applySlotCaptionsInsertedAction({ machine }) {
         machine.assertWritable("workspace", "SLOT_CAPTIONS_INSERTED");
@@ -702,7 +699,6 @@
         if (!previous || projectAssetPath(model) !== projectAssetPath(previous))
           throw Error(`교체할 ${image ? "이미지" : "CSV"} 또는 참조 경로가 올바르지 않습니다.`);
         if (image) model.settings = projectClone(previous.settings);
-        else if (previous.isDefaultEmpty === true) model.isDefaultEmpty = true;
         try {
           let next = collection.map((item, itemIndex) => itemIndex === index ? model : item);
           if (image) activeProject.images = next;
@@ -721,9 +717,6 @@
       }
       function applyDataObjectDeletedAction({ machine, payload }) {
         machine.assertWritable("data", "DATA_OBJECT_DELETED");
-        let csv = getProjectCsv(payload.csvId);
-        if (csv?.isDefaultEmpty === true)
-          throw Error("프로젝트 기본 빈 CSV는 삭제할 수 없습니다.");
         activeProject.csvFiles = activeProject.csvFiles.filter((item) => item.id !== payload.csvId);
       }
       function applyImageObjectCreatedAction({ machine, payload }) {
@@ -752,7 +745,6 @@
         slot.chart = null;
         if (!activeProject.slots.some((item) => item !== slot && item.chart === chartId)) {
           activeProject.charts = activeProject.charts.filter((chart) => chart.id !== chartId);
-          if (editing?.id === chartId) editing = null;
         }
         return chartId;
       }
@@ -761,100 +753,58 @@
         machine.assertWritable("charts", "SLOTS_RESET");
         machine.assertWritable("workspace", "SLOTS_RESET");
         machine.assertWritable("editor", "SLOTS_RESET");
-        let slotIds = new Set(
-            (Array.isArray(payload.slotIds) ? payload.slotIds : [payload.slotId])
-              .map(Number)
-              .filter(Number.isInteger),
-          ),
-          targets = activeProject.slots.filter((slot) => slotIds.has(slot.id)),
-          chartIds = new Set(targets.map((slot) => slot.chart).filter(Number.isInteger));
-        if (!targets.length) throw Error("초기화할 슬롯이 없습니다.");
-        activeProject.charts = activeProject.charts.filter((chart) => !chartIds.has(chart.id));
-        targets.forEach((slot) => {
-          slot.chart = null;
-          slot.imageId = null;
-          slot.contentType = "graph";
-        });
-        if (editing && chartIds.has(editing.id)) editing = null;
-        payload.resetCount = targets.length;
-        payload.removedChartIds = [...chartIds];
+        let slotIds=new Set((Array.isArray(payload.slotIds)?payload.slotIds:[payload.slotId])
+          .map(Number).filter(Number.isInteger)),
+          currentTargets=activeProject.slots.filter(slot=>slotIds.has(slot.id));
+        if(!currentTargets.length||currentTargets.length!==slotIds.size)
+          throw Error("초기화할 슬롯이 없습니다.");
+        let candidate=projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let targets=candidate.slots.filter(slot=>slotIds.has(slot.id)),
+          chartIds=new Set(targets.map(slot=>slot.chart).filter(Number.isInteger));
+        candidate.charts=candidate.charts.filter(chart=>!chartIds.has(chart.id));
+        targets.forEach(resetSlotLocalState);
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+        payload.resetCount=targets.length;
+        payload.removedChartIds=[...chartIds];
       }
       function applySlotsSwappedAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOTS_SWAPPED");
         machine.assertWritable("workspace", "SLOTS_SWAPPED");
         machine.assertWritable("editor", "SLOTS_SWAPPED");
-        let source = slotAt(Number(payload.sourceSlotId)),
-          target = slotAt(Number(payload.targetSlotId));
-        if (!source || !target || source === target || source.hidden || target.hidden)
+        let source=slotAt(Number(payload.sourceSlotId)),
+          target=slotAt(Number(payload.targetSlotId));
+        if(!source||!target||source===target||source.hidden||target.hidden)
           throw Error("교환할 슬롯이 올바르지 않습니다.");
-        let sourceContent = source.content,
-          targetContent = target.content,
-          previous = {
-            selectedSlotId,
-            editing,
-          };
-        try {
-          source.content = targetContent;
-          target.content = sourceContent;
-          if (selectedSlotId === source.id) selectedSlotId = target.id;
-          else if (selectedSlotId === target.id) selectedSlotId = source.id;
-          editing = null;
-          validateProjectObject(activeProject, { requireSlots: true });
-        } catch (error) {
-          source.content = sourceContent;
-          target.content = targetContent;
-          selectedSlotId = previous.selectedSlotId;
-          editing = previous.editing;
-          throw error;
-        }
-        [source, target].forEach((slot) => {
-          if (slotImage(slot)) normalizeImageSettings(slotImage(slot));
-        });
-        payload.slotId = selectedSlotId;
-        debugLog("slot:swap", {
-          sourceSlotId: source.id,
-          targetSlotId: target.id,
-          sourceChartBefore: sourceContent.chart || null,
-          targetChartBefore: targetContent.chart || null,
-          sourceChartAfter: source.chart || null,
-          targetChartAfter: target.chart || null,
-        });
-        renderDashboard();
-        status(
-          `${source.row}행 ${source.col}열과 ${target.row}행 ${target.col}열의 슬롯 내용을 교환했습니다.`,
-        );
-        auditApp("slot:swap");
+        let candidate=projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let a=candidate.slots.find(slot=>slot.id===source.id),
+          b=candidate.slots.find(slot=>slot.id===target.id),
+          aLocal=slotLocalState(a), bLocal=slotLocalState(b);
+        setSlotLocalState(a,bLocal); setSlotLocalState(b,aLocal);
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+        if(selectedSlotId===source.id)selectedSlotId=target.id;
+        else if(selectedSlotId===target.id)selectedSlotId=source.id;
+        payload.slotId=selectedSlotId;
       }
       function applySlotImageLinkedAction({ machine, payload }) {
-        machine.assertWritable("slots", "SLOT_IMAGE_LINKED");
-        machine.assertWritable("charts", "SLOT_IMAGE_LINKED");
-        machine.assertWritable("editor", "SLOT_IMAGE_LINKED");
-        let slot = slotAt(payload.slotId);
-        if (!slot || slot.contentType !== "image" || !getProjectImage(payload.imageId))
-          throw Error("이미지를 연결할 슬롯 또는 이미지가 없습니다.");
-        let previous = {
-          charts: activeProject.charts,
-          slotChart: slot.chart,
-          slotImageId: slot.imageId,
-          editing,
-        };
-        try {
-          detachSlotChart(slot);
-          slot.imageId = payload.imageId;
-          editing = null;
-          validateProjectObject(activeProject, { requireSlots: true });
-        } catch (error) {
-          activeProject.charts = previous.charts;
-          slot.chart = previous.slotChart;
-          slot.imageId = previous.slotImageId;
-          editing = previous.editing;
-          throw error;
-        }
-        machine.state = Object.freeze({
-          ...machine.state,
-          graphObject: "none",
-          graphObjectIndex: null,
-        });
+        machine.assertWritable("slots","SLOT_IMAGE_LINKED");
+        machine.assertWritable("charts","SLOT_IMAGE_LINKED");
+        let slot=slotAt(payload.slotId),image=getProjectImage(payload.imageId);
+        if(!slot||!image)throw Error("이미지를 연결할 슬롯 또는 이미지가 없습니다.");
+        let candidate=projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let target=candidate.slots.find(item=>item.id===slot.id),
+          oldChart=target.chart;
+        if(Number.isInteger(oldChart))
+          candidate.charts=candidate.charts.filter(chart=>chart.id!==oldChart);
+        target.chart=null;target.imageId=image.id;target.contentType="image";
+        target.content.imageSettings=readImageSettings(target.content.imageSettings);
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+        payload.image=getProjectImage(image.id);
       }
       function applySlotDataConnectedAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOT_DATA_CONNECTED");
@@ -873,7 +823,6 @@
               slotChart: slot.chart,
               slotImageId: slot.imageId,
               slotContentType: slot.contentType,
-              editing,
             }
           : null;
         try {
@@ -898,34 +847,28 @@
             slot.chart = previous.slotChart;
             slot.imageId = previous.slotImageId;
             slot.contentType = previous.slotContentType;
-            editing = previous.editing;
           }
           throw error;
         }
       }
       function applyGraphObjectsReplacedAction({ machine, payload }) {
         machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
-        let chart = getChart(payload.chartId);
-        if (!chart || !chart.editor || chart.editor.editable === false)
+        let current=getChart(payload.chartId);
+        if(!current||!current.editor||current.editor.editable===false)
           throw Error("그래프 오브젝트를 변경할 편집 가능 차트가 없습니다.");
-        let objects = Array.isArray(payload.objects) ? [...payload.objects] : [];
-        if (!objects.length) {
-          let csv = ensureDefaultCsv(),
-            selection = graphDataSelection(csv.rows, csv.headerLines, chart.editor);
-          objects = [
-            {
-              ...baseGraphObject(chart, csv),
-              csvId: csv.id,
-              ...selection,
-            },
-          ];
-          payload.recovered = true;
-        }
-        chart.editor.objects = objects;
-        ensureGraphObjects(chart);
-        if (editing?.id === chart.id) editing = chart;
-        rebuildEditableGraph(chart);
-        payload.chart = chart;
+        let candidate=projectClone(activeProject._state),
+          chart=candidate.charts.find(item=>item.id===payload.chartId);
+        chart.editor.objects=Array.isArray(payload.objects)?projectClone(payload.objects):[];
+        validateChartModel(chart,"변경할 차트",candidate.assets.csvFiles);
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+        chart=getChart(payload.chartId);
+        if(chart.editor.editable!==false)rebuildEditableGraph(chart);
+        if(machine.state.graphObject==="selected" &&
+          (!Number.isInteger(machine.state.graphObjectIndex)||
+           machine.state.graphObjectIndex>=chart.editor.objects.length))
+          machine.state=Object.freeze({...machine.state,graphObject:"none",graphObjectIndex:null});
+        payload.chart=chart;
       }
       function applyChartLayoutChangedAction({ machine, payload }) {
         machine.assertWritable("charts", "CHART_LAYOUT_CHANGED");
@@ -946,7 +889,6 @@
         chart.editor.title = String(payload.title || "");
         chart.editor.globalSettings = projectClone(payload.globalSettings);
         chart.graph.layout = layout(chart);
-        if (editing?.id === chart.id) editing = chart;
         payload.chart = chart;
         payload.layout = chart.graph.layout;
       }
@@ -969,179 +911,115 @@
           throw Error("편집 가능한 차트 모델이 아닙니다.");
         rebuildEditableGraph(chart);
         activeProject.charts[index] = chart;
-        editing = chart;
         payload.chart = chart;
       }
       function applySlotImageImportedAction({ machine, payload }) {
-        machine.assertWritable("slots", "SLOT_IMAGE_IMPORTED");
-        machine.assertWritable("images", "SLOT_IMAGE_IMPORTED");
-        machine.assertWritable("charts", "SLOT_IMAGE_IMPORTED");
-        machine.assertWritable("workspace", "SLOT_IMAGE_IMPORTED");
-        machine.assertWritable("editor", "SLOT_IMAGE_IMPORTED");
-        machine.assertWritable("files", "SLOT_IMAGE_IMPORTED");
-        let slot = slotAt(payload.slotId),
-          model = payload.model,
-          image = model || getProjectImage(payload.imageId);
-        if (
-          !slot ||
-          !image ||
-          !Number.isInteger(image.id) ||
-          image.id < 1 ||
-          typeof image.name !== "string" ||
-          typeof image.bytesBase64 !== "string" ||
-          !image.bytesBase64 ||
-          !image.settings ||
-          typeof image.settings !== "object" ||
-          Array.isArray(image.settings) ||
-          (model && activeProject.images.some((item) => item.id === model.id))
-        )
+        machine.assertWritable("slots","SLOT_IMAGE_IMPORTED");
+        machine.assertWritable("images","SLOT_IMAGE_IMPORTED");
+        machine.assertWritable("charts","SLOT_IMAGE_IMPORTED");
+        machine.assertWritable("workspace","SLOT_IMAGE_IMPORTED");
+        machine.assertWritable("files","SLOT_IMAGE_IMPORTED");
+        let slot=slotAt(payload.slotId),source=payload.model||getProjectImage(payload.imageId);
+        if(!slot||!source||!Number.isInteger(source.id)||source.id<1||
+          typeof source.name!=="string"||typeof source.bytesBase64!=="string"||!source.bytesBase64)
           throw Error("이미지를 연결할 슬롯 또는 이미지가 없습니다.");
-        let previous = {
-          fileSystem: projectClone(activeProject.fileSystem),
-          images: activeProject.images,
-          imageId: activeProject.imageId,
-          charts: activeProject.charts,
-          slotChart: slot.chart,
-          slotImageId: slot.imageId,
-          slotContentType: slot.contentType,
-          editing,
-        };
-        try {
-          if (model) {
-            projectVfs.prepare(model, "image");
-            activeProject.images = [...activeProject.images, model];
-            activeProject.imageId = Math.max(activeProject.imageId, model.id + 1);
-          }
-          detachSlotChart(slot);
-          slot.contentType = "image";
-          slot.imageId = image.id;
-          if (slot.id === selectedSlotId) {
-            editing = null;
-          }
-          validateProjectObject(activeProject, { requireSlots: true });
-        } catch (error) {
-          activeProject.fileSystem = previous.fileSystem;
-          activeProject.images = previous.images;
-          activeProject.imageId = previous.imageId;
-          activeProject.charts = previous.charts;
-          slot.chart = previous.slotChart;
-          slot.imageId = previous.slotImageId;
-          slot.contentType = previous.slotContentType;
-          editing = previous.editing;
-          throw error;
+        let candidate=projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let imageId=source.id;
+        if(payload.model){
+          if(candidate.assets.images.some(item=>item.id===imageId))
+            throw Error(`이미지 ID ${imageId}가 중복되었습니다.`);
+          let model=projectClone(source);delete model.settings;
+          projectVfs.prepare(model,"image",candidate);
+          candidate.assets.images.push(model);
+          candidate.nextId.image=Math.max(candidate.nextId.image,imageId+1);
         }
-        payload.image = image;
-        if (slot.id === selectedSlotId) {
-          machine.state = Object.freeze({
-            ...machine.state,
-            graphObject: "none",
-            graphObjectIndex: null,
-          });
-        }
+        let target=candidate.slots.find(item=>item.id===slot.id);
+        if(Number.isInteger(target.chart))
+          candidate.charts=candidate.charts.filter(chart=>chart.id!==target.chart);
+        target.chart=null;target.imageId=imageId;target.contentType="image";
+        target.content.imageSettings={...DEFAULT_IMAGE_SETTINGS};
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+        payload.image=getProjectImage(imageId);
+        if(slot.id===selectedSlotId)
+          machine.state=Object.freeze({...machine.state,graphObject:"none",graphObjectIndex:null});
       }
       function applySlotChartImportedAction({ machine, payload }) {
-        machine.assertWritable("slots", "SLOT_CHART_IMPORTED");
-        machine.assertWritable("data", "SLOT_CHART_IMPORTED");
-        machine.assertWritable("charts", "SLOT_CHART_IMPORTED");
-        machine.assertWritable("workspace", "SLOT_CHART_IMPORTED");
-        machine.assertWritable("editor", "SLOT_CHART_IMPORTED");
-        machine.assertWritable("files", "SLOT_CHART_IMPORTED");
-        let slot = slotAt(payload.slotId),
-          sourceChart = payload.chart,
-          packagedCsvFiles = Array.isArray(payload.csvFiles) ? payload.csvFiles : [],
-          packagedIds = new Set(),
-          nextCsvId = activeProject.csvId,
-          defaultCsv = activeProject.csvFiles.find((csv) => csv.isDefaultEmpty === true),
-          csvMap = new Map(defaultCsv ? [[0, defaultCsv.id]] : []),
-          csvModels = packagedCsvFiles.map((source) => {
-            if (
-              !source ||
-              !Number.isInteger(source.id) ||
-              source.id < 1 ||
-              packagedIds.has(source.id) ||
-              !Array.isArray(source.rows)
-            )
+        machine.assertWritable("slots","SLOT_CHART_IMPORTED");
+        machine.assertWritable("data","SLOT_CHART_IMPORTED");
+        machine.assertWritable("charts","SLOT_CHART_IMPORTED");
+        machine.assertWritable("workspace","SLOT_CHART_IMPORTED");
+        machine.assertWritable("editor","SLOT_CHART_IMPORTED");
+        machine.assertWritable("files","SLOT_CHART_IMPORTED");
+        let slot=slotAt(payload.slotId),
+          sourceChart=payload.chart,
+          importKind=payload.importKind==="plotly"?"plotly":"ffsx",
+          packaged=Array.isArray(payload.csvFiles)?payload.csvFiles:[];
+        if(!slot||!sourceChart)
+          throw Error("불러온 차트를 적용할 슬롯 또는 차트가 없습니다.");
+
+        let candidate=projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let chart=projectClone(sourceChart),
+          createdCsvIds=[];
+
+        if(importKind==="ffsx"){
+          let packagedIds=new Set(),csvMap=new Map(),nextCsvId=candidate.nextId.csv;
+          for(let source of packaged){
+            if(!source||!Number.isInteger(source.id)||source.id<1||
+              packagedIds.has(source.id)||!Array.isArray(source.rows))
               throw Error("FFSX CSV 데이터가 올바르지 않습니다.");
             packagedIds.add(source.id);
-            let model = buildProjectCsvModel(
+            let model=buildProjectCsvModel(
               source.rows,
-              source.name || source.sourceName,
+              source.name||source.sourceName,
               nextCsvId++,
               source.bytesBase64,
               source.mime,
               source.headerLines,
+              candidate,
             );
-            csvMap.set(source.id, model.id);
-            return model;
-          });
-        if (!slot || !sourceChart)
-          throw Error("불러온 차트를 적용할 슬롯 또는 차트가 없습니다.");
-        let chart = projectClone(sourceChart),
-          oldId = slot?.chart,
-          index = activeProject.charts.findIndex((item) => item.id === oldId),
-          shared = activeProject.slots.some((item) => item !== slot && item.chart === oldId);
-        (chart.editor?.objects || []).forEach((object) => {
-          if (csvMap.has(object.csvId)) object.csvId = csvMap.get(object.csvId);
-        });
-        validateChartModel(chart, "불러온 슬롯 차트", [
-          ...activeProject.csvFiles,
-          ...csvModels,
-        ]);
-        let previous = {
-          fileSystem: projectClone(activeProject.fileSystem),
-          csvFiles: activeProject.csvFiles,
-          csvId: activeProject.csvId,
-          charts: activeProject.charts,
-          chartId: activeProject.chartId,
-          slotChart: slot.chart,
-          slotImageId: slot.imageId,
-          slotContentType: slot.contentType,
-          slotCaption: slot.caption,
-          editing,
-        };
-        try {
-          csvModels.forEach((model) => {
-            projectVfs.prepare(model, "csv");
-            activeProject.csvFiles = [...activeProject.csvFiles, model];
-          });
-          activeProject.csvId = nextCsvId;
-          chart.id = activeProject.chartId++;
-          activeProject.charts =
-            index >= 0 && !shared
-              ? activeProject.charts.map((item, chartIndex) =>
-                  chartIndex === index ? chart : item,
-                )
-              : [...activeProject.charts, chart];
-          slot.chart = chart.id;
-          slot.imageId = null;
-          slot.contentType = "graph";
-          if (payload.slotCaption !== undefined)
-            slot.caption =
-              payload.slotCaption === `${slotLabel(slot)} 슬롯 캡션`
-                ? "슬롯 캡션"
-                : payload.slotCaption;
-          editing = chart;
-          validateProjectObject(activeProject, { requireSlots: true });
-        } catch (error) {
-          activeProject.fileSystem = previous.fileSystem;
-          activeProject.csvFiles = previous.csvFiles;
-          activeProject.csvId = previous.csvId;
-          activeProject.charts = previous.charts;
-          activeProject.chartId = previous.chartId;
-          slot.chart = previous.slotChart;
-          slot.imageId = previous.slotImageId;
-          slot.contentType = previous.slotContentType;
-          slot.caption = previous.slotCaption;
-          editing = previous.editing;
-          throw error;
+            projectVfs.prepare(model,"csv",candidate);
+            candidate.assets.csvFiles.push(model);
+            csvMap.set(source.id,model.id);
+            createdCsvIds.push(model.id);
+          }
+          candidate.nextId.csv=nextCsvId;
+          for(let object of chart.editor?.objects||[]){
+            if(!csvMap.has(object.csvId))
+              throw Error("FFSX 차트가 포함되지 않은 CSV를 참조합니다.");
+            object.csvId=csvMap.get(object.csvId);
+          }
+        } else {
+          chart.editor.editable=false;
+          if(!Array.isArray(chart.editor.conversionRows))
+            chart.editor.conversionRows=[];
         }
-        machine.state = Object.freeze({
+
+        chart.id=candidate.nextId.chart++;
+        validateChartModel(chart,"불러온 슬롯 차트",candidate.assets.csvFiles);
+        let target=candidate.slots.find(item=>item.id===slot.id);
+        if(Number.isInteger(target.chart))
+          candidate.charts=candidate.charts.filter(item=>item.id!==target.chart);
+        candidate.charts.push(chart);
+        target.chart=chart.id;
+        target.imageId=null;
+        target.contentType="graph";
+        target.content.imageSettings={...DEFAULT_IMAGE_SETTINGS};
+        if(payload.slotCaption!==undefined)
+          target.caption=typeof payload.slotCaption==="string"&&payload.slotCaption
+            ?payload.slotCaption:null;
+
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+        machine.state=Object.freeze({
           ...machine.state,
-          graphObject: "none",
-          graphObjectIndex: null,
+          graphObject:"none",
+          graphObjectIndex:null,
         });
-        payload.chart = chart;
-        payload.createdCsvIds = csvModels.map((csv) => csv.id);
+        payload.chart=getChart(chart.id);
+        payload.createdCsvIds=createdCsvIds;
       }
       function applyGridLayoutChangedAction({ machine, payload }) {
         machine.assertWritable("layout", "GRID_LAYOUT_CHANGED");
@@ -1172,32 +1050,26 @@
           0,
         ) + activeProject.slots.filter((slot) => imageIds.has(slot.imageId)).length;
       }
-      function removeProjectAssetReferences(csvIds, imageIds) {
-        let removedGraphReferenceCount = 0,
-          resetImageSlotCount = 0;
-        activeProject.charts.forEach((chart) => {
-          if (!Array.isArray(chart.editor?.objects)) return;
-          let objects = chart.editor.objects.filter((object) => !csvIds.has(object.csvId));
-          removedGraphReferenceCount += chart.editor.objects.length - objects.length;
-          if (objects.length === chart.editor.objects.length) return;
-          if (!objects.length && chart.editor.editable !== false) {
-            let defaultCsv = activeProject.csvFiles.find((csv) => csv.isDefaultEmpty === true);
-            if (defaultCsv) {
-              let selection = graphDataSelection(defaultCsv.rows, defaultCsv.headerLines, chart.editor);
-              objects = [{ ...baseGraphObject(chart, defaultCsv), ...selection }];
-            }
+      function removeProjectAssetReferences(csvIds, imageIds, state=activeProject._state) {
+        let removedGraphReferenceCount=0, resetImageSlotCount=0;
+        normalizeSlotContents(state.slots);
+        state.charts.forEach(chart=>{
+          if(!Array.isArray(chart.editor?.objects))return;
+          let objects=chart.editor.objects.filter(object=>!csvIds.has(object.csvId));
+          removedGraphReferenceCount+=chart.editor.objects.length-objects.length;
+          if(objects.length===chart.editor.objects.length)return;
+          chart.editor.objects=objects;
+          if(chart.editor.editable!==false){
+            chart.graph.data=traces(chart);
+            chart.graph.layout=layout(chart);
           }
-          chart.editor.objects = objects;
-          if (chart.editor.editable !== false) rebuildEditableGraph(chart);
         });
-        activeProject.slots.forEach((slot) => {
-          if (!imageIds.has(slot.imageId)) return;
-          resetImageSlotCount += 1;
-          slot.imageId = null;
-          slot.chart = null;
-          slot.contentType = "graph";
+        state.slots.forEach(slot=>{
+          if(!imageIds.has(slot.imageId))return;
+          resetImageSlotCount+=1;
+          slot.imageId=null;
         });
-        return { removedGraphReferenceCount, resetImageSlotCount };
+        return {removedGraphReferenceCount,resetImageSlotCount};
       }
       function applyProjectTrashEmptiedAction({ machine, payload }) {
         machine.assertWritable("files", "PROJECT_TRASH_EMPTIED");
@@ -1210,8 +1082,6 @@
           ),
           csvIds = new Set(csvFiles.map((csv) => csv.id)),
           imageIds = new Set(images.map((image) => image.id));
-        if (csvFiles.some((csv) => csv.isDefaultEmpty === true))
-          throw Error("프로젝트 기본 빈 CSV는 휴지통에 있을 수 없습니다.");
         let hasReferences = projectAssetReferenceCount(csvIds, imageIds) > 0;
         if (hasReferences) {
           machine.assertWritable("charts", "PROJECT_TRASH_EMPTIED");
@@ -1233,85 +1103,99 @@
         validateProjectObject(activeProject, { requireSlots: true });
       }
       function applyProjectNodeMovedAction({ machine, payload }) {
-        machine.assertWritable("files", "PROJECT_NODE_MOVED");
-        let match = projectVfs.resolve(payload.path),
-          directory = normalizeProjectPath(payload.directory, { directory: true });
-        if (!match) throw Error("이동할 프로젝트 파일 또는 폴더가 없습니다.");
-        if (!activeProject.fileSystem.directories.includes(directory))
+        machine.assertWritable("files","PROJECT_NODE_MOVED");
+        let liveMatch=projectVfs.resolve(payload.path),
+          directory=normalizeProjectPath(payload.directory,{directory:true});
+        if(!liveMatch) throw Error("이동할 프로젝트 파일 또는 폴더가 없습니다.");
+        if(!activeProject.fileSystem.directories.includes(directory))
           throw Error("대상 폴더가 없습니다.");
-        let source = match.kind === "directory" ? match.path : projectAssetPath(match.asset);
-        if (match.kind === "directory") {
-          if (projectVfs.isFixedDirectory(source))
+
+        let source=liveMatch.kind==="directory"?liveMatch.path:projectAssetPath(liveMatch.asset);
+        if(liveMatch.kind==="directory"){
+          if(projectVfs.isFixedDirectory(source))
             throw Error("기본 프로젝트 폴더는 이동할 수 없습니다.");
-          if (projectPathInDirectory(directory, source))
+          if(projectPathInDirectory(directory,source))
             throw Error("폴더를 자기 자신 또는 하위 폴더로 이동할 수 없습니다.");
         }
-        let movingAssets = match.kind === "directory"
-            ? projectVfs.descendants(source)
-            : [{ kind: match.kind, asset: match.asset }],
-          protectedCsv = movingAssets.find(
-            ({ kind, asset }) => kind === "csv" && asset.isDefaultEmpty === true,
-          );
-        if (protectedCsv) throw Error("프로젝트 기본 빈 CSV는 이동할 수 없습니다.");
-        if (movingAssets.some(({ kind }) => kind === "csv"))
-          machine.assertWritable("data", "PROJECT_NODE_MOVED");
-        if (movingAssets.some(({ kind }) => kind === "image"))
-          machine.assertWritable("images", "PROJECT_NODE_MOVED");
-        let requestedName =
-            payload.name === undefined ? projectPathName(source) : String(payload.name || "").trim(),
-          safeName = projectCsvName(requestedName, ""),
-          destination;
-        if (!safeName || safeName !== requestedName || /[\\/]/.test(requestedName))
+
+        let movingLive=liveMatch.kind==="directory"
+            ?projectVfs.descendants(source)
+            :[{kind:liveMatch.kind,asset:liveMatch.asset}],
+          csvIds=new Set(movingLive.filter(({kind})=>kind==="csv").map(({asset})=>asset.id)),
+          imageIds=new Set(movingLive.filter(({kind})=>kind==="image").map(({asset})=>asset.id));
+
+        if(csvIds.size) machine.assertWritable("data","PROJECT_NODE_MOVED");
+        if(imageIds.size) machine.assertWritable("images","PROJECT_NODE_MOVED");
+
+        let requestedName=payload.name===undefined
+            ?projectPathName(source)
+            :String(payload.name||"").trim(),
+          safeName=projectCsvName(requestedName,"");
+        if(!safeName||safeName!==requestedName||/[\\/]/.test(requestedName))
           throw Error("이동할 항목의 새 이름이 올바르지 않습니다.");
-        destination = normalizeProjectPath(`${directory}/${safeName}`, {
-          directory: match.kind === "directory",
+
+        let destination=normalizeProjectPath(`${directory}/${safeName}`,{
+          directory:liveMatch.kind==="directory",
         });
-        if (destination === source) return;
-        if (projectVfs.exists(destination)) throw Error(`${destination}가 이미 존재합니다.`);
-        let enteringTrash = projectVfs.isTrashed(destination) && !projectVfs.isTrashed(source);
-        if (enteringTrash) {
-          machine.assertWritable("charts", "PROJECT_NODE_MOVED");
-          machine.assertWritable("slots", "PROJECT_NODE_MOVED");
-          machine.assertWritable("editor", "PROJECT_NODE_MOVED");
+        if(destination===source){
+          payload.path=source;
+          payload.trashed=false;
+          return;
         }
-        let rewritePath = (path) =>
-          match.kind === "directory" && projectPathInDirectory(path, source)
-            ? `${destination}${path.slice(source.length)}`
-            : destination;
-        if (match.kind === "directory") {
-          activeProject.fileSystem.directories = activeProject.fileSystem.directories
-            .map((path) => projectPathInDirectory(path, source) ? rewritePath(path) : path)
+
+        let candidate=projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let match=projectVfs.resolve(source,candidate);
+        if(!match) throw Error("이동할 프로젝트 항목을 candidate에서 찾을 수 없습니다.");
+        if(projectVfs.exists(destination,candidate))
+          throw Error(`${destination}가 이미 존재합니다.`);
+
+        let enteringTrash=projectVfs.isTrashed(destination)&&!projectVfs.isTrashed(source);
+        if(enteringTrash){
+          machine.assertWritable("charts","PROJECT_NODE_MOVED");
+          machine.assertWritable("slots","PROJECT_NODE_MOVED");
+          machine.assertWritable("editor","PROJECT_NODE_MOVED");
+        }
+
+        let rewritePath=(path)=>
+          match.kind==="directory"&&projectPathInDirectory(path,source)
+            ?`${destination}${path.slice(source.length)}`
+            :destination;
+
+        if(match.kind==="directory"){
+          candidate.fileSystem.directories=candidate.fileSystem.directories
+            .map(path=>projectPathInDirectory(path,source)?rewritePath(path):path)
             .sort();
-          movingAssets.forEach(({ asset }) => {
-            asset.directory = projectParentPath(rewritePath(projectAssetPath(asset)));
+          projectVfs.descendants(source,candidate).forEach(({asset})=>{
+            let oldPath=projectAssetPath(asset);
+            asset.directory=projectParentPath(rewritePath(oldPath));
           });
         } else {
-          match.asset.directory = directory;
-          match.asset.name = safeName;
+          match.asset.directory=directory;
+          match.asset.name=safeName;
         }
-        if (enteringTrash) {
-          let csvIds = new Set(
-              movingAssets.filter(({ kind }) => kind === "csv").map(({ asset }) => asset.id),
-            ),
-            imageIds = new Set(
-              movingAssets.filter(({ kind }) => kind === "image").map(({ asset }) => asset.id),
-            ),
-            removedReferences = removeProjectAssetReferences(csvIds, imageIds),
-            removedGraphReference = removedReferences.removedGraphReferenceCount > 0,
-            resetImageSlot = removedReferences.resetImageSlotCount > 0;
-          if (machine.state.assetPath && projectVfs.isTrashed(rewritePath(machine.state.assetPath))) {
-            payload.clearAssetSelection = true;
-          }
-          payload.clearGraphSelection = removedGraphReference || resetImageSlot;
-        } else if (machine.state.assetPath && projectPathInDirectory(machine.state.assetPath, source)) {
-          machine.state = Object.freeze({
-            ...machine.state,
-            assetPath: rewritePath(machine.state.assetPath),
-          });
+
+        let removedReferences={removedGraphReferenceCount:0,resetImageSlotCount:0};
+        if(enteringTrash)
+          removedReferences=removeProjectAssetReferences(csvIds,imageIds,candidate);
+
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+
+        let movedSelectionPath=
+          machine.state.assetPath&&projectPathInDirectory(machine.state.assetPath,source)
+            ?rewritePath(machine.state.assetPath):null;
+        if(movedSelectionPath){
+          if(projectVfs.isTrashed(movedSelectionPath))
+            payload.clearAssetSelection=true;
+          else
+            machine.state=Object.freeze({...machine.state,assetPath:movedSelectionPath});
         }
-        validateProjectObject(activeProject, { requireSlots: true });
-        payload.path = destination;
-        payload.trashed = enteringTrash;
+        payload.clearGraphSelection=
+          removedReferences.removedGraphReferenceCount>0||
+          removedReferences.resetImageSlotCount>0;
+        payload.path=destination;
+        payload.trashed=enteringTrash;
       }
       function applyAssetSelectionAction({ machine, payload }) {
         let kind = ["csv", "image", "directory"].includes(payload.kind) ? payload.kind : null,
@@ -1332,9 +1216,8 @@
         return state === payload.overlay ? "none" : payload.overlay;
       }
       function syncGraphWorkspaceState() {
-        let slot = getSelectedSlot();
-        if (!slot) return;
-        if (slot.chart && editing?.id !== slot.chart) activateChartModel(slot.chart);
+        let slot=getSelectedSlot();
+        if(slot?.chart)activateChartModel(slot.chart);
       }
       function exitGraphWorkspaceState({ machine }) {
         machine.state = Object.freeze({
@@ -1362,10 +1245,6 @@
           SLOT_TYPE_CHANGED: {
             action: applySlotTypeAction,
             target: requestedWorkspaceState,
-          },
-          SLOT_CAPTION_MODE_CHANGED: {
-            action: applySlotCaptionModeAction,
-            target: ({ state }) => state,
           },
           CAPTION_TEXT_INPUT: {
             action: applyCaptionTextAction,
@@ -1464,7 +1343,6 @@
           SELECT_SLOT: {
             target: ({ state, payload }) => payload.slotId == null ? state : "none",
           },
-          SLOT_CAPTION_MODE_CHANGED: { target: ({ state }) => state },
           CAPTION_TEXT_INPUT: { target: ({ state }) => state },
           SLOT_CAPTIONS_INSERTED: { target: ({ state }) => state },
           SLOTS_SWAPPED: { target: ({ state }) => state },
@@ -1691,6 +1569,7 @@
         .registerPath("slots", PROJECT_OBJECT_PATHS.slots)
         .registerPath("sequences", PROJECT_OBJECT_PATHS.sequences)
         .registerPath("appearance", PROJECT_OBJECT_PATHS.appearance)
+        .registerPath("export", PROJECT_OBJECT_PATHS.export)
         .register("ui", {
           read: (project) => ({
             selectedSlotId,
@@ -1895,11 +1774,6 @@
             kind: "fsm-asset-path-out-of-sync",
             selection: appFSM.state.assetSelection,
             path: appFSM.state.assetPath,
-          });
-        if (typeof activeProject.slotCaptionsEnabled !== "boolean")
-          issues.push({
-            kind: "invalid-slot-caption-mode",
-            value: activeProject.slotCaptionsEnabled,
           });
         if (typeof activeProject.captionAfterText !== "string")
           issues.push({
@@ -2171,77 +2045,39 @@
           col,
           rowSpan: 1,
           colSpan: 1,
+          hidden: false,
           content: {
             chart: null,
             imageId: null,
             contentType: "graph",
-            caption: null,
+            imageSettings: { ...DEFAULT_IMAGE_SETTINGS },
           },
+          caption: null,
         });
       }
       function rebuildGridSlots(r, c) {
-        let old = activeProject.slots
-          .filter((s) => !s.hidden)
-          .map((s) => ({
-            row: s.row,
-            col: s.col,
-            rowSpan: s.rowSpan || 1,
-            colSpan: s.colSpan || 1,
-            content: {
-              ...projectClone(s.content),
-              chart:
-                s.chart && activeProject.charts.some((chart) => chart.id === s.chart)
-                  ? s.chart
-                  : null,
-              imageId: getProjectImage(s.imageId) ? s.imageId : null,
-              contentType: s.contentType || "graph",
-              caption: typeof s.caption === "string" ? s.caption : null,
-            },
-          }));
-        let occupied = old.filter((s) => s.content.chart || s.content.imageId),
-          preserveCoordinates = occupied.every(
-            (s) =>
-              s.row >= 1 &&
-              s.col >= 1 &&
-              s.row + s.rowSpan - 1 <= r &&
-              s.col + s.colSpan - 1 <= c,
-          );
-        activeProject.gridRows = r;
-        activeProject.gridCols = c;
-        activeProject.slots = [];
-        for (let i = 0; i < r * c; i++)
-          activeProject.slots.push(newGridSlot(i, Math.floor(i / c) + 1, (i % c) + 1));
-        if (preserveCoordinates) {
-          occupied.forEach((source) => {
-            let target = activeProject.slots.find(
-              (slot) => slot.row === source.row && slot.col === source.col,
-            );
-            Object.assign(target, source, { id: target.id });
-            for (let row = source.row; row < source.row + source.rowSpan; row++)
-              for (let col = source.col; col < source.col + source.colSpan; col++) {
-                if (row === source.row && col === source.col) continue;
-                let covered = activeProject.slots.find((slot) => slot.row === row && slot.col === col);
-                if (covered) covered.hidden = true;
-              }
-          });
-        } else
-          activeProject.slots.forEach((slot, i) => {
-            let source = old[i];
-            if (!source) return;
-            Object.assign(slot, source, {
-              id: slot.id,
-              row: slot.row,
-              col: slot.col,
-              rowSpan: 1,
-              colSpan: 1,
-            });
-          });
-        activeProject.slots.filter((s) => !s.hidden).forEach((s) => {
-          if (slotImage(s)) normalizeImageSettings(slotImage(s));
-          let chart = s.chart && getChart(s.chart);
-        });
-        if (activeProject.slotCaptionsEnabled) initializeSlotCaptions();
-        selectedSlotId = null;
+        let rows=Number(r), cols=Number(c);
+        if(!Number.isInteger(rows)||!Number.isInteger(cols)||rows<1||rows>8||cols<1||cols>8)
+          throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
+        let candidate=projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let removed=candidate.slots.filter(slot=>slot.row>rows||slot.col>cols);
+        if(removed.some(slot=>slot.hidden||slot.rowSpan!==1||slot.colSpan!==1||slotHasNonDefaultLocalState(slot)))
+          throw Error("내용이나 병합 상태가 있는 영역은 그리드 축소로 제거할 수 없습니다.");
+        let retained=candidate.slots.filter(slot=>slot.row<=rows&&slot.col<=cols);
+        if(retained.filter(slot=>!slot.hidden).some(slot=>
+          slot.row+slot.rowSpan-1>rows||slot.col+slot.colSpan-1>cols))
+          throw Error("병합된 슬롯을 가로지르도록 그리드를 축소할 수 없습니다.");
+        candidate.layout.gridRows=rows; candidate.layout.gridCols=cols; candidate.slots=retained;
+        let occupied=new Set(candidate.slots.map(slot=>`${slot.row}:${slot.col}`)),
+          nextId=Math.max(-1,...candidate.slots.map(slot=>slot.id))+1;
+        for(let row=1;row<=rows;row++) for(let col=1;col<=cols;col++){
+          let key=`${row}:${col}`; if(occupied.has(key))continue;
+          candidate.slots.push(newGridSlot(nextId++,row,col)); occupied.add(key);
+        }
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+        if(selectedSlotId!==null&&!slotAt(selectedSlotId)) selectedSlotId=null;
         renderDashboard();
       }
       function makeSlots(r = activeProject.gridRows, c = activeProject.gridCols) {
@@ -2322,7 +2158,7 @@
       function releaseProjectImageDisplayUrls(collection) {
         (Array.isArray(collection) ? collection : []).forEach(releaseProjectImageDisplayUrl);
       }
-      function buildProjectImageModel(bytes, name, mime, id, settings = null) {
+      function buildProjectImageModel(bytes, name, mime, id) {
         let model = {
           id,
           name: projectCsvName(name, "image.bin"),
@@ -2330,23 +2166,17 @@
           mime: typeof mime === "string" && mime ? mime : "application/octet-stream",
           bytesBase64:
             typeof bytes === "string" ? bytes : ffpxBytesToBase64(bytes || new Uint8Array()),
-          settings:
-            settings && typeof settings === "object"
-              ? projectClone(settings)
-              : { fit: "contain", scale: 100, x: 50, y: 50 },
         };
         projectVfs.assignUniqueLocation(model, PROJECT_ASSET_DIRECTORIES.image);
         if (!model.bytesBase64) throw Error("이미지 데이터가 비어 있습니다.");
-        normalizeImageSettings(model);
         return model;
       }
-      function createProjectImage(bytes, name, mime, id = null, settings = null, path = null) {
+      function createProjectImage(bytes, name, mime, id = null, path = null) {
         let model = buildProjectImageModel(
           bytes,
           name,
           mime,
           Number.isInteger(id) && id > 0 ? id : activeProject.imageId,
-          settings,
         );
         if (path) projectVfs.assignLocation(model, path);
         appFSM.send("IMAGE_OBJECT_CREATED", {
@@ -2374,6 +2204,7 @@
         bytesBase64 = "",
         mime = "text/csv",
         headerLines = 1,
+        state = activeProject._state,
       ) {
         let model = {
           id,
@@ -2389,7 +2220,7 @@
           mime: typeof mime === "string" && mime ? mime : "text/csv",
           headerLines: headerLineCount(headerLines, data),
         };
-        projectVfs.assignUniqueLocation(model, PROJECT_ASSET_DIRECTORIES.csv);
+        projectVfs.assignUniqueLocation(model, PROJECT_ASSET_DIRECTORIES.csv, state);
         return model;
       }
       function createProjectCsv(
@@ -2425,63 +2256,9 @@
         if (!csv) throw Error(`${label}가 참조하는 프로젝트 CSV가 없습니다.`);
         return csv;
       }
-      function defaultCsvModel(id = null) {
-        let rows = [
-            ["X", "Y"],
-            ["", ""],
-          ];
-        let model = {
-          id,
-          name: "빈 CSV.csv",
-          directory: PROJECT_ASSET_DIRECTORIES.csv,
-          rows,
-          bytesBase64: ffpxBytesToBase64(
-            new TextEncoder().encode(ffpxCsv(rows)),
-          ),
-          mime: "text/csv",
-          headerLines: 1,
-          isDefaultEmpty: true,
-        };
-        return model;
-      }
-      function ensureDefaultCsv() {
-        let csv = activeProject.csvFiles.find((item) => item.isDefaultEmpty === true);
-        if (csv) return csv;
-        let model = defaultCsvModel();
-        csv = createProjectCsv(
-          model.rows,
-          model.name,
-          model.id,
-          model.bytesBase64,
-          model.mime,
-          model.headerLines,
-        );
-        csv.isDefaultEmpty = model.isDefaultEmpty;
-        return csv;
-      }
-      function reuseImportedDefaultCsv(
-        csvList,
-        chartList,
-        defaultCsv,
-        defaultReferenceId = defaultCsv.id,
-      ) {
-        let reusedIds = new Set(
-          csvList
-            .filter(
-              (csv) =>
-                csv.name === defaultCsv.name &&
-                csv.bytesBase64 === defaultCsv.bytesBase64,
-            )
-            .map((csv) => csv.id),
-        );
-        if (!reusedIds.size) return csvList;
-        for (let chart of chartList) {
-          for (let object of chart?.editor?.objects || []) {
-            if (reusedIds.has(object.csvId)) object.csvId = defaultReferenceId;
-          }
-        }
-        return csvList.filter((csv) => !reusedIds.has(csv.id));
-      }
+
+
+
       function chartCsvIds(chart) {
         return [
           ...new Set(
@@ -2658,45 +2435,21 @@
           return model;
         },
       });
-      function projectAssetImportCollisionModel(file, directory, reservedPaths = null) {
-        let kind = slotFileKind(file),
-          assetKind = kind === "data" ? "csv" : kind === "image" ? "image" : null;
-        if (!assetKind) throw Error(`${file?.name || "파일"}: 지원하지 않는 파일 형식입니다.`);
-        let parent = normalizeProjectPath(directory, { directory: true }),
-          name = projectCsvName(file.name, assetKind === "csv" ? "data.csv" : "image.bin"),
-          path = normalizeProjectPath(`${parent}/${name}`),
-          collision = projectVfs.resolve(path),
-          reserved = reservedPaths?.has(path) === true,
-          replaceId =
-            collision?.kind === assetKind && collision.asset.isDefaultEmpty !== true
-              ? collision.asset.id
-              : null,
-          mode = !collision && !reserved
-            ? "available"
-            : Number.isInteger(replaceId)
-              ? "replace-or-rename"
-              : "rename-only",
-          message =
-            mode === "replace-or-rename"
-              ? `${path}에 같은 이름의 파일이 이미 있습니다.\n\n` +
-                "[확인] 기존 파일을 교체하고 참조를 유지합니다.\n" +
-                "[취소] 이름을 바꿔 새 파일로 추가합니다."
-              : "",
-          notice = collision && mode === "rename-only"
-            ? collision.asset?.isDefaultEmpty === true
-              ? `${path}는 프로젝트 기본 CSV이므로 교체할 수 없습니다. 이름을 바꿔 추가합니다.`
-              : `${path}의 기존 항목은 종류가 달라 참조를 유지한 채 교체할 수 없습니다. 이름을 바꿔 추가합니다.`
-            : "";
-        return Object.freeze({
-          assetKind,
-          parent,
-          name,
-          path,
-          mode,
-          replaceId,
-          message,
-          notice,
-        });
+      function projectAssetImportCollisionModel(file,directory,reservedPaths=null) {
+        let kind=slotFileKind(file),
+          assetKind=kind==="data"?"csv":kind==="image"?"image":null;
+        if(!assetKind)throw Error(`${file?.name||"파일"}: 지원하지 않는 파일 형식입니다.`);
+        let parent=normalizeProjectPath(directory,{directory:true}),
+          name=projectCsvName(file.name,assetKind==="csv"?"data.csv":"image.bin"),
+          path=normalizeProjectPath(`${parent}/${name}`),
+          collision=projectVfs.resolve(path),reserved=reservedPaths?.has(path)===true,
+          replaceId=collision?.kind===assetKind?collision.asset.id:null,
+          mode=!collision&&!reserved?"available":Number.isInteger(replaceId)?"replace-or-rename":"rename-only",
+          message=mode==="replace-or-rename"
+            ?`${path}에 같은 이름의 파일이 이미 있습니다.\n\n[확인] 기존 파일을 교체하고 참조를 유지합니다.\n[취소] 이름을 바꿔 새 파일로 추가합니다.`:"",
+          notice=collision&&mode==="rename-only"
+            ?`${path}의 기존 항목은 종류가 달라 참조를 유지한 채 교체할 수 없습니다. 이름을 바꿔 추가합니다.`:"";
+        return Object.freeze({assetKind,parent,name,path,mode,replaceId,message,notice});
       }
       function resolveProjectAssetImportPlan(model, choice = "rename", reservedPaths = null) {
         if (!model || typeof model !== "object")
@@ -2972,7 +2725,6 @@
           activeProject.charts.push(chart);
           slot.chart = chart.id;
         }
-        editing = chart;
         return chart;
       }
       function connectDataToSlot(
@@ -3307,23 +3059,24 @@
         let slot = selectedSlotId === null ? null : slotAt(selectedSlotId);
         return slot && !slot.hidden ? slot : null;
       }
-      function normalizeImageSettings(image) {
-        if (!image) return null;
-        image.settings = readImageSettings(image);
-        return image.settings;
+      function normalizeImageSettings(slot) {
+        if (!slot) return null;
+        normalizeSlotContent(slot);
+        slot.content.imageSettings = readImageSettings(slot.content.imageSettings);
+        return slot.content.imageSettings;
       }
-      function readImageSettings(image) {
-        if (!image) return null;
-        let settings = image.settings && typeof image.settings === "object" ? image.settings : {},
-          fit = ["contain", "cover", "manual"].includes(settings.fit) ? settings.fit : "contain",
+      function readImageSettings(settings) {
+        let source = settings && typeof settings === "object" && !Array.isArray(settings)
+            ? settings
+            : {},
+          fit = ["contain", "cover", "manual"].includes(source.fit) ? source.fit : "contain",
           number = (value, fallback, min, max) =>
             Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : fallback));
         return {
-          ...settings,
           fit,
-          scale: number(settings.scale, 100, 1, 1000),
-          x: number(settings.x, 50, -100, 200),
-          y: number(settings.y, 50, -100, 200),
+          scale: number(source.scale, 100, 1, 1000),
+          x: number(source.x, 50, -100, 200),
+          y: number(source.y, 50, -100, 200),
         };
       }
       function updateFileAvailability() {
@@ -3520,22 +3273,15 @@
         let index = orderedVisibleSlots(project).findIndex((item) => item.id === slot?.id);
         return slotIdentifier(Math.max(0, index), project);
       }
-      function initializeSlotCaption(slot) {
-        if (slot && slot.caption == null) slot.caption = "슬롯 캡션";
-        return slot?.caption ?? "";
-      }
-      function initializeSlotCaptions(project = activeProject) {
-        orderedVisibleSlots(project).forEach(initializeSlotCaption);
-      }
+
+
       function normalizeLegacySlotCaptionDefaults(project = activeProject) {
         orderedVisibleSlots(project).forEach((slot) => {
           if (slot.caption === `${slotLabel(slot, project)} 슬롯 캡션`)
             slot.caption = "슬롯 캡션";
         });
       }
-      function activeSlotCaptionTarget() {
-        return activeProject.slotCaptionsEnabled ? getSelectedSlot() : null;
-      }
+
       function slotCaptionSections() {
         let groups = [],
           current = null;
@@ -3563,24 +3309,11 @@
           };
         });
       }
-      function activeCaptionView(caption = projectObjects.read("captions")) {
-        let slot = activeSlotCaptionTarget(),
-          label = slot && activeProject.labelsEnabled ? `(${slotLabel(slot)})` : "",
-          text = slot ? slot.caption ?? "슬롯 캡션" : caption.text;
+      function activeCaptionView(caption=projectObjects.read("captions")) {
         return {
-          enabled: caption.enabled,
-          text,
-          afterText: "",
-          sections: [],
-          aggregate: false,
-          editable: true,
-          label,
-          name: slot ? "" : caption.name,
-          nameBold: slot ? false : caption.nameBold,
-          settings: caption.settings,
-          slot,
-          slotMode: caption.slotMode,
-          exportText: [label, text].filter(Boolean).join(" "),
+          enabled:caption.enabled,text:caption.text,afterText:caption.afterText,
+          sections:[],aggregate:false,label:"",name:caption.name,nameBold:caption.nameBold,
+          settings:caption.settings,slot:null,exportText:caption.text,
         };
       }
       function labelStyle() {
@@ -3679,7 +3412,7 @@
         visibleSlots.forEach((s, visibleIndex) => {
           let c = s.chart && getChart(s.chart),
             image = slotImage(s),
-            imageSettings = normalizeImageSettings(image),
+            imageSettings = normalizeImageSettings(s),
             el = document.createElement("section");
           el.className =
             "slot" +
@@ -3778,7 +3511,6 @@
                       if (axisChanged(plotlyAxis)) copyRange(plotlyAxis, key);
                     });
                     c.editor.globalSettings = settings;
-                    if (editing?.id === c.id) editing = c;
                     debugLog("plotly:range-sync", { chartId: c.id, event, all, settings });
                   });
                 plot.on("plotly_relayout", (event) => {
@@ -3816,122 +3548,67 @@
         syncDashboardCaption();
       }
       function activateChartModel(id) {
-        let chart = getChart(id);
-        if (!chart) {
-          debugLog("chart:activate-missing", { chartId: id });
-          return null;
-        }
-        let csv =
-          getProjectCsv(chart.editor?.objects?.[0]?.csvId) ||
-          (chart.editor?.editable === false ? ensureDefaultCsv() : null);
-        if (!csv) throw Error("차트가 참조하는 프로젝트 CSV가 없습니다.");
-        editing = chart;
-        debugLog("chart:activate", {
-          chartId: id,
-          sourceName: csv.name,
-        });
+        let chart=getChart(id);
+        if(!chart){debugLog("chart:activate-missing",{chartId:id});return null;}
+        if(chart.editor?.editable!==false)
+          for(let object of chart.editor?.objects||[])
+            if(!getProjectCsv(object.csvId))
+              throw Error("차트가 참조하는 프로젝트 CSV가 없습니다.");
+        debugLog("chart:activate",{chartId:id});
         return chart;
       }
-      function mergeSlots(slotIds = []) {
-        let selected = [
-          ...new Set(
-            (Array.isArray(slotIds) ? slotIds : []).filter(Number.isInteger),
-          ),
-        ]
-          .map(slotAt)
-          .filter((slot) => slot && !slot.hidden);
-        if (selected.length < 2) return status("합칠 슬롯을 둘 이상 선택하세요.");
-        let top = Math.min(...selected.map((s) => s.row)),
-          left = Math.min(...selected.map((s) => s.col)),
-          bottom = Math.max(...selected.map((s) => s.row + s.rowSpan - 1)),
-          right = Math.max(...selected.map((s) => s.col + s.colSpan - 1)),
-          covered = new Set();
-        selected.forEach((s) => {
-          for (let row = s.row; row < s.row + s.rowSpan; row++)
-            for (let col = s.col; col < s.col + s.colSpan; col++) covered.add(`${row}:${col}`);
-        });
-        let area = (bottom - top + 1) * (right - left + 1);
-        if (covered.size !== area)
+      function mergeSlots(slotIds=[]) {
+        let selectedIds=[...new Set((Array.isArray(slotIds)?slotIds:[]).filter(Number.isInteger))],
+          selected=selectedIds.map(slotAt).filter(slot=>slot&&!slot.hidden);
+        if(selected.length!==selectedIds.length||selected.length<2)
+          return status("합칠 슬롯을 둘 이상 선택하세요.");
+        let top=Math.min(...selected.map(s=>s.row)),left=Math.min(...selected.map(s=>s.col)),
+          bottom=Math.max(...selected.map(s=>s.row+s.rowSpan-1)),
+          right=Math.max(...selected.map(s=>s.col+s.colSpan-1)),
+          selectedCells=new Set();
+        selected.forEach(s=>{for(let row=s.row;row<s.row+s.rowSpan;row++)for(let col=s.col;col<s.col+s.colSpan;col++)selectedCells.add(`${row}:${col}`)});
+        if(selectedCells.size!==(bottom-top+1)*(right-left+1))
           return status("선택한 슬롯의 전체 영역이 빈칸 없는 직사각형이어야 합니다.");
-        let cells = activeProject.slots.filter(
-          (s) => s.row >= top && s.row <= bottom && s.col >= left && s.col <= right,
-        );
-        if (cells.length !== area) return status("선택 영역을 확인할 수 없습니다.");
-        let occupied = selected.filter((s) => s.chart || s.imageId);
-        if (occupied.length > 1)
-          return status("콘텐츠가 두 개 이상 있는 슬롯은 합칠 수 없습니다.");
-        let anchor = cells.find((s) => s.row === top && s.col === left),
-          source = occupied[0] || null,
-          sourceContent = null;
-        if (source && source !== anchor) {
-          sourceContent = {};
-          ["chart", "imageId", "contentType"].forEach(
-            (key) => (sourceContent[key] = source[key]),
-          );
-        }
-        cells.forEach((s) => {
-          s.hidden = false;
-          s.rowSpan = 1;
-          s.colSpan = 1;
-          if (s !== anchor) {
-            s.chart = null;
-            s.imageId = null;
-          }
+        let candidate=projectClone(activeProject._state);normalizeSlotContents(candidate.slots);
+        let cells=candidate.slots.filter(s=>s.row>=top&&s.row<=bottom&&s.col>=left&&s.col<=right);
+        if(cells.length!==selectedCells.size)return status("선택 영역을 확인할 수 없습니다.");
+        let nonDefault=cells.filter(slot=>slotHasNonDefaultLocalState(slot));
+        if(nonDefault.length>1)return status("로컬 상태가 두 개 이상 있는 슬롯은 합칠 수 없습니다.");
+        let anchor=cells.find(s=>s.row===top&&s.col===left),
+          source=nonDefault[0]||anchor,local=slotLocalState(source);
+        cells.forEach(cell=>{
+          cell.rowSpan=1;cell.colSpan=1;cell.hidden=cell!==anchor;
+          if(cell!==anchor)resetSlotLocalState(cell);
         });
-        anchor.rowSpan = bottom - top + 1;
-        anchor.colSpan = right - left + 1;
-        if (source) {
-          if (sourceContent) Object.assign(anchor, sourceContent);
-          else anchor.chart = source.chart;
-          if (anchor.chart) {
-            let chart = getChart(anchor.chart);
-          }
-        } else {
-          anchor.chart = null;
-          anchor.imageId = null;
-        }
-        cells.filter((s) => s !== anchor).forEach((s) => (s.hidden = true));
-        if (selectedSlotId !== null && cells.some((s) => s.id === selectedSlotId))
-          selectedSlotId = anchor.id;
-        renderDashboard();
-        status("직사각형 영역의 슬롯을 합쳤습니다.");
-        appFSM.send("SELECT_SLOT", {
-          slotId: selectedSlotId,
-          reason: "slots-merged",
-          direction: "model-to-fsm",
-        });
-        appFSM.notify("layout", "SLOTS_MERGED");
-        return [];
+        setSlotLocalState(anchor,local);
+        anchor.rowSpan=bottom-top+1;anchor.colSpan=right-left+1;anchor.hidden=false;
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+        if(selectedSlotId!==null&&cells.some(s=>s.id===selectedSlotId))selectedSlotId=anchor.id;
+        renderDashboard();appFSM.notify("layout","SLOTS_MERGED");
+        return [anchor.id];
       }
-      function splitSlots(slotIds = []) {
-        let selected = [
-            ...new Set(
-              (Array.isArray(slotIds) ? slotIds : []).filter(Number.isInteger),
-            ),
-          ]
-          .map(slotAt)
-          .filter((s) => s && !s.hidden && (s.rowSpan > 1 || s.colSpan > 1));
-        if (!selected.length) return status("나눌 합쳐진 슬롯을 선택하세요.");
-        let restored = new Set();
-        selected.forEach((s) => {
-          let endRow = s.row + s.rowSpan,
-            endCol = s.col + s.colSpan;
-          activeProject.slots.forEach((cell) => {
-            if (cell.row >= s.row && cell.row < endRow && cell.col >= s.col && cell.col < endCol) {
-              cell.hidden = false;
-              cell.rowSpan = 1;
-              cell.colSpan = 1;
-              if (cell !== s) {
-                cell.chart = null;
-                cell.imageId = null;
-              }
+      function splitSlots(slotIds=[]) {
+        let ids=[...new Set((Array.isArray(slotIds)?slotIds:[]).filter(Number.isInteger))],
+          selected=ids.map(slotAt).filter(slot=>slot&&!slot.hidden&&(slot.rowSpan>1||slot.colSpan>1));
+        if(!selected.length)return status("나눌 합쳐진 슬롯을 선택하세요.");
+        let candidate=projectClone(activeProject._state);normalizeSlotContents(candidate.slots);
+        let restored=new Set();
+        for(let source of selected){
+          let anchor=candidate.slots.find(slot=>slot.id===source.id),
+            endRow=anchor.row+anchor.rowSpan,endCol=anchor.col+anchor.colSpan,
+            local=slotLocalState(anchor);
+          candidate.slots.forEach(cell=>{
+            if(cell.row>=anchor.row&&cell.row<endRow&&cell.col>=anchor.col&&cell.col<endCol){
+              cell.hidden=false;cell.rowSpan=1;cell.colSpan=1;
+              if(cell.id===anchor.id)setSlotLocalState(cell,local);else resetSlotLocalState(cell);
               restored.add(cell.id);
             }
           });
-        });
-        renderDashboard();
-        status(`${selected.length}개 슬롯을 나눴습니다.`);
-        appFSM.notify("layout", "SLOTS_SPLIT");
+        }
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+        renderDashboard();appFSM.notify("layout","SLOTS_SPLIT");
         return [...restored];
       }
       function createChartModel({ id = null, editor = {}, graph = {} } = {}) {
@@ -3983,8 +3660,6 @@
           !Array.isArray(chart.editor.objects)
         )
           throw Error(`${label} editor.objects가 없습니다.`);
-        if (chart.editor.editable !== false && chart.editor.objects.length === 0)
-          throw Error(`${label}에는 그래프 오브젝트가 하나 이상 필요합니다.`);
         if (
           !chart.graph ||
           typeof chart.graph !== "object" ||
@@ -4158,7 +3833,6 @@
             });
           }
         });
-        if (!rowsOut.length) rowsOut = [{ X: "", Y: "" }];
         let sourceHeaders = [...new Set(rowsOut.flatMap((row) => Object.keys(row || {})))],
           columnMap = Object.fromEntries(
             sourceHeaders.map((header, index) => [header, `C${index + 1}`]),
@@ -4168,7 +3842,7 @@
           x: columnMap[object.x] || object.x,
           y: columnMap[object.y] || object.y,
         }));
-        rowsOut = dataTable(rowsOut);
+        rowsOut = rowsOut.length ? dataTable(rowsOut) : [];
         let layoutIn = figure.layout && typeof figure.layout === "object" ? figure.layout : {},
           chart = createChartModel({
             id,
@@ -4218,84 +3892,109 @@
       function projectClone(value) {
         return JSON.parse(JSON.stringify(value));
       }
+      function slotLocalState(slot) {
+        normalizeSlotContent(slot);
+        return {
+          chart: slot.content.chart,
+          imageId: slot.content.imageId,
+          contentType: slot.content.contentType,
+          imageSettings: readImageSettings(slot.content.imageSettings),
+          caption: typeof slot.caption === "string" ? slot.caption : null,
+        };
+      }
+      function setSlotLocalState(slot, localState) {
+        normalizeSlotContent(slot);
+        let next = localState && typeof localState === "object" ? localState : SLOT_LOCAL_DEFAULTS;
+        slot.content.chart = Number.isInteger(next.chart) ? next.chart : null;
+        slot.content.imageId = Number.isInteger(next.imageId) ? next.imageId : null;
+        slot.content.contentType = next.contentType === "image" ? "image" : "graph";
+        slot.content.imageSettings = readImageSettings(next.imageSettings);
+        slot.caption = typeof next.caption === "string" && next.caption ? next.caption : null;
+        return slot;
+      }
+      function resetSlotLocalState(slot) {
+        return setSlotLocalState(slot, SLOT_LOCAL_DEFAULTS);
+      }
+      function slotHasNonDefaultLocalState(slot) {
+        let local = slotLocalState(slot),
+          defaults = SLOT_LOCAL_DEFAULTS;
+        return (
+          local.chart !== defaults.chart ||
+          local.imageId !== defaults.imageId ||
+          local.contentType !== defaults.contentType ||
+          local.caption !== defaults.caption ||
+          local.imageSettings.fit !== defaults.imageSettings.fit ||
+          local.imageSettings.scale !== defaults.imageSettings.scale ||
+          local.imageSettings.x !== defaults.imageSettings.x ||
+          local.imageSettings.y !== defaults.imageSettings.y
+        );
+      }
       function slotLegacyState(slot) {
-        let state = Object.fromEntries(
-            Object.entries(slot).filter(([key]) => key !== "content"),
-          ),
-          content = slot.content && typeof slot.content === "object" ? slot.content : {};
-        state.chart = content.chart ?? null;
-        state.imageId = content.imageId ?? null;
-        state.contentType = content.contentType === "image" ? "image" : "graph";
-        state.caption = typeof content.caption === "string" ? content.caption : null;
-        return state;
+        let local = slotLocalState(slot);
+        return {
+          ...Object.fromEntries(Object.entries(slot).filter(([key]) => key !== "content")),
+          chart: local.chart,
+          imageId: local.imageId,
+          contentType: local.contentType,
+          imageSettings: projectClone(local.imageSettings),
+          caption: local.caption,
+        };
       }
       function normalizeSlotContent(slot) {
         if (!slot || typeof slot !== "object" || Array.isArray(slot)) return slot;
-        let legacy = {
-            chart: slot.chart ?? null,
-            imageId: slot.imageId ?? null,
-            contentType: slot.contentType === "image" ? "image" : "graph",
-            caption: typeof slot.caption === "string" ? slot.caption : null,
-          },
-          content =
+        let sourceContent =
             slot.content && typeof slot.content === "object" && !Array.isArray(slot.content)
               ? slot.content
-              : {};
-        if (!Object.prototype.hasOwnProperty.call(content, "chart")) content.chart = legacy.chart;
-        if (!Object.prototype.hasOwnProperty.call(content, "imageId"))
-          content.imageId = legacy.imageId;
-        if (!Object.prototype.hasOwnProperty.call(content, "contentType"))
-          content.contentType = legacy.contentType;
-        if (!Object.prototype.hasOwnProperty.call(content, "caption"))
-          content.caption = legacy.caption;
-        slot.content = content;
+              : {},
+          legacyCaption =
+            typeof slot.caption === "string"
+              ? slot.caption
+              : typeof sourceContent.caption === "string"
+                ? sourceContent.caption
+                : null,
+          legacySettings =
+            sourceContent.imageSettings && typeof sourceContent.imageSettings === "object"
+              ? sourceContent.imageSettings
+              : slot.imageSettings && typeof slot.imageSettings === "object"
+                ? slot.imageSettings
+                : DEFAULT_IMAGE_SETTINGS;
+        slot.content = {
+          ...sourceContent,
+          chart: Number.isInteger(sourceContent.chart)
+            ? sourceContent.chart
+            : Number.isInteger(slot.chart) ? slot.chart : null,
+          imageId: Number.isInteger(sourceContent.imageId)
+            ? sourceContent.imageId
+            : Number.isInteger(slot.imageId) ? slot.imageId : null,
+          contentType:
+            (sourceContent.contentType ?? slot.contentType) === "image" ? "image" : "graph",
+          imageSettings: readImageSettings(legacySettings),
+        };
+        delete slot.content.caption;
+        slot.caption = legacyCaption && legacyCaption !== "슬롯 캡션" ? legacyCaption : null;
         Object.defineProperties(slot, {
           chart: {
             configurable: true,
             enumerable: false,
-            get() {
-              return this.content.chart;
-            },
-            set(value) {
-              this.content.chart = value;
-            },
+            get() { return this.content.chart; },
+            set(value) { this.content.chart = value; },
           },
           imageId: {
             configurable: true,
             enumerable: false,
-            get() {
-              return this.content.imageId;
-            },
-            set(value) {
-              this.content.imageId = value;
-            },
+            get() { return this.content.imageId; },
+            set(value) { this.content.imageId = value; },
           },
           contentType: {
             configurable: true,
             enumerable: false,
-            get() {
-              return this.content.contentType;
-            },
-            set(value) {
-              this.content.contentType = value;
-            },
-          },
-          caption: {
-            configurable: true,
-            enumerable: false,
-            get() {
-              return this.content.caption;
-            },
-            set(value) {
-              this.content.caption = value;
-            },
+            get() { return this.content.contentType; },
+            set(value) { this.content.contentType = value; },
           },
           toJSON: {
             configurable: true,
             enumerable: false,
-            value() {
-              return slotLegacyState(this);
-            },
+            value() { return slotLegacyState(this); },
           },
         });
         return slot;
@@ -4309,189 +4008,109 @@
         return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value) : fallback;
       }
       function validateProjectObjectState(state, { requireSlots = false } = {}) {
-        let record = (value) =>
-          !!value && typeof value === "object" && !Array.isArray(value);
-        if (
-          !record(state) ||
-          state.kind !== "fast-figure-project-object" ||
-          !record(state.meta) ||
-          !record(state.layout) ||
-          !record(state.layout.slotStyle) ||
-          !record(state.annotations?.labels) ||
-          !record(state.annotations?.labels?.settings) ||
-          !record(state.annotations?.captions) ||
-          !record(state.annotations?.captions?.settings) ||
-          !record(state.assets) ||
-          !record(state.nextId) ||
-          !record(state.appearance) ||
-          !record(state.appearance.uiPalette)
-        )
+        let record=(value)=>!!value&&typeof value==="object"&&!Array.isArray(value);
+        if(!record(state)||state.kind!=="fast-figure-project-object"||!record(state.meta)||
+          !record(state.layout)||!record(state.layout.slotStyle)||!record(state.annotations?.labels)||
+          !record(state.annotations?.labels?.settings)||!record(state.annotations?.captions)||
+          !record(state.annotations?.captions?.settings)||!record(state.assets)||
+          !record(state.fileSystem)||!record(state.nextId)||!record(state.appearance)||
+          !record(state.appearance.uiPalette)||!record(state.export))
           throw Error("프로젝트 오브젝트 구조가 올바르지 않습니다.");
-        if (
-          typeof state.meta.projectName !== "string" ||
-          typeof state.meta.appBuild !== "string" ||
-          !Number.isInteger(state.layout.gridRows) ||
-          !Number.isInteger(state.layout.gridCols) ||
-          state.layout.gridRows < 1 ||
-          state.layout.gridRows > 8 ||
-          state.layout.gridCols < 1 ||
-          state.layout.gridCols > 8 ||
-          !(
-            state.layout.layoutMapWidth === null ||
-            Number.isFinite(state.layout.layoutMapWidth)
-          ) ||
-          typeof state.annotations.labels.enabled !== "boolean" ||
-          typeof state.annotations.captions.enabled !== "boolean" ||
-          typeof state.annotations.captions.slotMode !== "boolean" ||
-          typeof state.annotations.captions.text !== "string" ||
-          typeof state.annotations.captions.afterText !== "string" ||
-          typeof state.annotations.captions.name !== "string" ||
-          typeof state.annotations.captions.nameBold !== "boolean"
-        )
+        if(typeof state.meta.projectName!=="string"||typeof state.meta.appBuild!=="string"||
+          !Number.isInteger(state.layout.gridRows)||!Number.isInteger(state.layout.gridCols)||
+          state.layout.gridRows<1||state.layout.gridRows>8||state.layout.gridCols<1||state.layout.gridCols>8||
+          typeof state.annotations.labels.enabled!=="boolean"||
+          typeof state.annotations.captions.enabled!=="boolean"||
+          typeof state.annotations.captions.text!=="string"||
+          typeof state.annotations.captions.afterText!=="string"||
+          typeof state.annotations.captions.name!=="string"||
+          typeof state.annotations.captions.nameBold!=="boolean")
           throw Error("프로젝트 메타데이터 또는 레이아웃이 올바르지 않습니다.");
-        let style = state.layout.slotStyle;
-        for (let [key, min, max] of [
-          ["referenceWidth", 100, 20000],
-          ["gap", 0, 2000],
-          ["outerMargin", 0, 5000],
-          ["radius", 0, 2000],
-          ["aspect", 0.1, 10],
-        ]) {
-          if (!Number.isFinite(style[key]) || style[key] < min || style[key] > max)
+        let style=state.layout.slotStyle;
+        for(let [key,min,max] of [["referenceWidth",100,20000],["gap",0,2000],["outerMargin",0,5000],
+          ["radius",0,2000],["aspect",0.1,10]])
+          if(!Number.isFinite(style[key])||style[key]<min||style[key]>max)
             throw Error(`프로젝트 슬롯 스타일 ${key}가 올바르지 않습니다.`);
-        }
-        if (typeof style.showBorders !== "boolean")
-          throw Error("프로젝트 슬롯 외곽선 설정이 올바르지 않습니다.");
-        let labelSettings = state.annotations.labels.settings;
-        if (
-          !Number.isFinite(labelSettings.x) ||
-          !Number.isFinite(labelSettings.y) ||
-          !Number.isFinite(labelSettings.fontSize) ||
-          labelSettings.fontSize < 6
-        )
+        if(typeof style.showBorders!=="boolean")throw Error("프로젝트 슬롯 외곽선 설정이 올바르지 않습니다.");
+        let labelSettings=state.annotations.labels.settings;
+        if(!Number.isFinite(labelSettings.x)||!Number.isFinite(labelSettings.y)||
+          !Number.isFinite(labelSettings.fontSize)||labelSettings.fontSize<6)
           throw Error("프로젝트 레이블 위치 또는 크기가 올바르지 않습니다.");
-        for (let [key, fallback] of Object.entries(DEFAULT_UI_PALETTE))
-          if (projectColor(state.appearance.uiPalette[key], null) === null)
+        let output=state.export, explicit=output.heightMode==="explicit";
+        if(!Number.isFinite(output.width)||output.width<100||output.width>20000||
+          !["auto","explicit"].includes(output.heightMode)||
+          (explicit&&(!Number.isFinite(output.height)||output.height<100||output.height>20000))||
+          !Number.isFinite(output.dpi)||output.dpi<36||output.dpi>1200||
+          !["png","jpeg"].includes(output.format))
+          throw Error("프로젝트 출력 설정이 올바르지 않습니다.");
+        for(let key of Object.keys(DEFAULT_UI_PALETTE))
+          if(projectColor(state.appearance.uiPalette[key],null)===null)
             throw Error(`프로젝트 UI 색상 ${key}가 올바르지 않습니다.`);
-        if (
-          !Array.isArray(state.assets.csvFiles) ||
-          !Array.isArray(state.assets.images) ||
-          !record(state.fileSystem) ||
-          !Array.isArray(state.fileSystem.directories) ||
-          !Array.isArray(state.charts) ||
-          !Array.isArray(state.slots) ||
-          (requireSlots && state.slots.length === 0)
-        )
+        if(!Array.isArray(state.assets.csvFiles)||!Array.isArray(state.assets.images)||
+          !Array.isArray(state.fileSystem.directories)||!Array.isArray(state.charts)||
+          !Array.isArray(state.slots)||(requireSlots&&state.slots.length===0))
           throw Error("프로젝트 자산, 차트 또는 슬롯 목록이 올바르지 않습니다.");
-        let filePaths = new Set(),
-          directoryPaths = new Set();
-        state.fileSystem.directories.forEach((path) => {
-          let normalized = normalizeProjectPath(path, { directory: true });
-          if (normalized === "/" || normalized !== path || directoryPaths.has(path))
+        let filePaths=new Set(),directoryPaths=new Set();
+        state.fileSystem.directories.forEach(path=>{
+          let normalized=normalizeProjectPath(path,{directory:true});
+          if(normalized==="/"||normalized!==path||directoryPaths.has(path))
             throw Error("프로젝트 폴더 경로가 올바르지 않습니다.");
           directoryPaths.add(path);
         });
-        for (let required of ["/assets", "/assets/csv", "/assets/images", "/assets/trash"])
-          if (!directoryPaths.has(required)) throw Error(`프로젝트 기본 폴더 ${required}가 없습니다.`);
-        let csvIds = new Set();
-        state.assets.csvFiles.forEach((csv) => {
-          let path;
-          try {
-            path = projectAssetPath(csv);
-          } catch (_) {
+        for(let required of ["/assets","/assets/csv","/assets/images","/assets/trash"])
+          if(!directoryPaths.has(required))throw Error(`프로젝트 기본 폴더 ${required}가 없습니다.`);
+        let csvIds=new Set();
+        state.assets.csvFiles.forEach(csv=>{
+          let path;try{path=projectAssetPath(csv)}catch(_){throw Error("프로젝트 CSV 오브젝트가 올바르지 않습니다.")}
+          if(!record(csv)||!Number.isInteger(csv.id)||csv.id<1||csvIds.has(csv.id)||
+            typeof csv.name!=="string"||typeof csv.directory!=="string"||!Array.isArray(csv.rows)||
+            typeof csv.bytesBase64!=="string"||!csv.bytesBase64||
+            normalizeProjectPath(csv.directory,{directory:true})!==csv.directory||
+            filePaths.has(path)||!directoryPaths.has(csv.directory))
             throw Error("프로젝트 CSV 오브젝트가 올바르지 않습니다.");
-          }
-          if (
-            !record(csv) ||
-            !Number.isInteger(csv.id) ||
-            csv.id < 1 ||
-            csvIds.has(csv.id) ||
-            Object.prototype.hasOwnProperty.call(csv, "path") ||
-            typeof csv.name !== "string" ||
-            typeof csv.directory !== "string" ||
-            !Array.isArray(csv.rows) ||
-            typeof csv.bytesBase64 !== "string" ||
-            !csv.bytesBase64 ||
-            normalizeProjectPath(csv.directory, { directory: true }) !== csv.directory ||
-            filePaths.has(path) ||
-            !directoryPaths.has(csv.directory)
-          )
-            throw Error("프로젝트 CSV 오브젝트가 올바르지 않습니다.");
-          csvIds.add(csv.id);
-          filePaths.add(path);
+          csvIds.add(csv.id);filePaths.add(path);
         });
-        let imageIds = new Set();
-        state.assets.images.forEach((image) => {
-          let path;
-          try {
-            path = projectAssetPath(image);
-          } catch (_) {
+        let imageIds=new Set();
+        state.assets.images.forEach(image=>{
+          let path;try{path=projectAssetPath(image)}catch(_){throw Error("프로젝트 이미지 오브젝트가 올바르지 않습니다.")}
+          if(!record(image)||!Number.isInteger(image.id)||image.id<1||imageIds.has(image.id)||
+            typeof image.name!=="string"||typeof image.directory!=="string"||
+            typeof image.bytesBase64!=="string"||!image.bytesBase64||
+            normalizeProjectPath(image.directory,{directory:true})!==image.directory||
+            filePaths.has(path)||!directoryPaths.has(image.directory))
             throw Error("프로젝트 이미지 오브젝트가 올바르지 않습니다.");
-          }
-          if (
-            !record(image) ||
-            !Number.isInteger(image.id) ||
-            image.id < 1 ||
-            imageIds.has(image.id) ||
-            Object.prototype.hasOwnProperty.call(image, "path") ||
-            typeof image.name !== "string" ||
-            typeof image.directory !== "string" ||
-            typeof image.bytesBase64 !== "string" ||
-            !image.bytesBase64 ||
-            !record(image.settings) ||
-            normalizeProjectPath(image.directory, { directory: true }) !== image.directory ||
-            filePaths.has(path) ||
-            !directoryPaths.has(image.directory)
-          )
-            throw Error("프로젝트 이미지 오브젝트가 올바르지 않습니다.");
-          imageIds.add(image.id);
-          filePaths.add(path);
+          imageIds.add(image.id);filePaths.add(path);
         });
-        let chartIds = new Set();
-        state.charts.forEach((chart, index) => {
-          if (!Number.isInteger(chart?.id) || chart.id < 1 || chartIds.has(chart.id))
+        let chartIds=new Set();
+        state.charts.forEach((chart,index)=>{
+          if(!Number.isInteger(chart?.id)||chart.id<1||chartIds.has(chart.id))
             throw Error("프로젝트 차트 ID가 올바르지 않습니다.");
-          chartIds.add(chart.id);
-          validateChartModel(
-            chart,
-            `프로젝트 차트 ${index + 1}`,
-            state.assets.csvFiles,
-          );
+          chartIds.add(chart.id);validateChartModel(chart,`프로젝트 차트 ${index+1}`,state.assets.csvFiles);
         });
-        let slotIds = new Set();
-        state.slots.forEach((slot) => {
-          if (
-            !record(slot) ||
-            !Number.isInteger(slot.id) ||
-            slotIds.has(slot.id) ||
-            !Number.isInteger(slot.row) ||
-            !Number.isInteger(slot.col) ||
-            !Number.isInteger(slot.rowSpan) ||
-            !Number.isInteger(slot.colSpan) ||
-            slot.row < 1 ||
-            slot.col < 1 ||
-            slot.rowSpan < 1 ||
-            slot.colSpan < 1 ||
-            slot.row + slot.rowSpan - 1 > state.layout.gridRows ||
-            slot.col + slot.colSpan - 1 > state.layout.gridCols ||
-            !["graph", "image"].includes(slot.contentType) ||
-            (slot.chart != null && slot.imageId != null) ||
-            (slot.chart != null && !chartIds.has(slot.chart)) ||
-            (slot.imageId != null && !imageIds.has(slot.imageId))
-          )
+        normalizeSlotContents(state.slots);
+        let slotIds=new Set(),owners=new Map([...chartIds].map(id=>[id,0]));
+        state.slots.forEach(slot=>{
+          if(!record(slot)||!Number.isInteger(slot.id)||slotIds.has(slot.id)||
+            !Number.isInteger(slot.row)||!Number.isInteger(slot.col)||
+            !Number.isInteger(slot.rowSpan)||!Number.isInteger(slot.colSpan)||
+            slot.row<1||slot.col<1||slot.rowSpan<1||slot.colSpan<1||
+            slot.row+slot.rowSpan-1>state.layout.gridRows||
+            slot.col+slot.colSpan-1>state.layout.gridCols||
+            !["graph","image"].includes(slot.contentType)||
+            (slot.chart!=null&&slot.imageId!=null)||
+            (slot.chart!=null&&!chartIds.has(slot.chart))||
+            (slot.imageId!=null&&!imageIds.has(slot.imageId))||
+            !(slot.caption===null||typeof slot.caption==="string"))
             throw Error("프로젝트 슬롯 오브젝트가 올바르지 않습니다.");
+          slot.content.imageSettings=readImageSettings(slot.content.imageSettings);
+          if(slot.chart!=null)owners.set(slot.chart,owners.get(slot.chart)+1);
           slotIds.add(slot.id);
         });
-        let maximums = {
-          csv: Math.max(0, ...csvIds),
-          image: Math.max(0, ...imageIds),
-          chart: Math.max(0, ...chartIds),
-        };
-        for (let key of ["csv", "image", "chart"])
-          if (
-            !Number.isInteger(state.nextId[key]) ||
-            state.nextId[key] <= maximums[key]
-          )
+        for(let [chartId,count] of owners)
+          if(count!==1)throw Error(`프로젝트 차트 ${chartId}의 슬롯 소유권이 올바르지 않습니다.`);
+        let maximums={csv:Math.max(0,...csvIds),image:Math.max(0,...imageIds),chart:Math.max(0,...chartIds)};
+        for(let key of ["csv","image","chart"])
+          if(!Number.isInteger(state.nextId[key])||state.nextId[key]<=maximums[key])
             throw Error(`프로젝트 ${key} ID 시퀀스가 올바르지 않습니다.`);
         return state;
       }
@@ -4551,7 +4170,7 @@
           )
             throw Error("프로젝트 이미지 데이터가 올바르지 않습니다.");
           ids.add(source.id);
-          let image = {
+          nextImages.push({
             id: source.id,
             name: projectCsvName(source.name, "image.bin"),
             directory: typeof source.directory === "string" ? source.directory : null,
@@ -4560,13 +4179,7 @@
                 ? source.mime
                 : "application/octet-stream",
             bytesBase64: source.bytesBase64,
-            settings:
-              source.settings && typeof source.settings === "object"
-                ? projectClone(source.settings)
-                : {},
-          };
-          normalizeImageSettings(image);
-          nextImages.push(image);
+          });
         });
         return {
           images: nextImages,
@@ -4581,218 +4194,105 @@
         let number = Number(value);
         return Number.isFinite(number) ? number : fallback;
       }
-      function buildProjectObject(payload, fileName) {
-        if (
-          payload?.schema !== "fast-figure-project" ||
-          payload.version !== PACKAGE_FORMAT_VERSION
-        )
+      function buildProjectObject(payload,fileName) {
+        if(payload?.schema!=="fast-figure-project"||payload.version!==PACKAGE_FORMAT_VERSION)
           throw Error("지원하지 않는 FFPX 프로젝트 형식입니다.");
-        let candidate = new ProjectObject();
-        candidate.projectName =
-          typeof payload.projectName === "string" ? payload.projectName.trim().slice(0, 120) : "";
-        if (!candidate.projectName)
-          candidate.projectName = String(fileName || "")
-            .replace(/\.[^.]+$/, "")
-            .trim()
-            .slice(0, 120);
-        let importedRows = Number(payload.gridRows),
-          importedCols = Number(payload.gridCols);
-        if (
-          !Number.isInteger(importedRows) ||
-          !Number.isInteger(importedCols) ||
-          importedRows < 1 ||
-          importedRows > 8 ||
-          importedCols < 1 ||
-          importedCols > 8
-        )
+        let candidate=new ProjectObject();
+        candidate.projectName=typeof payload.projectName==="string"?payload.projectName.trim().slice(0,120):"";
+        if(!candidate.projectName)
+          candidate.projectName=String(fileName||"").replace(/\.[^.]+$/,"").trim().slice(0,120);
+        let rows=Number(payload.gridRows),cols=Number(payload.gridCols);
+        if(!Number.isInteger(rows)||!Number.isInteger(cols)||rows<1||rows>8||cols<1||cols>8)
           throw Error("프로젝트의 행 또는 열 값이 올바르지 않습니다.");
-        if (!Array.isArray(payload.charts) || !Array.isArray(payload.slots))
+        if(!Array.isArray(payload.charts)||!Array.isArray(payload.slots))
           throw Error("프로젝트의 charts 또는 slots 배열이 없습니다.");
-        let nextCharts = projectClone(payload.charts),
-          csvState = importedProjectCsvState(payload),
-          imageState = importedProjectImageState(payload),
-          chartIds = new Set();
-        let defaultCsv = defaultCsvModel(csvState.csvId++);
-        csvState.csvFiles = [
-          ...reuseImportedDefaultCsv(csvState.csvFiles, nextCharts, defaultCsv),
-          defaultCsv,
-        ];
-        nextCharts.forEach((chart, index) => {
-          validateChartModel(chart, `프로젝트 차트 ${index + 1}`, csvState.csvFiles);
-          if (!Number.isInteger(chart.id) || chartIds.has(chart.id))
-            throw Error("프로젝트 차트 ID가 올바르지 않습니다.");
-          chartIds.add(chart.id);
-          normalizeGlobalSettings(chart, true);
+        let csvState=importedProjectCsvState(payload),imageState=importedProjectImageState(payload),
+          charts=projectClone(payload.charts),chartIds=new Set();
+        charts.forEach((chart,index)=>{
+          validateChartModel(chart,`프로젝트 차트 ${index+1}`,csvState.csvFiles);
+          if(!Number.isInteger(chart.id)||chartIds.has(chart.id))throw Error("프로젝트 차트 ID가 올바르지 않습니다.");
+          chartIds.add(chart.id);normalizeGlobalSettings(chart,true);
         });
-        let slotIds = new Set(),
-          nextSlots = projectClone(payload.slots).map((slot) => {
-            if (
-              !slot ||
-              typeof slot !== "object" ||
-              !Number.isInteger(slot.id) ||
-              slotIds.has(slot.id)
-            )
-              throw Error("프로젝트 슬롯 데이터가 올바르지 않습니다.");
-            slotIds.add(slot.id);
-            let slotState = { ...slot };
-            delete slotState.offsetX;
-            delete slotState.offsetY;
-            let row = Number(slot.row),
-              col = Number(slot.col),
-              rowSpan = Number(slot.rowSpan ?? 1),
-              colSpan = Number(slot.colSpan ?? 1);
-            if (
-              !Number.isInteger(row) ||
-              !Number.isInteger(col) ||
-              !Number.isInteger(rowSpan) ||
-              !Number.isInteger(colSpan) ||
-              row < 1 ||
-              col < 1 ||
-              rowSpan < 1 ||
-              colSpan < 1 ||
-              row + rowSpan - 1 > importedRows ||
-              col + colSpan - 1 > importedCols
-            )
-              throw Error("프로젝트 슬롯 위치가 올바르지 않습니다.");
-            let linkedImageId = getProjectImage(slot.imageId, imageState.images)?.id ?? null;
-            if (slot.imageId != null && linkedImageId === null)
-              throw Error("프로젝트 슬롯이 존재하지 않는 이미지를 참조합니다.");
-            let chart = chartIds.has(slot.chart) ? slot.chart : null;
-            if (slot.chart != null && chart === null)
-              throw Error("프로젝트 슬롯이 존재하지 않는 차트를 참조합니다.");
-            return {
-              ...slotState,
-              row,
-              col,
-              rowSpan,
-              colSpan,
-              hidden: slot.hidden === true,
-              chart,
-              imageId: linkedImageId,
-              contentType: slot.contentType === "image" ? "image" : "graph",
-              caption: typeof slot.caption === "string" ? slot.caption : null,
-            };
+        let slotIds=new Set(),slots=projectClone(payload.slots).map(raw=>{
+          if(!raw||typeof raw!=="object"||!Number.isInteger(raw.id)||slotIds.has(raw.id))
+            throw Error("프로젝트 슬롯 데이터가 올바르지 않습니다.");
+          slotIds.add(raw.id);
+          let row=Number(raw.row),col=Number(raw.col),rowSpan=Number(raw.rowSpan??1),colSpan=Number(raw.colSpan??1);
+          if(!Number.isInteger(row)||!Number.isInteger(col)||!Number.isInteger(rowSpan)||!Number.isInteger(colSpan)||
+            row<1||col<1||rowSpan<1||colSpan<1||row+rowSpan-1>rows||col+colSpan-1>cols)
+            throw Error("프로젝트 슬롯 위치가 올바르지 않습니다.");
+          let chart=raw.chart==null?null:(chartIds.has(raw.chart)?raw.chart:null),
+            imageId=raw.imageId==null?null:(getProjectImage(raw.imageId,imageState.images)?.id??null);
+          if(raw.chart!=null&&chart===null)throw Error("프로젝트 슬롯이 존재하지 않는 차트를 참조합니다.");
+          if(raw.imageId!=null&&imageId===null)throw Error("프로젝트 슬롯이 존재하지 않는 이미지를 참조합니다.");
+          return normalizeSlotContent({
+            id:raw.id,row,col,rowSpan,colSpan,hidden:raw.hidden===true,
+            content:{
+              chart,imageId,
+              contentType:raw.contentType==="image"?"image":"graph",
+              imageSettings:readImageSettings(raw.imageSettings||raw.content?.imageSettings),
+            },
+            caption:typeof raw.caption==="string"&&raw.caption?raw.caption:null,
           });
-        if (!nextSlots.length) throw Error("프로젝트 슬롯이 없습니다.");
-        candidate.gridRows = importedRows;
-        candidate.gridCols = importedCols;
-        candidate.csvFiles = csvState.csvFiles;
-        candidate.csvId = Math.max(
-          Number.isInteger(payload.csvId) ? payload.csvId : 1,
-          csvState.csvId,
-        );
-        candidate.images = imageState.images;
-        candidate.fileSystem = {
-          directories: Array.isArray(payload.fileSystem?.directories)
-            ? projectClone(payload.fileSystem.directories)
-            : [],
-        };
+        });
+        if(!slots.length)throw Error("프로젝트 슬롯이 없습니다.");
+        candidate.gridRows=rows;candidate.gridCols=cols;
+        candidate.csvFiles=csvState.csvFiles;candidate.images=imageState.images;
+        candidate.charts=charts;candidate.slots=slots;
+        candidate.fileSystem={directories:Array.isArray(payload.fileSystem?.directories)?projectClone(payload.fileSystem.directories):[]};
         projectVfs.ensure(candidate._state);
-        candidate.imageId = Math.max(
-          Number.isInteger(payload.imageId) ? payload.imageId : 1,
-          imageState.imageId,
-        );
-        candidate.charts = nextCharts;
-        candidate.slots = nextSlots;
-        candidate.chartId = Math.max(
-          Number.isInteger(payload.chartId) ? payload.chartId : 1,
-          ...nextCharts.map((chart) => chart.id + 1),
-        );
-        let annotations =
-            payload.annotations && typeof payload.annotations === "object"
-              ? payload.annotations
-              : {},
-          importedLabels =
-            annotations.labelSettings && typeof annotations.labelSettings === "object"
-              ? annotations.labelSettings
-              : {},
-          importedCaption =
-            annotations.captionSettings && typeof annotations.captionSettings === "object"
-              ? annotations.captionSettings
-              : {};
-        candidate.labelsEnabled = annotations.labelsEnabled === true;
-        candidate.labelSettings = {
-          ...candidate.labelSettings,
-          ...importedLabels,
-          parentheses: importedLabels.parentheses === true,
-          x: readFiniteProjectNumber(importedLabels.x, candidate.labelSettings.x),
-          y: readFiniteProjectNumber(importedLabels.y, candidate.labelSettings.y),
-          fontSize: Math.max(
-            6,
-            readFiniteProjectNumber(importedLabels.fontSize, candidate.labelSettings.fontSize),
-          ),
-        };
-        candidate.captionsEnabled = annotations.captionsEnabled === true;
-        candidate.slotCaptionsEnabled = annotations.slotCaptionsEnabled === true;
-        if (candidate.slotCaptionsEnabled) {
-          normalizeLegacySlotCaptionDefaults(candidate);
-          initializeSlotCaptions(candidate);
-        }
-        candidate.captionText = typeof annotations.captionText === "string" ? annotations.captionText : "";
-        candidate.captionAfterText =
-          typeof annotations.captionAfterText === "string" ? annotations.captionAfterText : "";
-        candidate.captionName = typeof annotations.captionName === "string" ? annotations.captionName : "";
-        candidate.captionNameBold = annotations.captionNameBold === true;
-        candidate.captionSettings = {
-          ...candidate.captionSettings,
-          ...importedCaption,
-          fontSize: readProjectNumber(importedCaption.fontSize, candidate.captionSettings.fontSize, 6, 96),
-          lineHeight: readProjectNumber(
-            importedCaption.lineHeight,
-            candidate.captionSettings.lineHeight,
-            0.8,
-            4,
-          ),
-        };
-        let style =
-            payload.slotStyle && typeof payload.slotStyle === "object" ? payload.slotStyle : {},
-          palette =
-            payload.uiPalette && typeof payload.uiPalette === "object" ? payload.uiPalette : {};
-        candidate.layout.slotStyle = {
-          referenceWidth: readProjectNumber(style.referenceWidth, 1200, 100, 20000),
-          gap: readProjectNumber(style.gap, 0, 0, 2000),
-          outerMargin: readProjectNumber(style.outerMargin, 120, 0, 5000),
-          radius: readProjectNumber(style.radius, 0, 0, 2000),
-          aspect: readProjectNumber(style.aspect, 1.618, 0.1, 10),
-          showBorders: style.showBorders !== false,
-        };
-        candidate.layoutMapWidth = Number.isFinite(Number(style.layoutMapWidth))
-          ? Number(style.layoutMapWidth)
-          : null;
-        candidate.appearance.uiPalette = Object.fromEntries(
-          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
-            key,
-            projectColor(palette[key], fallback),
-          ]),
-        );
-        validateProjectObject(candidate, { requireSlots: true });
+        candidate.csvId=Math.max(Number.isInteger(payload.csvId)?payload.csvId:1,csvState.csvId);
+        candidate.imageId=Math.max(Number.isInteger(payload.imageId)?payload.imageId:1,imageState.imageId);
+        candidate.chartId=Math.max(Number.isInteger(payload.chartId)?payload.chartId:1,1,...charts.map(chart=>chart.id+1));
+        let annotations=payload.annotations&&typeof payload.annotations==="object"?payload.annotations:{},
+          labelPatch=annotations.labelSettings&&typeof annotations.labelSettings==="object"?annotations.labelSettings:{},
+          captionPatch=annotations.captionSettings&&typeof annotations.captionSettings==="object"?annotations.captionSettings:{};
+        candidate.labelsEnabled=annotations.labelsEnabled===true;
+        candidate.labelSettings={...candidate.labelSettings,...labelPatch,
+          parentheses:labelPatch.parentheses===true,
+          x:readFiniteProjectNumber(labelPatch.x,candidate.labelSettings.x),
+          y:readFiniteProjectNumber(labelPatch.y,candidate.labelSettings.y),
+          fontSize:Math.max(6,readFiniteProjectNumber(labelPatch.fontSize,candidate.labelSettings.fontSize))};
+        candidate.captionsEnabled=annotations.captionsEnabled===true;
+        candidate.captionText=typeof annotations.captionText==="string"?annotations.captionText:"";
+        candidate.captionAfterText=typeof annotations.captionAfterText==="string"?annotations.captionAfterText:"";
+        candidate.captionName=typeof annotations.captionName==="string"?annotations.captionName:"";
+        candidate.captionNameBold=annotations.captionNameBold===true;
+        candidate.captionSettings={...candidate.captionSettings,...captionPatch,
+          fontSize:readProjectNumber(captionPatch.fontSize,candidate.captionSettings.fontSize,6,96),
+          lineHeight:readProjectNumber(captionPatch.lineHeight,candidate.captionSettings.lineHeight,0.8,4)};
+        let style=payload.slotStyle&&typeof payload.slotStyle==="object"?payload.slotStyle:{},
+          palette=payload.uiPalette&&typeof payload.uiPalette==="object"?payload.uiPalette:{},
+          output=payload.export&&typeof payload.export==="object"?payload.export:{};
+        candidate.layout.slotStyle={
+          referenceWidth:readProjectNumber(style.referenceWidth,1200,100,20000),
+          gap:readProjectNumber(style.gap,0,0,2000),
+          outerMargin:readProjectNumber(style.outerMargin,120,0,5000),
+          radius:readProjectNumber(style.radius,0,0,2000),
+          aspect:readProjectNumber(style.aspect,1.618,0.1,10),
+          showBorders:style.showBorders!==false};
+        candidate.appearance.uiPalette=Object.fromEntries(Object.entries(DEFAULT_UI_PALETTE)
+          .map(([key,fallback])=>[key,projectColor(palette[key],fallback)]));
+        let heightMode=output.heightMode==="explicit"?"explicit":"auto";
+        candidate.exportSettings={
+          width:readProjectNumber(output.width,candidate.layout.slotStyle.referenceWidth,100,20000),
+          heightMode,
+          height:heightMode==="explicit"?readProjectNumber(output.height,100,100,20000):null,
+          dpi:readProjectNumber(output.dpi,300,36,1200),
+          format:output.format==="jpeg"?"jpeg":"png"};
+        validateProjectObject(candidate,{requireSlots:true});
         return candidate;
       }
       function captureProjectRuntimeState(machine) {
-        return {
-          editing,
-          selectedSlotId,
-          graphObject: machine.state.graphObject,
-          graphObjectIndex: machine.state.graphObjectIndex,
-        };
+        return {selectedSlotId,graphObject:machine.state.graphObject,graphObjectIndex:machine.state.graphObjectIndex};
       }
-      function restoreProjectRuntimeState(snapshot, machine) {
-        editing = snapshot.editing;
-        selectedSlotId = snapshot.selectedSlotId;
-        machine.state = Object.freeze({
-          ...machine.state,
-          graphObject: snapshot.graphObject,
-          graphObjectIndex: snapshot.graphObjectIndex,
-        });
+      function restoreProjectRuntimeState(snapshot,machine) {
+        selectedSlotId=snapshot.selectedSlotId;
+        machine.state=Object.freeze({...machine.state,graphObject:snapshot.graphObject,graphObjectIndex:snapshot.graphObjectIndex});
       }
       function resetProjectRuntimeState(machine) {
-        editing = null;
-        selectedSlotId = null;
-        machine.state = Object.freeze({
-          ...machine.state,
-          graphObject: "none",
-          graphObjectIndex: null,
-        });
+        selectedSlotId=null;
+        machine.state=Object.freeze({...machine.state,graphObject:"none",graphObjectIndex:null});
       }
       function renderProjectObject(project = activeProject) {
         applySlotStyle(false, false);
@@ -5188,6 +4688,7 @@
           chartObjects = projectObjects.read("charts"),
           slotObjects = projectObjects.read("slots"),
           appearanceObject = projectObjects.read("appearance"),
+          exportObject = projectObjects.read("export"),
           manifest = {
             schema: "fast-figure-project",
             version: PACKAGE_FORMAT_VERSION,
@@ -5204,18 +4705,15 @@
               labelsEnabled: labelObject.enabled,
               labelSettings: projectClone(labelObject.settings),
               captionsEnabled: captionObject.enabled,
-              slotCaptionsEnabled: captionObject.slotMode,
               captionText: captionObject.text,
               captionAfterText: captionObject.afterText,
               captionName: captionObject.name,
               captionNameBold: captionObject.nameBold,
               captionSettings: projectClone(captionObject.settings),
             },
-            slotStyle: {
-              ...projectClone(layoutObject.slotStyle),
-              layoutMapWidth: layoutObject.layoutMapWidth,
-            },
+            slotStyle: projectClone(layoutObject.slotStyle),
             uiPalette: projectClone(appearanceObject.uiPalette),
+            export: projectClone(exportObject),
           },
           assets = [];
         for (let csv of dataObjects) {
@@ -5271,6 +4769,7 @@
               slotStyle: manifest.slotStyle,
               uiPalette: manifest.uiPalette,
             },
+            export: manifest.export,
           },
           layoutDocument = {
             gridRows: manifest.gridRows,
@@ -5285,7 +4784,6 @@
           },
           captionDocument = {
             enabled: manifest.annotations.captionsEnabled,
-            slotMode: manifest.annotations.slotCaptionsEnabled,
             beforeText: manifest.annotations.captionText,
             afterText: manifest.annotations.captionAfterText,
             name: manifest.annotations.captionName,
@@ -5324,7 +4822,7 @@
               imageObject: image
                 ? {
                     imageRef: image.id,
-                    settings: projectClone(image.settings || {}),
+                    settings: projectClone(slot.imageSettings || DEFAULT_IMAGE_SETTINGS),
                   }
                 : null,
             };
@@ -5509,16 +5007,13 @@
             let imageObject = imageNode
               ? ffpxXmlReadValue(imageNode.firstElementChild)
               : null;
-            if (imageObject?.imageRef != null) {
-              let image = images.find((item) => item.id === imageObject.imageRef);
-              if (image) image.settings = projectClone(imageObject.settings || {});
-            }
             slots.push({
               ...slotSettings,
               ...placement,
               id: placement.slotId,
               chart: chart?.id ?? null,
               imageId: imageObject?.imageRef ?? null,
+              imageSettings: readImageSettings(imageObject?.settings),
               caption:
                 typeof slotCaption?.text === "string" ? slotCaption.text : null,
             });
@@ -5544,7 +5039,6 @@
               labelsEnabled: labels.enabled,
               labelSettings: labels.settings,
               captionsEnabled: caption.enabled,
-              slotCaptionsEnabled: caption.slotMode,
               captionText: caption.beforeText,
               captionAfterText: caption.afterText,
               captionName: caption.name,
@@ -5756,36 +5250,34 @@
           direction: "fsm-to-model",
         });
       }
-      function syncSlotImageElement(slot, image) {
-        let element = slot && document.querySelector(`.slot[data-slot="${slot.id}"] .slot-image`);
-        if (!element || !image) return false;
-        let settings = normalizeImageSettings(image);
-        element.classList.toggle("manual", settings.fit === "manual");
+      function syncSlotImageElement(slot,image) {
+        let element=slot&&document.querySelector(`.slot[data-slot="${slot.id}"] .slot-image`);
+        if(!element||!image)return false;
+        let settings=normalizeImageSettings(slot);
+        element.classList.toggle("manual",settings.fit==="manual");
         element.removeAttribute("style");
-        if (settings.fit === "manual") {
-          element.style.width = `${settings.scale}%`;
-          element.style.left = `${settings.x}%`;
-          element.style.top = `${settings.y}%`;
-        } else element.style.objectFit = settings.fit;
+        if(settings.fit==="manual"){
+          element.style.width=`${settings.scale}%`;
+          element.style.left=`${settings.x}%`;
+          element.style.top=`${settings.y}%`;
+        } else element.style.objectFit=settings.fit;
         return true;
       }
-      function applyImageSettingsFromValues(values = {}) {
-        let slot = getSelectedSlot(),
-          image = slotImage(slot);
-        if (!image) return false;
-        let settings = normalizeImageSettings(image);
-        settings.fit = ["contain", "cover", "manual"].includes(values.fit)
-          ? values.fit
-          : settings.fit;
-        if (settings.fit === "manual") {
-          settings.scale = Math.max(1, Math.min(1000, Number(values.scale) || 100));
-          settings.x = Math.max(-100, Math.min(200, Number(values.x) || 0));
-          settings.y = Math.max(-100, Math.min(200, Number(values.y) || 0));
+      function applyImageSettingsFromValues(values={}) {
+        let slot=getSelectedSlot(), image=slotImage(slot);
+        if(!slot||!image)return false;
+        let current=normalizeImageSettings(slot),
+          next={...current,fit:["contain","cover","manual"].includes(values.fit)?values.fit:current.fit};
+        if(next.fit==="manual"){
+          next.scale=Math.max(1,Math.min(1000,Number(values.scale)||100));
+          next.x=Math.max(-100,Math.min(200,Number(values.x)||50));
+          next.y=Math.max(-100,Math.min(200,Number(values.y)||50));
         }
-        syncSlotImageElement(slot, image);
-        debugLog("slot:image-settings", { slotId: selectedSlotId, settings });
-        appFSM.notify("images", "IMAGE_SETTINGS_CHANGED");
-        return true;
+        slot.content.imageSettings=readImageSettings(next);
+        validateProjectObject(activeProject,{requireSlots:true});
+        syncSlotImageElement(slot,image);
+        appFSM.notify("images","IMAGE_SETTINGS_CHANGED");
+        return readImageEditorApi();
       }
       function readSelectedSlotApi() {
         let slot = getSelectedSlot();
@@ -5815,12 +5307,12 @@
         setTimeout(() => { slotDragSuppressClick = false; }, 0);
       }
       function readImageEditorApi() {
-        let image = slotImage(getSelectedSlot());
-        return image ? {
-          name: image.name,
-          src: projectImageDisplayUrl(image),
-          settings: readImageSettings(image),
-        } : null;
+        let slot=getSelectedSlot(), image=slotImage(slot);
+        return image&&slot?{
+          name:image.name,
+          src:projectImageDisplayUrl(image),
+          settings:Object.freeze({...normalizeImageSettings(slot)}),
+        }:null;
       }
       function setProjectName(value, trim = false) {
         activeProject.projectName = (trim ? String(value).trim() : String(value)).slice(0, 120);
@@ -5995,19 +5487,14 @@
         };
       }
       function normalizedGraphObjects(chart) {
-        if (!chart) return [];
-        return (Array.isArray(chart.editor?.objects) ? chart.editor.objects : []).map((object, index) => {
-          let csv = getProjectCsv(object?.csvId) || selectedProjectCsv() || activeProject.csvFiles[0];
-          if (!csv)
-            throw Error(`그래프 객체 ${index + 1}에 연결할 프로젝트 CSV가 없습니다.`);
-          let selection = graphDataSelection(csv.rows, csv.headerLines, object || {});
-          return {
-            ...baseGraphObject(chart, csv),
-            ...(object || {}),
-            csvId: csv.id,
-            x: selection.x,
-            y: selection.y,
-          };
+        if(!chart)return [];
+        if(chart.editor?.editable===false)
+          return projectClone(Array.isArray(chart.editor?.objects)?chart.editor.objects:[]);
+        return (Array.isArray(chart.editor?.objects)?chart.editor.objects:[]).map((object,index)=>{
+          let csv=getProjectCsv(object?.csvId);
+          if(!csv)throw Error(`그래프 객체 ${index+1}에 연결할 프로젝트 CSV가 없습니다.`);
+          let selection=graphDataSelection(csv.rows,csv.headerLines,object||{});
+          return {...baseGraphObject(chart,csv),...(object||{}),csvId:csv.id,x:selection.x,y:selection.y};
         });
       }
       function ensureGraphObjects(chart) {
@@ -6020,19 +5507,17 @@
         let slot = getSelectedSlot();
         return slot?.chart ? getChart(slot.chart) : null;
       }
-      function graphEditorCommit(objects, index = null) {
-        let chart = graphEditorChart();
-        if (!chart) return null;
-        let payload = { chartId: chart.id, objects: [...objects], index, direction: "fsm-to-model" };
-        appFSM.send("GRAPH_OBJECTS_REPLACED", payload);
-        chart = payload.chart;
-        editing = chart;
-        let selected = Number.isInteger(index) && index >= 0 && index < chart.editor.objects.length ? index : null;
-        appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
-        if (chart.editor.editable !== false) rebuildEditableGraph(chart);
-        renderDashboard();
-        updateFileAvailability();
-        appFSM.notify("charts", payload.recovered ? "GRAPH_OBJECTS_DEFAULT_CREATED" : "GRAPH_OBJECTS_CHANGED");
+      function graphEditorCommit(objects,index=null) {
+        let chart=graphEditorChart();
+        if(!chart)return null;
+        let payload={chartId:chart.id,objects:[...objects],index,direction:"fsm-to-model"};
+        appFSM.send("GRAPH_OBJECTS_REPLACED",payload);
+        chart=payload.chart;
+        let selected=Number.isInteger(index)&&index>=0&&index<chart.editor.objects.length?index:null;
+        appFSM.send(selected===null?"CLEAR_GRAPH_OBJECT":"SELECT_GRAPH_OBJECT",
+          {index:selected,direction:"fsm-to-model"});
+        renderDashboard(); updateFileAvailability();
+        appFSM.notify("charts","GRAPH_OBJECTS_CHANGED");
         return chart;
       }
       function graphEditorSelectCsv(csvId) {
@@ -6085,7 +5570,6 @@
           appFSM.send("SLOT_DATA_CONNECTED", payload);
           chart = payload.chart;
           if (!chart) return status("빈 슬롯에 그래프를 추가하지 못했습니다.");
-          editing = chart;
           return graphEditorCommit(ensureGraphObjects(chart), 0);
         }
         let objects = ensureGraphObjects(chart);
@@ -6115,25 +5599,58 @@
         appFSM.notify("data", "CSV_HEADER_LINES_CHANGED");
         return csv.headerLines;
       }
-      function graphEditorSetEditable(editable = null) {
-        let chart = graphEditorChart();
-        if (!chart) return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
-        let next = typeof editable === "boolean" ? editable : chart.editor.editable === false;
-        if (next && chartCsvIds(chart).length === 0) {
-          let conversionRows = chart.editor.conversionRows || parsePlotlyToEditor(chart.graph.imported, chart.id).editor.conversionRows;
-          if (!Array.isArray(conversionRows) || !conversionRows.length) conversionRows = [["X", "Y"], ["", ""]];
-          let csv = createProjectCsv(conversionRows, "Plotly JSON.csv");
-          chart.editor.objects.forEach((object) => { object.csvId = csv.id; });
+      function graphEditorSetEditable(editable=null) {
+        let current=graphEditorChart();
+        if(!current)
+          return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
+        let next=typeof editable==="boolean"?editable:current.editor.editable===false;
+        if(next===current.editor.editable) return current;
+
+        let candidate=projectClone(activeProject._state),
+          chart=candidate.charts.find(item=>item.id===current.id);
+        if(!chart) throw Error("편집 상태를 변경할 차트가 없습니다.");
+
+        let createdCsvId=null;
+        if(next && chart.editor.editable===false){
+          let objects=Array.isArray(chart.editor.objects)?chart.editor.objects:[],
+            rows=Array.isArray(chart.editor.conversionRows)?chart.editor.conversionRows:[];
+          if(objects.length){
+            if(!rows.length)
+              throw Error("Plotly 변환 데이터가 없어 편집 가능한 차트로 바꿀 수 없습니다.");
+            let csvId=candidate.nextId.csv,
+              model=buildProjectCsvModel(
+                rows,
+                "Plotly JSON.csv",
+                csvId,
+                "",
+                "text/csv",
+                1,
+                candidate,
+              );
+            projectVfs.prepare(model,"csv",candidate);
+            candidate.assets.csvFiles.push(model);
+            candidate.nextId.csv=csvId+1;
+            objects.forEach(object=>{object.csvId=model.id;});
+            createdCsvId=model.id;
+          }
           delete chart.editor.conversionRows;
-          graphEditorSelectCsv(csv.id);
         }
-        chart.editor.editable = next;
-        if (next) rebuildEditableGraph(chart);
+
+        chart.editor.editable=next;
+        validateChartModel(chart,"편집 상태 변경 차트",candidate.assets.csvFiles);
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+
+        let committed=getChart(current.id);
+        if(next) rebuildEditableGraph(committed);
+        if(createdCsvId!==null) graphEditorSelectCsv(createdCsvId);
         renderDashboard();
-        status(next ? "가져온 JSON을 편집기 설정으로 재구성했습니다." : "가져온 원본 Plotly JSON 표시로 전환했습니다.");
-        debugLog("editor:editable", { chartId: chart.id, editable: next });
-        appFSM.notify("charts", "GRAPH_EDITABLE_CHANGED");
-        return next;
+        status(next
+          ?"가져온 JSON을 편집기 설정으로 재구성했습니다."
+          :"가져온 원본 Plotly JSON 표시로 전환했습니다.");
+        debugLog("editor:editable",{chartId:committed.id,editable:next});
+        appFSM.notify("charts","GRAPH_EDITABLE_CHANGED");
+        return committed;
       }
       function readGraphDataApi() {
         let chart = graphEditorChart(), objects = normalizedGraphObjects(chart);
@@ -6181,8 +5698,7 @@
       function readAssetDeletionTarget() {
         let selected = appFSM.state.assetPath
           ? projectVfs.resolve(appFSM.state.assetPath) : null;
-        if (!["csv", "image"].includes(selected?.kind) ||
-          (selected.kind === "csv" && selected.asset.isDefaultEmpty === true))
+        if (!["csv", "image"].includes(selected?.kind))
           return null;
         let id = selected.asset.id;
         return {
@@ -6197,7 +5713,7 @@
         if (!target) return null;
         if (target.kind === "csv") {
           let csv = getProjectCsv(target.id);
-          if (!csv || csv.isDefaultEmpty === true) return null;
+          if (!csv) return null;
           let references = activeProject.charts.flatMap((chart) =>
             (chart.editor?.objects || []).filter((object) => object.csvId === csv.id));
           if (references.length) {
@@ -6244,7 +5760,7 @@
         let match = path ? projectVfs.resolve(path) : null;
         if (!match || projectVfs.isTrashed(path)) return false;
         if (match.kind === "directory") return !projectVfs.isFixedDirectory(path);
-        return !(match.kind === "csv" && match.asset.isDefaultEmpty === true);
+        return true;
       }
       function projectNodeReferenceCount(path) {
         let match = projectVfs.resolve(path);
@@ -6459,38 +5975,23 @@
           image.src = src;
         });
       }
-      function exportDrawImage(ctx, image, rect, slot, scaleX, scaleY, imageModel = null) {
-        let settings =
-            normalizeImageSettings(projectClone(imageModel || slotImage(slot))) || {},
-          width = rect.width,
-          height = rect.height,
-          ratio = image.naturalWidth / image.naturalHeight || 1,
-          fit = settings.fit || "contain",
-          drawW,
-          drawH,
-          left,
-          top;
-        if (fit === "manual") {
-          drawW = (width * (Number(settings.scale) || 100)) / 100;
-          drawH = drawW / ratio;
-          left = rect.left + (width * (Number(settings.x) || 50)) / 100 - drawW / 2;
-          top = rect.top + (height * (Number(settings.y) || 50)) / 100 - drawH / 2;
+      function exportDrawImage(ctx,image,rect,slot,scaleX,scaleY) {
+        let settings=readImageSettings(slot?.content?.imageSettings),
+          width=rect.width,height=rect.height,ratio=image.naturalWidth/image.naturalHeight||1,
+          fit=settings.fit||"contain",drawW,drawH,left,top;
+        if(fit==="manual"){
+          drawW=(width*(Number(settings.scale)||100))/100; drawH=drawW/ratio;
+          left=rect.left+width*((Number(settings.x)||50)/100)-drawW/2;
+          top=rect.top+height*((Number(settings.y)||50)/100)-drawH/2;
         } else {
-          let factor =
-            fit === "cover"
-              ? Math.max(width / image.naturalWidth, height / image.naturalHeight)
-              : Math.min(width / image.naturalWidth, height / image.naturalHeight);
-          drawW = image.naturalWidth * factor;
-          drawH = image.naturalHeight * factor;
-          left = rect.left + (width - drawW) / 2;
-          top = rect.top + (height - drawH) / 2;
+          let contain=fit!=="cover", fitWidth=width, fitHeight=fitWidth/ratio;
+          if((contain&&fitHeight>height)||(!contain&&fitHeight<height)){
+            fitHeight=height; fitWidth=fitHeight*ratio;
+          }
+          drawW=fitWidth; drawH=fitHeight;
+          left=rect.left+(width-drawW)/2; top=rect.top+(height-drawH)/2;
         }
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(rect.left * scaleX, rect.top * scaleY, width * scaleX, height * scaleY);
-        ctx.clip();
-        ctx.drawImage(image, left * scaleX, top * scaleY, drawW * scaleX, drawH * scaleY);
-        ctx.restore();
+        ctx.drawImage(image,left*scaleX,top*scaleY,drawW*scaleX,drawH*scaleY);
       }
       function exportWrapText(ctx, text, x, y, maxWidth, lineHeight) {
         let words = (text || "").split(/\s+/),
@@ -6797,7 +6298,7 @@
           lineHeight = fontSize * view.settings.lineHeight,
           available = Math.max(10, width - padding * 2),
           prefix = view.name || "",
-          body = view.slotMode ? view.exportText : view.text || "",
+          body = view.text || "",
           lines = [],
           firstLine = true,
           prefixWidth = 0;
@@ -7027,7 +6528,7 @@
               ctx.drawImage(image, rect.left, rect.top, rect.width, rect.height);
             } else if (imageModel) {
               let image = await exportImageLoad(projectImageDataUrl(imageModel));
-              exportDrawImage(ctx, image, rect, slot, 1, 1, imageModel);
+              exportDrawImage(ctx, image, rect, slot, 1, 1);
             }
             ctx.restore();
             if (bordersVisible) {
@@ -7298,18 +6799,7 @@
           csv.bytesBase64 = ffpxBytesToBase64(data);
           delete csv.dataRef;
         }
-        let defaultCsv = defaultCsvModel(0);
-        payload.csvFiles = reuseImportedDefaultCsv(
-          payload.csvFiles,
-          [chart],
-          defaultCsv,
-          0,
-        );
-        let validationCsvFiles = [
-          ...payload.csvFiles,
-          defaultCsv,
-        ];
-        validateChartModel(chart, "FFSX 차트", validationCsvFiles);
+        validateChartModel(chart, "FFSX 차트", payload.csvFiles);
         return payload;
       }
       function downloadSlotFfsx() {
@@ -7356,6 +6846,7 @@
               : JSON.parse(await file.text());
         let chart,
           slotCaption,
+          importKind,
           packagedCsvFiles = [];
         if (
           payload?.schema === "fast-figure-slot" &&
@@ -7363,6 +6854,7 @@
           payload.chart &&
           typeof payload.chart === "object"
         ) {
+          importKind = "ffsx";
           packagedCsvFiles = payload.csvFiles;
           if (
             !Array.isArray(packagedCsvFiles) ||
@@ -7370,17 +6862,8 @@
           )
             throw Error("FFSX CSV 데이터가 없습니다.");
           chart = projectClone(payload.chart);
-          let temporaryDefaultCsv = defaultCsvModel(0);
-          packagedCsvFiles = reuseImportedDefaultCsv(
-            projectClone(packagedCsvFiles),
-            [chart],
-            temporaryDefaultCsv,
-            0,
-          );
-          chart = validateChartModel(chart, "FFSX 차트", [
-            ...packagedCsvFiles,
-            temporaryDefaultCsv,
-          ]);
+          packagedCsvFiles = projectClone(packagedCsvFiles);
+          chart = validateChartModel(chart, "FFSX 차트", packagedCsvFiles);
           slotCaption =
             typeof payload.slot?.caption === "string" ? payload.slot.caption : undefined;
         } else if (
@@ -7389,16 +6872,16 @@
           payload?.config ||
           payload?.frames
         ) {
+          importKind = "plotly";
           chart = parsePlotlyToEditor(payload, null);
           chart.editor.editable = false;
-          if (Array.isArray(chart.editor.conversionRows)) chart.editor.conversionRows.length = 0;
-          delete chart.editor.conversionRows;
         } else throw Error("지원하지 않는 FFSX 슬롯 또는 Plotly JSON 형식입니다.");
         normalizeGlobalSettings(chart);
         let importPayload = {
           slotId: slot.id,
           chart,
           csvFiles: packagedCsvFiles || [],
+          importKind,
           slotCaption,
           direction: "fsm-to-model",
         };
@@ -7481,61 +6964,58 @@
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
-      function readCaptionsApiState() {
-        let slotMode = activeProject.slotCaptionsEnabled,
-          slot = slotMode ? getSelectedSlot() : null;
+      function readGlobalCaptionState() {
         return Object.freeze({
-          enabled: activeProject.captionsEnabled,
-          slotMode,
-          target: slot
-            ? Object.freeze({
-                id: slot.id,
-                row: slot.row,
-                col: slot.col,
-              })
-            : null,
-          text: slot ? slot.caption ?? "슬롯 캡션" : activeProject.captionText,
-          name: activeProject.captionName,
-          nameBold: activeProject.captionNameBold,
-          settings: Object.freeze({ ...activeProject.captionSettings }),
+          enabled:activeProject.captionsEnabled,
+          text:activeProject.captionText,
+          afterText:activeProject.captionAfterText,
+          name:activeProject.captionName,
+          nameBold:activeProject.captionNameBold,
+          settings:Object.freeze({...activeProject.captionSettings}),
         });
+      }
+      function readSlotCaptionState(slotId) {
+        let slot=slotAt(Number(slotId));
+        return slot?Object.freeze({
+          id:slot.id,row:slot.row,col:slot.col,text:slot.caption??"",
+        }):null;
       }
       function setCaptionsApiEnabled(enabled) {
-        setAnnotationEnabled("caption", enabled === true);
-        return readCaptionsApiState();
+        setAnnotationEnabled("caption",enabled===true);
+        return readGlobalCaptionState();
       }
-      function setCaptionsApiSlotMode(enabled) {
-        appFSM.send("SLOT_CAPTION_MODE_CHANGED", {
-          enabled: enabled === true,
-          direction: "fsm-to-model",
-        });
-        return readCaptionsApiState();
-      }
-      function insertCaptionsApiSlotCaptions() {
-        appFSM.send("SLOT_CAPTIONS_INSERTED", { direction: "fsm-to-model" });
-        syncDashboardCaption();
-        return readCaptionsApiState();
-      }
-      function setCaptionsApiText(text) {
-        appFSM.send("CAPTION_TEXT_INPUT", {
-          text: String(text ?? ""),
-          region: "body",
-          direction: "fsm-to-model",
+      function setGlobalCaptionText(text) {
+        appFSM.send("CAPTION_TEXT_INPUT",{
+          target:{kind:"global"},text:String(text??""),direction:"fsm-to-model",
         });
         syncDashboardCaption();
-        return readCaptionsApiState();
+        return readGlobalCaptionState();
       }
+      function setSlotCaptionText(slotId,text) {
+        appFSM.send("CAPTION_TEXT_INPUT",{
+          target:{kind:"slot",id:Number(slotId)},text:String(text??""),direction:"fsm-to-model",
+        });
+        return readSlotCaptionState(slotId);
+      }
+      function insertCaptionsApiSlotCaptions(slotIds=null) {
+        appFSM.send("SLOT_CAPTIONS_INSERTED",{
+          slotIds:Array.isArray(slotIds)?slotIds:null,direction:"fsm-to-model",
+        });
+        syncDashboardCaption();
+        return readGlobalCaptionState();
+      }
+
       function setCaptionsApiName(name) {
         activeProject.captionName = String(name ?? "");
         syncDashboardCaption();
         appFSM.notify("captions", "CAPTION_NAME_CHANGED");
-        return readCaptionsApiState();
+        return readGlobalCaptionState();
       }
       function setCaptionsApiNameBold(bold) {
         activeProject.captionNameBold = bold === true;
         syncDashboardCaption();
         appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
-        return readCaptionsApiState();
+        return readGlobalCaptionState();
       }
       function setCaptionsApiSettings(patch = {}) {
         let current = activeProject.captionSettings,
@@ -7556,18 +7036,46 @@
         }
         activeProject.captionSettings = next;
         applyCaptionSettings();
-        return readCaptionsApiState();
+        return readGlobalCaptionState();
       }
-      function readPrintApiDefaults() {
-        return Object.freeze({
-          width: Math.max(100, Math.round(dashboardReferenceWidth())),
+      function readPrintApiSettings() {
+        return Object.freeze({...activeProject.exportSettings});
+      }
+      function setPrintApiSettings(values={}) {
+        let current=activeProject.exportSettings,
+          heightMode=values.heightMode==="explicit"?"explicit":
+            values.heightMode==="auto"?"auto":current.heightMode,
+          candidate={
+            width:readProjectNumber(values.width,current.width,100,20000),
+            heightMode,
+            height:heightMode==="explicit"
+              ?readProjectNumber(values.height,current.height??100,100,20000):null,
+            dpi:readProjectNumber(values.dpi,current.dpi,36,1200),
+            format:values.format==="jpeg"?"jpeg":values.format==="png"?"png":current.format,
+          },
+          state=projectClone(activeProject._state);
+        state.export=candidate;
+        validateProjectObjectState(state,{requireSlots:true});
+        activeProject.initialize(state);
+        return readPrintApiSettings();
+      }
+      function savePrintApi(options={}) {
+        let settings=readPrintApiSettings();
+        return exportDashboardTarget({
+          width:settings.width,
+          height:settings.heightMode==="explicit"?settings.height:"",
+          dpi:settings.dpi,
+          format:settings.format,
+          onStatus:options.onStatus,
         });
       }
-      function savePrintApi(options = {}) {
-        return exportDashboardTarget(options);
-      }
-      function capturePrintApi(options = {}) {
-        return exportDashboard(true, options);
+      function capturePrintApi(options={}) {
+        let settings=readPrintApiSettings();
+        return exportDashboard(true,{
+          dpi:settings.dpi,
+          format:settings.format,
+          onStatus:options.onStatus,
+        });
       }
       function readLabelsApiState() {
         let reference = gridSlotGeometry(
@@ -7637,15 +7145,12 @@
       function setLabelsApiPosition(x, y) {
         return updateLabelsApiPosition(x, y, "LABEL_POSITION_CHANGED");
       }
-      function previewLabelsApiPosition(x, y) {
-        return updateLabelsApiPosition(x, y);
-      }
-      function commitLabelsApiPosition() {
-        debugLog("mantine:label-position", {
-          x: activeProject.labelSettings.x,
-          y: activeProject.labelSettings.y,
+
+      function finishLabelsApiPositionInteraction() {
+        debugLog("mantine:label-position",{
+          x:activeProject.labelSettings.x,y:activeProject.labelSettings.y,
         });
-        appFSM.notify("labels", "LABEL_POSITION_DRAGGED");
+        appFSM.notify("labels","LABEL_POSITION_DRAGGED");
         return readLabelsApiState();
       }
       function resetLabelsApiPosition() {
@@ -7824,16 +7329,18 @@
           exportPlotlyJson: downloadPlotlyJson,
         }),
         print: Object.freeze({
-          readDefaults: readPrintApiDefaults,
+          readSettings: readPrintApiSettings,
+          setSettings: setPrintApiSettings,
           save: savePrintApi,
           capture: capturePrintApi,
         }),
         captions: Object.freeze({
-          readState: readCaptionsApiState,
+          readGlobal: readGlobalCaptionState,
+          readSlot: readSlotCaptionState,
           setEnabled: setCaptionsApiEnabled,
-          setSlotMode: setCaptionsApiSlotMode,
+          setGlobalText: setGlobalCaptionText,
+          setSlotText: setSlotCaptionText,
           insertSlotCaptions: insertCaptionsApiSlotCaptions,
-          setText: setCaptionsApiText,
           setName: setCaptionsApiName,
           setNameBold: setCaptionsApiNameBold,
           setSettings: setCaptionsApiSettings,
@@ -7843,8 +7350,7 @@
           setEnabled: setLabelsApiEnabled,
           setSettings: setLabelsApiSettings,
           setPosition: setLabelsApiPosition,
-          previewPosition: previewLabelsApiPosition,
-          commitPosition: commitLabelsApiPosition,
+          finishPositionInteraction: finishLabelsApiPositionInteraction,
           resetPosition: resetLabelsApiPosition,
         }),
         appearance: Object.freeze({
@@ -7883,9 +7389,7 @@
         location: location.href,
       });
       applyDashboardZoom();
-      ensureDefaultCsv();
       installSlotClickController();
-      makeSlots();
       applySlotStyle();
       appFSM.ready();
       debugLog(
