@@ -91,11 +91,12 @@ variables
   activeProject = InitialProject,
   lastResult = "initialized";
 
-procedure applySlotsResetAction(slotIds)
+procedure applySlotsResetAction(slotIds, idsResolved)
 variables candidate = activeProject;
 begin
 ResetResolve:
-  if slotIds \subseteq SlotIds then
+  if /\ idsResolved
+     /\ slotIds \subseteq SlotIds then
     candidate := ResetSlotsCandidate(activeProject, slotIds);
     if ValidApplicationProjection(candidate) then
       activeProject := candidate ||
@@ -176,7 +177,9 @@ VerificationHarness:
   while TRUE do
     either
       with chosenResetSlotIds \in SUBSET SlotIds do
-        call applySlotsResetAction(chosenResetSlotIds);
+        with chosenResetIdsResolved \in {TRUE, FALSE} do
+          call applySlotsResetAction(chosenResetSlotIds, chosenResetIdsResolved);
+        end with;
       end with;
     or
       with chosenSourceId \in SlotIds do
