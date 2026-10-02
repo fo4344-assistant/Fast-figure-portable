@@ -3550,8 +3550,10 @@
       function activateChartModel(id) {
         let chart=getChart(id);
         if(!chart){debugLog("chart:activate-missing",{chartId:id});return null;}
-        for(let object of chart.editor?.objects||[])
-          if(!getProjectCsv(object.csvId))throw Error("차트가 참조하는 프로젝트 CSV가 없습니다.");
+        if(chart.editor?.editable!==false)
+          for(let object of chart.editor?.objects||[])
+            if(!getProjectCsv(object.csvId))
+              throw Error("차트가 참조하는 프로젝트 CSV가 없습니다.");
         debugLog("chart:activate",{chartId:id});
         return chart;
       }
@@ -5486,6 +5488,8 @@
       }
       function normalizedGraphObjects(chart) {
         if(!chart)return [];
+        if(chart.editor?.editable===false)
+          return projectClone(Array.isArray(chart.editor?.objects)?chart.editor.objects:[]);
         return (Array.isArray(chart.editor?.objects)?chart.editor.objects:[]).map((object,index)=>{
           let csv=getProjectCsv(object?.csvId);
           if(!csv)throw Error(`그래프 객체 ${index+1}에 연결할 프로젝트 CSV가 없습니다.`);
