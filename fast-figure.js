@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.31-wip";
+      const APP_BUILD = "1.1.32-wip";
       const PROJECT_OBJECT_PATHS = Object.freeze({
         project: "meta",
         layout: "layout",
@@ -13,6 +13,7 @@
         slots: "slots",
         sequences: "nextId",
         appearance: "appearance",
+        export: "export",
       });
       const DEFAULT_SLOT_STYLE = Object.freeze({
         referenceWidth: 1200,
@@ -44,17 +45,26 @@
         "#0997B3",
         "#FAFAFA",
       ];
+      const DEFAULT_IMAGE_SETTINGS = Object.freeze({
+        fit: "contain",
+        scale: 100,
+        x: 50,
+        y: 50,
+      });
+      const SLOT_LOCAL_DEFAULTS = Object.freeze({
+        chart: null,
+        imageId: null,
+        contentType: "graph",
+        imageSettings: DEFAULT_IMAGE_SETTINGS,
+        caption: null,
+      });
       function createProjectState() {
-        return {
+        let state = {
           kind: "fast-figure-project-object",
-          meta: {
-            projectName: "",
-            appBuild: APP_BUILD,
-          },
+          meta: { projectName: "", appBuild: APP_BUILD },
           layout: {
             gridRows: 2,
             gridCols: 2,
-            layoutMapWidth: null,
             slotStyle: { ...DEFAULT_SLOT_STYLE },
           },
           annotations: {
@@ -72,7 +82,6 @@
             },
             captions: {
               enabled: false,
-              slotMode: false,
               text: "",
               afterText: "",
               name: "",
@@ -84,24 +93,25 @@
               },
             },
           },
-          assets: {
-            csvFiles: [],
-            images: [],
-          },
+          assets: { csvFiles: [], images: [] },
           fileSystem: {
             directories: ["/assets", "/assets/csv", "/assets/images", "/assets/trash"],
           },
           charts: [],
           slots: [],
-          nextId: {
-            csv: 1,
-            image: 1,
-            chart: 1,
-          },
-          appearance: {
-            uiPalette: { ...DEFAULT_UI_PALETTE },
+          nextId: { csv: 1, image: 1, chart: 1 },
+          appearance: { uiPalette: { ...DEFAULT_UI_PALETTE } },
+          export: {
+            width: DEFAULT_SLOT_STYLE.referenceWidth,
+            heightMode: "auto",
+            height: null,
+            dpi: 300,
+            format: "png",
           },
         };
+        for (let index = 0; index < 4; index++)
+          state.slots.push(newGridSlot(index, Math.floor(index / 2) + 1, (index % 2) + 1));
+        return state;
       }
       function projectObjectPath(state, path) {
         return String(path)
@@ -165,12 +175,6 @@
         }
         set gridCols(value) {
           this.layout.gridCols = value;
-        }
-        get layoutMapWidth() {
-          return this.layout.layoutMapWidth;
-        }
-        set layoutMapWidth(value) {
-          this.layout.layoutMapWidth = value;
         }
         get csvFiles() {
           return this.assets.csvFiles;
@@ -238,12 +242,6 @@
         set captionsEnabled(value) {
           this.annotations.captions.enabled = value;
         }
-        get slotCaptionsEnabled() {
-          return this.annotations.captions.slotMode;
-        }
-        set slotCaptionsEnabled(value) {
-          this.annotations.captions.slotMode = value;
-        }
         get captionText() {
           return this.annotations.captions.text;
         }
@@ -274,10 +272,15 @@
         set captionSettings(value) {
           this.annotations.captions.settings = value;
         }
+        get exportSettings() {
+          return this._state.export;
+        }
+        set exportSettings(value) {
+          this._state.export = value;
+        }
       }
       const activeProject = new ProjectObject();
-      let editing = null,
-        selectedSlotId = null,
+      let selectedSlotId = null,
         pendingSlotContentType = "graph",
         dashboardObserver = null,
         graphAreaObserver = null,
@@ -2171,77 +2174,39 @@
           col,
           rowSpan: 1,
           colSpan: 1,
+          hidden: false,
           content: {
             chart: null,
             imageId: null,
             contentType: "graph",
-            caption: null,
+            imageSettings: { ...DEFAULT_IMAGE_SETTINGS },
           },
+          caption: null,
         });
       }
       function rebuildGridSlots(r, c) {
-        let old = activeProject.slots
-          .filter((s) => !s.hidden)
-          .map((s) => ({
-            row: s.row,
-            col: s.col,
-            rowSpan: s.rowSpan || 1,
-            colSpan: s.colSpan || 1,
-            content: {
-              ...projectClone(s.content),
-              chart:
-                s.chart && activeProject.charts.some((chart) => chart.id === s.chart)
-                  ? s.chart
-                  : null,
-              imageId: getProjectImage(s.imageId) ? s.imageId : null,
-              contentType: s.contentType || "graph",
-              caption: typeof s.caption === "string" ? s.caption : null,
-            },
-          }));
-        let occupied = old.filter((s) => s.content.chart || s.content.imageId),
-          preserveCoordinates = occupied.every(
-            (s) =>
-              s.row >= 1 &&
-              s.col >= 1 &&
-              s.row + s.rowSpan - 1 <= r &&
-              s.col + s.colSpan - 1 <= c,
-          );
-        activeProject.gridRows = r;
-        activeProject.gridCols = c;
-        activeProject.slots = [];
-        for (let i = 0; i < r * c; i++)
-          activeProject.slots.push(newGridSlot(i, Math.floor(i / c) + 1, (i % c) + 1));
-        if (preserveCoordinates) {
-          occupied.forEach((source) => {
-            let target = activeProject.slots.find(
-              (slot) => slot.row === source.row && slot.col === source.col,
-            );
-            Object.assign(target, source, { id: target.id });
-            for (let row = source.row; row < source.row + source.rowSpan; row++)
-              for (let col = source.col; col < source.col + source.colSpan; col++) {
-                if (row === source.row && col === source.col) continue;
-                let covered = activeProject.slots.find((slot) => slot.row === row && slot.col === col);
-                if (covered) covered.hidden = true;
-              }
-          });
-        } else
-          activeProject.slots.forEach((slot, i) => {
-            let source = old[i];
-            if (!source) return;
-            Object.assign(slot, source, {
-              id: slot.id,
-              row: slot.row,
-              col: slot.col,
-              rowSpan: 1,
-              colSpan: 1,
-            });
-          });
-        activeProject.slots.filter((s) => !s.hidden).forEach((s) => {
-          if (slotImage(s)) normalizeImageSettings(slotImage(s));
-          let chart = s.chart && getChart(s.chart);
-        });
-        if (activeProject.slotCaptionsEnabled) initializeSlotCaptions();
-        selectedSlotId = null;
+        let rows=Number(r), cols=Number(c);
+        if(!Number.isInteger(rows)||!Number.isInteger(cols)||rows<1||rows>8||cols<1||cols>8)
+          throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
+        let candidate=projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let removed=candidate.slots.filter(slot=>slot.row>rows||slot.col>cols);
+        if(removed.some(slot=>slot.hidden||slot.rowSpan!==1||slot.colSpan!==1||slotHasNonDefaultLocalState(slot)))
+          throw Error("내용이나 병합 상태가 있는 영역은 그리드 축소로 제거할 수 없습니다.");
+        let retained=candidate.slots.filter(slot=>slot.row<=rows&&slot.col<=cols);
+        if(retained.filter(slot=>!slot.hidden).some(slot=>
+          slot.row+slot.rowSpan-1>rows||slot.col+slot.colSpan-1>cols))
+          throw Error("병합된 슬롯을 가로지르도록 그리드를 축소할 수 없습니다.");
+        candidate.layout.gridRows=rows; candidate.layout.gridCols=cols; candidate.slots=retained;
+        let occupied=new Set(candidate.slots.map(slot=>`${slot.row}:${slot.col}`)),
+          nextId=Math.max(-1,...candidate.slots.map(slot=>slot.id))+1;
+        for(let row=1;row<=rows;row++) for(let col=1;col<=cols;col++){
+          let key=`${row}:${col}`; if(occupied.has(key))continue;
+          candidate.slots.push(newGridSlot(nextId++,row,col)); occupied.add(key);
+        }
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+        if(selectedSlotId!==null&&!slotAt(selectedSlotId)) selectedSlotId=null;
         renderDashboard();
       }
       function makeSlots(r = activeProject.gridRows, c = activeProject.gridCols) {
@@ -2322,7 +2287,7 @@
       function releaseProjectImageDisplayUrls(collection) {
         (Array.isArray(collection) ? collection : []).forEach(releaseProjectImageDisplayUrl);
       }
-      function buildProjectImageModel(bytes, name, mime, id, settings = null) {
+      function buildProjectImageModel(bytes, name, mime, id) {
         let model = {
           id,
           name: projectCsvName(name, "image.bin"),
@@ -2330,23 +2295,17 @@
           mime: typeof mime === "string" && mime ? mime : "application/octet-stream",
           bytesBase64:
             typeof bytes === "string" ? bytes : ffpxBytesToBase64(bytes || new Uint8Array()),
-          settings:
-            settings && typeof settings === "object"
-              ? projectClone(settings)
-              : { fit: "contain", scale: 100, x: 50, y: 50 },
         };
         projectVfs.assignUniqueLocation(model, PROJECT_ASSET_DIRECTORIES.image);
         if (!model.bytesBase64) throw Error("이미지 데이터가 비어 있습니다.");
-        normalizeImageSettings(model);
         return model;
       }
-      function createProjectImage(bytes, name, mime, id = null, settings = null, path = null) {
+      function createProjectImage(bytes, name, mime, id = null, path = null) {
         let model = buildProjectImageModel(
           bytes,
           name,
           mime,
           Number.isInteger(id) && id > 0 ? id : activeProject.imageId,
-          settings,
         );
         if (path) projectVfs.assignLocation(model, path);
         appFSM.send("IMAGE_OBJECT_CREATED", {
@@ -3307,23 +3266,24 @@
         let slot = selectedSlotId === null ? null : slotAt(selectedSlotId);
         return slot && !slot.hidden ? slot : null;
       }
-      function normalizeImageSettings(image) {
-        if (!image) return null;
-        image.settings = readImageSettings(image);
-        return image.settings;
+      function normalizeImageSettings(slot) {
+        if (!slot) return null;
+        normalizeSlotContent(slot);
+        slot.content.imageSettings = readImageSettings(slot.content.imageSettings);
+        return slot.content.imageSettings;
       }
-      function readImageSettings(image) {
-        if (!image) return null;
-        let settings = image.settings && typeof image.settings === "object" ? image.settings : {},
-          fit = ["contain", "cover", "manual"].includes(settings.fit) ? settings.fit : "contain",
+      function readImageSettings(settings) {
+        let source = settings && typeof settings === "object" && !Array.isArray(settings)
+            ? settings
+            : {},
+          fit = ["contain", "cover", "manual"].includes(source.fit) ? source.fit : "contain",
           number = (value, fallback, min, max) =>
             Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : fallback));
         return {
-          ...settings,
           fit,
-          scale: number(settings.scale, 100, 1, 1000),
-          x: number(settings.x, 50, -100, 200),
-          y: number(settings.y, 50, -100, 200),
+          scale: number(source.scale, 100, 1, 1000),
+          x: number(source.x, 50, -100, 200),
+          y: number(source.y, 50, -100, 200),
         };
       }
       function updateFileAvailability() {
@@ -4218,84 +4178,109 @@
       function projectClone(value) {
         return JSON.parse(JSON.stringify(value));
       }
+      function slotLocalState(slot) {
+        normalizeSlotContent(slot);
+        return {
+          chart: slot.content.chart,
+          imageId: slot.content.imageId,
+          contentType: slot.content.contentType,
+          imageSettings: readImageSettings(slot.content.imageSettings),
+          caption: typeof slot.caption === "string" ? slot.caption : null,
+        };
+      }
+      function setSlotLocalState(slot, localState) {
+        normalizeSlotContent(slot);
+        let next = localState && typeof localState === "object" ? localState : SLOT_LOCAL_DEFAULTS;
+        slot.content.chart = Number.isInteger(next.chart) ? next.chart : null;
+        slot.content.imageId = Number.isInteger(next.imageId) ? next.imageId : null;
+        slot.content.contentType = next.contentType === "image" ? "image" : "graph";
+        slot.content.imageSettings = readImageSettings(next.imageSettings);
+        slot.caption = typeof next.caption === "string" && next.caption ? next.caption : null;
+        return slot;
+      }
+      function resetSlotLocalState(slot) {
+        return setSlotLocalState(slot, SLOT_LOCAL_DEFAULTS);
+      }
+      function slotHasNonDefaultLocalState(slot) {
+        let local = slotLocalState(slot),
+          defaults = SLOT_LOCAL_DEFAULTS;
+        return (
+          local.chart !== defaults.chart ||
+          local.imageId !== defaults.imageId ||
+          local.contentType !== defaults.contentType ||
+          local.caption !== defaults.caption ||
+          local.imageSettings.fit !== defaults.imageSettings.fit ||
+          local.imageSettings.scale !== defaults.imageSettings.scale ||
+          local.imageSettings.x !== defaults.imageSettings.x ||
+          local.imageSettings.y !== defaults.imageSettings.y
+        );
+      }
       function slotLegacyState(slot) {
-        let state = Object.fromEntries(
-            Object.entries(slot).filter(([key]) => key !== "content"),
-          ),
-          content = slot.content && typeof slot.content === "object" ? slot.content : {};
-        state.chart = content.chart ?? null;
-        state.imageId = content.imageId ?? null;
-        state.contentType = content.contentType === "image" ? "image" : "graph";
-        state.caption = typeof content.caption === "string" ? content.caption : null;
-        return state;
+        let local = slotLocalState(slot);
+        return {
+          ...Object.fromEntries(Object.entries(slot).filter(([key]) => key !== "content")),
+          chart: local.chart,
+          imageId: local.imageId,
+          contentType: local.contentType,
+          imageSettings: projectClone(local.imageSettings),
+          caption: local.caption,
+        };
       }
       function normalizeSlotContent(slot) {
         if (!slot || typeof slot !== "object" || Array.isArray(slot)) return slot;
-        let legacy = {
-            chart: slot.chart ?? null,
-            imageId: slot.imageId ?? null,
-            contentType: slot.contentType === "image" ? "image" : "graph",
-            caption: typeof slot.caption === "string" ? slot.caption : null,
-          },
-          content =
+        let sourceContent =
             slot.content && typeof slot.content === "object" && !Array.isArray(slot.content)
               ? slot.content
-              : {};
-        if (!Object.prototype.hasOwnProperty.call(content, "chart")) content.chart = legacy.chart;
-        if (!Object.prototype.hasOwnProperty.call(content, "imageId"))
-          content.imageId = legacy.imageId;
-        if (!Object.prototype.hasOwnProperty.call(content, "contentType"))
-          content.contentType = legacy.contentType;
-        if (!Object.prototype.hasOwnProperty.call(content, "caption"))
-          content.caption = legacy.caption;
-        slot.content = content;
+              : {},
+          legacyCaption =
+            typeof slot.caption === "string"
+              ? slot.caption
+              : typeof sourceContent.caption === "string"
+                ? sourceContent.caption
+                : null,
+          legacySettings =
+            sourceContent.imageSettings && typeof sourceContent.imageSettings === "object"
+              ? sourceContent.imageSettings
+              : slot.imageSettings && typeof slot.imageSettings === "object"
+                ? slot.imageSettings
+                : DEFAULT_IMAGE_SETTINGS;
+        slot.content = {
+          ...sourceContent,
+          chart: Number.isInteger(sourceContent.chart)
+            ? sourceContent.chart
+            : Number.isInteger(slot.chart) ? slot.chart : null,
+          imageId: Number.isInteger(sourceContent.imageId)
+            ? sourceContent.imageId
+            : Number.isInteger(slot.imageId) ? slot.imageId : null,
+          contentType:
+            (sourceContent.contentType ?? slot.contentType) === "image" ? "image" : "graph",
+          imageSettings: readImageSettings(legacySettings),
+        };
+        delete slot.content.caption;
+        slot.caption = legacyCaption && legacyCaption !== "슬롯 캡션" ? legacyCaption : null;
         Object.defineProperties(slot, {
           chart: {
             configurable: true,
             enumerable: false,
-            get() {
-              return this.content.chart;
-            },
-            set(value) {
-              this.content.chart = value;
-            },
+            get() { return this.content.chart; },
+            set(value) { this.content.chart = value; },
           },
           imageId: {
             configurable: true,
             enumerable: false,
-            get() {
-              return this.content.imageId;
-            },
-            set(value) {
-              this.content.imageId = value;
-            },
+            get() { return this.content.imageId; },
+            set(value) { this.content.imageId = value; },
           },
           contentType: {
             configurable: true,
             enumerable: false,
-            get() {
-              return this.content.contentType;
-            },
-            set(value) {
-              this.content.contentType = value;
-            },
-          },
-          caption: {
-            configurable: true,
-            enumerable: false,
-            get() {
-              return this.content.caption;
-            },
-            set(value) {
-              this.content.caption = value;
-            },
+            get() { return this.content.contentType; },
+            set(value) { this.content.contentType = value; },
           },
           toJSON: {
             configurable: true,
             enumerable: false,
-            value() {
-              return slotLegacyState(this);
-            },
+            value() { return slotLegacyState(this); },
           },
         });
         return slot;
@@ -4309,6 +4294,134 @@
         return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value) : fallback;
       }
       function validateProjectObjectState(state, { requireSlots = false } = {}) {
+        let record = (value) => !!value && typeof value === "object" && !Array.isArray(value);
+        if (
+          !record(state) ||
+          state.kind !== "fast-figure-project-object" ||
+          !record(state.meta) ||
+          !record(state.layout) ||
+          !record(state.layout.slotStyle) ||
+          !record(state.annotations?.labels) ||
+          !record(state.annotations?.labels?.settings) ||
+          !record(state.annotations?.captions) ||
+          !record(state.annotations?.captions?.settings) ||
+          !record(state.assets) ||
+          !record(state.fileSystem) ||
+          !record(state.nextId) ||
+          !record(state.appearance) ||
+          !record(state.appearance.uiPalette) ||
+          !record(state.export)
+        ) throw Error("프로젝트 오브젝트 구조가 올바르지 않습니다.");
+        if (
+          typeof state.meta.projectName !== "string" ||
+          typeof state.meta.appBuild !== "string" ||
+          !Number.isInteger(state.layout.gridRows) ||
+          !Number.isInteger(state.layout.gridCols) ||
+          state.layout.gridRows < 1 || state.layout.gridRows > 8 ||
+          state.layout.gridCols < 1 || state.layout.gridCols > 8 ||
+          typeof state.annotations.labels.enabled !== "boolean" ||
+          typeof state.annotations.captions.enabled !== "boolean" ||
+          typeof state.annotations.captions.text !== "string" ||
+          typeof state.annotations.captions.afterText !== "string" ||
+          typeof state.annotations.captions.name !== "string" ||
+          typeof state.annotations.captions.nameBold !== "boolean"
+        ) throw Error("프로젝트 메타데이터 또는 레이아웃이 올바르지 않습니다.");
+        let style = state.layout.slotStyle;
+        for (let [key, min, max] of [
+          ["referenceWidth",100,20000],["gap",0,2000],["outerMargin",0,5000],
+          ["radius",0,2000],["aspect",0.1,10],
+        ])
+          if (!Number.isFinite(style[key]) || style[key] < min || style[key] > max)
+            throw Error(`프로젝트 슬롯 스타일 ${key}가 올바르지 않습니다.`);
+        if (typeof style.showBorders !== "boolean")
+          throw Error("프로젝트 슬롯 외곽선 설정이 올바르지 않습니다.");
+        let labelSettings = state.annotations.labels.settings;
+        if (!Number.isFinite(labelSettings.x) || !Number.isFinite(labelSettings.y) ||
+            !Number.isFinite(labelSettings.fontSize) || labelSettings.fontSize < 6)
+          throw Error("프로젝트 레이블 위치 또는 크기가 올바르지 않습니다.");
+        let output = state.export,
+          explicit = output.heightMode === "explicit";
+        if (
+          !Number.isFinite(output.width) || output.width < 100 || output.width > 20000 ||
+          !["auto","explicit"].includes(output.heightMode) ||
+          (explicit && (!Number.isFinite(output.height) || output.height < 100 || output.height > 20000)) ||
+          !Number.isFinite(output.dpi) || output.dpi < 36 || output.dpi > 1200 ||
+          !["png","jpeg"].includes(output.format)
+        ) throw Error("프로젝트 출력 설정이 올바르지 않습니다.");
+        for (let key of Object.keys(DEFAULT_UI_PALETTE))
+          if (projectColor(state.appearance.uiPalette[key], null) === null)
+            throw Error(`프로젝트 UI 색상 ${key}가 올바르지 않습니다.`);
+        if (!Array.isArray(state.assets.csvFiles) || !Array.isArray(state.assets.images) ||
+            !Array.isArray(state.fileSystem.directories) || !Array.isArray(state.charts) ||
+            !Array.isArray(state.slots) || (requireSlots && state.slots.length === 0))
+          throw Error("프로젝트 자산, 차트 또는 슬롯 목록이 올바르지 않습니다.");
+        let filePaths=new Set(), directoryPaths=new Set();
+        state.fileSystem.directories.forEach((path)=>{
+          let normalized=normalizeProjectPath(path,{directory:true});
+          if(normalized==="/"||normalized!==path||directoryPaths.has(path))
+            throw Error("프로젝트 폴더 경로가 올바르지 않습니다.");
+          directoryPaths.add(path);
+        });
+        for(let required of ["/assets","/assets/csv","/assets/images","/assets/trash"])
+          if(!directoryPaths.has(required)) throw Error(`프로젝트 기본 폴더 ${required}가 없습니다.`);
+        let csvIds=new Set();
+        state.assets.csvFiles.forEach((csv)=>{
+          let path; try{path=projectAssetPath(csv)}catch(_){throw Error("프로젝트 CSV 오브젝트가 올바르지 않습니다.")}
+          if(!record(csv)||!Number.isInteger(csv.id)||csv.id<1||csvIds.has(csv.id)||
+             typeof csv.name!=="string"||typeof csv.directory!=="string"||!Array.isArray(csv.rows)||
+             typeof csv.bytesBase64!=="string"||!csv.bytesBase64||
+             normalizeProjectPath(csv.directory,{directory:true})!==csv.directory||
+             filePaths.has(path)||!directoryPaths.has(csv.directory))
+            throw Error("프로젝트 CSV 오브젝트가 올바르지 않습니다.");
+          csvIds.add(csv.id); filePaths.add(path);
+        });
+        let imageIds=new Set();
+        state.assets.images.forEach((image)=>{
+          let path; try{path=projectAssetPath(image)}catch(_){throw Error("프로젝트 이미지 오브젝트가 올바르지 않습니다.")}
+          if(!record(image)||!Number.isInteger(image.id)||image.id<1||imageIds.has(image.id)||
+             typeof image.name!=="string"||typeof image.directory!=="string"||
+             typeof image.bytesBase64!=="string"||!image.bytesBase64||
+             normalizeProjectPath(image.directory,{directory:true})!==image.directory||
+             filePaths.has(path)||!directoryPaths.has(image.directory))
+            throw Error("프로젝트 이미지 오브젝트가 올바르지 않습니다.");
+          imageIds.add(image.id); filePaths.add(path);
+        });
+        let chartIds=new Set();
+        state.charts.forEach((chart,index)=>{
+          if(!Number.isInteger(chart?.id)||chart.id<1||chartIds.has(chart.id))
+            throw Error("프로젝트 차트 ID가 올바르지 않습니다.");
+          chartIds.add(chart.id);
+          validateChartModel(chart,`프로젝트 차트 ${index+1}`,state.assets.csvFiles);
+        });
+        normalizeSlotContents(state.slots);
+        let slotIds=new Set(), owners=new Map([...chartIds].map(id=>[id,0]));
+        state.slots.forEach((slot)=>{
+          let settings=readImageSettings(slot.content?.imageSettings);
+          if(!record(slot)||!Number.isInteger(slot.id)||slotIds.has(slot.id)||
+             !Number.isInteger(slot.row)||!Number.isInteger(slot.col)||
+             !Number.isInteger(slot.rowSpan)||!Number.isInteger(slot.colSpan)||
+             slot.row<1||slot.col<1||slot.rowSpan<1||slot.colSpan<1||
+             slot.row+slot.rowSpan-1>state.layout.gridRows||
+             slot.col+slot.colSpan-1>state.layout.gridCols||
+             !["graph","image"].includes(slot.contentType)||
+             (slot.chart!=null&&slot.imageId!=null)||
+             (slot.chart!=null&&!chartIds.has(slot.chart))||
+             (slot.imageId!=null&&!imageIds.has(slot.imageId))||
+             !(slot.caption===null||typeof slot.caption==="string"))
+            throw Error("프로젝트 슬롯 오브젝트가 올바르지 않습니다.");
+          slot.content.imageSettings=settings;
+          if(slot.chart!=null) owners.set(slot.chart,owners.get(slot.chart)+1);
+          slotIds.add(slot.id);
+        });
+        for(let [chartId,count] of owners)
+          if(count!==1) throw Error(`프로젝트 차트 ${chartId}의 슬롯 소유권이 올바르지 않습니다.`);
+        let maximums={csv:Math.max(0,...csvIds),image:Math.max(0,...imageIds),chart:Math.max(0,...chartIds)};
+        for(let key of ["csv","image","chart"])
+          if(!Number.isInteger(state.nextId[key])||state.nextId[key]<=maximums[key])
+            throw Error(`프로젝트 ${key} ID 시퀀스가 올바르지 않습니다.`);
+        return state;
+      }
+ = {}) {
         let record = (value) =>
           !!value && typeof value === "object" && !Array.isArray(value);
         if (
@@ -4551,7 +4664,7 @@
           )
             throw Error("프로젝트 이미지 데이터가 올바르지 않습니다.");
           ids.add(source.id);
-          let image = {
+          nextImages.push({
             id: source.id,
             name: projectCsvName(source.name, "image.bin"),
             directory: typeof source.directory === "string" ? source.directory : null,
@@ -4560,13 +4673,7 @@
                 ? source.mime
                 : "application/octet-stream",
             bytesBase64: source.bytesBase64,
-            settings:
-              source.settings && typeof source.settings === "object"
-                ? projectClone(source.settings)
-                : {},
-          };
-          normalizeImageSettings(image);
-          nextImages.push(image);
+          });
         });
         return {
           images: nextImages,
