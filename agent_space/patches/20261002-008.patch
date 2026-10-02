@@ -192,3 +192,44 @@ new file mode 100644
 +          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 +          git commit -m "Build distribution artifacts"
 +          git push origin HEAD:main
+diff --git a/LICENSE b/LICENSE
+--- a/LICENSE
++++ b/LICENSE
+@@ -31,8 +31,8 @@ Fast Figure incorporates third-party software distributed under the licenses
+ below. These notices apply to their respective third-party components.
+ 
+ The split distribution carries third-party runtime files separately under
+-`vendor/`; the inline distribution embeds the same runtime files into the
+-generated `Fast-figure.html`. Selected Iconoir SVG definitions are embedded in
++vendor/; the inline distribution embeds the same runtime files into the
++generated Fast-figure.html. Selected Iconoir SVG definitions are embedded in
+ the application HTML. The split ZIP also includes this LICENSE file.
+ 
+ 
+@@ -79,7 +79,7 @@ License source:
+ https://github.com/plotly/plotly.js/blob/v2.35.2/LICENSE
+ 
+ Fast Figure carries the minified Plotly.js distribution as
+-`vendor/plotly.min.js` in the split package and embeds the same file into the
++vendor/plotly.min.js in the split package and embeds the same file into the
+ inline HTML build. The bundled distribution retains its own version, copyright,
+ and license header.
+ 
+@@ -113,7 +113,7 @@ Component version: 19.2.8
+ Source repository: https://github.com/facebook/react
+ 
+ Fast Figure carries React and ReactDOM in
+-`vendor/fast-figure-ui-runtime.js` in the split package and embeds that runtime
++vendor/fast-figure-ui-runtime.js in the split package and embeds that runtime
+ into the inline HTML build.
+ 
+ MIT License
+@@ -146,7 +146,7 @@ Component version: 9.5.2
+ Source repository: https://github.com/mantinedev/mantine
+ 
+ Fast Figure carries @mantine/core and @mantine/hooks in
+-`vendor/fast-figure-ui-runtime.js` in the split package and embeds that runtime
++vendor/fast-figure-ui-runtime.js in the split package and embeds that runtime
+ into the inline HTML build.
+ 
+ MIT License
