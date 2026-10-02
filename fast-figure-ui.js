@@ -2881,6 +2881,11 @@
   function FastFigureApp() {
     useAppState();
     const palette = window.FastFigureApi.appearance.readPalette();
+    const theme = createTheme({
+      ...fastFigureTheme,
+      colors: { ffui: Array(10).fill(palette.uiColor) },
+      primaryColor: "ffui",
+    });
     const channels = [1, 3, 5].map((index) => {
       const value = parseInt(palette.uiColor.slice(index, index + 2), 16) / 255;
       return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
@@ -2893,7 +2898,7 @@
       MantineProvider,
       {
         defaultColorScheme: "light",
-        theme: fastFigureTheme,
+        theme,
         cssVariablesResolver: (theme) => ({
           variables: {
             "--ff-header-height": `${theme.other.shell.headerHeight}px`,
@@ -2925,6 +2930,12 @@
             "--mantine-primary-color-light-hover": `color-mix(in srgb, ${palette.uiColor} 24%, transparent)`,
             "--mantine-primary-color-light-color": palette.fontColor,
             "--mantine-primary-color-contrast": contrast,
+            "--mantine-color-ffui-filled": "var(--mantine-primary-color-filled)",
+            "--mantine-color-ffui-filled-hover": "var(--mantine-primary-color-filled-hover)",
+            "--mantine-color-ffui-light": "var(--mantine-primary-color-light)",
+            "--mantine-color-ffui-light-hover": "var(--mantine-primary-color-light-hover)",
+            "--mantine-color-ffui-light-color": "var(--mantine-primary-color-light-color)",
+            "--mantine-color-ffui-contrast": "var(--mantine-primary-color-contrast)",
           },
           dark: {},
         }),
