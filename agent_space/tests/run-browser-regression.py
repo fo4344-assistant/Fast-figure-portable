@@ -99,9 +99,20 @@ def main():
                     "unexpected split package members: "
                     + repr(sorted(members ^ expected_members))
                 )
+            if archive.read("Fast-figure/README.md") != (root / "README.md").read_bytes():
+                raise RuntimeError(
+                    "split package README.md differs from repository README.md"
+                )
             archive.extractall(extracted)
 
         split = extracted / "Fast-figure" / "Fast-figure.html"
+        for name, target in (("inline", inline), ("split-zip", split)):
+            contents = target.read_text(encoding="utf-8")
+            if "<!-- FAST_FIGURE_README -->" in contents:
+                raise RuntimeError(f"{name} HTML still contains the README build marker")
+            if 'data-source="README.md"' not in contents or "<h1>Fast Figure</h1>" not in contents:
+                raise RuntimeError(f"{name} HTML does not contain the built README.md content")
+
         failed = False
         for name, target in (("inline", inline), ("split-zip", split)):
             results = run(browser, target, probe)
