@@ -1,0 +1,33 @@
+name: Distribution Build Regression
+
+on:
+  push:
+    branches:
+      - 'agent/distribution-build-r2-20261002'
+    paths:
+      - 'scripts/build-portable.py'
+      - 'agent_space/tests/browser-regression.js'
+      - 'agent_space/tests/run-browser-regression.py'
+      - 'Fast-figure.html'
+      - 'fast-figure.js'
+      - 'fast-figure-ui.js'
+      - 'vendor/**'
+      - '.github/workflows/distribution-build-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  distribution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check syntax
+        run: |
+          python -m py_compile scripts/build-portable.py
+          python -m py_compile agent_space/tests/run-browser-regression.py
+          node --check agent_space/tests/browser-regression.js
+      - name: Run inline and split ZIP regression
+        run: python agent_space/tests/run-browser-regression.py
