@@ -1,0 +1,31 @@
+name: Source Sync Regression
+
+on:
+  push:
+    branches:
+      - 'agent/source-sync-r12-20261002'
+    paths:
+      - 'agent_space/tests/browser-regression.js'
+      - 'agent_space/tests/run-browser-regression.py'
+      - 'Fast-figure.html'
+      - 'fast-figure.js'
+      - 'fast-figure-ui.js'
+      - '.github/workflows/source-sync-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        run: |
+          node --check fast-figure.js
+          node --check fast-figure-ui.js
+          node --check agent_space/tests/browser-regression.js
+      - name: Run split and portable regression
+        run: python agent_space/tests/run-browser-regression.py
