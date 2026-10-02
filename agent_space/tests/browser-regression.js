@@ -86,13 +86,15 @@
         "blank.json",
       ));
       api.graphs.setEditable(true);
-      const chart = getChart(slot.chart);
+      let currentSlot = slotAt(slot.id);
+      const chart = getChart(currentSlot.chart);
       check(chart && chart.editor.objects.length === 0, "blank chart is not zero-object");
-      const file = ffsxFile(slot);
+      const file = ffsxFile(currentSlot);
       const payload = await ffsxReadSlot(file);
       check(payload.chart && payload.csvFiles.length === 0, "blank FFSX contains synthetic CSV");
       await api.graphs.importFile(file);
-      check(!!slot.chart && getChart(slot.chart).editor.objects.length === 0, "blank FFSX import failed");
+      currentSlot = slotAt(slot.id);
+      check(!!currentSlot.chart && getChart(currentSlot.chart).editor.objects.length === 0, "blank FFSX import failed");
     });
     await run(5, "multi-CSV FFSX", async () => {
       const slot = activeProject.slots[0]; select(slot);

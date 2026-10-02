@@ -3608,8 +3608,6 @@
           !Array.isArray(chart.editor.objects)
         )
           throw Error(`${label} editor.objects가 없습니다.`);
-        if (chart.editor.editable !== false && chart.editor.objects.length === 0)
-          throw Error(`${label}에는 그래프 오브젝트가 하나 이상 필요합니다.`);
         if (
           !chart.graph ||
           typeof chart.graph !== "object" ||
