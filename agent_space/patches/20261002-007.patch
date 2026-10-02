@@ -563,3 +563,132 @@ diff --git a/agent_space/tests/run-browser-regression.py b/agent_space/tests/run
          failed = False
          for name, target in (("inline", inline), ("split-zip", split)):
              results = run(browser, target, probe)
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2,7 +2,7 @@
+ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+   sourceScript: "r12",
+   verificationModel: "r6",
+-  sourceCode: "r2",
++  sourceCode: "r3",
+   appBuild: "1.1.32-wip",
+ });
+ (async () => {
+diff --git a/.github/workflows/fast-figure-regression.yml b/.github/workflows/fast-figure-regression.yml
+--- a/.github/workflows/fast-figure-regression.yml
++++ b/.github/workflows/fast-figure-regression.yml
+@@ -11,6 +11,7 @@ on:
+       - 'fast-figure.js'
+       - 'fast-figure-ui.js'
+       - 'scripts/build-portable.py'
++      - 'README.md'
+   workflow_dispatch:
+ 
+ permissions:
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -29,20 +29,20 @@
+       "validation_review": "agent_space/reviews/review-017-tlc-slot-core-r6-2x2.md"
+     },
+     "source-code": {
+-      "revision": 2,
++      "revision": 3,
+       "status": "current",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:4ed1b0ebe81476560b10aac0b85238e3ed183d0e4faa14fadd9d3e73c60a7210",
++      "fingerprint": "sha256:6977517c2d0232c4346f201d91b5f5db243710f3fc65c62d15a1e26751d3022a",
+       "derived_from": {
+         "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db",
+         "verification-model": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b"
+       },
+-      "validation_review": "agent_space/reviews/review-019-source-code-r2-distribution.md"
++      "validation_review": "agent_space/reviews/review-020-source-code-r3-readme-build.md"
+     }
+   },
+   "legacy_artifacts": {
+diff --git a/agent_space/reviews/review-020-source-code-r3-readme-build.md b/agent_space/reviews/review-020-source-code-r3-readme-build.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-020-source-code-r3-readme-build.md
+@@ -0,0 +1,74 @@
++# Review 020 — source-code r3 README build source
++
++## Scope
++
++This review covers the source-code r3 change that removes the independently
++maintained README body from `Fast-figure.html` and makes repository
++`README.md` the authoring source for the README shown inside both distribution
++artifacts.
++
++No Source Script, verification-model, EFSM, project-model, or file-format
++semantics are changed.
++
++Authority chain:
++
++- Source Script: r12 / current / closed
++- verification-model: r6 / current / TLC passed
++- source-code target: r3
++- application build: `1.1.32-wip`
++
++## Ownership and build boundary
++
++The checked-in HTML now contains only:
++
++```html
++<!-- FAST_FIGURE_README -->
++```
++
++inside `template#readmeContent`.
++
++`scripts/build-portable.py` reads the root `README.md`, renders the Markdown
++constructs currently used by that document, and replaces the marker before
++writing either distribution artifact.
++
++Both `build_inline()` and `build_split_zip()` use the same
++`build_source_html()` result. The split ZIP additionally retains the raw
++`README.md` bytes as `Fast-figure/README.md`.
++
++The builder uses only the Python standard library and HTML-escapes source text.
++It supports the README's current headings, paragraphs, fenced code blocks,
++ordered/unordered lists, inline code, bold text, and links.
++
++## Regression coverage
++
++The distribution regression now checks that:
++
++1. split ZIP `README.md` is byte-identical to the repository source;
++2. no built HTML retains the README build marker;
++3. both inline and split HTML contain `data-source="README.md"` and
++   `<h1>Fast Figure</h1>`;
++4. the existing browser regression still runs against both built artifacts.
++
++The main regression workflow now watches `README.md`.
++
++## Source-code fingerprint
++
++r3 fingerprint:
++
++`sha256:6977517c2d0232c4346f201d91b5f5db243710f3fc65c62d15a1e26751d3022a`
++
++Derived from:
++
++- Source Script r12:
++  `sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db`
++- verification-model r6:
++  `sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b`
++
++## Validation before integration
++
++- exact r3 builder Python compilation: passed
++- Markdown renderer smoke test: passed
++- full inline/split browser regression: delegated to the existing main push workflow
++
++The app build string remains `1.1.32-wip` because this is documentation
++sourcing and packaging, not application-state behavior.
