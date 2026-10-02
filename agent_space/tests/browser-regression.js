@@ -2,7 +2,7 @@
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   sourceScript: "r12",
   verificationModel: "r6",
-  sourceCode: "r3",
+  sourceCode: "r4",
   appBuild: "1.1.32-wip",
 });
 (async () => {
@@ -222,6 +222,20 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(Number.isFinite(labels.width) && labels.width > 0, "label width invalid");
       const slot = document.querySelector(".slot:not(.hidden)");
       check(slot && slot.getBoundingClientRect().width > 0, "rendered slot has no width");
+    });
+    await run(14, "Mantine primary button follows UI color", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const button = document.querySelector(".mantine-Button-root[data-variant='filled']");
+      check(!!button, "filled Mantine button absent");
+      const probe = document.createElement("span");
+      probe.style.color = api.appearance.readPalette().uiColor;
+      document.body.appendChild(probe);
+      const expected = getComputedStyle(probe).color;
+      probe.remove();
+      check(
+        getComputedStyle(button).backgroundColor === expected,
+        "filled Mantine button does not use appearance uiColor",
+      );
     });
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
