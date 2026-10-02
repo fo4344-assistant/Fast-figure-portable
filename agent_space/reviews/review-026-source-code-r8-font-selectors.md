@@ -77,8 +77,9 @@ graph 검사:
 
 1. 기존 blank graph regression 이후 editable chart에서 graph font를 자동 값으로 설정한다.
 2. Select가 `자동`을 표시한다.
-3. custom graph font를 설정하면 `기존: ...`로 보존된다.
-4. 원래 graph font를 복원한다.
+3. custom graph font가 authoritative settings에 저장되는지 확인한다.
+4. graph workspace를 다시 선택해 editor를 재구성한 뒤 `기존: ...`로 보존되는지 확인한다.
+5. 원래 graph font를 복원한다.
 
 ## 의미 및 경계
 

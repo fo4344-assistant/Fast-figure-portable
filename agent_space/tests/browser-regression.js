@@ -186,6 +186,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     });
     await run(19, "graph font selector preserves auto and custom values", async () => {
       api.graphs.setEditable(true);
+      const slotId = api.slots.readSelected()?.id;
       const original = api.graphs.readLayout().settings.graphFontFamily;
       api.graphs.updateLayout({ globalSettings: { graphFontFamily: "" } });
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -197,6 +198,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(!!input && input.classList.contains("mantine-Select-input"), "graph font is not a Select");
       check(input.value === "자동", "graph automatic font option missing");
       api.graphs.updateLayout({ globalSettings: { graphFontFamily: "Legacy Graph Font, sans-serif" } });
+      check(
+        api.graphs.readLayout().settings.graphFontFamily === "Legacy Graph Font, sans-serif",
+        "graph custom font was not stored",
+      );
+      api.slots.select(null);
+      api.slots.select(slotId);
       await new Promise((resolve) => setTimeout(resolve, 0));
       input = selectInput();
       check(input?.value === "기존: Legacy Graph Font, sans-serif", "graph custom font not preserved");

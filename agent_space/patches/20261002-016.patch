@@ -1,0 +1,34 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -188,6 +188,7 @@
+     await run(19, "graph font selector preserves auto and custom values", async () => {
+       api.graphs.setEditable(true);
++      const slotId = api.slots.readSelected()?.id;
+       const original = api.graphs.readLayout().settings.graphFontFamily;
+       api.graphs.updateLayout({ globalSettings: { graphFontFamily: "" } });
+       await new Promise((resolve) => setTimeout(resolve, 0));
+@@ -200,7 +201,13 @@
+       check(input.value === "자동", "graph automatic font option missing");
+       api.graphs.updateLayout({ globalSettings: { graphFontFamily: "Legacy Graph Font, sans-serif" } });
++      check(
++        api.graphs.readLayout().settings.graphFontFamily === "Legacy Graph Font, sans-serif",
++        "graph custom font was not stored",
++      );
++      api.slots.select(null);
++      api.slots.select(slotId);
+       await new Promise((resolve) => setTimeout(resolve, 0));
+       input = selectInput();
+       check(input?.value === "기존: Legacy Graph Font, sans-serif", "graph custom font not preserved");
+diff --git a/agent_space/reviews/review-026-source-code-r8-font-selectors.md b/agent_space/reviews/review-026-source-code-r8-font-selectors.md
+--- a/agent_space/reviews/review-026-source-code-r8-font-selectors.md
++++ b/agent_space/reviews/review-026-source-code-r8-font-selectors.md
+@@ -64,8 +64,9 @@
+ 
+ 1. 기존 blank graph regression 이후 editable chart에서 graph font를 자동 값으로 설정한다.
+ 2. Select가 `자동`을 표시한다.
+-3. custom graph font를 설정하면 `기존: ...`로 보존된다.
+-4. 원래 graph font를 복원한다.
++3. custom graph font가 authoritative settings에 저장되는지 확인한다.
++4. graph workspace를 다시 선택해 editor를 재구성한 뒤 `기존: ...`로 보존되는지 확인한다.
++5. 원래 graph font를 복원한다.
