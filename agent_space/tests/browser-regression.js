@@ -31,7 +31,8 @@
     images: activeProject.images.map((i) => i.name),
     graphs: activeProject.charts.length,
     labels: api.labels.readState(),
-    captions: api.captions.readState(),
+    captions: api.captions.readGlobal(),
+    exportSettings: api.print.readSettings(),
     palette: api.appearance.readPalette(),
   });
   try {
@@ -52,10 +53,11 @@
       select(slots[1]);
       api.slots.setContentType("image");
       api.images.insertEmpty();
+      api.images.setSettings({ fit: "manual", scale: 135, x: 42, y: 61 });
       api.layout.mergeSlots([slots[2].id, slots[3].id]);
       api.labels.setEnabled(true);
       api.captions.setEnabled(true);
-      api.captions.setText("Regression caption");
+      api.captions.setGlobalText("Regression caption");
       const before = save();
       await api.project.importFile(ffpxFile());
       const after = save();
@@ -63,6 +65,9 @@
       check(after.images.length > 0 && after.slots.some((s) => s.imageId), "image lost");
       check(after.slots.some((s) => s.rowSpan > 1 || s.colSpan > 1), "merge lost");
       check(after.labels.enabled && after.captions.enabled, "annotations lost");
+      check(after.exportSettings.width === before.exportSettings.width, "export settings lost");
+      const imageSlot = activeProject.slots.find((s) => s.imageId);
+      check(imageSlot?.content?.imageSettings?.scale === 135, "slot-local image settings lost");
     });
     await run(3, "empty image and graph slots", async () => {
       api.layout.setGrid(2, 3);
@@ -76,12 +81,18 @@
     await run(4, "FFSX blank graph", async () => {
       const slot = activeProject.slots[5];
       select(slot);
-      api.graphs.addObject(activeProject.csvFiles[0].id);
+      await api.graphs.importFile(new File(
+        [JSON.stringify({ data: [], layout: { title: "Blank graph" } })],
+        "blank.json",
+      ));
+      api.graphs.setEditable(true);
+      const chart = getChart(slot.chart);
+      check(chart && chart.editor.objects.length === 0, "blank chart is not zero-object");
       const file = ffsxFile(slot);
       const payload = await ffsxReadSlot(file);
-      check(payload.chart && Array.isArray(payload.csvFiles), "blank FFSX invalid");
+      check(payload.chart && payload.csvFiles.length === 0, "blank FFSX contains synthetic CSV");
       await api.graphs.importFile(file);
-      check(!!slot.chart, "blank FFSX import failed");
+      check(!!slot.chart && getChart(slot.chart).editor.objects.length === 0, "blank FFSX import failed");
     });
     await run(5, "multi-CSV FFSX", async () => {
       const slot = activeProject.slots[0]; select(slot);
@@ -108,7 +119,26 @@
       await api.graphs.importFile(new File([JSON.stringify(figure)], "export.json"));
       check(!!slot.chart, "Plotly import lost graph");
     });
-    await run(8, "palette save and load", async () => {
+    await run(8, "persistent export settings", async () => {
+      api.print.setSettings({
+        width: 1777,
+        heightMode: "explicit",
+        height: 1111,
+        dpi: 450,
+        format: "jpeg",
+      });
+      await api.project.importFile(ffpxFile());
+      const settings = api.print.readSettings();
+      check(
+        settings.width === 1777 &&
+        settings.heightMode === "explicit" &&
+        settings.height === 1111 &&
+        settings.dpi === 450 &&
+        settings.format === "jpeg",
+        "export settings roundtrip failed",
+      );
+    });
+    await run(9, "palette save and load", async () => {
       const original = api.appearance.readPalette();
       const key = Object.keys(original)[0];
       check(!!key, "empty palette");
@@ -118,7 +148,7 @@
       await api.project.importFile(ffpxFile());
       check(api.appearance.readPalette()[key] === expected, "palette lost");
     });
-    await run(9, "collision replace and rename", async () => {
+    await run(10, "collision replace and rename", async () => {
       api.slots.select(null);
       const file = csv("collision.csv", "X,Y\n1,2\n");
       await api.assets.importFiles([file], choose("rename"));
@@ -129,7 +159,7 @@
       await api.assets.importFiles([file], choose("rename"));
       check(activeProject.csvFiles.filter((c) => c.name.startsWith("collision")).length >= 2, "rename failed");
     });
-    await run(10, "asset delete cascade", async () => {
+    await run(11, "asset delete cascade", async () => {
       const slot = activeProject.slots[5]; select(slot);
       const item = createProjectCsv([["X", "Y"], ["1", "2"]], "delete.csv");
       api.graphs.addObject(item.id);
@@ -138,7 +168,7 @@
       check(!activeProject.csvFiles.some((c) => c.id === item.id), "CSV not deleted");
       check(activeProject.charts.every((c) => !chartCsvIds(c).includes(item.id)), "dangling reference");
     });
-    await run(11, "move to trash cascade", async () => {
+    await run(12, "move to trash cascade", async () => {
       const item = createProjectCsv([["X", "Y"], ["1", "2"]], "trash.csv");
       const slot = activeProject.slots[5]; select(slot); api.graphs.addObject(item.id);
       check(chartCsvIds(getChart(slot.chart)).includes(item.id), "CSV reference absent before trash move");
@@ -149,7 +179,7 @@
       check(api.assets.isTrashed(projectAssetPath(item)), "move did not enter trash");
       check(activeProject.charts.every((c) => !chartCsvIds(c).includes(item.id)), "trashed CSV still referenced");
     });
-    await run(12, "layout and label preview geometry", async () => {
+    await run(13, "layout and label preview geometry", async () => {
       const layout = api.layout.readState(600).previewGeometry;
       const labels = api.labels.readState().reference;
       check(Number.isFinite(layout.width) && layout.width > 0, "layout width invalid");
