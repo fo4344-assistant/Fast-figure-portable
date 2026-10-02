@@ -20,7 +20,7 @@ jobs:
             module: FastFigureApplicationFsmUnit
           - unit: layout-annotations-export
             module: FastFigureLayoutUnit
-    name: \${{ matrix.unit }}
+    name: ${{ matrix.unit }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -48,17 +48,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/fast-figure-tla
-          cp ".github/tlc/modules/\${{ matrix.module }}.tla" /tmp/fast-figure-tla/
-          cp ".github/tlc/modules/\${{ matrix.module }}.cfg" /tmp/fast-figure-tla/
+          cp ".github/tlc/modules/${{ matrix.module }}.tla" /tmp/fast-figure-tla/
+          cp ".github/tlc/modules/${{ matrix.module }}.cfg" /tmp/fast-figure-tla/
           cd /tmp/fast-figure-tla
-          java -cp /tmp/tla2tools.jar pcal.trans "\${{ matrix.module }}.tla"
+          java -cp /tmp/tla2tools.jar pcal.trans "${{ matrix.module }}.tla"
 
       - name: Parse generated TLA+
         shell: bash
         run: |
           set -euo pipefail
           cd /tmp/fast-figure-tla
-          java -cp /tmp/tla2tools.jar tla2sany.SANY "\${{ matrix.module }}.tla"
+          java -cp /tmp/tla2tools.jar tla2sany.SANY "${{ matrix.module }}.tla"
 
       - name: Model check
         shell: bash
@@ -67,5 +67,5 @@ jobs:
           cd /tmp/fast-figure-tla
           java -XX:+UseParallelGC -cp /tmp/tla2tools.jar tlc2.TLC \
             -workers auto \
-            -config "\${{ matrix.module }}.cfg" \
-            "\${{ matrix.module }}.tla"
+            -config "${{ matrix.module }}.cfg" \
+            "${{ matrix.module }}.tla"
