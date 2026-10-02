@@ -2,7 +2,7 @@
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   sourceScript: "r12",
   verificationModel: "r6",
-  sourceCode: "r2",
+  sourceCode: "r3",
   appBuild: "1.1.32-wip",
 });
 (async () => {
