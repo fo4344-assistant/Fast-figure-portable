@@ -45,7 +45,7 @@ After extracting the ZIP, open `Fast-figure/Fast-figure.html` directly in a
 modern web browser. Both distributions are intended to work from `file://`
 without a server or network connection.
 
-The current application version, detailed project-format documentation, and bundled third-party software information are available from the README built into the application.
+The README shown inside both distributions is generated from this repository `README.md` during the distribution build.
 
 ### `agent_space`
 
