@@ -203,6 +203,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "graph custom font was not stored",
       );
       api.slots.select(null);
+      await new Promise((resolve) => setTimeout(resolve, 0));
       api.slots.select(slotId);
       await new Promise((resolve) => setTimeout(resolve, 0));
       input = selectInput();
