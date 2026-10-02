@@ -8,7 +8,7 @@ Fast Figure runs as a self-contained HTML file and processes loaded data and ima
 
 ## Download and use
 
-The distribution builder creates two offline distributions under `dist/`:
+The repository tracks two generated offline distribution artifacts under `dist/`:
 
 ```text
 dist/
@@ -18,7 +18,11 @@ dist/
    └─ Fast-figure.zip
 ```
 
-Run:
+GitHub Actions runs `scripts/build-portable.py` when distribution inputs change on
+`main` and commits changed artifacts back to the repository. Files under `dist/`
+are generated outputs and should not be edited directly.
+
+To reproduce the same artifacts locally, run:
 
 ```bash
 python scripts/build-portable.py
@@ -147,16 +151,24 @@ The application reads only its current format. Conversion from earlier developme
 
 ## Bundled third-party software
 
-The portable HTML currently incorporates:
+The current distributions incorporate:
 
+- **React / ReactDOM 19.2.8**
+- **Mantine 9.5.2**
 - **Iconoir 7.11.1**
 - **Plotly.js 2.35.2**
 
-Selected Iconoir SVG definitions are embedded directly in `Fast-figure.html`. The Iconoir package, CDN, and external SVG files are not required at runtime.
+The split distribution carries React/ReactDOM and Mantine in
+`vendor/fast-figure-ui-runtime.js` and Plotly.js in `vendor/plotly.min.js`.
+The inline distribution embeds those runtime files directly into
+`Fast-figure.html`.
 
-The minified Plotly.js distribution is also bundled directly inside `Fast-figure.html`. No separate Plotly.js installation is required.
+Selected Iconoir SVG definitions are embedded directly in the application HTML;
+the Iconoir package, CDN, and external SVG files are not required at runtime.
 
-Third-party copyright and license notices are retained in the distributed HTML and reproduced in the repository `LICENSE` file.
+Third-party copyright and license notices are retained in the bundled runtime
+sources and reproduced in the repository `LICENSE` file. The split ZIP also
+contains a copy of `LICENSE`.
 
 ## License
 
