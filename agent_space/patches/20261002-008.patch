@@ -1,0 +1,194 @@
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -8,7 +8,7 @@ Fast Figure runs as a self-contained HTML file and processes loaded data and ima
+ 
+ ## Download and use
+ 
+-The distribution builder creates two offline distributions under `dist/`:
++The repository tracks two generated offline distribution artifacts under `dist/`:
+ 
+ ```text
+ dist/
+@@ -18,7 +18,11 @@ dist/
+    └─ Fast-figure.zip
+ ```
+ 
+-Run:
++GitHub Actions runs `scripts/build-portable.py` when distribution inputs change on
++`main` and commits changed artifacts back to the repository. Files under `dist/`
++are generated outputs and should not be edited directly.
++
++To reproduce the same artifacts locally, run:
+ 
+ ```bash
+ python scripts/build-portable.py
+@@ -147,16 +151,24 @@ The application reads only its current format. Conversion from earlier developme
+ 
+ ## Bundled third-party software
+ 
+-The portable HTML currently incorporates:
++The current distributions incorporate:
+ 
++- **React / ReactDOM 19.2.8**
++- **Mantine 9.5.2**
+ - **Iconoir 7.11.1**
+ - **Plotly.js 2.35.2**
+ 
+-Selected Iconoir SVG definitions are embedded directly in `Fast-figure.html`. The Iconoir package, CDN, and external SVG files are not required at runtime.
++The split distribution carries React/ReactDOM and Mantine in
++`vendor/fast-figure-ui-runtime.js` and Plotly.js in `vendor/plotly.min.js`.
++The inline distribution embeds those runtime files directly into
++`Fast-figure.html`.
+ 
+-The minified Plotly.js distribution is also bundled directly inside `Fast-figure.html`. No separate Plotly.js installation is required.
++Selected Iconoir SVG definitions are embedded directly in the application HTML;
++the Iconoir package, CDN, and external SVG files are not required at runtime.
+ 
+-Third-party copyright and license notices are retained in the distributed HTML and reproduced in the repository `LICENSE` file.
++Third-party copyright and license notices are retained in the bundled runtime
++sources and reproduced in the repository `LICENSE` file. The split ZIP also
++contains a copy of `LICENSE`.
+ 
+ ## License
+ 
+diff --git a/LICENSE b/LICENSE
+--- a/LICENSE
++++ b/LICENSE
+@@ -30,15 +30,20 @@ Third-Party Software
+ Fast Figure incorporates third-party software distributed under the licenses
+ below. These notices apply to their respective third-party components.
+ 
++The split distribution carries third-party runtime files separately under
++`vendor/`; the inline distribution embeds the same runtime files into the
++generated `Fast-figure.html`. Selected Iconoir SVG definitions are embedded in
++the application HTML. The split ZIP also includes this LICENSE file.
++
+ 
+ Iconoir
+ =======
+ 
+ Component version: 7.11.1
+ Source repository: https://github.com/iconoir-icons/iconoir
+ 
+-Fast Figure embeds selected Iconoir SVG definitions directly in the portable
+-HTML file.
++Fast Figure embeds selected Iconoir SVG definitions directly in the application
++HTML used by both distributions.
+ 
+ MIT License
+ 
+@@ -73,9 +78,10 @@ Documentation: https://plotly.com/javascript/
+ License source:
+ https://github.com/plotly/plotly.js/blob/v2.35.2/LICENSE
+ 
+-Fast Figure bundles the minified Plotly.js distribution directly in the
+-portable HTML file. The bundled distribution retains its own version,
+-copyright, and license header.
++Fast Figure carries the minified Plotly.js distribution as
++`vendor/plotly.min.js` in the split package and embeds the same file into the
++inline HTML build. The bundled distribution retains its own version, copyright,
++and license header.
+ 
+ The MIT License (MIT)
+ 
+@@ -106,7 +112,9 @@ React / ReactDOM
+ Component version: 19.2.8
+ Source repository: https://github.com/facebook/react
+ 
+-Fast Figure bundles React and ReactDOM directly in the portable HTML file.
++Fast Figure carries React and ReactDOM in
++`vendor/fast-figure-ui-runtime.js` in the split package and embeds that runtime
++into the inline HTML build.
+ 
+ MIT License
+ 
+@@ -137,7 +145,9 @@ Mantine
+ Component version: 9.5.2
+ Source repository: https://github.com/mantinedev/mantine
+ 
+-Fast Figure bundles @mantine/core and @mantine/hooks directly in the portable HTML file.
++Fast Figure carries @mantine/core and @mantine/hooks in
++`vendor/fast-figure-ui-runtime.js` in the split package and embeds that runtime
++into the inline HTML build.
+ 
+ MIT License
+ 
+diff --git a/.gitignore b/.gitignore
+--- a/.gitignore
++++ b/.gitignore
+@@ -1 +1 @@
+-/dist/
++# dist/ is intentionally tracked as generated distribution output.
+diff --git a/.github/workflows/build-distribution.yml b/.github/workflows/build-distribution.yml
+new file mode 100644
+--- /dev/null
++++ b/.github/workflows/build-distribution.yml
+@@ -0,0 +1,67 @@
++name: Build distribution
++
++on:
++  push:
++    branches: [main]
++    paths:
++      - 'Fast-figure.html'
++      - 'fast-figure.js'
++      - 'fast-figure-ui.js'
++      - 'vendor/**'
++      - 'README.md'
++      - 'LICENSE'
++      - 'scripts/build-portable.py'
++      - '.github/workflows/build-distribution.yml'
++  workflow_dispatch:
++
++permissions:
++  contents: write
++
++concurrency:
++  group: fast-figure-distribution-main
++  cancel-in-progress: true
++
++jobs:
++  build-and-commit:
++    runs-on: ubuntu-latest
++    timeout-minutes: 10
++    steps:
++      - uses: actions/checkout@v4
++        with:
++          ref: main
++          fetch-depth: 0
++
++      - name: Build distribution
++        run: python scripts/build-portable.py
++
++      - name: Verify distribution
++        run: |
++          test -s dist/inline/Fast-figure.html
++          test -s dist/split/Fast-figure.zip
++          python - <<'PY'
++          from pathlib import Path
++          from zipfile import ZipFile
++
++          with ZipFile("dist/split/Fast-figure.zip") as archive:
++              assert archive.read("Fast-figure/README.md") == Path("README.md").read_bytes()
++              assert archive.read("Fast-figure/LICENSE") == Path("LICENSE").read_bytes()
++          PY
++
++      - name: Commit distribution artifacts
++        run: |
++          git fetch origin main
++          if [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD)" ]; then
++            echo "main advanced during this run; a newer workflow run will build it."
++            exit 0
++          fi
++
++          git add dist/inline/Fast-figure.html dist/split/Fast-figure.zip
++          if git diff --cached --quiet; then
++            echo "distribution artifacts are already current."
++            exit 0
++          fi
++
++          git config user.name "github-actions[bot]"
++          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
++          git commit -m "Build distribution artifacts"
++          git push origin HEAD:main
