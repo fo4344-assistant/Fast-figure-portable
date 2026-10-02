@@ -10,6 +10,9 @@ on:
       - 'Fast-figure.html'
       - 'fast-figure.js'
       - 'fast-figure-ui.js'
+      - 'development-versions.json'
+      - 'agent_space/reviews/**'
+      - 'agent_space/patches/**'
       - '.github/workflows/source-sync-regression.yml'
   workflow_dispatch:
 
@@ -29,3 +32,5 @@ jobs:
           node --check agent_space/tests/browser-regression.js
       - name: Run split and portable regression
         run: python agent_space/tests/run-browser-regression.py
+      - name: Validate development layer versions
+        run: python scripts/check-development-layer-versions.py --base ba4a8c5c7b54b65e1a017effb59be9f647b67e9f
