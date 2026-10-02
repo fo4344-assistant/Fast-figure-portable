@@ -615,8 +615,6 @@
           graphObject: "none",
           graphObjectIndex: null,
         });
-        if (!hydrating && activeProject.slotCaptionsEnabled && selectedSlotId !== null)
-          initializeSlotCaption(slot);
         if (
           !hydrating &&
           selectedSlotId !== null &&
@@ -659,14 +657,6 @@
         );
       }
 
-) {
-        machine.assertWritable("workspace", "SLOT_CAPTION_MODE_CHANGED");
-        activeProject.slotCaptionsEnabled = payload.enabled === true;
-        if (activeProject.slotCaptionsEnabled) {
-          activeProject.captionsEnabled = true;
-          initializeSlotCaptions();
-        }
-      }
       function applyCaptionTextAction({ machine, payload }) {
         machine.assertWritable("workspace","CAPTION_TEXT_INPUT");
         let target=payload.target;
@@ -1530,6 +1520,7 @@
         .registerPath("slots", PROJECT_OBJECT_PATHS.slots)
         .registerPath("sequences", PROJECT_OBJECT_PATHS.sequences)
         .registerPath("appearance", PROJECT_OBJECT_PATHS.appearance)
+        .registerPath("export", PROJECT_OBJECT_PATHS.export)
         .register("ui", {
           read: (project) => ({
             selectedSlotId,
@@ -1734,11 +1725,6 @@
             kind: "fsm-asset-path-out-of-sync",
             selection: appFSM.state.assetSelection,
             path: appFSM.state.assetPath,
-          });
-        if (typeof activeProject.slotCaptionsEnabled !== "boolean")
-          issues.push({
-            kind: "invalid-slot-caption-mode",
-            value: activeProject.slotCaptionsEnabled,
           });
         if (typeof activeProject.captionAfterText !== "string")
           issues.push({
@@ -4653,6 +4639,7 @@
           chartObjects = projectObjects.read("charts"),
           slotObjects = projectObjects.read("slots"),
           appearanceObject = projectObjects.read("appearance"),
+          exportObject = projectObjects.read("export"),
           manifest = {
             schema: "fast-figure-project",
             version: PACKAGE_FORMAT_VERSION,
@@ -4669,18 +4656,15 @@
               labelsEnabled: labelObject.enabled,
               labelSettings: projectClone(labelObject.settings),
               captionsEnabled: captionObject.enabled,
-              slotCaptionsEnabled: captionObject.slotMode,
               captionText: captionObject.text,
               captionAfterText: captionObject.afterText,
               captionName: captionObject.name,
               captionNameBold: captionObject.nameBold,
               captionSettings: projectClone(captionObject.settings),
             },
-            slotStyle: {
-              ...projectClone(layoutObject.slotStyle),
-              layoutMapWidth: layoutObject.layoutMapWidth,
-            },
+            slotStyle: projectClone(layoutObject.slotStyle),
             uiPalette: projectClone(appearanceObject.uiPalette),
+            export: projectClone(exportObject),
           },
           assets = [];
         for (let csv of dataObjects) {
@@ -4736,6 +4720,7 @@
               slotStyle: manifest.slotStyle,
               uiPalette: manifest.uiPalette,
             },
+            export: manifest.export,
           },
           layoutDocument = {
             gridRows: manifest.gridRows,
@@ -4750,7 +4735,6 @@
           },
           captionDocument = {
             enabled: manifest.annotations.captionsEnabled,
-            slotMode: manifest.annotations.slotCaptionsEnabled,
             beforeText: manifest.annotations.captionText,
             afterText: manifest.annotations.captionAfterText,
             name: manifest.annotations.captionName,
@@ -4789,7 +4773,7 @@
               imageObject: image
                 ? {
                     imageRef: image.id,
-                    settings: projectClone(image.settings || {}),
+                    settings: projectClone(slot.imageSettings || DEFAULT_IMAGE_SETTINGS),
                   }
                 : null,
             };
@@ -4974,16 +4958,13 @@
             let imageObject = imageNode
               ? ffpxXmlReadValue(imageNode.firstElementChild)
               : null;
-            if (imageObject?.imageRef != null) {
-              let image = images.find((item) => item.id === imageObject.imageRef);
-              if (image) image.settings = projectClone(imageObject.settings || {});
-            }
             slots.push({
               ...slotSettings,
               ...placement,
               id: placement.slotId,
               chart: chart?.id ?? null,
               imageId: imageObject?.imageRef ?? null,
+              imageSettings: readImageSettings(imageObject?.settings),
               caption:
                 typeof slotCaption?.text === "string" ? slotCaption.text : null,
             });
@@ -5009,7 +4990,6 @@
               labelsEnabled: labels.enabled,
               labelSettings: labels.settings,
               captionsEnabled: caption.enabled,
-              slotCaptionsEnabled: caption.slotMode,
               captionText: caption.beforeText,
               captionAfterText: caption.afterText,
               captionName: caption.name,
@@ -5254,7 +5234,7 @@
         let slot = getSelectedSlot(),
           image = slotImage(slot);
         if (!image) return false;
-        let settings = normalizeImageSettings(image);
+        let settings = normalizeImageSettings(slot);
         settings.fit = ["contain", "cover", "manual"].includes(values.fit)
           ? values.fit
           : settings.fit;
@@ -5657,8 +5637,7 @@
       function readAssetDeletionTarget() {
         let selected = appFSM.state.assetPath
           ? projectVfs.resolve(appFSM.state.assetPath) : null;
-        if (!["csv", "image"].includes(selected?.kind) ||
-          (selected.kind === "csv" && selected.asset.isDefaultEmpty === true))
+        if (!["csv", "image"].includes(selected?.kind))
           return null;
         let id = selected.asset.id;
         return {
@@ -5673,7 +5652,7 @@
         if (!target) return null;
         if (target.kind === "csv") {
           let csv = getProjectCsv(target.id);
-          if (!csv || csv.isDefaultEmpty === true) return null;
+          if (!csv) return null;
           let references = activeProject.charts.flatMap((chart) =>
             (chart.editor?.objects || []).filter((object) => object.csvId === csv.id));
           if (references.length) {
@@ -5720,7 +5699,7 @@
         let match = path ? projectVfs.resolve(path) : null;
         if (!match || projectVfs.isTrashed(path)) return false;
         if (match.kind === "directory") return !projectVfs.isFixedDirectory(path);
-        return !(match.kind === "csv" && match.asset.isDefaultEmpty === true);
+        return true;
       }
       function projectNodeReferenceCount(path) {
         let match = projectVfs.resolve(path);
@@ -6258,7 +6237,7 @@
           lineHeight = fontSize * view.settings.lineHeight,
           available = Math.max(10, width - padding * 2),
           prefix = view.name || "",
-          body = view.slotMode ? view.exportText : view.text || "",
+          body = view.text || "",
           lines = [],
           firstLine = true,
           prefixWidth = 0;
@@ -6759,18 +6738,7 @@
           csv.bytesBase64 = ffpxBytesToBase64(data);
           delete csv.dataRef;
         }
-        let defaultCsv = defaultCsvModel(0);
-        payload.csvFiles = reuseImportedDefaultCsv(
-          payload.csvFiles,
-          [chart],
-          defaultCsv,
-          0,
-        );
-        let validationCsvFiles = [
-          ...payload.csvFiles,
-          defaultCsv,
-        ];
-        validateChartModel(chart, "FFSX 차트", validationCsvFiles);
+        validateChartModel(chart, "FFSX 차트", payload.csvFiles);
         return payload;
       }
       function downloadSlotFfsx() {
@@ -6831,17 +6799,8 @@
           )
             throw Error("FFSX CSV 데이터가 없습니다.");
           chart = projectClone(payload.chart);
-          let temporaryDefaultCsv = defaultCsvModel(0);
-          packagedCsvFiles = reuseImportedDefaultCsv(
-            projectClone(packagedCsvFiles),
-            [chart],
-            temporaryDefaultCsv,
-            0,
-          );
-          chart = validateChartModel(chart, "FFSX 차트", [
-            ...packagedCsvFiles,
-            temporaryDefaultCsv,
-          ]);
+          packagedCsvFiles = projectClone(packagedCsvFiles);
+          chart = validateChartModel(chart, "FFSX 차트", packagedCsvFiles);
           slotCaption =
             typeof payload.slot?.caption === "string" ? payload.slot.caption : undefined;
         } else if (
@@ -6942,61 +6901,58 @@
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
-      function readCaptionsApiState() {
-        let slotMode = activeProject.slotCaptionsEnabled,
-          slot = slotMode ? getSelectedSlot() : null;
+      function readGlobalCaptionState() {
         return Object.freeze({
-          enabled: activeProject.captionsEnabled,
-          slotMode,
-          target: slot
-            ? Object.freeze({
-                id: slot.id,
-                row: slot.row,
-                col: slot.col,
-              })
-            : null,
-          text: slot ? slot.caption ?? "슬롯 캡션" : activeProject.captionText,
-          name: activeProject.captionName,
-          nameBold: activeProject.captionNameBold,
-          settings: Object.freeze({ ...activeProject.captionSettings }),
+          enabled:activeProject.captionsEnabled,
+          text:activeProject.captionText,
+          afterText:activeProject.captionAfterText,
+          name:activeProject.captionName,
+          nameBold:activeProject.captionNameBold,
+          settings:Object.freeze({...activeProject.captionSettings}),
         });
+      }
+      function readSlotCaptionState(slotId) {
+        let slot=slotAt(Number(slotId));
+        return slot?Object.freeze({
+          id:slot.id,row:slot.row,col:slot.col,text:slot.caption??"",
+        }):null;
       }
       function setCaptionsApiEnabled(enabled) {
-        setAnnotationEnabled("caption", enabled === true);
-        return readCaptionsApiState();
+        setAnnotationEnabled("caption",enabled===true);
+        return readGlobalCaptionState();
       }
-      function setCaptionsApiSlotMode(enabled) {
-        appFSM.send("SLOT_CAPTION_MODE_CHANGED", {
-          enabled: enabled === true,
-          direction: "fsm-to-model",
-        });
-        return readCaptionsApiState();
-      }
-      function insertCaptionsApiSlotCaptions() {
-        appFSM.send("SLOT_CAPTIONS_INSERTED", { direction: "fsm-to-model" });
-        syncDashboardCaption();
-        return readCaptionsApiState();
-      }
-      function setCaptionsApiText(text) {
-        appFSM.send("CAPTION_TEXT_INPUT", {
-          text: String(text ?? ""),
-          region: "body",
-          direction: "fsm-to-model",
+      function setGlobalCaptionText(text) {
+        appFSM.send("CAPTION_TEXT_INPUT",{
+          target:{kind:"global"},text:String(text??""),direction:"fsm-to-model",
         });
         syncDashboardCaption();
-        return readCaptionsApiState();
+        return readGlobalCaptionState();
       }
+      function setSlotCaptionText(slotId,text) {
+        appFSM.send("CAPTION_TEXT_INPUT",{
+          target:{kind:"slot",id:Number(slotId)},text:String(text??""),direction:"fsm-to-model",
+        });
+        return readSlotCaptionState(slotId);
+      }
+      function insertCaptionsApiSlotCaptions(slotIds=null) {
+        appFSM.send("SLOT_CAPTIONS_INSERTED",{
+          slotIds:Array.isArray(slotIds)?slotIds:null,direction:"fsm-to-model",
+        });
+        syncDashboardCaption();
+        return readGlobalCaptionState();
+      }
+
       function setCaptionsApiName(name) {
         activeProject.captionName = String(name ?? "");
         syncDashboardCaption();
         appFSM.notify("captions", "CAPTION_NAME_CHANGED");
-        return readCaptionsApiState();
+        return readGlobalCaptionState();
       }
       function setCaptionsApiNameBold(bold) {
         activeProject.captionNameBold = bold === true;
         syncDashboardCaption();
         appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
-        return readCaptionsApiState();
+        return readGlobalCaptionState();
       }
       function setCaptionsApiSettings(patch = {}) {
         let current = activeProject.captionSettings,
@@ -7017,18 +6973,46 @@
         }
         activeProject.captionSettings = next;
         applyCaptionSettings();
-        return readCaptionsApiState();
+        return readGlobalCaptionState();
       }
-      function readPrintApiDefaults() {
-        return Object.freeze({
-          width: Math.max(100, Math.round(dashboardReferenceWidth())),
+      function readPrintApiSettings() {
+        return Object.freeze({...activeProject.exportSettings});
+      }
+      function setPrintApiSettings(values={}) {
+        let current=activeProject.exportSettings,
+          heightMode=values.heightMode==="explicit"?"explicit":
+            values.heightMode==="auto"?"auto":current.heightMode,
+          candidate={
+            width:readProjectNumber(values.width,current.width,100,20000),
+            heightMode,
+            height:heightMode==="explicit"
+              ?readProjectNumber(values.height,current.height??100,100,20000):null,
+            dpi:readProjectNumber(values.dpi,current.dpi,36,1200),
+            format:values.format==="jpeg"?"jpeg":values.format==="png"?"png":current.format,
+          },
+          state=projectClone(activeProject._state);
+        state.export=candidate;
+        validateProjectObjectState(state,{requireSlots:true});
+        activeProject.initialize(state);
+        return readPrintApiSettings();
+      }
+      function savePrintApi(options={}) {
+        let settings=readPrintApiSettings();
+        return exportDashboardTarget({
+          width:settings.width,
+          height:settings.heightMode==="explicit"?settings.height:"",
+          dpi:settings.dpi,
+          format:settings.format,
+          onStatus:options.onStatus,
         });
       }
-      function savePrintApi(options = {}) {
-        return exportDashboardTarget(options);
-      }
-      function capturePrintApi(options = {}) {
-        return exportDashboard(true, options);
+      function capturePrintApi(options={}) {
+        let settings=readPrintApiSettings();
+        return exportDashboard(true,{
+          dpi:settings.dpi,
+          format:settings.format,
+          onStatus:options.onStatus,
+        });
       }
       function readLabelsApiState() {
         let reference = gridSlotGeometry(
@@ -7098,15 +7082,12 @@
       function setLabelsApiPosition(x, y) {
         return updateLabelsApiPosition(x, y, "LABEL_POSITION_CHANGED");
       }
-      function previewLabelsApiPosition(x, y) {
-        return updateLabelsApiPosition(x, y);
-      }
-      function commitLabelsApiPosition() {
-        debugLog("mantine:label-position", {
-          x: activeProject.labelSettings.x,
-          y: activeProject.labelSettings.y,
+
+      function finishLabelsApiPositionInteraction() {
+        debugLog("mantine:label-position",{
+          x:activeProject.labelSettings.x,y:activeProject.labelSettings.y,
         });
-        appFSM.notify("labels", "LABEL_POSITION_DRAGGED");
+        appFSM.notify("labels","LABEL_POSITION_DRAGGED");
         return readLabelsApiState();
       }
       function resetLabelsApiPosition() {
@@ -7285,16 +7266,18 @@
           exportPlotlyJson: downloadPlotlyJson,
         }),
         print: Object.freeze({
-          readDefaults: readPrintApiDefaults,
+          readSettings: readPrintApiSettings,
+          setSettings: setPrintApiSettings,
           save: savePrintApi,
           capture: capturePrintApi,
         }),
         captions: Object.freeze({
-          readState: readCaptionsApiState,
+          readGlobal: readGlobalCaptionState,
+          readSlot: readSlotCaptionState,
           setEnabled: setCaptionsApiEnabled,
-          setSlotMode: setCaptionsApiSlotMode,
+          setGlobalText: setGlobalCaptionText,
+          setSlotText: setSlotCaptionText,
           insertSlotCaptions: insertCaptionsApiSlotCaptions,
-          setText: setCaptionsApiText,
           setName: setCaptionsApiName,
           setNameBold: setCaptionsApiNameBold,
           setSettings: setCaptionsApiSettings,
@@ -7304,8 +7287,7 @@
           setEnabled: setLabelsApiEnabled,
           setSettings: setLabelsApiSettings,
           setPosition: setLabelsApiPosition,
-          previewPosition: previewLabelsApiPosition,
-          commitPosition: commitLabelsApiPosition,
+          finishPositionInteraction: finishLabelsApiPositionInteraction,
           resetPosition: resetLabelsApiPosition,
         }),
         appearance: Object.freeze({
