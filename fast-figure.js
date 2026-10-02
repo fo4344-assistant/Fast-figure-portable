@@ -952,43 +952,74 @@
         machine.assertWritable("workspace","SLOT_CHART_IMPORTED");
         machine.assertWritable("editor","SLOT_CHART_IMPORTED");
         machine.assertWritable("files","SLOT_CHART_IMPORTED");
-        let slot=slotAt(payload.slotId),sourceChart=payload.chart,
+        let slot=slotAt(payload.slotId),
+          sourceChart=payload.chart,
+          importKind=payload.importKind==="plotly"?"plotly":"ffsx",
           packaged=Array.isArray(payload.csvFiles)?payload.csvFiles:[];
-        if(!slot||!sourceChart)throw Error("불러온 차트를 적용할 슬롯 또는 차트가 없습니다.");
+        if(!slot||!sourceChart)
+          throw Error("불러온 차트를 적용할 슬롯 또는 차트가 없습니다.");
+
         let candidate=projectClone(activeProject._state);
         normalizeSlotContents(candidate.slots);
-        let packagedIds=new Set(),csvMap=new Map(),nextCsvId=candidate.nextId.csv;
-        for(let source of packaged){
-          if(!source||!Number.isInteger(source.id)||source.id<1||packagedIds.has(source.id)||!Array.isArray(source.rows))
-            throw Error("FFSX CSV 데이터가 올바르지 않습니다.");
-          packagedIds.add(source.id);
-          let model=buildProjectCsvModel(source.rows,source.name||source.sourceName,nextCsvId++,
-            source.bytesBase64,source.mime,source.headerLines);
-          projectVfs.prepare(model,"csv",candidate);
-          candidate.assets.csvFiles.push(model);
-          csvMap.set(source.id,model.id);
+        let chart=projectClone(sourceChart),
+          createdCsvIds=[];
+
+        if(importKind==="ffsx"){
+          let packagedIds=new Set(),csvMap=new Map(),nextCsvId=candidate.nextId.csv;
+          for(let source of packaged){
+            if(!source||!Number.isInteger(source.id)||source.id<1||
+              packagedIds.has(source.id)||!Array.isArray(source.rows))
+              throw Error("FFSX CSV 데이터가 올바르지 않습니다.");
+            packagedIds.add(source.id);
+            let model=buildProjectCsvModel(
+              source.rows,
+              source.name||source.sourceName,
+              nextCsvId++,
+              source.bytesBase64,
+              source.mime,
+              source.headerLines,
+              candidate,
+            );
+            projectVfs.prepare(model,"csv",candidate);
+            candidate.assets.csvFiles.push(model);
+            csvMap.set(source.id,model.id);
+            createdCsvIds.push(model.id);
+          }
+          candidate.nextId.csv=nextCsvId;
+          for(let object of chart.editor?.objects||[]){
+            if(!csvMap.has(object.csvId))
+              throw Error("FFSX 차트가 포함되지 않은 CSV를 참조합니다.");
+            object.csvId=csvMap.get(object.csvId);
+          }
+        } else {
+          chart.editor.editable=false;
+          if(!Array.isArray(chart.editor.conversionRows))
+            chart.editor.conversionRows=[];
         }
-        candidate.nextId.csv=nextCsvId;
-        let chart=projectClone(sourceChart);
-        for(let object of chart.editor?.objects||[]){
-          if(!csvMap.has(object.csvId))throw Error("FFSX 차트가 포함되지 않은 CSV를 참조합니다.");
-          object.csvId=csvMap.get(object.csvId);
-        }
+
         chart.id=candidate.nextId.chart++;
         validateChartModel(chart,"불러온 슬롯 차트",candidate.assets.csvFiles);
         let target=candidate.slots.find(item=>item.id===slot.id);
         if(Number.isInteger(target.chart))
           candidate.charts=candidate.charts.filter(item=>item.id!==target.chart);
         candidate.charts.push(chart);
-        target.chart=chart.id;target.imageId=null;target.contentType="graph";
+        target.chart=chart.id;
+        target.imageId=null;
+        target.contentType="graph";
         target.content.imageSettings={...DEFAULT_IMAGE_SETTINGS};
         if(payload.slotCaption!==undefined)
-          target.caption=typeof payload.slotCaption==="string"&&payload.slotCaption?payload.slotCaption:null;
+          target.caption=typeof payload.slotCaption==="string"&&payload.slotCaption
+            ?payload.slotCaption:null;
+
         validateProjectObjectState(candidate,{requireSlots:true});
         activeProject.initialize(candidate);
-        machine.state=Object.freeze({...machine.state,graphObject:"none",graphObjectIndex:null});
+        machine.state=Object.freeze({
+          ...machine.state,
+          graphObject:"none",
+          graphObjectIndex:null,
+        });
         payload.chart=getChart(chart.id);
-        payload.createdCsvIds=[...csvMap.values()];
+        payload.createdCsvIds=createdCsvIds;
       }
       function applyGridLayoutChangedAction({ machine, payload }) {
         machine.assertWritable("layout", "GRID_LAYOUT_CHANGED");
@@ -1072,81 +1103,99 @@
         validateProjectObject(activeProject, { requireSlots: true });
       }
       function applyProjectNodeMovedAction({ machine, payload }) {
-        machine.assertWritable("files", "PROJECT_NODE_MOVED");
-        let match = projectVfs.resolve(payload.path),
-          directory = normalizeProjectPath(payload.directory, { directory: true });
-        if (!match) throw Error("이동할 프로젝트 파일 또는 폴더가 없습니다.");
-        if (!activeProject.fileSystem.directories.includes(directory))
+        machine.assertWritable("files","PROJECT_NODE_MOVED");
+        let liveMatch=projectVfs.resolve(payload.path),
+          directory=normalizeProjectPath(payload.directory,{directory:true});
+        if(!liveMatch) throw Error("이동할 프로젝트 파일 또는 폴더가 없습니다.");
+        if(!activeProject.fileSystem.directories.includes(directory))
           throw Error("대상 폴더가 없습니다.");
-        let source = match.kind === "directory" ? match.path : projectAssetPath(match.asset);
-        if (match.kind === "directory") {
-          if (projectVfs.isFixedDirectory(source))
+
+        let source=liveMatch.kind==="directory"?liveMatch.path:projectAssetPath(liveMatch.asset);
+        if(liveMatch.kind==="directory"){
+          if(projectVfs.isFixedDirectory(source))
             throw Error("기본 프로젝트 폴더는 이동할 수 없습니다.");
-          if (projectPathInDirectory(directory, source))
+          if(projectPathInDirectory(directory,source))
             throw Error("폴더를 자기 자신 또는 하위 폴더로 이동할 수 없습니다.");
         }
-        let movingAssets = match.kind === "directory"
-            ? projectVfs.descendants(source)
-            : [{ kind: match.kind, asset: match.asset }]
-        if (movingAssets.some(({ kind }) => kind === "csv"))
-          machine.assertWritable("data", "PROJECT_NODE_MOVED");
-        if (movingAssets.some(({ kind }) => kind === "image"))
-          machine.assertWritable("images", "PROJECT_NODE_MOVED");
-        let requestedName =
-            payload.name === undefined ? projectPathName(source) : String(payload.name || "").trim(),
-          safeName = projectCsvName(requestedName, ""),
-          destination;
-        if (!safeName || safeName !== requestedName || /[\\/]/.test(requestedName))
+
+        let movingLive=liveMatch.kind==="directory"
+            ?projectVfs.descendants(source)
+            :[{kind:liveMatch.kind,asset:liveMatch.asset}],
+          csvIds=new Set(movingLive.filter(({kind})=>kind==="csv").map(({asset})=>asset.id)),
+          imageIds=new Set(movingLive.filter(({kind})=>kind==="image").map(({asset})=>asset.id));
+
+        if(csvIds.size) machine.assertWritable("data","PROJECT_NODE_MOVED");
+        if(imageIds.size) machine.assertWritable("images","PROJECT_NODE_MOVED");
+
+        let requestedName=payload.name===undefined
+            ?projectPathName(source)
+            :String(payload.name||"").trim(),
+          safeName=projectCsvName(requestedName,"");
+        if(!safeName||safeName!==requestedName||/[\\/]/.test(requestedName))
           throw Error("이동할 항목의 새 이름이 올바르지 않습니다.");
-        destination = normalizeProjectPath(`${directory}/${safeName}`, {
-          directory: match.kind === "directory",
+
+        let destination=normalizeProjectPath(`${directory}/${safeName}`,{
+          directory:liveMatch.kind==="directory",
         });
-        if (destination === source) return;
-        if (projectVfs.exists(destination)) throw Error(`${destination}가 이미 존재합니다.`);
-        let enteringTrash = projectVfs.isTrashed(destination) && !projectVfs.isTrashed(source);
-        if (enteringTrash) {
-          machine.assertWritable("charts", "PROJECT_NODE_MOVED");
-          machine.assertWritable("slots", "PROJECT_NODE_MOVED");
-          machine.assertWritable("editor", "PROJECT_NODE_MOVED");
+        if(destination===source){
+          payload.path=source;
+          payload.trashed=false;
+          return;
         }
-        let rewritePath = (path) =>
-          match.kind === "directory" && projectPathInDirectory(path, source)
-            ? `${destination}${path.slice(source.length)}`
-            : destination;
-        if (match.kind === "directory") {
-          activeProject.fileSystem.directories = activeProject.fileSystem.directories
-            .map((path) => projectPathInDirectory(path, source) ? rewritePath(path) : path)
+
+        let candidate=projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let match=projectVfs.resolve(source,candidate);
+        if(!match) throw Error("이동할 프로젝트 항목을 candidate에서 찾을 수 없습니다.");
+        if(projectVfs.exists(destination,candidate))
+          throw Error(`${destination}가 이미 존재합니다.`);
+
+        let enteringTrash=projectVfs.isTrashed(destination)&&!projectVfs.isTrashed(source);
+        if(enteringTrash){
+          machine.assertWritable("charts","PROJECT_NODE_MOVED");
+          machine.assertWritable("slots","PROJECT_NODE_MOVED");
+          machine.assertWritable("editor","PROJECT_NODE_MOVED");
+        }
+
+        let rewritePath=(path)=>
+          match.kind==="directory"&&projectPathInDirectory(path,source)
+            ?`${destination}${path.slice(source.length)}`
+            :destination;
+
+        if(match.kind==="directory"){
+          candidate.fileSystem.directories=candidate.fileSystem.directories
+            .map(path=>projectPathInDirectory(path,source)?rewritePath(path):path)
             .sort();
-          movingAssets.forEach(({ asset }) => {
-            asset.directory = projectParentPath(rewritePath(projectAssetPath(asset)));
+          projectVfs.descendants(source,candidate).forEach(({asset})=>{
+            let oldPath=projectAssetPath(asset);
+            asset.directory=projectParentPath(rewritePath(oldPath));
           });
         } else {
-          match.asset.directory = directory;
-          match.asset.name = safeName;
+          match.asset.directory=directory;
+          match.asset.name=safeName;
         }
-        if (enteringTrash) {
-          let csvIds = new Set(
-              movingAssets.filter(({ kind }) => kind === "csv").map(({ asset }) => asset.id),
-            ),
-            imageIds = new Set(
-              movingAssets.filter(({ kind }) => kind === "image").map(({ asset }) => asset.id),
-            ),
-            removedReferences = removeProjectAssetReferences(csvIds, imageIds),
-            removedGraphReference = removedReferences.removedGraphReferenceCount > 0,
-            resetImageSlot = removedReferences.resetImageSlotCount > 0;
-          if (machine.state.assetPath && projectVfs.isTrashed(rewritePath(machine.state.assetPath))) {
-            payload.clearAssetSelection = true;
-          }
-          payload.clearGraphSelection = removedGraphReference || resetImageSlot;
-        } else if (machine.state.assetPath && projectPathInDirectory(machine.state.assetPath, source)) {
-          machine.state = Object.freeze({
-            ...machine.state,
-            assetPath: rewritePath(machine.state.assetPath),
-          });
+
+        let removedReferences={removedGraphReferenceCount:0,resetImageSlotCount:0};
+        if(enteringTrash)
+          removedReferences=removeProjectAssetReferences(csvIds,imageIds,candidate);
+
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+
+        let movedSelectionPath=
+          machine.state.assetPath&&projectPathInDirectory(machine.state.assetPath,source)
+            ?rewritePath(machine.state.assetPath):null;
+        if(movedSelectionPath){
+          if(projectVfs.isTrashed(movedSelectionPath))
+            payload.clearAssetSelection=true;
+          else
+            machine.state=Object.freeze({...machine.state,assetPath:movedSelectionPath});
         }
-        validateProjectObject(activeProject, { requireSlots: true });
-        payload.path = destination;
-        payload.trashed = enteringTrash;
+        payload.clearGraphSelection=
+          removedReferences.removedGraphReferenceCount>0||
+          removedReferences.resetImageSlotCount>0;
+        payload.path=destination;
+        payload.trashed=enteringTrash;
       }
       function applyAssetSelectionAction({ machine, payload }) {
         let kind = ["csv", "image", "directory"].includes(payload.kind) ? payload.kind : null,
@@ -2155,6 +2204,7 @@
         bytesBase64 = "",
         mime = "text/csv",
         headerLines = 1,
+        state = activeProject._state,
       ) {
         let model = {
           id,
@@ -2170,7 +2220,7 @@
           mime: typeof mime === "string" && mime ? mime : "text/csv",
           headerLines: headerLineCount(headerLines, data),
         };
-        projectVfs.assignUniqueLocation(model, PROJECT_ASSET_DIRECTORIES.csv);
+        projectVfs.assignUniqueLocation(model, PROJECT_ASSET_DIRECTORIES.csv, state);
         return model;
       }
       function createProjectCsv(
@@ -3781,7 +3831,6 @@
             });
           }
         });
-        if (!rowsOut.length) rowsOut = [{ X: "", Y: "" }];
         let sourceHeaders = [...new Set(rowsOut.flatMap((row) => Object.keys(row || {})))],
           columnMap = Object.fromEntries(
             sourceHeaders.map((header, index) => [header, `C${index + 1}`]),
@@ -3791,7 +3840,7 @@
           x: columnMap[object.x] || object.x,
           y: columnMap[object.y] || object.y,
         }));
-        rowsOut = dataTable(rowsOut);
+        rowsOut = rowsOut.length ? dataTable(rowsOut) : [];
         let layoutIn = figure.layout && typeof figure.layout === "object" ? figure.layout : {},
           chart = createChartModel({
             id,
@@ -5547,29 +5596,57 @@
         return csv.headerLines;
       }
       function graphEditorSetEditable(editable=null) {
-        let chart=graphEditorChart();
-        if(!chart)return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
-        let next=typeof editable==="boolean"?editable:chart.editor.editable===false;
+        let current=graphEditorChart();
+        if(!current)
+          return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
+        let next=typeof editable==="boolean"?editable:current.editor.editable===false;
+        if(next===current.editor.editable) return current;
+
+        let candidate=projectClone(activeProject._state),
+          chart=candidate.charts.find(item=>item.id===current.id);
+        if(!chart) throw Error("편집 상태를 변경할 차트가 없습니다.");
+
+        let createdCsvId=null;
         if(next && chart.editor.editable===false){
-          let parsed=parsePlotlyToEditor(chart.graph.imported,chart.id),
-            rows=chart.editor.conversionRows||parsed.editor.conversionRows,
-            objects=Array.isArray(chart.editor.objects)?chart.editor.objects:[];
-          if(objects.length && Array.isArray(rows) && rows.length){
-            let csv=createProjectCsv(rows,"Plotly JSON.csv");
-            objects.forEach(object=>{object.csvId=csv.id});
-            graphEditorSelectCsv(csv.id);
-          } else if(!objects.length) {
-            chart.editor.objects=[];
+          let objects=Array.isArray(chart.editor.objects)?chart.editor.objects:[],
+            rows=Array.isArray(chart.editor.conversionRows)?chart.editor.conversionRows:[];
+          if(objects.length){
+            if(!rows.length)
+              throw Error("Plotly 변환 데이터가 없어 편집 가능한 차트로 바꿀 수 없습니다.");
+            let csvId=candidate.nextId.csv,
+              model=buildProjectCsvModel(
+                rows,
+                "Plotly JSON.csv",
+                csvId,
+                "",
+                "text/csv",
+                1,
+                candidate,
+              );
+            projectVfs.prepare(model,"csv",candidate);
+            candidate.assets.csvFiles.push(model);
+            candidate.nextId.csv=csvId+1;
+            objects.forEach(object=>{object.csvId=model.id;});
+            createdCsvId=model.id;
           }
           delete chart.editor.conversionRows;
         }
+
         chart.editor.editable=next;
-        if(next)rebuildEditableGraph(chart);
+        validateChartModel(chart,"편집 상태 변경 차트",candidate.assets.csvFiles);
+        validateProjectObjectState(candidate,{requireSlots:true});
+        activeProject.initialize(candidate);
+
+        let committed=getChart(current.id);
+        if(next) rebuildEditableGraph(committed);
+        if(createdCsvId!==null) graphEditorSelectCsv(createdCsvId);
         renderDashboard();
-        status(next?"가져온 JSON을 편집기 설정으로 재구성했습니다.":"가져온 원본 Plotly JSON 표시로 전환했습니다.");
-        debugLog("editor:editable",{chartId:chart.id,editable:next});
+        status(next
+          ?"가져온 JSON을 편집기 설정으로 재구성했습니다."
+          :"가져온 원본 Plotly JSON 표시로 전환했습니다.");
+        debugLog("editor:editable",{chartId:committed.id,editable:next});
         appFSM.notify("charts","GRAPH_EDITABLE_CHANGED");
-        return chart;
+        return committed;
       }
       function readGraphDataApi() {
         let chart = graphEditorChart(), objects = normalizedGraphObjects(chart);
@@ -6765,6 +6842,7 @@
               : JSON.parse(await file.text());
         let chart,
           slotCaption,
+          importKind,
           packagedCsvFiles = [];
         if (
           payload?.schema === "fast-figure-slot" &&
@@ -6772,6 +6850,7 @@
           payload.chart &&
           typeof payload.chart === "object"
         ) {
+          importKind = "ffsx";
           packagedCsvFiles = payload.csvFiles;
           if (
             !Array.isArray(packagedCsvFiles) ||
@@ -6789,16 +6868,16 @@
           payload?.config ||
           payload?.frames
         ) {
+          importKind = "plotly";
           chart = parsePlotlyToEditor(payload, null);
           chart.editor.editable = false;
-          if (Array.isArray(chart.editor.conversionRows)) chart.editor.conversionRows.length = 0;
-          delete chart.editor.conversionRows;
         } else throw Error("지원하지 않는 FFSX 슬롯 또는 Plotly JSON 형식입니다.");
         normalizeGlobalSettings(chart);
         let importPayload = {
           slotId: slot.id,
           chart,
           csvFiles: packagedCsvFiles || [],
+          importKind,
           slotCaption,
           direction: "fsm-to-model",
         };

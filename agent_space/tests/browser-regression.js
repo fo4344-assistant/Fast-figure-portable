@@ -1,4 +1,10 @@
 /* Runs after the application scripts in a headless file:// browser. */
+const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+  sourceScript: "r12",
+  verificationModel: "r6",
+  sourceCode: "r1",
+  appBuild: "1.1.32-wip",
+});
 (async () => {
   const api = window.FastFigureApi;
   const results = [];
@@ -97,29 +103,52 @@
       check(!!currentSlot.chart && getChart(currentSlot.chart).editor.objects.length === 0, "blank FFSX import failed");
     });
     await run(5, "multi-CSV FFSX", async () => {
-      const slot = activeProject.slots[0]; select(slot);
+      const slotId = activeProject.slots[0].id;
+      select(slotAt(slotId));
       const extra = createProjectCsv([["X", "Y"], ["9", "8"]], "second.csv");
       api.graphs.addObject(extra.id);
-      const file = ffsxFile(slot);
+      const currentBeforeExport = slotAt(slotId);
+      const file = ffsxFile(currentBeforeExport);
       check((await ffsxReadSlot(file)).csvFiles.length >= 2, "second CSV missing");
       await api.graphs.importFile(file);
-      check(chartCsvIds(getChart(slot.chart)).length >= 2, "multi-CSV references lost");
+      const current = slotAt(slotId);
+      check(current && chartCsvIds(getChart(current.chart)).length >= 2, "multi-CSV references lost");
     });
     await run(6, "imported Plotly edit and FFPX", async () => {
-      const slot = activeProject.slots[5]; select(slot);
-      const figure = { data: [{ x: [1, 2], y: [3, 4], type: "scatter" }], layout: { title: "Plotly import" } };
+      const slotId = activeProject.slots[5].id;
+      select(slotAt(slotId));
+      const figure = {
+        data: [{ x: [1, 2], y: [3, 4], type: "scatter" }],
+        layout: { title: "Plotly import" },
+      };
       await api.graphs.importFile(new File([JSON.stringify(figure)], "plotly.json"));
+      let current = slotAt(slotId),
+        imported = getChart(current.chart);
+      check(imported.editor.editable === false, "Plotly import did not remain non-editable");
+      check(Array.isArray(imported.editor.conversionRows) && imported.editor.conversionRows.length > 0,
+        "Plotly conversion rows were not preserved");
       api.graphs.setEditable(true);
-      check(getChart(slot.chart).editor.editable !== false, "Plotly edit mode unavailable");
+      current = slotAt(slotId);
+      const editable = getChart(current.chart);
+      check(editable.editor.editable !== false, "Plotly edit mode unavailable");
+      check(chartCsvIds(editable).length === 1, "Plotly editable conversion did not allocate one CSV");
       await api.project.importFile(ffpxFile());
-      check(activeProject.charts.some((chart) => chart.editor.editable !== false), "edited Plotly lost");
+      current = slotAt(slotId);
+      check(getChart(current.chart)?.editor.editable !== false, "edited Plotly lost");
     });
     await run(7, "Plotly export and import", async () => {
-      const slot = activeProject.slots.find((s) => s.chart); select(slot);
-      const figure = chartFigure(getChart(slot.chart));
+      const source = activeProject.slots.find((s) => s.chart),
+        slotId = source.id,
+        oldChartId = source.chart;
+      select(source);
+      const figure = chartFigure(getChart(oldChartId));
       check(Array.isArray(figure.data), "Plotly export invalid");
       await api.graphs.importFile(new File([JSON.stringify(figure)], "export.json"));
-      check(!!slot.chart, "Plotly import lost graph");
+      const current = slotAt(slotId),
+        imported = current?.chart ? getChart(current.chart) : null;
+      check(imported && current.chart !== oldChartId, "Plotly import did not replace the chart");
+      check(imported.editor.editable === false, "Plotly import unexpectedly became editable");
+      check(Array.isArray(imported.graph.imported?.data), "Plotly imported semantics were not preserved");
     });
     await run(8, "persistent export settings", async () => {
       api.print.setSettings({
@@ -171,15 +200,20 @@
       check(activeProject.charts.every((c) => !chartCsvIds(c).includes(item.id)), "dangling reference");
     });
     await run(12, "move to trash cascade", async () => {
-      const item = createProjectCsv([["X", "Y"], ["1", "2"]], "trash.csv");
-      const slot = activeProject.slots[5]; select(slot); api.graphs.addObject(item.id);
-      check(chartCsvIds(getChart(slot.chart)).includes(item.id), "CSV reference absent before trash move");
-      const path = projectAssetPath(item);
-      const plan = api.assets.planMove(path, "/assets/trash");
+      const created = createProjectCsv([["X", "Y"], ["1", "2"]], "trash.csv"),
+        csvId = created.id,
+        slotId = activeProject.slots[5].id;
+      select(slotAt(slotId));
+      api.graphs.addObject(csvId);
+      let currentSlot = slotAt(slotId),
+        currentCsv = getProjectCsv(csvId);
+      check(chartCsvIds(getChart(currentSlot.chart)).includes(csvId), "CSV reference absent before trash move");
+      const plan = api.assets.planMove(projectAssetPath(currentCsv), "/assets/trash");
       check(plan?.enteringTrash && plan.referenceCount > 0, "trash plan misses references");
       api.assets.move(plan);
-      check(api.assets.isTrashed(projectAssetPath(item)), "move did not enter trash");
-      check(activeProject.charts.every((c) => !chartCsvIds(c).includes(item.id)), "trashed CSV still referenced");
+      currentCsv = getProjectCsv(csvId);
+      check(currentCsv && api.assets.isTrashed(projectAssetPath(currentCsv)), "move did not enter trash");
+      check(activeProject.charts.every((c) => !chartCsvIds(c).includes(csvId)), "trashed CSV still referenced");
     });
     await run(13, "layout and label preview geometry", async () => {
       const layout = api.layout.readState(600).previewGeometry;
@@ -192,6 +226,10 @@
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
+    document.documentElement.setAttribute(
+      "data-fast-figure-regression-target",
+      btoa(unescape(encodeURIComponent(JSON.stringify(FAST_FIGURE_REGRESSION_TARGET)))),
+    );
     document.documentElement.setAttribute("data-fast-figure-regression",
       btoa(unescape(encodeURIComponent(JSON.stringify(results)))));
   }
