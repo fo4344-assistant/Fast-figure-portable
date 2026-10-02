@@ -1,0 +1,81 @@
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -20,7 +20,7 @@
+       "closure_review": "agent_space/reviews/review-015-sourcescript-closure-r12.md"
+     },
+     "verification-model": {
+-      "revision": 7,
++      "revision": 6,
+       "status": "current",
+       "path_rule": "verification/**/*",
+       "fingerprint": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b",
+@@ -32,7 +32,7 @@
+       "validation_review": "agent_space/reviews/review-017-tlc-slot-core-r6-2x2.md"
+     },
+     "source-code": {
+-      "revision": 6,
++      "revision": 7,
+       "status": "current",
+       "paths": [
+diff --git a/agent_space/patches/20261002-013.patch b/agent_space/patches/20261002-013.patch
+--- a/agent_space/patches/20261002-013.patch
++++ b/agent_space/patches/20261002-013.patch
+@@ -57,12 +57,18 @@
+ diff --git a/development-versions.json b/development-versions.json
+ --- a/development-versions.json
+ +++ b/development-versions.json
+-@@ -32,7 +32,7 @@
++@@ -20,7 +20,7 @@
++       "closure_review": "agent_space/reviews/review-015-sourcescript-closure-r12.md"
++     },
++     "verification-model": {
++-      "revision": 6,
+++      "revision": 7,
++       "status": "current",
++       "path_rule": "verification/**/*",
++       "fingerprint": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b",
++@@ -43,12 +43,12 @@
++         "fast-figure.js",
++         "scripts/build-portable.py"
++       ],
+-     },
+-     "source-code": {
+--      "revision": 6,
+-+      "revision": 7,
+-       "status": "current",
+-@@ -43,12 +43,12 @@
+-         "fast-figure.js",
+-         "scripts/build-portable.py"
+-       ],
+        "fingerprint": "sha256:82c1bdc1853d7bf43ef843dbcdee09e2608dc26ac7ebbf4181bce6f7a6d98de7",
+diff --git a/agent_space/patches/20261002-013.md b/agent_space/patches/20261002-013.md
+--- a/agent_space/patches/20261002-013.md
++++ b/agent_space/patches/20261002-013.md
+@@ -12,7 +12,8 @@
+ - `agent_space/tests/browser-regression.js`
+   - regression target r7
+   - preview/dashboard label의 computed line-height/font-size 비율 비교
+ - `development-versions.json`
+-  - source-code r6 → r7
++  - source-code r7 metadata 반영을 의도함
++  - 초기 커밋의 revision field 오적용은 아래 정정 기록과 20261002-014에서 보정
+ - `agent_space/reviews/review-025-source-code-r7-label-preview.md`
+   - 변경 경계와 검증 기록
+@@ -42,6 +43,17 @@
+ 
+ 이번 수정은 renderer-level typography projection이다.
+ 
++## 메타데이터 오류 및 후속 정정
++
++초기 013 커밋 `4f31d421de09d4e2347dc5965f98a8e8218d82cd`에서
++자동 문자열 치환이 첫 번째 `"revision": 6`에 적용되어
++verification-model revision이 6에서 7로 잘못 바뀌고 source-code revision은 6에 남았다.
++
++애플리케이션 source, source-code fingerprint, validation review 내용은 r7 변경과 일치한다.
++이 기록 파일은 20261002-014에서 당시 실제 diff를 반영하도록 정정하며,
++같은 보정 패치에서 verification-model을 r6로 복원하고 source-code revision을 r7로 맞춘다.
++
+ ## 검증
+ 
+ 실제 DOM에서 dashboard label과 preview label의 computed
