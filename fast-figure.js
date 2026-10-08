@@ -5194,16 +5194,7 @@
           status(`${image.name}을 선택했습니다.`);
           return;
         }
-        if (slot.contentType !== "image")
-          return status("이미지를 연결하려면 이미지 슬롯을 선택하세요.");
-        appFSM.send("SLOT_IMAGE_LINKED", {
-          slotId: slot.id,
-          imageId: image.id,
-          direction: "fsm-to-model",
-        });
-        updateFileAvailability();
-        renderDashboard();
-        status(`${image.name}을 선택 슬롯에 연결했습니다.`);
+        status(`${image.name}을 선택했습니다. 이미지 슬롯의 추가 버튼이나 드롭으로 연결할 수 있습니다.`);
       }
       function insertEmptyImageIntoSelectedSlot() {
         let slot = getSelectedSlot();
@@ -5656,9 +5647,7 @@
         let chart = graphEditorChart(), objects = normalizedGraphObjects(chart);
         let index = appFSM.state.graphObjectIndex;
         let selectedIndex = Number.isInteger(index) && objects[index] ? index : null;
-        let csv = getProjectCsv(objects[selectedIndex]?.csvId) ||
-          getProjectCsv(objects[0]?.csvId) || selectedProjectCsv() ||
-          activeProject.csvFiles[0] || null;
+        let csv = selectedProjectCsv();
         return {
           chartId: chart?.id ?? null,
           editable: chart?.editor?.editable !== false,

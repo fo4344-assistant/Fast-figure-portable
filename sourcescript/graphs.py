@@ -185,6 +185,15 @@ def connectDataToSlotModel(slot, data, sourceName, projectCsv):
     return candidate
 
 
+GRAPH_CSV_SELECTION_RULE = (
+    "현재 CSV 선택은 application FSM의 assetSelection/assetPath를 단일 원천으로 한다. "
+    "graph object의 csvId는 해당 object가 소유하는 데이터 참조이며 선택값이 아니다. "
+    "CSV 선택 표시와 새 object 추가는 동일한 현재 선택 CSV를 참조한다. "
+    "graph object 선택 시 참조 CSV를 같은 선택 상태에 반영할 수 있으나 "
+    "단순 CSV 선택으로 기존 graph object의 csvId를 변경하지 않는다."
+)
+
+
 def graphEditorAdd(csvId):
     """
     Return:

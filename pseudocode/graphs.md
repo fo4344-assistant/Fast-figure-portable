@@ -74,6 +74,14 @@ INPUT slot, data, sourceName, projectCsv
 6. Rebuild candidate renderer projection.
 7. Return candidate; do not commit here.
 
+## Selected CSV reference semantics
+
+1. Resolve current selected CSV only from FSM assetSelection/assetPath.
+2. An existing graph object's csvId is its data reference, not a current selection fallback.
+3. Graph object selection may update the same FSM CSV selection to its own csvId.
+4. Selecting another CSV does not rewrite existing graph object references.
+5. Editor selection display and add-object command read the same selected CSV.
+
 ## graphEditorAdd
 
 INPUT csvId

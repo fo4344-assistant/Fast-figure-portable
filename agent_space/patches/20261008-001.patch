@@ -1,0 +1,2848 @@
+diff --git a/sourcescript/api_ui.py b/sourcescript/api_ui.py
+--- a/sourcescript/api_ui.py
++++ b/sourcescript/api_ui.py
+@@ -65,20 +65,20 @@
+         "createDirectory": "mutation; canonical non-conflicting directory candidate commit",
+         "emptyTrash": "mutation; trash references/assets/directories candidate removal commit",
+         "draggableAsset": "read/calculation; drag payload로 노출 가능한 asset projection",
+-        "connectToSlot": "mutation; existing asset -> explicit/selected slot candidate connection",
+-        "importToDirectory": "lifecycle mutation; batch file candidates -> collision plan -> one commit",
+-        "importToSlot": "lifecycle mutation; file asset + target slot/chart candidate -> one commit",
+-        "fileKind": "calculation; filename/MIME에서 지원 slot import kind 판정",
+-        "importFiles": "lifecycle router; supported files를 directory/slot import contract로 전달",
+-        "collisionModel": "calculation; current VFS + reserved paths에서 collision model",
+-        "resolveImportPlan": "calculation; user choice를 concrete path/replace id plan으로 변환",
+-        "selectDirectory": "runtime mutation; VFS-resolved directory selection",
+-        "selectCsv": "runtime mutation; VFS-resolved CSV selection",
+-        "selectImage": "runtime mutation; VFS-resolved image selection",
+-        "download": "read/export; asset original bytes download, project mutation 없음",
+-    },
+-    "graphs": {
+-        "readData": "read; selected chart objects/CSV/columns projection",
++        "connectToSlot": "mutation; explicit add/drop request resolves existing asset and target slot; asset selection alone does not connect",
++        "importToDirectory": "lifecycle mutation; batch file candidates -> collision plan -> one commit",
++        "importToSlot": "lifecycle mutation; file asset + target slot/chart candidate -> one commit",
++        "fileKind": "calculation; filename/MIME에서 지원 slot import kind 판정",
++        "importFiles": "lifecycle router; supported files를 directory/slot import contract로 전달",
++        "collisionModel": "calculation; current VFS + reserved paths에서 collision model",
++        "resolveImportPlan": "calculation; user choice를 concrete path/replace id plan으로 변환",
++        "selectDirectory": "runtime mutation; VFS-resolved directory selection",
++        "selectCsv": "runtime mutation; VFS-resolved CSV selection",
++        "selectImage": "runtime mutation; VFS-resolved image selection only; no slot mutation",
++        "download": "read/export; asset original bytes download, project mutation 없음",
++    },
++    "graphs": {
++        "readData": "read; selected chart objects and single selected CSV/columns projection; object csvId is a persistent reference, not an alternative current selection",
+         "readLayout": "read; selected chart title/global/axis projection",
+         "readPalette": "read; selected chart object color projection",
+         "selectCsv": "runtime mutation; graph editor의 current CSV selection",
+diff --git a/sourcescript/graphs.py b/sourcescript/graphs.py
+--- a/sourcescript/graphs.py
++++ b/sourcescript/graphs.py
+@@ -185,6 +185,15 @@
+     return candidate
+ 
+ 
++GRAPH_CSV_SELECTION_RULE = (
++    "현재 CSV 선택은 application FSM의 assetSelection/assetPath를 단일 원천으로 한다. "
++    "graph object의 csvId는 해당 object가 소유하는 데이터 참조이며 선택값이 아니다. "
++    "CSV 선택 표시와 새 object 추가는 동일한 현재 선택 CSV를 참조한다. "
++    "graph object 선택 시 참조 CSV를 같은 선택 상태에 반영할 수 있으나 "
++    "단순 CSV 선택으로 기존 graph object의 csvId를 변경하지 않는다."
++)
++
++
+ def graphEditorAdd(csvId):
+     """
+     Return:
+diff --git a/pseudocode/api_ui.md b/pseudocode/api_ui.md
+--- a/pseudocode/api_ui.md
++++ b/pseudocode/api_ui.md
+@@ -58,19 +58,20 @@
+ - createDirectory: canonical collision-free directory candidate.
+ - emptyTrash: reference/assets/directories candidate removal.
+ - draggableAsset: read drag payload projection.
+-- connectToSlot: existing asset -> explicit/selected slot candidate.
+-- importToDirectory: batch candidate import.
+-- importToSlot: asset + target slot/chart candidate import.
+-- fileKind: classify supported slot-import kind.
+-- importFiles: route supported files to import contract.
+-- collisionModel: calculate import collision.
+-- resolveImportPlan: user choice -> path/replace-id plan.
+-- selectDirectory/selectCsv/selectImage: runtime VFS-resolved selection.
+-- download: output copied asset bytes without project mutation.
+-
+-### graphs
+-
+-- readData/readLayout/readPalette: current selected-chart projections.
++- connectToSlot: only explicit add/drop command resolves an existing asset and target slot object, validates and connects; selecting an asset alone never connects.
++- importToDirectory: batch candidate import.
++- importToSlot: asset + target slot/chart candidate import.
++- fileKind: classify supported slot-import kind.
++- importFiles: route supported files to import contract.
++- collisionModel: calculate import collision.
++- resolveImportPlan: user choice -> path/replace-id plan.
++- selectDirectory/selectCsv/selectImage: runtime VFS-resolved selection only. selectImage never changes slot contents.
++- download: output copied asset bytes without project mutation.
++
++### graphs
++
++- readData: current chart object projection, selected CSV/columns from the one FSM asset selection; graph-object csvId never substitutes for selected CSV.
++- readLayout/readPalette: current selected-chart projections.
+ - selectCsv/selectObject: runtime editor selection.
+ - setHeaderLines: candidate-change referenced CSV headerLines.
+ - setEditable: imported-chart conversion candidate.
+diff --git a/pseudocode/graphs.md b/pseudocode/graphs.md
+--- a/pseudocode/graphs.md
++++ b/pseudocode/graphs.md
+@@ -74,6 +74,14 @@
+ 6. Rebuild candidate renderer projection.
+ 7. Return candidate; do not commit here.
+ 
++## Selected CSV reference semantics
++
++1. Resolve current selected CSV only from FSM assetSelection/assetPath.
++2. An existing graph object's csvId is its data reference, not a current selection fallback.
++3. Graph object selection may update the same FSM CSV selection to its own csvId.
++4. Selecting another CSV does not rewrite existing graph object references.
++5. Editor selection display and add-object command read the same selected CSV.
++
+ ## graphEditorAdd
+ 
+ INPUT csvId
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -5194,471 +5194,460 @@
+           status(`${image.name}을 선택했습니다.`);
+           return;
+         }
+-        if (slot.contentType !== "image")
+-          return status("이미지를 연결하려면 이미지 슬롯을 선택하세요.");
+-        appFSM.send("SLOT_IMAGE_LINKED", {
+-          slotId: slot.id,
+-          imageId: image.id,
+-          direction: "fsm-to-model",
+-        });
+-        updateFileAvailability();
+-        renderDashboard();
+-        status(`${image.name}을 선택 슬롯에 연결했습니다.`);
+-      }
+-      function insertEmptyImageIntoSelectedSlot() {
+-        let slot = getSelectedSlot();
+-        if (!slot || slot.contentType !== "image")
+-          return status("빈 이미지를 삽입할 이미지 슬롯을 먼저 선택하세요.");
+-        let svg =
+-            '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>',
+-          image = buildProjectImageModel(
+-            new TextEncoder().encode(svg),
+-            "빈 이미지.svg",
+-            "image/svg+xml",
+-            activeProject.imageId,
+-          );
+-        appFSM.send("SLOT_IMAGE_IMPORTED", {
+-          slotId: slot.id,
+-          model: image,
+-          direction: "fsm-to-model",
+-        });
+-        updateFileAvailability();
+-        renderDashboard();
+-        status("선택 슬롯에 빈 이미지를 삽입했습니다.");
+-        return image;
+-      }
+-      function setSlotContentType(type) {
+-        let slot = getSelectedSlot();
+-        if (!slot) {
+-          appFSM.send("SLOT_TYPE_CHANGED", {
+-            slotId: null,
+-            type,
+-            direction: "fsm-to-model",
+-          });
+-          debugLog("slot:content-type-pending", { type, direction: "fsm-to-model" });
+-          return;
+-        }
+-        appFSM.send("SLOT_TYPE_CHANGED", {
+-          slotId: slot.id,
+-          type,
+-          direction: "fsm-to-model",
+-        });
+-        renderDashboard();
+-        debugLog("slot:content-type", {
+-          slotId: slot.id,
+-          type,
+-          direction: "fsm-to-model",
+-        });
+-      }
+-      function syncSlotImageElement(slot,image) {
+-        let element=slot&&document.querySelector(`.slot[data-slot="${slot.id}"] .slot-image`);
+-        if(!element||!image)return false;
+-        let settings=normalizeImageSettings(slot);
+-        element.classList.toggle("manual",settings.fit==="manual");
+-        element.removeAttribute("style");
+-        if(settings.fit==="manual"){
+-          element.style.width=`${settings.scale}%`;
+-          element.style.left=`${settings.x}%`;
+-          element.style.top=`${settings.y}%`;
+-        } else element.style.objectFit=settings.fit;
+-        return true;
+-      }
+-      function applyImageSettingsFromValues(values={}) {
+-        let slot=getSelectedSlot(), image=slotImage(slot);
+-        if(!slot||!image)return false;
+-        let current=normalizeImageSettings(slot),
+-          next={...current,fit:["contain","cover","manual"].includes(values.fit)?values.fit:current.fit};
+-        if(next.fit==="manual"){
+-          next.scale=Math.max(1,Math.min(1000,Number(values.scale)||100));
+-          next.x=Math.max(-100,Math.min(200,Number(values.x)||50));
+-          next.y=Math.max(-100,Math.min(200,Number(values.y)||50));
+-        }
+-        slot.content.imageSettings=readImageSettings(next);
+-        validateProjectObject(activeProject,{requireSlots:true});
+-        syncSlotImageElement(slot,image);
+-        appFSM.notify("images","IMAGE_SETTINGS_CHANGED");
+-        return readImageEditorApi();
+-      }
+-      function readSelectedSlotApi() {
+-        let slot = getSelectedSlot();
+-        return slot ? {
+-          id: slot.id, row: slot.row, col: slot.col,
+-          contentType: slot.contentType, chart: slot.chart, imageId: slot.imageId,
+-        } : null;
+-      }
+-      function resetSlotApi(slotId) {
+-        let payload = { slotIds: [slotId], direction: "fsm-to-model" };
+-        appFSM.send("SLOTS_RESET", payload);
+-        appFSM.send("CLEAR_ASSET_SELECTION", { direction: "fsm-to-model" });
+-        renderDashboard();
+-        status("선택한 슬롯을 초기화했습니다.");
+-        debugLog("slotReset:complete", {
+-          slotId, removedChartIds: payload.removedChartIds,
+-        });
+-      }
+-      function prepareDashboardFileDrop(slotId) {
+-        let slot = slotAt(slotId);
+-        clearSlotDragState();
+-        if (!slot || slot.hidden) return false;
+-        if (!isSlotSelected(slot)) setSelectedSlot(slot.id);
+-        return true;
+-      }
+-      function finishDashboardFileDrop() {
+-        setTimeout(() => { slotDragSuppressClick = false; }, 0);
+-      }
+-      function readImageEditorApi() {
+-        let slot=getSelectedSlot(), image=slotImage(slot);
+-        return image&&slot?{
+-          name:image.name,
+-          src:projectImageDisplayUrl(image),
+-          settings:Object.freeze({...normalizeImageSettings(slot)}),
+-        }:null;
+-      }
+-      function setProjectName(value, trim = false) {
+-        activeProject.projectName = (trim ? String(value).trim() : String(value)).slice(0, 120);
+-        if (trim) debugLog("project:name", { projectName: activeProject.projectName });
+-        return activeProject.projectName;
+-      }
+-      async function loadImageFile(
+-        file,
+-        slot,
+-        { assetPath = null, replaceAssetId = null, planImport = null } = {},
+-      ) {
+-        try {
+-          if (!assetPath && typeof planImport !== "function")
+-            throw Error("프로젝트 이미지 가져오기 계획이 없습니다.");
+-          let bytes = new Uint8Array(await file.arrayBuffer()),
+-            plan = assetPath
+-              ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
+-              : await planImport(file, PROJECT_ASSET_DIRECTORIES.image),
+-            image;
+-          if (Number.isInteger(plan.replaceId)) {
+-            image = buildProjectImageModel(
+-              bytes,
+-              file.name,
+-              file.type,
+-              plan.replaceId,
+-            );
+-            projectVfs.assignLocation(image, plan.path);
+-            appFSM.send("IMAGE_OBJECT_REPLACED", {
+-              model: image,
+-              direction: "fsm-to-model",
+-            });
+-            if (slot)
+-              appFSM.send("SLOT_IMAGE_LINKED", {
+-                slotId: slot.id,
+-                imageId: image.id,
+-                direction: "fsm-to-model",
+-              });
+-          } else if (slot) {
+-            image = buildProjectImageModel(bytes, file.name, file.type, activeProject.imageId);
+-            projectVfs.assignLocation(image, plan.path);
+-            appFSM.send("SLOT_IMAGE_IMPORTED", {
+-              slotId: slot.id,
+-              model: image,
+-              direction: "fsm-to-model",
+-            });
+-          } else image = createProjectImage(bytes, file.name, file.type, null, null, plan.path);
+-          updateFileAvailability();
+-          renderDashboard();
+-          status(
+-            slot
+-              ? `${file.name} 이미지를 선택 슬롯에 연결했습니다.`
+-              : Number.isInteger(plan.replaceId)
+-                ? `${file.name} 이미지를 기존 참조를 유지한 채 교체했습니다.`
+-                : `${file.name} 이미지를 프로젝트에 추가했습니다.`,
+-          );
+-          debugLog("slot:image-load", { slotId: slot?.id ?? null, name: file.name });
+-        } catch (error) {
+-          status("이미지 불러오기 실패: " + error.message);
+-          throw error;
+-        }
+-      }
+-      function slotFileKind(file) {
+-        let name = String(file?.name || "").toLowerCase(),
+-          type = String(file?.type || "").toLowerCase();
+-        if (name.endsWith(".ffsx")) return "slot";
+-        if (name.endsWith(".csv") || name.endsWith(".tsv") || name.endsWith(".json")) return "data";
+-        if (type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name))
+-          return "image";
+-        return "";
+-      }
+-      function dataTransferHasFiles(dataTransfer) {
+-        return Array.from(dataTransfer?.types || []).includes("Files");
+-      }
+-      async function loadDataFile(
+-        file,
+-        slot,
+-        { replaceSlotContent = false, assetPath = null, replaceAssetId = null, planImport = null } = {},
+-      ) {
+-        debugLog("fileLoad:start", {
+-          name: file.name,
+-          size: file.size,
+-          slotId: slot?.id ?? null,
+-          source: "shared-loader",
+-        });
+-        let csv = null;
+-        try {
+-          let bytes = new Uint8Array(await file.arrayBuffer()),
+-            text = new TextDecoder().decode(bytes),
+-            data = file.name.toLowerCase().endsWith(".json") ? JSON.parse(text) : parseCSV(text);
+-          if (!Array.isArray(data) && Array.isArray(data.data)) data = data.data;
+-          if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
+-          if (!assetPath && typeof planImport !== "function")
+-            throw Error("프로젝트 데이터 가져오기 계획이 없습니다.");
+-          let plan = assetPath
+-            ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
+-            : await planImport(file, PROJECT_ASSET_DIRECTORIES.csv);
+-          if (Number.isInteger(plan.replaceId)) {
+-            csv = buildProjectCsvModel(
+-              data,
+-              file.name,
+-              plan.replaceId,
+-              ffpxBytesToBase64(bytes),
+-              file.type || "text/csv",
+-              1,
+-            );
+-            projectVfs.assignLocation(csv, plan.path);
+-            appFSM.send("DATA_OBJECT_REPLACED", {
+-              model: csv,
+-              direction: "fsm-to-model",
+-            });
+-          } else
+-            csv = createProjectCsv(
+-              data,
+-              file.name,
+-              null,
+-              ffpxBytesToBase64(bytes),
+-              file.type || "text/csv",
+-              1,
+-              plan.path,
+-            );
+-          if (slot) {
+-            connectDataToSlot(slot, data, file.name, csv, { replaceSlotContent });
+-          }
+-          status(
+-            Number.isInteger(plan.replaceId)
+-              ? `${file.name}을 기존 참조를 유지한 채 교체했습니다.`
+-              : `${file.name}을 프로젝트 CSV로 추가했습니다.`,
+-          );
+-          debugLog("fileLoad:complete", {
+-            name: file.name,
+-            rows: csv.rows.length,
+-            slotId: slot?.id ?? null,
+-            chartId: slot?.chart || null,
+-            csvId: csv.id,
+-          });
+-        } catch (error) {
+-          if (
+-            csv &&
+-            !activeProject.charts.some((chart) => chartCsvIds(chart).includes(csv.id))
+-          )
+-            appFSM.send("DATA_OBJECT_DELETED", {
+-              csvId: csv.id,
+-              direction: "fsm-to-model",
+-            });
+-          debugLog("fileLoad:error", {
+-            name: file.name,
+-            slotId: slot?.id ?? null,
+-            message: error.message,
+-          });
+-          throw error;
+-        }
+-      }
+-      function baseGraphObject(chart, csv = selectedProjectCsv()) {
+-        let editor = chart.editor || {};
+-        if (!csv) throw Error("그래프 오브젝트에 연결할 프로젝트 CSV가 없습니다.");
+-        let selection = graphDataSelection(csv.rows, csv.headerLines, editor);
+-        return {
+-          csvId: csv.id,
+-          x: selection.x,
+-          y: selection.y,
+-          xAxisSide: editor.xAxisSide || "bottom",
+-          yAxisSide: editor.yAxisSide || "left",
+-          type: editor.type || "scatter",
+-          color: editor.colors?.[0] || DEFAULT_COLORS[0],
+-          legendName: editor.legendName || "",
+-          lineWidth: Math.max(0.1, Math.min(20, Number(editor.lineWidth) || 2)),
+-          lineDash: editor.lineDash || "solid",
+-          markerSymbol: editor.markerSymbol || "circle",
+-          markerSize: Math.max(1, Math.min(40, Number(editor.markerSize) || 6)),
+-          barOpacity: Math.max(0.05, Math.min(1, Number(editor.barOpacity) || 1)),
+-          barLineWidth: Math.max(0, Math.min(10, Number(editor.barLineWidth) || 0)),
+-        };
+-      }
+-      function normalizedGraphObjects(chart) {
+-        if(!chart)return [];
+-        if(chart.editor?.editable===false)
+-          return projectClone(Array.isArray(chart.editor?.objects)?chart.editor.objects:[]);
+-        return (Array.isArray(chart.editor?.objects)?chart.editor.objects:[]).map((object,index)=>{
+-          let csv=getProjectCsv(object?.csvId);
+-          if(!csv)throw Error(`그래프 객체 ${index+1}에 연결할 프로젝트 CSV가 없습니다.`);
+-          let selection=graphDataSelection(csv.rows,csv.headerLines,object||{});
+-          return {...baseGraphObject(chart,csv),...(object||{}),csvId:csv.id,x:selection.x,y:selection.y};
+-        });
+-      }
+-      function ensureGraphObjects(chart) {
+-        if (!chart) return [];
+-        chart.editor = chart.editor || {};
+-        chart.editor.objects = normalizedGraphObjects(chart);
+-        return chart.editor.objects;
+-      }
+-      function graphEditorChart() {
+-        let slot = getSelectedSlot();
+-        return slot?.chart ? getChart(slot.chart) : null;
+-      }
+-      function graphEditorCommit(objects,index=null) {
+-        let chart=graphEditorChart();
+-        if(!chart)return null;
+-        let payload={chartId:chart.id,objects:[...objects],index,direction:"fsm-to-model"};
+-        appFSM.send("GRAPH_OBJECTS_REPLACED",payload);
+-        chart=payload.chart;
+-        let selected=Number.isInteger(index)&&index>=0&&index<chart.editor.objects.length?index:null;
+-        appFSM.send(selected===null?"CLEAR_GRAPH_OBJECT":"SELECT_GRAPH_OBJECT",
+-          {index:selected,direction:"fsm-to-model"});
+-        renderDashboard(); updateFileAvailability();
+-        appFSM.notify("charts","GRAPH_OBJECTS_CHANGED");
+-        return chart;
+-      }
+-      function graphEditorSelectCsv(csvId) {
+-        let csv = getProjectCsv(Number(csvId));
+-        if (!csv) return null;
+-        appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(csv), direction: "ui-to-fsm" });
+-        appFSM.notify("data", "CSV_SELECTION_CHANGED");
+-        return csv;
+-      }
+-      function graphEditorSelectObject(index) {
+-        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
+-        let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
+-        appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
+-        if (selected !== null) graphEditorSelectCsv(objects[selected].csvId);
+-        appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
+-        return selected;
+-      }
+-      function graphEditorObjectValues(index, values = {}) {
+-        let chart = graphEditorChart(), objects = ensureGraphObjects(chart), current = objects[index];
+-        if (!chart || !current) return null;
+-        let csv = getProjectCsv(Number(values.csvId)) || getProjectCsv(current.csvId);
+-        if (!csv) return null;
+-        let defaults = baseGraphObject(chart, csv), columns = new Set(columnDefinitions(csv.rows, csv.headerLines).map((column) => column.id));
+-        let clamp = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(max, Number(value))) : fallback;
+-        let next = { ...defaults, ...current, csvId: csv.id };
+-        next.x = columns.has(values.x) ? values.x : columns.has(next.x) ? next.x : defaults.x;
+-        next.y = columns.has(values.y) ? values.y : columns.has(next.y) ? next.y : defaults.y;
+-        if (["bottom", "top"].includes(values.xAxisSide)) next.xAxisSide = values.xAxisSide;
+-        if (["left", "right"].includes(values.yAxisSide)) next.yAxisSide = values.yAxisSide;
+-        if (["scatter", "markers", "lines+markers", "bar", "hidden"].includes(values.type)) next.type = values.type;
+-        if (values.legendName !== undefined) next.legendName = String(values.legendName);
+-        if (values.lineDash !== undefined) next.lineDash = String(values.lineDash || "solid");
+-        if (values.markerSymbol !== undefined) next.markerSymbol = String(values.markerSymbol || "circle");
+-        if (/^#[0-9a-f]{6}$/i.test(values.color || "")) next.color = values.color;
+-        next.lineWidth = clamp(values.lineWidth, next.lineWidth, 0.1, 20);
+-        next.markerSize = clamp(values.markerSize, next.markerSize, 1, 40);
+-        next.barOpacity = clamp(values.barOpacity, next.barOpacity, 0.05, 1);
+-        next.barLineWidth = clamp(values.barLineWidth, next.barLineWidth, 0, 10);
+-        let updated = [...objects];
+-        updated[index] = next;
+-        return graphEditorCommit(updated, index);
+-      }
+-      function graphEditorAdd(csvId = selectedProjectCsv()?.id) {
+-        let slot = getSelectedSlot(), csv = getProjectCsv(Number(csvId));
+-        if (!slot || slot.contentType === "image" || !csv) return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
+-        graphEditorSelectCsv(csv.id);
+-        let chart = graphEditorChart();
+-        if (!chart) {
+-          let payload = { slotId: slot.id, csvId: csv.id, direction: "fsm-to-model" };
+-          appFSM.send("SLOT_DATA_CONNECTED", payload);
+-          chart = payload.chart;
+-          if (!chart) return status("빈 슬롯에 그래프를 추가하지 못했습니다.");
+-          return graphEditorCommit(ensureGraphObjects(chart), 0);
+-        }
+-        let objects = ensureGraphObjects(chart);
+-        return graphEditorCommit([...objects, baseGraphObject(chart, csv)], objects.length);
+-      }
+-      function graphEditorMove(from, to) {
+-        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
+-        if (!chart || !objects[from] || !objects[to] || from === to) return chart;
+-        let next = [...objects], moved = next.splice(from, 1)[0];
+-        next.splice(to, 0, moved);
+-        return graphEditorCommit(next, to);
+-      }
+-      function graphEditorDelete(index) {
+-        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
+-        if (!chart || !objects[index]) return null;
+-        return graphEditorCommit(objects.filter((_, objectIndex) => objectIndex !== index), null);
+-      }
+-      function graphEditorHeaderLines(csvId, value) {
+-        let csv = getProjectCsv(Number(csvId));
+-        if (!csv) return null;
+-        csv.headerLines = headerLineCount(value, csv.rows);
+-        activeProject.charts.forEach((chart) => {
+-          if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id)) rebuildEditableGraph(chart);
+-        });
+-        renderDashboard();
+-        debugLog("csv:header-lines", { csvId: csv.id, headerLines: csv.headerLines });
+-        appFSM.notify("data", "CSV_HEADER_LINES_CHANGED");
+-        return csv.headerLines;
+-      }
+-      function graphEditorSetEditable(editable=null) {
+-        let current=graphEditorChart();
+-        if(!current)
+-          return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
+-        let next=typeof editable==="boolean"?editable:current.editor.editable===false;
+-        if(next===current.editor.editable) return current;
+-
+-        let candidate=projectClone(activeProject._state),
+-          chart=candidate.charts.find(item=>item.id===current.id);
+-        if(!chart) throw Error("편집 상태를 변경할 차트가 없습니다.");
+-
+-        let createdCsvId=null;
+-        if(next && chart.editor.editable===false){
+-          let objects=Array.isArray(chart.editor.objects)?chart.editor.objects:[],
+-            rows=Array.isArray(chart.editor.conversionRows)?chart.editor.conversionRows:[];
+-          if(objects.length){
+-            if(!rows.length)
+-              throw Error("Plotly 변환 데이터가 없어 편집 가능한 차트로 바꿀 수 없습니다.");
+-            let csvId=candidate.nextId.csv,
+-              model=buildProjectCsvModel(
+-                rows,
+-                "Plotly JSON.csv",
+-                csvId,
+-                "",
+-                "text/csv",
+-                1,
+-                candidate,
+-              );
+-            projectVfs.prepare(model,"csv",candidate);
+-            candidate.assets.csvFiles.push(model);
+-            candidate.nextId.csv=csvId+1;
+-            objects.forEach(object=>{object.csvId=model.id;});
+-            createdCsvId=model.id;
+-          }
+-          delete chart.editor.conversionRows;
+-        }
+-
+-        chart.editor.editable=next;
+-        validateChartModel(chart,"편집 상태 변경 차트",candidate.assets.csvFiles);
+-        validateProjectObjectState(candidate,{requireSlots:true});
+-        activeProject.initialize(candidate);
+-
+-        let committed=getChart(current.id);
+-        if(next) rebuildEditableGraph(committed);
+-        if(createdCsvId!==null) graphEditorSelectCsv(createdCsvId);
+-        renderDashboard();
+-        status(next
+-          ?"가져온 JSON을 편집기 설정으로 재구성했습니다."
+-          :"가져온 원본 Plotly JSON 표시로 전환했습니다.");
+-        debugLog("editor:editable",{chartId:committed.id,editable:next});
+-        appFSM.notify("charts","GRAPH_EDITABLE_CHANGED");
+-        return committed;
+-      }
+-      function readGraphDataApi() {
+-        let chart = graphEditorChart(), objects = normalizedGraphObjects(chart);
+-        let index = appFSM.state.graphObjectIndex;
+-        let selectedIndex = Number.isInteger(index) && objects[index] ? index : null;
+-        let csv = getProjectCsv(objects[selectedIndex]?.csvId) ||
+-          getProjectCsv(objects[0]?.csvId) || selectedProjectCsv() ||
+-          activeProject.csvFiles[0] || null;
++        status(`${image.name}을 선택했습니다. 이미지 슬롯의 추가 버튼이나 드롭으로 연결할 수 있습니다.`);
++      }
++      function insertEmptyImageIntoSelectedSlot() {
++        let slot = getSelectedSlot();
++        if (!slot || slot.contentType !== "image")
++          return status("빈 이미지를 삽입할 이미지 슬롯을 먼저 선택하세요.");
++        let svg =
++            '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>',
++          image = buildProjectImageModel(
++            new TextEncoder().encode(svg),
++            "빈 이미지.svg",
++            "image/svg+xml",
++            activeProject.imageId,
++          );
++        appFSM.send("SLOT_IMAGE_IMPORTED", {
++          slotId: slot.id,
++          model: image,
++          direction: "fsm-to-model",
++        });
++        updateFileAvailability();
++        renderDashboard();
++        status("선택 슬롯에 빈 이미지를 삽입했습니다.");
++        return image;
++      }
++      function setSlotContentType(type) {
++        let slot = getSelectedSlot();
++        if (!slot) {
++          appFSM.send("SLOT_TYPE_CHANGED", {
++            slotId: null,
++            type,
++            direction: "fsm-to-model",
++          });
++          debugLog("slot:content-type-pending", { type, direction: "fsm-to-model" });
++          return;
++        }
++        appFSM.send("SLOT_TYPE_CHANGED", {
++          slotId: slot.id,
++          type,
++          direction: "fsm-to-model",
++        });
++        renderDashboard();
++        debugLog("slot:content-type", {
++          slotId: slot.id,
++          type,
++          direction: "fsm-to-model",
++        });
++      }
++      function syncSlotImageElement(slot,image) {
++        let element=slot&&document.querySelector(`.slot[data-slot="${slot.id}"] .slot-image`);
++        if(!element||!image)return false;
++        let settings=normalizeImageSettings(slot);
++        element.classList.toggle("manual",settings.fit==="manual");
++        element.removeAttribute("style");
++        if(settings.fit==="manual"){
++          element.style.width=`${settings.scale}%`;
++          element.style.left=`${settings.x}%`;
++          element.style.top=`${settings.y}%`;
++        } else element.style.objectFit=settings.fit;
++        return true;
++      }
++      function applyImageSettingsFromValues(values={}) {
++        let slot=getSelectedSlot(), image=slotImage(slot);
++        if(!slot||!image)return false;
++        let current=normalizeImageSettings(slot),
++          next={...current,fit:["contain","cover","manual"].includes(values.fit)?values.fit:current.fit};
++        if(next.fit==="manual"){
++          next.scale=Math.max(1,Math.min(1000,Number(values.scale)||100));
++          next.x=Math.max(-100,Math.min(200,Number(values.x)||50));
++          next.y=Math.max(-100,Math.min(200,Number(values.y)||50));
++        }
++        slot.content.imageSettings=readImageSettings(next);
++        validateProjectObject(activeProject,{requireSlots:true});
++        syncSlotImageElement(slot,image);
++        appFSM.notify("images","IMAGE_SETTINGS_CHANGED");
++        return readImageEditorApi();
++      }
++      function readSelectedSlotApi() {
++        let slot = getSelectedSlot();
++        return slot ? {
++          id: slot.id, row: slot.row, col: slot.col,
++          contentType: slot.contentType, chart: slot.chart, imageId: slot.imageId,
++        } : null;
++      }
++      function resetSlotApi(slotId) {
++        let payload = { slotIds: [slotId], direction: "fsm-to-model" };
++        appFSM.send("SLOTS_RESET", payload);
++        appFSM.send("CLEAR_ASSET_SELECTION", { direction: "fsm-to-model" });
++        renderDashboard();
++        status("선택한 슬롯을 초기화했습니다.");
++        debugLog("slotReset:complete", {
++          slotId, removedChartIds: payload.removedChartIds,
++        });
++      }
++      function prepareDashboardFileDrop(slotId) {
++        let slot = slotAt(slotId);
++        clearSlotDragState();
++        if (!slot || slot.hidden) return false;
++        if (!isSlotSelected(slot)) setSelectedSlot(slot.id);
++        return true;
++      }
++      function finishDashboardFileDrop() {
++        setTimeout(() => { slotDragSuppressClick = false; }, 0);
++      }
++      function readImageEditorApi() {
++        let slot=getSelectedSlot(), image=slotImage(slot);
++        return image&&slot?{
++          name:image.name,
++          src:projectImageDisplayUrl(image),
++          settings:Object.freeze({...normalizeImageSettings(slot)}),
++        }:null;
++      }
++      function setProjectName(value, trim = false) {
++        activeProject.projectName = (trim ? String(value).trim() : String(value)).slice(0, 120);
++        if (trim) debugLog("project:name", { projectName: activeProject.projectName });
++        return activeProject.projectName;
++      }
++      async function loadImageFile(
++        file,
++        slot,
++        { assetPath = null, replaceAssetId = null, planImport = null } = {},
++      ) {
++        try {
++          if (!assetPath && typeof planImport !== "function")
++            throw Error("프로젝트 이미지 가져오기 계획이 없습니다.");
++          let bytes = new Uint8Array(await file.arrayBuffer()),
++            plan = assetPath
++              ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
++              : await planImport(file, PROJECT_ASSET_DIRECTORIES.image),
++            image;
++          if (Number.isInteger(plan.replaceId)) {
++            image = buildProjectImageModel(
++              bytes,
++              file.name,
++              file.type,
++              plan.replaceId,
++            );
++            projectVfs.assignLocation(image, plan.path);
++            appFSM.send("IMAGE_OBJECT_REPLACED", {
++              model: image,
++              direction: "fsm-to-model",
++            });
++            if (slot)
++              appFSM.send("SLOT_IMAGE_LINKED", {
++                slotId: slot.id,
++                imageId: image.id,
++                direction: "fsm-to-model",
++              });
++          } else if (slot) {
++            image = buildProjectImageModel(bytes, file.name, file.type, activeProject.imageId);
++            projectVfs.assignLocation(image, plan.path);
++            appFSM.send("SLOT_IMAGE_IMPORTED", {
++              slotId: slot.id,
++              model: image,
++              direction: "fsm-to-model",
++            });
++          } else image = createProjectImage(bytes, file.name, file.type, null, null, plan.path);
++          updateFileAvailability();
++          renderDashboard();
++          status(
++            slot
++              ? `${file.name} 이미지를 선택 슬롯에 연결했습니다.`
++              : Number.isInteger(plan.replaceId)
++                ? `${file.name} 이미지를 기존 참조를 유지한 채 교체했습니다.`
++                : `${file.name} 이미지를 프로젝트에 추가했습니다.`,
++          );
++          debugLog("slot:image-load", { slotId: slot?.id ?? null, name: file.name });
++        } catch (error) {
++          status("이미지 불러오기 실패: " + error.message);
++          throw error;
++        }
++      }
++      function slotFileKind(file) {
++        let name = String(file?.name || "").toLowerCase(),
++          type = String(file?.type || "").toLowerCase();
++        if (name.endsWith(".ffsx")) return "slot";
++        if (name.endsWith(".csv") || name.endsWith(".tsv") || name.endsWith(".json")) return "data";
++        if (type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name))
++          return "image";
++        return "";
++      }
++      function dataTransferHasFiles(dataTransfer) {
++        return Array.from(dataTransfer?.types || []).includes("Files");
++      }
++      async function loadDataFile(
++        file,
++        slot,
++        { replaceSlotContent = false, assetPath = null, replaceAssetId = null, planImport = null } = {},
++      ) {
++        debugLog("fileLoad:start", {
++          name: file.name,
++          size: file.size,
++          slotId: slot?.id ?? null,
++          source: "shared-loader",
++        });
++        let csv = null;
++        try {
++          let bytes = new Uint8Array(await file.arrayBuffer()),
++            text = new TextDecoder().decode(bytes),
++            data = file.name.toLowerCase().endsWith(".json") ? JSON.parse(text) : parseCSV(text);
++          if (!Array.isArray(data) && Array.isArray(data.data)) data = data.data;
++          if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
++          if (!assetPath && typeof planImport !== "function")
++            throw Error("프로젝트 데이터 가져오기 계획이 없습니다.");
++          let plan = assetPath
++            ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
++            : await planImport(file, PROJECT_ASSET_DIRECTORIES.csv);
++          if (Number.isInteger(plan.replaceId)) {
++            csv = buildProjectCsvModel(
++              data,
++              file.name,
++              plan.replaceId,
++              ffpxBytesToBase64(bytes),
++              file.type || "text/csv",
++              1,
++            );
++            projectVfs.assignLocation(csv, plan.path);
++            appFSM.send("DATA_OBJECT_REPLACED", {
++              model: csv,
++              direction: "fsm-to-model",
++            });
++          } else
++            csv = createProjectCsv(
++              data,
++              file.name,
++              null,
++              ffpxBytesToBase64(bytes),
++              file.type || "text/csv",
++              1,
++              plan.path,
++            );
++          if (slot) {
++            connectDataToSlot(slot, data, file.name, csv, { replaceSlotContent });
++          }
++          status(
++            Number.isInteger(plan.replaceId)
++              ? `${file.name}을 기존 참조를 유지한 채 교체했습니다.`
++              : `${file.name}을 프로젝트 CSV로 추가했습니다.`,
++          );
++          debugLog("fileLoad:complete", {
++            name: file.name,
++            rows: csv.rows.length,
++            slotId: slot?.id ?? null,
++            chartId: slot?.chart || null,
++            csvId: csv.id,
++          });
++        } catch (error) {
++          if (
++            csv &&
++            !activeProject.charts.some((chart) => chartCsvIds(chart).includes(csv.id))
++          )
++            appFSM.send("DATA_OBJECT_DELETED", {
++              csvId: csv.id,
++              direction: "fsm-to-model",
++            });
++          debugLog("fileLoad:error", {
++            name: file.name,
++            slotId: slot?.id ?? null,
++            message: error.message,
++          });
++          throw error;
++        }
++      }
++      function baseGraphObject(chart, csv = selectedProjectCsv()) {
++        let editor = chart.editor || {};
++        if (!csv) throw Error("그래프 오브젝트에 연결할 프로젝트 CSV가 없습니다.");
++        let selection = graphDataSelection(csv.rows, csv.headerLines, editor);
++        return {
++          csvId: csv.id,
++          x: selection.x,
++          y: selection.y,
++          xAxisSide: editor.xAxisSide || "bottom",
++          yAxisSide: editor.yAxisSide || "left",
++          type: editor.type || "scatter",
++          color: editor.colors?.[0] || DEFAULT_COLORS[0],
++          legendName: editor.legendName || "",
++          lineWidth: Math.max(0.1, Math.min(20, Number(editor.lineWidth) || 2)),
++          lineDash: editor.lineDash || "solid",
++          markerSymbol: editor.markerSymbol || "circle",
++          markerSize: Math.max(1, Math.min(40, Number(editor.markerSize) || 6)),
++          barOpacity: Math.max(0.05, Math.min(1, Number(editor.barOpacity) || 1)),
++          barLineWidth: Math.max(0, Math.min(10, Number(editor.barLineWidth) || 0)),
++        };
++      }
++      function normalizedGraphObjects(chart) {
++        if(!chart)return [];
++        if(chart.editor?.editable===false)
++          return projectClone(Array.isArray(chart.editor?.objects)?chart.editor.objects:[]);
++        return (Array.isArray(chart.editor?.objects)?chart.editor.objects:[]).map((object,index)=>{
++          let csv=getProjectCsv(object?.csvId);
++          if(!csv)throw Error(`그래프 객체 ${index+1}에 연결할 프로젝트 CSV가 없습니다.`);
++          let selection=graphDataSelection(csv.rows,csv.headerLines,object||{});
++          return {...baseGraphObject(chart,csv),...(object||{}),csvId:csv.id,x:selection.x,y:selection.y};
++        });
++      }
++      function ensureGraphObjects(chart) {
++        if (!chart) return [];
++        chart.editor = chart.editor || {};
++        chart.editor.objects = normalizedGraphObjects(chart);
++        return chart.editor.objects;
++      }
++      function graphEditorChart() {
++        let slot = getSelectedSlot();
++        return slot?.chart ? getChart(slot.chart) : null;
++      }
++      function graphEditorCommit(objects,index=null) {
++        let chart=graphEditorChart();
++        if(!chart)return null;
++        let payload={chartId:chart.id,objects:[...objects],index,direction:"fsm-to-model"};
++        appFSM.send("GRAPH_OBJECTS_REPLACED",payload);
++        chart=payload.chart;
++        let selected=Number.isInteger(index)&&index>=0&&index<chart.editor.objects.length?index:null;
++        appFSM.send(selected===null?"CLEAR_GRAPH_OBJECT":"SELECT_GRAPH_OBJECT",
++          {index:selected,direction:"fsm-to-model"});
++        renderDashboard(); updateFileAvailability();
++        appFSM.notify("charts","GRAPH_OBJECTS_CHANGED");
++        return chart;
++      }
++      function graphEditorSelectCsv(csvId) {
++        let csv = getProjectCsv(Number(csvId));
++        if (!csv) return null;
++        appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(csv), direction: "ui-to-fsm" });
++        appFSM.notify("data", "CSV_SELECTION_CHANGED");
++        return csv;
++      }
++      function graphEditorSelectObject(index) {
++        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
++        let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
++        appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
++        if (selected !== null) graphEditorSelectCsv(objects[selected].csvId);
++        appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
++        return selected;
++      }
++      function graphEditorObjectValues(index, values = {}) {
++        let chart = graphEditorChart(), objects = ensureGraphObjects(chart), current = objects[index];
++        if (!chart || !current) return null;
++        let csv = getProjectCsv(Number(values.csvId)) || getProjectCsv(current.csvId);
++        if (!csv) return null;
++        let defaults = baseGraphObject(chart, csv), columns = new Set(columnDefinitions(csv.rows, csv.headerLines).map((column) => column.id));
++        let clamp = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(max, Number(value))) : fallback;
++        let next = { ...defaults, ...current, csvId: csv.id };
++        next.x = columns.has(values.x) ? values.x : columns.has(next.x) ? next.x : defaults.x;
++        next.y = columns.has(values.y) ? values.y : columns.has(next.y) ? next.y : defaults.y;
++        if (["bottom", "top"].includes(values.xAxisSide)) next.xAxisSide = values.xAxisSide;
++        if (["left", "right"].includes(values.yAxisSide)) next.yAxisSide = values.yAxisSide;
++        if (["scatter", "markers", "lines+markers", "bar", "hidden"].includes(values.type)) next.type = values.type;
++        if (values.legendName !== undefined) next.legendName = String(values.legendName);
++        if (values.lineDash !== undefined) next.lineDash = String(values.lineDash || "solid");
++        if (values.markerSymbol !== undefined) next.markerSymbol = String(values.markerSymbol || "circle");
++        if (/^#[0-9a-f]{6}$/i.test(values.color || "")) next.color = values.color;
++        next.lineWidth = clamp(values.lineWidth, next.lineWidth, 0.1, 20);
++        next.markerSize = clamp(values.markerSize, next.markerSize, 1, 40);
++        next.barOpacity = clamp(values.barOpacity, next.barOpacity, 0.05, 1);
++        next.barLineWidth = clamp(values.barLineWidth, next.barLineWidth, 0, 10);
++        let updated = [...objects];
++        updated[index] = next;
++        return graphEditorCommit(updated, index);
++      }
++      function graphEditorAdd(csvId = selectedProjectCsv()?.id) {
++        let slot = getSelectedSlot(), csv = getProjectCsv(Number(csvId));
++        if (!slot || slot.contentType === "image" || !csv) return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
++        graphEditorSelectCsv(csv.id);
++        let chart = graphEditorChart();
++        if (!chart) {
++          let payload = { slotId: slot.id, csvId: csv.id, direction: "fsm-to-model" };
++          appFSM.send("SLOT_DATA_CONNECTED", payload);
++          chart = payload.chart;
++          if (!chart) return status("빈 슬롯에 그래프를 추가하지 못했습니다.");
++          return graphEditorCommit(ensureGraphObjects(chart), 0);
++        }
++        let objects = ensureGraphObjects(chart);
++        return graphEditorCommit([...objects, baseGraphObject(chart, csv)], objects.length);
++      }
++      function graphEditorMove(from, to) {
++        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
++        if (!chart || !objects[from] || !objects[to] || from === to) return chart;
++        let next = [...objects], moved = next.splice(from, 1)[0];
++        next.splice(to, 0, moved);
++        return graphEditorCommit(next, to);
++      }
++      function graphEditorDelete(index) {
++        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
++        if (!chart || !objects[index]) return null;
++        return graphEditorCommit(objects.filter((_, objectIndex) => objectIndex !== index), null);
++      }
++      function graphEditorHeaderLines(csvId, value) {
++        let csv = getProjectCsv(Number(csvId));
++        if (!csv) return null;
++        csv.headerLines = headerLineCount(value, csv.rows);
++        activeProject.charts.forEach((chart) => {
++          if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id)) rebuildEditableGraph(chart);
++        });
++        renderDashboard();
++        debugLog("csv:header-lines", { csvId: csv.id, headerLines: csv.headerLines });
++        appFSM.notify("data", "CSV_HEADER_LINES_CHANGED");
++        return csv.headerLines;
++      }
++      function graphEditorSetEditable(editable=null) {
++        let current=graphEditorChart();
++        if(!current)
++          return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
++        let next=typeof editable==="boolean"?editable:current.editor.editable===false;
++        if(next===current.editor.editable) return current;
++
++        let candidate=projectClone(activeProject._state),
++          chart=candidate.charts.find(item=>item.id===current.id);
++        if(!chart) throw Error("편집 상태를 변경할 차트가 없습니다.");
++
++        let createdCsvId=null;
++        if(next && chart.editor.editable===false){
++          let objects=Array.isArray(chart.editor.objects)?chart.editor.objects:[],
++            rows=Array.isArray(chart.editor.conversionRows)?chart.editor.conversionRows:[];
++          if(objects.length){
++            if(!rows.length)
++              throw Error("Plotly 변환 데이터가 없어 편집 가능한 차트로 바꿀 수 없습니다.");
++            let csvId=candidate.nextId.csv,
++              model=buildProjectCsvModel(
++                rows,
++                "Plotly JSON.csv",
++                csvId,
++                "",
++                "text/csv",
++                1,
++                candidate,
++              );
++            projectVfs.prepare(model,"csv",candidate);
++            candidate.assets.csvFiles.push(model);
++            candidate.nextId.csv=csvId+1;
++            objects.forEach(object=>{object.csvId=model.id;});
++            createdCsvId=model.id;
++          }
++          delete chart.editor.conversionRows;
++        }
++
++        chart.editor.editable=next;
++        validateChartModel(chart,"편집 상태 변경 차트",candidate.assets.csvFiles);
++        validateProjectObjectState(candidate,{requireSlots:true});
++        activeProject.initialize(candidate);
++
++        let committed=getChart(current.id);
++        if(next) rebuildEditableGraph(committed);
++        if(createdCsvId!==null) graphEditorSelectCsv(createdCsvId);
++        renderDashboard();
++        status(next
++          ?"가져온 JSON을 편집기 설정으로 재구성했습니다."
++          :"가져온 원본 Plotly JSON 표시로 전환했습니다.");
++        debugLog("editor:editable",{chartId:committed.id,editable:next});
++        appFSM.notify("charts","GRAPH_EDITABLE_CHANGED");
++        return committed;
++      }
++      function readGraphDataApi() {
++        let chart = graphEditorChart(), objects = normalizedGraphObjects(chart);
++        let index = appFSM.state.graphObjectIndex;
++        let selectedIndex = Number.isInteger(index) && objects[index] ? index : null;
++        let csv = selectedProjectCsv();
+         return {
+           chartId: chart?.id ?? null,
+           editable: chart?.editor?.editable !== false,
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -501,853 +501,862 @@
+         },
+         "빈 이미지 삽입",
+       ),
+-      React.createElement(Select, {
+-        label: "맞춤",
+-        value: settings?.fit || "contain",
+-        data: [
+-          { value: "contain", label: "맞춰 넣기" },
+-          { value: "cover", label: "채우기" },
+-          { value: "manual", label: "수동" },
+-        ],
+-        disabled: busy || !image,
+-        allowDeselect: false,
+-        onChange: (value) => updateSettings({ fit: value || settings?.fit || "contain" }),
+-      }),
+-      settings?.fit === "manual"
+-        ? React.createElement(
+-            Stack,
+-            { gap: "xs" },
+-            React.createElement(NumberInput, {
+-              label: "크기 (%)",
+-              value: settings.scale,
+-              min: 1,
+-              max: 1000,
+-              disabled: busy,
+-              onChange: (value) => updateSettings({ scale: value }),
+-            }),
+-            React.createElement(
+-              Group,
+-              { gap: "xs", grow: true },
+-              React.createElement(NumberInput, {
+-                label: "X (%)",
+-                value: settings.x,
+-                min: -100,
+-                max: 200,
+-                disabled: busy,
+-                onChange: (value) => updateSettings({ x: value }),
+-              }),
+-              React.createElement(NumberInput, {
+-                label: "Y (%)",
+-                value: settings.y,
+-                min: -100,
+-                max: 200,
+-                disabled: busy,
+-                onChange: (value) => updateSettings({ y: value }),
+-              }),
+-            ),
+-          )
+-        : null,
+-    );
+-  }
+-
+-  function FastFigureProjectDataTree() {
+-    const state = useAppState();
+-    const assetApi = window.FastFigureApi.assets;
+-    const snapshot = assetApi.readTree();
+-    const selectedSlotId = window.FastFigureApi.slots.readSelected()?.id;
+-    const [expanded, setExpanded] = useState(() => new Set(["/assets", "/slots"]));
+-    const [lastDirectory, setLastDirectory] = useState("/assets");
+-    const [folderDialog, setFolderDialog] = useState({
+-      opened: false,
+-      parent: "/assets",
+-      name: "New Folder",
+-    });
+-    const [trashDialog, setTrashDialog] = useState(null);
+-    const [movePicker, setMovePicker] = useState(null);
+-    const [moveConfirm, setMoveConfirm] = useState(null);
+-    const dragNodeRef = useRef(null);
+-    const { choosePlan: chooseTreeImportPlan, modal: treeImportCollisionModal } =
+-      useProjectAssetImportCollision();
+-    const busy = state.lifecycle !== "ready";
+-    const directories = [...new Set(snapshot.directories)]
+-      .filter((path) => path === "/assets" || path.startsWith("/assets/"))
+-      .sort((a, b) => a.localeCompare(b));
+-
+-    const openFolderDialog = () => {
+-      const selectedDirectory =
+-        state.assetSelection === "directory" ? state.assetPath : lastDirectory;
+-      const parent =
+-        typeof selectedDirectory === "string" &&
+-        (selectedDirectory === "/assets" || selectedDirectory.startsWith("/assets/")) &&
+-        !assetApi.isTrashed(selectedDirectory)
+-          ? selectedDirectory
+-          : "/assets";
+-      setFolderDialog({ opened: true, parent, name: "New Folder" });
+-    };
+-    const closeFolderDialog = () =>
+-      setFolderDialog((current) => ({ ...current, opened: false }));
+-    const createFolderFromMantine = () => {
+-      try {
+-        setLastDirectory(assetApi.createDirectory(folderDialog.parent, folderDialog.name));
+-        closeFolderDialog();
+-      } catch (error) {
+-        status(`폴더 생성 오류: ${error.message}`);
+-      }
+-    };
+-    const trashSelected =
+-      state.assetSelection === "directory" && state.assetPath === PROJECT_TRASH_DIRECTORY;
+-    const trash = assetApi.readTrash();
+-    const trashHasContents = trash.hasContents;
+-    const openTrashDialog = () => {
+-      if (!trashSelected || !trashHasContents) return;
+-      setTrashDialog({ referenceCount: trash.referenceCount });
+-    };
+-    const closeTrashDialog = () => setTrashDialog(null);
+-    const emptyTrashFromMantine = () => {
+-      try {
+-        assetApi.emptyTrash();
+-        closeTrashDialog();
+-      } catch (error) {
+-        status(`휴지통 비우기 오류: ${error.message}`);
+-      }
+-    };
+-    const rewriteExpandedAfterMove = (source, destination) => {
+-      setExpanded((current) => {
+-        const next = new Set();
+-        current.forEach((path) => {
+-          next.add(
+-            projectPathInDirectory(path, source)
+-              ? `${destination}${path.slice(source.length)}`
+-              : path,
+-          );
+-        });
+-        return next;
+-      });
+-      setLastDirectory((current) =>
+-        projectPathInDirectory(current, source)
+-          ? `${destination}${current.slice(source.length)}`
+-          : current,
+-      );
+-    };
+-    const executeProjectNodeMove = (plan, useUniqueName = false) => {
+-      if (!plan) return;
+-      try {
+-        const result = assetApi.move(plan, useUniqueName);
+-        if (plan.kind === "directory" && !result.trashed)
+-          rewriteExpandedAfterMove(plan.path, result.path);
+-        setMovePicker(null);
+-        setMoveConfirm(null);
+-      } catch (error) {
+-        status(`프로젝트 항목 이동 오류: ${error.message}`);
+-      }
+-    };
+-    const requestProjectNodeMove = (path, directory) => {
+-      try {
+-        const plan = assetApi.planMove(path, directory);
+-        if (!plan) {
+-          setMovePicker(null);
+-          return;
+-        }
+-        if (plan.collision || (plan.enteringTrash && plan.referenceCount > 0))
+-          setMoveConfirm(plan);
+-        else executeProjectNodeMove(plan);
+-      } catch (error) {
+-        status(`프로젝트 항목 이동 오류: ${error.message}`);
+-      }
+-    };
+-    const toggleExpanded = (path) => {
+-      setExpanded((current) => {
+-        const next = new Set(current);
+-        if (next.has(path)) next.delete(path);
+-        else next.add(path);
+-        return next;
+-      });
+-    };
+-    const csvReferenceCount = (id) =>
+-      snapshot.charts.reduce(
+-        (count, chart) => count + chart.csvReferences.filter((csvId) => csvId === id).length,
+-        0,
+-      );
+-    const imageReferenceCount = (id) =>
+-      snapshot.slots.filter((slot) => slot.imageId === id).length;
+-    const assetRow = (asset, kind) => {
+-      const inactive = assetApi.isTrashed(asset.path);
+-      const selected = state.assetSelection === kind && state.assetPath === asset.path;
+-      const movable = assetApi.movable(asset.path);
+-      const meta =
+-        kind === "csv"
+-          ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${csvReferenceCount(asset.id)}`
+-          : `참조 ${imageReferenceCount(asset.id)}`;
+-      return React.createElement(
+-        Group,
+-        {
+-          key: `${kind}:${asset.path}`,
+-          gap: 2,
+-          wrap: "nowrap",
+-          draggable: movable,
+-          onDragStart: (event) => {
+-            if (!movable) return event.preventDefault();
+-            dragNodeRef.current = { path: asset.path };
+-            event.dataTransfer.effectAllowed = "move";
+-            event.dataTransfer.setData("text/plain", asset.path);
+-          },
+-          onDragEnd: () => {
+-            dragNodeRef.current = null;
+-          },
+-        },
+-        React.createElement(
+-          Button,
+-          {
+-            variant: selected ? "filled" : "subtle",
+-            size: "xs",
+-            fullWidth: true,
+-            disabled: inactive,
+-            justify: "space-between",
+-            onClick: () =>
+-              kind === "csv" ? assetApi.selectCsv(asset.path) : assetApi.selectImage(asset.path),
+-          },
+-          React.createElement(Text, { component: "span" }, projectPathName(asset.path)),
+-          React.createElement(Text, { component: "span", c: "dimmed" }, meta),
+-        ),
+-        React.createElement(
+-          Menu,
+-          { position: "bottom-end", withinPortal: true },
+-          React.createElement(
+-            Menu.Target,
+-            null,
+-            React.createElement(
+-              ActionIcon,
+-              {
+-                variant: "subtle",
+-                size: "sm",
+-                disabled: inactive,
+-                "aria-label": `${projectPathName(asset.path)} 작업`,
+-              },
+-              "···",
+-            ),
+-          ),
+-          React.createElement(
+-            Menu.Dropdown,
+-            null,
+-            React.createElement(
+-              Menu.Item,
+-              { onClick: () => assetApi.download(asset.path) },
+-              "다운로드",
+-            ),
+-            movable
+-              ? React.createElement(
+-                  Menu.Item,
+-                  {
+-                    onClick: () =>
+-                      setMovePicker({
+-                        path: asset.path,
+-                        directory: projectParentPath(asset.path),
+-                      }),
+-                  },
+-                  "이동…",
+-                )
+-              : null,
+-            movable
+-              ? React.createElement(
+-                  Menu.Item,
+-                  {
+-                    onClick: () =>
+-                      requestProjectNodeMove(asset.path, PROJECT_TRASH_DIRECTORY),
+-                  },
+-                  "휴지통으로 이동",
+-                )
+-              : null,
+-          ),
+-        ),
+-      );
+-    };
+-    const directoryNode = (path) => {
+-      const selected = state.assetSelection === "directory" && state.assetPath === path;
+-      const movable = assetApi.movable(path);
+-      const childDirectories = directories.filter(
+-        (candidate) => candidate !== path && projectParentPath(candidate) === path,
+-      );
+-      const childAssets = [
+-        ...snapshot.data
+-          .filter((asset) => projectParentPath(asset.path) === path)
+-          .map((asset) => assetRow(asset, "csv")),
+-        ...snapshot.images
+-          .filter((asset) => projectParentPath(asset.path) === path)
+-          .map((asset) => assetRow(asset, "image")),
+-      ];
+-      const open = expanded.has(path);
+-      return React.createElement(
+-        Stack,
+-        {
+-          key: path,
+-          gap: 2,
+-          draggable: movable,
+-          onDragStart: (event) => {
+-            if (!movable) return event.preventDefault();
+-            dragNodeRef.current = { path };
+-            event.dataTransfer.effectAllowed = "move";
+-            event.dataTransfer.setData("text/plain", path);
+-          },
+-          onDragEnd: () => {
+-            dragNodeRef.current = null;
+-          },
+-          onDragOver: (event) => allowTreeFolderDrop(event, path),
+-          onDrop: (event) => dropOnTreeFolder(event, path),
+-        },
+-        React.createElement(
+-          Group,
+-          { gap: 2, wrap: "nowrap" },
+-          React.createElement(
+-            Button,
+-            {
+-              variant: selected ? "filled" : "subtle",
+-              size: "xs",
+-              fullWidth: true,
+-              justify: "flex-start",
+-              "aria-expanded": open,
+-              onClick: () => {
+-                setLastDirectory(path);
+-                assetApi.selectDirectory(path);
+-                toggleExpanded(path);
+-              },
+-            },
+-            `${open ? "▾" : "▸"} ${path === "/assets" ? "/assets" : projectPathName(path)}`,
+-          ),
+-          movable
+-            ? React.createElement(
+-                Menu,
+-                { position: "bottom-end", withinPortal: true },
+-                React.createElement(
+-                  Menu.Target,
+-                  null,
+-                  React.createElement(
+-                    ActionIcon,
+-                    {
+-                      variant: "subtle",
+-                      size: "sm",
+-                      "aria-label": `${projectPathName(path)} 폴더 작업`,
+-                    },
+-                    "···",
+-                  ),
+-                ),
+-                React.createElement(
+-                  Menu.Dropdown,
+-                  null,
+-                  React.createElement(
+-                    Menu.Item,
+-                    {
+-                      onClick: () =>
+-                        setMovePicker({
+-                          path,
+-                          directory: projectParentPath(path),
+-                        }),
+-                    },
+-                    "이동…",
+-                  ),
+-                  React.createElement(
+-                    Menu.Item,
+-                    {
+-                      onClick: () =>
+-                        requestProjectNodeMove(path, PROJECT_TRASH_DIRECTORY),
+-                    },
+-                    "휴지통으로 이동",
+-                  ),
+-                ),
+-              )
+-            : null,
+-        ),
+-        open
+-          ? React.createElement(
+-              Stack,
+-              { gap: 2, pl: "md" },
+-              ...childDirectories.map(directoryNode),
+-              ...childAssets,
+-            )
+-          : null,
+-      );
+-    };
+-    const visibleSlots = snapshot.slots
+-      .filter((slot) => !slot.hidden)
+-      .sort((a, b) => a.row - b.row || a.col - b.col);
+-    const slotReference = (slot) => {
+-      if (slot.contentType === "image") {
+-        const image = snapshot.images.find((item) => item.id === slot.imageId);
+-        return image ? `${image.name} · ${image.path}` : "(에셋 없음)";
+-      }
+-      const chart = snapshot.charts.find((item) => item.id === slot.chart);
+-      if (!chart) return "(에셋 없음)";
+-      if (chart.editable === false) return "Plotly JSON 내부 데이터 · 외부 참조 없음";
+-      const references = chart.csvIds
+-        .map((id) => snapshot.data.find((item) => item.id === id))
+-        .filter(Boolean)
+-        .map((csv) => `${csv.name} · ${csv.path}`);
+-      return references.length ? references.join(", ") : "(에셋 없음)";
+-    };
+-    const draggedProjectAsset = (event) => {
+-      const path =
+-        dragNodeRef.current?.path || event.dataTransfer?.getData("text/plain") || "";
+-      return assetApi.draggableAsset(path);
+-    };
+-    const allowProjectAssetSlotDrop = (event) => {
+-      const dragged = draggedProjectAsset(event);
+-      if (!dragged) return false;
+-      event.preventDefault();
+-      event.dataTransfer.dropEffect = "link";
+-      return true;
+-    };
+-    const dropProjectAssetOnSlot = (event, slot) => {
+-      const dragged = draggedProjectAsset(event);
+-      dragNodeRef.current = null;
+-      if (!dragged) return;
+-      event.preventDefault();
+-      try {
+-        assetApi.connectToSlot(dragged.path, dragged.kind, slot.id);
+-      } catch (error) {
+-        status(`슬롯 연결 오류: ${error.message}`);
+-      }
+-    };
+-    const externalFiles = (event) => Array.from(event.dataTransfer?.files || []);
+-    const allowExternalFileDrop = (event) => {
+-      if (!dataTransferHasFiles(event.dataTransfer)) return false;
+-      event.preventDefault();
+-      event.stopPropagation();
+-      event.dataTransfer.dropEffect = "copy";
+-      return true;
+-    };
+-    const importExternalFilesToDirectory = async (event, directory) => {
+-      const files = externalFiles(event);
+-      if (!files.length) return;
+-      event.preventDefault();
+-      event.stopPropagation();
+-      try {
+-        await assetApi.importToDirectory(files, directory, chooseTreeImportPlan);
+-        status(`${directory}에 외부 파일 ${files.length}개를 가져왔습니다.`);
+-      } catch (error) {
+-        status(`폴더 가져오기 실패: ${error.message}`);
+-        debugLog("mantine:folder-drop-error", { directory, message: error.message }, "error");
+-      }
+-    };
+-    const importExternalFileToSlot = async (event, slot) => {
+-      const files = externalFiles(event);
+-      event.preventDefault();
+-      event.stopPropagation();
+-      if (files.length !== 1)
+-        return status("슬롯에는 한 번에 외부 파일 하나만 놓을 수 있습니다.");
+-      await runLifecycleTask("importing", "ASSET_TREE_DROP", () =>
+-        assetApi.importToSlot(files[0], slot.id, chooseTreeImportPlan));
+-    };
+-    const allowTreeFolderDrop = (event, path) => {
+-      if (dataTransferHasFiles(event.dataTransfer)) {
+-        if (assetApi.isTrashed(path)) return false;
+-        return allowExternalFileDrop(event);
+-      }
+-      const source = dragNodeRef.current?.path;
+-      if (!source || source === path) return false;
+-      event.preventDefault();
+-      event.stopPropagation();
+-      event.dataTransfer.dropEffect = "move";
+-      return true;
+-    };
+-    const dropOnTreeFolder = (event, path) => {
+-      if (dataTransferHasFiles(event.dataTransfer))
+-        return importExternalFilesToDirectory(event, path);
+-      const source =
+-        dragNodeRef.current?.path || event.dataTransfer.getData("text/plain");
+-      dragNodeRef.current = null;
+-      if (!source || source === path) return;
+-      event.preventDefault();
+-      event.stopPropagation();
+-      requestProjectNodeMove(source, path);
+-    };
+-
+-    return React.createElement(
+-      Stack,
+-      { gap: "xs", px: "md", pb: "md" },
+-      React.createElement(Text, { fw: 600, size: "sm" }, "PROJECT DATA"),
+-      React.createElement(
+-        Button,
+-        {
+-          variant: "light",
+-          size: "xs",
+-          disabled: busy,
+-          onClick: openFolderDialog,
+-        },
+-        "새 폴더",
+-      ),
+-      React.createElement(
+-        Modal,
+-        {
+-          opened: folderDialog.opened,
+-          onClose: closeFolderDialog,
+-          title: "새 폴더",
+-          },
+-        React.createElement(
+-          Stack,
+-          { gap: "sm" },
+-          React.createElement(Text, { size: "sm", c: "dimmed" }, `위치: ${folderDialog.parent}`),
+-          React.createElement(TextInput, {
+-            label: "폴더 이름",
+-            value: folderDialog.name,
+-            autoFocus: true,
+-            onChange: (event) =>
+-              setFolderDialog((current) => ({ ...current, name: event.target.value })),
+-            onKeyDown: (event) => {
+-              if (event.key !== "Enter" || event.nativeEvent?.isComposing) return;
+-              event.preventDefault();
+-              createFolderFromMantine();
+-            },
+-          }),
+-          React.createElement(
+-            Group,
+-            { justify: "flex-end", gap: "xs" },
+-            React.createElement(Button, { variant: "light", onClick: closeFolderDialog }, "취소"),
+-            React.createElement(Button, { onClick: createFolderFromMantine }, "만들기"),
+-          ),
+-        ),
+-      ),
+-      trashSelected
+-        ? React.createElement(
+-            Button,
+-            {
+-              variant: "light",
+-              size: "xs",
+-              disabled: busy || !trashHasContents,
+-              onClick: openTrashDialog,
+-            },
+-            "휴지통 비우기",
+-          )
+-        : null,
+-      React.createElement(
+-        Modal,
+-        {
+-          opened: !!trashDialog,
+-          onClose: closeTrashDialog,
+-          title: "휴지통 비우기",
+-          },
+-        trashDialog
+-          ? React.createElement(
+-              Stack,
+-              { gap: "sm" },
+-              React.createElement(
+-                Text,
+-                null,
+-                trashDialog.referenceCount
+-                  ? `휴지통 자산에 남아 있는 참조 ${trashDialog.referenceCount}개도 함께 제거됩니다. 휴지통의 폴더와 파일을 영구적으로 비우시겠습니까?`
+-                  : "휴지통의 폴더와 파일을 영구적으로 비우시겠습니까?",
+-              ),
+-              React.createElement(
+-                Group,
+-                { justify: "flex-end", gap: "xs" },
+-                React.createElement(Button, { variant: "light", onClick: closeTrashDialog }, "취소"),
+-                React.createElement(Button, { onClick: emptyTrashFromMantine }, "비우기"),
+-              ),
+-            )
+-          : null,
+-      ),
+-      React.createElement(
+-        Modal,
+-        {
+-          opened: !!movePicker,
+-          onClose: () => setMovePicker(null),
+-          title: "프로젝트 항목 이동",
+-          },
+-        movePicker
+-          ? React.createElement(
+-              Stack,
+-              { gap: "sm" },
+-              React.createElement(
+-                Text,
+-                { size: "sm", c: "dimmed" },
+-                `이동: ${movePicker.path}`,
+-              ),
+-              React.createElement(Select, {
+-                label: "대상 폴더",
+-                value: movePicker.directory,
+-                data: assetApi.moveOptions(movePicker.path)
+-                  .map((directory) => ({ value: directory, label: directory })),
+-                allowDeselect: false,
+-                searchable: true,
+-                onChange: (value) =>
+-                  value &&
+-                  setMovePicker((current) => ({
+-                    ...current,
+-                    directory: value,
+-                  })),
+-              }),
+-              React.createElement(
+-                Group,
+-                { justify: "flex-end", gap: "xs" },
+-                React.createElement(
+-                  Button,
+-                  { variant: "light", onClick: () => setMovePicker(null) },
+-                  "취소",
+-                ),
+-                React.createElement(
+-                  Button,
+-                  {
+-                    onClick: () =>
+-                      requestProjectNodeMove(movePicker.path, movePicker.directory),
+-                  },
+-                  "이동",
+-                ),
+-              ),
+-            )
+-          : null,
+-      ),
+-      React.createElement(
+-        Modal,
+-        {
+-          opened: !!moveConfirm,
+-          onClose: () => setMoveConfirm(null),
+-          title: moveConfirm?.collision ? "이름 충돌" : "휴지통으로 이동",
+-          },
+-        moveConfirm
+-          ? React.createElement(
+-              Stack,
+-              { gap: "sm" },
+-              React.createElement(
+-                Text,
+-                { style: { whiteSpace: "pre-wrap" } },
+-                [
+-                  moveConfirm.collision
+-                    ? `${moveConfirm.destination}가 이미 존재합니다.\n${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.`
+-                    : null,
+-                  moveConfirm.enteringTrash && moveConfirm.referenceCount > 0
+-                    ? `이 항목을 휴지통으로 이동하면 그래프·슬롯 참조 ${moveConfirm.referenceCount}개가 제거됩니다.`
+-                    : null,
+-                ]
+-                  .filter(Boolean)
+-                  .join("\n\n"),
+-              ),
+-              React.createElement(
+-                Group,
+-                { justify: "flex-end", gap: "xs" },
+-                React.createElement(
+-                  Button,
+-                  { variant: "light", onClick: () => setMoveConfirm(null) },
+-                  "취소",
+-                ),
+-                React.createElement(
+-                  Button,
+-                  {
+-                    onClick: () =>
+-                      executeProjectNodeMove(moveConfirm, moveConfirm.collision),
+-                  },
+-                  moveConfirm.collision ? "새 이름으로 이동" : "이동",
+-                ),
+-              ),
+-            )
+-          : null,
+-      ),
+-      treeImportCollisionModal,
+-      directoryNode("/assets"),
+-      React.createElement(
+-        Button,
+-        {
+-          variant: "subtle",
+-          size: "xs",
+-          fullWidth: true,
+-          justify: "flex-start",
+-          "aria-expanded": expanded.has("/slots"),
+-          onClick: () => toggleExpanded("/slots"),
+-        },
+-        `${expanded.has("/slots") ? "▾" : "▸"} /slots`,
+-      ),
+-      expanded.has("/slots")
+-        ? React.createElement(
+-            Stack,
+-            { gap: 2, pl: "md" },
+-            ...(visibleSlots.length
+-              ? visibleSlots.map((slot) =>
+-                  React.createElement(
+-                    Button,
+-                    {
+-                      key: slot.id,
+-                      variant: state.workspace !== "project" && selectedSlotId === slot.id ? "filled" : "subtle",
+-                      size: "xs",
+-                      fullWidth: true,
+-                      justify: "flex-start",
+-                      disabled: busy,
+-                      onClick: () => window.FastFigureApi.slots.select(slot.id),
+-                      onDragOver: (event) => {
+-                        if (dataTransferHasFiles(event.dataTransfer))
+-                          return allowExternalFileDrop(event);
+-                        return allowProjectAssetSlotDrop(event);
+-                      },
+-                      onDrop: (event) => {
+-                        if (dataTransferHasFiles(event.dataTransfer))
+-                          return importExternalFileToSlot(event, slot);
+-                        return dropProjectAssetOnSlot(event, slot);
+-                      },
+-                    },
+-                    `[row=${slot.row},col=${slot.col}] — ${slotReference(slot)}`,
+-                  ),
+-                )
+-              : [React.createElement(Text, { key: "empty", size: "xs", c: "dimmed" }, "(표시 슬롯 없음)")]),
+-          )
+-        : null,
+-    );
+-  }
+-  function FastFigureProjectActions() {
+-    const state = useAppState();
+-    const busy = state.lifecycle !== "ready";
+-    const importResetRef = useRef(null);
+-    const projectApi = window.FastFigureApi.project;
+-
+-    const openProjectImportPicker = (open) => {
+-      if (window.FastFigureApi.slots.readSelected())
+-        return status("프로젝트 불러오기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
+-      open();
+-    };
+-    const importProjectFileFromMantine = async (file) => {
+-      if (!file) return;
+-      try {
+-        await runLifecycleTask("importing", "PROJECT_IMPORT", async () => {
+-          try {
+-            await projectApi.importFile(file);
+-            status(`${file.name} 프로젝트를 불러왔습니다.`);
+-          } catch (error) {
+-            status("프로젝트 불러오기 오류: " + error.message);
+-            debugLog("project:import-error", { message: error.message });
+-          }
+-        });
+-      } finally {
+-        importResetRef.current?.();
+-      }
+-    };
+-
+-    return React.createElement(
+-      Stack,
+-      { gap: "xs", p: "md" },
+-      React.createElement(Text, { fw: 600 }, "프로젝트"),
+-      React.createElement(TextInput, {
+-        key: `project-name-${projectApi.readName()}`,
+-        label: "프로젝트 이름",
+-        defaultValue: projectApi.readName(),
+-        disabled: busy,
+-        onChange: (event) => {
+-          projectApi.setName(event.target.value);
+-        },
+-        onBlur: (event) => {
+-          event.target.value = projectApi.setName(event.target.value, true);
+-        },
+-      }),
+-      React.createElement(
+-        Group,
+-        { gap: "xs" },
+-        React.createElement(
+-          Button,
+-          { variant: "light", disabled: busy, onClick: exportProjectFromMantine },
+-          "FFPX 내보내기",
+-        ),
+-        React.createElement(
+-          FileButton,
+-          {
+-            onChange: importProjectFileFromMantine,
+-            resetRef: importResetRef,
+-            disabled: busy,
+-          },
+-          (props) =>
+-            React.createElement(
+-              Button,
+-              {
+-                ...props,
+-                variant: "light",
+-                disabled: busy,
+-                onClick: () => openProjectImportPicker(props.onClick),
+-              },
+-              "FFPX 불러오기",
+-            ),
+-        ),
+-      ),
+-    );
+-  }
+-
+-  function FastFigureGraphDataEditor() {
+-    const state = useAppState();
+-    const busy = state.lifecycle !== "ready";
+-    const dragRef = useRef(null);
+-    if (state.workspace !== "slot.graph") return null;
+-    const graphApi = window.FastFigureApi.graphs;
+-    const editor = graphApi.readData();
+-    const objects = editor.objects;
+-    const selectedIndex = editor.selectedIndex;
+-    const selected = selectedIndex === null ? null : objects[selectedIndex];
+-    const activeCsv = editor.csv;
+-    const csvOptions = editor.csvOptions;
+-    const columns = activeCsv?.columns || [];
+-    const columnOptions = columns.map((column) => ({ value: column.id, label: column.label }));
+-    const update = (values) => selectedIndex !== null && graphApi.setObjectValues(selectedIndex, values);
+-    const selectField = (label, key, data) => React.createElement(Select, {
+-      label, data, value: selected?.[key] ?? null, disabled: busy,
+-      onChange: (value) => value !== null && update({ [key]: value }),
+-    });
+-    const numberField = (label, key, min, max, step = 1) => React.createElement(NumberInput, {
+-      label, value: selected?.[key], min, max, step, disabled: busy,
+-      onChange: (value) => update({ [key]: value }),
+-    });
+-    return React.createElement(
+-      Stack,
+-      { gap: "xs", p: "md" },
+-      React.createElement(Text, { fw: 600 }, "그래프 / 데이터"),
+-      React.createElement(Select, {
+-        label: "사용할 CSV", data: csvOptions, value: activeCsv ? String(activeCsv.id) : null,
+-        disabled: busy || !csvOptions.length,
+-        onChange: (value) => value !== null && graphApi.selectCsv(Number(value)),
+-      }),
+-      activeCsv ? React.createElement(NumberInput, {
+-        label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rowCount,
+-        allowDecimal: false, disabled: busy,
+-        onChange: (value) => graphApi.setHeaderLines(activeCsv.id, value),
+-      }) : null,
+-      activeCsv && columns.length
+-        ? React.createElement(
+-            ScrollArea,
+-            { h: 220, type: "auto" },
+-            React.createElement(
+-              Table,
+-              { fz: "xs" },
+-              React.createElement(
+-                TableThead,
+-                null,
+-                React.createElement(
+-                  TableTr,
+-                  null,
+-                  ...columns.map((column) =>
+-                    React.createElement(TableTh, { key: column.id }, column.label),
+-                  ),
+-                ),
+-              ),
+-              React.createElement(
+-                TableTbody,
+-                null,
+-                ...activeCsv.rows.map((row, rowIndex) =>
+-                  React.createElement(
+-                    TableTr,
+-                    { key: rowIndex },
+-                    ...columns.map((column) =>
+-                      React.createElement(
+-                        TableTd,
+-                        {
+-                          key: column.id,
+-                          fw: rowIndex < activeCsv.headerLines ? 600 : 400,
+-                        },
+-                        String(row?.[column.index] ?? ""),
+-                      ),
+-                    ),
+-                  ),
+-                ),
+-              ),
+-            ),
+-          )
+-        : null,
+-      React.createElement(Group, { gap: "xs", grow: true },
+-        React.createElement(Button, {
+-          variant: editor.editable ? "filled" : "light", disabled: busy || !editor.chartId,
+-          onClick: () => graphApi.setEditable(!editor.editable),
+-        }, editor.editable ? "편집 가능" : "원본 JSON"),
+-        React.createElement(Button, {
+-          variant: "light", disabled: busy || !activeCsv,
++      React.createElement(Button, {
++        variant: "light",
++        disabled: busy || state.assetSelection !== "image" || !state.assetPath,
++        onClick: () => {
++          const slot = window.FastFigureApi.slots.readSelected();
++          if (slot?.contentType === "image")
++            window.FastFigureApi.assets.connectToSlot(state.assetPath, "image", slot);
++        },
++      }, "선택 이미지 추가"),
++      React.createElement(Select, {
++        label: "맞춤",
++        value: settings?.fit || "contain",
++        data: [
++          { value: "contain", label: "맞춰 넣기" },
++          { value: "cover", label: "채우기" },
++          { value: "manual", label: "수동" },
++        ],
++        disabled: busy || !image,
++        allowDeselect: false,
++        onChange: (value) => updateSettings({ fit: value || settings?.fit || "contain" }),
++      }),
++      settings?.fit === "manual"
++        ? React.createElement(
++            Stack,
++            { gap: "xs" },
++            React.createElement(NumberInput, {
++              label: "크기 (%)",
++              value: settings.scale,
++              min: 1,
++              max: 1000,
++              disabled: busy,
++              onChange: (value) => updateSettings({ scale: value }),
++            }),
++            React.createElement(
++              Group,
++              { gap: "xs", grow: true },
++              React.createElement(NumberInput, {
++                label: "X (%)",
++                value: settings.x,
++                min: -100,
++                max: 200,
++                disabled: busy,
++                onChange: (value) => updateSettings({ x: value }),
++              }),
++              React.createElement(NumberInput, {
++                label: "Y (%)",
++                value: settings.y,
++                min: -100,
++                max: 200,
++                disabled: busy,
++                onChange: (value) => updateSettings({ y: value }),
++              }),
++            ),
++          )
++        : null,
++    );
++  }
++
++  function FastFigureProjectDataTree() {
++    const state = useAppState();
++    const assetApi = window.FastFigureApi.assets;
++    const snapshot = assetApi.readTree();
++    const selectedSlotId = window.FastFigureApi.slots.readSelected()?.id;
++    const [expanded, setExpanded] = useState(() => new Set(["/assets", "/slots"]));
++    const [lastDirectory, setLastDirectory] = useState("/assets");
++    const [folderDialog, setFolderDialog] = useState({
++      opened: false,
++      parent: "/assets",
++      name: "New Folder",
++    });
++    const [trashDialog, setTrashDialog] = useState(null);
++    const [movePicker, setMovePicker] = useState(null);
++    const [moveConfirm, setMoveConfirm] = useState(null);
++    const dragNodeRef = useRef(null);
++    const { choosePlan: chooseTreeImportPlan, modal: treeImportCollisionModal } =
++      useProjectAssetImportCollision();
++    const busy = state.lifecycle !== "ready";
++    const directories = [...new Set(snapshot.directories)]
++      .filter((path) => path === "/assets" || path.startsWith("/assets/"))
++      .sort((a, b) => a.localeCompare(b));
++
++    const openFolderDialog = () => {
++      const selectedDirectory =
++        state.assetSelection === "directory" ? state.assetPath : lastDirectory;
++      const parent =
++        typeof selectedDirectory === "string" &&
++        (selectedDirectory === "/assets" || selectedDirectory.startsWith("/assets/")) &&
++        !assetApi.isTrashed(selectedDirectory)
++          ? selectedDirectory
++          : "/assets";
++      setFolderDialog({ opened: true, parent, name: "New Folder" });
++    };
++    const closeFolderDialog = () =>
++      setFolderDialog((current) => ({ ...current, opened: false }));
++    const createFolderFromMantine = () => {
++      try {
++        setLastDirectory(assetApi.createDirectory(folderDialog.parent, folderDialog.name));
++        closeFolderDialog();
++      } catch (error) {
++        status(`폴더 생성 오류: ${error.message}`);
++      }
++    };
++    const trashSelected =
++      state.assetSelection === "directory" && state.assetPath === PROJECT_TRASH_DIRECTORY;
++    const trash = assetApi.readTrash();
++    const trashHasContents = trash.hasContents;
++    const openTrashDialog = () => {
++      if (!trashSelected || !trashHasContents) return;
++      setTrashDialog({ referenceCount: trash.referenceCount });
++    };
++    const closeTrashDialog = () => setTrashDialog(null);
++    const emptyTrashFromMantine = () => {
++      try {
++        assetApi.emptyTrash();
++        closeTrashDialog();
++      } catch (error) {
++        status(`휴지통 비우기 오류: ${error.message}`);
++      }
++    };
++    const rewriteExpandedAfterMove = (source, destination) => {
++      setExpanded((current) => {
++        const next = new Set();
++        current.forEach((path) => {
++          next.add(
++            projectPathInDirectory(path, source)
++              ? `${destination}${path.slice(source.length)}`
++              : path,
++          );
++        });
++        return next;
++      });
++      setLastDirectory((current) =>
++        projectPathInDirectory(current, source)
++          ? `${destination}${current.slice(source.length)}`
++          : current,
++      );
++    };
++    const executeProjectNodeMove = (plan, useUniqueName = false) => {
++      if (!plan) return;
++      try {
++        const result = assetApi.move(plan, useUniqueName);
++        if (plan.kind === "directory" && !result.trashed)
++          rewriteExpandedAfterMove(plan.path, result.path);
++        setMovePicker(null);
++        setMoveConfirm(null);
++      } catch (error) {
++        status(`프로젝트 항목 이동 오류: ${error.message}`);
++      }
++    };
++    const requestProjectNodeMove = (path, directory) => {
++      try {
++        const plan = assetApi.planMove(path, directory);
++        if (!plan) {
++          setMovePicker(null);
++          return;
++        }
++        if (plan.collision || (plan.enteringTrash && plan.referenceCount > 0))
++          setMoveConfirm(plan);
++        else executeProjectNodeMove(plan);
++      } catch (error) {
++        status(`프로젝트 항목 이동 오류: ${error.message}`);
++      }
++    };
++    const toggleExpanded = (path) => {
++      setExpanded((current) => {
++        const next = new Set(current);
++        if (next.has(path)) next.delete(path);
++        else next.add(path);
++        return next;
++      });
++    };
++    const csvReferenceCount = (id) =>
++      snapshot.charts.reduce(
++        (count, chart) => count + chart.csvReferences.filter((csvId) => csvId === id).length,
++        0,
++      );
++    const imageReferenceCount = (id) =>
++      snapshot.slots.filter((slot) => slot.imageId === id).length;
++    const assetRow = (asset, kind) => {
++      const inactive = assetApi.isTrashed(asset.path);
++      const selected = state.assetSelection === kind && state.assetPath === asset.path;
++      const movable = assetApi.movable(asset.path);
++      const meta =
++        kind === "csv"
++          ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${csvReferenceCount(asset.id)}`
++          : `참조 ${imageReferenceCount(asset.id)}`;
++      return React.createElement(
++        Group,
++        {
++          key: `${kind}:${asset.path}`,
++          gap: 2,
++          wrap: "nowrap",
++          draggable: movable,
++          onDragStart: (event) => {
++            if (!movable) return event.preventDefault();
++            dragNodeRef.current = { path: asset.path };
++            event.dataTransfer.effectAllowed = "move";
++            event.dataTransfer.setData("text/plain", asset.path);
++          },
++          onDragEnd: () => {
++            dragNodeRef.current = null;
++          },
++        },
++        React.createElement(
++          Button,
++          {
++            variant: selected ? "filled" : "subtle",
++            size: "xs",
++            fullWidth: true,
++            disabled: inactive,
++            justify: "space-between",
++            onClick: () =>
++              kind === "csv" ? assetApi.selectCsv(asset.path) : assetApi.selectImage(asset.path),
++          },
++          React.createElement(Text, { component: "span" }, projectPathName(asset.path)),
++          React.createElement(Text, { component: "span", c: "dimmed" }, meta),
++        ),
++        React.createElement(
++          Menu,
++          { position: "bottom-end", withinPortal: true },
++          React.createElement(
++            Menu.Target,
++            null,
++            React.createElement(
++              ActionIcon,
++              {
++                variant: "subtle",
++                size: "sm",
++                disabled: inactive,
++                "aria-label": `${projectPathName(asset.path)} 작업`,
++              },
++              "···",
++            ),
++          ),
++          React.createElement(
++            Menu.Dropdown,
++            null,
++            React.createElement(
++              Menu.Item,
++              { onClick: () => assetApi.download(asset.path) },
++              "다운로드",
++            ),
++            movable
++              ? React.createElement(
++                  Menu.Item,
++                  {
++                    onClick: () =>
++                      setMovePicker({
++                        path: asset.path,
++                        directory: projectParentPath(asset.path),
++                      }),
++                  },
++                  "이동…",
++                )
++              : null,
++            movable
++              ? React.createElement(
++                  Menu.Item,
++                  {
++                    onClick: () =>
++                      requestProjectNodeMove(asset.path, PROJECT_TRASH_DIRECTORY),
++                  },
++                  "휴지통으로 이동",
++                )
++              : null,
++          ),
++        ),
++      );
++    };
++    const directoryNode = (path) => {
++      const selected = state.assetSelection === "directory" && state.assetPath === path;
++      const movable = assetApi.movable(path);
++      const childDirectories = directories.filter(
++        (candidate) => candidate !== path && projectParentPath(candidate) === path,
++      );
++      const childAssets = [
++        ...snapshot.data
++          .filter((asset) => projectParentPath(asset.path) === path)
++          .map((asset) => assetRow(asset, "csv")),
++        ...snapshot.images
++          .filter((asset) => projectParentPath(asset.path) === path)
++          .map((asset) => assetRow(asset, "image")),
++      ];
++      const open = expanded.has(path);
++      return React.createElement(
++        Stack,
++        {
++          key: path,
++          gap: 2,
++          draggable: movable,
++          onDragStart: (event) => {
++            if (!movable) return event.preventDefault();
++            dragNodeRef.current = { path };
++            event.dataTransfer.effectAllowed = "move";
++            event.dataTransfer.setData("text/plain", path);
++          },
++          onDragEnd: () => {
++            dragNodeRef.current = null;
++          },
++          onDragOver: (event) => allowTreeFolderDrop(event, path),
++          onDrop: (event) => dropOnTreeFolder(event, path),
++        },
++        React.createElement(
++          Group,
++          { gap: 2, wrap: "nowrap" },
++          React.createElement(
++            Button,
++            {
++              variant: selected ? "filled" : "subtle",
++              size: "xs",
++              fullWidth: true,
++              justify: "flex-start",
++              "aria-expanded": open,
++              onClick: () => {
++                setLastDirectory(path);
++                assetApi.selectDirectory(path);
++                toggleExpanded(path);
++              },
++            },
++            `${open ? "▾" : "▸"} ${path === "/assets" ? "/assets" : projectPathName(path)}`,
++          ),
++          movable
++            ? React.createElement(
++                Menu,
++                { position: "bottom-end", withinPortal: true },
++                React.createElement(
++                  Menu.Target,
++                  null,
++                  React.createElement(
++                    ActionIcon,
++                    {
++                      variant: "subtle",
++                      size: "sm",
++                      "aria-label": `${projectPathName(path)} 폴더 작업`,
++                    },
++                    "···",
++                  ),
++                ),
++                React.createElement(
++                  Menu.Dropdown,
++                  null,
++                  React.createElement(
++                    Menu.Item,
++                    {
++                      onClick: () =>
++                        setMovePicker({
++                          path,
++                          directory: projectParentPath(path),
++                        }),
++                    },
++                    "이동…",
++                  ),
++                  React.createElement(
++                    Menu.Item,
++                    {
++                      onClick: () =>
++                        requestProjectNodeMove(path, PROJECT_TRASH_DIRECTORY),
++                    },
++                    "휴지통으로 이동",
++                  ),
++                ),
++              )
++            : null,
++        ),
++        open
++          ? React.createElement(
++              Stack,
++              { gap: 2, pl: "md" },
++              ...childDirectories.map(directoryNode),
++              ...childAssets,
++            )
++          : null,
++      );
++    };
++    const visibleSlots = snapshot.slots
++      .filter((slot) => !slot.hidden)
++      .sort((a, b) => a.row - b.row || a.col - b.col);
++    const slotReference = (slot) => {
++      if (slot.contentType === "image") {
++        const image = snapshot.images.find((item) => item.id === slot.imageId);
++        return image ? `${image.name} · ${image.path}` : "(에셋 없음)";
++      }
++      const chart = snapshot.charts.find((item) => item.id === slot.chart);
++      if (!chart) return "(에셋 없음)";
++      if (chart.editable === false) return "Plotly JSON 내부 데이터 · 외부 참조 없음";
++      const references = chart.csvIds
++        .map((id) => snapshot.data.find((item) => item.id === id))
++        .filter(Boolean)
++        .map((csv) => `${csv.name} · ${csv.path}`);
++      return references.length ? references.join(", ") : "(에셋 없음)";
++    };
++    const draggedProjectAsset = (event) => {
++      const path =
++        dragNodeRef.current?.path || event.dataTransfer?.getData("text/plain") || "";
++      return assetApi.draggableAsset(path);
++    };
++    const allowProjectAssetSlotDrop = (event) => {
++      const dragged = draggedProjectAsset(event);
++      if (!dragged) return false;
++      event.preventDefault();
++      event.dataTransfer.dropEffect = "link";
++      return true;
++    };
++    const dropProjectAssetOnSlot = (event, slot) => {
++      const dragged = draggedProjectAsset(event);
++      dragNodeRef.current = null;
++      if (!dragged) return;
++      event.preventDefault();
++      try {
++        assetApi.connectToSlot(dragged.path, dragged.kind, slot.id);
++      } catch (error) {
++        status(`슬롯 연결 오류: ${error.message}`);
++      }
++    };
++    const externalFiles = (event) => Array.from(event.dataTransfer?.files || []);
++    const allowExternalFileDrop = (event) => {
++      if (!dataTransferHasFiles(event.dataTransfer)) return false;
++      event.preventDefault();
++      event.stopPropagation();
++      event.dataTransfer.dropEffect = "copy";
++      return true;
++    };
++    const importExternalFilesToDirectory = async (event, directory) => {
++      const files = externalFiles(event);
++      if (!files.length) return;
++      event.preventDefault();
++      event.stopPropagation();
++      try {
++        await assetApi.importToDirectory(files, directory, chooseTreeImportPlan);
++        status(`${directory}에 외부 파일 ${files.length}개를 가져왔습니다.`);
++      } catch (error) {
++        status(`폴더 가져오기 실패: ${error.message}`);
++        debugLog("mantine:folder-drop-error", { directory, message: error.message }, "error");
++      }
++    };
++    const importExternalFileToSlot = async (event, slot) => {
++      const files = externalFiles(event);
++      event.preventDefault();
++      event.stopPropagation();
++      if (files.length !== 1)
++        return status("슬롯에는 한 번에 외부 파일 하나만 놓을 수 있습니다.");
++      await runLifecycleTask("importing", "ASSET_TREE_DROP", () =>
++        assetApi.importToSlot(files[0], slot.id, chooseTreeImportPlan));
++    };
++    const allowTreeFolderDrop = (event, path) => {
++      if (dataTransferHasFiles(event.dataTransfer)) {
++        if (assetApi.isTrashed(path)) return false;
++        return allowExternalFileDrop(event);
++      }
++      const source = dragNodeRef.current?.path;
++      if (!source || source === path) return false;
++      event.preventDefault();
++      event.stopPropagation();
++      event.dataTransfer.dropEffect = "move";
++      return true;
++    };
++    const dropOnTreeFolder = (event, path) => {
++      if (dataTransferHasFiles(event.dataTransfer))
++        return importExternalFilesToDirectory(event, path);
++      const source =
++        dragNodeRef.current?.path || event.dataTransfer.getData("text/plain");
++      dragNodeRef.current = null;
++      if (!source || source === path) return;
++      event.preventDefault();
++      event.stopPropagation();
++      requestProjectNodeMove(source, path);
++    };
++
++    return React.createElement(
++      Stack,
++      { gap: "xs", px: "md", pb: "md" },
++      React.createElement(Text, { fw: 600, size: "sm" }, "PROJECT DATA"),
++      React.createElement(
++        Button,
++        {
++          variant: "light",
++          size: "xs",
++          disabled: busy,
++          onClick: openFolderDialog,
++        },
++        "새 폴더",
++      ),
++      React.createElement(
++        Modal,
++        {
++          opened: folderDialog.opened,
++          onClose: closeFolderDialog,
++          title: "새 폴더",
++          },
++        React.createElement(
++          Stack,
++          { gap: "sm" },
++          React.createElement(Text, { size: "sm", c: "dimmed" }, `위치: ${folderDialog.parent}`),
++          React.createElement(TextInput, {
++            label: "폴더 이름",
++            value: folderDialog.name,
++            autoFocus: true,
++            onChange: (event) =>
++              setFolderDialog((current) => ({ ...current, name: event.target.value })),
++            onKeyDown: (event) => {
++              if (event.key !== "Enter" || event.nativeEvent?.isComposing) return;
++              event.preventDefault();
++              createFolderFromMantine();
++            },
++          }),
++          React.createElement(
++            Group,
++            { justify: "flex-end", gap: "xs" },
++            React.createElement(Button, { variant: "light", onClick: closeFolderDialog }, "취소"),
++            React.createElement(Button, { onClick: createFolderFromMantine }, "만들기"),
++          ),
++        ),
++      ),
++      trashSelected
++        ? React.createElement(
++            Button,
++            {
++              variant: "light",
++              size: "xs",
++              disabled: busy || !trashHasContents,
++              onClick: openTrashDialog,
++            },
++            "휴지통 비우기",
++          )
++        : null,
++      React.createElement(
++        Modal,
++        {
++          opened: !!trashDialog,
++          onClose: closeTrashDialog,
++          title: "휴지통 비우기",
++          },
++        trashDialog
++          ? React.createElement(
++              Stack,
++              { gap: "sm" },
++              React.createElement(
++                Text,
++                null,
++                trashDialog.referenceCount
++                  ? `휴지통 자산에 남아 있는 참조 ${trashDialog.referenceCount}개도 함께 제거됩니다. 휴지통의 폴더와 파일을 영구적으로 비우시겠습니까?`
++                  : "휴지통의 폴더와 파일을 영구적으로 비우시겠습니까?",
++              ),
++              React.createElement(
++                Group,
++                { justify: "flex-end", gap: "xs" },
++                React.createElement(Button, { variant: "light", onClick: closeTrashDialog }, "취소"),
++                React.createElement(Button, { onClick: emptyTrashFromMantine }, "비우기"),
++              ),
++            )
++          : null,
++      ),
++      React.createElement(
++        Modal,
++        {
++          opened: !!movePicker,
++          onClose: () => setMovePicker(null),
++          title: "프로젝트 항목 이동",
++          },
++        movePicker
++          ? React.createElement(
++              Stack,
++              { gap: "sm" },
++              React.createElement(
++                Text,
++                { size: "sm", c: "dimmed" },
++                `이동: ${movePicker.path}`,
++              ),
++              React.createElement(Select, {
++                label: "대상 폴더",
++                value: movePicker.directory,
++                data: assetApi.moveOptions(movePicker.path)
++                  .map((directory) => ({ value: directory, label: directory })),
++                allowDeselect: false,
++                searchable: true,
++                onChange: (value) =>
++                  value &&
++                  setMovePicker((current) => ({
++                    ...current,
++                    directory: value,
++                  })),
++              }),
++              React.createElement(
++                Group,
++                { justify: "flex-end", gap: "xs" },
++                React.createElement(
++                  Button,
++                  { variant: "light", onClick: () => setMovePicker(null) },
++                  "취소",
++                ),
++                React.createElement(
++                  Button,
++                  {
++                    onClick: () =>
++                      requestProjectNodeMove(movePicker.path, movePicker.directory),
++                  },
++                  "이동",
++                ),
++              ),
++            )
++          : null,
++      ),
++      React.createElement(
++        Modal,
++        {
++          opened: !!moveConfirm,
++          onClose: () => setMoveConfirm(null),
++          title: moveConfirm?.collision ? "이름 충돌" : "휴지통으로 이동",
++          },
++        moveConfirm
++          ? React.createElement(
++              Stack,
++              { gap: "sm" },
++              React.createElement(
++                Text,
++                { style: { whiteSpace: "pre-wrap" } },
++                [
++                  moveConfirm.collision
++                    ? `${moveConfirm.destination}가 이미 존재합니다.\n${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.`
++                    : null,
++                  moveConfirm.enteringTrash && moveConfirm.referenceCount > 0
++                    ? `이 항목을 휴지통으로 이동하면 그래프·슬롯 참조 ${moveConfirm.referenceCount}개가 제거됩니다.`
++                    : null,
++                ]
++                  .filter(Boolean)
++                  .join("\n\n"),
++              ),
++              React.createElement(
++                Group,
++                { justify: "flex-end", gap: "xs" },
++                React.createElement(
++                  Button,
++                  { variant: "light", onClick: () => setMoveConfirm(null) },
++                  "취소",
++                ),
++                React.createElement(
++                  Button,
++                  {
++                    onClick: () =>
++                      executeProjectNodeMove(moveConfirm, moveConfirm.collision),
++                  },
++                  moveConfirm.collision ? "새 이름으로 이동" : "이동",
++                ),
++              ),
++            )
++          : null,
++      ),
++      treeImportCollisionModal,
++      directoryNode("/assets"),
++      React.createElement(
++        Button,
++        {
++          variant: "subtle",
++          size: "xs",
++          fullWidth: true,
++          justify: "flex-start",
++          "aria-expanded": expanded.has("/slots"),
++          onClick: () => toggleExpanded("/slots"),
++        },
++        `${expanded.has("/slots") ? "▾" : "▸"} /slots`,
++      ),
++      expanded.has("/slots")
++        ? React.createElement(
++            Stack,
++            { gap: 2, pl: "md" },
++            ...(visibleSlots.length
++              ? visibleSlots.map((slot) =>
++                  React.createElement(
++                    Button,
++                    {
++                      key: slot.id,
++                      variant: state.workspace !== "project" && selectedSlotId === slot.id ? "filled" : "subtle",
++                      size: "xs",
++                      fullWidth: true,
++                      justify: "flex-start",
++                      disabled: busy,
++                      onClick: () => window.FastFigureApi.slots.select(slot.id),
++                      onDragOver: (event) => {
++                        if (dataTransferHasFiles(event.dataTransfer))
++                          return allowExternalFileDrop(event);
++                        return allowProjectAssetSlotDrop(event);
++                      },
++                      onDrop: (event) => {
++                        if (dataTransferHasFiles(event.dataTransfer))
++                          return importExternalFileToSlot(event, slot);
++                        return dropProjectAssetOnSlot(event, slot);
++                      },
++                    },
++                    `[row=${slot.row},col=${slot.col}] — ${slotReference(slot)}`,
++                  ),
++                )
++              : [React.createElement(Text, { key: "empty", size: "xs", c: "dimmed" }, "(표시 슬롯 없음)")]),
++          )
++        : null,
++    );
++  }
++  function FastFigureProjectActions() {
++    const state = useAppState();
++    const busy = state.lifecycle !== "ready";
++    const importResetRef = useRef(null);
++    const projectApi = window.FastFigureApi.project;
++
++    const openProjectImportPicker = (open) => {
++      if (window.FastFigureApi.slots.readSelected())
++        return status("프로젝트 불러오기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
++      open();
++    };
++    const importProjectFileFromMantine = async (file) => {
++      if (!file) return;
++      try {
++        await runLifecycleTask("importing", "PROJECT_IMPORT", async () => {
++          try {
++            await projectApi.importFile(file);
++            status(`${file.name} 프로젝트를 불러왔습니다.`);
++          } catch (error) {
++            status("프로젝트 불러오기 오류: " + error.message);
++            debugLog("project:import-error", { message: error.message });
++          }
++        });
++      } finally {
++        importResetRef.current?.();
++      }
++    };
++
++    return React.createElement(
++      Stack,
++      { gap: "xs", p: "md" },
++      React.createElement(Text, { fw: 600 }, "프로젝트"),
++      React.createElement(TextInput, {
++        key: `project-name-${projectApi.readName()}`,
++        label: "프로젝트 이름",
++        defaultValue: projectApi.readName(),
++        disabled: busy,
++        onChange: (event) => {
++          projectApi.setName(event.target.value);
++        },
++        onBlur: (event) => {
++          event.target.value = projectApi.setName(event.target.value, true);
++        },
++      }),
++      React.createElement(
++        Group,
++        { gap: "xs" },
++        React.createElement(
++          Button,
++          { variant: "light", disabled: busy, onClick: exportProjectFromMantine },
++          "FFPX 내보내기",
++        ),
++        React.createElement(
++          FileButton,
++          {
++            onChange: importProjectFileFromMantine,
++            resetRef: importResetRef,
++            disabled: busy,
++          },
++          (props) =>
++            React.createElement(
++              Button,
++              {
++                ...props,
++                variant: "light",
++                disabled: busy,
++                onClick: () => openProjectImportPicker(props.onClick),
++              },
++              "FFPX 불러오기",
++            ),
++        ),
++      ),
++    );
++  }
++
++  function FastFigureGraphDataEditor() {
++    const state = useAppState();
++    const busy = state.lifecycle !== "ready";
++    const dragRef = useRef(null);
++    if (state.workspace !== "slot.graph") return null;
++    const graphApi = window.FastFigureApi.graphs;
++    const editor = graphApi.readData();
++    const objects = editor.objects;
++    const selectedIndex = editor.selectedIndex;
++    const selected = selectedIndex === null ? null : objects[selectedIndex];
++    const activeCsv = editor.csv;
++    const csvOptions = editor.csvOptions;
++    const columns = activeCsv?.columns || [];
++    const columnOptions = columns.map((column) => ({ value: column.id, label: column.label }));
++    const update = (values) => selectedIndex !== null && graphApi.setObjectValues(selectedIndex, values);
++    const selectField = (label, key, data) => React.createElement(Select, {
++      label, data, value: selected?.[key] ?? null, disabled: busy,
++      onChange: (value) => value !== null && update({ [key]: value }),
++    });
++    const numberField = (label, key, min, max, step = 1) => React.createElement(NumberInput, {
++      label, value: selected?.[key], min, max, step, disabled: busy,
++      onChange: (value) => update({ [key]: value }),
++    });
++    return React.createElement(
++      Stack,
++      { gap: "xs", p: "md" },
++      React.createElement(Text, { fw: 600 }, "그래프 / 데이터"),
++      React.createElement(Select, {
++        label: "사용할 CSV", data: csvOptions, value: activeCsv ? String(activeCsv.id) : null,
++        disabled: busy || !csvOptions.length,
++        onChange: (value) => value !== null && graphApi.selectCsv(Number(value)),
++      }),
++      activeCsv ? React.createElement(NumberInput, {
++        label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rowCount,
++        allowDecimal: false, disabled: busy,
++        onChange: (value) => graphApi.setHeaderLines(activeCsv.id, value),
++      }) : null,
++      activeCsv && columns.length
++        ? React.createElement(
++            ScrollArea,
++            { h: 220, type: "auto" },
++            React.createElement(
++              Table,
++              { fz: "xs" },
++              React.createElement(
++                TableThead,
++                null,
++                React.createElement(
++                  TableTr,
++                  null,
++                  ...columns.map((column) =>
++                    React.createElement(TableTh, { key: column.id }, column.label),
++                  ),
++                ),
++              ),
++              React.createElement(
++                TableTbody,
++                null,
++                ...activeCsv.rows.map((row, rowIndex) =>
++                  React.createElement(
++                    TableTr,
++                    { key: rowIndex },
++                    ...columns.map((column) =>
++                      React.createElement(
++                        TableTd,
++                        {
++                          key: column.id,
++                          fw: rowIndex < activeCsv.headerLines ? 600 : 400,
++                        },
++                        String(row?.[column.index] ?? ""),
++                      ),
++                    ),
++                  ),
++                ),
++              ),
++            ),
++          )
++        : null,
++      React.createElement(Group, { gap: "xs", grow: true },
++        React.createElement(Button, {
++          variant: editor.editable ? "filled" : "light", disabled: busy || !editor.chartId,
++          onClick: () => graphApi.setEditable(!editor.editable),
++        }, editor.editable ? "편집 가능" : "원본 JSON"),
++        React.createElement(Button, {
++          variant: "light", disabled: busy || !activeCsv || !editor.editable,
+           onClick: () => activeCsv && graphApi.addObject(activeCsv.id),
+         }, "오브젝트 추가"),
+       ),
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,48 +9,48 @@
+   "authority_rule": "On semantic conflict, Source Script wins. Source code may be current only when the current verification model derives from the current closed Source Script and its TLC validation has passed.",
+   "layers": {
+     "source-script": {
+-      "revision": 12,
+-      "status": "current",
+-      "path_rule": "sourcescript/**/*.py",
+-      "fingerprint": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db",
+-      "derived_from": null,
+-      "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-015-sourcescript-closure-r12.md"
+-    },
+-    "verification-model": {
+-      "revision": 6,
+-      "status": "current",
+-      "path_rule": "verification/**/*",
+-      "fingerprint": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b",
+-      "derived_from": {
+-        "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
+-      },
+-      "tlc": "passed",
+-      "validation_review": "agent_space/reviews/review-017-tlc-slot-core-r6-2x2.md"
+-    },
+-    "source-code": {
+-      "revision": 8,
+-      "status": "current",
+-      "paths": [
+-        "Fast-figure.html",
+-        "fast-figure-ui.js",
+-        "fast-figure.js",
+-        "scripts/build-portable.py"
+-      ],
+-      "fingerprint": "sha256:f1a5fa8a4e80369457cbbe86193b8da5fcce00e05d63bb174e57669e2780316b",
+-      "derived_from": {
+-        "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db",
+-        "verification-model": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b"
+-      },
+-      "validation_review": "agent_space/reviews/review-026-source-code-r8-font-selectors.md"
+-    }
+-  },
+-  "legacy_artifacts": {
+-    "pseudocode": {
+-      "revision": 2,
+-      "status": "archived",
+-      "path_rule": "pseudocode/**/*",
+-      "fingerprint": "sha256:39d7bccaa29c116b5e8db207a2d604742ab726711d37fe7b86f3ddb92f025759",
++      "revision": 13,
++      "status": "stale",
++      "path_rule": "sourcescript/**/*.py",
++      "fingerprint": "sha256:a88a8a2f51b74ba8ba50a5921cd3587d7c30df8f08f9e38661c77aae645e8e26",
++      "derived_from": null,
++      "closure": "open",
++      "closure_review": null
++    },
++    "verification-model": {
++      "revision": 6,
++      "status": "stale",
++      "path_rule": "verification/**/*",
++      "fingerprint": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b",
++      "derived_from": {
++        "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
++      },
++      "tlc": "passed",
++      "validation_review": "agent_space/reviews/review-017-tlc-slot-core-r6-2x2.md"
++    },
++    "source-code": {
++      "revision": 9,
++      "status": "stale",
++      "paths": [
++        "Fast-figure.html",
++        "fast-figure-ui.js",
++        "fast-figure.js",
++        "scripts/build-portable.py"
++      ],
++      "fingerprint": "sha256:39e79b2e1a152cdb6979451443f10c12cb29129001b204913d09f694b6f6a888",
++      "derived_from": {
++        "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db",
++        "verification-model": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b"
++      },
++      "validation_review": null
++    }
++  },
++  "legacy_artifacts": {
++    "pseudocode": {
++      "revision": 2,
++      "status": "archived",
++      "path_rule": "pseudocode/**/*",
++      "fingerprint": "sha256:0d908d8ea88f2e7a983e0103ba88352f4c42abc44b4377835ee7d8a095ea5d7b",
+       "derived_from": {
+         "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
+       },

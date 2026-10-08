@@ -9,17 +9,17 @@
   "authority_rule": "On semantic conflict, Source Script wins. Source code may be current only when the current verification model derives from the current closed Source Script and its TLC validation has passed.",
   "layers": {
     "source-script": {
-      "revision": 12,
-      "status": "current",
+      "revision": 13,
+      "status": "stale",
       "path_rule": "sourcescript/**/*.py",
-      "fingerprint": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db",
+      "fingerprint": "sha256:a88a8a2f51b74ba8ba50a5921cd3587d7c30df8f08f9e38661c77aae645e8e26",
       "derived_from": null,
-      "closure": "closed",
-      "closure_review": "agent_space/reviews/review-015-sourcescript-closure-r12.md"
+      "closure": "open",
+      "closure_review": null
     },
     "verification-model": {
       "revision": 6,
-      "status": "current",
+      "status": "stale",
       "path_rule": "verification/**/*",
       "fingerprint": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b",
       "derived_from": {
@@ -29,20 +29,20 @@
       "validation_review": "agent_space/reviews/review-017-tlc-slot-core-r6-2x2.md"
     },
     "source-code": {
-      "revision": 8,
-      "status": "current",
+      "revision": 9,
+      "status": "stale",
       "paths": [
         "Fast-figure.html",
         "fast-figure-ui.js",
         "fast-figure.js",
         "scripts/build-portable.py"
       ],
-      "fingerprint": "sha256:f1a5fa8a4e80369457cbbe86193b8da5fcce00e05d63bb174e57669e2780316b",
+      "fingerprint": "sha256:39e79b2e1a152cdb6979451443f10c12cb29129001b204913d09f694b6f6a888",
       "derived_from": {
         "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db",
         "verification-model": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b"
       },
-      "validation_review": "agent_space/reviews/review-026-source-code-r8-font-selectors.md"
+      "validation_review": null
     }
   },
   "legacy_artifacts": {
@@ -50,7 +50,7 @@
       "revision": 2,
       "status": "archived",
       "path_rule": "pseudocode/**/*",
-      "fingerprint": "sha256:39d7bccaa29c116b5e8db207a2d604742ab726711d37fe7b86f3ddb92f025759",
+      "fingerprint": "sha256:0d908d8ea88f2e7a983e0103ba88352f4c42abc44b4377835ee7d8a095ea5d7b",
       "derived_from": {
         "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
       },
