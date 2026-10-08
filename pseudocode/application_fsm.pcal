@@ -1,0 +1,51 @@
+---- MODULE FastFigureSelectionProcedure ----
+EXTENDS Naturals
+
+\* Partial PlusCal translation of sourcescript/application_fsm.py:
+\* SELECTION_COMMAND_ORDER and the asset/graph runtime selection contract.
+\* All IDs are symbolic; the live VFS/chart validates and resolves them before
+\* entering these commands. This module does not mutate chart/slot authority.
+CONSTANTS CsvIds, ImageIds, ObjectIndices, ObjectCsv, NoSelection
+
+(*
+--algorithm FastFigureSelectionProcedure {
+  variables assetSelection = [kind |-> "none", path |-> NoSelection],
+            graphObjectIndex = NoSelection;
+
+  SelectionLoop:
+    while (TRUE) {
+      either {
+        \* Select CSV from either project tree or graph editor.
+        with (csv \in CsvIds) {
+          ClearObjectForCsv:
+            graphObjectIndex := NoSelection;
+          SelectCsvAsset:
+            assetSelection := [kind |-> "csv", path |-> csv];
+        }
+      } or {
+        \* Explicit graph object selection: same CSV selection authority.
+        with (index \in ObjectIndices) {
+          ClearObjectForObject:
+            graphObjectIndex := NoSelection;
+          SelectReferencedCsv:
+            assetSelection := [kind |-> "csv", path |-> ObjectCsv[index]];
+          SelectGraphObject:
+            graphObjectIndex := index;
+        }
+      } or {
+        \* Image selection is runtime-only; no slot image link is performed.
+        with (image \in ImageIds) {
+          SelectImageAsset:
+            assetSelection := [kind |-> "image", path |-> image];
+        }
+      } or {
+        ClearGraphObject:
+          graphObjectIndex := NoSelection;
+      } or {
+        ClearAsset:
+          assetSelection := [kind |-> "none", path |-> NoSelection];
+      };
+    }
+}
+*)
+====
