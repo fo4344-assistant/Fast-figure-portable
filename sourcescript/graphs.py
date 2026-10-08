@@ -190,7 +190,8 @@ GRAPH_CSV_SELECTION_RULE = (
     "graph object의 csvId는 해당 object가 소유하는 데이터 참조이며 선택값이 아니다. "
     "CSV 선택 표시와 새 object 추가는 동일한 현재 선택 CSV를 참조한다. "
     "graph object 선택 시 참조 CSV를 같은 선택 상태에 반영할 수 있으나 "
-    "단순 CSV 선택으로 기존 graph object의 csvId를 변경하지 않는다."
+    "단순 CSV 선택은 graph object 선택을 해제하되 기존 object의 csvId를 변경하지 않는다. "
+    "기존 object의 x/y 편집에 필요한 열은 해당 object.csvId에서 resolve하며 현재 선택 CSV 열과 혼용하지 않는다."
 )
 
 

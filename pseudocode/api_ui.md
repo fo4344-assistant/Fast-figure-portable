@@ -58,7 +58,7 @@
 - createDirectory: canonical collision-free directory candidate.
 - emptyTrash: reference/assets/directories candidate removal.
 - draggableAsset: read drag payload projection.
-- connectToSlot: only explicit add/drop command resolves an existing asset and target slot object, validates and connects; selecting an asset alone never connects.
+- connectToSlot(path, kind, slotId): on explicit add/drop, resolve the VFS asset and slot by id, validate them and connect; selecting an asset alone never connects.
 - importToDirectory: batch candidate import.
 - importToSlot: asset + target slot/chart candidate import.
 - fileKind: classify supported slot-import kind.
@@ -70,7 +70,7 @@
 
 ### graphs
 
-- readData: current chart object projection, selected CSV/columns from the one FSM asset selection; graph-object csvId never substitutes for selected CSV.
+- readData: selected CSV/columns are read from the one FSM asset selection. Separately resolve selected object csvId to objectColumns for x/y editing, without changing the selection.
 - readLayout/readPalette: current selected-chart projections.
 - selectCsv/selectObject: runtime editor selection.
 - setHeaderLines: candidate-change referenced CSV headerLines.

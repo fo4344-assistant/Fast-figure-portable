@@ -5514,6 +5514,7 @@
       function graphEditorSelectCsv(csvId) {
         let csv = getProjectCsv(Number(csvId));
         if (!csv) return null;
+        appFSM.send("CLEAR_GRAPH_OBJECT", { index: null, direction: "ui-to-fsm" });
         appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(csv), direction: "ui-to-fsm" });
         appFSM.notify("data", "CSV_SELECTION_CHANGED");
         return csv;
@@ -5648,7 +5649,9 @@
         let index = appFSM.state.graphObjectIndex;
         let selectedIndex = Number.isInteger(index) && objects[index] ? index : null;
         let csv = selectedProjectCsv();
+        let objectCsv = selectedIndex === null ? null : getProjectCsv(objects[selectedIndex].csvId);
         return {
+          objectColumns: objectCsv ? columnDefinitions(objectCsv.rows, objectCsv.headerLines) : [],
           chartId: chart?.id ?? null,
           editable: chart?.editor?.editable !== false,
           objects: projectClone(objects),

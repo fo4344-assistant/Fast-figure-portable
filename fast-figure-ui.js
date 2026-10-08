@@ -507,7 +507,7 @@
         onClick: () => {
           const slot = window.FastFigureApi.slots.readSelected();
           if (slot?.contentType === "image")
-            window.FastFigureApi.assets.connectToSlot(state.assetPath, "image", slot);
+            window.FastFigureApi.assets.connectToSlot(state.assetPath, "image", slot.id);
         },
       }, "선택 이미지 추가"),
       React.createElement(Select, {
@@ -1285,7 +1285,8 @@
     const activeCsv = editor.csv;
     const csvOptions = editor.csvOptions;
     const columns = activeCsv?.columns || [];
-    const columnOptions = columns.map((column) => ({ value: column.id, label: column.label }));
+    const objectColumns = editor.objectColumns || [];
+    const columnOptions = objectColumns.map((column) => ({ value: column.id, label: column.label }));
     const update = (values) => selectedIndex !== null && graphApi.setObjectValues(selectedIndex, values);
     const selectField = (label, key, data) => React.createElement(Select, {
       label, data, value: selected?.[key] ?? null, disabled: busy,

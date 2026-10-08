@@ -65,7 +65,7 @@ PUBLIC_API_METHODS = {
         "createDirectory": "mutation; canonical non-conflicting directory candidate commit",
         "emptyTrash": "mutation; trash references/assets/directories candidate removal commit",
         "draggableAsset": "read/calculation; drag payload로 노출 가능한 asset projection",
-        "connectToSlot": "mutation; explicit add/drop request resolves existing asset and target slot; asset selection alone does not connect",
+        "connectToSlot": "mutation; (path, kind, slotId)에서 현재 VFS asset 및 slotId로 slot을 resolve 후 명시적 연결 commit; 단순 선택은 연결하지 않음",
         "importToDirectory": "lifecycle mutation; batch file candidates -> collision plan -> one commit",
         "importToSlot": "lifecycle mutation; file asset + target slot/chart candidate -> one commit",
         "fileKind": "calculation; filename/MIME에서 지원 slot import kind 판정",
@@ -78,7 +78,7 @@ PUBLIC_API_METHODS = {
         "download": "read/export; asset original bytes download, project mutation 없음",
     },
     "graphs": {
-        "readData": "read; selected chart objects and single selected CSV/columns projection; object csvId is a persistent reference, not an alternative current selection",
+        "readData": "read; selected chart objects + 단일 현재 CSV/columns + selected object csvId에서 별도로 resolve한 objectColumns; object reference는 현재 선택 대체 원천이 아님",
         "readLayout": "read; selected chart title/global/axis projection",
         "readPalette": "read; selected chart object color projection",
         "selectCsv": "runtime mutation; graph editor의 current CSV selection",
