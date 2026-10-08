@@ -1,5 +1,5 @@
 # 개발 작업 정책
-# v0.2.2
+# v0.2.6
 
 ## 0. 정책의 성격과 변경 권한
 
@@ -19,244 +19,77 @@
 
 ## 1. 개발 순서
 
-작업은 다음 순서로 진행한다.
+개발 작업은 Source Script의 고수준 논리를 대상 언어의 실제 구현으로 바로 옮기지 않고,
+그 사이에 언어중립적인 pseudocode 단계를 두어 한 단계씩 구체화한다.
 
-1. 소스 스크립트
-2. PlusCal/TLA+ verification code
-3. TLC 검사
-4. 대상 언어 구현
+작업 흐름은 다음 세 단계로 이루어진다.
 
-앞 단계가 구조적으로 닫히거나 검증을 통과하기 전에 다음 단계로 넘어가지 않는다.
+1. Source Script
+2. PlusCal pseudocode
+3. Source Code
 
-여기서 소스 스크립트가 구조적으로 닫힌다는 것은 모든 세부사항이 결정되었다는 뜻이 아니다.
-다음 단계에서 새로운 의미나 책임을 임의로 결정하지 않고 verification code와 구현으로 직접 옮길 수 있을 만큼,
-해당 단계가 소유하는 데이터 형태, 책임, 참조 관계, 의미 있는 처리 순서와 확정된 규칙이 결정되고,
-미확정 사항은 미확정 상태로 명시되어 있다는 뜻이다.
-소스 스크립트의 닫힘 여부는 아래 "소스 스크립트 닫힘 판정"에 따라 판정한다.
+각 단계의 역할은 서로 다르다.
 
-PlusCal/TLA+ 단계는 일반 소스코드 컴파일러가 주로 검사하는 구문·이름·타입 오류를 다시 검사하기 위해 두는 단계가 아니다.
-같은 종류의 검사를 뒤에서 다시 수행하기보다, 소스 스크립트를 직접 실행형 verification code로 번역하여
-호출 순서, 상태 조합, 참조 무결성, mutation 원자성, 실패 경로, lifecycle, lock/동시성처럼
-일반 컴파일러가 충분히 검사하지 못하는 전역 논리의 충돌을 추가로 검사하는 정식 중간 단계다.
+Source Script는 프로그램의 고수준 논리, 책임, 데이터 관계, Module decomposition hierarchy,
+의미 있는 처리 순서와 확정된 규칙을 정의하는 상위 명세다.
 
-PlusCal은 소스 스크립트에 이미 정의된 알고리즘과 상태전이를 직접 절차 표현으로 옮기는 데 사용하고,
-TLA+는 그 동일한 의미의 state, action, invariant, safety/liveness property와 필요한 환경 제약을 표현하는 데 사용한다.
-TLC는 유한하게 구성한 상태공간에서 가능한 실행 경로와 반례를 탐색하는 필수 검증 단계다.
+PlusCal pseudocode는 Source Script의 의미를 특정 대상 언어에 종속되지 않는 형태로 직접 번역하면서,
+실제 실행 절차, 상태 변화, branch, 값의 흐름과 mutation 경계를 더 명시적으로 드러내는
+**Source Script보다 한 단계 구체화된 언어중립 실행 명세**다.
 
-이 단계는 소스 스크립트를 다시 분석해 더 나은 구조로 재설계하거나 별도의 모델을 만드는 단계가 아니다.
-개발 흐름은 `Source Script -> verification code -> source code`이며,
-verification code는 Source Script와 독립된 설계 권위를 갖지 않는다.
+Source Code는 이 pseudocode에 이미 확정된 논리를 대상 언어·OS·런타임·디바이스에서 실제로 실행할 수 있도록
+구체적인 타입, 메모리 표현, API 호출, 라이브러리 사용법과 그 밖의 저수준 구현 세부를 추가한 최종 구현이다.
 
-대상 구현 언어는 프로젝트에 따라 TypeScript, Python, C 등으로 달라질 수 있다.
-
-### 소스 스크립트 닫힘 판정
-
-소스 스크립트는 PlusCal/TLA+ verification code와 대상 언어 구현의 원천일 뿐 아니라, 그 자체가 평가 대상이다.
-소스 스크립트 단계의 목적은 알고리즘이 논리적으로 완결되어 있는지, 프로젝트 목적에 부합하는지, 불필요한 중복이나 논리적 확장·통합이 필요한 부분이 없는지를 평가하는 것이다.
-이 평가는 하위 단계로 미룰 수 없다. 코드가 동작하더라도 중복 구조, 목적 이탈, 통합 기회는 드러나지 않으며, 코드가 만들어진 뒤에는 이를 고치는 비용이 커지기 때문이다.
-
-소스 스크립트는 다음 세 항목을 모두 충족하고 그 근거가 기록되었을 때 닫힌 것으로 판정한다.
-
-1. 논리적 완결성
-   - 입력에서 출력까지 알고리즘이 끊기지 않고 이어지는가.
-   - 확정된 규칙끼리 모순되지 않는가.
-   - 미확정 사항이 미확정 상태로 명시되어 있고, 임의로 채워지지 않았는가.
-2. 프로젝트 목적 부합
-   - 프로젝트의 요구와 목적을 충족하는가.
-   - 목적에서 도출되지 않는 규칙이나 기능이 추가되지 않았는가. (§10)
-3. 중복과 통합·확장
-   - 기존 구조와 의미·책임이 같은 새 구조가 만들어지지 않았는가. (§11)
-   - 참조 관계를 유지하는 비용이 과도하여 통합해야 할 구조가 없는가. (§9)
-   - 복잡도 대비 자유도 관점에서 통합 또는 확장이 필요한 부분이 없는가. (§7)
-
-근거 기록:
-
-- 각 항목에 대해 무엇을 어떤 방식으로 확인했고 어떤 결론에 이르렀는지 기록한다. 예를 들어 확인한 중복 후보와, 그것을 통합하거나 분리하기로 한 사유를 남긴다.
-- "검토했다"는 선언만으로는 해당 항목을 충족한 것으로 보지 않는다.
-- 근거가 없거나 해결되지 않은 항목이 있으면 닫히지 않은 것이다. 지금 결정할 수 없는 사항은 미확정 사항 또는 설계 문제로 기록한다.
-
-닫힘 판정은 논리적 판단이므로, 실제로 만들었을 때 놓친 부분이 없음을 보장하지 않는다.
-이 한계는 아래 작업 루프의 검증으로 다루며, 검증 단계가 있다는 이유로 이 단계의 판정 기준을 낮추거나 생략하지 않는다.
-논리적으로 완결되어 보이는 것과 실제 구현에서 누락이 없는 것은 서로 다른 문제이며, 두 검증은 서로를 대체하지 않는다.
-
-### 작업 루프
-
-기본 개발 흐름은 다음의 한 방향 pipeline이다.
+따라서 각 단계는 다음 관계를 가진다.
 
 ```text
 Source Script
--> verification code
--> TLC verification
--> source code
+    고수준 논리와 구조 확정
+        ↓
+PlusCal pseudocode
+    언어중립 실행 절차로 구체화
+        ↓
+Source Code
+    대상 환경의 저수준 구현 세부 추가
 ```
 
-1. 소스 스크립트를 작성하고, 위 기준으로 닫힘을 판정한다.
-2. 닫힌 소스 스크립트를 PlusCal/TLA+ verification code로 **직접 번역**한다.
+앞 단계가 자신이 책임지는 의미를 충분히 확정하지 않은 상태에서
+다음 단계가 그 의미를 임의로 결정하거나 보완해서는 안 된다.
+
+### 1.1 기본 작업 루프
+
+기본 작업은 다음 순서로 진행한다.
+
+1. Source Script를 작성한다.
+
+2. Source Script가 책임지는 고수준 논리와 구조가 충분히 확정되었는지 닫힘을 판정한다.
+
+3. 닫힌 Source Script를 PlusCal pseudocode로 직접 번역한다.
+   - Source Script보다 한 단계 구체적인 언어중립 실행 절차 명세를 만든다.
    - 핵심 알고리즘, 상태전이, mutation 순서, 참조 변화, 실패 경로와 상호작용을 원래 의미와 순서를 보존해 옮긴다.
-   - verification code를 만들기 위해 소스 스크립트의 책임을 다시 분류하거나 알고리즘을 재구성하지 않는다.
-   - 상태공간을 유한하게 만들기 위한 값/개수의 축약은 §12의 추상화 원칙을 따른다.
-3. 번역 충실도를 먼저 확인한다.
-   - Source Script와 verification code의 의미, branch, reference, 처리 순서, failure 의미가 충돌하면 verification code가 잘못된 것이다.
-   - 이 경우 Source Script를 verification code에 맞추지 않고 verification code를 수정한다.
-4. TLC로 verification code를 검사한다.
-   - 최소한 핵심 invariant와 safety property를 검사한다.
-   - lifecycle, 대기, 완료 보장이 의미가 있는 경우 liveness와 deadlock도 검사한다.
-   - 검사에 사용한 범위, 환경 가정, 추상화와 생략 항목을 기록한다.
-5. TLC가 반례를 찾으면 먼저 verification code가 Source Script를 정확히 번역했는지 다시 확인한다.
-   - 번역·추상화·environment assumption 오류이면 verification code를 수정한다.
-   - Source Script와 verification code 사이의 의미 충돌을 Source Script 수정으로 해결하지 않는다.
-   - 번역이 충실한 상태에서 반례가 Source Script 알고리즘 자체의 실제 논리 오류를 재현하는 경우에만 Source Script 단계의 별도 문제로 기록하고 수정한 뒤 다시 닫힘 판정한다.
-6. TLC 검증을 통과한 verification code를 기준으로 대상 언어를 구현한다.
-7. source code 단계에서는 검증된 고수준 알고리즘을 재설계하지 않고, 대상 언어·OS·디바이스의 저수준 구현만 구체화한다.
-8. 구현 과정에서 상위 단계에 존재하지 않는 새로운 고수준 의미가 필요해 보이면 먼저 구현의 저수준 선택 문제인지 확인한다. 실제로 새 고수준 요구라면 별도 요구 변경으로 Source Script부터 수정한다.
+   - Source Script의 Module decomposition hierarchy와 책임 경계를 보존한다.
+   - pseudocode를 만들기 위해 책임을 다시 분류하거나 새로운 의미 decomposition을 만들지 않는다.
+   - 대상 언어에 종속된 저수준 구현 세부는 아직 추가하지 않는다.
 
-대상 언어의 컴파일러, 정적 분석, 단위 테스트와 통합 테스트는 추가 검증 수단이다.
-PlusCal/TLA+를 선택한 이유는 이들이 이미 잘 검사하는 항목을 중복하는 것이 아니라,
-그들이 놓치는 전역 상태·순서·불변식 문제를 앞 단계에서 추가로 검사하기 위해서다.
+4. PlusCal pseudocode의 번역 충실도와 구체화 수준을 확인한다.
+   - Source Script와 pseudocode의 의미, module 대응, branch, reference, 처리 순서, failure 의미를 대조한다.
+   - Source Code 구현자가 새로운 고수준 처리 규칙을 발명하지 않고 저수준 구현만 추가할 수 있을 정도로 구체화되었는지 확인한다.
+   - 충돌하면 pseudocode 번역을 수정한다.
+   - Source Script를 pseudocode에 맞추지 않는다.
+
+5. 확인된 PlusCal pseudocode를 기준으로 대상 언어의 Source Code를 구현한다.
+   - pseudocode에 확정된 언어중립 논리를 재설계하지 않는다.
+   - 대상 언어·OS·런타임·디바이스에 필요한 저수준 세부 구현만 추가한다.
+
+6. 구현 중 상위 단계에 존재하지 않는 새로운 의미 또는 decomposition이 필요해 보이면
+   구현 코드에서 임의로 결정하지 않고 필요한 상위 단계로 돌아간다.
+   Source Script의 의미를 수정해야 하는 경우 Source Script를 다시 닫은 뒤 pseudocode에도 동일하게 전파한다.
 
 ---
 
-## 2. 소스 스크립트의 정의
+## 2. 공통 개발 원칙
 
-소스 스크립트는 Python 문법을 작성 표기법(authoring notation)으로 사용하는 구조화된 구현 명세다.
-
-- Python 문법은 구조와 공통 식별자, 데이터 형태, 함수 경계를 표현하는 데 사용한다.
-- Python 자체를 최종 구현 언어로 전제하지 않는다.
-- 함수 내부의 세부 처리는 자연어 알고리즘으로 작성할 수 있다.
-- 확정된 규칙의 계산식과 관계식은 필요한 경우 명시한다.
-- 대상 구현 언어에 종속되는 타입 체계, 메모리 표현, 라이브러리 사용법 등의 세부 구현은 아직 결정하지 않는다.
-- 변수 값에는 실제 도메인 값이 아니라 해당 변수의 의미를 설명하는 텍스트를 넣는다.
-
-예:
-
-```python
-actor = "현재 액티브 스킬을 사용하는 캐릭터"
-```
-
-소스 스크립트는 알고리즘뿐 아니라 데이터 형태와 공통 식별자, 참조 관계, 책임 경계, 입력과 출력, 상태 변경 여부와 변경 경로, 의미가 있는 처리 순서, 확정된 계산 규칙, 구현자가 보존해야 하는 설계 의도를 표현할 수 있다.
-
-### 고수준 알고리즘과 저수준 구현의 경계
-
-소스 스크립트는 **대상 언어·운영체제·디바이스·런타임에 종속되지 않는 고수준 알고리즘과 계약을 완결하는 단계**다.
-
-소스 스크립트에서 생략할 수 있는 것은 실제 환경에 맞춰 뒤에서 결정해야 하는 저수준 구현 알고리즘이다.
-
-예를 들어 다음은 대상 언어·디바이스에 따라 달라질 수 있으므로 소스 스크립트에서 구체 구현을 정하지 않을 수 있다.
-
-- 실제 메모리 배치, allocation, ownership primitive와 buffer 관리 방식
-- thread, mutex, atomic, event loop, Promise/future, interrupt 같은 구체 동기화 primitive
-- OS syscall, 브라우저 API, 디바이스 driver, GPU/CPU 실행 방식
-- 실제 filesystem/network API 호출 순서의 저수준 plumbing
-- 특정 ZIP/XML/graphics/database/library의 호출 문법과 내부 사용법
-- SIMD, GPU kernel, device-specific I/O처럼 대상 장치에 종속되는 최적화
-- 대상 언어의 class/generic/type-system 표현과 예외 객체의 구체 형태
-
-그러나 **저수준 구현을 생략한다는 것은 고수준 알고리즘의 입력·데이터 계약·외부 형식·저장 구조를 생략한다는 뜻이 아니다.**
-
-다음 정보가 기능의 의미, 호환성, 참조 관계, 처리 순서 또는 검증 결과에 영향을 준다면 소스 스크립트에 명시해야 한다.
-
-- 데이터의 형태, 종류, 필드와 관계
-- schema와 contract 구조
-- 파일 또는 package의 논리적 위치와 문서 구성
-- 의미가 있는 파일명, 경로, 확장자, MIME/format 식별자
-- serialization/deserialization에서 보존해야 하는 구조와 관계
-- encoding, container, entry/path constraint처럼 상호운용성에 필요한 형식 조건
-- 외부 입력과 출력의 의미 및 허용/거부 조건
-- ID, reference, key, path가 어느 원천과 대상을 연결하는지
-- operation의 의미 있는 순서, transaction/commit 경계와 실패 결과
-- 어떤 외부 자원을 읽고 쓰는지와 그 결과가 이후 알고리즘에 어떻게 사용되는지
-- lock, ordering, stale-read, resource lifetime처럼 고수준 정확성에 영향을 주는 동시성 요구
-
-예를 들어 ZIP을 어느 라이브러리로 읽을지는 저수준 구현 문제지만,
-어떤 entry가 존재해야 하고 어떤 path가 허용되며 어떤 document가 어떤 데이터를 소유하는지는 고수준 계약이다.
-
-마찬가지로 실제 파일 API 호출 코드는 저수준 구현이지만,
-어느 논리적 파일을 어떤 확장자·형식으로 읽고 쓰며 그 결과가 어느 authoritative state와 연결되는지는 소스 스크립트의 책임이다.
-
-판별 기준은 다음과 같다.
-
-> 대상 언어와 디바이스를 바꾸더라도 유지되어야 하는 의미라면 소스 스크립트에 남긴다.  
-> 같은 고수준 의미를 보존하면서 환경에 맞게 선택할 수 있는 실행 기법이라면 구현 단계로 남길 수 있다.
-
-따라서 소스 스크립트가 닫혔다는 것은 실제 machine-level 또는 platform API 알고리즘까지 결정되었다는 뜻이 아니라,
-**대상 환경만 주어지면 새로운 고수준 기능·데이터 계약·처리 규칙을 발명하지 않고 구현할 수 있을 정도로 의미가 닫혀 있다는 뜻**이다.
-
-### 소스 스크립트 가이드: 외부 원천과 다른 소스 스크립트
-
-소스 스크립트는 하나의 파일 안에 모든 구조와 알고리즘을 반복해서 포함할 필요가 없다.
-책임이나 범위가 분리된 다른 소스 스크립트가 이미 존재하면 해당 소스 스크립트를 import하거나 참조 원천으로 사용할 수 있다.
-
-- 다른 소스 스크립트의 구조나 함수가 현재 소스 스크립트의 책임 범위 밖에서 이미 정의되어 있다면, 동일한 내용을 다시 작성하기보다 import 또는 명시적인 참조를 우선 검토한다.
-- import는 대상 구현 언어의 실제 모듈 시스템을 미리 확정한다는 뜻이 아니라, 소스 스크립트 단계에서 다른 구현 명세의 책임과 식별자를 재사용한다는 뜻으로 사용할 수 있다.
-- import하거나 참조하는 대상은 어떤 소스 스크립트의 어떤 구조·함수·원천을 사용하는지 식별할 수 있어야 한다.
-- 외부 정보 원천이나 근거를 사용하는 경우에는 가능한 한 구체적으로 그 출처와 역할을 설명한다.
-- 파일, 설정 문서, 데이터 파일, authoritative state 원천, 외부 서비스, 규칙 원천 등 외부 의존성이 있다면 이름만 남기지 말고 무엇을 제공하며 어떤 판단 또는 계산의 근거로 사용되는지 명시한다.
-- 실제 파일 경로, 문서 식별자, 데이터 구조, 조회 방식 등이 이미 확정되어 있고 소스 스크립트의 의미 이해에 필요하다면 함께 기록한다.
-- 반대로 저장 방식이나 API 형식처럼 아직 구현 단계에서 결정할 사항은 임의로 확정하지 않는다. 이 경우에도 필요한 원천의 의미, 책임, 제공해야 하는 정보는 설명한다.
-- 외부 원천이 특정 규칙의 권위 있는 근거라면 그 사실을 명시하고, 단순 참고자료와 authoritative source를 구분한다.
-- 외부 원천 또는 import 대상이 변경되었을 때 어떤 참조나 책임이 영향을 받는지 추적할 수 있도록 관계를 표현한다.
-
-목표는 소스 스크립트만 읽은 작업자가 외부 의존성을 이름으로만 추측하지 않고,
-필요한 원천을 찾아 그 역할과 근거를 확인한 뒤 동일한 책임 구조를 이어갈 수 있게 하는 것이다.
-
----
-
-## 3. 변수 사용 원칙
-
-변수는 단계 간 일관성을 유지하기 위한 공통 식별자로 사용한다.
-
-- 같은 대상을 단계마다 다른 이름으로 부르지 않는다.
-- 실제 값 대신 설명 텍스트를 넣는다.
-- 변수는 구조화를 위한 목적이 아니라 참조와 흐름의 일관성을 유지하기 위해 사용한다.
-- 필요한 구조만 사용하고, 구현 전에 불필요한 타입 체계를 과도하게 만들지 않는다.
-- 데이터 형태를 정의하는 것과 대상 언어의 타입 체계를 결정하는 것을 구분한다.
-
----
-
-## 4. 함수 작성 원칙
-
-함수의 입력과 출력은 Python 함수 구조 자체로 표현한다.
-
-데이터 구조 자체가 알고리즘 이해에 중요한 경우에는 docstring의 `Args`와 `Return`에서 구조를 명시한다.
-
-```python
-def f(arg1):
-    """
-    Args:
-    - arg1:
-      상단에서 이미 정의되지 않았거나
-      구조 이해에 추가 설명이 필요한 경우 설명한다.
-
-    Return:
-    - output:
-      반환값의 의미 또는 중요한 데이터 구조를 설명한다.
-
-    변경:
-    - 이 함수가 변경하는 대상
-    - 변경하지 않는 원본 상태가 있다면 그 사실
-
-    처리:
-    자연어 알고리즘
-    """
-
-    return output
-```
-
-원칙:
-
-- 입력은 `def f(args):`에 명시한다.
-- 출력은 `return output`에 명시한다.
-- 구조가 중요한 입력값은 `Args`에서 데이터 형태와 역할을 설명한다.
-- 구조가 중요한 반환값은 `Return`에서 데이터 형태와 역할을 설명한다.
-- 상단 변수 정의에서 이미 의미가 충분히 설명된 단순 변수는 함수마다 반복 설명하지 않는다.
-- `Args`와 `Return`은 모든 함수에 기계적으로 넣는 항목이 아니라, 데이터 구조 또는 역할을 명확히 해야 할 때 사용한다.
-- docstring에는 함수가 무엇을 변경하는지 명확히 적는다.
-- docstring의 처리 부분에는 자연어 알고리즘을 적는다.
-- 구조 설명은 PlusCal/TLA+ verification code나 실제 구현을 대신하지 않으며, 해당 함수가 어떤 형태의 데이터를 받거나 반환하는지 명확하게 하는 용도로만 사용한다.
-
----
-
-## 5. 계산과 상태 변경 분리
+### 2.1 계산과 상태 변경 분리
 
 계산과 실제 상태 변경은 구분한다.
 
@@ -267,17 +100,20 @@ def f(arg1):
 
 ---
 
-## 6. 상태 변경 경로의 목적
+### 2.2 상태 변경 경로의 목적
 
-API 또는 Router의 핵심 목적은 모든 로직을 감싸는 것이 아니라 실제 상태 변경을 통제하는 것이다.
+authoritative state의 변경은 명시적으로 식별 가능한 변경 경로를 통해 수행한다.
 
-- 조회는 직접 수행할 수 있다.
-- 순수 계산은 직접 함수 호출이 가능하다.
-- authoritative state를 바꾸는 작업은 통제된 변경 경로를 사용한다.
-- 변경이 허용되지 않으면 원본 상태를 유지한다.
-- Single Source of Truth를 유지한다.
+- 변경 경로는 해당 authoritative state의 소유 책임과 변경 규칙을 우회하지 않는다.
+- 변경을 적용하기 전에 현재 authoritative state와 입력을 기준으로 변경 전제조건과 허용 여부를 확인한다.
+- 변경 조건을 충족한 경우에만 다음 authoritative state를 확정한다.
+- 변경이 거부되거나 실패하면 기존 authoritative state를 유지한다.
+- 동일한 authoritative state를 변경하는 여러 진입점이 있더라도 서로 독립적인 변경 규칙을 만들지 않고 동일한 authority와 mutation 규칙으로 수렴시킨다.
+- authoritative state의 내부 표현이나 필드를 외부 책임이 직접 수정하여 변경 경로를 우회하지 않는다.
+- 상태 변경 과정에서 필요한 계산과 판정은 실제 mutation과 구분하고, mutation은 확인된 결과를 기준으로 수행한다.
+- 변경 경로를 추가하거나 분리할 때 새로운 authoritative source나 독립적인 mutation 규칙이 생기지 않도록 한다.
 
-### Single Source of Truth와 복사본
+### 2.3 Single Source of Truth와 복사본
 
 Source of Truth의 복사본이나 임시 상태는 존재할 수 있다.
 중요한 것은 복사본이 독립적인 권위 원천으로 분기되거나, 추적하기 어려운 경로를 통해 다시 Source of Truth의 변경에 영향을 주지 않도록 하는 것이다.
@@ -315,7 +151,7 @@ input / edit copy
 Source of Truth에서 밖으로만 흐르는 파생 값은 읽기용으로 사용할 수 있다.
 
 
-### 권위의 단일성과 연속성
+### 2.4 권위의 단일성과 연속성
 
 Single Source of Truth는 반드시 하나의 물리적 파일이나 저장 위치를 의미하지 않는다.
 중요한 것은 어떤 상태가 권위 있는 상태인지 결정할 수 있고, 그 상태가 이전의 권위 상태에서 어떤 변경 경로를 통해 이어졌는지 추적 가능한 **권위의 단일성과 연속성**이 유지되는 것이다.
@@ -347,7 +183,7 @@ working copy C ─┘
 
 ---
 
-## 7. 최소 구현 원칙
+### 2.5 최소 구현 원칙
 
 최소 구현은 현재의 코드량이나 구조의 크기를 최소화하는 것이 아니라,
 작업자가 합리적으로 파악할 수 있는 범위에서 **복잡도 대비 자유도를 최대화**하는 방향으로 설계하는 원칙이다.
@@ -373,19 +209,7 @@ working copy C ─┘
 
 ---
 
-## 8. 구조 선택 원칙
-
-class, schema, FSM 같은 구조는 필요할 경우 적극적으로 사용할 수 있다.
-
-- 구조 자체를 만드는 것이 목적이 되어서는 안 된다.
-- 같은 책임을 단순한 함수나 데이터 구조로 처리할 수 있으면 더 단순한 방식을 우선한다.
-- 여러 단계에서 공통 상태를 관리해야 할 때는 적절한 컨텍스트 구조를 사용할 수 있다.
-- 여러 턴이나 시간 구간에 걸친 상태 전이가 필요할 때 FSM을 고려한다.
-- 데이터 관계와 제약을 명확히 해야 할 때 schema나 class를 사용할 수 있다.
-
----
-
-## 9. 참조 무결성 원칙
+### 2.6 참조 무결성 원칙
 
 의미적으로 참조인 관계는 값의 수동 일치에 의존하지 않고, **참조 원천과 대상 사이의 상관관계가 추적·검증 가능한 형태로 보존되어야 한다.**
 
@@ -483,18 +307,18 @@ tags.json
 
 ---
 
-## 10. 확정된 규칙과 미확정 규칙 구분
+### 2.7 확정된 규칙과 미확정 규칙 구분
 
 이미 확정된 규칙은 다음 단계에서 다시 해석하거나 새로 설계하지 않는다. 반대로 아직 확정되지 않은 규칙은 임의로 채우지 않는다.
 
-- 확정된 규칙은 소스 스크립트에서 verification code로 직접 추적 가능하게 연결한다.
+- 확정된 규칙은 소스 스크립트에서 PlusCal pseudocode로 직접 추적 가능하게 연결한다.
 - 미확정 규칙은 확장 지점 또는 미정 상태로 유지한다.
 - 구현 편의를 이유로 새로운 도메인 규칙을 임의로 만들지 않는다.
 - 구현 과정에서 결정이 필요하지만 상위 단계에서 결정되지 않은 사항을 발견하면 필요한 상위 단계로 돌아가 결정한다.
 
 ---
 
-## 11. 불필요한 개념과 중복 구조 추가 금지
+### 2.8 불필요한 개념과 중복 구조 추가 금지
 
 필요하지 않은 추상 개념이나 별도 용어 체계를 임의로 추가하지 않는다.
 
@@ -509,27 +333,725 @@ tags.json
 
 ---
 
-## 12. PlusCal/TLA+ verification code와 TLC 검증
+## 3. 구조 및 Module decomposition 원칙
 
-PlusCal/TLA+ verification code는 소스 스크립트의 핵심 알고리즘을 상태와 action의 실행 가능한 관계로 **직접 번역**하고,
-TLC로 가능한 상태전이 조합과 invariant 위반을 탐색하기 위한 정식 검증 단계다.
+### 3.1 구조 선택 원칙
 
-verification code는 Source Script의 하위 표현이며 별도의 설계 모델이 아니다.
-Source Script를 검증하기 좋게 다시 구성하거나, 책임을 합치거나 나누거나, 알고리즘을 다른 형태로 재설계하는 것을 기본 작업으로 삼지 않는다.
+class, schema, FSM 같은 구조는 필요할 경우 적극적으로 사용할 수 있다.
+
+- 구조 자체를 만드는 것이 목적이 되어서는 안 된다.
+- 같은 책임을 단순한 함수나 데이터 구조로 처리할 수 있으면 더 단순한 방식을 우선한다.
+- 여러 단계에서 공통 상태를 관리해야 할 때는 적절한 컨텍스트 구조를 사용할 수 있다.
+- 여러 턴이나 시간 구간에 걸친 상태 전이가 필요할 때 FSM을 고려한다.
+- 데이터 관계와 제약을 명확히 해야 할 때 schema나 class를 사용할 수 있다.
+
+### 3.2 Module decomposition hierarchy 설계 및 단계 간 구조 보존
+
+논리적 모듈 구조는 다음 순서로 정의하고 구체화한다.
+
+```text
+Source Script
+→ Pseudocode
+→ Source Code
+```
+
+이 절에서 Pseudocode는 아래 §5에서 정의한 PlusCal pseudocode를 뜻하며,
+Source Script의 고수준 의미를 Source Code로 옮기기 전에 직접 추적 가능한 중간 표현으로 구체화하는 단계를 뜻한다.
+
+Source Script는 프로그램의 논리적 **Module decomposition hierarchy**와 각 모듈이 나타내는 추상화된 의미를 정의하는 상위 원천이다.
+
+Pseudocode와 Source Code는 상위 단계에서 정의된 의미 구조를 각각 중간 표현과 대상 언어 구현으로 구체화하는 하위 표현이며,
+상위 원천에 존재하지 않는 새로운 논리적 decomposition, 추상화 계층 또는 모듈 구조를 임의로 생성해서는 안 된다.
+
+#### 3.2.1 Module decomposition hierarchy의 설계 기준
+
+Module decomposition hierarchy는 임의의 파일 분류나 구현 편의를 기준으로 구성하지 않는다.
+
+부모-자식 관계는 다음 중 하나 이상의 근거를 가져야 한다.
+
+- 해당 분야에서 암묵적으로 통용되는 표준적 개념 구조
+- 프로젝트에서 명시적으로 정의한 개념 구조
+- 추상화된 의미에 따른 집합론적 포함 관계
+
+각 모듈은 자신이 나타내는 추상화된 의미 영역을 가진다.
+
+부모 모듈은 더 넓거나 더 일반적인 의미 영역을 나타내고,
+자식 모듈은 그 의미 영역 안에 포함되는 더 구체적인 부분을 나타내야 한다.
+
+개념적으로 부모-자식 관계는 다음을 만족해야 한다.
+
+```text
+Meaning(child) ⊆ Meaning(parent)
+```
+
+여기서 `Meaning(x)`는 특정 데이터 구조, 상태 변수, 함수 집합 또는 인터페이스 목록 자체가 아니라,
+해당 모듈이 프로그램의 개념 체계 안에서 나타내는 **추상화된 의미의 범위**를 뜻한다.
+
+따라서 포함관계의 판단은 구현 요소의 종류가 아니라,
+두 모듈이 나타내는 추상화된 의미 사이에 실제 상위-하위 관계가 성립하는지를 기준으로 한다.
+
+예를 들어 다음과 같이 `import`와 `export`가 `document`라는 더 넓은 의미의 구체적인 부분이라면 적절한 decomposition이 될 수 있다.
+
+```text
+document/
+├─ import
+└─ export
+```
+
+반대로 두 개념이 단순히 함께 사용되거나 서로 호출된다는 이유만으로 부모-자식 관계를 만들 수는 없다.
+
+```text
+storage/
+└─ ui_button
+```
+
+`Meaning(ui_button) ⊆ Meaning(storage)`가 성립하지 않는다면 이러한 decomposition 관계는 성립하지 않는다.
+
+Module decomposition hierarchy는 호출 관계, 파일 위치, 구현 순서 또는 코드 재사용 관계를 표현하는 구조가 아니라,
+**추상화된 의미 사이의 포함 구조를 표현하는 hierarchy**다.
+
+#### 3.2.2 단계 간 hierarchy 보존
+
+Source Script → Pseudocode → Source Code 방향에서 Module decomposition hierarchy는 상위 단계에서 정의된 구조를 그대로 보존해야 한다.
+
+하위 단계에서는 다음을 할 수 없다.
+
+- 상위 단계에 없는 논리적 자식 모듈 또는 중간 추상화 계층을 추가한다.
+- 새로운 의미 decomposition을 만든다.
+- 기존 의미를 새로운 독립 모듈로 재분류한다.
+- 상위 단계에 존재하는 부모-자식 관계를 제거한다.
+- 여러 논리 모듈을 하나로 병합한다.
+- 중간 모듈을 제거하여 hierarchy를 평탄화한다.
+- 모듈을 다른 부모 아래로 이동한다.
+- 형제 관계를 부모-자식 관계로 바꾸거나 그 반대로 변경한다.
+- 상위 모듈 내부의 구현 세부를 새로운 논리 모듈로 승격한다.
+
+예를 들어 Source Script가 다음 구조를 가진다면:
+
+```text
+A/
+├─ B/
+│  ├─ D
+│  └─ E
+└─ C
+```
+
+Pseudocode와 Source Code도 동일한 논리적 부모-자식 관계를 유지해야 한다.
+
+다음처럼 상위 원천에 없는 분기를 추가할 수 없다.
+
+```text
+A/
+├─ B/
+│  ├─ D/
+│  │  ├─ F
+│  │  └─ G
+│  └─ E
+└─ C
+```
+
+또한 다음처럼 기존 hierarchy를 평탄화하거나 중간 계층을 제거할 수 없다.
+
+```text
+A/
+├─ B
+├─ D
+├─ E
+└─ C
+```
+
+```text
+A/
+├─ D
+├─ E
+└─ C
+```
+
+`D`와 `E`가 실제로 `B`의 의미에 포함되는 모듈로 정의되었다면,
+`B`라는 의미적 부모 관계는 하위 단계에서도 유지되어야 한다.
+
+하위 단계에서 새로운 독립적인 의미 구조가 필요하다는 사실이 발견되면 이를 그 단계에서 직접 추가하지 않는다.
+Source Script로 돌아가 해당 의미와 포함관계를 먼저 정의한 뒤 Pseudocode와 Source Code에 순서대로 전파한다.
+
+Source Script는 기본적으로 대상 언어·런타임·디바이스·플랫폼에 종속되지 않는 고수준 논리 명세다.
+
+다만 특정 언어, 런타임, 디바이스, 외부 라이브러리, vendor 기술 등 플랫폼 의존적인 저수준 논리가
+고수준 논리의 의미, 책임, 계약, 처리 순서, 자원 관계 또는 결과를 결정하여
+고수준 논리에서 반드시 고려해야 하는 경우에는 이를 단순한 구현 세부로 하위 단계에 남겨두어서는 안 된다.
+
+이 경우 프로그래머는 해당 플랫폼 의존성을 Source Script 수준에서
+**외부 의존성 또는 특수한 저수준 로직의 별도 hierarchy로 격리하여 도입**해야 한다.
+
+격리된 저수준 hierarchy는 일반적인 고수준 논리와 불필요하게 혼합하지 않되,
+Source Code 단계에서 해당 플랫폼 의존 로직을 새로 추론하거나 설계하지 않고 재현할 수 있을 정도로 충분히 자세하게 명세해야 한다.
+
+따라서 명세에는 필요한 경우 다음과 같은 사항이 포함되어야 한다.
+
+- 해당 외부 의존성 또는 특수한 저수준 로직이 필요한 이유와 고수준 논리에 미치는 영향
+- 어떤 vendor, runtime, device, library, platform resource 또는 외부 contract에 의존하는지
+- 해당 의존성이 제공하거나 요구하는 논리적 책임과 입력·출력
+- 고수준 알고리즘이 해당 저수준 로직을 호출하거나 관찰하는 경계
+- 보존해야 하는 처리 순서, 상태 변화, 실패 의미, resource 관계 또는 contract
+- Source Code에서 동일한 저수준 논리를 재현하는 데 필요한 저수준 처리 절차, 알고리즘, 상태 전이 또는 상호작용 규칙
+- Source Code에서 동일한 저수준 논리를 재현하기 위해 필요한 확정된 조건과 제약
+
+이는 모든 플랫폼별 구현 세부를 Source Script에 기록한다는 뜻이 아니다.
+고수준 논리와 무관하게 교체 가능한 호출 문법, 메모리 배치, 구체 API invocation 등의 순수 구현 세부는 계속 하위 구현 단계에 남길 수 있다.
+
+반대로 플랫폼 의존적인 저수준 논리 자체가 독립적인 decomposition을 필요로 할 정도로
+고수준 의미에 영향을 준다면 Source Code에서 예외적으로 hierarchy를 추가할 수 없다.
+Source Script에서 먼저 격리된 hierarchy로 정의한 뒤 Pseudocode와 Source Code에 동일한 구조와 의미를 전파해야 한다.
+
+필요한 성격에 따라 예를 들어:
+
+- 외부 라이브러리나 vendor가 제공하는 기능적·구조적 계약이면 vendor contract
+- 디바이스, 파일, 메모리, 외부 실행 자원 등 프로그램이 다루어야 하는 외부 자원이면 resource
+- 그 밖에 프로그램의 추상화된 의미에 포함되는 독립적인 역할이면 그 의미에 맞는 Source Script 모듈
+
+로 분류할 수 있다.
+
+`vendor contract`, `resource`라는 명칭이나 구체 hierarchy를 모든 프로젝트에 고정하지 않는다.
+실제 위치와 추상화는 기존 개념 구조와 `Meaning(child) ⊆ Meaning(parent)` 관계를 기준으로 프로그래머가 결정한다.
+
+예를 들어 Source Script에 다음만 존재한다고 한다.
+
+```text
+rendering
+```
+
+특정 GPU 구현에서 다음과 같은 독립적인 구조가 필요하다는 이유로 Source Code에서 직접 다음 hierarchy를 만들 수는 없다.
+
+```text
+rendering/
+├─ host_dispatch
+├─ device_kernel
+└─ device_memory
+```
+
+이들이 단순한 파일 구분을 넘어 각각 독립적인 추상화된 의미 또는 구현 계약을 가진다면
+Source Script에서 먼저 표현해야 한다.
+
+프로젝트의 의미에 따라 예를 들면 다음처럼 도입할 수 있다.
+
+```text
+rendering/
+├─ resource/
+│  └─ gpu
+└─ vendor_contract/
+   └─ gpu_runtime
+```
+
+이 예시는 고정 hierarchy가 아니라 가능한 분류의 예일 뿐이다.
+
+#### 3.2.3 물리 파일과 논리 decomposition의 구분
+
+Module decomposition hierarchy의 구조 보존은 Source Code에서 파일을 추가하는 것을 금지하지 않는다.
+
+하나의 논리 모듈을 특정 프로그래밍 언어나 특정 디바이스에서 구현하기 위해 여러 물리 파일이 필요하다면 추가할 수 있다.
+
+예를 들어 Source Script에 `storage`라는 하나의 논리 모듈이 있을 때 C 구현을 다음처럼 구성할 수 있다.
+
+```text
+storage/
+├─ storage.h
+├─ storage.c
+└─ storage_internal.h
+```
+
+세 파일이 모두 하나의 `Meaning(storage)`를 구현하는 물리적 구성 요소라면 새로운 논리적 decomposition으로 간주하지 않는다.
+
+마찬가지로 다음과 같은 언어 종속적 파일 분할도 가능하다.
+
+```text
+parser/
+├─ mod.rs
+├─ impl.rs
+└─ types.rs
+```
+
+단, 각 파일은 기존 논리 모듈 `parser`의 물리적 구현 파일이어야 하며,
+각각이 독립된 추상화된 의미, 계약 또는 구조적 책임을 갖는 논리 모듈로 취급되어서는 안 된다.
+
+따라서 다음을 명확히 구분한다.
+
+```text
+Module decomposition hierarchy
+    ≠
+physical file hierarchy
+```
+
+파일 수와 파일 형식은 특정 언어 또는 디바이스의 요구에 따라 달라질 수 있지만,
+물리 파일 배치가 Module decomposition hierarchy 자체를 변경하는 근거가 되어서는 안 된다.
+
+예를 들어 Source Script가 다음과 같다면:
+
+```text
+application/
+├─ state/
+│  ├─ project
+│  └─ session
+└─ command/
+   ├─ import
+   └─ export
+```
+
+Source Code에서도 이 논리적인 Module decomposition hierarchy는 유지되어야 한다.
+
+```text
+application/
+├─ state/
+│  ├─ project/
+│  │  ├─ project.h
+│  │  └─ project.c
+│  └─ session/
+│     ├─ session.h
+│     └─ session.c
+└─ command/
+   ├─ import/
+   │  └─ import.c
+   └─ export/
+      └─ export.c
+```
+
+반대로 다음처럼 물리적 편의를 이유로 `state`와 `command`의 의미적 부모 관계를 제거하는 평탄화는 허용되지 않는다.
+
+```text
+application/
+├─ project_state.c
+├─ session_state.c
+├─ import.c
+└─ export.c
+```
+
+Source Code 단계에서 허용되는 언어·디바이스 종속 구체화는 기존 논리 모듈의 `Meaning`을 구현하는 방법에 한정된다.
+
+```text
+Meaning(A)
+    ↓ implementation
+file_1
+file_2
+file_3
+```
+
+다음처럼 하위 단계에서 새로운 `Meaning` 노드를 만드는 것은 허용되지 않는다.
+
+```text
+Meaning(A)
+    ↓ lower stage
+Meaning(A1)
+Meaning(A2)
+Meaning(A3)
+```
+
+모든 하위 단계의 논리 모듈은 어느 상위 모듈에서 파생되었는지 추적 가능해야 하며,
+Source Script, Pseudocode, Source Code 사이에서 논리 모듈의 부모-자식 경로가 달라져서는 안 된다.
+
+기본 관계는 다음과 같다.
+
+```text
+Source Script module decomposition hierarchy
+        ↓
+Pseudocode module decomposition hierarchy
+        ↓
+Source Code module decomposition hierarchy
+        ↓
+0..N physical files per logical module
+```
+
+---
+
+## 4. Source Script
+
+### 4.1 Source Script 단계
+
+Source Script 단계에서는 구현할 시스템의 고수준 논리를 닫는다.
+
+이 단계에서 최소한 다음이 결정되어야 한다.
+
+- 데이터 형태와 의미
+- 책임 경계
+- 참조 관계와 authoritative source
+- Module decomposition hierarchy
+- 입력과 출력
+- 의미 있는 처리 순서
+- 상태 변경 여부와 변경 경로
+- 확정된 계산 규칙
+- 실패·거부·취소 등 고수준 결과 의미
+- 구현자가 보존해야 하는 설계 의도
+
+Source Script가 닫혔다는 것은 모든 저수준 구현 세부가 결정되었다는 뜻이 아니다.
+
+다음 단계에서 새로운 고수준 의미나 책임을 발명하지 않고
+언어중립 pseudocode로 직접 옮길 수 있을 만큼
+Source Script가 책임지는 논리와 구조가 확정되어 있다는 뜻이다.
+
+### 4.2 소스 스크립트의 목적
+
+소스 스크립트는 자연어 설명서나 실행 가능한 소스코드가 아니라, pseudocode와 그로부터 구체화되는 대상 언어 구현의 상위 원천이 되는 구조화된 구현 명세다.
+
+따라서:
+
+- 코드에 가까운 구조가 보여야 한다.
+- 데이터 형태와 공통 식별자가 보여야 한다.
+- 입력과 출력이 보여야 한다.
+- 어떤 상태를 변경하는지 보여야 한다.
+- 참조 관계가 원천과 대상 사이의 상관관계를 잃지 않고 추적·검증 가능한 형태로 표현되어야 한다.
+- 함수와 데이터의 책임 경계가 보여야 한다.
+- 의미가 있는 처리 순서와 확정된 계산 규칙을 표현할 수 있어야 한다.
+- 대상 언어·OS·디바이스에 종속되는 저수준 실행 알고리즘은 뒤 단계로 남긴다.
+- 데이터 형태·종류, schema/contract, 의미 있는 파일 위치·경로·확장자와 외부 형식처럼 고수준 알고리즘의 의미를 결정하는 정보는 저수준 구현으로 오인해 생략하지 않는다.
+- 구현자가 다음 단계에서 새로운 고수준 알고리즘이나 도메인 규칙을 발명할 필요가 없도록 한다.
+
+최종 목표는 복잡한 시스템의 platform-specific 구현까지 소스 스크립트에서 미리 결정하는 것이 아니라, 고수준 알고리즘과 데이터·파일·schema·contract 의미를 충분히 닫고 이를 PlusCal pseudocode로 언어중립적으로 한 단계 구체화한 뒤, 필요한 경우 TLA+/TLC 상태 기반 검증을 추가하고, 대상 언어와 디바이스에 맞는 저수준 알고리즘만 추가하여 자연스럽게 구현할 수 있게 하는 것이다.
+
+### 4.3 소스 스크립트의 정의
+
+소스 스크립트는 Python 문법을 작성 표기법(authoring notation)으로 사용하는 구조화된 구현 명세다.
+Python 형식을 사용하는 이유는 Python이 대표적인 고수준 객체지향 언어 중 하나이고, 현대 LLM이 비교적 안정적으로 이해·생성할 수 있으며, 다양한 데이터 구조와 제어 구조를 충분히 표현할 수 있기 때문이다.
+
+- Python 문법은 구조와 공통 식별자, 데이터 형태, 함수 경계를 표현하는 데 사용한다.
+- 데이터 구조는 가능한 명확히 표현해야 한다. 의미상 구분되는 필드, 중첩 관계, collection 구성, 참조 관계가 정해져 있다면 해당 관계가 구조에서 드러나도록 작성한다.
+- Python 문법이나 대상 구현 언어의 타입 시스템은 데이터 구조와 구분한다. Source Script에서 Python 문법은 데이터 구조를 표현하기 위한 authoring notation이며, 특정 문법 또는 타입 표현 자체를 데이터 구조의 의미로 간주하지 않는다.
+- Python 자체를 최종 구현 언어로 전제하지 않는다.
+- 함수 내부의 세부 처리는 자연어 알고리즘으로 작성할 수 있다.
+- 확정된 규칙의 계산식과 관계식은 필요한 경우 명시한다.
+- 대상 구현 언어에 종속되는 타입 체계, 메모리 표현, 라이브러리 사용법 등의 세부 구현은 아직 결정하지 않는다.
+- 변수 값에는 실제 도메인 값이 아니라 해당 변수의 의미를 설명하는 텍스트를 넣는다.
+
+
+
+예:
+
+```python
+# 피함: 이미 구분된 데이터 구조를 하나의 설명 문자열로 축약
+WORLD_STATE = {
+    "characters": "location, alive, capable, inventory, relationships, physical state",
+}
+
+# 사용: 의미 있는 필드와 중첩 관계가 구조에서 드러남
+WORLD_STATE = {
+    "characters": {
+        "character_ref": {
+            "location": "current character location",
+            "alive": "whether the character is alive",
+            "capable": "whether the character can currently act",
+            "inventory": "objects currently held by the character",
+            "relationships": "current relationship references",
+            "physical_state": "current physical state",
+        },
+    },
+}
+```
+
+설명 텍스트를 단순 변수 값으로 사용하는 경우:
+
+```python
+actor = "현재 액티브 스킬을 사용하는 캐릭터"
+```
+
+소스 스크립트는 알고리즘뿐 아니라 데이터 형태와 공통 식별자, 참조 관계, 책임 경계, 입력과 출력, 상태 변경 여부와 변경 경로, 의미가 있는 처리 순서, 확정된 계산 규칙, 구현자가 보존해야 하는 설계 의도를 표현할 수 있다.
+
+#### 4.3.1 고수준 알고리즘과 저수준 구현의 경계
+
+소스 스크립트는 **대상 언어·운영체제·디바이스·런타임에 종속되지 않는 고수준 알고리즘과 계약을 완결하는 단계**다.
+
+소스 스크립트에서 생략할 수 있는 것은 실제 환경에 맞춰 뒤에서 결정해야 하는 저수준 구현 알고리즘이다.
+
+예를 들어 다음은 대상 언어·디바이스에 따라 달라질 수 있으므로 소스 스크립트에서 구체 구현을 정하지 않을 수 있다.
+
+- 실제 메모리 배치, allocation, ownership primitive와 buffer 관리 방식
+- thread, mutex, atomic, event loop, Promise/future, interrupt 같은 구체 동기화 primitive
+- OS syscall, 브라우저 API, 디바이스 driver, GPU/CPU 실행 방식
+- 실제 filesystem/network API 호출 순서의 저수준 plumbing
+- 특정 ZIP/XML/graphics/database/library의 호출 문법과 내부 사용법
+- SIMD, GPU kernel, device-specific I/O처럼 대상 장치에 종속되는 최적화
+- 대상 언어의 class/generic/type-system 표현과 예외 객체의 구체 형태
+
+그러나 **저수준 구현을 생략한다는 것은 고수준 알고리즘의 입력·데이터 계약·외부 형식·저장 구조를 생략한다는 뜻이 아니다.**
+
+다음 정보가 기능의 의미, 호환성, 참조 관계, 처리 순서 또는 검증 결과에 영향을 준다면 소스 스크립트에 명시해야 한다.
+
+- 데이터의 형태, 종류, 필드와 관계
+- schema와 contract 구조
+- 파일 또는 package의 논리적 위치와 문서 구성
+- 의미가 있는 파일명, 경로, 확장자, MIME/format 식별자
+- serialization/deserialization에서 보존해야 하는 구조와 관계
+- encoding, container, entry/path constraint처럼 상호운용성에 필요한 형식 조건
+- 외부 입력과 출력의 의미 및 허용/거부 조건
+- ID, reference, key, path가 어느 원천과 대상을 연결하는지
+- operation의 의미 있는 순서, transaction/commit 경계와 실패 결과
+- 어떤 외부 자원을 읽고 쓰는지와 그 결과가 이후 알고리즘에 어떻게 사용되는지
+- lock, ordering, stale-read, resource lifetime처럼 고수준 정확성에 영향을 주는 동시성 요구
+
+예를 들어 ZIP을 어느 라이브러리로 읽을지는 저수준 구현 문제지만,
+어떤 entry가 존재해야 하고 어떤 path가 허용되며 어떤 document가 어떤 데이터를 소유하는지는 고수준 계약이다.
+
+마찬가지로 실제 파일 API 호출 코드는 저수준 구현이지만,
+어느 논리적 파일을 어떤 확장자·형식으로 읽고 쓰며 그 결과가 어느 authoritative state와 연결되는지는 소스 스크립트의 책임이다.
+
+판별 기준은 다음과 같다.
+
+> 대상 언어와 디바이스를 바꾸더라도 유지되어야 하는 의미라면 소스 스크립트에 남긴다.  
+> 같은 고수준 의미를 보존하면서 환경에 맞게 선택할 수 있는 실행 기법이라면 구현 단계로 남길 수 있다.
+
+따라서 소스 스크립트가 닫혔다는 것은 실제 machine-level 또는 platform API 알고리즘까지 결정되었다는 뜻이 아니라,
+**대상 환경만 주어지면 새로운 고수준 기능·데이터 계약·처리 규칙을 발명하지 않고 구현할 수 있을 정도로 의미가 닫혀 있다는 뜻**이다.
+
+실무적으로는 Source Script의 작성 형식인 Python을 고수준 로직의 1차적인 판단 기준으로 사용한다.
+
+즉, Python 수준에서 특정 플랫폼이나 구현 환경에 종속되지 않고 자연스럽게 표현할 수 있는 데이터 구조, 알고리즘, 상태 관계, 책임 경계와 처리 규칙은 원칙적으로 고수준 로직으로 간주한다. 반대로 동일한 의미를 유지하더라도 대상 언어·플랫폼·런타임에 따라 구현 방식이 달라져 하나의 공통된 고수준 표현으로 통일하기 어려운 부분은 저수준 구현으로 간주한다.
+
+#### 4.3.2 소스 스크립트 가이드: 외부 원천과 다른 소스 스크립트
+
+소스 스크립트는 하나의 파일 안에 모든 구조와 알고리즘을 반복해서 포함할 필요가 없다.
+책임이나 범위가 분리된 다른 소스 스크립트가 이미 존재하면 해당 소스 스크립트를 import하거나 참조 원천으로 사용할 수 있다.
+
+- 다른 소스 스크립트의 구조나 함수가 현재 소스 스크립트의 책임 범위 밖에서 이미 정의되어 있다면, 동일한 내용을 다시 작성하기보다 import 또는 명시적인 참조를 우선 검토한다.
+- import는 대상 구현 언어의 실제 모듈 시스템을 미리 확정한다는 뜻이 아니라, 소스 스크립트 단계에서 다른 구현 명세의 책임과 식별자를 재사용한다는 뜻으로 사용할 수 있다.
+- import하거나 참조하는 대상은 어떤 소스 스크립트의 어떤 구조·함수·원천을 사용하는지 식별할 수 있어야 한다.
+- 외부 정보 원천이나 근거를 사용하는 경우에는 가능한 한 구체적으로 그 출처와 역할을 설명한다.
+- 파일, 설정 문서, 데이터 파일, authoritative state 원천, 외부 서비스, 규칙 원천 등 외부 의존성이 있다면 이름만 남기지 말고 무엇을 제공하며 어떤 판단 또는 계산의 근거로 사용되는지 명시한다.
+- 실제 파일 경로, 문서 식별자, 데이터 구조, 조회 방식 등이 이미 확정되어 있고 소스 스크립트의 의미 이해에 필요하다면 함께 기록한다.
+- 반대로 저장 방식이나 API 형식처럼 아직 구현 단계에서 결정할 사항은 임의로 확정하지 않는다. 이 경우에도 필요한 원천의 의미, 책임, 제공해야 하는 정보는 설명한다.
+- 외부 원천이 특정 규칙의 권위 있는 근거라면 그 사실을 명시하고, 단순 참고자료와 authoritative source를 구분한다.
+- 외부 원천 또는 import 대상이 변경되었을 때 어떤 참조나 책임이 영향을 받는지 추적할 수 있도록 관계를 표현한다.
+
+목표는 소스 스크립트만 읽은 작업자가 외부 의존성을 이름으로만 추측하지 않고,
+필요한 원천을 찾아 그 역할과 근거를 확인한 뒤 동일한 책임 구조를 이어갈 수 있게 하는 것이다.
+
+---
+
+### 4.4 변수 사용 원칙
+
+변수는 단계 간 일관성을 유지하기 위한 공통 식별자로 사용한다.
+
+- 같은 대상을 단계마다 다른 이름으로 부르지 않는다.
+- 실제 값 대신 설명 텍스트를 넣는다.
+- 변수는 구조화를 위한 목적이 아니라 참조와 흐름의 일관성을 유지하기 위해 사용한다.
+- 필요한 구조만 사용하고, 구현 전에 불필요한 타입 체계를 과도하게 만들지 않는다.
+- 데이터 형태를 정의하는 것과 대상 언어의 타입 체계를 결정하는 것을 구분한다.
+
+---
+
+### 4.5 함수 작성 원칙
+
+함수의 입력과 출력은 Python 함수 구조 자체로 표현한다.
+
+데이터 구조 자체가 알고리즘 이해에 중요한 경우에는 docstring의 `Args`와 `Return`에서 구조를 명시한다.
+
+```python
+def f(arg1):
+    """
+    Args:
+    - arg1:
+      상단에서 이미 정의되지 않았거나
+      구조 이해에 추가 설명이 필요한 경우 설명한다.
+
+    Return:
+    - output:
+      반환값의 의미 또는 중요한 데이터 구조를 설명한다.
+
+    변경:
+    - 이 함수가 변경하는 대상
+    - 변경하지 않는 원본 상태가 있다면 그 사실
+
+    처리:
+    자연어 알고리즘
+    """
+
+    return output
+```
+
+원칙:
+
+- 입력은 `def f(args):`에 명시한다.
+- 출력은 `return output`에 명시한다.
+- 구조가 중요한 입력값은 `Args`에서 데이터 형태와 역할을 설명한다.
+- 구조가 중요한 반환값은 `Return`에서 데이터 형태와 역할을 설명한다.
+- 상단 변수 정의에서 이미 의미가 충분히 설명된 단순 변수는 함수마다 반복 설명하지 않는다.
+- `Args`와 `Return`은 모든 함수에 기계적으로 넣는 항목이 아니라, 데이터 구조 또는 역할을 명확히 해야 할 때 사용한다.
+- docstring에는 함수가 무엇을 변경하는지 명확히 적는다.
+- docstring의 처리 부분에는 자연어 알고리즘을 적는다.
+- 구조 설명은 PlusCal pseudocode나 실제 구현을 대신하지 않으며, 해당 함수가 어떤 형태의 데이터를 받거나 반환하는지 명확하게 하는 용도로만 사용한다.
+
+---
+
+### 4.6 소스 스크립트 닫힘 판정
+
+Source Script는 PlusCal pseudocode와 대상 언어 구현의 원천일 뿐 아니라, 그 자체가 평가 대상이다.
+Source Script 단계의 목적은 알고리즘이 논리적으로 완결되어 있는지,
+프로젝트 목적에 부합하는지,
+불필요한 중복이나 논리적 확장·통합이 필요한 부분이 없는지를 평가하는 것이다.
+
+이 평가는 하위 단계로 미룰 수 없다.
+코드가 동작하더라도 중복 구조, 목적 이탈, 통합 기회는 드러나지 않을 수 있으며,
+Source Code가 만들어진 뒤에는 이를 고치는 비용이 커지기 때문이다.
+
+Source Script는 다음 세 항목을 모두 충족하고 그 근거가 기록되었을 때 닫힌 것으로 판정한다.
+
+1. 논리적 완결성
+   - 입력에서 출력까지 알고리즘이 끊기지 않고 이어지는가.
+   - 확정된 규칙끼리 모순되지 않는가.
+   - 미확정 사항이 미확정 상태로 명시되어 있고, 임의로 채워지지 않았는가.
+
+2. 프로젝트 목적 부합
+   - 프로젝트의 요구와 목적을 충족하는가.
+   - 목적에서 도출되지 않는 규칙이나 기능이 추가되지 않았는가. (§2.7)
+
+3. 중복과 통합·확장
+   - 기존 구조와 의미·책임이 같은 새 구조가 만들어지지 않았는가. (§2.8)
+   - 참조 관계를 유지하는 비용이 과도하여 통합해야 할 구조가 없는가. (§2.6)
+   - 복잡도 대비 자유도 관점에서 통합 또는 확장이 필요한 부분이 없는가. (§2.5)
+
+근거 기록:
+
+- 각 항목에 대해 무엇을 어떤 방식으로 확인했고 어떤 결론에 이르렀는지 기록한다.
+- 확인한 중복 후보와 그것을 통합하거나 분리하기로 한 사유처럼 실제 판단 근거를 남긴다.
+- "검토했다"는 선언만으로는 해당 항목을 충족한 것으로 보지 않는다.
+- 근거가 없거나 해결되지 않은 항목이 있으면 닫히지 않은 것이다.
+- 지금 결정할 수 없는 사항은 미확정 사항 또는 설계 문제로 기록한다.
+
+닫힘 판정은 논리적 판단이므로 실제 구현에서 누락이 없음을 보장하지 않는다.
+
+이 한계는 다음 단계의 pseudocode 구체화와,
+필요한 경우 추가 상태 검증,
+그리고 Source Code 단계의 컴파일러·정적 분석·테스트를 통해 서로 다른 관점에서 확인한다.
+
+## 5. PlusCal pseudocode
+
+### 5.1 PlusCal pseudocode 단계
+
+PlusCal pseudocode 단계에서는 닫힌 Source Script를 **언어중립적인 실행 절차 명세로 직접 번역**한다.
+
+이 단계의 주목적은 검증 모델을 만드는 것이 아니다.
+
+주목적은 Source Script의 고수준 논리를 Source Code로 옮기기 전에,
+실제 실행 흐름을 따라갈 수 있을 만큼 한 단계 더 구체적인 명세를 작성하여
+Source Code 단계에서 새 고수준 알고리즘이나 처리 규칙을 다시 설계할 필요가 없도록 하는 것이다.
+
+Pseudocode는 최소한 다음을 직접 추적할 수 있어야 한다.
+
+- Source Script의 module과 책임 경계
+- Module decomposition hierarchy
+- authoritative state와 참조 원천
+- 함수·operation의 입력과 출력
+- 의미 있는 실행 순서와 branch
+- 값의 생성과 소비 관계
+- 상태전이
+- candidate → validation → commit 경계
+- mutation 순서와 원자성
+- 실패·거부·취소·부분 결과의 의미
+- lifecycle과 의미 있는 동시성 관계
+- 확정된 계산과 상태 변화 규칙
+
+Pseudocode는 Source Script에 없는 새로운 domain state, branch, 책임,
+의미 decomposition 또는 mutation source를 추가하지 않는다.
+
+Source Script에 존재하는 의미 있는 branch, 처리 순서, reference relation,
+failure path 또는 Module decomposition hierarchy를 제거하거나 다른 의미로 합치지 않는다.
+
+Source Script와 PlusCal pseudocode가 충돌하면 Source Script가 원천이며 pseudocode 번역이 잘못된 것이다.
+
+Pseudocode 단계에서는 아직 다음과 같은 대상 환경의 구체 구현 세부를 확정하지 않는다.
+
+- 대상 언어의 타입 체계와 class/generic 표현
+- 실제 메모리 배치와 ownership primitive
+- 구체 OS/browser/device API 호출 문법
+- 특정 라이브러리 또는 framework 사용법
+- platform-specific buffer, thread, callback, event-loop 구현
+- 같은 고수준 의미를 보존하면서 환경에 따라 달라질 수 있는 저수준 실행 기법
+
+즉 pseudocode는 Source Script보다 구체적이지만 Source Code보다는 추상적이다.
+
+### 5.2 PlusCal 선택과 선택적 상태 기반 검증
+
+PlusCal을 pseudocode 표기법으로 사용하는 이유는
+Source Script의 절차적 알고리즘과 상태전이를 언어중립적으로 표현할 수 있으면서,
+같은 pseudocode를 기반으로 필요할 경우 TLA+/TLC 상태 기반 검증을 추가할 수 있기 때문이다.
+
+이 검증은 기본 pseudocode 작성과 Source Code 구현을 성립시키기 위한 필수 단계가 아니다.
+
+PlusCal pseudocode 자체가 Source Code의 상위 언어중립 명세이며,
+상태 기반 검증을 수행하지 않더라도 pseudocode의 역할은 성립한다.
+
+TLA+/TLC 검증은 다음과 같은 문제가 중요할 때 선택적으로 추가한다.
+
+- 여러 상태의 조합에서만 발생할 수 있는 오류
+- operation 순서에 따른 잘못된 상태전이
+- partial commit 또는 mutation 원자성 위반
+- 참조 무결성 또는 ownership 위반
+- lifecycle 상태 조합
+- lock, interleaving, callback 순서와 같은 동시성 문제
+- invariant 위반
+- 필요한 경우 safety/liveness 문제
+
+이러한 문제는 개별 Source Code가 컴파일된다는 사실만으로 충분히 확인하기 어렵다.
+
+일반적인 Source Code 컴파일러와 정적 타입 검사는 주로 다음과 같은 구현 수준 문제를 잘 검사한다.
+
+- 구문 오류
+- 이름 해석
+- 타입 불일치
+- 함수 또는 symbol 존재 여부
+- 일부 정적 제약
+
+PlusCal을 사용하면 Source Code의 세부 구현에 들어가기 전에
+필요한 경우 pseudocode 수준에서 별도의 상태공간을 구성하여
+일반 컴파일러가 검사하기 어려운 상태·순서·참조·불변식·동시성 문제를 미리 확인할 수 있다.
+
+따라서 PlusCal을 선택한 이유는 검증을 의무화하기 위해서가 아니라,
+**언어중립 pseudocode를 작성하는 동시에 필요할 경우
+Source Code 구현 전에 상태 기반 검증을 추가할 수 있는 선택지를 확보하기 위해서**다.
+
+## 6. 선택적 verification model과 TLC 검증
+
+상태 기반 검증을 수행하는 경우,
+PlusCal pseudocode의 일부 또는 전체에서 verification model을 파생하여
+TLC로 가능한 상태전이 조합과 invariant 위반을 탐색한다.
+
+verification model은 PlusCal pseudocode의 파생 검증 표현이며 별도의 설계 모델이 아니다.
+PlusCal pseudocode를 검증하기 좋게 다시 설계하거나,
+책임을 합치거나 나누거나 알고리즘을 다른 의미로 재구성하는 것을 기본 작업으로 삼지 않는다.
 
 TLA+ 문법에 맞추기 위한 변수, operator, state 표현의 기계적 변환은 허용하지만 다음 조건을 만족해야 한다.
 
-- 각 verification state/action/operator가 어느 Source Script 상태·함수·단계에서 왔는지 추적할 수 있다.
-- Source Script에 없는 새로운 domain state, branch, 책임, mutation source를 추가하지 않는다.
-- Source Script에 존재하는 의미 있는 branch, 처리 순서, reference relation, failure path를 제거하거나 다른 의미로 합치지 않는다.
-- 표현을 바꾸더라도 Source Script와 동일한 입력에서 동일한 허용/거부 및 상태변화 의미를 나타낸다.
+- 각 verification state/action/operator가 어느 PlusCal pseudocode 상태·함수·단계에서 왔는지 추적할 수 있다.
+- PlusCal pseudocode에 없는 새로운 domain state, branch, 책임, mutation source를 추가하지 않는다.
+- PlusCal pseudocode에 존재하는 의미 있는 branch, 처리 순서, reference relation, failure path를 제거하거나 다른 의미로 합치지 않는다.
+- 표현을 바꾸더라도 PlusCal pseudocode와 동일한 입력에서 동일한 허용/거부 및 상태변화 의미를 나타낸다.
 
-Source Script와 verification code가 충돌할 경우 Source Script가 원천이며 verification code가 잘못 번역된 것이다.
+PlusCal pseudocode와 verification model이 충돌할 경우 PlusCal pseudocode가 직접 원천이며 verification model이 잘못 파생된 것이다.
+PlusCal pseudocode 자체가 Source Script와 충돌하는 경우에는 §1의 단계 권위에 따라 Source Script가 원천이다.
 
-이 단계의 목적은 대상 언어 컴파일러가 이미 잘 검사하는 구문, 함수 존재 여부, 단순 타입 일치만을 다시 확인하는 것이 아니다.
-개별 호출이 각각 유효하더라도 호출 순서와 상태 조합 때문에 발생할 수 있는 전역 논리 오류를 가능한 한 검사하는 것이 목적이다.
+### 6.1 검증을 수행하는 시점
 
-### 모델에 반드시 보존할 의미
+상태 기반 검증이 필요하다고 판단한 경우에는
+PlusCal pseudocode의 번역 충실도와 구체화 수준을 먼저 확인한 뒤,
+Source Code의 저수준 세부 구현에 들어가기 전에 검증 모델을 만든다.
+
+즉 선택적 검증을 수행하는 경우의 위치는 다음과 같다.
+
+```text
+Source Script
+    ↓
+PlusCal pseudocode
+    ↓
+pseudocode 번역 충실도 및 구체화 확인
+    ↓
+[필요한 경우]
+verification model decomposition
+    ↓
+TLA+ / TLC
+    ↓
+Source Code
+```
+
+이 순서는 verification model이 Source Script를 직접 재해석하거나
+pseudocode와 독립된 새로운 설계 권위를 갖는 것을 방지하기 위한 것이다.
+
+---
+
+### 6.2 모델에 반드시 보존할 의미
 
 가능한 한 다음을 모델에 포함한다.
 
@@ -548,44 +1070,46 @@ Source Script와 verification code가 충돌할 경우 Source Script가 원천�
 - safety invariant와, 필요한 경우 liveness/deadlock 조건
 - 확정된 계산 규칙 중 상태전이 또는 property 판정에 영향을 주는 부분
 
-소스 스크립트의 핵심 알고리즘은 기본적으로 verification code의 대상이다.
-상태공간이 커지거나 실제 데이터가 복잡하다는 이유만으로 핵심 알고리즘 전체를 생략하지 않는다.
+검증 대상으로 선택한 pseudocode 범위의 핵심 알고리즘은 기본적으로 verification model에 보존한다.
+상태공간이 커지거나 실제 데이터가 복잡하다는 이유만으로 해당 검증 범위의 핵심 알고리즘 전체를 생략하지 않는다.
 
-### verification code의 pseudocode 역할과 저수준 경계
+### 6.3 verification model decomposition
 
-PlusCal/TLA+ verification code는 기존 pseudocode 단계의 역할을 대체하며,
-**소스 스크립트의 고수준 알고리즘을 실행 가능한 형태로 직접 옮긴 중간 코드**다.
+검증 decomposition의 1차 경계는 Source Script와 pseudocode에서 이미 정의한 다음 구조를 따른다.
 
-verification code를 기준으로 대상 언어 구현자가 작업할 때:
+- Module decomposition hierarchy
+- module/file 책임 경계
+- import 관계
+- 참조 관계
+- 공식 호출 및 interface 경계
 
-- 새로운 고수준 알고리즘을 설계하지 않아야 한다.
-- operation의 순서, branch, 상태전이, reference 변경, transaction 경계와 실패 의미를 새로 결정하지 않아야 한다.
-- 데이터/schema/file/package contract를 다시 추론하거나 임의로 보완하지 않아야 한다.
-- 실제 언어와 디바이스에 필요한 저수준 실행 기법만 선택·작성하면 되어야 한다.
+검증 편의를 이유로 전체 pseudocode를 임의의 새로운 책임 구조로 다시 설계하지 않는다.
 
-소스 스크립트에서 의도적으로 생략한 언어·디바이스 종속 저수준 알고리즘은
-verification code에서도 실제 platform 구현으로 확정할 필요가 없다.
-대신 고수준 알고리즘이 그 저수준 기능을 호출했을 때 실행 가능하고 모순이 없는지 확인할 수 있도록
-필요한 interface, precondition, result, failure, atomicity 또는 environment assumption을 모델에 표현한다.
+각 verification model에는 원칙적으로 다음만 포함한다.
 
-예를 들어 실제 filesystem API의 syscall 순서를 모델링하지 않더라도:
+```text
+1. 해당 검증 단위가 직접 소유하거나 변경하는 국소 상태
+2. 다른 모듈에서 오지만 해당 단위의 next-state, branch 또는 invariant 판정에 실제로 필요한 입력 projection
+```
 
-- 요청한 논리적 path가 무엇인지
-- 성공/실패가 어떤 상태를 만드는지
-- 읽기 결과가 어느 다음 action의 입력인지
-- write가 어느 commit 경계에서 외부에 관찰되는지
-- concurrent access나 lock이 고수준 correctness에 영향을 주는지
+다른 모듈의 내부 상태 전체를 현재 verification model에 복제하지 않는다.
 
-는 필요한 수준까지 모델링해야 한다.
+외부 상태가 현재 검증 단위의 판단에 영향을 주더라도,
+현재 단위가 실제로 관찰하는 구분만 interface input 또는 projection으로 표현할 수 있다면 그 범위만 남긴다.
 
-즉 저수준 구현을 abstract action으로 바꿀 수는 있지만,
-그 action을 호출하는 **고수준 알고리즘 자체를 abstract success 하나로 치환하여 제거해서는 안 된다.**
+예:
 
-verification code의 완성 기준은 모든 platform-specific detail을 포함하는 것이 아니라,
-**Source Script의 고수준 알고리즘을 따라가면 실제 target implementation을 위한 control/data flow가 끊기지 않고,
-남은 미구현 부분이 오직 환경 종속 저수준 구현이라는 점을 확인할 수 있는 것**이다.
+```text
+resolved ∈ {TRUE, FALSE}
+visible ∈ {TRUE, FALSE}
+accepted ∈ {TRUE, FALSE}
+```
 
-### 추상화 원칙
+논리적으로 독립된 여러 verification model로 나누었더라도
+모듈 사이의 계약 또는 cross-module invariant가 별도 검증을 필요로 한다면
+해당 의미를 검사할 interface contract model 또는 필요한 범위의 결합 verification model을 둘 수 있다.
+
+### 6.4 추상화 원칙
 
 TLC가 탐색 가능한 유한 상태공간을 만들기 위해 세부 값을 축약할 수 있다.
 
@@ -603,9 +1127,9 @@ TLC가 탐색 가능한 유한 상태공간을 만들기 위해 세부 값을 �
 상태공간 폭발이 발생하면 우선 값의 범위 축소, symmetry, 대표 상태, atomic abstraction처럼
 검증 의미를 보존하는 축약을 사용하고, 핵심 알고리즘 자체를 제거하는 방향은 마지막 수단으로 둔다.
 
-### 생략 허용 범위
+### 6.5 생략 허용 범위
 
-소스 스크립트의 동작을 verification code에서 완전히 생략하는 것은 예외로 제한한다.
+검증 대상으로 선택한 pseudocode의 동작을 verification model에서 완전히 생략하는 것은 예외로 제한한다.
 
 다음 조건을 모두 만족한다고 판단할 수 있는 부분만 생략할 수 있다.
 
@@ -620,7 +1144,7 @@ TLC가 탐색 가능한 유한 상태공간을 만들기 위해 세부 값을 �
 
 생략 여부가 불확실하면 생략하지 않고 최소한 atomic action, 환경 action 또는 symbolic result로 모델링한다.
 
-verification code에서 생략하거나 크게 추상화한 Source Script 항목은 검증 기록에 다음을 남긴다.
+verification model에서 생략하거나 크게 추상화한 pseudocode 항목은 검증 기록에 다음을 남긴다.
 
 - 생략/추상화 대상
 - 그렇게 한 이유
@@ -628,7 +1152,7 @@ verification code에서 생략하거나 크게 추상화한 Source Script 항목
 - 검사하지 못하게 되는 위험 또는 한계
 - 이후 요구사항이 바뀌면 모델에 다시 포함해야 하는 조건
 
-### TLC 검증
+### 6.6 TLC 검증
 
 TLC 실행에서는 프로젝트에 의미 있는 범위에서 다음을 검사한다.
 
@@ -643,17 +1167,44 @@ TLC가 탐색한 유한 범위는 무한 상태공간 전체에 대한 일반 �
 대신 사용한 bound와 abstraction을 기록하고,
 핵심 invariant를 깨는 작은 반례를 적극적으로 찾는 실행 가능한 검증으로 사용한다.
 
-PlusCal/TLA+ 번역 과정에서 Source Script와 verification code 사이에 모순, 누락, 책임 불일치, 실행 순서 차이가 발견되면 verification code의 번역 오류로 처리한다.
-verification code에서 임의로 새 도메인 규칙을 추가하거나 Source Script를 verification code에 맞춰 수정하지 않는다.
+verification model 구성 과정에서 PlusCal pseudocode와 verification model 사이에
+모순, 누락, 책임 불일치 또는 실행 순서 차이가 발견되면 verification model의 decomposition·projection·추상화 오류로 처리한다.
+verification model에서 임의로 새 도메인 규칙을 추가하거나 PlusCal pseudocode를 verification model에 맞춰 수정하지 않는다.
 
-TLC 반례가 발생하면 먼저 번역 충실도와 추상화가 Source Script 의미를 보존하는지 확인한다.
-그 확인을 통과한 뒤에도 동일한 반례가 Source Script 알고리즘의 직접적인 결과로 재현될 때만 Source Script 자체의 논리 문제로 분류할 수 있다.
+TLC 반례가 발생하면 먼저 verification model의 decomposition·projection·추상화가 PlusCal pseudocode 의미를 보존하는지 확인한다.
+그 다음 PlusCal pseudocode가 Source Script를 충실하게 번역했는지 확인한다.
+두 단계가 모두 충실한 상태에서도 동일한 반례가 재현될 때만 Source Script 자체의 논리 문제로 분류할 수 있다.
 
 ---
 
-## 13. 대상 언어 구현
+## 7. 대상 언어 구현
+### 7.1 Source Code 단계
 
-구현 단계에서는 닫힌 소스 스크립트와 TLC 검증을 통과한 PlusCal/TLA+ verification code를 대상 언어의 실제 구조로 구체화한다.
+Source Code 단계에서는 PlusCal pseudocode에 이미 확정된 언어중립 실행 논리를
+대상 언어와 실제 실행 환경의 구조로 구체화한다.
+
+이 단계에서 새로 결정하는 것은 고수준 기능 의미가 아니라
+그 의미를 실제 환경에서 실행하기 위한 저수준 구현 세부다.
+
+예를 들어 다음을 이 단계에서 결정할 수 있다.
+
+- 대상 언어의 구체 타입과 자료구조
+- 메모리 표현과 ownership 방식
+- 실제 API와 library 선택
+- OS/browser/device 호출 방식
+- concurrency primitive
+- buffer와 resource 관리 방식
+- 구체 오류 객체와 언어별 예외 표현
+
+이러한 구현 결정은 Source Script와 PlusCal pseudocode에 이미 확정된 의미,
+책임, 처리 순서, 참조 관계와 Module decomposition hierarchy를 변경해서는 안 된다.
+
+구현 과정에서 상위 단계에 없는 새로운 의미 또는 decomposition이 필요하다는 사실을 발견하면
+Source Code에서 임의로 추가하지 않고 필요한 상위 단계로 돌아가 먼저 반영한다.
+
+### 7.2 구현 원칙
+
+구현 단계에서는 닫힌 소스 스크립트에서 직접 번역되어 번역 충실도와 구체화 수준이 확인된 PlusCal pseudocode를 대상 언어의 실제 구조로 구체화한다.
 
 이 단계에서 새로 작성·결정하는 것은 **대상 언어와 실제 디바이스에서 고수준 알고리즘을 실행하기 위한 저수준 구현**이다.
 source code 단계는 기능 의미나 고수준 알고리즘을 추가 개발하는 단계가 아니다.
@@ -662,35 +1213,16 @@ source code 단계는 기능 의미나 고수준 알고리즘을 추가 개발�
 - 실제 자료구조와 오류 표현을 결정한다.
 - 필요한 경우 메모리 표현, 소유권, 라이브러리, 프레임워크 등 언어와 실행 환경의 세부사항을 결정한다.
 - OS/browser/device API, concrete I/O primitive, concurrency primitive, buffer/memory strategy처럼 환경 종속적인 저수준 알고리즘을 선택하고 구현한다.
-- Source Script와 verification code에서 이미 정한 데이터 형태, schema, file/package contract, reference 관계, 처리 순서, transaction/failure 의미는 구현 편의를 이유로 다시 설계하지 않는다.
+- Source Script와 PlusCal pseudocode에서 이미 정한 데이터 형태, schema, file/package contract, reference 관계, 처리 순서, transaction/failure 의미는 구현 편의를 이유로 다시 설계하지 않는다.
 - 환경 종속 구현을 위해 representation을 바꾸더라도 상위 단계의 동일한 의미와 관계를 추적할 수 있어야 한다.
-- 이러한 구현 결정은 소스 스크립트와 verification code의 의미를 변경해서는 안 된다.
-- 핵심 상태전이와 mutation 경로는 구현의 어느 동작이 verification code의 어떤 action/state/property에 대응하는지 추적할 수 있어야 한다.
-- 컴파일러나 정적 타입 검사기가 통과했다는 사실만으로 verification code에서 확인한 invariant가 구현에서도 자동 보장된다고 간주하지 않는다.
-- 구현 세부가 새로운 공유상태, lock, callback 순서, resource lifetime, 실패 경로처럼 기존 verification code의 property에 영향을 줄 수 있는 의미를 추가하면 verification code를 보완하고 필요하면 소스 스크립트까지 돌아간다.
+- 이러한 구현 결정은 Source Script와 PlusCal pseudocode의 의미를 변경해서는 안 된다.
+- 상태 기반 검증을 수행한 범위에서는 핵심 상태전이와 mutation 경로가 구현의 어느 동작과 verification model의 어떤 action/state/property에 대응하는지 추적할 수 있어야 한다.
+- 상태 기반 검증을 수행한 경우, 컴파일러나 정적 타입 검사기가 통과했다는 사실만으로 verification model에서 확인한 invariant가 구현에서도 자동 보장된다고 간주하지 않는다.
+- 상태 기반 검증을 수행한 범위에서 구현 세부가 새로운 공유상태, lock, callback 순서, resource lifetime, 실패 경로처럼 기존 verification model의 property에 영향을 줄 수 있는 의미를 추가하면 관련 verification model을 보완하고, 그 의미가 상위 명세에도 영향을 주면 PlusCal pseudocode와 필요 시 Source Script까지 돌아간다.
 - 구현 중 상위 명세에서 결정되지 않은 의미적 문제가 발견되면 구현 코드에서 임의로 해결하지 않고 해당 상위 단계로 돌아간다.
 
 구현 후 전체 명세와 코드를 다시 대조하는 역검증은 공통 필수 절차로 두지 않는다.
-다만 verification code의 action과 실제 구현 사이의 핵심 대응 관계가 사라질 정도로 구조가 달라진 경우에는
-기존 TLC 결과를 그대로 적용하지 말고 verification code 또는 구현의 대응을 다시 확인한다.
+다만 상태 기반 검증을 수행한 범위에서 verification model의 action과 실제 구현 사이의 핵심 대응 관계가 사라질 정도로 구조가 달라진 경우에는
+기존 TLC 결과를 그대로 적용하지 말고 verification model 또는 구현의 대응을 다시 확인한다.
 
 ---
-
-## 14. 소스 스크립트의 목적
-
-소스 스크립트는 자연어 설명서나 실행 가능한 소스코드가 아니라, PlusCal/TLA+ verification code와 대상 언어 구현의 원천이 되는 구조화된 구현 명세다.
-
-따라서:
-
-- 코드에 가까운 구조가 보여야 한다.
-- 데이터 형태와 공통 식별자가 보여야 한다.
-- 입력과 출력이 보여야 한다.
-- 어떤 상태를 변경하는지 보여야 한다.
-- 참조 관계가 원천과 대상 사이의 상관관계를 잃지 않고 추적·검증 가능한 형태로 표현되어야 한다.
-- 함수와 데이터의 책임 경계가 보여야 한다.
-- 의미가 있는 처리 순서와 확정된 계산 규칙을 표현할 수 있어야 한다.
-- 대상 언어·OS·디바이스에 종속되는 저수준 실행 알고리즘은 뒤 단계로 남긴다.
-- 데이터 형태·종류, schema/contract, 의미 있는 파일 위치·경로·확장자와 외부 형식처럼 고수준 알고리즘의 의미를 결정하는 정보는 저수준 구현으로 오인해 생략하지 않는다.
-- 구현자가 다음 단계에서 새로운 고수준 알고리즘이나 도메인 규칙을 발명할 필요가 없도록 한다.
-
-최종 목표는 복잡한 시스템의 platform-specific 구현까지 소스 스크립트에서 미리 결정하는 것이 아니라, 고수준 알고리즘과 데이터·파일·schema·contract 의미를 충분히 닫고 이를 PlusCal/TLA+ verification code로 직접 번역하여 TLC로 검증한 뒤, 대상 언어와 디바이스에 맞는 저수준 알고리즘만 추가하여 자연스럽게 구현할 수 있게 하는 것이다.
