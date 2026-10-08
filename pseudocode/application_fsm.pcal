@@ -4,8 +4,8 @@ EXTENDS Naturals
 \* Partial PlusCal translation of sourcescript/application_fsm.py:
 \* SELECTION_COMMAND_ORDER and the asset/graph runtime selection contract.
 \* All IDs are symbolic; the live VFS/chart validates and resolves them before
-\* entering these commands. This module does not mutate chart/slot authority.
-CONSTANTS CsvIds, ImageIds, ObjectIndices, ObjectCsv, NoSelection
+\* entering these commands. ObjectCsvPath is the resolved VFS path of\n\* the selected object's csvId, never the numeric reference ID itself.\n\* This module does not mutate chart/slot authority.
+CONSTANTS CsvPaths, ImagePaths, ObjectIndices, ObjectCsvPath, NoSelection
 
 (*
 --algorithm FastFigureSelectionProcedure {
@@ -16,11 +16,11 @@ CONSTANTS CsvIds, ImageIds, ObjectIndices, ObjectCsv, NoSelection
     while (TRUE) {
       either {
         \* Select CSV from either project tree or graph editor.
-        with (csv \in CsvIds) {
+        with (csvPath \in CsvPaths) {
           ClearObjectForCsv:
             graphObjectIndex := NoSelection;
           SelectCsvAsset:
-            assetSelection := [kind |-> "csv", path |-> csv];
+            assetSelection := [kind |-> "csv", path |-> csvPath];
         }
       } or {
         \* Explicit graph object selection: same CSV selection authority.
@@ -28,15 +28,15 @@ CONSTANTS CsvIds, ImageIds, ObjectIndices, ObjectCsv, NoSelection
           ClearObjectForObject:
             graphObjectIndex := NoSelection;
           SelectReferencedCsv:
-            assetSelection := [kind |-> "csv", path |-> ObjectCsv[index]];
+            assetSelection := [kind |-> "csv", path |-> ObjectCsvPath[index]];
           SelectGraphObject:
             graphObjectIndex := index;
         }
       } or {
         \* Image selection is runtime-only; no slot image link is performed.
-        with (image \in ImageIds) {
+        with (imagePath \in ImagePaths) {
           SelectImageAsset:
-            assetSelection := [kind |-> "image", path |-> image];
+            assetSelection := [kind |-> "image", path |-> imagePath];
         }
       } or {
         ClearGraphObject:
