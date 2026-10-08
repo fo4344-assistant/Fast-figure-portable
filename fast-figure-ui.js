@@ -501,6 +501,15 @@
         },
         "빈 이미지 삽입",
       ),
+      React.createElement(Button, {
+        variant: "light",
+        disabled: busy || state.assetSelection !== "image" || !state.assetPath,
+        onClick: () => {
+          const slot = window.FastFigureApi.slots.readSelected();
+          if (slot?.contentType === "image")
+            window.FastFigureApi.assets.connectToSlot(state.assetPath, "image", slot.id);
+        },
+      }, "선택 이미지 추가"),
       React.createElement(Select, {
         label: "맞춤",
         value: settings?.fit || "contain",
@@ -1347,7 +1356,7 @@
           onClick: () => graphApi.setEditable(!editor.editable),
         }, editor.editable ? "편집 가능" : "원본 JSON"),
         React.createElement(Button, {
-          variant: "light", disabled: busy || !activeCsv,
+          variant: "light", disabled: busy || !activeCsv || !editor.editable,
           onClick: () => activeCsv && graphApi.addObject(activeCsv.id),
         }, "오브젝트 추가"),
       ),

@@ -1,0 +1,57 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -5196,13 +5196,6 @@
+         }
+         if (slot.contentType !== "image")
+           return status("이미지를 연결하려면 이미지 슬롯을 선택하세요.");
+-        appFSM.send("SLOT_IMAGE_LINKED", {
+-          slotId: slot.id,
+-          imageId: image.id,
+-          direction: "fsm-to-model",
+-        });
+-        updateFileAvailability();
+-        renderDashboard();
++        status(`${image.name}을 선택했습니다. 이미지 추가 버튼을 누르거나 슬롯에 드롭하세요.`);
+       }
+       function insertEmptyImageIntoSelectedSlot() {
+@@ -5656,8 +5650,9 @@
+         let chart = graphEditorChart(), objects = normalizedGraphObjects(chart);
+         let index = appFSM.state.graphObjectIndex;
+         let selectedIndex = Number.isInteger(index) && objects[index] ? index : null;
+-        let csv = getProjectCsv(objects[selectedIndex]?.csvId) ||
+-          getProjectCsv(objects[0]?.csvId) || selectedProjectCsv() ||
++        let csv = selectedProjectCsv() ||
++          getProjectCsv(objects[selectedIndex]?.csvId) ||
++          getProjectCsv(objects[0]?.csvId) ||
+           activeProject.csvFiles[0] || null;
+         return {
+           chartId: chart?.id ?? null,
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -501,6 +501,15 @@
+         },
+         "빈 이미지 삽입",
+       ),
++      React.createElement(Button, {
++        variant: "light",
++        disabled: busy || state.assetSelection !== "image" || !state.assetPath,
++        onClick: () => {
++          const slot = window.FastFigureApi.slots.readSelected();
++          if (slot?.contentType === "image")
++            window.FastFigureApi.assets.connectToSlot(state.assetPath, "image", slot.id);
++        },
++      }, "선택 이미지 추가"),
+       React.createElement(Select, {
+         label: "맞춤",
+         value: settings?.fit || "contain",
+@@ -1347,7 +1356,7 @@
+           onClick: () => graphApi.setEditable(!editor.editable),
+         }, editor.editable ? "편집 가능" : "원본 JSON"),
+         React.createElement(Button, {
+-          variant: "light", disabled: busy || !activeCsv,
++          variant: "light", disabled: busy || !activeCsv || !editor.editable,
+           onClick: () => activeCsv && graphApi.addObject(activeCsv.id),
+         }, "오브젝트 추가"),
+       ),
