@@ -5,11 +5,9 @@
 현재 정책 원천:
 
 - `source-script-policy.md`
-  - 사용자 지시에 따라 개정된 `v0.2.2`
-  - Source Script → PlusCal/TLA+ verification code → TLC 검사 → 대상 언어 구현 순서
-  - Source Script 닫힘 판정
-  - Source Script의 직접 실행형 번역, 제한적 생략/추상화 규칙, TLC 검증 기록
-  - verification code의 독립 재설계 금지와 Source Script 의미 충돌 시 번역 오류 우선 규칙
+  - 사용자 지시에 따라 개정된 `v0.2.6`
+  - Source Script → PlusCal/TLA+ pseudo code → TLC 검사 (선택) → Source Code (대상 언어 구현) -> Source Script 개선 순서
+  - verification code의 독립 재설계 금지
   - 고수준 알고리즘·데이터/schema/file contract와 언어·디바이스 종속 저수준 구현의 단계 경계
   - Source of Truth, 참조 무결성, 최소 구현, 확정/미확정 규칙, 단계 간 번역 원칙
 
