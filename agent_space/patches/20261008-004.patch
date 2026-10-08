@@ -1,0 +1,27 @@
+diff --git a/sourcescript/application_fsm.py b/sourcescript/application_fsm.py
+--- a/sourcescript/application_fsm.py
++++ b/sourcescript/application_fsm.py
+@@ -81,5 +81,22 @@
+     "SELECT_SLOT": "slot 선택이 생기면 열린 overlay를 닫는다.",
+ }
+ 
+-SELECTION_INVARIANTS = {
++SELECTION_COMMAND_ORDER = {
++    "selectCsv": (
++        "VFS에서 CSV를 resolve하고 유효할 때만 graphObject 선택을 해제한 다음 "
++        "같은 appFSM assetSelection/assetPath를 CSV로 전환한다. "
++        "트리와 그래프 편집기의 선택 진입점은 동일한 순서를 사용한다."
++    ),
++    "selectObject": (
++        "현재 선택 chart의 유효 index와 그 object.csvId의 실제 CSV 참조를 확인한다. "
++        "참조 CSV를 현재 단일 asset selection으로 선택하고, "
++        "그 선택으로 발생하는 graphObject 해제 이후 SELECT_GRAPH_OBJECT를 적용한다."
++    ),
++    "selectImage": (
++        "VFS에서 이미지 참조를 확인한 다음 asset selection만 갱신한다. "
++        "slot imageId는 명시적 connectToSlot 또는 drop event에서만 변경한다."
++    ),
++}
++
++SELECTION_INVARIANTS = {
+     "asset": (
