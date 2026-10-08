@@ -5522,8 +5522,8 @@
       function graphEditorSelectObject(index) {
         let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
         let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
-        appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
         if (selected !== null) graphEditorSelectCsv(objects[selected].csvId);
+        appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
         appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
         return selected;
       }
