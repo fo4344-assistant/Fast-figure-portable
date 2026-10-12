@@ -33,6 +33,8 @@ If a required meaning is absent or contradictory, translation stops and returns 
 | `sourcescript/api_ui.py` | `api_ui.pcal` | dashboard drop orchestration portion translated |
 | `sourcescript/project_state.py` | `project_state.pcal` | authority/validation/reference lifecycle translated |
 | `sourcescript/graphs.py` | `graphs.pcal` | chart/object/editable/import-export mutation flow translated |
+| `sourcescript/assets_files.py` | `assets_files.pcal` | VFS/import/delete/move/package transaction flow translated |
+| `sourcescript/layout_annotations_export.py` | `layout_annotations_export.pcal` | grid/slot-local annotation/export flow translated |
 | other Source Script modules | pending | not yet translated to r13 PlusCal |
 
 The Source Script hierarchy remains `system.py` as the system root with responsibility modules as siblings. PlusCal files do not introduce new semantic parent/child modules.

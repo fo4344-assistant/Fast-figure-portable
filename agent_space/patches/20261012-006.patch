@@ -1,0 +1,489 @@
+diff --git a/pseudocode/assets_files.pcal b/pseudocode/assets_files.pcal
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/assets_files.pcal
+@@ -0,0 +1,237 @@
++---- MODULE FastFigureAssetsFilesPseudocode ----
++EXTENDS Naturals, Sequences, FiniteSets
++
++\* r13 translation of sourcescript/assets_files.py.
++\* All persistent changes are candidate-first and commit only after project validation.
++CONSTANTS NoReference
++
++(*
++--algorithm FastFigureAssetsFiles {
++  variables projectAuthority = ReadActiveProject(),
++            candidate = NoReference,
++            result = NoReference,
++            command = NoReference;
++
++  procedure ResolveVfs(path, state) {
++  NormalizeRequestedPath:
++    with (canonical = NormalizeProjectPath(path)) {
++    ResolveExactlyOne:
++      result := ResolveUniqueDirectoryCsvOrImage(canonical, state);
++    };
++    return;
++  }
++
++  procedure BuildImportCollision(file, directory, reservedPaths) {
++  ClassifyImport:
++    with (kind = ClassifyAssetFile(file),
++          path = CandidateAssetPath(file, directory)) {
++      if (kind # NoReference /\ DirectoryExistsAndNotTrash(directory)) {
++      InspectCollision:
++        result := CollisionDecision(
++          kind,
++          path,
++          ResolveVfsAgainstProject(path),
++          reservedPaths);
++      } else {
++      RejectImportTarget:
++        result := NoReference;
++      };
++    };
++    return;
++  }
++
++  procedure ResolveImportPlan(model, choice, reservedPaths) {
++  AcceptAvailablePath:
++    if (model.mode = "available") {
++      result := [path |-> model.path, replaceId |-> NoReference];
++    } else {
++      if (choice = "replace" /\ model.replaceAllowed = TRUE) {
++      KeepExistingIdentity:
++        result := [path |-> model.path, replaceId |-> model.replaceId];
++      } else {
++      AllocateUniquePath:
++        result := [
++          path |-> ProjectVfsUniquePath(model.path, projectAuthority, reservedPaths),
++          replaceId |-> NoReference
++        ];
++      };
++    };
++    return;
++  }
++
++  procedure ImportBatch(files, directory, planImport) {
++  ValidateBatchTarget:
++    assert DirectoryExistsAndNotTrash(directory);
++  ReadBatchCandidates:
++    candidate := ReadAndParseAllAssetCandidates(files);
++  ResolveBatchPlans:
++    candidate := ApplyCollisionPlans(candidate, planImport, projectAuthority);
++  BuildWholeImportCandidate:
++    candidate := ApplyAssetsAndNextIdsToProject(candidate, projectAuthority);
++  ApplyOptionalSlotTarget:
++    candidate := ApplyRequestedSlotImportCandidate(candidate);
++  ValidateWholeImport:
++    assert ValidateWholeProject(candidate);
++  CommitWholeImport:
++    projectAuthority := candidate;
++    result := ImportResult(candidate);
++    return;
++  }
++
++  procedure DeleteAsset(target) {
++  ResolveDeleteTarget:
++    with (asset = ResolveCurrentAsset(target)) {
++      if (asset # NoReference) {
++      CollectDeleteReferences:
++        with (refs = CollectAssetReferences(asset, projectAuthority)) {
++        BuildDeleteCandidate:
++          candidate := RemoveAssetAndDetachExactly(refs, asset, projectAuthority);
++        ValidateDeleteCandidate:
++          assert ValidateWholeProject(candidate);
++        CommitDeleteCandidate:
++          projectAuthority := candidate;
++          result := TRUE;
++        };
++      };
++    };
++    return;
++  }
++
++  procedure MoveNode(plan, useUniqueName) {
++  ReresolveMoveInputs:
++    with (fresh = RebuildMovePlanFromCurrentProject(plan, projectAuthority)) {
++      if (fresh # NoReference) {
++      ComputeFinalDestination:
++        candidate := ApplyMoveDestination(fresh, useUniqueName, projectAuthority);
++      DetachTrashReferences:
++        candidate := DetachReferencesIfEnteringTrash(candidate);
++      MoveDirectoryDescendants:
++        candidate := MoveDescendantsIfDirectory(candidate);
++      ValidateMoveCandidate:
++        assert ValidateMoveCollisionFixedCycleAndReferences(candidate);
++      CommitMove:
++        projectAuthority := candidate;
++        result := FinalMovePath(candidate);
++      };
++    };
++    return;
++  }
++
++  procedure EmptyTrash() {
++  ResolveTrashSubtree:
++    with (trashObjects = ProjectVfsDescendants("/assets/trash", projectAuthority)) {
++    CollectTrashReferences:
++      with (refs = CollectReferencesForObjects(trashObjects, projectAuthority)) {
++      BuildTrashCandidate:
++        candidate := RemoveTrashObjectsAndReferences(trashObjects, refs, projectAuthority);
++      ValidateTrashCandidate:
++        assert ValidateWholeProject(candidate);
++      CommitTrashCandidate:
++        projectAuthority := candidate;
++        result := TrashRemovalResult(trashObjects, refs);
++      };
++    };
++    return;
++  }
++
++  procedure BuildFfpx() {
++  ValidateExportProject:
++    assert ValidateWholeProject(projectAuthority);
++  SnapshotExportAuthority:
++    candidate := ReadProjectSnapshot(projectAuthority);
++  ExcludeTrash:
++    candidate := RemoveTrashFromExportSnapshot(candidate);
++  ValidateExportReferences:
++    assert ExportReferencesResolve(candidate);
++  EncodeDocuments:
++    result := BuildFfpxEntriesWithTypedXmlAndCopiedBytes(candidate);
++    return;
++  }
++
++  procedure ReadFfpx(file) {
++  ValidateContainer:
++    assert ValidateStoreZipPathsCrcAndVersion(file);
++  DecodeDocuments:
++    candidate := DecodeRequiredTypedXmlDocuments(file);
++  RestoreCopiedAssets:
++    candidate := RestoreAndParseReferencedAssetBytes(candidate, file);
++  PreserveTopologyForValidation:
++    result := candidate;
++    return;
++  }
++
++  procedure ImportProject(file) {
++  ReadProjectPackage:
++    candidate := ReadFfpxCandidate(file);
++  BuildValidatedProject:
++    candidate := BuildProjectObject(candidate);
++  ValidateImportedProject:
++    assert ValidateWholeProject(candidate);
++  EmitProjectLoaded:
++    command := [name |-> "PROJECT_LOADED", project |-> candidate];
++    return;
++  }
++
++  procedure BuildFfsx(slot, chart) {
++  ResolveReferencedCsv:
++    candidate := CollectOnlyChartReferencedCsv(slot, chart, projectAuthority);
++  RemapPackageIds:
++    candidate := RemapCsvAndGraphObjectIdsToPackageLocal(candidate);
++  EncodeFfsx:
++    result := BuildFfsxEntries(candidate);
++    return;
++  }
++
++  procedure ReadFfsx(file) {
++  ValidateFfsxContainer:
++    assert ValidateFfsxSchemaVersionAndEntries(file);
++  RestoreFfsxPayload:
++    candidate := DecodeFfsxChartCaptionAndCsv(file);
++  ValidateFfsxReferences:
++    assert ValidateFfsxGraphObjectCsvReferences(candidate);
++  ValidateFfsxChart:
++    assert ValidateChartModel(candidate.chart);
++  ReturnFfsxPayload:
++    result := candidate;
++    return;
++  }
++
++  procedure ApplyFfsx(slotPayload, targetSlotId) {
++  ResolveCurrentTargetSlot:
++    with (target = ResolveSlot(targetSlotId, projectAuthority)) {
++      if (target # NoReference) {
++      AllocateProjectCsvIds:
++        candidate := AllocateImportedCsvIdsAndPaths(slotPayload, projectAuthority);
++      RemapChartCsvReferences:
++        candidate := RemapFfsxChartToProjectCsv(candidate);
++      AllocateChartIdAndOwner:
++        candidate := AttachNewChartToTargetSlot(candidate, target);
++      ApplySlotCaption:
++        candidate := ApplyImportedSlotCaption(candidate, target);
++      ValidateFfsxProjectCandidate:
++        assert ValidateWholeProject(candidate);
++      CommitFfsxCandidate:
++        projectAuthority := candidate;
++        result := FfsxCommitResult(candidate);
++      };
++    };
++    return;
++  }
++
++  Main:
++    while (TRUE) {
++      either {
++        with (target = RequestedDeleteTarget()) {
++          call DeleteAsset(target);
++        };
++      } or {
++        with (plan = RequestedMovePlan(), unique = RequestedUniqueNameFlag()) {
++          call MoveNode(plan, unique);
++        };
++      } or {
++        call EmptyTrash();
++      };
++    };
++}
++*)
++====
+diff --git a/pseudocode/layout_annotations_export.pcal b/pseudocode/layout_annotations_export.pcal
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/layout_annotations_export.pcal
+@@ -0,0 +1,230 @@
++---- MODULE FastFigureLayoutAnnotationsExportPseudocode ----
++EXTENDS Naturals, Sequences, FiniteSets
++
++\* r13 translation of sourcescript/layout_annotations_export.py.
++\* Layout/content changes are candidate-first; export snapshots are read-only.
++CONSTANTS NoReference
++
++(*
++--algorithm FastFigureLayoutAnnotationsExport {
++  variables projectAuthority = ReadActiveProject(),
++            candidate = NoReference,
++            snapshot = NoReference,
++            result = NoReference;
++
++  procedure BuildGridResize(rows, cols) {
++  ValidateGridRequest:
++    if (~(rows \in 1..8 /\ cols \in 1..8)) {
++      result := NoReference;
++      return;
++    };
++  PreserveExistingGrid:
++    candidate := CopyProject(projectAuthority);
++  HandleGridExpand:
++    if (rows >= projectAuthority.layout.gridRows
++        /\ cols >= projectAuthority.layout.gridCols) {
++      candidate := AddDefaultSlotsOnlyAtNewCoordinates(candidate, rows, cols);
++    } else {
++    CheckShrinkBoundary:
++      assert EveryRemovedOrCrossingSlotIsDefaultEmptyOneByOne(candidate, rows, cols);
++    RemoveSafeCells:
++      candidate := RemoveOnlyDefaultEmptyCells(candidate, rows, cols);
++    };
++  SetGridDimensions:
++    candidate := SetGridRowsCols(candidate, rows, cols);
++  ValidateGridCandidate:
++    assert ValidateWholeProject(candidate);
++  ReturnGridCandidate:
++    result := candidate;
++    return;
++  }
++
++  procedure SetGrid(rows, cols) {
++  BuildCandidate:
++    call BuildGridResize(rows, cols);
++  CommitGridIfValid:
++    if (result # NoReference) {
++      projectAuthority := result;
++      result := ReconcileSelectedSlotAfterGridCommit(result);
++    };
++    return;
++  }
++
++  procedure MergeSlots(slotIds) {
++  ResolveMergeRectangle:
++    with (slots = ResolveVisibleSlots(slotIds, projectAuthority)) {
++      assert FormsCompleteRectangle(slots);
++    CheckLocalPayloadCount:
++      assert Cardinality(NonDefaultLocalSlots(slots)) <= 1;
++    BuildAnchorCandidate:
++      candidate := CopyProject(projectAuthority);
++      candidate := MoveWholeLocalPayloadToTopLeftAnchor(candidate, slots);
++    ResetCoveredSlots:
++      candidate := ResetCoveredSlotsToDefaultsAndHide(candidate, slots);
++    SetAnchorSpan:
++      candidate := SetAnchorRectangleSpan(candidate, slots);
++    ValidateMergeCandidate:
++      assert ValidateWholeProject(candidate);
++    CommitMerge:
++      projectAuthority := candidate;
++      result := MergeResult(candidate);
++    };
++    return;
++  }
++
++  procedure SplitSlots(slotIds) {
++  ResolveMergedAnchors:
++    with (anchors = ResolveRequestedMergedAnchors(slotIds, projectAuthority)) {
++    PreserveAnchorPayload:
++      candidate := CopyProject(projectAuthority);
++    RestoreCoveredDefaults:
++      candidate := RestoreCoveredCellsAsVisibleDefaultSlots(candidate, anchors);
++    ResetAnchorSpan:
++      candidate := ResetAnchorsToOneByOne(candidate, anchors);
++    ValidateSplitCandidate:
++      assert ValidateWholeProject(candidate);
++    CommitSplit:
++      projectAuthority := candidate;
++      result := SplitResult(candidate);
++    };
++    return;
++  }
++
++  procedure SetImageSettings(values) {
++  ResolveSelectedImageSlot:
++    with (slot = ResolveSelectedImageSlot(projectAuthority)) {
++      if (slot # NoReference) {
++      NormalizeImageSettings:
++        candidate := UpdateOnlySelectedSlotImageSettings(projectAuthority, slot, values);
++      ValidateImageSettingsCandidate:
++        assert ValidateWholeProject(candidate);
++      CommitImageSettings:
++        projectAuthority := candidate;
++        result := ReadImageEditorProjection(projectAuthority, slot.id);
++      };
++    };
++    return;
++  }
++
++  procedure SetLabelPosition(x, y) {
++  NormalizeLabelPosition:
++    assert IsFinitePosition(x, y);
++  CommitSameAuthoritativePosition:
++    candidate := SetProjectLabelPosition(projectAuthority, x, y);
++    assert ValidateWholeProject(candidate);
++    projectAuthority := candidate;
++    result := ReadLabelProjection(projectAuthority);
++    return;
++  }
++
++  procedure FinishLabelInteraction() {
++  NoSecondPositionCommit:
++    result := InteractionCompletionOnly();
++    return;
++  }
++
++  procedure SetSlotCaption(slotId, text) {
++  ResolveCaptionSlot:
++    with (slot = ResolveSlot(slotId, projectAuthority)) {
++      if (slot # NoReference) {
++      BuildSlotCaptionCandidate:
++        candidate := SetOnlySlotCaption(projectAuthority, slot.id, text);
++      ValidateSlotCaptionCandidate:
++        assert ValidateWholeProject(candidate);
++      CommitSlotCaption:
++        projectAuthority := candidate;
++        result := ReadSlotCaptionProjection(projectAuthority, slot.id);
++      };
++    };
++    return;
++  }
++
++  procedure InsertSlotCaptions(slotIds) {
++  ResolveOrderedCaptionSlots:
++    with (slots = ResolveSlotsInLayoutOrder(slotIds, projectAuthority)) {
++    CalculateCaptionProjection:
++      with (text = ProjectNonEmptySlotCaptions(slots)) {
++      BuildGlobalCaptionCandidate:
++        candidate := InsertIntoGlobalCaption(projectAuthority, text);
++      ValidateGlobalCaptionCandidate:
++        assert ValidateWholeProject(candidate);
++      CommitGlobalCaption:
++        projectAuthority := candidate;
++        result := ReadGlobalCaptionProjection(projectAuthority);
++      };
++    };
++    return;
++  }
++
++  procedure SetExportSettings(values) {
++  NormalizeExportCandidate:
++    candidate := NormalizeExportSettings(projectAuthority, values);
++  ValidateExportSettingsCandidate:
++    assert ValidateWholeProject(candidate);
++  CommitExportSettings:
++    projectAuthority := candidate;
++    result := ReadExportSettingsProjection(projectAuthority);
++    return;
++  }
++
++  procedure CreateExportSnapshot() {
++  SnapshotPersistentInputs:
++    snapshot := SnapshotProjectObjects(projectAuthority);
++  ComputeTargetGeometry:
++    snapshot := AddTargetGeometryFromPersistentExportSettings(snapshot);
++  ReturnReadOnlySnapshot:
++    result := snapshot;
++    return;
++  }
++
++  procedure ExportTarget() {
++  CreateTargetSnapshot:
++    call CreateExportSnapshot();
++    snapshot := result;
++  ResolveOutputGeometry:
++    snapshot := ResolveAutoOrExplicitHeight(snapshot);
++  CheckRasterLimits:
++    if (~WithinRasterLimits(snapshot)) {
++      result := [status |-> "rejected"];
++      return;
++    };
++  RenderTargetSlots:
++    snapshot := RenderVisibleChartsImagesLabelsCaptions(snapshot);
++  EncodeAndDownload:
++    result := EncodeRasterWithDpiAndDownload(snapshot);
++    return;
++  }
++
++  procedure CaptureCurrent() {
++  ReadCurrentViewportOnce:
++    snapshot := ReadRenderedViewportForOneShotCapture();
++  ReadEncodingDefaults:
++    snapshot := AddPersistentDpiAndFormatDefaults(snapshot, projectAuthority);
++  EncodeCurrentCapture:
++    result := EncodeRasterAndDownload(snapshot);
++    return;
++  }
++
++  Main:
++    while (TRUE) {
++      either {
++        with (rows = RequestedRows(), cols = RequestedCols()) {
++          call SetGrid(rows, cols);
++        };
++      } or {
++        with (ids = RequestedSlotIds()) {
++          call MergeSlots(ids);
++        };
++      } or {
++        with (ids = RequestedSlotIds()) {
++          call SplitSlots(ids);
++        };
++      } or {
++        call ExportTarget();
++      } or {
++        call CaptureCurrent();
++      };
++    };
++}
++*)
++====
+diff --git a/pseudocode/README.md b/pseudocode/README.md
+--- a/pseudocode/README.md
++++ b/pseudocode/README.md
+@@ -33,6 +33,8 @@
+ | `sourcescript/api_ui.py` | `api_ui.pcal` | dashboard drop orchestration portion translated |
+ | `sourcescript/project_state.py` | `project_state.pcal` | authority/validation/reference lifecycle translated |
+ | `sourcescript/graphs.py` | `graphs.pcal` | chart/object/editable/import-export mutation flow translated |
++| `sourcescript/assets_files.py` | `assets_files.pcal` | VFS/import/delete/move/package transaction flow translated |
++| `sourcescript/layout_annotations_export.py` | `layout_annotations_export.pcal` | grid/slot-local annotation/export flow translated |
+ | other Source Script modules | pending | not yet translated to r13 PlusCal |
+ 
+ The Source Script hierarchy remains `system.py` as the system root with responsibility modules as siblings. PlusCal files do not introduce new semantic parent/child modules.

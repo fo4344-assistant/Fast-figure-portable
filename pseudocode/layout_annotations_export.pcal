@@ -1,0 +1,230 @@
+---- MODULE FastFigureLayoutAnnotationsExportPseudocode ----
+EXTENDS Naturals, Sequences, FiniteSets
+
+\* r13 translation of sourcescript/layout_annotations_export.py.
+\* Layout/content changes are candidate-first; export snapshots are read-only.
+CONSTANTS NoReference
+
+(*
+--algorithm FastFigureLayoutAnnotationsExport {
+  variables projectAuthority = ReadActiveProject(),
+            candidate = NoReference,
+            snapshot = NoReference,
+            result = NoReference;
+
+  procedure BuildGridResize(rows, cols) {
+  ValidateGridRequest:
+    if (~(rows \in 1..8 /\ cols \in 1..8)) {
+      result := NoReference;
+      return;
+    };
+  PreserveExistingGrid:
+    candidate := CopyProject(projectAuthority);
+  HandleGridExpand:
+    if (rows >= projectAuthority.layout.gridRows
+        /\ cols >= projectAuthority.layout.gridCols) {
+      candidate := AddDefaultSlotsOnlyAtNewCoordinates(candidate, rows, cols);
+    } else {
+    CheckShrinkBoundary:
+      assert EveryRemovedOrCrossingSlotIsDefaultEmptyOneByOne(candidate, rows, cols);
+    RemoveSafeCells:
+      candidate := RemoveOnlyDefaultEmptyCells(candidate, rows, cols);
+    };
+  SetGridDimensions:
+    candidate := SetGridRowsCols(candidate, rows, cols);
+  ValidateGridCandidate:
+    assert ValidateWholeProject(candidate);
+  ReturnGridCandidate:
+    result := candidate;
+    return;
+  }
+
+  procedure SetGrid(rows, cols) {
+  BuildCandidate:
+    call BuildGridResize(rows, cols);
+  CommitGridIfValid:
+    if (result # NoReference) {
+      projectAuthority := result;
+      result := ReconcileSelectedSlotAfterGridCommit(result);
+    };
+    return;
+  }
+
+  procedure MergeSlots(slotIds) {
+  ResolveMergeRectangle:
+    with (slots = ResolveVisibleSlots(slotIds, projectAuthority)) {
+      assert FormsCompleteRectangle(slots);
+    CheckLocalPayloadCount:
+      assert Cardinality(NonDefaultLocalSlots(slots)) <= 1;
+    BuildAnchorCandidate:
+      candidate := CopyProject(projectAuthority);
+      candidate := MoveWholeLocalPayloadToTopLeftAnchor(candidate, slots);
+    ResetCoveredSlots:
+      candidate := ResetCoveredSlotsToDefaultsAndHide(candidate, slots);
+    SetAnchorSpan:
+      candidate := SetAnchorRectangleSpan(candidate, slots);
+    ValidateMergeCandidate:
+      assert ValidateWholeProject(candidate);
+    CommitMerge:
+      projectAuthority := candidate;
+      result := MergeResult(candidate);
+    };
+    return;
+  }
+
+  procedure SplitSlots(slotIds) {
+  ResolveMergedAnchors:
+    with (anchors = ResolveRequestedMergedAnchors(slotIds, projectAuthority)) {
+    PreserveAnchorPayload:
+      candidate := CopyProject(projectAuthority);
+    RestoreCoveredDefaults:
+      candidate := RestoreCoveredCellsAsVisibleDefaultSlots(candidate, anchors);
+    ResetAnchorSpan:
+      candidate := ResetAnchorsToOneByOne(candidate, anchors);
+    ValidateSplitCandidate:
+      assert ValidateWholeProject(candidate);
+    CommitSplit:
+      projectAuthority := candidate;
+      result := SplitResult(candidate);
+    };
+    return;
+  }
+
+  procedure SetImageSettings(values) {
+  ResolveSelectedImageSlot:
+    with (slot = ResolveSelectedImageSlot(projectAuthority)) {
+      if (slot # NoReference) {
+      NormalizeImageSettings:
+        candidate := UpdateOnlySelectedSlotImageSettings(projectAuthority, slot, values);
+      ValidateImageSettingsCandidate:
+        assert ValidateWholeProject(candidate);
+      CommitImageSettings:
+        projectAuthority := candidate;
+        result := ReadImageEditorProjection(projectAuthority, slot.id);
+      };
+    };
+    return;
+  }
+
+  procedure SetLabelPosition(x, y) {
+  NormalizeLabelPosition:
+    assert IsFinitePosition(x, y);
+  CommitSameAuthoritativePosition:
+    candidate := SetProjectLabelPosition(projectAuthority, x, y);
+    assert ValidateWholeProject(candidate);
+    projectAuthority := candidate;
+    result := ReadLabelProjection(projectAuthority);
+    return;
+  }
+
+  procedure FinishLabelInteraction() {
+  NoSecondPositionCommit:
+    result := InteractionCompletionOnly();
+    return;
+  }
+
+  procedure SetSlotCaption(slotId, text) {
+  ResolveCaptionSlot:
+    with (slot = ResolveSlot(slotId, projectAuthority)) {
+      if (slot # NoReference) {
+      BuildSlotCaptionCandidate:
+        candidate := SetOnlySlotCaption(projectAuthority, slot.id, text);
+      ValidateSlotCaptionCandidate:
+        assert ValidateWholeProject(candidate);
+      CommitSlotCaption:
+        projectAuthority := candidate;
+        result := ReadSlotCaptionProjection(projectAuthority, slot.id);
+      };
+    };
+    return;
+  }
+
+  procedure InsertSlotCaptions(slotIds) {
+  ResolveOrderedCaptionSlots:
+    with (slots = ResolveSlotsInLayoutOrder(slotIds, projectAuthority)) {
+    CalculateCaptionProjection:
+      with (text = ProjectNonEmptySlotCaptions(slots)) {
+      BuildGlobalCaptionCandidate:
+        candidate := InsertIntoGlobalCaption(projectAuthority, text);
+      ValidateGlobalCaptionCandidate:
+        assert ValidateWholeProject(candidate);
+      CommitGlobalCaption:
+        projectAuthority := candidate;
+        result := ReadGlobalCaptionProjection(projectAuthority);
+      };
+    };
+    return;
+  }
+
+  procedure SetExportSettings(values) {
+  NormalizeExportCandidate:
+    candidate := NormalizeExportSettings(projectAuthority, values);
+  ValidateExportSettingsCandidate:
+    assert ValidateWholeProject(candidate);
+  CommitExportSettings:
+    projectAuthority := candidate;
+    result := ReadExportSettingsProjection(projectAuthority);
+    return;
+  }
+
+  procedure CreateExportSnapshot() {
+  SnapshotPersistentInputs:
+    snapshot := SnapshotProjectObjects(projectAuthority);
+  ComputeTargetGeometry:
+    snapshot := AddTargetGeometryFromPersistentExportSettings(snapshot);
+  ReturnReadOnlySnapshot:
+    result := snapshot;
+    return;
+  }
+
+  procedure ExportTarget() {
+  CreateTargetSnapshot:
+    call CreateExportSnapshot();
+    snapshot := result;
+  ResolveOutputGeometry:
+    snapshot := ResolveAutoOrExplicitHeight(snapshot);
+  CheckRasterLimits:
+    if (~WithinRasterLimits(snapshot)) {
+      result := [status |-> "rejected"];
+      return;
+    };
+  RenderTargetSlots:
+    snapshot := RenderVisibleChartsImagesLabelsCaptions(snapshot);
+  EncodeAndDownload:
+    result := EncodeRasterWithDpiAndDownload(snapshot);
+    return;
+  }
+
+  procedure CaptureCurrent() {
+  ReadCurrentViewportOnce:
+    snapshot := ReadRenderedViewportForOneShotCapture();
+  ReadEncodingDefaults:
+    snapshot := AddPersistentDpiAndFormatDefaults(snapshot, projectAuthority);
+  EncodeCurrentCapture:
+    result := EncodeRasterAndDownload(snapshot);
+    return;
+  }
+
+  Main:
+    while (TRUE) {
+      either {
+        with (rows = RequestedRows(), cols = RequestedCols()) {
+          call SetGrid(rows, cols);
+        };
+      } or {
+        with (ids = RequestedSlotIds()) {
+          call MergeSlots(ids);
+        };
+      } or {
+        with (ids = RequestedSlotIds()) {
+          call SplitSlots(ids);
+        };
+      } or {
+        call ExportTarget();
+      } or {
+        call CaptureCurrent();
+      };
+    };
+}
+*)
+====

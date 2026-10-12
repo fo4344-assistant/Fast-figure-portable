@@ -1,0 +1,237 @@
+---- MODULE FastFigureAssetsFilesPseudocode ----
+EXTENDS Naturals, Sequences, FiniteSets
+
+\* r13 translation of sourcescript/assets_files.py.
+\* All persistent changes are candidate-first and commit only after project validation.
+CONSTANTS NoReference
+
+(*
+--algorithm FastFigureAssetsFiles {
+  variables projectAuthority = ReadActiveProject(),
+            candidate = NoReference,
+            result = NoReference,
+            command = NoReference;
+
+  procedure ResolveVfs(path, state) {
+  NormalizeRequestedPath:
+    with (canonical = NormalizeProjectPath(path)) {
+    ResolveExactlyOne:
+      result := ResolveUniqueDirectoryCsvOrImage(canonical, state);
+    };
+    return;
+  }
+
+  procedure BuildImportCollision(file, directory, reservedPaths) {
+  ClassifyImport:
+    with (kind = ClassifyAssetFile(file),
+          path = CandidateAssetPath(file, directory)) {
+      if (kind # NoReference /\ DirectoryExistsAndNotTrash(directory)) {
+      InspectCollision:
+        result := CollisionDecision(
+          kind,
+          path,
+          ResolveVfsAgainstProject(path),
+          reservedPaths);
+      } else {
+      RejectImportTarget:
+        result := NoReference;
+      };
+    };
+    return;
+  }
+
+  procedure ResolveImportPlan(model, choice, reservedPaths) {
+  AcceptAvailablePath:
+    if (model.mode = "available") {
+      result := [path |-> model.path, replaceId |-> NoReference];
+    } else {
+      if (choice = "replace" /\ model.replaceAllowed = TRUE) {
+      KeepExistingIdentity:
+        result := [path |-> model.path, replaceId |-> model.replaceId];
+      } else {
+      AllocateUniquePath:
+        result := [
+          path |-> ProjectVfsUniquePath(model.path, projectAuthority, reservedPaths),
+          replaceId |-> NoReference
+        ];
+      };
+    };
+    return;
+  }
+
+  procedure ImportBatch(files, directory, planImport) {
+  ValidateBatchTarget:
+    assert DirectoryExistsAndNotTrash(directory);
+  ReadBatchCandidates:
+    candidate := ReadAndParseAllAssetCandidates(files);
+  ResolveBatchPlans:
+    candidate := ApplyCollisionPlans(candidate, planImport, projectAuthority);
+  BuildWholeImportCandidate:
+    candidate := ApplyAssetsAndNextIdsToProject(candidate, projectAuthority);
+  ApplyOptionalSlotTarget:
+    candidate := ApplyRequestedSlotImportCandidate(candidate);
+  ValidateWholeImport:
+    assert ValidateWholeProject(candidate);
+  CommitWholeImport:
+    projectAuthority := candidate;
+    result := ImportResult(candidate);
+    return;
+  }
+
+  procedure DeleteAsset(target) {
+  ResolveDeleteTarget:
+    with (asset = ResolveCurrentAsset(target)) {
+      if (asset # NoReference) {
+      CollectDeleteReferences:
+        with (refs = CollectAssetReferences(asset, projectAuthority)) {
+        BuildDeleteCandidate:
+          candidate := RemoveAssetAndDetachExactly(refs, asset, projectAuthority);
+        ValidateDeleteCandidate:
+          assert ValidateWholeProject(candidate);
+        CommitDeleteCandidate:
+          projectAuthority := candidate;
+          result := TRUE;
+        };
+      };
+    };
+    return;
+  }
+
+  procedure MoveNode(plan, useUniqueName) {
+  ReresolveMoveInputs:
+    with (fresh = RebuildMovePlanFromCurrentProject(plan, projectAuthority)) {
+      if (fresh # NoReference) {
+      ComputeFinalDestination:
+        candidate := ApplyMoveDestination(fresh, useUniqueName, projectAuthority);
+      DetachTrashReferences:
+        candidate := DetachReferencesIfEnteringTrash(candidate);
+      MoveDirectoryDescendants:
+        candidate := MoveDescendantsIfDirectory(candidate);
+      ValidateMoveCandidate:
+        assert ValidateMoveCollisionFixedCycleAndReferences(candidate);
+      CommitMove:
+        projectAuthority := candidate;
+        result := FinalMovePath(candidate);
+      };
+    };
+    return;
+  }
+
+  procedure EmptyTrash() {
+  ResolveTrashSubtree:
+    with (trashObjects = ProjectVfsDescendants("/assets/trash", projectAuthority)) {
+    CollectTrashReferences:
+      with (refs = CollectReferencesForObjects(trashObjects, projectAuthority)) {
+      BuildTrashCandidate:
+        candidate := RemoveTrashObjectsAndReferences(trashObjects, refs, projectAuthority);
+      ValidateTrashCandidate:
+        assert ValidateWholeProject(candidate);
+      CommitTrashCandidate:
+        projectAuthority := candidate;
+        result := TrashRemovalResult(trashObjects, refs);
+      };
+    };
+    return;
+  }
+
+  procedure BuildFfpx() {
+  ValidateExportProject:
+    assert ValidateWholeProject(projectAuthority);
+  SnapshotExportAuthority:
+    candidate := ReadProjectSnapshot(projectAuthority);
+  ExcludeTrash:
+    candidate := RemoveTrashFromExportSnapshot(candidate);
+  ValidateExportReferences:
+    assert ExportReferencesResolve(candidate);
+  EncodeDocuments:
+    result := BuildFfpxEntriesWithTypedXmlAndCopiedBytes(candidate);
+    return;
+  }
+
+  procedure ReadFfpx(file) {
+  ValidateContainer:
+    assert ValidateStoreZipPathsCrcAndVersion(file);
+  DecodeDocuments:
+    candidate := DecodeRequiredTypedXmlDocuments(file);
+  RestoreCopiedAssets:
+    candidate := RestoreAndParseReferencedAssetBytes(candidate, file);
+  PreserveTopologyForValidation:
+    result := candidate;
+    return;
+  }
+
+  procedure ImportProject(file) {
+  ReadProjectPackage:
+    candidate := ReadFfpxCandidate(file);
+  BuildValidatedProject:
+    candidate := BuildProjectObject(candidate);
+  ValidateImportedProject:
+    assert ValidateWholeProject(candidate);
+  EmitProjectLoaded:
+    command := [name |-> "PROJECT_LOADED", project |-> candidate];
+    return;
+  }
+
+  procedure BuildFfsx(slot, chart) {
+  ResolveReferencedCsv:
+    candidate := CollectOnlyChartReferencedCsv(slot, chart, projectAuthority);
+  RemapPackageIds:
+    candidate := RemapCsvAndGraphObjectIdsToPackageLocal(candidate);
+  EncodeFfsx:
+    result := BuildFfsxEntries(candidate);
+    return;
+  }
+
+  procedure ReadFfsx(file) {
+  ValidateFfsxContainer:
+    assert ValidateFfsxSchemaVersionAndEntries(file);
+  RestoreFfsxPayload:
+    candidate := DecodeFfsxChartCaptionAndCsv(file);
+  ValidateFfsxReferences:
+    assert ValidateFfsxGraphObjectCsvReferences(candidate);
+  ValidateFfsxChart:
+    assert ValidateChartModel(candidate.chart);
+  ReturnFfsxPayload:
+    result := candidate;
+    return;
+  }
+
+  procedure ApplyFfsx(slotPayload, targetSlotId) {
+  ResolveCurrentTargetSlot:
+    with (target = ResolveSlot(targetSlotId, projectAuthority)) {
+      if (target # NoReference) {
+      AllocateProjectCsvIds:
+        candidate := AllocateImportedCsvIdsAndPaths(slotPayload, projectAuthority);
+      RemapChartCsvReferences:
+        candidate := RemapFfsxChartToProjectCsv(candidate);
+      AllocateChartIdAndOwner:
+        candidate := AttachNewChartToTargetSlot(candidate, target);
+      ApplySlotCaption:
+        candidate := ApplyImportedSlotCaption(candidate, target);
+      ValidateFfsxProjectCandidate:
+        assert ValidateWholeProject(candidate);
+      CommitFfsxCandidate:
+        projectAuthority := candidate;
+        result := FfsxCommitResult(candidate);
+      };
+    };
+    return;
+  }
+
+  Main:
+    while (TRUE) {
+      either {
+        with (target = RequestedDeleteTarget()) {
+          call DeleteAsset(target);
+        };
+      } or {
+        with (plan = RequestedMovePlan(), unique = RequestedUniqueNameFlag()) {
+          call MoveNode(plan, unique);
+        };
+      } or {
+        call EmptyTrash();
+      };
+    };
+}
+*)
+====
