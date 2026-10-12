@@ -1,0 +1,205 @@
+diff --git a/pseudocode/application_fsm.pcal b/pseudocode/application_fsm.pcal
+--- a/pseudocode/application_fsm.pcal
++++ b/pseudocode/application_fsm.pcal
+@@ -130,46 +130,60 @@
+ begin
+ ResolveCsv:
+   csvPath := ResolveCsvPath(request);
+-CommitCsvIfResolved:
+-  if csvPath # NoSelection then
+-    graphObject := "none" ||
+-    graphObjectIndex := NoSelection ||
+-    assetSelection := "csv" ||
+-    assetPath := csvPath;
+-  end if;
+-SelectCsvReturn:
+-  return;
+-end procedure;
+-
+-procedure SelectObject(request)
+-variables index = NoSelection, csvPath = NoSelection;
+-begin
+-ResolveObjectIndex:
+-  index := ResolveObjectIndex(request);
+-ResolveObjectCsv:
+-  if index # NoSelection then
+-    csvPath := ResolveObjectCsvPath(index);
+-  end if;
+-CommitObjectIfResolved:
+-  if index # NoSelection /\ csvPath # NoSelection then
+-    graphObject := "selected" ||
+-    graphObjectIndex := index ||
+-    assetSelection := "csv" ||
+-    assetPath := csvPath;
+-  end if;
+-SelectObjectReturn:
+-  return;
+-end procedure;
+-
+-procedure SelectImage(request)
+-variables imagePath = NoSelection;
+-begin
+-ResolveImage:
+-  imagePath := ResolveImagePath(request);
+-CommitImageIfResolved:
+-  if imagePath # NoSelection then
+-    graphObject := "none" ||
+-    graphObjectIndex := NoSelection ||
++ClearObjectForCsv:
++  if csvPath # NoSelection then
++    graphObject := "none" ||
++    graphObjectIndex := NoSelection;
++  end if;
++CommitCsvSelection:
++  if csvPath # NoSelection then
++    assetSelection := "csv" ||
++    assetPath := csvPath;
++  end if;
++SelectCsvReturn:
++  return;
++end procedure;
++
++procedure SelectObject(request)
++variables index = NoSelection, csvPath = NoSelection;
++begin
++ResolveObjectIndex:
++  index := ResolveObjectIndex(request);
++ResolveObjectCsv:
++  if index # NoSelection then
++    csvPath := ResolveObjectCsvPath(index);
++  end if;
++ClearObjectForObject:
++  if index # NoSelection /\ csvPath # NoSelection then
++    graphObject := "none" ||
++    graphObjectIndex := NoSelection;
++  end if;
++CommitObjectCsvSelection:
++  if index # NoSelection /\ csvPath # NoSelection then
++    assetSelection := "csv" ||
++    assetPath := csvPath;
++  end if;
++CommitObjectSelection:
++  if index # NoSelection /\ csvPath # NoSelection then
++    graphObject := "selected" ||
++    graphObjectIndex := index;
++  end if;
++SelectObjectReturn:
++  return;
++end procedure;
++
++procedure SelectImage(request)
++variables imagePath = NoSelection;
++begin
++ResolveImage:
++  imagePath := ResolveImagePath(request);
++ClearObjectForImage:
++  if imagePath # NoSelection then
++    graphObject := "none" ||
++    graphObjectIndex := NoSelection;
++  end if;
++CommitImageSelection:
++  if imagePath # NoSelection then
+     assetSelection := "image" ||
+     assetPath := imagePath;
+   end if;
+diff --git a/pseudocode/renderer_runtime.pcal b/pseudocode/renderer_runtime.pcal
+--- a/pseudocode/renderer_runtime.pcal
++++ b/pseudocode/renderer_runtime.pcal
+@@ -249,6 +249,16 @@
+         call EmptySlotClick(slotId);
+       end with;
+     or
++      with slotId = NextBookmarkDragStartSlot() do
++        call BookmarkDragStart(slotId);
++      end with;
++    or
++      with slotId = NextBookmarkDropSlot() do
++        call BookmarkDrop(slotId);
++      end with;
++    or
++      call ReleaseSyntheticClickGuard();
++    or
+       call StartupCoreRuntime();
+     end either;
+   end while;
+diff --git a/pseudocode/api_ui.pcal b/pseudocode/api_ui.pcal
+--- a/pseudocode/api_ui.pcal
++++ b/pseudocode/api_ui.pcal
+@@ -38,11 +38,11 @@
+   else
+     collisionDraft := model ||
+     resolver := [file |-> file, directory |-> directory, reserved |-> reservedPaths];
+-    choice := AwaitCollisionModalChoice();
+-    if choice = "cancel" then
+-      result := NoValue;
+-    else
+-      result := CoreResolveImportPlan(model, choice, reservedPaths);
++    choice := AwaitCollisionModalOutcome();
++    if choice = "rename" \/ choice = "replace" then
++      result := CoreResolveImportPlan(model, choice, reservedPaths);
++    else
++      result := NoValue;
+     end if;
+     collisionDraft := NoValue ||
+     resolver := NoValue;
+diff --git a/pseudocode/README.md b/pseudocode/README.md
+--- a/pseudocode/README.md
++++ b/pseudocode/README.md
+@@ -1,30 +1,30 @@
+-# Fast Figure PlusCal pseudocode r13 — work in progress
+-
+-Derived from the closed Source Script:
+-
+-- Source Script revision: r13
+-- Source Script fingerprint: `sha256:2c7955cf29b10d73f4c0741b895c895633683ae00e6d4cc0bd75b78eaaa566c7`
+-- Source Script closure review: `agent_space/reviews/review-20261012-002-sourcescript-closure-r13.md`
+-
+-## Translation rule
+-
+-The active r13 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
+-
+-The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r13 PlusCal translation.
+-
+-The active translation preserves:
+-
+-- Source Script module/responsibility boundaries
+-- authoritative state and reference sources
+-- resolve-before-mutation ordering
+-- candidate/validation/commit boundaries
+-- failure/rejection semantics
+-- runtime versus persistent mutation ownership
+-- meaningful UI/FSM command sequencing
+-
+-If a required meaning is absent or contradictory, translation stops and returns to Source Script rather than filling the gap in PlusCal.
+-
+-## Active r13 module mapping
++# Fast Figure PlusCal pseudocode r14 — work in progress
++
++Derived from the closed Source Script:
++
++- Source Script revision: r14
++- Source Script fingerprint: `sha256:0a3b3d2c325afe802c817fc952683a92490c583349faea2afddf71cd3119b9f7`
++- Source Script closure review: `agent_space/reviews/review-20261012-003-sourcescript-closure-r14.md`
++
++## Translation rule
++
++The active r14 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
++
++The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r13 PlusCal translation.
++
++The active translation preserves:
++
++- Source Script module/responsibility boundaries
++- authoritative state and reference sources
++- resolve-before-mutation ordering
++- candidate/validation/commit boundaries
++- failure/rejection semantics
++- runtime versus persistent mutation ownership
++- meaningful UI/FSM command sequencing
++
++If a required meaning is absent or contradictory, translation stops and returns to Source Script rather than filling the gap in PlusCal.
++
++## Active r14 module mapping
+ 
+ | Source Script | Active PlusCal | Status |
+ | --- | --- | --- |

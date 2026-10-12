@@ -130,10 +130,13 @@ variables csvPath = NoSelection;
 begin
 ResolveCsv:
   csvPath := ResolveCsvPath(request);
-CommitCsvIfResolved:
+ClearObjectForCsv:
   if csvPath # NoSelection then
     graphObject := "none" ||
-    graphObjectIndex := NoSelection ||
+    graphObjectIndex := NoSelection;
+  end if;
+CommitCsvSelection:
+  if csvPath # NoSelection then
     assetSelection := "csv" ||
     assetPath := csvPath;
   end if;
@@ -150,12 +153,20 @@ ResolveObjectCsv:
   if index # NoSelection then
     csvPath := ResolveObjectCsvPath(index);
   end if;
-CommitObjectIfResolved:
+ClearObjectForObject:
   if index # NoSelection /\ csvPath # NoSelection then
-    graphObject := "selected" ||
-    graphObjectIndex := index ||
+    graphObject := "none" ||
+    graphObjectIndex := NoSelection;
+  end if;
+CommitObjectCsvSelection:
+  if index # NoSelection /\ csvPath # NoSelection then
     assetSelection := "csv" ||
     assetPath := csvPath;
+  end if;
+CommitObjectSelection:
+  if index # NoSelection /\ csvPath # NoSelection then
+    graphObject := "selected" ||
+    graphObjectIndex := index;
   end if;
 SelectObjectReturn:
   return;
@@ -166,10 +177,13 @@ variables imagePath = NoSelection;
 begin
 ResolveImage:
   imagePath := ResolveImagePath(request);
-CommitImageIfResolved:
+ClearObjectForImage:
   if imagePath # NoSelection then
     graphObject := "none" ||
-    graphObjectIndex := NoSelection ||
+    graphObjectIndex := NoSelection;
+  end if;
+CommitImageSelection:
+  if imagePath # NoSelection then
     assetSelection := "image" ||
     assetPath := imagePath;
   end if;

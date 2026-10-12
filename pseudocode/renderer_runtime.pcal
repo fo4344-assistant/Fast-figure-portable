@@ -249,6 +249,16 @@ Main:
         call EmptySlotClick(slotId);
       end with;
     or
+      with slotId = NextBookmarkDragStartSlot() do
+        call BookmarkDragStart(slotId);
+      end with;
+    or
+      with slotId = NextBookmarkDropSlot() do
+        call BookmarkDrop(slotId);
+      end with;
+    or
+      call ReleaseSyntheticClickGuard();
+    or
       call StartupCoreRuntime();
     end either;
   end while;

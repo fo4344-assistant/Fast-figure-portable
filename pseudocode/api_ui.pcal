@@ -38,11 +38,11 @@ CollisionAvailable:
   else
     collisionDraft := model ||
     resolver := [file |-> file, directory |-> directory, reserved |-> reservedPaths];
-    choice := AwaitCollisionModalChoice();
-    if choice = "cancel" then
-      result := NoValue;
-    else
+    choice := AwaitCollisionModalOutcome();
+    if choice = "rename" \/ choice = "replace" then
       result := CoreResolveImportPlan(model, choice, reservedPaths);
+    else
+      result := NoValue;
     end if;
     collisionDraft := NoValue ||
     resolver := NoValue;
