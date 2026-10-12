@@ -1,7 +1,7 @@
 /* Runs after the application scripts in a headless file:// browser. */
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
-  sourceScript: "r15",
-  plusCal: "r15",
+  sourceScript: "r16",
+  plusCal: "r16",
   verificationModel: "r6-stale",
   sourceCode: "r12",
   appBuild: "1.1.32-wip",
