@@ -1,0 +1,493 @@
+diff --git a/pseudocode/api_ui.pcal b/pseudocode/api_ui.pcal
+--- a/pseudocode/api_ui.pcal
++++ b/pseudocode/api_ui.pcal
+@@ -1,197 +1,261 @@
+ ---- MODULE FastFigureApiUiPseudocode ----
+ EXTENDS Naturals
+ 
+-\* r15 PlusCal pseudocode for sourcescript/api_ui.py.
+-\* Collision/form/sidebar values are UI-local and never project authority.
+-
+-CONSTANT NoValue
+-
+-(*
+---algorithm FastFigureApiUi
+-variables
+-  collisionDraft = NoValue,
+-  resolver = NoValue,
+-  preparedSlot = NoValue,
+-  lastPersistentCommand = NoValue,
+-  dragRuntimeActive = FALSE,
+-  sidebarWidth = 0,
+-  sidebarCollapsed = FALSE,
+-  result = NoValue,
+-  effect = NoValue;
+-
+-procedure SubscribeAppState(callback)
+-begin
+-SubscribeExternalStore:
+-  result := RegisterAppFsmSubscriber(callback);
+-SubscribeReturn:
+-  return;
+-end procedure;
+-
+-procedure ReadGraphData()
+-variables
+-  chart = NoValue,
+-  objects = <<>>,
+-  selectedIndex = NoValue,
+-  currentCsv = NoValue,
+-  objectCsv = NoValue,
+-  currentColumns = <<>>,
+-  objectColumns = <<>>;
+-begin
+-ReadGraphDataChart:
+-  chart := ResolveSelectedChartForRead();
+-ReadGraphDataObjects:
+-  if chart # NoValue then
+-    objects := chart.editor.objects;
+-  end if;
+-ReadGraphDataSelection:
+-  selectedIndex := ReadGraphObjectSelectionIndex();
+-ReadGraphDataCurrentCsv:
+-  currentCsv := ResolveCsvFromCurrentAssetSelection();
+-ReadGraphDataCurrentColumns:
+-  if currentCsv # NoValue then
+-    currentColumns := ColumnDefinitionsForCsv(currentCsv);
+-  end if;
+-ReadGraphDataObjectCsv:
+-  if ValidGraphObjectIndex(objects, selectedIndex) then
+-    objectCsv := ResolveProjectCsv(objects[selectedIndex].csvId);
+-  end if;
+-ReadGraphDataObjectColumns:
+-  if objectCsv # NoValue then
+-    objectColumns := ColumnDefinitionsForCsv(objectCsv);
+-  end if;
+-ReadGraphDataResult:
+-  result := [
+-    objects |-> objects,
+-    selectedIndex |-> selectedIndex,
+-    currentCsv |-> currentCsv,
+-    columns |-> currentColumns,
+-    objectColumns |-> objectColumns
+-  ];
+-ReadGraphDataReturn:
+-  return;
+-end procedure;
+-
+-procedure ChooseImportPlan(file, directory, reservedPaths)
+-variables model = NoValue, choice = NoValue;
+-begin
+-CollisionModel:
+-  model := CoreCollisionModel(file, directory, reservedPaths);
+-CollisionAvailable:
+-  if model.mode = "available" then
+-    result := CoreResolveImportPlan(model, "available", reservedPaths);
+-  else
+-    collisionDraft := model ||
+-    resolver := [file |-> file, directory |-> directory, reserved |-> reservedPaths];
+-    choice := AwaitCollisionModalOutcome();
+-    if choice = "rename" \/ choice = "replace" then
+-      result := CoreResolveImportPlan(model, choice, reservedPaths);
+-    else
+-      result := NoValue;
+-    end if;
+-    collisionDraft := NoValue ||
+-    resolver := NoValue;
+-  end if;
+-CollisionReturn:
+-  return;
+-end procedure;
+-
+-procedure RunLifecycleTask(requestedLifecycle, eventName, task)
+-begin
+-DelegateLifecycle:
+-  result := AppFsmRun(requestedLifecycle, eventName, task);
+-LifecycleTelemetry:
+-  if TaskFailed(result) then
+-    effect := PublishDebugTelemetry(TaskError(result));
+-  end if;
+-LifecycleUiReturn:
+-  return;
+-end procedure;
+-
+-procedure PrepareFileDrop(slotId)
+-begin
+-PrepareFileDropRuntime:
+-  result := SlotApiPrepareFileDrop(slotId);
+-PrepareFileDropState:
+-  if result then
+-    preparedSlot := slotId ||
+-    dragRuntimeActive := TRUE;
+-  else
+-    preparedSlot := NoValue;
+-  end if;
+-PrepareDropReturn:
+-  return;
+-end procedure;
+-
+-procedure ImportExternalFile(file, slotId)
+-begin
+-PrepareExternalDrop:
+-  call PrepareFileDrop(slotId);
+-RunExternalImport:
+-  if result then
+-    call RunLifecycleTask(
+-      "importing",
+-      "SLOT_DROP_IMPORT",
+-      [command |-> "assets.importToSlot", file |-> file, slotId |-> slotId]);
+-  end if;
+-FinishExternalDrop:
+-  effect := SlotApiFinishFileDrop();
+-  dragRuntimeActive := FALSE ||
+-  preparedSlot := NoValue;
+-ExternalDropReturn:
+-  return;
+-end procedure;
+-
+-procedure ConnectExistingAsset(path, kind, slotId)
+-begin
+-ExplicitAssetConnection:
+-  if AssetAndSlotConnectionInputsResolve(path, kind, slotId) then
+-    lastPersistentCommand := [
+-      name |-> "assets.connectToSlot",
+-      path |-> path,
+-      kind |-> kind,
+-      slotId |-> slotId
+-    ];
+-  end if;
+-ConnectAssetReturn:
+-  return;
+-end procedure;
+-
+-procedure FastFigureApp()
+-begin
+-ReadAppearance:
+-  result := MantineProviderFromPersistentPalette(ReadAppearancePalette());
+-MountShell:
+-  result := MountFastFigureShell(result);
+-AppReturn:
+-  return;
+-end procedure;
+-
+-procedure FastFigureShell(width, collapsed)
+-begin
+-UpdateSidebarLocalState:
+-  sidebarWidth := width ||
+-  sidebarCollapsed := collapsed;
+-ProjectSidebarGeometry:
+-  effect := ApplySidebarGeometryToRenderer(sidebarWidth, sidebarCollapsed);
+-ResizePlots:
+-  effect := RequestPlotResizeFromCurrentAuthority();
+-ShellReturn:
+-  return;
+-end procedure;
+-
+-begin
+-Main:
+-  while TRUE do
+-    either
+-      with file = NextDroppedFile(), slotId = NextDropSlotId() do
+-        call ImportExternalFile(file, slotId);
+-      end with;
+-    or
+-      with path = NextAssetPath(), kind = NextAssetKind(), slotId = NextDropSlotId() do
+-        call ConnectExistingAsset(path, kind, slotId);
+-      end with;
+-    or
+-      call FastFigureApp();
++\* r16 PlusCal pseudocode for sourcescript/api_ui.py.
++\* Collision/form/sidebar/drop-receiver values are UI-local and never project authority.
++
++CONSTANT NoValue
++
++(*
++--algorithm FastFigureApiUi
++variables
++  collisionDraft = NoValue,
++  resolver = NoValue,
++  preparedSlot = NoValue,
++  lastPersistentCommand = NoValue,
++  dragRuntimeActive = FALSE,
++  dashboardDropReceiver = "unmounted",
++  dashboardDropReceiverCount = 0,
++  activeDropEventId = NoValue,
++  lastHandledDropEventId = NoValue,
++  sidebarWidth = 0,
++  sidebarCollapsed = FALSE,
++  result = NoValue,
++  effect = NoValue;
++
++procedure SubscribeAppState(callback)
++begin
++SubscribeExternalStore:
++  result := RegisterAppFsmSubscriber(callback);
++SubscribeReturn:
++  return;
++end procedure;
++
++procedure ReadGraphData()
++variables
++  chart = NoValue,
++  objects = <<>>,
++  selectedIndex = NoValue,
++  currentCsv = NoValue,
++  objectCsv = NoValue,
++  currentColumns = <<>>,
++  objectColumns = <<>>;
++begin
++ReadGraphDataChart:
++  chart := ResolveSelectedChartForRead();
++ReadGraphDataObjects:
++  if chart # NoValue then
++    objects := chart.editor.objects;
++  end if;
++ReadGraphDataSelection:
++  selectedIndex := ReadGraphObjectSelectionIndex();
++ReadGraphDataCurrentCsv:
++  currentCsv := ResolveCsvFromCurrentAssetSelection();
++ReadGraphDataCurrentColumns:
++  if currentCsv # NoValue then
++    currentColumns := ColumnDefinitionsForCsv(currentCsv);
++  end if;
++ReadGraphDataObjectCsv:
++  if ValidGraphObjectIndex(objects, selectedIndex) then
++    objectCsv := ResolveProjectCsv(objects[selectedIndex].csvId);
++  end if;
++ReadGraphDataObjectColumns:
++  if objectCsv # NoValue then
++    objectColumns := ColumnDefinitionsForCsv(objectCsv);
++  end if;
++ReadGraphDataResult:
++  result := [
++    objects |-> objects,
++    selectedIndex |-> selectedIndex,
++    currentCsv |-> currentCsv,
++    columns |-> currentColumns,
++    objectColumns |-> objectColumns
++  ];
++ReadGraphDataReturn:
++  return;
++end procedure;
++
++procedure ChooseImportPlan(file, directory, reservedPaths)
++variables model = NoValue, choice = NoValue;
++begin
++CollisionModel:
++  model := CoreCollisionModel(file, directory, reservedPaths);
++CollisionAvailable:
++  if model.mode = "available" then
++    result := CoreResolveImportPlan(model, "available", reservedPaths);
++  else
++    collisionDraft := model ||
++    resolver := [file |-> file, directory |-> directory, reserved |-> reservedPaths];
++    choice := AwaitCollisionModalOutcome();
++    if choice = "rename" \/ choice = "replace" then
++      result := CoreResolveImportPlan(model, choice, reservedPaths);
++    else
++      result := NoValue;
++    end if;
++    collisionDraft := NoValue ||
++    resolver := NoValue;
++  end if;
++CollisionReturn:
++  return;
++end procedure;
++
++procedure RunLifecycleTask(requestedLifecycle, eventName, task)
++begin
++DelegateLifecycle:
++  result := AppFsmRun(requestedLifecycle, eventName, task);
++LifecycleTelemetry:
++  if TaskFailed(result) then
++    effect := PublishDebugTelemetry(TaskError(result));
++  end if;
++LifecycleUiReturn:
++  return;
++end procedure;
++
++procedure PrepareFileDrop(slotId)
++begin
++PrepareFileDropRuntime:
++  result := SlotApiPrepareFileDrop(slotId);
++PrepareFileDropState:
++  if result then
++    preparedSlot := slotId ||
++    dragRuntimeActive := TRUE;
++  else
++    preparedSlot := NoValue;
++  end if;
++PrepareDropReturn:
++  return;
++end procedure;
++
++procedure ImportExternalFile(file, slotId)
++begin
++PrepareExternalDrop:
++  call PrepareFileDrop(slotId);
++RunExternalImport:
++  if result then
++    call RunLifecycleTask(
++      "importing",
++      "SLOT_DROP_IMPORT",
++      [command |-> "assets.importToSlot", file |-> file, slotId |-> slotId]);
++  end if;
++FinishExternalDrop:
++  effect := SlotApiFinishFileDrop();
++  dragRuntimeActive := FALSE ||
++  preparedSlot := NoValue;
++ExternalDropReturn:
++  return;
++end procedure;
++
++procedure MountDashboardDropReceiver()
++begin
++MountReceiver:
++  if dashboardDropReceiver = "unmounted" then
++    dashboardDropReceiver := "mounted" ||
++    dashboardDropReceiverCount := 1;
++  end if;
++MountReceiverInvariant:
++  assert dashboardDropReceiver = "mounted" /\ dashboardDropReceiverCount = 1;
++MountReceiverReturn:
++  return;
++end procedure;
++
++procedure RerenderDashboardDropReceiver()
++begin
++RerenderReceiverInvariant:
++  assert dashboardDropReceiver = "mounted" /\ dashboardDropReceiverCount = 1;
++RerenderReceiverContinuity:
++  result := "continuous";
++RerenderReceiverReturn:
++  return;
++end procedure;
++
++procedure UnmountDashboardDropReceiver()
++begin
++UnmountReceiver:
++  dashboardDropReceiver := "unmounted" ||
++  dashboardDropReceiverCount := 0 ||
++  activeDropEventId := NoValue;
++UnmountReceiverReturn:
++  return;
++end procedure;
++
++procedure DispatchExternalDrop(dropEventId, file, slotId)
++begin
++DispatchReceiverInvariant:
++  assert dashboardDropReceiverCount \in {0, 1};
++DispatchExternalDropOnce:
++  if dashboardDropReceiver = "mounted"
++     /\ dashboardDropReceiverCount = 1
++     /\ DropAcceptingUiState()
++     /\ dropEventId # lastHandledDropEventId
++     /\ activeDropEventId = NoValue then
++    activeDropEventId := dropEventId;
++    call ImportExternalFile(file, slotId);
++    lastHandledDropEventId := dropEventId ||
++    activeDropEventId := NoValue;
++  end if;
++DispatchExternalDropReturn:
++  return;
++end procedure;
++
++procedure ConnectExistingAsset(path, kind, slotId)
++begin
++ExplicitAssetConnection:
++  if AssetAndSlotConnectionInputsResolve(path, kind, slotId) then
++    lastPersistentCommand := [
++      name |-> "assets.connectToSlot",
++      path |-> path,
++      kind |-> kind,
++      slotId |-> slotId
++    ];
++  end if;
++ConnectAssetReturn:
++  return;
++end procedure;
++
++procedure FastFigureApp()
++begin
++ReadAppearance:
++  result := MantineProviderFromPersistentPalette(ReadAppearancePalette());
++MountShell:
++  result := MountFastFigureShell(result);
++MountDropReceiver:
++  if dashboardDropReceiver = "unmounted" then
++    call MountDashboardDropReceiver();
++  end if;
++AppReturn:
++  return;
++end procedure;
++
++procedure FastFigureShell(width, collapsed)
++begin
++UpdateSidebarLocalState:
++  sidebarWidth := width ||
++  sidebarCollapsed := collapsed;
++ProjectSidebarGeometry:
++  effect := ApplySidebarGeometryToRenderer(sidebarWidth, sidebarCollapsed);
++ResizePlots:
++  effect := RequestPlotResizeFromCurrentAuthority();
++ShellReturn:
++  return;
++end procedure;
++
++begin
++InitializeApp:
++  call FastFigureApp();
++Main:
++  while TRUE do
++    either
++      with dropEventId = NextDropEventId(),
++           file = NextDroppedFile(),
++           slotId = NextDropSlotId() do
++        call DispatchExternalDrop(dropEventId, file, slotId);
++      end with;
++    or
++      with path = NextAssetPath(), kind = NextAssetKind(), slotId = NextDropSlotId() do
++        call ConnectExistingAsset(path, kind, slotId);
++      end with;
++    or
++      call RerenderDashboardDropReceiver();
+     end either;
+   end while;
+ end algorithm;
+diff --git a/agent_space/reviews/review-20261013-004-pluscal-r16-drop-lifetime.md b/agent_space/reviews/review-20261013-004-pluscal-r16-drop-lifetime.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261013-004-pluscal-r16-drop-lifetime.md
+@@ -0,0 +1,32 @@
++# Review 20261013-004 — PlusCal r16 dashboard drop lifetime
++
++## Source authority
++
++- Source Script revision: r16
++- fingerprint: `sha256:05c78c39c6c7ae715c8204ec0c4381ecd66ebf1dd9dbfb01a26fd99400270484`
++- closure review: `agent_space/reviews/review-20261013-003-sourcescript-closure-r16.md`
++
++## Translation
++
++`pseudocode/api_ui.pcal` now models the Source Script lifetime contract without prescribing React implementation mechanics.
++
++Added UI-local pseudocode state:
++
++- `dashboardDropReceiver`: mounted/unmounted logical availability;
++- `dashboardDropReceiverCount`: exactly one effective receiver while mounted;
++- `activeDropEventId`: one event currently entering the import path;
++- `lastHandledDropEventId`: prevents the same one-shot event from entering twice.
++
++`RerenderDashboardDropReceiver` preserves the mounted state and asserts exactly one logical receiver. `DispatchExternalDrop` accepts a one-shot event only when the receiver is mounted, the UI is accepting drops, the event has not already been handled, and no same-process drop is active.
++
++The underlying prepare -> lifecycle -> import -> finish flow is unchanged.
++
++## Boundary
++
++The PlusCal model does not name `useCallback`, React effect dependency arrays, DOM listener APIs, or another target-language mechanism.
++
++## Verdict
++
++**The r16 Source Script receiver-lifetime rule is translated at the PlusCal layer.**
++
++Source Code r12 can now be judged as a downstream realization of this rule. Official PlusCal translator/SANY or optional TLC execution is not claimed by this review.

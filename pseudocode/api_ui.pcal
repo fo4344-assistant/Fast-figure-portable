@@ -1,8 +1,8 @@
 ---- MODULE FastFigureApiUiPseudocode ----
 EXTENDS Naturals
 
-\* r15 PlusCal pseudocode for sourcescript/api_ui.py.
-\* Collision/form/sidebar values are UI-local and never project authority.
+\* r16 PlusCal pseudocode for sourcescript/api_ui.py.
+\* Collision/form/sidebar/drop-receiver values are UI-local and never project authority.
 
 CONSTANT NoValue
 
@@ -14,6 +14,10 @@ variables
   preparedSlot = NoValue,
   lastPersistentCommand = NoValue,
   dragRuntimeActive = FALSE,
+  dashboardDropReceiver = "unmounted",
+  dashboardDropReceiverCount = 0,
+  activeDropEventId = NoValue,
+  lastHandledDropEventId = NoValue,
   sidebarWidth = 0,
   sidebarCollapsed = FALSE,
   result = NoValue,
@@ -141,6 +145,58 @@ ExternalDropReturn:
   return;
 end procedure;
 
+procedure MountDashboardDropReceiver()
+begin
+MountReceiver:
+  if dashboardDropReceiver = "unmounted" then
+    dashboardDropReceiver := "mounted" ||
+    dashboardDropReceiverCount := 1;
+  end if;
+MountReceiverInvariant:
+  assert dashboardDropReceiver = "mounted" /\ dashboardDropReceiverCount = 1;
+MountReceiverReturn:
+  return;
+end procedure;
+
+procedure RerenderDashboardDropReceiver()
+begin
+RerenderReceiverInvariant:
+  assert dashboardDropReceiver = "mounted" /\ dashboardDropReceiverCount = 1;
+RerenderReceiverContinuity:
+  result := "continuous";
+RerenderReceiverReturn:
+  return;
+end procedure;
+
+procedure UnmountDashboardDropReceiver()
+begin
+UnmountReceiver:
+  dashboardDropReceiver := "unmounted" ||
+  dashboardDropReceiverCount := 0 ||
+  activeDropEventId := NoValue;
+UnmountReceiverReturn:
+  return;
+end procedure;
+
+procedure DispatchExternalDrop(dropEventId, file, slotId)
+begin
+DispatchReceiverInvariant:
+  assert dashboardDropReceiverCount \in {0, 1};
+DispatchExternalDropOnce:
+  if dashboardDropReceiver = "mounted"
+     /\ dashboardDropReceiverCount = 1
+     /\ DropAcceptingUiState()
+     /\ dropEventId # lastHandledDropEventId
+     /\ activeDropEventId = NoValue then
+    activeDropEventId := dropEventId;
+    call ImportExternalFile(file, slotId);
+    lastHandledDropEventId := dropEventId ||
+    activeDropEventId := NoValue;
+  end if;
+DispatchExternalDropReturn:
+  return;
+end procedure;
+
 procedure ConnectExistingAsset(path, kind, slotId)
 begin
 ExplicitAssetConnection:
@@ -162,6 +218,10 @@ ReadAppearance:
   result := MantineProviderFromPersistentPalette(ReadAppearancePalette());
 MountShell:
   result := MountFastFigureShell(result);
+MountDropReceiver:
+  if dashboardDropReceiver = "unmounted" then
+    call MountDashboardDropReceiver();
+  end if;
 AppReturn:
   return;
 end procedure;
@@ -180,18 +240,22 @@ ShellReturn:
 end procedure;
 
 begin
+InitializeApp:
+  call FastFigureApp();
 Main:
   while TRUE do
     either
-      with file = NextDroppedFile(), slotId = NextDropSlotId() do
-        call ImportExternalFile(file, slotId);
+      with dropEventId = NextDropEventId(),
+           file = NextDroppedFile(),
+           slotId = NextDropSlotId() do
+        call DispatchExternalDrop(dropEventId, file, slotId);
       end with;
     or
       with path = NextAssetPath(), kind = NextAssetKind(), slotId = NextDropSlotId() do
         call ConnectExistingAsset(path, kind, slotId);
       end with;
     or
-      call FastFigureApp();
+      call RerenderDashboardDropReceiver();
     end either;
   end while;
 end algorithm;
