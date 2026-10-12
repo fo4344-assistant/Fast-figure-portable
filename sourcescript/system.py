@@ -143,6 +143,11 @@ RESOLVED_REVIEW_ITEMS = [
         "Escape/outside-click/close/cleanup처럼 choice 없는 dismiss는 cancel이며 UI-local resolver를 정리할 뿐 "
         "rename 같은 persistent import 결정을 암묵적으로 승인하지 않는다."
     ),
+    (
+        "FastFigureDashboardFileDrop가 mounted이고 drop을 받을 수 있는 UI 상태라면 dashboard external-file drop receiver는 "
+        "ordinary rerender나 local UI state update 사이에서도 논리적으로 연속 1개여야 한다. 내부 listener/callback 교체 때문에 "
+        "유효 drop이 무처리되거나 한 event가 중복 import attempt로 전달되어서는 안 되며, 구체 listener 수명 관리 방식은 구현 세부다."
+    ),
 ]
 
 UNRESOLVED_REVIEW_ITEMS = []

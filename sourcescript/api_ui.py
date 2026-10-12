@@ -211,6 +211,15 @@ DASHBOARD_DROP_FLOW = (
 )
 
 
+DASHBOARD_DROP_LIFETIME_RULE = (
+    "FastFigureDashboardFileDrop가 mounted이고 external file drop을 받을 수 있는 UI 상태인 동안 dashboard의 "
+    "drop 수신 경로는 논리적으로 연속 1개여야 한다. ordinary frontend rerender, local state update, callback 교체는 "
+    "유효한 한 번의 drop event를 listener 교체 공백 때문에 잃게 하거나 둘 이상의 import attempt로 중복 전달해서는 안 된다. "
+    "component mount/unmount 또는 명시적으로 drop을 허용하지 않는 lifecycle/target 조건만 수신 가능성의 경계를 만든다. "
+    "stable callback, delegated listener, framework event handler 등 이를 만족하는 구체 수명 관리 방식은 Source Code가 선택한다."
+)
+
+
 MANTINE_THEME_RULE = (
     "generic Button, ActionIcon, Input 크기와 Modal centered/Escape/outside-click 기본값은 "
     "fastFigureTheme에서 공통 정의한다. renderer surface CSS와 generic UI lifecycle을 분리한다."
