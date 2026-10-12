@@ -1,0 +1,1191 @@
+diff --git a/pseudocode/application_fsm.pcal b/pseudocode/application_fsm.pcal
+--- a/pseudocode/application_fsm.pcal
++++ b/pseudocode/application_fsm.pcal
+@@ -1,96 +1,392 @@
+ ---- MODULE FastFigureApplicationFsmPseudocode ----
+-EXTENDS Naturals
+-
+-\* Direct r13 translation of the selection-command portion of
+-\* sourcescript/application_fsm.py. Resolver functions return NoSelection
+-\* when the requested current reference cannot be resolved.
+-CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
+-          ResolveCsvPath, ResolveImagePath,
+-          ResolveObjectIndex, ResolveObjectCsvPath,
+-          NoSelection
+-
+-(*
+---algorithm FastFigureApplicationFsmSelection {
+-  variables assetSelection = "none",
+-            assetPath = NoSelection,
+-            graphObject = "none",
+-            graphObjectIndex = NoSelection;
+-
+-  procedure SelectCsv(request) {
+-  ResolveCsv:
+-    with (csvPath = ResolveCsvPath[request]) {
+-      if (csvPath # NoSelection) {
+-      ClearObjectForCsv:
+-        graphObject := "none";
+-        graphObjectIndex := NoSelection;
+-      CommitCsvSelection:
+-        assetSelection := "csv";
+-        assetPath := csvPath;
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure SelectObject(request) {
+-  ResolveObject:
+-    with (index = ResolveObjectIndex[request]) {
+-      if (index # NoSelection) {
+-      ResolveObjectCsv:
+-        with (csvPath = ResolveObjectCsvPath[index]) {
+-          if (csvPath # NoSelection) {
+-          ClearObjectForObject:
+-            graphObject := "none";
+-            graphObjectIndex := NoSelection;
+-          CommitObjectCsvSelection:
+-            assetSelection := "csv";
+-            assetPath := csvPath;
+-          CommitObjectSelection:
+-            graphObject := "selected";
+-            graphObjectIndex := index;
+-          };
+-        };
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure SelectImage(request) {
+-  ResolveImage:
+-    with (imagePath = ResolveImagePath[request]) {
+-      if (imagePath # NoSelection) {
+-      ClearObjectForImage:
+-        graphObject := "none";
+-        graphObjectIndex := NoSelection;
+-      CommitImageSelection:
+-        assetSelection := "image";
+-        assetPath := imagePath;
+-      };
+-    };
+-    return;
+-  }
+-
+-  SelectionLoop:
+-    while (TRUE) {
+-      either {
+-        with (request \in CsvRequests) {
+-          call SelectCsv(request);
+-        };
+-      } or {
+-        with (request \in ObjectRequests) {
+-          call SelectObject(request);
+-        };
+-      } or {
+-        with (request \in ImageRequests) {
+-          call SelectImage(request);
+-        };
+-      } or {
+-      ClearGraphObject:
+-        graphObject := "none";
+-        graphObjectIndex := NoSelection;
+-      } or {
+-      ClearAsset:
+-        assetSelection := "none";
+-        assetPath := NoSelection;
++EXTENDS Naturals, Sequences
++
++\* r13 translation of sourcescript/application_fsm.py.
++\* Domain helpers below represent Source Script-defined candidate calculations.
++CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
++          ResolveCsvPath, ResolveImagePath,
++          ResolveObjectIndex, ResolveObjectCsvPath,
++          NoSelection
++
++(*
++--algorithm FastFigureApplicationFsm {
++  variables lifecycle = "booting",
++            workspace = "project",
++            overlay = "none",
++            assetSelection = "none",
++            assetPath = NoSelection,
++            graphObject = "none",
++            graphObjectIndex = NoSelection,
++            direction = "fsm-to-model",
++            revision = 0,
++            error = NoSelection,
++            projectAuthority = ReadActiveProject(),
++            selectedSlotId = NoSelection,
++            result = NoSelection;
++
++  procedure PublishState() {
++  PublishRevision:
++    revision := revision + 1;
++    return;
++  }
++
++  procedure Transition(region, target, event, payload) {
++  ResolveTransitionMode:
++    if (CurrentRegionState(region) = target /\ ~RequestsReentry(payload)) {
++    RunUpdateHook:
++      RunRegionUpdateHook(region, event, payload);
++    } else {
++    RunExitHook:
++      RunRegionExitHook(region, event, payload);
++    CommitRegionTarget:
++      SetRegionState(region, target);
++    RunEntryHook:
++      RunRegionEntryHook(region, event, payload);
++    };
++  ApplyDirection:
++    direction := PayloadDirectionOrDefault(payload);
++  PublishTransition:
++    call PublishState();
++    return;
++  }
++
++  procedure Send(event, payload) {
++  ProcessRegionsInOrder:
++    with (regions = RegionOrder()) {
++      result := FALSE;
++      while (Len(regions) > 0) {
++        with (region = Head(regions),
++              handler = ResolveRegionHandler(Head(regions), event)) {
++          if (handler # NoSelection) {
++          ExecuteActionFirst:
++            RunHandlerAction(handler, payload);
++          ExecuteTargetSecond:
++            if (HandlerHasTarget(handler)) {
++              call Transition(region, HandlerTarget(handler, payload), event, payload);
++            };
++          MarkHandled:
++            result := TRUE;
++          };
++        };
++        regions := Tail(regions);
++      };
++    };
++  UnhandledEvent:
++    if (~result) {
++      RecordDebugWarning(event);
++    };
++    return;
++  }
++
++  procedure Notify(objectName, event, payload) {
++  RejectDuringBootOrTransition:
++    if (lifecycle = "booting" \/ IsTransitionInProgress()) {
++      return;
++    };
++  SetModelToUiDirection:
++    direction := "model-to-ui";
++  UpdateSubscribedProjection:
++    if (CurrentWorkspaceOrOverlaySubscribes(objectName)) {
++      RunProjectionUpdate(objectName, event, payload);
++    };
++  PublishNotification:
++    call PublishState();
++    return;
++  }
++
++  procedure RunLifecycle(requestedLifecycle, event, task) {
++  RequireReady:
++    if (lifecycle # "ready") {
++      result := NoSelection;
++      return;
++    };
++  EnterLifecycle:
++    lifecycle := requestedLifecycle;
++    call PublishState();
++  RunTask:
++    try {
++      result := ExecuteTask(task);
++    } catch (taskError) {
++    RecordLifecycleError:
++      error := taskError;
++      lifecycle := "error";
++      call PublishState();
++    };
++  RestoreReady:
++    lifecycle := "ready";
++    call PublishState();
++    return;
++  }
++
++  procedure SelectCsv(request) {
++  ResolveCsv:
++    with (csvPath = ResolveCsvPath[request]) {
++      if (csvPath # NoSelection) {
++      ClearObjectForCsv:
++        graphObject := "none";
++        graphObjectIndex := NoSelection;
++      CommitCsvSelection:
++        assetSelection := "csv";
++        assetPath := csvPath;
++      };
++    };
++    return;
++  }
++
++  procedure SelectObject(request) {
++  ResolveObject:
++    with (index = ResolveObjectIndex[request]) {
++      if (index # NoSelection) {
++      ResolveObjectCsv:
++        with (csvPath = ResolveObjectCsvPath[index]) {
++          if (csvPath # NoSelection) {
++          ClearObjectForObject:
++            graphObject := "none";
++            graphObjectIndex := NoSelection;
++          CommitObjectCsvSelection:
++            assetSelection := "csv";
++            assetPath := csvPath;
++          CommitObjectSelection:
++            graphObject := "selected";
++            graphObjectIndex := index;
++          };
++        };
++      };
++    };
++    return;
++  }
++
++  procedure SelectImage(request) {
++  ResolveImage:
++    with (imagePath = ResolveImagePath[request]) {
++      if (imagePath # NoSelection) {
++      ClearObjectForImage:
++        graphObject := "none";
++        graphObjectIndex := NoSelection;
++      CommitImageSelection:
++        assetSelection := "image";
++        assetPath := imagePath;
++      };
++    };
++    return;
++  }
++
++  procedure ApplySlotSelection(payload) {
++  ResolveSlotSelection:
++    with (slot = ResolveSlotFromCurrentProject(payload.slotId)) {
++      if (payload.slotId = NoSelection) {
++      ClearSelectedSlot:
++        selectedSlotId := NoSelection;
++      ClearGraphForProjectWorkspace:
++        graphObject := "none";
++        graphObjectIndex := NoSelection;
++      SetProjectWorkspace:
++        workspace := "project";
++      } else {
++        if (slot # NoSelection) {
++          if (PayloadUsesUiToggle(payload) /\ selectedSlotId = slot.id) {
++          ToggleSelectedSlotOff:
++            selectedSlotId := NoSelection;
++          ClearGraphAfterDeselect:
++            graphObject := "none";
++            graphObjectIndex := NoSelection;
++          SetProjectAfterDeselect:
++            workspace := "project";
++          } else {
++          CommitSelectedSlot:
++            selectedSlotId := slot.id;
++          ReconcileGraphSelection:
++            if (~GraphObjectSelectionValidForSlot(slot, graphObjectIndex)) {
++              graphObject := "none";
++              graphObjectIndex := NoSelection;
++            };
++          DeriveWorkspace:
++            workspace := IF slot.contentType = "image" THEN "slot.image" ELSE "slot.graph";
++          };
++        };
++      };
++    };
++    return;
++  }
++
++  procedure ApplyProjectLoaded(project) {
++  CheckProjectWriteScope:
++    assert HasWriteScope("project");
++  ValidateProjectCandidate:
++    assert ValidateWholeProject(project);
++  CommitWholeProject:
++    projectAuthority := project;
++  ReconcileSelections:
++    selectedSlotId := ReResolveOrClearSelectedSlot(projectAuthority, selectedSlotId);
++    assetSelection := ReResolveOrClearAssetKind(projectAuthority, assetPath);
++    assetPath := ReResolveOrClearAssetPath(projectAuthority, assetPath);
++    graphObjectIndex := ReResolveOrClearGraphObject(projectAuthority, selectedSlotId, graphObjectIndex);
++    graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
++  ReleasePreviousDisplayResources:
++    ReleaseOldProjectResourcesAfterCommit();
++  ReprojectLoadedProject:
++    ReprojectRendererFrom(projectAuthority);
++    return;
++  }
++
++  procedure ApplyProjectNodeMoved(payload) {
++  ResolveMove:
++    with (move = ResolveCurrentMoveInputs(payload, projectAuthority)) {
++      if (move # NoSelection /\ MovePreconditionsHold(move)) {
++      BuildMoveCandidate:
++        with (candidate = BuildMoveAndReferenceCascade(move, projectAuthority)) {
++        ValidateMoveCandidate:
++          assert CandidateReferencesMatchCollectedReferences(candidate);
++          assert ValidateWholeProject(candidate);
++        CommitMoveCandidate:
++          projectAuthority := candidate;
++        ReconcileMoveSelections:
++          assetPath := ReResolveOrClearAssetPath(projectAuthority, assetPath);
++          assetSelection := ReResolveOrClearAssetKind(projectAuthority, assetPath);
++          graphObjectIndex := ReResolveOrClearGraphObject(projectAuthority, selectedSlotId, graphObjectIndex);
++          graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
++        result := FinalMovePath(candidate);
++        };
++      };
++    };
++    return;
++  }
++
++  procedure ApplyGraphObjectsReplaced(payload) {
++  ResolveEditableChart:
++    with (chart = ResolveEditableChart(payload.chartId, projectAuthority)) {
++      if (chart # NoSelection) {
++      NormalizeObjectCandidate:
++        with (candidate = ReplaceAndNormalizeGraphObjects(chart, payload.objects, projectAuthority)) {
++        ValidateGraphReferences:
++          assert ValidateGraphObjectReferences(candidate, projectAuthority);
++        RebuildGraphProjection:
++          candidate := RebuildEditableGraphCandidate(candidate, projectAuthority);
++        ValidateChartOwnership:
++          assert ValidateChartOwnershipInProject(candidate, projectAuthority);
++        CommitChartCandidate:
++          projectAuthority := CommitChart(projectAuthority, candidate);
++        ReconcileObjectIndex:
++          if (~ValidGraphObjectIndex(candidate, graphObjectIndex)) {
++            graphObject := "none";
++            graphObjectIndex := NoSelection;
++          };
++        result := candidate;
++        };
++      };
++    };
++    return;
++  }
++
++  procedure ApplySlotsReset(slotIds) {
++  ResolveResetSlots:
++    with (slots = ResolveSlots(slotIds, projectAuthority)) {
++      if (Len(slots) = Len(slotIds)) {
++      BuildResetCandidate:
++        with (candidate = ResetWholeSlotLocalPayloadsAndOwnedCharts(projectAuthority, slots)) {
++        ValidateResetCandidate:
++          assert ValidateWholeProject(candidate);
++        CommitResetCandidate:
++          projectAuthority := candidate;
++        ReconcileResetGraphSelection:
++          graphObjectIndex := ReResolveOrClearGraphObject(projectAuthority, selectedSlotId, graphObjectIndex);
++          graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
++        result := candidate;
++        };
++      };
++    };
++    return;
++  }
++
++  procedure ApplySlotsSwapped(sourceId, targetId) {
++  ResolveVisibleSwapSlots:
++    with (source = ResolveVisibleSlot(sourceId, projectAuthority),
++          target = ResolveVisibleSlot(targetId, projectAuthority)) {
++      if (source # NoSelection /\ target # NoSelection /\ source.id # target.id) {
++      BuildSwapCandidate:
++        with (candidate = SwapOnlySlotLocalPayload(projectAuthority, source, target)) {
++        PreservePlacementGeometry:
++          assert SwapPreservesRowColSpan(candidate, source, target);
++        ValidateSwapOwnership:
++          assert ValidateWholeProject(candidate);
++        CommitSwapCandidate:
++          projectAuthority := candidate;
++        FollowSelectedPayloadIdentity:
++          selectedSlotId := ReconcileSelectionAcrossSwap(selectedSlotId, source, target);
++        result := candidate;
++        };
++      };
++    };
++    return;
++  }
++
++  procedure ApplyCaptionText(target, text) {
++  ResolveCaptionOwner:
++    with (owner = ResolveExplicitCaptionOwner(target, projectAuthority)) {
++      if (owner # NoSelection) {
++      BuildCaptionCandidate:
++        with (candidate = ReplaceOnlyResolvedCaption(projectAuthority, owner, text)) {
++        ValidateCaptionCandidate:
++          assert ValidateWholeProject(candidate);
++        CommitCaptionCandidate:
++          projectAuthority := candidate;
++        result := candidate;
++        };
++      };
++    };
++    return;
++  }
++
++  procedure ApplySlotCaptionsInserted(slotIds) {
++  ResolveOrderedSlots:
++    with (slots = ResolveSlotCaptionSources(slotIds, projectAuthority),
++          text = ProjectNonEmptySlotCaptions(slotIds, projectAuthority)) {
++    BuildGlobalCaptionCandidate:
++      with (candidate = InsertProjectedSlotTextIntoGlobalCaption(projectAuthority, text)) {
++      ValidateGlobalCaptionCandidate:
++        assert ValidateWholeProject(candidate);
++      CommitGlobalCaptionCandidate:
++        projectAuthority := candidate;
++      result := candidate;
++      };
++    };
++    return;
++  }
++
++  procedure ApplyGridLayout(rows, cols) {
++  BuildGridCandidate:
++    with (candidate = BuildGridResizeCandidate(rows, cols, projectAuthority)) {
++      if (candidate # NoSelection) {
++      ValidateGridProject:
++        assert ValidateWholeProject(candidate);
++      CommitGridProject:
++        projectAuthority := candidate;
++      ReconcileGridSelection:
++        selectedSlotId := ReResolveOrClearSelectedSlot(projectAuthority, selectedSlotId);
++      result := candidate;
++      };
++    };
++    return;
++  }
++
++  Main:
++    while (TRUE) {
++      either {
++        with (request \in CsvRequests) {
++          call SelectCsv(request);
++        };
++      } or {
++        with (request \in ObjectRequests) {
++          call SelectObject(request);
++        };
++      } or {
++        with (request \in ImageRequests) {
++          call SelectImage(request);
++        };
++      } or {
++        with (payload = NextFsmEventPayload()) {
++          call Send(payload.event, payload);
++        };
+       };
+     };
+ }
+diff --git a/pseudocode/renderer_runtime.pcal b/pseudocode/renderer_runtime.pcal
+--- a/pseudocode/renderer_runtime.pcal
++++ b/pseudocode/renderer_runtime.pcal
+@@ -1,118 +1,224 @@
+ ---- MODULE FastFigureRendererRuntimePseudocode ----
+ EXTENDS Naturals
+ 
+-\* Direct r13 translation of the slot-interaction portion of
+-\* sourcescript/renderer_runtime.py. issuedCommand is a transient renderer-to-
+-\* FSM command emission, not a second project or slot authority.
+-CONSTANTS SlotIds, ContentSlots, EmptySlots, HiddenSlots, NoSelection
+-
+-(*
+---algorithm FastFigureRendererRuntimeInteraction {
+-  variables selectedSlotId = NoSelection,
+-            slotDragSourceId = NoSelection,
+-            suppressBookmarkClick = FALSE,
+-            issuedCommand = NoSelection;
+-
+-  procedure ToggleSlot(slotId) {
+-  ResolveToggleTarget:
+-    if (slotId \in SlotIds \ HiddenSlots) {
+-      if (selectedSlotId = slotId) {
+-      DeselectSlot:
+-        selectedSlotId := NoSelection;
+-      } else {
+-      SelectSlot:
+-        selectedSlotId := slotId;
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure ContentBodyClick(slotId) {
+-  PreserveContentInteraction:
+-    skip;
+-    return;
+-  }
+-
+-  procedure EmptySlotClick(slotId) {
+-  SelectEmptySlot:
+-    if (slotId \in EmptySlots) {
+-      call ToggleSlot(slotId);
+-    };
+-    return;
+-  }
+-
+-  procedure BookmarkClick(slotId) {
+-  HandleBookmarkClick:
+-    if (~suppressBookmarkClick /\ slotId \in ContentSlots) {
+-      call ToggleSlot(slotId);
+-    };
+-    return;
+-  }
+-
+-  procedure BookmarkDragStart(slotId) {
+-  StartBookmarkDrag:
+-    if (slotId \in ContentSlots) {
+-      slotDragSourceId := slotId;
+-      suppressBookmarkClick := TRUE;
+-    };
+-    return;
+-  }
+-
+-  procedure BookmarkDrop(targetSlotId) {
+-  ResolveBookmarkDrop:
+-    if (slotDragSourceId # NoSelection
+-        /\ targetSlotId \in SlotIds \ HiddenSlots
+-        /\ targetSlotId # slotDragSourceId) {
+-    IssueSwapCommand:
+-      issuedCommand := [
+-        name |-> "SLOTS_SWAPPED",
+-        sourceId |-> slotDragSourceId,
+-        targetId |-> targetSlotId
+-      ];
+-    };
+-  FinishBookmarkDrop:
+-    slotDragSourceId := NoSelection;
+-    return;
+-  }
+-
+-  procedure FinishBookmarkDrag() {
+-  ClearDragSource:
+-    slotDragSourceId := NoSelection;
+-    return;
+-  }
+-
+-  procedure ReleaseSyntheticClickGuard() {
+-  ReleaseBookmarkClick:
+-    suppressBookmarkClick := FALSE;
+-    return;
+-  }
+-
+-  InteractionLoop:
+-    while (TRUE) {
+-      either {
+-        with (slotId \in ContentSlots) {
+-          call ContentBodyClick(slotId);
+-        };
+-      } or {
+-        with (slotId \in EmptySlots) {
+-          call EmptySlotClick(slotId);
+-        };
+-      } or {
+-        with (slotId \in ContentSlots) {
+-          call BookmarkClick(slotId);
+-        };
+-      } or {
+-        with (slotId \in ContentSlots) {
+-          call BookmarkDragStart(slotId);
+-        };
+-      } or {
+-        with (slotId \in SlotIds) {
+-          call BookmarkDrop(slotId);
+-          call FinishBookmarkDrag();
+-        };
+-      } or {
+-        \* This occurs after the drag-generated click opportunity has passed.
+-        call ReleaseSyntheticClickGuard();
++\* r13 translation of sourcescript/renderer_runtime.py.
++\* Renderer state is projection/runtime state, never persistent project authority.
++CONSTANTS SlotIds, ContentSlots, EmptySlots, HiddenSlots, NoSelection
++
++(*
++--algorithm FastFigureRendererRuntime {
++  variables selectedSlotId = NoSelection,
++            slotDragSourceId = NoSelection,
++            suppressBookmarkClick = FALSE,
++            issuedCommand = NoSelection,
++            telemetryRevision = 0,
++            statusText = "",
++            debugEnabled = FALSE,
++            lifecycle = "booting",
++            result = NoSelection;
++
++  procedure PublishTelemetry(patch) {
++  ApplyTelemetryPatch:
++    ApplyTelemetryProjectionPatch(patch);
++  IncrementTelemetryRevision:
++    telemetryRevision := telemetryRevision + 1;
++    return;
++  }
++
++  procedure SetDebug(enabled) {
++  CommitDebugRuntimeAuthority:
++    debugEnabled := ToBoolean(enabled);
++  PublishDebugProjection:
++    call PublishTelemetry([debugEnabled |-> debugEnabled]);
++    return;
++  }
++
++  procedure Status(message) {
++  NormalizeStatus:
++    statusText := NormalizeStatusText(message);
++  PublishStatus:
++    call PublishTelemetry([status |-> statusText]);
++    result := statusText;
++    return;
++  }
++
++  procedure RenderDashboard() {
++  ReadCurrentProject:
++    with (project = ReadActiveProject()) {
++    ApplyGridAndStyleProjection:
++      ProjectLayoutToDashboardCss(project);
++    PurgeStalePlots:
++      PurgeDisconnectedPlotlyInstances();
++    RenderVisibleSlots:
++      RenderEveryVisibleSlotFromProject(project);
++    RenderGraphs:
++      RenderGraphSlotsFromReferencedCharts(project);
++    RenderImages:
++      RenderImageSlotsFromReferencedAssetsAndSlotSettings(project);
++    ApplySelectionProjection:
++      ApplySelectedSlotClass(selectedSlotId);
++    RenderAnnotations:
++      RenderLabelsAndCaptions(project);
++    };
++    result := "rendered";
++    return;
++  }
++
++  procedure ToggleSlot(slotId) {
++  ResolveToggleTarget:
++    if (slotId \in SlotIds \ HiddenSlots) {
++      if (selectedSlotId = slotId) {
++      DeselectSlot:
++        selectedSlotId := NoSelection;
++      } else {
++      SelectSlot:
++        selectedSlotId := slotId;
++      };
++    };
++  RefreshWorkspaceProjection:
++    issuedCommand := [name |-> "SELECT_SLOT", slotId |-> selectedSlotId];
++    RequestGraphViewAndResize();
++    return;
++  }
++
++  procedure ContentBodyClick(slotId) {
++  PreserveContentInteraction:
++    skip;
++    return;
++  }
++
++  procedure EmptySlotClick(slotId) {
++  SelectEmptySlot:
++    if (slotId \in EmptySlots) {
++      call ToggleSlot(slotId);
++    };
++    return;
++  }
++
++  procedure BookmarkClick(slotId) {
++  HandleBookmarkClick:
++    if (~suppressBookmarkClick /\ slotId \in ContentSlots) {
++      call ToggleSlot(slotId);
++    };
++    return;
++  }
++
++  procedure BookmarkDragStart(slotId) {
++  StartBookmarkDrag:
++    if (slotId \in ContentSlots) {
++      slotDragSourceId := slotId;
++      suppressBookmarkClick := TRUE;
++    };
++    return;
++  }
++
++  procedure BookmarkDrop(targetSlotId) {
++  ResolveBookmarkDrop:
++    if (slotDragSourceId # NoSelection
++        /\ targetSlotId \in SlotIds \ HiddenSlots
++        /\ targetSlotId # slotDragSourceId) {
++    IssueSwapCommand:
++      issuedCommand := [
++        name |-> "SLOTS_SWAPPED",
++        sourceId |-> slotDragSourceId,
++        targetId |-> targetSlotId
++      ];
++    };
++  ClearDragSource:
++    slotDragSourceId := NoSelection;
++    return;
++  }
++
++  procedure ReleaseSyntheticClickGuard() {
++  ReleaseBookmarkClick:
++    suppressBookmarkClick := FALSE;
++    return;
++  }
++
++  procedure PrepareExternalFileDrop(slotId) {
++  ResolveExternalDropTarget:
++    if (slotId \in SlotIds \ HiddenSlots) {
++      if (selectedSlotId # slotId) {
++      SelectDropTargetWorkspace:
++        call ToggleSlot(slotId);
++      };
++      result := TRUE;
++    } else {
++      result := FALSE;
++    };
++  ClearSlotDragSource:
++    slotDragSourceId := NoSelection;
++    return;
++  }
++
++  procedure ResolveSelectedChart() {
++  ResolveSelectedSlot:
++    with (slot = ResolveSlotFromActiveProject(selectedSlotId)) {
++      if (slot # NoSelection /\ slot.chart # NoSelection) {
++      ResolveReferencedChart:
++        result := ResolveChartFromActiveProject(slot.chart);
++      } else {
++        result := NoSelection;
++      };
++    };
++    return;
++  }
++
++  procedure UpdateGraphView() {
++  ReResolveSelectedWorkspace:
++    result := ProjectWorkspaceFromCurrentSelection(selectedSlotId);
++  RenderWorkspaceFromAuthority:
++    RenderWorkspaceProjection(result);
++    return;
++  }
++
++  procedure ApplySlotStyle(notify) {
++  ReadPersistentSlotStyle:
++    with (style = ReadActiveProjectSlotStyle()) {
++      ApplyStyleProjection:
++        ApplyDashboardCssFromStyle(style);
++    };
++  OptionalLayoutNotification:
++    if (notify) {
++      issuedCommand := [name |-> "notify-layout"];
++    };
++    return;
++  }
++
++  procedure StartupCoreRuntime() {
++  RequireValidExistingProject:
++    assert ValidateWholeProject(ReadActiveProject());
++  ApplyInitialZoom:
++    ApplyDashboardZoomProjection();
++  InstallSlotInteractionController:
++    InstallBookmarkAndDropController();
++  RenderExistingSlots:
++    call RenderDashboard();
++  ApplyInitialSlotStyle:
++    call ApplySlotStyle(FALSE);
++  EnterReadyLifecycle:
++    lifecycle := "ready";
++  AuditRuntimeInvariants:
++    assert AuditProjectReferenceRuntimeInvariants();
++  ReturnReadyRuntime:
++    result := "ready";
++    return;
++  }
++
++  Main:
++    while (TRUE) {
++      either {
++        call RenderDashboard();
++      } or {
++        with (slotId \in ContentSlots) {
++          call BookmarkClick(slotId);
++        };
++      } or {
++        with (slotId \in EmptySlots) {
++          call EmptySlotClick(slotId);
++        };
++      } or {
++        call StartupCoreRuntime();
+       };
+     };
+ }
+diff --git a/pseudocode/api_ui.pcal b/pseudocode/api_ui.pcal
+--- a/pseudocode/api_ui.pcal
++++ b/pseudocode/api_ui.pcal
+@@ -1,75 +1,144 @@
+ ---- MODULE FastFigureApiUiPseudocode ----
+ EXTENDS Naturals
+ 
+-\* Direct r13 translation of dashboard drop orchestration from
+-\* sourcescript/api_ui.py. Persistent import/link mutation is delegated to
+-\* the declared asset command; prepare/finish own runtime interaction only.
+-CONSTANTS SlotIds, Files, AssetPaths, AssetKinds, NoValue
+-
+-(*
+---algorithm FastFigureApiUiDropFlow {
+-  variables preparedSlot = NoValue,
+-            lifecycle = "ready",
+-            lastPersistentCommand = NoValue,
+-            dragRuntimeActive = FALSE;
+-
+-  procedure PrepareFileDrop(slotId) {
+-  ResolveDropTarget:
+-    if (slotId \in SlotIds) {
+-      preparedSlot := slotId;
+-      dragRuntimeActive := TRUE;
+-    } else {
+-      preparedSlot := NoValue;
+-    };
+-    return;
+-  }
+-
+-  procedure ImportExternalFile(file, slotId) {
+-  PrepareExternalDrop:
+-    call PrepareFileDrop(slotId);
+-  CheckExternalTarget:
+-    if (preparedSlot # NoValue) {
+-    EnterImportLifecycle:
+-      lifecycle := "importing";
+-    CommitThroughImportToSlot:
+-      lastPersistentCommand := [
+-        name |-> "assets.importToSlot",
+-        file |-> file,
+-        slotId |-> preparedSlot
+-      ];
+-    LeaveImportLifecycle:
+-      lifecycle := "ready";
+-    };
+-  FinishExternalDrop:
+-    dragRuntimeActive := FALSE;
+-    preparedSlot := NoValue;
+-    return;
+-  }
+-
+-  procedure ConnectExistingAsset(path, kind, slotId) {
+-  ResolveExplicitAssetDrop:
+-    if (path \in AssetPaths /\ kind \in AssetKinds /\ slotId \in SlotIds) {
+-    CommitThroughConnectToSlot:
+-      lastPersistentCommand := [
+-        name |-> "assets.connectToSlot",
+-        path |-> path,
+-        kind |-> kind,
+-        slotId |-> slotId
+-      ];
+-    };
+-    return;
+-  }
+-
+-  DropLoop:
+-    while (TRUE) {
+-      either {
+-        with (file \in Files, slotId \in SlotIds) {
+-          call ImportExternalFile(file, slotId);
+-        };
+-      } or {
+-        with (path \in AssetPaths, kind \in AssetKinds, slotId \in SlotIds) {
+-          call ConnectExistingAsset(path, kind, slotId);
+-        };
++\* r13 translation of sourcescript/api_ui.py.
++\* UI-local modal/form/pointer values do not become project authority.
++CONSTANTS SlotIds, Files, AssetPaths, AssetKinds, NoValue
++
++(*
++--algorithm FastFigureApiUi {
++  variables appRevision = 0,
++            collisionDraft = NoValue,
++            resolver = NoValue,
++            preparedSlot = NoValue,
++            lifecycle = "ready",
++            lastPersistentCommand = NoValue,
++            dragRuntimeActive = FALSE,
++            sidebarState = [width |-> 0, collapsed |-> FALSE],
++            result = NoValue;
++
++  procedure SubscribeAppState(callback) {
++  RegisterExternalStoreListener:
++    result := RegisterAppFsmSubscriber(callback);
++    return;
++  }
++
++  procedure ChooseImportPlan(file, directory, reservedPaths) {
++  CalculateCollisionModel:
++    with (model = CoreCollisionModel(file, directory, reservedPaths)) {
++      if (model.mode = "available") {
++      ResolveWithoutModal:
++        result := CoreResolveImportPlan(model, "available", reservedPaths);
++      } else {
++      HoldUiLocalResolver:
++        collisionDraft := model;
++        resolver := [file |-> file, directory |-> directory, reserved |-> reservedPaths];
++      AwaitUserChoice:
++        with (choice = AwaitCollisionModalChoice()) {
++          if (choice = "cancel") {
++          CancelCollisionChoice:
++            collisionDraft := NoValue;
++            resolver := NoValue;
++            result := NoValue;
++          } else {
++          ResolveChosenPlan:
++            result := CoreResolveImportPlan(model, choice, reservedPaths);
++          ClearCollisionDraft:
++            collisionDraft := NoValue;
++            resolver := NoValue;
++          };
++        };
++      };
++    };
++    return;
++  }
++
++  procedure RunUiLifecycle(requestedLifecycle, eventName, task) {
++  DelegateLifecycle:
++    result := AppFsmRun(requestedLifecycle, eventName, task);
++  RecordUiErrorOnly:
++    if (TaskFailed(result)) {
++      PublishDebugTelemetry(TaskError(result));
++    };
++    return;
++  }
++
++  procedure PrepareFileDrop(slotId) {
++  ResolveDropTarget:
++    if (slotId \in SlotIds) {
++      preparedSlot := slotId;
++      dragRuntimeActive := TRUE;
++      SelectSlotForImportWorkspaceIfNeeded(slotId);
++    } else {
++      preparedSlot := NoValue;
++    };
++    return;
++  }
++
++  procedure ImportExternalFile(file, slotId) {
++  PrepareExternalDrop:
++    call PrepareFileDrop(slotId);
++  CheckExternalTarget:
++    if (preparedSlot # NoValue) {
++    RunImportLifecycle:
++      call RunUiLifecycle(
++        "importing",
++        "SLOT_DROP_IMPORT",
++        [command |-> "assets.importToSlot", file |-> file, slotId |-> preparedSlot]);
++    };
++  FinishExternalDrop:
++    dragRuntimeActive := FALSE;
++    preparedSlot := NoValue;
++    return;
++  }
++
++  procedure ConnectExistingAsset(path, kind, slotId) {
++  ResolveExplicitAssetDrop:
++    if (path \in AssetPaths /\ kind \in AssetKinds /\ slotId \in SlotIds) {
++    CommitThroughConnectToSlot:
++      lastPersistentCommand := [
++        name |-> "assets.connectToSlot",
++        path |-> path,
++        kind |-> kind,
++        slotId |-> slotId
++      ];
++    };
++    return;
++  }
++
++  procedure RenderApp() {
++  ReadPersistentAppearance:
++    with (palette = ReadAppearancePalette()) {
++    ProjectMantineVariables:
++      result := MantineProviderWithPalette(palette);
++    };
++  MountOneShell:
++    result := MountFastFigureShell(result);
++    return;
++  }
++
++  procedure UpdateShellSidebar(width, collapsed) {
++  UpdateSessionLocalSidebar:
++    sidebarState := [width |-> width, collapsed |-> collapsed];
++  ProjectRendererGeometry:
++    ApplySidebarGeometryToRenderer(sidebarState);
++  RequestPlotResize:
++    RequestPlotResizeFromCurrentAuthority();
++    return;
++  }
++
++  Main:
++    while (TRUE) {
++      either {
++        with (file \in Files, slotId \in SlotIds) {
++          call ImportExternalFile(file, slotId);
++        };
++      } or {
++        with (path \in AssetPaths, kind \in AssetKinds, slotId \in SlotIds) {
++          call ConnectExistingAsset(path, kind, slotId);
++        };
++      } or {
++        call RenderApp();
+       };
+     };
+ }
+diff --git a/pseudocode/system.pcal b/pseudocode/system.pcal
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/system.pcal
+@@ -0,0 +1,56 @@
++---- MODULE FastFigureSystemPseudocode ----
++EXTENDS Naturals
++
++\* r13 translation of sourcescript/system.py.
++\* system.py is the semantic root; responsibility modules remain siblings.
++CONSTANT NoValue
++
++(*
++--algorithm FastFigureSystem {
++  variables activeProject = NoValue,
++            coreRuntime = "uninitialized",
++            appLifecycle = "booting",
++            apiExposed = FALSE,
++            mantineMounted = FALSE,
++            result = NoValue;
++
++  procedure InitializeFastFigure() {
++  CreateDefaultProjectCandidate:
++    with (candidate = CreateProjectState()) {
++    ValidateDefaultProject:
++      assert ValidateWholeProject(candidate);
++    CommitInitialProject:
++      activeProject := candidate;
++    };
++  ValidateRendererHosts:
++    assert RequiredRendererHostsExist();
++  PrepareDashboardRuntime:
++    ApplyDashboardZoomProjection();
++    InstallSlotInteractionController();
++  RenderExistingProjectSlots:
++    RenderDashboardFrom(activeProject);
++  ApplyInitialStyleAndGeometry:
++    ApplySlotStyleFrom(activeProject);
++  EnterReadyLifecycle:
++    appLifecycle := "ready";
++    SynchronizeInitialWorkspaceAndOverlay();
++  ExposeApiBoundary:
++    apiExposed := TRUE;
++  MountMantineFrontend:
++    MountMantineProviderAndShell();
++    mantineMounted := TRUE;
++  ProhibitSyntheticDefaultData:
++    assert NoDefaultCsvOrFakeGraphObjectWasCreated(activeProject);
++  FinalInvariantAudit:
++    assert AuditProjectReferenceRuntimeInvariants();
++  CompleteInitialization:
++    coreRuntime := "ready";
++    result := "initialized";
++    return;
++  }
++
++  Main:
++    call InitializeFastFigure();
++}
++*)
++====
+diff --git a/pseudocode/portable_build.pcal b/pseudocode/portable_build.pcal
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/portable_build.pcal
+@@ -0,0 +1,53 @@
++---- MODULE FastFigurePortableBuildPseudocode ----
++EXTENDS Naturals, Sequences
++
++\* r13 translation of sourcescript/portable_build.py.
++CONSTANTS ScriptSpecs, NoValue
++
++(*
++--algorithm FastFigurePortableBuild {
++  variables htmlBytes = NoValue,
++            outputBytes = NoValue,
++            result = NoValue;
++
++  procedure Build(output) {
++  ReadTemplate:
++    htmlBytes := ReadBytes("Fast-figure.html");
++    outputBytes := htmlBytes;
++  InlineScriptsInDeclaredOrder:
++    with (specs = ScriptSpecs) {
++      while (Len(specs) > 0) {
++        with (spec = Head(specs)) {
++        RequireExactlyOneExternalTag:
++          assert CountExactExternalTag(outputBytes, spec.externalTag) = 1;
++        RequireSourceFile:
++          assert SourceFileExists(spec.source);
++        ReadSourceBytes:
++          with (sourceBytes = ReadBytes(spec.source)) {
++          ReplaceExactlyOnce:
++            outputBytes := ReplaceTagWithInlineBytes(
++              outputBytes,
++              spec.externalTag,
++              spec.inlineTag,
++              sourceBytes);
++          };
++        };
++        specs := Tail(specs);
++      };
++    };
++  RequireNoExternalRuntimeTags:
++    assert NoDeclaredExternalScriptTagRemains(outputBytes);
++  CreateOutputParent:
++    EnsureOutputParentExists(output);
++  WritePortableArtifact:
++    WriteBytes(output, outputBytes);
++  ReturnOutput:
++    result := output;
++    return;
++  }
++
++  Main:
++    call Build(DefaultOutputPath());
++}
++*)
++====
+diff --git a/pseudocode/README.md b/pseudocode/README.md
+--- a/pseudocode/README.md
++++ b/pseudocode/README.md
+@@ -28,14 +28,15 @@
+ 
+ | Source Script | Active PlusCal | Status |
+ | --- | --- | --- |
+-| `sourcescript/application_fsm.py` | `application_fsm.pcal` | selection-command portion translated |
+-| `sourcescript/renderer_runtime.py` | `renderer_runtime.pcal` | slot bookmark interaction portion translated |
+-| `sourcescript/api_ui.py` | `api_ui.pcal` | dashboard drop orchestration portion translated |
+-| `sourcescript/project_state.py` | `project_state.pcal` | authority/validation/reference lifecycle translated |
+-| `sourcescript/graphs.py` | `graphs.pcal` | chart/object/editable/import-export mutation flow translated |
+-| `sourcescript/assets_files.py` | `assets_files.pcal` | VFS/import/delete/move/package transaction flow translated |
+-| `sourcescript/layout_annotations_export.py` | `layout_annotations_export.pcal` | grid/slot-local annotation/export flow translated |
+-| other Source Script modules | pending | not yet translated to r13 PlusCal |
++| `sourcescript/application_fsm.py` | `application_fsm.pcal` | event/transition/lifecycle + selection/project/slot/chart/layout actions translated |
++| `sourcescript/renderer_runtime.py` | `renderer_runtime.pcal` | telemetry/render/bookmark/drop/workspace/startup flow translated |
++| `sourcescript/api_ui.py` | `api_ui.pcal` | subscription/collision/lifecycle/drop/app-shell boundary translated |
++| `sourcescript/project_state.py` | `project_state.pcal` | authority/validation/reference lifecycle translated |
++| `sourcescript/graphs.py` | `graphs.pcal` | chart/object/editable/import-export mutation flow translated |
++| `sourcescript/assets_files.py` | `assets_files.pcal` | VFS/import/delete/move/package transaction flow translated |
++| `sourcescript/layout_annotations_export.py` | `layout_annotations_export.pcal` | grid/slot-local annotation/export flow translated |
++| `sourcescript/system.py` | `system.pcal` | initialization/root orchestration translated |
++| `sourcescript/portable_build.py` | `portable_build.pcal` | portable build flow translated |
+ 
+ The Source Script hierarchy remains `system.py` as the system root with responsibility modules as siblings. PlusCal files do not introduce new semantic parent/child modules.
+ 

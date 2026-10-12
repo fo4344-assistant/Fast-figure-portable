@@ -1,0 +1,53 @@
+---- MODULE FastFigurePortableBuildPseudocode ----
+EXTENDS Naturals, Sequences
+
+\* r13 translation of sourcescript/portable_build.py.
+CONSTANTS ScriptSpecs, NoValue
+
+(*
+--algorithm FastFigurePortableBuild {
+  variables htmlBytes = NoValue,
+            outputBytes = NoValue,
+            result = NoValue;
+
+  procedure Build(output) {
+  ReadTemplate:
+    htmlBytes := ReadBytes("Fast-figure.html");
+    outputBytes := htmlBytes;
+  InlineScriptsInDeclaredOrder:
+    with (specs = ScriptSpecs) {
+      while (Len(specs) > 0) {
+        with (spec = Head(specs)) {
+        RequireExactlyOneExternalTag:
+          assert CountExactExternalTag(outputBytes, spec.externalTag) = 1;
+        RequireSourceFile:
+          assert SourceFileExists(spec.source);
+        ReadSourceBytes:
+          with (sourceBytes = ReadBytes(spec.source)) {
+          ReplaceExactlyOnce:
+            outputBytes := ReplaceTagWithInlineBytes(
+              outputBytes,
+              spec.externalTag,
+              spec.inlineTag,
+              sourceBytes);
+          };
+        };
+        specs := Tail(specs);
+      };
+    };
+  RequireNoExternalRuntimeTags:
+    assert NoDeclaredExternalScriptTagRemains(outputBytes);
+  CreateOutputParent:
+    EnsureOutputParentExists(output);
+  WritePortableArtifact:
+    WriteBytes(output, outputBytes);
+  ReturnOutput:
+    result := output;
+    return;
+  }
+
+  Main:
+    call Build(DefaultOutputPath());
+}
+*)
+====

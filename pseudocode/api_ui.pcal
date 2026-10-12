@@ -1,23 +1,74 @@
 ---- MODULE FastFigureApiUiPseudocode ----
 EXTENDS Naturals
 
-\* Direct r13 translation of dashboard drop orchestration from
-\* sourcescript/api_ui.py. Persistent import/link mutation is delegated to
-\* the declared asset command; prepare/finish own runtime interaction only.
+\* r13 translation of sourcescript/api_ui.py.
+\* UI-local modal/form/pointer values do not become project authority.
 CONSTANTS SlotIds, Files, AssetPaths, AssetKinds, NoValue
 
 (*
---algorithm FastFigureApiUiDropFlow {
-  variables preparedSlot = NoValue,
+--algorithm FastFigureApiUi {
+  variables appRevision = 0,
+            collisionDraft = NoValue,
+            resolver = NoValue,
+            preparedSlot = NoValue,
             lifecycle = "ready",
             lastPersistentCommand = NoValue,
-            dragRuntimeActive = FALSE;
+            dragRuntimeActive = FALSE,
+            sidebarState = [width |-> 0, collapsed |-> FALSE],
+            result = NoValue;
+
+  procedure SubscribeAppState(callback) {
+  RegisterExternalStoreListener:
+    result := RegisterAppFsmSubscriber(callback);
+    return;
+  }
+
+  procedure ChooseImportPlan(file, directory, reservedPaths) {
+  CalculateCollisionModel:
+    with (model = CoreCollisionModel(file, directory, reservedPaths)) {
+      if (model.mode = "available") {
+      ResolveWithoutModal:
+        result := CoreResolveImportPlan(model, "available", reservedPaths);
+      } else {
+      HoldUiLocalResolver:
+        collisionDraft := model;
+        resolver := [file |-> file, directory |-> directory, reserved |-> reservedPaths];
+      AwaitUserChoice:
+        with (choice = AwaitCollisionModalChoice()) {
+          if (choice = "cancel") {
+          CancelCollisionChoice:
+            collisionDraft := NoValue;
+            resolver := NoValue;
+            result := NoValue;
+          } else {
+          ResolveChosenPlan:
+            result := CoreResolveImportPlan(model, choice, reservedPaths);
+          ClearCollisionDraft:
+            collisionDraft := NoValue;
+            resolver := NoValue;
+          };
+        };
+      };
+    };
+    return;
+  }
+
+  procedure RunUiLifecycle(requestedLifecycle, eventName, task) {
+  DelegateLifecycle:
+    result := AppFsmRun(requestedLifecycle, eventName, task);
+  RecordUiErrorOnly:
+    if (TaskFailed(result)) {
+      PublishDebugTelemetry(TaskError(result));
+    };
+    return;
+  }
 
   procedure PrepareFileDrop(slotId) {
   ResolveDropTarget:
     if (slotId \in SlotIds) {
       preparedSlot := slotId;
       dragRuntimeActive := TRUE;
+      SelectSlotForImportWorkspaceIfNeeded(slotId);
     } else {
       preparedSlot := NoValue;
     };
@@ -29,16 +80,11 @@ CONSTANTS SlotIds, Files, AssetPaths, AssetKinds, NoValue
     call PrepareFileDrop(slotId);
   CheckExternalTarget:
     if (preparedSlot # NoValue) {
-    EnterImportLifecycle:
-      lifecycle := "importing";
-    CommitThroughImportToSlot:
-      lastPersistentCommand := [
-        name |-> "assets.importToSlot",
-        file |-> file,
-        slotId |-> preparedSlot
-      ];
-    LeaveImportLifecycle:
-      lifecycle := "ready";
+    RunImportLifecycle:
+      call RunUiLifecycle(
+        "importing",
+        "SLOT_DROP_IMPORT",
+        [command |-> "assets.importToSlot", file |-> file, slotId |-> preparedSlot]);
     };
   FinishExternalDrop:
     dragRuntimeActive := FALSE;
@@ -60,7 +106,28 @@ CONSTANTS SlotIds, Files, AssetPaths, AssetKinds, NoValue
     return;
   }
 
-  DropLoop:
+  procedure RenderApp() {
+  ReadPersistentAppearance:
+    with (palette = ReadAppearancePalette()) {
+    ProjectMantineVariables:
+      result := MantineProviderWithPalette(palette);
+    };
+  MountOneShell:
+    result := MountFastFigureShell(result);
+    return;
+  }
+
+  procedure UpdateShellSidebar(width, collapsed) {
+  UpdateSessionLocalSidebar:
+    sidebarState := [width |-> width, collapsed |-> collapsed];
+  ProjectRendererGeometry:
+    ApplySidebarGeometryToRenderer(sidebarState);
+  RequestPlotResize:
+    RequestPlotResizeFromCurrentAuthority();
+    return;
+  }
+
+  Main:
     while (TRUE) {
       either {
         with (file \in Files, slotId \in SlotIds) {
@@ -70,6 +137,8 @@ CONSTANTS SlotIds, Files, AssetPaths, AssetKinds, NoValue
         with (path \in AssetPaths, kind \in AssetKinds, slotId \in SlotIds) {
           call ConnectExistingAsset(path, kind, slotId);
         };
+      } or {
+        call RenderApp();
       };
     };
 }

@@ -1,20 +1,122 @@
 ---- MODULE FastFigureApplicationFsmPseudocode ----
-EXTENDS Naturals
+EXTENDS Naturals, Sequences
 
-\* Direct r13 translation of the selection-command portion of
-\* sourcescript/application_fsm.py. Resolver functions return NoSelection
-\* when the requested current reference cannot be resolved.
+\* r13 translation of sourcescript/application_fsm.py.
+\* Domain helpers below represent Source Script-defined candidate calculations.
 CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
           ResolveCsvPath, ResolveImagePath,
           ResolveObjectIndex, ResolveObjectCsvPath,
           NoSelection
 
 (*
---algorithm FastFigureApplicationFsmSelection {
-  variables assetSelection = "none",
+--algorithm FastFigureApplicationFsm {
+  variables lifecycle = "booting",
+            workspace = "project",
+            overlay = "none",
+            assetSelection = "none",
             assetPath = NoSelection,
             graphObject = "none",
-            graphObjectIndex = NoSelection;
+            graphObjectIndex = NoSelection,
+            direction = "fsm-to-model",
+            revision = 0,
+            error = NoSelection,
+            projectAuthority = ReadActiveProject(),
+            selectedSlotId = NoSelection,
+            result = NoSelection;
+
+  procedure PublishState() {
+  PublishRevision:
+    revision := revision + 1;
+    return;
+  }
+
+  procedure Transition(region, target, event, payload) {
+  ResolveTransitionMode:
+    if (CurrentRegionState(region) = target /\ ~RequestsReentry(payload)) {
+    RunUpdateHook:
+      RunRegionUpdateHook(region, event, payload);
+    } else {
+    RunExitHook:
+      RunRegionExitHook(region, event, payload);
+    CommitRegionTarget:
+      SetRegionState(region, target);
+    RunEntryHook:
+      RunRegionEntryHook(region, event, payload);
+    };
+  ApplyDirection:
+    direction := PayloadDirectionOrDefault(payload);
+  PublishTransition:
+    call PublishState();
+    return;
+  }
+
+  procedure Send(event, payload) {
+  ProcessRegionsInOrder:
+    with (regions = RegionOrder()) {
+      result := FALSE;
+      while (Len(regions) > 0) {
+        with (region = Head(regions),
+              handler = ResolveRegionHandler(Head(regions), event)) {
+          if (handler # NoSelection) {
+          ExecuteActionFirst:
+            RunHandlerAction(handler, payload);
+          ExecuteTargetSecond:
+            if (HandlerHasTarget(handler)) {
+              call Transition(region, HandlerTarget(handler, payload), event, payload);
+            };
+          MarkHandled:
+            result := TRUE;
+          };
+        };
+        regions := Tail(regions);
+      };
+    };
+  UnhandledEvent:
+    if (~result) {
+      RecordDebugWarning(event);
+    };
+    return;
+  }
+
+  procedure Notify(objectName, event, payload) {
+  RejectDuringBootOrTransition:
+    if (lifecycle = "booting" \/ IsTransitionInProgress()) {
+      return;
+    };
+  SetModelToUiDirection:
+    direction := "model-to-ui";
+  UpdateSubscribedProjection:
+    if (CurrentWorkspaceOrOverlaySubscribes(objectName)) {
+      RunProjectionUpdate(objectName, event, payload);
+    };
+  PublishNotification:
+    call PublishState();
+    return;
+  }
+
+  procedure RunLifecycle(requestedLifecycle, event, task) {
+  RequireReady:
+    if (lifecycle # "ready") {
+      result := NoSelection;
+      return;
+    };
+  EnterLifecycle:
+    lifecycle := requestedLifecycle;
+    call PublishState();
+  RunTask:
+    try {
+      result := ExecuteTask(task);
+    } catch (taskError) {
+    RecordLifecycleError:
+      error := taskError;
+      lifecycle := "error";
+      call PublishState();
+    };
+  RestoreReady:
+    lifecycle := "ready";
+    call PublishState();
+    return;
+  }
 
   procedure SelectCsv(request) {
   ResolveCsv:
@@ -69,7 +171,205 @@ CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
     return;
   }
 
-  SelectionLoop:
+  procedure ApplySlotSelection(payload) {
+  ResolveSlotSelection:
+    with (slot = ResolveSlotFromCurrentProject(payload.slotId)) {
+      if (payload.slotId = NoSelection) {
+      ClearSelectedSlot:
+        selectedSlotId := NoSelection;
+      ClearGraphForProjectWorkspace:
+        graphObject := "none";
+        graphObjectIndex := NoSelection;
+      SetProjectWorkspace:
+        workspace := "project";
+      } else {
+        if (slot # NoSelection) {
+          if (PayloadUsesUiToggle(payload) /\ selectedSlotId = slot.id) {
+          ToggleSelectedSlotOff:
+            selectedSlotId := NoSelection;
+          ClearGraphAfterDeselect:
+            graphObject := "none";
+            graphObjectIndex := NoSelection;
+          SetProjectAfterDeselect:
+            workspace := "project";
+          } else {
+          CommitSelectedSlot:
+            selectedSlotId := slot.id;
+          ReconcileGraphSelection:
+            if (~GraphObjectSelectionValidForSlot(slot, graphObjectIndex)) {
+              graphObject := "none";
+              graphObjectIndex := NoSelection;
+            };
+          DeriveWorkspace:
+            workspace := IF slot.contentType = "image" THEN "slot.image" ELSE "slot.graph";
+          };
+        };
+      };
+    };
+    return;
+  }
+
+  procedure ApplyProjectLoaded(project) {
+  CheckProjectWriteScope:
+    assert HasWriteScope("project");
+  ValidateProjectCandidate:
+    assert ValidateWholeProject(project);
+  CommitWholeProject:
+    projectAuthority := project;
+  ReconcileSelections:
+    selectedSlotId := ReResolveOrClearSelectedSlot(projectAuthority, selectedSlotId);
+    assetSelection := ReResolveOrClearAssetKind(projectAuthority, assetPath);
+    assetPath := ReResolveOrClearAssetPath(projectAuthority, assetPath);
+    graphObjectIndex := ReResolveOrClearGraphObject(projectAuthority, selectedSlotId, graphObjectIndex);
+    graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
+  ReleasePreviousDisplayResources:
+    ReleaseOldProjectResourcesAfterCommit();
+  ReprojectLoadedProject:
+    ReprojectRendererFrom(projectAuthority);
+    return;
+  }
+
+  procedure ApplyProjectNodeMoved(payload) {
+  ResolveMove:
+    with (move = ResolveCurrentMoveInputs(payload, projectAuthority)) {
+      if (move # NoSelection /\ MovePreconditionsHold(move)) {
+      BuildMoveCandidate:
+        with (candidate = BuildMoveAndReferenceCascade(move, projectAuthority)) {
+        ValidateMoveCandidate:
+          assert CandidateReferencesMatchCollectedReferences(candidate);
+          assert ValidateWholeProject(candidate);
+        CommitMoveCandidate:
+          projectAuthority := candidate;
+        ReconcileMoveSelections:
+          assetPath := ReResolveOrClearAssetPath(projectAuthority, assetPath);
+          assetSelection := ReResolveOrClearAssetKind(projectAuthority, assetPath);
+          graphObjectIndex := ReResolveOrClearGraphObject(projectAuthority, selectedSlotId, graphObjectIndex);
+          graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
+        result := FinalMovePath(candidate);
+        };
+      };
+    };
+    return;
+  }
+
+  procedure ApplyGraphObjectsReplaced(payload) {
+  ResolveEditableChart:
+    with (chart = ResolveEditableChart(payload.chartId, projectAuthority)) {
+      if (chart # NoSelection) {
+      NormalizeObjectCandidate:
+        with (candidate = ReplaceAndNormalizeGraphObjects(chart, payload.objects, projectAuthority)) {
+        ValidateGraphReferences:
+          assert ValidateGraphObjectReferences(candidate, projectAuthority);
+        RebuildGraphProjection:
+          candidate := RebuildEditableGraphCandidate(candidate, projectAuthority);
+        ValidateChartOwnership:
+          assert ValidateChartOwnershipInProject(candidate, projectAuthority);
+        CommitChartCandidate:
+          projectAuthority := CommitChart(projectAuthority, candidate);
+        ReconcileObjectIndex:
+          if (~ValidGraphObjectIndex(candidate, graphObjectIndex)) {
+            graphObject := "none";
+            graphObjectIndex := NoSelection;
+          };
+        result := candidate;
+        };
+      };
+    };
+    return;
+  }
+
+  procedure ApplySlotsReset(slotIds) {
+  ResolveResetSlots:
+    with (slots = ResolveSlots(slotIds, projectAuthority)) {
+      if (Len(slots) = Len(slotIds)) {
+      BuildResetCandidate:
+        with (candidate = ResetWholeSlotLocalPayloadsAndOwnedCharts(projectAuthority, slots)) {
+        ValidateResetCandidate:
+          assert ValidateWholeProject(candidate);
+        CommitResetCandidate:
+          projectAuthority := candidate;
+        ReconcileResetGraphSelection:
+          graphObjectIndex := ReResolveOrClearGraphObject(projectAuthority, selectedSlotId, graphObjectIndex);
+          graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
+        result := candidate;
+        };
+      };
+    };
+    return;
+  }
+
+  procedure ApplySlotsSwapped(sourceId, targetId) {
+  ResolveVisibleSwapSlots:
+    with (source = ResolveVisibleSlot(sourceId, projectAuthority),
+          target = ResolveVisibleSlot(targetId, projectAuthority)) {
+      if (source # NoSelection /\ target # NoSelection /\ source.id # target.id) {
+      BuildSwapCandidate:
+        with (candidate = SwapOnlySlotLocalPayload(projectAuthority, source, target)) {
+        PreservePlacementGeometry:
+          assert SwapPreservesRowColSpan(candidate, source, target);
+        ValidateSwapOwnership:
+          assert ValidateWholeProject(candidate);
+        CommitSwapCandidate:
+          projectAuthority := candidate;
+        FollowSelectedPayloadIdentity:
+          selectedSlotId := ReconcileSelectionAcrossSwap(selectedSlotId, source, target);
+        result := candidate;
+        };
+      };
+    };
+    return;
+  }
+
+  procedure ApplyCaptionText(target, text) {
+  ResolveCaptionOwner:
+    with (owner = ResolveExplicitCaptionOwner(target, projectAuthority)) {
+      if (owner # NoSelection) {
+      BuildCaptionCandidate:
+        with (candidate = ReplaceOnlyResolvedCaption(projectAuthority, owner, text)) {
+        ValidateCaptionCandidate:
+          assert ValidateWholeProject(candidate);
+        CommitCaptionCandidate:
+          projectAuthority := candidate;
+        result := candidate;
+        };
+      };
+    };
+    return;
+  }
+
+  procedure ApplySlotCaptionsInserted(slotIds) {
+  ResolveOrderedSlots:
+    with (slots = ResolveSlotCaptionSources(slotIds, projectAuthority),
+          text = ProjectNonEmptySlotCaptions(slotIds, projectAuthority)) {
+    BuildGlobalCaptionCandidate:
+      with (candidate = InsertProjectedSlotTextIntoGlobalCaption(projectAuthority, text)) {
+      ValidateGlobalCaptionCandidate:
+        assert ValidateWholeProject(candidate);
+      CommitGlobalCaptionCandidate:
+        projectAuthority := candidate;
+      result := candidate;
+      };
+    };
+    return;
+  }
+
+  procedure ApplyGridLayout(rows, cols) {
+  BuildGridCandidate:
+    with (candidate = BuildGridResizeCandidate(rows, cols, projectAuthority)) {
+      if (candidate # NoSelection) {
+      ValidateGridProject:
+        assert ValidateWholeProject(candidate);
+      CommitGridProject:
+        projectAuthority := candidate;
+      ReconcileGridSelection:
+        selectedSlotId := ReResolveOrClearSelectedSlot(projectAuthority, selectedSlotId);
+      result := candidate;
+      };
+    };
+    return;
+  }
+
+  Main:
     while (TRUE) {
       either {
         with (request \in CsvRequests) {
@@ -84,13 +384,9 @@ CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
           call SelectImage(request);
         };
       } or {
-      ClearGraphObject:
-        graphObject := "none";
-        graphObjectIndex := NoSelection;
-      } or {
-      ClearAsset:
-        assetSelection := "none";
-        assetPath := NoSelection;
+        with (payload = NextFsmEventPayload()) {
+          call Send(payload.event, payload);
+        };
       };
     };
 }
