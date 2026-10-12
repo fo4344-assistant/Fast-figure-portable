@@ -1,0 +1,382 @@
+diff --git a/pseudocode/application_fsm.pcal b/pseudocode/application_fsm.pcal
+--- a/pseudocode/application_fsm.pcal
++++ b/pseudocode/application_fsm.pcal
+@@ -11,75 +11,86 @@
+ 
+ (*
+ --algorithm FastFigureApplicationFsmSelection {
+-  variables assetSelection = [kind |-> "none", path |-> NoSelection],
+-            graphObjectIndex = NoSelection;
+-
+-  procedure SelectCsv(request) {
+-  ResolveCsv:
+-    with (csvPath = ResolveCsvPath[request]) {
+-      if (csvPath # NoSelection) {
+-      ClearObjectForCsv:
+-        graphObjectIndex := NoSelection;
+-      CommitCsvSelection:
+-        assetSelection := [kind |-> "csv", path |-> csvPath];
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure SelectObject(request) {
+-  ResolveObject:
+-    with (index = ResolveObjectIndex[request]) {
+-      if (index # NoSelection) {
+-      ResolveObjectCsv:
+-        with (csvPath = ResolveObjectCsvPath[index]) {
+-          if (csvPath # NoSelection) {
+-          ClearObjectForObject:
+-            graphObjectIndex := NoSelection;
+-          CommitObjectCsvSelection:
+-            assetSelection := [kind |-> "csv", path |-> csvPath];
+-          CommitObjectSelection:
+-            graphObjectIndex := index;
+-          };
+-        };
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure SelectImage(request) {
+-  ResolveImage:
+-    with (imagePath = ResolveImagePath[request]) {
+-      if (imagePath # NoSelection) {
+-      ClearObjectForImage:
+-        graphObjectIndex := NoSelection;
+-      CommitImageSelection:
+-        assetSelection := [kind |-> "image", path |-> imagePath];
+-      };
+-    };
+-    return;
+-  }
+-
+-  SelectionLoop:
+-    while (TRUE) {
+-      either {
+-        with (request \in CsvRequests) {
+-          call SelectCsv(request);
+-        };
+-      } or {
+-        with (request \in ObjectRequests) {
+-          call SelectObject(request);
+-        };
+-      } or {
+-        with (request \in ImageRequests) {
+-          call SelectImage(request);
+-        };
+-      } or {
+-      ClearGraphObject:
+-        graphObjectIndex := NoSelection;
+-      } or {
+-      ClearAsset:
+-        assetSelection := [kind |-> "none", path |-> NoSelection];
++  variables assetSelection = "none",
++            assetPath = NoSelection,
++            graphObject = "none",
++            graphObjectIndex = NoSelection;
++
++  procedure SelectCsv(request) {
++  ResolveCsv:
++    with (csvPath = ResolveCsvPath[request]) {
++      if (csvPath # NoSelection) {
++      ClearObjectForCsv:
++        graphObject := "none";
++        graphObjectIndex := NoSelection;
++      CommitCsvSelection:
++        assetSelection := "csv";
++        assetPath := csvPath;
++      };
++    };
++    return;
++  }
++
++  procedure SelectObject(request) {
++  ResolveObject:
++    with (index = ResolveObjectIndex[request]) {
++      if (index # NoSelection) {
++      ResolveObjectCsv:
++        with (csvPath = ResolveObjectCsvPath[index]) {
++          if (csvPath # NoSelection) {
++          ClearObjectForObject:
++            graphObject := "none";
++            graphObjectIndex := NoSelection;
++          CommitObjectCsvSelection:
++            assetSelection := "csv";
++            assetPath := csvPath;
++          CommitObjectSelection:
++            graphObject := "selected";
++            graphObjectIndex := index;
++          };
++        };
++      };
++    };
++    return;
++  }
++
++  procedure SelectImage(request) {
++  ResolveImage:
++    with (imagePath = ResolveImagePath[request]) {
++      if (imagePath # NoSelection) {
++      ClearObjectForImage:
++        graphObject := "none";
++        graphObjectIndex := NoSelection;
++      CommitImageSelection:
++        assetSelection := "image";
++        assetPath := imagePath;
++      };
++    };
++    return;
++  }
++
++  SelectionLoop:
++    while (TRUE) {
++      either {
++        with (request \in CsvRequests) {
++          call SelectCsv(request);
++        };
++      } or {
++        with (request \in ObjectRequests) {
++          call SelectObject(request);
++        };
++      } or {
++        with (request \in ImageRequests) {
++          call SelectImage(request);
++        };
++      } or {
++      ClearGraphObject:
++        graphObject := "none";
++        graphObjectIndex := NoSelection;
++      } or {
++      ClearAsset:
++        assetSelection := "none";
++        assetPath := NoSelection;
+       };
+     };
+ }
+diff --git a/pseudocode/renderer_runtime.pcal b/pseudocode/renderer_runtime.pcal
+--- a/pseudocode/renderer_runtime.pcal
++++ b/pseudocode/renderer_runtime.pcal
+@@ -2,108 +2,117 @@
+ EXTENDS Naturals
+ 
+ \* Direct r13 translation of the slot-interaction portion of
+-\* sourcescript/renderer_runtime.py.
+-CONSTANTS SlotIds, ContentSlots, EmptySlots, HiddenSlots, NoSelection
+-
+-(*
+---algorithm FastFigureRendererRuntimeInteraction {
+-  variables selectedSlotId = NoSelection,
+-            slotDragSourceId = NoSelection,
+-            suppressBookmarkClick = FALSE,
+-            issuedCommand = NoSelection;
+-
+-  procedure ToggleSlot(slotId) {
+-  ResolveToggleTarget:
+-    if (slotId \in SlotIds \ HiddenSlots) {
+-      if (selectedSlotId = slotId) {
+-      DeselectSlot:
+-        selectedSlotId := NoSelection;
+-      } else {
+-      SelectSlot:
+-        selectedSlotId := slotId;
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure ContentBodyClick(slotId) {
+-  PreserveContentInteraction:
+-    skip;
+-    return;
+-  }
+-
+-  procedure EmptySlotClick(slotId) {
+-  SelectEmptySlot:
+-    if (slotId \in EmptySlots) {
+-      call ToggleSlot(slotId);
+-    };
+-    return;
+-  }
+-
+-  procedure BookmarkClick(slotId) {
+-  HandleBookmarkClick:
+-    if (~suppressBookmarkClick /\ slotId \in ContentSlots) {
+-      call ToggleSlot(slotId);
+-    };
+-    return;
+-  }
+-
+-  procedure BookmarkDragStart(slotId) {
+-  StartBookmarkDrag:
+-    if (slotId \in ContentSlots) {
+-      slotDragSourceId := slotId;
+-      suppressBookmarkClick := TRUE;
+-    };
+-    return;
+-  }
+-
+-  procedure BookmarkDrop(targetSlotId) {
+-  ResolveBookmarkDrop:
+-    if (slotDragSourceId # NoSelection
+-        /\ targetSlotId \in SlotIds \ HiddenSlots
+-        /\ targetSlotId # slotDragSourceId) {
+-    IssueSwapCommand:
+-      issuedCommand := [
+-        name |-> "SLOTS_SWAPPED",
+-        sourceId |-> slotDragSourceId,
+-        targetId |-> targetSlotId
+-      ];
+-    };
+-  FinishBookmarkDrop:
+-    slotDragSourceId := NoSelection;
+-    return;
+-  }
+-
+-  procedure FinishBookmarkDrag() {
+-  ClearBookmarkDrag:
+-    slotDragSourceId := NoSelection;
+-    suppressBookmarkClick := FALSE;
+-    return;
+-  }
+-
+-  InteractionLoop:
+-    while (TRUE) {
+-      either {
+-        with (slotId \in ContentSlots) {
+-          call ContentBodyClick(slotId);
+-        };
+-      } or {
+-        with (slotId \in EmptySlots) {
+-          call EmptySlotClick(slotId);
+-        };
+-      } or {
+-        with (slotId \in ContentSlots) {
+-          call BookmarkClick(slotId);
+-        };
+-      } or {
+-        with (slotId \in ContentSlots) {
+-          call BookmarkDragStart(slotId);
+-        };
+-      } or {
+-        with (slotId \in SlotIds) {
+-          call BookmarkDrop(slotId);
+-          call FinishBookmarkDrag();
+-        };
++\* sourcescript/renderer_runtime.py. issuedCommand is a transient renderer-to-
++\* FSM command emission, not a second project or slot authority.
++CONSTANTS SlotIds, ContentSlots, EmptySlots, HiddenSlots, NoSelection
++
++(*
++--algorithm FastFigureRendererRuntimeInteraction {
++  variables selectedSlotId = NoSelection,
++            slotDragSourceId = NoSelection,
++            suppressBookmarkClick = FALSE,
++            issuedCommand = NoSelection;
++
++  procedure ToggleSlot(slotId) {
++  ResolveToggleTarget:
++    if (slotId \in SlotIds \ HiddenSlots) {
++      if (selectedSlotId = slotId) {
++      DeselectSlot:
++        selectedSlotId := NoSelection;
++      } else {
++      SelectSlot:
++        selectedSlotId := slotId;
++      };
++    };
++    return;
++  }
++
++  procedure ContentBodyClick(slotId) {
++  PreserveContentInteraction:
++    skip;
++    return;
++  }
++
++  procedure EmptySlotClick(slotId) {
++  SelectEmptySlot:
++    if (slotId \in EmptySlots) {
++      call ToggleSlot(slotId);
++    };
++    return;
++  }
++
++  procedure BookmarkClick(slotId) {
++  HandleBookmarkClick:
++    if (~suppressBookmarkClick /\ slotId \in ContentSlots) {
++      call ToggleSlot(slotId);
++    };
++    return;
++  }
++
++  procedure BookmarkDragStart(slotId) {
++  StartBookmarkDrag:
++    if (slotId \in ContentSlots) {
++      slotDragSourceId := slotId;
++      suppressBookmarkClick := TRUE;
++    };
++    return;
++  }
++
++  procedure BookmarkDrop(targetSlotId) {
++  ResolveBookmarkDrop:
++    if (slotDragSourceId # NoSelection
++        /\ targetSlotId \in SlotIds \ HiddenSlots
++        /\ targetSlotId # slotDragSourceId) {
++    IssueSwapCommand:
++      issuedCommand := [
++        name |-> "SLOTS_SWAPPED",
++        sourceId |-> slotDragSourceId,
++        targetId |-> targetSlotId
++      ];
++    };
++  FinishBookmarkDrop:
++    slotDragSourceId := NoSelection;
++    return;
++  }
++
++  procedure FinishBookmarkDrag() {
++  ClearDragSource:
++    slotDragSourceId := NoSelection;
++    return;
++  }
++
++  procedure ReleaseSyntheticClickGuard() {
++  ReleaseBookmarkClick:
++    suppressBookmarkClick := FALSE;
++    return;
++  }
++
++  InteractionLoop:
++    while (TRUE) {
++      either {
++        with (slotId \in ContentSlots) {
++          call ContentBodyClick(slotId);
++        };
++      } or {
++        with (slotId \in EmptySlots) {
++          call EmptySlotClick(slotId);
++        };
++      } or {
++        with (slotId \in ContentSlots) {
++          call BookmarkClick(slotId);
++        };
++      } or {
++        with (slotId \in ContentSlots) {
++          call BookmarkDragStart(slotId);
++        };
++      } or {
++        with (slotId \in SlotIds) {
++          call BookmarkDrop(slotId);
++          call FinishBookmarkDrag();
++        };
++      } or {
++        \* This occurs after the drag-generated click opportunity has passed.
++        call ReleaseSyntheticClickGuard();
+       };
+     };
+ }

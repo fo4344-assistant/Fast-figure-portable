@@ -2,7 +2,8 @@
 EXTENDS Naturals
 
 \* Direct r13 translation of the slot-interaction portion of
-\* sourcescript/renderer_runtime.py.
+\* sourcescript/renderer_runtime.py. issuedCommand is a transient renderer-to-
+\* FSM command emission, not a second project or slot authority.
 CONSTANTS SlotIds, ContentSlots, EmptySlots, HiddenSlots, NoSelection
 
 (*
@@ -75,8 +76,13 @@ CONSTANTS SlotIds, ContentSlots, EmptySlots, HiddenSlots, NoSelection
   }
 
   procedure FinishBookmarkDrag() {
-  ClearBookmarkDrag:
+  ClearDragSource:
     slotDragSourceId := NoSelection;
+    return;
+  }
+
+  procedure ReleaseSyntheticClickGuard() {
+  ReleaseBookmarkClick:
     suppressBookmarkClick := FALSE;
     return;
   }
@@ -104,6 +110,9 @@ CONSTANTS SlotIds, ContentSlots, EmptySlots, HiddenSlots, NoSelection
           call BookmarkDrop(slotId);
           call FinishBookmarkDrag();
         };
+      } or {
+        \* This occurs after the drag-generated click opportunity has passed.
+        call ReleaseSyntheticClickGuard();
       };
     };
 }

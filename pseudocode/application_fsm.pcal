@@ -11,7 +11,9 @@ CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
 
 (*
 --algorithm FastFigureApplicationFsmSelection {
-  variables assetSelection = [kind |-> "none", path |-> NoSelection],
+  variables assetSelection = "none",
+            assetPath = NoSelection,
+            graphObject = "none",
             graphObjectIndex = NoSelection;
 
   procedure SelectCsv(request) {
@@ -19,9 +21,11 @@ CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
     with (csvPath = ResolveCsvPath[request]) {
       if (csvPath # NoSelection) {
       ClearObjectForCsv:
+        graphObject := "none";
         graphObjectIndex := NoSelection;
       CommitCsvSelection:
-        assetSelection := [kind |-> "csv", path |-> csvPath];
+        assetSelection := "csv";
+        assetPath := csvPath;
       };
     };
     return;
@@ -35,10 +39,13 @@ CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
         with (csvPath = ResolveObjectCsvPath[index]) {
           if (csvPath # NoSelection) {
           ClearObjectForObject:
+            graphObject := "none";
             graphObjectIndex := NoSelection;
           CommitObjectCsvSelection:
-            assetSelection := [kind |-> "csv", path |-> csvPath];
+            assetSelection := "csv";
+            assetPath := csvPath;
           CommitObjectSelection:
+            graphObject := "selected";
             graphObjectIndex := index;
           };
         };
@@ -52,9 +59,11 @@ CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
     with (imagePath = ResolveImagePath[request]) {
       if (imagePath # NoSelection) {
       ClearObjectForImage:
+        graphObject := "none";
         graphObjectIndex := NoSelection;
       CommitImageSelection:
-        assetSelection := [kind |-> "image", path |-> imagePath];
+        assetSelection := "image";
+        assetPath := imagePath;
       };
     };
     return;
@@ -76,10 +85,12 @@ CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
         };
       } or {
       ClearGraphObject:
+        graphObject := "none";
         graphObjectIndex := NoSelection;
       } or {
       ClearAsset:
-        assetSelection := [kind |-> "none", path |-> NoSelection];
+        assetSelection := "none";
+        assetPath := NoSelection;
       };
     };
 }
