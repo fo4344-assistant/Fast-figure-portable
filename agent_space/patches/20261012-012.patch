@@ -1,0 +1,226 @@
+diff --git a/pseudocode/system.pcal b/pseudocode/system.pcal
+--- a/pseudocode/system.pcal
++++ b/pseudocode/system.pcal
+@@ -1,57 +1,65 @@
+ ---- MODULE FastFigureSystemPseudocode ----
+ EXTENDS Naturals
+ 
+-\* r13 translation of sourcescript/system.py.
+-\* system.py is the semantic root; responsibility modules remain siblings.
+-CONSTANT NoValue
+-
+-(*
+---algorithm FastFigureSystem {
+-  variables activeProject = NoValue,
+-            coreRuntime = "uninitialized",
+-            appLifecycle = "booting",
+-            apiExposed = FALSE,
+-            mantineMounted = FALSE,
+-            result = NoValue;
+-
+-  procedure InitializeFastFigure() {
+-  CreateDefaultProjectCandidate:
+-    with (candidate = CreateProjectState()) {
+-    ValidateDefaultProject:
+-      assert ValidateWholeProject(candidate);
+-    CommitInitialProject:
+-      activeProject := candidate;
+-    };
+-  ValidateRendererHosts:
+-    assert RequiredRendererHostsExist();
+-  PrepareDashboardRuntime:
+-    ApplyDashboardZoomProjection();
+-    InstallSlotInteractionController();
+-  RenderExistingProjectSlots:
+-    RenderDashboardFrom(activeProject);
+-  ApplyInitialStyleAndGeometry:
+-    ApplySlotStyleFrom(activeProject);
+-  EnterReadyLifecycle:
+-    appLifecycle := "ready";
+-    SynchronizeInitialWorkspaceAndOverlay();
+-  ExposeApiBoundary:
+-    apiExposed := TRUE;
+-  MountMantineFrontend:
+-    MountMantineProviderAndShell();
+-    mantineMounted := TRUE;
+-  ProhibitSyntheticDefaultData:
+-    assert NoDefaultCsvOrFakeGraphObjectWasCreated(activeProject);
+-  FinalInvariantAudit:
+-    assert AuditProjectReferenceRuntimeInvariants();
+-  CompleteInitialization:
+-    coreRuntime := "ready";
+-    result := "initialized";
+-    return;
+-  }
+-
+-  Main:
+-    call InitializeFastFigure();
+-}
++\* r13 PlusCal pseudocode for sourcescript/system.py.
++\* system.py is the semantic root; responsibility modules remain siblings.
++
++CONSTANT NoValue
++
++(*
++--algorithm FastFigureSystem
++variables
++  activeProject = NoValue,
++  coreRuntime = "uninitialized",
++  appLifecycle = "booting",
++  apiExposed = FALSE,
++  mantineMounted = FALSE,
++  result = NoValue;
++
++procedure InitializeFastFigure()
++variables projectCandidate = NoValue;
++begin
++InitializeProjectCandidate:
++  projectCandidate := CreateProjectState();
++InitializeProjectValidate:
++  assert ValidateWholeProject(projectCandidate);
++InitializeProjectCommit:
++  activeProject := projectCandidate;
++InitializeRendererHosts:
++  assert RequiredRendererHostsExist();
++InitializeDashboardProjection:
++  ApplyDashboardZoomProjection();
++InitializeSlotController:
++  InstallSlotInteractionController();
++InitializeRender:
++  RenderDashboardFrom(activeProject);
++InitializeStyle:
++  ApplySlotStyleFrom(activeProject);
++InitializeReady:
++  appLifecycle := "ready";
++InitializeWorkspace:
++  SynchronizeInitialWorkspaceAndOverlay();
++InitializeApi:
++  apiExposed := TRUE;
++InitializeMantine:
++  MountMantineProviderAndShell();
++InitializeMantineState:
++  mantineMounted := TRUE;
++InitializeNoSyntheticData:
++  assert NoDefaultCsvOrFakeGraphObjectWasCreated(activeProject);
++InitializeAudit:
++  assert AuditProjectReferenceRuntimeInvariants();
++InitializeResult:
++  coreRuntime := "ready" ||
++  result := "initialized";
++InitializeReturn:
++  return;
++end procedure;
++
++begin
++Main:
++  call InitializeFastFigure();
++end algorithm;
+ *)
+ ====
+ 
+diff --git a/pseudocode/portable_build.pcal b/pseudocode/portable_build.pcal
+--- a/pseudocode/portable_build.pcal
++++ b/pseudocode/portable_build.pcal
+@@ -1,54 +1,54 @@
+ ---- MODULE FastFigurePortableBuildPseudocode ----
+ EXTENDS Naturals, Sequences
+ 
+-\* r13 translation of sourcescript/portable_build.py.
+-CONSTANTS ScriptSpecs, NoValue
+-
+-(*
+---algorithm FastFigurePortableBuild {
+-  variables htmlBytes = NoValue,
+-            outputBytes = NoValue,
+-            result = NoValue;
+-
+-  procedure Build(output) {
+-  ReadTemplate:
+-    htmlBytes := ReadBytes("Fast-figure.html");
+-    outputBytes := htmlBytes;
+-  InlineScriptsInDeclaredOrder:
+-    with (specs = ScriptSpecs) {
+-      while (Len(specs) > 0) {
+-        with (spec = Head(specs)) {
+-        RequireExactlyOneExternalTag:
+-          assert CountExactExternalTag(outputBytes, spec.externalTag) = 1;
+-        RequireSourceFile:
+-          assert SourceFileExists(spec.source);
+-        ReadSourceBytes:
+-          with (sourceBytes = ReadBytes(spec.source)) {
+-          ReplaceExactlyOnce:
+-            outputBytes := ReplaceTagWithInlineBytes(
+-              outputBytes,
+-              spec.externalTag,
+-              spec.inlineTag,
+-              sourceBytes);
+-          };
+-        };
+-        specs := Tail(specs);
+-      };
+-    };
+-  RequireNoExternalRuntimeTags:
+-    assert NoDeclaredExternalScriptTagRemains(outputBytes);
+-  CreateOutputParent:
+-    EnsureOutputParentExists(output);
+-  WritePortableArtifact:
+-    WriteBytes(output, outputBytes);
+-  ReturnOutput:
+-    result := output;
+-    return;
+-  }
+-
+-  Main:
+-    call Build(DefaultOutputPath());
+-}
++\* r13 PlusCal pseudocode for sourcescript/portable_build.py.
++
++CONSTANTS ScriptSpecs, NoValue
++
++(*
++--algorithm FastFigurePortableBuild
++variables
++  htmlBytes = NoValue,
++  outputBytes = NoValue,
++  scriptIndex = 1,
++  result = NoValue;
++
++procedure Build(output)
++variables spec = NoValue, sourceBytes = NoValue;
++begin
++BuildReadTemplate:
++  htmlBytes := ReadBytes("Fast-figure.html") ||
++  outputBytes := ReadBytes("Fast-figure.html") ||
++  scriptIndex := 1;
++BuildInlineLoop:
++  while scriptIndex =< Len(ScriptSpecs) do
++    spec := ScriptSpecs[scriptIndex];
++    assert CountExactExternalTag(outputBytes, spec.externalTag) = 1;
++    assert SourceFileExists(spec.source);
++    sourceBytes := ReadBytes(spec.source);
++    outputBytes := ReplaceTagWithInlineBytes(
++      outputBytes,
++      spec.externalTag,
++      spec.inlineTag,
++      sourceBytes);
++    scriptIndex := scriptIndex + 1;
++  end while;
++BuildExternalTagCheck:
++  assert NoDeclaredExternalScriptTagRemains(outputBytes);
++BuildOutputParent:
++  result := EnsureOutputParentExists(output);
++BuildWrite:
++  result := WriteBytes(output, outputBytes);
++BuildResult:
++  result := output;
++BuildReturn:
++  return;
++end procedure;
++
++begin
++Main:
++  call Build(DefaultOutputPath());
++end algorithm;
+ *)
+ ====
+ 

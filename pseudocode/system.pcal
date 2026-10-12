@@ -1,56 +1,64 @@
 ---- MODULE FastFigureSystemPseudocode ----
 EXTENDS Naturals
 
-\* r13 translation of sourcescript/system.py.
+\* r13 PlusCal pseudocode for sourcescript/system.py.
 \* system.py is the semantic root; responsibility modules remain siblings.
+
 CONSTANT NoValue
 
 (*
---algorithm FastFigureSystem {
-  variables activeProject = NoValue,
-            coreRuntime = "uninitialized",
-            appLifecycle = "booting",
-            apiExposed = FALSE,
-            mantineMounted = FALSE,
-            result = NoValue;
+--algorithm FastFigureSystem
+variables
+  activeProject = NoValue,
+  coreRuntime = "uninitialized",
+  appLifecycle = "booting",
+  apiExposed = FALSE,
+  mantineMounted = FALSE,
+  result = NoValue;
 
-  procedure InitializeFastFigure() {
-  CreateDefaultProjectCandidate:
-    with (candidate = CreateProjectState()) {
-    ValidateDefaultProject:
-      assert ValidateWholeProject(candidate);
-    CommitInitialProject:
-      activeProject := candidate;
-    };
-  ValidateRendererHosts:
-    assert RequiredRendererHostsExist();
-  PrepareDashboardRuntime:
-    ApplyDashboardZoomProjection();
-    InstallSlotInteractionController();
-  RenderExistingProjectSlots:
-    RenderDashboardFrom(activeProject);
-  ApplyInitialStyleAndGeometry:
-    ApplySlotStyleFrom(activeProject);
-  EnterReadyLifecycle:
-    appLifecycle := "ready";
-    SynchronizeInitialWorkspaceAndOverlay();
-  ExposeApiBoundary:
-    apiExposed := TRUE;
-  MountMantineFrontend:
-    MountMantineProviderAndShell();
-    mantineMounted := TRUE;
-  ProhibitSyntheticDefaultData:
-    assert NoDefaultCsvOrFakeGraphObjectWasCreated(activeProject);
-  FinalInvariantAudit:
-    assert AuditProjectReferenceRuntimeInvariants();
-  CompleteInitialization:
-    coreRuntime := "ready";
-    result := "initialized";
-    return;
-  }
+procedure InitializeFastFigure()
+variables projectCandidate = NoValue;
+begin
+InitializeProjectCandidate:
+  projectCandidate := CreateProjectState();
+InitializeProjectValidate:
+  assert ValidateWholeProject(projectCandidate);
+InitializeProjectCommit:
+  activeProject := projectCandidate;
+InitializeRendererHosts:
+  assert RequiredRendererHostsExist();
+InitializeDashboardProjection:
+  ApplyDashboardZoomProjection();
+InitializeSlotController:
+  InstallSlotInteractionController();
+InitializeRender:
+  RenderDashboardFrom(activeProject);
+InitializeStyle:
+  ApplySlotStyleFrom(activeProject);
+InitializeReady:
+  appLifecycle := "ready";
+InitializeWorkspace:
+  SynchronizeInitialWorkspaceAndOverlay();
+InitializeApi:
+  apiExposed := TRUE;
+InitializeMantine:
+  MountMantineProviderAndShell();
+InitializeMantineState:
+  mantineMounted := TRUE;
+InitializeNoSyntheticData:
+  assert NoDefaultCsvOrFakeGraphObjectWasCreated(activeProject);
+InitializeAudit:
+  assert AuditProjectReferenceRuntimeInvariants();
+InitializeResult:
+  coreRuntime := "ready" ||
+  result := "initialized";
+InitializeReturn:
+  return;
+end procedure;
 
-  Main:
-    call InitializeFastFigure();
-}
+begin
+Main:
+  call InitializeFastFigure();
+end algorithm;
 *)
 ====
