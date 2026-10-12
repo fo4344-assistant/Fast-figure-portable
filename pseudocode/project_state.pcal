@@ -1,0 +1,138 @@
+---- MODULE FastFigureProjectStatePseudocode ----
+EXTENDS Naturals, Sequences, FiniteSets
+
+\* r13 translation of sourcescript/project_state.py.
+\* Candidate validation is pure. Only InitializeProject replaces projectAuthority.
+CONSTANTS DefaultProject, NoReference
+
+(*
+--algorithm FastFigureProjectState {
+  variables projectAuthority = DefaultProject,
+            result = NoReference,
+            candidate = NoReference;
+
+  procedure ValidateProject(state, requireSlots) {
+  ValidateTopLevel:
+    assert state.kind = "FastFigureProject";
+  ValidateGrid:
+    assert state.layout.gridRows \in 1..8;
+    assert state.layout.gridCols \in 1..8;
+  ValidateDirectories:
+    assert ValidateVfsDirectories(state);
+  ValidateAssetIdentity:
+    assert UniqueCsvIds(state) /\ UniqueImageIds(state);
+    assert UniqueAssetPaths(state);
+    assert AssetDirectoriesExist(state);
+  ValidateCharts:
+    assert UniqueChartIds(state);
+    assert EveryGraphCsvReferenceResolves(state);
+  ValidateSlots:
+    assert UniqueSlotIds(state);
+    assert SlotGeometryValid(state);
+    assert NoSlotOwnsChartAndImage(state);
+    assert EverySlotReferenceResolves(state);
+    assert ImageSettingsValid(state);
+  ValidateChartOwnership:
+    assert EveryChartHasExactlyOneOwningSlot(state);
+  ValidateSequences:
+    assert NextIdsExceedExistingIds(state);
+  ValidateRequiredSlots:
+    if (requireSlots) {
+      assert Len(state.slots) > 0;
+    };
+    return;
+  }
+
+  procedure NormalizeSlot(candidateSlot) {
+  FillSlotDefaults:
+    candidateSlot := FillMissingSlotLocalFields(
+      candidateSlot,
+      [chart |-> NoReference,
+       imageId |-> NoReference,
+       contentType |-> "graph",
+       imageSettings |-> [fit |-> "contain", scale |-> 100, x |-> 50, y |-> 50],
+       caption |-> NoReference]);
+  NormalizeLegacyCaption:
+    candidateSlot := MoveLegacyNestedCaptionToSlot(candidateSlot);
+  RemoveDuplicateAuthority:
+    candidateSlot := RemoveCompatibilityDuplicateSlotValues(candidateSlot);
+  ReturnNormalizedSlot:
+    result := candidateSlot;
+    return;
+  }
+
+  procedure InitializeProject(source) {
+  CopyCandidate:
+    candidate := DeepCopy(source);
+  NormalizeCandidateSlots:
+    candidate := MapNormalizeSlot(candidate);
+  ValidateWholeCandidate:
+    call ValidateProject(candidate, TRUE);
+  CommitWholeProject:
+    result := projectAuthority;
+    projectAuthority := candidate;
+    return;
+  }
+
+  procedure CreateProject() {
+  CreateCandidate:
+    candidate := NewProjectFromRules(
+      gridRows = 2,
+      gridCols = 2,
+      csvFiles = <<>>,
+      images = <<>>,
+      charts = <<>>,
+      fixedDirectories = {"/assets", "/assets/csv", "/assets/images", "/assets/trash"},
+      slotCount = 4);
+  ValidateNewProject:
+    call ValidateProject(candidate, TRUE);
+  ReturnNewCandidate:
+    result := candidate;
+    return;
+  }
+
+  procedure ResolveOwningSlot(chartId, state) {
+  CollectOwners:
+    with (owners = SlotsReferencingChart(chartId, state)) {
+      if (Cardinality(owners) = 1) {
+      ReturnOwner:
+        result := CHOOSE owner \in owners : TRUE;
+      } else {
+      RejectAmbiguousOwner:
+        result := NoReference;
+      };
+    };
+    return;
+  }
+
+  procedure ResolveCsv(csvId) {
+  ResolveCsvReference:
+    result := ResolveUniqueById(projectAuthority.csvFiles, csvId);
+    return;
+  }
+
+  procedure ResolveImage(imageId) {
+  ResolveImageReference:
+    result := ResolveUniqueById(projectAuthority.images, imageId);
+    return;
+  }
+
+  procedure ResolveChart(chartId) {
+  ResolveChartReference:
+    result := ResolveUniqueById(projectAuthority.charts, chartId);
+    return;
+  }
+
+  Main:
+    while (TRUE) {
+      either {
+        call CreateProject();
+      } or {
+        with (source = candidate) {
+          call InitializeProject(source);
+        };
+      };
+    };
+}
+*)
+====

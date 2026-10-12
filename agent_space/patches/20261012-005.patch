@@ -1,0 +1,359 @@
+diff --git a/pseudocode/project_state.pcal b/pseudocode/project_state.pcal
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/project_state.pcal
+@@ -0,0 +1,138 @@
++---- MODULE FastFigureProjectStatePseudocode ----
++EXTENDS Naturals, Sequences, FiniteSets
++
++\* r13 translation of sourcescript/project_state.py.
++\* Candidate validation is pure. Only InitializeProject replaces projectAuthority.
++CONSTANTS DefaultProject, NoReference
++
++(*
++--algorithm FastFigureProjectState {
++  variables projectAuthority = DefaultProject,
++            result = NoReference,
++            candidate = NoReference;
++
++  procedure ValidateProject(state, requireSlots) {
++  ValidateTopLevel:
++    assert state.kind = "FastFigureProject";
++  ValidateGrid:
++    assert state.layout.gridRows \in 1..8;
++    assert state.layout.gridCols \in 1..8;
++  ValidateDirectories:
++    assert ValidateVfsDirectories(state);
++  ValidateAssetIdentity:
++    assert UniqueCsvIds(state) /\ UniqueImageIds(state);
++    assert UniqueAssetPaths(state);
++    assert AssetDirectoriesExist(state);
++  ValidateCharts:
++    assert UniqueChartIds(state);
++    assert EveryGraphCsvReferenceResolves(state);
++  ValidateSlots:
++    assert UniqueSlotIds(state);
++    assert SlotGeometryValid(state);
++    assert NoSlotOwnsChartAndImage(state);
++    assert EverySlotReferenceResolves(state);
++    assert ImageSettingsValid(state);
++  ValidateChartOwnership:
++    assert EveryChartHasExactlyOneOwningSlot(state);
++  ValidateSequences:
++    assert NextIdsExceedExistingIds(state);
++  ValidateRequiredSlots:
++    if (requireSlots) {
++      assert Len(state.slots) > 0;
++    };
++    return;
++  }
++
++  procedure NormalizeSlot(candidateSlot) {
++  FillSlotDefaults:
++    candidateSlot := FillMissingSlotLocalFields(
++      candidateSlot,
++      [chart |-> NoReference,
++       imageId |-> NoReference,
++       contentType |-> "graph",
++       imageSettings |-> [fit |-> "contain", scale |-> 100, x |-> 50, y |-> 50],
++       caption |-> NoReference]);
++  NormalizeLegacyCaption:
++    candidateSlot := MoveLegacyNestedCaptionToSlot(candidateSlot);
++  RemoveDuplicateAuthority:
++    candidateSlot := RemoveCompatibilityDuplicateSlotValues(candidateSlot);
++  ReturnNormalizedSlot:
++    result := candidateSlot;
++    return;
++  }
++
++  procedure InitializeProject(source) {
++  CopyCandidate:
++    candidate := DeepCopy(source);
++  NormalizeCandidateSlots:
++    candidate := MapNormalizeSlot(candidate);
++  ValidateWholeCandidate:
++    call ValidateProject(candidate, TRUE);
++  CommitWholeProject:
++    result := projectAuthority;
++    projectAuthority := candidate;
++    return;
++  }
++
++  procedure CreateProject() {
++  CreateCandidate:
++    candidate := NewProjectFromRules(
++      gridRows = 2,
++      gridCols = 2,
++      csvFiles = <<>>,
++      images = <<>>,
++      charts = <<>>,
++      fixedDirectories = {"/assets", "/assets/csv", "/assets/images", "/assets/trash"},
++      slotCount = 4);
++  ValidateNewProject:
++    call ValidateProject(candidate, TRUE);
++  ReturnNewCandidate:
++    result := candidate;
++    return;
++  }
++
++  procedure ResolveOwningSlot(chartId, state) {
++  CollectOwners:
++    with (owners = SlotsReferencingChart(chartId, state)) {
++      if (Cardinality(owners) = 1) {
++      ReturnOwner:
++        result := CHOOSE owner \in owners : TRUE;
++      } else {
++      RejectAmbiguousOwner:
++        result := NoReference;
++      };
++    };
++    return;
++  }
++
++  procedure ResolveCsv(csvId) {
++  ResolveCsvReference:
++    result := ResolveUniqueById(projectAuthority.csvFiles, csvId);
++    return;
++  }
++
++  procedure ResolveImage(imageId) {
++  ResolveImageReference:
++    result := ResolveUniqueById(projectAuthority.images, imageId);
++    return;
++  }
++
++  procedure ResolveChart(chartId) {
++  ResolveChartReference:
++    result := ResolveUniqueById(projectAuthority.charts, chartId);
++    return;
++  }
++
++  Main:
++    while (TRUE) {
++      either {
++        call CreateProject();
++      } or {
++        with (source = candidate) {
++          call InitializeProject(source);
++        };
++      };
++    };
++}
++*)
++====
+diff --git a/pseudocode/graphs.pcal b/pseudocode/graphs.pcal
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/graphs.pcal
+@@ -0,0 +1,199 @@
++---- MODULE FastFigureGraphsPseudocode ----
++EXTENDS Naturals, Sequences
++
++\* r13 translation of sourcescript/graphs.py.
++\* Project/chart writes are emitted through existing mutation commands.
++CONSTANTS NoReference
++
++(*
++--algorithm FastFigureGraphs {
++  variables selectedSlot = NoReference,
++            selectedCsv = NoReference,
++            selectedObjectIndex = NoReference,
++            chartCandidate = NoReference,
++            projectCandidate = NoReference,
++            command = NoReference,
++            result = NoReference;
++
++  procedure AddGraphObject(csvId) {
++  ResolveAddInputs:
++    with (slot = ResolveSelectedSlot(),
++          csv = ResolveProjectCsv(csvId)) {
++      if (slot # NoReference /\ csv # NoReference) {
++        if (slot.chart = NoReference) {
++        BuildFirstObjectCandidate:
++          chartCandidate := ConnectDataToSlotCandidate(slot, csv);
++        EmitSlotDataConnect:
++          command := [
++            name |-> "SLOT_DATA_CONNECTED",
++            slotId |-> slot.id,
++            csvId |-> csv.id
++          ];
++        } else {
++        ResolveOwnedChart:
++          with (chart = ResolveChart(slot.chart)) {
++            if (chart # NoReference /\ chart.editor.editable = TRUE) {
++            BuildAppendCandidate:
++              chartCandidate := AppendBaseGraphObject(chart, csv);
++            ValidateAppendCandidate:
++              assert ValidateChartModel(chartCandidate);
++            EmitObjectReplacement:
++              command := [
++                name |-> "GRAPH_OBJECTS_REPLACED",
++                chartId |-> chart.id,
++                objects |-> chartCandidate.editor.objects
++              ];
++            };
++          };
++        };
++      };
++    };
++    return;
++  }
++
++  procedure CommitGraphObjects(objects, requestedIndex) {
++  ResolveCommitChart:
++    with (chart = ResolveSelectedChart()) {
++      if (chart # NoReference /\ chart.editor.editable = TRUE) {
++      NormalizeObjects:
++        chartCandidate := NormalizeGraphObjects(chart, objects);
++      ValidateObjectReferences:
++        assert EveryObjectCsvAndColumnReferenceResolves(chartCandidate);
++      RebuildCandidateProjection:
++        chartCandidate := RebuildEditableProjection(chartCandidate);
++      EmitCommit:
++        command := [
++          name |-> "GRAPH_OBJECTS_REPLACED",
++          chartId |-> chart.id,
++          objects |-> chartCandidate.editor.objects
++        ];
++      ReconcileRuntimeObjectSelection:
++        if (requestedIndex \in 1..Len(chartCandidate.editor.objects)) {
++          selectedObjectIndex := requestedIndex;
++        } else {
++          selectedObjectIndex := NoReference;
++        };
++      };
++    };
++    return;
++  }
++
++  procedure SetObjectValues(index, values) {
++  ResolveObject:
++    with (chart = ResolveSelectedChart(),
++          object = ResolveGraphObject(index)) {
++      if (chart # NoReference /\ object # NoReference
++          /\ chart.editor.editable = TRUE) {
++      ResolveObjectCsv:
++        with (csv = ResolveRequestedOrExistingCsv(values, object.csvId)) {
++          if (csv # NoReference) {
++          NormalizeAllowedFields:
++            chartCandidate := ReplaceOneObjectWithNormalizedValues(
++              chart, index, values, csv);
++          DelegateObjectCommit:
++            call CommitGraphObjects(chartCandidate.editor.objects, index);
++          };
++        };
++      };
++    };
++    return;
++  }
++
++  procedure SetEditable(editable) {
++  ResolveEditableChart:
++    with (chart = ResolveSelectedChart()) {
++      if (chart # NoReference) {
++        if (editable = TRUE /\ chart.editor.editable = FALSE) {
++        ConvertImportedCandidate:
++          projectCandidate := ConvertImportedChartToEditableCandidate(chart);
++        ValidateEditableProject:
++          assert ValidateWholeProject(projectCandidate);
++        EmitEditableProjectCommit:
++          command := [
++            name |-> "CHART_MODEL_REPLACED",
++            chartId |-> chart.id,
++            candidate |-> projectCandidate
++          ];
++        } else {
++        EmitEditableFlagCommit:
++          command := [
++            name |-> "CHART_MODEL_REPLACED",
++            chartId |-> chart.id,
++            editable |-> editable
++          ];
++        };
++      };
++    };
++    return;
++  }
++
++  procedure RebuildEditable(chart) {
++  ResolveTraceCsvReferences:
++    assert EveryGraphObjectCsvResolves(chart);
++  CalculateTraceProjection:
++    chartCandidate := ChartWithTracesFromEditorAndCsv(chart);
++  CalculateLayoutProjection:
++    chartCandidate := ChartWithNormalizedLayout(chartCandidate);
++  ReturnProjection:
++    result := chartCandidate;
++    return;
++  }
++
++  procedure ImportGraphFile(file) {
++  ResolveTargetSlot:
++    with (slot = ResolveSelectedSlot()) {
++      if (slot # NoReference) {
++        if (IsFfsx(file)) {
++        ReadFfsxCandidate:
++          projectCandidate := ReadAndRemapFfsx(file, slot);
++        } else {
++        ReadPlotlyCandidate:
++          chartCandidate := ParsePlotlyPreservingOriginal(file);
++          projectCandidate := AttachImportedChartToSlot(chartCandidate, slot);
++        };
++      ValidateImportedProject:
++        assert ValidateWholeProject(projectCandidate);
++      EmitImportedChartCommit:
++        command := [
++          name |-> "SLOT_CHART_IMPORTED",
++          slotId |-> slot.id,
++          candidate |-> projectCandidate
++        ];
++      };
++    };
++    return;
++  }
++
++  procedure ExportChartFigure(chart) {
++  PreserveRepresentationRule:
++    if (chart.editor.editable = TRUE) {
++      result := FigureFromEditorAndReferencedCsv(chart);
++    } else {
++      result := PreservedImportedFigure(chart);
++    };
++    return;
++  }
++
++  Main:
++    while (TRUE) {
++      either {
++        with (csvId = SelectedCsvId()) {
++          call AddGraphObject(csvId);
++        };
++      } or {
++        with (objects = EditedObjectList(), index = RequestedObjectIndex()) {
++          call CommitGraphObjects(objects, index);
++        };
++      } or {
++        with (index = RequestedObjectIndex(), values = EditedObjectValues()) {
++          call SetObjectValues(index, values);
++        };
++      } or {
++        with (editable = RequestedEditableState()) {
++          call SetEditable(editable);
++        };
++      };
++    };
++}
++*)
++====
+diff --git a/pseudocode/README.md b/pseudocode/README.md
+--- a/pseudocode/README.md
++++ b/pseudocode/README.md
+@@ -31,6 +31,8 @@
+ | `sourcescript/application_fsm.py` | `application_fsm.pcal` | selection-command portion translated |
+ | `sourcescript/renderer_runtime.py` | `renderer_runtime.pcal` | slot bookmark interaction portion translated |
+ | `sourcescript/api_ui.py` | `api_ui.pcal` | dashboard drop orchestration portion translated |
++| `sourcescript/project_state.py` | `project_state.pcal` | authority/validation/reference lifecycle translated |
++| `sourcescript/graphs.py` | `graphs.pcal` | chart/object/editable/import-export mutation flow translated |
+ | other Source Script modules | pending | not yet translated to r13 PlusCal |
+ 
+ The Source Script hierarchy remains `system.py` as the system root with responsibility modules as siblings. PlusCal files do not introduce new semantic parent/child modules.

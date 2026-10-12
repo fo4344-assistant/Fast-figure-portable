@@ -31,6 +31,8 @@ If a required meaning is absent or contradictory, translation stops and returns 
 | `sourcescript/application_fsm.py` | `application_fsm.pcal` | selection-command portion translated |
 | `sourcescript/renderer_runtime.py` | `renderer_runtime.pcal` | slot bookmark interaction portion translated |
 | `sourcescript/api_ui.py` | `api_ui.pcal` | dashboard drop orchestration portion translated |
+| `sourcescript/project_state.py` | `project_state.pcal` | authority/validation/reference lifecycle translated |
+| `sourcescript/graphs.py` | `graphs.pcal` | chart/object/editable/import-export mutation flow translated |
 | other Source Script modules | pending | not yet translated to r13 PlusCal |
 
 The Source Script hierarchy remains `system.py` as the system root with responsibility modules as siblings. PlusCal files do not introduce new semantic parent/child modules.

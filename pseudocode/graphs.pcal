@@ -1,0 +1,199 @@
+---- MODULE FastFigureGraphsPseudocode ----
+EXTENDS Naturals, Sequences
+
+\* r13 translation of sourcescript/graphs.py.
+\* Project/chart writes are emitted through existing mutation commands.
+CONSTANTS NoReference
+
+(*
+--algorithm FastFigureGraphs {
+  variables selectedSlot = NoReference,
+            selectedCsv = NoReference,
+            selectedObjectIndex = NoReference,
+            chartCandidate = NoReference,
+            projectCandidate = NoReference,
+            command = NoReference,
+            result = NoReference;
+
+  procedure AddGraphObject(csvId) {
+  ResolveAddInputs:
+    with (slot = ResolveSelectedSlot(),
+          csv = ResolveProjectCsv(csvId)) {
+      if (slot # NoReference /\ csv # NoReference) {
+        if (slot.chart = NoReference) {
+        BuildFirstObjectCandidate:
+          chartCandidate := ConnectDataToSlotCandidate(slot, csv);
+        EmitSlotDataConnect:
+          command := [
+            name |-> "SLOT_DATA_CONNECTED",
+            slotId |-> slot.id,
+            csvId |-> csv.id
+          ];
+        } else {
+        ResolveOwnedChart:
+          with (chart = ResolveChart(slot.chart)) {
+            if (chart # NoReference /\ chart.editor.editable = TRUE) {
+            BuildAppendCandidate:
+              chartCandidate := AppendBaseGraphObject(chart, csv);
+            ValidateAppendCandidate:
+              assert ValidateChartModel(chartCandidate);
+            EmitObjectReplacement:
+              command := [
+                name |-> "GRAPH_OBJECTS_REPLACED",
+                chartId |-> chart.id,
+                objects |-> chartCandidate.editor.objects
+              ];
+            };
+          };
+        };
+      };
+    };
+    return;
+  }
+
+  procedure CommitGraphObjects(objects, requestedIndex) {
+  ResolveCommitChart:
+    with (chart = ResolveSelectedChart()) {
+      if (chart # NoReference /\ chart.editor.editable = TRUE) {
+      NormalizeObjects:
+        chartCandidate := NormalizeGraphObjects(chart, objects);
+      ValidateObjectReferences:
+        assert EveryObjectCsvAndColumnReferenceResolves(chartCandidate);
+      RebuildCandidateProjection:
+        chartCandidate := RebuildEditableProjection(chartCandidate);
+      EmitCommit:
+        command := [
+          name |-> "GRAPH_OBJECTS_REPLACED",
+          chartId |-> chart.id,
+          objects |-> chartCandidate.editor.objects
+        ];
+      ReconcileRuntimeObjectSelection:
+        if (requestedIndex \in 1..Len(chartCandidate.editor.objects)) {
+          selectedObjectIndex := requestedIndex;
+        } else {
+          selectedObjectIndex := NoReference;
+        };
+      };
+    };
+    return;
+  }
+
+  procedure SetObjectValues(index, values) {
+  ResolveObject:
+    with (chart = ResolveSelectedChart(),
+          object = ResolveGraphObject(index)) {
+      if (chart # NoReference /\ object # NoReference
+          /\ chart.editor.editable = TRUE) {
+      ResolveObjectCsv:
+        with (csv = ResolveRequestedOrExistingCsv(values, object.csvId)) {
+          if (csv # NoReference) {
+          NormalizeAllowedFields:
+            chartCandidate := ReplaceOneObjectWithNormalizedValues(
+              chart, index, values, csv);
+          DelegateObjectCommit:
+            call CommitGraphObjects(chartCandidate.editor.objects, index);
+          };
+        };
+      };
+    };
+    return;
+  }
+
+  procedure SetEditable(editable) {
+  ResolveEditableChart:
+    with (chart = ResolveSelectedChart()) {
+      if (chart # NoReference) {
+        if (editable = TRUE /\ chart.editor.editable = FALSE) {
+        ConvertImportedCandidate:
+          projectCandidate := ConvertImportedChartToEditableCandidate(chart);
+        ValidateEditableProject:
+          assert ValidateWholeProject(projectCandidate);
+        EmitEditableProjectCommit:
+          command := [
+            name |-> "CHART_MODEL_REPLACED",
+            chartId |-> chart.id,
+            candidate |-> projectCandidate
+          ];
+        } else {
+        EmitEditableFlagCommit:
+          command := [
+            name |-> "CHART_MODEL_REPLACED",
+            chartId |-> chart.id,
+            editable |-> editable
+          ];
+        };
+      };
+    };
+    return;
+  }
+
+  procedure RebuildEditable(chart) {
+  ResolveTraceCsvReferences:
+    assert EveryGraphObjectCsvResolves(chart);
+  CalculateTraceProjection:
+    chartCandidate := ChartWithTracesFromEditorAndCsv(chart);
+  CalculateLayoutProjection:
+    chartCandidate := ChartWithNormalizedLayout(chartCandidate);
+  ReturnProjection:
+    result := chartCandidate;
+    return;
+  }
+
+  procedure ImportGraphFile(file) {
+  ResolveTargetSlot:
+    with (slot = ResolveSelectedSlot()) {
+      if (slot # NoReference) {
+        if (IsFfsx(file)) {
+        ReadFfsxCandidate:
+          projectCandidate := ReadAndRemapFfsx(file, slot);
+        } else {
+        ReadPlotlyCandidate:
+          chartCandidate := ParsePlotlyPreservingOriginal(file);
+          projectCandidate := AttachImportedChartToSlot(chartCandidate, slot);
+        };
+      ValidateImportedProject:
+        assert ValidateWholeProject(projectCandidate);
+      EmitImportedChartCommit:
+        command := [
+          name |-> "SLOT_CHART_IMPORTED",
+          slotId |-> slot.id,
+          candidate |-> projectCandidate
+        ];
+      };
+    };
+    return;
+  }
+
+  procedure ExportChartFigure(chart) {
+  PreserveRepresentationRule:
+    if (chart.editor.editable = TRUE) {
+      result := FigureFromEditorAndReferencedCsv(chart);
+    } else {
+      result := PreservedImportedFigure(chart);
+    };
+    return;
+  }
+
+  Main:
+    while (TRUE) {
+      either {
+        with (csvId = SelectedCsvId()) {
+          call AddGraphObject(csvId);
+        };
+      } or {
+        with (objects = EditedObjectList(), index = RequestedObjectIndex()) {
+          call CommitGraphObjects(objects, index);
+        };
+      } or {
+        with (index = RequestedObjectIndex(), values = EditedObjectValues()) {
+          call SetObjectValues(index, values);
+        };
+      } or {
+        with (editable = RequestedEditableState()) {
+          call SetEditable(editable);
+        };
+      };
+    };
+}
+*)
+====
