@@ -1,360 +1,377 @@
 ---- MODULE FastFigureGraphsPseudocode ----
 EXTENDS Naturals, Sequences
 
-\* r13 translation of sourcescript/graphs.py.
-\* Project/chart writes are emitted through existing mutation commands.
-CONSTANTS NoReference
+\* r13 PlusCal pseudocode for sourcescript/graphs.py.
+\* Persistent chart/project changes are emitted through existing mutation commands.
+
+CONSTANT NoReference
 
 (*
---algorithm FastFigureGraphs {
-  variables selectedSlot = NoReference,
-            selectedCsv = NoReference,
-            selectedObjectIndex = NoReference,
-            chartCandidate = NoReference,
-            projectCandidate = NoReference,
-            command = NoReference,
-            result = NoReference;
+--algorithm FastFigureGraphs
+variables
+  chartCandidate = NoReference,
+  projectCandidate = NoReference,
+  command = NoReference,
+  selectedObjectIndex = NoReference,
+  result = NoReference;
 
-  procedure AddGraphObject(csvId) {
-  ResolveAddInputs:
-    with (slot = ResolveSelectedSlot(),
-          csv = ResolveProjectCsv(csvId)) {
-      if (slot # NoReference /\ csv # NoReference) {
-        if (slot.chart = NoReference) {
-        BuildFirstObjectCandidate:
-          chartCandidate := ConnectDataToSlotCandidate(slot, csv);
-        EmitSlotDataConnect:
-          command := [
-            name |-> "SLOT_DATA_CONNECTED",
-            slotId |-> slot.id,
-            csvId |-> csv.id
-          ];
-        } else {
-        ResolveOwnedChart:
-          with (chart = ResolveChart(slot.chart)) {
-            if (chart # NoReference /\ chart.editor.editable = TRUE) {
-            BuildAppendCandidate:
-              chartCandidate := AppendBaseGraphObject(chart, csv);
-            ValidateAppendCandidate:
-              assert ValidateChartModel(chartCandidate);
-            EmitObjectReplacement:
-              command := [
-                name |-> "GRAPH_OBJECTS_REPLACED",
-                chartId |-> chart.id,
-                objects |-> chartCandidate.editor.objects
-              ];
-            };
-          };
-        };
-      };
-    };
-    return;
-  }
+procedure DataTable(data)
+begin
+NormalizeTable:
+  if RowsAreArrays(data) then
+    result := PreserveArrayRows(data);
+  elsif RowsAreObjects(data) then
+    result := ProjectObjectsToCommonColumnOrder(data);
+  else
+    result := NoReference;
+  end if;
+ValidateTable:
+  assert result # NoReference;
+DataTableReturn:
+  return;
+end procedure;
 
-  procedure CommitGraphObjects(objects, requestedIndex) {
-  ResolveCommitChart:
-    with (chart = ResolveSelectedChart()) {
-      if (chart # NoReference /\ chart.editor.editable = TRUE) {
-      NormalizeObjects:
-        chartCandidate := NormalizeGraphObjects(chart, objects);
-      ValidateObjectReferences:
-        assert EveryObjectCsvAndColumnReferenceResolves(chartCandidate);
-      RebuildCandidateProjection:
-        chartCandidate := RebuildEditableProjection(chartCandidate);
-      EmitCommit:
+procedure ColumnDefinitions(table, headerLines)
+variables width = 0;
+begin
+ColumnWidth:
+  width := MaximumRowWidth(table);
+ColumnBuild:
+  result := BuildColumnIdsAndOptionalNames(width, table, headerLines);
+ColumnReturn:
+  return;
+end procedure;
+
+procedure GraphDataSelection(matrix, headerLines, editor)
+variables columns = NoReference, xColumn = NoReference;
+begin
+SelectionColumns:
+  columns := ColumnDefinitionsFor(matrix, headerLines);
+SelectionPreserve:
+  if EditorXYRemainValid(editor, columns) then
+    result := [x |-> editor.x, y |-> editor.y];
+  else
+    xColumn := FirstNumericColumnOrValidFallback(matrix, columns);
+    result := [
+      x |-> xColumn,
+      y |-> DifferentNumericOrValidColumn(matrix, columns, xColumn)
+    ];
+  end if;
+GraphSelectionReturn:
+  return;
+end procedure;
+
+procedure ConnectDataToSlot(slotValue, data, sourceName, projectCsv)
+variables xy = NoReference;
+begin
+ConnectResolve:
+  assert ResolveSlot(slotValue.id) # NoReference
+         /\ ResolveProjectCsv(projectCsv.id) # NoReference;
+ConnectColumns:
+  xy := GraphDataSelectionForCsv(projectCsv);
+ConnectCandidate:
+  if slotValue.chart # NoReference then
+    result := AppendGraphObjectCandidate(slotValue, projectCsv, xy);
+  else
+    result := NewOwnedChartCandidate(slotValue, projectCsv, xy);
+  end if;
+ConnectProjection:
+  result := RebuildCandidateGraphProjection(result);
+ConnectReturn:
+  return;
+end procedure;
+
+procedure AddGraphObject(csvId)
+variables slotValue = NoReference, csv = NoReference, chart = NoReference;
+begin
+AddResolveSlot:
+  slotValue := ResolveSelectedSlot();
+AddResolveCsv:
+  csv := ResolveProjectCsv(csvId);
+AddObjectBranch:
+  if slotValue # NoReference /\ csv # NoReference then
+    if slotValue.chart = NoReference then
+      command := [
+        name |-> "SLOT_DATA_CONNECTED",
+        slotId |-> slotValue.id,
+        csvId |-> csv.id
+      ];
+    else
+      chart := ResolveChart(slotValue.chart);
+      if chart # NoReference /\ chart.editor.editable = TRUE then
+        chartCandidate := AppendBaseGraphObject(chart, csv);
+        assert ValidateChartModel(chartCandidate);
         command := [
           name |-> "GRAPH_OBJECTS_REPLACED",
           chartId |-> chart.id,
           objects |-> chartCandidate.editor.objects
         ];
-      ReconcileRuntimeObjectSelection:
-        if (requestedIndex \in 1..Len(chartCandidate.editor.objects)) {
-          selectedObjectIndex := requestedIndex;
-        } else {
-          selectedObjectIndex := NoReference;
-        };
-      };
-    };
-    return;
-  }
+      end if;
+    end if;
+  end if;
+AddObjectReturn:
+  return;
+end procedure;
 
-  procedure SetObjectValues(index, values) {
-  ResolveObject:
-    with (chart = ResolveSelectedChart(),
-          object = ResolveGraphObject(index)) {
-      if (chart # NoReference /\ object # NoReference
-          /\ chart.editor.editable = TRUE) {
-      ResolveObjectCsv:
-        with (csv = ResolveRequestedOrExistingCsv(values, object.csvId)) {
-          if (csv # NoReference) {
-          NormalizeAllowedFields:
-            chartCandidate := ReplaceOneObjectWithNormalizedValues(
-              chart, index, values, csv);
-          DelegateObjectCommit:
-            call CommitGraphObjects(chartCandidate.editor.objects, index);
-          };
-        };
-      };
-    };
-    return;
-  }
+procedure CommitGraphObjects(objects, requestedIndex)
+variables chart = NoReference;
+begin
+CommitResolveChart:
+  chart := ResolveSelectedChart();
+CommitNormalize:
+  if chart # NoReference /\ chart.editor.editable = TRUE then
+    chartCandidate := NormalizeGraphObjects(chart, objects);
+    assert EveryObjectCsvAndColumnReferenceResolves(chartCandidate);
+    chartCandidate := RebuildEditableProjection(chartCandidate);
+    command := [
+      name |-> "GRAPH_OBJECTS_REPLACED",
+      chartId |-> chart.id,
+      objects |-> chartCandidate.editor.objects
+    ];
+    if requestedIndex \in 1..Len(chartCandidate.editor.objects) then
+      selectedObjectIndex := requestedIndex;
+    else
+      selectedObjectIndex := NoReference;
+    end if;
+  end if;
+CommitObjectsReturn:
+  return;
+end procedure;
 
-  procedure SetEditable(editable) {
-  ResolveEditableChart:
-    with (chart = ResolveSelectedChart()) {
-      if (chart # NoReference) {
-        if (editable = TRUE /\ chart.editor.editable = FALSE) {
-        ConvertImportedCandidate:
-          projectCandidate := ConvertImportedChartToEditableCandidate(chart);
-        ValidateEditableProject:
-          assert ValidateWholeProject(projectCandidate);
-        EmitEditableProjectCommit:
-          command := [
-            name |-> "CHART_MODEL_REPLACED",
-            chartId |-> chart.id,
-            candidate |-> projectCandidate
-          ];
-        } else {
-        EmitEditableFlagCommit:
-          command := [
-            name |-> "CHART_MODEL_REPLACED",
-            chartId |-> chart.id,
-            editable |-> editable
-          ];
-        };
-      };
-    };
-    return;
-  }
+procedure SetObjectValues(index, values)
+variables chart = NoReference, objectValue = NoReference, csv = NoReference;
+begin
+ObjectValuesResolveChart:
+  chart := ResolveSelectedChart();
+ObjectValuesResolveObject:
+  objectValue := ResolveGraphObject(index);
+ObjectValuesResolveCsv:
+  if chart # NoReference /\ objectValue # NoReference
+     /\ chart.editor.editable = TRUE then
+    csv := ResolveRequestedOrExistingCsv(values, objectValue.csvId);
+  end if;
+ObjectValuesBuild:
+  if csv # NoReference then
+    chartCandidate := ReplaceOneObjectWithNormalizedValues(
+      chart,
+      index,
+      values,
+      csv);
+    call CommitGraphObjects(chartCandidate.editor.objects, index);
+  end if;
+ObjectValuesReturn:
+  return;
+end procedure;
 
-  procedure RebuildEditable(chart) {
-  ResolveTraceCsvReferences:
-    assert EveryGraphObjectCsvResolves(chart);
-  CalculateTraceProjection:
-    chartCandidate := ChartWithTracesFromEditorAndCsv(chart);
-  CalculateLayoutProjection:
-    chartCandidate := ChartWithNormalizedLayout(chartCandidate);
-  ReturnProjection:
-    result := chartCandidate;
-    return;
-  }
+procedure SetEditable(editable)
+variables chart = NoReference;
+begin
+EditableResolve:
+  chart := ResolveSelectedChart();
+EditableBuild:
+  if chart # NoReference then
+    if editable = TRUE /\ chart.editor.editable = FALSE then
+      projectCandidate := ConvertImportedChartToEditableCandidate(chart);
+      assert ValidateWholeProject(projectCandidate);
+      command := [
+        name |-> "CHART_MODEL_REPLACED",
+        chartId |-> chart.id,
+        candidate |-> projectCandidate
+      ];
+    else
+      command := [
+        name |-> "CHART_MODEL_REPLACED",
+        chartId |-> chart.id,
+        editable |-> editable
+      ];
+    end if;
+  end if;
+EditableReturn:
+  return;
+end procedure;
 
-  procedure ImportGraphFile(file) {
-  ResolveTargetSlot:
-    with (slot = ResolveSelectedSlot()) {
-      if (slot # NoReference) {
-        if (IsFfsx(file)) {
-        ReadFfsxCandidate:
-          projectCandidate := ReadAndRemapFfsx(file, slot);
-        } else {
-        ReadPlotlyCandidate:
-          chartCandidate := ParsePlotlyPreservingOriginal(file);
-          projectCandidate := AttachImportedChartToSlot(chartCandidate, slot);
-        };
-      ValidateImportedProject:
-        assert ValidateWholeProject(projectCandidate);
-      EmitImportedChartCommit:
-        command := [
-          name |-> "SLOT_CHART_IMPORTED",
-          slotId |-> slot.id,
-          candidate |-> projectCandidate
-        ];
-      };
-    };
-    return;
-  }
+procedure TracesSingle(objectView)
+variables values = NoReference;
+begin
+TraceResolveValues:
+  values := ResolveTraceColumnsAndDivisors(objectView);
+TraceDomainFilter:
+  values := RemoveReciprocalZeroAndLogNonPositive(values, objectView);
+TraceBuild:
+  result := BuildPlotlyTraceFromGraphObject(values, objectView);
+TraceSingleReturn:
+  return;
+end procedure;
 
-  procedure ExportChartFigure(chart) {
-  PreserveRepresentationRule:
-    if (chart.editor.editable = TRUE) {
-      result := FigureFromEditorAndReferencedCsv(chart);
-    } else {
-      result := PreservedImportedFigure(chart);
-    };
-    return;
-  }
+procedure Traces(chart)
+begin
+TraceResolveCsv:
+  assert EveryGraphObjectCsvResolves(chart);
+TraceAllObjects:
+  result := ConcatenateTraceProjectionPerObject(chart);
+TracesReturn:
+  return;
+end procedure;
 
-  procedure DataTable(data) {
-  NormalizeTabularInput:
-    if (RowsAreArrays(data)) {
-      result := PreserveArrayRows(data);
-    } else {
-      if (RowsAreObjects(data)) {
-      BuildObjectKeyUnion:
-        result := ProjectObjectsToCommonColumnOrder(data);
-      } else {
-      RejectUnsupportedTable:
-        result := NoReference;
-      };
-    };
-  RequireNonEmptySupportedTable:
-    assert result # NoReference;
-    return;
-  }
+procedure RebuildEditable(chart)
+begin
+RebuildResolveReferences:
+  assert EveryGraphObjectCsvResolves(chart);
+RebuildTraces:
+  chartCandidate := ChartWithTracesFromEditorAndCsv(chart);
+RebuildLayout:
+  chartCandidate := ChartWithNormalizedLayout(chartCandidate);
+RebuildResult:
+  result := chartCandidate;
+RebuildReturn:
+  return;
+end procedure;
 
-  procedure ColumnDefinitions(table, headerLines) {
-  ComputeMaximumWidth:
-    with (width = MaximumRowWidth(table)) {
-    ChooseLastHeaderRow:
-      result := BuildColumnIdsAndOptionalNames(width, table, headerLines);
-    };
-    return;
-  }
-
-  procedure GraphDataSelection(matrix, headerLines, editor) {
-  ResolveValidColumns:
-    with (columns = ColumnDefinitionsFor(matrix, headerLines)) {
-      if (EditorXYRemainValid(editor, columns)) {
-      PreserveEditorSelection:
-        result := [x |-> editor.x, y |-> editor.y];
-      } else {
-      ChooseX:
-        with (x = FirstNumericColumnOrValidFallback(matrix, columns)) {
-      ChooseY:
-        result := [x |-> x, y |-> DifferentNumericOrValidColumn(matrix, columns, x)];
-        };
-      };
-    };
-    return;
-  }
-
-  procedure ConnectDataToSlot(slot, data, sourceName, projectCsv) {
-  ResolveSlotAndCsv:
-    assert ResolveSlot(slot.id) # NoReference /\ ResolveProjectCsv(projectCsv.id) # NoReference;
-  ChooseValidColumns:
-    with (xy = GraphDataSelectionForCsv(projectCsv)) {
-      if (slot.chart # NoReference) {
-      AppendObjectToOwnedChartCandidate:
-        result := AppendGraphObjectCandidate(slot, projectCsv, xy);
-      } else {
-      AllocateChartAndAttachCandidate:
-        result := NewOwnedChartCandidate(slot, projectCsv, xy);
-      };
-    };
-  RebuildConnectionProjection:
-    result := RebuildCandidateGraphProjection(result);
-    return;
-  }
-
-  procedure TracesSingle(objectView) {
-  ReadObjectCsvValues:
-    with (values = ResolveTraceColumnsAndDivisors(objectView)) {
-    FilterAxisDomain:
-      values := RemoveReciprocalZeroAndLogNonPositive(values, objectView);
-    MapTraceStyle:
-      result := BuildPlotlyTraceFromGraphObject(values, objectView);
-    };
-    return;
-  }
-
-  procedure Traces(chart) {
-  ResolveEveryObjectCsv:
-    assert EveryGraphObjectCsvResolves(chart);
-  ProjectEveryObject:
-    result := ConcatenateTraceProjectionPerObject(chart);
-    return;
-  }
-
-  procedure NormalizeAxis(axis, key) {
-  FillAxisDefaults:
-    result := FillAxisDefaultsBySide(axis, key);
-  NormalizeAxisEnumsAndNumbers:
-    result := NormalizeAxisEnumsNumericOrEmpty(result);
-  RequireNonZeroDivide:
-    assert result.divide # 0;
-  ForcePlotlyTicksForLog:
-    if (result.scaleType = "log") {
-      result := SetTickModePlotly(result);
-    };
-    return;
-  }
-
-  procedure NormalizeGlobal(settings) {
-  FillGraphDefaults:
-    result := FillGlobalGraphDefaults(settings);
-  NormalizeFourAxes:
-    result := NormalizeAllFourAxes(result);
-  PreserveImportedExtensionsSeparately:
-    result := SeparateEditorOwnedAndImportedExtensionFields(result);
-    return;
-  }
-
-  procedure ValidateChart(chart, csvCollection) {
-  ValidateChartShape:
-    assert ValidChartIdEditorAndGraphShape(chart);
-  PermitZeroObjects:
-    assert IsSequence(chart.editor.objects);
-  ValidateObjects:
-    assert EveryObjectReferenceColumnEnumAndStyleValid(chart, csvCollection);
-  ValidateGlobalSettings:
-    assert GlobalAndFourAxesNormalize(chart.editor.globalSettings);
-  ValidateRendererShapes:
-    assert ValidGraphDataLayoutConfigFramesImported(chart.graph);
-  ReturnChart:
-    result := chart;
-    return;
-  }
-
-  procedure ParsePlotly(figure, chartId) {
-  PreserveOriginalFigure:
-    chartCandidate := DeepCopyImportedPlotlyRepresentation(figure, chartId);
-  BuildConversionRows:
-    chartCandidate := ExpandTraceXYArraysInTraceOrder(chartCandidate);
-  BuildConversionObjects:
-    chartCandidate := MapSupportedTraceAxisTypeVisibilityAndStyles(chartCandidate);
-  ConvertLayout:
-    chartCandidate := ConvertSupportedLayoutToGlobalSettings(chartCandidate);
-  PreserveUnsupportedExtensions:
-    chartCandidate := PreservePlotlyExtensions(chartCandidate);
-  PermitEmptyConversion:
-    assert ZeroTraceOrZeroDataFigureNeedsNoFakeRows(chartCandidate);
-  MarkNonEditable:
-    chartCandidate := SetEditorEditable(chartCandidate, FALSE);
-  ReturnImportedChart:
-    result := chartCandidate;
-    return;
-  }
-
-  procedure ConvertImportedToEditable(chart) {
-  PreserveImportedRepresentation:
-    projectCandidate := CopyCurrentProject();
-  HandleEmptyConversion:
-    if (Len(ConversionObjects(chart)) = 0) {
-      projectCandidate := SetChartEditableWithoutCsv(projectCandidate, chart.id);
-    } else {
-    CreateOneProjectCsv:
-      projectCandidate := CreateCsvFromConversionRows(projectCandidate, chart);
-    RemapAllConversionObjects:
-      projectCandidate := PointConversionObjectsToCreatedCsv(projectCandidate, chart.id);
-    };
-  RebuildEditableProjection:
-    projectCandidate := RebuildConvertedChartProjection(projectCandidate, chart.id);
-  ValidateConvertedProject:
+procedure ImportGraphFile(file)
+variables slotValue = NoReference;
+begin
+ImportGraphResolveSlot:
+  slotValue := ResolveSelectedSlot();
+ImportGraphBuild:
+  if slotValue # NoReference then
+    if IsFfsx(file) then
+      projectCandidate := ReadAndRemapFfsx(file, slotValue);
+    else
+      chartCandidate := ParsePlotlyPreservingOriginal(file);
+      projectCandidate := AttachImportedChartToSlot(chartCandidate, slotValue);
+    end if;
     assert ValidateWholeProject(projectCandidate);
-  ReturnEditableCandidate:
-    result := projectCandidate;
-    return;
-  }
-  Main:
-    while (TRUE) {
-      either {
-        with (csvId = SelectedCsvId()) {
-          call AddGraphObject(csvId);
-        };
-      } or {
-        with (objects = EditedObjectList(), index = RequestedObjectIndex()) {
-          call CommitGraphObjects(objects, index);
-        };
-      } or {
-        with (index = RequestedObjectIndex(), values = EditedObjectValues()) {
-          call SetObjectValues(index, values);
-        };
-      } or {
-        with (editable = RequestedEditableState()) {
-          call SetEditable(editable);
-        };
-      };
-    };
-}
+    command := [
+      name |-> "SLOT_CHART_IMPORTED",
+      slotId |-> slotValue.id,
+      candidate |-> projectCandidate
+    ];
+  end if;
+ImportGraphReturn:
+  return;
+end procedure;
+
+procedure ExportChartFigure(chart)
+begin
+FigureRepresentation:
+  if chart.editor.editable = TRUE then
+    result := FigureFromEditorAndReferencedCsv(chart);
+  else
+    result := PreservedImportedFigure(chart);
+  end if;
+FigureReturn:
+  return;
+end procedure;
+
+procedure NormalizeAxis(axis, key)
+begin
+AxisDefaults:
+  result := FillAxisDefaultsBySide(axis, key);
+AxisEnums:
+  result := NormalizeAxisEnumsNumericOrEmpty(result);
+AxisDivide:
+  assert result.divide # 0;
+AxisLogTicks:
+  if result.scaleType = "log" then
+    result := SetTickModePlotly(result);
+  end if;
+AxisReturn:
+  return;
+end procedure;
+
+procedure NormalizeGlobal(settings)
+begin
+GlobalDefaults:
+  result := FillGlobalGraphDefaults(settings);
+GlobalAxes:
+  result := NormalizeAllFourAxes(result);
+GlobalExtensions:
+  result := SeparateEditorOwnedAndImportedExtensionFields(result);
+GlobalReturn:
+  return;
+end procedure;
+
+procedure ValidateChart(chart, csvCollection)
+begin
+ChartShape:
+  assert ValidChartIdEditorAndGraphShape(chart);
+ChartObjects:
+  assert IsSequence(chart.editor.objects)
+         /\ EveryObjectReferenceColumnEnumAndStyleValid(chart, csvCollection);
+ChartSettings:
+  assert GlobalAndFourAxesNormalize(chart.editor.globalSettings);
+ChartRendererShapes:
+  assert ValidGraphDataLayoutConfigFramesImported(chart.graph);
+ChartValidateResult:
+  result := chart;
+ChartValidateReturn:
+  return;
+end procedure;
+
+procedure ParsePlotly(figure, chartId)
+begin
+PlotlyPreserve:
+  chartCandidate := DeepCopyImportedPlotlyRepresentation(figure, chartId);
+PlotlyRows:
+  chartCandidate := ExpandTraceXYArraysInTraceOrder(chartCandidate);
+PlotlyObjects:
+  chartCandidate := MapSupportedTraceAxisTypeVisibilityAndStyles(chartCandidate);
+PlotlyLayout:
+  chartCandidate := ConvertSupportedLayoutToGlobalSettings(chartCandidate);
+PlotlyExtensions:
+  chartCandidate := PreservePlotlyExtensions(chartCandidate);
+PlotlyEmpty:
+  assert ZeroTraceOrZeroDataFigureNeedsNoFakeRows(chartCandidate);
+PlotlyEditable:
+  chartCandidate := SetEditorEditable(chartCandidate, FALSE);
+PlotlyResult:
+  result := chartCandidate;
+PlotlyReturn:
+  return;
+end procedure;
+
+procedure ConvertImportedToEditable(chart)
+begin
+EditableCopyProject:
+  projectCandidate := CopyCurrentProject();
+EditableConversionBranch:
+  if Len(ConversionObjects(chart)) = 0 then
+    projectCandidate := SetChartEditableWithoutCsv(projectCandidate, chart.id);
+  else
+    projectCandidate := CreateCsvFromConversionRows(projectCandidate, chart);
+    projectCandidate := PointConversionObjectsToCreatedCsv(projectCandidate, chart.id);
+  end if;
+EditableProjection:
+  projectCandidate := RebuildConvertedChartProjection(projectCandidate, chart.id);
+EditableValidate:
+  assert ValidateWholeProject(projectCandidate);
+EditableResult:
+  result := projectCandidate;
+EditableConvertReturn:
+  return;
+end procedure;
+
+begin
+Main:
+  while TRUE do
+    either
+      with csvId = SelectedCsvId() do
+        call AddGraphObject(csvId);
+      end with;
+    or
+      with objects = EditedObjectList(), index = RequestedObjectIndex() do
+        call CommitGraphObjects(objects, index);
+      end with;
+    or
+      with index = RequestedObjectIndex(), values = EditedObjectValues() do
+        call SetObjectValues(index, values);
+      end with;
+    or
+      with editable = RequestedEditableState() do
+        call SetEditable(editable);
+      end with;
+    end either;
+  end while;
+end algorithm;
 *)
 ====

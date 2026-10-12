@@ -1,164 +1,191 @@
 ---- MODULE FastFigureProjectStatePseudocode ----
 EXTENDS Naturals, Sequences, FiniteSets
 
-\* r13 translation of sourcescript/project_state.py.
-\* Candidate validation is pure. Only InitializeProject replaces projectAuthority.
+\* r13 PlusCal pseudocode for sourcescript/project_state.py.
+
 CONSTANTS DefaultProject, NoReference
 
 (*
---algorithm FastFigureProjectState {
-  variables projectAuthority = DefaultProject,
-            result = NoReference,
-            candidate = NoReference;
+--algorithm FastFigureProjectState
+variables
+  projectAuthority = DefaultProject,
+  candidate = NoReference,
+  result = NoReference;
 
-  procedure ValidateProject(state, requireSlots) {
-  ValidateTopLevel:
-    assert state.kind = "FastFigureProject";
-  ValidateGrid:
-    assert state.layout.gridRows \in 1..8;
-    assert state.layout.gridCols \in 1..8;
-  ValidateDirectories:
-    assert ValidateVfsDirectories(state);
-  ValidateAssetIdentity:
-    assert UniqueCsvIds(state) /\ UniqueImageIds(state);
-    assert UniqueAssetPaths(state);
-    assert AssetDirectoriesExist(state);
-  ValidateCharts:
-    assert UniqueChartIds(state);
-    assert EveryGraphCsvReferenceResolves(state);
-  ValidateSlots:
-    assert UniqueSlotIds(state);
-    assert SlotGeometryValid(state);
-    assert NoSlotOwnsChartAndImage(state);
-    assert EverySlotReferenceResolves(state);
-    assert ImageSettingsValid(state);
-  ValidateChartOwnership:
-    assert EveryChartHasExactlyOneOwningSlot(state);
-  ValidateSequences:
-    assert NextIdsExceedExistingIds(state);
-  ValidateRequiredSlots:
-    if (requireSlots) {
-      assert Len(state.slots) > 0;
-    };
-    return;
-  }
+procedure ValidateProject(state, requireSlots)
+begin
+ValidateTopLevel:
+  assert state.kind = "FastFigureProject";
+ValidateGrid:
+  assert state.layout.gridRows \in 1..8 /\ state.layout.gridCols \in 1..8;
+ValidateVfs:
+  assert ValidateVfsDirectories(state)
+         /\ UniqueCsvIds(state)
+         /\ UniqueImageIds(state)
+         /\ UniqueAssetPaths(state)
+         /\ AssetDirectoriesExist(state);
+ValidateCharts:
+  assert UniqueChartIds(state)
+         /\ EveryGraphCsvReferenceResolves(state);
+ValidateSlots:
+  assert UniqueSlotIds(state)
+         /\ SlotGeometryValid(state)
+         /\ NoSlotOwnsChartAndImage(state)
+         /\ EverySlotReferenceResolves(state)
+         /\ ImageSettingsValid(state);
+ValidateOwnership:
+  assert EveryChartHasExactlyOneOwningSlot(state);
+ValidateSequences:
+  assert NextIdsExceedExistingIds(state);
+ValidateRequiredSlots:
+  if requireSlots then
+    assert Len(state.slots) > 0;
+  end if;
+ValidateResult:
+  result := state;
+ValidateReturn:
+  return;
+end procedure;
 
-  procedure NormalizeSlot(candidateSlot) {
-  FillSlotDefaults:
-    candidateSlot := FillMissingSlotLocalFields(
-      candidateSlot,
-      [chart |-> NoReference,
-       imageId |-> NoReference,
-       contentType |-> "graph",
-       imageSettings |-> [fit |-> "contain", scale |-> 100, x |-> 50, y |-> 50],
-       caption |-> NoReference]);
-  NormalizeLegacyCaption:
-    candidateSlot := MoveLegacyNestedCaptionToSlot(candidateSlot);
-  RemoveDuplicateAuthority:
-    candidateSlot := RemoveCompatibilityDuplicateSlotValues(candidateSlot);
-  ReturnNormalizedSlot:
-    result := candidateSlot;
-    return;
-  }
+procedure NormalizeSlot(slotValue)
+variables normalized = slotValue;
+begin
+FillSlotDefaults:
+  normalized := FillMissingSlotLocalFields(normalized, DefaultSlotLocalPayload());
+NormalizeLegacyCaption:
+  normalized := MoveLegacyNestedCaptionToSlot(normalized);
+RemoveDuplicateSlotAuthority:
+  normalized := RemoveCompatibilityDuplicateSlotValues(normalized);
+NormalizeSlotResult:
+  result := normalized;
+NormalizeSlotReturn:
+  return;
+end procedure;
 
-  procedure InitializeProject(source) {
-  CopyCandidate:
-    candidate := DeepCopy(source);
-  NormalizeCandidateSlots:
-    candidate := MapNormalizeSlot(candidate);
-  ValidateWholeCandidate:
-    call ValidateProject(candidate, TRUE);
-  CommitWholeProject:
-    result := projectAuthority;
-    projectAuthority := candidate;
-    return;
-  }
+procedure InitializeProject(source)
+begin
+CopyProjectCandidate:
+  candidate := DeepCopy(source);
+NormalizeProjectSlots:
+  candidate := MapNormalizeSlot(candidate);
+ValidateProjectCandidate:
+  call ValidateProject(candidate, TRUE);
+CommitProjectAuthority:
+  projectAuthority := candidate;
+InitializeResult:
+  result := projectAuthority;
+InitializeReturn:
+  return;
+end procedure;
 
-  procedure CreateProject() {
-  CreateCandidate:
-    candidate := NewProjectFromRules(
-      gridRows = 2,
-      gridCols = 2,
-      csvFiles = <<>>,
-      images = <<>>,
-      charts = <<>>,
-      fixedDirectories = {"/assets", "/assets/csv", "/assets/images", "/assets/trash"},
-      slotCount = 4);
-  ValidateNewProject:
-    call ValidateProject(candidate, TRUE);
-  ReturnNewCandidate:
-    result := candidate;
-    return;
-  }
+procedure CreateProject()
+begin
+CreateDefaultCandidate:
+  candidate := NewProjectFromRules(
+    2,
+    2,
+    <<>>,
+    <<>>,
+    <<>>,
+    {"/assets", "/assets/csv", "/assets/images", "/assets/trash"},
+    4);
+ValidateDefaultCandidate:
+  call ValidateProject(candidate, TRUE);
+CreateResult:
+  result := candidate;
+CreateReturn:
+  return;
+end procedure;
 
-  procedure ResolveOwningSlot(chartId, state) {
-  CollectOwners:
-    with (owners = SlotsReferencingChart(chartId, state)) {
-      if (Cardinality(owners) = 1) {
-      ReturnOwner:
-        result := CHOOSE owner \in owners : TRUE;
-      } else {
-      RejectAmbiguousOwner:
-        result := NoReference;
-      };
-    };
-    return;
-  }
+procedure ResolveOwningSlot(chartId, state)
+variables owners = {};
+begin
+CollectChartOwners:
+  owners := SlotsReferencingChart(chartId, state);
+ResolveUniqueOwner:
+  if Cardinality(owners) = 1 then
+    result := CHOOSE owner \in owners : TRUE;
+  else
+    result := NoReference;
+  end if;
+ResolveOwnerReturn:
+  return;
+end procedure;
 
-  procedure ResolveCsv(csvId) {
-  ResolveCsvReference:
-    result := ResolveUniqueById(projectAuthority.csvFiles, csvId);
-    return;
-  }
+procedure ResolveCsv(csvId)
+begin
+ResolveCsvCurrent:
+  result := ResolveUniqueById(projectAuthority.csvFiles, csvId);
+ResolveCsvReturn:
+  return;
+end procedure;
 
-  procedure ResolveImage(imageId) {
-  ResolveImageReference:
-    result := ResolveUniqueById(projectAuthority.images, imageId);
-    return;
-  }
+procedure ResolveImage(imageId)
+begin
+ResolveImageCurrent:
+  result := ResolveUniqueById(projectAuthority.images, imageId);
+ResolveImageReturn:
+  return;
+end procedure;
 
-  procedure ResolveChart(chartId) {
-  ResolveChartReference:
-    result := ResolveUniqueById(projectAuthority.charts, chartId);
-    return;
-  }
+procedure ResolveChart(chartId)
+begin
+ResolveChartCurrent:
+  result := ResolveUniqueById(projectAuthority.charts, chartId);
+ResolveChartReturn:
+  return;
+end procedure;
 
-  procedure ReadProjectPath(path) {
-  ResolveCurrentProjectPath:
-    result := ResolveDeclaredProjectPath(projectAuthority, path);
-    return;
-  }
+procedure ReadProjectPath(path)
+begin
+ReadCurrentPath:
+  result := ResolveDeclaredProjectPath(projectAuthority, path);
+ReadProjectReturn:
+  return;
+end procedure;
 
-  procedure RegistryRead(name) {
-  ResolveRegistryName:
-    result := ResolveRegistryNameAgainstCurrentProject(name, projectAuthority);
-    return;
-  }
+procedure RegistryRead(name)
+begin
+RegistryResolveCurrent:
+  result := ResolveRegistryNameAgainstCurrentProject(name, projectAuthority);
+RegistryReadReturn:
+  return;
+end procedure;
 
-  procedure RegistrySnapshot(names) {
-  ReadOneWorkScopeSnapshot:
-    result := DeepCopyResolvedProjectObjects(names, projectAuthority);
-    return;
-  }
+procedure RegistrySnapshot(names)
+begin
+SnapshotCurrentObjects:
+  result := DeepCopyResolvedProjectObjects(names, projectAuthority);
+SnapshotReturn:
+  return;
+end procedure;
 
-  procedure SlotHasNonDefaultLocalState(slot) {
-  NormalizeLocalPayloadForComparison:
-    with (local = NormalizeSlotLocalPayload(slot)) {
-    CompareAllLocalFields:
-      result := local # DefaultSlotLocalPayload();
-    };
-    return;
-  }
-  Main:
-    while (TRUE) {
-      either {
-        call CreateProject();
-      } or {
-        with (source = candidate) {
-          call InitializeProject(source);
-        };
-      };
-    };
-}
+procedure SlotHasNonDefaultLocalState(slotValue)
+variables local = NoReference;
+begin
+NormalizeSlotLocalComparison:
+  local := NormalizeSlotLocalPayload(slotValue);
+CompareSlotLocalDefaults:
+  result := local # DefaultSlotLocalPayload();
+SlotDefaultReturn:
+  return;
+end procedure;
+
+begin
+Main:
+  while TRUE do
+    either
+      call CreateProject();
+    or
+      with source = NextProjectInitializationCandidate() do
+        call InitializeProject(source);
+      end with;
+    or
+      with chartId = NextChartReference() do
+        call ResolveOwningSlot(chartId, projectAuthority);
+      end with;
+    end either;
+  end while;
+end algorithm;
 *)
 ====
