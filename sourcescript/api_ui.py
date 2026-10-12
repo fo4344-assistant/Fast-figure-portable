@@ -202,6 +202,15 @@ MANTINE_COMPONENT_OWNERSHIP = {
     "FastFigureShell": "Mantine AppShell, navbar resize/collapse, component composition",
 }
 
+DASHBOARD_DROP_FLOW = (
+    "external file drop은 FastFigureDashboardFileDrop이 DOM target slotId를 얻고 slots.prepareFileDrop으로 "
+    "target validity/runtime selection만 확정한 뒤 lifecycle 안에서 assets.importToSlot(file, slotId, choosePlan)을 호출한다. "
+    "importToSlot만 asset/chart/image의 persistent candidate를 만들고 검증·commit한다. "
+    "finally에서 slots.finishFileDrop은 drag runtime state만 정리한다. "
+    "project tree의 기존 asset drop은 assets.connectToSlot(path, kind, slotId)의 별도 explicit connection 경로를 사용한다."
+)
+
+
 MANTINE_THEME_RULE = (
     "generic Button, ActionIcon, Input 크기와 Modal centered/Escape/outside-click 기본값은 "
     "fastFigureTheme에서 공통 정의한다. renderer surface CSS와 generic UI lifecycle을 분리한다."

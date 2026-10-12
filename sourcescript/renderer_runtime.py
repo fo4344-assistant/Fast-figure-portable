@@ -97,7 +97,7 @@ def renderDashboard():
 
     처리:
     1. activeProject grid와 style을 dashboard CSS geometry에 반영한다.
-    2. visible slot마다 slot container와 label/tab surface를 구성한다.
+    2. visible slot마다 slot container와 label/bookmark control surface를 구성한다.
     3. graph slot은 referenced chart를 resolve해 Plotly projection을 render한다.
     4. image slot은 referenced image asset bytes와 같은 slot object의 imageSettings를 resolve해 image surface를 동기화한다.
     5. selectedSlotId에 따라 selection/interaction class를 적용한다.
@@ -126,14 +126,20 @@ def setSelectedSlot(slotId, direction):
 def installSlotClickController():
     """
     변경:
-    - dashboard DOM에 slot click/slot-to-slot drag event listener를 설치한다.
+    - dashboard DOM에 slot bookmark click/slot-to-slot bookmark drag event listener를 설치한다.
     - project state 변경은 event handler 안에서 공식 command를 통해 수행한다.
 
     처리:
-    slot background/tab click은 setSelectedSlot로 전달한다.
-    selected slot tab drag는 slot swap command를 사용한다.
-    renderable content와 caption의 이동 의미는 layout_annotations_export의 operation matrix를 따른다.
-    file DataTransfer drop은 여기서 처리하지 않고 Mantine FastFigureDashboardFileDrop에 넘긴다.
+    1. graph/image content가 있는 slot의 본문 클릭은 Plotly/image interaction에 맡기며 slot selection을 바꾸지 않는다.
+    2. 각 content slot 왼쪽 위의 bookmark control click만 setSelectedSlot로 전달한다.
+       같은 selected slot bookmark를 다시 클릭하면 기존 SELECT_SLOT toggle semantics로 선택 해제한다.
+    3. empty slot은 graph/image interaction이 없으므로 empty surface click으로 선택할 수 있다.
+    4. bookmark drag는 selection toggle이 아니라 source/target GUI position 사이의 slot-local payload 이동으로 처리한다.
+       drop 성공 뒤 생길 수 있는 synthetic click은 억제한다.
+    5. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
+       layout_annotations_export의 operation matrix를 따른다.
+    6. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
+       Mantine FastFigureDashboardFileDrop에 넘긴다.
     """
     return "설치된 dashboard interaction controller"
 
@@ -164,7 +170,11 @@ def prepareDashboardFileDrop(slotId):
     - drag runtime state를 정리한다.
 
     처리:
-    실제 file import와 collision UI는 frontend가 소유한다.
+    1. slotId를 current visible slot에서 resolve하고 hidden/invalid target이면 false로 끝낸다.
+    2. 유효 target이 현재 selected slot이 아니면 import target workspace를 위해 그 slot을 선택한다.
+    3. 이 함수는 file bytes, asset, chart/image reference를 변경하지 않는다.
+    4. 실제 file import/collision UI는 FastFigureDashboardFileDrop -> assets.importToSlot 경로가 소유한다.
+    5. finishFileDrop은 drag runtime cleanup만 수행하며 domain commit을 반복하지 않는다.
     """
     accepted = "drop target 유효 여부"
     return accepted

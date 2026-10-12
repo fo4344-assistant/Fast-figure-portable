@@ -1,0 +1,389 @@
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -39,77 +39,102 @@
+     "portable_build.py": "split-to-portable build specification",
+ }
+ 
+-PROJECT_PURPOSE_INVARIANTS = {
+-    "figure-workspace": (
+-        "Fast Figure는 tabular data와 image에서 scientific figure draft를 빠르게 구성하는 slot-based workspace다. "
+-        "graph, image placement, layout, label, caption, project packaging, raster/Plotly export가 같은 project 의미 위에서 동작한다."
+-    ),
+-    "local-processing": (
+-        "ordinary use의 loaded data와 image 처리는 browser local runtime에서 수행한다. "
+-        "core workflow에 server, account, mandatory network connection을 요구하지 않는다."
+-    ),
+-    "portable-runtime": (
+-        "배포 artifact는 단일 Fast-figure.html로 실행 가능해야 하며 core runtime dependency는 portable artifact 안에 포함한다."
+-    ),
+-    "complete-project-state": (
+-        "ProjectObject와 FFPX는 한 figure의 complete persistent state를 표현한다. "
+-        "session-only selection, pointer/modal draft, telemetry는 persistent project에 포함하지 않는다."
+-    ),
+-    "copied-assets": (
+-        "FFPX는 CSV/image의 project copy bytes를 package 내부에 보존한다. "
+-        "저장·이동·재개방에 원본 filesystem path나 원본 file object가 필요하지 않아야 한다."
+-    ),
+-    "interchange-boundaries": (
+-        "Plotly JSON은 one graph figure interchange, FFSX는 one graph slot + referenced CSV + slot-local caption, "
+-        "FFPX는 complete project container 책임을 가진다. 서로의 책임을 암묵적으로 확대하지 않는다."
+-    ),
+-}
+-
+-RUNTIME_LOAD_ORDER = [
+-    "Fast-figure.html이 renderer host DOM과 스타일을 제공한다.",
+-    "vendor/plotly.min.js가 Plotly renderer를 제공한다.",
+-    "vendor/fast-figure-ui-runtime.js가 React와 Mantine runtime을 제공한다.",
+-    "fast-figure.js가 project/domain/FSM/API와 functional renderer를 초기화한다.",
+-    "fast-figure-ui.js가 기존 API와 UI FSM 위에 Mantine frontend를 mount한다.",
+-]
+-
+-AUTHORITATIVE_STATE_RULE = (
+-    "영속 프로젝트 상태의 권위 원천은 activeProject의 ProjectObject state다. "
+-    "UI는 FastFigureApi 또는 appFSM event를 통해 변경한다. "
+-    "renderer snapshot과 React local state는 독립적인 project authority가 아니다."
+-)
+-
+-RUNTIME_STATE_RULE = (
+-    "selectedSlotId, dashboard zoom/drag state, telemetry와 같은 값은 영속 project state가 아닌 runtime state다. "
+-    "선택 chart는 selectedSlotId -> slot.chart -> chart로 resolve하며 별도 global editing pointer를 Source Script 상태로 두지 않는다. "
+-    "각 runtime 값은 책임 범위를 벗어나 project state의 대체 읽기 원천으로 사용하지 않는다."
+-)
+-
+-RESOLVED_REVIEW_ITEMS = [
+-    (
+-        "label position은 별도 preview draft 없이 하나의 authoritative persistent x/y를 연속 갱신하는 것으로 확정했다. "
+-        "interaction finish는 position의 두 번째 commit이 아니다."
+-    ),
+-    (
+-        "editing global pointer는 독립 기능 의미가 없고 selectedSlotId -> slot.chart -> chart로 resolve 가능하므로 "
+-        "Source Script runtime state에서 제거했다."
+-    ),
+-    (
+-        "layoutMapWidth는 실제 producer/consumer가 없으므로 authoritative persistent state에서 제거했다. "
+-        "기존 v3 input의 field는 legacy no-op으로 무시할 수 있다."
+-    ),
+-    (
+-        "debugEnabled는 session runtime authority이고 uiTelemetryState.debugEnabled는 one-way UI projection이다. "
+-        "Source Script에는 projection에서 debug authority로 되돌아가는 mutation 경로를 두지 않는다."
+-    ),
+-    (
+-        "slot caption은 slot object의 local property로 확정했다. "
+-        "slot object를 GUI layout position 사이에서 이동·교환하면 caption도 chart/image/contentType과 함께 이동한다. "
+-        "global caption은 project-level property이며 slot caption editor target은 UI/runtime state다."
+-    ),
+-    (
+-        "image fit/scale/x/y는 image asset 자체가 아니라 slot-local display state로 확정했다. "
+-        "image asset은 copied bytes/name/MIME/location을 소유하고, 같은 image를 여러 slot이 참조해도 각 slot의 imageSettings는 독립적이다."
++SOURCE_SCRIPT_DECOMPOSITION_RULE = (
++    "system.py가 Fast Figure 전체 시스템 경계를 나타내는 최상위 Source Script module이고, "
++    "project_state/application_fsm/assets_files/graphs/layout_annotations_export/api_ui/renderer_runtime/portable_build는 "
++    "그 시스템 의미의 서로 다른 직접 하위 책임이다. 이들 형제 module 사이의 import/call 관계는 의미적 부모-자식 관계가 아니다. "
++    "하위 단계는 이 sibling responsibility를 새 중간 계층으로 재분류하지 않는다."
++)
++
++
++PROJECT_PURPOSE_INVARIANTS = {
++    "figure-workspace": (
++        "Fast Figure는 tabular data와 image에서 scientific figure draft를 빠르게 구성하는 slot-based workspace다. "
++        "graph, image placement, layout, label, caption, project packaging, raster/Plotly export가 같은 project 의미 위에서 동작한다."
++    ),
++    "local-processing": (
++        "ordinary use의 loaded data와 image 처리는 browser local runtime에서 수행한다. "
++        "core workflow에 server, account, mandatory network connection을 요구하지 않는다."
++    ),
++    "portable-runtime": (
++        "배포 artifact는 단일 Fast-figure.html로 실행 가능해야 하며 core runtime dependency는 portable artifact 안에 포함한다."
++    ),
++    "complete-project-state": (
++        "ProjectObject와 FFPX는 한 figure의 complete persistent state를 표현한다. "
++        "session-only selection, pointer/modal draft, telemetry는 persistent project에 포함하지 않는다."
++    ),
++    "copied-assets": (
++        "FFPX는 CSV/image의 project copy bytes를 package 내부에 보존한다. "
++        "저장·이동·재개방에 원본 filesystem path나 원본 file object가 필요하지 않아야 한다."
++    ),
++    "interchange-boundaries": (
++        "Plotly JSON은 one graph figure interchange, FFSX는 one graph slot + referenced CSV + slot-local caption, "
++        "FFPX는 complete project container 책임을 가진다. 서로의 책임을 암묵적으로 확대하지 않는다."
++    ),
++}
++
++RUNTIME_LOAD_ORDER = [
++    "Fast-figure.html이 renderer host DOM과 스타일을 제공한다.",
++    "vendor/plotly.min.js가 Plotly renderer를 제공한다.",
++    "vendor/fast-figure-ui-runtime.js가 React와 Mantine runtime을 제공한다.",
++    "fast-figure.js가 project/domain/FSM/API와 functional renderer를 초기화한다.",
++    "fast-figure-ui.js가 기존 API와 UI FSM 위에 Mantine frontend를 mount한다.",
++]
++
++AUTHORITATIVE_STATE_RULE = (
++    "영속 프로젝트 상태의 권위 원천은 activeProject의 ProjectObject state다. "
++    "UI는 FastFigureApi 또는 appFSM event를 통해 변경한다. "
++    "renderer snapshot과 React local state는 독립적인 project authority가 아니다."
++)
++
++RUNTIME_STATE_RULE = (
++    "selectedSlotId, dashboard zoom/drag state, telemetry와 같은 값은 영속 project state가 아닌 runtime state다. "
++    "선택 chart는 selectedSlotId -> slot.chart -> chart로 resolve하며 별도 global editing pointer를 Source Script 상태로 두지 않는다. "
++    "각 runtime 값은 책임 범위를 벗어나 project state의 대체 읽기 원천으로 사용하지 않는다."
++)
++
++RESOLVED_REVIEW_ITEMS = [
++    (
++        "label position은 별도 preview draft 없이 하나의 authoritative persistent x/y를 연속 갱신하는 것으로 확정했다. "
++        "interaction finish는 position의 두 번째 commit이 아니다."
++    ),
++    (
++        "editing global pointer는 독립 기능 의미가 없고 selectedSlotId -> slot.chart -> chart로 resolve 가능하므로 "
++        "Source Script runtime state에서 제거했다."
++    ),
++    (
++        "layoutMapWidth는 실제 producer/consumer가 없으므로 authoritative persistent state에서 제거했다. "
++        "기존 v3 input의 field는 legacy no-op으로 무시할 수 있다."
++    ),
++    (
++        "debugEnabled는 session runtime authority이고 uiTelemetryState.debugEnabled는 one-way UI projection이다. "
++        "Source Script에는 projection에서 debug authority로 되돌아가는 mutation 경로를 두지 않는다."
++    ),
++    (
++        "slot caption은 slot object의 local property로 확정했다. "
++        "slot object를 GUI layout position 사이에서 이동·교환하면 caption도 chart/image/contentType과 함께 이동한다. "
++        "global caption은 project-level property이며 slot caption editor target은 UI/runtime state다."
++    ),
++    (
++        "image fit/scale/x/y는 image asset 자체가 아니라 slot-local display state로 확정했다. "
++        "image asset은 copied bytes/name/MIME/location을 소유하고, 같은 image를 여러 slot이 참조해도 각 slot의 imageSettings는 독립적이다."
++    ),
++    (
++        "content slot 선택/해제는 왼쪽 위 bookmark control이 소유하고 graph/image 본문 interaction과 분리한다. "
++        "bookmark drag는 선택 동작이 아니라 slot-local payload의 GUI position 이동이며 synthetic click을 억제한다. "
++        "empty slot은 interactive content가 없으므로 empty surface click으로 선택할 수 있다."
++    ),
++    (
++        "CSV/image/object runtime selection은 필요한 참조를 mutation 전에 모두 resolve한다. "
++        "resolve 실패는 기존 runtime selection을 보존하고, 성공 후에만 clear/select 순서를 실행한다."
++    ),
++    (
++        "dashboard external file drop은 target/runtime selection, collision UI, persistent import commit을 분리한다. "
++        "prepare/finish는 runtime 책임이고 assets.importToSlot만 persistent import candidate를 commit한다."
++    ),
++    (
++        "Source Script module hierarchy는 system.py 아래의 직접 sibling responsibility로 둔다. "
++        "형제 module의 import/call 관계를 추가적인 의미적 부모-자식 hierarchy로 해석하지 않는다."
+     ),
+ ]
+ 
+diff --git a/sourcescript/application_fsm.py b/sourcescript/application_fsm.py
+--- a/sourcescript/application_fsm.py
++++ b/sourcescript/application_fsm.py
+@@ -83,18 +83,21 @@
+ 
+ SELECTION_COMMAND_ORDER = {
+     "selectCsv": (
+-        "VFS에서 CSV를 resolve하고 유효할 때만 graphObject 선택을 해제한 다음 "
+-        "같은 appFSM assetSelection/assetPath를 CSV로 전환한다. "
+-        "트리와 그래프 편집기의 선택 진입점은 동일한 순서를 사용한다."
+-    ),
+-    "selectObject": (
+-        "현재 선택 chart의 유효 index와 그 object.csvId의 실제 CSV 참조를 확인한다. "
+-        "참조 CSV를 현재 단일 asset selection으로 선택하고, "
+-        "그 선택으로 발생하는 graphObject 해제 이후 SELECT_GRAPH_OBJECT를 적용한다."
+-    ),
+-    "selectImage": (
+-        "VFS에서 이미지 참조를 확인한 다음 asset selection만 갱신한다. "
+-        "slot imageId는 명시적 connectToSlot 또는 drop event에서만 변경한다."
++        "요청 CSV id/path를 current VFS에서 먼저 resolve하고 csv kind와 canonical assetPath를 모두 확정한다. "
++        "resolve 실패 시 assetSelection과 graphObject selection을 모두 그대로 유지한다. "
++        "성공한 경우에만 graphObject 선택을 해제한 뒤 같은 appFSM assetSelection/assetPath를 CSV로 전환한다. "
++        "트리와 그래프 편집기의 선택 진입점은 이 동일한 순서를 사용한다."
++    ),
++    "selectObject": (
++        "현재 selected slot -> chart, 요청 index -> graph object, object.csvId -> project CSV -> canonical assetPath를 "
++        "모두 mutation 전에 resolve한다. 하나라도 실패하면 asset/graphObject selection을 모두 유지한다. "
++        "모두 유효하면 graphObject 선택을 먼저 해제하고 참조 CSV를 단일 asset selection으로 선택한 다음 "
++        "마지막에 SELECT_GRAPH_OBJECT를 적용한다."
++    ),
++    "selectImage": (
++        "요청 image path를 current VFS에서 먼저 resolve하고 image kind/canonical path를 확인한다. "
++        "실패하면 기존 asset/graphObject selection을 유지한다. 성공한 경우 graphObject 선택을 해제한 뒤 "
++        "asset selection만 image로 갱신한다. slot imageId는 명시적 connectToSlot 또는 file/asset drop에서만 변경한다."
+     ),
+ }
+ 
+diff --git a/sourcescript/renderer_runtime.py b/sourcescript/renderer_runtime.py
+--- a/sourcescript/renderer_runtime.py
++++ b/sourcescript/renderer_runtime.py
+@@ -97,74 +97,84 @@
+ 
+     처리:
+     1. activeProject grid와 style을 dashboard CSS geometry에 반영한다.
+-    2. visible slot마다 slot container와 label/tab surface를 구성한다.
+-    3. graph slot은 referenced chart를 resolve해 Plotly projection을 render한다.
+-    4. image slot은 referenced image asset bytes와 같은 slot object의 imageSettings를 resolve해 image surface를 동기화한다.
+-    5. selectedSlotId에 따라 selection/interaction class를 적용한다.
+-    6. caption과 label projection을 동기화한다.
+-    7. stale Plotly instance를 purge하고 resize generation을 관리한다.
+-    """
+-    return "현재 project에서 다시 생성된 dashboard projection"
+-
+-
+-def setSelectedSlot(slotId, direction):
+-    """
+-    변경:
+-    - SELECT_SLOT event를 통한 runtime selection/workspace.
+-    - graph view renderer projection.
+-
+-    중요 semantics:
+-    기본 UI 방향에서 이미 선택된 동일 slot id를 다시 보내면 선택 해제된다.
+-    caller가 '선택을 보장'해야 하면 현재 selected slot을 먼저 읽어야 한다.
+-
+-    처리:
+-    appFSM event가 selection semantics를 결정한 뒤 graph view를 갱신하고 resize를 요청한다.
+-    """
+-    return "선택 후 runtime state"
+-
+-
+-def installSlotClickController():
+-    """
+-    변경:
+-    - dashboard DOM에 slot click/slot-to-slot drag event listener를 설치한다.
+-    - project state 변경은 event handler 안에서 공식 command를 통해 수행한다.
+-
+-    처리:
+-    slot background/tab click은 setSelectedSlot로 전달한다.
+-    selected slot tab drag는 slot swap command를 사용한다.
+-    renderable content와 caption의 이동 의미는 layout_annotations_export의 operation matrix를 따른다.
+-    file DataTransfer drop은 여기서 처리하지 않고 Mantine FastFigureDashboardFileDrop에 넘긴다.
+-    """
+-    return "설치된 dashboard interaction controller"
+-
+-
+-def swapSlotContents(source, target):
+-    """
+-    변경:
+-    - 검증된 candidate를 통해 source/target GUI 위치의 slot-local properties와 필요 시 selectedSlotId.
+-
+-    처리:
+-    1. source/target을 current project에서 다시 resolve한다.
+-    2. row/col/span geometry는 각 GUI 위치에 유지한다.
+-    3. chart/image/contentType/imageSettings/caption 등 slot-local properties 전체를 한 단위로 교환한다.
+-    4. chart ownership은 교환된 target slot에 맞춰 1:1을 유지한다.
+-    5. project candidate를 검증한 뒤 한 번 commit한다.
+-    """
+-    return "swap candidate commit 결과"
+-
+-
+-def prepareDashboardFileDrop(slotId):
+-    """
+-    Return:
+-    - accepted:
+-      target slot이 외부 file drop을 받을 수 있는지 여부.
+-
+-    변경:
+-    - 유효 target이 현재 선택이 아니면 해당 slot을 선택한다.
+-    - drag runtime state를 정리한다.
+-
+-    처리:
+-    실제 file import와 collision UI는 frontend가 소유한다.
++    2. visible slot마다 slot container와 label/bookmark control surface를 구성한다.
++    3. graph slot은 referenced chart를 resolve해 Plotly projection을 render한다.
++    4. image slot은 referenced image asset bytes와 같은 slot object의 imageSettings를 resolve해 image surface를 동기화한다.
++    5. selectedSlotId에 따라 selection/interaction class를 적용한다.
++    6. caption과 label projection을 동기화한다.
++    7. stale Plotly instance를 purge하고 resize generation을 관리한다.
++    """
++    return "현재 project에서 다시 생성된 dashboard projection"
++
++
++def setSelectedSlot(slotId, direction):
++    """
++    변경:
++    - SELECT_SLOT event를 통한 runtime selection/workspace.
++    - graph view renderer projection.
++
++    중요 semantics:
++    기본 UI 방향에서 이미 선택된 동일 slot id를 다시 보내면 선택 해제된다.
++    caller가 '선택을 보장'해야 하면 현재 selected slot을 먼저 읽어야 한다.
++
++    처리:
++    appFSM event가 selection semantics를 결정한 뒤 graph view를 갱신하고 resize를 요청한다.
++    """
++    return "선택 후 runtime state"
++
++
++def installSlotClickController():
++    """
++    변경:
++    - dashboard DOM에 slot bookmark click/slot-to-slot bookmark drag event listener를 설치한다.
++    - project state 변경은 event handler 안에서 공식 command를 통해 수행한다.
++
++    처리:
++    1. graph/image content가 있는 slot의 본문 클릭은 Plotly/image interaction에 맡기며 slot selection을 바꾸지 않는다.
++    2. 각 content slot 왼쪽 위의 bookmark control click만 setSelectedSlot로 전달한다.
++       같은 selected slot bookmark를 다시 클릭하면 기존 SELECT_SLOT toggle semantics로 선택 해제한다.
++    3. empty slot은 graph/image interaction이 없으므로 empty surface click으로 선택할 수 있다.
++    4. bookmark drag는 selection toggle이 아니라 source/target GUI position 사이의 slot-local payload 이동으로 처리한다.
++       drop 성공 뒤 생길 수 있는 synthetic click은 억제한다.
++    5. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
++       layout_annotations_export의 operation matrix를 따른다.
++    6. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
++       Mantine FastFigureDashboardFileDrop에 넘긴다.
++    """
++    return "설치된 dashboard interaction controller"
++
++
++def swapSlotContents(source, target):
++    """
++    변경:
++    - 검증된 candidate를 통해 source/target GUI 위치의 slot-local properties와 필요 시 selectedSlotId.
++
++    처리:
++    1. source/target을 current project에서 다시 resolve한다.
++    2. row/col/span geometry는 각 GUI 위치에 유지한다.
++    3. chart/image/contentType/imageSettings/caption 등 slot-local properties 전체를 한 단위로 교환한다.
++    4. chart ownership은 교환된 target slot에 맞춰 1:1을 유지한다.
++    5. project candidate를 검증한 뒤 한 번 commit한다.
++    """
++    return "swap candidate commit 결과"
++
++
++def prepareDashboardFileDrop(slotId):
++    """
++    Return:
++    - accepted:
++      target slot이 외부 file drop을 받을 수 있는지 여부.
++
++    변경:
++    - 유효 target이 현재 선택이 아니면 해당 slot을 선택한다.
++    - drag runtime state를 정리한다.
++
++    처리:
++    1. slotId를 current visible slot에서 resolve하고 hidden/invalid target이면 false로 끝낸다.
++    2. 유효 target이 현재 selected slot이 아니면 import target workspace를 위해 그 slot을 선택한다.
++    3. 이 함수는 file bytes, asset, chart/image reference를 변경하지 않는다.
++    4. 실제 file import/collision UI는 FastFigureDashboardFileDrop -> assets.importToSlot 경로가 소유한다.
++    5. finishFileDrop은 drag runtime cleanup만 수행하며 domain commit을 반복하지 않는다.
+     """
+     accepted = "drop target 유효 여부"
+     return accepted
+diff --git a/sourcescript/api_ui.py b/sourcescript/api_ui.py
+--- a/sourcescript/api_ui.py
++++ b/sourcescript/api_ui.py
+@@ -202,6 +202,15 @@
+     "FastFigureShell": "Mantine AppShell, navbar resize/collapse, component composition",
+ }
+ 
++DASHBOARD_DROP_FLOW = (
++    "external file drop은 FastFigureDashboardFileDrop이 DOM target slotId를 얻고 slots.prepareFileDrop으로 "
++    "target validity/runtime selection만 확정한 뒤 lifecycle 안에서 assets.importToSlot(file, slotId, choosePlan)을 호출한다. "
++    "importToSlot만 asset/chart/image의 persistent candidate를 만들고 검증·commit한다. "
++    "finally에서 slots.finishFileDrop은 drag runtime state만 정리한다. "
++    "project tree의 기존 asset drop은 assets.connectToSlot(path, kind, slotId)의 별도 explicit connection 경로를 사용한다."
++)
++
++
+ MANTINE_THEME_RULE = (
+     "generic Button, ActionIcon, Input 크기와 Modal centered/Escape/outside-click 기본값은 "
+     "fastFigureTheme에서 공통 정의한다. renderer surface CSS와 generic UI lifecycle을 분리한다."

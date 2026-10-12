@@ -39,6 +39,14 @@ SOURCE_SCRIPT_MODULES = {
     "portable_build.py": "split-to-portable build specification",
 }
 
+SOURCE_SCRIPT_DECOMPOSITION_RULE = (
+    "system.py가 Fast Figure 전체 시스템 경계를 나타내는 최상위 Source Script module이고, "
+    "project_state/application_fsm/assets_files/graphs/layout_annotations_export/api_ui/renderer_runtime/portable_build는 "
+    "그 시스템 의미의 서로 다른 직접 하위 책임이다. 이들 형제 module 사이의 import/call 관계는 의미적 부모-자식 관계가 아니다. "
+    "하위 단계는 이 sibling responsibility를 새 중간 계층으로 재분류하지 않는다."
+)
+
+
 PROJECT_PURPOSE_INVARIANTS = {
     "figure-workspace": (
         "Fast Figure는 tabular data와 image에서 scientific figure draft를 빠르게 구성하는 slot-based workspace다. "
@@ -110,6 +118,23 @@ RESOLVED_REVIEW_ITEMS = [
     (
         "image fit/scale/x/y는 image asset 자체가 아니라 slot-local display state로 확정했다. "
         "image asset은 copied bytes/name/MIME/location을 소유하고, 같은 image를 여러 slot이 참조해도 각 slot의 imageSettings는 독립적이다."
+    ),
+    (
+        "content slot 선택/해제는 왼쪽 위 bookmark control이 소유하고 graph/image 본문 interaction과 분리한다. "
+        "bookmark drag는 선택 동작이 아니라 slot-local payload의 GUI position 이동이며 synthetic click을 억제한다. "
+        "empty slot은 interactive content가 없으므로 empty surface click으로 선택할 수 있다."
+    ),
+    (
+        "CSV/image/object runtime selection은 필요한 참조를 mutation 전에 모두 resolve한다. "
+        "resolve 실패는 기존 runtime selection을 보존하고, 성공 후에만 clear/select 순서를 실행한다."
+    ),
+    (
+        "dashboard external file drop은 target/runtime selection, collision UI, persistent import commit을 분리한다. "
+        "prepare/finish는 runtime 책임이고 assets.importToSlot만 persistent import candidate를 commit한다."
+    ),
+    (
+        "Source Script module hierarchy는 system.py 아래의 직접 sibling responsibility로 둔다. "
+        "형제 module의 import/call 관계를 추가적인 의미적 부모-자식 hierarchy로 해석하지 않는다."
     ),
 ]
 

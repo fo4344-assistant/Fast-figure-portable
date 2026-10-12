@@ -83,18 +83,21 @@ OVERLAY_EVENTS = {
 
 SELECTION_COMMAND_ORDER = {
     "selectCsv": (
-        "VFS에서 CSV를 resolve하고 유효할 때만 graphObject 선택을 해제한 다음 "
-        "같은 appFSM assetSelection/assetPath를 CSV로 전환한다. "
-        "트리와 그래프 편집기의 선택 진입점은 동일한 순서를 사용한다."
+        "요청 CSV id/path를 current VFS에서 먼저 resolve하고 csv kind와 canonical assetPath를 모두 확정한다. "
+        "resolve 실패 시 assetSelection과 graphObject selection을 모두 그대로 유지한다. "
+        "성공한 경우에만 graphObject 선택을 해제한 뒤 같은 appFSM assetSelection/assetPath를 CSV로 전환한다. "
+        "트리와 그래프 편집기의 선택 진입점은 이 동일한 순서를 사용한다."
     ),
     "selectObject": (
-        "현재 선택 chart의 유효 index와 그 object.csvId의 실제 CSV 참조를 확인한다. "
-        "참조 CSV를 현재 단일 asset selection으로 선택하고, "
-        "그 선택으로 발생하는 graphObject 해제 이후 SELECT_GRAPH_OBJECT를 적용한다."
+        "현재 selected slot -> chart, 요청 index -> graph object, object.csvId -> project CSV -> canonical assetPath를 "
+        "모두 mutation 전에 resolve한다. 하나라도 실패하면 asset/graphObject selection을 모두 유지한다. "
+        "모두 유효하면 graphObject 선택을 먼저 해제하고 참조 CSV를 단일 asset selection으로 선택한 다음 "
+        "마지막에 SELECT_GRAPH_OBJECT를 적용한다."
     ),
     "selectImage": (
-        "VFS에서 이미지 참조를 확인한 다음 asset selection만 갱신한다. "
-        "slot imageId는 명시적 connectToSlot 또는 drop event에서만 변경한다."
+        "요청 image path를 current VFS에서 먼저 resolve하고 image kind/canonical path를 확인한다. "
+        "실패하면 기존 asset/graphObject selection을 유지한다. 성공한 경우 graphObject 선택을 해제한 뒤 "
+        "asset selection만 image로 갱신한다. slot imageId는 명시적 connectToSlot 또는 file/asset drop에서만 변경한다."
     ),
 }
 
