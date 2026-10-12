@@ -121,7 +121,9 @@ RESOLVED_REVIEW_ITEMS = [
     ),
     (
         "content slot 선택/해제는 왼쪽 위 bookmark control이 소유하고 graph/image 본문 interaction과 분리한다. "
-        "bookmark drag는 선택 동작이 아니라 slot-local payload의 GUI position 이동이며 synthetic click을 억제한다. "
+        "bookmark drag는 선택 동작이 아니라 slot-local payload의 GUI position 이동이다. drag 시작 시 UI-local click suppression을 켜고 "
+        "drop/dragend에서 즉시 풀지 않는다. post-drag bookmark click이 발생하면 그 click을 소비하면서 suppression을 해제하고, "
+        "click이 없으면 click dispatch 기회가 지난 cleanup에서만 해제한다. "
         "empty slot은 interactive content가 없으므로 empty surface click으로 선택할 수 있다."
     ),
     (

@@ -135,7 +135,11 @@ def installSlotClickController():
        같은 selected slot bookmark를 다시 클릭하면 기존 SELECT_SLOT toggle semantics로 선택 해제한다.
     3. empty slot은 graph/image interaction이 없으므로 empty surface click으로 선택할 수 있다.
     4. bookmark drag는 selection toggle이 아니라 source/target GUI position 사이의 slot-local payload 이동으로 처리한다.
-       drop 성공 뒤 생길 수 있는 synthetic click은 억제한다.
+       drag 시작 시 UI-local click suppression을 활성화한다.
+       drop 또는 dragend는 drag source를 정리하지만 click suppression을 즉시 해제하지 않는다.
+       suppression이 활성화된 동안 bookmark click이 들어오면 SELECT_SLOT을 보내지 않고 그 click을 소비한 뒤 suppression을 해제한다.
+       browser가 post-drag click을 만들지 않는 경우에는 그 click dispatch 기회가 지난 뒤의 cleanup에서 suppression을 해제한다.
+       따라서 drag와 같은 interaction cycle에서 생긴 click은 slot selection/toggle로 해석하지 않는다.
     5. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
        layout_annotations_export의 operation matrix를 따른다.
     6. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고

@@ -1,0 +1,118 @@
+diff --git a/sourcescript/renderer_runtime.py b/sourcescript/renderer_runtime.py
+--- a/sourcescript/renderer_runtime.py
++++ b/sourcescript/renderer_runtime.py
+@@ -135,7 +135,11 @@
+        같은 selected slot bookmark를 다시 클릭하면 기존 SELECT_SLOT toggle semantics로 선택 해제한다.
+     3. empty slot은 graph/image interaction이 없으므로 empty surface click으로 선택할 수 있다.
+     4. bookmark drag는 selection toggle이 아니라 source/target GUI position 사이의 slot-local payload 이동으로 처리한다.
+-       drop 성공 뒤 생길 수 있는 synthetic click은 억제한다.
++       drag 시작 시 UI-local click suppression을 활성화한다.
++       drop 또는 dragend는 drag source를 정리하지만 click suppression을 즉시 해제하지 않는다.
++       suppression이 활성화된 동안 bookmark click이 들어오면 SELECT_SLOT을 보내지 않고 그 click을 소비한 뒤 suppression을 해제한다.
++       browser가 post-drag click을 만들지 않는 경우에는 그 click dispatch 기회가 지난 뒤의 cleanup에서 suppression을 해제한다.
++       따라서 drag와 같은 interaction cycle에서 생긴 click은 slot selection/toggle로 해석하지 않는다.
+     5. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
+        layout_annotations_export의 operation matrix를 따른다.
+     6. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -121,7 +121,9 @@
+     ),
+     (
+         "content slot 선택/해제는 왼쪽 위 bookmark control이 소유하고 graph/image 본문 interaction과 분리한다. "
+-        "bookmark drag는 선택 동작이 아니라 slot-local payload의 GUI position 이동이며 synthetic click을 억제한다. "
++        "bookmark drag는 선택 동작이 아니라 slot-local payload의 GUI position 이동이다. drag 시작 시 UI-local click suppression을 켜고 "
++        "drop/dragend에서 즉시 풀지 않는다. post-drag bookmark click이 발생하면 그 click을 소비하면서 suppression을 해제하고, "
++        "click이 없으면 click dispatch 기회가 지난 cleanup에서만 해제한다. "
+         "empty slot은 interactive content가 없으므로 empty surface click으로 선택할 수 있다."
+     ),
+     (
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,13 +9,13 @@
+   "authority_rule": "On semantic conflict, Source Script wins. Source code may be current only when the current verification model derives from the current closed Source Script and its TLC validation has passed.",
+   "layers": {
+     "source-script": {
+-      "revision": 14,
+-      "status": "current",
+-      "path_rule": "sourcescript/**/*.py",
+-      "fingerprint": "sha256:0a3b3d2c325afe802c817fc952683a92490c583349faea2afddf71cd3119b9f7",
+-      "derived_from": null,
+-      "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261012-003-sourcescript-closure-r14.md"
++      "revision": 15,
++      "status": "current",
++      "path_rule": "sourcescript/**/*.py",
++      "fingerprint": "sha256:6c7d5b23a4a1a9b13db6f4210781926e64fbba81df93e5cf774d8356b7c6fb3f",
++      "derived_from": null,
++      "closure": "closed",
++      "closure_review": "agent_space/reviews/review-20261012-005-sourcescript-closure-r15.md"
+     },
+     "verification-model": {
+       "revision": 6,
+diff --git a/agent_space/reviews/review-20261012-005-sourcescript-closure-r15.md b/agent_space/reviews/review-20261012-005-sourcescript-closure-r15.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261012-005-sourcescript-closure-r15.md
+@@ -0,0 +1,59 @@
++# Review 20261012-005 — Source Script r15 closure
++
++Source Script revision: r15
++
++Fingerprint:
++
++```text
++sha256:6c7d5b23a4a1a9b13db6f4210781926e64fbba81df93e5cf774d8356b7c6fb3f
++```
++
++## Change trigger
++
++The r14 PlusCal review showed that the Source Script required post-drag synthetic bookmark clicks to be suppressed but did not define when the UI-local suppression could be released. Because the release point changes whether a post-drag click can become SELECT_SLOT, it is design meaning and must be fixed in Source Script rather than invented in PlusCal.
++
++## 1. Logical completeness
++
++**Pass.**
++
++The bookmark interaction lifetime is now ordered explicitly:
++
++1. bookmark drag start activates UI-local click suppression;
++2. drop/dragend clears the drag source but does not release suppression;
++3. if a bookmark click is dispatched while suppression is active, that click is consumed without SELECT_SLOT and suppression is then released;
++4. if no post-drag click is dispatched, cleanup may release suppression only after that click-dispatch opportunity has passed.
++
++Therefore the same drag interaction cycle cannot accidentally toggle/select the slot through its generated click.
++
++The existing click semantics remain unchanged outside that guarded cycle: content bookmark click selects/toggles, graph/image body does not select, empty slot surface may select.
++
++## 2. Project-purpose alignment
++
++**Pass.**
++
++The change only clarifies UI interaction sequencing needed to preserve Plotly/image interaction and bookmark-based slot movement. It does not change slot payload movement, persistent project state, layout geometry, or user-visible selection capability.
++
++## 3. Duplicate structure / integration
++
++**Pass.**
++
++Click suppression remains UI/runtime state owned by renderer interaction. It is not added to ProjectObject, application domain state, or a second slot-selection authority.
++
++The existing SELECT_SLOT and SLOTS_SWAPPED commands remain the only corresponding mutation/event boundaries.
++
++## 4. Cross-module consistency
++
++**Pass.**
++
++- application_fsm remains the authority for SELECT_SLOT toggle semantics.
++- renderer_runtime owns DOM bookmark click/drag event sequencing.
++- slot swap meaning remains the slot-local payload swap already defined by application_fsm/layout rules.
++- api_ui external file drop remains separate from bookmark drag.
++
++No new unresolved Source Script rule is introduced.
++
++## 5. Closure verdict
++
++**Source Script r15 is closed.**
++
++`UNRESOLVED_REVIEW_ITEMS` remains empty. Downstream PlusCal must represent this ordered guard lifetime exactly. Source Code remains stale until the PlusCal translation is complete.
