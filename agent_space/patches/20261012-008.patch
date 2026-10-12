@@ -1,0 +1,420 @@
+diff --git a/pseudocode/project_state.pcal b/pseudocode/project_state.pcal
+--- a/pseudocode/project_state.pcal
++++ b/pseudocode/project_state.pcal
+@@ -123,6 +123,32 @@
+     return;
+   }
+ 
++  procedure ReadProjectPath(path) {
++  ResolveCurrentProjectPath:
++    result := ResolveDeclaredProjectPath(projectAuthority, path);
++    return;
++  }
++
++  procedure RegistryRead(name) {
++  ResolveRegistryName:
++    result := ResolveRegistryNameAgainstCurrentProject(name, projectAuthority);
++    return;
++  }
++
++  procedure RegistrySnapshot(names) {
++  ReadOneWorkScopeSnapshot:
++    result := DeepCopyResolvedProjectObjects(names, projectAuthority);
++    return;
++  }
++
++  procedure SlotHasNonDefaultLocalState(slot) {
++  NormalizeLocalPayloadForComparison:
++    with (local = NormalizeSlotLocalPayload(slot)) {
++    CompareAllLocalFields:
++      result := local # DefaultSlotLocalPayload();
++    };
++    return;
++  }
+   Main:
+     while (TRUE) {
+       either {
+diff --git a/pseudocode/assets_files.pcal b/pseudocode/assets_files.pcal
+--- a/pseudocode/assets_files.pcal
++++ b/pseudocode/assets_files.pcal
+@@ -218,6 +218,123 @@
+     return;
+   }
+ 
++  procedure NormalizePath(value, isDirectory) {
++  NormalizeSlashAndSegments:
++    result := NormalizeSlashAbsoluteProjectPath(value, isDirectory);
++  RejectDotSegments:
++    assert ~ContainsDotOrDotDotSegment(result);
++  ValidateEveryNameSegment:
++    assert EveryPathSegmentUsesProjectNameRules(result);
++    return;
++  }
++
++  procedure AssetPath(asset) {
++  RecomputeFromOwnerFields:
++    result := JoinCanonicalAssetDirectoryAndName(asset.directory, asset.name);
++    return;
++  }
++
++  procedure CreateCsv(data, name, id, bytesBase64, mime, headerLines, path) {
++  NormalizeCsvCandidate:
++    candidate := NormalizeCsvAsset(data, name, id, bytesBase64, mime, headerLines, path);
++  EmitCsvCreate:
++    command := [name |-> "DATA_OBJECT_CREATED", asset |-> candidate];
++  ReturnCsvCandidate:
++    result := candidate;
++    return;
++  }
++
++  procedure CreateImage(bytes, name, mime, id, path) {
++  NormalizeImageCandidate:
++    candidate := NormalizeImageAssetBytesNameMimeLocation(bytes, name, mime, id, path);
++  ExcludeSlotDisplaySettings:
++    assert ~ImageAssetContainsSlotDisplaySettings(candidate);
++  EmitImageCreate:
++    command := [name |-> "IMAGE_OBJECT_CREATED", asset |-> candidate];
++  ReturnImageCandidate:
++    result := candidate;
++    return;
++  }
++
++  procedure PlanNodeMove(path, directory) {
++  ResolveMoveSourceAndTarget:
++    result := CalculateMovePlanFromCurrentVfs(path, directory, projectAuthority);
++    return;
++  }
++
++  procedure UniquePath(path, reservedPaths) {
++  PreserveParentBaseAndExtension:
++    result := CalculateCollisionFreePath(path, projectAuthority, reservedPaths);
++    return;
++  }
++
++  procedure Descendants(directory) {
++  ResolveCanonicalSubtree:
++    result := CollectByCanonicalSegmentBoundary(directory, projectAuthority);
++    return;
++  }
++
++  procedure ParseDataAsset(name, bytes) {
++  DecodeUtf8:
++    with (text = DecodeUtf8(bytes)) {
++      if (HasJsonExtension(name)) {
++      ParseJsonTable:
++        result := NormalizeJsonTopLevelOrDataArray(text);
++      } else {
++      ParseDelimitedTable:
++        result := ParseCsvOrTsvPreservingQuotedNewlinesAndBlankRows(name, text);
++      };
++    };
++  ValidateParsedTable:
++    assert ValidTabularShape(result);
++    return;
++  }
++
++  procedure CollectReferences(csvIds, imageIds, state) {
++  EnumerateGraphObjectReferences:
++    result := CollectEveryGraphObjectReference(csvIds, state);
++  EnumerateImageSlotReferences:
++    result := AppendEveryImageSlotReference(result, imageIds, state);
++    return;
++  }
++
++  procedure EncodeTypedValue(value) {
++  DispatchTypedXmlShape:
++    result := RecursiveTypedXmlEncode(value);
++  RequireSupportedRuntimeType:
++    assert result # NoReference;
++    return;
++  }
++
++  procedure DecodeTypedValue(element) {
++  ValidateTypedXmlShape:
++    result := RecursiveTypedXmlDecode(element);
++  RequireFiniteNumbersAndKnownTypes:
++    assert DecodedTypedValueValid(result);
++    return;
++  }
++
++  procedure BuildProjectObject(payload, fileName) {
++  ValidateSchemaVersionAndGrid:
++    assert ValidImportedProjectHeader(payload);
++  NormalizeImportedAssets:
++    candidate := NormalizeImportedCsvImageCollections(payload);
++  NormalizeImportedCharts:
++    candidate := NormalizeChartsAndResolveCsvReferences(candidate);
++  NormalizeImportedSlots:
++    candidate := NormalizeSlotGeometryContentSettingsAndCaptions(candidate);
++  RequireUniqueChartOwners:
++    assert EveryChartHasExactlyOneOwner(candidate);
++  NormalizeProjectPresentation:
++    candidate := NormalizeLabelsCaptionsAppearanceExport(candidate);
++  RecalculateNextIds:
++    candidate := SetNextIdsAboveCollectionMaxima(candidate);
++  ValidateBuiltProject:
++    assert ValidateWholeProject(candidate);
++  ReturnBuiltProject:
++    result := candidate;
++    return;
++  }
+   Main:
+     while (TRUE) {
+       either {
+diff --git a/pseudocode/graphs.pcal b/pseudocode/graphs.pcal
+--- a/pseudocode/graphs.pcal
++++ b/pseudocode/graphs.pcal
+@@ -174,6 +174,167 @@
+     return;
+   }
+ 
++  procedure DataTable(data) {
++  NormalizeTabularInput:
++    if (RowsAreArrays(data)) {
++      result := PreserveArrayRows(data);
++    } else {
++      if (RowsAreObjects(data)) {
++      BuildObjectKeyUnion:
++        result := ProjectObjectsToCommonColumnOrder(data);
++      } else {
++      RejectUnsupportedTable:
++        result := NoReference;
++      };
++    };
++  RequireNonEmptySupportedTable:
++    assert result # NoReference;
++    return;
++  }
++
++  procedure ColumnDefinitions(table, headerLines) {
++  ComputeMaximumWidth:
++    with (width = MaximumRowWidth(table)) {
++    ChooseLastHeaderRow:
++      result := BuildColumnIdsAndOptionalNames(width, table, headerLines);
++    };
++    return;
++  }
++
++  procedure GraphDataSelection(matrix, headerLines, editor) {
++  ResolveValidColumns:
++    with (columns = ColumnDefinitionsFor(matrix, headerLines)) {
++      if (EditorXYRemainValid(editor, columns)) {
++      PreserveEditorSelection:
++        result := [x |-> editor.x, y |-> editor.y];
++      } else {
++      ChooseX:
++        with (x = FirstNumericColumnOrValidFallback(matrix, columns)) {
++      ChooseY:
++        result := [x |-> x, y |-> DifferentNumericOrValidColumn(matrix, columns, x)];
++        };
++      };
++    };
++    return;
++  }
++
++  procedure ConnectDataToSlot(slot, data, sourceName, projectCsv) {
++  ResolveSlotAndCsv:
++    assert ResolveSlot(slot.id) # NoReference /\ ResolveProjectCsv(projectCsv.id) # NoReference;
++  ChooseValidColumns:
++    with (xy = GraphDataSelectionForCsv(projectCsv)) {
++      if (slot.chart # NoReference) {
++      AppendObjectToOwnedChartCandidate:
++        result := AppendGraphObjectCandidate(slot, projectCsv, xy);
++      } else {
++      AllocateChartAndAttachCandidate:
++        result := NewOwnedChartCandidate(slot, projectCsv, xy);
++      };
++    };
++  RebuildConnectionProjection:
++    result := RebuildCandidateGraphProjection(result);
++    return;
++  }
++
++  procedure TracesSingle(objectView) {
++  ReadObjectCsvValues:
++    with (values = ResolveTraceColumnsAndDivisors(objectView)) {
++    FilterAxisDomain:
++      values := RemoveReciprocalZeroAndLogNonPositive(values, objectView);
++    MapTraceStyle:
++      result := BuildPlotlyTraceFromGraphObject(values, objectView);
++    };
++    return;
++  }
++
++  procedure Traces(chart) {
++  ResolveEveryObjectCsv:
++    assert EveryGraphObjectCsvResolves(chart);
++  ProjectEveryObject:
++    result := ConcatenateTraceProjectionPerObject(chart);
++    return;
++  }
++
++  procedure NormalizeAxis(axis, key) {
++  FillAxisDefaults:
++    result := FillAxisDefaultsBySide(axis, key);
++  NormalizeAxisEnumsAndNumbers:
++    result := NormalizeAxisEnumsNumericOrEmpty(result);
++  RequireNonZeroDivide:
++    assert result.divide # 0;
++  ForcePlotlyTicksForLog:
++    if (result.scaleType = "log") {
++      result := SetTickModePlotly(result);
++    };
++    return;
++  }
++
++  procedure NormalizeGlobal(settings) {
++  FillGraphDefaults:
++    result := FillGlobalGraphDefaults(settings);
++  NormalizeFourAxes:
++    result := NormalizeAllFourAxes(result);
++  PreserveImportedExtensionsSeparately:
++    result := SeparateEditorOwnedAndImportedExtensionFields(result);
++    return;
++  }
++
++  procedure ValidateChart(chart, csvCollection) {
++  ValidateChartShape:
++    assert ValidChartIdEditorAndGraphShape(chart);
++  PermitZeroObjects:
++    assert IsSequence(chart.editor.objects);
++  ValidateObjects:
++    assert EveryObjectReferenceColumnEnumAndStyleValid(chart, csvCollection);
++  ValidateGlobalSettings:
++    assert GlobalAndFourAxesNormalize(chart.editor.globalSettings);
++  ValidateRendererShapes:
++    assert ValidGraphDataLayoutConfigFramesImported(chart.graph);
++  ReturnChart:
++    result := chart;
++    return;
++  }
++
++  procedure ParsePlotly(figure, chartId) {
++  PreserveOriginalFigure:
++    chartCandidate := DeepCopyImportedPlotlyRepresentation(figure, chartId);
++  BuildConversionRows:
++    chartCandidate := ExpandTraceXYArraysInTraceOrder(chartCandidate);
++  BuildConversionObjects:
++    chartCandidate := MapSupportedTraceAxisTypeVisibilityAndStyles(chartCandidate);
++  ConvertLayout:
++    chartCandidate := ConvertSupportedLayoutToGlobalSettings(chartCandidate);
++  PreserveUnsupportedExtensions:
++    chartCandidate := PreservePlotlyExtensions(chartCandidate);
++  PermitEmptyConversion:
++    assert ZeroTraceOrZeroDataFigureNeedsNoFakeRows(chartCandidate);
++  MarkNonEditable:
++    chartCandidate := SetEditorEditable(chartCandidate, FALSE);
++  ReturnImportedChart:
++    result := chartCandidate;
++    return;
++  }
++
++  procedure ConvertImportedToEditable(chart) {
++  PreserveImportedRepresentation:
++    projectCandidate := CopyCurrentProject();
++  HandleEmptyConversion:
++    if (Len(ConversionObjects(chart)) = 0) {
++      projectCandidate := SetChartEditableWithoutCsv(projectCandidate, chart.id);
++    } else {
++    CreateOneProjectCsv:
++      projectCandidate := CreateCsvFromConversionRows(projectCandidate, chart);
++    RemapAllConversionObjects:
++      projectCandidate := PointConversionObjectsToCreatedCsv(projectCandidate, chart.id);
++    };
++  RebuildEditableProjection:
++    projectCandidate := RebuildConvertedChartProjection(projectCandidate, chart.id);
++  ValidateConvertedProject:
++    assert ValidateWholeProject(projectCandidate);
++  ReturnEditableCandidate:
++    result := projectCandidate;
++    return;
++  }
+   Main:
+     while (TRUE) {
+       either {
+diff --git a/pseudocode/layout_annotations_export.pcal b/pseudocode/layout_annotations_export.pcal
+--- a/pseudocode/layout_annotations_export.pcal
++++ b/pseudocode/layout_annotations_export.pcal
+@@ -205,6 +205,82 @@
+     return;
+   }
+ 
++  procedure DashboardGeometry(width, heightOverride) {
++  CalculateScale:
++    with (scale = width / ReadReferenceWidth(projectAuthority)) {
++    CalculateNaturalHeight:
++      with (naturalHeight = width / ReadConfiguredAspect(projectAuthority)) {
++    ChooseHeight:
++      with (height = IF ValidHeightOverride(heightOverride) THEN heightOverride ELSE naturalHeight) {
++    CalculateScaledStyle:
++      result := [
++        width |-> width,
++        height |-> height,
++        scale |-> scale,
++        outerMargin |-> Min(ReadOuterMargin(projectAuthority) * scale, Min(width, height) * 0.49),
++        gap |-> ReadGap(projectAuthority) * scale,
++        radius |-> ReadRadius(projectAuthority) * scale
++      ];
++      };
++      };
++    };
++    return;
++  }
++
++  procedure GridSlotGeometry(layoutState, geometry, slot) {
++  CalculateCellSize:
++    with (colWidth = (geometry.width - 2 * geometry.outerMargin
++                      - geometry.gap * (layoutState.gridCols - 1)) / layoutState.gridCols,
++          rowHeight = (geometry.height - 2 * geometry.outerMargin
++                       - geometry.gap * (layoutState.gridRows - 1)) / layoutState.gridRows) {
++  IncludeInternalSpanGaps:
++    result := SlotWidthHeightFromSpan(colWidth, rowHeight, geometry.gap, slot);
++    };
++    return;
++  }
++
++  procedure ReadImageEditor() {
++  ResolveSelectedImageSlot:
++    result := ReadSelectedImageNameUrlAndSlotSettings(projectAuthority);
++    return;
++  }
++
++  procedure ReadLabels() {
++  ReadPersistentLabelSettings:
++    result := ReadLabelSettings(projectAuthority);
++  AddSelectedSlotReferenceGeometry:
++    result := AddSelectedSlotReferenceWidthHeight(result, projectAuthority);
++    return;
++  }
++
++  procedure ReadGlobalCaption() {
++  ReadOnlyGlobalOwner:
++    result := ReadProjectGlobalCaption(projectAuthority);
++    return;
++  }
++
++  procedure ReadSlotCaption(slotId) {
++  ResolveSlotCaptionOwner:
++    result := ReadResolvedSlotIdPositionAndCaption(projectAuthority, slotId);
++    return;
++  }
++
++  procedure SetGlobalCaptionText(text) {
++  BuildOnlyGlobalTextCandidate:
++    candidate := ReplaceOnlyGlobalCaptionText(projectAuthority, text);
++  ValidateGlobalTextCandidate:
++    assert ValidateWholeProject(candidate);
++  CommitGlobalText:
++    projectAuthority := candidate;
++    result := ReadProjectGlobalCaption(projectAuthority);
++    return;
++  }
++
++  procedure ReadExportSettings() {
++  ReadPersistentExportOwner:
++    result := ReadProjectExportSettings(projectAuthority);
++    return;
++  }
+   Main:
+     while (TRUE) {
+       either {

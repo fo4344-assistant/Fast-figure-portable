@@ -174,6 +174,167 @@ CONSTANTS NoReference
     return;
   }
 
+  procedure DataTable(data) {
+  NormalizeTabularInput:
+    if (RowsAreArrays(data)) {
+      result := PreserveArrayRows(data);
+    } else {
+      if (RowsAreObjects(data)) {
+      BuildObjectKeyUnion:
+        result := ProjectObjectsToCommonColumnOrder(data);
+      } else {
+      RejectUnsupportedTable:
+        result := NoReference;
+      };
+    };
+  RequireNonEmptySupportedTable:
+    assert result # NoReference;
+    return;
+  }
+
+  procedure ColumnDefinitions(table, headerLines) {
+  ComputeMaximumWidth:
+    with (width = MaximumRowWidth(table)) {
+    ChooseLastHeaderRow:
+      result := BuildColumnIdsAndOptionalNames(width, table, headerLines);
+    };
+    return;
+  }
+
+  procedure GraphDataSelection(matrix, headerLines, editor) {
+  ResolveValidColumns:
+    with (columns = ColumnDefinitionsFor(matrix, headerLines)) {
+      if (EditorXYRemainValid(editor, columns)) {
+      PreserveEditorSelection:
+        result := [x |-> editor.x, y |-> editor.y];
+      } else {
+      ChooseX:
+        with (x = FirstNumericColumnOrValidFallback(matrix, columns)) {
+      ChooseY:
+        result := [x |-> x, y |-> DifferentNumericOrValidColumn(matrix, columns, x)];
+        };
+      };
+    };
+    return;
+  }
+
+  procedure ConnectDataToSlot(slot, data, sourceName, projectCsv) {
+  ResolveSlotAndCsv:
+    assert ResolveSlot(slot.id) # NoReference /\ ResolveProjectCsv(projectCsv.id) # NoReference;
+  ChooseValidColumns:
+    with (xy = GraphDataSelectionForCsv(projectCsv)) {
+      if (slot.chart # NoReference) {
+      AppendObjectToOwnedChartCandidate:
+        result := AppendGraphObjectCandidate(slot, projectCsv, xy);
+      } else {
+      AllocateChartAndAttachCandidate:
+        result := NewOwnedChartCandidate(slot, projectCsv, xy);
+      };
+    };
+  RebuildConnectionProjection:
+    result := RebuildCandidateGraphProjection(result);
+    return;
+  }
+
+  procedure TracesSingle(objectView) {
+  ReadObjectCsvValues:
+    with (values = ResolveTraceColumnsAndDivisors(objectView)) {
+    FilterAxisDomain:
+      values := RemoveReciprocalZeroAndLogNonPositive(values, objectView);
+    MapTraceStyle:
+      result := BuildPlotlyTraceFromGraphObject(values, objectView);
+    };
+    return;
+  }
+
+  procedure Traces(chart) {
+  ResolveEveryObjectCsv:
+    assert EveryGraphObjectCsvResolves(chart);
+  ProjectEveryObject:
+    result := ConcatenateTraceProjectionPerObject(chart);
+    return;
+  }
+
+  procedure NormalizeAxis(axis, key) {
+  FillAxisDefaults:
+    result := FillAxisDefaultsBySide(axis, key);
+  NormalizeAxisEnumsAndNumbers:
+    result := NormalizeAxisEnumsNumericOrEmpty(result);
+  RequireNonZeroDivide:
+    assert result.divide # 0;
+  ForcePlotlyTicksForLog:
+    if (result.scaleType = "log") {
+      result := SetTickModePlotly(result);
+    };
+    return;
+  }
+
+  procedure NormalizeGlobal(settings) {
+  FillGraphDefaults:
+    result := FillGlobalGraphDefaults(settings);
+  NormalizeFourAxes:
+    result := NormalizeAllFourAxes(result);
+  PreserveImportedExtensionsSeparately:
+    result := SeparateEditorOwnedAndImportedExtensionFields(result);
+    return;
+  }
+
+  procedure ValidateChart(chart, csvCollection) {
+  ValidateChartShape:
+    assert ValidChartIdEditorAndGraphShape(chart);
+  PermitZeroObjects:
+    assert IsSequence(chart.editor.objects);
+  ValidateObjects:
+    assert EveryObjectReferenceColumnEnumAndStyleValid(chart, csvCollection);
+  ValidateGlobalSettings:
+    assert GlobalAndFourAxesNormalize(chart.editor.globalSettings);
+  ValidateRendererShapes:
+    assert ValidGraphDataLayoutConfigFramesImported(chart.graph);
+  ReturnChart:
+    result := chart;
+    return;
+  }
+
+  procedure ParsePlotly(figure, chartId) {
+  PreserveOriginalFigure:
+    chartCandidate := DeepCopyImportedPlotlyRepresentation(figure, chartId);
+  BuildConversionRows:
+    chartCandidate := ExpandTraceXYArraysInTraceOrder(chartCandidate);
+  BuildConversionObjects:
+    chartCandidate := MapSupportedTraceAxisTypeVisibilityAndStyles(chartCandidate);
+  ConvertLayout:
+    chartCandidate := ConvertSupportedLayoutToGlobalSettings(chartCandidate);
+  PreserveUnsupportedExtensions:
+    chartCandidate := PreservePlotlyExtensions(chartCandidate);
+  PermitEmptyConversion:
+    assert ZeroTraceOrZeroDataFigureNeedsNoFakeRows(chartCandidate);
+  MarkNonEditable:
+    chartCandidate := SetEditorEditable(chartCandidate, FALSE);
+  ReturnImportedChart:
+    result := chartCandidate;
+    return;
+  }
+
+  procedure ConvertImportedToEditable(chart) {
+  PreserveImportedRepresentation:
+    projectCandidate := CopyCurrentProject();
+  HandleEmptyConversion:
+    if (Len(ConversionObjects(chart)) = 0) {
+      projectCandidate := SetChartEditableWithoutCsv(projectCandidate, chart.id);
+    } else {
+    CreateOneProjectCsv:
+      projectCandidate := CreateCsvFromConversionRows(projectCandidate, chart);
+    RemapAllConversionObjects:
+      projectCandidate := PointConversionObjectsToCreatedCsv(projectCandidate, chart.id);
+    };
+  RebuildEditableProjection:
+    projectCandidate := RebuildConvertedChartProjection(projectCandidate, chart.id);
+  ValidateConvertedProject:
+    assert ValidateWholeProject(projectCandidate);
+  ReturnEditableCandidate:
+    result := projectCandidate;
+    return;
+  }
   Main:
     while (TRUE) {
       either {

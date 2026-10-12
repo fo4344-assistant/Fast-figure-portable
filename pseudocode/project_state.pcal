@@ -123,6 +123,32 @@ CONSTANTS DefaultProject, NoReference
     return;
   }
 
+  procedure ReadProjectPath(path) {
+  ResolveCurrentProjectPath:
+    result := ResolveDeclaredProjectPath(projectAuthority, path);
+    return;
+  }
+
+  procedure RegistryRead(name) {
+  ResolveRegistryName:
+    result := ResolveRegistryNameAgainstCurrentProject(name, projectAuthority);
+    return;
+  }
+
+  procedure RegistrySnapshot(names) {
+  ReadOneWorkScopeSnapshot:
+    result := DeepCopyResolvedProjectObjects(names, projectAuthority);
+    return;
+  }
+
+  procedure SlotHasNonDefaultLocalState(slot) {
+  NormalizeLocalPayloadForComparison:
+    with (local = NormalizeSlotLocalPayload(slot)) {
+    CompareAllLocalFields:
+      result := local # DefaultSlotLocalPayload();
+    };
+    return;
+  }
   Main:
     while (TRUE) {
       either {

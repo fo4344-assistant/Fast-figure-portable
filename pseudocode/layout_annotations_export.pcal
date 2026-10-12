@@ -205,6 +205,82 @@ CONSTANTS NoReference
     return;
   }
 
+  procedure DashboardGeometry(width, heightOverride) {
+  CalculateScale:
+    with (scale = width / ReadReferenceWidth(projectAuthority)) {
+    CalculateNaturalHeight:
+      with (naturalHeight = width / ReadConfiguredAspect(projectAuthority)) {
+    ChooseHeight:
+      with (height = IF ValidHeightOverride(heightOverride) THEN heightOverride ELSE naturalHeight) {
+    CalculateScaledStyle:
+      result := [
+        width |-> width,
+        height |-> height,
+        scale |-> scale,
+        outerMargin |-> Min(ReadOuterMargin(projectAuthority) * scale, Min(width, height) * 0.49),
+        gap |-> ReadGap(projectAuthority) * scale,
+        radius |-> ReadRadius(projectAuthority) * scale
+      ];
+      };
+      };
+    };
+    return;
+  }
+
+  procedure GridSlotGeometry(layoutState, geometry, slot) {
+  CalculateCellSize:
+    with (colWidth = (geometry.width - 2 * geometry.outerMargin
+                      - geometry.gap * (layoutState.gridCols - 1)) / layoutState.gridCols,
+          rowHeight = (geometry.height - 2 * geometry.outerMargin
+                       - geometry.gap * (layoutState.gridRows - 1)) / layoutState.gridRows) {
+  IncludeInternalSpanGaps:
+    result := SlotWidthHeightFromSpan(colWidth, rowHeight, geometry.gap, slot);
+    };
+    return;
+  }
+
+  procedure ReadImageEditor() {
+  ResolveSelectedImageSlot:
+    result := ReadSelectedImageNameUrlAndSlotSettings(projectAuthority);
+    return;
+  }
+
+  procedure ReadLabels() {
+  ReadPersistentLabelSettings:
+    result := ReadLabelSettings(projectAuthority);
+  AddSelectedSlotReferenceGeometry:
+    result := AddSelectedSlotReferenceWidthHeight(result, projectAuthority);
+    return;
+  }
+
+  procedure ReadGlobalCaption() {
+  ReadOnlyGlobalOwner:
+    result := ReadProjectGlobalCaption(projectAuthority);
+    return;
+  }
+
+  procedure ReadSlotCaption(slotId) {
+  ResolveSlotCaptionOwner:
+    result := ReadResolvedSlotIdPositionAndCaption(projectAuthority, slotId);
+    return;
+  }
+
+  procedure SetGlobalCaptionText(text) {
+  BuildOnlyGlobalTextCandidate:
+    candidate := ReplaceOnlyGlobalCaptionText(projectAuthority, text);
+  ValidateGlobalTextCandidate:
+    assert ValidateWholeProject(candidate);
+  CommitGlobalText:
+    projectAuthority := candidate;
+    result := ReadProjectGlobalCaption(projectAuthority);
+    return;
+  }
+
+  procedure ReadExportSettings() {
+  ReadPersistentExportOwner:
+    result := ReadProjectExportSettings(projectAuthority);
+    return;
+  }
   Main:
     while (TRUE) {
       either {

@@ -218,6 +218,123 @@ CONSTANTS NoReference
     return;
   }
 
+  procedure NormalizePath(value, isDirectory) {
+  NormalizeSlashAndSegments:
+    result := NormalizeSlashAbsoluteProjectPath(value, isDirectory);
+  RejectDotSegments:
+    assert ~ContainsDotOrDotDotSegment(result);
+  ValidateEveryNameSegment:
+    assert EveryPathSegmentUsesProjectNameRules(result);
+    return;
+  }
+
+  procedure AssetPath(asset) {
+  RecomputeFromOwnerFields:
+    result := JoinCanonicalAssetDirectoryAndName(asset.directory, asset.name);
+    return;
+  }
+
+  procedure CreateCsv(data, name, id, bytesBase64, mime, headerLines, path) {
+  NormalizeCsvCandidate:
+    candidate := NormalizeCsvAsset(data, name, id, bytesBase64, mime, headerLines, path);
+  EmitCsvCreate:
+    command := [name |-> "DATA_OBJECT_CREATED", asset |-> candidate];
+  ReturnCsvCandidate:
+    result := candidate;
+    return;
+  }
+
+  procedure CreateImage(bytes, name, mime, id, path) {
+  NormalizeImageCandidate:
+    candidate := NormalizeImageAssetBytesNameMimeLocation(bytes, name, mime, id, path);
+  ExcludeSlotDisplaySettings:
+    assert ~ImageAssetContainsSlotDisplaySettings(candidate);
+  EmitImageCreate:
+    command := [name |-> "IMAGE_OBJECT_CREATED", asset |-> candidate];
+  ReturnImageCandidate:
+    result := candidate;
+    return;
+  }
+
+  procedure PlanNodeMove(path, directory) {
+  ResolveMoveSourceAndTarget:
+    result := CalculateMovePlanFromCurrentVfs(path, directory, projectAuthority);
+    return;
+  }
+
+  procedure UniquePath(path, reservedPaths) {
+  PreserveParentBaseAndExtension:
+    result := CalculateCollisionFreePath(path, projectAuthority, reservedPaths);
+    return;
+  }
+
+  procedure Descendants(directory) {
+  ResolveCanonicalSubtree:
+    result := CollectByCanonicalSegmentBoundary(directory, projectAuthority);
+    return;
+  }
+
+  procedure ParseDataAsset(name, bytes) {
+  DecodeUtf8:
+    with (text = DecodeUtf8(bytes)) {
+      if (HasJsonExtension(name)) {
+      ParseJsonTable:
+        result := NormalizeJsonTopLevelOrDataArray(text);
+      } else {
+      ParseDelimitedTable:
+        result := ParseCsvOrTsvPreservingQuotedNewlinesAndBlankRows(name, text);
+      };
+    };
+  ValidateParsedTable:
+    assert ValidTabularShape(result);
+    return;
+  }
+
+  procedure CollectReferences(csvIds, imageIds, state) {
+  EnumerateGraphObjectReferences:
+    result := CollectEveryGraphObjectReference(csvIds, state);
+  EnumerateImageSlotReferences:
+    result := AppendEveryImageSlotReference(result, imageIds, state);
+    return;
+  }
+
+  procedure EncodeTypedValue(value) {
+  DispatchTypedXmlShape:
+    result := RecursiveTypedXmlEncode(value);
+  RequireSupportedRuntimeType:
+    assert result # NoReference;
+    return;
+  }
+
+  procedure DecodeTypedValue(element) {
+  ValidateTypedXmlShape:
+    result := RecursiveTypedXmlDecode(element);
+  RequireFiniteNumbersAndKnownTypes:
+    assert DecodedTypedValueValid(result);
+    return;
+  }
+
+  procedure BuildProjectObject(payload, fileName) {
+  ValidateSchemaVersionAndGrid:
+    assert ValidImportedProjectHeader(payload);
+  NormalizeImportedAssets:
+    candidate := NormalizeImportedCsvImageCollections(payload);
+  NormalizeImportedCharts:
+    candidate := NormalizeChartsAndResolveCsvReferences(candidate);
+  NormalizeImportedSlots:
+    candidate := NormalizeSlotGeometryContentSettingsAndCaptions(candidate);
+  RequireUniqueChartOwners:
+    assert EveryChartHasExactlyOneOwner(candidate);
+  NormalizeProjectPresentation:
+    candidate := NormalizeLabelsCaptionsAppearanceExport(candidate);
+  RecalculateNextIds:
+    candidate := SetNextIdsAboveCollectionMaxima(candidate);
+  ValidateBuiltProject:
+    assert ValidateWholeProject(candidate);
+  ReturnBuiltProject:
+    result := candidate;
+    return;
+  }
   Main:
     while (TRUE) {
       either {
