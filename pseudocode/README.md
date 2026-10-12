@@ -1,45 +1,36 @@
-# Fast Figure pseudocode r1
+# Fast Figure PlusCal pseudocode r13 — work in progress
 
-Derived exactly from:
+Derived from the closed Source Script:
 
-- Source Script revision: r12
-- Source Script fingerprint: `sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db`
-- Source Script closure review: `agent_space/reviews/review-015-sourcescript-closure-r12.md`
+- Source Script revision: r13
+- Source Script fingerprint: `sha256:2c7955cf29b10d73f4c0741b895c895633683ae00e6d4cc0bd75b78eaaa566c7`
+- Source Script closure review: `agent_space/reviews/review-20261012-002-sourcescript-closure-r13.md`
 
 ## Translation rule
 
-This directory is the language-neutral execution translation of the closed Source Script.
+The active r13 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
 
-It preserves:
+The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r13 PlusCal translation.
 
-- Source Script identifiers and responsibility boundaries
+The active translation preserves:
+
+- Source Script module/responsibility boundaries
 - authoritative state and reference sources
-- inputs and outputs
-- meaningful execution order
-- candidate construction and commit boundaries
+- resolve-before-mutation ordering
+- candidate/validation/commit boundaries
 - failure/rejection semantics
-- fixed calculations
+- runtime versus persistent mutation ownership
+- meaningful UI/FSM command sequencing
 
-It does not decide:
+If a required meaning is absent or contradictory, translation stops and returns to Source Script rather than filling the gap in PlusCal.
 
-- JavaScript/React/Python-specific data structures
-- concrete exception classes
-- browser/library call syntax
-- implementation-only caching or memory layout
-- new domain rules
+## Active r13 module mapping
 
-If a required meaning is missing or contradictory, translation stops and the issue returns to Source Script.
+| Source Script | Active PlusCal | Status |
+| --- | --- | --- |
+| `sourcescript/application_fsm.py` | `application_fsm.pcal` | selection-command portion translated |
+| `sourcescript/renderer_runtime.py` | `renderer_runtime.pcal` | slot bookmark interaction portion translated |
+| `sourcescript/api_ui.py` | `api_ui.pcal` | dashboard drop orchestration portion translated |
+| other Source Script modules | pending | not yet translated to r13 PlusCal |
 
-## Module mapping
-
-| Source Script | Pseudocode |
-| --- | --- |
-| `sourcescript/system.py` | `system.md` |
-| `sourcescript/project_state.py` | `project_state.md` |
-| `sourcescript/application_fsm.py` | `application_fsm.md` |
-| `sourcescript/assets_files.py` | `assets_files.md` |
-| `sourcescript/graphs.py` | `graphs.md` |
-| `sourcescript/layout_annotations_export.py` | `layout_annotations_export.md` |
-| `sourcescript/api_ui.py` | `api_ui.md` |
-| `sourcescript/renderer_runtime.py` | `renderer_runtime.md` |
-| `sourcescript/portable_build.py` | `portable_build.md` |
+The Source Script hierarchy remains `system.py` as the system root with responsibility modules as siblings. PlusCal files do not introduce new semantic parent/child modules.

@@ -1,51 +1,87 @@
----- MODULE FastFigureSelectionProcedure ----
+---- MODULE FastFigureApplicationFsmPseudocode ----
 EXTENDS Naturals
 
-\* Partial PlusCal translation of sourcescript/application_fsm.py:
-\* SELECTION_COMMAND_ORDER and the asset/graph runtime selection contract.
-\* All IDs are symbolic; the live VFS/chart validates and resolves them before
-\* entering these commands. ObjectCsvPath is the resolved VFS path of\n\* the selected object's csvId, never the numeric reference ID itself.\n\* This module does not mutate chart/slot authority.
-CONSTANTS CsvPaths, ImagePaths, ObjectIndices, ObjectCsvPath, NoSelection
+\* Direct r13 translation of the selection-command portion of
+\* sourcescript/application_fsm.py. Resolver functions return NoSelection
+\* when the requested current reference cannot be resolved.
+CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
+          ResolveCsvPath, ResolveImagePath,
+          ResolveObjectIndex, ResolveObjectCsvPath,
+          NoSelection
 
 (*
---algorithm FastFigureSelectionProcedure {
+--algorithm FastFigureApplicationFsmSelection {
   variables assetSelection = [kind |-> "none", path |-> NoSelection],
             graphObjectIndex = NoSelection;
+
+  procedure SelectCsv(request) {
+  ResolveCsv:
+    with (csvPath = ResolveCsvPath[request]) {
+      if (csvPath # NoSelection) {
+      ClearObjectForCsv:
+        graphObjectIndex := NoSelection;
+      CommitCsvSelection:
+        assetSelection := [kind |-> "csv", path |-> csvPath];
+      };
+    };
+    return;
+  }
+
+  procedure SelectObject(request) {
+  ResolveObject:
+    with (index = ResolveObjectIndex[request]) {
+      if (index # NoSelection) {
+      ResolveObjectCsv:
+        with (csvPath = ResolveObjectCsvPath[index]) {
+          if (csvPath # NoSelection) {
+          ClearObjectForObject:
+            graphObjectIndex := NoSelection;
+          CommitObjectCsvSelection:
+            assetSelection := [kind |-> "csv", path |-> csvPath];
+          CommitObjectSelection:
+            graphObjectIndex := index;
+          };
+        };
+      };
+    };
+    return;
+  }
+
+  procedure SelectImage(request) {
+  ResolveImage:
+    with (imagePath = ResolveImagePath[request]) {
+      if (imagePath # NoSelection) {
+      ClearObjectForImage:
+        graphObjectIndex := NoSelection;
+      CommitImageSelection:
+        assetSelection := [kind |-> "image", path |-> imagePath];
+      };
+    };
+    return;
+  }
 
   SelectionLoop:
     while (TRUE) {
       either {
-        \* Select CSV from either project tree or graph editor.
-        with (csvPath \in CsvPaths) {
-          ClearObjectForCsv:
-            graphObjectIndex := NoSelection;
-          SelectCsvAsset:
-            assetSelection := [kind |-> "csv", path |-> csvPath];
-        }
+        with (request \in CsvRequests) {
+          call SelectCsv(request);
+        };
       } or {
-        \* Explicit graph object selection: same CSV selection authority.
-        with (index \in ObjectIndices) {
-          ClearObjectForObject:
-            graphObjectIndex := NoSelection;
-          SelectReferencedCsv:
-            assetSelection := [kind |-> "csv", path |-> ObjectCsvPath[index]];
-          SelectGraphObject:
-            graphObjectIndex := index;
-        }
+        with (request \in ObjectRequests) {
+          call SelectObject(request);
+        };
       } or {
-        \* Image selection is runtime-only; no slot image link is performed.
-        with (imagePath \in ImagePaths) {
-          SelectImageAsset:
-            assetSelection := [kind |-> "image", path |-> imagePath];
-        }
+        with (request \in ImageRequests) {
+          call SelectImage(request);
+        };
       } or {
-        ClearGraphObject:
-          graphObjectIndex := NoSelection;
+      ClearGraphObject:
+        graphObjectIndex := NoSelection;
       } or {
-        ClearAsset:
-          assetSelection := [kind |-> "none", path |-> NoSelection];
+      ClearAsset:
+        assetSelection := [kind |-> "none", path |-> NoSelection];
       };
-    }
+    };
 }
 *)
 ====

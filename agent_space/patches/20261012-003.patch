@@ -1,0 +1,423 @@
+diff --git a/pseudocode/application_fsm.pcal b/pseudocode/application_fsm.pcal
+--- a/pseudocode/application_fsm.pcal
++++ b/pseudocode/application_fsm.pcal
+@@ -1,51 +1,87 @@
+----- MODULE FastFigureSelectionProcedure ----
+-EXTENDS Naturals
+-
+-\* Partial PlusCal translation of sourcescript/application_fsm.py:
+-\* SELECTION_COMMAND_ORDER and the asset/graph runtime selection contract.
+-\* All IDs are symbolic; the live VFS/chart validates and resolves them before
+-\* entering these commands. ObjectCsvPath is the resolved VFS path of\n\* the selected object's csvId, never the numeric reference ID itself.\n\* This module does not mutate chart/slot authority.
+-CONSTANTS CsvPaths, ImagePaths, ObjectIndices, ObjectCsvPath, NoSelection
+-
+-(*
+---algorithm FastFigureSelectionProcedure {
+-  variables assetSelection = [kind |-> "none", path |-> NoSelection],
+-            graphObjectIndex = NoSelection;
+-
+-  SelectionLoop:
+-    while (TRUE) {
+-      either {
+-        \* Select CSV from either project tree or graph editor.
+-        with (csvPath \in CsvPaths) {
+-          ClearObjectForCsv:
+-            graphObjectIndex := NoSelection;
+-          SelectCsvAsset:
+-            assetSelection := [kind |-> "csv", path |-> csvPath];
+-        }
+-      } or {
+-        \* Explicit graph object selection: same CSV selection authority.
+-        with (index \in ObjectIndices) {
+-          ClearObjectForObject:
+-            graphObjectIndex := NoSelection;
+-          SelectReferencedCsv:
+-            assetSelection := [kind |-> "csv", path |-> ObjectCsvPath[index]];
+-          SelectGraphObject:
+-            graphObjectIndex := index;
+-        }
+-      } or {
+-        \* Image selection is runtime-only; no slot image link is performed.
+-        with (imagePath \in ImagePaths) {
+-          SelectImageAsset:
+-            assetSelection := [kind |-> "image", path |-> imagePath];
+-        }
+-      } or {
+-        ClearGraphObject:
+-          graphObjectIndex := NoSelection;
+-      } or {
+-        ClearAsset:
+-          assetSelection := [kind |-> "none", path |-> NoSelection];
+-      };
+-    }
++---- MODULE FastFigureApplicationFsmPseudocode ----
++EXTENDS Naturals
++
++\* Direct r13 translation of the selection-command portion of
++\* sourcescript/application_fsm.py. Resolver functions return NoSelection
++\* when the requested current reference cannot be resolved.
++CONSTANTS CsvRequests, ImageRequests, ObjectRequests,
++          ResolveCsvPath, ResolveImagePath,
++          ResolveObjectIndex, ResolveObjectCsvPath,
++          NoSelection
++
++(*
++--algorithm FastFigureApplicationFsmSelection {
++  variables assetSelection = [kind |-> "none", path |-> NoSelection],
++            graphObjectIndex = NoSelection;
++
++  procedure SelectCsv(request) {
++  ResolveCsv:
++    with (csvPath = ResolveCsvPath[request]) {
++      if (csvPath # NoSelection) {
++      ClearObjectForCsv:
++        graphObjectIndex := NoSelection;
++      CommitCsvSelection:
++        assetSelection := [kind |-> "csv", path |-> csvPath];
++      };
++    };
++    return;
++  }
++
++  procedure SelectObject(request) {
++  ResolveObject:
++    with (index = ResolveObjectIndex[request]) {
++      if (index # NoSelection) {
++      ResolveObjectCsv:
++        with (csvPath = ResolveObjectCsvPath[index]) {
++          if (csvPath # NoSelection) {
++          ClearObjectForObject:
++            graphObjectIndex := NoSelection;
++          CommitObjectCsvSelection:
++            assetSelection := [kind |-> "csv", path |-> csvPath];
++          CommitObjectSelection:
++            graphObjectIndex := index;
++          };
++        };
++      };
++    };
++    return;
++  }
++
++  procedure SelectImage(request) {
++  ResolveImage:
++    with (imagePath = ResolveImagePath[request]) {
++      if (imagePath # NoSelection) {
++      ClearObjectForImage:
++        graphObjectIndex := NoSelection;
++      CommitImageSelection:
++        assetSelection := [kind |-> "image", path |-> imagePath];
++      };
++    };
++    return;
++  }
++
++  SelectionLoop:
++    while (TRUE) {
++      either {
++        with (request \in CsvRequests) {
++          call SelectCsv(request);
++        };
++      } or {
++        with (request \in ObjectRequests) {
++          call SelectObject(request);
++        };
++      } or {
++        with (request \in ImageRequests) {
++          call SelectImage(request);
++        };
++      } or {
++      ClearGraphObject:
++        graphObjectIndex := NoSelection;
++      } or {
++      ClearAsset:
++        assetSelection := [kind |-> "none", path |-> NoSelection];
++      };
++    };
+ }
+ *)
+ ====
+diff --git a/pseudocode/renderer_runtime.pcal b/pseudocode/renderer_runtime.pcal
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/renderer_runtime.pcal
+@@ -0,0 +1,111 @@
++---- MODULE FastFigureRendererRuntimePseudocode ----
++EXTENDS Naturals
++
++\* Direct r13 translation of the slot-interaction portion of
++\* sourcescript/renderer_runtime.py.
++CONSTANTS SlotIds, ContentSlots, EmptySlots, HiddenSlots, NoSelection
++
++(*
++--algorithm FastFigureRendererRuntimeInteraction {
++  variables selectedSlotId = NoSelection,
++            slotDragSourceId = NoSelection,
++            suppressBookmarkClick = FALSE,
++            issuedCommand = NoSelection;
++
++  procedure ToggleSlot(slotId) {
++  ResolveToggleTarget:
++    if (slotId \in SlotIds \ HiddenSlots) {
++      if (selectedSlotId = slotId) {
++      DeselectSlot:
++        selectedSlotId := NoSelection;
++      } else {
++      SelectSlot:
++        selectedSlotId := slotId;
++      };
++    };
++    return;
++  }
++
++  procedure ContentBodyClick(slotId) {
++  PreserveContentInteraction:
++    skip;
++    return;
++  }
++
++  procedure EmptySlotClick(slotId) {
++  SelectEmptySlot:
++    if (slotId \in EmptySlots) {
++      call ToggleSlot(slotId);
++    };
++    return;
++  }
++
++  procedure BookmarkClick(slotId) {
++  HandleBookmarkClick:
++    if (~suppressBookmarkClick /\ slotId \in ContentSlots) {
++      call ToggleSlot(slotId);
++    };
++    return;
++  }
++
++  procedure BookmarkDragStart(slotId) {
++  StartBookmarkDrag:
++    if (slotId \in ContentSlots) {
++      slotDragSourceId := slotId;
++      suppressBookmarkClick := TRUE;
++    };
++    return;
++  }
++
++  procedure BookmarkDrop(targetSlotId) {
++  ResolveBookmarkDrop:
++    if (slotDragSourceId # NoSelection
++        /\ targetSlotId \in SlotIds \ HiddenSlots
++        /\ targetSlotId # slotDragSourceId) {
++    IssueSwapCommand:
++      issuedCommand := [
++        name |-> "SLOTS_SWAPPED",
++        sourceId |-> slotDragSourceId,
++        targetId |-> targetSlotId
++      ];
++    };
++  FinishBookmarkDrop:
++    slotDragSourceId := NoSelection;
++    return;
++  }
++
++  procedure FinishBookmarkDrag() {
++  ClearBookmarkDrag:
++    slotDragSourceId := NoSelection;
++    suppressBookmarkClick := FALSE;
++    return;
++  }
++
++  InteractionLoop:
++    while (TRUE) {
++      either {
++        with (slotId \in ContentSlots) {
++          call ContentBodyClick(slotId);
++        };
++      } or {
++        with (slotId \in EmptySlots) {
++          call EmptySlotClick(slotId);
++        };
++      } or {
++        with (slotId \in ContentSlots) {
++          call BookmarkClick(slotId);
++        };
++      } or {
++        with (slotId \in ContentSlots) {
++          call BookmarkDragStart(slotId);
++        };
++      } or {
++        with (slotId \in SlotIds) {
++          call BookmarkDrop(slotId);
++          call FinishBookmarkDrag();
++        };
++      };
++    };
++}
++*)
++====
+diff --git a/pseudocode/api_ui.pcal b/pseudocode/api_ui.pcal
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/api_ui.pcal
+@@ -0,0 +1,77 @@
++---- MODULE FastFigureApiUiPseudocode ----
++EXTENDS Naturals
++
++\* Direct r13 translation of dashboard drop orchestration from
++\* sourcescript/api_ui.py. Persistent import/link mutation is delegated to
++\* the declared asset command; prepare/finish own runtime interaction only.
++CONSTANTS SlotIds, Files, AssetPaths, AssetKinds, NoValue
++
++(*
++--algorithm FastFigureApiUiDropFlow {
++  variables preparedSlot = NoValue,
++            lifecycle = "ready",
++            lastPersistentCommand = NoValue,
++            dragRuntimeActive = FALSE;
++
++  procedure PrepareFileDrop(slotId) {
++  ResolveDropTarget:
++    if (slotId \in SlotIds) {
++      preparedSlot := slotId;
++      dragRuntimeActive := TRUE;
++    } else {
++      preparedSlot := NoValue;
++    };
++    return;
++  }
++
++  procedure ImportExternalFile(file, slotId) {
++  PrepareExternalDrop:
++    call PrepareFileDrop(slotId);
++  CheckExternalTarget:
++    if (preparedSlot # NoValue) {
++    EnterImportLifecycle:
++      lifecycle := "importing";
++    CommitThroughImportToSlot:
++      lastPersistentCommand := [
++        name |-> "assets.importToSlot",
++        file |-> file,
++        slotId |-> preparedSlot
++      ];
++    LeaveImportLifecycle:
++      lifecycle := "ready";
++    };
++  FinishExternalDrop:
++    dragRuntimeActive := FALSE;
++    preparedSlot := NoValue;
++    return;
++  }
++
++  procedure ConnectExistingAsset(path, kind, slotId) {
++  ResolveExplicitAssetDrop:
++    if (path \in AssetPaths /\ kind \in AssetKinds /\ slotId \in SlotIds) {
++    CommitThroughConnectToSlot:
++      lastPersistentCommand := [
++        name |-> "assets.connectToSlot",
++        path |-> path,
++        kind |-> kind,
++        slotId |-> slotId
++      ];
++    };
++    return;
++  }
++
++  DropLoop:
++    while (TRUE) {
++      either {
++        with (file \in Files, slotId \in SlotIds) {
++          call ImportExternalFile(file, slotId);
++        };
++      } or {
++        with (path \in AssetPaths, kind \in AssetKinds, slotId \in SlotIds) {
++          call ConnectExistingAsset(path, kind, slotId);
++        };
++      };
++    };
++}
++*)
++====
+diff --git a/pseudocode/README.md b/pseudocode/README.md
+--- a/pseudocode/README.md
++++ b/pseudocode/README.md
+@@ -1,46 +1,37 @@
+-# Fast Figure pseudocode r1
+-
+-Derived exactly from:
+-
+-- Source Script revision: r12
+-- Source Script fingerprint: `sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db`
+-- Source Script closure review: `agent_space/reviews/review-015-sourcescript-closure-r12.md`
+-
+-## Translation rule
+-
+-This directory is the language-neutral execution translation of the closed Source Script.
+-
+-It preserves:
+-
+-- Source Script identifiers and responsibility boundaries
+-- authoritative state and reference sources
+-- inputs and outputs
+-- meaningful execution order
+-- candidate construction and commit boundaries
+-- failure/rejection semantics
+-- fixed calculations
+-
+-It does not decide:
+-
+-- JavaScript/React/Python-specific data structures
+-- concrete exception classes
+-- browser/library call syntax
+-- implementation-only caching or memory layout
+-- new domain rules
+-
+-If a required meaning is missing or contradictory, translation stops and the issue returns to Source Script.
+-
+-## Module mapping
+-
+-| Source Script | Pseudocode |
+-| --- | --- |
+-| `sourcescript/system.py` | `system.md` |
+-| `sourcescript/project_state.py` | `project_state.md` |
+-| `sourcescript/application_fsm.py` | `application_fsm.md` |
+-| `sourcescript/assets_files.py` | `assets_files.md` |
+-| `sourcescript/graphs.py` | `graphs.md` |
+-| `sourcescript/layout_annotations_export.py` | `layout_annotations_export.md` |
+-| `sourcescript/api_ui.py` | `api_ui.md` |
+-| `sourcescript/renderer_runtime.py` | `renderer_runtime.md` |
+-| `sourcescript/portable_build.py` | `portable_build.md` |
++# Fast Figure PlusCal pseudocode r13 — work in progress
++
++Derived from the closed Source Script:
++
++- Source Script revision: r13
++- Source Script fingerprint: `sha256:2c7955cf29b10d73f4c0741b895c895633683ae00e6d4cc0bd75b78eaaa566c7`
++- Source Script closure review: `agent_space/reviews/review-20261012-002-sourcescript-closure-r13.md`
++
++## Translation rule
++
++The active r13 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
++
++The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r13 PlusCal translation.
++
++The active translation preserves:
++
++- Source Script module/responsibility boundaries
++- authoritative state and reference sources
++- resolve-before-mutation ordering
++- candidate/validation/commit boundaries
++- failure/rejection semantics
++- runtime versus persistent mutation ownership
++- meaningful UI/FSM command sequencing
++
++If a required meaning is absent or contradictory, translation stops and returns to Source Script rather than filling the gap in PlusCal.
++
++## Active r13 module mapping
++
++| Source Script | Active PlusCal | Status |
++| --- | --- | --- |
++| `sourcescript/application_fsm.py` | `application_fsm.pcal` | selection-command portion translated |
++| `sourcescript/renderer_runtime.py` | `renderer_runtime.pcal` | slot bookmark interaction portion translated |
++| `sourcescript/api_ui.py` | `api_ui.pcal` | dashboard drop orchestration portion translated |
++| other Source Script modules | pending | not yet translated to r13 PlusCal |
++
++The Source Script hierarchy remains `system.py` as the system root with responsibility modules as siblings. PlusCal files do not introduce new semantic parent/child modules.
+ 

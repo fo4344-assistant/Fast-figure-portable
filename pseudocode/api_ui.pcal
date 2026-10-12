@@ -1,0 +1,77 @@
+---- MODULE FastFigureApiUiPseudocode ----
+EXTENDS Naturals
+
+\* Direct r13 translation of dashboard drop orchestration from
+\* sourcescript/api_ui.py. Persistent import/link mutation is delegated to
+\* the declared asset command; prepare/finish own runtime interaction only.
+CONSTANTS SlotIds, Files, AssetPaths, AssetKinds, NoValue
+
+(*
+--algorithm FastFigureApiUiDropFlow {
+  variables preparedSlot = NoValue,
+            lifecycle = "ready",
+            lastPersistentCommand = NoValue,
+            dragRuntimeActive = FALSE;
+
+  procedure PrepareFileDrop(slotId) {
+  ResolveDropTarget:
+    if (slotId \in SlotIds) {
+      preparedSlot := slotId;
+      dragRuntimeActive := TRUE;
+    } else {
+      preparedSlot := NoValue;
+    };
+    return;
+  }
+
+  procedure ImportExternalFile(file, slotId) {
+  PrepareExternalDrop:
+    call PrepareFileDrop(slotId);
+  CheckExternalTarget:
+    if (preparedSlot # NoValue) {
+    EnterImportLifecycle:
+      lifecycle := "importing";
+    CommitThroughImportToSlot:
+      lastPersistentCommand := [
+        name |-> "assets.importToSlot",
+        file |-> file,
+        slotId |-> preparedSlot
+      ];
+    LeaveImportLifecycle:
+      lifecycle := "ready";
+    };
+  FinishExternalDrop:
+    dragRuntimeActive := FALSE;
+    preparedSlot := NoValue;
+    return;
+  }
+
+  procedure ConnectExistingAsset(path, kind, slotId) {
+  ResolveExplicitAssetDrop:
+    if (path \in AssetPaths /\ kind \in AssetKinds /\ slotId \in SlotIds) {
+    CommitThroughConnectToSlot:
+      lastPersistentCommand := [
+        name |-> "assets.connectToSlot",
+        path |-> path,
+        kind |-> kind,
+        slotId |-> slotId
+      ];
+    };
+    return;
+  }
+
+  DropLoop:
+    while (TRUE) {
+      either {
+        with (file \in Files, slotId \in SlotIds) {
+          call ImportExternalFile(file, slotId);
+        };
+      } or {
+        with (path \in AssetPaths, kind \in AssetKinds, slotId \in SlotIds) {
+          call ConnectExistingAsset(path, kind, slotId);
+        };
+      };
+    };
+}
+*)
+====
