@@ -1,354 +1,402 @@
 ---- MODULE FastFigureAssetsFilesPseudocode ----
 EXTENDS Naturals, Sequences, FiniteSets
 
-\* r13 translation of sourcescript/assets_files.py.
-\* All persistent changes are candidate-first and commit only after project validation.
-CONSTANTS NoReference
+\* r13 PlusCal pseudocode for sourcescript/assets_files.py.
+\* Persistent mutations are candidate-first and commit once after validation.
+
+CONSTANT NoReference
 
 (*
---algorithm FastFigureAssetsFiles {
-  variables projectAuthority = ReadActiveProject(),
-            candidate = NoReference,
-            result = NoReference,
-            command = NoReference;
+--algorithm FastFigureAssetsFiles
+variables
+  projectAuthority = ReadActiveProject(),
+  candidate = NoReference,
+  command = NoReference,
+  result = NoReference;
 
-  procedure ResolveVfs(path, state) {
-  NormalizeRequestedPath:
-    with (canonical = NormalizeProjectPath(path)) {
-    ResolveExactlyOne:
-      result := ResolveUniqueDirectoryCsvOrImage(canonical, state);
-    };
-    return;
-  }
+procedure NormalizePath(value, isDirectory)
+begin
+NormalizeProjectPath:
+  result := NormalizeSlashAbsoluteProjectPath(value, isDirectory);
+PathSegments:
+  assert ~ContainsDotOrDotDotSegment(result)
+         /\ EveryPathSegmentUsesProjectNameRules(result);
+NormalizePathReturn:
+  return;
+end procedure;
 
-  procedure BuildImportCollision(file, directory, reservedPaths) {
-  ClassifyImport:
-    with (kind = ClassifyAssetFile(file),
-          path = CandidateAssetPath(file, directory)) {
-      if (kind # NoReference /\ DirectoryExistsAndNotTrash(directory)) {
-      InspectCollision:
-        result := CollisionDecision(
-          kind,
-          path,
-          ResolveVfsAgainstProject(path),
-          reservedPaths);
-      } else {
-      RejectImportTarget:
-        result := NoReference;
-      };
-    };
-    return;
-  }
+procedure AssetPath(asset)
+begin
+RecomputeAssetPath:
+  result := JoinCanonicalAssetDirectoryAndName(asset.directory, asset.name);
+AssetPathReturn:
+  return;
+end procedure;
 
-  procedure ResolveImportPlan(model, choice, reservedPaths) {
-  AcceptAvailablePath:
-    if (model.mode = "available") {
-      result := [path |-> model.path, replaceId |-> NoReference];
-    } else {
-      if (choice = "replace" /\ model.replaceAllowed = TRUE) {
-      KeepExistingIdentity:
-        result := [path |-> model.path, replaceId |-> model.replaceId];
-      } else {
-      AllocateUniquePath:
-        result := [
-          path |-> ProjectVfsUniquePath(model.path, projectAuthority, reservedPaths),
-          replaceId |-> NoReference
-        ];
-      };
-    };
-    return;
-  }
+procedure ResolveVfs(pathValue, state)
+variables canonical = NoReference;
+begin
+ResolveNormalize:
+  canonical := NormalizeProjectPathValue(pathValue);
+ResolveUniqueVfsObject:
+  result := ResolveUniqueDirectoryCsvOrImage(canonical, state);
+ResolveVfsReturn:
+  return;
+end procedure;
 
-  procedure ImportBatch(files, directory, planImport) {
-  ValidateBatchTarget:
-    assert DirectoryExistsAndNotTrash(directory);
-  ReadBatchCandidates:
-    candidate := ReadAndParseAllAssetCandidates(files);
-  ResolveBatchPlans:
-    candidate := ApplyCollisionPlans(candidate, planImport, projectAuthority);
-  BuildWholeImportCandidate:
-    candidate := ApplyAssetsAndNextIdsToProject(candidate, projectAuthority);
-  ApplyOptionalSlotTarget:
-    candidate := ApplyRequestedSlotImportCandidate(candidate);
-  ValidateWholeImport:
+procedure UniquePath(pathValue, reservedPaths)
+begin
+UniqueCandidate:
+  result := CalculateCollisionFreePath(pathValue, projectAuthority, reservedPaths);
+UniquePathReturn:
+  return;
+end procedure;
+
+procedure Descendants(directory)
+begin
+DescendantCollect:
+  result := CollectByCanonicalSegmentBoundary(directory, projectAuthority);
+DescendantReturn:
+  return;
+end procedure;
+
+procedure BuildImportCollision(file, directory, reservedPaths)
+variables kind = NoReference, pathValue = NoReference;
+begin
+CollisionClassify:
+  kind := ClassifyAssetFile(file);
+CollisionCandidatePath:
+  pathValue := CandidateAssetPath(file, directory);
+CollisionDecision:
+  if kind # NoReference /\ DirectoryExistsAndNotTrash(directory) then
+    result := CollisionDecision(
+      kind,
+      pathValue,
+      ResolveVfsAgainstProject(pathValue),
+      reservedPaths);
+  else
+    result := NoReference;
+  end if;
+CollisionReturn:
+  return;
+end procedure;
+
+procedure ResolveImportPlan(model, choice, reservedPaths)
+begin
+ResolvePlanBranch:
+  if model.mode = "available" then
+    result := [path |-> model.path, replaceId |-> NoReference];
+  elsif choice = "replace" /\ model.replaceAllowed = TRUE then
+    result := [path |-> model.path, replaceId |-> model.replaceId];
+  else
+    result := [
+      path |-> CalculateCollisionFreePath(model.path, projectAuthority, reservedPaths),
+      replaceId |-> NoReference
+    ];
+  end if;
+ResolvePlanReturn:
+  return;
+end procedure;
+
+procedure ParseDataAsset(name, bytes)
+variables text = NoReference;
+begin
+ParseDecodeUtf8:
+  text := DecodeUtf8(bytes);
+ParseByFormat:
+  if HasJsonExtension(name) then
+    result := NormalizeJsonTopLevelOrDataArray(text);
+  else
+    result := ParseCsvOrTsvPreservingQuotedNewlinesAndBlankRows(name, text);
+  end if;
+ParseValidate:
+  assert ValidTabularShape(result);
+ParseReturn:
+  return;
+end procedure;
+
+procedure CreateCsv(data, name, id, bytesBase64, mime, headerLines, pathValue)
+begin
+CreateCsvCandidate:
+  candidate := NormalizeCsvAsset(data, name, id, bytesBase64, mime, headerLines, pathValue);
+CreateCsvCommand:
+  command := [name |-> "DATA_OBJECT_CREATED", asset |-> candidate];
+CreateCsvResult:
+  result := candidate;
+CreateCsvReturn:
+  return;
+end procedure;
+
+procedure CreateImage(bytes, name, mime, id, pathValue)
+begin
+CreateImageCandidate:
+  candidate := NormalizeImageAssetBytesNameMimeLocation(bytes, name, mime, id, pathValue);
+CreateImageOwnership:
+  assert ~ImageAssetContainsSlotDisplaySettings(candidate);
+CreateImageCommand:
+  command := [name |-> "IMAGE_OBJECT_CREATED", asset |-> candidate];
+CreateImageResult:
+  result := candidate;
+CreateImageReturn:
+  return;
+end procedure;
+
+procedure ImportBatch(files, directory, planImport)
+begin
+ImportTarget:
+  assert DirectoryExistsAndNotTrash(directory);
+ImportReadCandidates:
+  candidate := ReadAndParseAllAssetCandidates(files);
+ImportResolvePlans:
+  candidate := ApplyCollisionPlans(candidate, planImport, projectAuthority);
+ImportProjectCandidate:
+  candidate := ApplyAssetsAndNextIdsToProject(candidate, projectAuthority);
+ImportOptionalSlot:
+  candidate := ApplyRequestedSlotImportCandidate(candidate);
+ImportValidate:
+  assert ValidateWholeProject(candidate);
+ImportCommit:
+  projectAuthority := candidate;
+ImportResult:
+  result := ImportResult(candidate);
+ImportReturn:
+  return;
+end procedure;
+
+procedure CollectReferences(csvIds, imageIds, state)
+begin
+CollectCsvReferences:
+  result := CollectEveryGraphObjectReference(csvIds, state);
+CollectImageReferences:
+  result := AppendEveryImageSlotReference(result, imageIds, state);
+CollectReferencesReturn:
+  return;
+end procedure;
+
+procedure DeleteAsset(target)
+variables asset = NoReference, refs = NoReference;
+begin
+DeleteResolveAsset:
+  asset := ResolveCurrentAsset(target);
+DeleteCollectReferences:
+  if asset # NoReference then
+    refs := CollectAssetReferences(asset, projectAuthority);
+  end if;
+DeleteBuildCandidate:
+  if asset # NoReference then
+    candidate := RemoveAssetAndDetachExactly(refs, asset, projectAuthority);
+  end if;
+DeleteValidate:
+  if candidate # NoReference then
     assert ValidateWholeProject(candidate);
-  CommitWholeImport:
     projectAuthority := candidate;
-    result := ImportResult(candidate);
-    return;
-  }
+    result := TRUE;
+  end if;
+DeleteReturn:
+  return;
+end procedure;
 
-  procedure DeleteAsset(target) {
-  ResolveDeleteTarget:
-    with (asset = ResolveCurrentAsset(target)) {
-      if (asset # NoReference) {
-      CollectDeleteReferences:
-        with (refs = CollectAssetReferences(asset, projectAuthority)) {
-        BuildDeleteCandidate:
-          candidate := RemoveAssetAndDetachExactly(refs, asset, projectAuthority);
-        ValidateDeleteCandidate:
-          assert ValidateWholeProject(candidate);
-        CommitDeleteCandidate:
-          projectAuthority := candidate;
-          result := TRUE;
-        };
-      };
-    };
-    return;
-  }
+procedure PlanNodeMove(pathValue, directory)
+begin
+MovePlanRead:
+  result := CalculateMovePlanFromCurrentVfs(pathValue, directory, projectAuthority);
+MovePlanReturn:
+  return;
+end procedure;
 
-  procedure MoveNode(plan, useUniqueName) {
-  ReresolveMoveInputs:
-    with (fresh = RebuildMovePlanFromCurrentProject(plan, projectAuthority)) {
-      if (fresh # NoReference) {
-      ComputeFinalDestination:
-        candidate := ApplyMoveDestination(fresh, useUniqueName, projectAuthority);
-      DetachTrashReferences:
-        candidate := DetachReferencesIfEnteringTrash(candidate);
-      MoveDirectoryDescendants:
-        candidate := MoveDescendantsIfDirectory(candidate);
-      ValidateMoveCandidate:
-        assert ValidateMoveCollisionFixedCycleAndReferences(candidate);
-      CommitMove:
-        projectAuthority := candidate;
-        result := FinalMovePath(candidate);
-      };
-    };
-    return;
-  }
+procedure MoveNode(plan, useUniqueName)
+variables fresh = NoReference;
+begin
+MoveReresolve:
+  fresh := RebuildMovePlanFromCurrentProject(plan, projectAuthority);
+MoveBuild:
+  if fresh # NoReference then
+    candidate := ApplyMoveDestination(fresh, useUniqueName, projectAuthority);
+    candidate := DetachReferencesIfEnteringTrash(candidate);
+    candidate := MoveDescendantsIfDirectory(candidate);
+  end if;
+MoveValidate:
+  if candidate # NoReference then
+    assert ValidateMoveCollisionFixedCycleAndReferences(candidate);
+    projectAuthority := candidate;
+    result := FinalMovePath(candidate);
+  end if;
+MoveReturn:
+  return;
+end procedure;
 
-  procedure EmptyTrash() {
-  ResolveTrashSubtree:
-    with (trashObjects = ProjectVfsDescendants("/assets/trash", projectAuthority)) {
-    CollectTrashReferences:
-      with (refs = CollectReferencesForObjects(trashObjects, projectAuthority)) {
-      BuildTrashCandidate:
-        candidate := RemoveTrashObjectsAndReferences(trashObjects, refs, projectAuthority);
-      ValidateTrashCandidate:
-        assert ValidateWholeProject(candidate);
-      CommitTrashCandidate:
-        projectAuthority := candidate;
-        result := TrashRemovalResult(trashObjects, refs);
-      };
-    };
-    return;
-  }
+procedure EmptyTrash()
+variables trashObjects = NoReference, refs = NoReference;
+begin
+TrashResolve:
+  trashObjects := ProjectVfsDescendants("/assets/trash", projectAuthority);
+TrashReferences:
+  refs := CollectReferencesForObjects(trashObjects, projectAuthority);
+TrashBuild:
+  candidate := RemoveTrashObjectsAndReferences(trashObjects, refs, projectAuthority);
+TrashValidate:
+  assert ValidateWholeProject(candidate);
+TrashCommit:
+  projectAuthority := candidate;
+TrashResult:
+  result := TrashRemovalResult(trashObjects, refs);
+TrashReturn:
+  return;
+end procedure;
 
-  procedure BuildFfpx() {
-  ValidateExportProject:
-    assert ValidateWholeProject(projectAuthority);
-  SnapshotExportAuthority:
-    candidate := ReadProjectSnapshot(projectAuthority);
-  ExcludeTrash:
-    candidate := RemoveTrashFromExportSnapshot(candidate);
-  ValidateExportReferences:
-    assert ExportReferencesResolve(candidate);
-  EncodeDocuments:
-    result := BuildFfpxEntriesWithTypedXmlAndCopiedBytes(candidate);
-    return;
-  }
+procedure EncodeTypedValue(value)
+begin
+EncodeTypedXml:
+  result := RecursiveTypedXmlEncode(value);
+EncodeTypeGuard:
+  assert result # NoReference;
+EncodeReturn:
+  return;
+end procedure;
 
-  procedure ReadFfpx(file) {
-  ValidateContainer:
-    assert ValidateStoreZipPathsCrcAndVersion(file);
-  DecodeDocuments:
-    candidate := DecodeRequiredTypedXmlDocuments(file);
-  RestoreCopiedAssets:
-    candidate := RestoreAndParseReferencedAssetBytes(candidate, file);
-  PreserveTopologyForValidation:
-    result := candidate;
-    return;
-  }
+procedure DecodeTypedValue(element)
+begin
+DecodeTypedXml:
+  result := RecursiveTypedXmlDecode(element);
+DecodeTypeGuard:
+  assert DecodedTypedValueValid(result);
+DecodeReturn:
+  return;
+end procedure;
 
-  procedure ImportProject(file) {
-  ReadProjectPackage:
-    candidate := ReadFfpxCandidate(file);
-  BuildValidatedProject:
-    candidate := BuildProjectObject(candidate);
-  ValidateImportedProject:
+procedure BuildFfpx()
+begin
+FfpxValidateProject:
+  assert ValidateWholeProject(projectAuthority);
+FfpxSnapshot:
+  candidate := ReadProjectSnapshot(projectAuthority);
+FfpxExcludeTrash:
+  candidate := RemoveTrashFromExportSnapshot(candidate);
+FfpxReferenceCheck:
+  assert ExportReferencesResolve(candidate);
+FfpxEncode:
+  result := BuildFfpxEntriesWithTypedXmlAndCopiedBytes(candidate);
+FfpxBuildReturn:
+  return;
+end procedure;
+
+procedure ReadFfpx(file)
+begin
+FfpxContainer:
+  assert ValidateStoreZipPathsCrcAndVersion(file);
+FfpxDecode:
+  candidate := DecodeRequiredTypedXmlDocuments(file);
+FfpxRestoreAssets:
+  candidate := RestoreAndParseReferencedAssetBytes(candidate, file);
+FfpxReadResult:
+  result := candidate;
+FfpxReadReturn:
+  return;
+end procedure;
+
+procedure BuildProjectObject(payload, fileName)
+begin
+ProjectImportHeader:
+  assert ValidImportedProjectHeader(payload);
+ProjectImportAssets:
+  candidate := NormalizeImportedCsvImageCollections(payload);
+ProjectImportCharts:
+  candidate := NormalizeChartsAndResolveCsvReferences(candidate);
+ProjectImportSlots:
+  candidate := NormalizeSlotGeometryContentSettingsAndCaptions(candidate);
+ProjectImportOwnership:
+  assert EveryChartHasExactlyOneOwner(candidate);
+ProjectImportPresentation:
+  candidate := NormalizeLabelsCaptionsAppearanceExport(candidate);
+ProjectImportNextIds:
+  candidate := SetNextIdsAboveCollectionMaxima(candidate);
+ProjectImportValidate:
+  assert ValidateWholeProject(candidate);
+ProjectImportResult:
+  result := candidate;
+ProjectImportReturn:
+  return;
+end procedure;
+
+procedure ImportProject(file)
+begin
+ImportProjectRead:
+  candidate := ReadFfpxCandidate(file);
+ImportProjectBuild:
+  candidate := BuildProjectObjectCandidate(candidate);
+ImportProjectValidate:
+  assert ValidateWholeProject(candidate);
+ImportProjectCommand:
+  command := [name |-> "PROJECT_LOADED", project |-> candidate];
+ImportProjectReturn:
+  return;
+end procedure;
+
+procedure BuildFfsx(slotValue, chart)
+begin
+FfsxCollectCsv:
+  candidate := CollectOnlyChartReferencedCsv(slotValue, chart, projectAuthority);
+FfsxRemapIds:
+  candidate := RemapCsvAndGraphObjectIdsToPackageLocal(candidate);
+FfsxEncode:
+  result := BuildFfsxEntries(candidate);
+FfsxBuildReturn:
+  return;
+end procedure;
+
+procedure ReadFfsx(file)
+begin
+FfsxContainer:
+  assert ValidateFfsxSchemaVersionAndEntries(file);
+FfsxDecode:
+  candidate := DecodeFfsxChartCaptionAndCsv(file);
+FfsxReferences:
+  assert ValidateFfsxGraphObjectCsvReferences(candidate);
+FfsxChart:
+  assert ValidateChartModel(candidate.chart);
+FfsxReadResult:
+  result := candidate;
+FfsxReadReturn:
+  return;
+end procedure;
+
+procedure ApplyFfsx(slotPayload, targetSlotId)
+variables target = NoReference;
+begin
+FfsxTarget:
+  target := ResolveSlot(targetSlotId, projectAuthority);
+FfsxAllocateAssets:
+  if target # NoReference then
+    candidate := AllocateImportedCsvIdsAndPaths(slotPayload, projectAuthority);
+    candidate := RemapFfsxChartToProjectCsv(candidate);
+    candidate := AttachNewChartToTargetSlot(candidate, target);
+    candidate := ApplyImportedSlotCaption(candidate, target);
+  end if;
+FfsxValidateCandidate:
+  if candidate # NoReference then
     assert ValidateWholeProject(candidate);
-  EmitProjectLoaded:
-    command := [name |-> "PROJECT_LOADED", project |-> candidate];
-    return;
-  }
+    projectAuthority := candidate;
+    result := FfsxCommitResult(candidate);
+  end if;
+FfsxApplyReturn:
+  return;
+end procedure;
 
-  procedure BuildFfsx(slot, chart) {
-  ResolveReferencedCsv:
-    candidate := CollectOnlyChartReferencedCsv(slot, chart, projectAuthority);
-  RemapPackageIds:
-    candidate := RemapCsvAndGraphObjectIdsToPackageLocal(candidate);
-  EncodeFfsx:
-    result := BuildFfsxEntries(candidate);
-    return;
-  }
-
-  procedure ReadFfsx(file) {
-  ValidateFfsxContainer:
-    assert ValidateFfsxSchemaVersionAndEntries(file);
-  RestoreFfsxPayload:
-    candidate := DecodeFfsxChartCaptionAndCsv(file);
-  ValidateFfsxReferences:
-    assert ValidateFfsxGraphObjectCsvReferences(candidate);
-  ValidateFfsxChart:
-    assert ValidateChartModel(candidate.chart);
-  ReturnFfsxPayload:
-    result := candidate;
-    return;
-  }
-
-  procedure ApplyFfsx(slotPayload, targetSlotId) {
-  ResolveCurrentTargetSlot:
-    with (target = ResolveSlot(targetSlotId, projectAuthority)) {
-      if (target # NoReference) {
-      AllocateProjectCsvIds:
-        candidate := AllocateImportedCsvIdsAndPaths(slotPayload, projectAuthority);
-      RemapChartCsvReferences:
-        candidate := RemapFfsxChartToProjectCsv(candidate);
-      AllocateChartIdAndOwner:
-        candidate := AttachNewChartToTargetSlot(candidate, target);
-      ApplySlotCaption:
-        candidate := ApplyImportedSlotCaption(candidate, target);
-      ValidateFfsxProjectCandidate:
-        assert ValidateWholeProject(candidate);
-      CommitFfsxCandidate:
-        projectAuthority := candidate;
-        result := FfsxCommitResult(candidate);
-      };
-    };
-    return;
-  }
-
-  procedure NormalizePath(value, isDirectory) {
-  NormalizeSlashAndSegments:
-    result := NormalizeSlashAbsoluteProjectPath(value, isDirectory);
-  RejectDotSegments:
-    assert ~ContainsDotOrDotDotSegment(result);
-  ValidateEveryNameSegment:
-    assert EveryPathSegmentUsesProjectNameRules(result);
-    return;
-  }
-
-  procedure AssetPath(asset) {
-  RecomputeFromOwnerFields:
-    result := JoinCanonicalAssetDirectoryAndName(asset.directory, asset.name);
-    return;
-  }
-
-  procedure CreateCsv(data, name, id, bytesBase64, mime, headerLines, path) {
-  NormalizeCsvCandidate:
-    candidate := NormalizeCsvAsset(data, name, id, bytesBase64, mime, headerLines, path);
-  EmitCsvCreate:
-    command := [name |-> "DATA_OBJECT_CREATED", asset |-> candidate];
-  ReturnCsvCandidate:
-    result := candidate;
-    return;
-  }
-
-  procedure CreateImage(bytes, name, mime, id, path) {
-  NormalizeImageCandidate:
-    candidate := NormalizeImageAssetBytesNameMimeLocation(bytes, name, mime, id, path);
-  ExcludeSlotDisplaySettings:
-    assert ~ImageAssetContainsSlotDisplaySettings(candidate);
-  EmitImageCreate:
-    command := [name |-> "IMAGE_OBJECT_CREATED", asset |-> candidate];
-  ReturnImageCandidate:
-    result := candidate;
-    return;
-  }
-
-  procedure PlanNodeMove(path, directory) {
-  ResolveMoveSourceAndTarget:
-    result := CalculateMovePlanFromCurrentVfs(path, directory, projectAuthority);
-    return;
-  }
-
-  procedure UniquePath(path, reservedPaths) {
-  PreserveParentBaseAndExtension:
-    result := CalculateCollisionFreePath(path, projectAuthority, reservedPaths);
-    return;
-  }
-
-  procedure Descendants(directory) {
-  ResolveCanonicalSubtree:
-    result := CollectByCanonicalSegmentBoundary(directory, projectAuthority);
-    return;
-  }
-
-  procedure ParseDataAsset(name, bytes) {
-  DecodeUtf8:
-    with (text = DecodeUtf8(bytes)) {
-      if (HasJsonExtension(name)) {
-      ParseJsonTable:
-        result := NormalizeJsonTopLevelOrDataArray(text);
-      } else {
-      ParseDelimitedTable:
-        result := ParseCsvOrTsvPreservingQuotedNewlinesAndBlankRows(name, text);
-      };
-    };
-  ValidateParsedTable:
-    assert ValidTabularShape(result);
-    return;
-  }
-
-  procedure CollectReferences(csvIds, imageIds, state) {
-  EnumerateGraphObjectReferences:
-    result := CollectEveryGraphObjectReference(csvIds, state);
-  EnumerateImageSlotReferences:
-    result := AppendEveryImageSlotReference(result, imageIds, state);
-    return;
-  }
-
-  procedure EncodeTypedValue(value) {
-  DispatchTypedXmlShape:
-    result := RecursiveTypedXmlEncode(value);
-  RequireSupportedRuntimeType:
-    assert result # NoReference;
-    return;
-  }
-
-  procedure DecodeTypedValue(element) {
-  ValidateTypedXmlShape:
-    result := RecursiveTypedXmlDecode(element);
-  RequireFiniteNumbersAndKnownTypes:
-    assert DecodedTypedValueValid(result);
-    return;
-  }
-
-  procedure BuildProjectObject(payload, fileName) {
-  ValidateSchemaVersionAndGrid:
-    assert ValidImportedProjectHeader(payload);
-  NormalizeImportedAssets:
-    candidate := NormalizeImportedCsvImageCollections(payload);
-  NormalizeImportedCharts:
-    candidate := NormalizeChartsAndResolveCsvReferences(candidate);
-  NormalizeImportedSlots:
-    candidate := NormalizeSlotGeometryContentSettingsAndCaptions(candidate);
-  RequireUniqueChartOwners:
-    assert EveryChartHasExactlyOneOwner(candidate);
-  NormalizeProjectPresentation:
-    candidate := NormalizeLabelsCaptionsAppearanceExport(candidate);
-  RecalculateNextIds:
-    candidate := SetNextIdsAboveCollectionMaxima(candidate);
-  ValidateBuiltProject:
-    assert ValidateWholeProject(candidate);
-  ReturnBuiltProject:
-    result := candidate;
-    return;
-  }
-  Main:
-    while (TRUE) {
-      either {
-        with (target = RequestedDeleteTarget()) {
-          call DeleteAsset(target);
-        };
-      } or {
-        with (plan = RequestedMovePlan(), unique = RequestedUniqueNameFlag()) {
-          call MoveNode(plan, unique);
-        };
-      } or {
-        call EmptyTrash();
-      };
-    };
-}
+begin
+Main:
+  while TRUE do
+    either
+      with target = RequestedDeleteTarget() do
+        call DeleteAsset(target);
+      end with;
+    or
+      with plan = RequestedMovePlan(), unique = RequestedUniqueNameFlag() do
+        call MoveNode(plan, unique);
+      end with;
+    or
+      call EmptyTrash();
+    end either;
+  end while;
+end algorithm;
 *)
 ====

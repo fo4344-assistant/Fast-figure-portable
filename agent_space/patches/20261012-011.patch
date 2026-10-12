@@ -1,0 +1,1413 @@
+diff --git a/pseudocode/assets_files.pcal b/pseudocode/assets_files.pcal
+--- a/pseudocode/assets_files.pcal
++++ b/pseudocode/assets_files.pcal
+@@ -1,355 +1,403 @@
+ ---- MODULE FastFigureAssetsFilesPseudocode ----
+ EXTENDS Naturals, Sequences, FiniteSets
+ 
+-\* r13 translation of sourcescript/assets_files.py.
+-\* All persistent changes are candidate-first and commit only after project validation.
+-CONSTANTS NoReference
+-
+-(*
+---algorithm FastFigureAssetsFiles {
+-  variables projectAuthority = ReadActiveProject(),
+-            candidate = NoReference,
+-            result = NoReference,
+-            command = NoReference;
+-
+-  procedure ResolveVfs(path, state) {
+-  NormalizeRequestedPath:
+-    with (canonical = NormalizeProjectPath(path)) {
+-    ResolveExactlyOne:
+-      result := ResolveUniqueDirectoryCsvOrImage(canonical, state);
+-    };
+-    return;
+-  }
+-
+-  procedure BuildImportCollision(file, directory, reservedPaths) {
+-  ClassifyImport:
+-    with (kind = ClassifyAssetFile(file),
+-          path = CandidateAssetPath(file, directory)) {
+-      if (kind # NoReference /\ DirectoryExistsAndNotTrash(directory)) {
+-      InspectCollision:
+-        result := CollisionDecision(
+-          kind,
+-          path,
+-          ResolveVfsAgainstProject(path),
+-          reservedPaths);
+-      } else {
+-      RejectImportTarget:
+-        result := NoReference;
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure ResolveImportPlan(model, choice, reservedPaths) {
+-  AcceptAvailablePath:
+-    if (model.mode = "available") {
+-      result := [path |-> model.path, replaceId |-> NoReference];
+-    } else {
+-      if (choice = "replace" /\ model.replaceAllowed = TRUE) {
+-      KeepExistingIdentity:
+-        result := [path |-> model.path, replaceId |-> model.replaceId];
+-      } else {
+-      AllocateUniquePath:
+-        result := [
+-          path |-> ProjectVfsUniquePath(model.path, projectAuthority, reservedPaths),
+-          replaceId |-> NoReference
+-        ];
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure ImportBatch(files, directory, planImport) {
+-  ValidateBatchTarget:
+-    assert DirectoryExistsAndNotTrash(directory);
+-  ReadBatchCandidates:
+-    candidate := ReadAndParseAllAssetCandidates(files);
+-  ResolveBatchPlans:
+-    candidate := ApplyCollisionPlans(candidate, planImport, projectAuthority);
+-  BuildWholeImportCandidate:
+-    candidate := ApplyAssetsAndNextIdsToProject(candidate, projectAuthority);
+-  ApplyOptionalSlotTarget:
+-    candidate := ApplyRequestedSlotImportCandidate(candidate);
+-  ValidateWholeImport:
+-    assert ValidateWholeProject(candidate);
+-  CommitWholeImport:
+-    projectAuthority := candidate;
+-    result := ImportResult(candidate);
+-    return;
+-  }
+-
+-  procedure DeleteAsset(target) {
+-  ResolveDeleteTarget:
+-    with (asset = ResolveCurrentAsset(target)) {
+-      if (asset # NoReference) {
+-      CollectDeleteReferences:
+-        with (refs = CollectAssetReferences(asset, projectAuthority)) {
+-        BuildDeleteCandidate:
+-          candidate := RemoveAssetAndDetachExactly(refs, asset, projectAuthority);
+-        ValidateDeleteCandidate:
+-          assert ValidateWholeProject(candidate);
+-        CommitDeleteCandidate:
+-          projectAuthority := candidate;
+-          result := TRUE;
+-        };
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure MoveNode(plan, useUniqueName) {
+-  ReresolveMoveInputs:
+-    with (fresh = RebuildMovePlanFromCurrentProject(plan, projectAuthority)) {
+-      if (fresh # NoReference) {
+-      ComputeFinalDestination:
+-        candidate := ApplyMoveDestination(fresh, useUniqueName, projectAuthority);
+-      DetachTrashReferences:
+-        candidate := DetachReferencesIfEnteringTrash(candidate);
+-      MoveDirectoryDescendants:
+-        candidate := MoveDescendantsIfDirectory(candidate);
+-      ValidateMoveCandidate:
+-        assert ValidateMoveCollisionFixedCycleAndReferences(candidate);
+-      CommitMove:
+-        projectAuthority := candidate;
+-        result := FinalMovePath(candidate);
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure EmptyTrash() {
+-  ResolveTrashSubtree:
+-    with (trashObjects = ProjectVfsDescendants("/assets/trash", projectAuthority)) {
+-    CollectTrashReferences:
+-      with (refs = CollectReferencesForObjects(trashObjects, projectAuthority)) {
+-      BuildTrashCandidate:
+-        candidate := RemoveTrashObjectsAndReferences(trashObjects, refs, projectAuthority);
+-      ValidateTrashCandidate:
+-        assert ValidateWholeProject(candidate);
+-      CommitTrashCandidate:
+-        projectAuthority := candidate;
+-        result := TrashRemovalResult(trashObjects, refs);
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure BuildFfpx() {
+-  ValidateExportProject:
+-    assert ValidateWholeProject(projectAuthority);
+-  SnapshotExportAuthority:
+-    candidate := ReadProjectSnapshot(projectAuthority);
+-  ExcludeTrash:
+-    candidate := RemoveTrashFromExportSnapshot(candidate);
+-  ValidateExportReferences:
+-    assert ExportReferencesResolve(candidate);
+-  EncodeDocuments:
+-    result := BuildFfpxEntriesWithTypedXmlAndCopiedBytes(candidate);
+-    return;
+-  }
+-
+-  procedure ReadFfpx(file) {
+-  ValidateContainer:
+-    assert ValidateStoreZipPathsCrcAndVersion(file);
+-  DecodeDocuments:
+-    candidate := DecodeRequiredTypedXmlDocuments(file);
+-  RestoreCopiedAssets:
+-    candidate := RestoreAndParseReferencedAssetBytes(candidate, file);
+-  PreserveTopologyForValidation:
+-    result := candidate;
+-    return;
+-  }
+-
+-  procedure ImportProject(file) {
+-  ReadProjectPackage:
+-    candidate := ReadFfpxCandidate(file);
+-  BuildValidatedProject:
+-    candidate := BuildProjectObject(candidate);
+-  ValidateImportedProject:
+-    assert ValidateWholeProject(candidate);
+-  EmitProjectLoaded:
+-    command := [name |-> "PROJECT_LOADED", project |-> candidate];
+-    return;
+-  }
+-
+-  procedure BuildFfsx(slot, chart) {
+-  ResolveReferencedCsv:
+-    candidate := CollectOnlyChartReferencedCsv(slot, chart, projectAuthority);
+-  RemapPackageIds:
+-    candidate := RemapCsvAndGraphObjectIdsToPackageLocal(candidate);
+-  EncodeFfsx:
+-    result := BuildFfsxEntries(candidate);
+-    return;
+-  }
+-
+-  procedure ReadFfsx(file) {
+-  ValidateFfsxContainer:
+-    assert ValidateFfsxSchemaVersionAndEntries(file);
+-  RestoreFfsxPayload:
+-    candidate := DecodeFfsxChartCaptionAndCsv(file);
+-  ValidateFfsxReferences:
+-    assert ValidateFfsxGraphObjectCsvReferences(candidate);
+-  ValidateFfsxChart:
+-    assert ValidateChartModel(candidate.chart);
+-  ReturnFfsxPayload:
+-    result := candidate;
+-    return;
+-  }
+-
+-  procedure ApplyFfsx(slotPayload, targetSlotId) {
+-  ResolveCurrentTargetSlot:
+-    with (target = ResolveSlot(targetSlotId, projectAuthority)) {
+-      if (target # NoReference) {
+-      AllocateProjectCsvIds:
+-        candidate := AllocateImportedCsvIdsAndPaths(slotPayload, projectAuthority);
+-      RemapChartCsvReferences:
+-        candidate := RemapFfsxChartToProjectCsv(candidate);
+-      AllocateChartIdAndOwner:
+-        candidate := AttachNewChartToTargetSlot(candidate, target);
+-      ApplySlotCaption:
+-        candidate := ApplyImportedSlotCaption(candidate, target);
+-      ValidateFfsxProjectCandidate:
+-        assert ValidateWholeProject(candidate);
+-      CommitFfsxCandidate:
+-        projectAuthority := candidate;
+-        result := FfsxCommitResult(candidate);
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure NormalizePath(value, isDirectory) {
+-  NormalizeSlashAndSegments:
+-    result := NormalizeSlashAbsoluteProjectPath(value, isDirectory);
+-  RejectDotSegments:
+-    assert ~ContainsDotOrDotDotSegment(result);
+-  ValidateEveryNameSegment:
+-    assert EveryPathSegmentUsesProjectNameRules(result);
+-    return;
+-  }
+-
+-  procedure AssetPath(asset) {
+-  RecomputeFromOwnerFields:
+-    result := JoinCanonicalAssetDirectoryAndName(asset.directory, asset.name);
+-    return;
+-  }
+-
+-  procedure CreateCsv(data, name, id, bytesBase64, mime, headerLines, path) {
+-  NormalizeCsvCandidate:
+-    candidate := NormalizeCsvAsset(data, name, id, bytesBase64, mime, headerLines, path);
+-  EmitCsvCreate:
+-    command := [name |-> "DATA_OBJECT_CREATED", asset |-> candidate];
+-  ReturnCsvCandidate:
+-    result := candidate;
+-    return;
+-  }
+-
+-  procedure CreateImage(bytes, name, mime, id, path) {
+-  NormalizeImageCandidate:
+-    candidate := NormalizeImageAssetBytesNameMimeLocation(bytes, name, mime, id, path);
+-  ExcludeSlotDisplaySettings:
+-    assert ~ImageAssetContainsSlotDisplaySettings(candidate);
+-  EmitImageCreate:
+-    command := [name |-> "IMAGE_OBJECT_CREATED", asset |-> candidate];
+-  ReturnImageCandidate:
+-    result := candidate;
+-    return;
+-  }
+-
+-  procedure PlanNodeMove(path, directory) {
+-  ResolveMoveSourceAndTarget:
+-    result := CalculateMovePlanFromCurrentVfs(path, directory, projectAuthority);
+-    return;
+-  }
+-
+-  procedure UniquePath(path, reservedPaths) {
+-  PreserveParentBaseAndExtension:
+-    result := CalculateCollisionFreePath(path, projectAuthority, reservedPaths);
+-    return;
+-  }
+-
+-  procedure Descendants(directory) {
+-  ResolveCanonicalSubtree:
+-    result := CollectByCanonicalSegmentBoundary(directory, projectAuthority);
+-    return;
+-  }
+-
+-  procedure ParseDataAsset(name, bytes) {
+-  DecodeUtf8:
+-    with (text = DecodeUtf8(bytes)) {
+-      if (HasJsonExtension(name)) {
+-      ParseJsonTable:
+-        result := NormalizeJsonTopLevelOrDataArray(text);
+-      } else {
+-      ParseDelimitedTable:
+-        result := ParseCsvOrTsvPreservingQuotedNewlinesAndBlankRows(name, text);
+-      };
+-    };
+-  ValidateParsedTable:
+-    assert ValidTabularShape(result);
+-    return;
+-  }
+-
+-  procedure CollectReferences(csvIds, imageIds, state) {
+-  EnumerateGraphObjectReferences:
+-    result := CollectEveryGraphObjectReference(csvIds, state);
+-  EnumerateImageSlotReferences:
+-    result := AppendEveryImageSlotReference(result, imageIds, state);
+-    return;
+-  }
+-
+-  procedure EncodeTypedValue(value) {
+-  DispatchTypedXmlShape:
+-    result := RecursiveTypedXmlEncode(value);
+-  RequireSupportedRuntimeType:
+-    assert result # NoReference;
+-    return;
+-  }
+-
+-  procedure DecodeTypedValue(element) {
+-  ValidateTypedXmlShape:
+-    result := RecursiveTypedXmlDecode(element);
+-  RequireFiniteNumbersAndKnownTypes:
+-    assert DecodedTypedValueValid(result);
+-    return;
+-  }
+-
+-  procedure BuildProjectObject(payload, fileName) {
+-  ValidateSchemaVersionAndGrid:
+-    assert ValidImportedProjectHeader(payload);
+-  NormalizeImportedAssets:
+-    candidate := NormalizeImportedCsvImageCollections(payload);
+-  NormalizeImportedCharts:
+-    candidate := NormalizeChartsAndResolveCsvReferences(candidate);
+-  NormalizeImportedSlots:
+-    candidate := NormalizeSlotGeometryContentSettingsAndCaptions(candidate);
+-  RequireUniqueChartOwners:
+-    assert EveryChartHasExactlyOneOwner(candidate);
+-  NormalizeProjectPresentation:
+-    candidate := NormalizeLabelsCaptionsAppearanceExport(candidate);
+-  RecalculateNextIds:
+-    candidate := SetNextIdsAboveCollectionMaxima(candidate);
+-  ValidateBuiltProject:
+-    assert ValidateWholeProject(candidate);
+-  ReturnBuiltProject:
+-    result := candidate;
+-    return;
+-  }
+-  Main:
+-    while (TRUE) {
+-      either {
+-        with (target = RequestedDeleteTarget()) {
+-          call DeleteAsset(target);
+-        };
+-      } or {
+-        with (plan = RequestedMovePlan(), unique = RequestedUniqueNameFlag()) {
+-          call MoveNode(plan, unique);
+-        };
+-      } or {
+-        call EmptyTrash();
+-      };
+-    };
+-}
++\* r13 PlusCal pseudocode for sourcescript/assets_files.py.
++\* Persistent mutations are candidate-first and commit once after validation.
++
++CONSTANT NoReference
++
++(*
++--algorithm FastFigureAssetsFiles
++variables
++  projectAuthority = ReadActiveProject(),
++  candidate = NoReference,
++  command = NoReference,
++  result = NoReference;
++
++procedure NormalizePath(value, isDirectory)
++begin
++NormalizeProjectPath:
++  result := NormalizeSlashAbsoluteProjectPath(value, isDirectory);
++PathSegments:
++  assert ~ContainsDotOrDotDotSegment(result)
++         /\ EveryPathSegmentUsesProjectNameRules(result);
++NormalizePathReturn:
++  return;
++end procedure;
++
++procedure AssetPath(asset)
++begin
++RecomputeAssetPath:
++  result := JoinCanonicalAssetDirectoryAndName(asset.directory, asset.name);
++AssetPathReturn:
++  return;
++end procedure;
++
++procedure ResolveVfs(pathValue, state)
++variables canonical = NoReference;
++begin
++ResolveNormalize:
++  canonical := NormalizeProjectPathValue(pathValue);
++ResolveUniqueVfsObject:
++  result := ResolveUniqueDirectoryCsvOrImage(canonical, state);
++ResolveVfsReturn:
++  return;
++end procedure;
++
++procedure UniquePath(pathValue, reservedPaths)
++begin
++UniqueCandidate:
++  result := CalculateCollisionFreePath(pathValue, projectAuthority, reservedPaths);
++UniquePathReturn:
++  return;
++end procedure;
++
++procedure Descendants(directory)
++begin
++DescendantCollect:
++  result := CollectByCanonicalSegmentBoundary(directory, projectAuthority);
++DescendantReturn:
++  return;
++end procedure;
++
++procedure BuildImportCollision(file, directory, reservedPaths)
++variables kind = NoReference, pathValue = NoReference;
++begin
++CollisionClassify:
++  kind := ClassifyAssetFile(file);
++CollisionCandidatePath:
++  pathValue := CandidateAssetPath(file, directory);
++CollisionDecision:
++  if kind # NoReference /\ DirectoryExistsAndNotTrash(directory) then
++    result := CollisionDecision(
++      kind,
++      pathValue,
++      ResolveVfsAgainstProject(pathValue),
++      reservedPaths);
++  else
++    result := NoReference;
++  end if;
++CollisionReturn:
++  return;
++end procedure;
++
++procedure ResolveImportPlan(model, choice, reservedPaths)
++begin
++ResolvePlanBranch:
++  if model.mode = "available" then
++    result := [path |-> model.path, replaceId |-> NoReference];
++  elsif choice = "replace" /\ model.replaceAllowed = TRUE then
++    result := [path |-> model.path, replaceId |-> model.replaceId];
++  else
++    result := [
++      path |-> CalculateCollisionFreePath(model.path, projectAuthority, reservedPaths),
++      replaceId |-> NoReference
++    ];
++  end if;
++ResolvePlanReturn:
++  return;
++end procedure;
++
++procedure ParseDataAsset(name, bytes)
++variables text = NoReference;
++begin
++ParseDecodeUtf8:
++  text := DecodeUtf8(bytes);
++ParseByFormat:
++  if HasJsonExtension(name) then
++    result := NormalizeJsonTopLevelOrDataArray(text);
++  else
++    result := ParseCsvOrTsvPreservingQuotedNewlinesAndBlankRows(name, text);
++  end if;
++ParseValidate:
++  assert ValidTabularShape(result);
++ParseReturn:
++  return;
++end procedure;
++
++procedure CreateCsv(data, name, id, bytesBase64, mime, headerLines, pathValue)
++begin
++CreateCsvCandidate:
++  candidate := NormalizeCsvAsset(data, name, id, bytesBase64, mime, headerLines, pathValue);
++CreateCsvCommand:
++  command := [name |-> "DATA_OBJECT_CREATED", asset |-> candidate];
++CreateCsvResult:
++  result := candidate;
++CreateCsvReturn:
++  return;
++end procedure;
++
++procedure CreateImage(bytes, name, mime, id, pathValue)
++begin
++CreateImageCandidate:
++  candidate := NormalizeImageAssetBytesNameMimeLocation(bytes, name, mime, id, pathValue);
++CreateImageOwnership:
++  assert ~ImageAssetContainsSlotDisplaySettings(candidate);
++CreateImageCommand:
++  command := [name |-> "IMAGE_OBJECT_CREATED", asset |-> candidate];
++CreateImageResult:
++  result := candidate;
++CreateImageReturn:
++  return;
++end procedure;
++
++procedure ImportBatch(files, directory, planImport)
++begin
++ImportTarget:
++  assert DirectoryExistsAndNotTrash(directory);
++ImportReadCandidates:
++  candidate := ReadAndParseAllAssetCandidates(files);
++ImportResolvePlans:
++  candidate := ApplyCollisionPlans(candidate, planImport, projectAuthority);
++ImportProjectCandidate:
++  candidate := ApplyAssetsAndNextIdsToProject(candidate, projectAuthority);
++ImportOptionalSlot:
++  candidate := ApplyRequestedSlotImportCandidate(candidate);
++ImportValidate:
++  assert ValidateWholeProject(candidate);
++ImportCommit:
++  projectAuthority := candidate;
++ImportResult:
++  result := ImportResult(candidate);
++ImportReturn:
++  return;
++end procedure;
++
++procedure CollectReferences(csvIds, imageIds, state)
++begin
++CollectCsvReferences:
++  result := CollectEveryGraphObjectReference(csvIds, state);
++CollectImageReferences:
++  result := AppendEveryImageSlotReference(result, imageIds, state);
++CollectReferencesReturn:
++  return;
++end procedure;
++
++procedure DeleteAsset(target)
++variables asset = NoReference, refs = NoReference;
++begin
++DeleteResolveAsset:
++  asset := ResolveCurrentAsset(target);
++DeleteCollectReferences:
++  if asset # NoReference then
++    refs := CollectAssetReferences(asset, projectAuthority);
++  end if;
++DeleteBuildCandidate:
++  if asset # NoReference then
++    candidate := RemoveAssetAndDetachExactly(refs, asset, projectAuthority);
++  end if;
++DeleteValidate:
++  if candidate # NoReference then
++    assert ValidateWholeProject(candidate);
++    projectAuthority := candidate;
++    result := TRUE;
++  end if;
++DeleteReturn:
++  return;
++end procedure;
++
++procedure PlanNodeMove(pathValue, directory)
++begin
++MovePlanRead:
++  result := CalculateMovePlanFromCurrentVfs(pathValue, directory, projectAuthority);
++MovePlanReturn:
++  return;
++end procedure;
++
++procedure MoveNode(plan, useUniqueName)
++variables fresh = NoReference;
++begin
++MoveReresolve:
++  fresh := RebuildMovePlanFromCurrentProject(plan, projectAuthority);
++MoveBuild:
++  if fresh # NoReference then
++    candidate := ApplyMoveDestination(fresh, useUniqueName, projectAuthority);
++    candidate := DetachReferencesIfEnteringTrash(candidate);
++    candidate := MoveDescendantsIfDirectory(candidate);
++  end if;
++MoveValidate:
++  if candidate # NoReference then
++    assert ValidateMoveCollisionFixedCycleAndReferences(candidate);
++    projectAuthority := candidate;
++    result := FinalMovePath(candidate);
++  end if;
++MoveReturn:
++  return;
++end procedure;
++
++procedure EmptyTrash()
++variables trashObjects = NoReference, refs = NoReference;
++begin
++TrashResolve:
++  trashObjects := ProjectVfsDescendants("/assets/trash", projectAuthority);
++TrashReferences:
++  refs := CollectReferencesForObjects(trashObjects, projectAuthority);
++TrashBuild:
++  candidate := RemoveTrashObjectsAndReferences(trashObjects, refs, projectAuthority);
++TrashValidate:
++  assert ValidateWholeProject(candidate);
++TrashCommit:
++  projectAuthority := candidate;
++TrashResult:
++  result := TrashRemovalResult(trashObjects, refs);
++TrashReturn:
++  return;
++end procedure;
++
++procedure EncodeTypedValue(value)
++begin
++EncodeTypedXml:
++  result := RecursiveTypedXmlEncode(value);
++EncodeTypeGuard:
++  assert result # NoReference;
++EncodeReturn:
++  return;
++end procedure;
++
++procedure DecodeTypedValue(element)
++begin
++DecodeTypedXml:
++  result := RecursiveTypedXmlDecode(element);
++DecodeTypeGuard:
++  assert DecodedTypedValueValid(result);
++DecodeReturn:
++  return;
++end procedure;
++
++procedure BuildFfpx()
++begin
++FfpxValidateProject:
++  assert ValidateWholeProject(projectAuthority);
++FfpxSnapshot:
++  candidate := ReadProjectSnapshot(projectAuthority);
++FfpxExcludeTrash:
++  candidate := RemoveTrashFromExportSnapshot(candidate);
++FfpxReferenceCheck:
++  assert ExportReferencesResolve(candidate);
++FfpxEncode:
++  result := BuildFfpxEntriesWithTypedXmlAndCopiedBytes(candidate);
++FfpxBuildReturn:
++  return;
++end procedure;
++
++procedure ReadFfpx(file)
++begin
++FfpxContainer:
++  assert ValidateStoreZipPathsCrcAndVersion(file);
++FfpxDecode:
++  candidate := DecodeRequiredTypedXmlDocuments(file);
++FfpxRestoreAssets:
++  candidate := RestoreAndParseReferencedAssetBytes(candidate, file);
++FfpxReadResult:
++  result := candidate;
++FfpxReadReturn:
++  return;
++end procedure;
++
++procedure BuildProjectObject(payload, fileName)
++begin
++ProjectImportHeader:
++  assert ValidImportedProjectHeader(payload);
++ProjectImportAssets:
++  candidate := NormalizeImportedCsvImageCollections(payload);
++ProjectImportCharts:
++  candidate := NormalizeChartsAndResolveCsvReferences(candidate);
++ProjectImportSlots:
++  candidate := NormalizeSlotGeometryContentSettingsAndCaptions(candidate);
++ProjectImportOwnership:
++  assert EveryChartHasExactlyOneOwner(candidate);
++ProjectImportPresentation:
++  candidate := NormalizeLabelsCaptionsAppearanceExport(candidate);
++ProjectImportNextIds:
++  candidate := SetNextIdsAboveCollectionMaxima(candidate);
++ProjectImportValidate:
++  assert ValidateWholeProject(candidate);
++ProjectImportResult:
++  result := candidate;
++ProjectImportReturn:
++  return;
++end procedure;
++
++procedure ImportProject(file)
++begin
++ImportProjectRead:
++  candidate := ReadFfpxCandidate(file);
++ImportProjectBuild:
++  candidate := BuildProjectObjectCandidate(candidate);
++ImportProjectValidate:
++  assert ValidateWholeProject(candidate);
++ImportProjectCommand:
++  command := [name |-> "PROJECT_LOADED", project |-> candidate];
++ImportProjectReturn:
++  return;
++end procedure;
++
++procedure BuildFfsx(slotValue, chart)
++begin
++FfsxCollectCsv:
++  candidate := CollectOnlyChartReferencedCsv(slotValue, chart, projectAuthority);
++FfsxRemapIds:
++  candidate := RemapCsvAndGraphObjectIdsToPackageLocal(candidate);
++FfsxEncode:
++  result := BuildFfsxEntries(candidate);
++FfsxBuildReturn:
++  return;
++end procedure;
++
++procedure ReadFfsx(file)
++begin
++FfsxContainer:
++  assert ValidateFfsxSchemaVersionAndEntries(file);
++FfsxDecode:
++  candidate := DecodeFfsxChartCaptionAndCsv(file);
++FfsxReferences:
++  assert ValidateFfsxGraphObjectCsvReferences(candidate);
++FfsxChart:
++  assert ValidateChartModel(candidate.chart);
++FfsxReadResult:
++  result := candidate;
++FfsxReadReturn:
++  return;
++end procedure;
++
++procedure ApplyFfsx(slotPayload, targetSlotId)
++variables target = NoReference;
++begin
++FfsxTarget:
++  target := ResolveSlot(targetSlotId, projectAuthority);
++FfsxAllocateAssets:
++  if target # NoReference then
++    candidate := AllocateImportedCsvIdsAndPaths(slotPayload, projectAuthority);
++    candidate := RemapFfsxChartToProjectCsv(candidate);
++    candidate := AttachNewChartToTargetSlot(candidate, target);
++    candidate := ApplyImportedSlotCaption(candidate, target);
++  end if;
++FfsxValidateCandidate:
++  if candidate # NoReference then
++    assert ValidateWholeProject(candidate);
++    projectAuthority := candidate;
++    result := FfsxCommitResult(candidate);
++  end if;
++FfsxApplyReturn:
++  return;
++end procedure;
++
++begin
++Main:
++  while TRUE do
++    either
++      with target = RequestedDeleteTarget() do
++        call DeleteAsset(target);
++      end with;
++    or
++      with plan = RequestedMovePlan(), unique = RequestedUniqueNameFlag() do
++        call MoveNode(plan, unique);
++      end with;
++    or
++      call EmptyTrash();
++    end either;
++  end while;
++end algorithm;
+ *)
+ ====
+ 
+diff --git a/pseudocode/layout_annotations_export.pcal b/pseudocode/layout_annotations_export.pcal
+--- a/pseudocode/layout_annotations_export.pcal
++++ b/pseudocode/layout_annotations_export.pcal
+@@ -1,307 +1,352 @@
+ ---- MODULE FastFigureLayoutAnnotationsExportPseudocode ----
+ EXTENDS Naturals, Sequences, FiniteSets
+ 
+-\* r13 translation of sourcescript/layout_annotations_export.py.
+-\* Layout/content changes are candidate-first; export snapshots are read-only.
+-CONSTANTS NoReference
+-
+-(*
+---algorithm FastFigureLayoutAnnotationsExport {
+-  variables projectAuthority = ReadActiveProject(),
+-            candidate = NoReference,
+-            snapshot = NoReference,
+-            result = NoReference;
+-
+-  procedure BuildGridResize(rows, cols) {
+-  ValidateGridRequest:
+-    if (~(rows \in 1..8 /\ cols \in 1..8)) {
+-      result := NoReference;
+-      return;
+-    };
+-  PreserveExistingGrid:
+-    candidate := CopyProject(projectAuthority);
+-  HandleGridExpand:
+-    if (rows >= projectAuthority.layout.gridRows
+-        /\ cols >= projectAuthority.layout.gridCols) {
+-      candidate := AddDefaultSlotsOnlyAtNewCoordinates(candidate, rows, cols);
+-    } else {
+-    CheckShrinkBoundary:
+-      assert EveryRemovedOrCrossingSlotIsDefaultEmptyOneByOne(candidate, rows, cols);
+-    RemoveSafeCells:
+-      candidate := RemoveOnlyDefaultEmptyCells(candidate, rows, cols);
+-    };
+-  SetGridDimensions:
+-    candidate := SetGridRowsCols(candidate, rows, cols);
+-  ValidateGridCandidate:
+-    assert ValidateWholeProject(candidate);
+-  ReturnGridCandidate:
+-    result := candidate;
+-    return;
+-  }
+-
+-  procedure SetGrid(rows, cols) {
+-  BuildCandidate:
+-    call BuildGridResize(rows, cols);
+-  CommitGridIfValid:
+-    if (result # NoReference) {
+-      projectAuthority := result;
+-      result := ReconcileSelectedSlotAfterGridCommit(result);
+-    };
+-    return;
+-  }
+-
+-  procedure MergeSlots(slotIds) {
+-  ResolveMergeRectangle:
+-    with (slots = ResolveVisibleSlots(slotIds, projectAuthority)) {
+-      assert FormsCompleteRectangle(slots);
+-    CheckLocalPayloadCount:
+-      assert Cardinality(NonDefaultLocalSlots(slots)) <= 1;
+-    BuildAnchorCandidate:
+-      candidate := CopyProject(projectAuthority);
+-      candidate := MoveWholeLocalPayloadToTopLeftAnchor(candidate, slots);
+-    ResetCoveredSlots:
+-      candidate := ResetCoveredSlotsToDefaultsAndHide(candidate, slots);
+-    SetAnchorSpan:
+-      candidate := SetAnchorRectangleSpan(candidate, slots);
+-    ValidateMergeCandidate:
+-      assert ValidateWholeProject(candidate);
+-    CommitMerge:
+-      projectAuthority := candidate;
+-      result := MergeResult(candidate);
+-    };
+-    return;
+-  }
+-
+-  procedure SplitSlots(slotIds) {
+-  ResolveMergedAnchors:
+-    with (anchors = ResolveRequestedMergedAnchors(slotIds, projectAuthority)) {
+-    PreserveAnchorPayload:
+-      candidate := CopyProject(projectAuthority);
+-    RestoreCoveredDefaults:
+-      candidate := RestoreCoveredCellsAsVisibleDefaultSlots(candidate, anchors);
+-    ResetAnchorSpan:
+-      candidate := ResetAnchorsToOneByOne(candidate, anchors);
+-    ValidateSplitCandidate:
+-      assert ValidateWholeProject(candidate);
+-    CommitSplit:
+-      projectAuthority := candidate;
+-      result := SplitResult(candidate);
+-    };
+-    return;
+-  }
+-
+-  procedure SetImageSettings(values) {
+-  ResolveSelectedImageSlot:
+-    with (slot = ResolveSelectedImageSlot(projectAuthority)) {
+-      if (slot # NoReference) {
+-      NormalizeImageSettings:
+-        candidate := UpdateOnlySelectedSlotImageSettings(projectAuthority, slot, values);
+-      ValidateImageSettingsCandidate:
+-        assert ValidateWholeProject(candidate);
+-      CommitImageSettings:
+-        projectAuthority := candidate;
+-        result := ReadImageEditorProjection(projectAuthority, slot.id);
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure SetLabelPosition(x, y) {
+-  NormalizeLabelPosition:
+-    assert IsFinitePosition(x, y);
+-  CommitSameAuthoritativePosition:
+-    candidate := SetProjectLabelPosition(projectAuthority, x, y);
+-    assert ValidateWholeProject(candidate);
+-    projectAuthority := candidate;
+-    result := ReadLabelProjection(projectAuthority);
+-    return;
+-  }
+-
+-  procedure FinishLabelInteraction() {
+-  NoSecondPositionCommit:
+-    result := InteractionCompletionOnly();
+-    return;
+-  }
+-
+-  procedure SetSlotCaption(slotId, text) {
+-  ResolveCaptionSlot:
+-    with (slot = ResolveSlot(slotId, projectAuthority)) {
+-      if (slot # NoReference) {
+-      BuildSlotCaptionCandidate:
+-        candidate := SetOnlySlotCaption(projectAuthority, slot.id, text);
+-      ValidateSlotCaptionCandidate:
+-        assert ValidateWholeProject(candidate);
+-      CommitSlotCaption:
+-        projectAuthority := candidate;
+-        result := ReadSlotCaptionProjection(projectAuthority, slot.id);
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure InsertSlotCaptions(slotIds) {
+-  ResolveOrderedCaptionSlots:
+-    with (slots = ResolveSlotsInLayoutOrder(slotIds, projectAuthority)) {
+-    CalculateCaptionProjection:
+-      with (text = ProjectNonEmptySlotCaptions(slots)) {
+-      BuildGlobalCaptionCandidate:
+-        candidate := InsertIntoGlobalCaption(projectAuthority, text);
+-      ValidateGlobalCaptionCandidate:
+-        assert ValidateWholeProject(candidate);
+-      CommitGlobalCaption:
+-        projectAuthority := candidate;
+-        result := ReadGlobalCaptionProjection(projectAuthority);
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure SetExportSettings(values) {
+-  NormalizeExportCandidate:
+-    candidate := NormalizeExportSettings(projectAuthority, values);
+-  ValidateExportSettingsCandidate:
+-    assert ValidateWholeProject(candidate);
+-  CommitExportSettings:
+-    projectAuthority := candidate;
+-    result := ReadExportSettingsProjection(projectAuthority);
+-    return;
+-  }
+-
+-  procedure CreateExportSnapshot() {
+-  SnapshotPersistentInputs:
+-    snapshot := SnapshotProjectObjects(projectAuthority);
+-  ComputeTargetGeometry:
+-    snapshot := AddTargetGeometryFromPersistentExportSettings(snapshot);
+-  ReturnReadOnlySnapshot:
+-    result := snapshot;
+-    return;
+-  }
+-
+-  procedure ExportTarget() {
+-  CreateTargetSnapshot:
+-    call CreateExportSnapshot();
+-    snapshot := result;
+-  ResolveOutputGeometry:
+-    snapshot := ResolveAutoOrExplicitHeight(snapshot);
+-  CheckRasterLimits:
+-    if (~WithinRasterLimits(snapshot)) {
+-      result := [status |-> "rejected"];
+-      return;
+-    };
+-  RenderTargetSlots:
+-    snapshot := RenderVisibleChartsImagesLabelsCaptions(snapshot);
+-  EncodeAndDownload:
+-    result := EncodeRasterWithDpiAndDownload(snapshot);
+-    return;
+-  }
+-
+-  procedure CaptureCurrent() {
+-  ReadCurrentViewportOnce:
+-    snapshot := ReadRenderedViewportForOneShotCapture();
+-  ReadEncodingDefaults:
+-    snapshot := AddPersistentDpiAndFormatDefaults(snapshot, projectAuthority);
+-  EncodeCurrentCapture:
+-    result := EncodeRasterAndDownload(snapshot);
+-    return;
+-  }
+-
+-  procedure DashboardGeometry(width, heightOverride) {
+-  CalculateScale:
+-    with (scale = width / ReadReferenceWidth(projectAuthority)) {
+-    CalculateNaturalHeight:
+-      with (naturalHeight = width / ReadConfiguredAspect(projectAuthority)) {
+-    ChooseHeight:
+-      with (height = IF ValidHeightOverride(heightOverride) THEN heightOverride ELSE naturalHeight) {
+-    CalculateScaledStyle:
+-      result := [
+-        width |-> width,
+-        height |-> height,
+-        scale |-> scale,
+-        outerMargin |-> Min(ReadOuterMargin(projectAuthority) * scale, Min(width, height) * 0.49),
+-        gap |-> ReadGap(projectAuthority) * scale,
+-        radius |-> ReadRadius(projectAuthority) * scale
+-      ];
+-      };
+-      };
+-    };
+-    return;
+-  }
+-
+-  procedure GridSlotGeometry(layoutState, geometry, slot) {
+-  CalculateCellSize:
+-    with (colWidth = (geometry.width - 2 * geometry.outerMargin
+-                      - geometry.gap * (layoutState.gridCols - 1)) / layoutState.gridCols,
+-          rowHeight = (geometry.height - 2 * geometry.outerMargin
+-                       - geometry.gap * (layoutState.gridRows - 1)) / layoutState.gridRows) {
+-  IncludeInternalSpanGaps:
+-    result := SlotWidthHeightFromSpan(colWidth, rowHeight, geometry.gap, slot);
+-    };
+-    return;
+-  }
+-
+-  procedure ReadImageEditor() {
+-  ResolveSelectedImageSlot:
+-    result := ReadSelectedImageNameUrlAndSlotSettings(projectAuthority);
+-    return;
+-  }
+-
+-  procedure ReadLabels() {
+-  ReadPersistentLabelSettings:
+-    result := ReadLabelSettings(projectAuthority);
+-  AddSelectedSlotReferenceGeometry:
+-    result := AddSelectedSlotReferenceWidthHeight(result, projectAuthority);
+-    return;
+-  }
+-
+-  procedure ReadGlobalCaption() {
+-  ReadOnlyGlobalOwner:
+-    result := ReadProjectGlobalCaption(projectAuthority);
+-    return;
+-  }
+-
+-  procedure ReadSlotCaption(slotId) {
+-  ResolveSlotCaptionOwner:
+-    result := ReadResolvedSlotIdPositionAndCaption(projectAuthority, slotId);
+-    return;
+-  }
+-
+-  procedure SetGlobalCaptionText(text) {
+-  BuildOnlyGlobalTextCandidate:
+-    candidate := ReplaceOnlyGlobalCaptionText(projectAuthority, text);
+-  ValidateGlobalTextCandidate:
+-    assert ValidateWholeProject(candidate);
+-  CommitGlobalText:
+-    projectAuthority := candidate;
+-    result := ReadProjectGlobalCaption(projectAuthority);
+-    return;
+-  }
+-
+-  procedure ReadExportSettings() {
+-  ReadPersistentExportOwner:
+-    result := ReadProjectExportSettings(projectAuthority);
+-    return;
+-  }
+-  Main:
+-    while (TRUE) {
+-      either {
+-        with (rows = RequestedRows(), cols = RequestedCols()) {
+-          call SetGrid(rows, cols);
+-        };
+-      } or {
+-        with (ids = RequestedSlotIds()) {
+-          call MergeSlots(ids);
+-        };
+-      } or {
+-        with (ids = RequestedSlotIds()) {
+-          call SplitSlots(ids);
+-        };
+-      } or {
+-        call ExportTarget();
+-      } or {
+-        call CaptureCurrent();
+-      };
+-    };
+-}
++\* r13 PlusCal pseudocode for sourcescript/layout_annotations_export.py.
++
++CONSTANT NoReference
++
++(*
++--algorithm FastFigureLayoutAnnotationsExport
++variables
++  projectAuthority = ReadActiveProject(),
++  candidate = NoReference,
++  snapshot = NoReference,
++  result = NoReference;
++
++procedure DashboardGeometry(width, heightOverride)
++variables scale = 1, naturalHeight = 0, chosenHeight = 0;
++begin
++GeometryScale:
++  scale := width / ReadReferenceWidth(projectAuthority);
++GeometryNaturalHeight:
++  naturalHeight := width / ReadConfiguredAspect(projectAuthority);
++GeometryHeight:
++  chosenHeight := IF ValidHeightOverride(heightOverride)
++                  THEN heightOverride
++                  ELSE naturalHeight;
++GeometryResult:
++  result := [
++    width |-> width,
++    height |-> chosenHeight,
++    scale |-> scale,
++    outerMargin |-> Min(
++      ReadOuterMargin(projectAuthority) * scale,
++      Min(width, chosenHeight) * 0.49),
++    gap |-> ReadGap(projectAuthority) * scale,
++    radius |-> ReadRadius(projectAuthority) * scale
++  ];
++GeometryReturn:
++  return;
++end procedure;
++
++procedure GridSlotGeometry(layoutState, geometry, slotValue)
++variables colWidth = 0, rowHeight = 0;
++begin
++GridCellWidth:
++  colWidth := (geometry.width - 2 * geometry.outerMargin
++               - geometry.gap * (layoutState.gridCols - 1))
++              / layoutState.gridCols;
++GridCellHeight:
++  rowHeight := (geometry.height - 2 * geometry.outerMargin
++                - geometry.gap * (layoutState.gridRows - 1))
++               / layoutState.gridRows;
++GridSlotResult:
++  result := SlotWidthHeightFromSpan(colWidth, rowHeight, geometry.gap, slotValue);
++GridSlotReturn:
++  return;
++end procedure;
++
++procedure BuildGridResize(rows, cols)
++begin
++GridRequest:
++  if ~(rows \in 1..8 /\ cols \in 1..8) then
++    result := NoReference;
++  else
++    candidate := CopyProject(projectAuthority);
++    if rows >= projectAuthority.layout.gridRows
++       /\ cols >= projectAuthority.layout.gridCols then
++      candidate := AddDefaultSlotsOnlyAtNewCoordinates(candidate, rows, cols);
++    else
++      assert EveryRemovedOrCrossingSlotIsDefaultEmptyOneByOne(candidate, rows, cols);
++      candidate := RemoveOnlyDefaultEmptyCells(candidate, rows, cols);
++    end if;
++    candidate := SetGridRowsCols(candidate, rows, cols);
++    assert ValidateWholeProject(candidate);
++    result := candidate;
++  end if;
++GridBuildReturn:
++  return;
++end procedure;
++
++procedure SetGrid(rows, cols)
++begin
++GridBuild:
++  call BuildGridResize(rows, cols);
++GridCommit:
++  if result # NoReference then
++    projectAuthority := result;
++    result := ReconcileSelectedSlotAfterGridCommit(projectAuthority);
++  end if;
++GridSetReturn:
++  return;
++end procedure;
++
++procedure MergeSlots(slotIds)
++variables slots = NoReference;
++begin
++MergeResolve:
++  slots := ResolveVisibleSlots(slotIds, projectAuthority);
++MergeRectangle:
++  assert FormsCompleteRectangle(slots);
++MergePayloadCount:
++  assert Cardinality(NonDefaultLocalSlots(slots)) <= 1;
++MergeBuild:
++  candidate := CopyProject(projectAuthority);
++  candidate := MoveWholeLocalPayloadToTopLeftAnchor(candidate, slots);
++  candidate := ResetCoveredSlotsToDefaultsAndHide(candidate, slots);
++  candidate := SetAnchorRectangleSpan(candidate, slots);
++MergeValidate:
++  assert ValidateWholeProject(candidate);
++MergeCommit:
++  projectAuthority := candidate;
++MergeResult:
++  result := MergeResult(candidate);
++MergeReturn:
++  return;
++end procedure;
++
++procedure SplitSlots(slotIds)
++variables anchors = NoReference;
++begin
++SplitResolve:
++  anchors := ResolveRequestedMergedAnchors(slotIds, projectAuthority);
++SplitBuild:
++  candidate := CopyProject(projectAuthority);
++  candidate := RestoreCoveredCellsAsVisibleDefaultSlots(candidate, anchors);
++  candidate := ResetAnchorsToOneByOne(candidate, anchors);
++SplitValidate:
++  assert ValidateWholeProject(candidate);
++SplitCommit:
++  projectAuthority := candidate;
++SplitResult:
++  result := SplitResult(candidate);
++SplitReturn:
++  return;
++end procedure;
++
++procedure ReadImageEditor()
++begin
++ImageEditorRead:
++  result := ReadSelectedImageNameUrlAndSlotSettings(projectAuthority);
++ImageEditorReturn:
++  return;
++end procedure;
++
++procedure SetImageSettings(values)
++variables slotValue = NoReference;
++begin
++ImageSettingsResolve:
++  slotValue := ResolveSelectedImageSlot(projectAuthority);
++ImageSettingsBuild:
++  if slotValue # NoReference then
++    candidate := UpdateOnlySelectedSlotImageSettings(
++      projectAuthority,
++      slotValue,
++      values);
++  end if;
++ImageSettingsCommit:
++  if candidate # NoReference then
++    assert ValidateWholeProject(candidate);
++    projectAuthority := candidate;
++    result := ReadImageEditorProjection(projectAuthority, slotValue.id);
++  end if;
++ImageSettingsReturn:
++  return;
++end procedure;
++
++procedure ReadLabels()
++begin
++LabelsRead:
++  result := ReadLabelSettings(projectAuthority);
++LabelsGeometry:
++  result := AddSelectedSlotReferenceWidthHeight(result, projectAuthority);
++LabelsReadReturn:
++  return;
++end procedure;
++
++procedure SetLabelPosition(x, y)
++begin
++LabelPositionGuard:
++  assert IsFinitePosition(x, y);
++LabelPositionBuild:
++  candidate := SetProjectLabelPosition(projectAuthority, x, y);
++LabelPositionValidate:
++  assert ValidateWholeProject(candidate);
++LabelPositionCommit:
++  projectAuthority := candidate;
++LabelPositionResult:
++  result := ReadLabelProjection(projectAuthority);
++LabelPositionReturn:
++  return;
++end procedure;
++
++procedure FinishLabelInteraction()
++begin
++LabelInteractionFinish:
++  result := InteractionCompletionOnly();
++LabelInteractionReturn:
++  return;
++end procedure;
++
++procedure ReadGlobalCaption()
++begin
++GlobalCaptionRead:
++  result := ReadProjectGlobalCaption(projectAuthority);
++GlobalCaptionReadReturn:
++  return;
++end procedure;
++
++procedure ReadSlotCaption(slotId)
++begin
++SlotCaptionRead:
++  result := ReadResolvedSlotIdPositionAndCaption(projectAuthority, slotId);
++SlotCaptionReadReturn:
++  return;
++end procedure;
++
++procedure SetGlobalCaptionText(text)
++begin
++GlobalCaptionBuild:
++  candidate := ReplaceOnlyGlobalCaptionText(projectAuthority, text);
++GlobalCaptionValidate:
++  assert ValidateWholeProject(candidate);
++GlobalCaptionCommit:
++  projectAuthority := candidate;
++GlobalCaptionResult:
++  result := ReadProjectGlobalCaption(projectAuthority);
++GlobalCaptionReturn:
++  return;
++end procedure;
++
++procedure SetSlotCaption(slotId, text)
++begin
++SlotCaptionBuild:
++  candidate := SetResolvedSlotCaptionCandidate(projectAuthority, slotId, text);
++SlotCaptionCommit:
++  if candidate # NoReference /\ ValidateWholeProject(candidate) then
++    projectAuthority := candidate;
++    result := ReadResolvedSlotIdPositionAndCaption(projectAuthority, slotId);
++  end if;
++SlotCaptionReturn:
++  return;
++end procedure;
++
++procedure InsertSlotCaptions(slotIds)
++variables slots = NoReference, projectedText = "";
++begin
++InsertCaptionResolve:
++  slots := ResolveSlotsInLayoutOrder(slotIds, projectAuthority);
++InsertCaptionProjection:
++  projectedText := ProjectNonEmptySlotCaptions(slots);
++InsertCaptionBuild:
++  candidate := InsertIntoGlobalCaption(projectAuthority, projectedText);
++InsertCaptionValidate:
++  assert ValidateWholeProject(candidate);
++InsertCaptionCommit:
++  projectAuthority := candidate;
++InsertCaptionResult:
++  result := ReadProjectGlobalCaption(projectAuthority);
++InsertCaptionReturn:
++  return;
++end procedure;
++
++procedure ReadExportSettings()
++begin
++ExportSettingsRead:
++  result := ReadProjectExportSettings(projectAuthority);
++ExportSettingsReadReturn:
++  return;
++end procedure;
++
++procedure SetExportSettings(values)
++begin
++ExportSettingsBuild:
++  candidate := NormalizeExportSettings(projectAuthority, values);
++ExportSettingsValidate:
++  assert ValidateWholeProject(candidate);
++ExportSettingsCommit:
++  projectAuthority := candidate;
++ExportSettingsResult:
++  result := ReadProjectExportSettings(projectAuthority);
++ExportSettingsReturn:
++  return;
++end procedure;
++
++procedure CreateExportSnapshot()
++begin
++ExportSnapshotRead:
++  snapshot := SnapshotProjectObjects(projectAuthority);
++ExportSnapshotGeometry:
++  snapshot := AddTargetGeometryFromPersistentExportSettings(snapshot);
++ExportSnapshotResult:
++  result := snapshot;
++ExportSnapshotReturn:
++  return;
++end procedure;
++
++procedure ExportTarget()
++begin
++ExportTargetSnapshot:
++  call CreateExportSnapshot();
++ExportTargetCopy:
++  snapshot := result;
++ExportTargetHeight:
++  snapshot := ResolveAutoOrExplicitHeight(snapshot);
++ExportTargetLimits:
++  if ~WithinRasterLimits(snapshot) then
++    result := [status |-> "rejected"];
++  else
++    snapshot := RenderVisibleChartsImagesLabelsCaptions(snapshot);
++    result := EncodeRasterWithDpiAndDownload(snapshot);
++  end if;
++ExportTargetReturn:
++  return;
++end procedure;
++
++procedure CaptureCurrent()
++begin
++CaptureViewport:
++  snapshot := ReadRenderedViewportForOneShotCapture();
++CaptureEncoding:
++  snapshot := AddPersistentDpiAndFormatDefaults(snapshot, projectAuthority);
++CaptureResult:
++  result := EncodeRasterAndDownload(snapshot);
++CaptureReturn:
++  return;
++end procedure;
++
++begin
++Main:
++  while TRUE do
++    either
++      with rows = RequestedRows(), cols = RequestedCols() do
++        call SetGrid(rows, cols);
++      end with;
++    or
++      with ids = RequestedSlotIds() do
++        call MergeSlots(ids);
++      end with;
++    or
++      with ids = RequestedSlotIds() do
++        call SplitSlots(ids);
++      end with;
++    or
++      call ExportTarget();
++    or
++      call CaptureCurrent();
++    end either;
++  end while;
++end algorithm;
+ *)
+ ====
+ 
