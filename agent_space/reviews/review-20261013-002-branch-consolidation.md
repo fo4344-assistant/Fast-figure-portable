@@ -1,0 +1,57 @@
+# Review 20261013-002 — Branch history consolidation
+
+## Goal
+
+Collapse the repository's divergent branch topology without replacing the validated r15/r12 working tree with obsolete branch contents.
+
+## Validated integration tree
+
+The integration tree is the current `fix/gui-fsm-20261008-review` tree after:
+
+- Source Script r15 closure;
+- PlusCal r15 translation and issue-resolution review;
+- Source Code r12 update;
+- browser regression run `38270550250`: inline 26/26 and split 26/26;
+- distribution build run `38270773742`: success;
+- distribution artifact commit `9ded687881beab23748bd44a166cae9319d3ede4`;
+- temporary workflow triggers restored to the normal main-only configuration.
+
+## Divergent histories
+
+The following branch histories remain divergent from the validated branch and are consolidated as merge parents:
+
+- agent/distribution-build-r2-20261002
+- agent/distribution-build-r2-final
+- agent/source-sync-r12-20261002
+- agent/tlc-module-map-20261002
+- agent/20260908-clean-final2
+- agent/20260908-clean-final3
+- agent/20260908-clean-real
+- agent/20260908-mantine-continue
+- agent/20260908-mantine-continue-clean
+- agent/20260908-mantine-continue-clean2
+- agent/20260908-mantine-continue-clean3
+- agent/20260908-mantine-continue-final
+- agent/20260908-work
+- backup/mantine-migration-20260906
+- fix/gui-selection-20261008
+
+Several 2026-09-08 branches contain only accidental marker files such as `accidental`, `bad`, `oops`, or `wrong-again`. The 2026-10-02 branches contain older source-sync/distribution/TLC experiments. Their commits are preserved in history, but their obsolete trees are not applied over the validated r15/r12 tree.
+
+Branches already fully behind the validated branch require no merge parent because their histories are already ancestors.
+
+## Merge strategy
+
+Create one multi-parent merge commit whose first parent is the validated review branch and whose additional parents are every remaining divergent branch HEAD. Use the validated review tree as the merge tree.
+
+This is equivalent to an explicit history-preserving `ours` resolution:
+
+- preserve every divergent commit as reachable history;
+- introduce no obsolete/accidental file into the current tree;
+- keep the tested source, tests, workflows and built distribution unchanged.
+
+After creating the consolidation commit on the review branch, fast-forward `main` to the same commit. No force update is used.
+
+## Expected result
+
+After main advances to the consolidation commit, every named historical branch is either an ancestor of main or already was an ancestor. Branch refs may remain for historical navigation, but there is no longer an unmerged divergent line of development.
