@@ -1,0 +1,14 @@
+diff --git a/.github/workflows/fast-figure-regression.yml b/.github/workflows/fast-figure-regression.yml
+--- a/.github/workflows/fast-figure-regression.yml
++++ b/.github/workflows/fast-figure-regression.yml
+@@ -2,7 +2,9 @@ name: Fast Figure regression
+ 
+ on:
+   push:
+-    branches: [main]
++    branches:
++      - main
++      - fix/gui-fsm-20261008-review
+     paths:
+       - 'agent_space/tests/browser-regression.js'
+       - 'agent_space/tests/run-browser-regression.py'
