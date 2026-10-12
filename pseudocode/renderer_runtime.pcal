@@ -16,12 +16,13 @@ variables
   statusText = "",
   debugEnabled = FALSE,
   lifecycle = "booting",
-  result = NoSelection;
+  result = NoSelection,
+  effect = NoSelection;
 
 procedure PublishTelemetry(patch)
 begin
 TelemetryPatch:
-  ApplyTelemetryProjectionPatch(patch);
+  effect := ApplyTelemetryProjectionPatch(patch);
 TelemetryRevision:
   telemetryRevision := telemetryRevision + 1;
 TelemetryReturn:
@@ -53,19 +54,19 @@ end procedure;
 procedure RenderDashboard()
 begin
 RenderGridAndStyle:
-  ProjectLayoutToDashboardCss(ReadActiveProject());
+  effect := ProjectLayoutToDashboardCss(ReadActiveProject());
 RenderPurge:
-  PurgeDisconnectedPlotlyInstances();
+  effect := PurgeDisconnectedPlotlyInstances();
 RenderSlots:
-  RenderEveryVisibleSlotFromProject(ReadActiveProject());
+  effect := RenderEveryVisibleSlotFromProject(ReadActiveProject());
 RenderGraphs:
-  RenderGraphSlotsFromReferencedCharts(ReadActiveProject());
+  effect := RenderGraphSlotsFromReferencedCharts(ReadActiveProject());
 RenderImages:
-  RenderImageSlotsFromReferencedAssetsAndSlotSettings(ReadActiveProject());
+  effect := RenderImageSlotsFromReferencedAssetsAndSlotSettings(ReadActiveProject());
 RenderSelection:
-  ApplySelectedSlotClass(selectedSlotId);
+  effect := ApplySelectedSlotClass(selectedSlotId);
 RenderAnnotations:
-  RenderLabelsAndCaptions(ReadActiveProject());
+  effect := RenderLabelsAndCaptions(ReadActiveProject());
 RenderResult:
   result := "rendered";
 RenderReturn:
@@ -85,7 +86,7 @@ ResolveSelectionAfterEvent:
 UpdateSelectedWorkspace:
   call UpdateGraphView();
 ResizeAfterSelection:
-  RequestGraphViewResize();
+  effect := RequestGraphViewResize();
 SetSelectedReturn:
   return;
 end procedure;
@@ -185,7 +186,7 @@ end procedure;
 procedure ApplySlotStyle(notify)
 begin
 StyleProjection:
-  ApplyDashboardCssFromStyle(ReadActiveProjectSlotStyle());
+  effect := ApplyDashboardCssFromStyle(ReadActiveProjectSlotStyle());
 StyleNotify:
   if notify then
     issuedCommand := [name |-> "notify-layout"];
@@ -207,7 +208,7 @@ begin
 ResolveWorkspaceProjection:
   result := ProjectWorkspaceFromCurrentSelection(selectedSlotId);
 RenderWorkspaceProjection:
-  RenderWorkspaceFromAuthority(result);
+  effect := RenderWorkspaceFromAuthority(result);
 UpdateGraphReturn:
   return;
 end procedure;
@@ -217,9 +218,9 @@ begin
 StartupValidate:
   assert ValidateWholeProject(ReadActiveProject());
 StartupZoom:
-  ApplyDashboardZoomProjection();
+  effect := ApplyDashboardZoomProjection();
 StartupController:
-  InstallBookmarkAndDropController();
+  effect := InstallBookmarkAndDropController();
 StartupRender:
   call RenderDashboard();
 StartupStyle:

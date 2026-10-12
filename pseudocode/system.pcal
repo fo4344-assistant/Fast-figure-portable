@@ -14,7 +14,8 @@ variables
   appLifecycle = "booting",
   apiExposed = FALSE,
   mantineMounted = FALSE,
-  result = NoValue;
+  result = NoValue,
+  effect = NoValue;
 
 procedure InitializeFastFigure()
 variables projectCandidate = NoValue;
@@ -28,21 +29,21 @@ InitializeProjectCommit:
 InitializeRendererHosts:
   assert RequiredRendererHostsExist();
 InitializeDashboardProjection:
-  ApplyDashboardZoomProjection();
+  effect := ApplyDashboardZoomProjection();
 InitializeSlotController:
-  InstallSlotInteractionController();
+  effect := InstallSlotInteractionController();
 InitializeRender:
-  RenderDashboardFrom(activeProject);
+  effect := RenderDashboardFrom(activeProject);
 InitializeStyle:
-  ApplySlotStyleFrom(activeProject);
+  effect := ApplySlotStyleFrom(activeProject);
 InitializeReady:
   appLifecycle := "ready";
 InitializeWorkspace:
-  SynchronizeInitialWorkspaceAndOverlay();
+  effect := SynchronizeInitialWorkspaceAndOverlay();
 InitializeApi:
   apiExposed := TRUE;
 InitializeMantine:
-  MountMantineProviderAndShell();
+  effect := MountMantineProviderAndShell();
 InitializeMantineState:
   mantineMounted := TRUE;
 InitializeNoSyntheticData:

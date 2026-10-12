@@ -21,7 +21,8 @@ variables
   error = NoSelection,
   projectAuthority = ReadActiveProject(),
   selectedSlotId = NoSelection,
-  result = NoSelection;
+  result = NoSelection,
+  effect = NoSelection;
 
 procedure PublishState()
 begin
@@ -35,11 +36,11 @@ procedure Transition(region, target, event, payload)
 begin
 TransitionMode:
   if CurrentRegionState(region) = target /\ ~RequestsReentry(payload) then
-    RunRegionUpdateHook(region, event, payload);
+    effect := RunRegionUpdateHook(region, event, payload);
   else
-    RunRegionExitHook(region, event, payload);
-    SetRegionState(region, target);
-    RunRegionEntryHook(region, event, payload);
+    effect := RunRegionExitHook(region, event, payload);
+    effect := SetRegionState(region, target);
+    effect := RunRegionEntryHook(region, event, payload);
   end if;
 TransitionDirection:
   direction := PayloadDirectionOrDefault(payload);
@@ -56,10 +57,11 @@ ResolveRegionHandler:
   handler := ResolveRegionHandler(region, event);
 RunRegionHandler:
   if handler # NoSelection then
-    ApplyDeclaredHandlerAction(handler, payload);
-    if HandlerHasTarget(handler) then
-      SetPendingTransitionTarget(HandlerTarget(handler, payload));
-    end if;
+    effect := ApplyDeclaredHandlerAction(handler, payload);
+  end if;
+RegionTransition:
+  if handler # NoSelection /\ HandlerHasTarget(handler) then
+    call Transition(region, HandlerTarget(handler, payload), event, payload);
   end if;
 ProcessRegionReturn:
   return;
@@ -80,7 +82,7 @@ GraphObjectRegion:
   call ProcessRegion("graphObject", event, payload);
 UnhandledEvent:
   if HandlerCount() = handledBefore then
-    RecordDebugWarning(event);
+    effect := RecordDebugWarning(event);
   end if;
 SendReturn:
   return;
@@ -92,7 +94,7 @@ NotifyGuard:
   if lifecycle # "booting" /\ ~IsTransitionInProgress() then
     direction := "model-to-ui";
     if CurrentWorkspaceOrOverlaySubscribes(objectName) then
-      RunProjectionUpdate(objectName, event, payload);
+      effect := RunProjectionUpdate(objectName, event, payload);
     end if;
     revision := revision + 1;
   end if;
@@ -216,8 +218,8 @@ ProjectLoadValidate:
     assetSelection := ReResolveOrClearAssetKind(candidate, assetPath);
     graphObjectIndex := ReResolveOrClearGraphObject(candidate, selectedSlotId, graphObjectIndex);
     graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
-    ReleaseOldProjectResourcesAfterCommit();
-    ReprojectRendererFrom(candidate);
+    effect := ReleaseOldProjectResourcesAfterCommit();
+    effect := ReprojectRendererFrom(candidate);
   end if;
 ProjectLoadReturn:
   return;

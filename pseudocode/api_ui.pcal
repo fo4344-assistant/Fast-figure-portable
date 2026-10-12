@@ -16,7 +16,8 @@ variables
   dragRuntimeActive = FALSE,
   sidebarWidth = 0,
   sidebarCollapsed = FALSE,
-  result = NoValue;
+  result = NoValue,
+  effect = NoValue;
 
 procedure SubscribeAppState(callback)
 begin
@@ -56,7 +57,7 @@ DelegateLifecycle:
   result := AppFsmRun(requestedLifecycle, eventName, task);
 LifecycleTelemetry:
   if TaskFailed(result) then
-    PublishDebugTelemetry(TaskError(result));
+    effect := PublishDebugTelemetry(TaskError(result));
   end if;
 LifecycleUiReturn:
   return;
@@ -89,7 +90,7 @@ RunExternalImport:
       [command |-> "assets.importToSlot", file |-> file, slotId |-> slotId]);
   end if;
 FinishExternalDrop:
-  SlotApiFinishFileDrop();
+  effect := SlotApiFinishFileDrop();
   dragRuntimeActive := FALSE ||
   preparedSlot := NoValue;
 ExternalDropReturn:
@@ -127,9 +128,9 @@ UpdateSidebarLocalState:
   sidebarWidth := width ||
   sidebarCollapsed := collapsed;
 ProjectSidebarGeometry:
-  ApplySidebarGeometryToRenderer(sidebarWidth, sidebarCollapsed);
+  effect := ApplySidebarGeometryToRenderer(sidebarWidth, sidebarCollapsed);
 ResizePlots:
-  RequestPlotResizeFromCurrentAuthority();
+  effect := RequestPlotResizeFromCurrentAuthority();
 ShellReturn:
   return;
 end procedure;
