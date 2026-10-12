@@ -1,226 +1,256 @@
 ---- MODULE FastFigureRendererRuntimePseudocode ----
 EXTENDS Naturals
 
-\* r13 translation of sourcescript/renderer_runtime.py.
-\* Renderer state is projection/runtime state, never persistent project authority.
-CONSTANTS SlotIds, ContentSlots, EmptySlots, HiddenSlots, NoSelection
+\* r13 PlusCal pseudocode for sourcescript/renderer_runtime.py.
+
+CONSTANT NoSelection
 
 (*
---algorithm FastFigureRendererRuntime {
-  variables selectedSlotId = NoSelection,
-            slotDragSourceId = NoSelection,
-            suppressBookmarkClick = FALSE,
-            issuedCommand = NoSelection,
-            telemetryRevision = 0,
-            statusText = "",
-            debugEnabled = FALSE,
-            lifecycle = "booting",
-            result = NoSelection;
+--algorithm FastFigureRendererRuntime
+variables
+  selectedSlotId = NoSelection,
+  slotDragSourceId = NoSelection,
+  suppressBookmarkClick = FALSE,
+  issuedCommand = NoSelection,
+  telemetryRevision = 0,
+  statusText = "",
+  debugEnabled = FALSE,
+  lifecycle = "booting",
+  result = NoSelection;
 
-  procedure PublishTelemetry(patch) {
-  ApplyTelemetryPatch:
-    ApplyTelemetryProjectionPatch(patch);
-  IncrementTelemetryRevision:
-    telemetryRevision := telemetryRevision + 1;
-    return;
-  }
+procedure PublishTelemetry(patch)
+begin
+TelemetryPatch:
+  ApplyTelemetryProjectionPatch(patch);
+TelemetryRevision:
+  telemetryRevision := telemetryRevision + 1;
+TelemetryReturn:
+  return;
+end procedure;
 
-  procedure SetDebug(enabled) {
-  CommitDebugRuntimeAuthority:
-    debugEnabled := ToBoolean(enabled);
-  PublishDebugProjection:
-    call PublishTelemetry([debugEnabled |-> debugEnabled]);
-    return;
-  }
+procedure SetDebug(enabled)
+begin
+DebugAuthority:
+  debugEnabled := ToBoolean(enabled);
+DebugProjection:
+  call PublishTelemetry([debugEnabled |-> debugEnabled]);
+DebugReturn:
+  return;
+end procedure;
 
-  procedure Status(message) {
-  NormalizeStatus:
-    statusText := NormalizeStatusText(message);
-  PublishStatus:
-    call PublishTelemetry([status |-> statusText]);
-    result := statusText;
-    return;
-  }
+procedure Status(message)
+begin
+StatusNormalize:
+  statusText := NormalizeStatusText(message);
+StatusProjection:
+  call PublishTelemetry([status |-> statusText]);
+StatusResult:
+  result := statusText;
+StatusReturn:
+  return;
+end procedure;
 
-  procedure RenderDashboard() {
-  ReadCurrentProject:
-    with (project = ReadActiveProject()) {
-    ApplyGridAndStyleProjection:
-      ProjectLayoutToDashboardCss(project);
-    PurgeStalePlots:
-      PurgeDisconnectedPlotlyInstances();
-    RenderVisibleSlots:
-      RenderEveryVisibleSlotFromProject(project);
-    RenderGraphs:
-      RenderGraphSlotsFromReferencedCharts(project);
-    RenderImages:
-      RenderImageSlotsFromReferencedAssetsAndSlotSettings(project);
-    ApplySelectionProjection:
-      ApplySelectedSlotClass(selectedSlotId);
-    RenderAnnotations:
-      RenderLabelsAndCaptions(project);
-    };
-    result := "rendered";
-    return;
-  }
+procedure RenderDashboard()
+begin
+RenderGridAndStyle:
+  ProjectLayoutToDashboardCss(ReadActiveProject());
+RenderPurge:
+  PurgeDisconnectedPlotlyInstances();
+RenderSlots:
+  RenderEveryVisibleSlotFromProject(ReadActiveProject());
+RenderGraphs:
+  RenderGraphSlotsFromReferencedCharts(ReadActiveProject());
+RenderImages:
+  RenderImageSlotsFromReferencedAssetsAndSlotSettings(ReadActiveProject());
+RenderSelection:
+  ApplySelectedSlotClass(selectedSlotId);
+RenderAnnotations:
+  RenderLabelsAndCaptions(ReadActiveProject());
+RenderResult:
+  result := "rendered";
+RenderReturn:
+  return;
+end procedure;
 
-  procedure ToggleSlot(slotId) {
-  ResolveToggleTarget:
-    if (slotId \in SlotIds \ HiddenSlots) {
-      if (selectedSlotId = slotId) {
-      DeselectSlot:
-        selectedSlotId := NoSelection;
-      } else {
-      SelectSlot:
-        selectedSlotId := slotId;
-      };
-    };
-  RefreshWorkspaceProjection:
-    issuedCommand := [name |-> "SELECT_SLOT", slotId |-> selectedSlotId];
-    RequestGraphViewAndResize();
-    return;
-  }
+procedure SetSelectedSlot(slotId, selectionDirection)
+begin
+EmitSelectSlot:
+  issuedCommand := [
+    name |-> "SELECT_SLOT",
+    slotId |-> slotId,
+    direction |-> selectionDirection
+  ];
+ResolveSelectionAfterEvent:
+  selectedSlotId := ReadSelectedSlotIdFromFsm();
+UpdateSelectedWorkspace:
+  call UpdateGraphView();
+ResizeAfterSelection:
+  RequestGraphViewResize();
+SetSelectedReturn:
+  return;
+end procedure;
 
-  procedure ContentBodyClick(slotId) {
-  PreserveContentInteraction:
-    skip;
-    return;
-  }
+procedure ContentBodyClick(slotId)
+begin
+ContentPassThrough:
+  skip;
+ContentReturn:
+  return;
+end procedure;
 
-  procedure EmptySlotClick(slotId) {
-  SelectEmptySlot:
-    if (slotId \in EmptySlots) {
-      call ToggleSlot(slotId);
-    };
-    return;
-  }
+procedure EmptySlotClick(slotId)
+begin
+EmptySelect:
+  if IsVisibleEmptySlot(slotId) then
+    call SetSelectedSlot(slotId, "ui-to-fsm");
+  end if;
+EmptyReturn:
+  return;
+end procedure;
 
-  procedure BookmarkClick(slotId) {
-  HandleBookmarkClick:
-    if (~suppressBookmarkClick /\ slotId \in ContentSlots) {
-      call ToggleSlot(slotId);
-    };
-    return;
-  }
+procedure BookmarkClick(slotId)
+begin
+BookmarkSelect:
+  if ~suppressBookmarkClick /\ IsVisibleContentSlot(slotId) then
+    call SetSelectedSlot(slotId, "ui-to-fsm");
+  end if;
+BookmarkReturn:
+  return;
+end procedure;
 
-  procedure BookmarkDragStart(slotId) {
-  StartBookmarkDrag:
-    if (slotId \in ContentSlots) {
-      slotDragSourceId := slotId;
-      suppressBookmarkClick := TRUE;
-    };
-    return;
-  }
+procedure BookmarkDragStart(slotId)
+begin
+BookmarkDragGuard:
+  if IsVisibleContentSlot(slotId) then
+    slotDragSourceId := slotId ||
+    suppressBookmarkClick := TRUE;
+  end if;
+BookmarkDragStartReturn:
+  return;
+end procedure;
 
-  procedure BookmarkDrop(targetSlotId) {
-  ResolveBookmarkDrop:
-    if (slotDragSourceId # NoSelection
-        /\ targetSlotId \in SlotIds \ HiddenSlots
-        /\ targetSlotId # slotDragSourceId) {
-    IssueSwapCommand:
-      issuedCommand := [
-        name |-> "SLOTS_SWAPPED",
-        sourceId |-> slotDragSourceId,
-        targetId |-> targetSlotId
-      ];
-    };
-  ClearDragSource:
-    slotDragSourceId := NoSelection;
-    return;
-  }
+procedure SwapSlotContents(sourceId, targetId)
+begin
+EmitSlotSwap:
+  if sourceId # targetId /\ IsVisibleSlot(sourceId) /\ IsVisibleSlot(targetId) then
+    issuedCommand := [
+      name |-> "SLOTS_SWAPPED",
+      sourceId |-> sourceId,
+      targetId |-> targetId
+    ];
+  end if;
+SwapSlotReturn:
+  return;
+end procedure;
 
-  procedure ReleaseSyntheticClickGuard() {
-  ReleaseBookmarkClick:
-    suppressBookmarkClick := FALSE;
-    return;
-  }
+procedure BookmarkDrop(targetSlotId)
+begin
+BookmarkDropGuard:
+  if slotDragSourceId # NoSelection
+     /\ targetSlotId # slotDragSourceId
+     /\ IsVisibleSlot(targetSlotId) then
+    call SwapSlotContents(slotDragSourceId, targetSlotId);
+  end if;
+BookmarkDropClearSource:
+  slotDragSourceId := NoSelection;
+BookmarkDropReturn:
+  return;
+end procedure;
 
-  procedure PrepareExternalFileDrop(slotId) {
-  ResolveExternalDropTarget:
-    if (slotId \in SlotIds \ HiddenSlots) {
-      if (selectedSlotId # slotId) {
-      SelectDropTargetWorkspace:
-        call ToggleSlot(slotId);
-      };
-      result := TRUE;
-    } else {
-      result := FALSE;
-    };
-  ClearSlotDragSource:
-    slotDragSourceId := NoSelection;
-    return;
-  }
+procedure ReleaseSyntheticClickGuard()
+begin
+BookmarkClickGuardRelease:
+  suppressBookmarkClick := FALSE;
+BookmarkGuardReturn:
+  return;
+end procedure;
 
-  procedure ResolveSelectedChart() {
-  ResolveSelectedSlot:
-    with (slot = ResolveSlotFromActiveProject(selectedSlotId)) {
-      if (slot # NoSelection /\ slot.chart # NoSelection) {
-      ResolveReferencedChart:
-        result := ResolveChartFromActiveProject(slot.chart);
-      } else {
-        result := NoSelection;
-      };
-    };
-    return;
-  }
+procedure PrepareDashboardFileDrop(slotId)
+begin
+FileDropResolve:
+  if IsVisibleSlot(slotId) then
+    if selectedSlotId # slotId then
+      call SetSelectedSlot(slotId, "ui-to-fsm");
+    end if;
+    result := TRUE;
+  else
+    result := FALSE;
+  end if;
+FileDropClearSlotDrag:
+  slotDragSourceId := NoSelection;
+FileDropPrepareReturn:
+  return;
+end procedure;
 
-  procedure UpdateGraphView() {
-  ReResolveSelectedWorkspace:
-    result := ProjectWorkspaceFromCurrentSelection(selectedSlotId);
-  RenderWorkspaceFromAuthority:
-    RenderWorkspaceProjection(result);
-    return;
-  }
+procedure ApplySlotStyle(notify)
+begin
+StyleProjection:
+  ApplyDashboardCssFromStyle(ReadActiveProjectSlotStyle());
+StyleNotify:
+  if notify then
+    issuedCommand := [name |-> "notify-layout"];
+  end if;
+StyleReturn:
+  return;
+end procedure;
 
-  procedure ApplySlotStyle(notify) {
-  ReadPersistentSlotStyle:
-    with (style = ReadActiveProjectSlotStyle()) {
-      ApplyStyleProjection:
-        ApplyDashboardCssFromStyle(style);
-    };
-  OptionalLayoutNotification:
-    if (notify) {
-      issuedCommand := [name |-> "notify-layout"];
-    };
-    return;
-  }
+procedure ResolveSelectedChart()
+begin
+ResolveSelectedChartPath:
+  result := ResolveChartFromSelectedSlot(ReadActiveProject(), selectedSlotId);
+ResolveChartReturn:
+  return;
+end procedure;
 
-  procedure StartupCoreRuntime() {
-  RequireValidExistingProject:
-    assert ValidateWholeProject(ReadActiveProject());
-  ApplyInitialZoom:
-    ApplyDashboardZoomProjection();
-  InstallSlotInteractionController:
-    InstallBookmarkAndDropController();
-  RenderExistingSlots:
-    call RenderDashboard();
-  ApplyInitialSlotStyle:
-    call ApplySlotStyle(FALSE);
-  EnterReadyLifecycle:
-    lifecycle := "ready";
-  AuditRuntimeInvariants:
-    assert AuditProjectReferenceRuntimeInvariants();
-  ReturnReadyRuntime:
-    result := "ready";
-    return;
-  }
+procedure UpdateGraphView()
+begin
+ResolveWorkspaceProjection:
+  result := ProjectWorkspaceFromCurrentSelection(selectedSlotId);
+RenderWorkspaceProjection:
+  RenderWorkspaceFromAuthority(result);
+UpdateGraphReturn:
+  return;
+end procedure;
 
-  Main:
-    while (TRUE) {
-      either {
-        call RenderDashboard();
-      } or {
-        with (slotId \in ContentSlots) {
-          call BookmarkClick(slotId);
-        };
-      } or {
-        with (slotId \in EmptySlots) {
-          call EmptySlotClick(slotId);
-        };
-      } or {
-        call StartupCoreRuntime();
-      };
-    };
-}
+procedure StartupCoreRuntime()
+begin
+StartupValidate:
+  assert ValidateWholeProject(ReadActiveProject());
+StartupZoom:
+  ApplyDashboardZoomProjection();
+StartupController:
+  InstallBookmarkAndDropController();
+StartupRender:
+  call RenderDashboard();
+StartupStyle:
+  call ApplySlotStyle(FALSE);
+StartupReady:
+  lifecycle := "ready";
+StartupAudit:
+  assert AuditProjectReferenceRuntimeInvariants();
+StartupResult:
+  result := "ready";
+StartupReturn:
+  return;
+end procedure;
+
+begin
+Main:
+  while TRUE do
+    either
+      call RenderDashboard();
+    or
+      with slotId = NextBookmarkClickSlot() do
+        call BookmarkClick(slotId);
+      end with;
+    or
+      with slotId = NextEmptySlotClickSlot() do
+        call EmptySlotClick(slotId);
+      end with;
+    or
+      call StartupCoreRuntime();
+    end either;
+  end while;
+end algorithm;
 *)
 ====
