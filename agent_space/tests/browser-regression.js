@@ -653,17 +653,26 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         }),
       );
 
-      const closeButton = await waitFor(
+      await waitFor(
         () =>
-          document.querySelector(".mantine-Modal-close") ||
-          document.querySelector("[aria-label='Close modal']") ||
-          document.querySelector("[aria-label='닫기']"),
-        "collision modal close button absent",
+          Array.from(document.querySelectorAll("[role='dialog']")).find((dialog) =>
+            dialog.textContent?.includes("같은 이름의 파일"),
+          ),
+        "collision modal did not open",
+        5000,
       );
-      click(closeButton);
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          code: "Escape",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
       await waitFor(
         () => appFSM.state.lifecycle === "ready",
         "application did not return to ready after collision cancel",
+        5000,
       );
       await tick();
 
