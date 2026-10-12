@@ -3119,11 +3119,10 @@
           (e) => {
             let el = e.target.closest?.(".slot");
             if (!el) {
-              debugLog("slotClick:dashboard-background", {
+              debugLog("slotClick:dashboard-background-pass-through", {
                 target: e.target.className?.baseVal || e.target.className || e.target.tagName,
                 wasSelected: selectedSlotId !== null,
               });
-              if (selectedSlotId !== null) setSelectedSlot(null);
               return;
             }
             let slot = slotAt(+el.dataset.slot),

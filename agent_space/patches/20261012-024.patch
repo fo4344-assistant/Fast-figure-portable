@@ -1,0 +1,47 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -3119,11 +3119,10 @@
+           (e) => {
+             let el = e.target.closest?.(".slot");
+             if (!el) {
+-              debugLog("slotClick:dashboard-background", {
+-                target: e.target.className?.baseVal || e.target.className || e.target.tagName,
+-                wasSelected: selectedSlotId !== null,
+-              });
+-              if (selectedSlotId !== null) setSelectedSlot(null);
++              debugLog("slotClick:dashboard-background-pass-through", {
++                target: e.target.className?.baseVal || e.target.className || e.target.tagName,
++                wasSelected: selectedSlotId !== null,
++              });
+               return;
+             }
+             let slot = slotAt(+el.dataset.slot),
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -29,15 +29,15 @@
+       "validation_review": "agent_space/reviews/review-017-tlc-slot-core-r6-2x2.md"
+     },
+     "source-code": {
+-      "revision": 10,
+-      "status": "stale",
+-      "paths": [
+-        "Fast-figure.html",
+-        "fast-figure-ui.js",
+-        "fast-figure.js",
+-        "scripts/build-portable.py"
+-      ],
+-      "fingerprint": "sha256:518497d0a1f210198f82a4ceca971788e416479a1ea7254f62d76fece05a42e4",
++      "revision": 11,
++      "status": "stale",
++      "paths": [
++        "Fast-figure.html",
++        "fast-figure-ui.js",
++        "fast-figure.js",
++        "scripts/build-portable.py"
++      ],
++      "fingerprint": "sha256:7a9884e8674fdc2bcbfd6245db055e7ee4c51c544ae30a3224971d2c15e237d1",
+       "derived_from": {
+         "source-script": "sha256:6c7d5b23a4a1a9b13db6f4210781926e64fbba81df93e5cf774d8356b7c6fb3f",
+         "verification-model": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b"
