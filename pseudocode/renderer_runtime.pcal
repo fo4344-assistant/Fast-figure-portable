@@ -1,7 +1,7 @@
 ---- MODULE FastFigureRendererRuntimePseudocode ----
 EXTENDS Naturals
 
-\* r13 PlusCal pseudocode for sourcescript/renderer_runtime.py.
+\* r15 PlusCal pseudocode for sourcescript/renderer_runtime.py.
 
 CONSTANT NoSelection
 
@@ -111,9 +111,15 @@ end procedure;
 
 procedure BookmarkClick(slotId)
 begin
-BookmarkSelect:
-  if ~suppressBookmarkClick /\ IsVisibleContentSlot(slotId) then
-    call SetSelectedSlot(slotId, "ui-to-fsm");
+BookmarkGuard:
+  if IsVisibleContentSlot(slotId) then
+    if suppressBookmarkClick then
+      if slotDragSourceId = NoSelection then
+        suppressBookmarkClick := FALSE;
+      end if;
+    else
+      call SetSelectedSlot(slotId, "ui-to-fsm");
+    end if;
   end if;
 BookmarkReturn:
   return;
@@ -158,10 +164,22 @@ BookmarkDropReturn:
   return;
 end procedure;
 
+procedure BookmarkDragEnd()
+begin
+BookmarkDragEndSource:
+  slotDragSourceId := NoSelection;
+BookmarkDragEndReturn:
+  return;
+end procedure;
+
 procedure ReleaseSyntheticClickGuard()
 begin
 BookmarkClickGuardRelease:
-  suppressBookmarkClick := FALSE;
+  if suppressBookmarkClick
+     /\ slotDragSourceId = NoSelection
+     /\ PostDragClickOpportunityPassed() then
+    suppressBookmarkClick := FALSE;
+  end if;
 BookmarkGuardReturn:
   return;
 end procedure;
@@ -256,6 +274,8 @@ Main:
       with slotId = NextBookmarkDropSlot() do
         call BookmarkDrop(slotId);
       end with;
+    or
+      call BookmarkDragEnd();
     or
       call ReleaseSyntheticClickGuard();
     or

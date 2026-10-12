@@ -1,7 +1,7 @@
 ---- MODULE FastFigureApiUiPseudocode ----
 EXTENDS Naturals
 
-\* r13 PlusCal pseudocode for sourcescript/api_ui.py.
+\* r15 PlusCal pseudocode for sourcescript/api_ui.py.
 \* Collision/form/sidebar values are UI-local and never project authority.
 
 CONSTANT NoValue
@@ -24,6 +24,50 @@ begin
 SubscribeExternalStore:
   result := RegisterAppFsmSubscriber(callback);
 SubscribeReturn:
+  return;
+end procedure;
+
+procedure ReadGraphData()
+variables
+  chart = NoValue,
+  objects = <<>>,
+  selectedIndex = NoValue,
+  currentCsv = NoValue,
+  objectCsv = NoValue,
+  currentColumns = <<>>,
+  objectColumns = <<>>;
+begin
+ReadGraphDataChart:
+  chart := ResolveSelectedChartForRead();
+ReadGraphDataObjects:
+  if chart # NoValue then
+    objects := chart.editor.objects;
+  end if;
+ReadGraphDataSelection:
+  selectedIndex := ReadGraphObjectSelectionIndex();
+ReadGraphDataCurrentCsv:
+  currentCsv := ResolveCsvFromCurrentAssetSelection();
+ReadGraphDataCurrentColumns:
+  if currentCsv # NoValue then
+    currentColumns := ColumnDefinitionsForCsv(currentCsv);
+  end if;
+ReadGraphDataObjectCsv:
+  if ValidGraphObjectIndex(objects, selectedIndex) then
+    objectCsv := ResolveProjectCsv(objects[selectedIndex].csvId);
+  end if;
+ReadGraphDataObjectColumns:
+  if objectCsv # NoValue then
+    objectColumns := ColumnDefinitionsForCsv(objectCsv);
+  end if;
+ReadGraphDataResult:
+  result := [
+    objects |-> objects,
+    selectedIndex |-> selectedIndex,
+    currentCsv |-> currentCsv,
+    columns |-> currentColumns,
+    objectColumns |-> objectColumns
+  ];
+ReadGraphDataReturn:
   return;
 end procedure;
 

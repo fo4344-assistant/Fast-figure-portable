@@ -1,0 +1,701 @@
+diff --git a/pseudocode/renderer_runtime.pcal b/pseudocode/renderer_runtime.pcal
+--- a/pseudocode/renderer_runtime.pcal
++++ b/pseudocode/renderer_runtime.pcal
+@@ -1,261 +1,281 @@
+ ---- MODULE FastFigureRendererRuntimePseudocode ----
+ EXTENDS Naturals
+ 
+-\* r13 PlusCal pseudocode for sourcescript/renderer_runtime.py.
+-
+-CONSTANT NoSelection
+-
+-(*
+---algorithm FastFigureRendererRuntime
+-variables
+-  selectedSlotId = NoSelection,
+-  slotDragSourceId = NoSelection,
+-  suppressBookmarkClick = FALSE,
+-  issuedCommand = NoSelection,
+-  telemetryRevision = 0,
+-  statusText = "",
+-  debugEnabled = FALSE,
+-  lifecycle = "booting",
+-  result = NoSelection,
+-  effect = NoSelection;
+-
+-procedure PublishTelemetry(patch)
+-begin
+-TelemetryPatch:
+-  effect := ApplyTelemetryProjectionPatch(patch);
+-TelemetryRevision:
+-  telemetryRevision := telemetryRevision + 1;
+-TelemetryReturn:
+-  return;
+-end procedure;
+-
+-procedure SetDebug(enabled)
+-begin
+-DebugAuthority:
+-  debugEnabled := ToBoolean(enabled);
+-DebugProjection:
+-  call PublishTelemetry([debugEnabled |-> debugEnabled]);
+-DebugReturn:
+-  return;
+-end procedure;
+-
+-procedure Status(message)
+-begin
+-StatusNormalize:
+-  statusText := NormalizeStatusText(message);
+-StatusProjection:
+-  call PublishTelemetry([status |-> statusText]);
+-StatusResult:
+-  result := statusText;
+-StatusReturn:
+-  return;
+-end procedure;
+-
+-procedure RenderDashboard()
+-begin
+-RenderGridAndStyle:
+-  effect := ProjectLayoutToDashboardCss(ReadActiveProject());
+-RenderPurge:
+-  effect := PurgeDisconnectedPlotlyInstances();
+-RenderSlots:
+-  effect := RenderEveryVisibleSlotFromProject(ReadActiveProject());
+-RenderGraphs:
+-  effect := RenderGraphSlotsFromReferencedCharts(ReadActiveProject());
+-RenderImages:
+-  effect := RenderImageSlotsFromReferencedAssetsAndSlotSettings(ReadActiveProject());
+-RenderSelection:
+-  effect := ApplySelectedSlotClass(selectedSlotId);
+-RenderAnnotations:
+-  effect := RenderLabelsAndCaptions(ReadActiveProject());
+-RenderResult:
+-  result := "rendered";
+-RenderReturn:
+-  return;
+-end procedure;
+-
+-procedure SetSelectedSlot(slotId, selectionDirection)
+-begin
+-EmitSelectSlot:
+-  issuedCommand := [
+-    name |-> "SELECT_SLOT",
+-    slotId |-> slotId,
+-    direction |-> selectionDirection
+-  ];
+-ResolveSelectionAfterEvent:
+-  selectedSlotId := ReadSelectedSlotIdFromFsm();
+-UpdateSelectedWorkspace:
+-  call UpdateGraphView();
+-ResizeAfterSelection:
+-  effect := RequestGraphViewResize();
+-SetSelectedReturn:
+-  return;
+-end procedure;
+-
+-procedure ContentBodyClick(slotId)
+-begin
+-ContentPassThrough:
+-  skip;
+-ContentReturn:
+-  return;
+-end procedure;
+-
+-procedure EmptySlotClick(slotId)
+-begin
+-EmptySelect:
+-  if IsVisibleEmptySlot(slotId) then
+-    call SetSelectedSlot(slotId, "ui-to-fsm");
+-  end if;
+-EmptyReturn:
+-  return;
+-end procedure;
+-
+-procedure BookmarkClick(slotId)
+-begin
+-BookmarkSelect:
+-  if ~suppressBookmarkClick /\ IsVisibleContentSlot(slotId) then
+-    call SetSelectedSlot(slotId, "ui-to-fsm");
+-  end if;
+-BookmarkReturn:
+-  return;
+-end procedure;
+-
+-procedure BookmarkDragStart(slotId)
+-begin
+-BookmarkDragGuard:
+-  if IsVisibleContentSlot(slotId) then
+-    slotDragSourceId := slotId ||
+-    suppressBookmarkClick := TRUE;
+-  end if;
+-BookmarkDragStartReturn:
+-  return;
+-end procedure;
+-
+-procedure SwapSlotContents(sourceId, targetId)
+-begin
+-EmitSlotSwap:
+-  if sourceId # targetId /\ IsVisibleSlot(sourceId) /\ IsVisibleSlot(targetId) then
+-    issuedCommand := [
+-      name |-> "SLOTS_SWAPPED",
+-      sourceId |-> sourceId,
+-      targetId |-> targetId
+-    ];
+-  end if;
+-SwapSlotReturn:
+-  return;
+-end procedure;
+-
+-procedure BookmarkDrop(targetSlotId)
+-begin
+-BookmarkDropGuard:
+-  if slotDragSourceId # NoSelection
+-     /\ targetSlotId # slotDragSourceId
+-     /\ IsVisibleSlot(targetSlotId) then
+-    call SwapSlotContents(slotDragSourceId, targetSlotId);
+-  end if;
+-BookmarkDropClearSource:
+-  slotDragSourceId := NoSelection;
+-BookmarkDropReturn:
+-  return;
+-end procedure;
+-
+-procedure ReleaseSyntheticClickGuard()
+-begin
+-BookmarkClickGuardRelease:
+-  suppressBookmarkClick := FALSE;
+-BookmarkGuardReturn:
+-  return;
+-end procedure;
+-
+-procedure PrepareDashboardFileDrop(slotId)
+-begin
+-FileDropResolve:
+-  if IsVisibleSlot(slotId) then
+-    if selectedSlotId # slotId then
+-      call SetSelectedSlot(slotId, "ui-to-fsm");
+-    end if;
+-    result := TRUE;
+-  else
+-    result := FALSE;
+-  end if;
+-FileDropClearSlotDrag:
+-  slotDragSourceId := NoSelection;
+-FileDropPrepareReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplySlotStyle(notify)
+-begin
+-StyleProjection:
+-  effect := ApplyDashboardCssFromStyle(ReadActiveProjectSlotStyle());
+-StyleNotify:
+-  if notify then
+-    issuedCommand := [name |-> "notify-layout"];
+-  end if;
+-StyleReturn:
+-  return;
+-end procedure;
+-
+-procedure ResolveSelectedChart()
+-begin
+-ResolveSelectedChartPath:
+-  result := ResolveChartFromSelectedSlot(ReadActiveProject(), selectedSlotId);
+-ResolveChartReturn:
+-  return;
+-end procedure;
+-
+-procedure UpdateGraphView()
+-begin
+-ResolveWorkspaceProjection:
+-  result := ProjectWorkspaceFromCurrentSelection(selectedSlotId);
+-RenderWorkspaceProjection:
+-  effect := RenderWorkspaceFromAuthority(result);
+-UpdateGraphReturn:
+-  return;
+-end procedure;
+-
+-procedure StartupCoreRuntime()
+-begin
+-StartupValidate:
+-  assert ValidateWholeProject(ReadActiveProject());
+-StartupZoom:
+-  effect := ApplyDashboardZoomProjection();
+-StartupController:
+-  effect := InstallBookmarkAndDropController();
+-StartupRender:
+-  call RenderDashboard();
+-StartupStyle:
+-  call ApplySlotStyle(FALSE);
+-StartupReady:
+-  lifecycle := "ready";
+-StartupAudit:
+-  assert AuditProjectReferenceRuntimeInvariants();
+-StartupResult:
+-  result := "ready";
+-StartupReturn:
+-  return;
+-end procedure;
+-
+-begin
+-Main:
+-  while TRUE do
+-    either
+-      call RenderDashboard();
+-    or
+-      with slotId = NextBookmarkClickSlot() do
+-        call BookmarkClick(slotId);
+-      end with;
+-    or
+-      with slotId = NextEmptySlotClickSlot() do
+-        call EmptySlotClick(slotId);
+-      end with;
+-    or
+-      with slotId = NextBookmarkDragStartSlot() do
+-        call BookmarkDragStart(slotId);
+-      end with;
+-    or
+-      with slotId = NextBookmarkDropSlot() do
+-        call BookmarkDrop(slotId);
+-      end with;
++\* r15 PlusCal pseudocode for sourcescript/renderer_runtime.py.
++
++CONSTANT NoSelection
++
++(*
++--algorithm FastFigureRendererRuntime
++variables
++  selectedSlotId = NoSelection,
++  slotDragSourceId = NoSelection,
++  suppressBookmarkClick = FALSE,
++  issuedCommand = NoSelection,
++  telemetryRevision = 0,
++  statusText = "",
++  debugEnabled = FALSE,
++  lifecycle = "booting",
++  result = NoSelection,
++  effect = NoSelection;
++
++procedure PublishTelemetry(patch)
++begin
++TelemetryPatch:
++  effect := ApplyTelemetryProjectionPatch(patch);
++TelemetryRevision:
++  telemetryRevision := telemetryRevision + 1;
++TelemetryReturn:
++  return;
++end procedure;
++
++procedure SetDebug(enabled)
++begin
++DebugAuthority:
++  debugEnabled := ToBoolean(enabled);
++DebugProjection:
++  call PublishTelemetry([debugEnabled |-> debugEnabled]);
++DebugReturn:
++  return;
++end procedure;
++
++procedure Status(message)
++begin
++StatusNormalize:
++  statusText := NormalizeStatusText(message);
++StatusProjection:
++  call PublishTelemetry([status |-> statusText]);
++StatusResult:
++  result := statusText;
++StatusReturn:
++  return;
++end procedure;
++
++procedure RenderDashboard()
++begin
++RenderGridAndStyle:
++  effect := ProjectLayoutToDashboardCss(ReadActiveProject());
++RenderPurge:
++  effect := PurgeDisconnectedPlotlyInstances();
++RenderSlots:
++  effect := RenderEveryVisibleSlotFromProject(ReadActiveProject());
++RenderGraphs:
++  effect := RenderGraphSlotsFromReferencedCharts(ReadActiveProject());
++RenderImages:
++  effect := RenderImageSlotsFromReferencedAssetsAndSlotSettings(ReadActiveProject());
++RenderSelection:
++  effect := ApplySelectedSlotClass(selectedSlotId);
++RenderAnnotations:
++  effect := RenderLabelsAndCaptions(ReadActiveProject());
++RenderResult:
++  result := "rendered";
++RenderReturn:
++  return;
++end procedure;
++
++procedure SetSelectedSlot(slotId, selectionDirection)
++begin
++EmitSelectSlot:
++  issuedCommand := [
++    name |-> "SELECT_SLOT",
++    slotId |-> slotId,
++    direction |-> selectionDirection
++  ];
++ResolveSelectionAfterEvent:
++  selectedSlotId := ReadSelectedSlotIdFromFsm();
++UpdateSelectedWorkspace:
++  call UpdateGraphView();
++ResizeAfterSelection:
++  effect := RequestGraphViewResize();
++SetSelectedReturn:
++  return;
++end procedure;
++
++procedure ContentBodyClick(slotId)
++begin
++ContentPassThrough:
++  skip;
++ContentReturn:
++  return;
++end procedure;
++
++procedure EmptySlotClick(slotId)
++begin
++EmptySelect:
++  if IsVisibleEmptySlot(slotId) then
++    call SetSelectedSlot(slotId, "ui-to-fsm");
++  end if;
++EmptyReturn:
++  return;
++end procedure;
++
++procedure BookmarkClick(slotId)
++begin
++BookmarkGuard:
++  if IsVisibleContentSlot(slotId) then
++    if suppressBookmarkClick then
++      if slotDragSourceId = NoSelection then
++        suppressBookmarkClick := FALSE;
++      end if;
++    else
++      call SetSelectedSlot(slotId, "ui-to-fsm");
++    end if;
++  end if;
++BookmarkReturn:
++  return;
++end procedure;
++
++procedure BookmarkDragStart(slotId)
++begin
++BookmarkDragGuard:
++  if IsVisibleContentSlot(slotId) then
++    slotDragSourceId := slotId ||
++    suppressBookmarkClick := TRUE;
++  end if;
++BookmarkDragStartReturn:
++  return;
++end procedure;
++
++procedure SwapSlotContents(sourceId, targetId)
++begin
++EmitSlotSwap:
++  if sourceId # targetId /\ IsVisibleSlot(sourceId) /\ IsVisibleSlot(targetId) then
++    issuedCommand := [
++      name |-> "SLOTS_SWAPPED",
++      sourceId |-> sourceId,
++      targetId |-> targetId
++    ];
++  end if;
++SwapSlotReturn:
++  return;
++end procedure;
++
++procedure BookmarkDrop(targetSlotId)
++begin
++BookmarkDropGuard:
++  if slotDragSourceId # NoSelection
++     /\ targetSlotId # slotDragSourceId
++     /\ IsVisibleSlot(targetSlotId) then
++    call SwapSlotContents(slotDragSourceId, targetSlotId);
++  end if;
++BookmarkDropClearSource:
++  slotDragSourceId := NoSelection;
++BookmarkDropReturn:
++  return;
++end procedure;
++
++procedure BookmarkDragEnd()
++begin
++BookmarkDragEndSource:
++  slotDragSourceId := NoSelection;
++BookmarkDragEndReturn:
++  return;
++end procedure;
++
++procedure ReleaseSyntheticClickGuard()
++begin
++BookmarkClickGuardRelease:
++  if suppressBookmarkClick
++     /\ slotDragSourceId = NoSelection
++     /\ PostDragClickOpportunityPassed() then
++    suppressBookmarkClick := FALSE;
++  end if;
++BookmarkGuardReturn:
++  return;
++end procedure;
++
++procedure PrepareDashboardFileDrop(slotId)
++begin
++FileDropResolve:
++  if IsVisibleSlot(slotId) then
++    if selectedSlotId # slotId then
++      call SetSelectedSlot(slotId, "ui-to-fsm");
++    end if;
++    result := TRUE;
++  else
++    result := FALSE;
++  end if;
++FileDropClearSlotDrag:
++  slotDragSourceId := NoSelection;
++FileDropPrepareReturn:
++  return;
++end procedure;
++
++procedure ApplySlotStyle(notify)
++begin
++StyleProjection:
++  effect := ApplyDashboardCssFromStyle(ReadActiveProjectSlotStyle());
++StyleNotify:
++  if notify then
++    issuedCommand := [name |-> "notify-layout"];
++  end if;
++StyleReturn:
++  return;
++end procedure;
++
++procedure ResolveSelectedChart()
++begin
++ResolveSelectedChartPath:
++  result := ResolveChartFromSelectedSlot(ReadActiveProject(), selectedSlotId);
++ResolveChartReturn:
++  return;
++end procedure;
++
++procedure UpdateGraphView()
++begin
++ResolveWorkspaceProjection:
++  result := ProjectWorkspaceFromCurrentSelection(selectedSlotId);
++RenderWorkspaceProjection:
++  effect := RenderWorkspaceFromAuthority(result);
++UpdateGraphReturn:
++  return;
++end procedure;
++
++procedure StartupCoreRuntime()
++begin
++StartupValidate:
++  assert ValidateWholeProject(ReadActiveProject());
++StartupZoom:
++  effect := ApplyDashboardZoomProjection();
++StartupController:
++  effect := InstallBookmarkAndDropController();
++StartupRender:
++  call RenderDashboard();
++StartupStyle:
++  call ApplySlotStyle(FALSE);
++StartupReady:
++  lifecycle := "ready";
++StartupAudit:
++  assert AuditProjectReferenceRuntimeInvariants();
++StartupResult:
++  result := "ready";
++StartupReturn:
++  return;
++end procedure;
++
++begin
++Main:
++  while TRUE do
++    either
++      call RenderDashboard();
++    or
++      with slotId = NextBookmarkClickSlot() do
++        call BookmarkClick(slotId);
++      end with;
++    or
++      with slotId = NextEmptySlotClickSlot() do
++        call EmptySlotClick(slotId);
++      end with;
++    or
++      with slotId = NextBookmarkDragStartSlot() do
++        call BookmarkDragStart(slotId);
++      end with;
++    or
++      with slotId = NextBookmarkDropSlot() do
++        call BookmarkDrop(slotId);
++      end with;
++    or
++      call BookmarkDragEnd();
+     or
+       call ReleaseSyntheticClickGuard();
+     or
+diff --git a/pseudocode/api_ui.pcal b/pseudocode/api_ui.pcal
+--- a/pseudocode/api_ui.pcal
++++ b/pseudocode/api_ui.pcal
+@@ -1,29 +1,73 @@
+ ---- MODULE FastFigureApiUiPseudocode ----
+ EXTENDS Naturals
+ 
+-\* r13 PlusCal pseudocode for sourcescript/api_ui.py.
+-\* Collision/form/sidebar values are UI-local and never project authority.
+-
+-CONSTANT NoValue
+-
+-(*
+---algorithm FastFigureApiUi
+-variables
+-  collisionDraft = NoValue,
+-  resolver = NoValue,
+-  preparedSlot = NoValue,
+-  lastPersistentCommand = NoValue,
+-  dragRuntimeActive = FALSE,
+-  sidebarWidth = 0,
+-  sidebarCollapsed = FALSE,
+-  result = NoValue,
+-  effect = NoValue;
+-
+-procedure SubscribeAppState(callback)
+-begin
+-SubscribeExternalStore:
+-  result := RegisterAppFsmSubscriber(callback);
+-SubscribeReturn:
++\* r15 PlusCal pseudocode for sourcescript/api_ui.py.
++\* Collision/form/sidebar values are UI-local and never project authority.
++
++CONSTANT NoValue
++
++(*
++--algorithm FastFigureApiUi
++variables
++  collisionDraft = NoValue,
++  resolver = NoValue,
++  preparedSlot = NoValue,
++  lastPersistentCommand = NoValue,
++  dragRuntimeActive = FALSE,
++  sidebarWidth = 0,
++  sidebarCollapsed = FALSE,
++  result = NoValue,
++  effect = NoValue;
++
++procedure SubscribeAppState(callback)
++begin
++SubscribeExternalStore:
++  result := RegisterAppFsmSubscriber(callback);
++SubscribeReturn:
++  return;
++end procedure;
++
++procedure ReadGraphData()
++variables
++  chart = NoValue,
++  objects = <<>>,
++  selectedIndex = NoValue,
++  currentCsv = NoValue,
++  objectCsv = NoValue,
++  currentColumns = <<>>,
++  objectColumns = <<>>;
++begin
++ReadGraphDataChart:
++  chart := ResolveSelectedChartForRead();
++ReadGraphDataObjects:
++  if chart # NoValue then
++    objects := chart.editor.objects;
++  end if;
++ReadGraphDataSelection:
++  selectedIndex := ReadGraphObjectSelectionIndex();
++ReadGraphDataCurrentCsv:
++  currentCsv := ResolveCsvFromCurrentAssetSelection();
++ReadGraphDataCurrentColumns:
++  if currentCsv # NoValue then
++    currentColumns := ColumnDefinitionsForCsv(currentCsv);
++  end if;
++ReadGraphDataObjectCsv:
++  if ValidGraphObjectIndex(objects, selectedIndex) then
++    objectCsv := ResolveProjectCsv(objects[selectedIndex].csvId);
++  end if;
++ReadGraphDataObjectColumns:
++  if objectCsv # NoValue then
++    objectColumns := ColumnDefinitionsForCsv(objectCsv);
++  end if;
++ReadGraphDataResult:
++  result := [
++    objects |-> objects,
++    selectedIndex |-> selectedIndex,
++    currentCsv |-> currentCsv,
++    columns |-> currentColumns,
++    objectColumns |-> objectColumns
++  ];
++ReadGraphDataReturn:
+   return;
+ end procedure;
+ 
+diff --git a/pseudocode/README.md b/pseudocode/README.md
+--- a/pseudocode/README.md
++++ b/pseudocode/README.md
+@@ -1,30 +1,30 @@
+-# Fast Figure PlusCal pseudocode r14 — work in progress
+-
+-Derived from the closed Source Script:
+-
+-- Source Script revision: r14
+-- Source Script fingerprint: `sha256:0a3b3d2c325afe802c817fc952683a92490c583349faea2afddf71cd3119b9f7`
+-- Source Script closure review: `agent_space/reviews/review-20261012-003-sourcescript-closure-r14.md`
+-
+-## Translation rule
+-
+-The active r14 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
+-
+-The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r14 PlusCal translation.
+-
+-The active translation preserves:
+-
+-- Source Script module/responsibility boundaries
+-- authoritative state and reference sources
+-- resolve-before-mutation ordering
+-- candidate/validation/commit boundaries
+-- failure/rejection semantics
+-- runtime versus persistent mutation ownership
+-- meaningful UI/FSM command sequencing
+-
+-If a required meaning is absent or contradictory, translation stops and returns to Source Script rather than filling the gap in PlusCal.
+-
+-## Active r14 module mapping
++# Fast Figure PlusCal pseudocode r15 — work in progress
++
++Derived from the closed Source Script:
++
++- Source Script revision: r15
++- Source Script fingerprint: `sha256:6c7d5b23a4a1a9b13db6f4210781926e64fbba81df93e5cf774d8356b7c6fb3f`
++- Source Script closure review: `agent_space/reviews/review-20261012-005-sourcescript-closure-r15.md`
++
++## Translation rule
++
++The active r15 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
++
++The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r15 PlusCal translation.
++
++The active translation preserves:
++
++- Source Script module/responsibility boundaries
++- authoritative state and reference sources
++- resolve-before-mutation ordering
++- candidate/validation/commit boundaries
++- failure/rejection semantics
++- runtime versus persistent mutation ownership
++- meaningful UI/FSM command sequencing
++
++If a required meaning is absent or contradictory, translation stops and returns to Source Script rather than filling the gap in PlusCal.
++
++## Active r15 module mapping
+ 
+ | Source Script | Active PlusCal | Status |
+ | --- | --- | --- |

@@ -1,16 +1,16 @@
-# Fast Figure PlusCal pseudocode r14 — work in progress
+# Fast Figure PlusCal pseudocode r15 — work in progress
 
 Derived from the closed Source Script:
 
-- Source Script revision: r14
-- Source Script fingerprint: `sha256:0a3b3d2c325afe802c817fc952683a92490c583349faea2afddf71cd3119b9f7`
-- Source Script closure review: `agent_space/reviews/review-20261012-003-sourcescript-closure-r14.md`
+- Source Script revision: r15
+- Source Script fingerprint: `sha256:6c7d5b23a4a1a9b13db6f4210781926e64fbba81df93e5cf774d8356b7c6fb3f`
+- Source Script closure review: `agent_space/reviews/review-20261012-005-sourcescript-closure-r15.md`
 
 ## Translation rule
 
-The active r14 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
+The active r15 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
 
-The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r14 PlusCal translation.
+The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r15 PlusCal translation.
 
 The active translation preserves:
 
@@ -24,7 +24,7 @@ The active translation preserves:
 
 If a required meaning is absent or contradictory, translation stops and returns to Source Script rather than filling the gap in PlusCal.
 
-## Active r14 module mapping
+## Active r15 module mapping
 
 | Source Script | Active PlusCal | Status |
 | --- | --- | --- |
