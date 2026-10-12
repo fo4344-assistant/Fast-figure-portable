@@ -1,0 +1,50 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@
+-  sourceCode: "r11",
++  sourceCode: "r12",
+@@
+-      slotElement(slot.id)?.dispatchEvent(
++      const dropTarget = slotElement(slot.id);
++      check(!!dropTarget, "collision drop target absent");
++      dropTarget.dispatchEvent(
+@@
+-          Array.from(document.querySelectorAll("[role='dialog']")).find((dialog) =>
+-            dialog.textContent?.includes("같은 이름의 파일"),
+-          ),
++          Array.from(document.querySelectorAll("body *")).find(
++            (element) =>
++              element.children.length === 0 &&
++              element.textContent?.trim() === "같은 이름의 파일",
++          ),
+@@
+-      document.dispatchEvent(
+-        new KeyboardEvent("keydown", {
+-          key: "Escape",
+-          code: "Escape",
+-          bubbles: true,
+-          cancelable: true,
+-        }),
+-      );
++      const closeButton =
++        document.querySelector(".mantine-Modal-close") ||
++        document.querySelector("[aria-label='Close modal']") ||
++        document.querySelector("[aria-label='닫기']");
++      const overlay = document.querySelector(".mantine-Modal-overlay");
++      if (closeButton) {
++        click(closeButton);
++      } else if (overlay) {
++        click(overlay);
++      } else {
++        const escape = () =>
++          new KeyboardEvent("keydown", {
++            key: "Escape",
++            code: "Escape",
++            bubbles: true,
++            cancelable: true,
++          });
++        (document.activeElement || document.body).dispatchEvent(escape());
++        document.dispatchEvent(escape());
++        window.dispatchEvent(escape());
++      }

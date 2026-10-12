@@ -3,7 +3,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   sourceScript: "r15",
   plusCal: "r15",
   verificationModel: "r6-stale",
-  sourceCode: "r11",
+  sourceCode: "r12",
   appBuild: "1.1.32-wip",
 });
 (async () => {
@@ -645,7 +645,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       transfer.items.add(
         csv("collision-dismiss.csv", "X,Y\n99,100\n"),
       );
-      slotElement(slot.id)?.dispatchEvent(
+      const dropTarget = slotElement(slot.id);
+      check(!!dropTarget, "collision drop target absent");
+      dropTarget.dispatchEvent(
         new DragEvent("drop", {
           bubbles: true,
           cancelable: true,
@@ -655,20 +657,35 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
 
       await waitFor(
         () =>
-          Array.from(document.querySelectorAll("[role='dialog']")).find((dialog) =>
-            dialog.textContent?.includes("같은 이름의 파일"),
+          Array.from(document.querySelectorAll("body *")).find(
+            (element) =>
+              element.children.length === 0 &&
+              element.textContent?.trim() === "같은 이름의 파일",
           ),
         "collision modal did not open",
         5000,
       );
-      document.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "Escape",
-          code: "Escape",
-          bubbles: true,
-          cancelable: true,
-        }),
-      );
+      const closeButton =
+        document.querySelector(".mantine-Modal-close") ||
+        document.querySelector("[aria-label='Close modal']") ||
+        document.querySelector("[aria-label='닫기']");
+      const overlay = document.querySelector(".mantine-Modal-overlay");
+      if (closeButton) {
+        click(closeButton);
+      } else if (overlay) {
+        click(overlay);
+      } else {
+        const escape = () =>
+          new KeyboardEvent("keydown", {
+            key: "Escape",
+            code: "Escape",
+            bubbles: true,
+            cancelable: true,
+          });
+        (document.activeElement || document.body).dispatchEvent(escape());
+        document.dispatchEvent(escape());
+        window.dispatchEvent(escape());
+      }
       await waitFor(
         () => appFSM.state.lifecycle === "ready",
         "application did not return to ready after collision cancel",
