@@ -2,7 +2,9 @@ name: Build distribution
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - fix/gui-fsm-20261008-review
     paths:
       - 'Fast-figure.html'
       - 'fast-figure.js'
@@ -28,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - name: Build distribution
@@ -49,9 +51,9 @@ jobs:
 
       - name: Commit distribution artifacts
         run: |
-          git fetch origin main
-          if [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD)" ]; then
-            echo "main advanced during this run; a newer workflow run will build it."
+          git fetch origin "$GITHUB_REF_NAME"
+          if [ "$(git rev-parse "origin/$GITHUB_REF_NAME")" != "$(git rev-parse HEAD)" ]; then
+            echo "$GITHUB_REF_NAME advanced during this run; a newer workflow run will build it."
             exit 0
           fi
 
@@ -64,4 +66,4 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Build distribution artifacts"
-          git push origin HEAD:main
+          git push origin "HEAD:$GITHUB_REF_NAME"

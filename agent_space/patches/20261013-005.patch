@@ -1,0 +1,27 @@
+diff --git a/.github/workflows/build-distribution.yml b/.github/workflows/build-distribution.yml
+--- a/.github/workflows/build-distribution.yml
++++ b/.github/workflows/build-distribution.yml
+@@
+   push:
+-    branches: [main]
++    branches:
++      - main
++      - fix/gui-fsm-20261008-review
+@@
+       - uses: actions/checkout@v4
+         with:
+-          ref: main
++          ref: ${{ github.ref_name }}
+           fetch-depth: 0
+@@
+-          git fetch origin main
+-          if [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD)" ]; then
+-            echo "main advanced during this run; a newer workflow run will build it."
++          git fetch origin "$GITHUB_REF_NAME"
++          if [ "$(git rev-parse "origin/$GITHUB_REF_NAME")" != "$(git rev-parse HEAD)" ]; then
++            echo "$GITHUB_REF_NAME advanced during this run; a newer workflow run will build it."
+             exit 0
+           fi
+@@
+-          git push origin HEAD:main
++          git push origin "HEAD:$GITHUB_REF_NAME"
