@@ -136,6 +136,11 @@ RESOLVED_REVIEW_ITEMS = [
         "Source Script module hierarchy는 system.py 아래의 직접 sibling responsibility로 둔다. "
         "형제 module의 import/call 관계를 추가적인 의미적 부모-자식 hierarchy로 해석하지 않는다."
     ),
+    (
+        "asset import collision Modal은 rename/replace의 명시적 선택만 import plan으로 변환한다. "
+        "Escape/outside-click/close/cleanup처럼 choice 없는 dismiss는 cancel이며 UI-local resolver를 정리할 뿐 "
+        "rename 같은 persistent import 결정을 암묵적으로 승인하지 않는다."
+    ),
 ]
 
 UNRESOLVED_REVIEW_ITEMS = []

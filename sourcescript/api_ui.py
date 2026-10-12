@@ -247,10 +247,12 @@ def useProjectAssetImportCollision():
     - local collision/resolver state만 변경한다.
 
     처리:
-    core collisionModel을 먼저 계산한다.
-    available이면 UI 없이 core resolveImportPlan을 호출한다.
-    user choice가 필요하면 Modal lifetime 동안 resolver를 보유하고
-    choice를 받은 뒤 core resolveImportPlan으로 최종 plan을 계산한다.
+    1. core collisionModel을 먼저 계산한다.
+    2. available이면 UI 없이 core resolveImportPlan을 호출한다.
+    3. user choice가 필요하면 Modal lifetime 동안 resolver를 보유한다.
+    4. rename/replace 버튼처럼 명시적 choice를 받은 경우에만 core resolveImportPlan으로 최종 plan을 계산한다.
+    5. Escape, outside click, close button 또는 component cleanup처럼 명시적 choice 없이 Modal이 닫히면 cancel로 완료한다.
+       cancel은 import plan을 만들지 않고 pending resolver/local collision state만 정리하며 project/domain mutation을 발생시키지 않는다.
     """
     return "component-local collision chooser와 Modal"
 

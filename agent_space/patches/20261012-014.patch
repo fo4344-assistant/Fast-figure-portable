@@ -1,0 +1,59 @@
+diff --git a/sourcescript/api_ui.py b/sourcescript/api_ui.py
+--- a/sourcescript/api_ui.py
++++ b/sourcescript/api_ui.py
+@@ -247,10 +247,12 @@
+     - local collision/resolver state만 변경한다.
+ 
+     처리:
+-    core collisionModel을 먼저 계산한다.
+-    available이면 UI 없이 core resolveImportPlan을 호출한다.
+-    user choice가 필요하면 Modal lifetime 동안 resolver를 보유하고
+-    choice를 받은 뒤 core resolveImportPlan으로 최종 plan을 계산한다.
++    1. core collisionModel을 먼저 계산한다.
++    2. available이면 UI 없이 core resolveImportPlan을 호출한다.
++    3. user choice가 필요하면 Modal lifetime 동안 resolver를 보유한다.
++    4. rename/replace 버튼처럼 명시적 choice를 받은 경우에만 core resolveImportPlan으로 최종 plan을 계산한다.
++    5. Escape, outside click, close button 또는 component cleanup처럼 명시적 choice 없이 Modal이 닫히면 cancel로 완료한다.
++       cancel은 import plan을 만들지 않고 pending resolver/local collision state만 정리하며 project/domain mutation을 발생시키지 않는다.
+     """
+     return "component-local collision chooser와 Modal"
+ 
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -136,6 +136,11 @@
+         "Source Script module hierarchy는 system.py 아래의 직접 sibling responsibility로 둔다. "
+         "형제 module의 import/call 관계를 추가적인 의미적 부모-자식 hierarchy로 해석하지 않는다."
+     ),
++    (
++        "asset import collision Modal은 rename/replace의 명시적 선택만 import plan으로 변환한다. "
++        "Escape/outside-click/close/cleanup처럼 choice 없는 dismiss는 cancel이며 UI-local resolver를 정리할 뿐 "
++        "rename 같은 persistent import 결정을 암묵적으로 승인하지 않는다."
++    ),
+ ]
+ 
+ UNRESOLVED_REVIEW_ITEMS = []
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,13 +9,13 @@
+   "authority_rule": "On semantic conflict, Source Script wins. Source code may be current only when the current verification model derives from the current closed Source Script and its TLC validation has passed.",
+   "layers": {
+     "source-script": {
+-      "revision": 13,
+-      "status": "current",
+-      "path_rule": "sourcescript/**/*.py",
+-      "fingerprint": "sha256:2c7955cf29b10d73f4c0741b895c895633683ae00e6d4cc0bd75b78eaaa566c7",
+-      "derived_from": null,
+-      "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261012-002-sourcescript-closure-r13.md"
++      "revision": 14,
++      "status": "current",
++      "path_rule": "sourcescript/**/*.py",
++      "fingerprint": "sha256:0a3b3d2c325afe802c817fc952683a92490c583349faea2afddf71cd3119b9f7",
++      "derived_from": null,
++      "closure": "open",
++      "closure_review": null
+     },
+     "verification-model": {
+       "revision": 6,
