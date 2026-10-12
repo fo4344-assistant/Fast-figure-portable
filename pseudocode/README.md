@@ -1,16 +1,16 @@
-# Fast Figure PlusCal pseudocode r15 — work in progress
+# Fast Figure PlusCal pseudocode r16 — work in progress
 
 Derived from the closed Source Script:
 
-- Source Script revision: r15
-- Source Script fingerprint: `sha256:6c7d5b23a4a1a9b13db6f4210781926e64fbba81df93e5cf774d8356b7c6fb3f`
-- Source Script closure review: `agent_space/reviews/review-20261012-005-sourcescript-closure-r15.md`
+- Source Script revision: r16
+- Source Script fingerprint: `sha256:05c78c39c6c7ae715c8204ec0c4381ecd66ebf1dd9dbfb01a26fd99400270484`
+- Source Script closure review: `agent_space/reviews/review-20261013-003-sourcescript-closure-r16.md`
 
 ## Translation rule
 
-The active r15 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
+The active r16 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
 
-The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r15 PlusCal translation.
+The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r16 PlusCal translation.
 
 The active translation preserves:
 
@@ -24,7 +24,7 @@ The active translation preserves:
 
 If a required meaning is absent or contradictory, translation stops and returns to Source Script rather than filling the gap in PlusCal.
 
-## Active r15 module mapping
+## Active r16 module mapping
 
 | Source Script | Active PlusCal | Status |
 | --- | --- | --- |
@@ -42,8 +42,8 @@ The Source Script hierarchy remains `system.py` as the system root with responsi
 
 ## Current validation status
 
-- Source Script r15 is closed.
+- Source Script r16 is closed.
 - All nine Source Script responsibility modules have active `.pcal` counterparts.
 - Function/procedure coverage and static syntax-pattern checks have been completed.
 - The PlusCal translator has not yet been executed on these pseudocode files, so translator/SANY success is not claimed.
-- TLC verification is optional under policy v0.2.6 and has not been run for this r14 pseudocode.
+- TLC verification is optional under policy v0.2.6 and has not been run for this r16 pseudocode.
