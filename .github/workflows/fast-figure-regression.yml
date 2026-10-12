@@ -2,9 +2,7 @@ name: Fast Figure regression
 
 on:
   push:
-    branches:
-      - main
-      - fix/gui-fsm-20261008-review
+    branches: [main]
     paths:
       - 'agent_space/tests/browser-regression.js'
       - 'agent_space/tests/run-browser-regression.py'
