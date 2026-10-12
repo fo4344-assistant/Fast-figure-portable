@@ -10,7 +10,7 @@ Derived from the closed Source Script:
 
 The active r14 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
 
-The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r13 PlusCal translation.
+The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r14 PlusCal translation.
 
 The active translation preserves:
 
@@ -39,3 +39,11 @@ If a required meaning is absent or contradictory, translation stops and returns 
 | `sourcescript/portable_build.py` | `portable_build.pcal` | portable build flow translated |
 
 The Source Script hierarchy remains `system.py` as the system root with responsibility modules as siblings. PlusCal files do not introduce new semantic parent/child modules.
+
+## Current validation status
+
+- Source Script r14 is closed.
+- All nine Source Script responsibility modules have active `.pcal` counterparts.
+- Function/procedure coverage and static syntax-pattern checks have been completed.
+- The PlusCal translator has not yet been executed on these pseudocode files, so translator/SANY success is not claimed.
+- TLC verification is optional under policy v0.2.6 and has not been run for this r14 pseudocode.
