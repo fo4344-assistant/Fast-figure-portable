@@ -42,7 +42,7 @@ The Source Script hierarchy remains `system.py` as the system root with responsi
 
 ## Current validation status
 
-- Source Script r14 is closed.
+- Source Script r15 is closed.
 - All nine Source Script responsibility modules have active `.pcal` counterparts.
 - Function/procedure coverage and static syntax-pattern checks have been completed.
 - The PlusCal translator has not yet been executed on these pseudocode files, so translator/SANY success is not claimed.
