@@ -34,7 +34,7 @@
     UnstyledButton,
     createTheme,
   } = MantineCore;
-  const { useEffect, useRef, useState, useSyncExternalStore } = React;
+  const { useCallback, useEffect, useRef, useState, useSyncExternalStore } = React;
 
   const fastFigureTheme = createTheme({
     fontFamily: 'system-ui, "Segoe UI", sans-serif',
@@ -191,7 +191,7 @@
       resolverRef.current = null;
       resolve?.(null);
     }, []);
-    const choosePlan = async (file, directory, reservedPaths = null) => {
+    const choosePlan = useCallback(async (file, directory, reservedPaths = null) => {
       const model = window.FastFigureApi.assets.collisionModel(file, directory, reservedPaths);
       if (model.mode === "available")
         return window.FastFigureApi.assets.resolveImportPlan(model, "available", reservedPaths);
@@ -201,7 +201,7 @@
       });
       if (choice !== "rename" && choice !== "replace") return null;
       return window.FastFigureApi.assets.resolveImportPlan(model, choice, reservedPaths);
-    };
+    }, []);
     const modal = React.createElement(
       Modal,
       {
