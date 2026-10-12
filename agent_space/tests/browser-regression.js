@@ -1,8 +1,9 @@
 /* Runs after the application scripts in a headless file:// browser. */
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
-  sourceScript: "r12",
-  verificationModel: "r6",
-  sourceCode: "r8",
+  sourceScript: "r15",
+  plusCal: "r15",
+  verificationModel: "r6-stale",
+  sourceCode: "r11",
   appBuild: "1.1.32-wip",
 });
 (async () => {
@@ -30,6 +31,31 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   const csv = (name, body) => new File([body], name, { type: "text/csv" });
   const choose = (choice) => async (file, directory) =>
     api.assets.resolveImportPlan(api.assets.collisionModel(file, directory), choice);
+  const tick = (delay = 0) => new Promise((resolve) => setTimeout(resolve, delay));
+  const waitFor = async (reader, message, timeout = 1500) => {
+    const started = performance.now();
+    while (performance.now() - started < timeout) {
+      const value = reader();
+      if (value) return value;
+      await tick(10);
+    }
+    throw Error(message);
+  };
+  const slotElement = (slotId) =>
+    document.querySelector(`#dashboard .slot[data-slot="${slotId}"]`);
+  const click = (element) => {
+    check(!!element, "interaction target absent");
+    element.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, view: window }),
+    );
+  };
+  const slotPayloadSignature = (slot) =>
+    JSON.stringify({
+      chart: slot?.chart ?? null,
+      imageId: slot?.imageId ?? null,
+      contentType: slot?.contentType ?? "graph",
+      caption: slot?.caption ?? "",
+    });
   const save = () => ({
     slots: activeProject.slots.map((s) => ({ id: s.id, chart: s.chart, imageId: s.imageId,
       contentType: s.contentType, hidden: s.hidden, rowSpan: s.rowSpan, colSpan: s.colSpan })),
@@ -345,6 +371,310 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         getComputedStyle(button).backgroundColor === expected,
         "filled Mantine button does not use appearance uiColor",
       );
+    });
+    await run(20, "content slots use bookmark-only selection", async () => {
+      const contentSlot = activeProject.slots.find(
+        (slot) => !slot.hidden && (slot.chart || slot.imageId),
+      );
+      check(!!contentSlot, "content slot absent");
+      api.slots.select(null);
+      await tick();
+
+      let element = slotElement(contentSlot.id);
+      const body = contentSlot.chart
+        ? element?.querySelector(".plot-item")
+        : element?.querySelector(".slot-image-frame");
+      click(body);
+      await tick();
+      check(api.slots.readSelected() === null, "content body selected its slot");
+
+      click(slotElement(contentSlot.id)?.querySelector(".slot-tab"));
+      await tick();
+      check(
+        api.slots.readSelected()?.id === contentSlot.id,
+        "bookmark did not select content slot",
+      );
+
+      click(document.getElementById("dashboard"));
+      await tick();
+      check(
+        api.slots.readSelected()?.id === contentSlot.id,
+        "dashboard background cleared content-slot selection",
+      );
+
+      click(slotElement(contentSlot.id)?.querySelector(".slot-tab"));
+      await tick();
+      check(api.slots.readSelected() === null, "second bookmark click did not deselect");
+    });
+    await run(21, "empty slot surface remains selectable", async () => {
+      let emptySlot = activeProject.slots.find(
+        (slot) => !slot.hidden && !slot.chart && !slot.imageId,
+      );
+      if (!emptySlot) {
+        emptySlot = activeProject.slots.find((slot) => !slot.hidden);
+        check(!!emptySlot, "visible slot absent");
+        api.slots.reset(emptySlot.id);
+      }
+      api.slots.select(null);
+      await tick();
+      click(slotElement(emptySlot.id));
+      await tick();
+      check(
+        api.slots.readSelected()?.id === emptySlot.id,
+        "empty slot surface did not select slot",
+      );
+      api.slots.select(null);
+      await tick();
+    });
+    await run(22, "bookmark drag consumes post-drag click", async () => {
+      if (typeof DataTransfer !== "function" || typeof DragEvent !== "function")
+        return { blocked: "DragEvent/DataTransfer unavailable in this browser" };
+
+      let contentSlots = activeProject.slots.filter(
+        (slot) => !slot.hidden && (slot.chart || slot.imageId),
+      );
+      let source = contentSlots[0];
+      let target = contentSlots.find(
+        (slot) =>
+          slot.id !== source?.id &&
+          slotPayloadSignature(slot) !== slotPayloadSignature(source),
+      );
+      if (!source || !target) {
+        source = source || activeProject.slots.find((slot) => !slot.hidden);
+        target = activeProject.slots.find(
+          (slot) => !slot.hidden && slot.id !== source?.id,
+        );
+        check(!!source && !!target, "two visible slots are required");
+        api.slots.reset(target.id);
+        select(target);
+        api.slots.setContentType("graph");
+        const helperCsv = createProjectCsv(
+          [["DX", "DY"], ["1", "2"]],
+          "drag-target.csv",
+        );
+        api.graphs.addObject(helperCsv.id);
+        source = slotAt(source.id);
+        target = slotAt(target.id);
+      }
+
+      const sourceId = source.id;
+      const targetId = target.id;
+      const sourceBefore = slotPayloadSignature(source);
+      const targetBefore = slotPayloadSignature(target);
+      api.slots.select(null);
+      await tick();
+
+      const transfer = new DataTransfer();
+      const sourceTab = slotElement(sourceId)?.querySelector(".slot-tab");
+      check(!!sourceTab, "source bookmark absent");
+      sourceTab.dispatchEvent(
+        new DragEvent("dragstart", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+        }),
+      );
+      slotElement(targetId)?.dispatchEvent(
+        new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+        }),
+      );
+
+      check(
+        slotPayloadSignature(slotAt(sourceId)) === targetBefore &&
+          slotPayloadSignature(slotAt(targetId)) === sourceBefore,
+        "bookmark drag did not swap slot-local payloads",
+      );
+      check(api.slots.readSelected() === null, "drag unexpectedly selected a slot");
+
+      click(slotElement(sourceId)?.querySelector(".slot-tab"));
+      await tick();
+      check(
+        api.slots.readSelected() === null,
+        "post-drag synthetic-equivalent click was not consumed",
+      );
+
+      click(slotElement(sourceId)?.querySelector(".slot-tab"));
+      await tick();
+      check(
+        api.slots.readSelected()?.id === sourceId,
+        "bookmark did not recover normal selection after guarded click",
+      );
+      api.slots.select(null);
+      await tick();
+    });
+    await run(23, "image asset selection does not link until explicit add", async () => {
+      let target = activeProject.slots.find(
+        (slot) => !slot.hidden && !slot.chart && !slot.imageId,
+      );
+      target = target || activeProject.slots.find((slot) => !slot.hidden);
+      check(!!target, "image test slot absent");
+      api.slots.reset(target.id);
+      select(slotAt(target.id));
+      api.slots.setContentType("image");
+      api.images.insertEmpty();
+      const beforeImageId = slotAt(target.id).imageId;
+      check(Number.isInteger(beforeImageId), "baseline image was not inserted");
+
+      const image = createProjectImage(
+        new TextEncoder().encode(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>',
+        ),
+        "selection-only.svg",
+        "image/svg+xml",
+      );
+      const path = projectAssetPath(image);
+      api.assets.selectImage(path);
+      await tick();
+      check(appFSM.state.assetSelection === "image", "image asset was not selected");
+      check(appFSM.state.assetPath === path, "selected image path mismatch");
+      check(
+        slotAt(target.id).imageId === beforeImageId,
+        "image selection implicitly linked asset to slot",
+      );
+
+      api.assets.connectToSlot(path, "image", target.id);
+      await tick();
+      check(
+        slotAt(target.id).imageId === image.id,
+        "explicit image add did not link selected asset",
+      );
+    });
+    await run(24, "graph readData separates current CSV from objectColumns", async () => {
+      let target = activeProject.slots.find(
+        (slot) => !slot.hidden && slot.contentType !== "image",
+      );
+      check(!!target, "graph projection slot absent");
+      api.slots.reset(target.id);
+      select(slotAt(target.id));
+      api.slots.setContentType("graph");
+
+      const currentCsv = createProjectCsv(
+        [["AX", "AY"], ["1", "2"]],
+        "projection-current.csv",
+      );
+      const objectCsv = createProjectCsv(
+        [["BX", "BY", "BZ"], ["3", "4", "5"]],
+        "projection-object.csv",
+      );
+      api.graphs.addObject(currentCsv.id);
+      let editor = api.graphs.readData();
+      check(editor.selectedIndex !== null, "new graph object was not selected");
+      const index = editor.selectedIndex;
+
+      api.graphs.setObjectValues(index, { csvId: objectCsv.id });
+      editor = api.graphs.readData();
+      check(editor.csv?.id === currentCsv.id, "current CSV selection was replaced by object csvId");
+      check(
+        editor.objects[index]?.csvId === objectCsv.id,
+        "selected graph object did not keep its own csvId",
+      );
+      check(editor.csv?.columns?.length === 2, "current CSV columns are incorrect");
+      check(editor.objectColumns.length === 3, "objectColumns did not use object CSV");
+      check(
+        editor.objectColumns.some((column) => column.label.includes("BZ")),
+        "objectColumns are not projected from the selected object's CSV",
+      );
+    });
+    await run(25, "non-editable imported graph rejects object mutation", async () => {
+      const slot = api.slots.readSelected();
+      check(!!slot, "graph mutation test requires selected slot");
+      const figure = {
+        data: [{ x: [1, 2], y: [4, 8], type: "scatter", name: "guard" }],
+        layout: { title: "non-editable guard" },
+      };
+      await api.graphs.importFile(
+        new File([JSON.stringify(figure)], "non-editable-guard.json"),
+      );
+      await tick();
+
+      const currentSlot = slotAt(slot.id);
+      const chart = getChart(currentSlot.chart);
+      check(chart?.editor?.editable === false, "imported graph became editable");
+      const guardCsv = createProjectCsv(
+        [["GX", "GY"], ["7", "9"]],
+        "non-editable-guard.csv",
+      );
+      const before = JSON.stringify(chart.editor.objects);
+
+      api.graphs.addObject(guardCsv.id);
+      check(
+        JSON.stringify(getChart(slotAt(slot.id).chart).editor.objects) === before,
+        "addObject mutated non-editable chart",
+      );
+      if (chart.editor.objects.length) {
+        api.graphs.setObjectValues(0, { legendName: "should-not-change" });
+        api.graphs.deleteObject(0);
+        check(
+          JSON.stringify(getChart(slotAt(slot.id).chart).editor.objects) === before,
+          "object edit/delete mutated non-editable chart",
+        );
+      }
+
+      await tick();
+      const addButton = Array.from(document.querySelectorAll("button")).find(
+        (button) => button.textContent?.trim() === "오브젝트 추가",
+      );
+      check(!!addButton && addButton.disabled, "non-editable add button is enabled");
+      const deleteButton = document.querySelector(
+        "[aria-label$='그래프 오브젝트 삭제']",
+      );
+      if (deleteButton)
+        check(deleteButton.disabled, "non-editable object delete control is enabled");
+    });
+    await run(26, "collision modal dismissal cancels import", async () => {
+      if (typeof DataTransfer !== "function" || typeof DragEvent !== "function")
+        return { blocked: "DragEvent/DataTransfer unavailable in this browser" };
+
+      const slot = api.slots.readSelected();
+      check(!!slot, "collision cancel test requires selected slot");
+      const existing = createProjectCsv(
+        [["X", "Y"], ["1", "2"]],
+        "collision-dismiss.csv",
+      );
+      const existingPath = projectAssetPath(existing);
+      const beforeRows = JSON.stringify(existing.rows);
+      const beforeCount = activeProject.csvFiles.filter(
+        (item) => item.name.startsWith("collision-dismiss"),
+      ).length;
+      const beforeChart = slotAt(slot.id).chart;
+
+      const transfer = new DataTransfer();
+      transfer.items.add(
+        csv("collision-dismiss.csv", "X,Y\n99,100\n"),
+      );
+      slotElement(slot.id)?.dispatchEvent(
+        new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+        }),
+      );
+
+      const closeButton = await waitFor(
+        () =>
+          document.querySelector(".mantine-Modal-close") ||
+          document.querySelector("[aria-label='Close modal']") ||
+          document.querySelector("[aria-label='닫기']"),
+        "collision modal close button absent",
+      );
+      click(closeButton);
+      await waitFor(
+        () => appFSM.state.lifecycle === "ready",
+        "application did not return to ready after collision cancel",
+      );
+      await tick();
+
+      const after = projectVfs.resolve(existingPath)?.asset;
+      check(!!after, "existing collision asset disappeared");
+      check(JSON.stringify(after.rows) === beforeRows, "dismissal replaced existing CSV");
+      check(
+        activeProject.csvFiles.filter((item) => item.name.startsWith("collision-dismiss")).length === beforeCount,
+        "dismissal created a renamed CSV",
+      );
+      check(slotAt(slot.id).chart === beforeChart, "dismissal mutated slot chart");
     });
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
