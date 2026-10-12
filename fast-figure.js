@@ -2493,6 +2493,7 @@
           if (kind !== "data" && kind !== "image")
             throw Error(`${file.name}: 폴더에는 CSV/TSV/JSON 또는 이미지만 가져올 수 있습니다.`);
           let plan = await planImport(file, targetDirectory, reserved);
+          if (!plan) return null;
           reserved.add(plan.path);
           staged.push({ file, kind, ...plan });
         }
@@ -3102,6 +3103,13 @@
           .querySelectorAll("#dashboard .slot.drag-over")
           .forEach((slot) => slot.classList.remove("drag-over"));
       }
+      function scheduleSlotDragClickSuppressionRelease() {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (slotDragSourceId === null) slotDragSuppressClick = false;
+          });
+        });
+      }
       function installSlotClickController() {
         let dashboard = $("dashboard");
         if (dashboard.dataset.clickController) return;
@@ -3124,20 +3132,24 @@
             if (tab && slotDragSuppressClick) {
               e.preventDefault();
               e.stopPropagation();
+              if (slotDragSourceId === null) slotDragSuppressClick = false;
+              debugLog("slotClick:post-drag-suppressed", { slotId: slot.id });
               return;
             }
+            let hasInteractiveContent = !!slot.chart || !!slot.imageId;
             debugLog("slotClick", {
               slotId: slot.id,
               hasChart: !!slot.chart,
+              hasImage: !!slot.imageId,
               tab,
               wasSelected: isSlotSelected(slot),
               target: e.target.className?.baseVal || e.target.className || e.target.tagName,
             });
-            if (tab || !slot.chart || !isSlotSelected(slot)) {
+            if (tab || !hasInteractiveContent) {
               e.preventDefault();
               e.stopPropagation();
               setSelectedSlot(slot.id);
-            } else debugLog("slotClick:plotly-pass-through", { slotId: slot.id });
+            } else debugLog("slotClick:content-pass-through", { slotId: slot.id });
           },
           true,
         );
@@ -3188,6 +3200,7 @@
           let source = slotDragSourceId === null ? null : slotAt(slotDragSourceId);
           if (!source || !target || target.hidden || source === target) {
             clearSlotDragState();
+            scheduleSlotDragClickSuppressionRelease();
             return;
           }
           e.preventDefault();
@@ -3195,15 +3208,11 @@
           el.classList.remove("drag-over");
           swapSlotContents(source, target);
           clearSlotDragState();
-          setTimeout(() => {
-            slotDragSuppressClick = false;
-          }, 0);
+          scheduleSlotDragClickSuppressionRelease();
         });
         dashboard.addEventListener("dragend", () => {
           clearSlotDragState();
-          setTimeout(() => {
-            slotDragSuppressClick = false;
-          }, 0);
+          scheduleSlotDragClickSuppressionRelease();
         });
       }
       function setSelectedSlot(slotId = null, direction = "fsm-to-model") {
@@ -5295,7 +5304,7 @@
         return true;
       }
       function finishDashboardFileDrop() {
-        setTimeout(() => { slotDragSuppressClick = false; }, 0);
+        clearSlotDragState();
       }
       function readImageEditorApi() {
         let slot=getSelectedSlot(), image=slotImage(slot);
@@ -5323,6 +5332,7 @@
               ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
               : await planImport(file, PROJECT_ASSET_DIRECTORIES.image),
             image;
+          if (!plan) return null;
           if (Number.isInteger(plan.replaceId)) {
             image = buildProjectImageModel(
               bytes,
@@ -5400,6 +5410,7 @@
           let plan = assetPath
             ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
             : await planImport(file, PROJECT_ASSET_DIRECTORIES.csv);
+          if (!plan) return null;
           if (Number.isInteger(plan.replaceId)) {
             csv = buildProjectCsvModel(
               data,
@@ -5501,6 +5512,10 @@
       function graphEditorCommit(objects,index=null) {
         let chart=graphEditorChart();
         if(!chart)return null;
+        if(chart.editor?.editable===false){
+          status("원본 JSON 그래프는 편집 가능 상태로 전환한 뒤 변경할 수 있습니다.");
+          return null;
+        }
         let payload={chartId:chart.id,objects:[...objects],index,direction:"fsm-to-model"};
         appFSM.send("GRAPH_OBJECTS_REPLACED",payload);
         chart=payload.chart;
@@ -5563,6 +5578,10 @@
           chart = payload.chart;
           if (!chart) return status("빈 슬롯에 그래프를 추가하지 못했습니다.");
           return graphEditorCommit(ensureGraphObjects(chart), 0);
+        }
+        if (chart.editor?.editable === false) {
+          status("원본 JSON 그래프는 편집 가능 상태로 전환한 뒤 오브젝트를 추가할 수 있습니다.");
+          return null;
         }
         let objects = ensureGraphObjects(chart);
         return graphEditorCommit([...objects, baseGraphObject(chart, csv)], objects.length);
@@ -5869,12 +5888,14 @@
           if (kind === "slot") return importSlotFile(file, target);
           if (kind === "image") {
             let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.image);
+            if (!plan) return null;
             return loadImageFile(file, target, {
               assetPath: plan.path, replaceAssetId: plan.replaceId,
             });
           }
           if (kind === "data") {
             let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.csv);
+            if (!plan) return null;
             return loadDataFile(file, target, {
               replaceSlotContent: true,
               assetPath: plan.path, replaceAssetId: plan.replaceId,
@@ -5885,6 +5906,7 @@
         if (target) {
           for (let file of selectedFiles) {
             let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.csv);
+            if (!plan) return null;
             await loadDataFile(file, target, {
               assetPath: plan.path, replaceAssetId: plan.replaceId,
             });
@@ -5896,6 +5918,7 @@
           if (kind !== "image" && kind !== "data")
             throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
           let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES[kind === "image" ? "image" : "csv"]);
+          if (!plan) return null;
           if (kind === "image")
             await loadImageFile(file, null, {
               assetPath: plan.path, replaceAssetId: plan.replaceId,

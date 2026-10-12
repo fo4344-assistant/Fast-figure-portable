@@ -180,27 +180,33 @@
   function useProjectAssetImportCollision() {
     const resolverRef = useRef(null);
     const [collision, setCollision] = useState(null);
-    const resolveCollision = (choice = "rename") => {
+    const resolveCollision = (choice = null) => {
       const resolve = resolverRef.current;
       resolverRef.current = null;
       setCollision(null);
       resolve?.(choice);
     };
+    useEffect(() => () => {
+      const resolve = resolverRef.current;
+      resolverRef.current = null;
+      resolve?.(null);
+    }, []);
     const choosePlan = async (file, directory, reservedPaths = null) => {
       const model = window.FastFigureApi.assets.collisionModel(file, directory, reservedPaths);
       if (model.mode === "available")
-        return window.FastFigureApi.assets.resolveImportPlan(model, "rename", reservedPaths);
+        return window.FastFigureApi.assets.resolveImportPlan(model, "available", reservedPaths);
       const choice = await new Promise((resolve) => {
         resolverRef.current = resolve;
         setCollision(model);
       });
-      return window.FastFigureApi.assets.resolveImportPlan(model, choice || "rename", reservedPaths);
+      if (choice !== "rename" && choice !== "replace") return null;
+      return window.FastFigureApi.assets.resolveImportPlan(model, choice, reservedPaths);
     };
     const modal = React.createElement(
       Modal,
       {
         opened: !!collision,
-        onClose: () => resolveCollision("rename"),
+        onClose: () => resolveCollision(null),
         title:
           collision?.mode === "replace-or-rename"
             ? "같은 이름의 파일"
@@ -1364,11 +1370,18 @@
       React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
       objects.length ? React.createElement(Stack, { gap: 4 },
         ...objects.map((object, index) => React.createElement(Group, {
-          key: `${editor.chartId}-${index}`, gap: 4, wrap: "nowrap", draggable: true,
-          onDragStart: () => { dragRef.current = index; },
+          key: `${editor.chartId}-${index}`, gap: 4, wrap: "nowrap",
+          draggable: editor.editable && !busy,
+          onDragStart: (event) => {
+            if (!editor.editable || busy) return event.preventDefault();
+            dragRef.current = index;
+          },
           onDragEnd: () => { dragRef.current = null; },
-          onDragOver: (event) => event.preventDefault(),
+          onDragOver: (event) => {
+            if (editor.editable && !busy) event.preventDefault();
+          },
           onDrop: (event) => {
+            if (!editor.editable || busy) return;
             event.preventDefault();
             if (Number.isInteger(dragRef.current)) graphApi.moveObject(dragRef.current, index);
             dragRef.current = null;
@@ -1380,11 +1393,12 @@
             onClick: () => graphApi.selectObject(index),
           }, `${index + 1}. ${object.legendName || `${object.x} · ${object.y}`}`),
           React.createElement(ColorInput, {
-            size: "xs", value: object.color, style: { width: 72 }, disabled: busy,
+            size: "xs", value: object.color, style: { width: 72 },
+            disabled: busy || !editor.editable,
             onChange: (color) => graphApi.setObjectValues(index, { color }),
           }),
           React.createElement(ActionIcon, {
-            size: "sm", variant: "subtle", disabled: busy,
+            size: "sm", variant: "subtle", disabled: busy || !editor.editable,
             "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
             onClick: () => graphApi.deleteObject(index),
           }, "×"),
