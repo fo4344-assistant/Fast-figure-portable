@@ -30,6 +30,7 @@ NoCsv == 0
 
 SlotIds == 1..3
 CsvIds == 1..2
+MaxGraphObjects == 2
 
 SlotContentType == <<"graph", "image", "graph">>
 
@@ -50,6 +51,7 @@ InitialProject ==
 ValidProject(project) ==
   /\ project.csvIds \subseteq CsvIds
   /\ project.nextCsvId \in 1..(Cardinality(CsvIds) + 1)
+  /\ Len(project.graphObjectCsvRefs) <= MaxGraphObjects
   /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
        project.graphObjectCsvRefs[index] \in project.csvIds
 
@@ -192,7 +194,8 @@ AddGraphGuard:
   if /\ selectedSlotId \in SlotIds
      /\ SlotContentType[selectedSlotId] = "graph"
      /\ selectedCsvId # NoCsv
-     /\ selectedCsvId \in project.csvIds then
+     /\ selectedCsvId \in project.csvIds
+     /\ Len(project.graphObjectCsvRefs) < MaxGraphObjects then
     project := [
       project EXCEPT
         !.graphObjectCsvRefs = Append(@, selectedCsvId)

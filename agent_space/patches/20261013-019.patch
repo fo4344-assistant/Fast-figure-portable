@@ -1,0 +1,22 @@
+diff --git a/verification/FastFigureInteractionCore.tla b/verification/FastFigureInteractionCore.tla
+--- a/verification/FastFigureInteractionCore.tla
++++ b/verification/FastFigureInteractionCore.tla
+@@
+ CsvIds == 1..2
++MaxGraphObjects == 2
+@@
+   /\ project.nextCsvId \in 1..(Cardinality(CsvIds) + 1)
++  /\ Len(project.graphObjectCsvRefs) <= MaxGraphObjects
+@@
+      /\ selectedCsvId # NoCsv
+      /\ selectedCsvId \in project.csvIds
++     /\ Len(project.graphObjectCsvRefs) < MaxGraphObjects then
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@
+-      "revision": 10,
++      "revision": 11,
+@@
+-      "fingerprint": "sha256:886afad260ca3c71a19e056dfe4d7c9ef87ae301cbc24d7d0b7a842ec777c52c",
++      "fingerprint": "sha256:66274b5f28db2ce3ba3a509689fa2d827713ece54c71c69bbd2ce898471acf8a",
