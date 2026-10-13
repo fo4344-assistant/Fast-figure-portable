@@ -1,10 +1,10 @@
 /* Runs after the application scripts in a headless file:// browser. */
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
-  sourceScript: "r16",
-  plusCal: "r16",
-  verificationModel: "r6-stale",
-  sourceCode: "r12",
-  appBuild: "1.1.32-wip",
+  sourceScript: "r17",
+  plusCal: "r16+r17-interaction",
+  verificationModel: "r11",
+  sourceCode: "r13",
+  appBuild: "1.1.33-wip",
 });
 (async () => {
   const api = window.FastFigureApi;
@@ -16,7 +16,25 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     try {
       const outcome = await action();
       results.push({ number, name, result: outcome?.blocked ? "blocked" : "pass", detail: outcome?.blocked });
-    } catch (error) {
+      await run(27, "empty CSV creation selects a normal project CSV only", async () => {
+      const beforeCharts = activeProject.charts.length;
+      const beforeObjectCounts = activeProject.charts.map((chart) => chart.editor?.objects?.length || 0);
+      const csvAsset = api.assets.createEmptyCsv();
+      await tick();
+      check(!!csvAsset && activeProject.csvFiles.some((item) => item.id === csvAsset.id), "empty CSV was not created");
+      check(csvAsset.name.startsWith("빈 CSV"), "empty CSV name is incorrect");
+      check(JSON.stringify(csvAsset.rows) === JSON.stringify([["X", "Y"], ["", ""]]), "empty CSV template is incorrect");
+      check(csvAsset.headerLines === 1, "empty CSV headerLines is incorrect");
+      check(appFSM.state.assetSelection === "csv", "empty CSV was not selected");
+      check(appFSM.state.assetPath === projectAssetPath(csvAsset), "empty CSV selected path mismatch");
+      check(activeProject.charts.length === beforeCharts, "empty CSV creation changed chart count");
+      check(
+        JSON.stringify(activeProject.charts.map((chart) => chart.editor?.objects?.length || 0)) ===
+          JSON.stringify(beforeObjectCounts),
+        "empty CSV creation changed graph objects",
+      );
+    });
+  } catch (error) {
       results.push({ number, name, result: "fail", detail: String(error?.stack || error) });
     }
   };
@@ -372,7 +390,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "filled Mantine button does not use appearance uiColor",
       );
     });
-    await run(20, "content slots use bookmark-only selection", async () => {
+    await run(20, "slot selection is state-first and background deselects", async () => {
       const contentSlot = activeProject.slots.find(
         (slot) => !slot.hidden && (slot.chart || slot.imageId),
       );
@@ -386,7 +404,21 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         : element?.querySelector(".slot-image-frame");
       click(body);
       await tick();
-      check(api.slots.readSelected() === null, "content body selected its slot");
+      check(
+        api.slots.readSelected()?.id === contentSlot.id,
+        "unselected content slot surface did not select its slot",
+      );
+
+      click(body);
+      await tick();
+      check(
+        api.slots.readSelected()?.id === contentSlot.id,
+        "selected content interaction changed slot selection",
+      );
+
+      click(document.getElementById("dashboard"));
+      await tick();
+      check(api.slots.readSelected() === null, "dashboard background did not deselect");
 
       click(slotElement(contentSlot.id)?.querySelector(".slot-tab"));
       await tick();
@@ -394,14 +426,6 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         api.slots.readSelected()?.id === contentSlot.id,
         "bookmark did not select content slot",
       );
-
-      click(document.getElementById("dashboard"));
-      await tick();
-      check(
-        api.slots.readSelected()?.id === contentSlot.id,
-        "dashboard background cleared content-slot selection",
-      );
-
       click(slotElement(contentSlot.id)?.querySelector(".slot-tab"));
       await tick();
       check(api.slots.readSelected() === null, "second bookmark click did not deselect");
@@ -423,7 +447,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         api.slots.readSelected()?.id === emptySlot.id,
         "empty slot surface did not select slot",
       );
-      api.slots.select(null);
+      click(slotElement(emptySlot.id));
+      await tick();
+      check(api.slots.readSelected() === null, "selected empty slot surface did not toggle off");
       await tick();
     });
     await run(22, "bookmark drag consumes post-drag click", async () => {

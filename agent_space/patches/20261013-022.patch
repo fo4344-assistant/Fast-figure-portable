@@ -1,0 +1,251 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@
+-      const APP_BUILD = "1.1.32-wip";
++      const APP_BUILD = "1.1.33-wip";
+@@
+       function createProjectCsv(
+@@
+         return model;
+       }
++      function createEmptyProjectCsv() {
++        return createProjectCsv(
++          [["X", "Y"], ["", ""]],
++          "빈 CSV.csv",
++          null,
++          "",
++          "text/csv",
++          1,
++        );
++      }
+@@
+             let el = e.target.closest?.(".slot");
+             if (!el) {
+-              debugLog("slotClick:dashboard-background-pass-through", {
++              let wasSelected = selectedSlotId !== null;
++              debugLog("slotClick:dashboard-background", {
+                 target: e.target.className?.baseVal || e.target.className || e.target.tagName,
+-                wasSelected: selectedSlotId !== null,
++                wasSelected,
+               });
++              if (wasSelected) setSelectedSlot(null);
+               return;
+             }
+@@
+-            let hasInteractiveContent = !!slot.chart || !!slot.imageId;
++            let hasInteractiveContent = !!slot.chart || !!slot.imageId,
++              selected = isSlotSelected(slot);
+@@
+-              wasSelected: isSlotSelected(slot),
++              wasSelected: selected,
+@@
+-            if (tab || !hasInteractiveContent) {
++            if (!selected || tab || !hasInteractiveContent) {
+@@
+       function graphEditorSelectCsv(csvId) {
+@@
+         return csv;
+       }
++      function createEmptyProjectCsvAndSelect() {
++        let csv = createEmptyProjectCsv();
++        graphEditorSelectCsv(csv.id);
++        status(`${csv.name}을 만들고 선택했습니다.`);
++        return csv;
++      }
+@@
+           createDirectory: createProjectDirectory,
++          createEmptyCsv: createEmptyProjectCsvAndSelect,
+           emptyTrash: emptyProjectTrash,
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@
+   const { useCallback, useEffect, useRef, useState, useSyncExternalStore } = React;
++  const FAST_FIGURE_SETTINGS_MODAL_SIZE = "min(96vw, 1320px)";
+@@
+     other: {
++      settingsModalSize: FAST_FIGURE_SETTINGS_MODAL_SIZE,
+       shell: {
+@@
+               {
+                 variant: "subtle",
+                 size: "sm",
+-                disabled: inactive,
+                 "aria-label": `${projectPathName(asset.path)} 작업`,
+@@
+     const graphApi = window.FastFigureApi.graphs;
++    const assetApi = window.FastFigureApi.assets;
+@@
+       React.createElement(Text, { fw: 600 }, "그래프 / 데이터"),
++      React.createElement(
++        Button,
++        {
++          variant: "light",
++          disabled: busy,
++          onClick: assetApi.createEmptyCsv,
++        },
++        "빈 CSV 삽입",
++      ),
+@@
+-        size: "lg",
++        size: fastFigureTheme.other.settingsModalSize,
+@@
+-        size: "lg",
++        size: fastFigureTheme.other.settingsModalSize,
+@@
+-        size: "lg",
++        size: fastFigureTheme.other.settingsModalSize,
+@@
+-        size: "xl",
++        size: fastFigureTheme.other.settingsModalSize,
+@@
+     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
+     const [previewWidth, setPreviewWidth] = useState(600);
++    const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(600);
++    const previewFrameRef = useRef(null);
+     const previewResizeRef = useRef(null);
+@@
++    useEffect(() => {
++      if (state.overlay !== "layout") return;
++      const element = previewFrameRef.current;
++      if (!element) return;
++      const updateRenderedWidth = () => {
++        const width = element.getBoundingClientRect().width;
++        if (width > 0) setRenderedPreviewWidth(width);
++      };
++      updateRenderedWidth();
++      const observer = new ResizeObserver(updateRenderedWidth);
++      observer.observe(element);
++      return () => observer.disconnect();
++    }, [state.overlay]);
+@@
+-    const layout = layoutApi.readState(previewWidth);
++    const layout = layoutApi.readState(renderedPreviewWidth);
+@@
+-        React.createElement(
+-          "div",
++        React.createElement(
++          Box,
+           {
+-            role: "grid",
+-            "aria-label": "레이아웃 슬롯 선택",
++            ref: previewFrameRef,
+             style: {
+-              display: "grid",
+-              boxSizing: "border-box",
+-              width: previewGeometry.width,
++              width: previewWidth,
+               maxWidth: "100%",
+-              height: previewGeometry.height,
+-              gridTemplateColumns: `repeat(${layout.gridCols}, minmax(0, 1fr))`,
+-              gridTemplateRows: `repeat(${layout.gridRows}, minmax(0, 1fr))`,
+-              gap: previewGeometry.gap,
+-              padding: previewGeometry.outerMargin,
+-              border: "1px solid var(--mantine-color-default-border)",
+-              borderRadius: previewGeometry.radius,
+-              overflow: "hidden",
++              marginInline: "auto",
+             },
+           },
+-          ...visibleSlots.map((slot) => {
+-            ...
+-          }),
+-        ),
+-        React.createElement(Box, {
+-          role: "separator",
+-          ...
+-          w: Math.min(previewGeometry.width, 900),
+-          maw: "100%",
+-          ...
+-        }),
++          React.createElement("div", {
++            role: "grid",
++            "aria-label": "레이아웃 슬롯 선택",
++            style: {
++              display: "grid",
++              boxSizing: "border-box",
++              width: "100%",
++              height: previewGeometry.height,
++              ...
++            },
++          }, ...visibleSlots.map(...)),
++          React.createElement(Box, {
++            role: "separator",
++            ...
++            w: "100%",
++          }),
++        ),
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@
+-  sourceScript: "r16",
+-  plusCal: "r16",
+-  verificationModel: "r6-stale",
+-  sourceCode: "r12",
+-  appBuild: "1.1.32-wip",
++  sourceScript: "r17",
++  plusCal: "r16+r17-interaction",
++  verificationModel: "r11",
++  sourceCode: "r13",
++  appBuild: "1.1.33-wip",
+@@
+-    await run(20, "content slots use bookmark-only selection", async () => {
++    await run(20, "slot selection is state-first and background deselects", async () => {
+@@
+-      check(api.slots.readSelected() === null, "content body selected its slot");
++      check(api.slots.readSelected()?.id === contentSlot.id,
++        "unselected content slot surface did not select its slot");
++      click(body);
++      await tick();
++      check(api.slots.readSelected()?.id === contentSlot.id,
++        "selected content interaction changed slot selection");
+@@
+-      check(api.slots.readSelected()?.id === contentSlot.id,
+-        "dashboard background cleared content-slot selection");
++      check(api.slots.readSelected() === null, "dashboard background did not deselect");
+@@
+       check(api.slots.readSelected()?.id === emptySlot.id,
+         "empty slot surface did not select slot");
+-      api.slots.select(null);
++      click(slotElement(emptySlot.id));
+       await tick();
++      check(api.slots.readSelected() === null,
++        "selected empty slot surface did not toggle off");
+@@
++    await run(27, "empty CSV creation selects a normal project CSV only", async () => {
++      const beforeCharts = activeProject.charts.length;
++      const beforeObjectCounts = activeProject.charts.map(
++        (chart) => chart.editor?.objects?.length || 0);
++      const csvAsset = api.assets.createEmptyCsv();
++      await tick();
++      check(activeProject.csvFiles.some((item) => item.id === csvAsset.id),
++        "empty CSV was not created");
++      check(JSON.stringify(csvAsset.rows) === JSON.stringify([["X", "Y"], ["", ""]]),
++        "empty CSV template is incorrect");
++      check(csvAsset.headerLines === 1, "empty CSV headerLines is incorrect");
++      check(appFSM.state.assetSelection === "csv", "empty CSV was not selected");
++      check(activeProject.charts.length === beforeCharts,
++        "empty CSV creation changed chart count");
++      check(JSON.stringify(activeProject.charts.map(
++        (chart) => chart.editor?.objects?.length || 0)) === JSON.stringify(beforeObjectCounts),
++        "empty CSV creation changed graph objects");
++    });
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@
+-      "revision": 12,
+-      "status": "stale",
++      "revision": 13,
++      "status": "current",
+@@
+-      "fingerprint": "sha256:912f4eb82b66e97e17a825187212353b04d3d8e37353cd7ac09c789a929cddfb",
++      "fingerprint": "sha256:a76944037f6bc203b950b889aa37a57f2d6e94ce61a4790bcfa1bcc8829c4bcb",
+       "derived_from": {
+-        "source-script": "sha256:05c78c39c6c7ae715c8204ec0c4381ecd66ebf1dd9dbfb01a26fd99400270484",
+-        "verification-model": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b"
++        "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
++        "verification-model": "sha256:66274b5f28db2ce3ba3a509689fa2d827713ece54c71c69bbd2ce898471acf8a"
+       },

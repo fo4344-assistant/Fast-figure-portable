@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.32-wip";
+      const APP_BUILD = "1.1.33-wip";
       const PROJECT_OBJECT_PATHS = Object.freeze({
         project: "meta",
         layout: "layout",
@@ -2248,6 +2248,16 @@
         });
         return model;
       }
+      function createEmptyProjectCsv() {
+        return createProjectCsv(
+          [["X", "Y"], ["", ""]],
+          "빈 CSV.csv",
+          null,
+          "",
+          "text/csv",
+          1,
+        );
+      }
       function requireProjectCsv(chart, label = "차트", collection = activeProject.csvFiles) {
         let csv = getProjectCsv(
           chart?.editor?.objects?.[0]?.csvId ?? chart?.csvId,
@@ -3119,10 +3129,12 @@
           (e) => {
             let el = e.target.closest?.(".slot");
             if (!el) {
-              debugLog("slotClick:dashboard-background-pass-through", {
+              let wasSelected = selectedSlotId !== null;
+              debugLog("slotClick:dashboard-background", {
                 target: e.target.className?.baseVal || e.target.className || e.target.tagName,
-                wasSelected: selectedSlotId !== null,
+                wasSelected,
               });
+              if (wasSelected) setSelectedSlot(null);
               return;
             }
             let slot = slotAt(+el.dataset.slot),
@@ -3135,16 +3147,17 @@
               debugLog("slotClick:post-drag-suppressed", { slotId: slot.id });
               return;
             }
-            let hasInteractiveContent = !!slot.chart || !!slot.imageId;
+            let hasInteractiveContent = !!slot.chart || !!slot.imageId,
+              selected = isSlotSelected(slot);
             debugLog("slotClick", {
               slotId: slot.id,
               hasChart: !!slot.chart,
               hasImage: !!slot.imageId,
               tab,
-              wasSelected: isSlotSelected(slot),
+              wasSelected: selected,
               target: e.target.className?.baseVal || e.target.className || e.target.tagName,
             });
-            if (tab || !hasInteractiveContent) {
+            if (!selected || tab || !hasInteractiveContent) {
               e.preventDefault();
               e.stopPropagation();
               setSelectedSlot(slot.id);
@@ -5533,6 +5546,12 @@
         appFSM.notify("data", "CSV_SELECTION_CHANGED");
         return csv;
       }
+      function createEmptyProjectCsvAndSelect() {
+        let csv = createEmptyProjectCsv();
+        graphEditorSelectCsv(csv.id);
+        status(`${csv.name}을 만들고 선택했습니다.`);
+        return csv;
+      }
       function graphEditorSelectObject(index) {
         let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
         let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
@@ -7308,6 +7327,7 @@
           planMove: planProjectNodeMove,
           move: moveProjectNode,
           createDirectory: createProjectDirectory,
+          createEmptyCsv: createEmptyProjectCsvAndSelect,
           emptyTrash: emptyProjectTrash,
           draggableAsset: draggableProjectAsset,
           connectToSlot: connectProjectAssetPathToSlot,

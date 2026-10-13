@@ -35,6 +35,7 @@
     createTheme,
   } = MantineCore;
   const { useCallback, useEffect, useRef, useState, useSyncExternalStore } = React;
+  const FAST_FIGURE_SETTINGS_MODAL_SIZE = "min(96vw, 1320px)";
 
   const fastFigureTheme = createTheme({
     fontFamily: 'system-ui, "Segoe UI", sans-serif',
@@ -42,6 +43,7 @@
     radius: { ff: "6px" },
     defaultRadius: "ff",
     other: {
+      settingsModalSize: FAST_FIGURE_SETTINGS_MODAL_SIZE,
       shell: {
         headerHeight: 57,
         navbarWidth: 370,
@@ -735,7 +737,6 @@
               {
                 variant: "subtle",
                 size: "sm",
-                disabled: inactive,
                 "aria-label": `${projectPathName(asset.path)} 작업`,
               },
               "···",
@@ -1284,6 +1285,7 @@
     const dragRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
     const graphApi = window.FastFigureApi.graphs;
+    const assetApi = window.FastFigureApi.assets;
     const editor = graphApi.readData();
     const objects = editor.objects;
     const selectedIndex = editor.selectedIndex;
@@ -1306,6 +1308,15 @@
       Stack,
       { gap: "xs", p: "md" },
       React.createElement(Text, { fw: 600 }, "그래프 / 데이터"),
+      React.createElement(
+        Button,
+        {
+          variant: "light",
+          disabled: busy,
+          onClick: assetApi.createEmptyCsv,
+        },
+        "빈 CSV 삽입",
+      ),
       React.createElement(Select, {
         label: "사용할 CSV", data: csvOptions, value: activeCsv ? String(activeCsv.id) : null,
         disabled: busy || !csvOptions.length,
@@ -2076,7 +2087,7 @@
         opened: true,
         onClose: close,
         title: "레이블",
-        size: "lg",
+        size: fastFigureTheme.other.settingsModalSize,
         "data-fastfigure-overlay": "label",
       },
       React.createElement(
@@ -2261,7 +2272,7 @@
         opened: true,
         onClose: close,
         title: "캡션",
-        size: "lg",
+        size: fastFigureTheme.other.settingsModalSize,
         "data-fastfigure-overlay": "caption",
       },
       React.createElement(
@@ -2425,7 +2436,7 @@
         opened: true,
         onClose: close,
         title: "프린트 / 내보내기",
-        size: "lg",
+        size: fastFigureTheme.other.settingsModalSize,
         "data-fastfigure-overlay": "print",
       },
       React.createElement(
@@ -2505,14 +2516,29 @@
     const state = useAppState();
     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
     const [previewWidth, setPreviewWidth] = useState(600);
+    const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(600);
+    const previewFrameRef = useRef(null);
     const previewResizeRef = useRef(null);
     useEffect(() => {
       if (state.overlay !== "layout") setLayoutSelection(new Set());
     }, [state.overlay]);
+    useEffect(() => {
+      if (state.overlay !== "layout") return;
+      const element = previewFrameRef.current;
+      if (!element) return;
+      const updateRenderedWidth = () => {
+        const width = element.getBoundingClientRect().width;
+        if (width > 0) setRenderedPreviewWidth(width);
+      };
+      updateRenderedWidth();
+      const observer = new ResizeObserver(updateRenderedWidth);
+      observer.observe(element);
+      return () => observer.disconnect();
+    }, [state.overlay]);
     if (state.overlay !== "layout") return null;
     const busy = state.lifecycle !== "ready";
     const layoutApi = window.FastFigureApi.layout;
-    const layout = layoutApi.readState(previewWidth);
+    const layout = layoutApi.readState(renderedPreviewWidth);
     const style = layout.slotStyle;
     const visibleSlots = layout.visibleSlots;
     const previewGeometry = layout.previewGeometry;
@@ -2573,7 +2599,7 @@
         opened: true,
         onClose: close,
         title: "레이아웃",
-        size: "xl",
+        size: fastFigureTheme.other.settingsModalSize,
         "data-fastfigure-overlay": "layout",
       },
       React.createElement(
@@ -2696,78 +2722,87 @@
           ),
         ),
         React.createElement(
-          "div",
+          Box,
           {
-            role: "grid",
-            "aria-label": "레이아웃 슬롯 선택",
+            ref: previewFrameRef,
             style: {
-              display: "grid",
-              boxSizing: "border-box",
-              width: previewGeometry.width,
+              width: previewWidth,
               maxWidth: "100%",
-              height: previewGeometry.height,
-              gridTemplateColumns: `repeat(${layout.gridCols}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${layout.gridRows}, minmax(0, 1fr))`,
-              gap: previewGeometry.gap,
-              padding: previewGeometry.outerMargin,
-              border: "1px solid var(--mantine-color-default-border)",
-              borderRadius: previewGeometry.radius,
-              overflow: "hidden",
+              marginInline: "auto",
             },
           },
-          ...visibleSlots.map((slot) => {
-            const selected = layoutSelection.has(slot.id);
-            return React.createElement(
-              UnstyledButton,
-              {
-                key: slot.id,
-                disabled: busy,
-                "aria-pressed": selected,
-                onClick: () => toggleSlot(slot.id),
-                style: {
-                  gridColumn: `${slot.col} / span ${slot.colSpan}`,
-                  gridRow: `${slot.row} / span ${slot.rowSpan}`,
-                  width: "100%",
-                  height: "100%",
-                  minWidth: 0,
-                  minHeight: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: 0,
-                  borderWidth: 1,
-                  borderStyle: style.showBorders ? "solid" : "dashed",
-                  borderColor: selected
-                    ? "var(--mantine-primary-color-filled)"
-                    : "var(--mantine-color-default-border)",
-                  background: selected
-                    ? "var(--mantine-primary-color-light)"
-                    : "transparent",
-                  color: "inherit",
-                  cursor: busy ? "default" : "pointer",
-                },
+          React.createElement(
+            "div",
+            {
+              role: "grid",
+              "aria-label": "레이아웃 슬롯 선택",
+              style: {
+                display: "grid",
+                boxSizing: "border-box",
+                width: "100%",
+                height: previewGeometry.height,
+                gridTemplateColumns: `repeat(${layout.gridCols}, minmax(0, 1fr))`,
+                gridTemplateRows: `repeat(${layout.gridRows}, minmax(0, 1fr))`,
+                gap: previewGeometry.gap,
+                padding: previewGeometry.outerMargin,
+                border: "1px solid var(--mantine-color-default-border)",
+                borderRadius: previewGeometry.radius,
+                overflow: "hidden",
               },
-              `${slot.row},${slot.col}`,
-            );
+            },
+            ...visibleSlots.map((slot) => {
+              const selected = layoutSelection.has(slot.id);
+              return React.createElement(
+                UnstyledButton,
+                {
+                  key: slot.id,
+                  disabled: busy,
+                  "aria-pressed": selected,
+                  onClick: () => toggleSlot(slot.id),
+                  style: {
+                    gridColumn: `${slot.col} / span ${slot.colSpan}`,
+                    gridRow: `${slot.row} / span ${slot.rowSpan}`,
+                    width: "100%",
+                    height: "100%",
+                    minWidth: 0,
+                    minHeight: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 0,
+                    borderWidth: 1,
+                    borderStyle: style.showBorders ? "solid" : "dashed",
+                    borderColor: selected
+                      ? "var(--mantine-primary-color-filled)"
+                      : "var(--mantine-color-default-border)",
+                    background: selected
+                      ? "var(--mantine-primary-color-light)"
+                      : "transparent",
+                    color: "inherit",
+                    cursor: busy ? "default" : "pointer",
+                  },
+                },
+                `${slot.row},${slot.col}`,
+              );
+            }),
+          ),
+          React.createElement(Box, {
+            role: "separator",
+            "aria-orientation": "horizontal",
+            "aria-label": "레이아웃 미리보기 크기 조절",
+            onPointerDown: startPreviewResize,
+            onPointerMove: movePreviewResize,
+            onPointerUp: stopPreviewResize,
+            onPointerCancel: stopPreviewResize,
+            w: "100%",
+            h: 10,
+            style: {
+              cursor: "ns-resize",
+              touchAction: "none",
+              borderTop: "1px solid var(--mantine-color-default-border)",
+            },
           }),
         ),
-        React.createElement(Box, {
-          role: "separator",
-          "aria-orientation": "horizontal",
-          "aria-label": "레이아웃 미리보기 크기 조절",
-          onPointerDown: startPreviewResize,
-          onPointerMove: movePreviewResize,
-          onPointerUp: stopPreviewResize,
-          onPointerCancel: stopPreviewResize,
-          w: Math.min(previewGeometry.width, 900),
-          maw: "100%",
-          h: 10,
-          style: {
-            cursor: "ns-resize",
-            touchAction: "none",
-            borderTop: "1px solid var(--mantine-color-default-border)",
-          },
-        }),
         React.createElement(
           Group,
           { gap: "xs", grow: true },
