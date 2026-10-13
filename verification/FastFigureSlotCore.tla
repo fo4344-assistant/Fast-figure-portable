@@ -24,6 +24,7 @@ InitialCols == 2
 NoChart == "no-chart"
 NoImage == "no-image"
 NoCaption == "no-caption"
+NoSelectedSlot == 0
 
 ChartIds == {"chart-1", "chart-2"}
 ImageIds == {"image-1"}
@@ -351,8 +352,9 @@ SplitSlotsCandidate(project, slotIds) ==
       THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
       ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
 
-TypeOK(project, result) ==
+TypeOK(project, selectedSlotId, result) ==
   /\ ValidateSlotLayoutProjection(project)
+  /\ selectedSlotId \in VisibleSlotIds(project) \cup {NoSelectedSlot}
   /\ result \in {
        "initialized",
        "reset-committed", "reset-rejected",
@@ -360,13 +362,14 @@ TypeOK(project, result) ==
        "grid-committed", "grid-rejected",
        "merge-committed", "merge-rejected",
        "split-committed", "split-rejected",
-       "harness-seeded"
+       "harness-seeded", "harness-selected"
      }
 
 (*
 --algorithm FastFigureSlotCore
 variables
   activeProject = InitialProject,
+  selectedSlotId = NoSelectedSlot,
   lastResult = "initialized";
 
 procedure applySlotsResetAction(slotIds)
@@ -398,6 +401,12 @@ SwapResolve:
     candidate := SwapSlotsCandidate(activeProject, sourceId, targetId);
     if ValidateSlotLayoutProjection(candidate) then
       activeProject := candidate ||
+      selectedSlotId :=
+        IF selectedSlotId = sourceId
+          THEN targetId
+          ELSE IF selectedSlotId = targetId
+            THEN sourceId
+            ELSE selectedSlotId ||
       lastResult := "swap-committed";
     else
       lastResult := "swap-rejected";
@@ -480,6 +489,17 @@ end procedure;
 \* the translated Source Script procedures with non-default slot-local state.
 \* They are not Fast Figure domain commands and do not participate in the
 \* Source Script -> verification code -> source code mapping.
+
+procedure VerificationHarnessSelectSlot(slotId)
+begin
+HarnessSelect:
+  if slotId \in VisibleSlotIds(activeProject) then
+    selectedSlotId := slotId ||
+    lastResult := "harness-selected";
+  end if;
+HarnessSelectReturn:
+  return;
+end procedure;
 
 procedure VerificationHarnessSeedChart(slotId, chartId)
 variables slot = DefaultSlot(1);
@@ -575,6 +595,10 @@ begin
 VerificationHarness:
   while TRUE do
     either
+      with chosenSelectedSlotId \in VisibleSlotIds(activeProject) do
+        call VerificationHarnessSelectSlot(chosenSelectedSlotId);
+      end with;
+    or
       with chosenResetSlotIds \in SUBSET (DOMAIN activeProject.slots) do
         call applySlotsResetAction(chosenResetSlotIds);
       end with;
@@ -624,7 +648,10 @@ end algorithm;
 *)
 
 TypeOKSpec ==
-  TypeOK(activeProject, lastResult)
+  TypeOK(activeProject, selectedSlotId, lastResult)
+
+SelectedSlotInvariantSpec ==
+  selectedSlotId \in VisibleSlotIds(activeProject) \cup {NoSelectedSlot}
 
 ChartOwnershipInvariantSpec ==
   ChartOwnershipInvariant(activeProject)

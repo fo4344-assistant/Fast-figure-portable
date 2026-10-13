@@ -2,7 +2,7 @@
 EXTENDS Integers, FiniteSets, Sequences, TLC
 
 (*
-Executable verification translation for the r17 interaction slice.
+Executable verification translation for the r18 interaction slice.
 
 Source Script authority:
 - sourcescript/application_fsm.py
@@ -19,14 +19,24 @@ state-changing meaning introduced or clarified in r17:
 - ordinary empty CSV creation;
 - new empty CSV becomes the current CSV selection;
 - empty CSV creation does not itself create a graph object;
-- later graph-object creation references the current selected CSV.
+- later graph-object creation references the current selected CSV;
+- trash membership does not disable tree recovery moves;
+- entering trash detaches an existing asset reference;
+- leaving trash does not restore a detached reference;
+- trash assets cannot be connected directly to slots.
 
-Trash row Menu availability and common Modal maximum are UI-local constraints
+Settings-overlay height and Layout-preview geometry are UI-local projections
 with no project mutation and are reviewed outside this state model.
 *)
 
 NoSlot == 0
 NoCsv == 0
+
+AssetLocations == {"normal", "trash"}
+MoveSources == {"asset", "trash-root"}
+
+TreeMoveAllowed(source) == source # "trash-root"
+SlotConnectionAllowed(location) == location = "normal"
 
 SlotIds == 1..3
 CsvIds == 1..2
@@ -55,7 +65,8 @@ ValidProject(project) ==
   /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
        project.graphObjectCsvRefs[index] \in project.csvIds
 
-TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project, lastResult) ==
+TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project,
+            assetLocation, assetReferenced, lastResult) ==
   /\ selectedSlotId \in SlotIds \cup {NoSlot}
   /\ workspace \in {"project", "slot.graph", "slot.image"}
   /\ workspace = WorkspaceFor(selectedSlotId)
@@ -64,6 +75,9 @@ TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project, l
   /\ (assetSelection = "none" <=> selectedCsvId = NoCsv)
   /\ (selectedCsvId # NoCsv => selectedCsvId \in project.csvIds)
   /\ ValidProject(project)
+  /\ assetLocation \in AssetLocations
+  /\ assetReferenced \in BOOLEAN
+  /\ (assetReferenced => assetLocation = "normal")
   /\ lastResult \in {
        "initialized",
        "slot-selected",
@@ -73,7 +87,12 @@ TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project, l
        "empty-csv-created",
        "empty-csv-unavailable",
        "graph-object-added",
-       "graph-object-rejected"
+       "graph-object-rejected",
+       "asset-moved-normal",
+       "asset-moved-trash",
+       "asset-move-rejected",
+       "asset-slot-connected",
+       "asset-slot-connection-rejected"
      }
 
 SelectionInvariant(selectedSlotId, workspace) ==
@@ -84,6 +103,16 @@ CsvReferenceInvariant(project, selectedCsvId) ==
   /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
        project.graphObjectCsvRefs[index] \in project.csvIds
 
+TrashReferenceInvariant(assetLocation, assetReferenced) ==
+  assetLocation = "trash" => ~assetReferenced
+
+TreeRecoveryInvariant ==
+  /\ TreeMoveAllowed("asset")
+  /\ ~TreeMoveAllowed("trash-root")
+
+SlotConnectionInvariant(assetLocation) ==
+  SlotConnectionAllowed(assetLocation) <=> assetLocation = "normal"
+
 (*
 --algorithm FastFigureInteractionCore
 variables
@@ -92,6 +121,8 @@ variables
   assetSelection = "none",
   selectedCsvId = NoCsv,
   project = InitialProject,
+  assetLocation = "normal",
+  assetReferenced = TRUE,
   lastResult = "initialized";
 
 procedure ApplySlotSelection(slotId)
@@ -188,6 +219,41 @@ EmptyCsvReturn:
   return;
 end procedure;
 
+procedure MoveAsset(source, targetLocation)
+begin
+AssetMoveGuard:
+  if source \in MoveSources
+     /\ targetLocation \in AssetLocations
+     /\ TreeMoveAllowed(source) then
+    if targetLocation = "trash" /\ assetLocation # "trash" then
+      assetReferenced := FALSE;
+    end if;
+    assetLocation := targetLocation;
+    if targetLocation = "trash" then
+      lastResult := "asset-moved-trash";
+    else
+      lastResult := "asset-moved-normal";
+    end if;
+  else
+    lastResult := "asset-move-rejected";
+  end if;
+AssetMoveReturn:
+  return;
+end procedure;
+
+procedure ConnectAssetToSlot()
+begin
+AssetSlotConnectionGuard:
+  if SlotConnectionAllowed(assetLocation) then
+    assetReferenced := TRUE ||
+    lastResult := "asset-slot-connected";
+  else
+    lastResult := "asset-slot-connection-rejected";
+  end if;
+AssetSlotConnectionReturn:
+  return;
+end procedure;
+
 procedure AddGraphObject()
 begin
 AddGraphGuard:
@@ -225,6 +291,14 @@ Main:
       call CreateEmptyCsv();
     or
       call AddGraphObject();
+    or
+      with source \in MoveSources do
+        with targetLocation \in AssetLocations do
+          call MoveAsset(source, targetLocation);
+        end with;
+      end with;
+    or
+      call ConnectAssetToSlot();
     end either;
   end while;
 end algorithm;
@@ -237,6 +311,8 @@ TypeOKSpec ==
     assetSelection,
     selectedCsvId,
     project,
+    assetLocation,
+    assetReferenced,
     lastResult)
 
 SelectionInvariantSpec ==
@@ -244,5 +320,14 @@ SelectionInvariantSpec ==
 
 CsvReferenceInvariantSpec ==
   CsvReferenceInvariant(project, selectedCsvId)
+
+TrashReferenceInvariantSpec ==
+  TrashReferenceInvariant(assetLocation, assetReferenced)
+
+TreeRecoveryInvariantSpec ==
+  TreeRecoveryInvariant
+
+SlotConnectionInvariantSpec ==
+  SlotConnectionInvariant(assetLocation)
 
 =============================================================================

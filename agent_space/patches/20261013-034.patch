@@ -1,0 +1,312 @@
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -18,13 +18,13 @@
+       "closure_review": "agent_space/reviews/review-20261013-011-sourcescript-closure-r18.md"
+     },
+     "verification-model": {
+-      "revision": 11,
+-      "status": "stale",
++      "revision": 12,
++      "status": "current",
+       "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b",
++      "fingerprint": "sha256:02006c54ce0c1ceaed5b2f29296ce47bd10013e42e8b0a9912394322a6259767",
+       "derived_from": {
+-        "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
+-        "pseudocode": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898"
++        "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
++        "pseudocode": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583"
+       },
+       "tlc": "pending",
+       "validation_review": null
+diff --git a/verification/FastFigureInteractionCore.cfg b/verification/FastFigureInteractionCore.cfg
+--- a/verification/FastFigureInteractionCore.cfg
++++ b/verification/FastFigureInteractionCore.cfg
+@@ -6,3 +6,6 @@ CONSTANTS
+ INVARIANT TypeOKSpec
+ INVARIANT SelectionInvariantSpec
+ INVARIANT CsvReferenceInvariantSpec
++INVARIANT TrashReferenceInvariantSpec
++INVARIANT TreeRecoveryInvariantSpec
++INVARIANT SlotConnectionInvariantSpec
+diff --git a/verification/FastFigureInteractionCore.tla b/verification/FastFigureInteractionCore.tla
+--- a/verification/FastFigureInteractionCore.tla
++++ b/verification/FastFigureInteractionCore.tla
+@@ -2,7 +2,7 @@
+ EXTENDS Integers, FiniteSets, Sequences, TLC
+ 
+ (*
+-Executable verification translation for the r17 interaction slice.
++Executable verification translation for the r18 interaction slice.
+ 
+ Source Script authority:
+ - sourcescript/application_fsm.py
+@@ -19,15 +19,25 @@ state-changing meaning introduced or clarified in r17:
+ - ordinary empty CSV creation;
+ - new empty CSV becomes the current CSV selection;
+ - empty CSV creation does not itself create a graph object;
+-- later graph-object creation references the current selected CSV.
++- later graph-object creation references the current selected CSV;
++- trash membership does not disable tree recovery moves;
++- entering trash detaches an existing asset reference;
++- leaving trash does not restore a detached reference;
++- trash assets cannot be connected directly to slots.
+ 
+-Trash row Menu availability and common Modal maximum are UI-local constraints
++Settings-overlay height and Layout-preview geometry are UI-local projections
+ with no project mutation and are reviewed outside this state model.
+ *)
+ 
+ NoSlot == 0
+ NoCsv == 0
+ 
++AssetLocations == {"normal", "trash"}
++MoveSources == {"asset", "trash-root"}
++
++TreeMoveAllowed(source) == source # "trash-root"
++SlotConnectionAllowed(location) == location = "normal"
++
+ SlotIds == 1..3
+ CsvIds == 1..2
+ MaxGraphObjects == 2
+@@ -55,7 +65,8 @@ ValidProject(project) ==
+   /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
+        project.graphObjectCsvRefs[index] \in project.csvIds
+ 
+-TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project, lastResult) ==
++TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project,
++            assetLocation, assetReferenced, lastResult) ==
+   /\ selectedSlotId \in SlotIds \cup {NoSlot}
+   /\ workspace \in {"project", "slot.graph", "slot.image"}
+   /\ workspace = WorkspaceFor(selectedSlotId)
+@@ -64,6 +75,9 @@ TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project, l
+   /\ (assetSelection = "none" <=> selectedCsvId = NoCsv)
+   /\ (selectedCsvId # NoCsv => selectedCsvId \in project.csvIds)
+   /\ ValidProject(project)
++  /\ assetLocation \in AssetLocations
++  /\ assetReferenced \in BOOLEAN
++  /\ (assetReferenced => assetLocation = "normal")
+   /\ lastResult \in {
+        "initialized",
+        "slot-selected",
+@@ -73,7 +87,12 @@ TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project, l
+        "empty-csv-created",
+        "empty-csv-unavailable",
+        "graph-object-added",
+-       "graph-object-rejected"
++       "graph-object-rejected",
++       "asset-moved-normal",
++       "asset-moved-trash",
++       "asset-move-rejected",
++       "asset-slot-connected",
++       "asset-slot-connection-rejected"
+      }
+ 
+ SelectionInvariant(selectedSlotId, workspace) ==
+@@ -84,6 +103,16 @@ CsvReferenceInvariant(project, selectedCsvId) ==
+   /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
+        project.graphObjectCsvRefs[index] \in project.csvIds
+ 
++TrashReferenceInvariant(assetLocation, assetReferenced) ==
++  assetLocation = "trash" => ~assetReferenced
++
++TreeRecoveryInvariant ==
++  /\ TreeMoveAllowed("asset")
++  /\ ~TreeMoveAllowed("trash-root")
++
++SlotConnectionInvariant(assetLocation) ==
++  SlotConnectionAllowed(assetLocation) <=> assetLocation = "normal"
++
+ (*
+ --algorithm FastFigureInteractionCore
+ variables
+@@ -92,6 +121,8 @@ variables
+   assetSelection = "none",
+   selectedCsvId = NoCsv,
+   project = InitialProject,
++  assetLocation = "normal",
++  assetReferenced = TRUE,
+   lastResult = "initialized";
+ 
+ procedure ApplySlotSelection(slotId)
+@@ -188,6 +219,41 @@ EmptyCsvReturn:
+   return;
+ end procedure;
+ 
++procedure MoveAsset(source, targetLocation)
++begin
++AssetMoveGuard:
++  if source \in MoveSources
++     /\ targetLocation \in AssetLocations
++     /\ TreeMoveAllowed(source) then
++    if targetLocation = "trash" /\ assetLocation # "trash" then
++      assetReferenced := FALSE;
++    end if;
++    assetLocation := targetLocation;
++    if targetLocation = "trash" then
++      lastResult := "asset-moved-trash";
++    else
++      lastResult := "asset-moved-normal";
++    end if;
++  else
++    lastResult := "asset-move-rejected";
++  end if;
++AssetMoveReturn:
++  return;
++end procedure;
++
++procedure ConnectAssetToSlot()
++begin
++AssetSlotConnectionGuard:
++  if SlotConnectionAllowed(assetLocation) then
++    assetReferenced := TRUE ||
++    lastResult := "asset-slot-connected";
++  else
++    lastResult := "asset-slot-connection-rejected";
++  end if;
++AssetSlotConnectionReturn:
++  return;
++end procedure;
++
+ procedure AddGraphObject()
+ begin
+ AddGraphGuard:
+@@ -225,6 +291,14 @@ Main:
+       call CreateEmptyCsv();
+     or
+       call AddGraphObject();
++    or
++      with source \in MoveSources do
++        with targetLocation \in AssetLocations do
++          call MoveAsset(source, targetLocation);
++        end with;
++      end with;
++    or
++      call ConnectAssetToSlot();
+     end either;
+   end while;
+ end algorithm;
+@@ -237,6 +311,8 @@ TypeOKSpec ==
+     assetSelection,
+     selectedCsvId,
+     project,
++    assetLocation,
++    assetReferenced,
+     lastResult)
+ 
+ SelectionInvariantSpec ==
+@@ -245,4 +321,13 @@ SelectionInvariantSpec ==
+ CsvReferenceInvariantSpec ==
+   CsvReferenceInvariant(project, selectedCsvId)
+ 
++TrashReferenceInvariantSpec ==
++  TrashReferenceInvariant(assetLocation, assetReferenced)
++
++TreeRecoveryInvariantSpec ==
++  TreeRecoveryInvariant
++
++SlotConnectionInvariantSpec ==
++  SlotConnectionInvariant(assetLocation)
++
+ =============================================================================
+diff --git a/verification/FastFigureSlotCore.cfg b/verification/FastFigureSlotCore.cfg
+--- a/verification/FastFigureSlotCore.cfg
++++ b/verification/FastFigureSlotCore.cfg
+@@ -3,3 +3,4 @@ SPECIFICATION Spec
+ INVARIANT TypeOKSpec
+ INVARIANT SafetyInvariant
+ INVARIANT ChartOwnershipInvariantSpec
++INVARIANT SelectedSlotInvariantSpec
+diff --git a/verification/FastFigureSlotCore.tla b/verification/FastFigureSlotCore.tla
+--- a/verification/FastFigureSlotCore.tla
++++ b/verification/FastFigureSlotCore.tla
+@@ -24,6 +24,7 @@ InitialCols == 2
+ NoChart == "no-chart"
+ NoImage == "no-image"
+ NoCaption == "no-caption"
++NoSelectedSlot == 0
+ 
+ ChartIds == {"chart-1", "chart-2"}
+ ImageIds == {"image-1"}
+@@ -351,22 +352,24 @@ SplitSlotsCandidate(project, slotIds) ==
+       THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
+       ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
+ 
+-TypeOK(project, result) ==
++TypeOK(project, selectedSlotId, result) ==
+   /\ ValidateSlotLayoutProjection(project)
++  /\ selectedSlotId \in VisibleSlotIds(project) \cup {NoSelectedSlot}
+   /\ result \in {
+        "initialized",
+        "reset-committed", "reset-rejected",
+        "swap-committed", "swap-rejected",
+        "grid-committed", "grid-rejected",
+        "merge-committed", "merge-rejected",
+        "split-committed", "split-rejected",
+-       "harness-seeded"
++       "harness-seeded", "harness-selected"
+      }
+ 
+ (*
+ --algorithm FastFigureSlotCore
+ variables
+   activeProject = InitialProject,
++  selectedSlotId = NoSelectedSlot,
+   lastResult = "initialized";
+ 
+ procedure applySlotsResetAction(slotIds)
+@@ -398,6 +401,12 @@ SwapResolve:
+     candidate := SwapSlotsCandidate(activeProject, sourceId, targetId);
+     if ValidateSlotLayoutProjection(candidate) then
+       activeProject := candidate ||
++      selectedSlotId :=
++        IF selectedSlotId = sourceId
++          THEN targetId
++          ELSE IF selectedSlotId = targetId
++            THEN sourceId
++            ELSE selectedSlotId ||
+       lastResult := "swap-committed";
+     else
+       lastResult := "swap-rejected";
+@@ -481,6 +490,17 @@ end procedure;
+ \* They are not Fast Figure domain commands and do not participate in the
+ \* Source Script -> verification code -> source code mapping.
+ 
++procedure VerificationHarnessSelectSlot(slotId)
++begin
++HarnessSelect:
++  if slotId \in VisibleSlotIds(activeProject) then
++    selectedSlotId := slotId ||
++    lastResult := "harness-selected";
++  end if;
++HarnessSelectReturn:
++  return;
++end procedure;
++
+ procedure VerificationHarnessSeedChart(slotId, chartId)
+ variables slot = DefaultSlot(1);
+ begin
+@@ -575,6 +595,10 @@ begin
+ VerificationHarness:
+   while TRUE do
+     either
++      with chosenSelectedSlotId \in VisibleSlotIds(activeProject) do
++        call VerificationHarnessSelectSlot(chosenSelectedSlotId);
++      end with;
++    or
+       with chosenResetSlotIds \in SUBSET (DOMAIN activeProject.slots) do
+         call applySlotsResetAction(chosenResetSlotIds);
+       end with;
+@@ -624,7 +648,10 @@ end algorithm;
+ *)
+ 
+ TypeOKSpec ==
+-  TypeOK(activeProject, lastResult)
++  TypeOK(activeProject, selectedSlotId, lastResult)
++
++SelectedSlotInvariantSpec ==
++  selectedSlotId \in VisibleSlotIds(activeProject) \cup {NoSelectedSlot}
+ 
+ ChartOwnershipInvariantSpec ==
+   ChartOwnershipInvariant(activeProject)
