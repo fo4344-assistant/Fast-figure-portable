@@ -736,15 +736,17 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       const overlay = document.querySelector("[data-fastfigure-overlay='layout']");
       const grid = overlay?.querySelector("[role='grid']");
       const handle = overlay?.querySelector("[aria-label='레이아웃 미리보기 크기 조절']");
-      const modal = overlay?.closest(".mantine-Modal-content") || overlay;
-      check(!!grid && !!handle && !!modal, "layout preview ownership elements absent");
+      const frame = grid?.parentElement;
+      const content = frame?.parentElement;
+      check(!!grid && !!handle && !!frame && !!content, "layout preview ownership elements absent");
       const gridRect = grid.getBoundingClientRect();
       const handleRect = handle.getBoundingClientRect();
-      const modalRect = modal.getBoundingClientRect();
+      const frameRect = frame.getBoundingClientRect();
+      const contentRect = content.getBoundingClientRect();
       check(Math.abs(gridRect.width - handleRect.width) < 1.5, "preview and resize handle widths differ");
       check(
-        Math.abs((gridRect.left + gridRect.right - modalRect.left - modalRect.right) / 2) < 1.5,
-        "layout preview is not horizontally centered",
+        Math.abs((frameRect.left + frameRect.right - contentRect.left - contentRect.right) / 2) < 1.5,
+        "layout preview is not horizontally centered in its content area",
       );
       const expected = api.layout.readState(gridRect.width).previewGeometry;
       check(
@@ -794,8 +796,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(!!menuTarget, "trashed asset action menu target absent");
       check(!menuTarget.disabled, "trashed asset action menu target is disabled");
       click(menuTarget);
-      await tick();
-      check(!!document.querySelector(".mantine-Menu-dropdown"), "trashed asset action menu did not open");
+      await waitFor(
+        () => document.querySelector("[role='menu']"),
+        "trashed asset action menu did not open",
+      );
     });
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
