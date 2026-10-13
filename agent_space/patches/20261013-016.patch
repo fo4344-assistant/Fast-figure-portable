@@ -1,0 +1,20 @@
+diff --git a/verification/FastFigureInteractionCore.tla b/verification/FastFigureInteractionCore.tla
+--- a/verification/FastFigureInteractionCore.tla
++++ b/verification/FastFigureInteractionCore.tla
+@@
+-SlotContentType ==
+-  [1 |-> "graph", 2 |-> "image", 3 |-> "graph"]
++SlotContentType == <<"graph", "image", "graph">>
+ 
+-SlotHasContent ==
+-  [1 |-> TRUE, 2 |-> TRUE, 3 |-> FALSE]
++SlotHasContent == <<TRUE, TRUE, FALSE>>
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@
+-      "revision": 7,
++      "revision": 8,
+@@
+-      "fingerprint": "sha256:391a0b8a674fe2ffa1f742eb1c4073ea9fb7bba0d0f32eef975e1f128e8d9512",
++      "fingerprint": "sha256:f690bb45520fad40b863554ad24440eaf4502db79c9eb3adb15c054bdfdab993",

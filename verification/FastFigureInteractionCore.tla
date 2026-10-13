@@ -31,11 +31,9 @@ NoCsv == "no-csv"
 SlotIds == 1..3
 CsvIds == 1..2
 
-SlotContentType ==
-  [1 |-> "graph", 2 |-> "image", 3 |-> "graph"]
+SlotContentType == <<"graph", "image", "graph">>
 
-SlotHasContent ==
-  [1 |-> TRUE, 2 |-> TRUE, 3 |-> FALSE]
+SlotHasContent == <<TRUE, TRUE, FALSE>>
 
 WorkspaceFor(slotId) ==
   IF slotId = NoSlot
