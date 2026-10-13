@@ -1,0 +1,162 @@
+# Source Script closure review — r18
+
+## 대상
+
+- Source Script revision: r18
+- fingerprint: `sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7`
+- 변경 범위:
+  - `sourcescript/api_ui.py`
+  - `sourcescript/assets_files.py`
+  - `sourcescript/renderer_runtime.py`
+- 요구 원천: `agent_space/plans/plan-013.md`
+
+## 1. 논리적 완결성
+
+### Project tree / trash
+
+확인한 경로는 다음과 같다.
+
+```text
+current VFS
+→ tree read projection
+→ selection 또는 move intent
+→ current VFS에서 precondition 재판정
+→ planMove
+→ move candidate
+→ validation
+→ commit
+→ 새 tree projection
+```
+
+trash membership은 source move 금지 조건에서 분리되었다. fixed directory는 계속 이동할 수 없고, `/assets/trash` root도 fixed directory이므로 보호된다. 그 아래 user directory/CSV/image는 일반 directory로 이동할 수 있다.
+
+reference 의미는 다음으로 닫혀 있다.
+
+```text
+non-trash → trash
+→ current references detach
+
+trash → normal
+→ path/subtree move
+→ 과거 references 자동 복원 없음
+```
+
+`assets_files.py::moveProjectNode`과 `application_fsm.py::applyProjectNodeMovedAction`은 모두 candidate validation/commit 경계를 유지한다. 후자는 trash 진입 시 reference cascade를 이미 소유하고 있어 r18의 leaving-trash 규칙과 충돌하지 않는다.
+
+### Tree move와 slot connection
+
+`api_ui.py`에서 두 precondition을 분리했다.
+
+- tree move: fixed directory 여부와 current VFS source/target validity가 기준.
+- slot connection: non-trash CSV/image인지와 target slot validity가 기준.
+
+따라서 trash resource는 tree에서 선택/복구할 수 있지만 trash 상태에서 slot에 직접 연결할 수 없다. selection/drag 시작 자체는 mutation이 아니다.
+
+### Bookmark swap
+
+`renderer_runtime.py::swapSlotContents`는 기존 candidate swap commit 뒤 current project와 reconciled `selectedSlotId`를 읽어 dashboard projection을 즉시 갱신하도록 명시한다.
+
+renderer refresh는 authoritative project mutation을 반복하지 않는다. 따라서 swap mutation과 화면 갱신의 순서가 끊기지 않으며 DOM을 별도 authority로 만들지 않는다.
+
+### Settings overlay resize
+
+Layout/Label/Caption/Print의 outer width authority는 기존 공통 settings maximum에 유지했다. 새 height resize는 opened overlay lifetime의 UI-local state만 변경한다.
+
+project/domain state 또는 FFPX 저장 구조에 height copy를 만들지 않는다.
+
+### Layout preview geometry
+
+기존 `layout_annotations_export.py::dashboardGeometry`는 이미 다음 계산을 정의한다.
+
+```text
+scale = width / referenceWidth
+naturalHeight = width / configuredAspect
+height = heightOverride가 없으면 naturalHeight
+```
+
+r18은 Layout preview에서 actual rendered preview width 하나를 이 계산의 width 입력으로 사용하도록 책임을 확정한다. preview height/gap/outerMargin/radius가 서로 다른 width 기준을 사용하지 않는다.
+
+overlay height resize와 preview size command를 분리했으므로 지난 UI 회귀를 만들었던 독립 `previewWidth` drag 의미가 필요하지 않다.
+
+### 결론
+
+입력에서 mutation/projection 결과까지 필요한 branch와 책임 경계가 연결되어 있고 서로 모순되는 확정 규칙을 찾지 못했다.
+
+논리적 완결성: **충족**.
+
+## 2. 프로젝트 목적 부합
+
+이번 변경은 Mantine 포팅 과정에서 깨진 기존 interaction을 복구하고 분산된 UI 구현을 공통 primitive로 옮길 수 있게 하는 의미만 추가한다.
+
+추가하지 않은 기능:
+
+- trash original-location history
+- undo/redo
+- trash asset direct slot connection
+- 새 persistent drag state
+- 새 project preview-size field
+- 새 VFS authority
+
+따라서 사용자 요구에서 벗어난 기능 확장은 없다.
+
+Mantine `Tree` 자체의 API/prop 선택은 Source Script에 고수준 규칙으로 넣지 않았다. Source Code 단계에서 기존 tree capability를 구현하는 library 선택으로 남겼다.
+
+프로젝트 목적 부합: **충족**.
+
+## 3. 중복과 통합·확장
+
+### Authority 중복
+
+새 authority를 추가하지 않았다.
+
+- VFS/project: 기존 `activeProject`/project VFS
+- asset selection: 기존 app FSM/runtime selection
+- slot connection: 기존 public command
+- slot swap: 기존 `SLOTS_SWAPPED` mutation
+- overlay height: component-local interaction state
+- preview geometry: current layout + actual rendered width의 read projection
+
+### 중복 mutation 경로
+
+tree drag와 menu move 모두 `planMove → move`로 수렴하도록 명세했다. resource→slot drag도 기존 `connectToSlot`로 수렴한다.
+
+새로운 drag 전용 project mutation path를 만들지 않았다.
+
+### UI 공통화
+
+네 settings overlay가 같은 resize 의미를 공유하도록 정했고 각 overlay가 별도 resize algorithm을 소유할 필요가 없다.
+
+Layout preview는 overlay resize와 별도 책임으로 분리하여 하나의 state가 두 의미를 동시에 소유하지 않게 했다.
+
+### 기존 구조와의 충돌
+
+- `application_fsm.py`의 `PROJECT_NODE_MOVED`, `SLOTS_SWAPPED` 책임과 일치한다.
+- `layout_annotations_export.py::dashboardGeometry`의 aspect 계산과 일치한다.
+- `project_state.py`는 `layout.layoutMapWidth`를 이미 legacy non-authoritative field로 분류하므로 새 preview size persistence가 필요하지 않다.
+
+중복과 통합·확장: **충족**.
+
+## 4. 미확정 사항
+
+고수준 기능 의미에서 미확정 사항은 없다.
+
+다음은 의도적으로 Source Code 단계에 남긴 저수준 선택이다.
+
+- Mantine Tree에서 전체 node surface drag와 drag handle 중 어느 표현을 사용할지
+- concrete DataTransfer representation
+- overlay height min/max CSS 값
+- ResizeObserver 또는 동등한 actual-width 측정 방법
+
+이 선택들은 r18의 authoritative state, mutation rule, reference 의미를 바꾸지 않는 범위에서 결정할 수 있다.
+
+## 5. 닫힘 판정
+
+정책 §4.6의 세 조건을 모두 충족한다.
+
+- 논리적 완결성: 충족
+- 프로젝트 목적 부합: 충족
+- 중복과 통합·확장 검토: 충족
+
+따라서 Source Script r18을 **closed**로 판정한다.
+
+다음 단계는 r18을 PlusCal pseudocode로 직접 번역하고 translation fidelity를 검토하는 것이다.
