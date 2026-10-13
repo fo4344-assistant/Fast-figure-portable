@@ -25,8 +25,8 @@ Trash row Menu availability and common Modal maximum are UI-local constraints
 with no project mutation and are reviewed outside this state model.
 *)
 
-NoSlot == "no-slot"
-NoCsv == "no-csv"
+NoSlot == 0
+NoCsv == 0
 
 SlotIds == 1..3
 CsvIds == 1..2
