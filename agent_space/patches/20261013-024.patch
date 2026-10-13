@@ -1,0 +1,71 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@
++    await run(28, "layout preview uses one rendered width and is centered", async () => {
++      appFSM.send("TOGGLE_OVERLAY", { overlay: "layout", source: "regression" });
++      await tick();
++      const overlay = document.querySelector("[data-fastfigure-overlay='layout']");
++      const grid = overlay?.querySelector("[role='grid']");
++      const handle = overlay?.querySelector("[aria-label='레이아웃 미리보기 크기 조절']");
++      const modal = overlay?.closest(".mantine-Modal-content") || overlay;
++      check(!!grid && !!handle && !!modal, "layout preview ownership elements absent");
++      const gridRect = grid.getBoundingClientRect();
++      const handleRect = handle.getBoundingClientRect();
++      const modalRect = modal.getBoundingClientRect();
++      check(Math.abs(gridRect.width - handleRect.width) < 1.5, "preview and resize handle widths differ");
++      check(
++        Math.abs((gridRect.left + gridRect.right - modalRect.left - modalRect.right) / 2) < 1.5,
++        "layout preview is not horizontally centered",
++      );
++      const expected = api.layout.readState(gridRect.width).previewGeometry;
++      check(
++        Math.abs(gridRect.height - expected.height) < 1.5,
++        "layout preview height is not derived from rendered width",
++      );
++      appFSM.send("CLOSE_OVERLAY", { reason: "regression-layout-ownership" });
++      await tick();
++    });
++    await run(29, "settings overlays share one modal width", async () => {
++      const widths = [];
++      for (const overlayName of ["label", "caption", "print", "layout"]) {
++        appFSM.send("TOGGLE_OVERLAY", { overlay: overlayName, source: "regression" });
++        await tick();
++        const overlay = document.querySelector(`[data-fastfigure-overlay='${overlayName}']`);
++        const modal = overlay?.closest(".mantine-Modal-content") || overlay;
++        check(!!modal, `${overlayName} modal absent`);
++        widths.push(modal.getBoundingClientRect().width);
++        appFSM.send("CLOSE_OVERLAY", { reason: "regression-modal-width" });
++        await tick();
++      }
++      check(
++        Math.max(...widths) - Math.min(...widths) < 1.5,
++        `settings modal widths differ: ${widths.join(", ")}`,
++      );
++    });
++    await run(30, "trashed asset keeps row action menu accessible", async () => {
++      const csvAsset = createProjectCsv([["X", "Y"], ["1", "2"]], "trash-menu.csv");
++      const sourcePath = projectAssetPath(csvAsset);
++      const plan = api.assets.planMove(sourcePath, "/assets/trash");
++      check(!!plan, "trash menu test move plan absent");
++      api.assets.move(plan);
++      await tick();
++      const trashed = activeProject.csvFiles.find((item) => item.id === csvAsset.id);
++      check(!!trashed && api.assets.isTrashed(projectAssetPath(trashed)), "test CSV did not enter trash");
++      const trashDirectoryButton = Array.from(document.querySelectorAll("button")).find((button) =>
++        /^[▾▸]\s+trash$/.test(button.textContent?.trim() || ""),
++      );
++      check(!!trashDirectoryButton, "trash directory control absent");
++      if ((trashDirectoryButton.textContent || "").trim().startsWith("▸")) {
++        click(trashDirectoryButton);
++        await tick();
++      }
++      const menuTarget = document.querySelector(
++        `button[aria-label="${trashed.name} 작업"]`,
++      );
++      check(!!menuTarget, "trashed asset action menu target absent");
++      check(!menuTarget.disabled, "trashed asset action menu target is disabled");
++      click(menuTarget);
++      await tick();
++      check(!!document.querySelector(".mantine-Menu-dropdown"), "trashed asset action menu did not open");
++    });
