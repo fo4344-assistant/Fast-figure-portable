@@ -156,7 +156,8 @@ def installSlotClickController():
        browser가 post-drag click을 만들지 않는 경우에는 그 click dispatch 기회가 지난 뒤의 cleanup에서 suppression을 해제한다.
        따라서 drag와 같은 interaction cycle에서 생긴 click은 slot selection/toggle로 해석하지 않는다.
     7. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
-       layout_annotations_export의 operation matrix를 따른다.
+       layout_annotations_export의 operation matrix를 따른다. swap commit이 성공하면 current project와 selectedSlotId를 기준으로
+       dashboard projection을 즉시 다시 생성하며 이 renderer refresh는 domain state를 다시 변경하지 않는다.
     8. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
        Mantine FastFigureDashboardFileDrop에 넘긴다.
     """
@@ -174,8 +175,10 @@ def swapSlotContents(source, target):
     3. chart/image/contentType/imageSettings/caption 등 slot-local properties 전체를 한 단위로 교환한다.
     4. chart ownership은 교환된 target slot에 맞춰 1:1을 유지한다.
     5. project candidate를 검증한 뒤 한 번 commit한다.
+    6. commit된 current project와 reconciled selectedSlotId를 읽어 dashboard projection을 즉시 갱신한다.
+       이 갱신은 renderer projection만 변경하고 swap mutation을 반복하지 않는다.
     """
-    return "swap candidate commit 결과"
+    return "swap candidate commit과 즉시 갱신된 dashboard projection"
 
 
 def prepareDashboardFileDrop(slotId):

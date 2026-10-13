@@ -312,7 +312,9 @@ def planProjectNodeMove(path, directory):
     - 없음.
 
     처리:
-    실제 move 전에 VFS와 reference 상태를 읽어 UI confirmation에 필요한 값을 계산한다.
+    1. source를 current VFS에서 resolve하고 fixed directory이면 move 불가로 판정한다.
+    2. trash membership 자체는 source move 금지 조건으로 사용하지 않는다.
+    3. target directory, destination, collision, trash 진입 여부와 reference 상태를 읽어 UI confirmation에 필요한 값을 계산한다.
     """
     movePlan = "현재 project state에 대한 move 계획"
     return movePlan
@@ -326,10 +328,11 @@ def moveProjectNode(plan, useUniqueName):
     처리:
     1. stale UI plan을 그대로 신뢰하지 않고 current source/path/target을 다시 resolve한다.
     2. 최종 destination을 계산한다.
-    3. trash로 들어가는 asset이면 collectAssetReferences 결과를 candidate에서 detach한다.
-    4. directory 이동이면 descendant asset/directory path를 같은 candidate 안에서 함께 이동한다.
-    5. collision, fixed-directory, subtree cycle, reference invariant를 검증한다.
-    6. 성공한 candidate만 한 번 commit한다.
+    3. non-trash에서 trash로 들어가는 asset/subtree이면 collectAssetReferences 결과를 candidate에서 detach한다.
+    4. trash에서 일반 directory로 나오는 asset/subtree은 이전 reference를 자동 복원하지 않고 path만 일반 project 위치로 이동한다.
+    5. directory 이동이면 descendant asset/directory path를 같은 candidate 안에서 함께 이동한다.
+    6. collision, fixed-directory, subtree cycle, reference invariant를 검증한다.
+    7. 성공한 candidate만 한 번 commit한다.
     """
     return "commit된 최종 이동 path"
 

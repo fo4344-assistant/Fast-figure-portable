@@ -1,0 +1,166 @@
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,29 +9,29 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode and gates Source Code where TLC validation is used.",
+   "layers": {
+     "source-script": {
+-      "revision": 17,
++      "revision": 18,
+       "status": "current",
+       "path_rule": "sourcescript/**/*.py",
+-      "fingerprint": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
++      "fingerprint": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
+       "derived_from": null,
+-      "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261013-006-sourcescript-closure-r17.md"
++      "closure": "open",
++      "closure_review": null
+     },
+     "verification-model": {
+       "revision": 11,
+-      "status": "current",
++      "status": "stale",
+       "path_rule": "verification/**/*.{tla,cfg}",
+       "fingerprint": "sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b",
+       "derived_from": {
+         "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
+         "pseudocode": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898"
+       },
+-      "tlc": "passed",
+-      "validation_review": "agent_space/reviews/review-20261013-008-tlc-interaction-r11.md"
++      "tlc": "pending",
++      "validation_review": null
+     },
+     "source-code": {
+       "revision": 13,
+-      "status": "current",
++      "status": "stale",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+@@ -48,7 +48,7 @@
+     },
+     "pseudocode": {
+       "revision": 3,
+-      "status": "current",
++      "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+       "fingerprint": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898",
+       "derived_from": {
+diff --git a/sourcescript/api_ui.py b/sourcescript/api_ui.py
+--- a/sourcescript/api_ui.py
++++ b/sourcescript/api_ui.py
+@@ -57,7 +57,7 @@
+         "delete": "mutation; reference detach + asset removal candidate를 한 번 commit",
+         "readTree": "read; current VFS/assets에서 tree projection 계산",
+         "isTrashed": "read; canonical path의 trash subtree membership 계산",
+-        "movable": "read/calculation; fixed/root/selection rule에 따른 move 가능 여부",
++        "movable": "read/calculation; current VFS에서 fixed directory 여부와 source 존재를 기준으로 tree move 가능 여부 계산; trash membership 자체는 move 금지 조건이 아님",
+         "readTrash": "read; current trash subtree projection",
+         "moveOptions": "read/calculation; target directory 후보 계산",
+         "planMove": "calculation; current VFS에서 destination/collision/reference count plan",
+@@ -68,7 +68,7 @@
+             "graph object/chart는 이 command가 자동 생성하지 않음"
+         ),
+         "emptyTrash": "mutation; trash references/assets/directories candidate removal commit",
+-        "draggableAsset": "read/calculation; drag payload로 노출 가능한 asset projection",
++        "draggableAsset": "read/calculation; slot connection drag payload로 사용할 수 있는 non-trash CSV/image asset projection; tree move 가능 여부와는 별도 판정",
+         "connectToSlot": "mutation; (path, kind, slotId)에서 현재 VFS asset 및 slotId로 slot을 resolve 후 명시적 연결 commit; 단순 선택은 연결하지 않음",
+         "importToDirectory": "lifecycle mutation; batch file candidates -> collision plan -> one commit",
+         "importToSlot": "lifecycle mutation; file asset + target slot/chart candidate -> one commit",
+@@ -177,7 +177,8 @@
+         "project state에 slotMode로 저장하지 않는다."
+     ),
+     "sidebar geometry": "현재 session의 navbar width/collapsed/drag state",
+-    "pointer drag": "label/layout pointer interaction의 component-local state",
++    "pointer drag": "label/overlay resize 같은 pointer interaction의 component-local state",
++    "settings overlay height": "opened settings overlay lifetime 동안만 유지되는 component-local height projection",
+ }
+ 
+ UI_LOCAL_STATE_RULE = (
+@@ -230,14 +231,25 @@
+     "FastFigureLayoutOverlay, FastFigureLabelOverlay, FastFigureCaptionOverlay, FastFigurePrintOverlay의 outer Modal width는 "
+     "각 component가 독립적으로 lg/xl/px 값을 소유하지 않고 하나의 Fast Figure 공통 maximum-size definition을 사용한다. "
+     "그 공통 maximum은 현재 Mantine maximum size token보다 더 넓게 정의한다. concrete CSS length 또는 Mantine 구현 표현은 Source Code가 선택한다. "
+-    "FastFigureReadmeOverlay처럼 목적이 다른 Modal은 이 네 설정 overlay의 공통 maximum을 자동 상속하는 대상으로 간주하지 않는다."
++    "네 settings overlay는 공통된 하단 세로 resize interaction을 제공하며 resize는 해당 overlay의 UI-local height만 변경하고 project/domain state를 변경하지 않는다. "
++    "FastFigureReadmeOverlay처럼 목적이 다른 Modal은 이 네 설정 overlay의 공통 maximum 또는 resize interaction을 자동 상속하는 대상으로 간주하지 않는다."
++)
++
++LAYOUT_PREVIEW_RULE = (
++    "FastFigureLayoutOverlay의 preview는 layout slotStyle.aspect를 보존한다. 실제 rendered preview width 하나를 geometry 계산 기준으로 사용하고 "
++    "preview height와 width-dependent gap/outerMargin/radius를 같은 기준에서 계산한다. overlay height resize는 preview width를 직접 변경하는 command가 아니며 "
++    "preview 아래에 별도 preview-size drag 의미를 두지 않는다. viewport 또는 Modal content width 때문에 rendered width가 달라지면 height와 나머지 geometry도 "
++    "같은 rendered width에서 다시 계산한다."
+ )
+ 
+ 
+-PROJECT_TREE_TRASH_MENU_RULE = (
+-    "FastFigureProjectDataTree에서 trash subtree의 CSV/image가 일반 asset selection 또는 slot connection 대상으로 비활성화되어 있더라도 "
+-    "그 사실만으로 row action Menu target을 비활성화하지 않는다. Menu는 열 수 있어야 하며 각 action의 enabled 여부는 해당 public command의 "
+-    "현재 precondition을 별도로 적용한다. Menu 접근 허용은 asset selection, slot connection, original-location restore를 암묵적으로 허용하는 의미가 아니다."
++PROJECT_TREE_INTERACTION_RULE = (
++    "FastFigureProjectDataTree는 current VFS/assets를 읽어 만든 tree projection이며 별도 project authority를 소유하지 않는다. "
++    "trash subtree의 CSV/image도 일반 tree row로 선택할 수 있고, trash membership 자체를 이유로 row를 disabled 처리하지 않는다. "
++    "fixed directory가 아닌 project node는 current VFS precondition을 만족하면 tree move source가 될 수 있으며 trash descendant도 일반 directory로 이동해 복구할 수 있다. "
++    "tree move와 slot connection은 서로 다른 허용 조건을 사용한다. normal CSV/image는 explicit asset-to-slot connection source가 될 수 있지만 "
++    "trash CSV/image와 directory는 slot connection source가 아니다. tree move와 menu move는 같은 planMove/move authority로 수렴하고, "
++    "selection이나 drag 시작 자체가 slot connection 또는 original-location restore를 암묵적으로 수행하지 않는다."
+ )
+ 
+diff --git a/sourcescript/assets_files.py b/sourcescript/assets_files.py
+--- a/sourcescript/assets_files.py
++++ b/sourcescript/assets_files.py
+@@ -312,7 +312,9 @@ def planProjectNodeMove(path, directory):
+     - 없음.
+ 
+     처리:
+-    실제 move 전에 VFS와 reference 상태를 읽어 UI confirmation에 필요한 값을 계산한다.
++    1. source를 current VFS에서 resolve하고 fixed directory이면 move 불가로 판정한다.
++    2. trash membership 자체는 source move 금지 조건으로 사용하지 않는다.
++    3. target directory, destination, collision, trash 진입 여부와 reference 상태를 읽어 UI confirmation에 필요한 값을 계산한다.
+     """
+     movePlan = "현재 project state에 대한 move 계획"
+     return movePlan
+@@ -326,10 +328,11 @@ def moveProjectNode(plan, useUniqueName):
+     처리:
+     1. stale UI plan을 그대로 신뢰하지 않고 current source/path/target을 다시 resolve한다.
+     2. 최종 destination을 계산한다.
+-    3. trash로 들어가는 asset이면 collectAssetReferences 결과를 candidate에서 detach한다.
+-    4. directory 이동이면 descendant asset/directory path를 같은 candidate 안에서 함께 이동한다.
+-    5. collision, fixed-directory, subtree cycle, reference invariant를 검증한다.
+-    6. 성공한 candidate만 한 번 commit한다.
++    3. non-trash에서 trash로 들어가는 asset/subtree이면 collectAssetReferences 결과를 candidate에서 detach한다.
++    4. trash에서 일반 directory로 나오는 asset/subtree은 이전 reference를 자동 복원하지 않고 path만 일반 project 위치로 이동한다.
++    5. directory 이동이면 descendant asset/directory path를 같은 candidate 안에서 함께 이동한다.
++    6. collision, fixed-directory, subtree cycle, reference invariant를 검증한다.
++    7. 성공한 candidate만 한 번 commit한다.
+     """
+     return "commit된 최종 이동 path"
+ 
+diff --git a/sourcescript/renderer_runtime.py b/sourcescript/renderer_runtime.py
+--- a/sourcescript/renderer_runtime.py
++++ b/sourcescript/renderer_runtime.py
+@@ -156,7 +156,8 @@ def installSlotClickController():
+        browser가 post-drag click을 만들지 않는 경우에는 그 click dispatch 기회가 지난 뒤의 cleanup에서 suppression을 해제한다.
+        따라서 drag와 같은 interaction cycle에서 생긴 click은 slot selection/toggle로 해석하지 않는다.
+     7. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
+-       layout_annotations_export의 operation matrix를 따른다.
++       layout_annotations_export의 operation matrix를 따른다. swap commit이 성공하면 current project와 selectedSlotId를 기준으로
++       dashboard projection을 즉시 다시 생성하며 이 renderer refresh는 domain state를 다시 변경하지 않는다.
+     8. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
+        Mantine FastFigureDashboardFileDrop에 넘긴다.
+     """
+@@ -174,8 +175,10 @@ def swapSlotContents(source, target):
+     3. chart/image/contentType/imageSettings/caption 등 slot-local properties 전체를 한 단위로 교환한다.
+     4. chart ownership은 교환된 target slot에 맞춰 1:1을 유지한다.
+     5. project candidate를 검증한 뒤 한 번 commit한다.
++    6. commit된 current project와 reconciled selectedSlotId를 읽어 dashboard projection을 즉시 갱신한다.
++       이 갱신은 renderer projection만 변경하고 swap mutation을 반복하지 않는다.
+     """
+-    return "swap candidate commit 결과"
++    return "swap candidate commit과 즉시 갱신된 dashboard projection"
+ 
+ 
+ def prepareDashboardFileDrop(slotId):

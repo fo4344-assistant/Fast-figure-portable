@@ -57,7 +57,7 @@ PUBLIC_API_METHODS = {
         "delete": "mutation; reference detach + asset removal candidate를 한 번 commit",
         "readTree": "read; current VFS/assets에서 tree projection 계산",
         "isTrashed": "read; canonical path의 trash subtree membership 계산",
-        "movable": "read/calculation; fixed/root/selection rule에 따른 move 가능 여부",
+        "movable": "read/calculation; current VFS에서 fixed directory 여부와 source 존재를 기준으로 tree move 가능 여부 계산; trash membership 자체는 move 금지 조건이 아님",
         "readTrash": "read; current trash subtree projection",
         "moveOptions": "read/calculation; target directory 후보 계산",
         "planMove": "calculation; current VFS에서 destination/collision/reference count plan",
@@ -68,7 +68,7 @@ PUBLIC_API_METHODS = {
             "graph object/chart는 이 command가 자동 생성하지 않음"
         ),
         "emptyTrash": "mutation; trash references/assets/directories candidate removal commit",
-        "draggableAsset": "read/calculation; drag payload로 노출 가능한 asset projection",
+        "draggableAsset": "read/calculation; slot connection drag payload로 사용할 수 있는 non-trash CSV/image asset projection; tree move 가능 여부와는 별도 판정",
         "connectToSlot": "mutation; (path, kind, slotId)에서 현재 VFS asset 및 slotId로 slot을 resolve 후 명시적 연결 commit; 단순 선택은 연결하지 않음",
         "importToDirectory": "lifecycle mutation; batch file candidates -> collision plan -> one commit",
         "importToSlot": "lifecycle mutation; file asset + target slot/chart candidate -> one commit",
@@ -177,7 +177,8 @@ UI_LOCAL_STATE = {
         "project state에 slotMode로 저장하지 않는다."
     ),
     "sidebar geometry": "현재 session의 navbar width/collapsed/drag state",
-    "pointer drag": "label/layout pointer interaction의 component-local state",
+    "pointer drag": "label/overlay resize 같은 pointer interaction의 component-local state",
+    "settings overlay height": "opened settings overlay lifetime 동안만 유지되는 component-local height projection",
 }
 
 UI_LOCAL_STATE_RULE = (
@@ -230,14 +231,25 @@ MANTINE_THEME_RULE = (
     "FastFigureLayoutOverlay, FastFigureLabelOverlay, FastFigureCaptionOverlay, FastFigurePrintOverlay의 outer Modal width는 "
     "각 component가 독립적으로 lg/xl/px 값을 소유하지 않고 하나의 Fast Figure 공통 maximum-size definition을 사용한다. "
     "그 공통 maximum은 현재 Mantine maximum size token보다 더 넓게 정의한다. concrete CSS length 또는 Mantine 구현 표현은 Source Code가 선택한다. "
-    "FastFigureReadmeOverlay처럼 목적이 다른 Modal은 이 네 설정 overlay의 공통 maximum을 자동 상속하는 대상으로 간주하지 않는다."
+    "네 settings overlay는 공통된 하단 세로 resize interaction을 제공하며 resize는 해당 overlay의 UI-local height만 변경하고 project/domain state를 변경하지 않는다. "
+    "FastFigureReadmeOverlay처럼 목적이 다른 Modal은 이 네 설정 overlay의 공통 maximum 또는 resize interaction을 자동 상속하는 대상으로 간주하지 않는다."
+)
+
+LAYOUT_PREVIEW_RULE = (
+    "FastFigureLayoutOverlay의 preview는 layout slotStyle.aspect를 보존한다. 실제 rendered preview width 하나를 geometry 계산 기준으로 사용하고 "
+    "preview height와 width-dependent gap/outerMargin/radius를 같은 기준에서 계산한다. overlay height resize는 preview width를 직접 변경하는 command가 아니며 "
+    "preview 아래에 별도 preview-size drag 의미를 두지 않는다. viewport 또는 Modal content width 때문에 rendered width가 달라지면 height와 나머지 geometry도 "
+    "같은 rendered width에서 다시 계산한다."
 )
 
 
-PROJECT_TREE_TRASH_MENU_RULE = (
-    "FastFigureProjectDataTree에서 trash subtree의 CSV/image가 일반 asset selection 또는 slot connection 대상으로 비활성화되어 있더라도 "
-    "그 사실만으로 row action Menu target을 비활성화하지 않는다. Menu는 열 수 있어야 하며 각 action의 enabled 여부는 해당 public command의 "
-    "현재 precondition을 별도로 적용한다. Menu 접근 허용은 asset selection, slot connection, original-location restore를 암묵적으로 허용하는 의미가 아니다."
+PROJECT_TREE_INTERACTION_RULE = (
+    "FastFigureProjectDataTree는 current VFS/assets를 읽어 만든 tree projection이며 별도 project authority를 소유하지 않는다. "
+    "trash subtree의 CSV/image도 일반 tree row로 선택할 수 있고, trash membership 자체를 이유로 row를 disabled 처리하지 않는다. "
+    "fixed directory가 아닌 project node는 current VFS precondition을 만족하면 tree move source가 될 수 있으며 trash descendant도 일반 directory로 이동해 복구할 수 있다. "
+    "tree move와 slot connection은 서로 다른 허용 조건을 사용한다. normal CSV/image는 explicit asset-to-slot connection source가 될 수 있지만 "
+    "trash CSV/image와 directory는 slot connection source가 아니다. tree move와 menu move는 같은 planMove/move authority로 수렴하고, "
+    "selection이나 drag 시작 자체가 slot connection 또는 original-location restore를 암묵적으로 수행하지 않는다."
 )
 
 

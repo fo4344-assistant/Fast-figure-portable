@@ -9,29 +9,29 @@
   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode and gates Source Code where TLC validation is used.",
   "layers": {
     "source-script": {
-      "revision": 17,
+      "revision": 18,
       "status": "current",
       "path_rule": "sourcescript/**/*.py",
-      "fingerprint": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
+      "fingerprint": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
       "derived_from": null,
-      "closure": "closed",
-      "closure_review": "agent_space/reviews/review-20261013-006-sourcescript-closure-r17.md"
+      "closure": "open",
+      "closure_review": null
     },
     "verification-model": {
       "revision": 11,
-      "status": "current",
+      "status": "stale",
       "path_rule": "verification/**/*.{tla,cfg}",
       "fingerprint": "sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b",
       "derived_from": {
         "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
         "pseudocode": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898"
       },
-      "tlc": "passed",
-      "validation_review": "agent_space/reviews/review-20261013-008-tlc-interaction-r11.md"
+      "tlc": "pending",
+      "validation_review": null
     },
     "source-code": {
       "revision": 13,
-      "status": "current",
+      "status": "stale",
       "paths": [
         "Fast-figure.html",
         "fast-figure-ui.js",
@@ -48,7 +48,7 @@
     },
     "pseudocode": {
       "revision": 3,
-      "status": "current",
+      "status": "stale",
       "path_rule": "pseudocode/**/*.pcal",
       "fingerprint": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898",
       "derived_from": {
