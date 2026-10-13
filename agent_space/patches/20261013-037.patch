@@ -1,0 +1,73 @@
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -18,10 +18,10 @@
+       "closure_review": "agent_space/reviews/review-20261013-011-sourcescript-closure-r18.md"
+     },
+     "verification-model": {
+-      "revision": 14,
++      "revision": 15,
+       "status": "current",
+       "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:cef2dbcb9d153f9b8b23d4f63ef87462323afd06c0bf43079b94cae24f11fd30",
++      "fingerprint": "sha256:ee96d884edcb459419313e1b4e87db11dcb871955e9ce135fd9b8b1247995bdb",
+       "derived_from": {
+         "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
+         "pseudocode": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583"
+diff --git a/verification/FastFigureSlotCore.tla b/verification/FastFigureSlotCore.tla
+--- a/verification/FastFigureSlotCore.tla
++++ b/verification/FastFigureSlotCore.tla
+@@ -24,7 +24,6 @@ InitialCols == 2
+ NoChart == "no-chart"
+ NoImage == "no-image"
+ NoCaption == "no-caption"
+-NoSelectedSlot == 0
+ 
+ ChartIds == {"chart-1", "chart-2"}
+ ImageIds == {"image-1"}
+@@ -361,14 +360,14 @@ TypeOK(project, result) ==
+        "grid-committed", "grid-rejected",
+        "merge-committed", "merge-rejected",
+        "split-committed", "split-rejected",
+-       "harness-seeded", "harness-selected"
++       "harness-seeded"
+      }
+ 
+ (*
+ --algorithm FastFigureSlotCore
+ variables
+   activeProject = InitialProject,
+-  selectedSlotId = NoSelectedSlot,
++  selectedSlotId = 1,
+   lastResult = "initialized";
+ 
+ procedure applySlotsResetAction(slotIds)
+@@ -497,17 +496,6 @@ end procedure;
+ \* They are not Fast Figure domain commands and do not participate in the
+ \* Source Script -> verification code -> source code mapping.
+ 
+-procedure VerificationHarnessSelectSlot(slotId)
+-begin
+-HarnessSelect:
+-  if slotId \in VisibleSlotIds(activeProject) then
+-    selectedSlotId := slotId ||
+-    lastResult := "harness-selected";
+-  end if;
+-HarnessSelectReturn:
+-  return;
+-end procedure;
+-
+ procedure VerificationHarnessSeedChart(slotId, chartId)
+ variables slot = DefaultSlot(1);
+ begin
+@@ -602,10 +590,6 @@ begin
+ VerificationHarness:
+   while TRUE do
+     either
+-      with chosenSelectedSlotId \in VisibleSlotIds(activeProject) do
+-        call VerificationHarnessSelectSlot(chosenSelectedSlotId);
+-      end with;
+-    or
+       with chosenResetSlotIds \in SUBSET (DOMAIN activeProject.slots) do
+         call applySlotsResetAction(chosenResetSlotIds);
+       end with;

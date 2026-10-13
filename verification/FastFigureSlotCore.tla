@@ -24,7 +24,6 @@ InitialCols == 2
 NoChart == "no-chart"
 NoImage == "no-image"
 NoCaption == "no-caption"
-NoSelectedSlot == 0
 
 ChartIds == {"chart-1", "chart-2"}
 ImageIds == {"image-1"}
@@ -361,14 +360,14 @@ TypeOK(project, result) ==
        "grid-committed", "grid-rejected",
        "merge-committed", "merge-rejected",
        "split-committed", "split-rejected",
-       "harness-seeded", "harness-selected"
+       "harness-seeded"
      }
 
 (*
 --algorithm FastFigureSlotCore
 variables
   activeProject = InitialProject,
-  selectedSlotId = NoSelectedSlot,
+  selectedSlotId = 1,
   lastResult = "initialized";
 
 procedure applySlotsResetAction(slotIds)
@@ -497,17 +496,6 @@ end procedure;
 \* They are not Fast Figure domain commands and do not participate in the
 \* Source Script -> verification code -> source code mapping.
 
-procedure VerificationHarnessSelectSlot(slotId)
-begin
-HarnessSelect:
-  if slotId \in VisibleSlotIds(activeProject) then
-    selectedSlotId := slotId ||
-    lastResult := "harness-selected";
-  end if;
-HarnessSelectReturn:
-  return;
-end procedure;
-
 procedure VerificationHarnessSeedChart(slotId, chartId)
 variables slot = DefaultSlot(1);
 begin
@@ -602,10 +590,6 @@ begin
 VerificationHarness:
   while TRUE do
     either
-      with chosenSelectedSlotId \in VisibleSlotIds(activeProject) do
-        call VerificationHarnessSelectSlot(chosenSelectedSlotId);
-      end with;
-    or
       with chosenResetSlotIds \in SUBSET (DOMAIN activeProject.slots) do
         call applySlotsResetAction(chosenResetSlotIds);
       end with;
