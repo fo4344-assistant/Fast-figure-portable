@@ -130,19 +130,34 @@ def installSlotClickController():
     - project state 변경은 event handler 안에서 공식 command를 통해 수행한다.
 
     처리:
-    1. graph/image content가 있는 slot의 본문 클릭은 Plotly/image interaction에 맡기며 slot selection을 바꾸지 않는다.
-    2. 각 content slot 왼쪽 위의 bookmark control click만 setSelectedSlot로 전달한다.
-       같은 selected slot bookmark를 다시 클릭하면 기존 SELECT_SLOT toggle semantics로 선택 해제한다.
-    3. empty slot은 graph/image interaction이 없으므로 empty surface click으로 선택할 수 있다.
-    4. bookmark drag는 selection toggle이 아니라 source/target GUI position 사이의 slot-local payload 이동으로 처리한다.
+    1. click target이 visible slot에 속하는지 먼저 resolve한다.
+    2. visible slot에 속하지 않는 dashboard background click이면:
+       - 현재 selectedSlotId가 없으면 selection을 변경하지 않는다.
+       - 현재 selectedSlotId가 있으면 setSelectedSlot(None, "fsm-to-model")에 해당하는 기존 SELECT_SLOT 경로로
+         selectedSlotId를 none으로 만들고 workspace를 project로 갱신한다.
+       - toolbar, sidebar, overlay/Modal, project tree 등 dashboard interaction controller 밖의 UI click은
+         이 background deselection 규칙의 입력이 아니다.
+    3. visible slot click이면 contentType, chart 존재 여부, image 존재 여부보다 현재 selection 상태를 먼저 판정한다.
+    4. click한 slot이 현재 selected slot이 아니면:
+       - graph slot, image slot, empty slot 모두 같은 규칙으로 slot surface click을 setSelectedSlot(slot.id)로 전달한다.
+       - content가 존재한다는 이유만으로 미선택 slot의 selection 진입을 막지 않는다.
+       - 이 첫 click은 slot을 선택하는 interaction이며, 선택되지 않은 slot의 Plotly/image content interaction을
+         selection보다 우선하는 별도 규칙으로 만들지 않는다.
+    5. click한 slot이 이미 selected slot이면:
+       - bookmark control click은 setSelectedSlot(slot.id)로 전달하여 기존 SELECT_SLOT toggle semantics에 따라 선택 해제한다.
+       - graph content가 있는 본문 click은 Plotly interaction에 맡기고 selection을 다시 변경하지 않는다.
+       - image content가 있는 본문 click은 image interaction에 맡기고 selection을 다시 변경하지 않는다.
+       - graph/image content가 없는 empty slot surface click은 setSelectedSlot(slot.id)로 전달하여
+         기존 SELECT_SLOT toggle semantics에 따라 선택 해제한다.
+    6. bookmark drag는 selection toggle이 아니라 source/target GUI position 사이의 slot-local payload 이동으로 처리한다.
        drag 시작 시 UI-local click suppression을 활성화한다.
        drop 또는 dragend는 drag source를 정리하지만 click suppression을 즉시 해제하지 않는다.
        suppression이 활성화된 동안 bookmark click이 들어오면 SELECT_SLOT을 보내지 않고 그 click을 소비한 뒤 suppression을 해제한다.
        browser가 post-drag click을 만들지 않는 경우에는 그 click dispatch 기회가 지난 뒤의 cleanup에서 suppression을 해제한다.
        따라서 drag와 같은 interaction cycle에서 생긴 click은 slot selection/toggle로 해석하지 않는다.
-    5. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
+    7. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
        layout_annotations_export의 operation matrix를 따른다.
-    6. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
+    8. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
        Mantine FastFigureDashboardFileDrop에 넘긴다.
     """
     return "설치된 dashboard interaction controller"

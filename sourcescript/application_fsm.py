@@ -236,11 +236,15 @@ def applySlotSelectionAction(payload):
     - 필요한 경우 empty slot의 contentType
 
     처리:
-    1. payload slot id를 current project에서 resolve한다.
-    2. UI toggle semantics이면 현재 선택과 같은 id를 다시 선택할 때 selectedSlotId를 none으로 만든다.
-    3. selection이 바뀌면 graph-object selection을 현재 selected chart 기준으로 다시 검증하거나 해제한다.
-    4. workspace는 selection과 slot.contentType에서 파생한다.
-    5. 선택 chart는 별도 editing pointer에 저장하지 않고 필요할 때 resolve한다.
+    1. payload slot id가 none이면 explicit deselection request로 처리하고 selectedSlotId를 none으로 만든다.
+    2. payload slot id가 none이 아니면 current project의 visible slot에서 resolve한다.
+       hidden 또는 존재하지 않는 id는 유효한 selection target으로 만들지 않으며 기존 selection을 임의 변경하지 않는다.
+    3. 유효한 slot id에 대한 UI toggle semantics이면 현재 선택과 같은 id를 다시 선택할 때 selectedSlotId를 none으로 만든다.
+       현재 선택과 다른 유효한 id이면 그 id를 selectedSlotId로 만든다.
+    4. selection이 바뀌면 graph-object selection을 현재 selected chart 기준으로 다시 검증하거나 해제한다.
+    5. workspace는 selectedSlotId가 none이면 project, 선택 slot contentType이 image이면 slot.image,
+       그 외의 선택 slot이면 slot.graph로 파생한다.
+    6. 선택 chart는 별도 editing pointer에 저장하지 않고 필요할 때 resolve한다.
     """
     return "선택 결과"
 

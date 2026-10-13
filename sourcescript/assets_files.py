@@ -108,6 +108,21 @@ TYPED_XML_RULES = {
     "unknown": "지원하지 않는 type 또는 잘못된 value shape는 package read 실패",
 }
 
+EMPTY_CSV_TEMPLATE = {
+    "name": "빈 CSV.csv",
+    "directory": PROJECT_ASSET_DIRECTORIES["csv"],
+    "rows": [["X", "Y"], ["", ""]],
+    "mime": "text/csv",
+    "headerLines": 1,
+    "bytes": "rows를 동일 CSV serializer로 직렬화한 UTF-8 bytes",
+}
+
+EMPTY_CSV_RULE = (
+    "빈 CSV 삽입으로 생성한 asset은 일반 CSV asset이다. isDefaultEmpty, protected, undeletable, unmovable 같은 별도 상태를 갖지 않는다. "
+    "같은 이름이 이미 존재하면 일반 project asset collision/unique-path 규칙을 사용하며 기존 CSV를 암묵적으로 교체하지 않는다."
+)
+
+
 FORMAT_EVOLUTION_RULE = (
     "현재 package format version 3의 구조를 유지하되 persistent export settings는 additive project setting으로 기록한다. "
     "같은 version의 기존 파일에 export settings가 없으면 project default로 정규화한다. "
@@ -223,6 +238,31 @@ def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
     appFSM의 공식 create event로 등록한다.
     """
     csv = "등록된 CSV asset"
+    return csv
+
+
+def createEmptyProjectCsv():
+    """
+    Return:
+    - csv:
+      EMPTY_CSV_TEMPLATE에서 생성되어 activeProject에 등록된 일반 CSV asset.
+
+    변경:
+    - DATA_OBJECT_CREATED event를 통해 activeProject.csvFiles와 next csv id를 변경한다.
+    - asset selection 자체는 이 함수가 소유하지 않는다.
+
+    처리:
+    1. EMPTY_CSV_TEMPLATE의 rows를 그대로 사용한다: [["X", "Y"], ["", ""]].
+    2. name은 "빈 CSV.csv", MIME은 "text/csv", headerLines는 1을 사용한다.
+    3. bytes는 rows를 project CSV writer와 같은 CSV serializer로 직렬화한 UTF-8 bytes를 사용한다.
+    4. 기본 directory는 /assets/csv다.
+    5. 같은 canonical path가 이미 존재하면 projectVfs.uniquePath와 같은 일반 collision-free naming 규칙으로 새 path를 계산한다.
+       existing asset을 replace하지 않는다.
+    6. createProjectCsv의 일반 DATA_OBJECT_CREATED 경로로 등록한다.
+    7. 생성된 CSV에 protected/default 전용 field를 추가하지 않는다.
+    8. chart, graph object, selectedSlotId는 이 함수에서 변경하지 않는다.
+    """
+    csv = "등록된 일반 빈 CSV asset"
     return csv
 
 

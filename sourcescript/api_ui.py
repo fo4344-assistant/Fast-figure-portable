@@ -41,7 +41,7 @@ PUBLIC_API_METHODS = {
     },
     "slots": {
         "readSelected": "read; selectedSlotId를 current slot projection으로 resolve",
-        "select": "runtime mutation; explicit slot id의 selection toggle/workspace 갱신",
+        "select": "runtime mutation; explicit visible slot id의 selection toggle 또는 none의 explicit deselection으로 workspace 갱신",
         "setContentType": "mutation; selected/payload slot의 slot-local contentType candidate commit",
         "reset": "mutation; slot-local properties를 defaults로 reset하고 owned chart를 제거",
         "prepareFileDrop": "runtime calculation/mutation; drop target selection과 acceptability만 결정",
@@ -63,6 +63,10 @@ PUBLIC_API_METHODS = {
         "planMove": "calculation; current VFS에서 destination/collision/reference count plan",
         "move": "mutation; current state에서 plan을 재검증하고 candidate move commit",
         "createDirectory": "mutation; canonical non-conflicting directory candidate commit",
+        "createEmptyCsv": (
+            "mutation + runtime selection; 일반 CSV asset으로 빈 CSV.csv를 생성하고 기존 CSV selection 경로로 그 asset을 선택; "
+            "graph object/chart는 이 command가 자동 생성하지 않음"
+        ),
         "emptyTrash": "mutation; trash references/assets/directories candidate removal commit",
         "draggableAsset": "read/calculation; drag payload로 노출 가능한 asset projection",
         "connectToSlot": "mutation; (path, kind, slotId)에서 현재 VFS asset 및 slotId로 slot을 resolve 후 명시적 연결 commit; 단순 선택은 연결하지 않음",
@@ -222,7 +226,26 @@ DASHBOARD_DROP_LIFETIME_RULE = (
 
 MANTINE_THEME_RULE = (
     "generic Button, ActionIcon, Input 크기와 Modal centered/Escape/outside-click 기본값은 "
-    "fastFigureTheme에서 공통 정의한다. renderer surface CSS와 generic UI lifecycle을 분리한다."
+    "fastFigureTheme에서 공통 정의한다. renderer surface CSS와 generic UI lifecycle을 분리한다. "
+    "FastFigureLayoutOverlay, FastFigureLabelOverlay, FastFigureCaptionOverlay, FastFigurePrintOverlay의 outer Modal width는 "
+    "각 component가 독립적으로 lg/xl/px 값을 소유하지 않고 하나의 Fast Figure 공통 maximum-size definition을 사용한다. "
+    "그 공통 maximum은 현재 Mantine maximum size token보다 더 넓게 정의한다. concrete CSS length 또는 Mantine 구현 표현은 Source Code가 선택한다. "
+    "FastFigureReadmeOverlay처럼 목적이 다른 Modal은 이 네 설정 overlay의 공통 maximum을 자동 상속하는 대상으로 간주하지 않는다."
+)
+
+
+PROJECT_TREE_TRASH_MENU_RULE = (
+    "FastFigureProjectDataTree에서 trash subtree의 CSV/image가 일반 asset selection 또는 slot connection 대상으로 비활성화되어 있더라도 "
+    "그 사실만으로 row action Menu target을 비활성화하지 않는다. Menu는 열 수 있어야 하며 각 action의 enabled 여부는 해당 public command의 "
+    "현재 precondition을 별도로 적용한다. Menu 접근 허용은 asset selection, slot connection, original-location restore를 암묵적으로 허용하는 의미가 아니다."
+)
+
+
+EMPTY_CSV_UI_RULE = (
+    "graph slot의 데이터 불러오기 영역에는 image slot의 빈 이미지 삽입 control과 같은 기능 위치에 빈 CSV 삽입 control을 제공한다. "
+    "command는 assets.createEmptyCsv를 호출하여 일반 project CSV asset을 하나 생성하고 그 CSV를 현재 asset/graph CSV selection으로 선택한다. "
+    "이 command 자체는 chart 또는 graph object를 만들지 않는다. 사용자가 그 CSV로 graph object를 추가할 때는 기존 graphs.addObject와 "
+    "SLOT_DATA_CONNECTED/GRAPH_OBJECTS_REPLACED 경로를 그대로 사용한다. protected/default CSV 또는 별도 빈-그래프 mutation path를 만들지 않는다."
 )
 
 

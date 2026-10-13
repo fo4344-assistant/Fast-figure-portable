@@ -1,0 +1,353 @@
+diff --git a/sourcescript/renderer_runtime.py b/sourcescript/renderer_runtime.py
+--- a/sourcescript/renderer_runtime.py
++++ b/sourcescript/renderer_runtime.py
+@@ -130,19 +130,34 @@
+     - project state 변경은 event handler 안에서 공식 command를 통해 수행한다.
+ 
+     처리:
++    1. click target이 visible slot에 속하는지 먼저 resolve한다.
++    2. visible slot에 속하지 않는 dashboard background click이면:
++       - 현재 selectedSlotId가 없으면 selection을 변경하지 않는다.
++       - 현재 selectedSlotId가 있으면 setSelectedSlot(None, "fsm-to-model")에 해당하는 기존 SELECT_SLOT 경로로
++         selectedSlotId를 none으로 만들고 workspace를 project로 갱신한다.
++       - toolbar, sidebar, overlay/Modal, project tree 등 dashboard interaction controller 밖의 UI click은
++         이 background deselection 규칙의 입력이 아니다.
++    3. visible slot click이면 contentType, chart 존재 여부, image 존재 여부보다 현재 selection 상태를 먼저 판정한다.
++    4. click한 slot이 현재 selected slot이 아니면:
++       - graph slot, image slot, empty slot 모두 같은 규칙으로 slot surface click을 setSelectedSlot(slot.id)로 전달한다.
++       - content가 존재한다는 이유만으로 미선택 slot의 selection 진입을 막지 않는다.
++       - 이 첫 click은 slot을 선택하는 interaction이며, 선택되지 않은 slot의 Plotly/image content interaction을
++         selection보다 우선하는 별도 규칙으로 만들지 않는다.
++    5. click한 slot이 이미 selected slot이면:
++       - bookmark control click은 setSelectedSlot(slot.id)로 전달하여 기존 SELECT_SLOT toggle semantics에 따라 선택 해제한다.
++       - graph content가 있는 본문 click은 Plotly interaction에 맡기고 selection을 다시 변경하지 않는다.
++       - image content가 있는 본문 click은 image interaction에 맡기고 selection을 다시 변경하지 않는다.
++       - graph/image content가 없는 empty slot surface click은 setSelectedSlot(slot.id)로 전달하여
++         기존 SELECT_SLOT toggle semantics에 따라 선택 해제한다.
++    6. bookmark drag는 selection toggle이 아니라 source/target GUI position 사이의 slot-local payload 이동으로 처리한다.
+-    1. graph/image content가 있는 slot의 본문 클릭은 Plotly/image interaction에 맡기며 slot selection을 바꾸지 않는다.
+-    2. 각 content slot 왼쪽 위의 bookmark control click만 setSelectedSlot로 전달한다.
+-       같은 selected slot bookmark를 다시 클릭하면 기존 SELECT_SLOT toggle semantics로 선택 해제한다.
+-    3. empty slot은 graph/image interaction이 없으므로 empty surface click으로 선택할 수 있다.
+-    4. bookmark drag는 selection toggle이 아니라 source/target GUI position 사이의 slot-local payload 이동으로 처리한다.
+        drag 시작 시 UI-local click suppression을 활성화한다.
+        drop 또는 dragend는 drag source를 정리하지만 click suppression을 즉시 해제하지 않는다.
+        suppression이 활성화된 동안 bookmark click이 들어오면 SELECT_SLOT을 보내지 않고 그 click을 소비한 뒤 suppression을 해제한다.
+        browser가 post-drag click을 만들지 않는 경우에는 그 click dispatch 기회가 지난 뒤의 cleanup에서 suppression을 해제한다.
+        따라서 drag와 같은 interaction cycle에서 생긴 click은 slot selection/toggle로 해석하지 않는다.
++    7. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
+-    5. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
+        layout_annotations_export의 operation matrix를 따른다.
++    8. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
+-    6. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
+        Mantine FastFigureDashboardFileDrop에 넘긴다.
+     """
+     return "설치된 dashboard interaction controller"
+diff --git a/sourcescript/application_fsm.py b/sourcescript/application_fsm.py
+--- a/sourcescript/application_fsm.py
++++ b/sourcescript/application_fsm.py
+@@ -236,11 +236,15 @@
+     - 필요한 경우 empty slot의 contentType
+ 
+     처리:
++    1. payload slot id가 none이면 explicit deselection request로 처리하고 selectedSlotId를 none으로 만든다.
++    2. payload slot id가 none이 아니면 current project의 visible slot에서 resolve한다.
++       hidden 또는 존재하지 않는 id는 유효한 selection target으로 만들지 않으며 기존 selection을 임의 변경하지 않는다.
++    3. 유효한 slot id에 대한 UI toggle semantics이면 현재 선택과 같은 id를 다시 선택할 때 selectedSlotId를 none으로 만든다.
++       현재 선택과 다른 유효한 id이면 그 id를 selectedSlotId로 만든다.
++    4. selection이 바뀌면 graph-object selection을 현재 selected chart 기준으로 다시 검증하거나 해제한다.
++    5. workspace는 selectedSlotId가 none이면 project, 선택 slot contentType이 image이면 slot.image,
++       그 외의 선택 slot이면 slot.graph로 파생한다.
++    6. 선택 chart는 별도 editing pointer에 저장하지 않고 필요할 때 resolve한다.
+-    1. payload slot id를 current project에서 resolve한다.
+-    2. UI toggle semantics이면 현재 선택과 같은 id를 다시 선택할 때 selectedSlotId를 none으로 만든다.
+-    3. selection이 바뀌면 graph-object selection을 현재 selected chart 기준으로 다시 검증하거나 해제한다.
+-    4. workspace는 selection과 slot.contentType에서 파생한다.
+-    5. 선택 chart는 별도 editing pointer에 저장하지 않고 필요할 때 resolve한다.
+     """
+     return "선택 결과"
+ 
+diff --git a/sourcescript/api_ui.py b/sourcescript/api_ui.py
+--- a/sourcescript/api_ui.py
++++ b/sourcescript/api_ui.py
+@@ -41,7 +41,7 @@
+     },
+     "slots": {
+         "readSelected": "read; selectedSlotId를 current slot projection으로 resolve",
++        "select": "runtime mutation; explicit visible slot id의 selection toggle 또는 none의 explicit deselection으로 workspace 갱신",
+-        "select": "runtime mutation; explicit slot id의 selection toggle/workspace 갱신",
+         "setContentType": "mutation; selected/payload slot의 slot-local contentType candidate commit",
+         "reset": "mutation; slot-local properties를 defaults로 reset하고 owned chart를 제거",
+         "prepareFileDrop": "runtime calculation/mutation; drop target selection과 acceptability만 결정",
+@@ -63,6 +63,10 @@
+         "planMove": "calculation; current VFS에서 destination/collision/reference count plan",
+         "move": "mutation; current state에서 plan을 재검증하고 candidate move commit",
+         "createDirectory": "mutation; canonical non-conflicting directory candidate commit",
++        "createEmptyCsv": (
++            "mutation + runtime selection; 일반 CSV asset으로 빈 CSV.csv를 생성하고 기존 CSV selection 경로로 그 asset을 선택; "
++            "graph object/chart는 이 command가 자동 생성하지 않음"
++        ),
+         "emptyTrash": "mutation; trash references/assets/directories candidate removal commit",
+         "draggableAsset": "read/calculation; drag payload로 노출 가능한 asset projection",
+         "connectToSlot": "mutation; (path, kind, slotId)에서 현재 VFS asset 및 slotId로 slot을 resolve 후 명시적 연결 commit; 단순 선택은 연결하지 않음",
+@@ -222,7 +226,26 @@
+ 
+ MANTINE_THEME_RULE = (
+     "generic Button, ActionIcon, Input 크기와 Modal centered/Escape/outside-click 기본값은 "
++    "fastFigureTheme에서 공통 정의한다. renderer surface CSS와 generic UI lifecycle을 분리한다. "
++    "FastFigureLayoutOverlay, FastFigureLabelOverlay, FastFigureCaptionOverlay, FastFigurePrintOverlay의 outer Modal width는 "
++    "각 component가 독립적으로 lg/xl/px 값을 소유하지 않고 하나의 Fast Figure 공통 maximum-size definition을 사용한다. "
++    "그 공통 maximum은 현재 Mantine maximum size token보다 더 넓게 정의한다. concrete CSS length 또는 Mantine 구현 표현은 Source Code가 선택한다. "
++    "FastFigureReadmeOverlay처럼 목적이 다른 Modal은 이 네 설정 overlay의 공통 maximum을 자동 상속하는 대상으로 간주하지 않는다."
++)
++
++
++PROJECT_TREE_TRASH_MENU_RULE = (
++    "FastFigureProjectDataTree에서 trash subtree의 CSV/image가 일반 asset selection 또는 slot connection 대상으로 비활성화되어 있더라도 "
++    "그 사실만으로 row action Menu target을 비활성화하지 않는다. Menu는 열 수 있어야 하며 각 action의 enabled 여부는 해당 public command의 "
++    "현재 precondition을 별도로 적용한다. Menu 접근 허용은 asset selection, slot connection, original-location restore를 암묵적으로 허용하는 의미가 아니다."
++)
++
++
++EMPTY_CSV_UI_RULE = (
++    "graph slot의 데이터 불러오기 영역에는 image slot의 빈 이미지 삽입 control과 같은 기능 위치에 빈 CSV 삽입 control을 제공한다. "
++    "command는 assets.createEmptyCsv를 호출하여 일반 project CSV asset을 하나 생성하고 그 CSV를 현재 asset/graph CSV selection으로 선택한다. "
++    "이 command 자체는 chart 또는 graph object를 만들지 않는다. 사용자가 그 CSV로 graph object를 추가할 때는 기존 graphs.addObject와 "
++    "SLOT_DATA_CONNECTED/GRAPH_OBJECTS_REPLACED 경로를 그대로 사용한다. protected/default CSV 또는 별도 빈-그래프 mutation path를 만들지 않는다."
+-    "fastFigureTheme에서 공통 정의한다. renderer surface CSS와 generic UI lifecycle을 분리한다."
+ )
+ 
+ 
+diff --git a/sourcescript/assets_files.py b/sourcescript/assets_files.py
+--- a/sourcescript/assets_files.py
++++ b/sourcescript/assets_files.py
+@@ -108,6 +108,21 @@
+     "unknown": "지원하지 않는 type 또는 잘못된 value shape는 package read 실패",
+ }
+ 
++EMPTY_CSV_TEMPLATE = {
++    "name": "빈 CSV.csv",
++    "directory": PROJECT_ASSET_DIRECTORIES["csv"],
++    "rows": [["X", "Y"], ["", ""]],
++    "mime": "text/csv",
++    "headerLines": 1,
++    "bytes": "rows를 동일 CSV serializer로 직렬화한 UTF-8 bytes",
++}
++
++EMPTY_CSV_RULE = (
++    "빈 CSV 삽입으로 생성한 asset은 일반 CSV asset이다. isDefaultEmpty, protected, undeletable, unmovable 같은 별도 상태를 갖지 않는다. "
++    "같은 이름이 이미 존재하면 일반 project asset collision/unique-path 규칙을 사용하며 기존 CSV를 암묵적으로 교체하지 않는다."
++)
++
++
+ FORMAT_EVOLUTION_RULE = (
+     "현재 package format version 3의 구조를 유지하되 persistent export settings는 additive project setting으로 기록한다. "
+     "같은 version의 기존 파일에 export settings가 없으면 project default로 정규화한다. "
+@@ -226,6 +241,31 @@
+     return csv
+ 
+ 
++def createEmptyProjectCsv():
++    """
++    Return:
++    - csv:
++      EMPTY_CSV_TEMPLATE에서 생성되어 activeProject에 등록된 일반 CSV asset.
++
++    변경:
++    - DATA_OBJECT_CREATED event를 통해 activeProject.csvFiles와 next csv id를 변경한다.
++    - asset selection 자체는 이 함수가 소유하지 않는다.
++
++    처리:
++    1. EMPTY_CSV_TEMPLATE의 rows를 그대로 사용한다: [["X", "Y"], ["", ""]].
++    2. name은 "빈 CSV.csv", MIME은 "text/csv", headerLines는 1을 사용한다.
++    3. bytes는 rows를 project CSV writer와 같은 CSV serializer로 직렬화한 UTF-8 bytes를 사용한다.
++    4. 기본 directory는 /assets/csv다.
++    5. 같은 canonical path가 이미 존재하면 projectVfs.uniquePath와 같은 일반 collision-free naming 규칙으로 새 path를 계산한다.
++       existing asset을 replace하지 않는다.
++    6. createProjectCsv의 일반 DATA_OBJECT_CREATED 경로로 등록한다.
++    7. 생성된 CSV에 protected/default 전용 field를 추가하지 않는다.
++    8. chart, graph object, selectedSlotId는 이 함수에서 변경하지 않는다.
++    """
++    csv = "등록된 일반 빈 CSV asset"
++    return csv
++
++
+ def createProjectImage(bytes, name, mime, id, path):
+     """
+     Return:
+diff --git a/sourcescript/graphs.py b/sourcescript/graphs.py
+--- a/sourcescript/graphs.py
++++ b/sourcescript/graphs.py
+@@ -194,7 +194,14 @@
+     "기존 object의 x/y 편집에 필요한 열은 해당 object.csvId에서 resolve하며 현재 선택 CSV 열과 혼용하지 않는다."
+ )
+ 
++EMPTY_CSV_GRAPH_RULE = (
++    "assets.createEmptyCsv로 생성한 빈 CSV도 다른 project CSV와 동일한 csvId reference 대상이다. "
++    "생성 command는 CSV를 선택 상태로 만들 뿐 chart/object를 자동 생성하지 않는다. "
++    "사용자가 오브젝트 추가를 실행하면 graphEditorAdd는 그 현재 선택 CSV id를 resolve하여 기존 SLOT_DATA_CONNECTED 또는 "
++    "GRAPH_OBJECTS_REPLACED 경로로 graph object를 생성한다. 빈 CSV 전용 chart type, protected object, fake default object를 만들지 않는다."
++)
+ 
++
+ def graphEditorAdd(csvId):
+     """
+     Return:
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,13 +9,13 @@
+   "authority_rule": "On semantic conflict, Source Script wins. Source code may be current only when the current verification model derives from the current closed Source Script and its TLC validation has passed.",
+   "layers": {
+     "source-script": {
++      "revision": 17,
+-      "revision": 16,
+       "status": "current",
+       "path_rule": "sourcescript/**/*.py",
++      "fingerprint": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
+-      "fingerprint": "sha256:05c78c39c6c7ae715c8204ec0c4381ecd66ebf1dd9dbfb01a26fd99400270484",
+       "derived_from": null,
+       "closure": "closed",
++      "closure_review": "agent_space/reviews/review-20261013-006-sourcescript-closure-r17.md"
+-      "closure_review": "agent_space/reviews/review-20261013-003-sourcescript-closure-r16.md"
+     },
+     "verification-model": {
+       "revision": 6,
+diff --git a/agent_space/reviews/review-20261013-006-sourcescript-closure-r17.md b/agent_space/reviews/review-20261013-006-sourcescript-closure-r17.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261013-006-sourcescript-closure-r17.md
+@@ -0,0 +1,133 @@
++# Review 20261013-006 — Source Script r17 closure
++
++Source Script revision: r17
++
++Fingerprint:
++
++```text
++sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664
++```
++
++## Change trigger
++
++The current UI/source layers contain several user-visible regressions or ownership mismatches that cannot be corrected by inventing lower-layer exceptions:
++
++- slot body selection depends on whether chart/image content exists before it checks whether the slot is already selected;
++- dashboard background click has no explicit slot deselection meaning;
++- trash asset selection-disabled state also disables the row action menu even though menu availability and selection are separate interactions;
++- the earlier protected default CSV was removed with the zero-object chart redesign, but the user-facing empty-CSV insertion command was not restored;
++- Layout, Label, Caption and Print outer Modal widths are independently assigned and no longer share one Mantine sizing owner.
++
++Layout-preview centering and actual rendered-width measurement are also required in Source Code, but the existing Source Script dashboardGeometry rule already defines width/height/gap/margin/radius from one geometry width. Those renderer implementation details do not require a new persistent/domain meaning in r17.
++
++## 1. Slot selection interaction
++
++The dashboard interaction controller now defines the full branch order instead of classifying the slot by content first.
++
++1. Resolve whether the click belongs to a visible slot.
++2. A dashboard-background click outside a slot:
++   - does nothing when no slot is selected;
++   - otherwise uses the existing SELECT_SLOT path with no slot id to clear selectedSlotId and derive workspace=project;
++   - does not treat toolbar/sidebar/overlay/Modal/project-tree clicks as dashboard-background input.
++3. For a visible slot, determine whether that slot is already selected before using content type or content presence.
++4. If the clicked visible slot is not selected:
++   - graph, image and empty slots use the same slot-selection rule;
++   - a valid slot-surface click selects the slot;
++   - existing chart/image content does not block this selection entry.
++5. If the clicked visible slot is already selected:
++   - bookmark click keeps the existing same-slot SELECT_SLOT toggle and therefore deselects;
++   - graph-body interaction is left to Plotly without changing selection;
++   - image-body interaction is left to the image renderer without changing selection;
++   - an empty slot has no content interaction, so its surface click uses the existing same-slot toggle and deselects.
++6. Existing bookmark-drag click suppression remains unchanged.
++
++No content-type-specific selection authority or extra selection state is added.
++
++## 2. Explicit deselection semantics
++
++applySlotSelectionAction now explicitly distinguishes:
++
++- payload slot id = none: explicit deselection;
++- valid visible slot id different from current: select it;
++- same valid slot id under UI toggle semantics: deselect it;
++- hidden/nonexistent id: invalid target and no arbitrary selection mutation.
++
++workspace remains derived from selectedSlotId and selected slot contentType.
++
++## 3. Trash asset row menu
++
++FastFigureProjectDataTree keeps separate interaction decisions for:
++
++- whether a trash asset can be used as the normal selected asset / slot connection source;
++- whether the row action Menu target can be opened;
++- whether each command inside the Menu is enabled.
++
++A trash CSV/image may therefore expose its row action Menu while ordinary asset-selection remains disabled.
++
++This does not define original-location restore. The existing VFS move command may still be used only according to its own preconditions. No original-path field or restore authority is added.
++
++## 4. Empty CSV insertion
++
++The restored empty-CSV command uses the historical data shape but not the historical protected-default-CSV semantics.
++
++Exact asset template:
++
++```text
++name        = "빈 CSV.csv"
++directory   = /assets/csv
++rows        = [["X", "Y"], ["", ""]]
++mime        = "text/csv"
++headerLines = 1
++bytes       = the same rows serialized by the normal project CSV writer as UTF-8
++```
++
++Rules:
++
++1. createEmptyProjectCsv creates a normal project CSV through the existing DATA_OBJECT_CREATED path.
++2. Name collision uses the ordinary project unique-path rule; it does not silently replace an existing asset.
++3. The new CSV has no isDefaultEmpty/protected/undeletable/unmovable state.
++4. assets.createEmptyCsv then uses the existing CSV-selection path so the new CSV becomes the current asset/graph CSV selection.
++5. The command itself does not create a chart or graph object.
++6. When the user adds a graph object, existing graphs.addObject / graphEditorAdd and SLOT_DATA_CONNECTED or GRAPH_OBJECTS_REPLACED semantics are reused.
++7. The UI control belongs in the graph-slot data-loading area in the corresponding functional position to the image-slot empty-image insertion control.
++8. No protected default CSV and no separate empty-graph mutation path are reintroduced.
++
++## 5. Mantine Modal size ownership
++
++FastFigureLayoutOverlay, FastFigureLabelOverlay, FastFigureCaptionOverlay and FastFigurePrintOverlay no longer own independent outer Modal size decisions.
++
++Their shared outer width is owned by one Fast Figure common maximum-size definition in the Mantine UI layer.
++
++The common maximum must be wider than the currently used Mantine maximum size token. The concrete CSS length/token implementation remains Source Code detail.
++
++FastFigureReadmeOverlay and other Modal purposes are not automatically members of this four-overlay sizing group.
++
++Existing shared Modal centered, outside-click and Escape behavior remains unchanged.
++
++## 6. Source-of-truth and responsibility check
++
++Pass.
++
++- slot selection remains selectedSlotId + ApplicationStateMachine;
++- workspace remains derived;
++- CSV creation remains the normal project CSV collection and DATA_OBJECT_CREATED path;
++- CSV selection remains the existing application assetSelection/assetPath authority;
++- graph object creation remains the existing graph mutation path;
++- trash menu availability does not become domain state;
++- Modal width is generic UI ownership and does not enter project state;
++- layout preview actual DOM width remains a renderer projection input and is not introduced as persistent state.
++
++## 7. Project-purpose alignment
++
++Pass.
++
++The changes restore existing figure-editing entry points and make UI behavior consistent without adding a new file format, persistent schema, graph representation, asset class or selection model.
++
++## 8. Closure verdict
++
++Source Script r17 is closed.
++
++No unresolved Source Script design item is introduced by this revision.
++
++The verification model remains stale until these r17 interaction/mutation meanings are translated as required. Source Code remains stale and must not be updated to current before the verification/TLC gate is satisfied.
++

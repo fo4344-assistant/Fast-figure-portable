@@ -194,6 +194,13 @@ GRAPH_CSV_SELECTION_RULE = (
     "기존 object의 x/y 편집에 필요한 열은 해당 object.csvId에서 resolve하며 현재 선택 CSV 열과 혼용하지 않는다."
 )
 
+EMPTY_CSV_GRAPH_RULE = (
+    "assets.createEmptyCsv로 생성한 빈 CSV도 다른 project CSV와 동일한 csvId reference 대상이다. "
+    "생성 command는 CSV를 선택 상태로 만들 뿐 chart/object를 자동 생성하지 않는다. "
+    "사용자가 오브젝트 추가를 실행하면 graphEditorAdd는 그 현재 선택 CSV id를 resolve하여 기존 SLOT_DATA_CONNECTED 또는 "
+    "GRAPH_OBJECTS_REPLACED 경로로 graph object를 생성한다. 빈 CSV 전용 chart type, protected object, fake default object를 만들지 않는다."
+)
+
 
 def graphEditorAdd(csvId):
     """
