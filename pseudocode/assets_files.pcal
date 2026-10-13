@@ -1,7 +1,7 @@
 ---- MODULE FastFigureAssetsFilesPseudocode ----
 EXTENDS Naturals, Sequences, FiniteSets
 
-\* r16 PlusCal pseudocode for sourcescript/assets_files.py.
+\* r17 PlusCal pseudocode for sourcescript/assets_files.py.
 \* Persistent mutations are candidate-first and commit once after validation.
 
 CONSTANT NoReference
@@ -124,6 +124,31 @@ CreateCsvCommand:
 CreateCsvResult:
   result := candidate;
 CreateCsvReturn:
+  return;
+end procedure;
+
+procedure CreateEmptyProjectCsv()
+variables
+  rows = <<<<"X", "Y">>, <<"", "">>>>,
+  pathValue = NoReference;
+begin
+EmptyCsvPath:
+  pathValue := CalculateCollisionFreePath(
+    "/assets/csv/빈 CSV.csv",
+    projectAuthority,
+    {});
+EmptyCsvCreate:
+  call CreateCsv(
+    rows,
+    "빈 CSV.csv",
+    NextProjectCsvId(),
+    SerializeCsvRowsToUtf8Base64(rows),
+    "text/csv",
+    1,
+    pathValue);
+EmptyCsvOrdinaryAsset:
+  assert ~HasProtectedOrDefaultCsvMarker(result);
+EmptyCsvReturn:
   return;
 end procedure;
 
@@ -386,6 +411,8 @@ begin
 Main:
   while TRUE do
     either
+      call CreateEmptyProjectCsv();
+    or
       with target = RequestedDeleteTarget() do
         call DeleteAsset(target);
       end with;

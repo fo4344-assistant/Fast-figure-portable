@@ -1,7 +1,7 @@
 ---- MODULE FastFigureApplicationFsmPseudocode ----
 EXTENDS Naturals, Sequences
 
-\* r16 PlusCal pseudocode for sourcescript/application_fsm.py.
+\* r17 PlusCal pseudocode for sourcescript/application_fsm.py.
 \* Helper operators represent Source Script-defined resolution/candidate calculations.
 
 CONSTANT NoSelection
@@ -195,7 +195,11 @@ procedure ApplySlotSelection(payload)
 variables slot = NoSelection;
 begin
 ResolveSlotSelection:
-  slot := ResolveSlotFromCurrentProject(payload.slotId);
+  if payload.slotId = NoSelection then
+    slot := NoSelection;
+  else
+    slot := ResolveVisibleSlotFromCurrentProject(payload.slotId);
+  end if;
 CommitSlotSelection:
   if payload.slotId = NoSelection then
     selectedSlotId := NoSelection ||

@@ -1,7 +1,7 @@
 ---- MODULE FastFigureRendererRuntimePseudocode ----
 EXTENDS Naturals
 
-\* r16 PlusCal pseudocode for sourcescript/renderer_runtime.py.
+\* r17 PlusCal pseudocode for sourcescript/renderer_runtime.py.
 
 CONSTANT NoSelection
 
@@ -91,21 +91,31 @@ SetSelectedReturn:
   return;
 end procedure;
 
-procedure ContentBodyClick(slotId)
+procedure DashboardBackgroundClick()
 begin
-ContentPassThrough:
-  skip;
-ContentReturn:
+BackgroundDeselect:
+  if selectedSlotId # NoSelection then
+    call SetSelectedSlot(NoSelection, "fsm-to-model");
+  end if;
+BackgroundReturn:
   return;
 end procedure;
 
-procedure EmptySlotClick(slotId)
+procedure SlotSurfaceClick(slotId)
 begin
-EmptySelect:
-  if IsVisibleEmptySlot(slotId) then
-    call SetSelectedSlot(slotId, "ui-to-fsm");
+SlotSurfaceResolve:
+  if IsVisibleSlot(slotId) then
+    if selectedSlotId # slotId then
+      call SetSelectedSlot(slotId, "ui-to-fsm");
+    else
+      if IsVisibleContentSlot(slotId) then
+        effect := PassSelectedContentInteractionToRenderer(slotId);
+      else
+        call SetSelectedSlot(slotId, "ui-to-fsm");
+      end if;
+    end if;
   end if;
-EmptyReturn:
+SlotSurfaceReturn:
   return;
 end procedure;
 
@@ -263,9 +273,11 @@ Main:
         call BookmarkClick(slotId);
       end with;
     or
-      with slotId = NextEmptySlotClickSlot() do
-        call EmptySlotClick(slotId);
+      with slotId = NextSlotSurfaceClickSlot() do
+        call SlotSurfaceClick(slotId);
       end with;
+    or
+      call DashboardBackgroundClick();
     or
       with slotId = NextBookmarkDragStartSlot() do
         call BookmarkDragStart(slotId);

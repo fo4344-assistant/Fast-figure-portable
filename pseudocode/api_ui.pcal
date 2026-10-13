@@ -1,7 +1,7 @@
 ---- MODULE FastFigureApiUiPseudocode ----
 EXTENDS Naturals
 
-\* r16 PlusCal pseudocode for sourcescript/api_ui.py.
+\* r17 PlusCal pseudocode for sourcescript/api_ui.py.
 \* Collision/form/sidebar/drop-receiver values are UI-local and never project authority.
 
 CONSTANT NoValue
@@ -197,6 +197,46 @@ DispatchExternalDropReturn:
   return;
 end procedure;
 
+procedure CreateEmptyCsv()
+variables createdCsv = NoValue;
+begin
+EmptyCsvCreate:
+  createdCsv := AssetsCreateEmptyProjectCsv();
+EmptyCsvSelect:
+  if createdCsv # NoValue then
+    result := AssetApiSelectCsv(CanonicalAssetPath(createdCsv));
+    lastPersistentCommand := [
+      name |-> "assets.createEmptyCsv",
+      csvId |-> createdCsv.id
+    ];
+  end if;
+EmptyCsvReturn:
+  return;
+end procedure;
+
+procedure OpenTrashAssetRowMenu(path)
+variables asset = NoValue;
+begin
+TrashMenuResolve:
+  asset := ResolveProjectAsset(path);
+TrashMenuOpen:
+  if asset # NoValue /\ IsTrashedAsset(asset) then
+    effect := OpenRowActionMenu(path);
+  end if;
+TrashMenuReturn:
+  return;
+end procedure;
+
+procedure ResolveSettingsOverlayMaximum()
+begin
+SettingsOverlayMaximum:
+  result := CommonFastFigureSettingsOverlayMaximum();
+SettingsOverlayMaximumCheck:
+  assert result > MantineBuiltinMaximumSize();
+SettingsOverlayMaximumReturn:
+  return;
+end procedure;
+
 procedure ConnectExistingAsset(path, kind, slotId)
 begin
 ExplicitAssetConnection:
@@ -254,6 +294,14 @@ Main:
       with path = NextAssetPath(), kind = NextAssetKind(), slotId = NextDropSlotId() do
         call ConnectExistingAsset(path, kind, slotId);
       end with;
+    or
+      call CreateEmptyCsv();
+    or
+      with path = NextTrashedAssetMenuPath() do
+        call OpenTrashAssetRowMenu(path);
+      end with;
+    or
+      call ResolveSettingsOverlayMaximum();
     or
       call RerenderDashboardDropReceiver();
     end either;

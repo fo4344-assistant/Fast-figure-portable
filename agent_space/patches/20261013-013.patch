@@ -1,0 +1,337 @@
+diff --git a/pseudocode/application_fsm.pcal b/pseudocode/application_fsm.pcal
+--- a/pseudocode/application_fsm.pcal
++++ b/pseudocode/application_fsm.pcal
+@@ -1,7 +1,7 @@
+ ---- MODULE FastFigureApplicationFsmPseudocode ----
+ EXTENDS Naturals, Sequences
+ 
++\* r17 PlusCal pseudocode for sourcescript/application_fsm.py.
+-\* r16 PlusCal pseudocode for sourcescript/application_fsm.py.
+ \* Helper operators represent Source Script-defined resolution/candidate calculations.
+ 
+ CONSTANT NoSelection
+@@ -195,7 +195,11 @@
+ variables slot = NoSelection;
+ begin
+ ResolveSlotSelection:
++  if payload.slotId = NoSelection then
++    slot := NoSelection;
++  else
++    slot := ResolveVisibleSlotFromCurrentProject(payload.slotId);
++  end if;
+-  slot := ResolveSlotFromCurrentProject(payload.slotId);
+ CommitSlotSelection:
+   if payload.slotId = NoSelection then
+     selectedSlotId := NoSelection ||
+diff --git a/pseudocode/renderer_runtime.pcal b/pseudocode/renderer_runtime.pcal
+--- a/pseudocode/renderer_runtime.pcal
++++ b/pseudocode/renderer_runtime.pcal
+@@ -1,7 +1,7 @@
+ ---- MODULE FastFigureRendererRuntimePseudocode ----
+ EXTENDS Naturals
+ 
++\* r17 PlusCal pseudocode for sourcescript/renderer_runtime.py.
+-\* r16 PlusCal pseudocode for sourcescript/renderer_runtime.py.
+ 
+ CONSTANT NoSelection
+ 
+@@ -91,21 +91,31 @@
+   return;
+ end procedure;
+ 
++procedure DashboardBackgroundClick()
+-procedure ContentBodyClick(slotId)
+ begin
++BackgroundDeselect:
++  if selectedSlotId # NoSelection then
++    call SetSelectedSlot(NoSelection, "fsm-to-model");
++  end if;
++BackgroundReturn:
+-ContentPassThrough:
+-  skip;
+-ContentReturn:
+   return;
+ end procedure;
+ 
++procedure SlotSurfaceClick(slotId)
+-procedure EmptySlotClick(slotId)
+ begin
++SlotSurfaceResolve:
++  if IsVisibleSlot(slotId) then
++    if selectedSlotId # slotId then
++      call SetSelectedSlot(slotId, "ui-to-fsm");
++    else
++      if IsVisibleContentSlot(slotId) then
++        effect := PassSelectedContentInteractionToRenderer(slotId);
++      else
++        call SetSelectedSlot(slotId, "ui-to-fsm");
++      end if;
++    end if;
+-EmptySelect:
+-  if IsVisibleEmptySlot(slotId) then
+-    call SetSelectedSlot(slotId, "ui-to-fsm");
+   end if;
++SlotSurfaceReturn:
+-EmptyReturn:
+   return;
+ end procedure;
+ 
+@@ -263,10 +273,12 @@
+         call BookmarkClick(slotId);
+       end with;
+     or
++      with slotId = NextSlotSurfaceClickSlot() do
++        call SlotSurfaceClick(slotId);
+-      with slotId = NextEmptySlotClickSlot() do
+-        call EmptySlotClick(slotId);
+       end with;
+     or
++      call DashboardBackgroundClick();
++    or
+       with slotId = NextBookmarkDragStartSlot() do
+         call BookmarkDragStart(slotId);
+       end with;
+diff --git a/pseudocode/api_ui.pcal b/pseudocode/api_ui.pcal
+--- a/pseudocode/api_ui.pcal
++++ b/pseudocode/api_ui.pcal
+@@ -1,7 +1,7 @@
+ ---- MODULE FastFigureApiUiPseudocode ----
+ EXTENDS Naturals
+ 
++\* r17 PlusCal pseudocode for sourcescript/api_ui.py.
+-\* r16 PlusCal pseudocode for sourcescript/api_ui.py.
+ \* Collision/form/sidebar/drop-receiver values are UI-local and never project authority.
+ 
+ CONSTANT NoValue
+@@ -197,6 +197,46 @@
+   return;
+ end procedure;
+ 
++procedure CreateEmptyCsv()
++variables createdCsv = NoValue;
++begin
++EmptyCsvCreate:
++  createdCsv := AssetsCreateEmptyProjectCsv();
++EmptyCsvSelect:
++  if createdCsv # NoValue then
++    result := AssetApiSelectCsv(CanonicalAssetPath(createdCsv));
++    lastPersistentCommand := [
++      name |-> "assets.createEmptyCsv",
++      csvId |-> createdCsv.id
++    ];
++  end if;
++EmptyCsvReturn:
++  return;
++end procedure;
++
++procedure OpenTrashAssetRowMenu(path)
++variables asset = NoValue;
++begin
++TrashMenuResolve:
++  asset := ResolveProjectAsset(path);
++TrashMenuOpen:
++  if asset # NoValue /\ IsTrashedAsset(asset) then
++    effect := OpenRowActionMenu(path);
++  end if;
++TrashMenuReturn:
++  return;
++end procedure;
++
++procedure ResolveSettingsOverlayMaximum()
++begin
++SettingsOverlayMaximum:
++  result := CommonFastFigureSettingsOverlayMaximum();
++SettingsOverlayMaximumCheck:
++  assert result > MantineBuiltinMaximumSize();
++SettingsOverlayMaximumReturn:
++  return;
++end procedure;
++
+ procedure ConnectExistingAsset(path, kind, slotId)
+ begin
+ ExplicitAssetConnection:
+@@ -255,6 +295,14 @@
+         call ConnectExistingAsset(path, kind, slotId);
+       end with;
+     or
++      call CreateEmptyCsv();
++    or
++      with path = NextTrashedAssetMenuPath() do
++        call OpenTrashAssetRowMenu(path);
++      end with;
++    or
++      call ResolveSettingsOverlayMaximum();
++    or
+       call RerenderDashboardDropReceiver();
+     end either;
+   end while;
+diff --git a/pseudocode/assets_files.pcal b/pseudocode/assets_files.pcal
+--- a/pseudocode/assets_files.pcal
++++ b/pseudocode/assets_files.pcal
+@@ -1,7 +1,7 @@
+ ---- MODULE FastFigureAssetsFilesPseudocode ----
+ EXTENDS Naturals, Sequences, FiniteSets
+ 
++\* r17 PlusCal pseudocode for sourcescript/assets_files.py.
+-\* r16 PlusCal pseudocode for sourcescript/assets_files.py.
+ \* Persistent mutations are candidate-first and commit once after validation.
+ 
+ CONSTANT NoReference
+@@ -127,6 +127,31 @@
+   return;
+ end procedure;
+ 
++procedure CreateEmptyProjectCsv()
++variables
++  rows = <<<<"X", "Y">>, <<"", "">>>>,
++  pathValue = NoReference;
++begin
++EmptyCsvPath:
++  pathValue := CalculateCollisionFreePath(
++    "/assets/csv/빈 CSV.csv",
++    projectAuthority,
++    {});
++EmptyCsvCreate:
++  call CreateCsv(
++    rows,
++    "빈 CSV.csv",
++    NextProjectCsvId(),
++    SerializeCsvRowsToUtf8Base64(rows),
++    "text/csv",
++    1,
++    pathValue);
++EmptyCsvOrdinaryAsset:
++  assert ~HasProtectedOrDefaultCsvMarker(result);
++EmptyCsvReturn:
++  return;
++end procedure;
++
+ procedure CreateImage(bytes, name, mime, id, pathValue)
+ begin
+ CreateImageCandidate:
+@@ -386,6 +411,8 @@
+ Main:
+   while TRUE do
+     either
++      call CreateEmptyProjectCsv();
++    or
+       with target = RequestedDeleteTarget() do
+         call DeleteAsset(target);
+       end with;
+diff --git a/pseudocode/graphs.pcal b/pseudocode/graphs.pcal
+--- a/pseudocode/graphs.pcal
++++ b/pseudocode/graphs.pcal
+@@ -1,7 +1,7 @@
+ ---- MODULE FastFigureGraphsPseudocode ----
+ EXTENDS Naturals, Sequences
+ 
++\* r17 PlusCal pseudocode for sourcescript/graphs.py.
+-\* r16 PlusCal pseudocode for sourcescript/graphs.py.
+ \* Persistent chart/project changes are emitted through existing mutation commands.
+ 
+ CONSTANT NoReference
+@@ -88,6 +88,8 @@
+   slotValue := ResolveSelectedSlot();
+ AddResolveCsv:
+   csv := ResolveProjectCsv(csvId);
++AddSelectedCsvContract:
++  assert csvId = SelectedCsvId();
+ AddObjectBranch:
+   if slotValue # NoReference /\ csv # NoReference then
+     if slotValue.chart = NoReference then
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -47,15 +47,15 @@
+   },
+   "legacy_artifacts": {
+     "pseudocode": {
++      "revision": 3,
+-      "revision": 2,
+       "status": "archived",
+       "path_rule": "pseudocode/**/*",
++      "fingerprint": "sha256:086f64c600a847ecd389d3be621eb24a4589ae36c325cf248e4bc4cecd1790d0",
+-      "fingerprint": "sha256:0d908d8ea88f2e7a983e0103ba88352f4c42abc44b4377835ee7d8a095ea5d7b",
+       "derived_from": {
++        "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664"
+-        "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
+       },
++      "validation": "not-run",
++      "policy_version": "v0.2.6",
+-      "validation": "passed",
+-      "policy_version": "v0.1.1",
+       "role": "non-authoritative reference artifact; does not satisfy the v0.2.0 verification-model/TLC gate"
+     }
+   }
+diff --git a/agent_space/reviews/review-20261013-007-pluscal-r17.md b/agent_space/reviews/review-20261013-007-pluscal-r17.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261013-007-pluscal-r17.md
+@@ -0,0 +1,67 @@
++# Review 20261013-007 — PlusCal r17 translation
++
++## Source authority
++
++- Source Script revision: r17
++- fingerprint: `sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664`
++- closure review: `agent_space/reviews/review-20261013-006-sourcescript-closure-r17.md`
++
++## Translation changes
++
++### application_fsm.pcal
++
++Slot selection now resolves only visible slot ids when the payload is not NoSelection. NoSelection remains the explicit deselection input. The existing same-slot UI toggle branch remains intact.
++
++### renderer_runtime.pcal
++
++The old split between ContentBodyClick and EmptySlotClick is removed.
++
++The new SlotSurfaceClick procedure preserves the Source Script branch order:
++
++1. resolve visible slot;
++2. if the slot is not currently selected, select it regardless of graph/image/empty content;
++3. if already selected and the slot has graph/image content, pass interaction to the content renderer without changing selection;
++4. if already selected and empty, send the existing same-slot selection command and therefore toggle off.
++
++DashboardBackgroundClick sends NoSelection only when a slot is currently selected.
++
++Bookmark drag/click suppression procedures are unchanged.
++
++### assets_files.pcal
++
++CreateEmptyProjectCsv directly translates the r17 ordinary-asset template:
++
++- `빈 CSV.csv`
++- rows `[["X","Y"],["",""]]`
++- `text/csv`
++- headerLines 1
++- ordinary collision-free project path
++- existing DATA_OBJECT_CREATED path through CreateCsv
++- assertion that no protected/default marker is introduced.
++
++### api_ui.pcal
++
++CreateEmptyCsv calls the asset creation procedure and then the existing CSV-selection command. It does not emit chart/object creation.
++
++OpenTrashAssetRowMenu models Menu availability separately from normal asset selection.
++
++ResolveSettingsOverlayMaximum models one shared setting-overlay maximum and asserts that it is wider than the built-in Mantine maximum; concrete CSS units remain Source Code detail.
++
++### graphs.pcal
++
++AddGraphObject explicitly requires the passed csvId to be the current selected CSV id. No empty-CSV-specific graph mutation is added.
++
++## Non-persistent UI boundary
++
++Trash Menu opened state and concrete Modal dimensions are not promoted to project authority. The pseudocode records their interaction constraints but does not create persistent domain state for them.
++
++## Validation state
++
++This review records semantic translation only. Official PlusCal translation/SANY and TLC execution are not claimed here because the current execution environment does not contain `tla2tools.jar` and external tool download is unavailable.
++
++The canonical verification-model therefore remains stale/pending until an executable r17 verification model is produced and checked.
++
++## Verdict
++
++The r17 Source Script changes are translated into the corresponding PlusCal pseudocode without adding a protected default CSV, a second slot-selection authority, original-location restore state, or a separate empty-graph command.
++
