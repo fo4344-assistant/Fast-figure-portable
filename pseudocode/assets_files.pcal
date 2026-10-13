@@ -1,7 +1,7 @@
 ---- MODULE FastFigureAssetsFilesPseudocode ----
 EXTENDS Naturals, Sequences, FiniteSets
 
-\* r17 PlusCal pseudocode for sourcescript/assets_files.py.
+\* r18 PlusCal pseudocode for sourcescript/assets_files.py.
 \* Persistent mutations are candidate-first and commit once after validation.
 
 CONSTANT NoReference
@@ -222,9 +222,20 @@ DeleteReturn:
 end procedure;
 
 procedure PlanNodeMove(pathValue, directory)
+variables source = NoReference;
 begin
-MovePlanRead:
-  result := CalculateMovePlanFromCurrentVfs(pathValue, directory, projectAuthority);
+MovePlanResolveSource:
+  source := ResolveVfs(pathValue, projectAuthority);
+MovePlanEligibility:
+  if source # NoReference /\ ~IsFixedProjectDirectory(source) then
+    result := CalculateMovePlanFromCurrentVfs(pathValue, directory, projectAuthority);
+  else
+    result := NoReference;
+  end if;
+MovePlanTrashRule:
+  assert source = NoReference
+         \/ IsFixedProjectDirectory(source)
+         \/ TreeMoveEligibilityIndependentOfTrashMembership(source);
 MovePlanReturn:
   return;
 end procedure;
@@ -237,7 +248,12 @@ MoveReresolve:
 MoveBuild:
   if fresh # NoReference then
     candidate := ApplyMoveDestination(fresh, useUniqueName, projectAuthority);
-    candidate := DetachReferencesIfEnteringTrash(candidate);
+    if MoveEntersTrash(fresh) then
+      candidate := DetachReferencesIfEnteringTrash(candidate);
+    end if;
+    if MoveLeavesTrash(fresh) then
+      candidate := PreserveDetachedReferencesWithoutRestore(candidate);
+    end if;
     candidate := MoveDescendantsIfDirectory(candidate);
   end if;
 MoveValidate:

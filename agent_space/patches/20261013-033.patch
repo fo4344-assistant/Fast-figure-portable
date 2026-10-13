@@ -1,0 +1,400 @@
+diff --git a/agent_space/reviews/review-20261013-012-pluscal-r18.md b/agent_space/reviews/review-20261013-012-pluscal-r18.md
+--- a/agent_space/reviews/review-20261013-012-pluscal-r18.md
++++ b/agent_space/reviews/review-20261013-012-pluscal-r18.md
+@@ -0,0 +1,142 @@
++# PlusCal translation review — Source Script r18
++
++## 대상
++
++- Source Script: r18 / closed
++- Source Script fingerprint: `sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7`
++- PlusCal pseudocode: r4
++- pseudocode fingerprint: `sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583`
++- 변경 파일:
++  - `pseudocode/api_ui.pcal`
++  - `pseudocode/assets_files.pcal`
++  - `pseudocode/renderer_runtime.pcal`
++
++## 1. module 대응
++
++Source Script의 기존 module decomposition을 유지했다.
++
++- `api_ui.py` → `api_ui.pcal`
++- `assets_files.py` → `assets_files.pcal`
++- `renderer_runtime.py` → `renderer_runtime.pcal`
++
++새 logical module이나 중간 authority를 추가하지 않았다.
++
++## 2. project tree / trash 번역
++
++Source Script r18의 다음 의미를 직접 번역했다.
++
++```text
++current VFS resolve
++→ fixed directory 여부로 tree move source 판정
++→ trash membership은 tree move 금지 조건이 아님
++→ planMove
++→ move
++```
++
++`api_ui.pcal::MoveProjectTreeNode`는 UI tree interaction을 기존 asset move command로 전달한다. `assets_files.pcal::PlanNodeMove`는 current VFS에서 source를 다시 resolve하고 fixed directory만 차단한다.
++
++`assets_files.pcal::MoveNode`는:
++
++- entering trash일 때 reference detach
++- leaving trash일 때 detached reference를 복원하지 않음
++- directory descendant move
++- validation 후 commit
++
++순서를 보존한다.
++
++## 3. tree move와 slot connection 분리
++
++`api_ui.pcal::ConnectExistingAsset`은 explicit slot connection에서:
++
++- path/kind/slot resolve
++- non-trash
++- CSV/image kind
++
++조건을 요구한다.
++
++따라서 trash asset은 tree move source가 될 수 있지만 slot connection source가 아니다. 두 허용 조건을 하나의 draggable 상태로 합치지 않았다.
++
++## 4. selection 의미
++
++`SelectProjectTreeNode`는 current VFS에서 node를 resolve한 뒤 기존 selection command로 전달한다.
++
++tree projection 자체가 selection authority를 소유하지 않는다.
++
++## 5. settings overlay resize 번역
++
++`StartSettingsOverlayResize → MoveSettingsOverlayResize → EndSettingsOverlayResize` 절차를 추가했다.
++
++상태는 다음 UI-local interaction 값에 한정된다.
++
++- 시작 pointer 위치
++- 시작 height
++- 현재 overlay height
++- interaction active 여부
++
++`MoveSettingsOverlayResize`는 project authority가 변경되지 않는다는 조건을 명시한다.
++
++구체 CSS size, pointer capture API, Mantine Modal prop은 pseudocode에 넣지 않았다.
++
++## 6. Layout preview 번역
++
++`ReadLayoutPreview(renderedWidth)`는 actual rendered width를 `LayoutApiReadState` 입력으로 사용하고, returned preview geometry가 같은 rendered width와 configured aspect를 사용한다는 predicate를 확인한다.
++
++Source Script의 `dashboardGeometry` 계산 의미를 보존하면서 pseudocode 단계에서 별도 수치 타입/브라우저 측정 API를 발명하지 않았다.
++
++preview 전용 resize state는 추가하지 않았다.
++
++## 7. bookmark swap 번역
++
++`renderer_runtime.pcal::SwapSlotContents`는:
++
++```text
++SLOTS_SWAPPED command
++→ commit dispatch
++→ reconciled selectedSlotId read
++→ RenderDashboard
++```
++
++순서를 명시한다.
++
++renderer refresh는 swap mutation을 반복하지 않는다. `BookmarkDrop`의 drag-source cleanup과 post-drag click suppression 흐름은 기존 의미를 유지한다.
++
++## 8. failure / mutation 경계
++
++- tree move는 plan이 없으면 mutation하지 않는다.
++- invalid/fixed source는 move plan을 만들지 않는다.
++- slot connection precondition이 실패하면 persistent command를 만들지 않는다.
++- swap은 valid visible distinct slots에서만 실행된다.
++- overlay resize는 project mutation 경로를 호출하지 않는다.
++
++기존 candidate/validation/commit 책임은 `assets_files.pcal`에 유지했다.
++
++## 9. Source Script에 없는 의미 추가 여부
++
++다음 구현 세부는 추가하지 않았다.
++
++- Mantine Tree prop/API 이름
++- DataTransfer MIME
++- DOM hierarchy
++- concrete modal min/max pixel
++- ResizeObserver
++- pointer capture
++- local tree data mutation
++
++새 domain state, persistent field, restore history도 추가하지 않았다.
++
++## 10. 결론
++
++r4 pseudocode는 Source Script r18의 변경 의미를 기존 module hierarchy와 authority 경계를 유지한 채 언어중립 실행 절차로 직접 번역한다.
++
++Source Code 구현자가 다음 고수준 규칙을 새로 결정할 필요가 없다.
++
++- trash/tree move 허용 범위
++- slot connection 허용 범위
++- entering/leaving trash reference 의미
++- swap 후 projection refresh 순서
++- settings overlay resize의 local-state 경계
++- Layout preview geometry의 단일 width 기준
++
++번역 충실도와 구체화 수준: **충족**.
++
++다음 단계는 이 pseudocode에서 상태 기반 검증이 필요한 범위를 verification model에 반영하고 TLC를 실행하는 것이다.
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -47,14 +47,14 @@
+       "validation_review": "agent_space/reviews/review-20261013-010-pseudocode-lineage-policy-alignment.md"
+     },
+     "pseudocode": {
+-      "revision": 3,
+-      "status": "stale",
++      "revision": 4,
++      "status": "current",
+       "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898",
++      "fingerprint": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583",
+       "derived_from": {
+-        "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664"
++        "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7"
+       },
+-      "translation_review": "agent_space/reviews/review-20261013-007-pluscal-r17.md"
++      "translation_review": "agent_space/reviews/review-20261013-012-pluscal-r18.md"
+     }
+   }
+ }
+diff --git a/pseudocode/api_ui.pcal b/pseudocode/api_ui.pcal
+--- a/pseudocode/api_ui.pcal
++++ b/pseudocode/api_ui.pcal
+@@ -1,7 +1,7 @@
+ ---- MODULE FastFigureApiUiPseudocode ----
+ EXTENDS Naturals
+ 
+-\* r17 PlusCal pseudocode for sourcescript/api_ui.py.
++\* r18 PlusCal pseudocode for sourcescript/api_ui.py.
+ \* Collision/form/sidebar/drop-receiver values are UI-local and never project authority.
+ 
+ CONSTANT NoValue
+@@ -20,6 +20,10 @@ variables
+   lastHandledDropEventId = NoValue,
+   sidebarWidth = 0,
+   sidebarCollapsed = FALSE,
++  settingsOverlayHeight = NoValue,
++  settingsOverlayResizeStartY = NoValue,
++  settingsOverlayResizeStartHeight = NoValue,
++  settingsOverlayResizeActive = FALSE,
+   result = NoValue,
+   effect = NoValue;
+ 
+@@ -214,6 +218,40 @@ EmptyCsvReturn:
+   return;
+ end procedure;
+ 
++procedure SelectProjectTreeNode(path)
++variables node = NoValue;
++begin
++ProjectTreeSelectResolve:
++  node := ResolveProjectTreeNodeFromCurrentVfs(path);
++ProjectTreeSelect:
++  if node # NoValue then
++    effect := SelectProjectTreeNodeThroughExistingSelectionCommand(node);
++  end if;
++ProjectTreeSelectReturn:
++  return;
++end procedure;
++
++procedure MoveProjectTreeNode(path, directory)
++variables movePlan = NoValue;
++begin
++ProjectTreeMoveEligibility:
++  if TreeMoveSourceEligible(path) then
++    movePlan := AssetApiPlanMove(path, directory);
++  else
++    movePlan := NoValue;
++  end if;
++ProjectTreeMoveCommit:
++  if movePlan # NoValue then
++    lastPersistentCommand := [
++      name |-> "assets.move",
++      plan |-> movePlan
++    ] ||
++    effect := AssetApiMove(movePlan);
++  end if;
++ProjectTreeMoveReturn:
++  return;
++end procedure;
++
+ procedure OpenTrashAssetRowMenu(path)
+ variables asset = NoValue;
+ begin
+@@ -237,10 +275,57 @@ SettingsOverlayMaximumReturn:
+   return;
+ end procedure;
+ 
++procedure StartSettingsOverlayResize(pointerY, currentHeight)
++begin
++SettingsOverlayResizeStart:
++  settingsOverlayResizeStartY := pointerY ||
++  settingsOverlayResizeStartHeight := currentHeight ||
++  settingsOverlayResizeActive := TRUE;
++SettingsOverlayResizeStartReturn:
++  return;
++end procedure;
++
++procedure MoveSettingsOverlayResize(pointerY)
++begin
++SettingsOverlayResizeMove:
++  if settingsOverlayResizeActive then
++    settingsOverlayHeight := ClampSettingsOverlayHeight(
++      settingsOverlayResizeStartHeight + pointerY - settingsOverlayResizeStartY);
++    assert ProjectAuthorityUnchangedByOverlayResize();
++  end if;
++SettingsOverlayResizeMoveReturn:
++  return;
++end procedure;
++
++procedure EndSettingsOverlayResize()
++begin
++SettingsOverlayResizeEnd:
++  settingsOverlayResizeActive := FALSE ||
++  settingsOverlayResizeStartY := NoValue ||
++  settingsOverlayResizeStartHeight := NoValue;
++SettingsOverlayResizeEndReturn:
++  return;
++end procedure;
++
++procedure ReadLayoutPreview(renderedWidth)
++begin
++LayoutPreviewRead:
++  result := LayoutApiReadState(renderedWidth);
++LayoutPreviewAspect:
++  assert PreviewGeometryUsesRenderedWidthAndConfiguredAspect(
++    result.previewGeometry,
++    renderedWidth,
++    result.slotStyle.aspect);
++LayoutPreviewReturn:
++  return;
++end procedure;
++
+ procedure ConnectExistingAsset(path, kind, slotId)
+ begin
+ ExplicitAssetConnection:
+-  if AssetAndSlotConnectionInputsResolve(path, kind, slotId) then
++  if AssetAndSlotConnectionInputsResolve(path, kind, slotId)
++     /\ ~IsTrashedProjectAsset(path)
++     /\ IsCsvOrImageAssetKind(kind) then
+     lastPersistentCommand := [
+       name |-> "assets.connectToSlot",
+       path |-> path,
+@@ -296,12 +381,36 @@ Main:
+       end with;
+     or
+       call CreateEmptyCsv();
++    or
++      with path = NextProjectTreeSelectionPath() do
++        call SelectProjectTreeNode(path);
++      end with;
++    or
++      with path = NextProjectTreeDragPath(),
++           directory = NextProjectTreeDropDirectory() do
++        call MoveProjectTreeNode(path, directory);
++      end with;
+     or
+       with path = NextTrashedAssetMenuPath() do
+         call OpenTrashAssetRowMenu(path);
+       end with;
+     or
+       call ResolveSettingsOverlayMaximum();
++    or
++      with pointerY = NextOverlayResizePointerY(),
++           currentHeight = CurrentSettingsOverlayHeight() do
++        call StartSettingsOverlayResize(pointerY, currentHeight);
++      end with;
++    or
++      with pointerY = NextOverlayResizePointerY() do
++        call MoveSettingsOverlayResize(pointerY);
++      end with;
++    or
++      call EndSettingsOverlayResize();
++    or
++      with renderedWidth = CurrentLayoutPreviewRenderedWidth() do
++        call ReadLayoutPreview(renderedWidth);
++      end with;
+     or
+       call RerenderDashboardDropReceiver();
+     end either;
+diff --git a/pseudocode/assets_files.pcal b/pseudocode/assets_files.pcal
+--- a/pseudocode/assets_files.pcal
++++ b/pseudocode/assets_files.pcal
+@@ -1,7 +1,7 @@
+ ---- MODULE FastFigureAssetsFilesPseudocode ----
+ EXTENDS Naturals, Sequences, FiniteSets
+ 
+-\* r17 PlusCal pseudocode for sourcescript/assets_files.py.
++\* r18 PlusCal pseudocode for sourcescript/assets_files.py.
+ \* Persistent mutations are candidate-first and commit once after validation.
+ 
+ CONSTANT NoReference
+@@ -222,9 +222,20 @@ DeleteReturn:
+ end procedure;
+ 
+ procedure PlanNodeMove(pathValue, directory)
++variables source = NoReference;
+ begin
+-MovePlanRead:
+-  result := CalculateMovePlanFromCurrentVfs(pathValue, directory, projectAuthority);
++MovePlanResolveSource:
++  source := ResolveVfs(pathValue, projectAuthority);
++MovePlanEligibility:
++  if source # NoReference /\ ~IsFixedProjectDirectory(source) then
++    result := CalculateMovePlanFromCurrentVfs(pathValue, directory, projectAuthority);
++  else
++    result := NoReference;
++  end if;
++MovePlanTrashRule:
++  assert source = NoReference
++         \/ IsFixedProjectDirectory(source)
++         \/ TreeMoveEligibilityIndependentOfTrashMembership(source);
+ MovePlanReturn:
+   return;
+ end procedure;
+@@ -237,7 +248,12 @@ MoveReresolve:
+ MoveBuild:
+   if fresh # NoReference then
+     candidate := ApplyMoveDestination(fresh, useUniqueName, projectAuthority);
+-    candidate := DetachReferencesIfEnteringTrash(candidate);
++    if MoveEntersTrash(fresh) then
++      candidate := DetachReferencesIfEnteringTrash(candidate);
++    end if;
++    if MoveLeavesTrash(fresh) then
++      candidate := PreserveDetachedReferencesWithoutRestore(candidate);
++    end if;
+     candidate := MoveDescendantsIfDirectory(candidate);
+   end if;
+ MoveValidate:
+diff --git a/pseudocode/renderer_runtime.pcal b/pseudocode/renderer_runtime.pcal
+--- a/pseudocode/renderer_runtime.pcal
++++ b/pseudocode/renderer_runtime.pcal
+@@ -1,7 +1,7 @@
+ ---- MODULE FastFigureRendererRuntimePseudocode ----
+ EXTENDS Naturals
+ 
+-\* r17 PlusCal pseudocode for sourcescript/renderer_runtime.py.
++\* r18 PlusCal pseudocode for sourcescript/renderer_runtime.py.
+ 
+ CONSTANT NoSelection
+ 
+@@ -155,6 +155,9 @@ EmitSlotSwap:
+       sourceId |-> sourceId,
+       targetId |-> targetId
+     ];
++    effect := DispatchSlotSwapAndCommit(issuedCommand);
++    selectedSlotId := ReadSelectedSlotIdFromFsm();
++    call RenderDashboard();
+   end if;
+ SwapSlotReturn:
+   return;

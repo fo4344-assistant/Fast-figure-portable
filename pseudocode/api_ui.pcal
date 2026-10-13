@@ -1,7 +1,7 @@
 ---- MODULE FastFigureApiUiPseudocode ----
 EXTENDS Naturals
 
-\* r17 PlusCal pseudocode for sourcescript/api_ui.py.
+\* r18 PlusCal pseudocode for sourcescript/api_ui.py.
 \* Collision/form/sidebar/drop-receiver values are UI-local and never project authority.
 
 CONSTANT NoValue
@@ -20,6 +20,10 @@ variables
   lastHandledDropEventId = NoValue,
   sidebarWidth = 0,
   sidebarCollapsed = FALSE,
+  settingsOverlayHeight = NoValue,
+  settingsOverlayResizeStartY = NoValue,
+  settingsOverlayResizeStartHeight = NoValue,
+  settingsOverlayResizeActive = FALSE,
   result = NoValue,
   effect = NoValue;
 
@@ -214,6 +218,40 @@ EmptyCsvReturn:
   return;
 end procedure;
 
+procedure SelectProjectTreeNode(path)
+variables node = NoValue;
+begin
+ProjectTreeSelectResolve:
+  node := ResolveProjectTreeNodeFromCurrentVfs(path);
+ProjectTreeSelect:
+  if node # NoValue then
+    effect := SelectProjectTreeNodeThroughExistingSelectionCommand(node);
+  end if;
+ProjectTreeSelectReturn:
+  return;
+end procedure;
+
+procedure MoveProjectTreeNode(path, directory)
+variables movePlan = NoValue;
+begin
+ProjectTreeMoveEligibility:
+  if TreeMoveSourceEligible(path) then
+    movePlan := AssetApiPlanMove(path, directory);
+  else
+    movePlan := NoValue;
+  end if;
+ProjectTreeMoveCommit:
+  if movePlan # NoValue then
+    lastPersistentCommand := [
+      name |-> "assets.move",
+      plan |-> movePlan
+    ] ||
+    effect := AssetApiMove(movePlan);
+  end if;
+ProjectTreeMoveReturn:
+  return;
+end procedure;
+
 procedure OpenTrashAssetRowMenu(path)
 variables asset = NoValue;
 begin
@@ -237,10 +275,57 @@ SettingsOverlayMaximumReturn:
   return;
 end procedure;
 
+procedure StartSettingsOverlayResize(pointerY, currentHeight)
+begin
+SettingsOverlayResizeStart:
+  settingsOverlayResizeStartY := pointerY ||
+  settingsOverlayResizeStartHeight := currentHeight ||
+  settingsOverlayResizeActive := TRUE;
+SettingsOverlayResizeStartReturn:
+  return;
+end procedure;
+
+procedure MoveSettingsOverlayResize(pointerY)
+begin
+SettingsOverlayResizeMove:
+  if settingsOverlayResizeActive then
+    settingsOverlayHeight := ClampSettingsOverlayHeight(
+      settingsOverlayResizeStartHeight + pointerY - settingsOverlayResizeStartY);
+    assert ProjectAuthorityUnchangedByOverlayResize();
+  end if;
+SettingsOverlayResizeMoveReturn:
+  return;
+end procedure;
+
+procedure EndSettingsOverlayResize()
+begin
+SettingsOverlayResizeEnd:
+  settingsOverlayResizeActive := FALSE ||
+  settingsOverlayResizeStartY := NoValue ||
+  settingsOverlayResizeStartHeight := NoValue;
+SettingsOverlayResizeEndReturn:
+  return;
+end procedure;
+
+procedure ReadLayoutPreview(renderedWidth)
+begin
+LayoutPreviewRead:
+  result := LayoutApiReadState(renderedWidth);
+LayoutPreviewAspect:
+  assert PreviewGeometryUsesRenderedWidthAndConfiguredAspect(
+    result.previewGeometry,
+    renderedWidth,
+    result.slotStyle.aspect);
+LayoutPreviewReturn:
+  return;
+end procedure;
+
 procedure ConnectExistingAsset(path, kind, slotId)
 begin
 ExplicitAssetConnection:
-  if AssetAndSlotConnectionInputsResolve(path, kind, slotId) then
+  if AssetAndSlotConnectionInputsResolve(path, kind, slotId)
+     /\ ~IsTrashedProjectAsset(path)
+     /\ IsCsvOrImageAssetKind(kind) then
     lastPersistentCommand := [
       name |-> "assets.connectToSlot",
       path |-> path,
@@ -297,11 +382,35 @@ Main:
     or
       call CreateEmptyCsv();
     or
+      with path = NextProjectTreeSelectionPath() do
+        call SelectProjectTreeNode(path);
+      end with;
+    or
+      with path = NextProjectTreeDragPath(),
+           directory = NextProjectTreeDropDirectory() do
+        call MoveProjectTreeNode(path, directory);
+      end with;
+    or
       with path = NextTrashedAssetMenuPath() do
         call OpenTrashAssetRowMenu(path);
       end with;
     or
       call ResolveSettingsOverlayMaximum();
+    or
+      with pointerY = NextOverlayResizePointerY(),
+           currentHeight = CurrentSettingsOverlayHeight() do
+        call StartSettingsOverlayResize(pointerY, currentHeight);
+      end with;
+    or
+      with pointerY = NextOverlayResizePointerY() do
+        call MoveSettingsOverlayResize(pointerY);
+      end with;
+    or
+      call EndSettingsOverlayResize();
+    or
+      with renderedWidth = CurrentLayoutPreviewRenderedWidth() do
+        call ReadLayoutPreview(renderedWidth);
+      end with;
     or
       call RerenderDashboardDropReceiver();
     end either;
