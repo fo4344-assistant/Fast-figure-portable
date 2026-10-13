@@ -1,0 +1,841 @@
+@@ -27,7 +27,7 @@
+ 
+ ## 정책 원천
+ 
+-- Source Script, PlusCal/TLA+ 검증 모델, TLC 검증, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
++- Source Script, PlusCal pseudocode, 선택적 TLA+/TLC verification model, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
+ - 해당 정책 원문은 사용자가 명시적으로 정책 변경을 지시한 경우에만 수정한다.
+ - 프로젝트 고유의 데이터 구조, 책임 배치, 식별자, 파일 형식, 해결 방안은 정책 문서에 추가하지 않고 `sourcescript/`, `agent_space/plans/`, `agent_space/docs/` 중 해당 책임 경로에 기록한다.
+ 
+@@ -59,14 +59,19 @@
+ 
+ ## 개발 계층 버전 우선순위
+ 
+-- 개발 의미의 권위 순서는 반드시 `Source Script > verification-model > source code`로 유지할 것.
++- 개발 의미의 기본 권위 순서는 반드시 `Source Script > PlusCal pseudocode > source code`로 유지할 것.
++- 상태 기반 검증을 사용하는 범위에서는 `Source Script > PlusCal pseudocode > verification-model/TLC > source code` 순서로 선택적 검증 단계를 삽입한다.
++- PlusCal pseudocode는 Source Script 전체를 언어중립 실행 절차로 직접 번역한 정식 중간 계층이다. verification 전용 산출물이나 legacy reference로 취급하지 말 것.
++- verification-model은 PlusCal pseudocode에서 필요한 검증 범위를 파생한 표현이며 별도의 설계 권위를 갖지 않는다.
++- 현재 Fast Figure 프로젝트는 verification-model/TLC gate를 사용하므로 application source code가 `current`가 되려면 현재 pseudocode에서 파생된 verification-model이 `current`이고 TLC가 `passed`여야 한다.
+ - 계층 버전과 파생 관계의 단일 메타데이터 원천은 저장소 루트의 `development-versions.json`으로 둘 것.
+-- `development-versions.json`은 의미 자체를 정의하는 문서가 아니라 각 계층의 revision, 실제 내용 fingerprint, 상위 계층 파생 버전을 기록하는 lineage metadata다.
+-- Source Script는 항상 최상위 권위 계층이다. verification-model 또는 source code와 의미가 충돌하면 Source Script를 기준으로 하위 계층을 수정할 것.
+-- Source Script의 의미 파일이 바뀌면 source-script revision과 fingerprint를 갱신할 것. 기존 verification-model과 source code는 새 Source Script fingerprint를 정확히 반영하기 전까지 `current`로 표시하지 말 것.
+-- verification-model을 생성하거나 수정할 때는 현재 Source Script fingerprint를 `derived_from.source-script`에 기록하고 verification-model revision을 증가시킬 것. 최신 Source Script와 정확히 일치하지 않는 verification-model은 `current`가 될 수 없다. TLC가 `passed`가 되려면 새 validation review가 있어야 한다.
+-- application source code를 수정할 때는 verification-model이 먼저 `current`이고 TLC가 `passed`여야 하며, source code의 `derived_from.source-script`와 `derived_from.verification-model`이 각각 현재 상위 계층 fingerprint와 정확히 일치해야 한다. source-code revision도 증가시킬 것.
+-- 현재 동작하는 source code가 있더라도 최신 TLC-passed verification-model에서 내려온 lineage가 확인되지 않으면 설계 계층에서는 `stale`로 취급할 것. 실행 가능성과 계층 최신성은 같은 의미가 아니다.
+-- 하위 계층의 구현 편의 때문에 상위 계층을 암묵적으로 수정하지 말 것. source code에서 새 의미가 필요하다고 판단되면 Source Script 단계로 돌아가 먼저 반영하고 version chain을 다시 아래로 전파할 것.
++- `development-versions.json`은 의미 자체를 정의하는 문서가 아니라 각 계층의 revision, 실제 의미 파일 fingerprint, 상위 계층 파생 버전을 기록하는 lineage metadata다.
++- Source Script는 항상 최상위 권위 계층이다. 하위 계층과 의미가 충돌하면 Source Script를 기준으로 pseudocode부터 순서대로 다시 전파할 것.
++- Source Script의 의미 파일이 바뀌면 source-script revision과 fingerprint를 갱신할 것. PlusCal pseudocode는 새 Source Script를 직접 번역하고 번역 충실도와 구체화 수준을 확인하기 전까지 `current`가 될 수 없다.
++- PlusCal pseudocode를 생성하거나 수정할 때는 현재 Source Script fingerprint를 `derived_from.source-script`에 기록하고 pseudocode revision을 증가시킬 것. 활성 pseudocode 의미 파일은 `pseudocode/**/*.pcal`이다.
++- verification-model을 생성하거나 수정할 때는 현재 PlusCal pseudocode fingerprint를 `derived_from.pseudocode`에 기록하고 verification-model revision을 증가시킬 것. 현재 프로젝트에서는 추적성을 위해 `derived_from.source-script`도 함께 기록한다. TLC가 `passed`가 되려면 validation review가 있어야 한다.
++- application source code를 수정할 때는 현재 Source Script와 PlusCal pseudocode의 lineage를 모두 기록한다. verification-model/TLC를 사용한 범위에서는 current/passed verification-model lineage도 함께 기록하고 source-code revision을 증가시킬 것.
++- 현재 동작하는 source code가 있더라도 최신 Source Script → PlusCal pseudocode → verification-model/TLC lineage가 확인되지 않으면 설계 계층에서는 `stale`로 취급할 것. 실행 가능성과 계층 최신성은 같은 의미가 아니다.
++- 하위 계층의 구현 편의 때문에 상위 계층을 암묵적으로 수정하지 말 것. source code에서 새 의미가 필요하다고 판단되면 필요한 상위 단계로 돌아가고 Source Script 변경이 필요하면 Source Script부터 다시 닫은 뒤 pseudocode와 하위 계층에 순서대로 전파할 것.
+ - `scripts/check-development-layer-versions.py` 검사를 통과하지 않은 계층 버전 변경은 완료로 취급하지 말 것.
+-- main의 CI는 Source Script, verification-model, archived pseudocode, application source, 정책 또는 version metadata가 변경될 때 version chain을 검사해야 한다.
++- main의 CI는 Source Script, PlusCal pseudocode, verification-model, application source, 정책 또는 version metadata가 변경될 때 version chain을 검사해야 한다.
+@@ -0,0 +1,114 @@
++# Review 20261013-010 — Pseudocode lineage policy alignment
++
++## 판정
++
++상위 정책 `agent_space/policies/source-script-policy.md` v0.2.6에 따라 현재 개발 계층의 역할과 lineage를 재검토했다.
++
++정책상 기본 의미 계층은 다음과 같다.
++
++```text
++Source Script
++→ PlusCal pseudocode
++→ Source Code
++```
++
++현재 프로젝트처럼 상태 기반 검증을 수행하는 범위에서는 다음 단계가 중간에 추가된다.
++
++```text
++Source Script
++→ PlusCal pseudocode
++→ verification model
++→ TLA+/TLC
++→ Source Code
++```
++
++PlusCal pseudocode는 Source Script 전체 번역 계층이며 verification 전용 또는 legacy artifact가 아니다. verification model은 pseudocode에서 필요한 bounded state-space slice를 파생한 선택적 검증 표현이다.
++
++## 현재 의미 파일 상태
++
++이 정렬 작업에서 다음 의미 파일은 변경하지 않았다.
++
++- `sourcescript/**/*.py`
++- `pseudocode/**/*.pcal`
++- `verification/**/*.tla`
++- `verification/**/*.cfg`
++- `Fast-figure.html`
++- `fast-figure.js`
++- `fast-figure-ui.js`
++- `scripts/build-portable.py`
++
++따라서 Source Script r17, pseudocode r3의 번역 내용, verification-model r11의 TLC 결과, Source Code r13 application 의미는 그대로 유지된다.
++
++## pseudocode 판정
++
++활성 `.pcal` 9개는 Source Script responsibility module 전체에 대응한다.
++
++r17에서 의미가 바뀐 module은 해당 `.pcal`도 r17로 갱신되어 있다.
++
++- application_fsm
++- renderer_runtime
++- api_ui
++- assets_files
++- graphs
++
++r17에서 해당 Source Script module 의미가 바뀌지 않은 나머지 `.pcal`은 r16 번역 내용이 그대로 r17 전체 번역의 일부로 유효하다.
++
++현재 활성 pseudocode fingerprint:
++
++```text
++sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898
++```
++
++번역 검토 근거:
++
++- `agent_space/reviews/review-20261013-007-pluscal-r17.md`
++
++## verification 판정
++
++verification 의미 fingerprint는 README 같은 상태 문서를 제외하고 `.tla/.cfg`만 대상으로 다시 정의했다.
++
++```text
++sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b
++```
++
++verification 의미 파일 자체는 변경하지 않았으므로 revision은 r11을 유지한다.
++
++r11의 TLC 성공 증거는 그대로 유효하다.
++
++- validation review: `agent_space/reviews/review-20261013-008-tlc-interaction-r11.md`
++- Actions run: `38357202939`
++- result: passed
++
++현재 metadata는 verification-model이 Source Script를 직접 대체하는 것이 아니라 current pseudocode fingerprint에서 파생되었음을 명시한다.
++
++## Source Code 판정
++
++r13 application source 파일은 변경하지 않았다.
++
++기존 행동 검증:
++
++- `agent_space/reviews/review-20261013-009-source-code-r13-plan009.md`
++- final browser regression run `38382915972`: success
++
++이번 review는 그 행동 검증을 대체하여 다시 실행한 것이 아니라, 같은 r13 Source Code가 현재 정책에 맞는 lineage로 추적됨을 기록한다.
++
++현재 Source Code는 다음 세 관계를 모두 기록한다.
++
++- current Source Script r17
++- current complete PlusCal pseudocode r3
++- current/passed verification-model r11
++
++## 결론
++
++잘못된 `archived/non-authoritative pseudocode` 분류는 폐기한다.
++
++현재 계층은 다음과 같이 판정한다.
++
++```text
++Source Script r17       current / closed
++PlusCal pseudocode r3   current / complete translation layer
++verification-model r11  current / TLC passed
++Source Code r13         current
++```
++
++application 의미 변경 없이 계층 메타데이터와 checker/README를 상위 정책에 맞게 정렬할 수 있다.
+@@ -2,11 +2,11 @@
+   "schema": 2,
+   "precedence": [
+     "source-script",
+-    "verification-model",
++    "pseudocode",
+     "source-code"
+   ],
+   "fingerprint_algorithm": "sha256(sorted path + NUL + git-blob-sha1 + LF)",
+-  "authority_rule": "On semantic conflict, Source Script wins. Source code may be current only when the current verification model derives from the current closed Source Script and its TLC validation has passed.",
++  "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode and gates Source Code where TLC validation is used.",
+   "layers": {
+     "source-script": {
+       "revision": 17,
+@@ -20,10 +20,11 @@
+     "verification-model": {
+       "revision": 11,
+       "status": "current",
+-      "path_rule": "verification/**/*",
+-      "fingerprint": "sha256:66274b5f28db2ce3ba3a509689fa2d827713ece54c71c69bbd2ce898471acf8a",
++      "path_rule": "verification/**/*.{tla,cfg}",
++      "fingerprint": "sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b",
+       "derived_from": {
+-        "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664"
++        "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
++        "pseudocode": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898"
+       },
+       "tlc": "passed",
+       "validation_review": "agent_space/reviews/review-20261013-008-tlc-interaction-r11.md"
+@@ -40,23 +41,20 @@
+       "fingerprint": "sha256:a76944037f6bc203b950b889aa37a57f2d6e94ce61a4790bcfa1bcc8829c4bcb",
+       "derived_from": {
+         "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
+-        "verification-model": "sha256:66274b5f28db2ce3ba3a509689fa2d827713ece54c71c69bbd2ce898471acf8a"
++        "pseudocode": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898",
++        "verification-model": "sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b"
+       },
+-      "validation_review": "agent_space/reviews/review-20261013-009-source-code-r13-plan009.md"
+-    }
+-  },
+-  "legacy_artifacts": {
++      "validation_review": "agent_space/reviews/review-20261013-010-pseudocode-lineage-policy-alignment.md"
++    },
+     "pseudocode": {
+       "revision": 3,
+-      "status": "archived",
+-      "path_rule": "pseudocode/**/*",
+-      "fingerprint": "sha256:086f64c600a847ecd389d3be621eb24a4589ae36c325cf248e4bc4cecd1790d0",
++      "status": "current",
++      "path_rule": "pseudocode/**/*.pcal",
++      "fingerprint": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898",
+       "derived_from": {
+         "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664"
+       },
+-      "validation": "not-run",
+-      "policy_version": "v0.2.6",
+-      "role": "non-authoritative reference artifact; does not satisfy the v0.2.0 verification-model/TLC gate"
++      "translation_review": "agent_space/reviews/review-20261013-007-pluscal-r17.md"
+     }
+   }
+ }
+@@ -1,49 +1,69 @@
+-# Fast Figure PlusCal pseudocode r16 — work in progress
++# Fast Figure PlusCal pseudocode r17
+ 
+-Derived from the closed Source Script:
++이 디렉터리의 활성 `.pcal` 파일은 닫힌 Source Script 전체를 언어중립 실행 절차로 직접 번역한 정식 중간 개발 계층이다.
+ 
+-- Source Script revision: r16
+-- Source Script fingerprint: `sha256:05c78c39c6c7ae715c8204ec0c4381ecd66ebf1dd9dbfb01a26fd99400270484`
+-- Source Script closure review: `agent_space/reviews/review-20261013-003-sourcescript-closure-r16.md`
++```text
++Source Script
++→ PlusCal pseudocode
++→ Source Code
++```
+ 
+-## Translation rule
++상태 기반 검증이 필요한 범위에서는 pseudocode와 Source Code 사이에 선택적 verification/TLC 단계가 추가된다.
+ 
+-The active r16 pseudocode is written as `.pcal` modules. It translates the closed Source Script downward without adding domain rules, authorities, or responsibility decomposition.
++```text
++Source Script
++→ PlusCal pseudocode
++→ verification model
++→ TLA+/TLC
++→ Source Code
++```
+ 
+-The older `.md` files in this directory are historical language-neutral translations from the earlier workflow. They may be useful for comparison but are not the authoritative r16 PlusCal translation.
++verification model은 pseudocode의 대체물이나 상위 권위가 아니다. 필요한 상태전이·불변식 범위를 pseudocode에서 파생한 검증 표현이다.
+ 
+-The active translation preserves:
++## 현재 lineage
+ 
+-- Source Script module/responsibility boundaries
+-- authoritative state and reference sources
+-- resolve-before-mutation ordering
+-- candidate/validation/commit boundaries
+-- failure/rejection semantics
+-- runtime versus persistent mutation ownership
+-- meaningful UI/FSM command sequencing
++- Source Script revision: r17
++- Source Script fingerprint: `sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664`
++- Source Script closure review: `agent_space/reviews/review-20261013-006-sourcescript-closure-r17.md`
++- PlusCal pseudocode revision: r3
++- pseudocode fingerprint: `sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898`
++- translation review: `agent_space/reviews/review-20261013-007-pluscal-r17.md`
++- status: current
+ 
+-If a required meaning is absent or contradictory, translation stops and returns to Source Script rather than filling the gap in PlusCal.
++pseudocode fingerprint는 활성 의미 파일인 `pseudocode/**/*.pcal`만 대상으로 한다. 이 README와 과거 비교용 `.md` 문서는 상태 설명/역사 자료이며 pseudocode 의미 fingerprint에 포함하지 않는다.
+ 
+-## Active r16 module mapping
++## 번역 원칙
+ 
+-| Source Script | Active PlusCal | Status |
++활성 pseudocode는 Source Script의 module/책임 경계, Module decomposition hierarchy, authoritative state와 reference source, 입력/출력, branch와 실행 순서, 값의 생성/소비, candidate→validation→commit 경계, mutation 순서·원자성, 실패·거부·취소 의미와 lifecycle을 직접 구체화한다.
++
++Source Script에 없는 domain state, branch, 책임, 의미 decomposition 또는 mutation source를 추가하지 않는다. 충돌할 경우 Source Script가 원천이며 pseudocode를 수정한다.
++
++## 전체 module mapping
++
++| Source Script | Active PlusCal | 현재 번역 |
+ | --- | --- | --- |
+-| `sourcescript/application_fsm.py` | `application_fsm.pcal` | event/transition/lifecycle + selection/project/slot/chart/layout actions translated |
+-| `sourcescript/renderer_runtime.py` | `renderer_runtime.pcal` | telemetry/render/bookmark/drop/workspace/startup flow translated |
+-| `sourcescript/api_ui.py` | `api_ui.pcal` | subscription/collision/lifecycle/drop/app-shell boundary translated |
+-| `sourcescript/project_state.py` | `project_state.pcal` | authority/validation/reference lifecycle translated |
+-| `sourcescript/graphs.py` | `graphs.pcal` | chart/object/editable/import-export mutation flow translated |
+-| `sourcescript/assets_files.py` | `assets_files.pcal` | VFS/import/delete/move/package transaction flow translated |
+-| `sourcescript/layout_annotations_export.py` | `layout_annotations_export.pcal` | grid/slot-local annotation/export flow translated |
+-| `sourcescript/system.py` | `system.pcal` | initialization/root orchestration translated |
+-| `sourcescript/portable_build.py` | `portable_build.pcal` | portable build flow translated |
+-
+-The Source Script hierarchy remains `system.py` as the system root with responsibility modules as siblings. PlusCal files do not introduce new semantic parent/child modules.
+-
+-## Current validation status
+-
+-- Source Script r16 is closed.
+-- All nine Source Script responsibility modules have active `.pcal` counterparts.
+-- Function/procedure coverage and static syntax-pattern checks have been completed.
+-- The PlusCal translator has not yet been executed on these pseudocode files, so translator/SANY success is not claimed.
+-- TLC verification is optional under policy v0.2.6 and has not been run for this r16 pseudocode.
++| `sourcescript/application_fsm.py` | `application_fsm.pcal` | r17 |
++| `sourcescript/renderer_runtime.py` | `renderer_runtime.pcal` | r17 |
++| `sourcescript/api_ui.py` | `api_ui.pcal` | r17 |
++| `sourcescript/project_state.py` | `project_state.pcal` | r16에서 번역, r17에서 해당 Source Script 의미 변경 없음 |
++| `sourcescript/graphs.py` | `graphs.pcal` | r17 |
++| `sourcescript/assets_files.py` | `assets_files.pcal` | r17 |
++| `sourcescript/layout_annotations_export.py` | `layout_annotations_export.pcal` | r16에서 번역, r17에서 해당 Source Script 의미 변경 없음 |
++| `sourcescript/system.py` | `system.pcal` | r16에서 번역, r17에서 해당 Source Script 의미 변경 없음 |
++| `sourcescript/portable_build.py` | `portable_build.pcal` | r16에서 번역, r17에서 해당 Source Script 의미 변경 없음 |
++
++r17에서 일부 module 파일의 주석이 r16으로 남아 있는 것은 해당 Source Script module의 의미가 r17에서 변경되지 않았기 때문이다. 전체 pseudocode 계층은 현재 Source Script r17의 전체 번역이다.
++
++과거 `.md` pseudocode 파일은 이전 workflow에서 작성된 비교·역사 자료이며 현재 활성 번역은 `.pcal` 파일이다.
++
++## r17 변경 번역
++
++r17 갱신 범위에는 selection-state-first slot interaction, dashboard background deselection, 일반 빈 CSV 생성/선택, empty CSV 생성과 graph-object mutation의 분리, trash asset selection과 row action Menu 접근의 분리, 공통 설정 Modal maximum ownership, graph object의 current CSV reference contract가 포함된다.
++
++구체적인 DOM 측정, CSS 단위, Mantine API 호출 방식 같은 renderer/platform 구현 세부는 Source Code에서 결정한다.
++
++## verification과의 관계
++
++현재 `verification/`은 pseudocode 전체를 대체하지 않는다. 상태공간 검증의 가치가 있는 bounded slice를 pseudocode에서 파생하여 TLC로 검사한다.
++
++검증 coverage에 없는 영역이 있다는 사실은 pseudocode가 불완전한 번역이라는 뜻이 아니다. Source Code의 상위 언어중립 명세는 전체 `pseudocode/**/*.pcal`이다.
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""Validate Source Script > verification model/TLC > source code lineage."""
++"""Validate Source Script > PlusCal pseudocode > verification model/TLC > source code lineage."""
+ 
+ from __future__ import annotations
+ 
+@@ -15,7 +15,7 @@
+ SOURCE_SCRIPT_DIR = ROOT / "sourcescript"
+ VERIFICATION_DIR = ROOT / "verification"
+ PSEUDOCODE_DIR = ROOT / "pseudocode"
+-EXPECTED_PRECEDENCE = ["source-script", "verification-model", "source-code"]
++EXPECTED_PRECEDENCE = ["source-script", "pseudocode", "source-code"]
+ 
+ 
+ class VersionError(RuntimeError):
+@@ -50,23 +50,25 @@ def source_script_paths() -> list[Path]:
+     return paths
+ 
+ 
+-def verification_model_paths() -> list[Path]:
+-    if not VERIFICATION_DIR.is_dir():
++def pseudocode_paths() -> list[Path]:
++    if not PSEUDOCODE_DIR.is_dir():
+         return []
+     return [
+         path
+-        for path in VERIFICATION_DIR.rglob("*")
++        for path in PSEUDOCODE_DIR.rglob("*.pcal")
+         if path.is_file() and "__pycache__" not in path.parts
+     ]
+ 
+ 
+-def legacy_pseudocode_paths() -> list[Path]:
+-    if not PSEUDOCODE_DIR.is_dir():
++def verification_model_paths() -> list[Path]:
++    if not VERIFICATION_DIR.is_dir():
+         return []
+     return [
+         path
+-        for path in PSEUDOCODE_DIR.rglob("*")
+-        if path.is_file() and "__pycache__" not in path.parts
++        for path in VERIFICATION_DIR.rglob("*")
++        if path.is_file()
++        and path.suffix in {".tla", ".cfg"}
++        and "__pycache__" not in path.parts
+     ]
+ 
+ 
+@@ -93,7 +95,7 @@ def load_manifest(path: Path = MANIFEST_PATH) -> dict:
+         raise VersionError("unsupported development version schema")
+     if manifest.get("precedence") != EXPECTED_PRECEDENCE:
+         raise VersionError(
+-            "development precedence must be source-script > verification-model > source-code"
++            "development precedence must be source-script > pseudocode > source-code"
+         )
+     return manifest
+ 
+@@ -112,6 +114,7 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
+         raise VersionError("layers object is missing")
+ 
+     source = layers.get("source-script", {})
++    pseudocode = layers.get("pseudocode", {})
+     verification = layers.get("verification-model", {})
+     code = layers.get("source-code", {})
+ 
+@@ -134,6 +137,31 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
+             "Source Script fingerprint changed without updating development-versions.json"
+         )
+ 
++    pseudocode_status = pseudocode.get("status")
++    if pseudocode_status not in {"stale", "current"}:
++        raise VersionError(f"invalid pseudocode status: {pseudocode_status!r}")
++    if not isinstance(pseudocode.get("revision"), int) or pseudocode["revision"] < 1:
++        raise VersionError("pseudocode revision must be a positive integer")
++    active_pseudocode_paths = pseudocode_paths()
++    if not active_pseudocode_paths:
++        raise VersionError("active PlusCal pseudocode files are missing")
++    pseudocode_fp = layer_fingerprint(active_pseudocode_paths)
++    if pseudocode.get("fingerprint") != pseudocode_fp:
++        raise VersionError(
++            "PlusCal pseudocode fingerprint changed without updating development-versions.json"
++        )
++    if pseudocode_status == "current":
++        if source_closure != "closed":
++            raise VersionError("pseudocode cannot be current before Source Script is closed")
++        if pseudocode.get("derived_from", {}).get("source-script") != source_fp:
++            raise VersionError(
++                "current pseudocode does not derive from the current Source Script"
++            )
++        validate_review_path(
++            pseudocode.get("translation_review"),
++            "pseudocode translation review",
++        )
++
+     verification_paths = verification_model_paths()
+     verification_status = verification.get("status")
+     tlc_status = verification.get("tlc")
+@@ -175,9 +203,18 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
+                 raise VersionError(
+                     "verification-model cannot be current before Source Script is closed"
+                 )
+-            if verification.get("derived_from", {}).get("source-script") != source_fp:
++            if pseudocode_status != "current":
++                raise VersionError(
++                    "verification-model cannot be current before pseudocode is current"
++                )
++            derived = verification.get("derived_from", {})
++            if derived.get("pseudocode") != pseudocode_fp:
++                raise VersionError(
++                    "current verification-model does not derive from the current pseudocode"
++                )
++            if derived.get("source-script") != source_fp:
+                 raise VersionError(
+-                    "current verification-model does not derive from the current Source Script"
++                    "current verification-model does not trace to the current Source Script"
+                 )
+         if tlc_status == "passed":
+             if verification_status != "current":
+@@ -193,19 +230,6 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
+     else:
+         raise VersionError(f"invalid verification-model status: {verification_status!r}")
+ 
+-    legacy = manifest.get("legacy_artifacts", {}).get("pseudocode")
+-    if legacy is not None:
+-        legacy_paths = legacy_pseudocode_paths()
+-        if legacy.get("status") != "archived":
+-            raise VersionError("legacy pseudocode artifact must be marked archived")
+-        if not legacy_paths:
+-            raise VersionError("legacy pseudocode artifact is recorded but files are missing")
+-        legacy_fp = layer_fingerprint(legacy_paths)
+-        if legacy.get("fingerprint") != legacy_fp:
+-            raise VersionError(
+-                "archived pseudocode changed; update or restore the explicit legacy record"
+-            )
+-
+     code_status = code.get("status")
+     if code_status not in {"stale", "current"}:
+         raise VersionError(f"invalid source-code status: {code_status!r}")
+@@ -215,6 +239,8 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
+             "source-code fingerprint changed without updating development-versions.json"
+         )
+     if code_status == "current":
++        if pseudocode_status != "current":
++            raise VersionError("source code cannot be current before pseudocode is current")
+         if verification_status != "current" or verification_fp is None:
+             raise VersionError(
+                 "source code cannot be current before verification-model is current"
+@@ -228,13 +254,18 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
+             raise VersionError(
+                 "current source code does not derive from the current Source Script"
+             )
++        if derived.get("pseudocode") != pseudocode_fp:
++            raise VersionError(
++                "current source code does not derive from the current pseudocode"
++            )
+         if derived.get("verification-model") != verification_fp:
+             raise VersionError(
+                 "current source code does not derive from the current verification-model"
+             )
+ 
+     return {
+         "source-script": source_fp,
++        "pseudocode": pseudocode_fp,
+         "verification-model": verification_fp,
+         "source-code": code_fp,
+     }
+@@ -343,7 +374,15 @@ def validate_revision_progression(manifest: dict, base: str) -> None:
+         path.startswith("sourcescript/") and path.endswith(".py")
+         for path in changed
+     )
+-    verification_changed = any(path.startswith("verification/") for path in changed)
++    pseudocode_changed = any(
++        path.startswith("pseudocode/") and path.endswith(".pcal")
++        for path in changed
++    )
++    verification_changed = any(
++        path.startswith("verification/")
++        and (path.endswith(".tla") or path.endswith(".cfg"))
++        for path in changed
++    )
+ 
+     source_paths = set(current_layers["source-code"].get("paths", []))
+     source_paths.update(base_layers.get("source-code", {}).get("paths", []))
+@@ -384,16 +423,28 @@ def require_increment(layer_name: str) -> None:
+                 "Source Script closure review must be new for this closure transition"
+             )
+ 
++    if pseudocode_changed:
++        require_increment("pseudocode")
++        pseudocode = current_layers["pseudocode"]
++        if pseudocode.get("status") != "current":
++            raise VersionError(
++                "modified pseudocode must finish as current against the latest Source Script"
++            )
++        if current_layers["source-script"].get("closure") != "closed":
++            raise VersionError(
++                "pseudocode cannot change before Source Script is closed"
++            )
++
+     if verification_changed:
+         require_increment("verification-model")
+         verification = current_layers["verification-model"]
+         if verification.get("status") != "current":
+             raise VersionError(
+                 "modified verification-model must finish as current against the latest Source Script"
+             )
+-        if current_layers["source-script"].get("closure") != "closed":
++        if current_layers["pseudocode"].get("status") != "current":
+             raise VersionError(
+-                "verification-model cannot change before Source Script is closed"
++                "verification-model cannot change before pseudocode is current"
+             )
+ 
+     base_verification = base_layers.get("verification-model", {})
+@@ -414,6 +465,11 @@ def require_increment(layer_name: str) -> None:
+ 
+     if code_changed:
+         require_increment("source-code")
++        pseudocode = current_layers["pseudocode"]
++        if pseudocode.get("status") != "current":
++            raise VersionError(
++                "source code cannot change while pseudocode is stale"
++            )
+         verification = current_layers["verification-model"]
+         if verification.get("status") != "current":
+             raise VersionError(
+@@ -453,6 +509,8 @@ def main() -> int:
+         f"  source-script: r{layers['source-script']['revision']} "
+         f"{layers['source-script']['status']}/{layers['source-script']['closure']} "
+         f"{fingerprints['source-script']}\n"
++        f"  pseudocode: r{layers['pseudocode']['revision']} "
++        f"{layers['pseudocode']['status']} {fingerprints['pseudocode']}\n"
+         f"  verification-model: r{layers['verification-model']['revision']} "
+         f"{layers['verification-model']['status']}/{layers['verification-model']['tlc']} "
+         f"{fingerprints['verification-model'] or '-'}\n"
+@@ -1,225 +1,85 @@
+-# verification code r2 — slot/layout/chart direct translation
++# Fast Figure verification model r11
+ 
+-## Purpose
+-
+-This revision replaces the earlier state-model-style r1 with a direct executable
+-translation of the corresponding Source Script algorithms.
+-
+-The role is the original pseudocode role plus executable verification:
++이 디렉터리는 PlusCal pseudocode에서 상태 기반 검증이 필요한 범위를 파생한 선택적 verification model이다. verification model은 Source Script 전체 번역 계층이 아니며 별도의 설계 권위도 아니다.
+ 
+ ```text
+ Source Script
+--> verification code
+--> TLC
+--> source code
++→ PlusCal pseudocode
++→ [선택적] verification model
++→ TLA+/TLC
++→ Source Code
+ ```
+ 
+-The verification code is not a second design model.
+-
+-It preserves the Source Script's:
+-
+-- data ownership
+-- function boundaries
+-- call relationship
+-- execution order
+-- branches
+-- value generation and consumption
+-- candidate/validation/commit boundary
+-- failure/rejection behavior
+-
+-TLA+ operators are used where the Source Script describes pure calculation.
+-PlusCal procedures are used where the Source Script describes an operation or
+-mutation path.
+-
+-## Source Script mapping
+-
+-### project_state.py
++Source Script와 pseudocode가 충돌하면 Source Script가 원천이다. pseudocode와 verification model이 충돌하면 pseudocode가 직접 원천이며 verification model을 수정한다.
+ 
+-Directly represented:
++## 현재 lineage
+ 
+-- `SLOT_LOCAL_DEFAULTS`
+-- `slotHasNonDefaultLocalState`
+-- slot-local ownership of chart/imageId/contentType/imageSettings/caption
+-- chart/image reference validity for this slice
+-- exact-one-slot chart ownership
++- Source Script: r17 / current / closed
++- Source Script fingerprint: `sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664`
++- PlusCal pseudocode: r3 / current
++- pseudocode fingerprint: `sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898`
++- verification-model: r11 / current
++- verification fingerprint: `sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b`
++- TLC: passed
+ 
+-`validateProjectObjectState` is not redefined as a smaller project validator.
+-Instead this slice defines `ValidateSlotLayoutProjection`, which explicitly
+-means only the projection of whole-project validation that can change in this
+-translation. Unmodeled ProjectObject fields are assumed unchanged and valid.
++verification fingerprint는 의미 파일인 `verification/**/*.tla`와 `verification/**/*.cfg`만 대상으로 한다. README는 상태 설명 문서이며 verification 의미 fingerprint에 포함하지 않는다.
+ 
+-### application_fsm.py
++## canonical verification modules
+ 
+-Direct PlusCal procedures:
++- `FastFigureSlotCore.tla` / `FastFigureSlotCore.cfg`: slot/layout/chart candidate와 reference consistency bounded slice.
++- `FastFigureInteractionCore.tla` / `FastFigureInteractionCore.cfg`: r17 interaction과 empty-CSV bounded slice.
+ 
+-- `applySlotsResetAction`
+-- `applySlotsSwappedAction`
+-- `applyGridLayoutAction`
++기존 slot core의 r6 TLC 결과는 해당 의미 파일이 변경되지 않아 유지된다.
+ 
+-The candidate is calculated before authoritative mutation.
+-A rejected/invalid candidate leaves `activeProject` unchanged.
++r17 interaction core는 다음 pseudocode 의미를 파생해 검증한다.
+ 
+-### layout_annotations_export.py
++- explicit no-slot deselection
++- 미선택 visible graph/image/empty slot surface selection
++- selected graph/image content interaction pass-through
++- selected empty slot same-slot toggle
++- bookmark same-slot toggle
++- dashboard background deselection
++- 일반 empty CSV 생성
++- 새 CSV의 current selection
++- empty CSV 생성 자체가 graph-object sequence를 변경하지 않음
++- 이후 graph object가 current selected CSV를 reference함
+ 
+-Direct translation:
++UI-local이라 verification state로 만들지 않은 항목은 trash row Menu opened 상태, concrete Mantine Modal width, layout preview DOM measurement다. 이 값들은 persistent project authority가 아니며 Source Code의 renderer/UI 구체화 영역이다.
+ 
+-- `buildGridResizeCandidate` as a pure TLA+ operator
+-- `setLayoutApiGrid` as a PlusCal procedure
+-- `mergeSlots` as a PlusCal procedure
+-- `splitSlots` as a PlusCal procedure
+-
+-The call chain is preserved:
++## bounded verification
+ 
+ ```text
+-applyGridLayoutAction
+--> setLayoutApiGrid
+--> buildGridResizeCandidate
+--> projection validation
+--> commit or reject
++SlotIds = 1..3
++CsvIds = 1..2
++MaxGraphObjects = 2
++NoSlot = 0
++NoCsv = 0
+ ```
+ 
+-## Data representation
+-
+-The verification code keeps the Source Script slot structure rather than
+-replacing it with a separate `payload/cover` domain model.
+-
+-Each slot has:
+-
+-- id
+-- row / col
+-- rowSpan / colSpan
+-- hidden
+-- content.chart
+-- content.imageId
+-- content.contentType
+-- content.imageSettings
+-- caption
+-
+-The TLA+ function that maps slot id to slot record is a mechanical finite-state
+-representation of the Source Script slot collection.
+-
+-## TLC bounds
+-
+-For this slice TLC uses:
+-
+-- maximum grid: 3 x 3
+-- initial grid: 2 x 2
+-- chart ids: 2
+-- image ids: 1
+-
+-These are finite verification bounds, not application limits.
+-
+-Values such as caption text and manual image settings use representative values,
+-but the field ownership and branches that distinguish default/non-default state
+-are preserved.
+-
+-## Verification harness
+-
+-`VerificationHarness*` procedures are deliberately separated from translated
+-Fast Figure procedures.
+-
+-They are not domain commands and must not be copied into source code.
+-
+-Their only role is to construct valid representative prestates containing:
+-
+-- an owned chart
+-- an image reference
+-- a slot caption
+-- non-default image settings
+-
+-so TLC can execute reset/swap/merge/split/grid operations over the states that
+-the real application can reach through other Source Script modules.
+-
+-The earlier r1 mixed these state generators with the modeled operation set.
+-r2 makes the separation explicit.
+-
+-## Invariants
++이 값들은 application 제한이 아니라 TLC의 유한 상태공간을 위한 verification-only bound다.
+ 
+-The verification assertions for this slice check:
++## TLC validation
+ 
+-- bounded slot/layout type validity
+-- one slot record per active grid cell
+-- valid visible/hidden merged coverage
+-- chart/image reference validity
+-- chart and image mutual exclusion
+-- every existing chart has exactly one owning slot
+-- every committed state remains a valid slot/layout projection
++r11 interaction validation:
+ 
+-These assertions are additional verification of the translated pseudocode.
+-They do not replace or reinterpret Source Script behavior.
+-
+-## Deferred Source Script areas
+-
+-This file is still one verification-code module, not the complete project
+-translation.
+-
+-Not translated here:
+-
+-- asset/VFS algorithms
+-- CSV/TSV/JSON parsing
+-- graph/editor/Plotly algorithms
+-- FFPX/FFSX serialization/import
+-- caption/label/export algorithms outside the slot-local parts used here
+-- complete application FSM/lifecycle
+-- renderer/API/UI modules
+-
+-Those high-level algorithms must be translated in additional verification-code
+-modules before the project-wide TLC gate can pass.
+-
+-Pure reads may be omitted only under policy v0.2.2 conditions. Their data
+-contracts and any read that influences mutation, ordering, reference selection,
+-locking, stale-read behavior, or failure semantics must still be represented.
+-
+-## Current validation state
+-
+-This revision is executable verification code but has not yet been translated
+-and run with TLC in this change.
+-
+-Therefore:
++- review: `agent_space/reviews/review-20261013-008-tlc-interaction-r11.md`
++- GitHub Actions run: `38357202939`
++- job: `verify-interaction-core`
++- TLA+ tools: v1.7.4
++- TLC: 2.19
++- generated states: 3,937
++- distinct states: 2,808
++- states left on queue: 0
++- complete graph depth: 34
++- maximum outdegree: 9
++- invariant violation: none
++- counterexample/error: none
+ 
+ ```text
+-verification-model status = current
+-tlc = pending
++verification-model r11 = current
++TLC = passed
+ ```
+ 
+-The next step for this module is PlusCal translation and TLC execution.
+-
+-
+-## r17 interaction module
+-
+-`FastFigureInteractionCore.tla` is an additional executable verification slice derived from Source Script r17.
+-
+-It directly models:
+-
+-- explicit slot deselection through the existing selection authority;
+-- selection-state-first slot-surface clicks;
+-- same-slot bookmark toggle;
+-- selected content-slot body pass-through;
+-- selected empty-slot surface toggle;
+-- ordinary empty CSV creation;
+-- selecting the newly created CSV through the existing CSV selection authority;
+-- no graph-object side effect from empty CSV creation itself;
+-- later graph-object creation referencing the selected CSV.
+-
+-Representative slot ids are used only to cover graph-content, image-content, and empty-slot interaction branches. They are finite verification bounds, not application slot limits.
+-
+-The module deliberately does not introduce project state for:
+-
+-- trash row Menu opened state;
+-- concrete Mantine Modal width;
+-- layout-preview DOM measurements.
+-
+-Those are UI-local or renderer implementation details under the r17 Source Script ownership rules.
+-
+-### r17 validation status
+-
+-The interaction module has been authored but official PlusCal translation, SANY parse and TLC execution have not yet been run in this change because the current execution environment does not provide `tla2tools.jar`.
+-
+-Therefore the canonical verification-model remains:
+-
+-```text
+-status = stale
+-tlc = pending
+-```
++## coverage의 의미
+ 
+-Source Code must not be modified until the current verification model has been translated/parsed/model-checked and promoted according to the development gate.
++verification model은 pseudocode 전체를 복제하지 않는다. 상태공간 탐색이 필요한 범위를 선택적으로 파생한다. verification에 없는 asset parsing, 전체 UI renderer, serialization 등의 영역은 pseudocode 누락이 아니라 현재 TLC coverage 밖의 영역이다.

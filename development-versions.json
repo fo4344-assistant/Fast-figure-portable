@@ -2,11 +2,11 @@
   "schema": 2,
   "precedence": [
     "source-script",
-    "verification-model",
+    "pseudocode",
     "source-code"
   ],
   "fingerprint_algorithm": "sha256(sorted path + NUL + git-blob-sha1 + LF)",
-  "authority_rule": "On semantic conflict, Source Script wins. Source code may be current only when the current verification model derives from the current closed Source Script and its TLC validation has passed.",
+  "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode and gates Source Code where TLC validation is used.",
   "layers": {
     "source-script": {
       "revision": 17,
@@ -20,10 +20,11 @@
     "verification-model": {
       "revision": 11,
       "status": "current",
-      "path_rule": "verification/**/*",
-      "fingerprint": "sha256:66274b5f28db2ce3ba3a509689fa2d827713ece54c71c69bbd2ce898471acf8a",
+      "path_rule": "verification/**/*.{tla,cfg}",
+      "fingerprint": "sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b",
       "derived_from": {
-        "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664"
+        "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
+        "pseudocode": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898"
       },
       "tlc": "passed",
       "validation_review": "agent_space/reviews/review-20261013-008-tlc-interaction-r11.md"
@@ -40,23 +41,20 @@
       "fingerprint": "sha256:a76944037f6bc203b950b889aa37a57f2d6e94ce61a4790bcfa1bcc8829c4bcb",
       "derived_from": {
         "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
-        "verification-model": "sha256:66274b5f28db2ce3ba3a509689fa2d827713ece54c71c69bbd2ce898471acf8a"
+        "pseudocode": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898",
+        "verification-model": "sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b"
       },
-      "validation_review": "agent_space/reviews/review-20261013-009-source-code-r13-plan009.md"
-    }
-  },
-  "legacy_artifacts": {
+      "validation_review": "agent_space/reviews/review-20261013-010-pseudocode-lineage-policy-alignment.md"
+    },
     "pseudocode": {
       "revision": 3,
-      "status": "archived",
-      "path_rule": "pseudocode/**/*",
-      "fingerprint": "sha256:086f64c600a847ecd389d3be621eb24a4589ae36c325cf248e4bc4cecd1790d0",
+      "status": "current",
+      "path_rule": "pseudocode/**/*.pcal",
+      "fingerprint": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898",
       "derived_from": {
         "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664"
       },
-      "validation": "not-run",
-      "policy_version": "v0.2.6",
-      "role": "non-authoritative reference artifact; does not satisfy the v0.2.0 verification-model/TLC gate"
+      "translation_review": "agent_space/reviews/review-20261013-007-pluscal-r17.md"
     }
   }
 }

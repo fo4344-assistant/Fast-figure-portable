@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Source Script > verification model/TLC > source code lineage."""
+"""Validate Source Script > PlusCal pseudocode > verification model/TLC > source code lineage."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ MANIFEST_PATH = ROOT / "development-versions.json"
 SOURCE_SCRIPT_DIR = ROOT / "sourcescript"
 VERIFICATION_DIR = ROOT / "verification"
 PSEUDOCODE_DIR = ROOT / "pseudocode"
-EXPECTED_PRECEDENCE = ["source-script", "verification-model", "source-code"]
+EXPECTED_PRECEDENCE = ["source-script", "pseudocode", "source-code"]
 
 
 class VersionError(RuntimeError):
@@ -50,23 +50,25 @@ def source_script_paths() -> list[Path]:
     return paths
 
 
+def pseudocode_paths() -> list[Path]:
+    if not PSEUDOCODE_DIR.is_dir():
+        return []
+    return [
+        path
+        for path in PSEUDOCODE_DIR.rglob("*.pcal")
+        if path.is_file() and "__pycache__" not in path.parts
+    ]
+
+
 def verification_model_paths() -> list[Path]:
     if not VERIFICATION_DIR.is_dir():
         return []
     return [
         path
         for path in VERIFICATION_DIR.rglob("*")
-        if path.is_file() and "__pycache__" not in path.parts
-    ]
-
-
-def legacy_pseudocode_paths() -> list[Path]:
-    if not PSEUDOCODE_DIR.is_dir():
-        return []
-    return [
-        path
-        for path in PSEUDOCODE_DIR.rglob("*")
-        if path.is_file() and "__pycache__" not in path.parts
+        if path.is_file()
+        and path.suffix in {".tla", ".cfg"}
+        and "__pycache__" not in path.parts
     ]
 
 
@@ -93,7 +95,7 @@ def load_manifest(path: Path = MANIFEST_PATH) -> dict:
         raise VersionError("unsupported development version schema")
     if manifest.get("precedence") != EXPECTED_PRECEDENCE:
         raise VersionError(
-            "development precedence must be source-script > verification-model > source-code"
+            "development precedence must be source-script > pseudocode > source-code"
         )
     return manifest
 
@@ -112,6 +114,7 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
         raise VersionError("layers object is missing")
 
     source = layers.get("source-script", {})
+    pseudocode = layers.get("pseudocode", {})
     verification = layers.get("verification-model", {})
     code = layers.get("source-code", {})
 
@@ -132,6 +135,31 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
     if source.get("fingerprint") != source_fp:
         raise VersionError(
             "Source Script fingerprint changed without updating development-versions.json"
+        )
+
+    pseudocode_status = pseudocode.get("status")
+    if pseudocode_status not in {"stale", "current"}:
+        raise VersionError(f"invalid pseudocode status: {pseudocode_status!r}")
+    if not isinstance(pseudocode.get("revision"), int) or pseudocode["revision"] < 1:
+        raise VersionError("pseudocode revision must be a positive integer")
+    active_pseudocode_paths = pseudocode_paths()
+    if not active_pseudocode_paths:
+        raise VersionError("active PlusCal pseudocode files are missing")
+    pseudocode_fp = layer_fingerprint(active_pseudocode_paths)
+    if pseudocode.get("fingerprint") != pseudocode_fp:
+        raise VersionError(
+            "PlusCal pseudocode fingerprint changed without updating development-versions.json"
+        )
+    if pseudocode_status == "current":
+        if source_closure != "closed":
+            raise VersionError("pseudocode cannot be current before Source Script is closed")
+        if pseudocode.get("derived_from", {}).get("source-script") != source_fp:
+            raise VersionError(
+                "current pseudocode does not derive from the current Source Script"
+            )
+        validate_review_path(
+            pseudocode.get("translation_review"),
+            "pseudocode translation review",
         )
 
     verification_paths = verification_model_paths()
@@ -175,9 +203,18 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
                 raise VersionError(
                     "verification-model cannot be current before Source Script is closed"
                 )
-            if verification.get("derived_from", {}).get("source-script") != source_fp:
+            if pseudocode_status != "current":
                 raise VersionError(
-                    "current verification-model does not derive from the current Source Script"
+                    "verification-model cannot be current before pseudocode is current"
+                )
+            derived = verification.get("derived_from", {})
+            if derived.get("pseudocode") != pseudocode_fp:
+                raise VersionError(
+                    "current verification-model does not derive from the current pseudocode"
+                )
+            if derived.get("source-script") != source_fp:
+                raise VersionError(
+                    "current verification-model does not trace to the current Source Script"
                 )
         if tlc_status == "passed":
             if verification_status != "current":
@@ -193,19 +230,6 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
     else:
         raise VersionError(f"invalid verification-model status: {verification_status!r}")
 
-    legacy = manifest.get("legacy_artifacts", {}).get("pseudocode")
-    if legacy is not None:
-        legacy_paths = legacy_pseudocode_paths()
-        if legacy.get("status") != "archived":
-            raise VersionError("legacy pseudocode artifact must be marked archived")
-        if not legacy_paths:
-            raise VersionError("legacy pseudocode artifact is recorded but files are missing")
-        legacy_fp = layer_fingerprint(legacy_paths)
-        if legacy.get("fingerprint") != legacy_fp:
-            raise VersionError(
-                "archived pseudocode changed; update or restore the explicit legacy record"
-            )
-
     code_status = code.get("status")
     if code_status not in {"stale", "current"}:
         raise VersionError(f"invalid source-code status: {code_status!r}")
@@ -215,6 +239,8 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
             "source-code fingerprint changed without updating development-versions.json"
         )
     if code_status == "current":
+        if pseudocode_status != "current":
+            raise VersionError("source code cannot be current before pseudocode is current")
         if verification_status != "current" or verification_fp is None:
             raise VersionError(
                 "source code cannot be current before verification-model is current"
@@ -228,6 +254,10 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
             raise VersionError(
                 "current source code does not derive from the current Source Script"
             )
+        if derived.get("pseudocode") != pseudocode_fp:
+            raise VersionError(
+                "current source code does not derive from the current pseudocode"
+            )
         if derived.get("verification-model") != verification_fp:
             raise VersionError(
                 "current source code does not derive from the current verification-model"
@@ -235,6 +265,7 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
 
     return {
         "source-script": source_fp,
+        "pseudocode": pseudocode_fp,
         "verification-model": verification_fp,
         "source-code": code_fp,
     }
@@ -343,7 +374,15 @@ def validate_revision_progression(manifest: dict, base: str) -> None:
         path.startswith("sourcescript/") and path.endswith(".py")
         for path in changed
     )
-    verification_changed = any(path.startswith("verification/") for path in changed)
+    pseudocode_changed = any(
+        path.startswith("pseudocode/") and path.endswith(".pcal")
+        for path in changed
+    )
+    verification_changed = any(
+        path.startswith("verification/")
+        and (path.endswith(".tla") or path.endswith(".cfg"))
+        for path in changed
+    )
 
     source_paths = set(current_layers["source-code"].get("paths", []))
     source_paths.update(base_layers.get("source-code", {}).get("paths", []))
@@ -384,6 +423,18 @@ def validate_revision_progression(manifest: dict, base: str) -> None:
                 "Source Script closure review must be new for this closure transition"
             )
 
+    if pseudocode_changed:
+        require_increment("pseudocode")
+        pseudocode = current_layers["pseudocode"]
+        if pseudocode.get("status") != "current":
+            raise VersionError(
+                "modified pseudocode must finish as current against the latest Source Script"
+            )
+        if current_layers["source-script"].get("closure") != "closed":
+            raise VersionError(
+                "pseudocode cannot change before Source Script is closed"
+            )
+
     if verification_changed:
         require_increment("verification-model")
         verification = current_layers["verification-model"]
@@ -391,9 +442,9 @@ def validate_revision_progression(manifest: dict, base: str) -> None:
             raise VersionError(
                 "modified verification-model must finish as current against the latest Source Script"
             )
-        if current_layers["source-script"].get("closure") != "closed":
+        if current_layers["pseudocode"].get("status") != "current":
             raise VersionError(
-                "verification-model cannot change before Source Script is closed"
+                "verification-model cannot change before pseudocode is current"
             )
 
     base_verification = base_layers.get("verification-model", {})
@@ -414,6 +465,11 @@ def validate_revision_progression(manifest: dict, base: str) -> None:
 
     if code_changed:
         require_increment("source-code")
+        pseudocode = current_layers["pseudocode"]
+        if pseudocode.get("status") != "current":
+            raise VersionError(
+                "source code cannot change while pseudocode is stale"
+            )
         verification = current_layers["verification-model"]
         if verification.get("status") != "current":
             raise VersionError(
@@ -453,6 +509,8 @@ def main() -> int:
         f"  source-script: r{layers['source-script']['revision']} "
         f"{layers['source-script']['status']}/{layers['source-script']['closure']} "
         f"{fingerprints['source-script']}\n"
+        f"  pseudocode: r{layers['pseudocode']['revision']} "
+        f"{layers['pseudocode']['status']} {fingerprints['pseudocode']}\n"
         f"  verification-model: r{layers['verification-model']['revision']} "
         f"{layers['verification-model']['status']}/{layers['verification-model']['tlc']} "
         f"{fingerprints['verification-model'] or '-'}\n"

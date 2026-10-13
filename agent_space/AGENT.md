@@ -27,7 +27,7 @@
 
 ## 정책 원천
 
-- Source Script, PlusCal/TLA+ 검증 모델, TLC 검증, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
+- Source Script, PlusCal pseudocode, 선택적 TLA+/TLC verification model, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
 - 해당 정책 원문은 사용자가 명시적으로 정책 변경을 지시한 경우에만 수정한다.
 - 프로젝트 고유의 데이터 구조, 책임 배치, 식별자, 파일 형식, 해결 방안은 정책 문서에 추가하지 않고 `sourcescript/`, `agent_space/plans/`, `agent_space/docs/` 중 해당 책임 경로에 기록한다.
 
@@ -59,14 +59,19 @@
 
 ## 개발 계층 버전 우선순위
 
-- 개발 의미의 권위 순서는 반드시 `Source Script > verification-model > source code`로 유지할 것.
+- 개발 의미의 기본 권위 순서는 반드시 `Source Script > PlusCal pseudocode > source code`로 유지할 것.
+- 상태 기반 검증을 사용하는 범위에서는 `Source Script > PlusCal pseudocode > verification-model/TLC > source code` 순서로 선택적 검증 단계를 삽입한다.
+- PlusCal pseudocode는 Source Script 전체를 언어중립 실행 절차로 직접 번역한 정식 중간 계층이다. verification 전용 산출물이나 legacy reference로 취급하지 말 것.
+- verification-model은 PlusCal pseudocode에서 필요한 검증 범위를 파생한 표현이며 별도의 설계 권위를 갖지 않는다.
+- 현재 Fast Figure 프로젝트는 verification-model/TLC gate를 사용하므로 application source code가 `current`가 되려면 현재 pseudocode에서 파생된 verification-model이 `current`이고 TLC가 `passed`여야 한다.
 - 계층 버전과 파생 관계의 단일 메타데이터 원천은 저장소 루트의 `development-versions.json`으로 둘 것.
-- `development-versions.json`은 의미 자체를 정의하는 문서가 아니라 각 계층의 revision, 실제 내용 fingerprint, 상위 계층 파생 버전을 기록하는 lineage metadata다.
-- Source Script는 항상 최상위 권위 계층이다. verification-model 또는 source code와 의미가 충돌하면 Source Script를 기준으로 하위 계층을 수정할 것.
-- Source Script의 의미 파일이 바뀌면 source-script revision과 fingerprint를 갱신할 것. 기존 verification-model과 source code는 새 Source Script fingerprint를 정확히 반영하기 전까지 `current`로 표시하지 말 것.
-- verification-model을 생성하거나 수정할 때는 현재 Source Script fingerprint를 `derived_from.source-script`에 기록하고 verification-model revision을 증가시킬 것. 최신 Source Script와 정확히 일치하지 않는 verification-model은 `current`가 될 수 없다. TLC가 `passed`가 되려면 새 validation review가 있어야 한다.
-- application source code를 수정할 때는 verification-model이 먼저 `current`이고 TLC가 `passed`여야 하며, source code의 `derived_from.source-script`와 `derived_from.verification-model`이 각각 현재 상위 계층 fingerprint와 정확히 일치해야 한다. source-code revision도 증가시킬 것.
-- 현재 동작하는 source code가 있더라도 최신 TLC-passed verification-model에서 내려온 lineage가 확인되지 않으면 설계 계층에서는 `stale`로 취급할 것. 실행 가능성과 계층 최신성은 같은 의미가 아니다.
-- 하위 계층의 구현 편의 때문에 상위 계층을 암묵적으로 수정하지 말 것. source code에서 새 의미가 필요하다고 판단되면 Source Script 단계로 돌아가 먼저 반영하고 version chain을 다시 아래로 전파할 것.
+- `development-versions.json`은 의미 자체를 정의하는 문서가 아니라 각 계층의 revision, 실제 의미 파일 fingerprint, 상위 계층 파생 버전을 기록하는 lineage metadata다.
+- Source Script는 항상 최상위 권위 계층이다. 하위 계층과 의미가 충돌하면 Source Script를 기준으로 pseudocode부터 순서대로 다시 전파할 것.
+- Source Script의 의미 파일이 바뀌면 source-script revision과 fingerprint를 갱신할 것. PlusCal pseudocode는 새 Source Script를 직접 번역하고 번역 충실도와 구체화 수준을 확인하기 전까지 `current`가 될 수 없다.
+- PlusCal pseudocode를 생성하거나 수정할 때는 현재 Source Script fingerprint를 `derived_from.source-script`에 기록하고 pseudocode revision을 증가시킬 것. 활성 pseudocode 의미 파일은 `pseudocode/**/*.pcal`이다.
+- verification-model을 생성하거나 수정할 때는 현재 PlusCal pseudocode fingerprint를 `derived_from.pseudocode`에 기록하고 verification-model revision을 증가시킬 것. 현재 프로젝트에서는 추적성을 위해 `derived_from.source-script`도 함께 기록한다. TLC가 `passed`가 되려면 validation review가 있어야 한다.
+- application source code를 수정할 때는 현재 Source Script와 PlusCal pseudocode의 lineage를 모두 기록한다. verification-model/TLC를 사용한 범위에서는 current/passed verification-model lineage도 함께 기록하고 source-code revision을 증가시킬 것.
+- 현재 동작하는 source code가 있더라도 최신 Source Script → PlusCal pseudocode → verification-model/TLC lineage가 확인되지 않으면 설계 계층에서는 `stale`로 취급할 것. 실행 가능성과 계층 최신성은 같은 의미가 아니다.
+- 하위 계층의 구현 편의 때문에 상위 계층을 암묵적으로 수정하지 말 것. source code에서 새 의미가 필요하다고 판단되면 필요한 상위 단계로 돌아가고 Source Script 변경이 필요하면 Source Script부터 다시 닫은 뒤 pseudocode와 하위 계층에 순서대로 전파할 것.
 - `scripts/check-development-layer-versions.py` 검사를 통과하지 않은 계층 버전 변경은 완료로 취급하지 말 것.
-- main의 CI는 Source Script, verification-model, archived pseudocode, application source, 정책 또는 version metadata가 변경될 때 version chain을 검사해야 한다.
+- main의 CI는 Source Script, PlusCal pseudocode, verification-model, application source, 정책 또는 version metadata가 변경될 때 version chain을 검사해야 한다.

@@ -1,225 +1,85 @@
-# verification code r2 — slot/layout/chart direct translation
+# Fast Figure verification model r11
 
-## Purpose
-
-This revision replaces the earlier state-model-style r1 with a direct executable
-translation of the corresponding Source Script algorithms.
-
-The role is the original pseudocode role plus executable verification:
+이 디렉터리는 PlusCal pseudocode에서 상태 기반 검증이 필요한 범위를 파생한 선택적 verification model이다. verification model은 Source Script 전체 번역 계층이 아니며 별도의 설계 권위도 아니다.
 
 ```text
 Source Script
--> verification code
--> TLC
--> source code
+→ PlusCal pseudocode
+→ [선택적] verification model
+→ TLA+/TLC
+→ Source Code
 ```
 
-The verification code is not a second design model.
+Source Script와 pseudocode가 충돌하면 Source Script가 원천이다. pseudocode와 verification model이 충돌하면 pseudocode가 직접 원천이며 verification model을 수정한다.
 
-It preserves the Source Script's:
+## 현재 lineage
 
-- data ownership
-- function boundaries
-- call relationship
-- execution order
-- branches
-- value generation and consumption
-- candidate/validation/commit boundary
-- failure/rejection behavior
+- Source Script: r17 / current / closed
+- Source Script fingerprint: `sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664`
+- PlusCal pseudocode: r3 / current
+- pseudocode fingerprint: `sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898`
+- verification-model: r11 / current
+- verification fingerprint: `sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b`
+- TLC: passed
 
-TLA+ operators are used where the Source Script describes pure calculation.
-PlusCal procedures are used where the Source Script describes an operation or
-mutation path.
+verification fingerprint는 의미 파일인 `verification/**/*.tla`와 `verification/**/*.cfg`만 대상으로 한다. README는 상태 설명 문서이며 verification 의미 fingerprint에 포함하지 않는다.
 
-## Source Script mapping
+## canonical verification modules
 
-### project_state.py
+- `FastFigureSlotCore.tla` / `FastFigureSlotCore.cfg`: slot/layout/chart candidate와 reference consistency bounded slice.
+- `FastFigureInteractionCore.tla` / `FastFigureInteractionCore.cfg`: r17 interaction과 empty-CSV bounded slice.
 
-Directly represented:
+기존 slot core의 r6 TLC 결과는 해당 의미 파일이 변경되지 않아 유지된다.
 
-- `SLOT_LOCAL_DEFAULTS`
-- `slotHasNonDefaultLocalState`
-- slot-local ownership of chart/imageId/contentType/imageSettings/caption
-- chart/image reference validity for this slice
-- exact-one-slot chart ownership
+r17 interaction core는 다음 pseudocode 의미를 파생해 검증한다.
 
-`validateProjectObjectState` is not redefined as a smaller project validator.
-Instead this slice defines `ValidateSlotLayoutProjection`, which explicitly
-means only the projection of whole-project validation that can change in this
-translation. Unmodeled ProjectObject fields are assumed unchanged and valid.
+- explicit no-slot deselection
+- 미선택 visible graph/image/empty slot surface selection
+- selected graph/image content interaction pass-through
+- selected empty slot same-slot toggle
+- bookmark same-slot toggle
+- dashboard background deselection
+- 일반 empty CSV 생성
+- 새 CSV의 current selection
+- empty CSV 생성 자체가 graph-object sequence를 변경하지 않음
+- 이후 graph object가 current selected CSV를 reference함
 
-### application_fsm.py
+UI-local이라 verification state로 만들지 않은 항목은 trash row Menu opened 상태, concrete Mantine Modal width, layout preview DOM measurement다. 이 값들은 persistent project authority가 아니며 Source Code의 renderer/UI 구체화 영역이다.
 
-Direct PlusCal procedures:
-
-- `applySlotsResetAction`
-- `applySlotsSwappedAction`
-- `applyGridLayoutAction`
-
-The candidate is calculated before authoritative mutation.
-A rejected/invalid candidate leaves `activeProject` unchanged.
-
-### layout_annotations_export.py
-
-Direct translation:
-
-- `buildGridResizeCandidate` as a pure TLA+ operator
-- `setLayoutApiGrid` as a PlusCal procedure
-- `mergeSlots` as a PlusCal procedure
-- `splitSlots` as a PlusCal procedure
-
-The call chain is preserved:
+## bounded verification
 
 ```text
-applyGridLayoutAction
--> setLayoutApiGrid
--> buildGridResizeCandidate
--> projection validation
--> commit or reject
+SlotIds = 1..3
+CsvIds = 1..2
+MaxGraphObjects = 2
+NoSlot = 0
+NoCsv = 0
 ```
 
-## Data representation
+이 값들은 application 제한이 아니라 TLC의 유한 상태공간을 위한 verification-only bound다.
 
-The verification code keeps the Source Script slot structure rather than
-replacing it with a separate `payload/cover` domain model.
+## TLC validation
 
-Each slot has:
+r11 interaction validation:
 
-- id
-- row / col
-- rowSpan / colSpan
-- hidden
-- content.chart
-- content.imageId
-- content.contentType
-- content.imageSettings
-- caption
-
-The TLA+ function that maps slot id to slot record is a mechanical finite-state
-representation of the Source Script slot collection.
-
-## TLC bounds
-
-For this slice TLC uses:
-
-- maximum grid: 3 x 3
-- initial grid: 2 x 2
-- chart ids: 2
-- image ids: 1
-
-These are finite verification bounds, not application limits.
-
-Values such as caption text and manual image settings use representative values,
-but the field ownership and branches that distinguish default/non-default state
-are preserved.
-
-## Verification harness
-
-`VerificationHarness*` procedures are deliberately separated from translated
-Fast Figure procedures.
-
-They are not domain commands and must not be copied into source code.
-
-Their only role is to construct valid representative prestates containing:
-
-- an owned chart
-- an image reference
-- a slot caption
-- non-default image settings
-
-so TLC can execute reset/swap/merge/split/grid operations over the states that
-the real application can reach through other Source Script modules.
-
-The earlier r1 mixed these state generators with the modeled operation set.
-r2 makes the separation explicit.
-
-## Invariants
-
-The verification assertions for this slice check:
-
-- bounded slot/layout type validity
-- one slot record per active grid cell
-- valid visible/hidden merged coverage
-- chart/image reference validity
-- chart and image mutual exclusion
-- every existing chart has exactly one owning slot
-- every committed state remains a valid slot/layout projection
-
-These assertions are additional verification of the translated pseudocode.
-They do not replace or reinterpret Source Script behavior.
-
-## Deferred Source Script areas
-
-This file is still one verification-code module, not the complete project
-translation.
-
-Not translated here:
-
-- asset/VFS algorithms
-- CSV/TSV/JSON parsing
-- graph/editor/Plotly algorithms
-- FFPX/FFSX serialization/import
-- caption/label/export algorithms outside the slot-local parts used here
-- complete application FSM/lifecycle
-- renderer/API/UI modules
-
-Those high-level algorithms must be translated in additional verification-code
-modules before the project-wide TLC gate can pass.
-
-Pure reads may be omitted only under policy v0.2.2 conditions. Their data
-contracts and any read that influences mutation, ordering, reference selection,
-locking, stale-read behavior, or failure semantics must still be represented.
-
-## Current validation state
-
-This revision is executable verification code but has not yet been translated
-and run with TLC in this change.
-
-Therefore:
+- review: `agent_space/reviews/review-20261013-008-tlc-interaction-r11.md`
+- GitHub Actions run: `38357202939`
+- job: `verify-interaction-core`
+- TLA+ tools: v1.7.4
+- TLC: 2.19
+- generated states: 3,937
+- distinct states: 2,808
+- states left on queue: 0
+- complete graph depth: 34
+- maximum outdegree: 9
+- invariant violation: none
+- counterexample/error: none
 
 ```text
-verification-model status = current
-tlc = pending
+verification-model r11 = current
+TLC = passed
 ```
 
-The next step for this module is PlusCal translation and TLC execution.
+## coverage의 의미
 
-
-## r17 interaction module
-
-`FastFigureInteractionCore.tla` is an additional executable verification slice derived from Source Script r17.
-
-It directly models:
-
-- explicit slot deselection through the existing selection authority;
-- selection-state-first slot-surface clicks;
-- same-slot bookmark toggle;
-- selected content-slot body pass-through;
-- selected empty-slot surface toggle;
-- ordinary empty CSV creation;
-- selecting the newly created CSV through the existing CSV selection authority;
-- no graph-object side effect from empty CSV creation itself;
-- later graph-object creation referencing the selected CSV.
-
-Representative slot ids are used only to cover graph-content, image-content, and empty-slot interaction branches. They are finite verification bounds, not application slot limits.
-
-The module deliberately does not introduce project state for:
-
-- trash row Menu opened state;
-- concrete Mantine Modal width;
-- layout-preview DOM measurements.
-
-Those are UI-local or renderer implementation details under the r17 Source Script ownership rules.
-
-### r17 validation status
-
-The interaction module has been authored but official PlusCal translation, SANY parse and TLC execution have not yet been run in this change because the current execution environment does not provide `tla2tools.jar`.
-
-Therefore the canonical verification-model remains:
-
-```text
-status = stale
-tlc = pending
-```
-
-Source Code must not be modified until the current verification model has been translated/parsed/model-checked and promoted according to the development gate.
+verification model은 pseudocode 전체를 복제하지 않는다. 상태공간 탐색이 필요한 범위를 선택적으로 파생한다. verification에 없는 asset parsing, 전체 UI renderer, serialization 등의 영역은 pseudocode 누락이 아니라 현재 TLC coverage 밖의 영역이다.
