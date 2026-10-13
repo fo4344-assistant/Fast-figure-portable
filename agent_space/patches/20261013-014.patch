@@ -1,0 +1,335 @@
+diff --git a/verification/FastFigureInteractionCore.tla b/verification/FastFigureInteractionCore.tla
+new file mode 100644
+--- /dev/null
++++ b/verification/FastFigureInteractionCore.tla
+@@ -0,0 +1,248 @@
++------------------------ MODULE FastFigureInteractionCore ------------------------
++EXTENDS Integers, FiniteSets, Sequences, TLC
++
++(*
++Executable verification translation for the r17 interaction slice.
++
++Source Script authority:
++- sourcescript/application_fsm.py
++- sourcescript/renderer_runtime.py
++- sourcescript/assets_files.py
++- sourcescript/graphs.py
++- sourcescript/api_ui.py
++
++This module does not model Mantine DOM implementation details. It verifies the
++state-changing meaning introduced or clarified in r17:
++- explicit slot deselection;
++- selection-state-first slot-surface interaction;
++- same-slot bookmark toggle;
++- ordinary empty CSV creation;
++- new empty CSV becomes the current CSV selection;
++- empty CSV creation does not itself create a graph object;
++- later graph-object creation references the current selected CSV.
++
++Trash row Menu availability and common Modal maximum are UI-local constraints
++with no project mutation and are reviewed outside this state model.
++*)
++
++NoSlot == "no-slot"
++NoCsv == "no-csv"
++
++SlotIds == 1..3
++CsvIds == 1..2
++
++SlotContentType ==
++  [1 |-> "graph", 2 |-> "image", 3 |-> "graph"]
++
++SlotHasContent ==
++  [1 |-> TRUE, 2 |-> TRUE, 3 |-> FALSE]
++
++WorkspaceFor(slotId) ==
++  IF slotId = NoSlot
++    THEN "project"
++    ELSE IF SlotContentType[slotId] = "image"
++      THEN "slot.image"
++      ELSE "slot.graph"
++
++InitialProject ==
++  [ csvIds |-> {},
++    nextCsvId |-> 1,
++    graphObjectCsvRefs |-> <<>> ]
++
++ValidProject(project) ==
++  /\ project.csvIds \subseteq CsvIds
++  /\ project.nextCsvId \in 1..(Cardinality(CsvIds) + 1)
++  /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
++       project.graphObjectCsvRefs[index] \in project.csvIds
++
++TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project, lastResult) ==
++  /\ selectedSlotId \in SlotIds \cup {NoSlot}
++  /\ workspace \in {"project", "slot.graph", "slot.image"}
++  /\ workspace = WorkspaceFor(selectedSlotId)
++  /\ assetSelection \in {"none", "csv"}
++  /\ selectedCsvId \in CsvIds \cup {NoCsv}
++  /\ (assetSelection = "none" <=> selectedCsvId = NoCsv)
++  /\ (selectedCsvId # NoCsv => selectedCsvId \in project.csvIds)
++  /\ ValidProject(project)
++  /\ lastResult \in {
++       "initialized",
++       "slot-selected",
++       "slot-deselected",
++       "content-pass-through",
++       "invalid-slot",
++       "empty-csv-created",
++       "empty-csv-unavailable",
++       "graph-object-added",
++       "graph-object-rejected"
++     }
++
++SelectionInvariant(selectedSlotId, workspace) ==
++  workspace = WorkspaceFor(selectedSlotId)
++
++CsvReferenceInvariant(project, selectedCsvId) ==
++  /\ selectedCsvId = NoCsv \/ selectedCsvId \in project.csvIds
++  /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
++       project.graphObjectCsvRefs[index] \in project.csvIds
++
++(*
++--algorithm FastFigureInteractionCore
++variables
++  selectedSlotId = NoSlot,
++  workspace = "project",
++  assetSelection = "none",
++  selectedCsvId = NoCsv,
++  project = InitialProject,
++  lastResult = "initialized";
++
++procedure ApplySlotSelection(slotId)
++begin
++SelectResolve:
++  if slotId = NoSlot then
++    selectedSlotId := NoSlot ||
++    workspace := "project" ||
++    lastResult := "slot-deselected";
++  elsif slotId \in SlotIds then
++    if selectedSlotId = slotId then
++      selectedSlotId := NoSlot ||
++      workspace := "project" ||
++      lastResult := "slot-deselected";
++    else
++      selectedSlotId := slotId ||
++      workspace := WorkspaceFor(slotId) ||
++      lastResult := "slot-selected";
++    end if;
++  else
++    lastResult := "invalid-slot";
++  end if;
++SelectReturn:
++  return;
++end procedure;
++
++procedure SlotSurfaceClick(slotId)
++begin
++SurfaceResolve:
++  if slotId \in SlotIds then
++    if selectedSlotId # slotId then
++      call ApplySlotSelection(slotId);
++    else
++      if SlotHasContent[slotId] then
++        lastResult := "content-pass-through";
++      else
++        call ApplySlotSelection(slotId);
++      end if;
++    end if;
++  else
++    lastResult := "invalid-slot";
++  end if;
++SurfaceReturn:
++  return;
++end procedure;
++
++procedure BookmarkClick(slotId)
++begin
++BookmarkResolve:
++  if slotId \in SlotIds then
++    call ApplySlotSelection(slotId);
++  else
++    lastResult := "invalid-slot";
++  end if;
++BookmarkReturn:
++  return;
++end procedure;
++
++procedure DashboardBackgroundClick()
++begin
++BackgroundDeselect:
++  if selectedSlotId # NoSlot then
++    call ApplySlotSelection(NoSlot);
++  end if;
++BackgroundReturn:
++  return;
++end procedure;
++
++procedure CreateEmptyCsv()
++variables
++  newCsvId = NoCsv,
++  previousGraphObjectCount = 0;
++begin
++EmptyCsvRememberGraphObjects:
++  previousGraphObjectCount := Len(project.graphObjectCsvRefs);
++EmptyCsvCapacity:
++  if project.nextCsvId \in CsvIds then
++    newCsvId := project.nextCsvId;
++    project := [
++      project EXCEPT
++        !.csvIds = @ \cup {newCsvId},
++        !.nextCsvId = @ + 1
++    ] ||
++    assetSelection := "csv" ||
++    selectedCsvId := newCsvId ||
++    lastResult := "empty-csv-created";
++  else
++    lastResult := "empty-csv-unavailable";
++  end if;
++EmptyCsvNoGraphObjectSideEffect:
++  assert lastResult # "empty-csv-created"
++         \/ Len(project.graphObjectCsvRefs) = previousGraphObjectCount;
++EmptyCsvReturn:
++  return;
++end procedure;
++
++procedure AddGraphObject()
++begin
++AddGraphGuard:
++  if /\ selectedSlotId \in SlotIds
++     /\ SlotContentType[selectedSlotId] = "graph"
++     /\ selectedCsvId # NoCsv
++     /\ selectedCsvId \in project.csvIds then
++    project := [
++      project EXCEPT
++        !.graphObjectCsvRefs = Append(@, selectedCsvId)
++    ] ||
++    lastResult := "graph-object-added";
++  else
++    lastResult := "graph-object-rejected";
++  end if;
++AddGraphReturn:
++  return;
++end procedure;
++
++begin
++Main:
++  while TRUE do
++    either
++      with slotId \in SlotIds do
++        call SlotSurfaceClick(slotId);
++      end with;
++    or
++      with slotId \in SlotIds do
++        call BookmarkClick(slotId);
++      end with;
++    or
++      call DashboardBackgroundClick();
++    or
++      call CreateEmptyCsv();
++    or
++      call AddGraphObject();
++    end either;
++  end while;
++end algorithm;
++*)
++
++TypeOKSpec ==
++  TypeOKState(
++    selectedSlotId,
++    workspace,
++    assetSelection,
++    selectedCsvId,
++    project,
++    lastResult)
++
++SelectionInvariantSpec ==
++  SelectionInvariant(selectedSlotId, workspace)
++
++CsvReferenceInvariantSpec ==
++  CsvReferenceInvariant(project, selectedCsvId)
++
++=============================================================================
++
+diff --git a/verification/FastFigureInteractionCore.cfg b/verification/FastFigureInteractionCore.cfg
+new file mode 100644
+--- /dev/null
++++ b/verification/FastFigureInteractionCore.cfg
+@@ -0,0 +1,6 @@
++SPECIFICATION Spec
++
++INVARIANT TypeOKSpec
++INVARIANT SelectionInvariantSpec
++INVARIANT CsvReferenceInvariantSpec
++
+diff --git a/verification/README.md b/verification/README.md
+--- a/verification/README.md
++++ b/verification/README.md
+@@ -184,3 +184,43 @@
+ 
+ The next step for this module is PlusCal translation and TLC execution.
+ 
++
++## r17 interaction module
++
++`FastFigureInteractionCore.tla` is an additional executable verification slice derived from Source Script r17.
++
++It directly models:
++
++- explicit slot deselection through the existing selection authority;
++- selection-state-first slot-surface clicks;
++- same-slot bookmark toggle;
++- selected content-slot body pass-through;
++- selected empty-slot surface toggle;
++- ordinary empty CSV creation;
++- selecting the newly created CSV through the existing CSV selection authority;
++- no graph-object side effect from empty CSV creation itself;
++- later graph-object creation referencing the selected CSV.
++
++Representative slot ids are used only to cover graph-content, image-content, and empty-slot interaction branches. They are finite verification bounds, not application slot limits.
++
++The module deliberately does not introduce project state for:
++
++- trash row Menu opened state;
++- concrete Mantine Modal width;
++- layout-preview DOM measurements.
++
++Those are UI-local or renderer implementation details under the r17 Source Script ownership rules.
++
++### r17 validation status
++
++The interaction module has been authored but official PlusCal translation, SANY parse and TLC execution have not yet been run in this change because the current execution environment does not provide `tla2tools.jar`.
++
++Therefore the canonical verification-model remains:
++
++```text
++status = stale
++tlc = pending
++```
++
++Source Code must not be modified until the current verification model has been translated/parsed/model-checked and promoted according to the development gate.
++
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -18,15 +18,15 @@
+       "closure_review": "agent_space/reviews/review-20261013-006-sourcescript-closure-r17.md"
+     },
+     "verification-model": {
++      "revision": 7,
+-      "revision": 6,
+       "status": "stale",
+       "path_rule": "verification/**/*",
++      "fingerprint": "sha256:391a0b8a674fe2ffa1f742eb1c4073ea9fb7bba0d0f32eef975e1f128e8d9512",
+-      "fingerprint": "sha256:1998bb5eb999e46066d962b51a7e1081149df2f1358710fae55c5dfdb665c82b",
+       "derived_from": {
++        "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664"
+-        "source-script": "sha256:c8bde1257048128f5c17081cb08fb9ef5bee1cc94dd9bb690d3e9419032655db"
+       },
++      "tlc": "pending",
++      "validation_review": null
+-      "tlc": "passed",
+-      "validation_review": "agent_space/reviews/review-017-tlc-slot-core-r6-2x2.md"
+     },
+     "source-code": {
+       "revision": 12,

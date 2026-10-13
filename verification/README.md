@@ -183,3 +183,43 @@ tlc = pending
 ```
 
 The next step for this module is PlusCal translation and TLC execution.
+
+
+## r17 interaction module
+
+`FastFigureInteractionCore.tla` is an additional executable verification slice derived from Source Script r17.
+
+It directly models:
+
+- explicit slot deselection through the existing selection authority;
+- selection-state-first slot-surface clicks;
+- same-slot bookmark toggle;
+- selected content-slot body pass-through;
+- selected empty-slot surface toggle;
+- ordinary empty CSV creation;
+- selecting the newly created CSV through the existing CSV selection authority;
+- no graph-object side effect from empty CSV creation itself;
+- later graph-object creation referencing the selected CSV.
+
+Representative slot ids are used only to cover graph-content, image-content, and empty-slot interaction branches. They are finite verification bounds, not application slot limits.
+
+The module deliberately does not introduce project state for:
+
+- trash row Menu opened state;
+- concrete Mantine Modal width;
+- layout-preview DOM measurements.
+
+Those are UI-local or renderer implementation details under the r17 Source Script ownership rules.
+
+### r17 validation status
+
+The interaction module has been authored but official PlusCal translation, SANY parse and TLC execution have not yet been run in this change because the current execution environment does not provide `tla2tools.jar`.
+
+Therefore the canonical verification-model remains:
+
+```text
+status = stale
+tlc = pending
+```
+
+Source Code must not be modified until the current verification model has been translated/parsed/model-checked and promoted according to the development gate.
