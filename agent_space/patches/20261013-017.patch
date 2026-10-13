@@ -1,0 +1,34 @@
+diff --git a/verification/FastFigureInteractionCore.tla b/verification/FastFigureInteractionCore.tla
+--- a/verification/FastFigureInteractionCore.tla
++++ b/verification/FastFigureInteractionCore.tla
+@@
+-      with slotId \in SlotIds do
+-        call SlotSurfaceClick(slotId);
++      with surfaceSlotId \in SlotIds do
++        call SlotSurfaceClick(surfaceSlotId);
+       end with;
+     or
+-      with slotId \in SlotIds do
+-        call BookmarkClick(slotId);
++      with bookmarkSlotId \in SlotIds do
++        call BookmarkClick(bookmarkSlotId);
+       end with;
+diff --git a/verification/FastFigureInteractionCore.cfg b/verification/FastFigureInteractionCore.cfg
+--- a/verification/FastFigureInteractionCore.cfg
++++ b/verification/FastFigureInteractionCore.cfg
+@@
+ SPECIFICATION Spec
+ 
++CONSTANTS
++    defaultInitValue = defaultInitValue
++
+ INVARIANT TypeOKSpec
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@
+-      "revision": 8,
++      "revision": 9,
+@@
+-      "fingerprint": "sha256:f690bb45520fad40b863554ad24440eaf4502db79c9eb3adb15c054bdfdab993",
++      "fingerprint": "sha256:796ae3963e238517f42ee8cea24d221a72da913ce70ce705e33290640a17ef5f",

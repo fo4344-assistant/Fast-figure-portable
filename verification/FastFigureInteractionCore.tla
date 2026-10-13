@@ -209,12 +209,12 @@ begin
 Main:
   while TRUE do
     either
-      with slotId \in SlotIds do
-        call SlotSurfaceClick(slotId);
+      with surfaceSlotId \in SlotIds do
+        call SlotSurfaceClick(surfaceSlotId);
       end with;
     or
-      with slotId \in SlotIds do
-        call BookmarkClick(slotId);
+      with bookmarkSlotId \in SlotIds do
+        call BookmarkClick(bookmarkSlotId);
       end with;
     or
       call DashboardBackgroundClick();
