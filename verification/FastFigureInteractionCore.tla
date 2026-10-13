@@ -219,17 +219,17 @@ EmptyCsvReturn:
   return;
 end procedure;
 
-procedure MoveAsset(source, targetLocation)
+procedure MoveAsset(moveSource, targetLoc)
 begin
 AssetMoveGuard:
-  if source \in MoveSources
-     /\ targetLocation \in AssetLocations
-     /\ TreeMoveAllowed(source) then
-    if targetLocation = "trash" /\ assetLocation # "trash" then
+  if moveSource \in MoveSources
+     /\ targetLoc \in AssetLocations
+     /\ TreeMoveAllowed(moveSource) then
+    if targetLoc = "trash" /\ assetLocation # "trash" then
       assetReferenced := FALSE;
     end if;
-    assetLocation := targetLocation;
-    if targetLocation = "trash" then
+    assetLocation := targetLoc;
+    if targetLoc = "trash" then
       lastResult := "asset-moved-trash";
     else
       lastResult := "asset-moved-normal";
@@ -292,9 +292,9 @@ Main:
     or
       call AddGraphObject();
     or
-      with source \in MoveSources do
-        with targetLocation \in AssetLocations do
-          call MoveAsset(source, targetLocation);
+      with moveSource \in MoveSources do
+        with targetLoc \in AssetLocations do
+          call MoveAsset(moveSource, targetLoc);
         end with;
       end with;
     or

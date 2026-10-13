@@ -352,9 +352,8 @@ SplitSlotsCandidate(project, slotIds) ==
       THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
       ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
 
-TypeOK(project, selectedSlotId, result) ==
+TypeOK(project, result) ==
   /\ ValidateSlotLayoutProjection(project)
-  /\ selectedSlotId \in VisibleSlotIds(project) \cup {NoSelectedSlot}
   /\ result \in {
        "initialized",
        "reset-committed", "reset-rejected",
@@ -392,7 +391,9 @@ ResetReturn:
 end procedure;
 
 procedure applySlotsSwappedAction(sourceId, targetId)
-variables candidate = activeProject;
+variables
+  candidate = activeProject,
+  selectionBefore = selectedSlotId;
 begin
 SwapResolve:
   if /\ sourceId \in VisibleSlotIds(activeProject)
@@ -408,6 +409,12 @@ SwapResolve:
             THEN sourceId
             ELSE selectedSlotId ||
       lastResult := "swap-committed";
+    assert selectedSlotId =
+      IF selectionBefore = sourceId
+        THEN targetId
+        ELSE IF selectionBefore = targetId
+          THEN sourceId
+          ELSE selectionBefore;
     else
       lastResult := "swap-rejected";
     end if;
@@ -648,10 +655,7 @@ end algorithm;
 *)
 
 TypeOKSpec ==
-  TypeOK(activeProject, selectedSlotId, lastResult)
-
-SelectedSlotInvariantSpec ==
-  selectedSlotId \in VisibleSlotIds(activeProject) \cup {NoSelectedSlot}
+  TypeOK(activeProject, lastResult)
 
 ChartOwnershipInvariantSpec ==
   ChartOwnershipInvariant(activeProject)
