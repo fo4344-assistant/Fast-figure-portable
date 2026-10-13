@@ -1,0 +1,57 @@
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -18,10 +18,10 @@
+       "closure_review": "agent_space/reviews/review-20261013-011-sourcescript-closure-r18.md"
+     },
+     "verification-model": {
+-      "revision": 13,
++      "revision": 14,
+       "status": "current",
+       "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:4fe8edafce3636f29719f718457ac7ee2146e9fff49c056489bbcdc966cb1ac7",
++      "fingerprint": "sha256:cef2dbcb9d153f9b8b23d4f63ef87462323afd06c0bf43079b94cae24f11fd30",
+       "derived_from": {
+         "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
+         "pseudocode": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583"
+diff --git a/verification/FastFigureInteractionCore.tla b/verification/FastFigureInteractionCore.tla
+--- a/verification/FastFigureInteractionCore.tla
++++ b/verification/FastFigureInteractionCore.tla
+@@ -219,17 +219,17 @@ EmptyCsvReturn:
+   return;
+ end procedure;
+ 
+-procedure MoveAsset(moveSource, targetLoc)
++procedure MoveAsset(assetMoveSourceArg, assetTargetLocationArg)
+ begin
+ AssetMoveGuard:
+-  if moveSource \in MoveSources
+-     /\ targetLoc \in AssetLocations
+-     /\ TreeMoveAllowed(moveSource) then
+-    if targetLoc = "trash" /\ assetLocation # "trash" then
++  if assetMoveSourceArg \in MoveSources
++     /\ assetTargetLocationArg \in AssetLocations
++     /\ TreeMoveAllowed(assetMoveSourceArg) then
++    if assetTargetLocationArg = "trash" /\ assetLocation # "trash" then
+       assetReferenced := FALSE;
+     end if;
+-    assetLocation := targetLoc;
+-    if targetLoc = "trash" then
++    assetLocation := assetTargetLocationArg;
++    if assetTargetLocationArg = "trash" then
+       lastResult := "asset-moved-trash";
+     else
+       lastResult := "asset-moved-normal";
+@@ -292,9 +292,9 @@ Main:
+     or
+       call AddGraphObject();
+     or
+-      with moveSource \in MoveSources do
+-        with targetLoc \in AssetLocations do
+-          call MoveAsset(moveSource, targetLoc);
++      with requestedMoveSource \in MoveSources do
++        with requestedTargetLocation \in AssetLocations do
++          call MoveAsset(requestedMoveSource, requestedTargetLocation);
+         end with;
+       end with;
+     or
