@@ -16,24 +16,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     try {
       const outcome = await action();
       results.push({ number, name, result: outcome?.blocked ? "blocked" : "pass", detail: outcome?.blocked });
-      await run(27, "empty CSV creation selects a normal project CSV only", async () => {
-      const beforeCharts = activeProject.charts.length;
-      const beforeObjectCounts = activeProject.charts.map((chart) => chart.editor?.objects?.length || 0);
-      const csvAsset = api.assets.createEmptyCsv();
-      await tick();
-      check(!!csvAsset && activeProject.csvFiles.some((item) => item.id === csvAsset.id), "empty CSV was not created");
-      check(csvAsset.name.startsWith("빈 CSV"), "empty CSV name is incorrect");
-      check(JSON.stringify(csvAsset.rows) === JSON.stringify([["X", "Y"], ["", ""]]), "empty CSV template is incorrect");
-      check(csvAsset.headerLines === 1, "empty CSV headerLines is incorrect");
-      check(appFSM.state.assetSelection === "csv", "empty CSV was not selected");
-      check(appFSM.state.assetPath === projectAssetPath(csvAsset), "empty CSV selected path mismatch");
-      check(activeProject.charts.length === beforeCharts, "empty CSV creation changed chart count");
-      check(
-        JSON.stringify(activeProject.charts.map((chart) => chart.editor?.objects?.length || 0)) ===
-          JSON.stringify(beforeObjectCounts),
-        "empty CSV creation changed graph objects",
-      );
-    });
+  
   } catch (error) {
       results.push({ number, name, result: "fail", detail: String(error?.stack || error) });
     }
@@ -727,6 +710,24 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "dismissal created a renamed CSV",
       );
       check(slotAt(slot.id).chart === beforeChart, "dismissal mutated slot chart");
+    });
+    await run(27, "empty CSV creation selects a normal project CSV only", async () => {
+      const beforeCharts = activeProject.charts.length;
+      const beforeObjectCounts = activeProject.charts.map((chart) => chart.editor?.objects?.length || 0);
+      const csvAsset = api.assets.createEmptyCsv();
+      await tick();
+      check(!!csvAsset && activeProject.csvFiles.some((item) => item.id === csvAsset.id), "empty CSV was not created");
+      check(csvAsset.name.startsWith("빈 CSV"), "empty CSV name is incorrect");
+      check(JSON.stringify(csvAsset.rows) === JSON.stringify([["X", "Y"], ["", ""]]), "empty CSV template is incorrect");
+      check(csvAsset.headerLines === 1, "empty CSV headerLines is incorrect");
+      check(appFSM.state.assetSelection === "csv", "empty CSV was not selected");
+      check(appFSM.state.assetPath === projectAssetPath(csvAsset), "empty CSV selected path mismatch");
+      check(activeProject.charts.length === beforeCharts, "empty CSV creation changed chart count");
+      check(
+        JSON.stringify(activeProject.charts.map((chart) => chart.editor?.objects?.length || 0)) ===
+          JSON.stringify(beforeObjectCounts),
+        "empty CSV creation changed graph objects",
+      );
     });
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
