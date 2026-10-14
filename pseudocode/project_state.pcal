@@ -1,9 +1,17 @@
 ---- MODULE FastFigureProjectStatePseudocode ----
 EXTENDS Naturals, Sequences, FiniteSets
 
-\* r16 PlusCal pseudocode for sourcescript/project_state.py.
+\* r19 PlusCal pseudocode for sourcescript/project_state.py.
 
 CONSTANTS DefaultProject, NoReference
+
+DefaultSlotStylePayload ==
+  [ referenceWidth |-> 1200,
+    gap |-> 0,
+    outerMargin |-> 0,
+    radius |-> 0,
+    aspect |-> 1.618,
+    showBorders |-> TRUE ]
 
 (*
 --algorithm FastFigureProjectState
@@ -89,6 +97,8 @@ CreateDefaultCandidate:
     <<>>,
     {"/assets", "/assets/csv", "/assets/images", "/assets/trash"},
     4);
+ApplyDefaultSlotStyle:
+  candidate.layout.slotStyle := DefaultSlotStylePayload;
 ValidateDefaultCandidate:
   call ValidateProject(candidate, TRUE);
 CreateResult:

@@ -9,28 +9,28 @@
   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode and gates Source Code where TLC validation is used.",
   "layers": {
     "source-script": {
-      "revision": 18,
+      "revision": 19,
       "status": "current",
       "path_rule": "sourcescript/**/*.py",
-      "fingerprint": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
+      "fingerprint": "sha256:a6f3ce83d62984f9a18ca38574204a891b3f55c454f06579e4fff9fd2e589047",
       "derived_from": null,
       "closure": "closed",
-      "closure_review": "agent_space/reviews/review-20261013-011-sourcescript-closure-r18.md"
+      "closure_review": "agent_space/reviews/review-20261014-002-sourcescript-closure-r19.md"
     },
     "verification-model": {
-      "revision": 15,
+      "revision": 16,
       "status": "current",
       "path_rule": "verification/**/*.{tla,cfg}",
       "fingerprint": "sha256:ee96d884edcb459419313e1b4e87db11dcb871955e9ce135fd9b8b1247995bdb",
       "derived_from": {
-        "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
-        "pseudocode": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583"
+        "source-script": "sha256:a6f3ce83d62984f9a18ca38574204a891b3f55c454f06579e4fff9fd2e589047",
+        "pseudocode": "sha256:b99611f367162b52927d0f18d8d0b7cca0965dca241c5c465ce421ebfe06ce93"
       },
       "tlc": "passed",
-      "validation_review": "agent_space/reviews/review-20261013-013-tlc-interaction-r15.md"
+      "validation_review": "agent_space/reviews/review-20261014-004-verification-r16-lineage.md"
     },
     "source-code": {
-      "revision": 22,
+      "revision": 23,
       "status": "current",
       "paths": [
         "Fast-figure.html",
@@ -38,23 +38,23 @@
         "fast-figure.js",
         "scripts/build-portable.py"
       ],
-      "fingerprint": "sha256:b10cfd11a1e442af203d87a96a8d86561cc6970e73bca37e305bf453e253436d",
+      "fingerprint": "sha256:830b02a18b2432a06655d28f26af088e53aed94ce2aee723b3358aced20b2c3d",
       "derived_from": {
-        "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
-        "pseudocode": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583",
+        "source-script": "sha256:a6f3ce83d62984f9a18ca38574204a891b3f55c454f06579e4fff9fd2e589047",
+        "pseudocode": "sha256:b99611f367162b52927d0f18d8d0b7cca0965dca241c5c465ce421ebfe06ce93",
         "verification-model": "sha256:ee96d884edcb459419313e1b4e87db11dcb871955e9ce135fd9b8b1247995bdb"
       },
-      "validation_review": "agent_space/reviews/review-20261014-001-source-code-r22.md"
+      "validation_review": null
     },
     "pseudocode": {
-      "revision": 4,
+      "revision": 5,
       "status": "current",
       "path_rule": "pseudocode/**/*.pcal",
-      "fingerprint": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583",
+      "fingerprint": "sha256:b99611f367162b52927d0f18d8d0b7cca0965dca241c5c465ce421ebfe06ce93",
       "derived_from": {
-        "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7"
+        "source-script": "sha256:a6f3ce83d62984f9a18ca38574204a891b3f55c454f06579e4fff9fd2e589047"
       },
-      "translation_review": "agent_space/reviews/review-20261013-012-pluscal-r18.md"
+      "translation_review": "agent_space/reviews/review-20261014-003-pluscal-r19.md"
     }
   }
 }

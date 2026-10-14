@@ -8,6 +8,15 @@ Fast Figure Source Script — authoritative project state and references
   getProjectCsv/getProjectImage/getChart/slotAt.
 """
 
+SLOT_STYLE_DEFAULTS = {
+    "referenceWidth": 1200,
+    "gap": 0,
+    "outerMargin": 0,
+    "radius": 0,
+    "aspect": 1.618,
+    "showBorders": True,
+}
+
 PROJECT_OBJECT_PATHS = {
     "project": "meta project information의 공식 read path",
     "layout": "grid와 slotStyle의 공식 read path",
@@ -35,7 +44,7 @@ projectState = {
         "slotStyle": {
             "referenceWidth": "dashboard 기준 폭; 현재 허용 범위 100..20000",
             "gap": "slot 사이 기준 간격; 현재 허용 범위 0..2000",
-            "outerMargin": "dashboard 기준 바깥 여백; 현재 허용 범위 0..5000",
+            "outerMargin": "dashboard 기준 바깥 여백; 현재 허용 범위 0..5000, 새 project 기본값 0",
             "radius": "slot 기준 모서리 반경; 현재 허용 범위 0..2000",
             "aspect": "dashboard 종횡비; 현재 허용 범위 0.1..10",
             "showBorders": "slot 외곽선 표시 여부",
@@ -359,6 +368,10 @@ def validateProjectObjectState(state, requireSlots):
 
 DEFAULT_PROJECT_RULES = {
     "grid": "새 project는 2 x 2 grid에서 시작한다.",
+    "slotStyle": (
+        "새 project의 layout.slotStyle은 SLOT_STYLE_DEFAULTS를 사용한다. "
+        "outerMargin 기본값은 0이며 저장된 project에 명시된 outerMargin은 그대로 유지한다."
+    ),
     "slots": (
         "초기 grid의 각 cell은 1 x 1 empty slot이며 chart/image reference, caption은 empty, "
         "imageSettings는 slot-local default를 가진다."
@@ -390,7 +403,7 @@ def createProjectState():
     - activeProject를 직접 변경하지 않는다.
 
     처리:
-    1. project meta와 2 x 2 layout/default slot style을 만든다.
+    1. project meta와 2 x 2 layout을 만들고 slotStyle은 SLOT_STYLE_DEFAULTS에서 복사한다.
     2. label/caption authoritative state를 기본값으로 만든다.
        slot caption placeholder는 저장하지 않는다.
     3. CSV/image/chart collection은 empty로 시작한다.

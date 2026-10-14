@@ -1,10 +1,10 @@
 /* Runs after the application scripts in a headless file:// browser. */
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
-  sourceScript: "r18",
-  plusCal: "r4",
-  verificationModel: "r15",
-  sourceCode: "r22",
-  appBuild: "1.1.42-wip",
+  sourceScript: "r19",
+  plusCal: "r5",
+  verificationModel: "r16",
+  sourceCode: "r23",
+  appBuild: "1.1.43-wip",
 });
 (async () => {
   const api = window.FastFigureApi;
@@ -992,6 +992,15 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "slot connection unexpectedly moved source asset",
       );
     });
+
+    await run(32, "new project layout outer margin defaults to zero", async () => {
+      const fresh = createProjectState();
+      check(
+        fresh.layout?.slotStyle?.outerMargin === 0,
+        `new project outerMargin default is ${fresh.layout?.slotStyle?.outerMargin}`,
+      );
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
