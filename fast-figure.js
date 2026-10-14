@@ -402,7 +402,7 @@
           return [...this.adapters.keys()];
         }
       }
-      class InterfaceStateMachine {
+      class ApplicationStateMachine {
         constructor(objects, definitions) {
           this.objects = objects;
           this.definitions = definitions;
@@ -524,73 +524,6 @@
           if (!handled) debugLog("fsm:event-unhandled", { event, state: this.state }, "warn");
           return this.state;
         }
-        reconcileProjectResult(event, result) {
-          let payload = result?.payload || {},
-            hints = payload.selectionHints || {};
-
-          if (hints.resetInterfaceSelection) {
-            selectedSlotId = null;
-            this.state = Object.freeze({
-              ...this.state,
-              workspace: "project",
-              assetSelection: "none",
-              assetPath: null,
-              graphObject: "none",
-              graphObjectIndex: null,
-              direction: "model-to-ui",
-              revision: this.state.revision + 1,
-            });
-            return this.publish(`${event}:reconcile`);
-          }
-
-          if (Array.isArray(hints.swapSlotIds) && hints.swapSlotIds.length === 2) {
-            let [sourceId, targetId] = hints.swapSlotIds;
-            if (selectedSlotId === sourceId) selectedSlotId = targetId;
-            else if (selectedSlotId === targetId) selectedSlotId = sourceId;
-          }
-
-          if (hints.reResolveSlotSelection && selectedSlotId !== null && !slotAt(selectedSlotId))
-            selectedSlotId = null;
-
-          let assetPath = this.state.assetPath;
-          if (assetPath && hints.movedPathFrom && projectPathInDirectory(assetPath, hints.movedPathFrom)) {
-            assetPath = `${hints.movedPathTo}${assetPath.slice(hints.movedPathFrom.length)}`;
-          }
-          let selectedAsset = assetPath ? projectVfs.resolve(assetPath) : null;
-          if (
-            hints.clearAssetSelection ||
-            (hints.enteringTrash && assetPath && projectVfs.isTrashed(assetPath)) ||
-            !selectedAsset
-          ) {
-            assetPath = null;
-            selectedAsset = null;
-          }
-
-          let graphObjectIndex = this.state.graphObjectIndex,
-            selectedSlot = selectedSlotId === null ? null : slotAt(selectedSlotId),
-            selectedChart = selectedSlot?.chart ? getChart(selectedSlot.chart) : null,
-            objects = selectedChart ? ensureGraphObjects(selectedChart) : [];
-          if (
-            payload.clearGraphSelection ||
-            hints.clearGraphSelection ||
-            !Number.isInteger(graphObjectIndex) ||
-            graphObjectIndex < 0 ||
-            graphObjectIndex >= objects.length
-          )
-            graphObjectIndex = null;
-
-          this.state = Object.freeze({
-            ...this.state,
-            workspace: workspaceStateFromModel(selectedSlotId),
-            assetSelection: selectedAsset?.kind || "none",
-            assetPath,
-            graphObject: graphObjectIndex === null ? "none" : "selected",
-            graphObjectIndex,
-            direction: "model-to-ui",
-            revision: this.state.revision + 1,
-          });
-          return this.publish(`${event}:reconcile`);
-        }
         notify(object, event, payload = {}) {
           if (this.state.lifecycle === "booting" || this.transitioning) return this.state;
           this.state = Object.freeze({
@@ -657,32 +590,6 @@
           return () => this.listeners.delete(listener);
         }
       }
-
-      class ProjectStateMachine {
-        constructor(objects, actions) {
-          this.objects = objects;
-          this.actions = actions;
-          this.writeLocks = new Set();
-        }
-        assertWritable(scope, event) {
-          if (this.writeLocks.has(scope))
-            throw Error(`${event} 전이 중 잠긴 ${scope} 프로젝트 범위를 수정할 수 없습니다.`);
-        }
-        send(event, payload = {}) {
-          let action = this.actions[event];
-          if (!action) throw Error(`${event}는 등록된 ProjectObject command가 아닙니다.`);
-          action({ machine: this, event, payload });
-          return Object.freeze({
-            event,
-            committed: true,
-            payload,
-            removedGraphReferenceCount: payload.removedGraphReferenceCount || 0,
-            resetImageSlotCount: payload.resetImageSlotCount || 0,
-            selectionHints: payload.selectionHints || null,
-          });
-        }
-      }
-
       function workspaceStateForSelection() {
         let slot = getSelectedSlot();
         if (!slot) return "project";
@@ -708,13 +615,27 @@
           graphObject: "none",
           graphObjectIndex: null,
         });
+        if (
+          !hydrating &&
+          selectedSlotId !== null &&
+          !slot.chart &&
+          !slot.imageId
+        )
+          slot.contentType = pendingSlotContentType;
       }
       function applySlotTypeAction({ machine, payload }) {
-        machine.assertWritable("slots", "SLOT_TYPE_CHANGED");
-        let slot = Number.isInteger(payload.slotId) ? slotAt(payload.slotId) : null;
-        if (!slot) throw Error("콘텐츠 종류를 변경할 슬롯이 없습니다.");
+        machine.assertWritable("workspace", "SLOT_TYPE_CHANGED");
+        let slot = getSelectedSlot();
+        if (!slot) {
+          pendingSlotContentType = payload.type;
+          return;
+        }
         slot.contentType = payload.type === "image" ? "image" : "graph";
-        payload.clearGraphSelection = true;
+        machine.state = Object.freeze({
+          ...machine.state,
+          graphObject: "none",
+          graphObjectIndex: null,
+        });
       }
       function applyGraphObjectSelectionAction({ machine, payload }) {
         machine.assertWritable("editor", "SELECT_GRAPH_OBJECT");
@@ -864,11 +785,9 @@
         setSlotLocalState(a,bLocal); setSlotLocalState(b,aLocal);
         validateProjectObjectState(candidate,{requireSlots:true});
         activeProject.initialize(candidate);
-        payload.selectionHints = {
-          swapSlotIds: [source.id, target.id],
-          clearAssetSelection: true,
-          clearGraphSelection: true,
-        };
+        if(selectedSlotId===source.id)selectedSlotId=target.id;
+        else if(selectedSlotId===target.id)selectedSlotId=source.id;
+        payload.slotId=selectedSlotId;
       }
       function applySlotImageLinkedAction({ machine, payload }) {
         machine.assertWritable("slots","SLOT_IMAGE_LINKED");
@@ -914,7 +833,11 @@
             slot.contentType = "graph";
           }
           payload.chart = connectDataToSlotModel(slot, csv.rows, csv.name, csv);
-          payload.clearGraphSelection = true;
+          machine.state = Object.freeze({
+            ...machine.state,
+            graphObject: "none",
+            graphObjectIndex: null,
+          });
           if (payload.replaceSlotContent)
             validateProjectObject(activeProject, { requireSlots: true });
         } catch (error) {
@@ -941,7 +864,10 @@
         activeProject.initialize(candidate);
         chart=getChart(payload.chartId);
         if(chart.editor.editable!==false)rebuildEditableGraph(chart);
-        payload.graphObjectCount = chart.editor.objects.length;
+        if(machine.state.graphObject==="selected" &&
+          (!Number.isInteger(machine.state.graphObjectIndex)||
+           machine.state.graphObjectIndex>=chart.editor.objects.length))
+          machine.state=Object.freeze({...machine.state,graphObject:"none",graphObjectIndex:null});
         payload.chart=chart;
       }
       function applyChartLayoutChangedAction({ machine, payload }) {
@@ -1016,7 +942,8 @@
         validateProjectObjectState(candidate,{requireSlots:true});
         activeProject.initialize(candidate);
         payload.image=getProjectImage(imageId);
-        payload.clearGraphSelection = true;
+        if(slot.id===selectedSlotId)
+          machine.state=Object.freeze({...machine.state,graphObject:"none",graphObjectIndex:null});
       }
       function applySlotChartImportedAction({ machine, payload }) {
         machine.assertWritable("slots","SLOT_CHART_IMPORTED");
@@ -1086,16 +1013,20 @@
 
         validateProjectObjectState(candidate,{requireSlots:true});
         activeProject.initialize(candidate);
-        payload.clearGraphSelection = true;
+        machine.state=Object.freeze({
+          ...machine.state,
+          graphObject:"none",
+          graphObjectIndex:null,
+        });
         payload.chart=getChart(chart.id);
         payload.createdCsvIds=createdCsvIds;
       }
       function applyGridLayoutChangedAction({ machine, payload }) {
         machine.assertWritable("layout", "GRID_LAYOUT_CHANGED");
         machine.assertWritable("slots", "GRID_LAYOUT_CHANGED");
+        machine.assertWritable("workspace", "GRID_LAYOUT_CHANGED");
+        machine.assertWritable("editor", "GRID_LAYOUT_CHANGED");
         rebuildGridSlots(payload.rows, payload.cols);
-        payload.clearGraphSelection = true;
-        payload.selectionHints = { reResolveSlotSelection: true, clearAssetSelection: true };
       }
       function applyProjectDirectoryCreatedAction({ machine, payload }) {
         machine.assertWritable("files", "PROJECT_DIRECTORY_CREATED");
@@ -1255,11 +1186,15 @@
         validateProjectObjectState(candidate,{requireSlots:true});
         activeProject.initialize(candidate);
 
-        payload.selectionHints = {
-          movedPathFrom: source,
-          movedPathTo: destination,
-          enteringTrash,
-        };
+        let movedSelectionPath=
+          machine.state.assetPath&&projectPathInDirectory(machine.state.assetPath,source)
+            ?rewritePath(machine.state.assetPath):null;
+        if(movedSelectionPath){
+          if(projectVfs.isTrashed(movedSelectionPath))
+            payload.clearAssetSelection=true;
+          else
+            machine.state=Object.freeze({...machine.state,assetPath:movedSelectionPath});
+        }
         payload.removedGraphReferenceCount=removedReferences.removedGraphReferenceCount;
         payload.resetImageSlotCount=removedReferences.resetImageSlotCount;
         payload.clearGraphSelection=
@@ -1268,55 +1203,6 @@
         payload.path=destination;
         payload.trashed=enteringTrash;
       }
-      function applyProjectNameChangedAction({ machine, payload }) {
-        machine.assertWritable("project", "PROJECT_NAME_CHANGED");
-        let candidate = projectClone(activeProject._state);
-        candidate.meta.projectName = String(payload.name ?? "").slice(0, 120);
-        validateProjectObjectState(candidate, { requireSlots: true });
-        activeProject.initialize(candidate);
-        payload.name = activeProject.projectName;
-      }
-      function applyLabelSettingsChangedAction({ machine, payload }) {
-        machine.assertWritable("labels", "LABEL_SETTINGS_CHANGED");
-        let candidate = projectClone(activeProject._state);
-        if (Object.prototype.hasOwnProperty.call(payload, "enabled"))
-          candidate.annotations.labels.enabled = payload.enabled === true;
-        if (payload.settings && typeof payload.settings === "object")
-          candidate.annotations.labels.settings = projectClone(payload.settings);
-        validateProjectObjectState(candidate, { requireSlots: true });
-        activeProject.initialize(candidate);
-      }
-      function applyLabelPositionChangedAction({ machine, payload }) {
-        machine.assertWritable("labels", "LABEL_POSITION_CHANGED");
-        let candidate = projectClone(activeProject._state),
-          settings = candidate.annotations.labels.settings,
-          x = Number(payload.x),
-          y = Number(payload.y);
-        if (Number.isFinite(x)) settings.x = x;
-        if (Number.isFinite(y)) settings.y = y;
-        validateProjectObjectState(candidate, { requireSlots: true });
-        activeProject.initialize(candidate);
-      }
-      function applyAppearanceChangedAction({ machine, payload }) {
-        machine.assertWritable("appearance", "APPEARANCE_CHANGED");
-        let candidate = projectClone(activeProject._state);
-        candidate.appearance.uiPalette = Object.fromEntries(
-          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
-            key,
-            projectColor(payload.palette?.[key], fallback),
-          ]),
-        );
-        validateProjectObjectState(candidate, { requireSlots: true });
-        activeProject.initialize(candidate);
-      }
-      function applyExportSettingsChangedAction({ machine, payload }) {
-        machine.assertWritable("export", "EXPORT_SETTINGS_CHANGED");
-        let candidate = projectClone(activeProject._state);
-        candidate.export = projectClone(payload.settings);
-        validateProjectObjectState(candidate, { requireSlots: true });
-        activeProject.initialize(candidate);
-      }
-
       function applyAssetSelectionAction({ machine, payload }) {
         let kind = ["csv", "image", "directory"].includes(payload.kind) ? payload.kind : null,
           match = payload.path ? projectVfs.resolve(payload.path) : null,
@@ -1697,78 +1583,7 @@
             palette: project.appearance.uiPalette,
           }),
         });
-      const PROJECT_COMMAND_ACTIONS = Object.freeze({
-        PROJECT_LOADED: applyProjectLoadedAction,
-        PROJECT_NAME_CHANGED: applyProjectNameChangedAction,
-        PROJECT_DIRECTORY_CREATED: applyProjectDirectoryCreatedAction,
-        PROJECT_NODE_MOVED: applyProjectNodeMovedAction,
-        PROJECT_TRASH_EMPTIED: applyProjectTrashEmptiedAction,
-        DATA_OBJECT_CREATED: applyDataObjectCreatedAction,
-        DATA_OBJECT_REPLACED: applyDataObjectReplacedAction,
-        DATA_OBJECT_DELETED: applyDataObjectDeletedAction,
-        IMAGE_OBJECT_CREATED: applyImageObjectCreatedAction,
-        IMAGE_OBJECT_REPLACED: applyImageObjectReplacedAction,
-        IMAGE_OBJECT_DELETED: applyImageObjectDeletedAction,
-        SLOT_TYPE_CHANGED: applySlotTypeAction,
-        SLOTS_RESET: applySlotsResetAction,
-        SLOTS_SWAPPED: applySlotsSwappedAction,
-        SLOT_IMAGE_LINKED: applySlotImageLinkedAction,
-        SLOT_DATA_CONNECTED: applySlotDataConnectedAction,
-        GRAPH_OBJECTS_REPLACED: applyGraphObjectsReplacedAction,
-        CHART_LAYOUT_CHANGED: applyChartLayoutChangedAction,
-        CHART_MODEL_REPLACED: applyChartModelReplacedAction,
-        SLOT_IMAGE_IMPORTED: applySlotImageImportedAction,
-        SLOT_CHART_IMPORTED: applySlotChartImportedAction,
-        GRID_LAYOUT_CHANGED: applyGridLayoutChangedAction,
-        CAPTION_TEXT_INPUT: applyCaptionTextAction,
-        SLOT_CAPTIONS_INSERTED: applySlotCaptionsInsertedAction,
-        LABEL_SETTINGS_CHANGED: applyLabelSettingsChangedAction,
-        LABEL_POSITION_CHANGED: applyLabelPositionChangedAction,
-        APPEARANCE_CHANGED: applyAppearanceChangedAction,
-        EXPORT_SETTINGS_CHANGED: applyExportSettingsChangedAction,
-      });
-      const PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
-      const interfaceFSM = new InterfaceStateMachine(projectObjects, APP_STATE_DEFINITIONS);
-      const projectEFSM = new ProjectStateMachine(projectObjects, PROJECT_COMMAND_ACTIONS);
-
-      function dispatchProjectCommand(event, payload = {}) {
-        let result = projectEFSM.send(event, payload);
-        interfaceFSM.reconcileProjectResult(event, result);
-        return result;
-      }
-
-      const appFSM = Object.freeze({
-        get state() { return interfaceFSM.state; },
-        get writeLocks() { return interfaceFSM.writeLocks; },
-        definition: (...args) => interfaceFSM.definition(...args),
-        send(event, payload = {}) {
-          if (PROJECT_COMMANDS.has(event)) {
-            dispatchProjectCommand(event, payload);
-            return interfaceFSM.state;
-          }
-          let state = interfaceFSM.send(event, payload);
-          if (event === "SELECT_SLOT") {
-            let slot = selectedSlotId === null ? null : slotAt(selectedSlotId);
-            if (
-              slot &&
-              !slot.chart &&
-              !slot.imageId &&
-              slot.contentType !== pendingSlotContentType
-            ) {
-              dispatchProjectCommand("SLOT_TYPE_CHANGED", {
-                slotId: slot.id,
-                type: pendingSlotContentType,
-                direction: "model-to-fsm",
-              });
-            }
-          }
-          return state;
-        },
-        notify: (...args) => interfaceFSM.notify(...args),
-        run: (...args) => interfaceFSM.run(...args),
-        ready: (...args) => interfaceFSM.ready(...args),
-        subscribe: (...args) => interfaceFSM.subscribe(...args),
-      });
+      const appFSM = new ApplicationStateMachine(projectObjects, APP_STATE_DEFINITIONS);
       function selectedProjectAsset() {
         let path = appFSM.state.assetPath;
         return path ? projectVfs.resolve(path) : null;
@@ -1827,8 +1642,7 @@
         ["validateProjectObject", () => typeof validateProjectObject === "function"],
         ["renderProjectObject", () => typeof renderProjectObject === "function"],
         ["projectObjects", () => projectObjects instanceof ProjectObjectRegistry],
-        ["interfaceFSM", () => interfaceFSM instanceof InterfaceStateMachine],
-        ["projectEFSM", () => projectEFSM instanceof ProjectStateMachine],
+        ["appFSM", () => appFSM instanceof ApplicationStateMachine],
         ["auditApp", () => typeof auditApp === "function"],
       ];
       function auditObject(object, chartId, index, issues, allowNoCsv = false) {
@@ -2269,10 +2083,11 @@
         }
         validateProjectObjectState(candidate,{requireSlots:true});
         activeProject.initialize(candidate);
+        if(selectedSlotId!==null&&!slotAt(selectedSlotId)) selectedSlotId=null;
+        renderDashboard();
       }
       function makeSlots(r = activeProject.gridRows, c = activeProject.gridCols) {
         appFSM.send("GRID_LAYOUT_CHANGED", { rows: r, cols: c });
-        renderDashboard();
       }
       function parseCSV(text) {
         const d = (text.split(/\r?\n/)[0] || "").includes("\t") ? "\t" : ",";
@@ -4534,27 +4349,55 @@
       }
       function applyProjectLoadedAction({ machine, payload }) {
         for (let scope of [
-          "project", "layout", "labels", "captions", "data", "images",
-          "files", "charts", "slots",
+          "project",
+          "layout",
+          "labels",
+          "captions",
+          "data",
+          "images",
+          "files",
+          "charts",
+          "slots",
+          "workspace",
+          "editor",
+          "ui",
         ])
           machine.assertWritable(scope, "PROJECT_LOADED");
-        let candidate = validateProjectObject(payload.project, { requireSlots: true }),
+        let candidate = validateProjectObject(payload.project, {
+            requireSlots: true,
+          }),
           previousState = activeProject._state,
           previousImages = activeProject.images,
-          candidateImages = candidate.images;
+          candidateImages = candidate.images,
+          previousRuntime = captureProjectRuntimeState(machine);
         try {
           activeProject.initialize(candidate);
           projectObjectGeneration += 1;
+          resetProjectRuntimeState(machine);
+          renderProjectObject(activeProject);
         } catch (error) {
           releaseProjectImageDisplayUrls(candidateImages);
           activeProject.initialize(previousState);
           projectObjectGeneration += 1;
+          restoreProjectRuntimeState(previousRuntime, machine);
+          try {
+            renderProjectObject(activeProject);
+          } catch (rollbackError) {
+            debugLog(
+              "project:rollback-render-error",
+              { message: rollbackError.message },
+              "error",
+            );
+          }
           throw error;
         }
         releaseProjectImageDisplayUrls(previousImages);
+        machine.state = Object.freeze({
+          ...machine.state,
+          revision: machine.state.revision + 1,
+        });
         payload.project = activeProject;
         payload.generation = projectObjectGeneration;
-        payload.selectionHints = { resetInterfaceSelection: true };
       }
       function importProject(payload, fileName) {
         let candidate = ProjectObject.fromFFPX(payload, fileName);
@@ -4563,8 +4406,6 @@
           fileName,
           direction: "model-to-fsm",
         });
-        renderProjectObject(activeProject);
-        renderDashboard();
         appFSM.send("CLOSE_OVERLAY", { reason: "project-loaded" });
         status(`${fileName} 프로젝트를 불러왔습니다.`);
         debugLog("project:import", {
@@ -5427,8 +5268,12 @@
       function setSlotContentType(type) {
         let slot = getSelectedSlot();
         if (!slot) {
-          pendingSlotContentType = type === "image" ? "image" : "graph";
-          debugLog("slot:content-type-pending", { type: pendingSlotContentType });
+          appFSM.send("SLOT_TYPE_CHANGED", {
+            slotId: null,
+            type,
+            direction: "fsm-to-model",
+          });
+          debugLog("slot:content-type-pending", { type, direction: "fsm-to-model" });
           return;
         }
         appFSM.send("SLOT_TYPE_CHANGED", {
@@ -5508,8 +5353,7 @@
         }:null;
       }
       function setProjectName(value, trim = false) {
-        let name = (trim ? String(value).trim() : String(value)).slice(0, 120);
-        appFSM.send("PROJECT_NAME_CHANGED", { name, direction: "ui-to-fsm" });
+        activeProject.projectName = (trim ? String(value).trim() : String(value)).slice(0, 120);
         if (trim) debugLog("project:name", { projectName: activeProject.projectName });
         return activeProject.projectName;
       }
@@ -7170,10 +7014,12 @@
         if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
       }
       function applyUiPaletteValues(values, notify = true) {
-        appFSM.send("APPEARANCE_CHANGED", {
-          palette: values,
-          direction: "ui-to-fsm",
-        });
+        activeProject.appearance.uiPalette = Object.fromEntries(
+          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
+            key,
+            projectColor(values?.[key], fallback),
+          ]),
+        );
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
@@ -7265,11 +7111,11 @@
               ?readProjectNumber(values.height,current.height??100,100,20000):null,
             dpi:readProjectNumber(values.dpi,current.dpi,36,1200),
             format:values.format==="jpeg"?"jpeg":values.format==="png"?"png":current.format,
-          };
-        appFSM.send("EXPORT_SETTINGS_CHANGED", {
-          settings: candidate,
-          direction: "ui-to-fsm",
-        });
+          },
+          state=projectClone(activeProject._state);
+        state.export=candidate;
+        validateProjectObjectState(state,{requireSlots:true});
+        activeProject.initialize(state);
         return readPrintApiSettings();
       }
       function savePrintApi(options={}) {
@@ -7307,13 +7153,7 @@
         });
       }
       function setLabelsApiEnabled(enabled) {
-        appFSM.send("LABEL_SETTINGS_CHANGED", {
-          enabled: enabled === true,
-          direction: "ui-to-fsm",
-        });
-        renderDashboard();
-        debugLog("annotation:label", { enabled: activeProject.labelsEnabled });
-        appFSM.notify("labels", "ANNOTATION_VISIBILITY_CHANGED");
+        setAnnotationEnabled("label", enabled === true);
         return readLabelsApiState();
       }
       function setLabelsApiSettings(patch = {}) {
@@ -7340,10 +7180,7 @@
           let fontSize = Number(patch.fontSize);
           next.fontSize = Number.isFinite(fontSize) ? Math.max(6, fontSize) : current.fontSize;
         }
-        appFSM.send("LABEL_SETTINGS_CHANGED", {
-          settings: next,
-          direction: "ui-to-fsm",
-        });
+        activeProject.labelSettings = next;
         renderDashboard();
         schedulePlotResize();
         debugLog("mantine:label-settings", { ...next });
@@ -7354,12 +7191,8 @@
         let current = activeProject.labelSettings,
           nextX = Number(x),
           nextY = Number(y);
-        appFSM.send("LABEL_POSITION_CHANGED", {
-          x: Number.isFinite(nextX) ? nextX : current.x,
-          y: Number.isFinite(nextY) ? nextY : current.y,
-          direction: "ui-to-fsm",
-        });
-        current = activeProject.labelSettings;
+        current.x = Number.isFinite(nextX) ? nextX : current.x;
+        current.y = Number.isFinite(nextY) ? nextY : current.y;
         renderDashboard();
         schedulePlotResize();
         if (eventName) {
