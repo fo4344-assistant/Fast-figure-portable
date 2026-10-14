@@ -1268,6 +1268,55 @@
         payload.path=destination;
         payload.trashed=enteringTrash;
       }
+      function applyProjectNameChangedAction({ machine, payload }) {
+        machine.assertWritable("project", "PROJECT_NAME_CHANGED");
+        let candidate = projectClone(activeProject._state);
+        candidate.meta.projectName = String(payload.name ?? "").slice(0, 120);
+        validateProjectObjectState(candidate, { requireSlots: true });
+        activeProject.initialize(candidate);
+        payload.name = activeProject.projectName;
+      }
+      function applyLabelSettingsChangedAction({ machine, payload }) {
+        machine.assertWritable("labels", "LABEL_SETTINGS_CHANGED");
+        let candidate = projectClone(activeProject._state);
+        if (Object.prototype.hasOwnProperty.call(payload, "enabled"))
+          candidate.annotations.labels.enabled = payload.enabled === true;
+        if (payload.settings && typeof payload.settings === "object")
+          candidate.annotations.labels.settings = projectClone(payload.settings);
+        validateProjectObjectState(candidate, { requireSlots: true });
+        activeProject.initialize(candidate);
+      }
+      function applyLabelPositionChangedAction({ machine, payload }) {
+        machine.assertWritable("labels", "LABEL_POSITION_CHANGED");
+        let candidate = projectClone(activeProject._state),
+          settings = candidate.annotations.labels.settings,
+          x = Number(payload.x),
+          y = Number(payload.y);
+        if (Number.isFinite(x)) settings.x = x;
+        if (Number.isFinite(y)) settings.y = y;
+        validateProjectObjectState(candidate, { requireSlots: true });
+        activeProject.initialize(candidate);
+      }
+      function applyAppearanceChangedAction({ machine, payload }) {
+        machine.assertWritable("appearance", "APPEARANCE_CHANGED");
+        let candidate = projectClone(activeProject._state);
+        candidate.appearance.uiPalette = Object.fromEntries(
+          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
+            key,
+            projectColor(payload.palette?.[key], fallback),
+          ]),
+        );
+        validateProjectObjectState(candidate, { requireSlots: true });
+        activeProject.initialize(candidate);
+      }
+      function applyExportSettingsChangedAction({ machine, payload }) {
+        machine.assertWritable("export", "EXPORT_SETTINGS_CHANGED");
+        let candidate = projectClone(activeProject._state);
+        candidate.export = projectClone(payload.settings);
+        validateProjectObjectState(candidate, { requireSlots: true });
+        activeProject.initialize(candidate);
+      }
+
       function applyAssetSelectionAction({ machine, payload }) {
         let kind = ["csv", "image", "directory"].includes(payload.kind) ? payload.kind : null,
           match = payload.path ? projectVfs.resolve(payload.path) : null,
@@ -1650,6 +1699,7 @@
         });
       const PROJECT_COMMAND_ACTIONS = Object.freeze({
         PROJECT_LOADED: applyProjectLoadedAction,
+        PROJECT_NAME_CHANGED: applyProjectNameChangedAction,
         PROJECT_DIRECTORY_CREATED: applyProjectDirectoryCreatedAction,
         PROJECT_NODE_MOVED: applyProjectNodeMovedAction,
         PROJECT_TRASH_EMPTIED: applyProjectTrashEmptiedAction,
@@ -1672,6 +1722,10 @@
         GRID_LAYOUT_CHANGED: applyGridLayoutChangedAction,
         CAPTION_TEXT_INPUT: applyCaptionTextAction,
         SLOT_CAPTIONS_INSERTED: applySlotCaptionsInsertedAction,
+        LABEL_SETTINGS_CHANGED: applyLabelSettingsChangedAction,
+        LABEL_POSITION_CHANGED: applyLabelPositionChangedAction,
+        APPEARANCE_CHANGED: applyAppearanceChangedAction,
+        EXPORT_SETTINGS_CHANGED: applyExportSettingsChangedAction,
       });
       const PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
       const interfaceFSM = new InterfaceStateMachine(projectObjects, APP_STATE_DEFINITIONS);
@@ -5454,7 +5508,8 @@
         }:null;
       }
       function setProjectName(value, trim = false) {
-        activeProject.projectName = (trim ? String(value).trim() : String(value)).slice(0, 120);
+        let name = (trim ? String(value).trim() : String(value)).slice(0, 120);
+        appFSM.send("PROJECT_NAME_CHANGED", { name, direction: "ui-to-fsm" });
         if (trim) debugLog("project:name", { projectName: activeProject.projectName });
         return activeProject.projectName;
       }
@@ -7115,12 +7170,10 @@
         if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
       }
       function applyUiPaletteValues(values, notify = true) {
-        activeProject.appearance.uiPalette = Object.fromEntries(
-          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
-            key,
-            projectColor(values?.[key], fallback),
-          ]),
-        );
+        appFSM.send("APPEARANCE_CHANGED", {
+          palette: values,
+          direction: "ui-to-fsm",
+        });
         applyUiPalette(false, notify);
         return activeProject.appearance.uiPalette;
       }
@@ -7212,11 +7265,11 @@
               ?readProjectNumber(values.height,current.height??100,100,20000):null,
             dpi:readProjectNumber(values.dpi,current.dpi,36,1200),
             format:values.format==="jpeg"?"jpeg":values.format==="png"?"png":current.format,
-          },
-          state=projectClone(activeProject._state);
-        state.export=candidate;
-        validateProjectObjectState(state,{requireSlots:true});
-        activeProject.initialize(state);
+          };
+        appFSM.send("EXPORT_SETTINGS_CHANGED", {
+          settings: candidate,
+          direction: "ui-to-fsm",
+        });
         return readPrintApiSettings();
       }
       function savePrintApi(options={}) {
@@ -7254,7 +7307,13 @@
         });
       }
       function setLabelsApiEnabled(enabled) {
-        setAnnotationEnabled("label", enabled === true);
+        appFSM.send("LABEL_SETTINGS_CHANGED", {
+          enabled: enabled === true,
+          direction: "ui-to-fsm",
+        });
+        renderDashboard();
+        debugLog("annotation:label", { enabled: activeProject.labelsEnabled });
+        appFSM.notify("labels", "ANNOTATION_VISIBILITY_CHANGED");
         return readLabelsApiState();
       }
       function setLabelsApiSettings(patch = {}) {
@@ -7281,7 +7340,10 @@
           let fontSize = Number(patch.fontSize);
           next.fontSize = Number.isFinite(fontSize) ? Math.max(6, fontSize) : current.fontSize;
         }
-        activeProject.labelSettings = next;
+        appFSM.send("LABEL_SETTINGS_CHANGED", {
+          settings: next,
+          direction: "ui-to-fsm",
+        });
         renderDashboard();
         schedulePlotResize();
         debugLog("mantine:label-settings", { ...next });
@@ -7292,8 +7354,12 @@
         let current = activeProject.labelSettings,
           nextX = Number(x),
           nextY = Number(y);
-        current.x = Number.isFinite(nextX) ? nextX : current.x;
-        current.y = Number.isFinite(nextY) ? nextY : current.y;
+        appFSM.send("LABEL_POSITION_CHANGED", {
+          x: Number.isFinite(nextX) ? nextX : current.x,
+          y: Number.isFinite(nextY) ? nextY : current.y,
+          direction: "ui-to-fsm",
+        });
+        current = activeProject.labelSettings;
         renderDashboard();
         schedulePlotResize();
         if (eventName) {
