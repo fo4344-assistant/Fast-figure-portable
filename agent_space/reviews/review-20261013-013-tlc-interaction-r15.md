@@ -1,0 +1,83 @@
+# TLC validation review — verification r15
+
+## 대상
+
+- Source Script: r18 / closed
+- PlusCal pseudocode: r4 / current
+- verification-model: r15
+- verification fingerprint: `sha256:ee96d884edcb459419313e1b4e87db11dcb871955e9ce135fd9b8b1247995bdb`
+- hosted workflow: `TLA Slot Core`
+- run: `38394480809`
+- commit: `e0b0368a983a888281f37facea28a2cdc7c44f50`
+
+## 실행 결과
+
+### verify-interaction-core
+
+- job: `115286096786`
+- PlusCal translation: success
+- generated TLA+ parse: success
+- TLC model check: success
+
+검증 범위:
+
+- normal/trash location을 가진 대표 asset.
+- fixed trash root와 movable asset source의 tree move eligibility 차이.
+- non-trash → trash 진입 시 reference detach.
+- trash → normal 복구 시 detached reference의 자동 복원 금지.
+- trash asset의 direct slot connection 거부.
+- normal asset의 slot connection 허용.
+
+### verify-slot-core
+
+- job: `115286096461`
+- PlusCal translation: success
+- generated TLA+ parse: success
+- TLC model check: success
+
+검증 범위:
+
+- 기존 bounded slot/layout invariant.
+- representative selected slot에서 시작.
+- successful slot swap에서 selection identity가 source/target payload 이동을 따라가는 assertion.
+
+## r12–r15 수정 이력과 의미
+
+r12의 첫 실행에서 verification 표현 자체의 두 문제가 발견되었다.
+
+1. InteractionCore procedure parameter와 generated symbol의 이름 충돌.
+2. SlotCore에 추가한 selected-slot visibility 전역 invariant가 기존 merge semantics까지 새로운 규칙을 강제함.
+
+r13/r14에서 각각 범위를 바로잡고 symbol namespace를 분리했다. r15에서는 swap selection 검증 목적에 필요하지 않은 반복 selection harness를 제거해 상태공간을 줄였다.
+
+이 수정들은 Source Script의 기능 의미를 변경하지 않았다. 특히 merge/grid/split에 새로운 selection reconciliation 규칙을 추가하지 않았다.
+
+## 추상화와 한계
+
+InteractionCore는 하나의 대표 asset으로 location/reference/connection precondition을 검증한다. directory descendant 전체 byte/type 구조나 browser drag event를 모델링하지 않는다.
+
+SlotCore는 기존 bounded grid/slot 집합을 유지한다. 초기 selection은 대표 visible slot 1로 고정하고 이후 swap 조합에서 source/target selection 변환을 검사한다.
+
+따라서 이 TLC 결과는 해당 유한 모델에서 invariant 반례가 없음을 의미하며 무한 상태공간의 일반 증명은 아니다.
+
+## UI-only 생략 범위
+
+다음은 project/shared state를 변경하지 않는 구현/표시 계층이므로 TLC 상태공간에 포함하지 않았다.
+
+- Mantine Tree의 `renderNode`, `allowDrop`, `onDragDrop` 구체 API.
+- browser DataTransfer와 pointer capture.
+- settings overlay의 concrete height/CSS.
+- Layout preview의 ResizeObserver와 pixel geometry.
+- bookmark swap 뒤 DOM renderer 호출 자체.
+
+이들은 Source Code browser regression에서 직접 확인한다.
+
+## 판정
+
+- interaction-core: passed
+- slot-core: passed
+- version-chain workflow `38394481072`: success
+
+verification-model r15의 현재 추상화 범위에서 필요한 상태/reference 의미 검증을 통과했다.
+
+따라서 `development-versions.json`의 verification-model을 `tlc: passed`로 전환하고 이 문서를 validation review로 연결한다.
