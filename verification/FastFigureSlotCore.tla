@@ -595,6 +595,56 @@ HarnessCaptionReturn:
   return;
 end procedure;
 
+procedure ApplyResetAndReconcile(slotIds)
+begin
+ApplyResetAndReconcileCommit:
+  call applySlotsResetAction(slotIds);
+ApplyResetAndReconcileInterface:
+  call ReconcileInterfaceAfterProjectCommit();
+ApplyResetAndReconcileReturn:
+  return;
+end procedure;
+
+procedure ApplySwapAndReconcile(sourceId, targetId)
+begin
+ApplySwapAndReconcileCommit:
+  call applySlotsSwappedAction(sourceId, targetId);
+ApplySwapAndReconcileInterface:
+  call ReconcileInterfaceAfterProjectCommit();
+ApplySwapAndReconcileReturn:
+  return;
+end procedure;
+
+procedure ApplyGridAndReconcile(rows, cols)
+begin
+ApplyGridAndReconcileCommit:
+  call applyGridLayoutAction(rows, cols);
+ApplyGridAndReconcileInterface:
+  call ReconcileInterfaceAfterProjectCommit();
+ApplyGridAndReconcileReturn:
+  return;
+end procedure;
+
+procedure ApplyMergeAndReconcile(slotIds)
+begin
+ApplyMergeAndReconcileCommit:
+  call mergeSlots(slotIds);
+ApplyMergeAndReconcileInterface:
+  call ReconcileInterfaceAfterProjectCommit();
+ApplyMergeAndReconcileReturn:
+  return;
+end procedure;
+
+procedure ApplySplitAndReconcile(slotIds)
+begin
+ApplySplitAndReconcileCommit:
+  call splitSlots(slotIds);
+ApplySplitAndReconcileInterface:
+  call ReconcileInterfaceAfterProjectCommit();
+ApplySplitAndReconcileReturn:
+  return;
+end procedure;
+
 procedure VerificationHarnessSeedImageSettings(slotId)
 variables local = SLOT_LOCAL_DEFAULTS;
 begin
@@ -622,32 +672,27 @@ VerificationHarness:
   while TRUE do
     either
       with chosenResetSlotIds \in SUBSET (DOMAIN activeProject.slots) do
-        call applySlotsResetAction(chosenResetSlotIds);
-        call ReconcileInterfaceAfterProjectCommit();
+        call ApplyResetAndReconcile(chosenResetSlotIds);
       end with;
     or
       with chosenSourceId \in VisibleSlotIds(activeProject) do
         with chosenTargetId \in VisibleSlotIds(activeProject) \ {chosenSourceId} do
-          call applySlotsSwappedAction(chosenSourceId, chosenTargetId);
-          call ReconcileInterfaceAfterProjectCommit();
+          call ApplySwapAndReconcile(chosenSourceId, chosenTargetId);
         end with;
       end with;
     or
       with chosenRows \in 1..MaxRows do
         with chosenCols \in 1..MaxCols do
-          call applyGridLayoutAction(chosenRows, chosenCols);
-          call ReconcileInterfaceAfterProjectCommit();
+          call ApplyGridAndReconcile(chosenRows, chosenCols);
         end with;
       end with;
     or
       with chosenMergeSlotIds \in SUBSET VisibleSlotIds(activeProject) do
-        call mergeSlots(chosenMergeSlotIds);
-        call ReconcileInterfaceAfterProjectCommit();
+        call ApplyMergeAndReconcile(chosenMergeSlotIds);
       end with;
     or
       with chosenSplitSlotIds \in SUBSET VisibleSlotIds(activeProject) do
-        call splitSlots(chosenSplitSlotIds);
-        call ReconcileInterfaceAfterProjectCommit();
+        call ApplySplitAndReconcile(chosenSplitSlotIds);
       end with;
     or
       with chosenChartSlotId \in VisibleSlotIds(activeProject) do

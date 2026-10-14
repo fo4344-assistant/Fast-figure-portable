@@ -284,6 +284,16 @@ AssetSlotConnectionReturn:
   return;
 end procedure;
 
+procedure CreateEmptyCsvAndReconcile()
+begin
+CreateEmptyCsvAndReconcileCreate:
+  call CreateEmptyCsvProject();
+CreateEmptyCsvAndReconcileSelection:
+  call ReconcileEmptyCsvSelection();
+CreateEmptyCsvAndReconcileReturn:
+  return;
+end procedure;
+
 procedure AddGraphObject()
 begin
 AddGraphGuard:
@@ -318,8 +328,7 @@ Main:
     or
       call DashboardBackgroundClick();
     or
-      call CreateEmptyCsvProject();
-      call ReconcileEmptyCsvSelection();
+      call CreateEmptyCsvAndReconcile();
     or
       call AddGraphObject();
     or
