@@ -17,10 +17,13 @@ candidate -> validate -> commit order, branch meaning, and failure behavior.
 TLC-only state generators are explicitly named VerificationHarness* and are not
 Fast Figure domain commands.
 
-r22/r8 adds explicit project command coverage. This model does not duplicate
-settings values that do not affect slot/reference/selection invariants. It does
-verify that every persistent commit result represented in this slice maps to a
-declared projectEFSM command.
+r23/r10 adds explicit project command coverage. This model does not duplicate
+project name, appearance palette, or empty-slot content-type values because they
+do not affect the slot/reference/selection invariants checked here. It does
+model SLOT_IMAGE_IMPORTED because replacing a chart-owned slot with an image
+changes chart ownership and slot reference integrity.
+Every persistent commit result represented in this slice maps to a declared
+projectEFSM command.
 *)
 
 MaxRows == 3
@@ -246,6 +249,31 @@ ResetSlotsCandidate(project, slotIds) ==
       !.slots = candidateSlots,
       !.charts = project.charts \ removedCharts]
 
+ImportImageCandidate(project, slotId, imageId) ==
+  LET oldChart == project.slots[slotId].content.chart
+      nextLocal ==
+        [SLOT_LOCAL_DEFAULTS EXCEPT
+          !.imageId = imageId,
+          !.contentType = "image"]
+      candidateSlots ==
+        [sid \in DOMAIN project.slots |->
+          IF sid = slotId
+            THEN WithSlotLocalState(project.slots[sid], nextLocal)
+            ELSE project.slots[sid]]
+      candidateCharts ==
+        IF oldChart = NoChart
+          THEN project.charts
+          ELSE project.charts \ {oldChart}
+      candidate ==
+        [project EXCEPT
+          !.slots = candidateSlots,
+          !.charts = candidateCharts,
+          !.images = @ \cup {imageId}]
+  IN
+    IF ValidateSlotLayoutProjection(candidate)
+      THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
+      ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
+
 SwapSlotsCandidate(project, sourceId, targetId) ==
   LET sourceLocal == SlotLocalState(project.slots[sourceId])
       targetLocal == SlotLocalState(project.slots[targetId])
@@ -366,6 +394,7 @@ InterfaceSelectionValid(project, selectedSlotId, reconcilePending) ==
 
 ModeledProjectCommands == {
   "SLOTS_RESET",
+  "SLOT_IMAGE_IMPORTED",
   "SLOTS_SWAPPED",
   "GRID_LAYOUT_CHANGED",
   "SLOTS_MERGED",
@@ -374,6 +403,7 @@ ModeledProjectCommands == {
 
 CommittedProjectResults == {
   "reset-committed",
+  "image-import-committed",
   "swap-committed",
   "grid-committed",
   "merge-committed",
@@ -382,6 +412,7 @@ CommittedProjectResults == {
 
 CommittedResultCommand(result) ==
   CASE result = "reset-committed" -> "SLOTS_RESET"
+    [] result = "image-import-committed" -> "SLOT_IMAGE_IMPORTED"
     [] result = "swap-committed" -> "SLOTS_SWAPPED"
     [] result = "grid-committed" -> "GRID_LAYOUT_CHANGED"
     [] result = "merge-committed" -> "SLOTS_MERGED"
@@ -397,6 +428,7 @@ TypeOK(project, result) ==
   /\ result \in {
        "initialized",
        "reset-committed", "reset-rejected",
+       "image-import-committed", "image-import-rejected",
        "swap-committed", "swap-rejected",
        "grid-committed", "grid-rejected",
        "merge-committed", "merge-rejected",
@@ -430,6 +462,32 @@ ResetResolve:
     lastResult := "reset-rejected";
   end if;
 ResetReturn:
+  return;
+end procedure;
+
+procedure applySlotImageImportedAction(slotId, imageId)
+variables
+  importResult = [accepted |-> FALSE,
+                  project |-> activeProject,
+                  reason |-> "not-run"],
+  selectionBefore = selectedSlotId;
+begin
+ImageImportResolve:
+  if /\ slotId \in VisibleSlotIds(activeProject)
+     /\ imageId \in ImageIds then
+    importResult := ImportImageCandidate(activeProject, slotId, imageId);
+    if importResult.accepted then
+      activeProject := importResult.project ||
+      lastResult := "image-import-committed";
+    else
+      lastResult := "image-import-rejected";
+    end if;
+  else
+    lastResult := "image-import-rejected";
+  end if;
+ImageImportSelectionIdentity:
+  assert selectedSlotId = selectionBefore;
+ImageImportReturn:
   return;
 end procedure;
 
@@ -706,6 +764,12 @@ VerificationHarness:
     either
       with chosenResetSlotIds \in SUBSET (DOMAIN activeProject.slots) do
         call ApplyResetAndReconcile(chosenResetSlotIds);
+      end with;
+    or
+      with chosenImageSlotId \in VisibleSlotIds(activeProject) do
+        with chosenImageId \in ImageIds do
+          call applySlotImageImportedAction(chosenImageSlotId, chosenImageId);
+        end with;
       end with;
     or
       with chosenSourceId \in VisibleSlotIds(activeProject) do
