@@ -10,11 +10,12 @@ Fast Figure Source Script — project VFS, assets, FFPX/FFSX and import transact
 
 참조 Source Script:
 - project_state.py
+- project_efsm.py
 - application_fsm.py
 """
 
 from project_state import activeProject, projectVfs, getProjectCsv, getProjectImage
-from application_fsm import appFSM
+from application_fsm import dispatchProjectCommand
 
 PACKAGE_FORMAT_VERSION = "현재 FFPX/FFSX package format version 3"
 
@@ -235,7 +236,7 @@ def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
 
     처리:
     data table과 bytes representation을 정규화하고 VFS location을 정한 뒤
-    appFSM의 공식 create event로 등록한다.
+    dispatchProjectCommand를 통한 projectEFSM의 공식 create command로 등록한다.
     """
     csv = "등록된 CSV asset"
     return csv
@@ -260,7 +261,7 @@ def createEmptyProjectCsv():
        existing asset을 replace하지 않는다.
     6. createProjectCsv의 일반 DATA_OBJECT_CREATED 경로로 등록한다.
     7. 생성된 CSV에 protected/default 전용 field를 추가하지 않는다.
-    8. chart, graph object, selectedSlotId는 이 함수에서 변경하지 않는다.
+    8. chart, graph object, interface selection은 이 함수에서 변경하지 않는다.
     """
     csv = "등록된 일반 빈 CSV asset"
     return csv

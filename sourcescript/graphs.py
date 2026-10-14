@@ -13,12 +13,13 @@ Fast Figure Source Script — CSV data, chart model, graph objects and Plotly re
 
 참조 Source Script:
 - project_state.py
+- project_efsm.py
 - application_fsm.py
 - assets_files.py
 """
 
 from project_state import activeProject, getProjectCsv, getChart
-from application_fsm import appFSM
+from application_fsm import dispatchProjectCommand
 
 
 axisSettings = {

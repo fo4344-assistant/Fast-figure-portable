@@ -30,7 +30,9 @@ IMPLEMENTATION_SOURCES = {
 
 SOURCE_SCRIPT_MODULES = {
     "project_state.py": "authoritative project state, runtime references, invariants",
-    "application_fsm.py": "application state regions, events, controlled transitions",
+    "project_efsm.py": "FFPX ProjectObject persistent transition/validation/commit",
+    "interface_fsm.py": "application/UI runtime regions, selections and interaction transitions",
+    "application_fsm.py": "project EFSM → interface reconciliation → renderer orchestration",
     "assets_files.py": "VFS, asset lifecycle, FFPX/FFSX import/export",
     "graphs.py": "CSV-to-chart semantics, graph objects, Plotly conversion",
     "layout_annotations_export.py": "layout geometry, image/label/caption, raster export",
@@ -41,7 +43,7 @@ SOURCE_SCRIPT_MODULES = {
 
 SOURCE_SCRIPT_DECOMPOSITION_RULE = (
     "system.py가 Fast Figure 전체 시스템 경계를 나타내는 최상위 Source Script module이고, "
-    "project_state/application_fsm/assets_files/graphs/layout_annotations_export/api_ui/renderer_runtime/portable_build는 "
+    "project_state/project_efsm/interface_fsm/application_fsm/assets_files/graphs/layout_annotations_export/api_ui/renderer_runtime/portable_build는 "
     "그 시스템 의미의 서로 다른 직접 하위 책임이다. 이들 형제 module 사이의 import/call 관계는 의미적 부모-자식 관계가 아니다. "
     "하위 단계는 이 sibling responsibility를 새 중간 계층으로 재분류하지 않는다."
 )
@@ -83,7 +85,7 @@ RUNTIME_LOAD_ORDER = [
 
 AUTHORITATIVE_STATE_RULE = (
     "영속 프로젝트 상태의 권위 원천은 activeProject의 ProjectObject state다. "
-    "UI는 FastFigureApi 또는 appFSM event를 통해 변경한다. "
+    "UI는 FastFigureApi 또는 interfaceFSM event를 사용하고 persistent mutation은 application orchestration을 통해 projectEFSM으로 전달한다. "
     "renderer snapshot과 React local state는 독립적인 project authority가 아니다."
 )
 
@@ -162,7 +164,7 @@ def initializeFastFigure():
     변경:
     - activeProject를 createProjectState가 만든 검증된 기본 project로 시작한다.
     - renderer DOM/CSS 상태를 현재 project 값에 맞춘다.
-    - appFSM lifecycle을 ready로 전환한다.
+    - interfaceFSM lifecycle을 ready로 전환한다.
     - React root에 Mantine frontend를 mount한다.
 
     처리:
@@ -171,7 +173,7 @@ def initializeFastFigure():
     3. dashboard zoom projection과 slot interaction controller를 준비한다.
     4. project에 이미 존재하는 초기 empty slot을 renderer에 투영한다.
     5. slot style과 dashboard geometry를 적용한다.
-    6. appFSM을 ready로 전환하고 workspace/overlay 초기 상태를 동기화한다.
+    6. interfaceFSM을 ready로 전환하고 workspace/overlay 초기 상태를 동기화한다.
     7. FastFigureApi를 frontend 변경 경계로 공개한다.
     8. MantineProvider와 FastFigureShell을 기존 React root에 mount한다.
     9. startup 과정은 default CSV나 fake graph object를 생성하지 않는다.

@@ -219,11 +219,6 @@ projectVfs = (
     "별도 파일 트리 SoT를 갖지 않고 activeProject state에서 resolve한다."
 )
 
-selectedSlotId = (
-    "영속 project state가 아닌 현재 UI/runtime slot 선택 id. "
-    "같은 slot을 UI 방향으로 다시 선택하면 현재 구현에서는 선택이 해제된다."
-)
-
 class ProjectObject:
     def read(self, path):
         """

@@ -10,6 +10,8 @@ Fast Figure Source Script — FastFigureApi boundary and Mantine frontend
 
 참조 Source Script:
 - project_state.py
+- project_efsm.py
+- interface_fsm.py
 - application_fsm.py
 - assets_files.py
 - graphs.py
@@ -17,7 +19,8 @@ Fast Figure Source Script — FastFigureApi boundary and Mantine frontend
 """
 
 from project_state import activeProject
-from application_fsm import appFSM
+from interface_fsm import interfaceFSM, selectedSlotId
+from application_fsm import dispatchInterfaceEvent, dispatchProjectCommand, runLifecycleTask
 
 FastFigureApi = {
     "project": "project metadata와 FFPX project command",
@@ -157,7 +160,7 @@ LOWER_LAYER_API_REPLACEMENTS = {
 API_BOUNDARY_RULE = (
     "Mantine frontend는 activeProject, projectVfs, getChart, getProjectCsv 같은 domain 구현을 "
     "직접 일반 변경 경계로 사용하지 않는다. persistent/domain mutation은 PUBLIC_API_METHODS의 command 또는 "
-    "명시된 appFSM runtime event를 사용한다. UI-local editor target, modal draft, pointer state는 public domain API가 아니다."
+    "명시된 interfaceFSM runtime event를 사용한다. UI-local editor target, modal draft, pointer state는 public domain API가 아니다."
 )
 
 READ_RULE = (
@@ -275,16 +278,16 @@ def subscribeAppState(onStoreChange):
     """
     Return:
     - unsubscribe:
-      appFSM subscriber 제거 함수.
+      interfaceFSM subscriber 제거 함수.
 
     변경:
-    - appFSM state를 변경하지 않는다.
+    - interfaceFSM state를 변경하지 않는다.
 
     처리:
-    React useSyncExternalStore가 appFSM.state revision/transition을 직접 구독한다.
+    React useSyncExternalStore가 interfaceFSM.state revision/transition을 직접 구독한다.
     별도 React project store를 만들지 않는다.
     """
-    unsubscribe = "appFSM listener 해제 함수"
+    unsubscribe = "interfaceFSM listener 해제 함수"
     return unsubscribe
 
 
@@ -317,11 +320,11 @@ def runLifecycleTask(lifecycle, eventName, task):
     - task result 또는 UI error 처리 결과.
 
     변경:
-    - appFSM lifecycle.
+    - interfaceFSM lifecycle.
     - task가 호출하는 공식 command에 따른 domain state.
 
     처리:
-    lifecycle sequencing은 appFSM.run에 위임한다.
+    lifecycle sequencing은 runLifecycleTask에 위임한다.
     UI layer는 error를 debug telemetry에 기록하되 별도 domain rollback 규칙을 만들지 않는다.
     """
     return "lifecycle task 결과"

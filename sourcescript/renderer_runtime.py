@@ -11,13 +11,15 @@ Fast Figure Source Script — dashboard renderer, DOM interaction, telemetry and
 
 참조 Source Script:
 - project_state.py
+- interface_fsm.py
 - application_fsm.py
 - graphs.py
 - layout_annotations_export.py
 """
 
-from project_state import activeProject, selectedSlotId
-from application_fsm import appFSM
+from project_state import activeProject
+from interface_fsm import interfaceFSM, selectedSlotId
+from application_fsm import dispatchInterfaceEvent
 
 RENDERER_HOSTS = {
     "graphArea": "dashboard와 caption을 포함하는 scroll/render host",
@@ -90,31 +92,20 @@ def status(message):
 
 
 DASHBOARD_PROJECTION_INVALIDATION_RULE = (
-    "dashboard-affecting logical event는 UI/API orchestration이 appFSM.send로 처리한 뒤, 모든 region의 "
-    "action/transition/reconciliation/publish가 완료되어 send가 반환한 시점에 한 번만 projection effect를 판정한다. "
-    "PROJECT_NODE_MOVED와 PROJECT_TRASH_EMPTIED는 mutation result에서 실제 rendered reference 제거가 확인된 경우만 "
-    "FULL_DASHBOARD이고 path/tree 변화만 있으면 NONE이다. SLOTS_SWAPPED는 FULL_DASHBOARD 의미를 유지한다. "
-    "image/caption/style처럼 좁은 projection으로 충분한 기존 mutation은 TARGETED_PROJECTION을 유지한다. "
-    "region별 publish, lifecycle transition, UI-only transition은 full dashboard invalidation trigger가 아니다. "
-    "renderer는 current activeProject와 reconciled selectedSlotId를 다시 읽고 project mutation 또는 appFSM.send/notify를 재호출하지 않는다."
+    "application orchestration은 projectEFSM commit result 뒤 interfaceFSM reconciliation을 먼저 완료하고 "
+    "final runtime selection과 mutation result를 renderer에 전달한다. "
+    "실제 rendered reference 제거가 있으면 FULL_DASHBOARD, path/tree 변화만 있으면 NONE, "
+    "기존 narrow update가 충분하면 TARGETED_PROJECTION이다. "
+    "renderer는 activeProject와 final interface state를 읽기만 하고 두 FSM command를 재호출하지 않는다."
 )
 
-
-def dispatchDashboardAffectingEvent(event, payload):
+def applyDashboardProjectionInvalidation(event, mutationResult, interfaceState):
     """
-    처리:
-    1. UI/API orchestration 경계에서 appFSM.send(event, payload)를 동기 실행한다.
-    2. send 반환 뒤 mutation owner가 산출한 실제 reference/content 변경 결과를 읽는다.
-    3. FULL_DASHBOARD / TARGETED_PROJECTION / NONE 중 effect를 한 번 결정한다.
-    4. FULL_DASHBOARD는 current authority를 다시 읽어 renderDashboard를 수행하고,
-       TARGETED_PROJECTION은 기존 narrow renderer를 사용하며, NONE이면 dashboard DOM을 다시 만들지 않는다.
-    5. projection effect는 project/FSM state를 다시 변경하거나 별도 publish를 만들지 않는다.
-
-    첫 적용 대상은 PROJECT_NODE_MOVED와 PROJECT_TRASH_EMPTIED다.
-    SLOTS_SWAPPED의 기존 즉시 refresh는 동등성 검증 후 같은 orchestration 규칙으로 수렴할 수 있다.
+    post-reconciliation renderer effect.
+    FULL_DASHBOARD/TARGETED_PROJECTION/NONE을 project result와 final interface state에서 계산한다.
+    ProjectObject 또는 interface state를 변경하지 않는다.
     """
-    return "logical event 완료 뒤의 단일 projection effect"
-
+    return "projection effect"
 
 def renderDashboard():
     """
@@ -145,7 +136,7 @@ def setSelectedSlot(slotId, direction):
     caller가 '선택을 보장'해야 하면 현재 selected slot을 먼저 읽어야 한다.
 
     처리:
-    appFSM event가 selection semantics를 결정한 뒤 graph view를 갱신하고 resize를 요청한다.
+    interfaceFSM event가 selection semantics를 결정한 뒤 graph view를 갱신하고 resize를 요청한다.
     """
     return "선택 후 runtime state"
 
@@ -194,15 +185,16 @@ def installSlotClickController():
 def swapSlotContents(source, target):
     """
     변경:
-    - 검증된 candidate를 통해 source/target GUI 위치의 slot-local properties와 필요 시 selectedSlotId.
+    - projectEFSM command를 통한 source/target GUI 위치의 slot-local properties.
+    - selectedSlotId는 persistent mutation의 writable state가 아니며 commit 뒤 interfaceFSM이 reconcile한다.
 
     처리:
     1. source/target을 current project에서 다시 resolve한다.
     2. row/col/span geometry는 각 GUI 위치에 유지한다.
     3. chart/image/contentType/imageSettings/caption 등 slot-local properties 전체를 한 단위로 교환한다.
     4. chart ownership은 교환된 target slot에 맞춰 1:1을 유지한다.
-    5. project candidate를 검증한 뒤 한 번 commit한다.
-    6. commit된 current project와 reconciled selectedSlotId를 읽어 dashboard projection을 즉시 갱신한다.
+    5. projectEFSM이 candidate를 검증한 뒤 한 번 commit한다.
+    6. interfaceFSM reconciliation이 끝난 뒤 current project와 reconciled selectedSlotId를 읽어 dashboard projection을 갱신한다.
        이 갱신은 renderer projection만 변경하고 swap mutation을 반복하지 않는다.
     """
     return "swap candidate commit과 즉시 갱신된 dashboard projection"
@@ -282,7 +274,7 @@ def startupCoreRuntime():
     3. slot click/drop controller를 설치한다.
     4. activeProject의 existing slots를 renderDashboard로 투영한다.
     5. slot style을 적용한다.
-    6. appFSM을 ready로 전환한다.
+    6. interfaceFSM을 ready로 전환한다.
     7. project/reference/runtime invariant를 audit한다.
 
     startup은 default CSV를 생성하거나 grid slot을 domain state에 다시 만드는 초기화 side effect를 수행하지 않는다.

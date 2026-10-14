@@ -11,12 +11,15 @@ Fast Figure Source Script — layout geometry, image settings, annotations and r
 
 참조 Source Script:
 - project_state.py
+- project_efsm.py
+- interface_fsm.py
 - application_fsm.py
 - graphs.py
 """
 
-from project_state import activeProject, projectObjects, selectedSlotId
-from application_fsm import appFSM
+from project_state import activeProject, projectObjects
+from interface_fsm import selectedSlotId
+from application_fsm import dispatchProjectCommand
 
 layoutRules = {
     "gridRows": "1..8 integer",
@@ -187,8 +190,8 @@ def setLayoutApiGrid(rows, cols):
 
     처리:
     candidate를 먼저 만들고 전체 project invariant를 검증한다.
-    거부되면 원본 project와 selectedSlotId를 유지한다.
-    commit 후 selectedSlotId가 여전히 존재하는 slot이면 유지하고, 존재하지 않을 때만 해제한다.
+    거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
+    commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 interfaceFSM reconciliation이 결정한다.
     """
     return "grid 변경 또는 rejected layout state"
 
