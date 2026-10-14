@@ -1,0 +1,75 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3,8 +3,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+   sourceScript: "r18",
+   plusCal: "r4",
+   verificationModel: "r15",
+-  sourceCode: "r14",
+-  appBuild: "1.1.34-wip",
++  sourceCode: "r15",
++  appBuild: "1.1.35-wip",
+ });
+ (async () => {
+   const api = window.FastFigureApi;
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,15 +30,15 @@
+       "validation_review": "agent_space/reviews/review-20261013-013-tlc-interaction-r15.md"
+     },
+     "source-code": {
+-      "revision": 14,
++      "revision": 15,
+       "status": "current",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:b3cae3ee1ed43e6d631538b8c9ea6cc2fe60863943044bf1428f400380f54b80",
++      "fingerprint": "sha256:5b193f2e075abf9c36b02f21378d2a884315a7f69cbe1c52bb31ed2039bbcb2e",
+       "derived_from": {
+         "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
+         "pseudocode": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583",
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -36,7 +36,7 @@
+     createTheme,
+     useTree,
+   } = MantineCore;
+-  const { useCallback, useEffect, useRef, useState, useSyncExternalStore } = React;
++  const { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } = React;
+   const FAST_FIGURE_SETTINGS_MODAL_SIZE = "min(96vw, 1320px)";
+ 
+   const fastFigureTheme = createTheme({
+@@ -704,7 +704,15 @@
+           })),
+       ],
+     });
+-    const assetTreeData = [treeNodeForDirectory("/assets")];
++    const assetTreeRevision = [
++      ...directories,
++      ...snapshot.data.map((asset) => `csv:${asset.path}`),
++      ...snapshot.images.map((asset) => `image:${asset.path}`),
++    ].join("\u0000");
++    const assetTreeData = useMemo(
++      () => [treeNodeForDirectory("/assets")],
++      [assetTreeRevision],
++    );
+     const treeNodeKind = (path) =>
+       directorySet.has(path) ? "directory" : dataByPath.get(path)?.kind || null;
+     const treeNodeMeta = (path, kind) => {
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,6 +1,6 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.34-wip";
++      const APP_BUILD = "1.1.35-wip";
+       const PROJECT_OBJECT_PATHS = Object.freeze({
+         project: "meta",
+         layout: "layout",

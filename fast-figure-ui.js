@@ -36,7 +36,7 @@
     createTheme,
     useTree,
   } = MantineCore;
-  const { useCallback, useEffect, useRef, useState, useSyncExternalStore } = React;
+  const { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } = React;
   const FAST_FIGURE_SETTINGS_MODAL_SIZE = "min(96vw, 1320px)";
 
   const fastFigureTheme = createTheme({
@@ -704,7 +704,15 @@
           })),
       ],
     });
-    const assetTreeData = [treeNodeForDirectory("/assets")];
+    const assetTreeRevision = [
+      ...directories,
+      ...snapshot.data.map((asset) => `csv:${asset.path}`),
+      ...snapshot.images.map((asset) => `image:${asset.path}`),
+    ].join("\u0000");
+    const assetTreeData = useMemo(
+      () => [treeNodeForDirectory("/assets")],
+      [assetTreeRevision],
+    );
     const treeNodeKind = (path) =>
       directorySet.has(path) ? "directory" : dataByPath.get(path)?.kind || null;
     const treeNodeMeta = (path, kind) => {
