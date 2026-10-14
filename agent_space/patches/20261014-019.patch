@@ -1,0 +1,39 @@
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,7 +38,7 @@
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:7725b2403b43693209ac3e9274009bf75c251eebe7ed8508d357993dd04100ae",
++      "fingerprint": "sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f",
+       "derived_from": {
+         "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
+         "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17",
+diff --git a/agent_space/patches/20261014-019.md b/agent_space/patches/20261014-019.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/patches/20261014-019.md
+@@ -0,0 +1,22 @@
++# 20261014-019 — Correct Source Code fingerprint path ordering
++
++## 원인
++
++WIP Source Code r24 fingerprint를 계산할 때 JavaScript `localeCompare` 정렬을 사용해 파일 순서가 저장소 checker의 Python 문자열 정렬과 달라졌다.
++
++잘못 기록된 값:
++`sha256:7725b2403b43693209ac3e9274009bf75c251eebe7ed8508d357993dd04100ae`
++
++checker와 동일한 정렬 순서:
++`Fast-figure.html → fast-figure-ui.js → fast-figure.js → scripts/build-portable.py`
++
++수정 fingerprint:
++`sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f`
++
++## 변경
++
++application source는 변경하지 않고 `development-versions.json`의 Source Code r24 fingerprint만 실제 tree에 맞게 바로잡는다. Source Code 상태는 TLC 완료 전이므로 계속 `stale`이다.
++
++## 후속
++
++push-trigger development-layer check로 metadata가 실제 tree와 일치하는지 다시 검증한다. regression/build는 직전 구현 commit에서 이미 성공했으므로 이 metadata 수정은 기능 재검증을 대체하지 않는다.
