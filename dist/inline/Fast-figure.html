@@ -9893,7 +9893,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.42-wip";
+      const APP_BUILD = "1.1.43-wip";
       const PROJECT_OBJECT_PATHS = Object.freeze({
         project: "meta",
         layout: "layout",
@@ -9911,7 +9911,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       const DEFAULT_SLOT_STYLE = Object.freeze({
         referenceWidth: 1200,
         gap: 0,
-        outerMargin: 120,
+        outerMargin: 0,
         radius: 0,
         aspect: 1.618,
         showBorders: true,
@@ -14182,7 +14182,12 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         candidate.layout.slotStyle={
           referenceWidth:readProjectNumber(style.referenceWidth,1200,100,20000),
           gap:readProjectNumber(style.gap,0,0,2000),
-          outerMargin:readProjectNumber(style.outerMargin,120,0,5000),
+          outerMargin:readProjectNumber(
+            style.outerMargin,
+            DEFAULT_SLOT_STYLE.outerMargin,
+            0,
+            5000,
+          ),
           radius:readProjectNumber(style.radius,0,0,2000),
           aspect:readProjectNumber(style.aspect,1.618,0.1,10),
           showBorders:style.showBorders!==false};
