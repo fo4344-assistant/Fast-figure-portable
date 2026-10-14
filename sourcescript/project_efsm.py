@@ -12,12 +12,13 @@ PROJECT_COMMANDS = {
     "PROJECT_DIRECTORY_CREATED": "VFS directory 추가",
     "PROJECT_NODE_MOVED": "VFS path 변경과 entering-trash reference detach",
     "PROJECT_TRASH_EMPTIED": "trash subtree와 남은 reference 제거",
+    "ASSETS_IMPORTED": "raw CSV/image file batch와 선택적 target slot 연결을 하나의 whole-project candidate로 import",
     "DATA_OBJECT_CREATED": "CSV asset 추가",
     "DATA_OBJECT_REPLACED": "CSV asset 내용 교체",
-    "DATA_OBJECT_DELETED": "CSV asset 제거",
+    "DATA_OBJECT_DELETED": "CSV asset과 그 asset을 참조하는 graph-object reference를 같은 candidate에서 원자적으로 제거",
     "IMAGE_OBJECT_CREATED": "image asset 추가",
     "IMAGE_OBJECT_REPLACED": "image asset 내용 교체",
-    "IMAGE_OBJECT_DELETED": "image asset 제거",
+    "IMAGE_OBJECT_DELETED": "image asset과 그 asset을 참조하는 slot image reference를 같은 candidate에서 원자적으로 제거",
     "SLOT_TYPE_CHANGED": "slot-local contentType 변경",
     "SLOTS_RESET": "slot-local payload reset과 owned chart 제거",
     "SLOTS_SWAPPED": "두 GUI 위치의 slot-local payload 교환",
@@ -25,10 +26,10 @@ PROJECT_COMMANDS = {
     "SLOT_IMAGE_SETTINGS_CHANGED": "slot-local imageSettings candidate commit",
     "SLOT_DATA_CONNECTED": "CSV를 graph slot/chart object에 연결",
     "SLOT_IMAGE_IMPORTED": "imported image와 slot reference commit",
-    "SLOT_CHART_IMPORTED": "imported chart와 owning slot commit",
+    "SLOT_CHART_IMPORTED": "FFSX/Plotly chart, 필요한 package CSV와 owning slot을 같은 candidate로 commit",
     "GRAPH_OBJECTS_REPLACED": "chart.editor.objects 교체",
     "CHART_LAYOUT_CHANGED": "chart persistent layout 설정 교체",
-    "CHART_MODEL_REPLACED": "chart model 교체",
+    "CHART_MODEL_REPLACED": "chart model 교체; imported chart editable 전환이면 필요한 project CSV 생성과 reference remap도 같은 candidate에 포함",
     "GRID_LAYOUT_CHANGED": "grid 크기와 slot arrangement 변경",
     "LAYOUT_STYLE_CHANGED": "persistent slotStyle candidate commit",
     "SLOTS_MERGED": "선택 직사각형의 slot-local payload를 top-left anchor로 원자적 병합",
@@ -40,6 +41,53 @@ PROJECT_COMMANDS = {
     "LABEL_POSITION_CHANGED": "persistent label 위치 변경",
     "APPEARANCE_CHANGED": "persistent UI palette 변경",
     "EXPORT_SETTINGS_CHANGED": "persistent export 설정 변경",
+}
+
+PUBLIC_PROJECT_MUTATION_ROUTES = {
+    "project.setName": "PROJECT_NAME_CHANGED",
+    "project.importFile": "PROJECT_LOADED",
+    "slots.setContentType": "SLOT_TYPE_CHANGED",
+    "slots.reset": "SLOTS_RESET",
+    "images.setSettings": "SLOT_IMAGE_SETTINGS_CHANGED",
+    "images.insertEmpty": "SLOT_IMAGE_IMPORTED",
+    "assets.delete.csv": "DATA_OBJECT_DELETED",
+    "assets.delete.image": "IMAGE_OBJECT_DELETED",
+    "assets.move": "PROJECT_NODE_MOVED",
+    "assets.createDirectory": "PROJECT_DIRECTORY_CREATED",
+    "assets.createEmptyCsv": "DATA_OBJECT_CREATED",
+    "assets.emptyTrash": "PROJECT_TRASH_EMPTIED",
+    "assets.connectToSlot.csv": "SLOT_DATA_CONNECTED",
+    "assets.connectToSlot.image": "SLOT_IMAGE_LINKED",
+    "assets.importToDirectory": "ASSETS_IMPORTED",
+    "assets.importToSlot": "ASSETS_IMPORTED",
+    "graphs.setHeaderLines": "DATA_OBJECT_REPLACED",
+    "graphs.setEditable": "CHART_MODEL_REPLACED",
+    "graphs.addObject.emptySlot": "SLOT_DATA_CONNECTED",
+    "graphs.addObject.existingChart": "GRAPH_OBJECTS_REPLACED",
+    "graphs.moveObject": "GRAPH_OBJECTS_REPLACED",
+    "graphs.setObjectValues": "GRAPH_OBJECTS_REPLACED",
+    "graphs.deleteObject": "GRAPH_OBJECTS_REPLACED",
+    "graphs.updateLayout": "CHART_LAYOUT_CHANGED",
+    "graphs.applyPalette": "GRAPH_OBJECTS_REPLACED",
+    "graphs.importFile": "SLOT_CHART_IMPORTED",
+    "print.setSettings": "EXPORT_SETTINGS_CHANGED",
+    "captions.setEnabled": "CAPTION_SETTINGS_CHANGED",
+    "captions.setGlobalText": "CAPTION_TEXT_INPUT",
+    "captions.setSlotText": "CAPTION_TEXT_INPUT",
+    "captions.insertSlotCaptions": "SLOT_CAPTIONS_INSERTED",
+    "captions.setName": "CAPTION_SETTINGS_CHANGED",
+    "captions.setNameBold": "CAPTION_SETTINGS_CHANGED",
+    "captions.setSettings": "CAPTION_SETTINGS_CHANGED",
+    "labels.setEnabled": "LABEL_SETTINGS_CHANGED",
+    "labels.setSettings": "LABEL_SETTINGS_CHANGED",
+    "labels.setPosition": "LABEL_POSITION_CHANGED",
+    "labels.resetPosition": "LABEL_POSITION_CHANGED",
+    "appearance.setPalette": "APPEARANCE_CHANGED",
+    "appearance.resetPalette": "APPEARANCE_CHANGED",
+    "layout.setStyle": "LAYOUT_STYLE_CHANGED",
+    "layout.setGrid": "GRID_LAYOUT_CHANGED",
+    "layout.mergeSlots": "SLOTS_MERGED",
+    "layout.splitSlots": "SLOTS_SPLIT",
 }
 
 PROJECT_MUTATION_GROUPS = {
@@ -75,7 +123,9 @@ ProjectMutationResult = {
 }
 
 PROJECT_COMMAND_COVERAGE_RULE = (
-    "PUBLIC_API_METHODS에서 persistent ProjectObject mutation으로 분류한 operation은 PROJECT_COMMANDS 중 하나로 수렴한다. "
+    "PUBLIC_API_METHODS에서 persistent ProjectObject mutation으로 분류한 operation은 PUBLIC_PROJECT_MUTATION_ROUTES에 존재하고 "
+    "그 route가 PROJECT_COMMANDS의 declared command로 수렴해야 한다. "
+    "kind 또는 precondition에 따라 command가 달라지는 operation은 matrix에 explicit branch route를 둔다. "
     "domain helper가 candidate를 계산할 수는 있지만 activeProject commit을 독립 mutation path로 수행하지 않는다. "
     "같은 owner를 변경하는 UI/API 진입점은 동일 project command semantics를 공유한다."
 )

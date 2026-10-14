@@ -204,6 +204,24 @@ def resolveProjectAssetImportPlan(model, choice, reservedPaths):
     return plan
 
 
+def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=None):
+    """
+    Return:
+    - candidate:
+      전체 raw CSV/image import transaction을 반영한 whole-project candidate.
+
+    변경:
+    - authoritative project를 변경하지 않는다.
+
+    처리:
+    directory/target slot을 current project에서 resolve하고 모든 file parse/collision plan/id/path/reference를
+    candidate 안에서 계산한다. targetSlotId가 있으면 그 slot 연결까지 같은 candidate에 포함한다.
+    parse/collision/reference/whole-project validation 실패는 candidate rejection으로 끝나며 commit을 수행하지 않는다.
+    """
+    candidate = "검증된 asset import whole-project candidate 또는 rejected result"
+    return candidate
+
+
 def importProjectFilesToDirectory(files, directory, planImport):
     """
     변경:
@@ -221,8 +239,10 @@ def importProjectFilesToDirectory(files, directory, planImport):
 
     의미:
     batch import는 mutate 후 rollback이 아니라 candidate-first commit을 기본으로 한다.
+    buildProjectAssetImportCandidate로 계산한 candidate를 ASSETS_IMPORTED에 전달하고 projectEFSM이 최종 invariant를 다시 확인한 뒤 commit한다.
     """
-    return "전체 candidate import가 commit된 경우의 결과"
+    candidate = buildProjectAssetImportCandidate(files, directory, planImport)
+    return dispatchProjectCommand("ASSETS_IMPORTED", {"candidate": candidate})
 
 
 def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
@@ -238,8 +258,8 @@ def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
     data table과 bytes representation을 정규화하고 VFS location을 정한 뒤
     dispatchProjectCommand를 통한 projectEFSM의 공식 create command로 등록한다.
     """
-    csv = "등록된 CSV asset"
-    return csv
+    model = "정규화된 CSV candidate"
+    return dispatchProjectCommand("DATA_OBJECT_CREATED", {"model": model})
 
 
 def createEmptyProjectCsv():
@@ -280,8 +300,8 @@ def createProjectImage(bytes, name, mime, id, path):
     image asset은 copied bytes/name/MIME/location만 소유한다.
     fit/scale/x/y 같은 display settings는 연결 slot의 slot.content.imageSettings에 둔다.
     """
-    image = "등록된 image asset"
-    return image
+    model = "정규화된 image candidate"
+    return dispatchProjectCommand("IMAGE_OBJECT_CREATED", {"model": model})
 
 
 def deleteProjectAsset(target):
@@ -295,11 +315,17 @@ def deleteProjectAsset(target):
     3. CSV reference 제거 결과 graph object가 0개가 되어도 empty editable chart를 그대로 허용한다.
     4. image reference는 해당 slot의 image reference만 비운 candidate를 만든다.
     5. candidate 전체를 검증한다.
-    6. 검증 성공 후 asset/reference mutation을 한 번 commit한다.
+    6. resolved target kind가 CSV면 DATA_OBJECT_DELETED, image면 IMAGE_OBJECT_DELETED에 candidate와 target id를 전달한다.
+       두 command 모두 asset과 해당 reference detach를 같은 whole-project commit으로 소유한다.
 
     보호된 default CSV 같은 예외 asset은 존재하지 않는다.
     """
-    return "삭제 완료"
+    resolved = "current project에서 다시 resolve한 target"
+    event = "DATA_OBJECT_DELETED if resolved.kind == csv else IMAGE_OBJECT_DELETED"
+    return dispatchProjectCommand(
+        event,
+        {"target": resolved, "candidate": "asset+reference removal candidate"},
+    )
 
 
 def planProjectNodeMove(path, directory):
@@ -335,10 +361,13 @@ def moveProjectNode(plan, useUniqueName):
     6. collision, fixed-directory, subtree cycle, reference invariant를 검증한다.
     7. 성공한 candidate만 한 번 commit한다.
     8. entering-trash detach로 실제 제거된 graph-object reference 수와 image slot reset 수를
-       mutation result에 기록한다. path-only 이동과 trash 밖 복구에서는 두 값이 0이다.
+       ProjectMutationResult에 기록한다. path-only 이동과 trash 밖 복구에서는 두 값이 0이다.
        renderer는 이 commit 결과를 사용하고 VFS/DOM에서 변화 여부를 역추론하지 않는다.
     """
-    return "commit된 최종 이동 path와 실제 reference 제거 결과"
+    return dispatchProjectCommand(
+        "PROJECT_NODE_MOVED",
+        {"plan": plan, "useUniqueName": useUniqueName},
+    )
 
 
 def emptyProjectTrash():
@@ -352,10 +381,57 @@ def emptyProjectTrash():
     3. references와 trash assets/directories를 제거한 candidate project를 만든다.
     4. candidate 전체 invariant를 검증한다.
     5. 성공한 경우에만 한 번 commit한다.
-    6. 이 commit으로 실제 제거된 graph-object reference 수와 image slot reset 수를 result에 기록한다.
+    6. 이 commit으로 실제 제거된 graph-object reference 수와 image slot reset 수를 ProjectMutationResult에 기록한다.
        실제 제거된 reference가 없으면 dashboard content projection effect는 없다.
     """
-    return "삭제한 항목 수와 실제 reference 제거 결과"
+    return dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {})
+
+
+def createProjectDirectory(parent, name):
+    """
+    변경:
+    - project VFS directory collection.
+
+    처리:
+    current parent와 normalized name을 검증하고 PROJECT_DIRECTORY_CREATED로 commit한다.
+    """
+    return dispatchProjectCommand(
+        "PROJECT_DIRECTORY_CREATED",
+        {"parent": parent, "name": name},
+    )
+
+
+def connectProjectAssetToSlot(path, kind, slotId):
+    """
+    변경:
+    - CSV이면 target graph slot/chart reference.
+    - image이면 target slot image reference.
+
+    처리:
+    path와 slotId를 current project에서 다시 resolve한다.
+    CSV는 SLOT_DATA_CONNECTED, image는 SLOT_IMAGE_LINKED라는 기존 kind-specific command로 수렴한다.
+    단순 asset selection은 이 함수에서 변경하지 않는다.
+    """
+    event = "SLOT_DATA_CONNECTED if kind == csv else SLOT_IMAGE_LINKED"
+    return dispatchProjectCommand(event, {"path": path, "slotId": slotId})
+
+
+def importProjectFileToSlot(file, slotId, planImport):
+    """
+    변경:
+    - raw CSV/image asset과 target slot/chart candidate.
+
+    처리:
+    buildProjectAssetImportCandidate의 targetSlotId 경로로 한 whole-project candidate를 만든 뒤
+    ASSETS_IMPORTED 한 command로 commit한다. file asset 생성과 slot 연결을 별도 commit으로 쪼개지 않는다.
+    """
+    candidate = buildProjectAssetImportCandidate(
+        [file],
+        "target file plan의 directory",
+        planImport,
+        targetSlotId=slotId,
+    )
+    return dispatchProjectCommand("ASSETS_IMPORTED", {"candidate": candidate})
 
 
 def ffpxBuildProject():
@@ -419,7 +495,8 @@ def importProjectFile(file):
     PROJECT_LOADED 경계를 통해 authoritative project를 한 번 교체한다.
     현재 package가 아닌 legacy conversion은 application 내부에서 추측하지 않고 외부 converter 책임으로 둔다.
     """
-    return activeProject
+    candidate = buildProjectObject(ffpxReadProject(file), "file name")
+    return dispatchProjectCommand("PROJECT_LOADED", {"project": candidate})
 
 
 def ffsxBuildSlot(slot, chart):
@@ -626,8 +703,8 @@ def applyFfsxSlot(slotPayload, targetSlot):
     4. 새 chart id를 할당하고 target slot이 그 chart를 유일하게 소유하도록 candidate를 만든다.
     5. FFSX가 제공하는 slot caption을 target slot annotation candidate에 적용한다.
     6. whole-project invariant를 검증한다.
-    7. 성공한 candidate만 commit한다.
+    7. SLOT_CHART_IMPORTED에 candidate를 전달하고 projectEFSM이 최종 검증 후 한 번 commit한다.
     """
-    result = "FFSX candidate commit 결과"
-    return result
+    candidate = "target slot + remapped CSV + chart whole-project candidate"
+    return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"candidate": candidate})
 

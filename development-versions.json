@@ -9,17 +9,17 @@
   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode and gates Source Code where TLC validation is used.",
   "layers": {
     "source-script": {
-      "revision": 22,
+      "revision": 23,
       "status": "current",
       "path_rule": "sourcescript/**/*.py",
-      "fingerprint": "sha256:65f70d9060b0e2a802f1bc595058548ed350a2631e94069e4776af78df48bf2a",
+      "fingerprint": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
       "derived_from": null,
       "closure": "closed",
-      "closure_review": "agent_space/reviews/review-20261014-012-sourcescript-closure-r22.md"
+      "closure_review": "agent_space/reviews/review-20261014-014-sourcescript-closure-r23.md"
     },
     "verification-model": {
       "revision": 21,
-      "status": "current",
+      "status": "stale",
       "path_rule": "verification/**/*.{tla,cfg}",
       "fingerprint": "sha256:f651a05c3f4667e92d5082788b0ad77fd9d1b0b7fd730d319a05d836dada885e",
       "derived_from": {
@@ -48,7 +48,7 @@
     },
     "pseudocode": {
       "revision": 8,
-      "status": "current",
+      "status": "stale",
       "path_rule": "pseudocode/**/*.pcal",
       "fingerprint": "sha256:532d65420b932b45f503a05aa457f515779619b934e25ffd535c89ec58443d12",
       "derived_from": {

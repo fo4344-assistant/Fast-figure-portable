@@ -215,10 +215,10 @@ def graphEditorAdd(csvId):
     처리:
     선택 slot과 CSV를 실제 id로 resolve한다.
     선택 slot에 chart가 없으면 SLOT_DATA_CONNECTED로 첫 chart/object를 만든다.
-    chart가 있으면 현재 object 목록에 새 base graph object를 추가해 commit한다.
+    chart가 있으면 현재 object 목록에 새 base graph object를 추가해 GRAPH_OBJECTS_REPLACED로 commit한다.
     """
-    chart = "변경된 chart"
-    return chart
+    event = "SLOT_DATA_CONNECTED if selected slot has no chart else GRAPH_OBJECTS_REPLACED"
+    return dispatchProjectCommand(event, {"csvId": csvId, "objects": "candidate objects"})
 
 
 def graphEditorCommit(objects, index):
@@ -234,11 +234,14 @@ def graphEditorCommit(objects, index):
 
     처리:
     object array 자체를 UI/local state의 장기 원천으로 두지 않는다.
-    0개 object도 유효한 candidate로 받아 normalize/reference validation 후 chart SoT에 commit한다.
+    0개 object도 유효한 candidate로 받아 normalize/reference validation 후 GRAPH_OBJECTS_REPLACED로 chart SoT에 commit한다.
     fake default object를 복구하지 않는다.
+    interface object selection은 ProjectMutationResult 이후 별도 reconciliation한다.
     """
-    chart = "commit된 chart"
-    return chart
+    return dispatchProjectCommand(
+        "GRAPH_OBJECTS_REPLACED",
+        {"objects": objects, "selectedIndexHint": index},
+    )
 
 
 def graphEditorObjectValues(index, values):
@@ -272,11 +275,50 @@ def graphEditorSetEditable(editable):
     처리:
     imported Plotly에 conversion graph object가 하나 이상 있고 아직 project CSV가 없으면
     보존된 conversion rows에서 실제 project CSV candidate를 만든다.
-    object csvId를 그 CSV와 연결해 candidate project를 검증한 뒤 commit하고 editable projection을 rebuild한다.
+    object csvId를 그 CSV와 연결해 whole-project candidate를 만들고 CHART_MODEL_REPLACED 한 command로 commit한다.
+    이 command는 필요한 CSV 생성/next-id/reference remap을 chart editable 변경과 같은 candidate에 포함한다.
     zero-trace/zero-object imported figure는 CSV를 만들지 않고 empty editable chart로 전환할 수 있다.
     """
-    editable = "선택 chart의 최종 editable boolean"
-    return editable
+    candidate = convertImportedChartToEditable("selected chart") if editable else "editable flag candidate"
+    return dispatchProjectCommand("CHART_MODEL_REPLACED", {"candidate": candidate})
+
+
+def graphEditorSetHeaderLines(csvId, headerLines):
+    """
+    변경:
+    - resolved CSV의 persistent headerLines.
+
+    처리:
+    current CSV를 id로 resolve하고 같은 id/path/bytes/rows를 유지한 replacement candidate를 만든 뒤
+    DATA_OBJECT_REPLACED로 commit한다.
+    """
+    return dispatchProjectCommand(
+        "DATA_OBJECT_REPLACED",
+        {"csvId": csvId, "headerLines": headerLines},
+    )
+
+
+def graphEditorUpdateLayout(values):
+    """
+    변경:
+    - selected chart의 persistent title/global/axis settings.
+
+    처리:
+    normalized candidate를 CHART_LAYOUT_CHANGED로 commit한다.
+    Plotly graph layout은 commit된 chart settings에서 다시 계산하는 projection이다.
+    """
+    return dispatchProjectCommand("CHART_LAYOUT_CHANGED", {"settings": values})
+
+
+def graphEditorApplyPalette(colors):
+    """
+    변경:
+    - selected chart.editor.objects의 color fields.
+
+    처리:
+    current objects에서 color-only candidate를 계산하고 GRAPH_OBJECTS_REPLACED로 commit한다.
+    """
+    return dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {"colors": colors})
 
 
 def tracesSingle(objectView):
@@ -336,9 +378,10 @@ def importSelectedGraphFile(file):
     처리:
     FFSX면 ffsxReadSlot 검증 결과로 target slot candidate를 만든다.
     Plotly JSON이면 parsePlotlyToEditor로 non-editable imported chart candidate를 만든다.
-    두 경우 모두 target slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증한 뒤 commit한다.
+    두 경우 모두 target slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증한 뒤
+    SLOT_CHART_IMPORTED 한 command로 commit한다.
     """
-    return "import 완료 chart"
+    return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"file": file})
 
 
 def chartFigure(chart):
