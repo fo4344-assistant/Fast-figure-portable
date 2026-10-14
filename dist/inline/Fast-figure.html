@@ -9893,7 +9893,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.40-wip";
+      const APP_BUILD = "1.1.41-wip";
       const PROJECT_OBJECT_PATHS = Object.freeze({
         project: "meta",
         layout: "layout",
@@ -19446,7 +19446,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           minHeight,
           Math.min(maxHeight, drag.startHeight + moveEvent.clientY - drag.startY),
         );
-        if (contentRef.current) contentRef.current.style.height = `${nextHeight}px`;
+        if (contentRef.current)
+          contentRef.current.style.setProperty("--modal-content-height", `${nextHeight}px`);
       };
       const end = () => clearResizeListeners();
       resizeListenersRef.current = { move, end };
@@ -19471,8 +19472,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           ref: contentRef,
           "data-fastfigure-overlay": overlay,
           style: {
-            height: "min(72dvh, 720px)",
-            maxHeight: "calc(100dvh - 24px)",
+            "--modal-content-height": "min(72dvh, 720px)",
+            "--modal-content-max-height": "calc(100dvh - 24px)",
             display: "flex",
             flexDirection: "column",
           },
