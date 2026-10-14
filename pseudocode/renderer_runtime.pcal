@@ -51,6 +51,46 @@ StatusReturn:
   return;
 end procedure;
 
+procedure DetermineProjectionEffect(eventName, mutationResult)
+begin
+ProjectionEffectDecision:
+  if eventName = "PROJECT_NODE_MOVED" \/ eventName = "PROJECT_TRASH_EMPTIED" then
+    if mutationResult.removedGraphReferenceCount > 0 \/ mutationResult.resetImageSlotCount > 0 then
+      result := "FULL_DASHBOARD";
+    else
+      result := "NONE";
+    end if;
+  elsif eventName = "SLOTS_SWAPPED" then
+    result := "FULL_DASHBOARD";
+  else
+    result := ExistingTargetedOrNoneProjectionEffect(eventName, mutationResult);
+  end if;
+ProjectionEffectReturn:
+  return;
+end procedure;
+
+procedure DispatchDashboardAffectingEvent(eventName, payload)
+variables mutationResult = NoSelection, projectionEffect = NoSelection;
+begin
+DispatchLogicalEvent:
+  mutationResult := AppFsmSendAndReturnAfterAllRegionCompletion(eventName, payload);
+DetermineProjection:
+  call DetermineProjectionEffect(eventName, mutationResult);
+CaptureProjectionEffect:
+  projectionEffect := result;
+ApplyProjection:
+  if projectionEffect = "FULL_DASHBOARD" then
+    selectedSlotId := ReadSelectedSlotIdFromFsm();
+    call RenderDashboard();
+  elsif projectionEffect = "TARGETED_PROJECTION" then
+    effect := ApplyExistingTargetedProjection(eventName, mutationResult);
+  end if;
+ProjectionNoRecursiveMutation:
+  assert RendererProjectionDoesNotSendOrMutateProject();
+DispatchProjectionReturn:
+  return;
+end procedure;
+
 procedure RenderDashboard()
 begin
 RenderGridAndStyle:

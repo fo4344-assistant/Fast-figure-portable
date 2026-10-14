@@ -84,6 +84,10 @@ UnhandledEvent:
   if HandlerCount() = handledBefore then
     effect := RecordDebugWarning(event);
   end if;
+FinalizeLogicalEvent:
+  result := BuildMutationResultFromCommittedAuthority(event, payload);
+LogicalEventCompletion:
+  assert AllHandledRegionActionsReconciliationAndPublishCompleted();
 SendReturn:
   return;
 end procedure;

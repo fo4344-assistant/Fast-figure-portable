@@ -24,6 +24,7 @@ variables
   settingsOverlayResizeStartY = NoValue,
   settingsOverlayResizeStartHeight = NoValue,
   settingsOverlayResizeActive = FALSE,
+  layoutSelection = {},
   result = NoValue,
   effect = NoValue;
 
@@ -307,6 +308,48 @@ SettingsOverlayResizeEndReturn:
   return;
 end procedure;
 
+procedure LayoutSlotClick(slotId)
+begin
+LayoutSlotToggle:
+  if IsVisibleLayoutPreviewSlot(slotId) then
+    layoutSelection := ToggleSetMember(layoutSelection, slotId);
+  end if;
+LayoutSlotNoProjectMutation:
+  assert ProjectAuthorityUnchangedByLayoutSelection();
+LayoutSlotReturn:
+  return;
+end procedure;
+
+procedure LayoutBackgroundClick(targetKind)
+begin
+LayoutBackgroundClear:
+  if targetKind = "preview-background" \/ targetKind = "modal-nonslot-background" then
+    layoutSelection := {};
+  end if;
+LayoutBackgroundNoProjectMutation:
+  assert ProjectAuthorityUnchangedByLayoutSelection();
+LayoutBackgroundReturn:
+  return;
+end procedure;
+
+procedure LayoutSelectionConsumer(command)
+begin
+LayoutSelectionConsume:
+  effect := ExecuteLayoutSelectionCommand(command, layoutSelection);
+LayoutSelectionReconcile:
+  layoutSelection := ReconcileLayoutSelectionAfterCommand(command, layoutSelection);
+LayoutSelectionConsumerReturn:
+  return;
+end procedure;
+
+procedure ClearLayoutSelectionForGridOrClose()
+begin
+LayoutSelectionClear:
+  layoutSelection := {};
+LayoutSelectionClearReturn:
+  return;
+end procedure;
+
 procedure ReadLayoutPreview(renderedWidth)
 begin
 LayoutPreviewRead:
@@ -407,6 +450,22 @@ Main:
       end with;
     or
       call EndSettingsOverlayResize();
+    or
+      with slotId = NextLayoutPreviewSlotClick() do
+        call LayoutSlotClick(slotId);
+      end with;
+    or
+      with targetKind = NextLayoutBackgroundClickKind() do
+        call LayoutBackgroundClick(targetKind);
+      end with;
+    or
+      with command = NextLayoutSelectionCommand() do
+        call LayoutSelectionConsumer(command);
+      end with;
+    or
+      if LayoutGridChangedOrOverlayClosed() then
+        call ClearLayoutSelectionForGridOrClose();
+      end if;
     or
       with renderedWidth = CurrentLayoutPreviewRenderedWidth() do
         call ReadLayoutPreview(renderedWidth);

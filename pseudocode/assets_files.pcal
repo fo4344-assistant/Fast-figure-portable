@@ -260,7 +260,11 @@ MoveValidate:
   if candidate # NoReference then
     assert ValidateMoveCollisionFixedCycleAndReferences(candidate);
     projectAuthority := candidate;
-    result := FinalMovePath(candidate);
+    result := [
+      path |-> FinalMovePath(candidate),
+      removedGraphReferenceCount |-> RemovedGraphReferenceCount(fresh, candidate),
+      resetImageSlotCount |-> ResetImageSlotCount(fresh, candidate)
+    ];
   end if;
 MoveReturn:
   return;
@@ -280,7 +284,11 @@ TrashValidate:
 TrashCommit:
   projectAuthority := candidate;
 TrashResult:
-  result := TrashRemovalResult(trashObjects, refs);
+  result := [
+    removal |-> TrashRemovalResult(trashObjects, refs),
+    removedGraphReferenceCount |-> RemovedGraphReferenceCount(refs, candidate),
+    resetImageSlotCount |-> ResetImageSlotCount(refs, candidate)
+  ];
 TrashReturn:
   return;
 end procedure;
