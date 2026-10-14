@@ -1,10 +1,10 @@
 /* Runs after the application scripts in a headless file:// browser. */
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
-  sourceScript: "r17",
-  plusCal: "r16+r17-interaction",
-  verificationModel: "r11",
-  sourceCode: "r13",
-  appBuild: "1.1.33-wip",
+  sourceScript: "r18",
+  plusCal: "r4",
+  verificationModel: "r15",
+  sourceCode: "r14",
+  appBuild: "1.1.34-wip",
 });
 (async () => {
   const api = window.FastFigureApi;
@@ -474,7 +474,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       await tick();
 
       const transfer = new DataTransfer();
-      const sourceTab = slotElement(sourceId)?.querySelector(".slot-tab");
+      const sourceDomBefore = slotElement(sourceId);
+      const targetDomBefore = slotElement(targetId);
+      const sourceTab = sourceDomBefore?.querySelector(".slot-tab");
       check(!!sourceTab, "source bookmark absent");
       sourceTab.dispatchEvent(
         new DragEvent("dragstart", {
@@ -495,6 +497,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         slotPayloadSignature(slotAt(sourceId)) === targetBefore &&
           slotPayloadSignature(slotAt(targetId)) === sourceBefore,
         "bookmark drag did not swap slot-local payloads",
+      );
+      check(
+        slotElement(sourceId) !== sourceDomBefore &&
+          slotElement(targetId) !== targetDomBefore,
+        "bookmark drag changed project state without immediately rerendering dashboard",
       );
       check(api.slots.readSelected() === null, "drag unexpectedly selected a slot");
 
@@ -730,42 +737,89 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       );
     });
 
-    await run(28, "layout preview uses one rendered width and is centered", async () => {
+    await run(28, "layout preview preserves aspect without a preview resize handle", async () => {
       appFSM.send("TOGGLE_OVERLAY", { overlay: "layout", source: "regression" });
       await tick();
       const overlay = document.querySelector("[data-fastfigure-overlay='layout']");
       const grid = overlay?.querySelector("[role='grid']");
-      const handle = overlay?.querySelector("[aria-label='레이아웃 미리보기 크기 조절']");
+      const oldHandle = overlay?.querySelector("[aria-label='레이아웃 미리보기 크기 조절']");
       const frame = grid?.parentElement;
       const content = frame?.parentElement;
-      check(!!grid && !!handle && !!frame && !!content, "layout preview ownership elements absent");
+      check(!!grid && !!frame && !!content, "layout preview ownership elements absent");
+      check(!oldHandle, "obsolete layout preview resize handle still exists");
       const gridRect = grid.getBoundingClientRect();
-      const handleRect = handle.getBoundingClientRect();
       const frameRect = frame.getBoundingClientRect();
       const contentRect = content.getBoundingClientRect();
-      check(Math.abs(gridRect.width - handleRect.width) < 1.5, "preview and resize handle widths differ");
       check(
         Math.abs((frameRect.left + frameRect.right - contentRect.left - contentRect.right) / 2) < 1.5,
         "layout preview is not horizontally centered in its content area",
       );
-      const expected = api.layout.readState(gridRect.width).previewGeometry;
+      const layoutState = api.layout.readState(gridRect.width);
+      const expected = layoutState.previewGeometry;
       check(
         Math.abs(gridRect.height - expected.height) < 1.5,
         "layout preview height is not derived from rendered width",
       );
+      check(
+        Math.abs(gridRect.width / gridRect.height - layoutState.slotStyle.aspect) < 0.02,
+        "layout preview rendered aspect differs from configured aspect",
+      );
       appFSM.send("CLOSE_OVERLAY", { reason: "regression-layout-ownership" });
       await tick();
     });
-    await run(29, "settings overlays share one modal width", async () => {
+    await run(29, "settings overlays share width and resize their own height", async () => {
       const widths = [];
       for (const overlayName of ["label", "caption", "print", "layout"]) {
         appFSM.send("TOGGLE_OVERLAY", { overlay: overlayName, source: "regression" });
         await tick();
         const overlay = document.querySelector(`[data-fastfigure-overlay='${overlayName}']`);
         const modal = overlay?.closest(".mantine-Modal-content") || overlay;
-        check(!!modal, `${overlayName} modal absent`);
+        const handle = overlay?.querySelector(
+          `[data-fastfigure-modal-resize='${overlayName}']`,
+        );
+        check(!!modal && !!handle, `${overlayName} modal resize elements absent`);
         widths.push(modal.getBoundingClientRect().width);
-        appFSM.send("CLOSE_OVERLAY", { reason: "regression-modal-width" });
+        if (typeof PointerEvent === "function") {
+          const before = modal.getBoundingClientRect();
+          const pointerId = 71;
+          const maxHeight = Math.max(240, window.innerHeight - 24);
+          const delta = before.height < maxHeight - 40 ? 60 : -60;
+          handle.dispatchEvent(
+            new PointerEvent("pointerdown", {
+              bubbles: true,
+              cancelable: true,
+              pointerId,
+              clientY: before.bottom - 2,
+            }),
+          );
+          handle.dispatchEvent(
+            new PointerEvent("pointermove", {
+              bubbles: true,
+              cancelable: true,
+              pointerId,
+              clientY: before.bottom - 2 + delta,
+            }),
+          );
+          handle.dispatchEvent(
+            new PointerEvent("pointerup", {
+              bubbles: true,
+              cancelable: true,
+              pointerId,
+              clientY: before.bottom - 2 + delta,
+            }),
+          );
+          await tick();
+          const after = modal.getBoundingClientRect();
+          check(
+            Math.abs(after.height - before.height) > 20,
+            `${overlayName} modal height did not resize`,
+          );
+          check(
+            Math.abs(after.width - before.width) < 1.5,
+            `${overlayName} modal resize changed width`,
+          );
+        }
+        appFSM.send("CLOSE_OVERLAY", { reason: "regression-modal-size" });
         await tick();
       }
       check(
@@ -773,32 +827,148 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         `settings modal widths differ: ${widths.join(", ")}`,
       );
     });
-    await run(30, "trashed asset keeps row action menu accessible", async () => {
-      const csvAsset = createProjectCsv([["X", "Y"], ["1", "2"]], "trash-menu.csv");
+    await run(30, "trashed asset remains selectable and can be dragged out of trash", async () => {
+      if (typeof DataTransfer !== "function" || typeof DragEvent !== "function")
+        return { blocked: "DragEvent/DataTransfer unavailable in this browser" };
+      const csvAsset = createProjectCsv([["X", "Y"], ["1", "2"]], "trash-recovery.csv");
       const sourcePath = projectAssetPath(csvAsset);
+      const referenceSlot = activeProject.slots.find((slot) => !slot.hidden);
+      check(!!referenceSlot, "trash recovery reference slot absent");
+      api.slots.reset(referenceSlot.id);
+      select(slotAt(referenceSlot.id));
+      api.slots.setContentType("graph");
+      api.graphs.addObject(csvAsset.id);
+      check(
+        chartCsvIds(getChart(slotAt(referenceSlot.id).chart)).includes(csvAsset.id),
+        "trash recovery test reference was not created",
+      );
       const plan = api.assets.planMove(sourcePath, "/assets/trash");
-      check(!!plan, "trash menu test move plan absent");
-      const result = api.assets.move(plan);
+      check(!!plan, "trash recovery move plan absent");
+      api.assets.move(plan);
       await tick();
       const trashed = activeProject.csvFiles.find((item) => item.id === csvAsset.id);
-      check(!!trashed && api.assets.isTrashed(projectAssetPath(trashed)), "test CSV did not enter trash");
-      const trashDirectoryButton = Array.from(document.querySelectorAll("button")).find((button) =>
-        /^[▾▸]\s+trash$/.test(button.textContent?.trim() || ""),
+      const trashedPath = projectAssetPath(trashed);
+      check(!!trashed && api.assets.isTrashed(trashedPath), "test CSV did not enter trash");
+
+      const trashDirectoryRow = document.querySelector(
+        '[data-fastfigure-tree-path="/assets/trash"]',
       );
-      check(!!trashDirectoryButton, "trash directory control absent");
-      if ((trashDirectoryButton.textContent || "").trim().startsWith("▸")) {
-        click(trashDirectoryButton);
+      check(!!trashDirectoryRow, "trash directory tree row absent");
+      if (trashDirectoryRow.getAttribute("aria-expanded") !== "true") {
+        click(trashDirectoryRow);
         await tick();
       }
-      const menuTarget = document.querySelector(
-        `button[aria-label="${trashed.name} 작업"]`,
+
+      const trashedRow = document.querySelector(
+        `[data-fastfigure-tree-path="${trashedPath}"]`,
       );
-      check(!!menuTarget, "trashed asset action menu target absent");
-      check(!menuTarget.disabled, "trashed asset action menu target is disabled");
-      click(menuTarget);
-      await waitFor(
-        () => document.querySelector("[role='menu']"),
-        "trashed asset action menu did not open",
+      check(!!trashedRow, "trashed resource row absent");
+      check(!trashedRow.disabled, "trashed resource row is disabled");
+      click(trashedRow);
+      await tick();
+      check(appFSM.state.assetPath === trashedPath, "trashed resource row is not selectable");
+
+      const csvDirectoryRow = document.querySelector(
+        '[data-fastfigure-tree-path="/assets/csv"]',
+      );
+      check(!!csvDirectoryRow, "CSV target directory tree row absent");
+      const transfer = new DataTransfer();
+      trashedRow.dispatchEvent(
+        new DragEvent("dragstart", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+        }),
+      );
+      const targetRect = csvDirectoryRow.getBoundingClientRect();
+      csvDirectoryRow.dispatchEvent(
+        new DragEvent("dragover", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+          clientY: targetRect.top + targetRect.height * 0.75,
+        }),
+      );
+      csvDirectoryRow.dispatchEvent(
+        new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+          clientY: targetRect.top + targetRect.height * 0.75,
+        }),
+      );
+      await tick();
+      const recovered = activeProject.csvFiles.find((item) => item.id === csvAsset.id);
+      check(
+        !!recovered && !api.assets.isTrashed(projectAssetPath(recovered)),
+        "tree drag did not recover trashed asset",
+      );
+      check(
+        activeProject.charts.every((chart) => !chartCsvIds(chart).includes(csvAsset.id)),
+        "trash recovery unexpectedly restored old graph references",
+      );
+    });
+
+    await run(31, "Mantine Tree resource drags to slot connection target", async () => {
+      if (typeof DataTransfer !== "function" || typeof DragEvent !== "function")
+        return { blocked: "DragEvent/DataTransfer unavailable in this browser" };
+      const asset = createProjectCsv([["X", "Y"], ["3", "4"]], "tree-slot-drag.csv");
+      await tick();
+      const path = projectAssetPath(asset);
+      const parentPath = projectParentPath(path);
+      const parentRow = document.querySelector(
+        `[data-fastfigure-tree-path="${parentPath}"]`,
+      );
+      if (parentRow?.getAttribute("aria-expanded") !== "true") {
+        click(parentRow);
+        await tick();
+      }
+      const resourceRow = document.querySelector(
+        `[data-fastfigure-tree-path="${path}"]`,
+      );
+      check(!!resourceRow, "normal resource tree row absent");
+      const targetButton = Array.from(
+        document.querySelectorAll("button"),
+      ).find((button) => /^\[row=\d+,col=\d+\]/.test(button.textContent?.trim() || ""));
+      check(!!targetButton, "slot tree drop target absent");
+      const transfer = new DataTransfer();
+      resourceRow.dispatchEvent(
+        new DragEvent("dragstart", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+        }),
+      );
+      targetButton.dispatchEvent(
+        new DragEvent("dragover", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+        }),
+      );
+      targetButton.dispatchEvent(
+        new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+        }),
+      );
+      await tick();
+      const slotMatch = (targetButton.textContent || "").match(/^\[row=(\d+),col=(\d+)\]/);
+      const slot = activeProject.slots.find(
+        (item) =>
+          item.row === Number(slotMatch?.[1]) &&
+          item.col === Number(slotMatch?.[2]) &&
+          !item.hidden,
+      );
+      check(!!slot, "slot drop target could not be resolved");
+      check(
+        slot.chart && chartCsvIds(getChart(slot.chart)).includes(asset.id),
+        "tree resource drop did not connect CSV to target slot",
+      );
+      check(
+        projectAssetPath(activeProject.csvFiles.find((item) => item.id === asset.id)) === path,
+        "slot connection unexpectedly moved source asset",
       );
     });
   } catch (error) {

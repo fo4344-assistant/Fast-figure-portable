@@ -1,0 +1,1161 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1,10 +1,10 @@
+ /* Runs after the application scripts in a headless file:// browser. */
+ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+-  sourceScript: "r17",
+-  plusCal: "r16+r17-interaction",
+-  verificationModel: "r11",
+-  sourceCode: "r13",
+-  appBuild: "1.1.33-wip",
++  sourceScript: "r18",
++  plusCal: "r4",
++  verificationModel: "r15",
++  sourceCode: "r14",
++  appBuild: "1.1.34-wip",
+ });
+ (async () => {
+   const api = window.FastFigureApi;
+@@ -474,7 +474,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       await tick();
+ 
+       const transfer = new DataTransfer();
+-      const sourceTab = slotElement(sourceId)?.querySelector(".slot-tab");
++      const sourceDomBefore = slotElement(sourceId);
++      const targetDomBefore = slotElement(targetId);
++      const sourceTab = sourceDomBefore?.querySelector(".slot-tab");
+       check(!!sourceTab, "source bookmark absent");
+       sourceTab.dispatchEvent(
+         new DragEvent("dragstart", {
+@@ -496,6 +498,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           slotPayloadSignature(slotAt(targetId)) === sourceBefore,
+         "bookmark drag did not swap slot-local payloads",
+       );
++      check(
++        slotElement(sourceId) !== sourceDomBefore &&
++          slotElement(targetId) !== targetDomBefore,
++        "bookmark drag changed project state without immediately rerendering dashboard",
++      );
+       check(api.slots.readSelected() === null, "drag unexpectedly selected a slot");
+ 
+       click(slotElement(sourceId)?.querySelector(".slot-tab"));
+@@ -730,75 +737,238 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       );
+     });
+ 
+-    await run(28, "layout preview uses one rendered width and is centered", async () => {
++    await run(28, "layout preview preserves aspect without a preview resize handle", async () => {
+       appFSM.send("TOGGLE_OVERLAY", { overlay: "layout", source: "regression" });
+       await tick();
+       const overlay = document.querySelector("[data-fastfigure-overlay='layout']");
+       const grid = overlay?.querySelector("[role='grid']");
+-      const handle = overlay?.querySelector("[aria-label='레이아웃 미리보기 크기 조절']");
++      const oldHandle = overlay?.querySelector("[aria-label='레이아웃 미리보기 크기 조절']");
+       const frame = grid?.parentElement;
+       const content = frame?.parentElement;
+-      check(!!grid && !!handle && !!frame && !!content, "layout preview ownership elements absent");
++      check(!!grid && !!frame && !!content, "layout preview ownership elements absent");
++      check(!oldHandle, "obsolete layout preview resize handle still exists");
+       const gridRect = grid.getBoundingClientRect();
+-      const handleRect = handle.getBoundingClientRect();
+       const frameRect = frame.getBoundingClientRect();
+       const contentRect = content.getBoundingClientRect();
+-      check(Math.abs(gridRect.width - handleRect.width) < 1.5, "preview and resize handle widths differ");
+       check(
+         Math.abs((frameRect.left + frameRect.right - contentRect.left - contentRect.right) / 2) < 1.5,
+         "layout preview is not horizontally centered in its content area",
+       );
+-      const expected = api.layout.readState(gridRect.width).previewGeometry;
++      const layoutState = api.layout.readState(gridRect.width);
++      const expected = layoutState.previewGeometry;
+       check(
+         Math.abs(gridRect.height - expected.height) < 1.5,
+         "layout preview height is not derived from rendered width",
+       );
++      check(
++        Math.abs(gridRect.width / gridRect.height - layoutState.slotStyle.aspect) < 0.02,
++        "layout preview rendered aspect differs from configured aspect",
++      );
+       appFSM.send("CLOSE_OVERLAY", { reason: "regression-layout-ownership" });
+       await tick();
+     });
+-    await run(29, "settings overlays share one modal width", async () => {
++    await run(29, "settings overlays share width and resize their own height", async () => {
+       const widths = [];
+       for (const overlayName of ["label", "caption", "print", "layout"]) {
+         appFSM.send("TOGGLE_OVERLAY", { overlay: overlayName, source: "regression" });
+         await tick();
+         const overlay = document.querySelector(`[data-fastfigure-overlay='${overlayName}']`);
+         const modal = overlay?.closest(".mantine-Modal-content") || overlay;
+-        check(!!modal, `${overlayName} modal absent`);
++        const handle = overlay?.querySelector(
++          `[data-fastfigure-modal-resize='${overlayName}']`,
++        );
++        check(!!modal && !!handle, `${overlayName} modal resize elements absent`);
+         widths.push(modal.getBoundingClientRect().width);
+-        appFSM.send("CLOSE_OVERLAY", { reason: "regression-modal-width" });
++        if (typeof PointerEvent === "function") {
++          const before = modal.getBoundingClientRect();
++          const pointerId = 71;
++          const maxHeight = Math.max(240, window.innerHeight - 24);
++          const delta = before.height < maxHeight - 40 ? 60 : -60;
++          handle.dispatchEvent(
++            new PointerEvent("pointerdown", {
++              bubbles: true,
++              cancelable: true,
++              pointerId,
++              clientY: before.bottom - 2,
++            }),
++          );
++          handle.dispatchEvent(
++            new PointerEvent("pointermove", {
++              bubbles: true,
++              cancelable: true,
++              pointerId,
++              clientY: before.bottom - 2 + delta,
++            }),
++          );
++          handle.dispatchEvent(
++            new PointerEvent("pointerup", {
++              bubbles: true,
++              cancelable: true,
++              pointerId,
++              clientY: before.bottom - 2 + delta,
++            }),
++          );
++          await tick();
++          const after = modal.getBoundingClientRect();
++          check(
++            Math.abs(after.height - before.height) > 20,
++            `${overlayName} modal height did not resize`,
++          );
++          check(
++            Math.abs(after.width - before.width) < 1.5,
++            `${overlayName} modal resize changed width`,
++          );
++        }
++        appFSM.send("CLOSE_OVERLAY", { reason: "regression-modal-size" });
+         await tick();
+       }
+       check(
+         Math.max(...widths) - Math.min(...widths) < 1.5,
+         `settings modal widths differ: ${widths.join(", ")}`,
+       );
+     });
+-    await run(30, "trashed asset keeps row action menu accessible", async () => {
+-      const csvAsset = createProjectCsv([["X", "Y"], ["1", "2"]], "trash-menu.csv");
++    await run(30, "trashed asset remains selectable and can be dragged out of trash", async () => {
++      if (typeof DataTransfer !== "function" || typeof DragEvent !== "function")
++        return { blocked: "DragEvent/DataTransfer unavailable in this browser" };
++      const csvAsset = createProjectCsv([["X", "Y"], ["1", "2"]], "trash-recovery.csv");
+       const sourcePath = projectAssetPath(csvAsset);
++      const referenceSlot = activeProject.slots.find((slot) => !slot.hidden);
++      check(!!referenceSlot, "trash recovery reference slot absent");
++      api.slots.reset(referenceSlot.id);
++      select(slotAt(referenceSlot.id));
++      api.slots.setContentType("graph");
++      api.graphs.addObject(csvAsset.id);
++      check(
++        chartCsvIds(getChart(slotAt(referenceSlot.id).chart)).includes(csvAsset.id),
++        "trash recovery test reference was not created",
++      );
+       const plan = api.assets.planMove(sourcePath, "/assets/trash");
+-      check(!!plan, "trash menu test move plan absent");
+-      const result = api.assets.move(plan);
++      check(!!plan, "trash recovery move plan absent");
++      api.assets.move(plan);
+       await tick();
+       const trashed = activeProject.csvFiles.find((item) => item.id === csvAsset.id);
+-      check(!!trashed && api.assets.isTrashed(projectAssetPath(trashed)), "test CSV did not enter trash");
+-      const trashDirectoryButton = Array.from(document.querySelectorAll("button")).find((button) =>
+-        /^[▾▸]\s+trash$/.test(button.textContent?.trim() || ""),
++      const trashedPath = projectAssetPath(trashed);
++      check(!!trashed && api.assets.isTrashed(trashedPath), "test CSV did not enter trash");
++
++      const trashDirectoryRow = document.querySelector(
++        '[data-fastfigure-tree-path="/assets/trash"]',
+       );
+-      check(!!trashDirectoryButton, "trash directory control absent");
+-      if ((trashDirectoryButton.textContent || "").trim().startsWith("▸")) {
+-        click(trashDirectoryButton);
++      check(!!trashDirectoryRow, "trash directory tree row absent");
++      if (trashDirectoryRow.getAttribute("aria-expanded") !== "true") {
++        click(trashDirectoryRow);
+         await tick();
+       }
+-      const menuTarget = document.querySelector(
+-        `button[aria-label="${trashed.name} 작업"]`,
++
++      const trashedRow = document.querySelector(
++        `[data-fastfigure-tree-path="${trashedPath}"]`,
+       );
+-      check(!!menuTarget, "trashed asset action menu target absent");
+-      check(!menuTarget.disabled, "trashed asset action menu target is disabled");
+-      click(menuTarget);
+-      await waitFor(
+-        () => document.querySelector("[role='menu']"),
+-        "trashed asset action menu did not open",
++      check(!!trashedRow, "trashed resource row absent");
++      check(!trashedRow.disabled, "trashed resource row is disabled");
++      click(trashedRow);
++      await tick();
++      check(appFSM.state.assetPath === trashedPath, "trashed resource row is not selectable");
++
++      const csvDirectoryRow = document.querySelector(
++        '[data-fastfigure-tree-path="/assets/csv"]',
++      );
++      check(!!csvDirectoryRow, "CSV target directory tree row absent");
++      const transfer = new DataTransfer();
++      trashedRow.dispatchEvent(
++        new DragEvent("dragstart", {
++          bubbles: true,
++          cancelable: true,
++          dataTransfer: transfer,
++        }),
++      );
++      const targetRect = csvDirectoryRow.getBoundingClientRect();
++      csvDirectoryRow.dispatchEvent(
++        new DragEvent("dragover", {
++          bubbles: true,
++          cancelable: true,
++          dataTransfer: transfer,
++          clientY: targetRect.top + targetRect.height * 0.75,
++        }),
++      );
++      csvDirectoryRow.dispatchEvent(
++        new DragEvent("drop", {
++          bubbles: true,
++          cancelable: true,
++          dataTransfer: transfer,
++          clientY: targetRect.top + targetRect.height * 0.75,
++        }),
++      );
++      await tick();
++      const recovered = activeProject.csvFiles.find((item) => item.id === csvAsset.id);
++      check(
++        !!recovered && !api.assets.isTrashed(projectAssetPath(recovered)),
++        "tree drag did not recover trashed asset",
++      );
++      check(
++        activeProject.charts.every((chart) => !chartCsvIds(chart).includes(csvAsset.id)),
++        "trash recovery unexpectedly restored old graph references",
++      );
++    });
++
++    await run(31, "Mantine Tree resource drags to slot connection target", async () => {
++      if (typeof DataTransfer !== "function" || typeof DragEvent !== "function")
++        return { blocked: "DragEvent/DataTransfer unavailable in this browser" };
++      const asset = createProjectCsv([["X", "Y"], ["3", "4"]], "tree-slot-drag.csv");
++      await tick();
++      const path = projectAssetPath(asset);
++      const parentPath = projectParentPath(path);
++      const parentRow = document.querySelector(
++        `[data-fastfigure-tree-path="${parentPath}"]`,
++      );
++      if (parentRow?.getAttribute("aria-expanded") !== "true") {
++        click(parentRow);
++        await tick();
++      }
++      const resourceRow = document.querySelector(
++        `[data-fastfigure-tree-path="${path}"]`,
++      );
++      check(!!resourceRow, "normal resource tree row absent");
++      const targetButton = Array.from(
++        document.querySelectorAll("button"),
++      ).find((button) => /^\[row=\d+,col=\d+\]/.test(button.textContent?.trim() || ""));
++      check(!!targetButton, "slot tree drop target absent");
++      const transfer = new DataTransfer();
++      resourceRow.dispatchEvent(
++        new DragEvent("dragstart", {
++          bubbles: true,
++          cancelable: true,
++          dataTransfer: transfer,
++        }),
++      );
++      targetButton.dispatchEvent(
++        new DragEvent("dragover", {
++          bubbles: true,
++          cancelable: true,
++          dataTransfer: transfer,
++        }),
++      );
++      targetButton.dispatchEvent(
++        new DragEvent("drop", {
++          bubbles: true,
++          cancelable: true,
++          dataTransfer: transfer,
++        }),
++      );
++      await tick();
++      const slotMatch = (targetButton.textContent || "").match(/^\[row=(\d+),col=(\d+)\]/);
++      const slot = activeProject.slots.find(
++        (item) =>
++          item.row === Number(slotMatch?.[1]) &&
++          item.col === Number(slotMatch?.[2]) &&
++          !item.hidden,
++      );
++      check(!!slot, "slot drop target could not be resolved");
++      check(
++        slot.chart && chartCsvIds(getChart(slot.chart)).includes(asset.id),
++        "tree resource drop did not connect CSV to target slot",
++      );
++      check(
++        projectAssetPath(activeProject.csvFiles.find((item) => item.id === asset.id)) === path,
++        "slot connection unexpectedly moved source asset",
+       );
+     });
+   } catch (error) {
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,21 +30,21 @@
+       "validation_review": "agent_space/reviews/review-20261013-013-tlc-interaction-r15.md"
+     },
+     "source-code": {
+-      "revision": 13,
+-      "status": "stale",
++      "revision": 14,
++      "status": "current",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:a76944037f6bc203b950b889aa37a57f2d6e94ce61a4790bcfa1bcc8829c4bcb",
++      "fingerprint": "sha256:b3cae3ee1ed43e6d631538b8c9ea6cc2fe60863943044bf1428f400380f54b80",
+       "derived_from": {
+-        "source-script": "sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664",
+-        "pseudocode": "sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898",
+-        "verification-model": "sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b"
++        "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
++        "pseudocode": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583",
++        "verification-model": "sha256:ee96d884edcb459419313e1b4e87db11dcb871955e9ce135fd9b8b1247995bdb"
+       },
+-      "validation_review": "agent_space/reviews/review-20261013-010-pseudocode-lineage-policy-alignment.md"
++      "validation_review": null
+     },
+     "pseudocode": {
+       "revision": 4,
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -31,8 +31,10 @@
+     Text,
+     TextInput,
+     Textarea,
++    Tree,
+     UnstyledButton,
+     createTheme,
++    useTree,
+   } = MantineCore;
+   const { useCallback, useEffect, useRef, useState, useSyncExternalStore } = React;
+   const FAST_FIGURE_SETTINGS_MODAL_SIZE = "min(96vw, 1320px)";
+@@ -572,7 +574,10 @@
+     const assetApi = window.FastFigureApi.assets;
+     const snapshot = assetApi.readTree();
+     const selectedSlotId = window.FastFigureApi.slots.readSelected()?.id;
+-    const [expanded, setExpanded] = useState(() => new Set(["/assets", "/slots"]));
++    const assetTreeController = useTree({
++      initialExpandedState: { "/assets": true },
++    });
++    const [slotsExpanded, setSlotsExpanded] = useState(true);
+     const [lastDirectory, setLastDirectory] = useState("/assets");
+     const [folderDialog, setFolderDialog] = useState({
+       opened: false,
+@@ -628,18 +633,7 @@
+         status(`휴지통 비우기 오류: ${error.message}`);
+       }
+     };
+-    const rewriteExpandedAfterMove = (source, destination) => {
+-      setExpanded((current) => {
+-        const next = new Set();
+-        current.forEach((path) => {
+-          next.add(
+-            projectPathInDirectory(path, source)
+-              ? `${destination}${path.slice(source.length)}`
+-              : path,
+-          );
+-        });
+-        return next;
+-      });
++    const rewriteLastDirectoryAfterMove = (source, destination) => {
+       setLastDirectory((current) =>
+         projectPathInDirectory(current, source)
+           ? `${destination}${current.slice(source.length)}`
+@@ -651,7 +645,7 @@
+       try {
+         const result = assetApi.move(plan, useUniqueName);
+         if (plan.kind === "directory" && !result.trashed)
+-          rewriteExpandedAfterMove(plan.path, result.path);
++          rewriteLastDirectoryAfterMove(plan.path, result.path);
+         setMovePicker(null);
+         setMoveConfirm(null);
+       } catch (error) {
+@@ -672,61 +666,216 @@
+         status(`프로젝트 항목 이동 오류: ${error.message}`);
+       }
+     };
+-    const toggleExpanded = (path) => {
+-      setExpanded((current) => {
+-        const next = new Set(current);
+-        if (next.has(path)) next.delete(path);
+-        else next.add(path);
+-        return next;
+-      });
+-    };
+     const csvReferenceCount = (id) =>
+       snapshot.charts.reduce(
+         (count, chart) => count + chart.csvReferences.filter((csvId) => csvId === id).length,
+         0,
+       );
+     const imageReferenceCount = (id) =>
+       snapshot.slots.filter((slot) => slot.imageId === id).length;
+-    const assetRow = (asset, kind) => {
+-      const inactive = assetApi.isTrashed(asset.path);
+-      const selected = state.assetSelection === kind && state.assetPath === asset.path;
+-      const movable = assetApi.movable(asset.path);
+-      const meta =
+-        kind === "csv"
+-          ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${csvReferenceCount(asset.id)}`
+-          : `참조 ${imageReferenceCount(asset.id)}`;
+-      return React.createElement(
+-        Group,
++    const dataByPath = new Map(
++      snapshot.data.map((asset) => [asset.path, { kind: "csv", asset }]),
++    );
++    snapshot.images.forEach((asset) =>
++      dataByPath.set(asset.path, { kind: "image", asset }),
++    );
++    const directorySet = new Set(directories);
++    const treeNodeForDirectory = (path) => ({
++      value: path,
++      label: path === "/assets" ? "/assets" : projectPathName(path),
++      kind: "directory",
++      children: [
++        ...directories
++          .filter((candidate) => candidate !== path && projectParentPath(candidate) === path)
++          .map(treeNodeForDirectory),
++        ...snapshot.data
++          .filter((asset) => projectParentPath(asset.path) === path)
++          .map((asset) => ({
++            value: asset.path,
++            label: projectPathName(asset.path),
++            kind: "csv",
++          })),
++        ...snapshot.images
++          .filter((asset) => projectParentPath(asset.path) === path)
++          .map((asset) => ({
++            value: asset.path,
++            label: projectPathName(asset.path),
++            kind: "image",
++          })),
++      ],
++    });
++    const assetTreeData = [treeNodeForDirectory("/assets")];
++    const treeNodeKind = (path) =>
++      directorySet.has(path) ? "directory" : dataByPath.get(path)?.kind || null;
++    const treeNodeMeta = (path, kind) => {
++      const asset = dataByPath.get(path)?.asset;
++      if (!asset) return "";
++      return kind === "csv"
++        ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${csvReferenceCount(asset.id)}`
++        : `참조 ${imageReferenceCount(asset.id)}`;
++    };
++    const allowProjectTreeDrop = ({ draggedNode, targetNode, position }) =>
++      !busy &&
++      position === "inside" &&
++      directorySet.has(targetNode) &&
++      assetApi.movable(draggedNode);
++    const moveProjectTreeNode = (payload) => {
++      if (!allowProjectTreeDrop(payload)) return;
++      requestProjectNodeMove(payload.draggedNode, payload.targetNode);
++    };
++    const renderProjectTreeNode = ({
++      node,
++      expanded: nodeExpanded,
++      hasChildren,
++      tree,
++      elementProps,
++    }) => {
++      const path = node.value;
++      const kind = treeNodeKind(path);
++      const directory = kind === "directory";
++      const movable = assetApi.movable(path);
++      const trashed = assetApi.isTrashed(path);
++      const selected = state.assetPath === path && state.assetSelection === kind;
++      const originalClick = elementProps.onClick;
++      const originalDragStart = elementProps.onDragStart;
++      const originalDragOver = elementProps.onDragOver;
++      const originalDragLeave = elementProps.onDragLeave;
++      const originalDrop = elementProps.onDrop;
++      const originalDragEnd = elementProps.onDragEnd;
++      const selectNode = (event) => {
++        originalClick?.(event);
++        if (busy || !kind) return;
++        if (directory) {
++          setLastDirectory(path);
++          assetApi.selectDirectory(path);
++          if (hasChildren) tree.toggleExpanded(path);
++        } else if (kind === "csv") assetApi.selectCsv(path);
++        else if (kind === "image") assetApi.selectImage(path);
++      };
++      const startTreeDrag = (event) => {
++        if (busy || !movable) return event.preventDefault();
++        dragNodeRef.current = { path };
++        originalDragStart?.(event);
++        if (!event.defaultPrevented) event.dataTransfer.effectAllowed = "all";
++      };
++      const finishTreeDrag = (event) => {
++        originalDragEnd?.(event);
++        dragNodeRef.current = null;
++      };
++      const treeDragOver = (event) => {
++        if (dataTransferHasFiles(event.dataTransfer)) {
++          if (!directory || trashed) return false;
++          return allowExternalFileDrop(event);
++        }
++        return originalDragOver?.(event);
++      };
++      const treeDrop = (event) => {
++        if (dataTransferHasFiles(event.dataTransfer)) {
++          if (!directory || trashed) return false;
++          return importExternalFilesToDirectory(event, path);
++        }
++        return originalDrop?.(event);
++      };
++      const row = React.createElement(
++        UnstyledButton,
+         {
+-          key: `${kind}:${asset.path}`,
+-          gap: 2,
+-          wrap: "nowrap",
+-          draggable: movable,
+-          onDragStart: (event) => {
+-            if (!movable) return event.preventDefault();
+-            dragNodeRef.current = { path: asset.path };
+-            event.dataTransfer.effectAllowed = "move";
+-            event.dataTransfer.setData("text/plain", asset.path);
+-          },
+-          onDragEnd: () => {
+-            dragNodeRef.current = null;
++          ...elementProps,
++          type: "button",
++          disabled: busy,
++          onClick: selectNode,
++          onDragStart: startTreeDrag,
++          onDragOver: treeDragOver,
++          onDragLeave: originalDragLeave,
++          onDrop: treeDrop,
++          onDragEnd: finishTreeDrag,
++          "aria-expanded": directory && hasChildren ? nodeExpanded : undefined,
++          "data-fastfigure-tree-path": path,
++          style: {
++            ...(elementProps.style || {}),
++            display: "flex",
++            alignItems: "center",
++            justifyContent: "space-between",
++            gap: 8,
++            width: "100%",
++            minWidth: 0,
++            padding: "6px 8px",
++            borderRadius: "var(--mantine-radius-sm)",
++            background: selected ? "var(--mantine-primary-color-light)" : "transparent",
++            color: "inherit",
++            cursor: busy ? "default" : movable ? "grab" : "pointer",
+           },
+         },
+         React.createElement(
+-          Button,
++          Text,
+           {
+-            variant: selected ? "filled" : "subtle",
++            component: "span",
+             size: "xs",
+-            fullWidth: true,
+-            disabled: inactive,
+-            justify: "space-between",
+-            onClick: () =>
+-              kind === "csv" ? assetApi.selectCsv(asset.path) : assetApi.selectImage(asset.path),
++            style: {
++              minWidth: 0,
++              overflow: "hidden",
++              textOverflow: "ellipsis",
++              whiteSpace: "nowrap",
++            },
+           },
+-          React.createElement(Text, { component: "span" }, projectPathName(asset.path)),
+-          React.createElement(Text, { component: "span", c: "dimmed" }, meta),
++          directory
++            ? `${hasChildren ? (nodeExpanded ? "▾" : "▸") : "•"} ${node.label}`
++            : node.label,
+         ),
+-        React.createElement(
++        !directory
++          ? React.createElement(
++              Text,
++              { component: "span", size: "xs", c: "dimmed", style: { flexShrink: 0 } },
++              treeNodeMeta(path, kind),
++            )
++          : null,
++      );
++
++      let menu = null;
++      if (directory && movable) {
++        menu = React.createElement(
++          Menu,
++          { position: "bottom-end", withinPortal: true },
++          React.createElement(
++            Menu.Target,
++            null,
++            React.createElement(
++              ActionIcon,
++              {
++                variant: "subtle",
++                size: "sm",
++                "aria-label": `${projectPathName(path)} 폴더 작업`,
++              },
++              "···",
++            ),
++          ),
++          React.createElement(
++            Menu.Dropdown,
++            null,
++            React.createElement(
++              Menu.Item,
++              {
++                onClick: () =>
++                  setMovePicker({
++                    path,
++                    directory: projectParentPath(path),
++                  }),
++              },
++              "이동…",
++            ),
++            !trashed
++              ? React.createElement(
++                  Menu.Item,
++                  {
++                    onClick: () =>
++                      requestProjectNodeMove(path, PROJECT_TRASH_DIRECTORY),
++                  },
++                  "휴지통으로 이동",
++                )
++              : null,
++          ),
++        );
++      } else if (!directory && kind) {
++        menu = React.createElement(
+           Menu,
+           { position: "bottom-end", withinPortal: true },
+           React.createElement(
+@@ -737,7 +886,7 @@
+               {
+                 variant: "subtle",
+                 size: "sm",
+-                "aria-label": `${projectPathName(asset.path)} 작업`,
++                "aria-label": `${projectPathName(path)} 작업`,
+               },
+               "···",
+             ),
+@@ -747,7 +896,7 @@
+             null,
+             React.createElement(
+               Menu.Item,
+-              { onClick: () => assetApi.download(asset.path) },
++              { onClick: () => assetApi.download(path) },
+               "다운로드",
+             ),
+             movable
+@@ -756,130 +905,32 @@
+                   {
+                     onClick: () =>
+                       setMovePicker({
+-                        path: asset.path,
+-                        directory: projectParentPath(asset.path),
++                        path,
++                        directory: projectParentPath(path),
+                       }),
+                   },
+                   "이동…",
+                 )
+               : null,
+-            movable
++            movable && !trashed
+               ? React.createElement(
+                   Menu.Item,
+                   {
+                     onClick: () =>
+-                      requestProjectNodeMove(asset.path, PROJECT_TRASH_DIRECTORY),
++                      requestProjectNodeMove(path, PROJECT_TRASH_DIRECTORY),
+                   },
+                   "휴지통으로 이동",
+                 )
+               : null,
+           ),
+-        ),
+-      );
+-    };
+-    const directoryNode = (path) => {
+-      const selected = state.assetSelection === "directory" && state.assetPath === path;
+-      const movable = assetApi.movable(path);
+-      const childDirectories = directories.filter(
+-        (candidate) => candidate !== path && projectParentPath(candidate) === path,
+-      );
+-      const childAssets = [
+-        ...snapshot.data
+-          .filter((asset) => projectParentPath(asset.path) === path)
+-          .map((asset) => assetRow(asset, "csv")),
+-        ...snapshot.images
+-          .filter((asset) => projectParentPath(asset.path) === path)
+-          .map((asset) => assetRow(asset, "image")),
+-      ];
+-      const open = expanded.has(path);
++        );
++      }
++
+       return React.createElement(
+-        Stack,
+-        {
+-          key: path,
+-          gap: 2,
+-          draggable: movable,
+-          onDragStart: (event) => {
+-            if (!movable) return event.preventDefault();
+-            dragNodeRef.current = { path };
+-            event.dataTransfer.effectAllowed = "move";
+-            event.dataTransfer.setData("text/plain", path);
+-          },
+-          onDragEnd: () => {
+-            dragNodeRef.current = null;
+-          },
+-          onDragOver: (event) => allowTreeFolderDrop(event, path),
+-          onDrop: (event) => dropOnTreeFolder(event, path),
+-        },
+-        React.createElement(
+-          Group,
+-          { gap: 2, wrap: "nowrap" },
+-          React.createElement(
+-            Button,
+-            {
+-              variant: selected ? "filled" : "subtle",
+-              size: "xs",
+-              fullWidth: true,
+-              justify: "flex-start",
+-              "aria-expanded": open,
+-              onClick: () => {
+-                setLastDirectory(path);
+-                assetApi.selectDirectory(path);
+-                toggleExpanded(path);
+-              },
+-            },
+-            `${open ? "▾" : "▸"} ${path === "/assets" ? "/assets" : projectPathName(path)}`,
+-          ),
+-          movable
+-            ? React.createElement(
+-                Menu,
+-                { position: "bottom-end", withinPortal: true },
+-                React.createElement(
+-                  Menu.Target,
+-                  null,
+-                  React.createElement(
+-                    ActionIcon,
+-                    {
+-                      variant: "subtle",
+-                      size: "sm",
+-                      "aria-label": `${projectPathName(path)} 폴더 작업`,
+-                    },
+-                    "···",
+-                  ),
+-                ),
+-                React.createElement(
+-                  Menu.Dropdown,
+-                  null,
+-                  React.createElement(
+-                    Menu.Item,
+-                    {
+-                      onClick: () =>
+-                        setMovePicker({
+-                          path,
+-                          directory: projectParentPath(path),
+-                        }),
+-                    },
+-                    "이동…",
+-                  ),
+-                  React.createElement(
+-                    Menu.Item,
+-                    {
+-                      onClick: () =>
+-                        requestProjectNodeMove(path, PROJECT_TRASH_DIRECTORY),
+-                    },
+-                    "휴지통으로 이동",
+-                  ),
+-                ),
+-              )
+-            : null,
+-        ),
+-        open
+-          ? React.createElement(
+-              Stack,
+-              { gap: 2, pl: "md" },
+-              ...childDirectories.map(directoryNode),
+-              ...childAssets,
+-            )
+-          : null,
++        Group,
++        { gap: 2, wrap: "nowrap", style: { width: "100%" } },
++        React.createElement(Box, { style: { flex: 1, minWidth: 0 } }, row),
++        menu,
+       );
+     };
+     const visibleSlots = snapshot.slots
+@@ -952,30 +1003,6 @@
+       await runLifecycleTask("importing", "ASSET_TREE_DROP", () =>
+         assetApi.importToSlot(files[0], slot.id, chooseTreeImportPlan));
+     };
+-    const allowTreeFolderDrop = (event, path) => {
+-      if (dataTransferHasFiles(event.dataTransfer)) {
+-        if (assetApi.isTrashed(path)) return false;
+-        return allowExternalFileDrop(event);
+-      }
+-      const source = dragNodeRef.current?.path;
+-      if (!source || source === path) return false;
+-      event.preventDefault();
+-      event.stopPropagation();
+-      event.dataTransfer.dropEffect = "move";
+-      return true;
+-    };
+-    const dropOnTreeFolder = (event, path) => {
+-      if (dataTransferHasFiles(event.dataTransfer))
+-        return importExternalFilesToDirectory(event, path);
+-      const source =
+-        dragNodeRef.current?.path || event.dataTransfer.getData("text/plain");
+-      dragNodeRef.current = null;
+-      if (!source || source === path) return;
+-      event.preventDefault();
+-      event.stopPropagation();
+-      requestProjectNodeMove(source, path);
+-    };
+-
+     return React.createElement(
+       Stack,
+       { gap: "xs", px: "md", pb: "md" },
+@@ -1156,20 +1183,31 @@
+           : null,
+       ),
+       treeImportCollisionModal,
+-      directoryNode("/assets"),
++      React.createElement(Tree, {
++        data: assetTreeData,
++        tree: assetTreeController,
++        levelOffset: "md",
++        expandOnClick: false,
++        selectOnClick: false,
++        allowRangeSelection: false,
++        onDragDrop: moveProjectTreeNode,
++        allowDrop: allowProjectTreeDrop,
++        renderNode: renderProjectTreeNode,
++        "data-fastfigure-project-tree": "assets",
++      }),
+       React.createElement(
+         Button,
+         {
+           variant: "subtle",
+           size: "xs",
+           fullWidth: true,
+           justify: "flex-start",
+-          "aria-expanded": expanded.has("/slots"),
+-          onClick: () => toggleExpanded("/slots"),
++          "aria-expanded": slotsExpanded,
++          onClick: () => setSlotsExpanded((value) => !value),
+         },
+-        `${expanded.has("/slots") ? "▾" : "▸"} /slots`,
++        `${slotsExpanded ? "▾" : "▸"} /slots`,
+       ),
+-      expanded.has("/slots")
++      slotsExpanded
+         ? React.createElement(
+             Stack,
+             { gap: 2, pl: "md" },
+@@ -2029,6 +2067,113 @@
+     );
+   }
+ 
++  function FastFigureSettingsModal({ title, overlay, onClose, children }) {
++    const [height, setHeight] = useState(null);
++    const resizeRef = useRef(null);
++    useEffect(
++      () => () => {
++        resizeRef.current = null;
++        document.body.style.userSelect = "";
++        document.body.style.cursor = "";
++      },
++      [],
++    );
++    const startResize = (event) => {
++      const dialog = event.currentTarget.closest?.('[role="dialog"]');
++      if (!dialog) return;
++      resizeRef.current = {
++        pointerId: event.pointerId,
++        startY: event.clientY,
++        startHeight: dialog.getBoundingClientRect().height,
++      };
++      event.currentTarget.setPointerCapture?.(event.pointerId);
++      document.body.style.userSelect = "none";
++      document.body.style.cursor = "ns-resize";
++      event.preventDefault();
++    };
++    const moveResize = (event) => {
++      const drag = resizeRef.current;
++      if (!drag || drag.pointerId !== event.pointerId) return;
++      const minHeight = 240;
++      const maxHeight = Math.max(minHeight, window.innerHeight - 24);
++      setHeight(
++        Math.max(
++          minHeight,
++          Math.min(maxHeight, drag.startHeight + event.clientY - drag.startY),
++        ),
++      );
++    };
++    const stopResize = (event) => {
++      if (resizeRef.current?.pointerId !== event.pointerId) return;
++      event.currentTarget.releasePointerCapture?.(event.pointerId);
++      resizeRef.current = null;
++      document.body.style.userSelect = "";
++      document.body.style.cursor = "";
++    };
++    return React.createElement(
++      Modal,
++      {
++        opened: true,
++        onClose,
++        title,
++        size: fastFigureTheme.other.settingsModalSize,
++        "data-fastfigure-overlay": overlay,
++        styles: {
++          content: {
++            height: height ?? undefined,
++            maxHeight: "calc(100dvh - 24px)",
++            display: "flex",
++            flexDirection: "column",
++          },
++          body: {
++            flex: "1 1 auto",
++            minHeight: 0,
++            overflowY: "auto",
++            display: "flex",
++            flexDirection: "column",
++          },
++        },
++      },
++      children,
++      React.createElement(
++        Box,
++        {
++          role: "separator",
++          "aria-orientation": "horizontal",
++          "aria-label": `${title} 창 높이 조절`,
++          onPointerDown: startResize,
++          onPointerMove: moveResize,
++          onPointerUp: stopResize,
++          onPointerCancel: stopResize,
++          "data-fastfigure-modal-resize": overlay,
++          style: {
++            position: "sticky",
++            bottom: 0,
++            flexShrink: 0,
++            width: "100%",
++            height: 24,
++            marginTop: "auto",
++            cursor: "ns-resize",
++            touchAction: "none",
++            display: "grid",
++            placeItems: "center",
++            borderTop: "1px solid var(--mantine-color-default-border)",
++            background: "var(--mantine-color-body)",
++            zIndex: 1,
++          },
++        },
++        React.createElement(Box, {
++          w: 42,
++          h: 4,
++          style: {
++            borderRadius: 99,
++            background: "var(--mantine-primary-color-filled)",
++          },
++        }),
++      ),
++    );
++  }
++
+   function FastFigureLabelOverlay() {
+     const state = useAppState();
+     const previewRef = useRef(null);
+@@ -2082,13 +2227,11 @@
+     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-label" });
+ 
+     return React.createElement(
+-      Modal,
++      FastFigureSettingsModal,
+       {
+-        opened: true,
+         onClose: close,
+         title: "레이블",
+-        size: fastFigureTheme.other.settingsModalSize,
+-        "data-fastfigure-overlay": "label",
++        overlay: "label",
+       },
+       React.createElement(
+         Stack,
+@@ -2267,13 +2410,11 @@
+     const slotMode = targetMode === "slot";
+ 
+     return React.createElement(
+-      Modal,
++      FastFigureSettingsModal,
+       {
+-        opened: true,
+         onClose: close,
+         title: "캡션",
+-        size: fastFigureTheme.other.settingsModalSize,
+-        "data-fastfigure-overlay": "caption",
++        overlay: "caption",
+       },
+       React.createElement(
+         Stack,
+@@ -2431,13 +2572,11 @@
+       );
+ 
+     return React.createElement(
+-      Modal,
++      FastFigureSettingsModal,
+       {
+-        opened: true,
+         onClose: close,
+         title: "프린트 / 내보내기",
+-        size: fastFigureTheme.other.settingsModalSize,
+-        "data-fastfigure-overlay": "print",
++        overlay: "print",
+       },
+       React.createElement(
+         Stack,
+@@ -2515,10 +2654,8 @@
+   function FastFigureLayoutOverlay() {
+     const state = useAppState();
+     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
+-    const [previewWidth, setPreviewWidth] = useState(600);
+     const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(600);
+     const previewFrameRef = useRef(null);
+-    const previewResizeRef = useRef(null);
+     useEffect(() => {
+       if (state.overlay !== "layout") setLayoutSelection(new Set());
+     }, [state.overlay]);
+@@ -2570,37 +2707,14 @@
+     const changeZoom = (value) =>
+       layoutApi.setZoom(clamp(value, 100, 50, 200));
+     const commitZoom = () => layoutApi.commitZoom();
+-    const startPreviewResize = (event) => {
+-      if (busy) return;
+-      previewResizeRef.current = {
+-        pointerId: event.pointerId,
+-        startY: event.clientY,
+-        startWidth: previewWidth,
+-      };
+-      event.currentTarget.setPointerCapture?.(event.pointerId);
+-      event.preventDefault();
+-    };
+-    const movePreviewResize = (event) => {
+-      const drag = previewResizeRef.current;
+-      if (!drag || drag.pointerId !== event.pointerId) return;
+-      const deltaY = event.clientY - drag.startY;
+-      setPreviewWidth(clamp(drag.startWidth + deltaY * style.aspect, 600, 360, 900));
+-    };
+-    const stopPreviewResize = (event) => {
+-      if (previewResizeRef.current?.pointerId !== event.pointerId) return;
+-      event.currentTarget.releasePointerCapture?.(event.pointerId);
+-      previewResizeRef.current = null;
+-    };
+     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-layout" });
+ 
+     return React.createElement(
+-      Modal,
++      FastFigureSettingsModal,
+       {
+-        opened: true,
+         onClose: close,
+         title: "레이아웃",
+-        size: fastFigureTheme.other.settingsModalSize,
+-        "data-fastfigure-overlay": "layout",
++        overlay: "layout",
+       },
+       React.createElement(
+         Stack,
+@@ -2726,7 +2840,7 @@
+           {
+             ref: previewFrameRef,
+             style: {
+-              width: previewWidth,
++              width: 600,
+               maxWidth: "100%",
+               marginInline: "auto",
+             },
+@@ -2741,6 +2855,7 @@
+                 boxSizing: "border-box",
+                 width: "100%",
+                 height: previewGeometry.height,
++                aspectRatio: `${style.aspect} / 1`,
+                 gridTemplateColumns: `repeat(${layout.gridCols}, minmax(0, 1fr))`,
+                 gridTemplateRows: `repeat(${layout.gridRows}, minmax(0, 1fr))`,
+                 gap: previewGeometry.gap,
+@@ -2786,22 +2901,6 @@
+               );
+             }),
+           ),
+-          React.createElement(Box, {
+-            role: "separator",
+-            "aria-orientation": "horizontal",
+-            "aria-label": "레이아웃 미리보기 크기 조절",
+-            onPointerDown: startPreviewResize,
+-            onPointerMove: movePreviewResize,
+-            onPointerUp: stopPreviewResize,
+-            onPointerCancel: stopPreviewResize,
+-            w: "100%",
+-            h: 10,
+-            style: {
+-              cursor: "ns-resize",
+-              touchAction: "none",
+-              borderTop: "1px solid var(--mantine-color-default-border)",
+-            },
+-          }),
+         ),
+         React.createElement(
+           Group,
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,6 +1,6 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.33-wip";
++      const APP_BUILD = "1.1.34-wip";
+       const PROJECT_OBJECT_PATHS = Object.freeze({
+         project: "meta",
+         layout: "layout",
+@@ -3105,6 +3105,7 @@
+           sourceSlotId: source.id,
+           targetSlotId: target.id,
+         });
++        updateGraphView();
+         return true;
+       }
+       function clearSlotDragState() {
+@@ -5787,7 +5788,7 @@
+       }
+       function movableProjectNode(path) {
+         let match = path ? projectVfs.resolve(path) : null;
+-        if (!match || projectVfs.isTrashed(path)) return false;
++        if (!match) return false;
+         if (match.kind === "directory") return !projectVfs.isFixedDirectory(path);
+         return true;
+       }

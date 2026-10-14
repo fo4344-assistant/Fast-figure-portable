@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.33-wip";
+      const APP_BUILD = "1.1.34-wip";
       const PROJECT_OBJECT_PATHS = Object.freeze({
         project: "meta",
         layout: "layout",
@@ -3105,6 +3105,7 @@
           sourceSlotId: source.id,
           targetSlotId: target.id,
         });
+        updateGraphView();
         return true;
       }
       function clearSlotDragState() {
@@ -5787,7 +5788,7 @@
       }
       function movableProjectNode(path) {
         let match = path ? projectVfs.resolve(path) : null;
-        if (!match || projectVfs.isTrashed(path)) return false;
+        if (!match) return false;
         if (match.kind === "directory") return !projectVfs.isFixedDirectory(path);
         return true;
       }

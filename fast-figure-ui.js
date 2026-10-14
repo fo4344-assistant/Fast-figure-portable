@@ -31,8 +31,10 @@
     Text,
     TextInput,
     Textarea,
+    Tree,
     UnstyledButton,
     createTheme,
+    useTree,
   } = MantineCore;
   const { useCallback, useEffect, useRef, useState, useSyncExternalStore } = React;
   const FAST_FIGURE_SETTINGS_MODAL_SIZE = "min(96vw, 1320px)";
@@ -572,7 +574,10 @@
     const assetApi = window.FastFigureApi.assets;
     const snapshot = assetApi.readTree();
     const selectedSlotId = window.FastFigureApi.slots.readSelected()?.id;
-    const [expanded, setExpanded] = useState(() => new Set(["/assets", "/slots"]));
+    const assetTreeController = useTree({
+      initialExpandedState: { "/assets": true },
+    });
+    const [slotsExpanded, setSlotsExpanded] = useState(true);
     const [lastDirectory, setLastDirectory] = useState("/assets");
     const [folderDialog, setFolderDialog] = useState({
       opened: false,
@@ -628,18 +633,7 @@
         status(`휴지통 비우기 오류: ${error.message}`);
       }
     };
-    const rewriteExpandedAfterMove = (source, destination) => {
-      setExpanded((current) => {
-        const next = new Set();
-        current.forEach((path) => {
-          next.add(
-            projectPathInDirectory(path, source)
-              ? `${destination}${path.slice(source.length)}`
-              : path,
-          );
-        });
-        return next;
-      });
+    const rewriteLastDirectoryAfterMove = (source, destination) => {
       setLastDirectory((current) =>
         projectPathInDirectory(current, source)
           ? `${destination}${current.slice(source.length)}`
@@ -651,7 +645,7 @@
       try {
         const result = assetApi.move(plan, useUniqueName);
         if (plan.kind === "directory" && !result.trashed)
-          rewriteExpandedAfterMove(plan.path, result.path);
+          rewriteLastDirectoryAfterMove(plan.path, result.path);
         setMovePicker(null);
         setMoveConfirm(null);
       } catch (error) {
@@ -672,14 +666,6 @@
         status(`프로젝트 항목 이동 오류: ${error.message}`);
       }
     };
-    const toggleExpanded = (path) => {
-      setExpanded((current) => {
-        const next = new Set(current);
-        if (next.has(path)) next.delete(path);
-        else next.add(path);
-        return next;
-      });
-    };
     const csvReferenceCount = (id) =>
       snapshot.charts.reduce(
         (count, chart) => count + chart.csvReferences.filter((csvId) => csvId === id).length,
@@ -687,46 +673,166 @@
       );
     const imageReferenceCount = (id) =>
       snapshot.slots.filter((slot) => slot.imageId === id).length;
-    const assetRow = (asset, kind) => {
-      const inactive = assetApi.isTrashed(asset.path);
-      const selected = state.assetSelection === kind && state.assetPath === asset.path;
-      const movable = assetApi.movable(asset.path);
-      const meta =
-        kind === "csv"
-          ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${csvReferenceCount(asset.id)}`
-          : `참조 ${imageReferenceCount(asset.id)}`;
-      return React.createElement(
-        Group,
+    const dataByPath = new Map(
+      snapshot.data.map((asset) => [asset.path, { kind: "csv", asset }]),
+    );
+    snapshot.images.forEach((asset) =>
+      dataByPath.set(asset.path, { kind: "image", asset }),
+    );
+    const directorySet = new Set(directories);
+    const treeNodeForDirectory = (path) => ({
+      value: path,
+      label: path === "/assets" ? "/assets" : projectPathName(path),
+      kind: "directory",
+      children: [
+        ...directories
+          .filter((candidate) => candidate !== path && projectParentPath(candidate) === path)
+          .map(treeNodeForDirectory),
+        ...snapshot.data
+          .filter((asset) => projectParentPath(asset.path) === path)
+          .map((asset) => ({
+            value: asset.path,
+            label: projectPathName(asset.path),
+            kind: "csv",
+          })),
+        ...snapshot.images
+          .filter((asset) => projectParentPath(asset.path) === path)
+          .map((asset) => ({
+            value: asset.path,
+            label: projectPathName(asset.path),
+            kind: "image",
+          })),
+      ],
+    });
+    const assetTreeData = [treeNodeForDirectory("/assets")];
+    const treeNodeKind = (path) =>
+      directorySet.has(path) ? "directory" : dataByPath.get(path)?.kind || null;
+    const treeNodeMeta = (path, kind) => {
+      const asset = dataByPath.get(path)?.asset;
+      if (!asset) return "";
+      return kind === "csv"
+        ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${csvReferenceCount(asset.id)}`
+        : `참조 ${imageReferenceCount(asset.id)}`;
+    };
+    const allowProjectTreeDrop = ({ draggedNode, targetNode, position }) =>
+      !busy &&
+      position === "inside" &&
+      directorySet.has(targetNode) &&
+      assetApi.movable(draggedNode);
+    const moveProjectTreeNode = (payload) => {
+      if (!allowProjectTreeDrop(payload)) return;
+      requestProjectNodeMove(payload.draggedNode, payload.targetNode);
+    };
+    const renderProjectTreeNode = ({
+      node,
+      expanded: nodeExpanded,
+      hasChildren,
+      tree,
+      elementProps,
+    }) => {
+      const path = node.value;
+      const kind = treeNodeKind(path);
+      const directory = kind === "directory";
+      const movable = assetApi.movable(path);
+      const trashed = assetApi.isTrashed(path);
+      const selected = state.assetPath === path && state.assetSelection === kind;
+      const originalClick = elementProps.onClick;
+      const originalDragStart = elementProps.onDragStart;
+      const originalDragOver = elementProps.onDragOver;
+      const originalDragLeave = elementProps.onDragLeave;
+      const originalDrop = elementProps.onDrop;
+      const originalDragEnd = elementProps.onDragEnd;
+      const selectNode = (event) => {
+        originalClick?.(event);
+        if (busy || !kind) return;
+        if (directory) {
+          setLastDirectory(path);
+          assetApi.selectDirectory(path);
+          if (hasChildren) tree.toggleExpanded(path);
+        } else if (kind === "csv") assetApi.selectCsv(path);
+        else if (kind === "image") assetApi.selectImage(path);
+      };
+      const startTreeDrag = (event) => {
+        if (busy || !movable) return event.preventDefault();
+        dragNodeRef.current = { path };
+        originalDragStart?.(event);
+        if (!event.defaultPrevented) event.dataTransfer.effectAllowed = "all";
+      };
+      const finishTreeDrag = (event) => {
+        originalDragEnd?.(event);
+        dragNodeRef.current = null;
+      };
+      const treeDragOver = (event) => {
+        if (dataTransferHasFiles(event.dataTransfer)) {
+          if (!directory || trashed) return false;
+          return allowExternalFileDrop(event);
+        }
+        return originalDragOver?.(event);
+      };
+      const treeDrop = (event) => {
+        if (dataTransferHasFiles(event.dataTransfer)) {
+          if (!directory || trashed) return false;
+          return importExternalFilesToDirectory(event, path);
+        }
+        return originalDrop?.(event);
+      };
+      const row = React.createElement(
+        UnstyledButton,
         {
-          key: `${kind}:${asset.path}`,
-          gap: 2,
-          wrap: "nowrap",
-          draggable: movable,
-          onDragStart: (event) => {
-            if (!movable) return event.preventDefault();
-            dragNodeRef.current = { path: asset.path };
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", asset.path);
-          },
-          onDragEnd: () => {
-            dragNodeRef.current = null;
+          ...elementProps,
+          type: "button",
+          disabled: busy,
+          onClick: selectNode,
+          onDragStart: startTreeDrag,
+          onDragOver: treeDragOver,
+          onDragLeave: originalDragLeave,
+          onDrop: treeDrop,
+          onDragEnd: finishTreeDrag,
+          "aria-expanded": directory && hasChildren ? nodeExpanded : undefined,
+          "data-fastfigure-tree-path": path,
+          style: {
+            ...(elementProps.style || {}),
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+            width: "100%",
+            minWidth: 0,
+            padding: "6px 8px",
+            borderRadius: "var(--mantine-radius-sm)",
+            background: selected ? "var(--mantine-primary-color-light)" : "transparent",
+            color: "inherit",
+            cursor: busy ? "default" : movable ? "grab" : "pointer",
           },
         },
         React.createElement(
-          Button,
+          Text,
           {
-            variant: selected ? "filled" : "subtle",
+            component: "span",
             size: "xs",
-            fullWidth: true,
-            disabled: inactive,
-            justify: "space-between",
-            onClick: () =>
-              kind === "csv" ? assetApi.selectCsv(asset.path) : assetApi.selectImage(asset.path),
+            style: {
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            },
           },
-          React.createElement(Text, { component: "span" }, projectPathName(asset.path)),
-          React.createElement(Text, { component: "span", c: "dimmed" }, meta),
+          directory
+            ? `${hasChildren ? (nodeExpanded ? "▾" : "▸") : "•"} ${node.label}`
+            : node.label,
         ),
-        React.createElement(
+        !directory
+          ? React.createElement(
+              Text,
+              { component: "span", size: "xs", c: "dimmed", style: { flexShrink: 0 } },
+              treeNodeMeta(path, kind),
+            )
+          : null,
+      );
+
+      let menu = null;
+      if (directory && movable) {
+        menu = React.createElement(
           Menu,
           { position: "bottom-end", withinPortal: true },
           React.createElement(
@@ -737,7 +843,7 @@
               {
                 variant: "subtle",
                 size: "sm",
-                "aria-label": `${projectPathName(asset.path)} 작업`,
+                "aria-label": `${projectPathName(path)} 폴더 작업`,
               },
               "···",
             ),
@@ -747,7 +853,50 @@
             null,
             React.createElement(
               Menu.Item,
-              { onClick: () => assetApi.download(asset.path) },
+              {
+                onClick: () =>
+                  setMovePicker({
+                    path,
+                    directory: projectParentPath(path),
+                  }),
+              },
+              "이동…",
+            ),
+            !trashed
+              ? React.createElement(
+                  Menu.Item,
+                  {
+                    onClick: () =>
+                      requestProjectNodeMove(path, PROJECT_TRASH_DIRECTORY),
+                  },
+                  "휴지통으로 이동",
+                )
+              : null,
+          ),
+        );
+      } else if (!directory && kind) {
+        menu = React.createElement(
+          Menu,
+          { position: "bottom-end", withinPortal: true },
+          React.createElement(
+            Menu.Target,
+            null,
+            React.createElement(
+              ActionIcon,
+              {
+                variant: "subtle",
+                size: "sm",
+                "aria-label": `${projectPathName(path)} 작업`,
+              },
+              "···",
+            ),
+          ),
+          React.createElement(
+            Menu.Dropdown,
+            null,
+            React.createElement(
+              Menu.Item,
+              { onClick: () => assetApi.download(path) },
               "다운로드",
             ),
             movable
@@ -756,130 +905,32 @@
                   {
                     onClick: () =>
                       setMovePicker({
-                        path: asset.path,
-                        directory: projectParentPath(asset.path),
+                        path,
+                        directory: projectParentPath(path),
                       }),
                   },
                   "이동…",
                 )
               : null,
-            movable
+            movable && !trashed
               ? React.createElement(
                   Menu.Item,
                   {
                     onClick: () =>
-                      requestProjectNodeMove(asset.path, PROJECT_TRASH_DIRECTORY),
+                      requestProjectNodeMove(path, PROJECT_TRASH_DIRECTORY),
                   },
                   "휴지통으로 이동",
                 )
               : null,
           ),
-        ),
-      );
-    };
-    const directoryNode = (path) => {
-      const selected = state.assetSelection === "directory" && state.assetPath === path;
-      const movable = assetApi.movable(path);
-      const childDirectories = directories.filter(
-        (candidate) => candidate !== path && projectParentPath(candidate) === path,
-      );
-      const childAssets = [
-        ...snapshot.data
-          .filter((asset) => projectParentPath(asset.path) === path)
-          .map((asset) => assetRow(asset, "csv")),
-        ...snapshot.images
-          .filter((asset) => projectParentPath(asset.path) === path)
-          .map((asset) => assetRow(asset, "image")),
-      ];
-      const open = expanded.has(path);
+        );
+      }
+
       return React.createElement(
-        Stack,
-        {
-          key: path,
-          gap: 2,
-          draggable: movable,
-          onDragStart: (event) => {
-            if (!movable) return event.preventDefault();
-            dragNodeRef.current = { path };
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", path);
-          },
-          onDragEnd: () => {
-            dragNodeRef.current = null;
-          },
-          onDragOver: (event) => allowTreeFolderDrop(event, path),
-          onDrop: (event) => dropOnTreeFolder(event, path),
-        },
-        React.createElement(
-          Group,
-          { gap: 2, wrap: "nowrap" },
-          React.createElement(
-            Button,
-            {
-              variant: selected ? "filled" : "subtle",
-              size: "xs",
-              fullWidth: true,
-              justify: "flex-start",
-              "aria-expanded": open,
-              onClick: () => {
-                setLastDirectory(path);
-                assetApi.selectDirectory(path);
-                toggleExpanded(path);
-              },
-            },
-            `${open ? "▾" : "▸"} ${path === "/assets" ? "/assets" : projectPathName(path)}`,
-          ),
-          movable
-            ? React.createElement(
-                Menu,
-                { position: "bottom-end", withinPortal: true },
-                React.createElement(
-                  Menu.Target,
-                  null,
-                  React.createElement(
-                    ActionIcon,
-                    {
-                      variant: "subtle",
-                      size: "sm",
-                      "aria-label": `${projectPathName(path)} 폴더 작업`,
-                    },
-                    "···",
-                  ),
-                ),
-                React.createElement(
-                  Menu.Dropdown,
-                  null,
-                  React.createElement(
-                    Menu.Item,
-                    {
-                      onClick: () =>
-                        setMovePicker({
-                          path,
-                          directory: projectParentPath(path),
-                        }),
-                    },
-                    "이동…",
-                  ),
-                  React.createElement(
-                    Menu.Item,
-                    {
-                      onClick: () =>
-                        requestProjectNodeMove(path, PROJECT_TRASH_DIRECTORY),
-                    },
-                    "휴지통으로 이동",
-                  ),
-                ),
-              )
-            : null,
-        ),
-        open
-          ? React.createElement(
-              Stack,
-              { gap: 2, pl: "md" },
-              ...childDirectories.map(directoryNode),
-              ...childAssets,
-            )
-          : null,
+        Group,
+        { gap: 2, wrap: "nowrap", style: { width: "100%" } },
+        React.createElement(Box, { style: { flex: 1, minWidth: 0 } }, row),
+        menu,
       );
     };
     const visibleSlots = snapshot.slots
@@ -952,30 +1003,6 @@
       await runLifecycleTask("importing", "ASSET_TREE_DROP", () =>
         assetApi.importToSlot(files[0], slot.id, chooseTreeImportPlan));
     };
-    const allowTreeFolderDrop = (event, path) => {
-      if (dataTransferHasFiles(event.dataTransfer)) {
-        if (assetApi.isTrashed(path)) return false;
-        return allowExternalFileDrop(event);
-      }
-      const source = dragNodeRef.current?.path;
-      if (!source || source === path) return false;
-      event.preventDefault();
-      event.stopPropagation();
-      event.dataTransfer.dropEffect = "move";
-      return true;
-    };
-    const dropOnTreeFolder = (event, path) => {
-      if (dataTransferHasFiles(event.dataTransfer))
-        return importExternalFilesToDirectory(event, path);
-      const source =
-        dragNodeRef.current?.path || event.dataTransfer.getData("text/plain");
-      dragNodeRef.current = null;
-      if (!source || source === path) return;
-      event.preventDefault();
-      event.stopPropagation();
-      requestProjectNodeMove(source, path);
-    };
-
     return React.createElement(
       Stack,
       { gap: "xs", px: "md", pb: "md" },
@@ -1156,7 +1183,18 @@
           : null,
       ),
       treeImportCollisionModal,
-      directoryNode("/assets"),
+      React.createElement(Tree, {
+        data: assetTreeData,
+        tree: assetTreeController,
+        levelOffset: "md",
+        expandOnClick: false,
+        selectOnClick: false,
+        allowRangeSelection: false,
+        onDragDrop: moveProjectTreeNode,
+        allowDrop: allowProjectTreeDrop,
+        renderNode: renderProjectTreeNode,
+        "data-fastfigure-project-tree": "assets",
+      }),
       React.createElement(
         Button,
         {
@@ -1164,12 +1202,12 @@
           size: "xs",
           fullWidth: true,
           justify: "flex-start",
-          "aria-expanded": expanded.has("/slots"),
-          onClick: () => toggleExpanded("/slots"),
+          "aria-expanded": slotsExpanded,
+          onClick: () => setSlotsExpanded((value) => !value),
         },
-        `${expanded.has("/slots") ? "▾" : "▸"} /slots`,
+        `${slotsExpanded ? "▾" : "▸"} /slots`,
       ),
-      expanded.has("/slots")
+      slotsExpanded
         ? React.createElement(
             Stack,
             { gap: 2, pl: "md" },
@@ -2029,6 +2067,113 @@
     );
   }
 
+  function FastFigureSettingsModal({ title, overlay, onClose, children }) {
+    const [height, setHeight] = useState(null);
+    const resizeRef = useRef(null);
+    useEffect(
+      () => () => {
+        resizeRef.current = null;
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+      },
+      [],
+    );
+    const startResize = (event) => {
+      const dialog = event.currentTarget.closest?.('[role="dialog"]');
+      if (!dialog) return;
+      resizeRef.current = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startHeight: dialog.getBoundingClientRect().height,
+      };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "ns-resize";
+      event.preventDefault();
+    };
+    const moveResize = (event) => {
+      const drag = resizeRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const minHeight = 240;
+      const maxHeight = Math.max(minHeight, window.innerHeight - 24);
+      setHeight(
+        Math.max(
+          minHeight,
+          Math.min(maxHeight, drag.startHeight + event.clientY - drag.startY),
+        ),
+      );
+    };
+    const stopResize = (event) => {
+      if (resizeRef.current?.pointerId !== event.pointerId) return;
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      resizeRef.current = null;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+    return React.createElement(
+      Modal,
+      {
+        opened: true,
+        onClose,
+        title,
+        size: fastFigureTheme.other.settingsModalSize,
+        "data-fastfigure-overlay": overlay,
+        styles: {
+          content: {
+            height: height ?? undefined,
+            maxHeight: "calc(100dvh - 24px)",
+            display: "flex",
+            flexDirection: "column",
+          },
+          body: {
+            flex: "1 1 auto",
+            minHeight: 0,
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+          },
+        },
+      },
+      children,
+      React.createElement(
+        Box,
+        {
+          role: "separator",
+          "aria-orientation": "horizontal",
+          "aria-label": `${title} 창 높이 조절`,
+          onPointerDown: startResize,
+          onPointerMove: moveResize,
+          onPointerUp: stopResize,
+          onPointerCancel: stopResize,
+          "data-fastfigure-modal-resize": overlay,
+          style: {
+            position: "sticky",
+            bottom: 0,
+            flexShrink: 0,
+            width: "100%",
+            height: 24,
+            marginTop: "auto",
+            cursor: "ns-resize",
+            touchAction: "none",
+            display: "grid",
+            placeItems: "center",
+            borderTop: "1px solid var(--mantine-color-default-border)",
+            background: "var(--mantine-color-body)",
+            zIndex: 1,
+          },
+        },
+        React.createElement(Box, {
+          w: 42,
+          h: 4,
+          style: {
+            borderRadius: 99,
+            background: "var(--mantine-primary-color-filled)",
+          },
+        }),
+      ),
+    );
+  }
+
   function FastFigureLabelOverlay() {
     const state = useAppState();
     const previewRef = useRef(null);
@@ -2082,13 +2227,11 @@
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-label" });
 
     return React.createElement(
-      Modal,
+      FastFigureSettingsModal,
       {
-        opened: true,
         onClose: close,
         title: "레이블",
-        size: fastFigureTheme.other.settingsModalSize,
-        "data-fastfigure-overlay": "label",
+        overlay: "label",
       },
       React.createElement(
         Stack,
@@ -2267,13 +2410,11 @@
     const slotMode = targetMode === "slot";
 
     return React.createElement(
-      Modal,
+      FastFigureSettingsModal,
       {
-        opened: true,
         onClose: close,
         title: "캡션",
-        size: fastFigureTheme.other.settingsModalSize,
-        "data-fastfigure-overlay": "caption",
+        overlay: "caption",
       },
       React.createElement(
         Stack,
@@ -2431,13 +2572,11 @@
       );
 
     return React.createElement(
-      Modal,
+      FastFigureSettingsModal,
       {
-        opened: true,
         onClose: close,
         title: "프린트 / 내보내기",
-        size: fastFigureTheme.other.settingsModalSize,
-        "data-fastfigure-overlay": "print",
+        overlay: "print",
       },
       React.createElement(
         Stack,
@@ -2515,10 +2654,8 @@
   function FastFigureLayoutOverlay() {
     const state = useAppState();
     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
-    const [previewWidth, setPreviewWidth] = useState(600);
     const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(600);
     const previewFrameRef = useRef(null);
-    const previewResizeRef = useRef(null);
     useEffect(() => {
       if (state.overlay !== "layout") setLayoutSelection(new Set());
     }, [state.overlay]);
@@ -2570,37 +2707,14 @@
     const changeZoom = (value) =>
       layoutApi.setZoom(clamp(value, 100, 50, 200));
     const commitZoom = () => layoutApi.commitZoom();
-    const startPreviewResize = (event) => {
-      if (busy) return;
-      previewResizeRef.current = {
-        pointerId: event.pointerId,
-        startY: event.clientY,
-        startWidth: previewWidth,
-      };
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-      event.preventDefault();
-    };
-    const movePreviewResize = (event) => {
-      const drag = previewResizeRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      const deltaY = event.clientY - drag.startY;
-      setPreviewWidth(clamp(drag.startWidth + deltaY * style.aspect, 600, 360, 900));
-    };
-    const stopPreviewResize = (event) => {
-      if (previewResizeRef.current?.pointerId !== event.pointerId) return;
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-      previewResizeRef.current = null;
-    };
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-layout" });
 
     return React.createElement(
-      Modal,
+      FastFigureSettingsModal,
       {
-        opened: true,
         onClose: close,
         title: "레이아웃",
-        size: fastFigureTheme.other.settingsModalSize,
-        "data-fastfigure-overlay": "layout",
+        overlay: "layout",
       },
       React.createElement(
         Stack,
@@ -2726,7 +2840,7 @@
           {
             ref: previewFrameRef,
             style: {
-              width: previewWidth,
+              width: 600,
               maxWidth: "100%",
               marginInline: "auto",
             },
@@ -2741,6 +2855,7 @@
                 boxSizing: "border-box",
                 width: "100%",
                 height: previewGeometry.height,
+                aspectRatio: `${style.aspect} / 1`,
                 gridTemplateColumns: `repeat(${layout.gridCols}, minmax(0, 1fr))`,
                 gridTemplateRows: `repeat(${layout.gridRows}, minmax(0, 1fr))`,
                 gap: previewGeometry.gap,
@@ -2786,22 +2901,6 @@
               );
             }),
           ),
-          React.createElement(Box, {
-            role: "separator",
-            "aria-orientation": "horizontal",
-            "aria-label": "레이아웃 미리보기 크기 조절",
-            onPointerDown: startPreviewResize,
-            onPointerMove: movePreviewResize,
-            onPointerUp: stopPreviewResize,
-            onPointerCancel: stopPreviewResize,
-            w: "100%",
-            h: 10,
-            style: {
-              cursor: "ns-resize",
-              touchAction: "none",
-              borderTop: "1px solid var(--mantine-color-default-border)",
-            },
-          }),
         ),
         React.createElement(
           Group,
