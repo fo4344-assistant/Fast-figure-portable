@@ -394,8 +394,8 @@ Main:
     or
       call AddGraphObject();
     or
-      with allowCommit \in BOOLEAN do
-        call ImportAssetBatch(allowCommit);
+      with batchCommitChoice \in BOOLEAN do
+        call ImportAssetBatch(batchCommitChoice);
       end with;
     or
       with requestedMoveSource \in MoveSources do

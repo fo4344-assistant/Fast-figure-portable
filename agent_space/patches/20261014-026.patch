@@ -1,0 +1,47 @@
+diff --git a/verification/FastFigureInteractionCore.tla b/verification/FastFigureInteractionCore.tla
+--- a/verification/FastFigureInteractionCore.tla
++++ b/verification/FastFigureInteractionCore.tla
+@@ -394,8 +394,8 @@
+     or
+       call AddGraphObject();
+     or
+-      with allowCommit \in BOOLEAN do
+-        call ImportAssetBatch(allowCommit);
++      with batchCommitChoice \in BOOLEAN do
++        call ImportAssetBatch(batchCommitChoice);
+       end with;
+     or
+       with requestedMoveSource \in MoveSources do
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -18,10 +18,10 @@
+       "closure_review": "agent_space/reviews/review-20261014-014-sourcescript-closure-r23.md"
+     },
+     "verification-model": {
+-      "revision": 22,
+-      "status": "current",
+-      "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:26967673803430e2bb68cdcdd792ceb6f28a5c220f2fdfbf1664e8e4f6b72f26",
++      "revision": 23,
++      "status": "current",
++      "path_rule": "verification/**/*.{tla,cfg}",
++      "fingerprint": "sha256:7538e8cfa04a5d51f992fc00eb1b43ff1c16fd42a851c6d88d2cd06ed8b37ae3",
+       "derived_from": {
+         "source-script": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
+         "pseudocode": "sha256:466498ff54b90c97d378e010fdd6e3bae4d142c6c5e10751cd1e16bd0f40ef1f"
+diff --git a/agent_space/patches/20261014-026.md b/agent_space/patches/20261014-026.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/patches/20261014-026.md
+@@ -0,0 +1,10 @@
++# 20261014-026 — Repair batch-import PlusCal symbol collision in verification r23
++
++## 원인
++Interaction Core의 main `with allowCommit` 변수와 `ImportAssetBatch(allowCommit)` procedure parameter가 PlusCal translator에서 중복 symbol로 생성되었다. translation은 끝났지만 SANY semantic analysis가 multiply-defined symbol로 실패했다.
++
++## 변경
++main 쪽 nondeterministic 선택 변수만 `batchCommitChoice`로 변경한다. procedure parameter, 상태 전이, atomicity assertion, command ownership 의미는 변경하지 않는다.
++
++## 기각
++batch atomicity transition 제거 또는 parameter를 전역 상태로 승격하면 검증 의미를 줄이거나 불필요한 상태를 만든다.
