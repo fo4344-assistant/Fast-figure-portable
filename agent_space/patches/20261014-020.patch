@@ -1,0 +1,181 @@
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -26,25 +26,25 @@
+         "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
+         "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17"
+       },
+-      "tlc": "pending",
+-      "validation_review": null
+-    },
+-    "source-code": {
+-      "revision": 24,
+-      "status": "stale",
+-      "paths": [
+-        "Fast-figure.html",
+-        "fast-figure-ui.js",
+-        "fast-figure.js",
+-        "scripts/build-portable.py"
+-      ],
+-      "fingerprint": "sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f",
+-      "derived_from": {
+-        "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
+-        "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17",
+-        "verification-model": "sha256:c3be19be754757a5b3423f0e939cebf841f0aa9c7532ee2d231263d57aa6d75f"
+-      },
+-      "validation_review": null
++      "tlc": "passed",
++      "validation_review": "agent_space/reviews/review-20261014-007-verification-r17.md"
++    },
++    "source-code": {
++      "revision": 24,
++      "status": "current",
++      "paths": [
++        "Fast-figure.html",
++        "fast-figure-ui.js",
++        "fast-figure.js",
++        "scripts/build-portable.py"
++      ],
++      "fingerprint": "sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f",
++      "derived_from": {
++        "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
++        "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17",
++        "verification-model": "sha256:c3be19be754757a5b3423f0e939cebf841f0aa9c7532ee2d231263d57aa6d75f"
++      },
++      "validation_review": "agent_space/reviews/review-20261014-008-source-code-r24.md"
+     },
+     "pseudocode": {
+       "revision": 6,
+diff --git a/agent_space/reviews/review-20261014-007-verification-r17.md b/agent_space/reviews/review-20261014-007-verification-r17.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261014-007-verification-r17.md
+@@ -0,0 +1,37 @@
++# Verification validation review — r17
++
++## 대상
++
++- Source Script: r20
++- pseudocode: r6
++- verification-model: r17
++- verification fingerprint: `sha256:c3be19be754757a5b3423f0e939cebf841f0aa9c7532ee2d231263d57aa6d75f`
++
++## 변경 모델과 검증 증거
++
++이번 revision에서 실제 내용이 바뀐 verification file은 `FastFigureInteractionCore.tla`의 abstraction 설명이다. 상태 transition 자체는 기존 entering-trash reference detach / leaving-trash non-restore / trash direct-slot connection 거부를 그대로 사용한다.
++
++push-trigger TLA workflow run `38518601964`에서 변경된 Interaction Core job `verify-interaction-core`는 PlusCal translate, SANY parse, TLC model check를 모두 성공했다.
++
++같은 run의 Slot Core job은 이 review 작성 시점에 중복 model check가 계속 실행 중이지만, 현재 `FastFigureSlotCore.tla`와 `FastFigureSlotCore.cfg`는 직전 성공 push workflow run `38394480809`의 입력과 Git blob SHA가 각각 완전히 동일하다.
++
++- FastFigureSlotCore.tla: `198507ee7835d8ea5f13efe7f330e465faeea2ab`
++- FastFigureSlotCore.cfg: `63d3955949b0ba85dd137f0a1ab2f3a67194113b`
++
++run `38394480809`의 `verify-slot-core`는 translate, parse, TLC model check를 모두 성공했다. 따라서 변경되지 않은 동일 Slot Core 모델에 대해 새 상태 의미가 추가되지 않았으며, 이번 revision의 변경된 검증 대상은 현재 push에서 다시 model check되었다.
++
++## abstraction 범위
++
++- Layout local selection은 UI-local state이므로 ProjectObject verification state에 추가하지 않는다.
++- dashboard projection invalidation은 renderer effect이며 project transition이 아니므로 verification state에 추가하지 않는다.
++- removed graph-reference count와 reset image-slot count는 existing entering-trash transition의 pre/post state에서 결정적으로 파생되는 mutation result metadata다. 이를 별도 independent state로 추가하지 않는다.
++
++## 판정
++
++verification-model r17은 현재 Source Script r20 / pseudocode r6의 검증 대상 상태 의미를 충족한다.
++
++- changed Interaction Core: current push TLC passed.
++- unchanged Slot Core: exact same TLA/CFG blobs의 prior push TLC passed.
++- verification-model r17: **passed**.
++
++현재 run의 unchanged Slot Core 중복 job이 나중에 다른 결과를 내면 이 판정을 다시 열고 원인을 조사해야 한다.
+diff --git a/agent_space/reviews/review-20261014-008-source-code-r24.md b/agent_space/reviews/review-20261014-008-source-code-r24.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261014-008-source-code-r24.md
+@@ -0,0 +1,58 @@
++# Source Code validation review — r24 / plan-014 completion
++
++## 대상
++
++- Source Script r20
++- pseudocode r6
++- verification-model r17
++- Source Code r24
++- Source Code fingerprint: `sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f`
++
++## 구현 결과
++
++### Layout selection
++
++`FastFigureLayoutOverlay`의 selection은 React component-local Set으로 유지된다.
++
++- slot click은 propagation을 차단하고 해당 slot을 toggle한다.
++- merge/split/explicit clear control은 selection을 먼저 소비하고 parent background clear에 의해 상쇄되지 않는다.
++- settings content의 non-slot click은 selection을 clear한다.
++- 이 경로는 FFPX ProjectObject를 변경하지 않는다.
++
++### dashboard projection invalidation
++
++`PROJECT_NODE_MOVED`와 `PROJECT_TRASH_EMPTIED` mutation owner가 실제 `removedGraphReferenceCount`와 `resetImageSlotCount`를 payload에 기록한다.
++
++`dispatchDashboardAffectingEvent`는 `appFSM.send()`가 모든 region을 동기 처리하고 반환한 뒤 projection effect를 한 번 판정한다.
++
++- 실제 rendered reference detach: FULL_DASHBOARD.
++- path-only move / reference 없는 trash empty: NONE.
++- SLOTS_SWAPPED: FULL_DASHBOARD.
++- renderer effect는 project mutation이나 재귀 appFSM event를 발생시키지 않는다.
++
++## push-trigger 검증 결과
++
++WIP implementation commit `94a0891cab60b704417c8236faac8cec9f0e9c6e` 기준:
++
++- Fast Figure regression run `38519371995`: **success**.
++- Build distribution run `38519372023`: **success**.
++- build workflow가 distribution artifact commit `03477a0b895dc646b5c530cf06722552c90c1ba1`을 main에 반영했다.
++
++초기 development-layer run `38519372013`은 구현 오류가 아니라 Source Code fingerprint 계산에서 JS locale sort를 사용한 메타데이터 오류 때문에 실패했다. checker의 Python path ordering으로 fingerprint를 바로잡은 commit `ce526e7872fb23d1d80d13ce7c11e6fcd1f480d3`의 push-trigger Development layer versions run `38519480783`은 **success**했다.
++
++verification 근거는 `review-20261014-007-verification-r17.md`에 기록했다.
++
++## 완료 판정
++
++plan-014의 A~E는 다음을 만족한다.
++
++- Source Script r20 closed.
++- pseudocode r6 current.
++- verification r17 passed.
++- Source Code r24가 current lineage를 가리킨다.
++- Layout background deselection regression 통과.
++- trash reference detach 후 stale dashboard regression 통과.
++- distribution build 성공.
++- development-layer version checker 성공.
++
++따라서 plan-014 구현 범위는 완료로 판정한다. 후속 plan-015는 이 상태를 기준으로 FFPX EFSM과 인터페이스 FSM 책임 분리를 진행한다.
+diff --git a/agent_space/patches/20261014-020.md b/agent_space/patches/20261014-020.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/patches/20261014-020.md
+@@ -0,0 +1,23 @@
++# 20261014-020 — Close plan-014 verification and Source Code r24
++
++## 변경
++
++- verification-model r17의 TLC 상태를 passed로 확정하고 validation review를 연결한다.
++- Source Code r24를 current로 전환하고 source-code validation review를 연결한다.
++- application source, pseudocode, verification model 자체는 이 patch에서 변경하지 않는다.
++
++## 검증 근거
++
++- changed Interaction Core: push-run 38518601964의 verify-interaction-core TLC success.
++- unchanged Slot Core: 현재 TLA/CFG blob이 prior successful push-run 38394480809 입력과 동일.
++- Fast Figure regression: run 38519371995 success.
++- distribution build: run 38519372023 success.
++- corrected development-layer metadata: run 38519480783 success.
++
++## 선택 이유
++
++변경된 verification input은 현재 push에서 다시 검사하고, 완전히 동일한 unchanged model은 blob identity와 직전 push TLC 결과로 추적한다. 긴 unchanged Slot Core 중복 실행이 끝날 때까지 변경된 기능 검증과 이미 확보된 동일-input 결과를 무의미하게 보류하지 않는다.
++
++## 주의
++
++run 38518601964의 unchanged Slot Core 중복 job이 이후 실패하면 verification r17 판정을 다시 열어야 한다.
