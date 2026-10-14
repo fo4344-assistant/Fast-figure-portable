@@ -75,3 +75,34 @@ FFPX 프로젝트 오브젝트의 권위는 `activeProject`와 해당 project co
 ## 4. 완료 판정
 
 FFPX 영속 프로젝트 객체의 권위 상태와 전이가 프로젝트 EFSM에 있고, UI 상호작용 상태와 전이가 인터페이스 FSM에 있으며, renderer는 두 상태로부터 단방향 projection을 만든다. 모든 관련 기능이 기존 의미와 저장 파일 호환성을 보존하고, 문서·패치·계층 lineage·필수 검증이 모두 일치한 경우에만 완료다.
+---
+
+## 5. 실행 결과 — 완료
+
+이 계획은 Source Code r29 closure 기준으로 완료되었다.
+
+실제 완료 상태:
+
+- F 단계 책임 감사: `review-20261014-009-fsm-responsibility-audit.md`.
+- G 단계 Source Script 책임 분리: Source Script r23 closed.
+- H 단계 PlusCal 번역: pseudocode r10 current.
+- I 단계 verification: verification r24 current, TLC는 정책상 선택 검증이므로 `pending`을 유지하며 구현/완료 gate로 사용하지 않았다.
+- J1~J3: `ProjectStateMachine/projectEFSM`, `InterfaceStateMachine/interfaceFSM`, orchestration facade와 result-driven reconciliation을 Source Code r29에 구현했다.
+- K 단계: r29 browser regression, distribution build, development-layer version check를 통과했고 `review-20261014-017-source-code-r29.md`에서 Source Code를 current로 닫았다.
+
+### 실행 중 정정된 계획 전제
+
+원래 §2 I와 §3.6, §4에는 TLC 실행을 사실상 필수 단계로 취급하거나 GitHub Actions를 사용하지 않는다는 당시 전제가 남아 있다. 이후 정책 원문을 다시 확인한 결과 `source-script-policy.md`는 TLA+/TLC를 명시적으로 선택적 verification으로 정의하며 Source Code 구현의 필수 gate로 두지 않는다. 또한 사용자는 이후 push-trigger 방식의 GitHub Actions 사용을 허용했다.
+
+따라서 원래 문구를 지워 이력을 덮어쓰지 않고, 실제 실행에서는 다음 기준을 적용했다.
+
+- Source Script → PlusCal pseudocode는 필수 권위 계층으로 유지.
+- verification/TLC는 수행 여부와 결과를 별도로 기록하되 Source Code 구현을 막지 않음.
+- push-trigger regression/build/version check는 허용된 검증 수단으로 사용.
+- TLC `pending`을 `passed`로 가장하지 않음.
+
+### 최종 판정
+
+FFPX 영속 ProjectObject mutation은 projectEFSM이 소유하고, UI/runtime interaction state는 interfaceFSM이 소유한다. project commit 결과는 interface reconciliation을 거친 뒤 renderer projection으로 전달되며, renderer와 interface state는 별도 persistent authority를 만들지 않는다. Source Code r29 validation review의 public mutation coverage에서 누락된 project action과 dispatch route는 0개다.
+
+따라서 plan-015는 완료로 판정한다.
