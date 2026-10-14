@@ -3,8 +3,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   sourceScript: "r18",
   plusCal: "r4",
   verificationModel: "r15",
-  sourceCode: "r21",
-  appBuild: "1.1.41-wip",
+  sourceCode: "r22",
+  appBuild: "1.1.42-wip",
 });
 (async () => {
   const api = window.FastFigureApi;
@@ -773,14 +773,19 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         appFSM.send("TOGGLE_OVERLAY", { overlay: overlayName, source: "regression" });
         await tick();
         const overlay = document.querySelector(`[data-fastfigure-overlay='${overlayName}']`);
-        const modal = overlay?.closest(".mantine-Modal-content") || overlay;
+        const modal = overlay?.querySelector?.("[data-modal-content]") || null;
         const handle = overlay?.querySelector(
           `[data-fastfigure-modal-resize='${overlayName}']`,
         );
         check(!!modal && !!handle, `${overlayName} modal resize elements absent`);
+        const centeredBefore = modal.getBoundingClientRect();
+        check(
+          Math.abs((centeredBefore.left + centeredBefore.right) / 2 - window.innerWidth / 2) < 2,
+          `${overlayName} modal is not horizontally centered`,
+        );
         widths.push(modal.getBoundingClientRect().width);
         const before = modal.getBoundingClientRect();
-        const maxHeight = Math.max(240, window.innerHeight - 24);
+        const maxHeight = Math.max(240, window.innerHeight - before.top - 12);
         const delta = before.height < maxHeight - 40 ? 60 : -60;
         handle.dispatchEvent(
           new MouseEvent("mousedown", {
@@ -826,6 +831,14 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(
           Math.abs(after.width - before.width) < 1.5,
           `${overlayName} modal resize changed width`,
+        );
+        check(
+          Math.abs(after.top - before.top) < 1.5,
+          `${overlayName} modal resize moved the top edge`,
+        );
+        check(
+          Math.abs((after.left + after.right) / 2 - window.innerWidth / 2) < 2,
+          `${overlayName} modal resize lost horizontal centering`,
         );
         appFSM.send("CLOSE_OVERLAY", { reason: "regression-modal-size" });
         await tick();

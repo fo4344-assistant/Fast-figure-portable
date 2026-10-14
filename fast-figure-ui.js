@@ -2076,7 +2076,7 @@
   }
 
   function FastFigureSettingsModal({ title, overlay, onClose, children }) {
-    const contentRef = useRef(null);
+    const modalRootRef = useRef(null);
     const resizeRef = useRef(null);
     const resizeListenersRef = useRef(null);
 
@@ -2094,27 +2094,43 @@
 
     useEffect(() => () => clearResizeListeners(), []);
 
+    const resolveModalContent = () =>
+      modalRootRef.current?.querySelector?.("[data-modal-content]") || null;
+
     const startResize = (event) => {
       if (event.button !== 0) return;
-      const content = contentRef.current;
+      const content = resolveModalContent();
       if (!content) return;
+
       clearResizeListeners();
+
+      const rect = content.getBoundingClientRect();
+      const inner = content.parentElement;
+      if (inner) {
+        inner.style.alignItems = "flex-start";
+        inner.style.paddingTop = `${rect.top}px`;
+        inner.style.paddingBottom = "0px";
+      }
+
       resizeRef.current = {
         startY: event.clientY,
-        startHeight: content.getBoundingClientRect().height,
+        startHeight: rect.height,
+        top: rect.top,
       };
+
       const move = (moveEvent) => {
         const drag = resizeRef.current;
         if (!drag) return;
         const minHeight = 240;
-        const maxHeight = Math.max(minHeight, window.innerHeight - 24);
+        const maxHeight = Math.max(minHeight, window.innerHeight - drag.top - 12);
         const nextHeight = Math.max(
           minHeight,
           Math.min(maxHeight, drag.startHeight + moveEvent.clientY - drag.startY),
         );
-        if (contentRef.current)
-          contentRef.current.style.setProperty("--modal-content-height", `${nextHeight}px`);
+        const currentContent = resolveModalContent();
+        currentContent?.style.setProperty("--modal-content-height", `${nextHeight}px`);
       };
+
       const end = () => clearResizeListeners();
       resizeListenersRef.current = { move, end };
       window.addEventListener("mousemove", move);
@@ -2125,73 +2141,69 @@
     };
 
     return React.createElement(
-      Modal.Root,
+      Modal,
       {
+        ref: modalRootRef,
         opened: true,
         onClose,
+        title,
+        centered: true,
         size: fastFigureTheme.other.settingsModalSize,
-      },
-      React.createElement(Modal.Overlay),
-      React.createElement(
-        Modal.Content,
-        {
-          ref: contentRef,
-          "data-fastfigure-overlay": overlay,
-          style: {
+        "data-fastfigure-overlay": overlay,
+        styles: {
+          content: {
             "--modal-content-height": "min(72dvh, 720px)",
             "--modal-content-max-height": "calc(100dvh - 24px)",
+          },
+          body: {
+            minHeight: 0,
             display: "flex",
             flexDirection: "column",
           },
         },
-        React.createElement(
-          Modal.Header,
-          null,
-          React.createElement(Modal.Title, null, title),
-          React.createElement(Modal.CloseButton),
-        ),
-        React.createElement(
-          Modal.Body,
-          {
-            style: {
-              flex: "1 1 auto",
-              minHeight: 0,
-              overflowY: "auto",
-              display: "flex",
-              flexDirection: "column",
-            },
+      },
+      React.createElement(
+        Box,
+        {
+          style: {
+            minHeight: 0,
+            flex: "1 1 auto",
           },
-          children,
-        ),
-        React.createElement(
-          Box,
-          {
-            role: "separator",
-            "aria-orientation": "horizontal",
-            "aria-label": `${title} 창 높이 조절`,
-            onMouseDown: startResize,
-            "data-fastfigure-modal-resize": overlay,
-            style: {
-              flexShrink: 0,
-              width: "100%",
-              height: 24,
-              cursor: "ns-resize",
-              userSelect: "none",
-              display: "grid",
-              placeItems: "center",
-              borderTop: "1px solid var(--mantine-color-default-border)",
-              background: "var(--mantine-color-body)",
-            },
+        },
+        children,
+      ),
+      React.createElement(
+        Box,
+        {
+          role: "separator",
+          "aria-orientation": "horizontal",
+          "aria-label": `${title} 창 높이 조절`,
+          onMouseDown: startResize,
+          "data-fastfigure-modal-resize": overlay,
+          style: {
+            position: "sticky",
+            bottom: 0,
+            flexShrink: 0,
+            width: "100%",
+            height: 24,
+            marginTop: 12,
+            cursor: "ns-resize",
+            userSelect: "none",
+            display: "grid",
+            placeItems: "center",
+            borderTop: "1px solid var(--mantine-color-default-border)",
+            background: "var(--mantine-color-body)",
+            zIndex: 1,
           },
-          React.createElement(Box, {
-            w: 42,
-            h: 4,
-            style: {
-              borderRadius: 99,
-              background: "var(--mantine-primary-color-filled)",
-            },
-          }),
-        ),
+        },
+        React.createElement(Box, {
+          w: 42,
+          h: 4,
+          style: {
+            borderRadius: 99,
+            background: "var(--mantine-primary-color-filled)",
+          },
+        }),
       ),
     );
   }
