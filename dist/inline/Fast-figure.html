@@ -10632,108 +10632,114 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
 
       function applyCaptionTextAction({ machine, payload }) {
-        machine.assertWritable("workspace","CAPTION_TEXT_INPUT");
-        let target=payload.target;
+        machine.assertWritable("captions","CAPTION_TEXT_INPUT");
+        machine.assertWritable("slots","CAPTION_TEXT_INPUT");
+        let candidate=projectClone(activeProject._state),
+          target=payload.target;
         if(target?.kind==="slot"){
-          let slot=slotAt(Number(target.id));
+          let slot=candidate.slots.find((item)=>item.id===Number(target.id));
           if(!slot)throw Error("캡션을 변경할 슬롯이 없습니다.");
           slot.caption=String(payload.text??"")||null;
         } else if(target?.kind==="global") {
-          activeProject.captionText=String(payload.text??"");
+          candidate.annotations.captions.text=String(payload.text??"");
         } else throw Error("캡션 변경 대상이 올바르지 않습니다.");
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
       }
       function applySlotCaptionsInsertedAction({ machine }) {
-        machine.assertWritable("workspace", "SLOT_CAPTIONS_INSERTED");
-        let inserted = slotCaptionSections()
-          .map((section) => [section.label, section.text].filter(Boolean).join(" "))
+        machine.assertWritable("captions","SLOT_CAPTIONS_INSERTED");
+        let inserted=slotCaptionSections()
+          .map((section)=>[section.label,section.text].filter(Boolean).join(" "))
           .join(" ");
-        if (!inserted) return;
-        activeProject.captionText += activeProject.captionText && !/\s$/.test(activeProject.captionText) ? ` ${inserted}` : inserted;
+        if(!inserted)return;
+        let candidate=projectClone(activeProject._state),
+          current=String(candidate.annotations.captions.text||"");
+        candidate.annotations.captions.text=
+          current+(current&&!/\s$/.test(current)?` ${inserted}`:inserted);
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
       }
       function applyDataObjectCreatedAction({ machine, payload }) {
-        machine.assertWritable("data", "DATA_OBJECT_CREATED");
-        machine.assertWritable("files", "DATA_OBJECT_CREATED");
-        let model = payload.model;
-        if (!model || activeProject.csvFiles.some((csv) => csv.id === model.id))
+        machine.assertWritable("data","DATA_OBJECT_CREATED");
+        machine.assertWritable("files","DATA_OBJECT_CREATED");
+        let model=payload.model;
+        if(!model||activeProject.csvFiles.some((csv)=>csv.id===model.id))
           throw Error(`CSV ID ${model?.id}가 중복되었습니다.`);
-        projectVfs.prepare(model, "csv");
-        activeProject.csvFiles.push(model);
-        activeProject.csvId = Math.max(activeProject.csvId, model.id + 1);
+        let candidate=projectClone(activeProject._state),
+          next=projectClone(model);
+        projectVfs.prepare(next,"csv",candidate);
+        candidate.assets.csvFiles.push(next);
+        candidate.nextId.csv=Math.max(candidate.nextId.csv,next.id+1);
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+        payload.csv=getProjectCsv(next.id);
       }
       function applyAssetObjectReplacedAction({ machine, payload }, kind) {
-        let image = kind === "image",
-          event = image ? "IMAGE_OBJECT_REPLACED" : "DATA_OBJECT_REPLACED",
-          scope = image ? "images" : "data",
-          collection = image ? activeProject.images : activeProject.csvFiles,
-          model = payload.model,
-          index = collection.findIndex((item) => item.id === model?.id),
-          previous = index >= 0 ? collection[index] : null;
-        machine.assertWritable(scope, event);
-        machine.assertWritable("files", event);
-        if (!previous || projectAssetPath(model) !== projectAssetPath(previous))
-          throw Error(`교체할 ${image ? "이미지" : "CSV"} 또는 참조 경로가 올바르지 않습니다.`);
-        if (image) model.settings = projectClone(previous.settings);
-        try {
-          let next = collection.map((item, itemIndex) => itemIndex === index ? model : item);
-          if (image) activeProject.images = next;
-          else activeProject.csvFiles = next;
-          validateProjectObject(activeProject, { requireSlots: true });
-        } catch (error) {
-          if (image) activeProject.images = collection;
-          else activeProject.csvFiles = collection;
-          throw error;
-        }
-        if (image) releaseProjectImageDisplayUrl(previous);
-        payload[image ? "image" : "csv"] = model;
+        let image=kind==="image",
+          event=image?"IMAGE_OBJECT_REPLACED":"DATA_OBJECT_REPLACED",
+          scope=image?"images":"data",
+          collection=image?activeProject.images:activeProject.csvFiles,
+          model=payload.model,
+          index=collection.findIndex((item)=>item.id===model?.id),
+          previous=index>=0?collection[index]:null;
+        machine.assertWritable(scope,event);
+        machine.assertWritable("files",event);
+        if(!previous||projectAssetPath(model)!==projectAssetPath(previous))
+          throw Error(`교체할 ${image?"이미지":"CSV"} 또는 참조 경로가 올바르지 않습니다.`);
+        let candidate=projectClone(activeProject._state),
+          next=projectClone(model),
+          candidateCollection=image?candidate.assets.images:candidate.assets.csvFiles;
+        if(image&&previous.settings)next.settings=projectClone(previous.settings);
+        candidateCollection[index]=next;
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+        if(image)releaseProjectImageDisplayUrl(previous);
+        payload[image?"image":"csv"]=image?getProjectImage(next.id):getProjectCsv(next.id);
       }
       function applyDataObjectReplacedAction(context) {
         applyAssetObjectReplacedAction(context, "csv");
       }
       function applyDataObjectDeletedAction({ machine, payload }) {
-        machine.assertWritable("data", "DATA_OBJECT_DELETED");
-        machine.assertWritable("charts", "DATA_OBJECT_DELETED");
-        if (payload.candidate) {
-          activeProject.initialize(validateProjectObjectState(payload.candidate, { requireSlots: true }));
-          return;
+        machine.assertWritable("data","DATA_OBJECT_DELETED");
+        machine.assertWritable("charts","DATA_OBJECT_DELETED");
+        let candidate=payload.candidate
+          ?projectClone(payload.candidate)
+          :projectClone(activeProject._state),
+          csvId=Number(payload.csvId);
+        if(!payload.candidate){
+          removeProjectAssetReferences(new Set([csvId]),new Set(),candidate);
+          candidate.assets.csvFiles=candidate.assets.csvFiles.filter((item)=>item.id!==csvId);
         }
-        activeProject.csvFiles = activeProject.csvFiles.filter((item) => item.id !== payload.csvId);
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
       }
       function applyImageObjectCreatedAction({ machine, payload }) {
-        machine.assertWritable("images", "IMAGE_OBJECT_CREATED");
-        machine.assertWritable("files", "IMAGE_OBJECT_CREATED");
-        let model = payload.model;
-        if (!model || activeProject.images.some((image) => image.id === model.id))
+        machine.assertWritable("images","IMAGE_OBJECT_CREATED");
+        machine.assertWritable("files","IMAGE_OBJECT_CREATED");
+        let model=payload.model;
+        if(!model||activeProject.images.some((image)=>image.id===model.id))
           throw Error(`이미지 ID ${model?.id}가 중복되었습니다.`);
-        projectVfs.prepare(model, "image");
-        activeProject.images.push(model);
-        activeProject.imageId = Math.max(activeProject.imageId, model.id + 1);
+        let candidate=projectClone(activeProject._state),
+          next=projectClone(model);
+        projectVfs.prepare(next,"image",candidate);
+        candidate.assets.images.push(next);
+        candidate.nextId.image=Math.max(candidate.nextId.image,next.id+1);
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+        payload.image=getProjectImage(next.id);
       }
       function applyImageObjectReplacedAction(context) {
         applyAssetObjectReplacedAction(context, "image");
       }
       function applyImageObjectDeletedAction({ machine, payload }) {
-        machine.assertWritable("images", "IMAGE_OBJECT_DELETED");
-        machine.assertWritable("slots", "IMAGE_OBJECT_DELETED");
-        machine.assertWritable("charts", "IMAGE_OBJECT_DELETED");
-        let previous = getProjectImage(payload.imageId);
-        if (payload.candidate) {
-          activeProject.initialize(validateProjectObjectState(payload.candidate, { requireSlots: true }));
-          releaseProjectImageDisplayUrl(previous);
-          return;
+        machine.assertWritable("images","IMAGE_OBJECT_DELETED");
+        machine.assertWritable("slots","IMAGE_OBJECT_DELETED");
+        machine.assertWritable("charts","IMAGE_OBJECT_DELETED");
+        let imageId=Number(payload.imageId),
+          previous=getProjectImage(imageId),
+          candidate=payload.candidate
+            ?projectClone(payload.candidate)
+            :projectClone(activeProject._state);
+        if(!payload.candidate){
+          removeProjectAssetReferences(new Set(),new Set([imageId]),candidate);
+          candidate.assets.images=candidate.assets.images.filter((item)=>item.id!==imageId);
         }
-        if (activeProject.slots.some((slot) => slot.imageId === payload.imageId))
-          throw Error("참조 슬롯을 초기화하지 않은 이미지는 삭제할 수 없습니다.");
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
         releaseProjectImageDisplayUrl(previous);
-        activeProject.images = activeProject.images.filter((item) => item.id !== payload.imageId);
-      }
-      function detachSlotChart(slot) {
-        let chartId = slot?.chart;
-        if (!Number.isInteger(chartId)) return null;
-        slot.chart = null;
-        if (!activeProject.slots.some((item) => item !== slot && item.chart === chartId)) {
-          activeProject.charts = activeProject.charts.filter((chart) => chart.id !== chartId);
-        }
-        return chartId;
       }
       function applySlotsResetAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOTS_RESET");
@@ -10796,45 +10802,53 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         payload.image=getProjectImage(image.id);
       }
       function applySlotDataConnectedAction({ machine, payload }) {
-        machine.assertWritable("slots", "SLOT_DATA_CONNECTED");
-        machine.assertWritable("charts", "SLOT_DATA_CONNECTED");
-        machine.assertWritable("editor", "SLOT_DATA_CONNECTED");
-        let slot = slotAt(payload.slotId),
-          csv = getProjectCsv(payload.csvId);
-        if (!slot || (!payload.replaceSlotContent && slot.contentType === "image") || !csv)
+        machine.assertWritable("slots","SLOT_DATA_CONNECTED");
+        machine.assertWritable("charts","SLOT_DATA_CONNECTED");
+        machine.assertWritable("editor","SLOT_DATA_CONNECTED");
+        let slot=slotAt(payload.slotId),csv=getProjectCsv(payload.csvId);
+        if(!slot||(!payload.replaceSlotContent&&slot.contentType==="image")||!csv)
           throw Error("데이터를 연결할 슬롯 또는 CSV가 없습니다.");
-        if (slot.chart && !payload.replaceSlotContent && getChart(slot.chart)?.editor?.editable === false)
+        if(slot.chart&&!payload.replaceSlotContent&&getChart(slot.chart)?.editor?.editable===false)
           throw Error("편집 가능 토글을 켠 뒤 CSV를 추가하세요.");
-        let previous = payload.replaceSlotContent
-          ? {
-              charts: activeProject.charts,
-              chartId: activeProject.chartId,
-              slotChart: slot.chart,
-              slotImageId: slot.imageId,
-              slotContentType: slot.contentType,
-            }
-          : null;
-        try {
-          if (payload.replaceSlotContent) {
-            activeProject.charts = [...activeProject.charts];
-            detachSlotChart(slot);
-            slot.imageId = null;
-            slot.contentType = "graph";
-          }
-          payload.chart = connectDataToSlotModel(slot, csv.rows, csv.name, csv);
-          payload.clearGraphSelection = true;
-          if (payload.replaceSlotContent)
-            validateProjectObject(activeProject, { requireSlots: true });
-        } catch (error) {
-          if (previous) {
-            activeProject.charts = previous.charts;
-            activeProject.chartId = previous.chartId;
-            slot.chart = previous.slotChart;
-            slot.imageId = previous.slotImageId;
-            slot.contentType = previous.slotContentType;
-          }
-          throw error;
+
+        let candidate=projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let target=candidate.slots.find((item)=>item.id===slot.id),
+          candidateCsv=candidate.assets.csvFiles.find((item)=>item.id===csv.id);
+        if(payload.replaceSlotContent){
+          if(Number.isInteger(target.chart))
+            candidate.charts=candidate.charts.filter((chart)=>chart.id!==target.chart);
+          target.chart=null;
+          target.imageId=null;
+          target.contentType="graph";
         }
+        let chart=Number.isInteger(target.chart)
+          ?candidate.charts.find((item)=>item.id===target.chart)
+          :null;
+        if(chart?.editor?.editable===false)
+          throw Error("편집 가능 토글을 켠 뒤 CSV를 추가하세요.");
+        if(chart){
+          let selection=graphDataSelection(candidateCsv.rows,candidateCsv.headerLines,chart.editor);
+          chart.editor.x=selection.x;
+          chart.editor.y=selection.y;
+          chart.editor.objects=[
+            ...(Array.isArray(chart.editor.objects)?chart.editor.objects:[]),
+            baseGraphObject(chart,candidateCsv),
+          ];
+        } else {
+          chart=createChartModel({
+            id:candidate.nextId.chart++,
+            editor:defaultChartEditor(target,candidateCsv.rows,candidateCsv.headerLines),
+          });
+          chart.editor.objects=[baseGraphObject(chart,candidateCsv)];
+          candidate.charts.push(chart);
+          target.chart=chart.id;
+        }
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+        let committed=getChart(chart.id);
+        if(committed?.editor?.editable!==false)rebuildEditableGraph(committed);
+        payload.chart=committed;
+        payload.clearGraphSelection=true;
       }
       function applyGraphObjectsReplacedAction({ machine, payload }) {
         machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
@@ -10853,26 +10867,24 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         payload.chart=chart;
       }
       function applyChartLayoutChangedAction({ machine, payload }) {
-        machine.assertWritable("charts", "CHART_LAYOUT_CHANGED");
-        machine.assertWritable("editor", "CHART_LAYOUT_CHANGED");
-        let slot = slotAt(payload.slotId),
-          chart = slot?.chart ? getChart(slot.chart) : null;
-        if (
-          !slot ||
-          slot.contentType === "image" ||
-          !chart ||
-          chart.id !== payload.chartId
-        )
+        machine.assertWritable("charts","CHART_LAYOUT_CHANGED");
+        machine.assertWritable("editor","CHART_LAYOUT_CHANGED");
+        let slot=slotAt(payload.slotId),current=slot?.chart?getChart(slot.chart):null;
+        if(!slot||slot.contentType==="image"||!current||current.id!==payload.chartId)
           throw Error("전역 설정을 변경할 그래프 슬롯 또는 차트가 없습니다.");
-        if (chart.editor?.editable === false)
+        if(current.editor?.editable===false)
           throw Error("편집 가능 토글을 켠 뒤 설정을 변경하세요.");
-        if (!payload.globalSettings || typeof payload.globalSettings !== "object")
+        if(!payload.globalSettings||typeof payload.globalSettings!=="object")
           throw Error("적용할 그래프 전역 설정이 없습니다.");
-        chart.editor.title = String(payload.title || "");
-        chart.editor.globalSettings = projectClone(payload.globalSettings);
-        chart.graph.layout = layout(chart);
-        payload.chart = chart;
-        payload.layout = chart.graph.layout;
+        let candidate=projectClone(activeProject._state),
+          chart=candidate.charts.find((item)=>item.id===current.id);
+        chart.editor.title=String(payload.title||"");
+        chart.editor.globalSettings=projectClone(payload.globalSettings);
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+        let committed=getChart(current.id);
+        committed.graph.layout=layout(committed);
+        payload.chart=committed;
+        payload.layout=committed.graph.layout;
       }
       function applyChartModelReplacedAction({ machine, payload }) {
         machine.assertWritable("charts", "CHART_MODEL_REPLACED");
@@ -10900,9 +10912,12 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           throw Error("교체할 그래프 슬롯 또는 차트가 없습니다.");
         if (!chart.editor || chart.editor.editable === false)
           throw Error("편집 가능한 차트 모델이 아닙니다.");
-        rebuildEditableGraph(chart);
-        activeProject.charts[index] = chart;
-        payload.chart = chart;
+        let candidate=projectClone(activeProject._state),
+          next=projectClone(chart);
+        rebuildEditableGraph(next);
+        candidate.charts[index]=next;
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+        payload.chart=getChart(next.id);
       }
       function applySlotImageImportedAction({ machine, payload }) {
         machine.assertWritable("slots","SLOT_IMAGE_IMPORTED");
@@ -11015,20 +11030,22 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         payload.selectionHints = { reResolveSlotSelection: true, clearAssetSelection: true };
       }
       function applyProjectDirectoryCreatedAction({ machine, payload }) {
-        machine.assertWritable("files", "PROJECT_DIRECTORY_CREATED");
-        projectVfs.ensure(activeProject._state);
-        let parent = normalizeProjectPath(payload.parent || "/assets", { directory: true }),
-          rawName = String(payload.name || "").trim(),
-          name = projectCsvName(rawName, "");
-        if (parent !== "/" && !activeProject.fileSystem.directories.includes(parent))
+        machine.assertWritable("files","PROJECT_DIRECTORY_CREATED");
+        let parent=normalizeProjectPath(payload.parent||"/assets",{directory:true}),
+          rawName=String(payload.name||"").trim(),
+          name=projectCsvName(rawName,"");
+        if(parent!=="/"&&!activeProject.fileSystem.directories.includes(parent))
           throw Error(`상위 폴더 ${parent}가 없습니다.`);
-        if (!name || name !== rawName || /[\\/]/.test(rawName))
+        if(!name||name!==rawName||/[\\/]/.test(rawName))
           throw Error("폴더 이름이 올바르지 않습니다.");
-        let path = normalizeProjectPath(`${parent}/${name}`, { directory: true });
-        if (projectVfs.exists(path)) throw Error(`${path}가 이미 존재합니다.`);
-        activeProject.fileSystem.directories.push(path);
-        activeProject.fileSystem.directories.sort();
-        payload.path = path;
+        let path=normalizeProjectPath(`${parent}/${name}`,{directory:true}),
+          candidate=projectClone(activeProject._state);
+        projectVfs.ensure(candidate);
+        if(projectVfs.exists(path,candidate))throw Error(`${path}가 이미 존재합니다.`);
+        candidate.fileSystem.directories.push(path);
+        candidate.fileSystem.directories.sort();
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+        payload.path=path;
       }
       function projectAssetReferenceCount(csvIds, imageIds) {
         return activeProject.charts.reduce(
@@ -11045,7 +11062,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           removedGraphReferenceCount+=chart.editor.objects.length-objects.length;
           if(objects.length===chart.editor.objects.length)return;
           chart.editor.objects=objects;
-          if(chart.editor.editable!==false){
+          if(state===activeProject._state&&chart.editor.editable!==false){
             chart.graph.data=traces(chart);
             chart.graph.layout=layout(chart);
           }
@@ -11058,37 +11075,35 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return {removedGraphReferenceCount,resetImageSlotCount};
       }
       function applyProjectTrashEmptiedAction({ machine, payload }) {
-        machine.assertWritable("files", "PROJECT_TRASH_EMPTIED");
-        machine.assertWritable("data", "PROJECT_TRASH_EMPTIED");
-        machine.assertWritable("images", "PROJECT_TRASH_EMPTIED");
-        let csvFiles = activeProject.csvFiles.filter((csv) => projectVfs.isTrashed(projectAssetPath(csv))),
-          images = activeProject.images.filter((image) => projectVfs.isTrashed(projectAssetPath(image))),
-          directories = activeProject.fileSystem.directories.filter(
-            (path) => path !== PROJECT_TRASH_DIRECTORY && projectVfs.isTrashed(path),
-          ),
-          csvIds = new Set(csvFiles.map((csv) => csv.id)),
-          imageIds = new Set(images.map((image) => image.id));
-        let hasReferences = projectAssetReferenceCount(csvIds, imageIds) > 0;
-        if (hasReferences) {
-          machine.assertWritable("charts", "PROJECT_TRASH_EMPTIED");
-          machine.assertWritable("slots", "PROJECT_TRASH_EMPTIED");
-          machine.assertWritable("editor", "PROJECT_TRASH_EMPTIED");
+        machine.assertWritable("files","PROJECT_TRASH_EMPTIED");
+        machine.assertWritable("data","PROJECT_TRASH_EMPTIED");
+        machine.assertWritable("images","PROJECT_TRASH_EMPTIED");
+        let candidate=projectClone(activeProject._state),
+          csvFiles=candidate.assets.csvFiles.filter((csv)=>projectVfs.isTrashed(projectAssetPath(csv))),
+          images=candidate.assets.images.filter((image)=>projectVfs.isTrashed(projectAssetPath(image))),
+          directories=candidate.fileSystem.directories.filter(
+            (path)=>path!==PROJECT_TRASH_DIRECTORY&&projectVfs.isTrashed(path)),
+          csvIds=new Set(csvFiles.map((csv)=>csv.id)),
+          imageIds=new Set(images.map((image)=>image.id));
+        if(projectAssetReferenceCount(csvIds,imageIds)>0){
+          machine.assertWritable("charts","PROJECT_TRASH_EMPTIED");
+          machine.assertWritable("slots","PROJECT_TRASH_EMPTIED");
+          machine.assertWritable("editor","PROJECT_TRASH_EMPTIED");
         }
-        let removedReferences = removeProjectAssetReferences(csvIds, imageIds);
+        let removedReferences=removeProjectAssetReferences(csvIds,imageIds,candidate);
+        candidate.assets.csvFiles=candidate.assets.csvFiles.filter((csv)=>!csvIds.has(csv.id));
+        candidate.assets.images=candidate.assets.images.filter((image)=>!imageIds.has(image.id));
+        candidate.fileSystem.directories=candidate.fileSystem.directories.filter(
+          (path)=>path===PROJECT_TRASH_DIRECTORY||!projectVfs.isTrashed(path));
+        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
         images.forEach(releaseProjectImageDisplayUrl);
-        activeProject.csvFiles = activeProject.csvFiles.filter((csv) => !csvIds.has(csv.id));
-        activeProject.images = activeProject.images.filter((image) => !imageIds.has(image.id));
-        activeProject.fileSystem.directories = activeProject.fileSystem.directories.filter(
-          (path) => path === PROJECT_TRASH_DIRECTORY || !projectVfs.isTrashed(path),
-        );
-        payload.csvCount = csvFiles.length;
-        payload.imageCount = images.length;
-        payload.directoryCount = directories.length;
-        payload.removedGraphReferenceCount = removedReferences.removedGraphReferenceCount;
-        payload.resetImageSlotCount = removedReferences.resetImageSlotCount;
-        payload.removedReferenceCount =
-          payload.removedGraphReferenceCount + payload.resetImageSlotCount;
-        validateProjectObject(activeProject, { requireSlots: true });
+        payload.csvCount=csvFiles.length;
+        payload.imageCount=images.length;
+        payload.directoryCount=directories.length;
+        payload.removedGraphReferenceCount=removedReferences.removedGraphReferenceCount;
+        payload.resetImageSlotCount=removedReferences.resetImageSlotCount;
+        payload.removedReferenceCount=
+          payload.removedGraphReferenceCount+payload.resetImageSlotCount;
       }
       function applyProjectNodeMovedAction({ machine, payload }) {
         machine.assertWritable("files","PROJECT_NODE_MOVED");
