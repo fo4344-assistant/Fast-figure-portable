@@ -1,7 +1,7 @@
 ---- MODULE FastFigureApiUiPseudocode ----
 EXTENDS Naturals
 
-\* r18 PlusCal pseudocode for sourcescript/api_ui.py.
+\* Direct translation of sourcescript/api_ui.py.
 \* Collision/form/sidebar/drop-receiver values are UI-local and never project authority.
 
 CONSTANT NoValue
@@ -27,6 +27,74 @@ variables
   layoutSelection = {},
   result = NoValue,
   effect = NoValue;
+
+procedure SetProjectName(name)
+begin
+ProjectNameDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "PROJECT_NAME_CHANGED",
+    [name |-> NormalizeProjectName(name)]);
+ProjectNameReturn:
+  return;
+end procedure;
+
+procedure SetSlotContentType(slotId, contentType)
+begin
+SlotTypeDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "SLOT_TYPE_CHANGED",
+    [slotId |-> slotId, type |-> NormalizeSlotContentType(contentType)]);
+SlotTypeReturn:
+  return;
+end procedure;
+
+procedure ResetSlots(slotIds)
+begin
+SlotsResetDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "SLOTS_RESET",
+    [slotIds |-> slotIds]);
+SlotsResetReturn:
+  return;
+end procedure;
+
+procedure InsertEmptyImage(slotId)
+variables candidate = NoValue;
+begin
+EmptyImageBuild:
+  candidate := BuildEmptyImageAndSlotCandidate(slotId);
+EmptyImageDispatch:
+  if candidate # NoValue then
+    result := ApplicationDispatchProjectCommand(
+      "SLOT_IMAGE_IMPORTED",
+      [slotId |-> slotId, candidate |-> candidate]);
+  end if;
+EmptyImageReturn:
+  return;
+end procedure;
+
+procedure SetAppearancePalette(values)
+variables normalized = NoValue;
+begin
+AppearanceNormalize:
+  normalized := NormalizeAppearancePalette(values);
+AppearanceDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "APPEARANCE_CHANGED",
+    [palette |-> normalized]);
+AppearanceReturn:
+  return;
+end procedure;
+
+procedure ResetAppearancePalette()
+begin
+AppearanceResetDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "APPEARANCE_CHANGED",
+    [palette |-> DefaultAppearancePalette()]);
+AppearanceResetReturn:
+  return;
+end procedure;
 
 procedure SubscribeAppState(callback)
 begin
@@ -413,6 +481,29 @@ InitializeApp:
 Main:
   while TRUE do
     either
+      with name = NextProjectNameInput() do
+        call SetProjectName(name);
+      end with;
+    or
+      with slotId = NextSelectedSlotId(),
+           contentType = NextSlotContentType() do
+        call SetSlotContentType(slotId, contentType);
+      end with;
+    or
+      with slotIds = NextSlotResetIds() do
+        call ResetSlots(slotIds);
+      end with;
+    or
+      with slotId = NextEmptyImageTargetSlotId() do
+        call InsertEmptyImage(slotId);
+      end with;
+    or
+      with palette = NextAppearancePalette() do
+        call SetAppearancePalette(palette);
+      end with;
+    or
+      call ResetAppearancePalette();
+    or
       with dropEventId = NextDropEventId(),
            file = NextDroppedFile(),
            slotId = NextDropSlotId() do

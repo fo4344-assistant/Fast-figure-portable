@@ -1,0 +1,1077 @@
+diff --git a/pseudocode/api_ui.pcal b/pseudocode/api_ui.pcal
+--- a/pseudocode/api_ui.pcal
++++ b/pseudocode/api_ui.pcal
+@@ -1,418 +1,509 @@
+ ---- MODULE FastFigureApiUiPseudocode ----
+ EXTENDS Naturals
+ 
+-\* r18 PlusCal pseudocode for sourcescript/api_ui.py.
+-\* Collision/form/sidebar/drop-receiver values are UI-local and never project authority.
+-
+-CONSTANT NoValue
+-
+-(*
+---algorithm FastFigureApiUi
+-variables
+-  collisionDraft = NoValue,
+-  resolver = NoValue,
+-  preparedSlot = NoValue,
+-  lastPersistentCommand = NoValue,
+-  dragRuntimeActive = FALSE,
+-  dashboardDropReceiver = "unmounted",
+-  dashboardDropReceiverCount = 0,
+-  activeDropEventId = NoValue,
+-  lastHandledDropEventId = NoValue,
+-  sidebarWidth = 0,
+-  sidebarCollapsed = FALSE,
+-  settingsOverlayHeight = NoValue,
+-  settingsOverlayResizeStartY = NoValue,
+-  settingsOverlayResizeStartHeight = NoValue,
+-  settingsOverlayResizeActive = FALSE,
+-  layoutSelection = {},
+-  result = NoValue,
+-  effect = NoValue;
+-
+-procedure SubscribeAppState(callback)
+-begin
+-SubscribeExternalStore:
+-  result := RegisterInterfaceFsmSubscriber(callback);
+-SubscribeReturn:
+-  return;
+-end procedure;
+-
+-procedure ReadGraphData()
+-variables
+-  chart = NoValue,
+-  objects = <<>>,
+-  selectedIndex = NoValue,
+-  currentCsv = NoValue,
+-  objectCsv = NoValue,
+-  currentColumns = <<>>,
+-  objectColumns = <<>>;
+-begin
+-ReadGraphDataChart:
+-  chart := ResolveSelectedChartForRead();
+-ReadGraphDataObjects:
+-  if chart # NoValue then
+-    objects := chart.editor.objects;
+-  end if;
+-ReadGraphDataSelection:
+-  selectedIndex := ReadGraphObjectSelectionIndex();
+-ReadGraphDataCurrentCsv:
+-  currentCsv := ResolveCsvFromCurrentAssetSelection();
+-ReadGraphDataCurrentColumns:
+-  if currentCsv # NoValue then
+-    currentColumns := ColumnDefinitionsForCsv(currentCsv);
+-  end if;
+-ReadGraphDataObjectCsv:
+-  if ValidGraphObjectIndex(objects, selectedIndex) then
+-    objectCsv := ResolveProjectCsv(objects[selectedIndex].csvId);
+-  end if;
+-ReadGraphDataObjectColumns:
+-  if objectCsv # NoValue then
+-    objectColumns := ColumnDefinitionsForCsv(objectCsv);
+-  end if;
+-ReadGraphDataResult:
+-  result := [
+-    objects |-> objects,
+-    selectedIndex |-> selectedIndex,
+-    currentCsv |-> currentCsv,
+-    columns |-> currentColumns,
+-    objectColumns |-> objectColumns
+-  ];
+-ReadGraphDataReturn:
+-  return;
+-end procedure;
+-
+-procedure ChooseImportPlan(file, directory, reservedPaths)
+-variables model = NoValue, choice = NoValue;
+-begin
+-CollisionModel:
+-  model := CoreCollisionModel(file, directory, reservedPaths);
+-CollisionAvailable:
+-  if model.mode = "available" then
+-    result := CoreResolveImportPlan(model, "available", reservedPaths);
+-  else
+-    collisionDraft := model ||
+-    resolver := [file |-> file, directory |-> directory, reserved |-> reservedPaths];
+-    choice := AwaitCollisionModalOutcome();
+-    if choice = "rename" \/ choice = "replace" then
+-      result := CoreResolveImportPlan(model, choice, reservedPaths);
+-    else
+-      result := NoValue;
+-    end if;
+-    collisionDraft := NoValue ||
+-    resolver := NoValue;
+-  end if;
+-CollisionReturn:
+-  return;
+-end procedure;
+-
+-procedure RunLifecycleTask(requestedLifecycle, eventName, task)
+-begin
+-DelegateLifecycle:
+-  result := RunApplicationLifecycleTask(requestedLifecycle, eventName, task);
+-LifecycleTelemetry:
+-  if TaskFailed(result) then
+-    effect := PublishDebugTelemetry(TaskError(result));
+-  end if;
+-LifecycleUiReturn:
+-  return;
+-end procedure;
+-
+-procedure PrepareFileDrop(slotId)
+-begin
+-PrepareFileDropRuntime:
+-  result := SlotApiPrepareFileDrop(slotId);
+-PrepareFileDropState:
+-  if result then
+-    preparedSlot := slotId ||
+-    dragRuntimeActive := TRUE;
+-  else
+-    preparedSlot := NoValue;
+-  end if;
+-PrepareDropReturn:
+-  return;
+-end procedure;
+-
+-procedure ImportExternalFile(file, slotId)
+-begin
+-PrepareExternalDrop:
+-  call PrepareFileDrop(slotId);
+-RunExternalImport:
+-  if result then
+-    call RunLifecycleTask(
+-      "importing",
+-      "SLOT_DROP_IMPORT",
+-      [command |-> "assets.importToSlot", file |-> file, slotId |-> slotId]);
+-  end if;
+-FinishExternalDrop:
+-  effect := SlotApiFinishFileDrop();
+-  dragRuntimeActive := FALSE ||
+-  preparedSlot := NoValue;
+-ExternalDropReturn:
+-  return;
+-end procedure;
+-
+-procedure MountDashboardDropReceiver()
+-begin
+-MountReceiver:
+-  if dashboardDropReceiver = "unmounted" then
+-    dashboardDropReceiver := "mounted" ||
+-    dashboardDropReceiverCount := 1;
+-  end if;
+-MountReceiverInvariant:
+-  assert dashboardDropReceiver = "mounted" /\ dashboardDropReceiverCount = 1;
+-MountReceiverReturn:
+-  return;
+-end procedure;
+-
+-procedure RerenderDashboardDropReceiver()
+-begin
+-RerenderReceiverInvariant:
+-  assert dashboardDropReceiver = "mounted" /\ dashboardDropReceiverCount = 1;
+-RerenderReceiverContinuity:
+-  result := "continuous";
+-RerenderReceiverReturn:
+-  return;
+-end procedure;
+-
+-procedure UnmountDashboardDropReceiver()
+-begin
+-UnmountReceiver:
+-  dashboardDropReceiver := "unmounted" ||
+-  dashboardDropReceiverCount := 0 ||
+-  activeDropEventId := NoValue;
+-UnmountReceiverReturn:
+-  return;
+-end procedure;
+-
+-procedure DispatchExternalDrop(dropEventId, file, slotId)
+-begin
+-DispatchReceiverInvariant:
+-  assert dashboardDropReceiverCount \in {0, 1};
+-DispatchExternalDropOnce:
+-  if dashboardDropReceiver = "mounted"
+-     /\ dashboardDropReceiverCount = 1
+-     /\ DropAcceptingUiState()
+-     /\ dropEventId # lastHandledDropEventId
+-     /\ activeDropEventId = NoValue then
+-    activeDropEventId := dropEventId;
+-    call ImportExternalFile(file, slotId);
+-    lastHandledDropEventId := dropEventId ||
+-    activeDropEventId := NoValue;
+-  end if;
+-DispatchExternalDropReturn:
+-  return;
+-end procedure;
+-
+-procedure CreateEmptyCsv()
+-variables createdCsv = NoValue;
+-begin
+-EmptyCsvCreate:
+-  createdCsv := AssetsCreateEmptyProjectCsv();
+-EmptyCsvSelect:
+-  if createdCsv # NoValue then
+-    result := AssetApiSelectCsv(CanonicalAssetPath(createdCsv));
+-    lastPersistentCommand := [
+-      name |-> "assets.createEmptyCsv",
+-      csvId |-> createdCsv.id
+-    ];
+-  end if;
+-EmptyCsvReturn:
+-  return;
+-end procedure;
+-
+-procedure SelectProjectTreeNode(path)
+-variables node = NoValue;
+-begin
+-ProjectTreeSelectResolve:
+-  node := ResolveProjectTreeNodeFromCurrentVfs(path);
+-ProjectTreeSelect:
+-  if node # NoValue then
+-    effect := SelectProjectTreeNodeThroughExistingSelectionCommand(node);
+-  end if;
+-ProjectTreeSelectReturn:
+-  return;
+-end procedure;
+-
+-procedure MoveProjectTreeNode(path, directory)
+-variables movePlan = NoValue;
+-begin
+-ProjectTreeMoveEligibility:
+-  if TreeMoveSourceEligible(path) then
+-    movePlan := AssetApiPlanMove(path, directory);
+-  else
+-    movePlan := NoValue;
+-  end if;
+-ProjectTreeMoveCommit:
+-  if movePlan # NoValue then
+-    lastPersistentCommand := [
+-      name |-> "assets.move",
+-      plan |-> movePlan
+-    ] ||
+-    effect := AssetApiMove(movePlan);
+-  end if;
+-ProjectTreeMoveReturn:
+-  return;
+-end procedure;
+-
+-procedure OpenTrashAssetRowMenu(path)
+-variables asset = NoValue;
+-begin
+-TrashMenuResolve:
+-  asset := ResolveProjectAsset(path);
+-TrashMenuOpen:
+-  if asset # NoValue /\ IsTrashedAsset(asset) then
+-    effect := OpenRowActionMenu(path);
+-  end if;
+-TrashMenuReturn:
+-  return;
+-end procedure;
+-
+-procedure ResolveSettingsOverlayMaximum()
+-begin
+-SettingsOverlayMaximum:
+-  result := CommonFastFigureSettingsOverlayMaximum();
+-SettingsOverlayMaximumCheck:
+-  assert result > MantineBuiltinMaximumSize();
+-SettingsOverlayMaximumReturn:
+-  return;
+-end procedure;
+-
+-procedure StartSettingsOverlayResize(pointerY, currentHeight)
+-begin
+-SettingsOverlayResizeStart:
+-  settingsOverlayResizeStartY := pointerY ||
+-  settingsOverlayResizeStartHeight := currentHeight ||
+-  settingsOverlayResizeActive := TRUE;
+-SettingsOverlayResizeStartReturn:
+-  return;
+-end procedure;
+-
+-procedure MoveSettingsOverlayResize(pointerY)
+-begin
+-SettingsOverlayResizeMove:
+-  if settingsOverlayResizeActive then
+-    settingsOverlayHeight := ClampSettingsOverlayHeight(
+-      settingsOverlayResizeStartHeight + pointerY - settingsOverlayResizeStartY);
+-    assert ProjectAuthorityUnchangedByOverlayResize();
+-  end if;
+-SettingsOverlayResizeMoveReturn:
+-  return;
+-end procedure;
+-
+-procedure EndSettingsOverlayResize()
+-begin
+-SettingsOverlayResizeEnd:
+-  settingsOverlayResizeActive := FALSE ||
+-  settingsOverlayResizeStartY := NoValue ||
+-  settingsOverlayResizeStartHeight := NoValue;
+-SettingsOverlayResizeEndReturn:
+-  return;
+-end procedure;
+-
+-procedure LayoutSlotClick(slotId)
+-begin
+-LayoutSlotToggle:
+-  if IsVisibleLayoutPreviewSlot(slotId) then
+-    layoutSelection := ToggleSetMember(layoutSelection, slotId);
+-  end if;
+-LayoutSlotNoProjectMutation:
+-  assert ProjectAuthorityUnchangedByLayoutSelection();
+-LayoutSlotReturn:
+-  return;
+-end procedure;
+-
+-procedure LayoutBackgroundClick(targetKind)
+-begin
+-LayoutBackgroundClear:
+-  if targetKind = "preview-background" \/ targetKind = "modal-nonslot-background" then
+-    layoutSelection := {};
+-  end if;
+-LayoutBackgroundNoProjectMutation:
+-  assert ProjectAuthorityUnchangedByLayoutSelection();
+-LayoutBackgroundReturn:
+-  return;
+-end procedure;
+-
+-procedure LayoutSelectionConsumer(command)
+-begin
+-LayoutSelectionConsume:
+-  effect := ExecuteLayoutSelectionCommand(command, layoutSelection);
+-LayoutSelectionReconcile:
+-  layoutSelection := ReconcileLayoutSelectionAfterCommand(command, layoutSelection);
+-LayoutSelectionConsumerReturn:
+-  return;
+-end procedure;
+-
+-procedure ClearLayoutSelectionForGridOrClose()
+-begin
+-LayoutSelectionClear:
+-  layoutSelection := {};
+-LayoutSelectionClearReturn:
+-  return;
+-end procedure;
+-
+-procedure ReadLayoutPreview(renderedWidth)
+-begin
+-LayoutPreviewRead:
+-  result := LayoutApiReadState(renderedWidth);
+-LayoutPreviewAspect:
+-  assert PreviewGeometryUsesRenderedWidthAndConfiguredAspect(
+-    result.previewGeometry,
+-    renderedWidth,
+-    result.slotStyle.aspect);
+-LayoutPreviewReturn:
+-  return;
+-end procedure;
+-
+-procedure ConnectExistingAsset(path, kind, slotId)
+-begin
+-ExplicitAssetConnection:
+-  if AssetAndSlotConnectionInputsResolve(path, kind, slotId)
+-     /\ ~IsTrashedProjectAsset(path)
+-     /\ IsCsvOrImageAssetKind(kind) then
+-    lastPersistentCommand := [
+-      name |-> "assets.connectToSlot",
+-      path |-> path,
+-      kind |-> kind,
+-      slotId |-> slotId
+-    ];
+-  end if;
+-ConnectAssetReturn:
+-  return;
+-end procedure;
+-
+-procedure FastFigureApp()
+-begin
+-ReadAppearance:
+-  result := MantineProviderFromPersistentPalette(ReadAppearancePalette());
+-MountShell:
+-  result := MountFastFigureShell(result);
+-MountDropReceiver:
+-  if dashboardDropReceiver = "unmounted" then
+-    call MountDashboardDropReceiver();
+-  end if;
+-AppReturn:
+-  return;
+-end procedure;
+-
+-procedure FastFigureShell(width, collapsed)
+-begin
+-UpdateSidebarLocalState:
+-  sidebarWidth := width ||
+-  sidebarCollapsed := collapsed;
+-ProjectSidebarGeometry:
+-  effect := ApplySidebarGeometryToRenderer(sidebarWidth, sidebarCollapsed);
+-ResizePlots:
+-  effect := RequestPlotResizeFromCurrentAuthority();
+-ShellReturn:
+-  return;
+-end procedure;
+-
+-begin
+-InitializeApp:
+-  call FastFigureApp();
+-Main:
+-  while TRUE do
+-    either
++\* Direct translation of sourcescript/api_ui.py.
++\* Collision/form/sidebar/drop-receiver values are UI-local and never project authority.
++
++CONSTANT NoValue
++
++(*
++--algorithm FastFigureApiUi
++variables
++  collisionDraft = NoValue,
++  resolver = NoValue,
++  preparedSlot = NoValue,
++  lastPersistentCommand = NoValue,
++  dragRuntimeActive = FALSE,
++  dashboardDropReceiver = "unmounted",
++  dashboardDropReceiverCount = 0,
++  activeDropEventId = NoValue,
++  lastHandledDropEventId = NoValue,
++  sidebarWidth = 0,
++  sidebarCollapsed = FALSE,
++  settingsOverlayHeight = NoValue,
++  settingsOverlayResizeStartY = NoValue,
++  settingsOverlayResizeStartHeight = NoValue,
++  settingsOverlayResizeActive = FALSE,
++  layoutSelection = {},
++  result = NoValue,
++  effect = NoValue;
++
++procedure SetProjectName(name)
++begin
++ProjectNameDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "PROJECT_NAME_CHANGED",
++    [name |-> NormalizeProjectName(name)]);
++ProjectNameReturn:
++  return;
++end procedure;
++
++procedure SetSlotContentType(slotId, contentType)
++begin
++SlotTypeDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "SLOT_TYPE_CHANGED",
++    [slotId |-> slotId, type |-> NormalizeSlotContentType(contentType)]);
++SlotTypeReturn:
++  return;
++end procedure;
++
++procedure ResetSlots(slotIds)
++begin
++SlotsResetDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "SLOTS_RESET",
++    [slotIds |-> slotIds]);
++SlotsResetReturn:
++  return;
++end procedure;
++
++procedure InsertEmptyImage(slotId)
++variables candidate = NoValue;
++begin
++EmptyImageBuild:
++  candidate := BuildEmptyImageAndSlotCandidate(slotId);
++EmptyImageDispatch:
++  if candidate # NoValue then
++    result := ApplicationDispatchProjectCommand(
++      "SLOT_IMAGE_IMPORTED",
++      [slotId |-> slotId, candidate |-> candidate]);
++  end if;
++EmptyImageReturn:
++  return;
++end procedure;
++
++procedure SetAppearancePalette(values)
++variables normalized = NoValue;
++begin
++AppearanceNormalize:
++  normalized := NormalizeAppearancePalette(values);
++AppearanceDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "APPEARANCE_CHANGED",
++    [palette |-> normalized]);
++AppearanceReturn:
++  return;
++end procedure;
++
++procedure ResetAppearancePalette()
++begin
++AppearanceResetDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "APPEARANCE_CHANGED",
++    [palette |-> DefaultAppearancePalette()]);
++AppearanceResetReturn:
++  return;
++end procedure;
++
++procedure SubscribeAppState(callback)
++begin
++SubscribeExternalStore:
++  result := RegisterInterfaceFsmSubscriber(callback);
++SubscribeReturn:
++  return;
++end procedure;
++
++procedure ReadGraphData()
++variables
++  chart = NoValue,
++  objects = <<>>,
++  selectedIndex = NoValue,
++  currentCsv = NoValue,
++  objectCsv = NoValue,
++  currentColumns = <<>>,
++  objectColumns = <<>>;
++begin
++ReadGraphDataChart:
++  chart := ResolveSelectedChartForRead();
++ReadGraphDataObjects:
++  if chart # NoValue then
++    objects := chart.editor.objects;
++  end if;
++ReadGraphDataSelection:
++  selectedIndex := ReadGraphObjectSelectionIndex();
++ReadGraphDataCurrentCsv:
++  currentCsv := ResolveCsvFromCurrentAssetSelection();
++ReadGraphDataCurrentColumns:
++  if currentCsv # NoValue then
++    currentColumns := ColumnDefinitionsForCsv(currentCsv);
++  end if;
++ReadGraphDataObjectCsv:
++  if ValidGraphObjectIndex(objects, selectedIndex) then
++    objectCsv := ResolveProjectCsv(objects[selectedIndex].csvId);
++  end if;
++ReadGraphDataObjectColumns:
++  if objectCsv # NoValue then
++    objectColumns := ColumnDefinitionsForCsv(objectCsv);
++  end if;
++ReadGraphDataResult:
++  result := [
++    objects |-> objects,
++    selectedIndex |-> selectedIndex,
++    currentCsv |-> currentCsv,
++    columns |-> currentColumns,
++    objectColumns |-> objectColumns
++  ];
++ReadGraphDataReturn:
++  return;
++end procedure;
++
++procedure ChooseImportPlan(file, directory, reservedPaths)
++variables model = NoValue, choice = NoValue;
++begin
++CollisionModel:
++  model := CoreCollisionModel(file, directory, reservedPaths);
++CollisionAvailable:
++  if model.mode = "available" then
++    result := CoreResolveImportPlan(model, "available", reservedPaths);
++  else
++    collisionDraft := model ||
++    resolver := [file |-> file, directory |-> directory, reserved |-> reservedPaths];
++    choice := AwaitCollisionModalOutcome();
++    if choice = "rename" \/ choice = "replace" then
++      result := CoreResolveImportPlan(model, choice, reservedPaths);
++    else
++      result := NoValue;
++    end if;
++    collisionDraft := NoValue ||
++    resolver := NoValue;
++  end if;
++CollisionReturn:
++  return;
++end procedure;
++
++procedure RunLifecycleTask(requestedLifecycle, eventName, task)
++begin
++DelegateLifecycle:
++  result := RunApplicationLifecycleTask(requestedLifecycle, eventName, task);
++LifecycleTelemetry:
++  if TaskFailed(result) then
++    effect := PublishDebugTelemetry(TaskError(result));
++  end if;
++LifecycleUiReturn:
++  return;
++end procedure;
++
++procedure PrepareFileDrop(slotId)
++begin
++PrepareFileDropRuntime:
++  result := SlotApiPrepareFileDrop(slotId);
++PrepareFileDropState:
++  if result then
++    preparedSlot := slotId ||
++    dragRuntimeActive := TRUE;
++  else
++    preparedSlot := NoValue;
++  end if;
++PrepareDropReturn:
++  return;
++end procedure;
++
++procedure ImportExternalFile(file, slotId)
++begin
++PrepareExternalDrop:
++  call PrepareFileDrop(slotId);
++RunExternalImport:
++  if result then
++    call RunLifecycleTask(
++      "importing",
++      "SLOT_DROP_IMPORT",
++      [command |-> "assets.importToSlot", file |-> file, slotId |-> slotId]);
++  end if;
++FinishExternalDrop:
++  effect := SlotApiFinishFileDrop();
++  dragRuntimeActive := FALSE ||
++  preparedSlot := NoValue;
++ExternalDropReturn:
++  return;
++end procedure;
++
++procedure MountDashboardDropReceiver()
++begin
++MountReceiver:
++  if dashboardDropReceiver = "unmounted" then
++    dashboardDropReceiver := "mounted" ||
++    dashboardDropReceiverCount := 1;
++  end if;
++MountReceiverInvariant:
++  assert dashboardDropReceiver = "mounted" /\ dashboardDropReceiverCount = 1;
++MountReceiverReturn:
++  return;
++end procedure;
++
++procedure RerenderDashboardDropReceiver()
++begin
++RerenderReceiverInvariant:
++  assert dashboardDropReceiver = "mounted" /\ dashboardDropReceiverCount = 1;
++RerenderReceiverContinuity:
++  result := "continuous";
++RerenderReceiverReturn:
++  return;
++end procedure;
++
++procedure UnmountDashboardDropReceiver()
++begin
++UnmountReceiver:
++  dashboardDropReceiver := "unmounted" ||
++  dashboardDropReceiverCount := 0 ||
++  activeDropEventId := NoValue;
++UnmountReceiverReturn:
++  return;
++end procedure;
++
++procedure DispatchExternalDrop(dropEventId, file, slotId)
++begin
++DispatchReceiverInvariant:
++  assert dashboardDropReceiverCount \in {0, 1};
++DispatchExternalDropOnce:
++  if dashboardDropReceiver = "mounted"
++     /\ dashboardDropReceiverCount = 1
++     /\ DropAcceptingUiState()
++     /\ dropEventId # lastHandledDropEventId
++     /\ activeDropEventId = NoValue then
++    activeDropEventId := dropEventId;
++    call ImportExternalFile(file, slotId);
++    lastHandledDropEventId := dropEventId ||
++    activeDropEventId := NoValue;
++  end if;
++DispatchExternalDropReturn:
++  return;
++end procedure;
++
++procedure CreateEmptyCsv()
++variables createdCsv = NoValue;
++begin
++EmptyCsvCreate:
++  createdCsv := AssetsCreateEmptyProjectCsv();
++EmptyCsvSelect:
++  if createdCsv # NoValue then
++    result := AssetApiSelectCsv(CanonicalAssetPath(createdCsv));
++    lastPersistentCommand := [
++      name |-> "assets.createEmptyCsv",
++      csvId |-> createdCsv.id
++    ];
++  end if;
++EmptyCsvReturn:
++  return;
++end procedure;
++
++procedure SelectProjectTreeNode(path)
++variables node = NoValue;
++begin
++ProjectTreeSelectResolve:
++  node := ResolveProjectTreeNodeFromCurrentVfs(path);
++ProjectTreeSelect:
++  if node # NoValue then
++    effect := SelectProjectTreeNodeThroughExistingSelectionCommand(node);
++  end if;
++ProjectTreeSelectReturn:
++  return;
++end procedure;
++
++procedure MoveProjectTreeNode(path, directory)
++variables movePlan = NoValue;
++begin
++ProjectTreeMoveEligibility:
++  if TreeMoveSourceEligible(path) then
++    movePlan := AssetApiPlanMove(path, directory);
++  else
++    movePlan := NoValue;
++  end if;
++ProjectTreeMoveCommit:
++  if movePlan # NoValue then
++    lastPersistentCommand := [
++      name |-> "assets.move",
++      plan |-> movePlan
++    ] ||
++    effect := AssetApiMove(movePlan);
++  end if;
++ProjectTreeMoveReturn:
++  return;
++end procedure;
++
++procedure OpenTrashAssetRowMenu(path)
++variables asset = NoValue;
++begin
++TrashMenuResolve:
++  asset := ResolveProjectAsset(path);
++TrashMenuOpen:
++  if asset # NoValue /\ IsTrashedAsset(asset) then
++    effect := OpenRowActionMenu(path);
++  end if;
++TrashMenuReturn:
++  return;
++end procedure;
++
++procedure ResolveSettingsOverlayMaximum()
++begin
++SettingsOverlayMaximum:
++  result := CommonFastFigureSettingsOverlayMaximum();
++SettingsOverlayMaximumCheck:
++  assert result > MantineBuiltinMaximumSize();
++SettingsOverlayMaximumReturn:
++  return;
++end procedure;
++
++procedure StartSettingsOverlayResize(pointerY, currentHeight)
++begin
++SettingsOverlayResizeStart:
++  settingsOverlayResizeStartY := pointerY ||
++  settingsOverlayResizeStartHeight := currentHeight ||
++  settingsOverlayResizeActive := TRUE;
++SettingsOverlayResizeStartReturn:
++  return;
++end procedure;
++
++procedure MoveSettingsOverlayResize(pointerY)
++begin
++SettingsOverlayResizeMove:
++  if settingsOverlayResizeActive then
++    settingsOverlayHeight := ClampSettingsOverlayHeight(
++      settingsOverlayResizeStartHeight + pointerY - settingsOverlayResizeStartY);
++    assert ProjectAuthorityUnchangedByOverlayResize();
++  end if;
++SettingsOverlayResizeMoveReturn:
++  return;
++end procedure;
++
++procedure EndSettingsOverlayResize()
++begin
++SettingsOverlayResizeEnd:
++  settingsOverlayResizeActive := FALSE ||
++  settingsOverlayResizeStartY := NoValue ||
++  settingsOverlayResizeStartHeight := NoValue;
++SettingsOverlayResizeEndReturn:
++  return;
++end procedure;
++
++procedure LayoutSlotClick(slotId)
++begin
++LayoutSlotToggle:
++  if IsVisibleLayoutPreviewSlot(slotId) then
++    layoutSelection := ToggleSetMember(layoutSelection, slotId);
++  end if;
++LayoutSlotNoProjectMutation:
++  assert ProjectAuthorityUnchangedByLayoutSelection();
++LayoutSlotReturn:
++  return;
++end procedure;
++
++procedure LayoutBackgroundClick(targetKind)
++begin
++LayoutBackgroundClear:
++  if targetKind = "preview-background" \/ targetKind = "modal-nonslot-background" then
++    layoutSelection := {};
++  end if;
++LayoutBackgroundNoProjectMutation:
++  assert ProjectAuthorityUnchangedByLayoutSelection();
++LayoutBackgroundReturn:
++  return;
++end procedure;
++
++procedure LayoutSelectionConsumer(command)
++begin
++LayoutSelectionConsume:
++  effect := ExecuteLayoutSelectionCommand(command, layoutSelection);
++LayoutSelectionReconcile:
++  layoutSelection := ReconcileLayoutSelectionAfterCommand(command, layoutSelection);
++LayoutSelectionConsumerReturn:
++  return;
++end procedure;
++
++procedure ClearLayoutSelectionForGridOrClose()
++begin
++LayoutSelectionClear:
++  layoutSelection := {};
++LayoutSelectionClearReturn:
++  return;
++end procedure;
++
++procedure ReadLayoutPreview(renderedWidth)
++begin
++LayoutPreviewRead:
++  result := LayoutApiReadState(renderedWidth);
++LayoutPreviewAspect:
++  assert PreviewGeometryUsesRenderedWidthAndConfiguredAspect(
++    result.previewGeometry,
++    renderedWidth,
++    result.slotStyle.aspect);
++LayoutPreviewReturn:
++  return;
++end procedure;
++
++procedure ConnectExistingAsset(path, kind, slotId)
++begin
++ExplicitAssetConnection:
++  if AssetAndSlotConnectionInputsResolve(path, kind, slotId)
++     /\ ~IsTrashedProjectAsset(path)
++     /\ IsCsvOrImageAssetKind(kind) then
++    lastPersistentCommand := [
++      name |-> "assets.connectToSlot",
++      path |-> path,
++      kind |-> kind,
++      slotId |-> slotId
++    ];
++  end if;
++ConnectAssetReturn:
++  return;
++end procedure;
++
++procedure FastFigureApp()
++begin
++ReadAppearance:
++  result := MantineProviderFromPersistentPalette(ReadAppearancePalette());
++MountShell:
++  result := MountFastFigureShell(result);
++MountDropReceiver:
++  if dashboardDropReceiver = "unmounted" then
++    call MountDashboardDropReceiver();
++  end if;
++AppReturn:
++  return;
++end procedure;
++
++procedure FastFigureShell(width, collapsed)
++begin
++UpdateSidebarLocalState:
++  sidebarWidth := width ||
++  sidebarCollapsed := collapsed;
++ProjectSidebarGeometry:
++  effect := ApplySidebarGeometryToRenderer(sidebarWidth, sidebarCollapsed);
++ResizePlots:
++  effect := RequestPlotResizeFromCurrentAuthority();
++ShellReturn:
++  return;
++end procedure;
++
++begin
++InitializeApp:
++  call FastFigureApp();
++Main:
++  while TRUE do
++    either
++      with name = NextProjectNameInput() do
++        call SetProjectName(name);
++      end with;
++    or
++      with slotId = NextSelectedSlotId(),
++           contentType = NextSlotContentType() do
++        call SetSlotContentType(slotId, contentType);
++      end with;
++    or
++      with slotIds = NextSlotResetIds() do
++        call ResetSlots(slotIds);
++      end with;
++    or
++      with slotId = NextEmptyImageTargetSlotId() do
++        call InsertEmptyImage(slotId);
++      end with;
++    or
++      with palette = NextAppearancePalette() do
++        call SetAppearancePalette(palette);
++      end with;
++    or
++      call ResetAppearancePalette();
++    or
+       with dropEventId = NextDropEventId(),
+            file = NextDroppedFile(),
+            slotId = NextDropSlotId() do
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -19,42 +19,42 @@
+     },
+     "verification-model": {
+       "revision": 23,
+-      "status": "current",
+-      "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:7538e8cfa04a5d51f992fc00eb1b43ff1c16fd42a851c6d88d2cd06ed8b37ae3",
+-      "derived_from": {
+-        "source-script": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
+-        "pseudocode": "sha256:466498ff54b90c97d378e010fdd6e3bae4d142c6c5e10751cd1e16bd0f40ef1f"
+-      },
+-      "tlc": "pending",
+-      "validation_review": null
+-    },
+-    "source-code": {
+-      "revision": 24,
+-      "status": "stale",
+-      "paths": [
+-        "Fast-figure.html",
+-        "fast-figure-ui.js",
+-        "fast-figure.js",
+-        "scripts/build-portable.py"
+-      ],
+-      "fingerprint": "sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f",
+-      "derived_from": {
+-        "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
+-        "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17",
+-        "verification-model": "sha256:c3be19be754757a5b3423f0e939cebf841f0aa9c7532ee2d231263d57aa6d75f"
+-      },
+-      "validation_review": null
+-    },
+-    "pseudocode": {
+-      "revision": 9,
+-      "status": "current",
+-      "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:466498ff54b90c97d378e010fdd6e3bae4d142c6c5e10751cd1e16bd0f40ef1f",
+-      "derived_from": {
+-        "source-script": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7"
+-      },
+-      "translation_review": "agent_space/reviews/review-20261014-015-pluscal-r23.md"
++      "status": "stale",
++      "path_rule": "verification/**/*.{tla,cfg}",
++      "fingerprint": "sha256:7538e8cfa04a5d51f992fc00eb1b43ff1c16fd42a851c6d88d2cd06ed8b37ae3",
++      "derived_from": {
++        "source-script": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
++        "pseudocode": "sha256:466498ff54b90c97d378e010fdd6e3bae4d142c6c5e10751cd1e16bd0f40ef1f"
++      },
++      "tlc": "pending",
++      "validation_review": null
++    },
++    "source-code": {
++      "revision": 24,
++      "status": "stale",
++      "paths": [
++        "Fast-figure.html",
++        "fast-figure-ui.js",
++        "fast-figure.js",
++        "scripts/build-portable.py"
++      ],
++      "fingerprint": "sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f",
++      "derived_from": {
++        "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
++        "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17",
++        "verification-model": "sha256:c3be19be754757a5b3423f0e939cebf841f0aa9c7532ee2d231263d57aa6d75f"
++      },
++      "validation_review": null
++    },
++    "pseudocode": {
++      "revision": 10,
++      "status": "current",
++      "path_rule": "pseudocode/**/*.pcal",
++      "fingerprint": "sha256:0753354b6c25df1f391d53991cf2631a31ab184749fd96653a60bed79d87bece",
++      "derived_from": {
++        "source-script": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7"
++      },
++      "translation_review": "agent_space/reviews/review-20261014-016-pluscal-r23.md"
+     }
+   }
+ }
+diff --git a/agent_space/reviews/review-20261014-016-pluscal-r23.md b/agent_space/reviews/review-20261014-016-pluscal-r23.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261014-016-pluscal-r23.md
+@@ -0,0 +1,40 @@
++# PlusCal translation review — Source Script r23 / pseudocode r10
++
++## 추가 번역 범위
++
++r9 이후 전체 public mutation route와 explicit ApplicationDispatchProjectCommand 호출을 대조한 결과,
++다음 Source Script r23 route가 pseudocode command declaration에는 있었지만 실제 transition procedure에는 누락되어 있었다.
++
++- project.setName → PROJECT_NAME_CHANGED
++- slots.setContentType → SLOT_TYPE_CHANGED
++- slots.reset → SLOTS_RESET
++- images.insertEmpty → SLOT_IMAGE_IMPORTED
++- appearance.setPalette/resetPalette → APPEARANCE_CHANGED
++
++r10은 이 다섯 계열을 `api_ui.pcal`의 public API orchestration procedure로 직접 번역한다.
++
++## 의미 보존
++
++- project name은 normalized name payload만 project command에 전달한다.
++- slot content type은 explicit slot id와 normalized type을 전달한다.
++- slot reset은 explicit slot id 집합을 SLOTS_RESET으로 전달한다.
++- empty image insert는 asset+slot candidate 계산과 SLOT_IMAGE_IMPORTED commit을 분리한다.
++- appearance palette는 normalize/default 계산 후 APPEARANCE_CHANGED로 commit한다.
++- UI-local state나 renderer side effect를 project mutation procedure에 추가하지 않는다.
++
++## 전체 command 대조
++
++Source Script와 pseudocode의 PROJECT_COMMANDS 집합은 34개로 동일하다.
++r10 이후 Source Script의 public persistent route target은 모두 pseudocode에서 actual application project-command dispatch 또는 해당 domain procedure로 표현된다.
++
++## 일반 코딩 원칙
++
++기존 `ApplicationDispatchProjectCommand`를 재사용하고 command-specific payload만 명시했다.
++별도 generic mutation wrapper나 duplicated project state를 추가하지 않았다.
++candidate 계산이 필요한 empty-image insertion만 계산 단계와 commit 단계를 분리했다.
++
++## 하위 단계
++
++verification r23은 pseudocode r10 lineage가 아니므로 stale다.
++다음 단계에서 slot image import가 기존 chart ownership invariant에 미치는 영향을 최소 verification action으로 반영하고,
++project-name/appearance/slot-type처럼 현재 selected verification property와 독립적인 항목은 생략 근거를 기록한다.
+diff --git a/agent_space/patches/20261014-028.md b/agent_space/patches/20261014-028.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/patches/20261014-028.md
+@@ -0,0 +1,20 @@
++# 20261014-028 — Complete missing public mutation translation in pseudocode r10
++
++## 변경
++
++pseudocode/api_ui.pcal에 PROJECT_NAME_CHANGED, SLOT_TYPE_CHANGED, SLOTS_RESET,
++SLOT_IMAGE_IMPORTED, APPEARANCE_CHANGED의 실제 application project-command dispatch 절차를 추가했다.
++
++## 원인
++
++r9은 Source Script r23의 command declaration과 assets/graphs routing을 번역했지만,
++api_ui public route 다섯 계열은 command set에만 존재하고 실제 transition procedure가 없었다.
++
++## 선택 이유
++
++PlusCal pseudocode는 Source Script 전체의 직접 번역 계층이므로 선언만 있고 실행 경로가 없는 상태를 허용하지 않는다.
++기존 orchestration 경계를 재사용하고 새 mutation abstraction을 만들지 않았다.
++
++## 후속
++
++verification을 r10에서 다시 파생한다. TLC passed 전에는 Source Code를 수정하지 않는다.
