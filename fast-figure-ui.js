@@ -2076,7 +2076,6 @@
   }
 
   function FastFigureSettingsModal({ title, overlay, onClose, children }) {
-    const [height, setHeight] = useState(null);
     const contentRef = useRef(null);
     const resizeRef = useRef(null);
     const resizeListenersRef = useRef(null);
@@ -2109,12 +2108,11 @@
         if (!drag) return;
         const minHeight = 240;
         const maxHeight = Math.max(minHeight, window.innerHeight - 24);
-        setHeight(
-          Math.max(
-            minHeight,
-            Math.min(maxHeight, drag.startHeight + moveEvent.clientY - drag.startY),
-          ),
+        const nextHeight = Math.max(
+          minHeight,
+          Math.min(maxHeight, drag.startHeight + moveEvent.clientY - drag.startY),
         );
+        if (contentRef.current) contentRef.current.style.height = `${nextHeight}px`;
       };
       const end = () => clearResizeListeners();
       resizeListenersRef.current = { move, end };
@@ -2139,7 +2137,7 @@
           ref: contentRef,
           "data-fastfigure-overlay": overlay,
           style: {
-            height: height ?? "min(72dvh, 720px)",
+            height: "min(72dvh, 720px)",
             maxHeight: "calc(100dvh - 24px)",
             display: "flex",
             flexDirection: "column",
