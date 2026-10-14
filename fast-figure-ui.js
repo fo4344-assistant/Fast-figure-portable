@@ -2084,9 +2084,8 @@
     const clearResizeListeners = () => {
       const listeners = resizeListenersRef.current;
       if (listeners) {
-        window.removeEventListener("pointermove", listeners.move);
-        window.removeEventListener("pointerup", listeners.end);
-        window.removeEventListener("pointercancel", listeners.end);
+        window.removeEventListener("mousemove", listeners.move);
+        window.removeEventListener("mouseup", listeners.end);
       }
       resizeListenersRef.current = null;
       resizeRef.current = null;
@@ -2097,18 +2096,17 @@
     useEffect(() => () => clearResizeListeners(), []);
 
     const startResize = (event) => {
+      if (event.button !== 0) return;
       const content = contentRef.current;
       if (!content) return;
       clearResizeListeners();
-      const pointerId = event.pointerId;
       resizeRef.current = {
-        pointerId,
         startY: event.clientY,
         startHeight: content.getBoundingClientRect().height,
       };
       const move = (moveEvent) => {
         const drag = resizeRef.current;
-        if (!drag || drag.pointerId !== moveEvent.pointerId) return;
+        if (!drag) return;
         const minHeight = 240;
         const maxHeight = Math.max(minHeight, window.innerHeight - 24);
         setHeight(
@@ -2118,14 +2116,10 @@
           ),
         );
       };
-      const end = (endEvent) => {
-        if (resizeRef.current?.pointerId !== endEvent.pointerId) return;
-        clearResizeListeners();
-      };
+      const end = () => clearResizeListeners();
       resizeListenersRef.current = { move, end };
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", end);
-      window.addEventListener("pointercancel", end);
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", end);
       document.body.style.userSelect = "none";
       document.body.style.cursor = "ns-resize";
       event.preventDefault();
@@ -2176,14 +2170,14 @@
             role: "separator",
             "aria-orientation": "horizontal",
             "aria-label": `${title} 창 높이 조절`,
-            onPointerDown: startResize,
+            onMouseDown: startResize,
             "data-fastfigure-modal-resize": overlay,
             style: {
               flexShrink: 0,
               width: "100%",
               height: 24,
               cursor: "ns-resize",
-              touchAction: "none",
+              userSelect: "none",
               display: "grid",
               placeItems: "center",
               borderTop: "1px solid var(--mantine-color-default-border)",

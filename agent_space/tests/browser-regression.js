@@ -3,8 +3,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   sourceScript: "r18",
   plusCal: "r4",
   verificationModel: "r15",
-  sourceCode: "r17",
-  appBuild: "1.1.37-wip",
+  sourceCode: "r18",
+  appBuild: "1.1.38-wip",
 });
 (async () => {
   const api = window.FastFigureApi;
@@ -779,46 +779,46 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         );
         check(!!modal && !!handle, `${overlayName} modal resize elements absent`);
         widths.push(modal.getBoundingClientRect().width);
-        if (typeof PointerEvent === "function") {
-          const before = modal.getBoundingClientRect();
-          const pointerId = 71;
-          const maxHeight = Math.max(240, window.innerHeight - 24);
-          const delta = before.height < maxHeight - 40 ? 60 : -60;
-          handle.dispatchEvent(
-            new PointerEvent("pointerdown", {
-              bubbles: true,
-              cancelable: true,
-              pointerId,
-              clientY: before.bottom - 2,
-            }),
-          );
-          handle.dispatchEvent(
-            new PointerEvent("pointermove", {
-              bubbles: true,
-              cancelable: true,
-              pointerId,
-              clientY: before.bottom - 2 + delta,
-            }),
-          );
-          handle.dispatchEvent(
-            new PointerEvent("pointerup", {
-              bubbles: true,
-              cancelable: true,
-              pointerId,
-              clientY: before.bottom - 2 + delta,
-            }),
-          );
-          await tick();
-          const after = modal.getBoundingClientRect();
-          check(
-            Math.abs(after.height - before.height) > 20,
-            `${overlayName} modal height did not resize`,
-          );
-          check(
-            Math.abs(after.width - before.width) < 1.5,
-            `${overlayName} modal resize changed width`,
-          );
-        }
+        const before = modal.getBoundingClientRect();
+        const maxHeight = Math.max(240, window.innerHeight - 24);
+        const delta = before.height < maxHeight - 40 ? 60 : -60;
+        handle.dispatchEvent(
+          new MouseEvent("mousedown", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            clientY: before.bottom - 2,
+            view: window,
+          }),
+        );
+        window.dispatchEvent(
+          new MouseEvent("mousemove", {
+            bubbles: true,
+            cancelable: true,
+            buttons: 1,
+            clientY: before.bottom - 2 + delta,
+            view: window,
+          }),
+        );
+        window.dispatchEvent(
+          new MouseEvent("mouseup", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            clientY: before.bottom - 2 + delta,
+            view: window,
+          }),
+        );
+        await tick();
+        const after = modal.getBoundingClientRect();
+        check(
+          Math.abs(after.height - before.height) > 20,
+          `${overlayName} modal height did not resize`,
+        );
+        check(
+          Math.abs(after.width - before.width) < 1.5,
+          `${overlayName} modal resize changed width`,
+        );
         appFSM.send("CLOSE_OVERLAY", { reason: "regression-modal-size" });
         await tick();
       }

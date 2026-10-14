@@ -1,0 +1,204 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3,8 +3,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+   sourceScript: "r18",
+   plusCal: "r4",
+   verificationModel: "r15",
+-  sourceCode: "r17",
+-  appBuild: "1.1.37-wip",
++  sourceCode: "r18",
++  appBuild: "1.1.38-wip",
+ });
+ (async () => {
+   const api = window.FastFigureApi;
+@@ -779,46 +779,46 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         );
+         check(!!modal && !!handle, `${overlayName} modal resize elements absent`);
+         widths.push(modal.getBoundingClientRect().width);
+-        if (typeof PointerEvent === "function") {
+-          const before = modal.getBoundingClientRect();
+-          const pointerId = 71;
+-          const maxHeight = Math.max(240, window.innerHeight - 24);
+-          const delta = before.height < maxHeight - 40 ? 60 : -60;
+-          handle.dispatchEvent(
+-            new PointerEvent("pointerdown", {
+-              bubbles: true,
+-              cancelable: true,
+-              pointerId,
+-              clientY: before.bottom - 2,
+-            }),
+-          );
+-          handle.dispatchEvent(
+-            new PointerEvent("pointermove", {
+-              bubbles: true,
+-              cancelable: true,
+-              pointerId,
+-              clientY: before.bottom - 2 + delta,
+-            }),
+-          );
+-          handle.dispatchEvent(
+-            new PointerEvent("pointerup", {
+-              bubbles: true,
+-              cancelable: true,
+-              pointerId,
+-              clientY: before.bottom - 2 + delta,
+-            }),
+-          );
+-          await tick();
+-          const after = modal.getBoundingClientRect();
+-          check(
+-            Math.abs(after.height - before.height) > 20,
+-            `${overlayName} modal height did not resize`,
+-          );
+-          check(
+-            Math.abs(after.width - before.width) < 1.5,
+-            `${overlayName} modal resize changed width`,
+-          );
+-        }
++        const before = modal.getBoundingClientRect();
++        const maxHeight = Math.max(240, window.innerHeight - 24);
++        const delta = before.height < maxHeight - 40 ? 60 : -60;
++        handle.dispatchEvent(
++          new MouseEvent("mousedown", {
++            bubbles: true,
++            cancelable: true,
++            button: 0,
++            clientY: before.bottom - 2,
++            view: window,
++          }),
++        );
++        window.dispatchEvent(
++          new MouseEvent("mousemove", {
++            bubbles: true,
++            cancelable: true,
++            buttons: 1,
++            clientY: before.bottom - 2 + delta,
++            view: window,
++          }),
++        );
++        window.dispatchEvent(
++          new MouseEvent("mouseup", {
++            bubbles: true,
++            cancelable: true,
++            button: 0,
++            clientY: before.bottom - 2 + delta,
++            view: window,
++          }),
++        );
++        await tick();
++        const after = modal.getBoundingClientRect();
++        check(
++          Math.abs(after.height - before.height) > 20,
++          `${overlayName} modal height did not resize`,
++        );
++        check(
++          Math.abs(after.width - before.width) < 1.5,
++          `${overlayName} modal resize changed width`,
++        );
+         appFSM.send("CLOSE_OVERLAY", { reason: "regression-modal-size" });
+         await tick();
+       }
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,15 +30,15 @@
+       "validation_review": "agent_space/reviews/review-20261013-013-tlc-interaction-r15.md"
+     },
+     "source-code": {
+-      "revision": 17,
++      "revision": 18,
+       "status": "current",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:823f37c22e0341e0241b6ce5735710879c74673dd93d48bce4a0dd099a290e0f",
++      "fingerprint": "sha256:f11fd2007298765515dc075a4c63947de7fbbd2066860d36642023acc4315407",
+       "derived_from": {
+         "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
+         "pseudocode": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583",
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2084,9 +2084,8 @@
+     const clearResizeListeners = () => {
+       const listeners = resizeListenersRef.current;
+       if (listeners) {
+-        window.removeEventListener("pointermove", listeners.move);
+-        window.removeEventListener("pointerup", listeners.end);
+-        window.removeEventListener("pointercancel", listeners.end);
++        window.removeEventListener("mousemove", listeners.move);
++        window.removeEventListener("mouseup", listeners.end);
+       }
+       resizeListenersRef.current = null;
+       resizeRef.current = null;
+@@ -2097,18 +2096,17 @@
+     useEffect(() => () => clearResizeListeners(), []);
+ 
+     const startResize = (event) => {
++      if (event.button !== 0) return;
+       const content = contentRef.current;
+       if (!content) return;
+       clearResizeListeners();
+-      const pointerId = event.pointerId;
+       resizeRef.current = {
+-        pointerId,
+         startY: event.clientY,
+         startHeight: content.getBoundingClientRect().height,
+       };
+       const move = (moveEvent) => {
+         const drag = resizeRef.current;
+-        if (!drag || drag.pointerId !== moveEvent.pointerId) return;
++        if (!drag) return;
+         const minHeight = 240;
+         const maxHeight = Math.max(minHeight, window.innerHeight - 24);
+         setHeight(
+@@ -2118,14 +2116,10 @@
+           ),
+         );
+       };
+-      const end = (endEvent) => {
+-        if (resizeRef.current?.pointerId !== endEvent.pointerId) return;
+-        clearResizeListeners();
+-      };
++      const end = () => clearResizeListeners();
+       resizeListenersRef.current = { move, end };
+-      window.addEventListener("pointermove", move);
+-      window.addEventListener("pointerup", end);
+-      window.addEventListener("pointercancel", end);
++      window.addEventListener("mousemove", move);
++      window.addEventListener("mouseup", end);
+       document.body.style.userSelect = "none";
+       document.body.style.cursor = "ns-resize";
+       event.preventDefault();
+@@ -2176,14 +2170,14 @@
+             role: "separator",
+             "aria-orientation": "horizontal",
+             "aria-label": `${title} 창 높이 조절`,
+-            onPointerDown: startResize,
++            onMouseDown: startResize,
+             "data-fastfigure-modal-resize": overlay,
+             style: {
+               flexShrink: 0,
+               width: "100%",
+               height: 24,
+               cursor: "ns-resize",
+-              touchAction: "none",
++              userSelect: "none",
+               display: "grid",
+               placeItems: "center",
+               borderTop: "1px solid var(--mantine-color-default-border)",
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,6 +1,6 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.37-wip";
++      const APP_BUILD = "1.1.38-wip";
+       const PROJECT_OBJECT_PATHS = Object.freeze({
+         project: "meta",
+         layout: "layout",
