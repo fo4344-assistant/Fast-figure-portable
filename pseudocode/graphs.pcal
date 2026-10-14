@@ -1,7 +1,7 @@
 ---- MODULE FastFigureGraphsPseudocode ----
 EXTENDS Naturals, Sequences
 
-\* r17 PlusCal pseudocode for sourcescript/graphs.py.
+\* Direct translation of sourcescript/graphs.py.
 \* Persistent chart/project changes are emitted through existing mutation commands.
 
 CONSTANT NoReference
@@ -11,8 +11,6 @@ CONSTANT NoReference
 variables
   chartCandidate = NoReference,
   projectCandidate = NoReference,
-  command = NoReference,
-  selectedObjectIndex = NoReference,
   result = NoReference;
 
 procedure DataTable(data)
@@ -93,21 +91,17 @@ AddSelectedCsvContract:
 AddObjectBranch:
   if slotValue # NoReference /\ csv # NoReference then
     if slotValue.chart = NoReference then
-      command := [
-        name |-> "SLOT_DATA_CONNECTED",
-        slotId |-> slotValue.id,
-        csvId |-> csv.id
-      ];
+      result := ApplicationDispatchProjectCommand(
+        "SLOT_DATA_CONNECTED",
+        [slotId |-> slotValue.id, csvId |-> csv.id]);
     else
       chart := ResolveChart(slotValue.chart);
       if chart # NoReference /\ chart.editor.editable = TRUE then
         chartCandidate := AppendBaseGraphObject(chart, csv);
         assert ValidateChartModel(chartCandidate);
-        command := [
-          name |-> "GRAPH_OBJECTS_REPLACED",
-          chartId |-> chart.id,
-          objects |-> chartCandidate.editor.objects
-        ];
+        result := ApplicationDispatchProjectCommand(
+          "GRAPH_OBJECTS_REPLACED",
+          [chartId |-> chart.id, objects |-> chartCandidate.editor.objects]);
       end if;
     end if;
   end if;
@@ -125,16 +119,11 @@ CommitNormalize:
     chartCandidate := NormalizeGraphObjects(chart, objects);
     assert EveryObjectCsvAndColumnReferenceResolves(chartCandidate);
     chartCandidate := RebuildEditableProjection(chartCandidate);
-    command := [
-      name |-> "GRAPH_OBJECTS_REPLACED",
-      chartId |-> chart.id,
-      objects |-> chartCandidate.editor.objects
-    ];
-    if requestedIndex \in 1..Len(chartCandidate.editor.objects) then
-      selectedObjectIndex := requestedIndex;
-    else
-      selectedObjectIndex := NoReference;
-    end if;
+    result := ApplicationDispatchProjectCommand(
+      "GRAPH_OBJECTS_REPLACED",
+      [chartId |-> chart.id,
+       objects |-> chartCandidate.editor.objects,
+       selectedIndexHint |-> requestedIndex]);
   end if;
 CommitObjectsReturn:
   return;
@@ -175,20 +164,46 @@ EditableBuild:
     if editable = TRUE /\ chart.editor.editable = FALSE then
       projectCandidate := ConvertImportedChartToEditableCandidate(chart);
       assert ValidateWholeProject(projectCandidate);
-      command := [
-        name |-> "CHART_MODEL_REPLACED",
-        chartId |-> chart.id,
-        candidate |-> projectCandidate
-      ];
+      result := ApplicationDispatchProjectCommand(
+        "CHART_MODEL_REPLACED",
+        [chartId |-> chart.id, candidate |-> projectCandidate]);
     else
-      command := [
-        name |-> "CHART_MODEL_REPLACED",
-        chartId |-> chart.id,
-        editable |-> editable
-      ];
+      result := ApplicationDispatchProjectCommand(
+        "CHART_MODEL_REPLACED",
+        [chartId |-> chart.id, editable |-> editable]);
     end if;
   end if;
 EditableReturn:
+  return;
+end procedure;
+
+procedure SetHeaderLines(csvId, headerLines)
+begin
+HeaderDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "DATA_OBJECT_REPLACED",
+    [csvId |-> csvId, headerLines |-> headerLines]);
+HeaderReturn:
+  return;
+end procedure;
+
+procedure UpdateChartLayout(values)
+begin
+LayoutDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "CHART_LAYOUT_CHANGED",
+    [settings |-> values]);
+LayoutReturn:
+  return;
+end procedure;
+
+procedure ApplyGraphPalette(colors)
+begin
+PaletteDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "GRAPH_OBJECTS_REPLACED",
+    [colors |-> colors]);
+PaletteReturn:
   return;
 end procedure;
 
@@ -243,11 +258,9 @@ ImportGraphBuild:
       projectCandidate := AttachImportedChartToSlot(chartCandidate, slotValue);
     end if;
     assert ValidateWholeProject(projectCandidate);
-    command := [
-      name |-> "SLOT_CHART_IMPORTED",
-      slotId |-> slotValue.id,
-      candidate |-> projectCandidate
-    ];
+    result := ApplicationDispatchProjectCommand(
+      "SLOT_CHART_IMPORTED",
+      [slotId |-> slotValue.id, candidate |-> projectCandidate]);
   end if;
 ImportGraphReturn:
   return;

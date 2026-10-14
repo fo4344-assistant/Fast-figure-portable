@@ -10,6 +10,7 @@ PROJECT_COMMANDS == {
   "PROJECT_DIRECTORY_CREATED",
   "PROJECT_NODE_MOVED",
   "PROJECT_TRASH_EMPTIED",
+  "ASSETS_IMPORTED",
   "DATA_OBJECT_CREATED",
   "DATA_OBJECT_REPLACED",
   "DATA_OBJECT_DELETED",
@@ -54,7 +55,8 @@ begin
 ProjectCommandMembership:
   assert eventName \in PROJECT_COMMANDS;
 ProjectCommandCoverage:
-  assert PublicPersistentMutationSurfaceCoveredBy(PROJECT_COMMANDS);
+  assert PublicPersistentMutationSurfaceCoveredBy(PROJECT_COMMANDS)
+         /\ PublicPersistentMutationRoutesCoveredBy(PROJECT_COMMANDS);
 ProjectReadCurrent:
   preProject := projectAuthority;
 ProjectResolve:

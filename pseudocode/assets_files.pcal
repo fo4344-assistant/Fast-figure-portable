@@ -1,7 +1,7 @@
 ---- MODULE FastFigureAssetsFilesPseudocode ----
 EXTENDS Naturals, Sequences, FiniteSets
 
-\* r18 PlusCal pseudocode for sourcescript/assets_files.py.
+\* Direct translation of sourcescript/assets_files.py.
 \* Persistent mutations are candidate-first and commit once after validation.
 
 CONSTANT NoReference
@@ -9,9 +9,8 @@ CONSTANT NoReference
 (*
 --algorithm FastFigureAssetsFiles
 variables
-  projectAuthority = ReadActiveProject(),
+  projectView = ReadActiveProject(),
   candidate = NoReference,
-  command = NoReference,
   result = NoReference;
 
 procedure NormalizePath(value, isDirectory)
@@ -47,7 +46,7 @@ end procedure;
 procedure UniquePath(pathValue, reservedPaths)
 begin
 UniqueCandidate:
-  result := CalculateCollisionFreePath(pathValue, projectAuthority, reservedPaths);
+  result := CalculateCollisionFreePath(pathValue, projectView, reservedPaths);
 UniquePathReturn:
   return;
 end procedure;
@@ -55,7 +54,7 @@ end procedure;
 procedure Descendants(directory)
 begin
 DescendantCollect:
-  result := CollectByCanonicalSegmentBoundary(directory, projectAuthority);
+  result := CollectByCanonicalSegmentBoundary(directory, projectView);
 DescendantReturn:
   return;
 end procedure;
@@ -90,7 +89,7 @@ ResolvePlanBranch:
     result := [path |-> model.path, replaceId |-> model.replaceId];
   else
     result := [
-      path |-> CalculateCollisionFreePath(model.path, projectAuthority, reservedPaths),
+      path |-> CalculateCollisionFreePath(model.path, projectView, reservedPaths),
       replaceId |-> NoReference
     ];
   end if;
@@ -119,10 +118,12 @@ procedure CreateCsv(data, name, id, bytesBase64, mime, headerLines, pathValue)
 begin
 CreateCsvCandidate:
   candidate := NormalizeCsvAsset(data, name, id, bytesBase64, mime, headerLines, pathValue);
-CreateCsvCommand:
-  command := [name |-> "DATA_OBJECT_CREATED", asset |-> candidate];
-CreateCsvResult:
-  result := candidate;
+CreateCsvDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "DATA_OBJECT_CREATED",
+    [asset |-> candidate]);
+CreateCsvRefresh:
+  projectView := ReadActiveProject();
 CreateCsvReturn:
   return;
 end procedure;
@@ -135,7 +136,7 @@ begin
 EmptyCsvPath:
   pathValue := CalculateCollisionFreePath(
     "/assets/csv/빈 CSV.csv",
-    projectAuthority,
+    projectView,
     {});
 EmptyCsvCreate:
   call CreateCsv(
@@ -158,10 +159,12 @@ CreateImageCandidate:
   candidate := NormalizeImageAssetBytesNameMimeLocation(bytes, name, mime, id, pathValue);
 CreateImageOwnership:
   assert ~ImageAssetContainsSlotDisplaySettings(candidate);
-CreateImageCommand:
-  command := [name |-> "IMAGE_OBJECT_CREATED", asset |-> candidate];
-CreateImageResult:
-  result := candidate;
+CreateImageDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "IMAGE_OBJECT_CREATED",
+    [asset |-> candidate]);
+CreateImageRefresh:
+  projectView := ReadActiveProject();
 CreateImageReturn:
   return;
 end procedure;
@@ -173,17 +176,19 @@ ImportTarget:
 ImportReadCandidates:
   candidate := ReadAndParseAllAssetCandidates(files);
 ImportResolvePlans:
-  candidate := ApplyCollisionPlans(candidate, planImport, projectAuthority);
+  candidate := ApplyCollisionPlans(candidate, planImport, projectView);
 ImportProjectCandidate:
-  candidate := ApplyAssetsAndNextIdsToProject(candidate, projectAuthority);
+  candidate := ApplyAssetsAndNextIdsToProject(candidate, projectView);
 ImportOptionalSlot:
   candidate := ApplyRequestedSlotImportCandidate(candidate);
 ImportValidate:
   assert ValidateWholeProject(candidate);
-ImportCommit:
-  projectAuthority := candidate;
-ImportResult:
-  result := ImportResult(candidate);
+ImportDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "ASSETS_IMPORTED",
+    [candidate |-> candidate]);
+ImportRefresh:
+  projectView := ReadActiveProject();
 ImportReturn:
   return;
 end procedure;
@@ -205,17 +210,25 @@ DeleteResolveAsset:
   asset := ResolveCurrentAsset(target);
 DeleteCollectReferences:
   if asset # NoReference then
-    refs := CollectAssetReferences(asset, projectAuthority);
+    refs := CollectAssetReferences(asset, projectView);
   end if;
 DeleteBuildCandidate:
   if asset # NoReference then
-    candidate := RemoveAssetAndDetachExactly(refs, asset, projectAuthority);
+    candidate := RemoveAssetAndDetachExactly(refs, asset, projectView);
   end if;
 DeleteValidate:
   if candidate # NoReference then
     assert ValidateWholeProject(candidate);
-    projectAuthority := candidate;
-    result := TRUE;
+    if asset.kind = "csv" then
+      result := ApplicationDispatchProjectCommand(
+        "DATA_OBJECT_DELETED",
+        [target |-> asset, candidate |-> candidate]);
+    else
+      result := ApplicationDispatchProjectCommand(
+        "IMAGE_OBJECT_DELETED",
+        [target |-> asset, candidate |-> candidate]);
+    end if;
+    projectView := ReadActiveProject();
   end if;
 DeleteReturn:
   return;
@@ -225,10 +238,10 @@ procedure PlanNodeMove(pathValue, directory)
 variables source = NoReference;
 begin
 MovePlanResolveSource:
-  source := ResolveVfs(pathValue, projectAuthority);
+  source := ResolveVfs(pathValue, projectView);
 MovePlanEligibility:
   if source # NoReference /\ ~IsFixedProjectDirectory(source) then
-    result := CalculateMovePlanFromCurrentVfs(pathValue, directory, projectAuthority);
+    result := CalculateMovePlanFromCurrentVfs(pathValue, directory, projectView);
   else
     result := NoReference;
   end if;
@@ -244,10 +257,10 @@ procedure MoveNode(plan, useUniqueName)
 variables fresh = NoReference;
 begin
 MoveReresolve:
-  fresh := RebuildMovePlanFromCurrentProject(plan, projectAuthority);
+  fresh := RebuildMovePlanFromCurrentProject(plan, projectView);
 MoveBuild:
   if fresh # NoReference then
-    candidate := ApplyMoveDestination(fresh, useUniqueName, projectAuthority);
+    candidate := ApplyMoveDestination(fresh, useUniqueName, projectView);
     if MoveEntersTrash(fresh) then
       candidate := DetachReferencesIfEnteringTrash(candidate);
     end if;
@@ -259,12 +272,10 @@ MoveBuild:
 MoveValidate:
   if candidate # NoReference then
     assert ValidateMoveCollisionFixedCycleAndReferences(candidate);
-    projectAuthority := candidate;
-    result := [
-      path |-> FinalMovePath(candidate),
-      removedGraphReferenceCount |-> RemovedGraphReferenceCount(fresh, candidate),
-      resetImageSlotCount |-> ResetImageSlotCount(fresh, candidate)
-    ];
+    result := ApplicationDispatchProjectCommand(
+      "PROJECT_NODE_MOVED",
+      [plan |-> fresh, candidate |-> candidate]);
+    projectView := ReadActiveProject();
   end if;
 MoveReturn:
   return;
@@ -274,21 +285,19 @@ procedure EmptyTrash()
 variables trashObjects = NoReference, refs = NoReference;
 begin
 TrashResolve:
-  trashObjects := ProjectVfsDescendants("/assets/trash", projectAuthority);
+  trashObjects := ProjectVfsDescendants("/assets/trash", projectView);
 TrashReferences:
-  refs := CollectReferencesForObjects(trashObjects, projectAuthority);
+  refs := CollectReferencesForObjects(trashObjects, projectView);
 TrashBuild:
-  candidate := RemoveTrashObjectsAndReferences(trashObjects, refs, projectAuthority);
+  candidate := RemoveTrashObjectsAndReferences(trashObjects, refs, projectView);
 TrashValidate:
   assert ValidateWholeProject(candidate);
-TrashCommit:
-  projectAuthority := candidate;
-TrashResult:
-  result := [
-    removal |-> TrashRemovalResult(trashObjects, refs),
-    removedGraphReferenceCount |-> RemovedGraphReferenceCount(refs, candidate),
-    resetImageSlotCount |-> ResetImageSlotCount(refs, candidate)
-  ];
+TrashDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "PROJECT_TRASH_EMPTIED",
+    [candidate |-> candidate]);
+TrashRefresh:
+  projectView := ReadActiveProject();
 TrashReturn:
   return;
 end procedure;
@@ -313,12 +322,62 @@ DecodeReturn:
   return;
 end procedure;
 
+procedure CreateDirectory(parent, name)
+begin
+DirectoryDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "PROJECT_DIRECTORY_CREATED",
+    [parent |-> parent, name |-> name]);
+DirectoryRefresh:
+  projectView := ReadActiveProject();
+DirectoryReturn:
+  return;
+end procedure;
+
+procedure ConnectAssetToSlot(pathValue, kind, slotId)
+begin
+ConnectAssetDispatch:
+  if kind = "csv" then
+    result := ApplicationDispatchProjectCommand(
+      "SLOT_DATA_CONNECTED",
+      [path |-> pathValue, slotId |-> slotId]);
+  else
+    result := ApplicationDispatchProjectCommand(
+      "SLOT_IMAGE_LINKED",
+      [path |-> pathValue, slotId |-> slotId]);
+  end if;
+ConnectAssetRefresh:
+  projectView := ReadActiveProject();
+ConnectAssetReturn:
+  return;
+end procedure;
+
+procedure ImportFileToSlot(file, slotId, planImport)
+begin
+ImportSlotBuild:
+  candidate := BuildProjectAssetImportCandidate(
+    <<file>>,
+    TargetDirectoryFromPlan(planImport),
+    planImport,
+    slotId);
+ImportSlotValidate:
+  assert candidate # NoReference /\ ValidateWholeProject(candidate);
+ImportSlotDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "ASSETS_IMPORTED",
+    [candidate |-> candidate, targetSlotId |-> slotId]);
+ImportSlotRefresh:
+  projectView := ReadActiveProject();
+ImportSlotReturn:
+  return;
+end procedure;
+
 procedure BuildFfpx()
 begin
 FfpxValidateProject:
-  assert ValidateWholeProject(projectAuthority);
+  assert ValidateWholeProject(projectView);
 FfpxSnapshot:
-  candidate := ReadProjectSnapshot(projectAuthority);
+  candidate := ReadProjectSnapshot(projectView);
 FfpxExcludeTrash:
   candidate := RemoveTrashFromExportSnapshot(candidate);
 FfpxReferenceCheck:
@@ -375,8 +434,12 @@ ImportProjectBuild:
   candidate := BuildProjectObjectCandidate(candidate);
 ImportProjectValidate:
   assert ValidateWholeProject(candidate);
-ImportProjectCommand:
-  command := [name |-> "PROJECT_LOADED", project |-> candidate];
+ImportProjectDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "PROJECT_LOADED",
+    [project |-> candidate]);
+ImportProjectRefresh:
+  projectView := ReadActiveProject();
 ImportProjectReturn:
   return;
 end procedure;
@@ -384,7 +447,7 @@ end procedure;
 procedure BuildFfsx(slotValue, chart)
 begin
 FfsxCollectCsv:
-  candidate := CollectOnlyChartReferencedCsv(slotValue, chart, projectAuthority);
+  candidate := CollectOnlyChartReferencedCsv(slotValue, chart, projectView);
 FfsxRemapIds:
   candidate := RemapCsvAndGraphObjectIdsToPackageLocal(candidate);
 FfsxEncode:
@@ -413,10 +476,10 @@ procedure ApplyFfsx(slotPayload, targetSlotId)
 variables target = NoReference;
 begin
 FfsxTarget:
-  target := ResolveSlot(targetSlotId, projectAuthority);
+  target := ResolveSlot(targetSlotId, projectView);
 FfsxAllocateAssets:
   if target # NoReference then
-    candidate := AllocateImportedCsvIdsAndPaths(slotPayload, projectAuthority);
+    candidate := AllocateImportedCsvIdsAndPaths(slotPayload, projectView);
     candidate := RemapFfsxChartToProjectCsv(candidate);
     candidate := AttachNewChartToTargetSlot(candidate, target);
     candidate := ApplyImportedSlotCaption(candidate, target);
@@ -424,8 +487,10 @@ FfsxAllocateAssets:
 FfsxValidateCandidate:
   if candidate # NoReference then
     assert ValidateWholeProject(candidate);
-    projectAuthority := candidate;
-    result := FfsxCommitResult(candidate);
+    result := ApplicationDispatchProjectCommand(
+      "SLOT_CHART_IMPORTED",
+      [slotId |-> targetSlotId, candidate |-> candidate]);
+    projectView := ReadActiveProject();
   end if;
 FfsxApplyReturn:
   return;
