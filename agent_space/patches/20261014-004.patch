@@ -1,0 +1,197 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3,8 +3,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+   sourceScript: "r18",
+   plusCal: "r4",
+   verificationModel: "r15",
+-  sourceCode: "r15",
+-  appBuild: "1.1.35-wip",
++  sourceCode: "r16",
++  appBuild: "1.1.36-wip",
+ });
+ (async () => {
+   const api = window.FastFigureApi;
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,15 +30,15 @@
+       "validation_review": "agent_space/reviews/review-20261013-013-tlc-interaction-r15.md"
+     },
+     "source-code": {
+-      "revision": 15,
++      "revision": 16,
+       "status": "current",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:5b193f2e075abf9c36b02f21378d2a884315a7f69cbe1c52bb31ed2039bbcb2e",
++      "fingerprint": "sha256:4d0f82cfe68eaeb5d39dd060b3a024a6d932a1ee37d5d1fd1a396395a6899ec7",
+       "derived_from": {
+         "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
+         "pseudocode": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583",
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2077,6 +2077,7 @@
+ 
+   function FastFigureSettingsModal({ title, overlay, onClose, children }) {
+     const [height, setHeight] = useState(null);
++    const contentRef = useRef(null);
+     const resizeRef = useRef(null);
+     useEffect(
+       () => () => {
+@@ -2087,12 +2088,12 @@
+       [],
+     );
+     const startResize = (event) => {
+-      const dialog = event.currentTarget.closest?.('[role="dialog"]');
+-      if (!dialog) return;
++      const content = contentRef.current;
++      if (!content) return;
+       resizeRef.current = {
+         pointerId: event.pointerId,
+         startY: event.clientY,
+-        startHeight: dialog.getBoundingClientRect().height,
++        startHeight: content.getBoundingClientRect().height,
+       };
+       event.currentTarget.setPointerCapture?.(event.pointerId);
+       document.body.style.userSelect = "none";
+@@ -2119,65 +2120,76 @@
+       document.body.style.cursor = "";
+     };
+     return React.createElement(
+-      Modal,
++      Modal.Root,
+       {
+         opened: true,
+         onClose,
+-        title,
+         size: fastFigureTheme.other.settingsModalSize,
+-        "data-fastfigure-overlay": overlay,
+-        styles: {
+-          content: {
++      },
++      React.createElement(Modal.Overlay),
++      React.createElement(
++        Modal.Content,
++        {
++          ref: contentRef,
++          "data-fastfigure-overlay": overlay,
++          style: {
+             height: height ?? undefined,
+             maxHeight: "calc(100dvh - 24px)",
+             display: "flex",
+             flexDirection: "column",
+           },
+-          body: {
+-            flex: "1 1 auto",
+-            minHeight: 0,
+-            overflowY: "auto",
+-            display: "flex",
+-            flexDirection: "column",
+-          },
+         },
+-      },
+-      children,
+-      React.createElement(
+-        Box,
+-        {
+-          role: "separator",
+-          "aria-orientation": "horizontal",
+-          "aria-label": `${title} 창 높이 조절`,
+-          onPointerDown: startResize,
+-          onPointerMove: moveResize,
+-          onPointerUp: stopResize,
+-          onPointerCancel: stopResize,
+-          "data-fastfigure-modal-resize": overlay,
+-          style: {
+-            position: "sticky",
+-            bottom: 0,
+-            flexShrink: 0,
+-            width: "100%",
+-            height: 24,
+-            marginTop: "auto",
+-            cursor: "ns-resize",
+-            touchAction: "none",
+-            display: "grid",
+-            placeItems: "center",
+-            borderTop: "1px solid var(--mantine-color-default-border)",
+-            background: "var(--mantine-color-body)",
+-            zIndex: 1,
++        React.createElement(
++          Modal.Header,
++          null,
++          React.createElement(Modal.Title, null, title),
++          React.createElement(Modal.CloseButton),
++        ),
++        React.createElement(
++          Modal.Body,
++          {
++            style: {
++              flex: "1 1 auto",
++              minHeight: 0,
++              overflowY: "auto",
++              display: "flex",
++              flexDirection: "column",
++            },
+           },
+-        },
+-        React.createElement(Box, {
+-          w: 42,
+-          h: 4,
+-          style: {
+-            borderRadius: 99,
+-            background: "var(--mantine-primary-color-filled)",
++          children,
++        ),
++        React.createElement(
++          Box,
++          {
++            role: "separator",
++            "aria-orientation": "horizontal",
++            "aria-label": `${title} 창 높이 조절`,
++            onPointerDown: startResize,
++            onPointerMove: moveResize,
++            onPointerUp: stopResize,
++            onPointerCancel: stopResize,
++            "data-fastfigure-modal-resize": overlay,
++            style: {
++              flexShrink: 0,
++              width: "100%",
++              height: 24,
++              cursor: "ns-resize",
++              touchAction: "none",
++              display: "grid",
++              placeItems: "center",
++              borderTop: "1px solid var(--mantine-color-default-border)",
++              background: "var(--mantine-color-body)",
++            },
+           },
+-        }),
++          React.createElement(Box, {
++            w: 42,
++            h: 4,
++            style: {
++              borderRadius: 99,
++              background: "var(--mantine-primary-color-filled)",
++            },
++          }),
++        ),
+       ),
+     );
+   }
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,6 +1,6 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.35-wip";
++      const APP_BUILD = "1.1.36-wip";
+       const PROJECT_OBJECT_PATHS = Object.freeze({
+         project: "meta",
+         layout: "layout",

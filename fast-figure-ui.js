@@ -2077,6 +2077,7 @@
 
   function FastFigureSettingsModal({ title, overlay, onClose, children }) {
     const [height, setHeight] = useState(null);
+    const contentRef = useRef(null);
     const resizeRef = useRef(null);
     useEffect(
       () => () => {
@@ -2087,12 +2088,12 @@
       [],
     );
     const startResize = (event) => {
-      const dialog = event.currentTarget.closest?.('[role="dialog"]');
-      if (!dialog) return;
+      const content = contentRef.current;
+      if (!content) return;
       resizeRef.current = {
         pointerId: event.pointerId,
         startY: event.clientY,
-        startHeight: dialog.getBoundingClientRect().height,
+        startHeight: content.getBoundingClientRect().height,
       };
       event.currentTarget.setPointerCapture?.(event.pointerId);
       document.body.style.userSelect = "none";
@@ -2119,65 +2120,76 @@
       document.body.style.cursor = "";
     };
     return React.createElement(
-      Modal,
+      Modal.Root,
       {
         opened: true,
         onClose,
-        title,
         size: fastFigureTheme.other.settingsModalSize,
-        "data-fastfigure-overlay": overlay,
-        styles: {
-          content: {
+      },
+      React.createElement(Modal.Overlay),
+      React.createElement(
+        Modal.Content,
+        {
+          ref: contentRef,
+          "data-fastfigure-overlay": overlay,
+          style: {
             height: height ?? undefined,
             maxHeight: "calc(100dvh - 24px)",
             display: "flex",
             flexDirection: "column",
           },
-          body: {
-            flex: "1 1 auto",
-            minHeight: 0,
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-          },
         },
-      },
-      children,
-      React.createElement(
-        Box,
-        {
-          role: "separator",
-          "aria-orientation": "horizontal",
-          "aria-label": `${title} 창 높이 조절`,
-          onPointerDown: startResize,
-          onPointerMove: moveResize,
-          onPointerUp: stopResize,
-          onPointerCancel: stopResize,
-          "data-fastfigure-modal-resize": overlay,
-          style: {
-            position: "sticky",
-            bottom: 0,
-            flexShrink: 0,
-            width: "100%",
-            height: 24,
-            marginTop: "auto",
-            cursor: "ns-resize",
-            touchAction: "none",
-            display: "grid",
-            placeItems: "center",
-            borderTop: "1px solid var(--mantine-color-default-border)",
-            background: "var(--mantine-color-body)",
-            zIndex: 1,
+        React.createElement(
+          Modal.Header,
+          null,
+          React.createElement(Modal.Title, null, title),
+          React.createElement(Modal.CloseButton),
+        ),
+        React.createElement(
+          Modal.Body,
+          {
+            style: {
+              flex: "1 1 auto",
+              minHeight: 0,
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+            },
           },
-        },
-        React.createElement(Box, {
-          w: 42,
-          h: 4,
-          style: {
-            borderRadius: 99,
-            background: "var(--mantine-primary-color-filled)",
+          children,
+        ),
+        React.createElement(
+          Box,
+          {
+            role: "separator",
+            "aria-orientation": "horizontal",
+            "aria-label": `${title} 창 높이 조절`,
+            onPointerDown: startResize,
+            onPointerMove: moveResize,
+            onPointerUp: stopResize,
+            onPointerCancel: stopResize,
+            "data-fastfigure-modal-resize": overlay,
+            style: {
+              flexShrink: 0,
+              width: "100%",
+              height: 24,
+              cursor: "ns-resize",
+              touchAction: "none",
+              display: "grid",
+              placeItems: "center",
+              borderTop: "1px solid var(--mantine-color-default-border)",
+              background: "var(--mantine-color-body)",
+            },
           },
-        }),
+          React.createElement(Box, {
+            w: 42,
+            h: 4,
+            style: {
+              borderRadius: 99,
+              background: "var(--mantine-primary-color-filled)",
+            },
+          }),
+        ),
       ),
     );
   }
