@@ -1,0 +1,1525 @@
+diff --git a/pseudocode/project_efsm.pcal b/pseudocode/project_efsm.pcal
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/project_efsm.pcal
+@@ -0,0 +1,54 @@
++---- MODULE FastFigureProjectEfsmPseudocode ----
++EXTENDS Naturals, Sequences
++
++\* Direct translation of sourcescript/project_efsm.py.
++CONSTANT NoReference
++
++(*
++--algorithm FastFigureProjectEfsm
++variables
++  projectAuthority = ReadActiveProject(),
++  result = NoReference,
++  candidate = NoReference,
++  effect = NoReference;
++
++procedure DispatchProjectCommand(eventName, payload)
++variables preProject = NoReference;
++begin
++ProjectCommandMembership:
++  assert IsDeclaredProjectCommand(eventName);
++ProjectReadCurrent:
++  preProject := projectAuthority;
++ProjectResolve:
++  assert ResolveAllProjectCommandInputs(preProject, eventName, payload);
++ProjectCandidate:
++  candidate := BuildDomainCandidate(preProject, eventName, payload);
++ProjectValidate:
++  assert candidate # NoReference /\ ValidateWholeProject(candidate);
++ProjectCommit:
++  projectAuthority := candidate;
++ProjectResult:
++  result := BuildProjectMutationResult(
++    eventName,
++    preProject,
++    projectAuthority,
++    payload
++  );
++ProjectNoInterfaceMutation:
++  assert InterfaceAuthorityUnchangedByProjectEfsm();
++ProjectNoRendererMutation:
++  assert RendererAuthorityUnchangedByProjectEfsm();
++ProjectCommandReturn:
++  return;
++end procedure;
++
++begin
++Main:
++  while TRUE do
++    with command = NextProjectCommand() do
++      call DispatchProjectCommand(command.event, command.payload);
++    end with;
++  end while;
++end algorithm;
++*)
++====
+diff --git a/pseudocode/interface_fsm.pcal b/pseudocode/interface_fsm.pcal
+new file mode 100644
+--- /dev/null
++++ b/pseudocode/interface_fsm.pcal
+@@ -0,0 +1,170 @@
++---- MODULE FastFigureInterfaceFsmPseudocode ----
++EXTENDS Naturals, Sequences
++
++\* Direct translation of sourcescript/interface_fsm.py.
++CONSTANT NoSelection
++
++(*
++--algorithm FastFigureInterfaceFsm
++variables
++  lifecycle = "booting",
++  workspace = "project",
++  overlay = "none",
++  assetSelection = "none",
++  assetPath = NoSelection,
++  graphObject = "none",
++  graphObjectIndex = NoSelection,
++  direction = "model-to-ui",
++  revision = 0,
++  error = NoSelection,
++  selectedSlotId = NoSelection,
++  result = NoSelection,
++  effect = NoSelection;
++
++procedure PublishState()
++begin
++PublishRevision:
++  revision := revision + 1;
++PublishReturn:
++  return;
++end procedure;
++
++procedure SelectSlot(payload)
++variables slot = NoSelection;
++begin
++ResolveSlot:
++  if payload.slotId # NoSelection then
++    slot := ResolveVisibleSlotFromCurrentProject(payload.slotId);
++  end if;
++CommitSlotSelection:
++  if payload.slotId = NoSelection then
++    selectedSlotId := NoSelection ||
++    graphObject := "none" ||
++    graphObjectIndex := NoSelection ||
++    workspace := "project";
++  elsif slot # NoSelection then
++    if PayloadUsesUiToggle(payload) /\ selectedSlotId = slot.id then
++      selectedSlotId := NoSelection ||
++      graphObject := "none" ||
++      graphObjectIndex := NoSelection ||
++      workspace := "project";
++    else
++      selectedSlotId := slot.id ||
++      workspace := IF slot.contentType = "image" THEN "slot.image" ELSE "slot.graph";
++      if ~GraphObjectSelectionValidForSlot(slot, graphObjectIndex) then
++        graphObject := "none" ||
++        graphObjectIndex := NoSelection;
++      end if;
++    end if;
++  end if;
++SelectSlotPublish:
++  call PublishState();
++SelectSlotReturn:
++  return;
++end procedure;
++
++procedure SelectAsset(kind, path)
++begin
++ResolveAsset:
++  if ResolveCurrentProjectAssetKind(path) = kind then
++    graphObject := "none" ||
++    graphObjectIndex := NoSelection ||
++    assetSelection := kind ||
++    assetPath := path;
++    call PublishState();
++  end if;
++SelectAssetReturn:
++  return;
++end procedure;
++
++procedure SelectGraphObject(index)
++variables csvPath = NoSelection;
++begin
++ResolveObject:
++  csvPath := ResolveCurrentSelectedGraphObjectCsvPath(index);
++CommitGraphObject:
++  if csvPath # NoSelection then
++    assetSelection := "csv" ||
++    assetPath := csvPath ||
++    graphObject := "selected" ||
++    graphObjectIndex := index;
++    call PublishState();
++  end if;
++SelectGraphReturn:
++  return;
++end procedure;
++
++procedure TransitionOverlay(eventName, payload)
++begin
++OverlayTransition:
++  overlay := ResolveOverlayTarget(overlay, eventName, payload);
++OverlayPublish:
++  call PublishState();
++OverlayReturn:
++  return;
++end procedure;
++
++procedure ReconcileProjectResult(eventName, mutationResult)
++begin
++ReconcileSlot:
++  selectedSlotId := ReResolveOrClearSelectedSlot(ReadActiveProject(), selectedSlotId);
++ReconcileAsset:
++  assetPath := ReResolveOrClearAssetPath(ReadActiveProject(), assetPath) ||
++  assetSelection := ReResolveOrClearAssetKind(ReadActiveProject(), assetPath);
++ReconcileGraph:
++  graphObjectIndex := ReResolveOrClearGraphObject(
++    ReadActiveProject(),
++    selectedSlotId,
++    graphObjectIndex
++  ) ||
++  graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
++ReconcileHints:
++  effect := ApplyProjectResultSelectionHints(mutationResult);
++ReconcileWorkspace:
++  workspace := WorkspaceFromSelectedSlot(ReadActiveProject(), selectedSlotId);
++ReconcileNoProjectMutation:
++  assert ProjectAuthorityUnchangedByInterfaceReconciliation();
++ReconcilePublish:
++  call PublishState();
++ReconcileReturn:
++  result := CurrentInterfaceState();
++  return;
++end procedure;
++
++procedure RunLifecycle(requestedLifecycle, eventName, task)
++begin
++LifecycleGuard:
++  assert lifecycle = "ready";
++LifecycleStart:
++  lifecycle := requestedLifecycle;
++  call PublishState();
++LifecycleTask:
++  either
++    result := ExecuteTask(task);
++  or
++    error := ExecuteTaskFailure(task) ||
++    lifecycle := "error";
++  end either;
++LifecycleRestore:
++  lifecycle := "ready";
++  call PublishState();
++LifecycleReturn:
++  return;
++end procedure;
++
++begin
++Main:
++  while TRUE do
++    either
++      with request = NextInterfaceEvent() do
++        effect := ApplyInterfaceOnlyEvent(request);
++      end with;
++    or
++      with projectResult = NextCommittedProjectResult() do
++        call ReconcileProjectResult(projectResult.event, projectResult);
++      end with;
++    end either;
++  end while;
++end algorithm;
++*)
++====
+diff --git a/pseudocode/application_fsm.pcal b/pseudocode/application_fsm.pcal
+--- a/pseudocode/application_fsm.pcal
++++ b/pseudocode/application_fsm.pcal
+@@ -1,380 +1,65 @@
+ ---- MODULE FastFigureApplicationFsmPseudocode ----
+-EXTENDS Naturals, Sequences
+-
+-\* r17 PlusCal pseudocode for sourcescript/application_fsm.py.
+-\* Helper operators represent Source Script-defined resolution/candidate calculations.
+-
+-CONSTANT NoSelection
+-
+-(*
+---algorithm FastFigureApplicationFsm
+-variables
+-  lifecycle = "booting",
+-  workspace = "project",
+-  overlay = "none",
+-  assetSelection = "none",
+-  assetPath = NoSelection,
+-  graphObject = "none",
+-  graphObjectIndex = NoSelection,
+-  direction = "fsm-to-model",
+-  revision = 0,
+-  error = NoSelection,
+-  projectAuthority = ReadActiveProject(),
+-  selectedSlotId = NoSelection,
+-  result = NoSelection,
+-  effect = NoSelection;
+-
+-procedure PublishState()
+-begin
+-PublishRevision:
+-  revision := revision + 1;
+-PublishReturn:
+-  return;
+-end procedure;
+-
+-procedure Transition(region, target, event, payload)
+-begin
+-TransitionMode:
+-  if CurrentRegionState(region) = target /\ ~RequestsReentry(payload) then
+-    effect := RunRegionUpdateHook(region, event, payload);
+-  else
+-    effect := RunRegionExitHook(region, event, payload);
+-    effect := SetRegionState(region, target);
+-    effect := RunRegionEntryHook(region, event, payload);
+-  end if;
+-TransitionDirection:
+-  direction := PayloadDirectionOrDefault(payload);
+-TransitionPublish:
+-  call PublishState();
+-TransitionReturn:
+-  return;
+-end procedure;
+-
+-procedure ProcessRegion(region, event, payload)
+-variables handler = NoSelection;
+-begin
+-ResolveRegionHandler:
+-  handler := ResolveRegionHandler(region, event);
+-RunRegionHandler:
+-  if handler # NoSelection then
+-    effect := ApplyDeclaredHandlerAction(handler, payload);
+-  end if;
+-RegionTransition:
+-  if handler # NoSelection /\ HandlerHasTarget(handler) then
+-    call Transition(region, HandlerTarget(handler, payload), event, payload);
+-  end if;
+-ProcessRegionReturn:
+-  return;
+-end procedure;
+-
+-procedure Send(event, payload)
+-variables handledBefore = HandlerCount();
+-begin
+-LifecycleRegion:
+-  call ProcessRegion("lifecycle", event, payload);
+-WorkspaceRegion:
+-  call ProcessRegion("workspace", event, payload);
+-OverlayRegion:
+-  call ProcessRegion("overlay", event, payload);
+-AssetRegion:
+-  call ProcessRegion("assetSelection", event, payload);
+-GraphObjectRegion:
+-  call ProcessRegion("graphObject", event, payload);
+-UnhandledEvent:
+-  if HandlerCount() = handledBefore then
+-    effect := RecordDebugWarning(event);
+-  end if;
+-FinalizeLogicalEvent:
+-  result := BuildMutationResultFromCommittedAuthority(event, payload);
+-LogicalEventCompletion:
+-  assert AllHandledRegionActionsReconciliationAndPublishCompleted();
+-SendReturn:
+-  return;
+-end procedure;
+-
+-procedure Notify(objectName, event, payload)
+-begin
+-NotifyGuard:
+-  if lifecycle # "booting" /\ ~IsTransitionInProgress() then
+-    direction := "model-to-ui";
+-    if CurrentWorkspaceOrOverlaySubscribes(objectName) then
+-      effect := RunProjectionUpdate(objectName, event, payload);
+-    end if;
+-    revision := revision + 1;
+-  end if;
+-NotifyReturn:
+-  return;
+-end procedure;
+-
+-procedure RunLifecycle(requestedLifecycle, event, task)
+-begin
+-LifecycleReadyGuard:
+-  if lifecycle = "ready" then
+-    lifecycle := requestedLifecycle;
+-  end if;
+-LifecycleTask:
+-  if lifecycle = requestedLifecycle then
+-    either
+-      result := ExecuteTaskResult(task);
+-    or
+-      error := ExecuteTaskFailure(task) ||
+-      lifecycle := "error";
+-    end either;
+-  end if;
+-LifecycleRestore:
+-  if lifecycle = requestedLifecycle \/ lifecycle = "error" then
+-    lifecycle := "ready";
+-  end if;
+-LifecycleReturn:
+-  return;
+-end procedure;
+-
+-procedure SelectCsv(request)
+-variables csvPath = NoSelection;
+-begin
+-ResolveCsv:
+-  csvPath := ResolveCsvPath(request);
+-ClearObjectForCsv:
+-  if csvPath # NoSelection then
+-    graphObject := "none" ||
+-    graphObjectIndex := NoSelection;
+-  end if;
+-CommitCsvSelection:
+-  if csvPath # NoSelection then
+-    assetSelection := "csv" ||
+-    assetPath := csvPath;
+-  end if;
+-SelectCsvReturn:
+-  return;
+-end procedure;
+-
+-procedure SelectObject(request)
+-variables index = NoSelection, csvPath = NoSelection;
+-begin
+-ResolveObjectIndex:
+-  index := ResolveObjectIndex(request);
+-ResolveObjectCsv:
+-  if index # NoSelection then
+-    csvPath := ResolveObjectCsvPath(index);
+-  end if;
+-ClearObjectForObject:
+-  if index # NoSelection /\ csvPath # NoSelection then
+-    graphObject := "none" ||
+-    graphObjectIndex := NoSelection;
+-  end if;
+-CommitObjectCsvSelection:
+-  if index # NoSelection /\ csvPath # NoSelection then
+-    assetSelection := "csv" ||
+-    assetPath := csvPath;
+-  end if;
+-CommitObjectSelection:
+-  if index # NoSelection /\ csvPath # NoSelection then
+-    graphObject := "selected" ||
+-    graphObjectIndex := index;
+-  end if;
+-SelectObjectReturn:
+-  return;
+-end procedure;
+-
+-procedure SelectImage(request)
+-variables imagePath = NoSelection;
+-begin
+-ResolveImage:
+-  imagePath := ResolveImagePath(request);
+-ClearObjectForImage:
+-  if imagePath # NoSelection then
+-    graphObject := "none" ||
+-    graphObjectIndex := NoSelection;
+-  end if;
+-CommitImageSelection:
+-  if imagePath # NoSelection then
+-    assetSelection := "image" ||
+-    assetPath := imagePath;
+-  end if;
+-SelectImageReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplySlotSelection(payload)
+-variables slot = NoSelection;
+-begin
+-ResolveSlotSelection:
+-  if payload.slotId = NoSelection then
+-    slot := NoSelection;
+-  else
+-    slot := ResolveVisibleSlotFromCurrentProject(payload.slotId);
+-  end if;
+-CommitSlotSelection:
+-  if payload.slotId = NoSelection then
+-    selectedSlotId := NoSelection ||
+-    graphObject := "none" ||
+-    graphObjectIndex := NoSelection ||
+-    workspace := "project";
+-  elsif slot # NoSelection then
+-    if PayloadUsesUiToggle(payload) /\ selectedSlotId = slot.id then
+-      selectedSlotId := NoSelection ||
+-      graphObject := "none" ||
+-      graphObjectIndex := NoSelection ||
+-      workspace := "project";
+-    else
+-      selectedSlotId := slot.id ||
+-      workspace := IF slot.contentType = "image" THEN "slot.image" ELSE "slot.graph";
+-      if ~GraphObjectSelectionValidForSlot(slot, graphObjectIndex) then
+-        graphObject := "none" ||
+-        graphObjectIndex := NoSelection;
+-      end if;
+-    end if;
+-  end if;
+-SlotSelectionReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplyProjectLoaded(project)
+-variables candidate = project;
+-begin
+-ProjectLoadValidate:
+-  if HasWriteScope("project") /\ ValidateWholeProject(candidate) then
+-    projectAuthority := candidate;
+-    selectedSlotId := ReResolveOrClearSelectedSlot(candidate, selectedSlotId);
+-    assetPath := ReResolveOrClearAssetPath(candidate, assetPath);
+-    assetSelection := ReResolveOrClearAssetKind(candidate, assetPath);
+-    graphObjectIndex := ReResolveOrClearGraphObject(candidate, selectedSlotId, graphObjectIndex);
+-    graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
+-    effect := ReleaseOldProjectResourcesAfterCommit();
+-    effect := ReprojectRendererFrom(candidate);
+-  end if;
+-ProjectLoadReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplyProjectNodeMoved(payload)
+-variables candidate = NoSelection;
+-begin
+-MoveResolveAndBuild:
+-  candidate := BuildCurrentValidatedMoveCandidate(payload, projectAuthority);
+-MoveCommit:
+-  if candidate # NoSelection then
+-    projectAuthority := candidate;
+-    assetPath := ReResolveOrClearAssetPath(candidate, assetPath);
+-    assetSelection := ReResolveOrClearAssetKind(candidate, assetPath);
+-    graphObjectIndex := ReResolveOrClearGraphObject(candidate, selectedSlotId, graphObjectIndex);
+-    graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
+-    result := FinalMovePath(candidate);
+-  end if;
+-MoveReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplyGraphObjectsReplaced(payload)
+-variables candidate = NoSelection;
+-begin
+-GraphReplaceBuild:
+-  candidate := BuildValidatedGraphObjectReplacement(payload, projectAuthority);
+-GraphReplaceCommit:
+-  if candidate # NoSelection then
+-    projectAuthority := CommitChart(projectAuthority, candidate);
+-    if ~ValidGraphObjectIndex(candidate, graphObjectIndex) then
+-      graphObject := "none" ||
+-      graphObjectIndex := NoSelection;
+-    end if;
+-    result := candidate;
+-  end if;
+-GraphReplaceReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplySlotsReset(slotIds)
+-variables candidate = NoSelection;
+-begin
+-ResetBuild:
+-  candidate := BuildValidatedSlotsResetCandidate(slotIds, projectAuthority);
+-ResetCommit:
+-  if candidate # NoSelection then
+-    projectAuthority := candidate;
+-    graphObjectIndex := ReResolveOrClearGraphObject(candidate, selectedSlotId, graphObjectIndex);
+-    graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
+-    result := candidate;
+-  end if;
+-ResetReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplySlotsSwapped(sourceId, targetId)
+-variables candidate = NoSelection;
+-begin
+-SwapBuild:
+-  candidate := BuildValidatedSlotLocalPayloadSwap(sourceId, targetId, projectAuthority);
+-SwapCommit:
+-  if candidate # NoSelection then
+-    projectAuthority := candidate;
+-    selectedSlotId := ReconcileSelectionAcrossSwap(selectedSlotId, sourceId, targetId);
+-    result := candidate;
+-  end if;
+-SwapReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplyCaptionText(target, text)
+-variables candidate = NoSelection;
+-begin
+-CaptionBuild:
+-  candidate := BuildExplicitCaptionOwnerCandidate(target, text, projectAuthority);
+-CaptionCommit:
+-  if candidate # NoSelection /\ ValidateWholeProject(candidate) then
+-    projectAuthority := candidate;
+-    result := candidate;
+-  end if;
+-CaptionReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplySlotCaptionsInserted(slotIds)
+-variables candidate = NoSelection;
+-begin
+-CaptionInsertBuild:
+-  candidate := BuildGlobalCaptionInsertionCandidate(slotIds, projectAuthority);
+-CaptionInsertCommit:
+-  if candidate # NoSelection /\ ValidateWholeProject(candidate) then
+-    projectAuthority := candidate;
+-    result := candidate;
+-  end if;
+-CaptionInsertReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplyGridLayout(rows, cols)
+-variables candidate = NoSelection;
+-begin
+-GridBuild:
+-  candidate := BuildGridResizeCandidate(rows, cols, projectAuthority);
+-GridCommit:
+-  if candidate # NoSelection /\ ValidateWholeProject(candidate) then
+-    projectAuthority := candidate;
+-    selectedSlotId := ReResolveOrClearSelectedSlot(candidate, selectedSlotId);
+-    result := candidate;
+-  end if;
+-GridReturn:
+-  return;
+-end procedure;
+-
+-begin
+-Main:
+-  while TRUE do
+-    either
+-      with request = NextCsvSelectionRequest() do
+-        call SelectCsv(request);
+-      end with;
+-    or
+-      with request = NextObjectSelectionRequest() do
+-        call SelectObject(request);
+-      end with;
+-    or
+-      with request = NextImageSelectionRequest() do
+-        call SelectImage(request);
+-      end with;
+-    or
+-      with eventPayload = NextFsmEventPayload() do
+-        call Send(eventPayload.event, eventPayload);
++EXTENDS Naturals
++
++\* Direct translation of sourcescript/application_fsm.py orchestration.
++CONSTANT NoValue
++
++(*
++--algorithm FastFigureApplicationOrchestration
++variables
++  projectResult = NoValue,
++  interfaceState = NoValue,
++  projectionEffect = NoValue,
++  result = NoValue;
++
++procedure DispatchInterfaceEvent(eventName, payload)
++begin
++InterfaceOnly:
++  result := InterfaceFsmSend(eventName, payload);
++InterfaceReturn:
++  return;
++end procedure;
++
++procedure DispatchProjectCommand(eventName, payload)
++begin
++ProjectCommit:
++  projectResult := ProjectEfsmSend(eventName, payload);
++ProjectCommitGuard:
++  assert projectResult.committed;
++InterfaceReconciliation:
++  interfaceState := InterfaceFsmReconcileProjectResult(eventName, projectResult);
++RendererAfterReconciliation:
++  projectionEffect := ApplyDashboardProjectionInvalidation(
++    eventName,
++    projectResult,
++    interfaceState
++  );
++NoRecursiveMutation:
++  assert RendererDidNotDispatchProjectOrInterfaceCommand(projectionEffect);
++ApplicationResult:
++  result := projectResult;
++ApplicationReturn:
++  return;
++end procedure;
++
++procedure RunLifecycleTask(lifecycleName, eventName, task)
++begin
++LifecycleDelegation:
++  result := InterfaceFsmRunLifecycle(lifecycleName, eventName, task);
++LifecycleReturn:
++  return;
++end procedure;
++
++begin
++Main:
++  while TRUE do
++    either
++      with request = NextInterfaceOnlyRequest() do
++        call DispatchInterfaceEvent(request.event, request.payload);
++      end with;
++    or
++      with request = NextProjectMutationRequest() do
++        call DispatchProjectCommand(request.event, request.payload);
+       end with;
+     end either;
+   end while;
+diff --git a/pseudocode/api_ui.pcal b/pseudocode/api_ui.pcal
+--- a/pseudocode/api_ui.pcal
++++ b/pseudocode/api_ui.pcal
+@@ -31,83 +31,83 @@
+ procedure SubscribeAppState(callback)
+ begin
+ SubscribeExternalStore:
+-  result := RegisterAppFsmSubscriber(callback);
+-SubscribeReturn:
+-  return;
+-end procedure;
+-
+-procedure ReadGraphData()
+-variables
+-  chart = NoValue,
+-  objects = <<>>,
+-  selectedIndex = NoValue,
+-  currentCsv = NoValue,
+-  objectCsv = NoValue,
+-  currentColumns = <<>>,
+-  objectColumns = <<>>;
+-begin
+-ReadGraphDataChart:
+-  chart := ResolveSelectedChartForRead();
+-ReadGraphDataObjects:
+-  if chart # NoValue then
+-    objects := chart.editor.objects;
+-  end if;
+-ReadGraphDataSelection:
+-  selectedIndex := ReadGraphObjectSelectionIndex();
+-ReadGraphDataCurrentCsv:
+-  currentCsv := ResolveCsvFromCurrentAssetSelection();
+-ReadGraphDataCurrentColumns:
+-  if currentCsv # NoValue then
+-    currentColumns := ColumnDefinitionsForCsv(currentCsv);
+-  end if;
+-ReadGraphDataObjectCsv:
+-  if ValidGraphObjectIndex(objects, selectedIndex) then
+-    objectCsv := ResolveProjectCsv(objects[selectedIndex].csvId);
+-  end if;
+-ReadGraphDataObjectColumns:
+-  if objectCsv # NoValue then
+-    objectColumns := ColumnDefinitionsForCsv(objectCsv);
+-  end if;
+-ReadGraphDataResult:
+-  result := [
+-    objects |-> objects,
+-    selectedIndex |-> selectedIndex,
+-    currentCsv |-> currentCsv,
+-    columns |-> currentColumns,
+-    objectColumns |-> objectColumns
+-  ];
+-ReadGraphDataReturn:
+-  return;
+-end procedure;
+-
+-procedure ChooseImportPlan(file, directory, reservedPaths)
+-variables model = NoValue, choice = NoValue;
+-begin
+-CollisionModel:
+-  model := CoreCollisionModel(file, directory, reservedPaths);
+-CollisionAvailable:
+-  if model.mode = "available" then
+-    result := CoreResolveImportPlan(model, "available", reservedPaths);
+-  else
+-    collisionDraft := model ||
+-    resolver := [file |-> file, directory |-> directory, reserved |-> reservedPaths];
+-    choice := AwaitCollisionModalOutcome();
+-    if choice = "rename" \/ choice = "replace" then
+-      result := CoreResolveImportPlan(model, choice, reservedPaths);
+-    else
+-      result := NoValue;
+-    end if;
+-    collisionDraft := NoValue ||
+-    resolver := NoValue;
+-  end if;
+-CollisionReturn:
+-  return;
+-end procedure;
+-
+-procedure RunLifecycleTask(requestedLifecycle, eventName, task)
+-begin
+-DelegateLifecycle:
+-  result := AppFsmRun(requestedLifecycle, eventName, task);
++  result := RegisterInterfaceFsmSubscriber(callback);
++SubscribeReturn:
++  return;
++end procedure;
++
++procedure ReadGraphData()
++variables
++  chart = NoValue,
++  objects = <<>>,
++  selectedIndex = NoValue,
++  currentCsv = NoValue,
++  objectCsv = NoValue,
++  currentColumns = <<>>,
++  objectColumns = <<>>;
++begin
++ReadGraphDataChart:
++  chart := ResolveSelectedChartForRead();
++ReadGraphDataObjects:
++  if chart # NoValue then
++    objects := chart.editor.objects;
++  end if;
++ReadGraphDataSelection:
++  selectedIndex := ReadGraphObjectSelectionIndex();
++ReadGraphDataCurrentCsv:
++  currentCsv := ResolveCsvFromCurrentAssetSelection();
++ReadGraphDataCurrentColumns:
++  if currentCsv # NoValue then
++    currentColumns := ColumnDefinitionsForCsv(currentCsv);
++  end if;
++ReadGraphDataObjectCsv:
++  if ValidGraphObjectIndex(objects, selectedIndex) then
++    objectCsv := ResolveProjectCsv(objects[selectedIndex].csvId);
++  end if;
++ReadGraphDataObjectColumns:
++  if objectCsv # NoValue then
++    objectColumns := ColumnDefinitionsForCsv(objectCsv);
++  end if;
++ReadGraphDataResult:
++  result := [
++    objects |-> objects,
++    selectedIndex |-> selectedIndex,
++    currentCsv |-> currentCsv,
++    columns |-> currentColumns,
++    objectColumns |-> objectColumns
++  ];
++ReadGraphDataReturn:
++  return;
++end procedure;
++
++procedure ChooseImportPlan(file, directory, reservedPaths)
++variables model = NoValue, choice = NoValue;
++begin
++CollisionModel:
++  model := CoreCollisionModel(file, directory, reservedPaths);
++CollisionAvailable:
++  if model.mode = "available" then
++    result := CoreResolveImportPlan(model, "available", reservedPaths);
++  else
++    collisionDraft := model ||
++    resolver := [file |-> file, directory |-> directory, reserved |-> reservedPaths];
++    choice := AwaitCollisionModalOutcome();
++    if choice = "rename" \/ choice = "replace" then
++      result := CoreResolveImportPlan(model, choice, reservedPaths);
++    else
++      result := NoValue;
++    end if;
++    collisionDraft := NoValue ||
++    resolver := NoValue;
++  end if;
++CollisionReturn:
++  return;
++end procedure;
++
++procedure RunLifecycleTask(requestedLifecycle, eventName, task)
++begin
++DelegateLifecycle:
++  result := RunApplicationLifecycleTask(requestedLifecycle, eventName, task);
+ LifecycleTelemetry:
+   if TaskFailed(result) then
+     effect := PublishDebugTelemetry(TaskError(result));
+diff --git a/pseudocode/renderer_runtime.pcal b/pseudocode/renderer_runtime.pcal
+--- a/pseudocode/renderer_runtime.pcal
++++ b/pseudocode/renderer_runtime.pcal
+@@ -54,250 +54,239 @@
+ procedure DetermineProjectionEffect(eventName, mutationResult)
+ begin
+ ProjectionEffectDecision:
+-  if eventName = "PROJECT_NODE_MOVED" \/ eventName = "PROJECT_TRASH_EMPTIED" then
+-    if mutationResult.removedGraphReferenceCount > 0 \/ mutationResult.resetImageSlotCount > 0 then
+-      result := "FULL_DASHBOARD";
+-    else
+-      result := "NONE";
+-    end if;
+-  elsif eventName = "SLOTS_SWAPPED" then
+-    result := "FULL_DASHBOARD";
+-  else
+-    result := ExistingTargetedOrNoneProjectionEffect(eventName, mutationResult);
+-  end if;
+-ProjectionEffectReturn:
+-  return;
+-end procedure;
+-
+-procedure DispatchDashboardAffectingEvent(eventName, payload)
+-variables mutationResult = NoSelection, projectionEffect = NoSelection;
+-begin
+-DispatchLogicalEvent:
+-  mutationResult := AppFsmSendAndReturnAfterAllRegionCompletion(eventName, payload);
+-DetermineProjection:
+-  call DetermineProjectionEffect(eventName, mutationResult);
+-CaptureProjectionEffect:
+-  projectionEffect := result;
+-ApplyProjection:
+-  if projectionEffect = "FULL_DASHBOARD" then
+-    selectedSlotId := ReadSelectedSlotIdFromFsm();
+-    call RenderDashboard();
+-  elsif projectionEffect = "TARGETED_PROJECTION" then
+-    effect := ApplyExistingTargetedProjection(eventName, mutationResult);
+-  end if;
+-ProjectionNoRecursiveMutation:
+-  assert RendererProjectionDoesNotSendOrMutateProject();
+-DispatchProjectionReturn:
+-  return;
+-end procedure;
+-
+-procedure RenderDashboard()
+-begin
+-RenderGridAndStyle:
+-  effect := ProjectLayoutToDashboardCss(ReadActiveProject());
+-RenderPurge:
+-  effect := PurgeDisconnectedPlotlyInstances();
+-RenderSlots:
+-  effect := RenderEveryVisibleSlotFromProject(ReadActiveProject());
+-RenderGraphs:
+-  effect := RenderGraphSlotsFromReferencedCharts(ReadActiveProject());
+-RenderImages:
+-  effect := RenderImageSlotsFromReferencedAssetsAndSlotSettings(ReadActiveProject());
+-RenderSelection:
+-  effect := ApplySelectedSlotClass(selectedSlotId);
+-RenderAnnotations:
+-  effect := RenderLabelsAndCaptions(ReadActiveProject());
+-RenderResult:
+-  result := "rendered";
+-RenderReturn:
+-  return;
+-end procedure;
+-
+-procedure SetSelectedSlot(slotId, selectionDirection)
+-begin
+-EmitSelectSlot:
+-  issuedCommand := [
+-    name |-> "SELECT_SLOT",
+-    slotId |-> slotId,
+-    direction |-> selectionDirection
+-  ];
+-ResolveSelectionAfterEvent:
+-  selectedSlotId := ReadSelectedSlotIdFromFsm();
+-UpdateSelectedWorkspace:
+-  call UpdateGraphView();
+-ResizeAfterSelection:
+-  effect := RequestGraphViewResize();
+-SetSelectedReturn:
+-  return;
+-end procedure;
+-
+-procedure DashboardBackgroundClick()
+-begin
+-BackgroundDeselect:
+-  if selectedSlotId # NoSelection then
+-    call SetSelectedSlot(NoSelection, "fsm-to-model");
+-  end if;
+-BackgroundReturn:
+-  return;
+-end procedure;
+-
+-procedure SlotSurfaceClick(slotId)
+-begin
+-SlotSurfaceResolve:
+-  if IsVisibleSlot(slotId) then
+-    if selectedSlotId # slotId then
+-      call SetSelectedSlot(slotId, "ui-to-fsm");
+-    else
+-      if IsVisibleContentSlot(slotId) then
+-        effect := PassSelectedContentInteractionToRenderer(slotId);
+-      else
+-        call SetSelectedSlot(slotId, "ui-to-fsm");
+-      end if;
+-    end if;
+-  end if;
+-SlotSurfaceReturn:
+-  return;
+-end procedure;
+-
+-procedure BookmarkClick(slotId)
+-begin
+-BookmarkGuard:
+-  if IsVisibleContentSlot(slotId) then
+-    if suppressBookmarkClick then
+-      if slotDragSourceId = NoSelection then
+-        suppressBookmarkClick := FALSE;
+-      end if;
+-    else
+-      call SetSelectedSlot(slotId, "ui-to-fsm");
+-    end if;
+-  end if;
+-BookmarkReturn:
+-  return;
+-end procedure;
+-
+-procedure BookmarkDragStart(slotId)
+-begin
+-BookmarkDragGuard:
+-  if IsVisibleContentSlot(slotId) then
+-    slotDragSourceId := slotId ||
+-    suppressBookmarkClick := TRUE;
+-  end if;
+-BookmarkDragStartReturn:
+-  return;
+-end procedure;
+-
+-procedure SwapSlotContents(sourceId, targetId)
+-begin
+-EmitSlotSwap:
+-  if sourceId # targetId /\ IsVisibleSlot(sourceId) /\ IsVisibleSlot(targetId) then
+-    issuedCommand := [
+-      name |-> "SLOTS_SWAPPED",
+-      sourceId |-> sourceId,
+-      targetId |-> targetId
+-    ];
+-    effect := DispatchSlotSwapAndCommit(issuedCommand);
+-    selectedSlotId := ReadSelectedSlotIdFromFsm();
+-    call RenderDashboard();
+-  end if;
+-SwapSlotReturn:
+-  return;
+-end procedure;
+-
+-procedure BookmarkDrop(targetSlotId)
+-begin
+-BookmarkDropGuard:
+-  if slotDragSourceId # NoSelection
+-     /\ targetSlotId # slotDragSourceId
+-     /\ IsVisibleSlot(targetSlotId) then
+-    call SwapSlotContents(slotDragSourceId, targetSlotId);
+-  end if;
+-BookmarkDropClearSource:
+-  slotDragSourceId := NoSelection;
+-BookmarkDropReturn:
+-  return;
+-end procedure;
+-
+-procedure BookmarkDragEnd()
+-begin
+-BookmarkDragEndSource:
+-  slotDragSourceId := NoSelection;
+-BookmarkDragEndReturn:
+-  return;
+-end procedure;
+-
+-procedure ReleaseSyntheticClickGuard()
+-begin
+-BookmarkClickGuardRelease:
+-  if suppressBookmarkClick
+-     /\ slotDragSourceId = NoSelection
+-     /\ PostDragClickOpportunityPassed() then
+-    suppressBookmarkClick := FALSE;
+-  end if;
+-BookmarkGuardReturn:
+-  return;
+-end procedure;
+-
+-procedure PrepareDashboardFileDrop(slotId)
+-begin
+-FileDropResolve:
+-  if IsVisibleSlot(slotId) then
+-    if selectedSlotId # slotId then
+-      call SetSelectedSlot(slotId, "ui-to-fsm");
+-    end if;
+-    result := TRUE;
+-  else
+-    result := FALSE;
+-  end if;
+-FileDropClearSlotDrag:
+-  slotDragSourceId := NoSelection;
+-FileDropPrepareReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplySlotStyle(notify)
+-begin
+-StyleProjection:
+-  effect := ApplyDashboardCssFromStyle(ReadActiveProjectSlotStyle());
+-StyleNotify:
+-  if notify then
+-    issuedCommand := [name |-> "notify-layout"];
+-  end if;
+-StyleReturn:
+-  return;
+-end procedure;
+-
+-procedure ResolveSelectedChart()
+-begin
+-ResolveSelectedChartPath:
+-  result := ResolveChartFromSelectedSlot(ReadActiveProject(), selectedSlotId);
+-ResolveChartReturn:
+-  return;
+-end procedure;
+-
+-procedure UpdateGraphView()
+-begin
+-ResolveWorkspaceProjection:
+-  result := ProjectWorkspaceFromCurrentSelection(selectedSlotId);
+-RenderWorkspaceProjection:
+-  effect := RenderWorkspaceFromAuthority(result);
+-UpdateGraphReturn:
+-  return;
+-end procedure;
+-
+-procedure StartupCoreRuntime()
+-begin
+-StartupValidate:
+-  assert ValidateWholeProject(ReadActiveProject());
+-StartupZoom:
+-  effect := ApplyDashboardZoomProjection();
+-StartupController:
+-  effect := InstallBookmarkAndDropController();
+-StartupRender:
+-  call RenderDashboard();
+-StartupStyle:
+-  call ApplySlotStyle(FALSE);
+-StartupReady:
+-  lifecycle := "ready";
++  result := ProjectionEffectFromCommittedProjectResult(eventName, mutationResult);
++ProjectionEffectReturn:
++  return;
++end procedure;
++
++procedure ApplyDashboardProjectionInvalidation(eventName, mutationResult, finalInterfaceState)
++variables projectionEffect = NoSelection;
++begin
++ReadFinalSelection:
++  selectedSlotId := ReadSelectedSlotIdFromInterfaceState(finalInterfaceState);
++DetermineProjection:
++  call DetermineProjectionEffect(eventName, mutationResult);
++CaptureProjection:
++  projectionEffect := result;
++ApplyProjection:
++  if projectionEffect = "FULL_DASHBOARD" then
++    call RenderDashboard();
++  elsif projectionEffect = "TARGETED_PROJECTION" then
++    effect := ApplyExistingTargetedProjection(eventName, mutationResult);
++  end if;
++NoStateMutation:
++  assert RendererProjectionDoesNotDispatchProjectOrInterfaceCommand();
++ProjectionReturn:
++  return;
++end procedure;
++procedure RenderDashboard()
++begin
++RenderGridAndStyle:
++  effect := ProjectLayoutToDashboardCss(ReadActiveProject());
++RenderPurge:
++  effect := PurgeDisconnectedPlotlyInstances();
++RenderSlots:
++  effect := RenderEveryVisibleSlotFromProject(ReadActiveProject());
++RenderGraphs:
++  effect := RenderGraphSlotsFromReferencedCharts(ReadActiveProject());
++RenderImages:
++  effect := RenderImageSlotsFromReferencedAssetsAndSlotSettings(ReadActiveProject());
++RenderSelection:
++  effect := ApplySelectedSlotClass(selectedSlotId);
++RenderAnnotations:
++  effect := RenderLabelsAndCaptions(ReadActiveProject());
++RenderResult:
++  result := "rendered";
++RenderReturn:
++  return;
++end procedure;
++
++procedure SetSelectedSlot(slotId, selectionDirection)
++begin
++EmitSelectSlot:
++  issuedCommand := [
++    name |-> "SELECT_SLOT",
++    slotId |-> slotId,
++    direction |-> selectionDirection
++  ];
++DispatchInterfaceSelection:
++  effect := ApplicationDispatchInterfaceEvent(issuedCommand);
++ResolveSelectionAfterEvent:
++  selectedSlotId := ReadSelectedSlotIdFromInterfaceFsm();
++UpdateSelectedWorkspace:
++  call UpdateGraphView();
++ResizeAfterSelection:
++  effect := RequestGraphViewResize();
++SetSelectedReturn:
++  return;
++end procedure;
++
++procedure DashboardBackgroundClick()
++begin
++BackgroundDeselect:
++  if selectedSlotId # NoSelection then
++    call SetSelectedSlot(NoSelection, "fsm-to-model");
++  end if;
++BackgroundReturn:
++  return;
++end procedure;
++
++procedure SlotSurfaceClick(slotId)
++begin
++SlotSurfaceResolve:
++  if IsVisibleSlot(slotId) then
++    if selectedSlotId # slotId then
++      call SetSelectedSlot(slotId, "ui-to-fsm");
++    else
++      if IsVisibleContentSlot(slotId) then
++        effect := PassSelectedContentInteractionToRenderer(slotId);
++      else
++        call SetSelectedSlot(slotId, "ui-to-fsm");
++      end if;
++    end if;
++  end if;
++SlotSurfaceReturn:
++  return;
++end procedure;
++
++procedure BookmarkClick(slotId)
++begin
++BookmarkGuard:
++  if IsVisibleContentSlot(slotId) then
++    if suppressBookmarkClick then
++      if slotDragSourceId = NoSelection then
++        suppressBookmarkClick := FALSE;
++      end if;
++    else
++      call SetSelectedSlot(slotId, "ui-to-fsm");
++    end if;
++  end if;
++BookmarkReturn:
++  return;
++end procedure;
++
++procedure BookmarkDragStart(slotId)
++begin
++BookmarkDragGuard:
++  if IsVisibleContentSlot(slotId) then
++    slotDragSourceId := slotId ||
++    suppressBookmarkClick := TRUE;
++  end if;
++BookmarkDragStartReturn:
++  return;
++end procedure;
++
++procedure SwapSlotContents(sourceId, targetId)
++begin
++EmitSlotSwap:
++  if sourceId # targetId /\ IsVisibleSlot(sourceId) /\ IsVisibleSlot(targetId) then
++    issuedCommand := [
++      name |-> "SLOTS_SWAPPED",
++      sourceId |-> sourceId,
++      targetId |-> targetId
++    ];
++    effect := ApplicationDispatchProjectCommand(issuedCommand);
++    selectedSlotId := ReadSelectedSlotIdFromInterfaceFsm();
++  end if;
++SwapSlotReturn:
++  return;
++end procedure;
++
++procedure BookmarkDrop(targetSlotId)
++begin
++BookmarkDropGuard:
++  if slotDragSourceId # NoSelection
++     /\ targetSlotId # slotDragSourceId
++     /\ IsVisibleSlot(targetSlotId) then
++    call SwapSlotContents(slotDragSourceId, targetSlotId);
++  end if;
++BookmarkDropClearSource:
++  slotDragSourceId := NoSelection;
++BookmarkDropReturn:
++  return;
++end procedure;
++
++procedure BookmarkDragEnd()
++begin
++BookmarkDragEndSource:
++  slotDragSourceId := NoSelection;
++BookmarkDragEndReturn:
++  return;
++end procedure;
++
++procedure ReleaseSyntheticClickGuard()
++begin
++BookmarkClickGuardRelease:
++  if suppressBookmarkClick
++     /\ slotDragSourceId = NoSelection
++     /\ PostDragClickOpportunityPassed() then
++    suppressBookmarkClick := FALSE;
++  end if;
++BookmarkGuardReturn:
++  return;
++end procedure;
++
++procedure PrepareDashboardFileDrop(slotId)
++begin
++FileDropResolve:
++  if IsVisibleSlot(slotId) then
++    if selectedSlotId # slotId then
++      call SetSelectedSlot(slotId, "ui-to-fsm");
++    end if;
++    result := TRUE;
++  else
++    result := FALSE;
++  end if;
++FileDropClearSlotDrag:
++  slotDragSourceId := NoSelection;
++FileDropPrepareReturn:
++  return;
++end procedure;
++
++procedure ApplySlotStyle(notify)
++begin
++StyleProjection:
++  effect := ApplyDashboardCssFromStyle(ReadActiveProjectSlotStyle());
++StyleNotify:
++  if notify then
++    issuedCommand := [name |-> "notify-layout"];
++  end if;
++StyleReturn:
++  return;
++end procedure;
++
++procedure ResolveSelectedChart()
++begin
++ResolveSelectedChartPath:
++  result := ResolveChartFromSelectedSlot(ReadActiveProject(), selectedSlotId);
++ResolveChartReturn:
++  return;
++end procedure;
++
++procedure UpdateGraphView()
++begin
++ResolveWorkspaceProjection:
++  result := ProjectWorkspaceFromCurrentSelection(selectedSlotId);
++RenderWorkspaceProjection:
++  effect := RenderWorkspaceFromAuthority(result);
++UpdateGraphReturn:
++  return;
++end procedure;
++
++procedure StartupCoreRuntime()
++begin
++StartupValidate:
++  assert ValidateWholeProject(ReadActiveProject());
++StartupZoom:
++  effect := ApplyDashboardZoomProjection();
++StartupController:
++  effect := InstallBookmarkAndDropController();
++StartupRender:
++  call RenderDashboard();
++StartupStyle:
++  call ApplySlotStyle(FALSE);
++StartupReady:
++  effect := InterfaceFsmReady();
+ StartupAudit:
+   assert AuditProjectReferenceRuntimeInvariants();
+ StartupResult:
+diff --git a/pseudocode/layout_annotations_export.pcal b/pseudocode/layout_annotations_export.pcal
+--- a/pseudocode/layout_annotations_export.pcal
++++ b/pseudocode/layout_annotations_export.pcal
+@@ -85,7 +85,7 @@
+ GridCommit:
+   if result # NoReference then
+     projectAuthority := result;
+-    result := ReconcileSelectedSlotAfterGridCommit(projectAuthority);
++    result := GridCommitMutationResult(projectAuthority);
+   end if;
+ GridSetReturn:
+   return;
+diff --git a/pseudocode/system.pcal b/pseudocode/system.pcal
+--- a/pseudocode/system.pcal
++++ b/pseudocode/system.pcal
+@@ -11,33 +11,34 @@
+ variables
+   activeProject = NoValue,
+   coreRuntime = "uninitialized",
+-  appLifecycle = "booting",
+-  apiExposed = FALSE,
+-  mantineMounted = FALSE,
+-  result = NoValue,
+-  effect = NoValue;
+-
+-procedure InitializeFastFigure()
+-variables projectCandidate = NoValue;
+-begin
+-InitializeProjectCandidate:
+-  projectCandidate := CreateProjectState();
+-InitializeProjectValidate:
+-  assert ValidateWholeProject(projectCandidate);
+-InitializeProjectCommit:
+-  activeProject := projectCandidate;
+-InitializeRendererHosts:
+-  assert RequiredRendererHostsExist();
+-InitializeDashboardProjection:
+-  effect := ApplyDashboardZoomProjection();
+-InitializeSlotController:
+-  effect := InstallSlotInteractionController();
+-InitializeRender:
+-  effect := RenderDashboardFrom(activeProject);
+-InitializeStyle:
+-  effect := ApplySlotStyleFrom(activeProject);
+-InitializeReady:
+-  appLifecycle := "ready";
++  interfaceLifecycle = "booting",
++  apiExposed = FALSE,
++  mantineMounted = FALSE,
++  result = NoValue,
++  effect = NoValue;
++
++procedure InitializeFastFigure()
++variables projectCandidate = NoValue;
++begin
++InitializeProjectCandidate:
++  projectCandidate := CreateProjectState();
++InitializeProjectValidate:
++  assert ValidateWholeProject(projectCandidate);
++InitializeProjectCommit:
++  activeProject := projectCandidate;
++InitializeRendererHosts:
++  assert RequiredRendererHostsExist();
++InitializeDashboardProjection:
++  effect := ApplyDashboardZoomProjection();
++InitializeSlotController:
++  effect := InstallSlotInteractionController();
++InitializeRender:
++  effect := RenderDashboardFrom(activeProject);
++InitializeStyle:
++  effect := ApplySlotStyleFrom(activeProject);
++InitializeReady:
++  interfaceLifecycle := "ready" ||
++  effect := InitializeInterfaceFsmReady();
+ InitializeWorkspace:
+   effect := SynchronizeInitialWorkspaceAndOverlay();
+ InitializeApi:
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -47,14 +47,14 @@
+       "validation_review": null
+     },
+     "pseudocode": {
+-      "revision": 6,
+-      "status": "stale",
+-      "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17",
+-      "derived_from": {
+-        "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e"
+-      },
+-      "translation_review": "agent_space/reviews/review-20261014-006-pluscal-r20.md"
++      "revision": 7,
++      "status": "current",
++      "path_rule": "pseudocode/**/*.pcal",
++      "fingerprint": "sha256:bc89a32a69f9dd06fb7d1b982e2eceb47ce7d89274c526f18eac351e4b469eb2",
++      "derived_from": {
++        "source-script": "sha256:20dcdebc56a6baa471e2e5b4996e7d6a13cdc5a910247eb20e1e7e50e1614563"
++      },
++      "translation_review": "agent_space/reviews/review-20261014-011-pluscal-r21.md"
+     }
+   }
+ }
+diff --git a/agent_space/reviews/review-20261014-011-pluscal-r21.md b/agent_space/reviews/review-20261014-011-pluscal-r21.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261014-011-pluscal-r21.md
+@@ -0,0 +1,58 @@
++# PlusCal translation review — Source Script r21 / pseudocode r7
++
++## module hierarchy
++
++Source Script r21의 decomposition을 PlusCal에서 그대로 보존했다.
++
++- project_efsm.py → project_efsm.pcal
++- interface_fsm.py → interface_fsm.pcal
++- application_fsm.py orchestration → application_fsm.pcal
++
++기존 domain pseudocode는 candidate 계산 모듈로 유지하고 project EFSM이 persistent commit owner가 된다.
++
++## project EFSM
++
++project_efsm.pcal은 다음 순서를 직접 번역한다.
++
++1. declared project command 확인.
++2. current ProjectObject에서 input/reference resolve.
++3. domain candidate 생성.
++4. whole-project validation.
++5. authoritative project 한 번 commit.
++6. pre/post에서 immutable ProjectMutationResult 생성.
++7. interface/renderer authority 불변 확인.
++
++selectedSlotId 또는 UI region을 project EFSM state로 두지 않는다.
++
++## interface FSM
++
++interface_fsm.pcal은 lifecycle/workspace/overlay/asset selection/graph-object selection/selectedSlotId만 소유한다.
++
++ProjectMutationResult를 받은 ReconcileProjectResult에서 current project를 다시 resolve해 invalid selection을 clear하고 workspace를 재계산한다. 이 절차는 project authority를 변경하지 않는 assertion을 가진다.
++
++component-local Layout selection은 기존 api_ui.pcal에 남아 shared interface FSM state로 승격하지 않는다.
++
++## application orchestration
++
++application_fsm.pcal은 persistent state나 interface region을 자체 변수로 복제하지 않는다.
++
++```text
++ProjectEfsmSend
++→ committed result guard
++→ InterfaceFsmReconcileProjectResult
++→ ApplyDashboardProjectionInvalidation
++```
++
++순서만 보존한다.
++
++## renderer / layout 보정
++
++renderer_runtime.pcal의 이전 AppFsm send 기반 invalidation을 제거하고 final interface state + project mutation result를 받는 projection procedure로 바꿨다.
++
++layout_annotations_export.pcal의 grid commit이 selected slot을 직접 reconcile하던 의미를 제거하고 project mutation result만 반환한다. selection reconciliation은 interface FSM에서 수행한다.
++
++## 번역 판정
++
++Source Script r21에 없는 persistent copy, compatibility FSM, UI/project 양방향 sync를 추가하지 않았다. 새 logical modules와 ownership은 상위 hierarchy와 1:1로 대응한다.
++
++pseudocode r7은 Source Script r21의 plan-015 G 의미를 직접 번역한 current 계층으로 판정한다. 다음 단계는 verification model/TLC I 단계다.
+diff --git a/agent_space/patches/20261014-023.md b/agent_space/patches/20261014-023.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/patches/20261014-023.md
+@@ -0,0 +1,24 @@
++# 20261014-023 — Translate project EFSM/interface FSM split to PlusCal r7
++
++## 변경
++
++- project_efsm.pcal 추가.
++- interface_fsm.pcal 추가.
++- application_fsm.pcal을 두 FSM orchestration으로 교체.
++- api_ui/renderer/layout/system pseudocode에서 appFSM 혼합 ownership 제거.
++- pseudocode r7과 Source Script r21 lineage 등록.
++
++## 선택 이유
++
++Source Script에서 확정한 persistent ProjectObject transition과 UI/runtime transition의 분리를 하위 단계에서 다시 합치지 않기 위해 동일 module hierarchy를 직접 번역했다.
++
++## 기각한 방향
++
++- 기존 application_fsm.pcal에 두 FSM을 region 이름만 나눠 유지.
++- selectedSlotId를 project EFSM result state로 유지.
++- renderer에서 project command와 interface reconciliation을 직접 수행.
++- component-local draft를 interface FSM variable로 승격.
++
++## 후속
++
++verification model은 r7에 대해 stale다. I 단계에서 project/interface 분리 invariants를 필요한 범위로 파생하고 push-trigger TLC를 실행한다.

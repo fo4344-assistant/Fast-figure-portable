@@ -11,7 +11,7 @@ CONSTANT NoValue
 variables
   activeProject = NoValue,
   coreRuntime = "uninitialized",
-  appLifecycle = "booting",
+  interfaceLifecycle = "booting",
   apiExposed = FALSE,
   mantineMounted = FALSE,
   result = NoValue,
@@ -37,7 +37,8 @@ InitializeRender:
 InitializeStyle:
   effect := ApplySlotStyleFrom(activeProject);
 InitializeReady:
-  appLifecycle := "ready";
+  interfaceLifecycle := "ready" ||
+  effect := InitializeInterfaceFsmReady();
 InitializeWorkspace:
   effect := SynchronizeInitialWorkspaceAndOverlay();
 InitializeApi:

@@ -1,0 +1,54 @@
+---- MODULE FastFigureProjectEfsmPseudocode ----
+EXTENDS Naturals, Sequences
+
+\* Direct translation of sourcescript/project_efsm.py.
+CONSTANT NoReference
+
+(*
+--algorithm FastFigureProjectEfsm
+variables
+  projectAuthority = ReadActiveProject(),
+  result = NoReference,
+  candidate = NoReference,
+  effect = NoReference;
+
+procedure DispatchProjectCommand(eventName, payload)
+variables preProject = NoReference;
+begin
+ProjectCommandMembership:
+  assert IsDeclaredProjectCommand(eventName);
+ProjectReadCurrent:
+  preProject := projectAuthority;
+ProjectResolve:
+  assert ResolveAllProjectCommandInputs(preProject, eventName, payload);
+ProjectCandidate:
+  candidate := BuildDomainCandidate(preProject, eventName, payload);
+ProjectValidate:
+  assert candidate # NoReference /\ ValidateWholeProject(candidate);
+ProjectCommit:
+  projectAuthority := candidate;
+ProjectResult:
+  result := BuildProjectMutationResult(
+    eventName,
+    preProject,
+    projectAuthority,
+    payload
+  );
+ProjectNoInterfaceMutation:
+  assert InterfaceAuthorityUnchangedByProjectEfsm();
+ProjectNoRendererMutation:
+  assert RendererAuthorityUnchangedByProjectEfsm();
+ProjectCommandReturn:
+  return;
+end procedure;
+
+begin
+Main:
+  while TRUE do
+    with command = NextProjectCommand() do
+      call DispatchProjectCommand(command.event, command.payload);
+    end with;
+  end while;
+end algorithm;
+*)
+====

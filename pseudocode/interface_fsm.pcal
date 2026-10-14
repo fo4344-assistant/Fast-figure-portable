@@ -1,0 +1,170 @@
+---- MODULE FastFigureInterfaceFsmPseudocode ----
+EXTENDS Naturals, Sequences
+
+\* Direct translation of sourcescript/interface_fsm.py.
+CONSTANT NoSelection
+
+(*
+--algorithm FastFigureInterfaceFsm
+variables
+  lifecycle = "booting",
+  workspace = "project",
+  overlay = "none",
+  assetSelection = "none",
+  assetPath = NoSelection,
+  graphObject = "none",
+  graphObjectIndex = NoSelection,
+  direction = "model-to-ui",
+  revision = 0,
+  error = NoSelection,
+  selectedSlotId = NoSelection,
+  result = NoSelection,
+  effect = NoSelection;
+
+procedure PublishState()
+begin
+PublishRevision:
+  revision := revision + 1;
+PublishReturn:
+  return;
+end procedure;
+
+procedure SelectSlot(payload)
+variables slot = NoSelection;
+begin
+ResolveSlot:
+  if payload.slotId # NoSelection then
+    slot := ResolveVisibleSlotFromCurrentProject(payload.slotId);
+  end if;
+CommitSlotSelection:
+  if payload.slotId = NoSelection then
+    selectedSlotId := NoSelection ||
+    graphObject := "none" ||
+    graphObjectIndex := NoSelection ||
+    workspace := "project";
+  elsif slot # NoSelection then
+    if PayloadUsesUiToggle(payload) /\ selectedSlotId = slot.id then
+      selectedSlotId := NoSelection ||
+      graphObject := "none" ||
+      graphObjectIndex := NoSelection ||
+      workspace := "project";
+    else
+      selectedSlotId := slot.id ||
+      workspace := IF slot.contentType = "image" THEN "slot.image" ELSE "slot.graph";
+      if ~GraphObjectSelectionValidForSlot(slot, graphObjectIndex) then
+        graphObject := "none" ||
+        graphObjectIndex := NoSelection;
+      end if;
+    end if;
+  end if;
+SelectSlotPublish:
+  call PublishState();
+SelectSlotReturn:
+  return;
+end procedure;
+
+procedure SelectAsset(kind, path)
+begin
+ResolveAsset:
+  if ResolveCurrentProjectAssetKind(path) = kind then
+    graphObject := "none" ||
+    graphObjectIndex := NoSelection ||
+    assetSelection := kind ||
+    assetPath := path;
+    call PublishState();
+  end if;
+SelectAssetReturn:
+  return;
+end procedure;
+
+procedure SelectGraphObject(index)
+variables csvPath = NoSelection;
+begin
+ResolveObject:
+  csvPath := ResolveCurrentSelectedGraphObjectCsvPath(index);
+CommitGraphObject:
+  if csvPath # NoSelection then
+    assetSelection := "csv" ||
+    assetPath := csvPath ||
+    graphObject := "selected" ||
+    graphObjectIndex := index;
+    call PublishState();
+  end if;
+SelectGraphReturn:
+  return;
+end procedure;
+
+procedure TransitionOverlay(eventName, payload)
+begin
+OverlayTransition:
+  overlay := ResolveOverlayTarget(overlay, eventName, payload);
+OverlayPublish:
+  call PublishState();
+OverlayReturn:
+  return;
+end procedure;
+
+procedure ReconcileProjectResult(eventName, mutationResult)
+begin
+ReconcileSlot:
+  selectedSlotId := ReResolveOrClearSelectedSlot(ReadActiveProject(), selectedSlotId);
+ReconcileAsset:
+  assetPath := ReResolveOrClearAssetPath(ReadActiveProject(), assetPath) ||
+  assetSelection := ReResolveOrClearAssetKind(ReadActiveProject(), assetPath);
+ReconcileGraph:
+  graphObjectIndex := ReResolveOrClearGraphObject(
+    ReadActiveProject(),
+    selectedSlotId,
+    graphObjectIndex
+  ) ||
+  graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
+ReconcileHints:
+  effect := ApplyProjectResultSelectionHints(mutationResult);
+ReconcileWorkspace:
+  workspace := WorkspaceFromSelectedSlot(ReadActiveProject(), selectedSlotId);
+ReconcileNoProjectMutation:
+  assert ProjectAuthorityUnchangedByInterfaceReconciliation();
+ReconcilePublish:
+  call PublishState();
+ReconcileReturn:
+  result := CurrentInterfaceState();
+  return;
+end procedure;
+
+procedure RunLifecycle(requestedLifecycle, eventName, task)
+begin
+LifecycleGuard:
+  assert lifecycle = "ready";
+LifecycleStart:
+  lifecycle := requestedLifecycle;
+  call PublishState();
+LifecycleTask:
+  either
+    result := ExecuteTask(task);
+  or
+    error := ExecuteTaskFailure(task) ||
+    lifecycle := "error";
+  end either;
+LifecycleRestore:
+  lifecycle := "ready";
+  call PublishState();
+LifecycleReturn:
+  return;
+end procedure;
+
+begin
+Main:
+  while TRUE do
+    either
+      with request = NextInterfaceEvent() do
+        effect := ApplyInterfaceOnlyEvent(request);
+      end with;
+    or
+      with projectResult = NextCommittedProjectResult() do
+        call ReconcileProjectResult(projectResult.event, projectResult);
+      end with;
+    end either;
+  end while;
+end algorithm;
+*)
+====

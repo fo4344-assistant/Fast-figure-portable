@@ -31,7 +31,7 @@ variables
 procedure SubscribeAppState(callback)
 begin
 SubscribeExternalStore:
-  result := RegisterAppFsmSubscriber(callback);
+  result := RegisterInterfaceFsmSubscriber(callback);
 SubscribeReturn:
   return;
 end procedure;
@@ -107,7 +107,7 @@ end procedure;
 procedure RunLifecycleTask(requestedLifecycle, eventName, task)
 begin
 DelegateLifecycle:
-  result := AppFsmRun(requestedLifecycle, eventName, task);
+  result := RunApplicationLifecycleTask(requestedLifecycle, eventName, task);
 LifecycleTelemetry:
   if TaskFailed(result) then
     effect := PublishDebugTelemetry(TaskError(result));

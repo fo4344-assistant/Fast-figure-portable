@@ -85,7 +85,7 @@ GridBuild:
 GridCommit:
   if result # NoReference then
     projectAuthority := result;
-    result := ReconcileSelectedSlotAfterGridCommit(projectAuthority);
+    result := GridCommitMutationResult(projectAuthority);
   end if;
 GridSetReturn:
   return;
