@@ -10691,6 +10691,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
       function applyDataObjectDeletedAction({ machine, payload }) {
         machine.assertWritable("data", "DATA_OBJECT_DELETED");
+        machine.assertWritable("charts", "DATA_OBJECT_DELETED");
+        if (payload.candidate) {
+          activeProject.initialize(validateProjectObjectState(payload.candidate, { requireSlots: true }));
+          return;
+        }
         activeProject.csvFiles = activeProject.csvFiles.filter((item) => item.id !== payload.csvId);
       }
       function applyImageObjectCreatedAction({ machine, payload }) {
@@ -10708,9 +10713,17 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
       function applyImageObjectDeletedAction({ machine, payload }) {
         machine.assertWritable("images", "IMAGE_OBJECT_DELETED");
+        machine.assertWritable("slots", "IMAGE_OBJECT_DELETED");
+        machine.assertWritable("charts", "IMAGE_OBJECT_DELETED");
+        let previous = getProjectImage(payload.imageId);
+        if (payload.candidate) {
+          activeProject.initialize(validateProjectObjectState(payload.candidate, { requireSlots: true }));
+          releaseProjectImageDisplayUrl(previous);
+          return;
+        }
         if (activeProject.slots.some((slot) => slot.imageId === payload.imageId))
           throw Error("참조 슬롯을 초기화하지 않은 이미지는 삭제할 수 없습니다.");
-        releaseProjectImageDisplayUrl(getProjectImage(payload.imageId));
+        releaseProjectImageDisplayUrl(previous);
         activeProject.images = activeProject.images.filter((item) => item.id !== payload.imageId);
       }
       function detachSlotChart(slot) {
@@ -10864,6 +10877,15 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       function applyChartModelReplacedAction({ machine, payload }) {
         machine.assertWritable("charts", "CHART_MODEL_REPLACED");
         machine.assertWritable("editor", "CHART_MODEL_REPLACED");
+        if (payload.candidate) {
+          machine.assertWritable("data", "CHART_MODEL_REPLACED");
+          machine.assertWritable("files", "CHART_MODEL_REPLACED");
+          activeProject.initialize(validateProjectObjectState(payload.candidate, { requireSlots: true }));
+          let committed = getChart(payload.chartId);
+          if (committed?.editor?.editable !== false) rebuildEditableGraph(committed);
+          payload.chart = committed;
+          return;
+        }
         let slot = slotAt(payload.slotId),
           chart = payload.chart,
           index = activeProject.charts.findIndex((item) => item.id === payload.chartId);
@@ -15285,18 +15307,18 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         if (getSelectedSlot())
           return status("프로젝트 내보내기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
         try {
-          activeProject.projectName = String(activeProject.projectName || "").trim().slice(0, 120);
-          let project = ffpxBuildProject(),
+          let exportProjectName = String(activeProject.projectName || "").trim().slice(0, 120),
+            project = ffpxBuildProject(),
             blob = new Blob([ffpxZipStore(project.assets)], {
               type: "application/vnd.fast-figure-project",
             }),
             link = document.createElement("a"),
             stamp = new Date().toISOString().replace(/[:.]/g, "-");
           link.href = URL.createObjectURL(blob);
-          link.download = `${projectFileStem(activeProject.projectName)}-${stamp}.ffpx`;
+          link.download = `${projectFileStem(exportProjectName)}-${stamp}.ffpx`;
           link.click();
           setTimeout(() => URL.revokeObjectURL(link.href), 0);
-          status(`${activeProject.projectName || "프로젝트"}를 FFPX 파일로 내보냈습니다.`);
+          status(`${exportProjectName || "프로젝트"}를 FFPX 파일로 내보냈습니다.`);
           debugLog("project:export-ffpx", {
             projectName: activeProject.projectName,
             charts: activeProject.charts.length,
@@ -15835,7 +15857,12 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         chart.editor.editable=next;
         validateChartModel(chart,"편집 상태 변경 차트",candidate.assets.csvFiles);
         validateProjectObjectState(candidate,{requireSlots:true});
-        activeProject.initialize(candidate);
+        appFSM.send("CHART_MODEL_REPLACED", {
+          slotId: getSelectedSlot()?.id ?? null,
+          chartId: current.id,
+          candidate,
+          direction: "ui-to-fsm",
+        });
 
         let committed=getChart(current.id);
         if(next) rebuildEditableGraph(committed);
@@ -15907,47 +15934,54 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
       function deleteProjectAsset(target) {
         if (!target) return null;
+        let candidate = projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+
         if (target.kind === "csv") {
-          let csv = getProjectCsv(target.id);
+          let csv = candidate.assets.csvFiles.find((item) => item.id === target.id);
           if (!csv) return null;
-          let references = activeProject.charts.flatMap((chart) =>
-            (chart.editor?.objects || []).filter((object) => object.csvId === csv.id));
-          if (references.length) {
-            appFSM.send("CLEAR_GRAPH_OBJECT", {
-              index: null, direction: "ui-to-fsm",
-            });
-            activeProject.charts.forEach((chart) => {
-              if (!Array.isArray(chart.editor?.objects)) return;
-              let objects = chart.editor.objects.filter((object) => object.csvId !== csv.id);
-              if (objects.length === chart.editor.objects.length) return;
-              appFSM.send("GRAPH_OBJECTS_REPLACED", {
-                chartId: chart.id, objects, direction: "fsm-to-model",
-              });
-            });
-          }
+          let removedReferenceCount = 0;
+          candidate.charts.forEach((chart) => {
+            if (!Array.isArray(chart.editor?.objects)) return;
+            let before = chart.editor.objects.length;
+            chart.editor.objects = chart.editor.objects.filter((object) => object.csvId !== csv.id);
+            removedReferenceCount += before - chart.editor.objects.length;
+          });
+          candidate.assets.csvFiles = candidate.assets.csvFiles.filter((item) => item.id !== csv.id);
+          validateProjectObjectState(candidate, { requireSlots: true });
           appFSM.send("DATA_OBJECT_DELETED", {
-            csvId: csv.id, direction: "fsm-to-model",
+            csvId: csv.id, candidate, direction: "ui-to-fsm",
           });
-          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "fsm-to-model" });
+          appFSM.send("CLEAR_GRAPH_OBJECT", { index: null, direction: "ui-to-fsm" });
+          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "ui-to-fsm" });
           renderDashboard();
-          status(references.length
-            ? `${csv.name}과 이를 참조하던 그래프 오브젝트 ${references.length}개를 삭제했습니다.`
+          status(removedReferenceCount
+            ? `${csv.name}과 이를 참조하던 그래프 오브젝트 ${removedReferenceCount}개를 삭제했습니다.`
             : `${csv.name}을 프로젝트에서 삭제했습니다.`);
-        } else if (target.kind === "image") {
-          let image = getProjectImage(target.id);
+          return null;
+        }
+
+        if (target.kind === "image") {
+          let image = candidate.assets.images.find((item) => item.id === target.id);
           if (!image) return null;
-          let references = activeProject.slots.filter((slot) => slot.imageId === image.id);
-          if (references.length)
-            appFSM.send("SLOTS_RESET", {
-              slotIds: references.map((slot) => slot.id), direction: "fsm-to-model",
-            });
-          appFSM.send("IMAGE_OBJECT_DELETED", {
-            imageId: image.id, direction: "fsm-to-model",
+          let resetCount = 0, removedChartIds = new Set();
+          candidate.slots.forEach((slot) => {
+            if (slot.imageId !== image.id) return;
+            if (Number.isInteger(slot.chart)) removedChartIds.add(slot.chart);
+            resetSlotLocalState(slot);
+            resetCount++;
           });
-          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "fsm-to-model" });
+          if (removedChartIds.size)
+            candidate.charts = candidate.charts.filter((chart) => !removedChartIds.has(chart.id));
+          candidate.assets.images = candidate.assets.images.filter((item) => item.id !== image.id);
+          validateProjectObjectState(candidate, { requireSlots: true });
+          appFSM.send("IMAGE_OBJECT_DELETED", {
+            imageId: image.id, candidate, direction: "ui-to-fsm",
+          });
+          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "ui-to-fsm" });
           renderDashboard();
-          status(references.length
-            ? `${image.name}을 삭제하고 참조 슬롯 ${references.length}개를 초기화했습니다.`
+          status(resetCount
+            ? `${image.name}을 삭제하고 참조 슬롯 ${resetCount}개를 초기화했습니다.`
             : `${image.name}을 프로젝트에서 삭제했습니다.`);
         }
         return null;
