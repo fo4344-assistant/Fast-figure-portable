@@ -1,0 +1,25 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -791,6 +791,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+             view: window,
+           }),
+         );
++        check(
++          document.body.style.cursor === "ns-resize",
++          `${overlayName} resize handler did not start`,
++        );
+         window.dispatchEvent(
+           new MouseEvent("mousemove", {
+             bubbles: true,
+@@ -800,6 +804,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+             view: window,
+           }),
+         );
++        check(
++          /px$/.test(modal.style.height),
++          `${overlayName} resize handler did not project an inline height`,
++        );
+         window.dispatchEvent(
+           new MouseEvent("mouseup", {
+             bubbles: true,

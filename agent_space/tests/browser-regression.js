@@ -791,6 +791,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
             view: window,
           }),
         );
+        check(
+          document.body.style.cursor === "ns-resize",
+          `${overlayName} resize handler did not start`,
+        );
         window.dispatchEvent(
           new MouseEvent("mousemove", {
             bubbles: true,
@@ -799,6 +803,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
             clientY: before.bottom - 2 + delta,
             view: window,
           }),
+        );
+        check(
+          /px$/.test(modal.style.height),
+          `${overlayName} resize handler did not project an inline height`,
         );
         window.dispatchEvent(
           new MouseEvent("mouseup", {
