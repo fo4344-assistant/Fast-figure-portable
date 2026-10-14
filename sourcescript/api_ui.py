@@ -235,6 +235,16 @@ MANTINE_THEME_RULE = (
     "FastFigureReadmeOverlay처럼 목적이 다른 Modal은 이 네 설정 overlay의 공통 maximum 또는 resize interaction을 자동 상속하는 대상으로 간주하지 않는다."
 )
 
+LAYOUT_SELECTION_INTERACTION_RULE = (
+    "Layout overlay의 slot 선택 집합은 해당 Modal lifetime 동안만 존재하는 UI-local state다. "
+    "slot surface click은 해당 slot id를 toggle한다. preview grid의 slot 이외 배경과 preview 바깥 "
+    "Layout Modal의 비-slot content 배경 click은 selection을 clear한다. "
+    "slot click과 selection을 소비하는 merge/split control은 같은 interaction에서 parent background clear에 의해 "
+    "선행 또는 상쇄되지 않아야 한다. grid shape 변경과 overlay close는 selection을 clear한다. "
+    "이 선택/해제는 FFPX project object, layout persistent state, slot persistent state를 변경하지 않는다."
+)
+
+
 LAYOUT_PREVIEW_RULE = (
     "FastFigureLayoutOverlay의 preview는 layout slotStyle.aspect를 보존한다. 실제 rendered preview width 하나를 geometry 계산 기준으로 사용하고 "
     "preview height와 width-dependent gap/outerMargin/radius를 같은 기준에서 계산한다. overlay height resize는 preview width를 직접 변경하는 command가 아니며 "

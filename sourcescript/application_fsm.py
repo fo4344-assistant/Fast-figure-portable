@@ -122,6 +122,10 @@ CANDIDATE_MUTATION_CONTRACT = [
     "candidate의 local rule, cross-reference, whole-project invariant를 필요한 범위까지 검증한다.",
     "모든 검증이 성공한 뒤 authoritative state를 한 번 commit한다.",
     "commit 뒤 selectedSlotId/asset selection/graph-object selection처럼 파생 runtime state를 현재 project에 맞춘다.",
+    "mutation owner는 commit 결과에서 실제 reference/content 변화와 renderer-relevant effect를 산출한다.",
+    "region별 publish는 frontend/FSM subscriber 알림이며 dashboard renderer의 logical-event 완료 신호가 아니다.",
+    "모든 handled region action/transition, selection reconciliation, 기존 publish가 끝난 뒤 send가 반환한다.",
+    "UI/API orchestration은 send 반환 뒤 mutation result를 소비해 필요한 renderer projection을 한 번 요청한다.",
     "renderer/UI notification은 commit된 authority를 다시 읽어 projection한다.",
     "validation 이전 실패는 authoritative state를 변경하지 않는다.",
 ]
@@ -167,6 +171,9 @@ class ApplicationStateMachine:
         3. handler가 target을 가지면 region transition을 수행한다.
         4. 같은 event를 여러 region이 소유하면 각 region이 같은 payload를 순서대로 처리한다.
         5. 처리 region이 없으면 debug warning만 남기고 state를 임의 변경하지 않는다.
+        6. 처리한 모든 region의 action/transition, selection reconciliation과 기존 publish를 끝낸 뒤 반환한다.
+        7. project/reference를 변경한 action은 실제 변경 사실을 event result/payload에 남겨 caller가 projection effect를 판단할 수 있게 한다.
+        8. 별도 completion listener registry를 추가하지 않는다. dashboard invalidation은 send 반환 뒤 UI/API orchestration이 수행한다.
         """
         state = "event 처리 후 appFSM.state"
         return state

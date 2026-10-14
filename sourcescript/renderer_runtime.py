@@ -89,6 +89,33 @@ def status(message):
     return text
 
 
+DASHBOARD_PROJECTION_INVALIDATION_RULE = (
+    "dashboard-affecting logical event는 UI/API orchestration이 appFSM.send로 처리한 뒤, 모든 region의 "
+    "action/transition/reconciliation/publish가 완료되어 send가 반환한 시점에 한 번만 projection effect를 판정한다. "
+    "PROJECT_NODE_MOVED와 PROJECT_TRASH_EMPTIED는 mutation result에서 실제 rendered reference 제거가 확인된 경우만 "
+    "FULL_DASHBOARD이고 path/tree 변화만 있으면 NONE이다. SLOTS_SWAPPED는 FULL_DASHBOARD 의미를 유지한다. "
+    "image/caption/style처럼 좁은 projection으로 충분한 기존 mutation은 TARGETED_PROJECTION을 유지한다. "
+    "region별 publish, lifecycle transition, UI-only transition은 full dashboard invalidation trigger가 아니다. "
+    "renderer는 current activeProject와 reconciled selectedSlotId를 다시 읽고 project mutation 또는 appFSM.send/notify를 재호출하지 않는다."
+)
+
+
+def dispatchDashboardAffectingEvent(event, payload):
+    """
+    처리:
+    1. UI/API orchestration 경계에서 appFSM.send(event, payload)를 동기 실행한다.
+    2. send 반환 뒤 mutation owner가 산출한 실제 reference/content 변경 결과를 읽는다.
+    3. FULL_DASHBOARD / TARGETED_PROJECTION / NONE 중 effect를 한 번 결정한다.
+    4. FULL_DASHBOARD는 current authority를 다시 읽어 renderDashboard를 수행하고,
+       TARGETED_PROJECTION은 기존 narrow renderer를 사용하며, NONE이면 dashboard DOM을 다시 만들지 않는다.
+    5. projection effect는 project/FSM state를 다시 변경하거나 별도 publish를 만들지 않는다.
+
+    첫 적용 대상은 PROJECT_NODE_MOVED와 PROJECT_TRASH_EMPTIED다.
+    SLOTS_SWAPPED의 기존 즉시 refresh는 동등성 검증 후 같은 orchestration 규칙으로 수렴할 수 있다.
+    """
+    return "logical event 완료 뒤의 단일 projection effect"
+
+
 def renderDashboard():
     """
     변경:

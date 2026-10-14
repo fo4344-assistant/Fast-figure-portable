@@ -1,0 +1,375 @@
+diff --git a/sourcescript/api_ui.py b/sourcescript/api_ui.py
+--- a/sourcescript/api_ui.py
++++ b/sourcescript/api_ui.py
+@@ -235,6 +235,16 @@
+     "FastFigureReadmeOverlay처럼 목적이 다른 Modal은 이 네 설정 overlay의 공통 maximum 또는 resize interaction을 자동 상속하는 대상으로 간주하지 않는다."
+ )
+ 
++LAYOUT_SELECTION_INTERACTION_RULE = (
++    "Layout overlay의 slot 선택 집합은 해당 Modal lifetime 동안만 존재하는 UI-local state다. "
++    "slot surface click은 해당 slot id를 toggle한다. preview grid의 slot 이외 배경과 preview 바깥 "
++    "Layout Modal의 비-slot content 배경 click은 selection을 clear한다. "
++    "slot click과 selection을 소비하는 merge/split control은 같은 interaction에서 parent background clear에 의해 "
++    "선행 또는 상쇄되지 않아야 한다. grid shape 변경과 overlay close는 selection을 clear한다. "
++    "이 선택/해제는 FFPX project object, layout persistent state, slot persistent state를 변경하지 않는다."
++)
++
++
+ LAYOUT_PREVIEW_RULE = (
+     "FastFigureLayoutOverlay의 preview는 layout slotStyle.aspect를 보존한다. 실제 rendered preview width 하나를 geometry 계산 기준으로 사용하고 "
+     "preview height와 width-dependent gap/outerMargin/radius를 같은 기준에서 계산한다. overlay height resize는 preview width를 직접 변경하는 command가 아니며 "
+diff --git a/sourcescript/application_fsm.py b/sourcescript/application_fsm.py
+--- a/sourcescript/application_fsm.py
++++ b/sourcescript/application_fsm.py
+@@ -122,51 +122,58 @@
+     "candidate의 local rule, cross-reference, whole-project invariant를 필요한 범위까지 검증한다.",
+     "모든 검증이 성공한 뒤 authoritative state를 한 번 commit한다.",
+     "commit 뒤 selectedSlotId/asset selection/graph-object selection처럼 파생 runtime state를 현재 project에 맞춘다.",
+-    "renderer/UI notification은 commit된 authority를 다시 읽어 projection한다.",
+-    "validation 이전 실패는 authoritative state를 변경하지 않는다.",
+-]
+-
+-MUTATION_GROUPS = {
+-    "project": (
+-        "PROJECT_LOADED와 project metadata 변경. 전체 candidate ProjectObject를 먼저 검증하고 한 번 교체한다."
+-    ),
+-    "slot-local": (
+-        "type/reset/swap/image-link/data-connect/chart-import. contentType/chart/image/imageSettings/caption 같은 "
+-        "slot object의 local properties와 chart ownership을 candidate에서 함께 계산해 partial slot state를 남기지 않는다."
+-    ),
+-    "assets": (
+-        "CSV/image create/replace/delete, directory/move/trash. VFS와 affected references를 같은 candidate에서 검증한다."
+-    ),
+-    "graphs": (
+-        "graph object list/layout/chart model. zero-object chart를 허용하고 referenced CSV를 candidate에서 검증한다."
+-    ),
+-    "layout": (
+-        "grid/merge/split. geometry와 slot-local payload 이동을 함께 계산하고 implicit data loss가 있으면 commit 전 거부한다."
+-    ),
+-    "captions": (
+-        "global caption은 project property, slot caption은 explicit slot id의 local property다. "
+-        "UI editor target mode는 mutation input에 명시적으로 전달할 뿐 persistent project state가 아니다."
+-    ),
+-}
+-
+-
+-class ApplicationStateMachine:
+-    def send(self, event, payload):
+-        """
+-        Return:
+-        - state:
+-          event를 처리한 뒤의 appFSM state.
+-
+-        변경:
+-        - 등록된 event action이 project/runtime state를 변경할 수 있다.
+-        - 대상 region state를 변경할 수 있다.
+-
+-        처리:
+-        1. REGION_ORDER 순서로 현재 region definition에서 event handler를 찾는다.
+-        2. handler가 action을 가지면 해당 action을 먼저 실행한다.
+-        3. handler가 target을 가지면 region transition을 수행한다.
+-        4. 같은 event를 여러 region이 소유하면 각 region이 같은 payload를 순서대로 처리한다.
+-        5. 처리 region이 없으면 debug warning만 남기고 state를 임의 변경하지 않는다.
++    "mutation owner는 commit 결과에서 실제 reference/content 변화와 renderer-relevant effect를 산출한다.",
++    "region별 publish는 frontend/FSM subscriber 알림이며 dashboard renderer의 logical-event 완료 신호가 아니다.",
++    "모든 handled region action/transition, selection reconciliation, 기존 publish가 끝난 뒤 send가 반환한다.",
++    "UI/API orchestration은 send 반환 뒤 mutation result를 소비해 필요한 renderer projection을 한 번 요청한다.",
++    "renderer/UI notification은 commit된 authority를 다시 읽어 projection한다.",
++    "validation 이전 실패는 authoritative state를 변경하지 않는다.",
++]
++
++MUTATION_GROUPS = {
++    "project": (
++        "PROJECT_LOADED와 project metadata 변경. 전체 candidate ProjectObject를 먼저 검증하고 한 번 교체한다."
++    ),
++    "slot-local": (
++        "type/reset/swap/image-link/data-connect/chart-import. contentType/chart/image/imageSettings/caption 같은 "
++        "slot object의 local properties와 chart ownership을 candidate에서 함께 계산해 partial slot state를 남기지 않는다."
++    ),
++    "assets": (
++        "CSV/image create/replace/delete, directory/move/trash. VFS와 affected references를 같은 candidate에서 검증한다."
++    ),
++    "graphs": (
++        "graph object list/layout/chart model. zero-object chart를 허용하고 referenced CSV를 candidate에서 검증한다."
++    ),
++    "layout": (
++        "grid/merge/split. geometry와 slot-local payload 이동을 함께 계산하고 implicit data loss가 있으면 commit 전 거부한다."
++    ),
++    "captions": (
++        "global caption은 project property, slot caption은 explicit slot id의 local property다. "
++        "UI editor target mode는 mutation input에 명시적으로 전달할 뿐 persistent project state가 아니다."
++    ),
++}
++
++
++class ApplicationStateMachine:
++    def send(self, event, payload):
++        """
++        Return:
++        - state:
++          event를 처리한 뒤의 appFSM state.
++
++        변경:
++        - 등록된 event action이 project/runtime state를 변경할 수 있다.
++        - 대상 region state를 변경할 수 있다.
++
++        처리:
++        1. REGION_ORDER 순서로 현재 region definition에서 event handler를 찾는다.
++        2. handler가 action을 가지면 해당 action을 먼저 실행한다.
++        3. handler가 target을 가지면 region transition을 수행한다.
++        4. 같은 event를 여러 region이 소유하면 각 region이 같은 payload를 순서대로 처리한다.
++        5. 처리 region이 없으면 debug warning만 남기고 state를 임의 변경하지 않는다.
++        6. 처리한 모든 region의 action/transition, selection reconciliation과 기존 publish를 끝낸 뒤 반환한다.
++        7. project/reference를 변경한 action은 실제 변경 사실을 event result/payload에 남겨 caller가 projection effect를 판단할 수 있게 한다.
++        8. 별도 completion listener registry를 추가하지 않는다. dashboard invalidation은 send 반환 뒤 UI/API orchestration이 수행한다.
+         """
+         state = "event 처리 후 appFSM.state"
+         return state
+diff --git a/sourcescript/assets_files.py b/sourcescript/assets_files.py
+--- a/sourcescript/assets_files.py
++++ b/sourcescript/assets_files.py
+@@ -333,23 +333,28 @@
+     5. directory 이동이면 descendant asset/directory path를 같은 candidate 안에서 함께 이동한다.
+     6. collision, fixed-directory, subtree cycle, reference invariant를 검증한다.
+     7. 성공한 candidate만 한 번 commit한다.
+-    """
+-    return "commit된 최종 이동 path"
+-
+-
+-def emptyProjectTrash():
+-    """
+-    변경:
+-    - trash 아래 directory/CSV/image와 아직 남아 있는 해당 reference.
+-
+-    처리:
+-    1. 현재 trash subtree를 다시 resolve한다.
+-    2. collectAssetReferences로 영향을 계산한다.
+-    3. references와 trash assets/directories를 제거한 candidate project를 만든다.
+-    4. candidate 전체 invariant를 검증한다.
+-    5. 성공한 경우에만 한 번 commit한다.
+-    """
+-    return "삭제한 항목 수와 reference 정리 결과"
++    8. entering-trash detach로 실제 제거된 graph-object reference 수와 image slot reset 수를
++       mutation result에 기록한다. path-only 이동과 trash 밖 복구에서는 두 값이 0이다.
++       renderer는 이 commit 결과를 사용하고 VFS/DOM에서 변화 여부를 역추론하지 않는다.
++    """
++    return "commit된 최종 이동 path와 실제 reference 제거 결과"
++
++
++def emptyProjectTrash():
++    """
++    변경:
++    - trash 아래 directory/CSV/image와 아직 남아 있는 해당 reference.
++
++    처리:
++    1. 현재 trash subtree를 다시 resolve한다.
++    2. collectAssetReferences로 영향을 계산한다.
++    3. references와 trash assets/directories를 제거한 candidate project를 만든다.
++    4. candidate 전체 invariant를 검증한다.
++    5. 성공한 경우에만 한 번 commit한다.
++    6. 이 commit으로 실제 제거된 graph-object reference 수와 image slot reset 수를 result에 기록한다.
++       실제 제거된 reference가 없으면 dashboard content projection effect는 없다.
++    """
++    return "삭제한 항목 수와 실제 reference 제거 결과"
+ 
+ 
+ def ffpxBuildProject():
+diff --git a/sourcescript/renderer_runtime.py b/sourcescript/renderer_runtime.py
+--- a/sourcescript/renderer_runtime.py
++++ b/sourcescript/renderer_runtime.py
+@@ -89,6 +89,33 @@
+     return text
+ 
+ 
++DASHBOARD_PROJECTION_INVALIDATION_RULE = (
++    "dashboard-affecting logical event는 UI/API orchestration이 appFSM.send로 처리한 뒤, 모든 region의 "
++    "action/transition/reconciliation/publish가 완료되어 send가 반환한 시점에 한 번만 projection effect를 판정한다. "
++    "PROJECT_NODE_MOVED와 PROJECT_TRASH_EMPTIED는 mutation result에서 실제 rendered reference 제거가 확인된 경우만 "
++    "FULL_DASHBOARD이고 path/tree 변화만 있으면 NONE이다. SLOTS_SWAPPED는 FULL_DASHBOARD 의미를 유지한다. "
++    "image/caption/style처럼 좁은 projection으로 충분한 기존 mutation은 TARGETED_PROJECTION을 유지한다. "
++    "region별 publish, lifecycle transition, UI-only transition은 full dashboard invalidation trigger가 아니다. "
++    "renderer는 current activeProject와 reconciled selectedSlotId를 다시 읽고 project mutation 또는 appFSM.send/notify를 재호출하지 않는다."
++)
++
++
++def dispatchDashboardAffectingEvent(event, payload):
++    """
++    처리:
++    1. UI/API orchestration 경계에서 appFSM.send(event, payload)를 동기 실행한다.
++    2. send 반환 뒤 mutation owner가 산출한 실제 reference/content 변경 결과를 읽는다.
++    3. FULL_DASHBOARD / TARGETED_PROJECTION / NONE 중 effect를 한 번 결정한다.
++    4. FULL_DASHBOARD는 current authority를 다시 읽어 renderDashboard를 수행하고,
++       TARGETED_PROJECTION은 기존 narrow renderer를 사용하며, NONE이면 dashboard DOM을 다시 만들지 않는다.
++    5. projection effect는 project/FSM state를 다시 변경하거나 별도 publish를 만들지 않는다.
++
++    첫 적용 대상은 PROJECT_NODE_MOVED와 PROJECT_TRASH_EMPTIED다.
++    SLOTS_SWAPPED의 기존 즉시 refresh는 동등성 검증 후 같은 orchestration 규칙으로 수렴할 수 있다.
++    """
++    return "logical event 완료 뒤의 단일 projection effect"
++
++
+ def renderDashboard():
+     """
+     변경:
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,46 +9,46 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode and gates Source Code where TLC validation is used.",
+   "layers": {
+     "source-script": {
+-      "revision": 19,
+-      "status": "current",
+-      "path_rule": "sourcescript/**/*.py",
+-      "fingerprint": "sha256:a6f3ce83d62984f9a18ca38574204a891b3f55c454f06579e4fff9fd2e589047",
+-      "derived_from": null,
+-      "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261014-002-sourcescript-closure-r19.md"
+-    },
+-    "verification-model": {
+-      "revision": 16,
+-      "status": "current",
+-      "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:ee96d884edcb459419313e1b4e87db11dcb871955e9ce135fd9b8b1247995bdb",
+-      "derived_from": {
+-        "source-script": "sha256:a6f3ce83d62984f9a18ca38574204a891b3f55c454f06579e4fff9fd2e589047",
+-        "pseudocode": "sha256:b99611f367162b52927d0f18d8d0b7cca0965dca241c5c465ce421ebfe06ce93"
+-      },
+-      "tlc": "passed",
+-      "validation_review": "agent_space/reviews/review-20261014-004-verification-r16-lineage.md"
+-    },
+-    "source-code": {
+-      "revision": 23,
+-      "status": "current",
+-      "paths": [
+-        "Fast-figure.html",
+-        "fast-figure-ui.js",
+-        "fast-figure.js",
+-        "scripts/build-portable.py"
+-      ],
+-      "fingerprint": "sha256:830b02a18b2432a06655d28f26af088e53aed94ce2aee723b3358aced20b2c3d",
+-      "derived_from": {
+-        "source-script": "sha256:a6f3ce83d62984f9a18ca38574204a891b3f55c454f06579e4fff9fd2e589047",
+-        "pseudocode": "sha256:b99611f367162b52927d0f18d8d0b7cca0965dca241c5c465ce421ebfe06ce93",
+-        "verification-model": "sha256:ee96d884edcb459419313e1b4e87db11dcb871955e9ce135fd9b8b1247995bdb"
+-      },
+-      "validation_review": null
+-    },
+-    "pseudocode": {
+-      "revision": 5,
+-      "status": "current",
++      "revision": 20,
++      "status": "current",
++      "path_rule": "sourcescript/**/*.py",
++      "fingerprint": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
++      "derived_from": null,
++      "closure": "closed",
++      "closure_review": "agent_space/reviews/review-20261014-005-sourcescript-closure-r20.md"
++    },
++    "verification-model": {
++      "revision": 16,
++      "status": "stale",
++      "path_rule": "verification/**/*.{tla,cfg}",
++      "fingerprint": "sha256:ee96d884edcb459419313e1b4e87db11dcb871955e9ce135fd9b8b1247995bdb",
++      "derived_from": {
++        "source-script": "sha256:a6f3ce83d62984f9a18ca38574204a891b3f55c454f06579e4fff9fd2e589047",
++        "pseudocode": "sha256:b99611f367162b52927d0f18d8d0b7cca0965dca241c5c465ce421ebfe06ce93"
++      },
++      "tlc": "passed",
++      "validation_review": "agent_space/reviews/review-20261014-004-verification-r16-lineage.md"
++    },
++    "source-code": {
++      "revision": 23,
++      "status": "stale",
++      "paths": [
++        "Fast-figure.html",
++        "fast-figure-ui.js",
++        "fast-figure.js",
++        "scripts/build-portable.py"
++      ],
++      "fingerprint": "sha256:830b02a18b2432a06655d28f26af088e53aed94ce2aee723b3358aced20b2c3d",
++      "derived_from": {
++        "source-script": "sha256:a6f3ce83d62984f9a18ca38574204a891b3f55c454f06579e4fff9fd2e589047",
++        "pseudocode": "sha256:b99611f367162b52927d0f18d8d0b7cca0965dca241c5c465ce421ebfe06ce93",
++        "verification-model": "sha256:ee96d884edcb459419313e1b4e87db11dcb871955e9ce135fd9b8b1247995bdb"
++      },
++      "validation_review": null
++    },
++    "pseudocode": {
++      "revision": 5,
++      "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+       "fingerprint": "sha256:b99611f367162b52927d0f18d8d0b7cca0965dca241c5c465ce421ebfe06ce93",
+       "derived_from": {
+diff --git a/agent_space/reviews/review-20261014-005-sourcescript-closure-r20.md b/agent_space/reviews/review-20261014-005-sourcescript-closure-r20.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261014-005-sourcescript-closure-r20.md
+@@ -0,0 +1,36 @@
++# Source Script r20 closure review — plan-014 A
++
++## 범위
++
++- 기준 계획: `agent_space/plans/plan-014.md`의 A 단계.
++- 이전 Source Script: r19.
++- 현재 Source Script: r20, `sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e`.
++- 후속 `plan-015`의 FFPX EFSM/UI-FSM 구조 분리는 이번 revision에 포함하지 않는다.
++
++## 논리적 완결성
++
++- Layout overlay selection은 Modal-local state이며 slot toggle, background clear, command control, grid 변경, overlay close의 경계를 명시했다.
++- background deselection은 FFPX project object와 layout/slot persistent state를 변경하지 않는다.
++- `ApplicationStateMachine.send()`의 logical-event 완료 시점은 모든 handled region action/transition, selection reconciliation, 기존 publish가 끝난 뒤다.
++- mutation owner가 실제 reference/content 변화 결과를 산출하며 renderer는 VFS/DOM에서 결과를 역추론하지 않는다.
++- trash move/empty는 실제 graph reference 제거 또는 image slot reset이 있는 경우에만 dashboard content invalidation을 요구한다.
++- renderer invalidation은 FULL_DASHBOARD / TARGETED_PROJECTION / NONE으로 구분하며 region별 publish나 lifecycle transition을 full-render trigger로 사용하지 않는다.
++- renderer effect는 current authority를 다시 읽는 projection이며 project mutation 또는 재귀적인 `appFSM.send/notify`를 발생시키지 않는다.
++
++## 프로젝트 목적 부합
++
++- plan-014의 Layout selection 해제 문제와 stale dashboard 문제를 같은 책임 경계 안에서 해결한다.
++- 새 persistent state, 별도 tree authority, completion listener registry, render queue를 추가하지 않는다.
++- outerMargin 기본값 0은 r19에 이미 반영되어 있으므로 중복 변경하지 않았다.
++
++## 중복과 통합 검토
++
++- 개별 public command마다 무조건 `renderDashboard()`를 추가하지 않고 logical event 완료 뒤 한 번만 invalidation을 판정한다.
++- existing narrow renderer가 충분한 image/caption/style 경로는 TARGETED_PROJECTION으로 유지한다.
++- composite command의 마지막 render 의미를 event별 중간 render로 분해하지 않는다.
++
++## 하위 계층 상태
++
++- pseudocode r5, verification r16, Source Code r23은 r20에 대해 stale로 전환한다.
++- 다음 단계는 PlusCal 직접 번역과 translation review다.
++- 이번 단계에서는 TLC, browser regression, distribution build를 실행하지 않았으며 통과했다고 기록하지 않는다.
+diff --git a/agent_space/patches/20261014-015.md b/agent_space/patches/20261014-015.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/patches/20261014-015.md
+@@ -0,0 +1,26 @@
++# 20261014-015 — Define plan-014 Source Script projection semantics
++
++## 목적과 변경
++
++- `sourcescript/api_ui.py`: Layout Modal selection/background deselection 경계 추가.
++- `sourcescript/application_fsm.py`: logical-event completion과 mutation-result 계약 보강.
++- `sourcescript/assets_files.py`: trash move/empty에서 실제 제거된 reference 결과를 mutation owner가 산출하도록 명세.
++- `sourcescript/renderer_runtime.py`: FULL_DASHBOARD / TARGETED_PROJECTION / NONE invalidation과 send 반환 뒤 orchestration 규칙 추가.
++- Source Script r20 fingerprint와 closure review를 등록하고 하위 계층을 stale로 표시.
++
++## 선택 이유
++
++region별 publish는 한 logical event 안에서 여러 번 발생할 수 있으므로 renderer invalidation 경계로 부적합하다. 동기 `send()` 반환 뒤의 final state/result를 사용하면 selection reconciliation까지 끝난 current authority를 한 번만 projection할 수 있다.
++
++conditional invalidation은 renderer가 VFS/DOM을 추측하는 대신 mutation owner가 실제 제거한 reference 결과를 제공하도록 했다.
++
++## 기각한 방향
++
++- appFSM 내부 completion-listener registry 추가: 현재 동기 send contract로 충분하다.
++- 모든 publish마다 full render: 중복 render와 중간 state projection을 만든다.
++- 모든 mutation을 full render로 통일: targeted renderer의 책임을 불필요하게 넓힌다.
++- Layout selection을 project state에 저장: UI-local lifetime을 persistent authority로 잘못 승격한다.
++
++## 검증과 후속
++
++이번 패치는 Source Script 의미와 lineage만 변경한다. PlusCal/TLC/Source Code/browser regression은 아직 갱신하지 않았고 stale로 기록한다. 다음 패치는 plan-014 B 단계 PlusCal 번역이다.

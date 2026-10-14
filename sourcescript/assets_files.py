@@ -333,8 +333,11 @@ def moveProjectNode(plan, useUniqueName):
     5. directory 이동이면 descendant asset/directory path를 같은 candidate 안에서 함께 이동한다.
     6. collision, fixed-directory, subtree cycle, reference invariant를 검증한다.
     7. 성공한 candidate만 한 번 commit한다.
+    8. entering-trash detach로 실제 제거된 graph-object reference 수와 image slot reset 수를
+       mutation result에 기록한다. path-only 이동과 trash 밖 복구에서는 두 값이 0이다.
+       renderer는 이 commit 결과를 사용하고 VFS/DOM에서 변화 여부를 역추론하지 않는다.
     """
-    return "commit된 최종 이동 path"
+    return "commit된 최종 이동 path와 실제 reference 제거 결과"
 
 
 def emptyProjectTrash():
@@ -348,8 +351,10 @@ def emptyProjectTrash():
     3. references와 trash assets/directories를 제거한 candidate project를 만든다.
     4. candidate 전체 invariant를 검증한다.
     5. 성공한 경우에만 한 번 commit한다.
+    6. 이 commit으로 실제 제거된 graph-object reference 수와 image slot reset 수를 result에 기록한다.
+       실제 제거된 reference가 없으면 dashboard content projection effect는 없다.
     """
-    return "삭제한 항목 수와 reference 정리 결과"
+    return "삭제한 항목 수와 실제 reference 제거 결과"
 
 
 def ffpxBuildProject():
