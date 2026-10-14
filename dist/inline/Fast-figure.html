@@ -9893,7 +9893,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.38-wip";
+      const APP_BUILD = "1.1.39-wip";
       const PROJECT_OBJECT_PATHS = Object.freeze({
         project: "meta",
         layout: "layout",
@@ -19473,7 +19473,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           ref: contentRef,
           "data-fastfigure-overlay": overlay,
           style: {
-            height: height ?? undefined,
+            height: height ?? "min(72dvh, 720px)",
             maxHeight: "calc(100dvh - 24px)",
             display: "flex",
             flexDirection: "column",
