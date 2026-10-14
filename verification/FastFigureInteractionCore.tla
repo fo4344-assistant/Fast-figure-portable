@@ -129,8 +129,8 @@ InteractionResultCommand(result) ==
     [] OTHER -> "none"
 
 InteractionProjectCommandOwnershipInvariant(result) ==
-  result in InteractionCommittedResults =>
-    InteractionResultCommand(result) in ModeledInteractionProjectCommands
+  result \in InteractionCommittedResults =>
+    InteractionResultCommand(result) \in ModeledInteractionProjectCommands
 
 SelectionInvariant(selectedSlotId, workspace) ==
   workspace = WorkspaceFor(selectedSlotId)

@@ -389,8 +389,8 @@ CommittedResultCommand(result) ==
     [] OTHER -> "none"
 
 ProjectCommandOwnershipInvariant(result) ==
-  result in CommittedProjectResults =>
-    CommittedResultCommand(result) in ModeledProjectCommands
+  result \in CommittedProjectResults =>
+    CommittedResultCommand(result) \in ModeledProjectCommands
 
 TypeOK(project, result) ==
   /\ ValidateSlotLayoutProjection(project)
