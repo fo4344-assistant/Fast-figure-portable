@@ -9893,7 +9893,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
     </div>
     <script>
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.34-wip";
+      const APP_BUILD = "1.1.35-wip";
       const PROJECT_OBJECT_PATHS = Object.freeze({
         project: "meta",
         layout: "layout",
@@ -17370,7 +17370,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
     createTheme,
     useTree,
   } = MantineCore;
-  const { useCallback, useEffect, useRef, useState, useSyncExternalStore } = React;
+  const { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } = React;
   const FAST_FIGURE_SETTINGS_MODAL_SIZE = "min(96vw, 1320px)";
 
   const fastFigureTheme = createTheme({
@@ -18038,7 +18038,15 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           })),
       ],
     });
-    const assetTreeData = [treeNodeForDirectory("/assets")];
+    const assetTreeRevision = [
+      ...directories,
+      ...snapshot.data.map((asset) => `csv:${asset.path}`),
+      ...snapshot.images.map((asset) => `image:${asset.path}`),
+    ].join("\u0000");
+    const assetTreeData = useMemo(
+      () => [treeNodeForDirectory("/assets")],
+      [assetTreeRevision],
+    );
     const treeNodeKind = (path) =>
       directorySet.has(path) ? "directory" : dataByPath.get(path)?.kind || null;
     const treeNodeMeta = (path, kind) => {
