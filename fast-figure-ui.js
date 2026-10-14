@@ -2139,7 +2139,7 @@
           ref: contentRef,
           "data-fastfigure-overlay": overlay,
           style: {
-            height: height ?? undefined,
+            height: height ?? "min(72dvh, 720px)",
             maxHeight: "calc(100dvh - 24px)",
             display: "flex",
             flexDirection: "column",

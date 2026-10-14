@@ -1,6 +1,6 @@
 
       const PACKAGE_FORMAT_VERSION = 3;
-      const APP_BUILD = "1.1.38-wip";
+      const APP_BUILD = "1.1.39-wip";
       const PROJECT_OBJECT_PATHS = Object.freeze({
         project: "meta",
         layout: "layout",

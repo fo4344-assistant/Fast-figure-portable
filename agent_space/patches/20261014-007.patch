@@ -1,0 +1,58 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3,8 +3,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+   sourceScript: "r18",
+   plusCal: "r4",
+   verificationModel: "r15",
+-  sourceCode: "r18",
+-  appBuild: "1.1.38-wip",
++  sourceCode: "r19",
++  appBuild: "1.1.39-wip",
+ });
+ (async () => {
+   const api = window.FastFigureApi;
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,15 +30,15 @@
+       "validation_review": "agent_space/reviews/review-20261013-013-tlc-interaction-r15.md"
+     },
+     "source-code": {
+-      "revision": 18,
++      "revision": 19,
+       "status": "current",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:f11fd2007298765515dc075a4c63947de7fbbd2066860d36642023acc4315407",
++      "fingerprint": "sha256:a08ce3831367ec303ba2559e18f8f25f088c7db12dbb6ede06b46a4c436ecdab",
+       "derived_from": {
+         "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
+         "pseudocode": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583",
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2139,7 +2139,7 @@
+           ref: contentRef,
+           "data-fastfigure-overlay": overlay,
+           style: {
+-            height: height ?? undefined,
++            height: height ?? "min(72dvh, 720px)",
+             maxHeight: "calc(100dvh - 24px)",
+             display: "flex",
+             flexDirection: "column",
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,6 +1,6 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.38-wip";
++      const APP_BUILD = "1.1.39-wip";
+       const PROJECT_OBJECT_PATHS = Object.freeze({
+         project: "meta",
+         layout: "layout",

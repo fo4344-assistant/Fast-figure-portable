@@ -3,8 +3,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   sourceScript: "r18",
   plusCal: "r4",
   verificationModel: "r15",
-  sourceCode: "r18",
-  appBuild: "1.1.38-wip",
+  sourceCode: "r19",
+  appBuild: "1.1.39-wip",
 });
 (async () => {
   const api = window.FastFigureApi;
