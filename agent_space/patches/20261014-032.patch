@@ -1,0 +1,100 @@
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -2928,6 +2928,45 @@
+         return imported;
+       }
+ 
++      function projectDataTreeSnapshot(objects = {}) {
++        return {
++          directories: Array.isArray(objects.files?.directories)
++            ? [...objects.files.directories]
++            : [...PROJECT_FIXED_DIRECTORIES],
++          data: (Array.isArray(objects.data) ? objects.data : []).map((csv) => ({
++            id: csv.id,
++            name: csv.name,
++            path: projectAssetPath(csv),
++            readable: Array.isArray(csv.rows),
++            rowCount: Array.isArray(csv.rows)
++              ? Math.max(0, csv.rows.length - (Number(csv.headerLines) || 0))
++              : 0,
++          })),
++          images: (Array.isArray(objects.images) ? objects.images : []).map((image) => ({
++            id: image.id,
++            name: image.name,
++            path: projectAssetPath(image),
++          })),
++          charts: (Array.isArray(objects.charts) ? objects.charts : []).map((chart) => ({
++            id: chart.id,
++            editable: chart.editor?.editable !== false,
++            csvIds: chartCsvIds(chart),
++            csvReferences: (chart.editor?.objects || [])
++              .map((object) => object.csvId)
++              .filter((id) => Number.isInteger(id)),
++          })),
++          slots: (Array.isArray(objects.slots) ? objects.slots : []).map((slot) => ({
++            id: slot.id,
++            row: slot.row,
++            col: slot.col,
++            hidden: slot.hidden === true,
++            contentType: slot.contentType,
++            chart: slot.chart,
++            imageId: slot.imageId,
++          })),
++        };
++      }
++
+       function projectDataTreeObjects() {
+         return {
+           files: projectObjects.read("files"),
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,15 +30,15 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 26,
+-      "status": "stale",
+-      "paths": [
+-        "Fast-figure.html",
+-        "fast-figure-ui.js",
+-        "fast-figure.js",
+-        "scripts/build-portable.py"
+-      ],
+-      "fingerprint": "sha256:7feeab57ea74e10c2b462859dd1b828d489cf5cf9aff5d065a3be9fc83ade6a2",
++      "revision": 27,
++      "status": "stale",
++      "paths": [
++        "Fast-figure.html",
++        "fast-figure-ui.js",
++        "fast-figure.js",
++        "scripts/build-portable.py"
++      ],
++      "fingerprint": "sha256:175c584ac130e239a2fe5109c7feb90f2092688fa78ec04045b1facccec3d1fd",
+       "derived_from": {
+         "source-script": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
+         "pseudocode": "sha256:0753354b6c25df1f391d53991cf2631a31ab184749fd96653a60bed79d87bece",
+diff --git a/agent_space/patches/20261014-032.md b/agent_space/patches/20261014-032.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/patches/20261014-032.md
+@@ -0,0 +1,18 @@
++# 20261014-032 — Restore project data-tree projection after batch import refactor
++
++## 원인
++
++r25에서 `importProjectFilesToDirectory`를 candidate-first 구현으로 교체할 때 종료 anchor를
++`projectDataTreeObjects`로 잡으면서 그 사이에 있던 `projectDataTreeSnapshot`까지 실수로 제거했다.
++
++이 함수는 Mantine project tree와 overlay가 사용하는 read-only projection이다.
++삭제 이후 project tree를 읽는 React component가 정상 렌더되지 않아 layout/label/caption/tree 계열 regression이 연쇄 실패했다.
++
++## 변경
++
++`projectDataTreeSnapshot`을 기존 의미 그대로 복원한다.
++
++## 범위와 원칙
++
++EFSM 책임, persistent mutation, batch import 알고리즘은 변경하지 않는다.
++회귀 원인이 패치 범위 오류이므로 새 추상화나 우회 구현을 추가하지 않는다.

@@ -2928,6 +2928,45 @@
         return imported;
       }
 
+      function projectDataTreeSnapshot(objects = {}) {
+        return {
+          directories: Array.isArray(objects.files?.directories)
+            ? [...objects.files.directories]
+            : [...PROJECT_FIXED_DIRECTORIES],
+          data: (Array.isArray(objects.data) ? objects.data : []).map((csv) => ({
+            id: csv.id,
+            name: csv.name,
+            path: projectAssetPath(csv),
+            readable: Array.isArray(csv.rows),
+            rowCount: Array.isArray(csv.rows)
+              ? Math.max(0, csv.rows.length - (Number(csv.headerLines) || 0))
+              : 0,
+          })),
+          images: (Array.isArray(objects.images) ? objects.images : []).map((image) => ({
+            id: image.id,
+            name: image.name,
+            path: projectAssetPath(image),
+          })),
+          charts: (Array.isArray(objects.charts) ? objects.charts : []).map((chart) => ({
+            id: chart.id,
+            editable: chart.editor?.editable !== false,
+            csvIds: chartCsvIds(chart),
+            csvReferences: (chart.editor?.objects || [])
+              .map((object) => object.csvId)
+              .filter((id) => Number.isInteger(id)),
+          })),
+          slots: (Array.isArray(objects.slots) ? objects.slots : []).map((slot) => ({
+            id: slot.id,
+            row: slot.row,
+            col: slot.col,
+            hidden: slot.hidden === true,
+            contentType: slot.contentType,
+            chart: slot.chart,
+            imageId: slot.imageId,
+          })),
+        };
+      }
+
       function projectDataTreeObjects() {
         return {
           files: projectObjects.read("files"),
