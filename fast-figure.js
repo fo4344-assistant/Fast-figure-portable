@@ -2832,6 +2832,57 @@
           replaceId: null,
         };
       }
+      async function stageProjectAssetImport(candidate, item) {
+        let bytes = new Uint8Array(await item.file.arrayBuffer());
+        if (item.kind === "data") {
+          let text = new TextDecoder().decode(bytes),
+            data = item.file.name.toLowerCase().endsWith(".json") ? JSON.parse(text) : parseCSV(text);
+          if (!Array.isArray(data) && Array.isArray(data?.data)) data = data.data;
+          if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
+          let id = Number.isInteger(item.replaceId) ? item.replaceId : candidate.nextId.csv++,
+            model = buildProjectCsvModel(
+              data,
+              item.file.name,
+              id,
+              ffpxBytesToBase64(bytes),
+              item.file.type || "text/csv",
+              1,
+              candidate,
+            );
+          projectVfs.assignLocation(model, item.path);
+          let index = candidate.assets.csvFiles.findIndex((asset) => asset.id === id);
+          if (Number.isInteger(item.replaceId)) {
+            if (index < 0) throw Error("교체할 CSV가 없습니다.");
+            candidate.assets.csvFiles[index] = model;
+          } else {
+            if (index >= 0) throw Error(`CSV ID ${id}가 중복되었습니다.`);
+            candidate.assets.csvFiles.push(model);
+          }
+          return { kind: "csv", id, name: model.name, model };
+        }
+
+        let id = Number.isInteger(item.replaceId) ? item.replaceId : candidate.nextId.image++,
+          model = buildProjectImageModel(
+            bytes,
+            item.file.name,
+            item.file.type,
+            id,
+            candidate,
+          );
+        projectVfs.assignLocation(model, item.path);
+        let index = candidate.assets.images.findIndex((asset) => asset.id === id);
+        if (Number.isInteger(item.replaceId)) {
+          if (index < 0) throw Error("교체할 이미지가 없습니다.");
+          if (candidate.assets.images[index]?.settings)
+            model.settings = projectClone(candidate.assets.images[index].settings);
+          candidate.assets.images[index] = model;
+        } else {
+          if (index >= 0) throw Error(`이미지 ID ${id}가 중복되었습니다.`);
+          candidate.assets.images.push(model);
+        }
+        return { kind: "image", id, name: model.name, model };
+      }
+
       async function importProjectFilesToDirectory(
         files,
         directory,
@@ -2865,54 +2916,12 @@
         let candidate = projectClone(activeProject._state),
           imported = [];
         for (let item of staged) {
-          let bytes = new Uint8Array(await item.file.arrayBuffer());
-          if (item.kind === "data") {
-            let text = new TextDecoder().decode(bytes),
-              data = item.file.name.toLowerCase().endsWith(".json") ? JSON.parse(text) : parseCSV(text);
-            if (!Array.isArray(data) && Array.isArray(data?.data)) data = data.data;
-            if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
-            let id = Number.isInteger(item.replaceId) ? item.replaceId : candidate.nextId.csv++,
-              model = buildProjectCsvModel(
-                data,
-                item.file.name,
-                id,
-                ffpxBytesToBase64(bytes),
-                item.file.type || "text/csv",
-                1,
-                candidate,
-              );
-            projectVfs.assignLocation(model, item.path);
-            let index = candidate.assets.csvFiles.findIndex((asset) => asset.id === id);
-            if (Number.isInteger(item.replaceId)) {
-              if (index < 0) throw Error("교체할 CSV가 없습니다.");
-              candidate.assets.csvFiles[index] = model;
-            } else {
-              if (index >= 0) throw Error(`CSV ID ${id}가 중복되었습니다.`);
-              candidate.assets.csvFiles.push(model);
-            }
-            imported.push({ kind: "csv", id, name: model.name });
-          } else {
-            let id = Number.isInteger(item.replaceId) ? item.replaceId : candidate.nextId.image++,
-              model = buildProjectImageModel(
-                bytes,
-                item.file.name,
-                item.file.type,
-                id,
-                candidate,
-              );
-            projectVfs.assignLocation(model, item.path);
-            let index = candidate.assets.images.findIndex((asset) => asset.id === id);
-            if (Number.isInteger(item.replaceId)) {
-              if (index < 0) throw Error("교체할 이미지가 없습니다.");
-              if (candidate.assets.images[index]?.settings)
-                model.settings = projectClone(candidate.assets.images[index].settings);
-              candidate.assets.images[index] = model;
-            } else {
-              if (index >= 0) throw Error(`이미지 ID ${id}가 중복되었습니다.`);
-              candidate.assets.images.push(model);
-            }
-            imported.push({ kind: "image", id, name: model.name });
-          }
+          let stagedAsset = await stageProjectAssetImport(candidate, item);
+          imported.push({
+            kind: stagedAsset.kind,
+            id: stagedAsset.id,
+            name: stagedAsset.name,
+          });
         }
         validateProjectObjectState(candidate, { requireSlots: true });
         await appFSM.run("importing", "ASSET_TREE_DROP", async () => {
@@ -6233,17 +6242,96 @@
         return connectProjectAssetToSlot(path, kind, slotAt(slotId));
       }
       async function importProjectFileToSlot(file, slotId, choosePlan) {
-        let slot = slotAt(slotId), kind = slotFileKind(file);
+        let slot = slotAt(slotId),
+          kind = slotFileKind(file);
+        if (!slot || slot.hidden) throw Error("가져올 대상 슬롯이 없습니다.");
         if (!kind) throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
         if (kind === "slot") return importSlotFile(file, slot);
-        if (kind === "image")
-          return loadImageFile(file, slot, {
-            planImport: choosePlan,
-          });
-        return loadDataFile(file, slot, {
-          replaceSlotContent: slot.contentType === "image",
-          planImport: choosePlan,
+        if (typeof choosePlan !== "function")
+          throw Error("프로젝트 자산 가져오기 계획이 없습니다.");
+
+        let assetKind = kind === "image" ? "image" : "data",
+          directory = PROJECT_ASSET_DIRECTORIES[kind === "image" ? "image" : "csv"],
+          plan = await choosePlan(file, directory);
+        if (!plan) return null;
+
+        let candidate = projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let stagedAsset = await stageProjectAssetImport(candidate, {
+            file,
+            kind: assetKind,
+            path: plan.path,
+            replaceId: plan.replaceId,
+          }),
+          target = candidate.slots.find((item) => item.id === slot.id);
+        if (!target) throw Error("가져올 대상 슬롯을 candidate에서 찾을 수 없습니다.");
+
+        let affectedChartId = null;
+        if (stagedAsset.kind === "image") {
+          if (Number.isInteger(target.chart))
+            candidate.charts = candidate.charts.filter((chart) => chart.id !== target.chart);
+          target.chart = null;
+          target.imageId = stagedAsset.id;
+          target.contentType = "image";
+          target.content.imageSettings = { ...DEFAULT_IMAGE_SETTINGS };
+        } else {
+          let csv = candidate.assets.csvFiles.find((item) => item.id === stagedAsset.id);
+          if (!csv) throw Error("가져온 CSV candidate가 없습니다.");
+          if (target.contentType === "image") {
+            if (Number.isInteger(target.chart))
+              candidate.charts = candidate.charts.filter((chart) => chart.id !== target.chart);
+            target.chart = null;
+            target.imageId = null;
+            target.contentType = "graph";
+          }
+
+          let chart = Number.isInteger(target.chart)
+            ? candidate.charts.find((item) => item.id === target.chart)
+            : null;
+          if (chart?.editor?.editable === false)
+            throw Error("편집 가능 토글을 켠 뒤 CSV를 추가하세요.");
+          if (chart) {
+            let selection = graphDataSelection(csv.rows, csv.headerLines, chart.editor);
+            chart.editor.x = selection.x;
+            chart.editor.y = selection.y;
+            chart.editor.objects = [
+              ...(Array.isArray(chart.editor.objects) ? chart.editor.objects : []),
+              baseGraphObject(chart, csv),
+            ];
+          } else {
+            chart = createChartModel({
+              id: candidate.nextId.chart++,
+              editor: defaultChartEditor(target, csv.rows, csv.headerLines),
+            });
+            chart.editor.objects = [baseGraphObject(chart, csv)];
+            candidate.charts.push(chart);
+            target.chart = chart.id;
+          }
+          affectedChartId = chart.id;
+        }
+
+        validateProjectObjectState(candidate, { requireSlots: true });
+        appFSM.send("ASSETS_IMPORTED", {
+          candidate,
+          imported: [{
+            kind: stagedAsset.kind,
+            id: stagedAsset.id,
+            name: stagedAsset.name,
+          }],
+          targetSlotId: slot.id,
+          affectedChartId,
+          direction: "ui-to-fsm",
         });
+        if (Number.isInteger(affectedChartId)) {
+          let chart = getChart(affectedChartId);
+          if (chart?.editor?.editable !== false) rebuildEditableGraph(chart);
+          activateChartModel(affectedChartId);
+        }
+        renderDashboard();
+        updateFileAvailability();
+        return stagedAsset.kind === "image"
+          ? getProjectImage(stagedAsset.id)
+          : getProjectCsv(stagedAsset.id);
       }
       async function importProjectAssetFiles(files, choosePlan) {
         let selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
