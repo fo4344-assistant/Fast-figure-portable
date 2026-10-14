@@ -1,0 +1,74 @@
+diff --git a/verification/FastFigureInteractionCore.tla b/verification/FastFigureInteractionCore.tla
+--- a/verification/FastFigureInteractionCore.tla
++++ b/verification/FastFigureInteractionCore.tla
+@@ -25,8 +25,10 @@
+ - leaving trash does not restore a detached reference;
+ - trash assets cannot be connected directly to slots.
+ 
+-Settings-overlay height and Layout-preview geometry are UI-local projections
+-with no project mutation and are reviewed outside this state model.
++Settings-overlay height, Layout local selection, and dashboard projection invalidation are
++UI/runtime-local effects with no independent project authority and are reviewed outside this state model.
++The removed-reference counts added by pseudocode r6 are deterministic metadata derived from the same
++entering-trash transition already represented by assetReferenced; they do not add a second project state.
+ *)
+ 
+ NoSlot == 0
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -18,16 +18,16 @@
+       "closure_review": "agent_space/reviews/review-20261014-005-sourcescript-closure-r20.md"
+     },
+     "verification-model": {
+-      "revision": 16,
+-      "status": "stale",
+-      "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:ee96d884edcb459419313e1b4e87db11dcb871955e9ce135fd9b8b1247995bdb",
+-      "derived_from": {
+-        "source-script": "sha256:a6f3ce83d62984f9a18ca38574204a891b3f55c454f06579e4fff9fd2e589047",
+-        "pseudocode": "sha256:b99611f367162b52927d0f18d8d0b7cca0965dca241c5c465ce421ebfe06ce93"
+-      },
+-      "tlc": "passed",
+-      "validation_review": "agent_space/reviews/review-20261014-004-verification-r16-lineage.md"
++      "revision": 17,
++      "status": "current",
++      "path_rule": "verification/**/*.{tla,cfg}",
++      "fingerprint": "sha256:c3be19be754757a5b3423f0e939cebf841f0aa9c7532ee2d231263d57aa6d75f",
++      "derived_from": {
++        "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
++        "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17"
++      },
++      "tlc": "pending",
++      "validation_review": null
+     },
+     "source-code": {
+       "revision": 23,
+diff --git a/agent_space/patches/20261014-017.md b/agent_space/patches/20261014-017.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/patches/20261014-017.md
+@@ -0,0 +1,23 @@
++# 20261014-017 — Refresh verification lineage for pseudocode r6
++
++## 변경
++
++- `FastFigureInteractionCore.tla`의 abstraction 설명을 pseudocode r6에 맞게 갱신한다.
++- Layout local selection과 dashboard projection invalidation은 project authority를 추가하지 않는 UI/runtime-local effect로 모델 밖에 둔다.
++- removed-reference count는 기존 entering-trash transition에서 결정적으로 파생되는 result metadata로 명시하고 별도 state variable을 추가하지 않는다.
++- verification revision을 r17로 올리고 Source Script r20 / pseudocode r6 lineage를 기록한다.
++- TLC 상태는 push-trigger workflow가 실제 통과하기 전까지 `pending`으로 둔다.
++
++## 선택 이유
++
++현재 interaction model은 이미 entering trash reference detach, leaving trash non-restore, trash direct slot connection 금지를 상태공간에서 검증한다. 결과 count를 독립 상태로 추가하면 같은 사실을 중복 표현하므로 최소 복잡도와 single source of truth에 맞지 않는다.
++
++## 기각한 방향
++
++- removed reference count를 새 verification state로 추가: 기존 transition에서 완전히 유도 가능해 상태공간만 증가한다.
++- Layout selection과 renderer scheduling을 project model에 포함: persistent project invariant가 아닌 UI-local effect다.
++- 이전 r16 TLC 결과를 새 lineage의 passed로 재사용: push-trigger TLC를 다시 실행하므로 pending으로 기록한다.
++
++## 후속
++
++이 push로 TLA/TLC workflow와 development-layer version check가 트리거된다. 실제 통과 결과를 확인한 뒤 validation review를 추가하고 `tlc: passed`로 전환한다.

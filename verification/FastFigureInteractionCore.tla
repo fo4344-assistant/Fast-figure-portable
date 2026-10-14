@@ -25,8 +25,10 @@ state-changing meaning introduced or clarified in r17:
 - leaving trash does not restore a detached reference;
 - trash assets cannot be connected directly to slots.
 
-Settings-overlay height and Layout-preview geometry are UI-local projections
-with no project mutation and are reviewed outside this state model.
+Settings-overlay height, Layout local selection, and dashboard projection invalidation are
+UI/runtime-local effects with no independent project authority and are reviewed outside this state model.
+The removed-reference counts added by pseudocode r6 are deterministic metadata derived from the same
+entering-trash transition already represented by assetReferenced; they do not add a second project state.
 *)
 
 NoSlot == 0
