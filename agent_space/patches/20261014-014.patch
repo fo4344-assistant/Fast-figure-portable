@@ -1,354 +1,108 @@
-diff --git a/agent_space/plans/plan-014.md b/agent_space/plans/plan-014.md
---- a/agent_space/plans/plan-014.md
-+++ b/agent_space/plans/plan-014.md
-@@ -165,37 +165,196 @@ one appFSM.send(EVENT)
- 
- 이 경계는 renderer invalidation의 단일 트리거로 사용하지 않는다.
- 
-+### 3.3 frontend React/Mantine appFSM 구조 재검토
+diff --git a/agent_space/plans/plan-015.md b/agent_space/plans/plan-015.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/plans/plan-015.md
+@@ -0,0 +1,77 @@
++# 계획 015 — FFPX EFSM과 인터페이스 FSM 책임 분리
 +
-+현재 frontend는 다음 두 projection 계층이 분리되어 있다.
++## 0. 선행 작업과 정의
 +
-+```text
-+appFSM.state
-+  → appFSM.subscribe()
-+  → React useSyncExternalStore
-+  → Mantine toolbar/sidebar/editor/overlay projection
++- 선행 계획: `agent_space/plans/plan-014.md`. 그 계획의 A~E 단계와 필수 검증이 완료된 뒤 이 계획의 구현을 시작한다.
++- FFPX는 파일 확장자를 뜻하는 것이 아니라 저장·복원 대상인 영속 **프로젝트 오브젝트 자체**를 뜻한다.
++- EFSM은 FFPX 프로젝트 오브젝트의 상태, 전이, 전이 조건 및 불변조건을 관리한다.
++- 인터페이스 FSM은 UI 상호작용의 단계와 상태를 관리한다.
++- 화면/DOM, Mantine/React, Plotly renderer는 확정된 프로젝트 상태와 UI 상호작용 상태의 projection만 소유한다.
++- 이 계획은 `agent_space/AGENT.md` 및 `agent_space/policies/source-script-policy.md`의 권위 계층, 단일 source of truth, diff patch pair, 리뷰 및 검증 규칙을 따른다.
 +
-+activeProject + selectedSlotId
-+  → renderDashboard()
-+  → #dashboard / Plotly / image / label / caption projection
-+```
++## 1. 변경 이유와 관찰된 경계
 +
-+구조적으로 확인된 사실:
++현재 `sourcescript/application_fsm.py`는 lifecycle, workspace, overlay, assetSelection, graphObject 등 프로젝트 상태와 UI 상태를 하나의 ApplicationStateMachine 하위 영역에 정의한다. 프론트엔드의 일부 UI-local 상태는 `sourcescript/api_ui.py`에도 정의된다. 따라서 명칭만 변경하지 말고 각 상태의 소유권과 전이 책임을 실제로 나누어야 한다.
 +
-+- `#ff-react-bootstrap-root`와 `#dashboard`는 서로 다른 DOM subtree다.
-+- Mantine `AppShell.Main`은 현재 dashboard DOM을 React child로 소유하지 않는다.
-+- React가 `#dashboard`의 slot DOM을 VDOM diff하지 않는다.
-+- `FastFigureDashboardFileDrop`와 slot click controller는 `#dashboard` host에 delegated listener를 설치한다.
-+- `renderDashboard()`는 dashboard host 자체를 교체하지 않고 child slot DOM만 다시 만든다.
-+- `dashboardRenderGeneration`이 이전 async Plotly render를 무효화한다.
++FFPX 프로젝트 오브젝트의 권위는 `activeProject`와 해당 project command/validation 경로에 있다. UI 내부에서 동일 영속 상태를 새로 복사해 독립 authority로 삼지 않는다. 직접 mutation 역시 위치 자체만으로 판단하지 말고 프로젝트 EFSM의 전이 조건, commit, 참조 정합성 절차를 거치는지 검증한다.
 +
-+따라서 dashboard full render 자체가 React와 같은 DOM을 동시에 소유하는 충돌을 만들지는 않는다.
++## 2. 단계별 실행 순서
 +
-+다만 실행 순서는 중요하다.
++### F. 책임 감사 및 기준 기록
++- 기존 Source Script, pseudocode, verification, source code에서 `appFSM`, `activeProject`, `selectedSlotId`, Mantine-local state, DOM controller, renderer invalidation의 읽기/쓰기 경로를 추적한다.
++- 상태별로 FFPX EFSM, 인터페이스 FSM, renderer projection, 임시 계산값, 직렬화 책임 중 하나로 분류한다.
++- event별 선행조건, 실제 project mutation, selection reconciliation, publication, renderer side effect와 직접 변경 우회 경로를 표로 기록한다.
++- 새 기능 없이 기존 observable semantics와 위반 경계를 분명히 적은 review를 만든다.
 +
-+`PROJECT_NODE_MOVED` 같은 event는 workspace region action에서 project/reference를 먼저 commit한 뒤 같은 `send()` 뒤쪽 graphObject/assetSelection region에서 selection reconciliation을 수행한다.
++### G. Source Script 책임 구조 확정
++- 프로젝트 EFSM에는 FFPX project object의 상태 전이, validation, 참조 무결성, commit/rollback 경계를 정의한다.
++- 인터페이스 FSM에는 overlay lifecycle, focus/selection interaction, pointer/drag/drop interaction 및 UI-only transition을 정의한다.
++- 명령 경계는 `UI event → interface transition → explicit project command → EFSM validate/commit → result → UI reconciliation → renderer projection`으로 명세한다.
++- 영속 프로젝트 오브젝트와 UI 선택값의 관계를 명시하되 동기화되는 두 독립 원천을 만들지 않는다.
++- Source Script 논리 module decomposition을 먼저 확정하고 closure review를 통과한다.
 +
-+따라서 workspace action 직후 full render는 너무 이르다.
++### H. PlusCal 직접 번역
++- 갱신된 전체 관련 Source Script 의미를 PlusCal에 반영한다.
++- 두 FSM의 전이, 오류·취소, 비정상 종료 시 UI cleanup, 프로젝트 commit/notification 순서를 표현한다.
++- translation review와 development-versions fingerprint/lineage를 갱신한다.
 +
-+```text
-+workspace action commit
-+→ renderDashboard()   ← 금지
-+→ graphObject selection reconciliation
-+→ asset selection reconciliation
-+```
++### I. 검증 모델 및 TLC
++- 프로젝트 불변조건과 참조 무결성, invalid transition 거부, 단일 commit, 오류 시 프로젝트 상태 불변을 검증한다.
++- UI-only transition이 FFPX project object를 변경하지 않는다는 경계 및 UI→EFSM 명령 일관성을 검토한다.
++- 필요한 bounded verification model을 pseudocode에서 파생하고 TLC를 실제 실행한 뒤 결과를 review에 기록한다. 실행하지 못했다면 passed로 표시하지 않는다.
 +
-+필요한 순서는 다음이다.
++### J1. FFPX EFSM 구현
++- 영속 project mutation과 validation을 프로젝트 EFSM 소유로 수렴시킨다.
++- 다른 UI 진입점에서 동일 프로젝트 전이를 호출해도 규칙이 중복되지 않도록 한다.
++- 소유권 단위 coherent patch, 관련 회귀검사, 정확한 .patch/.md 쌍 및 필요 version metadata를 남긴다.
 +
-+```text
-+all handled region actions/transitions
-+→ selection reconciliation
-+→ 기존 region publish
-+→ appFSM.send() 반환
-+→ dashboard projection invalidation
-+```
++### J2. 인터페이스 FSM 구현
++- workspace, overlay, UI selection, drag, pointer, focus 등 상호작용 상태와 event handling을 인터페이스 FSM으로 옮긴다.
++- Mantine/React 컴포넌트 로컬 상태와 공용 인터페이스 상태의 생명주기를 구분한다.
++- DOM hidden control, synthetic .click(), 임시 양방향 bridge로 기존 상태머신을 우회하지 않는다.
++- 이행 중 불완전 기능은 명시적으로 WIP 처리하고 영속 데이터 안정성을 보장한다.
 +
-+### 3.4 appFSM 내부 completion 채널 추가는 이번 패치에서 기각
++### J3. Orchestration 및 renderer
++- EFSM 결과와 UI-FSM notification을 구분하고 최종 commit/reconciliation 이후 renderer invalidation을 한 번 수행한다.
++- 프로젝트 변경이 없는 UI-only transition에서 불필요한 full dashboard render를 하지 않는다.
++- renderer가 새 project mutation/FSM event를 발생시키는 재진입 순환을 금지한다.
++- 필요한 targeted projection과 기존 dashboard delegated event ownership을 유지한다.
 +
-+추가 검토 결과 이번 문제를 해결하기 위해 `ApplicationStateMachine` 자체에 별도 completion listener registry를 추가할 필요는 없다.
++### K. 통합 회귀 및 cutover
++- 기존 project 저장·복원, VFS trash/ref detach, slot swap, asset-to-slot drag, graph/image/caption editor, overlay resize, layout selection, Plotly projection을 검증한다.
++- Source Script → PlusCal → verification/TLC → Source Code lineage 검사, browser regression, distribution build를 완료한다.
++- 최종 review에 통과/미실행/실패를 구분하고 legacy ownership 정리의 실제 완료 여부를 기록한다.
 +
-+`appFSM.send()`는 동기 함수이며 반환 시점에는 handled region의 action/transition/reconciliation/publish가 완료되어 있다.
++## 3. 단계 진행 규칙
 +
-+따라서 renderer invalidation은 appFSM 내부가 아니라 **send 호출을 소유한 UI/API orchestration 경계에서 send 반환 직후** 실행한다.
++1. 각 자동화 실행은 저장소 최신 main, 선행 계획 완료 증거, patch pair, review, development-versions.json을 먼저 확인한다.
++2. 첫 번째 미완료 단계에서 진행하며, 동일 실행에서 다음 단계까지 가능한 경우 검증 순서를 유지한 채 진행할 수 있다.
++3. 단계 완료는 시간 경과나 문서의 체크 표시가 아니라 변경 코드, 정확한 패치, 검증 및 review의 증거로 판정한다.
++4. 실제 source/pseudocode/code 변경은 해당 계층의 revision·fingerprint·derived_from을 갱신한다.
++5. 정책 원문은 사용자 요청 없이 수정하지 않는다.
++6. GitHub Actions 및 self-hosted runner를 사용하지 않는다. 실행하지 못한 테스트는 검증 완료로 주장하지 않는다.
++7. 작업은 장시간 세션 상태를 가정하지 않고 매 실행마다 저장소의 유일한 기록으로 복원한다.
 +
-+권장 구조:
++## 4. 완료 판정
 +
-+```text
-+dispatchDashboardAffectingEvent(event, payload)
-+  → appFSM.send(event, payload)
-+  → applyDashboardProjectionInvalidation(event, payload)
-+  → final state/payload 반환
-+```
++FFPX 영속 프로젝트 객체의 권위 상태와 전이가 프로젝트 EFSM에 있고, UI 상호작용 상태와 전이가 인터페이스 FSM에 있으며, renderer는 두 상태로부터 단방향 projection을 만든다. 모든 관련 기능이 기존 의미와 저장 파일 호환성을 보존하고, 문서·패치·계층 lineage·필수 검증이 모두 일치한 경우에만 완료다.
+diff --git a/agent_space/patches/20261014-014.md b/agent_space/patches/20261014-014.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/patches/20261014-014.md
+@@ -0,0 +1,21 @@
++# 20261014-014 — Add post-plan-014 FFPX/UI FSM separation plan
 +
-+이 helper는 appFSM state machine의 일부가 아니다.
++## 목적과 변경
++- `agent_space/plans/plan-015.md` 추가.
++- 사용자 정의인 FFPX 프로젝트 오브젝트의 EFSM과 UI 인터페이스 FSM의 경계를 확정할 후속 계획을 단계 F~K로 분리한다.
++- 이 패치에서는 application source, Source Script, pseudocode, verification, `development-versions.json`을 수정하지 않는다.
 +
-+이 방향의 장점:
++## 선택 이유
++- 기존 `plan-014.md`의 A~E를 먼저 끝내고 이후 논리 구조 변경을 수행해야 서로 다른 목적의 회귀를 분리할 수 있다.
++- Source Script에서 소유권·명령 의미를 먼저 정의하고 PlusCal/TLC/Source Code에 전파해야 정책상 계층 권위가 유지된다.
++- 다음 자동화 실행이 현재 단계와 후속 단계를 저장소 문서에서 확인할 수 있어야 한다.
 +
-+- 기존 `appFSM.subscribe() → useSyncExternalStore` contract를 변경하지 않는다.
-+- region publish 횟수나 event 문자열을 변경하지 않는다.
-+- React snapshot revision/identity 의미에 새 규칙을 추가하지 않는다.
-+- lifecycle transition과 renderer invalidation이 섞이지 않는다.
-+- `ApplicationStateMachine`이 DOM/renderer 의미를 알지 않는다.
-+- `send()` 반환 뒤이므로 final selection reconciliation 상태를 읽는다.
++## 검토 후 기각한 방향
++- 현재 `ApplicationStateMachine` 이름만 두 개로 바꾸기: 실제 영속 상태와 UI state ownership을 분리하지 못한다.
++- UI 전환과 EFSM core refactor를 한 패치로 수행하기: 검증 범위와 롤백 원인을 분리하기 어렵다.
++- Mantine local data를 새로운 project authority로 승격하기: single source of truth를 위반한다.
 +
-+### 3.5 useSyncExternalStore snapshot identity 검토
-+
-+React `useAppState()`는 `appFSM.state` 객체 자체를 snapshot으로 반환한다.
-+
-+따라서 listener callback 호출만으로 React rerender가 보장되는 것이 아니라 snapshot identity가 실제로 바뀌어야 한다.
-+
-+현재 관련 event 호출부를 확인한 결과:
-+
-+- `PROJECT_NODE_MOVED`, `PROJECT_TRASH_EMPTIED`는 `direction: "ui-to-fsm"` payload를 사용해 handled transition에서 새 state object를 만든다.
-+- `SLOTS_SWAPPED`는 direction이 없지만 graphObject/assetSelection reconciliation action이 `machine.state`를 새 immutable object로 갱신한다.
-+- `GRID_LAYOUT_CHANGED`도 graphObject/assetSelection reconciliation에서 state object가 갱신된다.
-+- direct mutation 뒤 `appFSM.notify()`를 사용하는 경로는 notify가 revision을 증가시킨 새 state object를 만든다.
-+
-+따라서 현재 trash stale-dashboard 문제는 React snapshot identity 문제 때문이 아니라 별도 dashboard DOM projection invalidation 누락이다.
-+
-+다만 이것을 모든 미래 event의 암묵적 보장으로 취급하지 않는다.
-+
-+새 domain event가 project state를 변경하고 React component도 그 값을 다시 읽어야 하는데 FSM state identity가 바뀌지 않는다면 renderer helper로 숨기지 않고 app-state notification/revision 의미를 Source Script에서 별도로 정의해야 한다.
-+
-+### 3.6 renderer helper의 재진입 제한
-+
-+`applyDashboardProjectionInvalidation()`은 `appFSM.send()`, `notify()` 또는 persistent mutation을 다시 호출하지 않는다.
-+
-+현재 `renderDashboard()`는 project를 읽어 DOM/Plotly projection을 만들며 직접 `appFSM.send/notify`를 호출하지 않는다. 이 특성을 유지한다.
-+
-+따라서 다음 순환을 구조적으로 금지한다.
-+
-+```text
-+send
-+→ projection invalidation
-+→ renderer
-+→ appFSM event
-+→ projection invalidation
-+→ ...
-+```
-+
-+renderer effect는 **read current authority → projection update** 단방향이어야 한다.
-+
-+### 3.7 lifecycle과 composite command 경계
-+
-+`appFSM.run()`의 importing/exporting/error/ready lifecycle transition 자체는 dashboard mutation 의미가 아니므로 renderer invalidation trigger로 사용하지 않는다.
-+
-+또 하나의 public command가 여러 `appFSM.send()`를 순차 호출하는 기존 경로가 있다.
-+
-+예:
-+
-+```text
-+asset delete
-+→ GRAPH_OBJECTS_REPLACED 여러 번
-+→ DATA_OBJECT_DELETED
-+→ CLEAR_ASSET_SELECTION
-+→ 마지막에 renderDashboard()
-+```
-+
-+이번 패치에서 이런 정상 composite command 전체를 새 helper로 기계적으로 전환하지 않는다. event마다 full render하면 중간 상태 render와 중복 Plotly 재생성이 늘어날 수 있기 때문이다.
-+
-+우선 공통 helper 적용 범위는 다음으로 제한한다.
-+
-+- 실제 누락이 확인된 `PROJECT_NODE_MOVED`.
-+- 실제 누락 가능성이 확인된 `PROJECT_TRASH_EMPTIED`.
-+- 이미 개별 refresh를 가진 `SLOTS_SWAPPED`은 helper 경로로 안전하게 대체되는지 regression 확인 후에만 기존 direct refresh를 제거.
-+
-+나머지 정상 경로는 이번 작업에서 유지한다.
-+
-+향후 renderer invalidation을 더 넓게 통합하려면 public command transaction/batching 경계를 별도로 설계한 뒤 수행한다.
-+
-+### 3.8 DOM ownership과 delegated listener 안전성
-+
-+`#ff-react-bootstrap-root`와 `#dashboard`는 서로 다른 DOM subtree다.
-+
-+Mantine `AppShell.Main`은 dashboard를 React child로 소유하지 않고, `renderDashboard()`는 `#dashboard` children만 재생성한다.
-+
-+slot click controller와 `FastFigureDashboardFileDrop`은 `#dashboard` host에 delegated listener를 설치한다.
-+
-+따라서 full dashboard render가:
-+
-+- React VDOM과 같은 child DOM을 동시에 소유하거나,
-+- slot child 교체 때문에 host-level listener를 매번 재설치하는
-+
-+구조는 아니다.
-+
-+이 separation을 유지한다.
-+
- ---
- 
- ## 4. 권장 renderer invalidation 규칙
- 
- ### 4.1 logical event completion 경계
- 
--우선안은 **각 region publish가 아니라 하나의 logical `send` 또는 `notify`가 완전히 끝난 뒤 한 번만 projection effect를 전달하는 경계**를 두는 것이다.
-+우선안은 **각 region publish가 아니라 dashboard-affecting domain event를 보내는 UI/API orchestration helper가 `appFSM.send()` 반환 뒤 한 번만 projection effect를 판정하는 경계**를 두는 것이다.
- 
- 개념:
- 
- ```text
--appFSM.send(EVENT, payload)
--  → 모든 region action/transition 완료
--  → authoritative/runtime state 확정
--  → logical event completion 1회
--  → renderer projection effect 판정
-+dispatchDashboardAffectingEvent(EVENT, payload)
-+  → appFSM.send(EVENT, payload)
-+      → 모든 region action/transition/reconciliation/publish 완료
-+  → renderer projection effect 판정 1회
- ```
- 
--`notify(object, event)`도 direct mutation이 완료된 뒤 동일한 completion 경계에 들어갈 수 있다.
--
--FSM 자체가 DOM renderer를 직접 호출하지는 않는다.
-+FSM 자체가 DOM renderer를 직접 호출하지 않는다.
- 
- Source Script 책임은 다음처럼 분리한다.
- 
- ```text
- ApplicationStateMachine
--  = logical event의 완료를 한 번 알림
-+  = domain/runtime event 처리와 기존 state publish
-+
-+UI/API orchestration
-+  = dashboard-affecting event dispatch 뒤 projection invalidation 요청
- 
- renderer_runtime
--  = 완료된 event가 어떤 projection을 invalidation하는지 판정
--  = 필요한 projection만 갱신
-+  = event + mutation result로 필요한 projection 판정/갱신
- ```
- 
- ### 4.2 projection effect 종류
-@@ -304,14 +463,13 @@ mutation contract의 마지막 단계인:
- 
- > renderer/UI notification은 commit된 authority를 다시 읽어 projection한다.
- 
--를 더 구체화한다.
--
--추가할 의미:
-+를 다음처럼 더 구체화한다.
- 
--- logical event action/region transitions가 모두 성공한 뒤 event completion은 한 번만 발생.
-+- `send()` 반환 시점에는 handled region의 action/transition/reconciliation/publish가 완료되어 있어야 한다.
- - mutation action은 renderer가 필요한 경우 실제 reference/content 변화 결과를 payload/result에 기록.
--- renderer completion notification은 authoritative mutation을 반복하지 않음.
--- region별 publish는 React/FSM state subscriber용이고 domain projection refresh의 단일 의미 경계가 아님.
-+- region별 `publish()`는 React/FSM state subscriber용이며 dashboard renderer trigger가 아니다.
-+- 이번 작업에서 별도 completion listener registry를 ApplicationStateMachine에 추가하지 않는다.
-+- project mutation이 React projection도 바꾸는데 FSM snapshot identity가 바뀌지 않는 새 event가 발견되면 renderer helper로 보정하지 않고 app-state notification/revision 의미를 별도로 정의한다.
- 
- ### 5.3 `sourcescript/renderer_runtime.py`
- 
-@@ -370,17 +528,29 @@ GridChange / OverlayClose
- 
- slot click과 background click이 한 interaction에서 모두 적용되지 않는 경계를 명시한다.
- 
--### 6.2 logical event completion
-+### 6.2 send 반환 경계
- 
- `application_fsm.pcal`:
- 
- ```text
- ApplyEventActionsAndTransitions
- → Commit/Reconcile
--→ EmitLogicalEventCompletionOnce
-+→ PublishExistingStateTransitions
-+→ ReturnFinalStateAndPayload
- ```
- 
--region publish와 completion을 구분한다.
-+별도 renderer completion state를 FSM에 추가하지 않는다.
-+
-+`api_ui.pcal` 또는 해당 orchestration 절차에서:
-+
-+```text
-+SendDashboardAffectingEvent
-+→ appFSM send 완료
-+→ DetermineProjectionEffect
-+→ RefreshProjection
-+```
-+
-+순서를 직접 번역한다.
- 
- ### 6.3 renderer invalidation
- 
-@@ -435,28 +605,32 @@ verification model을 단순히 revision 숫자만 올리기 위해 불필요하
- 
- 구체 capture/bubble 방식은 Source Code 단계에서 결정한다.
- 
--### 8.2 renderer event-completion hook
-+### 8.2 dashboard-affecting event orchestration helper
-+
-+`ApplicationStateMachine` 구현 자체는 변경하지 않는 것을 우선한다.
- 
--개별 `moveProjectNode()/emptyProjectTrash()/swapSlotContents()`에 full render를 계속 추가하지 않는다.
-+개별 command에 `renderDashboard()`를 직접 반복 추가하는 대신 UI/API orchestration layer에 하나의 공통 helper를 둔다.
- 
--우선 다음 구조를 구현 검토한다.
-+개념:
- 
- ```text
--appFSM logical event completed
--→ rendererRuntime projection-effect table
--→ full/targeted/no refresh
-+dispatchDashboardAffectingEvent(event, payload)
-+  → appFSM.send(event, payload)
-+  → applyDashboardProjectionInvalidation(event, payload)
- ```
- 
--FSM region `publish()` subscriber와는 별도다.
-+구체 조건:
- 
--구체 구현 후보:
-+1. helper는 `appFSM.send()`가 반환한 뒤에만 renderer를 호출한다.
-+2. 기존 `appFSM.subscribe()`와 `useSyncExternalStore` contract는 변경하지 않는다.
-+3. helper는 lifecycle transition을 감시하지 않는다.
-+4. projection effect table은 renderer_runtime 쪽 책임으로 둔다.
-+5. renderer effect는 `send/notify` 또는 persistent mutation을 다시 호출하지 않는다.
-+6. 첫 적용 대상은 `PROJECT_NODE_MOVED`, `PROJECT_TRASH_EMPTIED`로 제한한다.
-+7. `SLOTS_SWAPPED`의 기존 `updateGraphView()`는 같은 helper로 안전하게 대체되는지 regression 확인 후 정리한다.
-+8. composite command의 기존 최종 render는 이번 작업에서 기계적으로 제거하지 않는다.
- 
--1. `ApplicationStateMachine.send()`/ `notify()` 마지막에 renderer-neutral completion listener 호출.
--2. completion listener registry는 FSM이 DOM을 모르도록 generic callback으로 유지.
--3. renderer_runtime이 하나의 listener를 등록.
--4. projection-effect table은 renderer_runtime에 둔다.
--
--이 방식이 기존 `send/notify` 호출 수명과 충돌하지 않는지 Source Code에서 최소 diff로 확인한다.
-+이 구조는 React/Mantine GUI state publish를 손대지 않으면서 누락된 dashboard projection만 공통 규칙으로 보완한다.
- 
- ### 8.3 기존 개별 render 정리
- 
-@@ -503,11 +677,20 @@ legacy/stale reference를 직접 valid test fixture로 구성할 수 있는 범
- - trash empty가 reference를 실제 제거하면 dashboard도 같은 interaction 후 갱신.
- - reference가 없는 trash empty는 불필요한 semantic side effect가 없음.
- 
--### 9.4 duplicate render 감시
-+### 9.4 duplicate render와 GUI appFSM 순서 검증
-+
-+test instrumentation으로 다음을 확인한다.
- 
--가능하면 test instrumentation으로 한 logical mutation에 full dashboard render가 과도하게 반복되지 않는지 확인한다.
-+1. 하나의 dashboard-affecting event dispatch는 `appFSM.send()` 내부 region publish 수와 무관하게 projection invalidation을 최대 한 번 수행.
-+2. React `useSyncExternalStore` subscriber는 기존 publish 횟수/상태 전이를 그대로 받으며 helper 때문에 별도 FSM revision/publish가 추가되지 않음.
-+3. `PROJECT_NODE_MOVED`처럼 selection reconciliation이 필요한 event는 `send()` 반환 뒤의 최종 asset/graph selection을 dashboard와 editor가 동일하게 읽음.
-+4. projection renderer가 새 `appFSM.send/notify`를 발생시키지 않아 재귀 event cycle이 생기지 않음.
-+5. `appFSM.run()` lifecycle start/complete transition만으로 dashboard full render가 추가되지 않음.
-+6. dashboard child DOM 재생성 뒤에도 host-level delegated slot/drop listener가 한 번만 유지됨.
-+7. target event 처리 뒤 `appFSM.state` snapshot identity가 실제로 갱신되어 React editor/tree가 stale하지 않은지 확인.
-+8. helper를 거치지 않는 기존 composite command의 render 횟수/순서는 이번 변경 전과 동일함.
- 
--정확한 performance threshold를 정책으로 만들지는 않고, 최소한 region publish 수만큼 중복 full render가 발생하지 않는 것을 확인한다.
-+정확한 performance threshold를 정책으로 만들지는 않고, 최소한 region publish 수만큼 full render가 중복되는 구조는 허용하지 않는다.
- 
- ### 9.5 기본 여백
- 
-@@ -578,7 +761,13 @@ legacy/stale reference를 직접 valid test fixture로 구성할 수 있는 범
- 6. trash 이동으로 reference가 제거되면 별도 사용자 interaction 없이 dashboard가 갱신된다.
- 7. trash empty가 reference를 제거하는 경우에도 dashboard가 갱신된다.
- 8. 단순 VFS path move처럼 dashboard 의미가 안 바뀌는 mutation은 불필요한 full render를 요구하지 않는다.
--9. 하나의 logical appFSM event가 여러 region publish를 만들더라도 full dashboard render는 event completion 규칙에 따라 한 번만 요청된다.
--10. targeted projection이 충분한 image/caption/style interaction은 full render로 강제되지 않는다.
--11. Source Script → pseudocode → 필요 verification → Source Code lineage가 current다.
--12. browser regression, development version check, hosted build가 모두 통과한다.
-+9. 하나의 dashboard-affecting event가 여러 region publish를 만들더라도 full dashboard render는 orchestration helper에서 한 번만 요청된다.
-+10. 기존 `appFSM.subscribe() → useSyncExternalStore` GUI state publish semantics는 변경되지 않는다.
-+11. dashboard invalidation helper는 `appFSM.send()` 반환 뒤 실행되어 모든 region selection reconciliation과 기존 publish 이후의 state를 읽는다.
-+12. renderer invalidation은 appFSM event/persistent mutation을 다시 발생시키지 않는다.
-+13. lifecycle transition 자체가 dashboard invalidation으로 오인되지 않는다.
-+14. 현재 target mutation 뒤 React snapshot identity와 editor/tree projection도 stale하지 않다.
-+15. targeted projection이 충분한 image/caption/style interaction은 full render로 강제되지 않는다.
-+16. 기존 composite command를 무리하게 event별 full render로 분해하지 않는다.
-+17. Source Script → pseudocode → 필요 verification → Source Code lineage가 current다.
-+18. browser regression, development version check, hosted build가 모두 통과한다.
++## 후속 및 범위
++- 선행 `plan-014` 완료 이후 계획 015의 F 단계 책임 감사부터 수행한다.
++- 이번 계획 등록만으로 선행 계획의 구현이나 검증이 진행된 것으로 간주하지 않는다.
++- 모든 후속 소스 변경에는 별도 exact diff patch pair와 검증 기록이 필요하다.
