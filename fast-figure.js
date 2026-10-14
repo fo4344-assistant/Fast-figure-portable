@@ -1098,8 +1098,10 @@
         payload.csvCount = csvFiles.length;
         payload.imageCount = images.length;
         payload.directoryCount = directories.length;
+        payload.removedGraphReferenceCount = removedReferences.removedGraphReferenceCount;
+        payload.resetImageSlotCount = removedReferences.resetImageSlotCount;
         payload.removedReferenceCount =
-          removedReferences.removedGraphReferenceCount + removedReferences.resetImageSlotCount;
+          payload.removedGraphReferenceCount + payload.resetImageSlotCount;
         validateProjectObject(activeProject, { requireSlots: true });
       }
       function applyProjectNodeMovedAction({ machine, payload }) {
@@ -1140,6 +1142,8 @@
         if(destination===source){
           payload.path=source;
           payload.trashed=false;
+          payload.removedGraphReferenceCount=0;
+          payload.resetImageSlotCount=0;
           return;
         }
 
@@ -1191,9 +1195,11 @@
           else
             machine.state=Object.freeze({...machine.state,assetPath:movedSelectionPath});
         }
+        payload.removedGraphReferenceCount=removedReferences.removedGraphReferenceCount;
+        payload.resetImageSlotCount=removedReferences.resetImageSlotCount;
         payload.clearGraphSelection=
-          removedReferences.removedGraphReferenceCount>0||
-          removedReferences.resetImageSlotCount>0;
+          payload.removedGraphReferenceCount>0||
+          payload.resetImageSlotCount>0;
         payload.path=destination;
         payload.trashed=enteringTrash;
       }
@@ -3099,13 +3105,27 @@
         debugLog("updateGraphView", { selectedSlotId });
         renderDashboard();
       }
+      function dashboardProjectionEffect(event, payload = {}) {
+        if (event === "PROJECT_NODE_MOVED" || event === "PROJECT_TRASH_EMPTIED")
+          return (payload.removedGraphReferenceCount || 0) > 0 ||
+            (payload.resetImageSlotCount || 0) > 0
+            ? "FULL_DASHBOARD"
+            : "NONE";
+        if (event === "SLOTS_SWAPPED") return "FULL_DASHBOARD";
+        return "NONE";
+      }
+      function dispatchDashboardAffectingEvent(event, payload = {}) {
+        appFSM.send(event, payload);
+        let projectionEffect = dashboardProjectionEffect(event, payload);
+        if (projectionEffect === "FULL_DASHBOARD") renderDashboard();
+        return { state: appFSM.state, payload, projectionEffect };
+      }
       function swapSlotContents(source, target) {
         if (!source || !target || source === target || source.hidden || target.hidden) return false;
-        appFSM.send("SLOTS_SWAPPED", {
+        dispatchDashboardAffectingEvent("SLOTS_SWAPPED", {
           sourceSlotId: source.id,
           targetSlotId: target.id,
         });
-        updateGraphView();
         return true;
       }
       function clearSlotDragState() {
@@ -5862,7 +5882,7 @@
           path: plan.path, directory: plan.directory, direction: "ui-to-fsm",
         };
         if (useUniqueName) payload.name = plan.uniqueName;
-        appFSM.send("PROJECT_NODE_MOVED", payload);
+        dispatchDashboardAffectingEvent("PROJECT_NODE_MOVED", payload);
         status(payload.trashed
           ? `${projectPathName(plan.path)}을 휴지통으로 이동했습니다.`
           : `${projectPathName(plan.path)}을 ${projectParentPath(payload.path)}로 이동했습니다.`);
@@ -5879,7 +5899,7 @@
       }
       function emptyProjectTrash() {
         let payload = { direction: "ui-to-fsm" };
-        appFSM.send("PROJECT_TRASH_EMPTIED", payload);
+        dispatchDashboardAffectingEvent("PROJECT_TRASH_EMPTIED", payload);
         updateFileAvailability();
         status(`휴지통을 비웠습니다. 폴더 ${payload.directoryCount}개, CSV ${payload.csvCount}개, 이미지 ${payload.imageCount}개를 삭제했습니다.`);
       }

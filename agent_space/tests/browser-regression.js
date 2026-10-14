@@ -1001,6 +1001,50 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       );
     });
 
+
+    await run(33, "layout selection clears on non-slot modal content", async () => {
+      appFSM.send("TOGGLE_OVERLAY", { overlay: "layout", source: "regression-selection" });
+      await tick();
+      const overlay = document.querySelector("[data-fastfigure-overlay='layout']");
+      const grid = overlay?.querySelector("[role='grid']");
+      const slotButton = grid?.querySelector("button");
+      const content = overlay?.querySelector("[data-fastfigure-settings-content='layout']");
+      check(!!slotButton && !!content, "layout selection test controls absent");
+      click(slotButton);
+      await tick();
+      check(slotButton.getAttribute("aria-pressed") === "true", "layout slot did not become selected");
+      click(content);
+      await tick();
+      check(slotButton.getAttribute("aria-pressed") !== "true", "layout selection survived non-slot content click");
+      appFSM.send("CLOSE_OVERLAY", { reason: "regression-layout-selection" });
+      await tick();
+    });
+
+    await run(34, "trash reference detach invalidates dashboard immediately", async () => {
+      let target = activeProject.slots.find((slot) => !slot.hidden);
+      check(!!target, "trash invalidation slot absent");
+      api.slots.reset(target.id);
+      select(slotAt(target.id));
+      api.slots.setContentType("image");
+      const image = createProjectImage(
+        new TextEncoder().encode(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>',
+        ),
+        "trash-invalidation.svg",
+        "image/svg+xml",
+      );
+      const imagePath = projectAssetPath(image);
+      api.assets.connectToSlot(imagePath, "image", target.id);
+      await tick();
+      check(!!slotElement(target.id)?.querySelector(".slot-image"), "baseline image projection absent");
+      const plan = api.assets.planMove(imagePath, "/assets/trash");
+      check(!!plan?.enteringTrash, "image trash plan absent");
+      api.assets.move(plan);
+      await tick();
+      check(slotAt(target.id).imageId == null, "trash move did not detach image reference");
+      check(!slotElement(target.id)?.querySelector(".slot-image"), "dashboard retained stale image projection");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

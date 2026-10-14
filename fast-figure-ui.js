@@ -2075,7 +2075,7 @@
     );
   }
 
-  function FastFigureSettingsModal({ title, overlay, onClose, children }) {
+  function FastFigureSettingsModal({ title, overlay, onClose, onContentClick, children }) {
     const modalRootRef = useRef(null);
     const resizeRef = useRef(null);
     const resizeListenersRef = useRef(null);
@@ -2165,6 +2165,8 @@
       React.createElement(
         Box,
         {
+          onClick: onContentClick,
+          "data-fastfigure-settings-content": overlay,
           style: {
             minHeight: 0,
             flex: "1 1 auto",
@@ -2749,6 +2751,7 @@
         onClose: close,
         title: "레이아웃",
         overlay: "layout",
+        onContentClick: () => setLayoutSelection(new Set()),
       },
       React.createElement(
         Stack,
@@ -2907,7 +2910,10 @@
                   key: slot.id,
                   disabled: busy,
                   "aria-pressed": selected,
-                  onClick: () => toggleSlot(slot.id),
+                  onClick: (event) => {
+                    event.stopPropagation();
+                    toggleSlot(slot.id);
+                  },
                   style: {
                     gridColumn: `${slot.col} / span ${slot.colSpan}`,
                     gridRow: `${slot.row} / span ${slot.rowSpan}`,
@@ -2943,7 +2949,10 @@
             Button,
             {
               disabled: busy || layoutSelection.size < 2,
-              onClick: () => runLayoutCommand(layoutApi.mergeSlots),
+              onClick: (event) => {
+                event.stopPropagation();
+                runLayoutCommand(layoutApi.mergeSlots);
+              },
             },
             "선택 슬롯 합치기",
           ),
@@ -2952,7 +2961,10 @@
             {
               variant: "light",
               disabled: busy || layoutSelection.size < 1,
-              onClick: () => runLayoutCommand(layoutApi.splitSlots),
+              onClick: (event) => {
+                event.stopPropagation();
+                runLayoutCommand(layoutApi.splitSlots);
+              },
             },
             "선택 슬롯 나누기",
           ),
@@ -2961,7 +2973,10 @@
             {
               variant: "subtle",
               disabled: busy || layoutSelection.size < 1,
-              onClick: () => setLayoutSelection(new Set()),
+              onClick: (event) => {
+                event.stopPropagation();
+                setLayoutSelection(new Set());
+              },
             },
             "선택 해제",
           ),
