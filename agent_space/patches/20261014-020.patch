@@ -1,181 +1,1006 @@
+diff --git a/pseudocode/project_efsm.pcal b/pseudocode/project_efsm.pcal
+--- a/pseudocode/project_efsm.pcal
++++ b/pseudocode/project_efsm.pcal
+@@ -4,19 +4,57 @@
+ \* Direct translation of sourcescript/project_efsm.py.
+ CONSTANT NoReference
+ 
+-(*
+---algorithm FastFigureProjectEfsm
+-variables
+-  projectAuthority = ReadActiveProject(),
+-  result = NoReference,
+-  candidate = NoReference,
+-  effect = NoReference;
+-
+-procedure DispatchProjectCommand(eventName, payload)
+-variables preProject = NoReference;
+-begin
+-ProjectCommandMembership:
+-  assert IsDeclaredProjectCommand(eventName);
++PROJECT_COMMANDS == {
++  "PROJECT_LOADED",
++  "PROJECT_NAME_CHANGED",
++  "PROJECT_DIRECTORY_CREATED",
++  "PROJECT_NODE_MOVED",
++  "PROJECT_TRASH_EMPTIED",
++  "DATA_OBJECT_CREATED",
++  "DATA_OBJECT_REPLACED",
++  "DATA_OBJECT_DELETED",
++  "IMAGE_OBJECT_CREATED",
++  "IMAGE_OBJECT_REPLACED",
++  "IMAGE_OBJECT_DELETED",
++  "SLOT_TYPE_CHANGED",
++  "SLOTS_RESET",
++  "SLOTS_SWAPPED",
++  "SLOT_IMAGE_LINKED",
++  "SLOT_IMAGE_SETTINGS_CHANGED",
++  "SLOT_DATA_CONNECTED",
++  "SLOT_IMAGE_IMPORTED",
++  "SLOT_CHART_IMPORTED",
++  "GRAPH_OBJECTS_REPLACED",
++  "CHART_LAYOUT_CHANGED",
++  "CHART_MODEL_REPLACED",
++  "GRID_LAYOUT_CHANGED",
++  "LAYOUT_STYLE_CHANGED",
++  "SLOTS_MERGED",
++  "SLOTS_SPLIT",
++  "CAPTION_TEXT_INPUT",
++  "SLOT_CAPTIONS_INSERTED",
++  "CAPTION_SETTINGS_CHANGED",
++  "LABEL_SETTINGS_CHANGED",
++  "LABEL_POSITION_CHANGED",
++  "APPEARANCE_CHANGED",
++  "EXPORT_SETTINGS_CHANGED"
++}
++
++(*
++--algorithm FastFigureProjectEfsm
++variables
++  projectAuthority = ReadActiveProject(),
++  result = NoReference,
++  candidate = NoReference,
++  effect = NoReference;
++
++procedure DispatchProjectCommand(eventName, payload)
++variables preProject = NoReference;
++begin
++ProjectCommandMembership:
++  assert eventName \in PROJECT_COMMANDS;
++ProjectCommandCoverage:
++  assert PublicPersistentMutationSurfaceCoveredBy(PROJECT_COMMANDS);
+ ProjectReadCurrent:
+   preProject := projectAuthority;
+ ProjectResolve:
+diff --git a/pseudocode/layout_annotations_export.pcal b/pseudocode/layout_annotations_export.pcal
+--- a/pseudocode/layout_annotations_export.pcal
++++ b/pseudocode/layout_annotations_export.pcal
+@@ -1,344 +1,506 @@
+ ---- MODULE FastFigureLayoutAnnotationsExportPseudocode ----
+ EXTENDS Naturals, Sequences, FiniteSets
+ 
+-\* r16 PlusCal pseudocode for sourcescript/layout_annotations_export.py.
+-
+-CONSTANT NoReference
+-
+-(*
+---algorithm FastFigureLayoutAnnotationsExport
+-variables
+-  projectAuthority = ReadActiveProject(),
+-  candidate = NoReference,
+-  snapshot = NoReference,
+-  result = NoReference;
+-
+-procedure DashboardGeometry(width, heightOverride)
+-variables scale = 1, naturalHeight = 0, chosenHeight = 0;
+-begin
+-GeometryScale:
+-  scale := width / ReadReferenceWidth(projectAuthority);
+-GeometryNaturalHeight:
+-  naturalHeight := width / ReadConfiguredAspect(projectAuthority);
+-GeometryHeight:
+-  chosenHeight := IF ValidHeightOverride(heightOverride)
+-                  THEN heightOverride
+-                  ELSE naturalHeight;
+-GeometryResult:
+-  result := [
+-    width |-> width,
+-    height |-> chosenHeight,
+-    scale |-> scale,
+-    outerMargin |-> Min(
+-      ReadOuterMargin(projectAuthority) * scale,
+-      Min(width, chosenHeight) * 0.49),
+-    gap |-> ReadGap(projectAuthority) * scale,
+-    radius |-> ReadRadius(projectAuthority) * scale
+-  ];
+-GeometryReturn:
+-  return;
+-end procedure;
+-
+-procedure GridSlotGeometry(layoutState, geometry, slotValue)
+-variables colWidth = 0, rowHeight = 0;
+-begin
+-GridCellWidth:
+-  colWidth := (geometry.width - 2 * geometry.outerMargin
+-               - geometry.gap * (layoutState.gridCols - 1))
+-              / layoutState.gridCols;
+-GridCellHeight:
+-  rowHeight := (geometry.height - 2 * geometry.outerMargin
+-                - geometry.gap * (layoutState.gridRows - 1))
+-               / layoutState.gridRows;
+-GridSlotResult:
+-  result := SlotWidthHeightFromSpan(colWidth, rowHeight, geometry.gap, slotValue);
+-GridSlotReturn:
+-  return;
+-end procedure;
+-
+-procedure BuildGridResize(rows, cols)
+-begin
+-GridRequest:
+-  if ~(rows \in 1..8 /\ cols \in 1..8) then
+-    result := NoReference;
+-  else
+-    candidate := CopyProject(projectAuthority);
+-    if rows >= projectAuthority.layout.gridRows
+-       /\ cols >= projectAuthority.layout.gridCols then
+-      candidate := AddDefaultSlotsOnlyAtNewCoordinates(candidate, rows, cols);
+-    else
+-      assert EveryRemovedOrCrossingSlotIsDefaultEmptyOneByOne(candidate, rows, cols);
+-      candidate := RemoveOnlyDefaultEmptyCells(candidate, rows, cols);
+-    end if;
+-    candidate := SetGridRowsCols(candidate, rows, cols);
+-    assert ValidateWholeProject(candidate);
+-    result := candidate;
+-  end if;
+-GridBuildReturn:
+-  return;
+-end procedure;
+-
+-procedure SetGrid(rows, cols)
+-begin
+-GridBuild:
+-  call BuildGridResize(rows, cols);
+-GridCommit:
+-  if result # NoReference then
+-    projectAuthority := result;
+-    result := GridCommitMutationResult(projectAuthority);
+-  end if;
+-GridSetReturn:
+-  return;
+-end procedure;
+-
+-procedure MergeSlots(slotIds)
+-variables slots = NoReference;
+-begin
+-MergeResolve:
+-  slots := ResolveVisibleSlots(slotIds, projectAuthority);
+-MergeRectangle:
+-  assert FormsCompleteRectangle(slots);
+-MergePayloadCount:
+-  assert Cardinality(NonDefaultLocalSlots(slots)) <= 1;
+-MergeBuild:
+-  candidate := CopyProject(projectAuthority);
+-  candidate := MoveWholeLocalPayloadToTopLeftAnchor(candidate, slots);
+-  candidate := ResetCoveredSlotsToDefaultsAndHide(candidate, slots);
+-  candidate := SetAnchorRectangleSpan(candidate, slots);
+-MergeValidate:
+-  assert ValidateWholeProject(candidate);
+-MergeCommit:
+-  projectAuthority := candidate;
+-MergeResult:
+-  result := MergeResult(candidate);
+-MergeReturn:
+-  return;
+-end procedure;
+-
+-procedure SplitSlots(slotIds)
+-variables anchors = NoReference;
+-begin
+-SplitResolve:
+-  anchors := ResolveRequestedMergedAnchors(slotIds, projectAuthority);
+-SplitBuild:
+-  candidate := CopyProject(projectAuthority);
+-  candidate := RestoreCoveredCellsAsVisibleDefaultSlots(candidate, anchors);
+-  candidate := ResetAnchorsToOneByOne(candidate, anchors);
+-SplitValidate:
+-  assert ValidateWholeProject(candidate);
+-SplitCommit:
+-  projectAuthority := candidate;
+-SplitResult:
+-  result := SplitResult(candidate);
+-SplitReturn:
+-  return;
+-end procedure;
+-
+-procedure ReadImageEditor()
+-begin
+-ImageEditorRead:
+-  result := ReadSelectedImageNameUrlAndSlotSettings(projectAuthority);
+-ImageEditorReturn:
+-  return;
+-end procedure;
+-
+-procedure SetImageSettings(values)
+-variables slotValue = NoReference;
+-begin
+-ImageSettingsResolve:
+-  slotValue := ResolveSelectedImageSlot(projectAuthority);
+-ImageSettingsBuild:
+-  if slotValue # NoReference then
+-    candidate := UpdateOnlySelectedSlotImageSettings(
+-      projectAuthority,
+-      slotValue,
+-      values);
+-  end if;
+-ImageSettingsCommit:
+-  if candidate # NoReference then
+-    assert ValidateWholeProject(candidate);
+-    projectAuthority := candidate;
+-    result := ReadImageEditorProjection(projectAuthority, slotValue.id);
+-  end if;
+-ImageSettingsReturn:
+-  return;
+-end procedure;
+-
+-procedure ReadLabels()
+-begin
+-LabelsRead:
+-  result := ReadLabelSettings(projectAuthority);
+-LabelsGeometry:
+-  result := AddSelectedSlotReferenceWidthHeight(result, projectAuthority);
+-LabelsReadReturn:
+-  return;
+-end procedure;
+-
+-procedure SetLabelPosition(x, y)
+-begin
+-LabelPositionGuard:
+-  assert IsFinitePosition(x, y);
+-LabelPositionBuild:
+-  candidate := SetProjectLabelPosition(projectAuthority, x, y);
+-LabelPositionValidate:
+-  assert ValidateWholeProject(candidate);
+-LabelPositionCommit:
+-  projectAuthority := candidate;
+-LabelPositionResult:
+-  result := ReadLabelProjection(projectAuthority);
+-LabelPositionReturn:
+-  return;
+-end procedure;
+-
+-procedure FinishLabelInteraction()
+-begin
+-LabelInteractionFinish:
+-  result := InteractionCompletionOnly();
+-LabelInteractionReturn:
+-  return;
+-end procedure;
+-
+-procedure ReadGlobalCaption()
+-begin
+-GlobalCaptionRead:
+-  result := ReadProjectGlobalCaption(projectAuthority);
+-GlobalCaptionReadReturn:
+-  return;
+-end procedure;
+-
+-procedure ReadSlotCaption(slotId)
+-begin
+-SlotCaptionRead:
+-  result := ReadResolvedSlotIdPositionAndCaption(projectAuthority, slotId);
+-SlotCaptionReadReturn:
+-  return;
+-end procedure;
+-
+-procedure SetGlobalCaptionText(text)
+-begin
+-GlobalCaptionBuild:
+-  candidate := ReplaceOnlyGlobalCaptionText(projectAuthority, text);
+-GlobalCaptionValidate:
+-  assert ValidateWholeProject(candidate);
+-GlobalCaptionCommit:
+-  projectAuthority := candidate;
+-GlobalCaptionResult:
+-  result := ReadProjectGlobalCaption(projectAuthority);
+-GlobalCaptionReturn:
+-  return;
+-end procedure;
+-
+-procedure SetSlotCaption(slotId, text)
+-begin
+-SlotCaptionBuild:
+-  candidate := SetResolvedSlotCaptionCandidate(projectAuthority, slotId, text);
+-SlotCaptionCommit:
+-  if candidate # NoReference /\ ValidateWholeProject(candidate) then
+-    projectAuthority := candidate;
+-    result := ReadResolvedSlotIdPositionAndCaption(projectAuthority, slotId);
+-  end if;
+-SlotCaptionReturn:
+-  return;
+-end procedure;
+-
+-procedure InsertSlotCaptions(slotIds)
+-variables slots = NoReference, projectedText = "";
+-begin
+-InsertCaptionResolve:
+-  slots := ResolveSlotsInLayoutOrder(slotIds, projectAuthority);
+-InsertCaptionProjection:
+-  projectedText := ProjectNonEmptySlotCaptions(slots);
+-InsertCaptionBuild:
+-  candidate := InsertIntoGlobalCaption(projectAuthority, projectedText);
+-InsertCaptionValidate:
+-  assert ValidateWholeProject(candidate);
+-InsertCaptionCommit:
+-  projectAuthority := candidate;
+-InsertCaptionResult:
+-  result := ReadProjectGlobalCaption(projectAuthority);
+-InsertCaptionReturn:
+-  return;
+-end procedure;
+-
+-procedure ReadExportSettings()
+-begin
+-ExportSettingsRead:
+-  result := ReadProjectExportSettings(projectAuthority);
+-ExportSettingsReadReturn:
+-  return;
+-end procedure;
+-
+-procedure SetExportSettings(values)
+-begin
+-ExportSettingsBuild:
+-  candidate := NormalizeExportSettings(projectAuthority, values);
+-ExportSettingsValidate:
+-  assert ValidateWholeProject(candidate);
+-ExportSettingsCommit:
+-  projectAuthority := candidate;
+-ExportSettingsResult:
+-  result := ReadProjectExportSettings(projectAuthority);
+-ExportSettingsReturn:
+-  return;
+-end procedure;
+-
+-procedure CreateExportSnapshot()
+-begin
+-ExportSnapshotRead:
+-  snapshot := SnapshotProjectObjects(projectAuthority);
+-ExportSnapshotGeometry:
+-  snapshot := AddTargetGeometryFromPersistentExportSettings(snapshot);
+-ExportSnapshotResult:
+-  result := snapshot;
+-ExportSnapshotReturn:
+-  return;
+-end procedure;
+-
+-procedure ExportTarget()
+-begin
+-ExportTargetSnapshot:
+-  call CreateExportSnapshot();
+-ExportTargetCopy:
+-  snapshot := result;
+-ExportTargetHeight:
+-  snapshot := ResolveAutoOrExplicitHeight(snapshot);
+-ExportTargetLimits:
+-  if ~WithinRasterLimits(snapshot) then
+-    result := [status |-> "rejected"];
+-  else
+-    snapshot := RenderVisibleChartsImagesLabelsCaptions(snapshot);
+-    result := EncodeRasterWithDpiAndDownload(snapshot);
+-  end if;
+-ExportTargetReturn:
+-  return;
+-end procedure;
+-
+-procedure CaptureCurrent()
+-begin
+-CaptureViewport:
+-  snapshot := ReadRenderedViewportForOneShotCapture();
+-CaptureEncoding:
+-  snapshot := AddPersistentDpiAndFormatDefaults(snapshot, projectAuthority);
+-CaptureResult:
+-  result := EncodeRasterAndDownload(snapshot);
+-CaptureReturn:
+-  return;
+-end procedure;
+-
+-begin
+-Main:
+-  while TRUE do
+-    either
+-      with rows = RequestedRows(), cols = RequestedCols() do
+-        call SetGrid(rows, cols);
+-      end with;
+-    or
+-      with ids = RequestedSlotIds() do
+-        call MergeSlots(ids);
+-      end with;
+-    or
+-      with ids = RequestedSlotIds() do
+-        call SplitSlots(ids);
++\* Direct translation of sourcescript/layout_annotations_export.py.
++
++CONSTANT NoReference
++
++(*
++--algorithm FastFigureLayoutAnnotationsExport
++variables
++  projectView = ReadActiveProject(),
++  candidate = NoReference,
++  snapshot = NoReference,
++  result = NoReference;
++
++procedure DashboardGeometry(width, heightOverride)
++variables scale = 1, naturalHeight = 0, chosenHeight = 0;
++begin
++GeometryScale:
++  scale := width / ReadReferenceWidth(projectView);
++GeometryNaturalHeight:
++  naturalHeight := width / ReadConfiguredAspect(projectView);
++GeometryHeight:
++  chosenHeight := IF ValidHeightOverride(heightOverride)
++                  THEN heightOverride
++                  ELSE naturalHeight;
++GeometryResult:
++  result := [
++    width |-> width,
++    height |-> chosenHeight,
++    scale |-> scale,
++    outerMargin |-> Min(
++      ReadOuterMargin(projectView) * scale,
++      Min(width, chosenHeight) * 0.49),
++    gap |-> ReadGap(projectView) * scale,
++    radius |-> ReadRadius(projectView) * scale
++  ];
++GeometryReturn:
++  return;
++end procedure;
++
++procedure GridSlotGeometry(layoutState, geometry, slotValue)
++variables colWidth = 0, rowHeight = 0;
++begin
++GridCellWidth:
++  colWidth := (geometry.width - 2 * geometry.outerMargin
++               - geometry.gap * (layoutState.gridCols - 1))
++              / layoutState.gridCols;
++GridCellHeight:
++  rowHeight := (geometry.height - 2 * geometry.outerMargin
++                - geometry.gap * (layoutState.gridRows - 1))
++               / layoutState.gridRows;
++GridSlotResult:
++  result := SlotWidthHeightFromSpan(colWidth, rowHeight, geometry.gap, slotValue);
++GridSlotReturn:
++  return;
++end procedure;
++
++procedure SetLayoutStyle(values)
++variables normalized = NoReference;
++begin
++LayoutStyleNormalize:
++  normalized := NormalizeLayoutStyle(values, projectView);
++LayoutStyleDispatch:
++  if normalized # NoReference then
++    result := ApplicationDispatchProjectCommand(
++      "LAYOUT_STYLE_CHANGED",
++      [style |-> normalized]);
++    projectView := ReadActiveProject();
++  end if;
++LayoutStyleReturn:
++  return;
++end procedure;
++
++procedure BuildGridResize(rows, cols)
++begin
++GridRequest:
++  if ~(rows \in 1..8 /\ cols \in 1..8) then
++    result := NoReference;
++  else
++    candidate := CopyProject(projectView);
++    if rows >= projectView.layout.gridRows
++       /\ cols >= projectView.layout.gridCols then
++      candidate := AddDefaultSlotsOnlyAtNewCoordinates(candidate, rows, cols);
++    else
++      assert EveryRemovedOrCrossingSlotIsDefaultEmptyOneByOne(candidate, rows, cols);
++      candidate := RemoveOnlyDefaultEmptyCells(candidate, rows, cols);
++    end if;
++    candidate := SetGridRowsCols(candidate, rows, cols);
++    assert ValidateWholeProject(candidate);
++    result := candidate;
++  end if;
++GridBuildReturn:
++  return;
++end procedure;
++
++procedure SetGrid(rows, cols)
++begin
++GridBuild:
++  call BuildGridResize(rows, cols);
++GridDispatch:
++  if result # NoReference then
++    result := ApplicationDispatchProjectCommand(
++      "GRID_LAYOUT_CHANGED",
++      [rows |-> rows, cols |-> cols]);
++    projectView := ReadActiveProject();
++  end if;
++GridSetReturn:
++  return;
++end procedure;
++
++procedure MergeSlots(slotIds)
++variables slots = NoReference;
++begin
++MergeResolve:
++  slots := ResolveVisibleSlots(slotIds, projectView);
++MergeRectangle:
++  assert FormsCompleteRectangle(slots);
++MergePayloadCount:
++  assert Cardinality(NonDefaultLocalSlots(slots)) <= 1;
++MergeBuild:
++  candidate := CopyProject(projectView);
++  candidate := MoveWholeLocalPayloadToTopLeftAnchor(candidate, slots);
++  candidate := ResetCoveredSlotsToDefaultsAndHide(candidate, slots);
++  candidate := SetAnchorRectangleSpan(candidate, slots);
++MergeValidate:
++  assert ValidateWholeProject(candidate);
++MergeDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "SLOTS_MERGED",
++    [slotIds |-> slotIds]);
++  projectView := ReadActiveProject();
++MergeReturn:
++  return;
++end procedure;
++
++procedure SplitSlots(slotIds)
++variables anchors = NoReference;
++begin
++SplitResolve:
++  anchors := ResolveRequestedMergedAnchors(slotIds, projectView);
++SplitBuild:
++  candidate := CopyProject(projectView);
++  candidate := RestoreCoveredCellsAsVisibleDefaultSlots(candidate, anchors);
++  candidate := ResetAnchorsToOneByOne(candidate, anchors);
++SplitValidate:
++  assert ValidateWholeProject(candidate);
++SplitDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "SLOTS_SPLIT",
++    [slotIds |-> slotIds]);
++  projectView := ReadActiveProject();
++SplitReturn:
++  return;
++end procedure;
++
++procedure ReadImageEditor()
++begin
++ImageEditorRead:
++  result := ReadSelectedImageNameUrlAndSlotSettings(projectView);
++ImageEditorReturn:
++  return;
++end procedure;
++
++procedure SetImageSettings(values)
++variables slotValue = NoReference;
++begin
++ImageSettingsResolve:
++  slotValue := ResolveSelectedImageSlot(projectView);
++ImageSettingsBuild:
++  if slotValue # NoReference then
++    candidate := UpdateOnlySelectedSlotImageSettings(
++      projectView,
++      slotValue,
++      values);
++  end if;
++ImageSettingsDispatch:
++  if candidate # NoReference then
++    assert ValidateWholeProject(candidate);
++    result := ApplicationDispatchProjectCommand(
++      "SLOT_IMAGE_SETTINGS_CHANGED",
++      [slotId |-> slotValue.id, settings |-> values]);
++    projectView := ReadActiveProject();
++  end if;
++ImageSettingsReturn:
++  return;
++end procedure;
++
++procedure ReadLabels()
++begin
++LabelsRead:
++  result := ReadLabelSettings(projectView);
++LabelsGeometry:
++  result := AddSelectedSlotReferenceWidthHeight(result, projectView);
++LabelsReadReturn:
++  return;
++end procedure;
++
++procedure SetLabelEnabled(enabled)
++begin
++LabelEnabledDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "LABEL_SETTINGS_CHANGED",
++    [enabled |-> enabled]);
++LabelEnabledRefresh:
++  projectView := ReadActiveProject();
++LabelEnabledReturn:
++  return;
++end procedure;
++
++procedure SetLabelSettings(values)
++variables normalized = NoReference;
++begin
++LabelSettingsNormalize:
++  normalized := NormalizeLabelSettings(values, projectView);
++LabelSettingsDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "LABEL_SETTINGS_CHANGED",
++    [settings |-> normalized]);
++LabelSettingsRefresh:
++  projectView := ReadActiveProject();
++LabelSettingsReturn:
++  return;
++end procedure;
++
++procedure SetLabelPosition(x, y)
++begin
++LabelPositionGuard:
++  assert IsFinitePosition(x, y);
++LabelPositionBuild:
++  candidate := SetProjectLabelPosition(projectView, x, y);
++LabelPositionValidate:
++  assert ValidateWholeProject(candidate);
++LabelPositionDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "LABEL_POSITION_CHANGED",
++    [x |-> x, y |-> y]);
++LabelPositionRefresh:
++  projectView := ReadActiveProject();
++LabelPositionReturn:
++  return;
++end procedure;
++
++procedure FinishLabelInteraction()
++begin
++LabelInteractionFinish:
++  result := InteractionCompletionOnly();
++LabelInteractionReturn:
++  return;
++end procedure;
++
++procedure ReadGlobalCaption()
++begin
++GlobalCaptionRead:
++  result := ReadProjectGlobalCaption(projectView);
++GlobalCaptionReadReturn:
++  return;
++end procedure;
++
++procedure ReadSlotCaption(slotId)
++begin
++SlotCaptionRead:
++  result := ReadResolvedSlotIdPositionAndCaption(projectView, slotId);
++SlotCaptionReadReturn:
++  return;
++end procedure;
++
++procedure SetGlobalCaptionText(text)
++begin
++GlobalCaptionBuild:
++  candidate := ReplaceOnlyGlobalCaptionText(projectView, text);
++GlobalCaptionValidate:
++  assert ValidateWholeProject(candidate);
++GlobalCaptionDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "CAPTION_TEXT_INPUT",
++    [target |-> [kind |-> "global"], text |-> text]);
++GlobalCaptionRefresh:
++  projectView := ReadActiveProject();
++GlobalCaptionReturn:
++  return;
++end procedure;
++
++procedure SetSlotCaption(slotId, text)
++begin
++SlotCaptionBuild:
++  candidate := SetResolvedSlotCaptionCandidate(projectView, slotId, text);
++SlotCaptionDispatch:
++  if candidate # NoReference /\ ValidateWholeProject(candidate) then
++    result := ApplicationDispatchProjectCommand(
++      "CAPTION_TEXT_INPUT",
++      [target |-> [kind |-> "slot", id |-> slotId], text |-> text]);
++    projectView := ReadActiveProject();
++  end if;
++SlotCaptionReturn:
++  return;
++end procedure;
++
++procedure InsertSlotCaptions(slotIds)
++variables slots = NoReference, projectedText = "";
++begin
++InsertCaptionResolve:
++  slots := ResolveSlotsInLayoutOrder(slotIds, projectView);
++InsertCaptionProjection:
++  projectedText := ProjectNonEmptySlotCaptions(slots);
++InsertCaptionBuild:
++  candidate := InsertIntoGlobalCaption(projectView, projectedText);
++InsertCaptionValidate:
++  assert ValidateWholeProject(candidate);
++InsertCaptionDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "SLOT_CAPTIONS_INSERTED",
++    [slotIds |-> slotIds, projectedText |-> projectedText]);
++InsertCaptionRefresh:
++  projectView := ReadActiveProject();
++InsertCaptionReturn:
++  return;
++end procedure;
++
++procedure SetCaptionEnabled(enabled)
++begin
++CaptionEnabledDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "CAPTION_SETTINGS_CHANGED",
++    [enabled |-> enabled]);
++CaptionEnabledRefresh:
++  projectView := ReadActiveProject();
++CaptionEnabledReturn:
++  return;
++end procedure;
++
++procedure SetCaptionName(name)
++begin
++CaptionNameDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "CAPTION_SETTINGS_CHANGED",
++    [name |-> name]);
++CaptionNameRefresh:
++  projectView := ReadActiveProject();
++CaptionNameReturn:
++  return;
++end procedure;
++
++procedure SetCaptionNameBold(nameBold)
++begin
++CaptionNameBoldDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "CAPTION_SETTINGS_CHANGED",
++    [nameBold |-> nameBold]);
++CaptionNameBoldRefresh:
++  projectView := ReadActiveProject();
++CaptionNameBoldReturn:
++  return;
++end procedure;
++
++procedure SetCaptionSettings(values)
++variables normalized = NoReference;
++begin
++CaptionSettingsNormalize:
++  normalized := NormalizeCaptionSettings(values, projectView);
++CaptionSettingsDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "CAPTION_SETTINGS_CHANGED",
++    [settings |-> normalized]);
++CaptionSettingsRefresh:
++  projectView := ReadActiveProject();
++CaptionSettingsReturn:
++  return;
++end procedure;
++
++procedure ReadExportSettings()
++begin
++ExportSettingsRead:
++  result := ReadProjectExportSettings(projectView);
++ExportSettingsReadReturn:
++  return;
++end procedure;
++
++procedure SetExportSettings(values)
++begin
++ExportSettingsBuild:
++  candidate := NormalizeExportSettings(projectView, values);
++ExportSettingsValidate:
++  assert ValidateWholeProject(candidate);
++ExportSettingsDispatch:
++  result := ApplicationDispatchProjectCommand(
++    "EXPORT_SETTINGS_CHANGED",
++    [settings |-> candidate]);
++ExportSettingsRefresh:
++  projectView := ReadActiveProject();
++ExportSettingsReturn:
++  return;
++end procedure;
++
++procedure CreateExportSnapshot()
++begin
++ExportSnapshotRead:
++  snapshot := SnapshotProjectObjects(projectView);
++ExportSnapshotGeometry:
++  snapshot := AddTargetGeometryFromPersistentExportSettings(snapshot);
++ExportSnapshotResult:
++  result := snapshot;
++ExportSnapshotReturn:
++  return;
++end procedure;
++
++procedure ExportTarget()
++begin
++ExportTargetSnapshot:
++  call CreateExportSnapshot();
++ExportTargetCopy:
++  snapshot := result;
++ExportTargetHeight:
++  snapshot := ResolveAutoOrExplicitHeight(snapshot);
++ExportTargetLimits:
++  if ~WithinRasterLimits(snapshot) then
++    result := [status |-> "rejected"];
++  else
++    snapshot := RenderVisibleChartsImagesLabelsCaptions(snapshot);
++    result := EncodeRasterWithDpiAndDownload(snapshot);
++  end if;
++ExportTargetReturn:
++  return;
++end procedure;
++
++procedure CaptureCurrent()
++begin
++CaptureViewport:
++  snapshot := ReadRenderedViewportForOneShotCapture();
++CaptureEncoding:
++  snapshot := AddPersistentDpiAndFormatDefaults(snapshot, projectView);
++CaptureResult:
++  result := EncodeRasterAndDownload(snapshot);
++CaptureReturn:
++  return;
++end procedure;
++
++begin
++Main:
++  while TRUE do
++    either
++      with style = RequestedLayoutStyle() do
++        call SetLayoutStyle(style);
++      end with;
++    or
++      with rows = RequestedRows(), cols = RequestedCols() do
++        call SetGrid(rows, cols);
++      end with;
++    or
++      with ids = RequestedSlotIds() do
++        call MergeSlots(ids);
++      end with;
++    or
++      with ids = RequestedSlotIds() do
++        call SplitSlots(ids);
++      end with;
++    or
++      with values = RequestedImageSettings() do
++        call SetImageSettings(values);
++      end with;
++    or
++      with enabled = RequestedLabelEnabled() do
++        call SetLabelEnabled(enabled);
++      end with;
++    or
++      with values = RequestedLabelSettings() do
++        call SetLabelSettings(values);
++      end with;
++    or
++      with x = RequestedLabelX(), y = RequestedLabelY() do
++        call SetLabelPosition(x, y);
++      end with;
++    or
++      with text = RequestedGlobalCaptionText() do
++        call SetGlobalCaptionText(text);
++      end with;
++    or
++      with slotId = RequestedCaptionSlotId(), text = RequestedSlotCaptionText() do
++        call SetSlotCaption(slotId, text);
++      end with;
++    or
++      with ids = RequestedSlotCaptionInsertIds() do
++        call InsertSlotCaptions(ids);
++      end with;
++    or
++      with enabled = RequestedCaptionEnabled() do
++        call SetCaptionEnabled(enabled);
++      end with;
++    or
++      with name = RequestedCaptionName() do
++        call SetCaptionName(name);
++      end with;
++    or
++      with nameBold = RequestedCaptionNameBold() do
++        call SetCaptionNameBold(nameBold);
++      end with;
++    or
++      with values = RequestedCaptionSettings() do
++        call SetCaptionSettings(values);
++      end with;
++    or
++      with values = RequestedExportSettings() do
++        call SetExportSettings(values);
+       end with;
+     or
+       call ExportTarget();
 diff --git a/development-versions.json b/development-versions.json
 --- a/development-versions.json
 +++ b/development-versions.json
-@@ -26,25 +26,25 @@
-         "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
-         "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17"
-       },
--      "tlc": "pending",
--      "validation_review": null
--    },
--    "source-code": {
--      "revision": 24,
--      "status": "stale",
--      "paths": [
--        "Fast-figure.html",
--        "fast-figure-ui.js",
--        "fast-figure.js",
--        "scripts/build-portable.py"
--      ],
--      "fingerprint": "sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f",
--      "derived_from": {
--        "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
--        "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17",
--        "verification-model": "sha256:c3be19be754757a5b3423f0e939cebf841f0aa9c7532ee2d231263d57aa6d75f"
--      },
--      "validation_review": null
-+      "tlc": "passed",
-+      "validation_review": "agent_space/reviews/review-20261014-007-verification-r17.md"
-+    },
-+    "source-code": {
-+      "revision": 24,
-+      "status": "current",
-+      "paths": [
-+        "Fast-figure.html",
-+        "fast-figure-ui.js",
-+        "fast-figure.js",
-+        "scripts/build-portable.py"
-+      ],
-+      "fingerprint": "sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f",
-+      "derived_from": {
-+        "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
-+        "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17",
-+        "verification-model": "sha256:c3be19be754757a5b3423f0e939cebf841f0aa9c7532ee2d231263d57aa6d75f"
-+      },
-+      "validation_review": "agent_space/reviews/review-20261014-008-source-code-r24.md"
+@@ -47,14 +47,14 @@
+       "validation_review": null
      },
      "pseudocode": {
-       "revision": 6,
-diff --git a/agent_space/reviews/review-20261014-007-verification-r17.md b/agent_space/reviews/review-20261014-007-verification-r17.md
+-      "revision": 7,
+-      "status": "stale",
+-      "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:bc89a32a69f9dd06fb7d1b982e2eceb47ce7d89274c526f18eac351e4b469eb2",
+-      "derived_from": {
+-        "source-script": "sha256:20dcdebc56a6baa471e2e5b4996e7d6a13cdc5a910247eb20e1e7e50e1614563"
+-      },
+-      "translation_review": "agent_space/reviews/review-20261014-011-pluscal-r21.md"
++      "revision": 8,
++      "status": "current",
++      "path_rule": "pseudocode/**/*.pcal",
++      "fingerprint": "sha256:532d65420b932b45f503a05aa457f515779619b934e25ffd535c89ec58443d12",
++      "derived_from": {
++        "source-script": "sha256:65f70d9060b0e2a802f1bc595058548ed350a2631e94069e4776af78df48bf2a"
++      },
++      "translation_review": "agent_space/reviews/review-20261014-013-pluscal-r22.md"
+     }
+   }
+ }
+diff --git a/agent_space/reviews/review-20261014-013-pluscal-r22.md b/agent_space/reviews/review-20261014-013-pluscal-r22.md
 new file mode 100644
 --- /dev/null
-+++ b/agent_space/reviews/review-20261014-007-verification-r17.md
-@@ -0,0 +1,37 @@
-+# Verification validation review — r17
++++ b/agent_space/reviews/review-20261014-013-pluscal-r22.md
+@@ -0,0 +1,29 @@
++# PlusCal translation review — Source Script r22 / pseudocode r8
 +
-+## 대상
++## 번역 범위
 +
-+- Source Script: r20
-+- pseudocode: r6
-+- verification-model: r17
-+- verification fingerprint: `sha256:c3be19be754757a5b3423f0e939cebf841f0aa9c7532ee2d231263d57aa6d75f`
++Source Script r22의 project command coverage와 persistent mutation path를 `project_efsm.pcal`과 `layout_annotations_export.pcal`에 직접 번역했다.
 +
-+## 변경 모델과 검증 증거
++## 대응 확인
 +
-+이번 revision에서 실제 내용이 바뀐 verification file은 `FastFigureInteractionCore.tla`의 abstraction 설명이다. 상태 transition 자체는 기존 entering-trash reference detach / leaving-trash non-restore / trash direct-slot connection 거부를 그대로 사용한다.
++- `PROJECT_COMMANDS`를 PlusCal에 명시해 r22의 persistent command 집합을 직접 추적할 수 있게 했다.
++- public persistent mutation surface가 declared command 집합에 포함된다는 coverage assertion을 추가했다.
++- layout style/grid/merge/split, slot image settings, label settings/position, caption text/settings, export settings를 application orchestration의 project command 경계로 수렴시켰다.
++- `layout_annotations_export.pcal`의 로컬 project 값은 authoritative commit owner가 아니라 `ReadActiveProject()`에서 다시 읽는 projection으로 사용한다.
++- merge/split 등의 candidate 계산과 project commit을 분리했다. candidate/precondition 계산은 domain pseudocode에 남고 authoritative commit은 projectEFSM command가 소유한다.
++- renderer/interface effect는 이 모듈의 project mutation과 합치지 않았다.
 +
-+push-trigger TLA workflow run `38518601964`에서 변경된 Interaction Core job `verify-interaction-core`는 PlusCal translate, SANY parse, TLC model check를 모두 성공했다.
++## 일반 코딩 원칙 대조
 +
-+같은 run의 Slot Core job은 이 review 작성 시점에 중복 model check가 계속 실행 중이지만, 현재 `FastFigureSlotCore.tla`와 `FastFigureSlotCore.cfg`는 직전 성공 push workflow run `38394480809`의 입력과 Git blob SHA가 각각 완전히 동일하다.
++- 계산과 상태 변경 분리: candidate/normalize 단계와 command commit을 구분했다.
++- single source of truth: layout module이 별도 project authority로 commit하지 않는다.
++- 최소 구현: 기존 application/projectEFSM 경계를 재사용하고 별도 mutation bus나 generic patch layer를 추가하지 않았다.
++- 중복 금지: 같은 caption/label owner의 세부 field는 기존 settings command로 통합했다.
 +
-+- FastFigureSlotCore.tla: `198507ee7835d8ea5f13efe7f330e465faeea2ab`
-+- FastFigureSlotCore.cfg: `63d3955949b0ba85dd137f0a1ab2f3a67194113b`
++## 구체화 수준
 +
-+run `38394480809`의 `verify-slot-core`는 translate, parse, TLC model check를 모두 성공했다. 따라서 변경되지 않은 동일 Slot Core 모델에 대해 새 상태 의미가 추가되지 않았으며, 이번 revision의 변경된 검증 대상은 현재 push에서 다시 model check되었다.
++Source Code 구현자는 새 persistent command나 owner를 발명할 필요 없이 r8의 command dispatch와 candidate/validation 순서를 그대로 구현할 수 있다.
 +
-+## abstraction 범위
++## 하위 단계
 +
-+- Layout local selection은 UI-local state이므로 ProjectObject verification state에 추가하지 않는다.
-+- dashboard projection invalidation은 renderer effect이며 project transition이 아니므로 verification state에 추가하지 않는다.
-+- removed graph-reference count와 reset image-slot count는 existing entering-trash transition의 pre/post state에서 결정적으로 파생되는 mutation result metadata다. 이를 별도 independent state로 추가하지 않는다.
-+
-+## 판정
-+
-+verification-model r17은 현재 Source Script r20 / pseudocode r6의 검증 대상 상태 의미를 충족한다.
-+
-+- changed Interaction Core: current push TLC passed.
-+- unchanged Slot Core: exact same TLA/CFG blobs의 prior push TLC passed.
-+- verification-model r17: **passed**.
-+
-+현재 run의 unchanged Slot Core 중복 job이 나중에 다른 결과를 내면 이 판정을 다시 열고 원인을 조사해야 한다.
-diff --git a/agent_space/reviews/review-20261014-008-source-code-r24.md b/agent_space/reviews/review-20261014-008-source-code-r24.md
-new file mode 100644
---- /dev/null
-+++ b/agent_space/reviews/review-20261014-008-source-code-r24.md
-@@ -0,0 +1,58 @@
-+# Source Code validation review — r24 / plan-014 completion
-+
-+## 대상
-+
-+- Source Script r20
-+- pseudocode r6
-+- verification-model r17
-+- Source Code r24
-+- Source Code fingerprint: `sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f`
-+
-+## 구현 결과
-+
-+### Layout selection
-+
-+`FastFigureLayoutOverlay`의 selection은 React component-local Set으로 유지된다.
-+
-+- slot click은 propagation을 차단하고 해당 slot을 toggle한다.
-+- merge/split/explicit clear control은 selection을 먼저 소비하고 parent background clear에 의해 상쇄되지 않는다.
-+- settings content의 non-slot click은 selection을 clear한다.
-+- 이 경로는 FFPX ProjectObject를 변경하지 않는다.
-+
-+### dashboard projection invalidation
-+
-+`PROJECT_NODE_MOVED`와 `PROJECT_TRASH_EMPTIED` mutation owner가 실제 `removedGraphReferenceCount`와 `resetImageSlotCount`를 payload에 기록한다.
-+
-+`dispatchDashboardAffectingEvent`는 `appFSM.send()`가 모든 region을 동기 처리하고 반환한 뒤 projection effect를 한 번 판정한다.
-+
-+- 실제 rendered reference detach: FULL_DASHBOARD.
-+- path-only move / reference 없는 trash empty: NONE.
-+- SLOTS_SWAPPED: FULL_DASHBOARD.
-+- renderer effect는 project mutation이나 재귀 appFSM event를 발생시키지 않는다.
-+
-+## push-trigger 검증 결과
-+
-+WIP implementation commit `94a0891cab60b704417c8236faac8cec9f0e9c6e` 기준:
-+
-+- Fast Figure regression run `38519371995`: **success**.
-+- Build distribution run `38519372023`: **success**.
-+- build workflow가 distribution artifact commit `03477a0b895dc646b5c530cf06722552c90c1ba1`을 main에 반영했다.
-+
-+초기 development-layer run `38519372013`은 구현 오류가 아니라 Source Code fingerprint 계산에서 JS locale sort를 사용한 메타데이터 오류 때문에 실패했다. checker의 Python path ordering으로 fingerprint를 바로잡은 commit `ce526e7872fb23d1d80d13ce7c11e6fcd1f480d3`의 push-trigger Development layer versions run `38519480783`은 **success**했다.
-+
-+verification 근거는 `review-20261014-007-verification-r17.md`에 기록했다.
-+
-+## 완료 판정
-+
-+plan-014의 A~E는 다음을 만족한다.
-+
-+- Source Script r20 closed.
-+- pseudocode r6 current.
-+- verification r17 passed.
-+- Source Code r24가 current lineage를 가리킨다.
-+- Layout background deselection regression 통과.
-+- trash reference detach 후 stale dashboard regression 통과.
-+- distribution build 성공.
-+- development-layer version checker 성공.
-+
-+따라서 plan-014 구현 범위는 완료로 판정한다. 후속 plan-015는 이 상태를 기준으로 FFPX EFSM과 인터페이스 FSM 책임 분리를 진행한다.
++verification r19는 r8 lineage가 아니므로 stale다. 다음 단계에서 r8에서 verification model을 다시 파생하고 TLC를 실행한다.
 diff --git a/agent_space/patches/20261014-020.md b/agent_space/patches/20261014-020.md
 new file mode 100644
 --- /dev/null
 +++ b/agent_space/patches/20261014-020.md
-@@ -0,0 +1,23 @@
-+# 20261014-020 — Close plan-014 verification and Source Code r24
+@@ -0,0 +1,19 @@
++# 20261014-020 — Translate Source Script r22 command coverage to PlusCal r8
 +
 +## 변경
 +
-+- verification-model r17의 TLC 상태를 passed로 확정하고 validation review를 연결한다.
-+- Source Code r24를 current로 전환하고 source-code validation review를 연결한다.
-+- application source, pseudocode, verification model 자체는 이 patch에서 변경하지 않는다.
-+
-+## 검증 근거
-+
-+- changed Interaction Core: push-run 38518601964의 verify-interaction-core TLC success.
-+- unchanged Slot Core: 현재 TLA/CFG blob이 prior successful push-run 38394480809 입력과 동일.
-+- Fast Figure regression: run 38519371995 success.
-+- distribution build: run 38519372023 success.
-+- corrected development-layer metadata: run 38519480783 success.
++- `project_efsm.pcal`: r22 PROJECT_COMMANDS 전체와 public persistent mutation coverage assertion 번역.
++- `layout_annotations_export.pcal`: 직접 project commit을 제거하고 persistent mutation을 application project command dispatch로 수렴.
++- project read projection은 command 후 `ReadActiveProject()`로 갱신.
++- pseudocode r8 / Source Script r22 lineage와 translation review 갱신.
++- verification/source-code는 stale 유지.
 +
 +## 선택 이유
 +
-+변경된 verification input은 현재 push에서 다시 검사하고, 완전히 동일한 unchanged model은 blob identity와 직전 push TLC 결과로 추적한다. 긴 unchanged Slot Core 중복 실행이 끝날 때까지 변경된 기능 검증과 이미 확보된 동일-input 결과를 무의미하게 보류하지 않는다.
++Source Script의 module decomposition과 명시적 mutation path를 그대로 보존하면서, pseudocode가 별도 authoritative project owner가 되지 않게 한다.
 +
-+## 주의
++## 기각
 +
-+run 38518601964의 unchanged Slot Core 중복 job이 이후 실패하면 verification r17 판정을 다시 열어야 한다.
++- 기존 직접 `projectAuthority := candidate` 유지: r22 projectEFSM single mutation path와 충돌.
++- generic mutation procedure 추가: application/projectEFSM 경계와 중복된다.
++- Source Code부터 재개: TLC gate와 계층 순서를 위반한다.

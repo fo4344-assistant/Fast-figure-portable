@@ -1,14 +1,14 @@
 ---- MODULE FastFigureLayoutAnnotationsExportPseudocode ----
 EXTENDS Naturals, Sequences, FiniteSets
 
-\* r16 PlusCal pseudocode for sourcescript/layout_annotations_export.py.
+\* Direct translation of sourcescript/layout_annotations_export.py.
 
 CONSTANT NoReference
 
 (*
 --algorithm FastFigureLayoutAnnotationsExport
 variables
-  projectAuthority = ReadActiveProject(),
+  projectView = ReadActiveProject(),
   candidate = NoReference,
   snapshot = NoReference,
   result = NoReference;
@@ -17,9 +17,9 @@ procedure DashboardGeometry(width, heightOverride)
 variables scale = 1, naturalHeight = 0, chosenHeight = 0;
 begin
 GeometryScale:
-  scale := width / ReadReferenceWidth(projectAuthority);
+  scale := width / ReadReferenceWidth(projectView);
 GeometryNaturalHeight:
-  naturalHeight := width / ReadConfiguredAspect(projectAuthority);
+  naturalHeight := width / ReadConfiguredAspect(projectView);
 GeometryHeight:
   chosenHeight := IF ValidHeightOverride(heightOverride)
                   THEN heightOverride
@@ -30,10 +30,10 @@ GeometryResult:
     height |-> chosenHeight,
     scale |-> scale,
     outerMargin |-> Min(
-      ReadOuterMargin(projectAuthority) * scale,
+      ReadOuterMargin(projectView) * scale,
       Min(width, chosenHeight) * 0.49),
-    gap |-> ReadGap(projectAuthority) * scale,
-    radius |-> ReadRadius(projectAuthority) * scale
+    gap |-> ReadGap(projectView) * scale,
+    radius |-> ReadRadius(projectView) * scale
   ];
 GeometryReturn:
   return;
@@ -56,15 +56,31 @@ GridSlotReturn:
   return;
 end procedure;
 
+procedure SetLayoutStyle(values)
+variables normalized = NoReference;
+begin
+LayoutStyleNormalize:
+  normalized := NormalizeLayoutStyle(values, projectView);
+LayoutStyleDispatch:
+  if normalized # NoReference then
+    result := ApplicationDispatchProjectCommand(
+      "LAYOUT_STYLE_CHANGED",
+      [style |-> normalized]);
+    projectView := ReadActiveProject();
+  end if;
+LayoutStyleReturn:
+  return;
+end procedure;
+
 procedure BuildGridResize(rows, cols)
 begin
 GridRequest:
   if ~(rows \in 1..8 /\ cols \in 1..8) then
     result := NoReference;
   else
-    candidate := CopyProject(projectAuthority);
-    if rows >= projectAuthority.layout.gridRows
-       /\ cols >= projectAuthority.layout.gridCols then
+    candidate := CopyProject(projectView);
+    if rows >= projectView.layout.gridRows
+       /\ cols >= projectView.layout.gridCols then
       candidate := AddDefaultSlotsOnlyAtNewCoordinates(candidate, rows, cols);
     else
       assert EveryRemovedOrCrossingSlotIsDefaultEmptyOneByOne(candidate, rows, cols);
@@ -82,10 +98,12 @@ procedure SetGrid(rows, cols)
 begin
 GridBuild:
   call BuildGridResize(rows, cols);
-GridCommit:
+GridDispatch:
   if result # NoReference then
-    projectAuthority := result;
-    result := GridCommitMutationResult(projectAuthority);
+    result := ApplicationDispatchProjectCommand(
+      "GRID_LAYOUT_CHANGED",
+      [rows |-> rows, cols |-> cols]);
+    projectView := ReadActiveProject();
   end if;
 GridSetReturn:
   return;
@@ -95,22 +113,23 @@ procedure MergeSlots(slotIds)
 variables slots = NoReference;
 begin
 MergeResolve:
-  slots := ResolveVisibleSlots(slotIds, projectAuthority);
+  slots := ResolveVisibleSlots(slotIds, projectView);
 MergeRectangle:
   assert FormsCompleteRectangle(slots);
 MergePayloadCount:
   assert Cardinality(NonDefaultLocalSlots(slots)) <= 1;
 MergeBuild:
-  candidate := CopyProject(projectAuthority);
+  candidate := CopyProject(projectView);
   candidate := MoveWholeLocalPayloadToTopLeftAnchor(candidate, slots);
   candidate := ResetCoveredSlotsToDefaultsAndHide(candidate, slots);
   candidate := SetAnchorRectangleSpan(candidate, slots);
 MergeValidate:
   assert ValidateWholeProject(candidate);
-MergeCommit:
-  projectAuthority := candidate;
-MergeResult:
-  result := MergeResult(candidate);
+MergeDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "SLOTS_MERGED",
+    [slotIds |-> slotIds]);
+  projectView := ReadActiveProject();
 MergeReturn:
   return;
 end procedure;
@@ -119,17 +138,18 @@ procedure SplitSlots(slotIds)
 variables anchors = NoReference;
 begin
 SplitResolve:
-  anchors := ResolveRequestedMergedAnchors(slotIds, projectAuthority);
+  anchors := ResolveRequestedMergedAnchors(slotIds, projectView);
 SplitBuild:
-  candidate := CopyProject(projectAuthority);
+  candidate := CopyProject(projectView);
   candidate := RestoreCoveredCellsAsVisibleDefaultSlots(candidate, anchors);
   candidate := ResetAnchorsToOneByOne(candidate, anchors);
 SplitValidate:
   assert ValidateWholeProject(candidate);
-SplitCommit:
-  projectAuthority := candidate;
-SplitResult:
-  result := SplitResult(candidate);
+SplitDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "SLOTS_SPLIT",
+    [slotIds |-> slotIds]);
+  projectView := ReadActiveProject();
 SplitReturn:
   return;
 end procedure;
@@ -137,7 +157,7 @@ end procedure;
 procedure ReadImageEditor()
 begin
 ImageEditorRead:
-  result := ReadSelectedImageNameUrlAndSlotSettings(projectAuthority);
+  result := ReadSelectedImageNameUrlAndSlotSettings(projectView);
 ImageEditorReturn:
   return;
 end procedure;
@@ -146,19 +166,21 @@ procedure SetImageSettings(values)
 variables slotValue = NoReference;
 begin
 ImageSettingsResolve:
-  slotValue := ResolveSelectedImageSlot(projectAuthority);
+  slotValue := ResolveSelectedImageSlot(projectView);
 ImageSettingsBuild:
   if slotValue # NoReference then
     candidate := UpdateOnlySelectedSlotImageSettings(
-      projectAuthority,
+      projectView,
       slotValue,
       values);
   end if;
-ImageSettingsCommit:
+ImageSettingsDispatch:
   if candidate # NoReference then
     assert ValidateWholeProject(candidate);
-    projectAuthority := candidate;
-    result := ReadImageEditorProjection(projectAuthority, slotValue.id);
+    result := ApplicationDispatchProjectCommand(
+      "SLOT_IMAGE_SETTINGS_CHANGED",
+      [slotId |-> slotValue.id, settings |-> values]);
+    projectView := ReadActiveProject();
   end if;
 ImageSettingsReturn:
   return;
@@ -167,10 +189,37 @@ end procedure;
 procedure ReadLabels()
 begin
 LabelsRead:
-  result := ReadLabelSettings(projectAuthority);
+  result := ReadLabelSettings(projectView);
 LabelsGeometry:
-  result := AddSelectedSlotReferenceWidthHeight(result, projectAuthority);
+  result := AddSelectedSlotReferenceWidthHeight(result, projectView);
 LabelsReadReturn:
+  return;
+end procedure;
+
+procedure SetLabelEnabled(enabled)
+begin
+LabelEnabledDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "LABEL_SETTINGS_CHANGED",
+    [enabled |-> enabled]);
+LabelEnabledRefresh:
+  projectView := ReadActiveProject();
+LabelEnabledReturn:
+  return;
+end procedure;
+
+procedure SetLabelSettings(values)
+variables normalized = NoReference;
+begin
+LabelSettingsNormalize:
+  normalized := NormalizeLabelSettings(values, projectView);
+LabelSettingsDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "LABEL_SETTINGS_CHANGED",
+    [settings |-> normalized]);
+LabelSettingsRefresh:
+  projectView := ReadActiveProject();
+LabelSettingsReturn:
   return;
 end procedure;
 
@@ -179,13 +228,15 @@ begin
 LabelPositionGuard:
   assert IsFinitePosition(x, y);
 LabelPositionBuild:
-  candidate := SetProjectLabelPosition(projectAuthority, x, y);
+  candidate := SetProjectLabelPosition(projectView, x, y);
 LabelPositionValidate:
   assert ValidateWholeProject(candidate);
-LabelPositionCommit:
-  projectAuthority := candidate;
-LabelPositionResult:
-  result := ReadLabelProjection(projectAuthority);
+LabelPositionDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "LABEL_POSITION_CHANGED",
+    [x |-> x, y |-> y]);
+LabelPositionRefresh:
+  projectView := ReadActiveProject();
 LabelPositionReturn:
   return;
 end procedure;
@@ -201,7 +252,7 @@ end procedure;
 procedure ReadGlobalCaption()
 begin
 GlobalCaptionRead:
-  result := ReadProjectGlobalCaption(projectAuthority);
+  result := ReadProjectGlobalCaption(projectView);
 GlobalCaptionReadReturn:
   return;
 end procedure;
@@ -209,7 +260,7 @@ end procedure;
 procedure ReadSlotCaption(slotId)
 begin
 SlotCaptionRead:
-  result := ReadResolvedSlotIdPositionAndCaption(projectAuthority, slotId);
+  result := ReadResolvedSlotIdPositionAndCaption(projectView, slotId);
 SlotCaptionReadReturn:
   return;
 end procedure;
@@ -217,13 +268,15 @@ end procedure;
 procedure SetGlobalCaptionText(text)
 begin
 GlobalCaptionBuild:
-  candidate := ReplaceOnlyGlobalCaptionText(projectAuthority, text);
+  candidate := ReplaceOnlyGlobalCaptionText(projectView, text);
 GlobalCaptionValidate:
   assert ValidateWholeProject(candidate);
-GlobalCaptionCommit:
-  projectAuthority := candidate;
-GlobalCaptionResult:
-  result := ReadProjectGlobalCaption(projectAuthority);
+GlobalCaptionDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "CAPTION_TEXT_INPUT",
+    [target |-> [kind |-> "global"], text |-> text]);
+GlobalCaptionRefresh:
+  projectView := ReadActiveProject();
 GlobalCaptionReturn:
   return;
 end procedure;
@@ -231,11 +284,13 @@ end procedure;
 procedure SetSlotCaption(slotId, text)
 begin
 SlotCaptionBuild:
-  candidate := SetResolvedSlotCaptionCandidate(projectAuthority, slotId, text);
-SlotCaptionCommit:
+  candidate := SetResolvedSlotCaptionCandidate(projectView, slotId, text);
+SlotCaptionDispatch:
   if candidate # NoReference /\ ValidateWholeProject(candidate) then
-    projectAuthority := candidate;
-    result := ReadResolvedSlotIdPositionAndCaption(projectAuthority, slotId);
+    result := ApplicationDispatchProjectCommand(
+      "CAPTION_TEXT_INPUT",
+      [target |-> [kind |-> "slot", id |-> slotId], text |-> text]);
+    projectView := ReadActiveProject();
   end if;
 SlotCaptionReturn:
   return;
@@ -245,25 +300,78 @@ procedure InsertSlotCaptions(slotIds)
 variables slots = NoReference, projectedText = "";
 begin
 InsertCaptionResolve:
-  slots := ResolveSlotsInLayoutOrder(slotIds, projectAuthority);
+  slots := ResolveSlotsInLayoutOrder(slotIds, projectView);
 InsertCaptionProjection:
   projectedText := ProjectNonEmptySlotCaptions(slots);
 InsertCaptionBuild:
-  candidate := InsertIntoGlobalCaption(projectAuthority, projectedText);
+  candidate := InsertIntoGlobalCaption(projectView, projectedText);
 InsertCaptionValidate:
   assert ValidateWholeProject(candidate);
-InsertCaptionCommit:
-  projectAuthority := candidate;
-InsertCaptionResult:
-  result := ReadProjectGlobalCaption(projectAuthority);
+InsertCaptionDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "SLOT_CAPTIONS_INSERTED",
+    [slotIds |-> slotIds, projectedText |-> projectedText]);
+InsertCaptionRefresh:
+  projectView := ReadActiveProject();
 InsertCaptionReturn:
+  return;
+end procedure;
+
+procedure SetCaptionEnabled(enabled)
+begin
+CaptionEnabledDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "CAPTION_SETTINGS_CHANGED",
+    [enabled |-> enabled]);
+CaptionEnabledRefresh:
+  projectView := ReadActiveProject();
+CaptionEnabledReturn:
+  return;
+end procedure;
+
+procedure SetCaptionName(name)
+begin
+CaptionNameDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "CAPTION_SETTINGS_CHANGED",
+    [name |-> name]);
+CaptionNameRefresh:
+  projectView := ReadActiveProject();
+CaptionNameReturn:
+  return;
+end procedure;
+
+procedure SetCaptionNameBold(nameBold)
+begin
+CaptionNameBoldDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "CAPTION_SETTINGS_CHANGED",
+    [nameBold |-> nameBold]);
+CaptionNameBoldRefresh:
+  projectView := ReadActiveProject();
+CaptionNameBoldReturn:
+  return;
+end procedure;
+
+procedure SetCaptionSettings(values)
+variables normalized = NoReference;
+begin
+CaptionSettingsNormalize:
+  normalized := NormalizeCaptionSettings(values, projectView);
+CaptionSettingsDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "CAPTION_SETTINGS_CHANGED",
+    [settings |-> normalized]);
+CaptionSettingsRefresh:
+  projectView := ReadActiveProject();
+CaptionSettingsReturn:
   return;
 end procedure;
 
 procedure ReadExportSettings()
 begin
 ExportSettingsRead:
-  result := ReadProjectExportSettings(projectAuthority);
+  result := ReadProjectExportSettings(projectView);
 ExportSettingsReadReturn:
   return;
 end procedure;
@@ -271,13 +379,15 @@ end procedure;
 procedure SetExportSettings(values)
 begin
 ExportSettingsBuild:
-  candidate := NormalizeExportSettings(projectAuthority, values);
+  candidate := NormalizeExportSettings(projectView, values);
 ExportSettingsValidate:
   assert ValidateWholeProject(candidate);
-ExportSettingsCommit:
-  projectAuthority := candidate;
-ExportSettingsResult:
-  result := ReadProjectExportSettings(projectAuthority);
+ExportSettingsDispatch:
+  result := ApplicationDispatchProjectCommand(
+    "EXPORT_SETTINGS_CHANGED",
+    [settings |-> candidate]);
+ExportSettingsRefresh:
+  projectView := ReadActiveProject();
 ExportSettingsReturn:
   return;
 end procedure;
@@ -285,7 +395,7 @@ end procedure;
 procedure CreateExportSnapshot()
 begin
 ExportSnapshotRead:
-  snapshot := SnapshotProjectObjects(projectAuthority);
+  snapshot := SnapshotProjectObjects(projectView);
 ExportSnapshotGeometry:
   snapshot := AddTargetGeometryFromPersistentExportSettings(snapshot);
 ExportSnapshotResult:
@@ -318,7 +428,7 @@ begin
 CaptureViewport:
   snapshot := ReadRenderedViewportForOneShotCapture();
 CaptureEncoding:
-  snapshot := AddPersistentDpiAndFormatDefaults(snapshot, projectAuthority);
+  snapshot := AddPersistentDpiAndFormatDefaults(snapshot, projectView);
 CaptureResult:
   result := EncodeRasterAndDownload(snapshot);
 CaptureReturn:
@@ -329,6 +439,10 @@ begin
 Main:
   while TRUE do
     either
+      with style = RequestedLayoutStyle() do
+        call SetLayoutStyle(style);
+      end with;
+    or
       with rows = RequestedRows(), cols = RequestedCols() do
         call SetGrid(rows, cols);
       end with;
@@ -339,6 +453,54 @@ Main:
     or
       with ids = RequestedSlotIds() do
         call SplitSlots(ids);
+      end with;
+    or
+      with values = RequestedImageSettings() do
+        call SetImageSettings(values);
+      end with;
+    or
+      with enabled = RequestedLabelEnabled() do
+        call SetLabelEnabled(enabled);
+      end with;
+    or
+      with values = RequestedLabelSettings() do
+        call SetLabelSettings(values);
+      end with;
+    or
+      with x = RequestedLabelX(), y = RequestedLabelY() do
+        call SetLabelPosition(x, y);
+      end with;
+    or
+      with text = RequestedGlobalCaptionText() do
+        call SetGlobalCaptionText(text);
+      end with;
+    or
+      with slotId = RequestedCaptionSlotId(), text = RequestedSlotCaptionText() do
+        call SetSlotCaption(slotId, text);
+      end with;
+    or
+      with ids = RequestedSlotCaptionInsertIds() do
+        call InsertSlotCaptions(ids);
+      end with;
+    or
+      with enabled = RequestedCaptionEnabled() do
+        call SetCaptionEnabled(enabled);
+      end with;
+    or
+      with name = RequestedCaptionName() do
+        call SetCaptionName(name);
+      end with;
+    or
+      with nameBold = RequestedCaptionNameBold() do
+        call SetCaptionNameBold(nameBold);
+      end with;
+    or
+      with values = RequestedCaptionSettings() do
+        call SetCaptionSettings(values);
+      end with;
+    or
+      with values = RequestedExportSettings() do
+        call SetExportSettings(values);
       end with;
     or
       call ExportTarget();

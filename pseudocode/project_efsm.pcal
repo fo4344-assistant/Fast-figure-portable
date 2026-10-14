@@ -4,6 +4,42 @@ EXTENDS Naturals, Sequences
 \* Direct translation of sourcescript/project_efsm.py.
 CONSTANT NoReference
 
+PROJECT_COMMANDS == {
+  "PROJECT_LOADED",
+  "PROJECT_NAME_CHANGED",
+  "PROJECT_DIRECTORY_CREATED",
+  "PROJECT_NODE_MOVED",
+  "PROJECT_TRASH_EMPTIED",
+  "DATA_OBJECT_CREATED",
+  "DATA_OBJECT_REPLACED",
+  "DATA_OBJECT_DELETED",
+  "IMAGE_OBJECT_CREATED",
+  "IMAGE_OBJECT_REPLACED",
+  "IMAGE_OBJECT_DELETED",
+  "SLOT_TYPE_CHANGED",
+  "SLOTS_RESET",
+  "SLOTS_SWAPPED",
+  "SLOT_IMAGE_LINKED",
+  "SLOT_IMAGE_SETTINGS_CHANGED",
+  "SLOT_DATA_CONNECTED",
+  "SLOT_IMAGE_IMPORTED",
+  "SLOT_CHART_IMPORTED",
+  "GRAPH_OBJECTS_REPLACED",
+  "CHART_LAYOUT_CHANGED",
+  "CHART_MODEL_REPLACED",
+  "GRID_LAYOUT_CHANGED",
+  "LAYOUT_STYLE_CHANGED",
+  "SLOTS_MERGED",
+  "SLOTS_SPLIT",
+  "CAPTION_TEXT_INPUT",
+  "SLOT_CAPTIONS_INSERTED",
+  "CAPTION_SETTINGS_CHANGED",
+  "LABEL_SETTINGS_CHANGED",
+  "LABEL_POSITION_CHANGED",
+  "APPEARANCE_CHANGED",
+  "EXPORT_SETTINGS_CHANGED"
+}
+
 (*
 --algorithm FastFigureProjectEfsm
 variables
@@ -16,7 +52,9 @@ procedure DispatchProjectCommand(eventName, payload)
 variables preProject = NoReference;
 begin
 ProjectCommandMembership:
-  assert IsDeclaredProjectCommand(eventName);
+  assert eventName \in PROJECT_COMMANDS;
+ProjectCommandCoverage:
+  assert PublicPersistentMutationSurfaceCoveredBy(PROJECT_COMMANDS);
 ProjectReadCurrent:
   preProject := projectAuthority;
 ProjectResolve:
