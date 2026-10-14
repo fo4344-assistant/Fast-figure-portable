@@ -2112,7 +2112,8 @@
           minHeight,
           Math.min(maxHeight, drag.startHeight + moveEvent.clientY - drag.startY),
         );
-        if (contentRef.current) contentRef.current.style.height = `${nextHeight}px`;
+        if (contentRef.current)
+          contentRef.current.style.setProperty("--modal-content-height", `${nextHeight}px`);
       };
       const end = () => clearResizeListeners();
       resizeListenersRef.current = { move, end };
@@ -2137,8 +2138,8 @@
           ref: contentRef,
           "data-fastfigure-overlay": overlay,
           style: {
-            height: "min(72dvh, 720px)",
-            maxHeight: "calc(100dvh - 24px)",
+            "--modal-content-height": "min(72dvh, 720px)",
+            "--modal-content-max-height": "calc(100dvh - 24px)",
             display: "flex",
             flexDirection: "column",
           },

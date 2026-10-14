@@ -1,0 +1,81 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3,8 +3,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+   sourceScript: "r18",
+   plusCal: "r4",
+   verificationModel: "r15",
+-  sourceCode: "r20",
+-  appBuild: "1.1.40-wip",
++  sourceCode: "r21",
++  appBuild: "1.1.41-wip",
+ });
+ (async () => {
+   const api = window.FastFigureApi;
+@@ -805,8 +805,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           }),
+         );
+         check(
+-          /px$/.test(modal.style.height),
+-          `${overlayName} resize handler did not project an inline height`,
++          /px$/.test(modal.style.getPropertyValue("--modal-content-height")),
++          `${overlayName} resize handler did not project the Mantine content height`,
+         );
+         window.dispatchEvent(
+           new MouseEvent("mouseup", {
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,15 +30,15 @@
+       "validation_review": "agent_space/reviews/review-20261013-013-tlc-interaction-r15.md"
+     },
+     "source-code": {
+-      "revision": 20,
++      "revision": 21,
+       "status": "current",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:5f250634ec6a619955033755faa9a85d775782fce14aa3819aa9a3fa5baeab13",
++      "fingerprint": "sha256:6449487f1c6e2e32e8c110b3f2cf28366eeab90620cc42427e2d89d1625938c3",
+       "derived_from": {
+         "source-script": "sha256:887df7f68b94aead928737029b63babf54ea50bad339e1874b8d635f8c7e33a7",
+         "pseudocode": "sha256:695c5947f4e140054b0066d57453a6d15c5012e6f8707011c536b82f3c102583",
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2112,7 +2112,8 @@
+           minHeight,
+           Math.min(maxHeight, drag.startHeight + moveEvent.clientY - drag.startY),
+         );
+-        if (contentRef.current) contentRef.current.style.height = `${nextHeight}px`;
++        if (contentRef.current)
++          contentRef.current.style.setProperty("--modal-content-height", `${nextHeight}px`);
+       };
+       const end = () => clearResizeListeners();
+       resizeListenersRef.current = { move, end };
+@@ -2137,8 +2138,8 @@
+           ref: contentRef,
+           "data-fastfigure-overlay": overlay,
+           style: {
+-            height: "min(72dvh, 720px)",
+-            maxHeight: "calc(100dvh - 24px)",
++            "--modal-content-height": "min(72dvh, 720px)",
++            "--modal-content-max-height": "calc(100dvh - 24px)",
+             display: "flex",
+             flexDirection: "column",
+           },
+diff --git a/fast-figure.js b/fast-figure.js
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,6 +1,6 @@
+ 
+       const PACKAGE_FORMAT_VERSION = 3;
+-      const APP_BUILD = "1.1.40-wip";
++      const APP_BUILD = "1.1.41-wip";
+       const PROJECT_OBJECT_PATHS = Object.freeze({
+         project: "meta",
+         layout: "layout",

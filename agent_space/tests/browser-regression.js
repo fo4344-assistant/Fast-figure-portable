@@ -3,8 +3,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
   sourceScript: "r18",
   plusCal: "r4",
   verificationModel: "r15",
-  sourceCode: "r20",
-  appBuild: "1.1.40-wip",
+  sourceCode: "r21",
+  appBuild: "1.1.41-wip",
 });
 (async () => {
   const api = window.FastFigureApi;
@@ -805,8 +805,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           }),
         );
         check(
-          /px$/.test(modal.style.height),
-          `${overlayName} resize handler did not project an inline height`,
+          /px$/.test(modal.style.getPropertyValue("--modal-content-height")),
+          `${overlayName} resize handler did not project the Mantine content height`,
         );
         window.dispatchEvent(
           new MouseEvent("mouseup", {
