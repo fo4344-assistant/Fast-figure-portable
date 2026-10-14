@@ -1,0 +1,752 @@
+diff --git a/verification/FastFigureInteractionCore.tla b/verification/FastFigureInteractionCore.tla
+--- a/verification/FastFigureInteractionCore.tla
++++ b/verification/FastFigureInteractionCore.tla
+@@ -32,338 +32,371 @@
+ The removed-reference counts added by pseudocode r6 are deterministic metadata derived from the same
+ entering-trash transition already represented by assetReferenced; they do not add a second project state.
+ 
+-r22/r8 also makes persistent command ownership explicit. This slice models only
+-project commands that affect CSV/reference/tree interaction. Image settings,
+-caption settings, label settings, layout style, and export settings do not alter
+-the state or properties checked here, so they are omitted rather than copied as
+-independent verification state.
+-*)
+-
+-NoSlot == 0
+-NoCsv == 0
+-
+-AssetLocations == {"normal", "trash"}
+-MoveSources == {"asset", "trash-root"}
+-
+-TreeMoveAllowed(source) == source # "trash-root"
+-SlotConnectionAllowed(location) == location = "normal"
+-
+-SlotIds == 1..3
+-CsvIds == 1..2
+-MaxGraphObjects == 2
+-
+-SlotContentType == <<"graph", "image", "graph">>
+-
+-SlotHasContent == <<TRUE, TRUE, FALSE>>
+-
+-WorkspaceFor(slotId) ==
+-  IF slotId = NoSlot
+-    THEN "project"
+-    ELSE IF SlotContentType[slotId] = "image"
+-      THEN "slot.image"
+-      ELSE "slot.graph"
+-
+-InitialProject ==
+-  [ csvIds |-> {},
+-    nextCsvId |-> 1,
+-    graphObjectCsvRefs |-> <<>> ]
+-
+-ValidProject(project) ==
+-  /\ project.csvIds \subseteq CsvIds
+-  /\ project.nextCsvId \in 1..(Cardinality(CsvIds) + 1)
+-  /\ Len(project.graphObjectCsvRefs) <= MaxGraphObjects
+-  /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
+-       project.graphObjectCsvRefs[index] \in project.csvIds
+-
+-TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project,
+-            assetLocation, assetReferenced, lastResult) ==
+-  /\ selectedSlotId \in SlotIds \cup {NoSlot}
+-  /\ workspace \in {"project", "slot.graph", "slot.image"}
+-  /\ workspace = WorkspaceFor(selectedSlotId)
+-  /\ assetSelection \in {"none", "csv"}
+-  /\ selectedCsvId \in CsvIds \cup {NoCsv}
+-  /\ (assetSelection = "none" <=> selectedCsvId = NoCsv)
+-  /\ (selectedCsvId # NoCsv => selectedCsvId \in project.csvIds)
+-  /\ ValidProject(project)
+-  /\ assetLocation \in AssetLocations
+-  /\ assetReferenced \in BOOLEAN
+-  /\ (assetReferenced => assetLocation = "normal")
+-  /\ lastResult \in {
+-       "initialized",
+-       "slot-selected",
+-       "slot-deselected",
+-       "content-pass-through",
+-       "invalid-slot",
+-       "empty-csv-created",
+-       "empty-csv-unavailable",
+-       "graph-object-added",
+-       "graph-object-rejected",
+-       "asset-moved-normal",
+-       "asset-moved-trash",
+-       "asset-move-rejected",
+-       "asset-slot-connected",
+-       "asset-slot-connection-rejected"
+-     }
+-
+-ModeledInteractionProjectCommands == {
+-  "DATA_OBJECT_CREATED",
+-  "GRAPH_OBJECTS_REPLACED",
+-  "PROJECT_NODE_MOVED",
+-  "SLOT_DATA_CONNECTED"
+-}
+-
+-InteractionCommittedResults == {
+-  "empty-csv-created",
+-  "graph-object-added",
+-  "asset-moved-normal",
+-  "asset-moved-trash",
+-  "asset-slot-connected"
+-}
+-
+-InteractionResultCommand(result) ==
+-  CASE result = "empty-csv-created" -> "DATA_OBJECT_CREATED"
+-    [] result = "graph-object-added" -> "GRAPH_OBJECTS_REPLACED"
+-    [] result = "asset-moved-normal" -> "PROJECT_NODE_MOVED"
+-    [] result = "asset-moved-trash" -> "PROJECT_NODE_MOVED"
+-    [] result = "asset-slot-connected" -> "SLOT_DATA_CONNECTED"
+-    [] OTHER -> "none"
+-
+-InteractionProjectCommandOwnershipInvariant(result) ==
+-  result \in InteractionCommittedResults =>
+-    InteractionResultCommand(result) \in ModeledInteractionProjectCommands
+-
+-SelectionInvariant(selectedSlotId, workspace) ==
+-  workspace = WorkspaceFor(selectedSlotId)
+-
+-CsvReferenceInvariant(project, selectedCsvId) ==
+-  /\ selectedCsvId = NoCsv \/ selectedCsvId \in project.csvIds
+-  /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
+-       project.graphObjectCsvRefs[index] \in project.csvIds
+-
+-TrashReferenceInvariant(assetLocation, assetReferenced) ==
+-  assetLocation = "trash" => ~assetReferenced
+-
+-TreeRecoveryInvariant ==
+-  /\ TreeMoveAllowed("asset")
+-  /\ ~TreeMoveAllowed("trash-root")
+-
+-SlotConnectionInvariant(assetLocation) ==
+-  SlotConnectionAllowed(assetLocation) <=> assetLocation = "normal"
+-
+-(*
+---algorithm FastFigureInteractionCore
+-variables
+-  selectedSlotId = NoSlot,
+-  workspace = "project",
+-  assetSelection = "none",
+-  selectedCsvId = NoCsv,
+-  project = InitialProject,
+-  assetLocation = "normal",
+-  assetReferenced = TRUE,
+-  pendingCsvSelection = NoCsv,
+-  reconcilePending = FALSE,
+-  lastResult = "initialized";
+-
+-procedure ApplySlotSelection(slotId)
+-variables projectBefore = project, locationBefore = assetLocation, referenceBefore = assetReferenced;
+-begin
+-SelectResolve:
+-  if slotId = NoSlot then
+-    selectedSlotId := NoSlot ||
+-    workspace := "project" ||
+-    lastResult := "slot-deselected";
+-  elsif slotId \in SlotIds then
+-    if selectedSlotId = slotId then
+-      selectedSlotId := NoSlot ||
+-      workspace := "project" ||
+-      lastResult := "slot-deselected";
+-    else
+-      selectedSlotId := slotId ||
+-      workspace := WorkspaceFor(slotId) ||
+-      lastResult := "slot-selected";
+-    end if;
+-  else
+-    lastResult := "invalid-slot";
+-  end if;
+-SelectInterfaceIsolation:
+-  assert project = projectBefore /\ assetLocation = locationBefore /\ assetReferenced = referenceBefore;
+-SelectReturn:
+-  return;
+-end procedure;
+-
+-procedure SlotSurfaceClick(slotId)
+-begin
+-SurfaceResolve:
+-  if slotId \in SlotIds then
+-    if selectedSlotId # slotId then
+-      call ApplySlotSelection(slotId);
+-    else
+-      if SlotHasContent[slotId] then
+-        lastResult := "content-pass-through";
+-      else
+-        call ApplySlotSelection(slotId);
+-      end if;
+-    end if;
+-  else
+-    lastResult := "invalid-slot";
+-  end if;
+-SurfaceReturn:
+-  return;
+-end procedure;
+-
+-procedure BookmarkClick(slotId)
+-begin
+-BookmarkResolve:
+-  if slotId \in SlotIds then
+-    call ApplySlotSelection(slotId);
+-  else
+-    lastResult := "invalid-slot";
+-  end if;
+-BookmarkReturn:
+-  return;
+-end procedure;
+-
+-procedure DashboardBackgroundClick()
+-begin
+-BackgroundDeselect:
+-  if selectedSlotId # NoSlot then
+-    call ApplySlotSelection(NoSlot);
+-  end if;
+-BackgroundReturn:
+-  return;
+-end procedure;
+-
+-procedure CreateEmptyCsvProject()
+-variables
+-  newCsvId = NoCsv,
+-  previousGraphObjectCount = 0,
+-  selectionBefore = assetSelection,
+-  csvBefore = selectedCsvId;
+-begin
+-EmptyCsvRememberGraphObjects:
+-  previousGraphObjectCount := Len(project.graphObjectCsvRefs);
+-EmptyCsvCapacity:
+-  if project.nextCsvId \in CsvIds then
+-    newCsvId := project.nextCsvId;
+-    project := [
+-      project EXCEPT
+-        !.csvIds = @ \cup {newCsvId},
+-        !.nextCsvId = @ + 1
+-    ] ||
+-    pendingCsvSelection := newCsvId ||
+-    reconcilePending := TRUE;
+-  else
+-    lastResult := "empty-csv-unavailable";
+-  end if;
+-EmptyCsvProjectDoesNotMutateInterface:
+-  assert assetSelection = selectionBefore /\ selectedCsvId = csvBefore;
+-EmptyCsvNoGraphObjectSideEffect:
+-  assert pendingCsvSelection = NoCsv
+-         \/ Len(project.graphObjectCsvRefs) = previousGraphObjectCount;
+-EmptyCsvProjectReturn:
+-  return;
+-end procedure;
+-
+-procedure ReconcileEmptyCsvSelection()
+-variables projectBefore = project;
+-begin
+-EmptyCsvReconcile:
+-  if pendingCsvSelection # NoCsv then
+-    assetSelection := "csv" ||
+-    selectedCsvId := pendingCsvSelection ||
+-    lastResult := "empty-csv-created";
+-  end if;
+-EmptyCsvInterfaceDoesNotMutateProject:
+-  assert project = projectBefore;
+-EmptyCsvClearResult:
+-  pendingCsvSelection := NoCsv ||
+-  reconcilePending := FALSE;
+-EmptyCsvReconcileReturn:
+-  return;
+-end procedure;
+-
+-procedure MoveAsset(assetMoveSourceArg, assetTargetLocationArg)
+-begin
+-AssetMoveGuard:
+-  if assetMoveSourceArg \in MoveSources
+-     /\ assetTargetLocationArg \in AssetLocations
+-     /\ TreeMoveAllowed(assetMoveSourceArg) then
+-    if assetTargetLocationArg = "trash" /\ assetLocation # "trash" then
+-      assetReferenced := FALSE;
+-    end if;
+-    assetLocation := assetTargetLocationArg;
+-    if assetTargetLocationArg = "trash" then
+-      lastResult := "asset-moved-trash";
+-    else
+-      lastResult := "asset-moved-normal";
+-    end if;
+-  else
+-    lastResult := "asset-move-rejected";
+-  end if;
+-AssetMoveReturn:
+-  return;
+-end procedure;
+-
+-procedure ConnectAssetToSlot()
+-begin
+-AssetSlotConnectionGuard:
+-  if SlotConnectionAllowed(assetLocation) then
+-    assetReferenced := TRUE ||
+-    lastResult := "asset-slot-connected";
+-  else
+-    lastResult := "asset-slot-connection-rejected";
+-  end if;
+-AssetSlotConnectionReturn:
+-  return;
+-end procedure;
+-
+-procedure CreateEmptyCsvAndReconcile()
+-begin
+-CreateEmptyCsvAndReconcileCreate:
+-  call CreateEmptyCsvProject();
+-CreateEmptyCsvAndReconcileSelection:
+-  call ReconcileEmptyCsvSelection();
+-CreateEmptyCsvAndReconcileReturn:
+-  return;
+-end procedure;
+-
+-procedure AddGraphObject()
+-begin
+-AddGraphGuard:
+-  if /\ selectedSlotId \in SlotIds
+-     /\ SlotContentType[selectedSlotId] = "graph"
+-     /\ selectedCsvId # NoCsv
+-     /\ selectedCsvId \in project.csvIds
+-     /\ Len(project.graphObjectCsvRefs) < MaxGraphObjects then
+-    project := [
+-      project EXCEPT
+-        !.graphObjectCsvRefs = Append(@, selectedCsvId)
+-    ] ||
+-    lastResult := "graph-object-added";
+-  else
+-    lastResult := "graph-object-rejected";
+-  end if;
+-AddGraphReturn:
+-  return;
+-end procedure;
+-
+-begin
+-Main:
+-  while TRUE do
+-    either
+-      with surfaceSlotId \in SlotIds do
+-        call SlotSurfaceClick(surfaceSlotId);
+-      end with;
+-    or
+-      with bookmarkSlotId \in SlotIds do
+-        call BookmarkClick(bookmarkSlotId);
+-      end with;
+-    or
+-      call DashboardBackgroundClick();
+-    or
+-      call CreateEmptyCsvAndReconcile();
+-    or
+-      call AddGraphObject();
++r23/r9 also makes persistent command ownership and batch-import atomicity explicit. This slice models only
++project commands that affect CSV/reference/tree interaction. Image settings,
++caption settings, label settings, layout style, and export settings do not alter
++the state or properties checked here, so they are omitted rather than copied as
++independent verification state.
++*)
++
++NoSlot == 0
++NoCsv == 0
++
++AssetLocations == {"normal", "trash"}
++MoveSources == {"asset", "trash-root"}
++
++TreeMoveAllowed(source) == source # "trash-root"
++SlotConnectionAllowed(location) == location = "normal"
++
++SlotIds == 1..3
++CsvIds == 1..2
++MaxGraphObjects == 2
++
++SlotContentType == <<"graph", "image", "graph">>
++
++SlotHasContent == <<TRUE, TRUE, FALSE>>
++
++WorkspaceFor(slotId) ==
++  IF slotId = NoSlot
++    THEN "project"
++    ELSE IF SlotContentType[slotId] = "image"
++      THEN "slot.image"
++      ELSE "slot.graph"
++
++InitialProject ==
++  [ csvIds |-> {},
++    nextCsvId |-> 1,
++    graphObjectCsvRefs |-> <<>> ]
++
++ValidProject(project) ==
++  /\ project.csvIds \subseteq CsvIds
++  /\ project.nextCsvId \in 1..(Cardinality(CsvIds) + 1)
++  /\ Len(project.graphObjectCsvRefs) <= MaxGraphObjects
++  /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
++       project.graphObjectCsvRefs[index] \in project.csvIds
++
++TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project,
++            assetLocation, assetReferenced, lastResult) ==
++  /\ selectedSlotId \in SlotIds \cup {NoSlot}
++  /\ workspace \in {"project", "slot.graph", "slot.image"}
++  /\ workspace = WorkspaceFor(selectedSlotId)
++  /\ assetSelection \in {"none", "csv"}
++  /\ selectedCsvId \in CsvIds \cup {NoCsv}
++  /\ (assetSelection = "none" <=> selectedCsvId = NoCsv)
++  /\ (selectedCsvId # NoCsv => selectedCsvId \in project.csvIds)
++  /\ ValidProject(project)
++  /\ assetLocation \in AssetLocations
++  /\ assetReferenced \in BOOLEAN
++  /\ (assetReferenced => assetLocation = "normal")
++  /\ lastResult \in {
++       "initialized",
++       "slot-selected",
++       "slot-deselected",
++       "content-pass-through",
++       "invalid-slot",
++       "empty-csv-created",
++       "empty-csv-unavailable",
++       "batch-imported",
++       "batch-import-rejected",
++       "graph-object-added",
++       "graph-object-rejected",
++       "asset-moved-normal",
++       "asset-moved-trash",
++       "asset-move-rejected",
++       "asset-slot-connected",
++       "asset-slot-connection-rejected"
++     }
++
++ModeledInteractionProjectCommands == {
++  "DATA_OBJECT_CREATED",
++  "ASSETS_IMPORTED",
++  "GRAPH_OBJECTS_REPLACED",
++  "PROJECT_NODE_MOVED",
++  "SLOT_DATA_CONNECTED"
++}
++
++InteractionCommittedResults == {
++  "empty-csv-created",
++  "batch-imported",
++  "graph-object-added",
++  "asset-moved-normal",
++  "asset-moved-trash",
++  "asset-slot-connected"
++}
++
++InteractionResultCommand(result) ==
++  CASE result = "empty-csv-created" -> "DATA_OBJECT_CREATED"
++    [] result = "batch-imported" -> "ASSETS_IMPORTED"
++    [] result = "graph-object-added" -> "GRAPH_OBJECTS_REPLACED"
++    [] result = "asset-moved-normal" -> "PROJECT_NODE_MOVED"
++    [] result = "asset-moved-trash" -> "PROJECT_NODE_MOVED"
++    [] result = "asset-slot-connected" -> "SLOT_DATA_CONNECTED"
++    [] OTHER -> "none"
++
++InteractionProjectCommandOwnershipInvariant(result) ==
++  result \in InteractionCommittedResults =>
++    InteractionResultCommand(result) \in ModeledInteractionProjectCommands
++
++SelectionInvariant(selectedSlotId, workspace) ==
++  workspace = WorkspaceFor(selectedSlotId)
++
++CsvReferenceInvariant(project, selectedCsvId) ==
++  /\ selectedCsvId = NoCsv \/ selectedCsvId \in project.csvIds
++  /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
++       project.graphObjectCsvRefs[index] \in project.csvIds
++
++TrashReferenceInvariant(assetLocation, assetReferenced) ==
++  assetLocation = "trash" => ~assetReferenced
++
++TreeRecoveryInvariant ==
++  /\ TreeMoveAllowed("asset")
++  /\ ~TreeMoveAllowed("trash-root")
++
++SlotConnectionInvariant(assetLocation) ==
++  SlotConnectionAllowed(assetLocation) <=> assetLocation = "normal"
++
++(*
++--algorithm FastFigureInteractionCore
++variables
++  selectedSlotId = NoSlot,
++  workspace = "project",
++  assetSelection = "none",
++  selectedCsvId = NoCsv,
++  project = InitialProject,
++  assetLocation = "normal",
++  assetReferenced = TRUE,
++  pendingCsvSelection = NoCsv,
++  reconcilePending = FALSE,
++  lastResult = "initialized";
++
++procedure ApplySlotSelection(slotId)
++variables projectBefore = project, locationBefore = assetLocation, referenceBefore = assetReferenced;
++begin
++SelectResolve:
++  if slotId = NoSlot then
++    selectedSlotId := NoSlot ||
++    workspace := "project" ||
++    lastResult := "slot-deselected";
++  elsif slotId \in SlotIds then
++    if selectedSlotId = slotId then
++      selectedSlotId := NoSlot ||
++      workspace := "project" ||
++      lastResult := "slot-deselected";
++    else
++      selectedSlotId := slotId ||
++      workspace := WorkspaceFor(slotId) ||
++      lastResult := "slot-selected";
++    end if;
++  else
++    lastResult := "invalid-slot";
++  end if;
++SelectInterfaceIsolation:
++  assert project = projectBefore /\ assetLocation = locationBefore /\ assetReferenced = referenceBefore;
++SelectReturn:
++  return;
++end procedure;
++
++procedure SlotSurfaceClick(slotId)
++begin
++SurfaceResolve:
++  if slotId \in SlotIds then
++    if selectedSlotId # slotId then
++      call ApplySlotSelection(slotId);
++    else
++      if SlotHasContent[slotId] then
++        lastResult := "content-pass-through";
++      else
++        call ApplySlotSelection(slotId);
++      end if;
++    end if;
++  else
++    lastResult := "invalid-slot";
++  end if;
++SurfaceReturn:
++  return;
++end procedure;
++
++procedure BookmarkClick(slotId)
++begin
++BookmarkResolve:
++  if slotId \in SlotIds then
++    call ApplySlotSelection(slotId);
++  else
++    lastResult := "invalid-slot";
++  end if;
++BookmarkReturn:
++  return;
++end procedure;
++
++procedure DashboardBackgroundClick()
++begin
++BackgroundDeselect:
++  if selectedSlotId # NoSlot then
++    call ApplySlotSelection(NoSlot);
++  end if;
++BackgroundReturn:
++  return;
++end procedure;
++
++procedure CreateEmptyCsvProject()
++variables
++  newCsvId = NoCsv,
++  previousGraphObjectCount = 0,
++  selectionBefore = assetSelection,
++  csvBefore = selectedCsvId;
++begin
++EmptyCsvRememberGraphObjects:
++  previousGraphObjectCount := Len(project.graphObjectCsvRefs);
++EmptyCsvCapacity:
++  if project.nextCsvId \in CsvIds then
++    newCsvId := project.nextCsvId;
++    project := [
++      project EXCEPT
++        !.csvIds = @ \cup {newCsvId},
++        !.nextCsvId = @ + 1
++    ] ||
++    pendingCsvSelection := newCsvId ||
++    reconcilePending := TRUE;
++  else
++    lastResult := "empty-csv-unavailable";
++  end if;
++EmptyCsvProjectDoesNotMutateInterface:
++  assert assetSelection = selectionBefore /\ selectedCsvId = csvBefore;
++EmptyCsvNoGraphObjectSideEffect:
++  assert pendingCsvSelection = NoCsv
++         \/ Len(project.graphObjectCsvRefs) = previousGraphObjectCount;
++EmptyCsvProjectReturn:
++  return;
++end procedure;
++
++procedure ReconcileEmptyCsvSelection()
++variables projectBefore = project;
++begin
++EmptyCsvReconcile:
++  if pendingCsvSelection # NoCsv then
++    assetSelection := "csv" ||
++    selectedCsvId := pendingCsvSelection ||
++    lastResult := "empty-csv-created";
++  end if;
++EmptyCsvInterfaceDoesNotMutateProject:
++  assert project = projectBefore;
++EmptyCsvClearResult:
++  pendingCsvSelection := NoCsv ||
++  reconcilePending := FALSE;
++EmptyCsvReconcileReturn:
++  return;
++end procedure;
++
++procedure ImportAssetBatch(allowCommit)
++variables projectBefore = project, candidate = project;
++begin
++BatchBuildCandidate:
++  candidate := [
++    project EXCEPT
++      !.csvIds = CsvIds,
++      !.nextCsvId = Cardinality(CsvIds) + 1
++  ];
++BatchCommitOrReject:
++  if allowCommit /\ ValidProject(candidate) then
++    project := candidate ||
++    lastResult := "batch-imported";
++  else
++    lastResult := "batch-import-rejected";
++  end if;
++BatchRejectUnchanged:
++  assert lastResult # "batch-import-rejected" \/ project = projectBefore;
++BatchCommitAll:
++  assert lastResult # "batch-imported" \/ project.csvIds = CsvIds;
++BatchReturn:
++  return;
++end procedure;
++
++procedure MoveAsset(assetMoveSourceArg, assetTargetLocationArg)
++begin
++AssetMoveGuard:
++  if assetMoveSourceArg \in MoveSources
++     /\ assetTargetLocationArg \in AssetLocations
++     /\ TreeMoveAllowed(assetMoveSourceArg) then
++    if assetTargetLocationArg = "trash" /\ assetLocation # "trash" then
++      assetReferenced := FALSE;
++    end if;
++    assetLocation := assetTargetLocationArg;
++    if assetTargetLocationArg = "trash" then
++      lastResult := "asset-moved-trash";
++    else
++      lastResult := "asset-moved-normal";
++    end if;
++  else
++    lastResult := "asset-move-rejected";
++  end if;
++AssetMoveReturn:
++  return;
++end procedure;
++
++procedure ConnectAssetToSlot()
++begin
++AssetSlotConnectionGuard:
++  if SlotConnectionAllowed(assetLocation) then
++    assetReferenced := TRUE ||
++    lastResult := "asset-slot-connected";
++  else
++    lastResult := "asset-slot-connection-rejected";
++  end if;
++AssetSlotConnectionReturn:
++  return;
++end procedure;
++
++procedure CreateEmptyCsvAndReconcile()
++begin
++CreateEmptyCsvAndReconcileCreate:
++  call CreateEmptyCsvProject();
++CreateEmptyCsvAndReconcileSelection:
++  call ReconcileEmptyCsvSelection();
++CreateEmptyCsvAndReconcileReturn:
++  return;
++end procedure;
++
++procedure AddGraphObject()
++begin
++AddGraphGuard:
++  if /\ selectedSlotId \in SlotIds
++     /\ SlotContentType[selectedSlotId] = "graph"
++     /\ selectedCsvId # NoCsv
++     /\ selectedCsvId \in project.csvIds
++     /\ Len(project.graphObjectCsvRefs) < MaxGraphObjects then
++    project := [
++      project EXCEPT
++        !.graphObjectCsvRefs = Append(@, selectedCsvId)
++    ] ||
++    lastResult := "graph-object-added";
++  else
++    lastResult := "graph-object-rejected";
++  end if;
++AddGraphReturn:
++  return;
++end procedure;
++
++begin
++Main:
++  while TRUE do
++    either
++      with surfaceSlotId \in SlotIds do
++        call SlotSurfaceClick(surfaceSlotId);
++      end with;
++    or
++      with bookmarkSlotId \in SlotIds do
++        call BookmarkClick(bookmarkSlotId);
++      end with;
++    or
++      call DashboardBackgroundClick();
++    or
++      call CreateEmptyCsvAndReconcile();
++    or
++      call AddGraphObject();
++    or
++      with allowCommit \in BOOLEAN do
++        call ImportAssetBatch(allowCommit);
++      end with;
+     or
+       with requestedMoveSource \in MoveSources do
+         with requestedTargetLocation \in AssetLocations do
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -18,13 +18,13 @@
+       "closure_review": "agent_space/reviews/review-20261014-014-sourcescript-closure-r23.md"
+     },
+     "verification-model": {
+-      "revision": 21,
+-      "status": "stale",
+-      "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:f651a05c3f4667e92d5082788b0ad77fd9d1b0b7fd730d319a05d836dada885e",
+-      "derived_from": {
+-        "source-script": "sha256:65f70d9060b0e2a802f1bc595058548ed350a2631e94069e4776af78df48bf2a",
+-        "pseudocode": "sha256:532d65420b932b45f503a05aa457f515779619b934e25ffd535c89ec58443d12"
++      "revision": 22,
++      "status": "current",
++      "path_rule": "verification/**/*.{tla,cfg}",
++      "fingerprint": "sha256:26967673803430e2bb68cdcdd792ceb6f28a5c220f2fdfbf1664e8e4f6b72f26",
++      "derived_from": {
++        "source-script": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
++        "pseudocode": "sha256:466498ff54b90c97d378e010fdd6e3bae4d142c6c5e10751cd1e16bd0f40ef1f"
+       },
+       "tlc": "pending",
+       "validation_review": null
+diff --git a/agent_space/patches/20261014-025.md b/agent_space/patches/20261014-025.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/patches/20261014-025.md
+@@ -0,0 +1,16 @@
++# 20261014-025 — Verify r23/r9 batch-import atomicity in verification r22
++
++## 변경
++Interaction Core에 ASSETS_IMPORTED의 대표 CSV batch transition을 추가했다. 성공 시 요청 batch 전체가 한 상태 전이로 반영되고, reject 시 project가 이전 상태와 동일하다는 assertion을 둔다. command ownership mapping에도 ASSETS_IMPORTED를 추가했다.
++
++## 추상화
++image bytes/slot payload 전체를 복제하지 않고 여러 persistent asset의 all-or-nothing 성질을 CSV id 집합으로 대표한다. target-slot reference integrity는 기존 slot/reference slice가 검증한다. 서로 독립적인 표현 상태를 중복 추가하지 않는다.
++
++## 이유
++r23에서 새로 생긴 의미는 raw-file import의 batch atomicity다. 기존 singular create 검증만으로는 부분 commit 금지를 표현할 수 없어 최소 상태 전이를 추가했다.
++
++## 기각
++전체 import payload/VFS/bytes를 TLC state로 복제하는 방식은 검증하려는 atomicity에 비해 상태공간을 크게 늘린다.
++
++## 후속
++push-trigger PlusCal translation/SANY/TLC가 실제 성공한 뒤 validation review와 tlc: passed를 기록한다. 그 전 Source Code는 수정하지 않는다.

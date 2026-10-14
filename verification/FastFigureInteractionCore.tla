@@ -32,7 +32,7 @@ UI/runtime-local effects with no independent project authority and are reviewed 
 The removed-reference counts added by pseudocode r6 are deterministic metadata derived from the same
 entering-trash transition already represented by assetReferenced; they do not add a second project state.
 
-r22/r8 also makes persistent command ownership explicit. This slice models only
+r23/r9 also makes persistent command ownership and batch-import atomicity explicit. This slice models only
 project commands that affect CSV/reference/tree interaction. Image settings,
 caption settings, label settings, layout style, and export settings do not alter
 the state or properties checked here, so they are omitted rather than copied as
@@ -96,6 +96,8 @@ TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project,
        "invalid-slot",
        "empty-csv-created",
        "empty-csv-unavailable",
+       "batch-imported",
+       "batch-import-rejected",
        "graph-object-added",
        "graph-object-rejected",
        "asset-moved-normal",
@@ -107,6 +109,7 @@ TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project,
 
 ModeledInteractionProjectCommands == {
   "DATA_OBJECT_CREATED",
+  "ASSETS_IMPORTED",
   "GRAPH_OBJECTS_REPLACED",
   "PROJECT_NODE_MOVED",
   "SLOT_DATA_CONNECTED"
@@ -114,6 +117,7 @@ ModeledInteractionProjectCommands == {
 
 InteractionCommittedResults == {
   "empty-csv-created",
+  "batch-imported",
   "graph-object-added",
   "asset-moved-normal",
   "asset-moved-trash",
@@ -122,6 +126,7 @@ InteractionCommittedResults == {
 
 InteractionResultCommand(result) ==
   CASE result = "empty-csv-created" -> "DATA_OBJECT_CREATED"
+    [] result = "batch-imported" -> "ASSETS_IMPORTED"
     [] result = "graph-object-added" -> "GRAPH_OBJECTS_REPLACED"
     [] result = "asset-moved-normal" -> "PROJECT_NODE_MOVED"
     [] result = "asset-moved-trash" -> "PROJECT_NODE_MOVED"
@@ -282,6 +287,30 @@ EmptyCsvReconcileReturn:
   return;
 end procedure;
 
+procedure ImportAssetBatch(allowCommit)
+variables projectBefore = project, candidate = project;
+begin
+BatchBuildCandidate:
+  candidate := [
+    project EXCEPT
+      !.csvIds = CsvIds,
+      !.nextCsvId = Cardinality(CsvIds) + 1
+  ];
+BatchCommitOrReject:
+  if allowCommit /\ ValidProject(candidate) then
+    project := candidate ||
+    lastResult := "batch-imported";
+  else
+    lastResult := "batch-import-rejected";
+  end if;
+BatchRejectUnchanged:
+  assert lastResult # "batch-import-rejected" \/ project = projectBefore;
+BatchCommitAll:
+  assert lastResult # "batch-imported" \/ project.csvIds = CsvIds;
+BatchReturn:
+  return;
+end procedure;
+
 procedure MoveAsset(assetMoveSourceArg, assetTargetLocationArg)
 begin
 AssetMoveGuard:
@@ -364,6 +393,10 @@ Main:
       call CreateEmptyCsvAndReconcile();
     or
       call AddGraphObject();
+    or
+      with allowCommit \in BOOLEAN do
+        call ImportAssetBatch(allowCommit);
+      end with;
     or
       with requestedMoveSource \in MoveSources do
         with requestedTargetLocation \in AssetLocations do
