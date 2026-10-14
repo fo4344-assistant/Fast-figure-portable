@@ -1,221 +1,2271 @@
-diff --git a/agent_space/reviews/review-20261014-009-fsm-responsibility-audit.md b/agent_space/reviews/review-20261014-009-fsm-responsibility-audit.md
-new file mode 100644
---- /dev/null
-+++ b/agent_space/reviews/review-20261014-009-fsm-responsibility-audit.md
-@@ -0,0 +1,183 @@
-+# FSM responsibility audit — plan-015 F
+diff --git a/verification/FastFigureInteractionCore.tla b/verification/FastFigureInteractionCore.tla
+--- a/verification/FastFigureInteractionCore.tla
++++ b/verification/FastFigureInteractionCore.tla
+@@ -31,343 +31,379 @@
+ UI/runtime-local effects with no independent project authority and are reviewed outside this state model.
+ The removed-reference counts added by pseudocode r6 are deterministic metadata derived from the same
+ entering-trash transition already represented by assetReferenced; they do not add a second project state.
+-*)
+-
+-NoSlot == 0
+-NoCsv == 0
+-
+-AssetLocations == {"normal", "trash"}
+-MoveSources == {"asset", "trash-root"}
+-
+-TreeMoveAllowed(source) == source # "trash-root"
+-SlotConnectionAllowed(location) == location = "normal"
+-
+-SlotIds == 1..3
+-CsvIds == 1..2
+-MaxGraphObjects == 2
+-
+-SlotContentType == <<"graph", "image", "graph">>
+-
+-SlotHasContent == <<TRUE, TRUE, FALSE>>
+-
+-WorkspaceFor(slotId) ==
+-  IF slotId = NoSlot
+-    THEN "project"
+-    ELSE IF SlotContentType[slotId] = "image"
+-      THEN "slot.image"
+-      ELSE "slot.graph"
+-
+-InitialProject ==
+-  [ csvIds |-> {},
+-    nextCsvId |-> 1,
+-    graphObjectCsvRefs |-> <<>> ]
+-
+-ValidProject(project) ==
+-  /\ project.csvIds \subseteq CsvIds
+-  /\ project.nextCsvId \in 1..(Cardinality(CsvIds) + 1)
+-  /\ Len(project.graphObjectCsvRefs) <= MaxGraphObjects
+-  /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
+-       project.graphObjectCsvRefs[index] \in project.csvIds
+-
+-TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project,
+-            assetLocation, assetReferenced, lastResult) ==
+-  /\ selectedSlotId \in SlotIds \cup {NoSlot}
+-  /\ workspace \in {"project", "slot.graph", "slot.image"}
+-  /\ workspace = WorkspaceFor(selectedSlotId)
+-  /\ assetSelection \in {"none", "csv"}
+-  /\ selectedCsvId \in CsvIds \cup {NoCsv}
+-  /\ (assetSelection = "none" <=> selectedCsvId = NoCsv)
+-  /\ (selectedCsvId # NoCsv => selectedCsvId \in project.csvIds)
+-  /\ ValidProject(project)
+-  /\ assetLocation \in AssetLocations
+-  /\ assetReferenced \in BOOLEAN
+-  /\ (assetReferenced => assetLocation = "normal")
+-  /\ lastResult \in {
+-       "initialized",
+-       "slot-selected",
+-       "slot-deselected",
+-       "content-pass-through",
+-       "invalid-slot",
+-       "empty-csv-created",
+-       "empty-csv-unavailable",
+-       "graph-object-added",
+-       "graph-object-rejected",
+-       "asset-moved-normal",
+-       "asset-moved-trash",
+-       "asset-move-rejected",
+-       "asset-slot-connected",
+-       "asset-slot-connection-rejected"
+-     }
+-
+-SelectionInvariant(selectedSlotId, workspace) ==
+-  workspace = WorkspaceFor(selectedSlotId)
+-
+-CsvReferenceInvariant(project, selectedCsvId) ==
+-  /\ selectedCsvId = NoCsv \/ selectedCsvId \in project.csvIds
+-  /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
+-       project.graphObjectCsvRefs[index] \in project.csvIds
+-
+-TrashReferenceInvariant(assetLocation, assetReferenced) ==
+-  assetLocation = "trash" => ~assetReferenced
+-
+-TreeRecoveryInvariant ==
+-  /\ TreeMoveAllowed("asset")
+-  /\ ~TreeMoveAllowed("trash-root")
+-
+-SlotConnectionInvariant(assetLocation) ==
+-  SlotConnectionAllowed(assetLocation) <=> assetLocation = "normal"
+-
+-(*
+---algorithm FastFigureInteractionCore
+-variables
+-  selectedSlotId = NoSlot,
+-  workspace = "project",
+-  assetSelection = "none",
+-  selectedCsvId = NoCsv,
+-  project = InitialProject,
+-  assetLocation = "normal",
+-  assetReferenced = TRUE,
+-  pendingCsvSelection = NoCsv,
+-  reconcilePending = FALSE,
+-  lastResult = "initialized";
+-
+-procedure ApplySlotSelection(slotId)
+-variables projectBefore = project, locationBefore = assetLocation, referenceBefore = assetReferenced;
+-begin
+-SelectResolve:
+-  if slotId = NoSlot then
+-    selectedSlotId := NoSlot ||
+-    workspace := "project" ||
+-    lastResult := "slot-deselected";
+-  elsif slotId \in SlotIds then
+-    if selectedSlotId = slotId then
+-      selectedSlotId := NoSlot ||
+-      workspace := "project" ||
+-      lastResult := "slot-deselected";
+-    else
+-      selectedSlotId := slotId ||
+-      workspace := WorkspaceFor(slotId) ||
+-      lastResult := "slot-selected";
+-    end if;
+-  else
+-    lastResult := "invalid-slot";
+-  end if;
+-SelectInterfaceIsolation:
+-  assert project = projectBefore /\ assetLocation = locationBefore /\ assetReferenced = referenceBefore;
+-SelectReturn:
+-  return;
+-end procedure;
+-
+-procedure SlotSurfaceClick(slotId)
+-begin
+-SurfaceResolve:
+-  if slotId \in SlotIds then
+-    if selectedSlotId # slotId then
+-      call ApplySlotSelection(slotId);
+-    else
+-      if SlotHasContent[slotId] then
+-        lastResult := "content-pass-through";
+-      else
+-        call ApplySlotSelection(slotId);
+-      end if;
+-    end if;
+-  else
+-    lastResult := "invalid-slot";
+-  end if;
+-SurfaceReturn:
+-  return;
+-end procedure;
+-
+-procedure BookmarkClick(slotId)
+-begin
+-BookmarkResolve:
+-  if slotId \in SlotIds then
+-    call ApplySlotSelection(slotId);
+-  else
+-    lastResult := "invalid-slot";
+-  end if;
+-BookmarkReturn:
+-  return;
+-end procedure;
+-
+-procedure DashboardBackgroundClick()
+-begin
+-BackgroundDeselect:
+-  if selectedSlotId # NoSlot then
+-    call ApplySlotSelection(NoSlot);
+-  end if;
+-BackgroundReturn:
+-  return;
+-end procedure;
+-
+-procedure CreateEmptyCsvProject()
+-variables
+-  newCsvId = NoCsv,
+-  previousGraphObjectCount = 0,
+-  selectionBefore = assetSelection,
+-  csvBefore = selectedCsvId;
+-begin
+-EmptyCsvRememberGraphObjects:
+-  previousGraphObjectCount := Len(project.graphObjectCsvRefs);
+-EmptyCsvCapacity:
+-  if project.nextCsvId \in CsvIds then
+-    newCsvId := project.nextCsvId;
+-    project := [
+-      project EXCEPT
+-        !.csvIds = @ \cup {newCsvId},
+-        !.nextCsvId = @ + 1
+-    ] ||
+-    pendingCsvSelection := newCsvId ||
+-    reconcilePending := TRUE;
+-  else
+-    lastResult := "empty-csv-unavailable";
+-  end if;
+-EmptyCsvProjectDoesNotMutateInterface:
+-  assert assetSelection = selectionBefore /\ selectedCsvId = csvBefore;
+-EmptyCsvNoGraphObjectSideEffect:
+-  assert pendingCsvSelection = NoCsv
+-         \/ Len(project.graphObjectCsvRefs) = previousGraphObjectCount;
+-EmptyCsvProjectReturn:
+-  return;
+-end procedure;
+-
+-procedure ReconcileEmptyCsvSelection()
+-variables projectBefore = project;
+-begin
+-EmptyCsvReconcile:
+-  if pendingCsvSelection # NoCsv then
+-    assetSelection := "csv" ||
+-    selectedCsvId := pendingCsvSelection ||
+-    lastResult := "empty-csv-created";
+-  end if;
+-EmptyCsvInterfaceDoesNotMutateProject:
+-  assert project = projectBefore;
+-EmptyCsvClearResult:
+-  pendingCsvSelection := NoCsv ||
+-  reconcilePending := FALSE;
+-EmptyCsvReconcileReturn:
+-  return;
+-end procedure;
+-
+-procedure MoveAsset(assetMoveSourceArg, assetTargetLocationArg)
+-begin
+-AssetMoveGuard:
+-  if assetMoveSourceArg \in MoveSources
+-     /\ assetTargetLocationArg \in AssetLocations
+-     /\ TreeMoveAllowed(assetMoveSourceArg) then
+-    if assetTargetLocationArg = "trash" /\ assetLocation # "trash" then
+-      assetReferenced := FALSE;
+-    end if;
+-    assetLocation := assetTargetLocationArg;
+-    if assetTargetLocationArg = "trash" then
+-      lastResult := "asset-moved-trash";
+-    else
+-      lastResult := "asset-moved-normal";
+-    end if;
+-  else
+-    lastResult := "asset-move-rejected";
+-  end if;
+-AssetMoveReturn:
+-  return;
+-end procedure;
+-
+-procedure ConnectAssetToSlot()
+-begin
+-AssetSlotConnectionGuard:
+-  if SlotConnectionAllowed(assetLocation) then
+-    assetReferenced := TRUE ||
+-    lastResult := "asset-slot-connected";
+-  else
+-    lastResult := "asset-slot-connection-rejected";
+-  end if;
+-AssetSlotConnectionReturn:
+-  return;
+-end procedure;
+-
+-procedure CreateEmptyCsvAndReconcile()
+-begin
+-CreateEmptyCsvAndReconcileCreate:
+-  call CreateEmptyCsvProject();
+-CreateEmptyCsvAndReconcileSelection:
+-  call ReconcileEmptyCsvSelection();
+-CreateEmptyCsvAndReconcileReturn:
+-  return;
+-end procedure;
+-
+-procedure AddGraphObject()
+-begin
+-AddGraphGuard:
+-  if /\ selectedSlotId \in SlotIds
+-     /\ SlotContentType[selectedSlotId] = "graph"
+-     /\ selectedCsvId # NoCsv
+-     /\ selectedCsvId \in project.csvIds
+-     /\ Len(project.graphObjectCsvRefs) < MaxGraphObjects then
+-    project := [
+-      project EXCEPT
+-        !.graphObjectCsvRefs = Append(@, selectedCsvId)
+-    ] ||
+-    lastResult := "graph-object-added";
+-  else
+-    lastResult := "graph-object-rejected";
+-  end if;
+-AddGraphReturn:
+-  return;
+-end procedure;
+-
+-begin
+-Main:
+-  while TRUE do
+-    either
+-      with surfaceSlotId \in SlotIds do
+-        call SlotSurfaceClick(surfaceSlotId);
+-      end with;
+-    or
+-      with bookmarkSlotId \in SlotIds do
+-        call BookmarkClick(bookmarkSlotId);
+-      end with;
+-    or
+-      call DashboardBackgroundClick();
+-    or
+-      call CreateEmptyCsvAndReconcile();
+-    or
+-      call AddGraphObject();
+-    or
+-      with requestedMoveSource \in MoveSources do
+-        with requestedTargetLocation \in AssetLocations do
+-          call MoveAsset(requestedMoveSource, requestedTargetLocation);
+-        end with;
+-      end with;
+-    or
+-      call ConnectAssetToSlot();
+-    end either;
+-  end while;
+-end algorithm;
+-*)
+-
+-TypeOKSpec ==
+-  TypeOKState(
+-    selectedSlotId,
+-    workspace,
+-    assetSelection,
+-    selectedCsvId,
+-    project,
+-    assetLocation,
+-    assetReferenced,
+-    lastResult)
+-
+-SelectionInvariantSpec ==
+-  SelectionInvariant(selectedSlotId, workspace)
+-
+-CsvReferenceInvariantSpec ==
+-  CsvReferenceInvariant(project, selectedCsvId)
+-
+-TrashReferenceInvariantSpec ==
+-  TrashReferenceInvariant(assetLocation, assetReferenced)
+-
+-TreeRecoveryInvariantSpec ==
+-  TreeRecoveryInvariant
+-
+-SlotConnectionInvariantSpec ==
+-  SlotConnectionInvariant(assetLocation)
 +
-+## 0. 감사 기준
++r22/r8 also makes persistent command ownership explicit. This slice models only
++project commands that affect CSV/reference/tree interaction. Image settings,
++caption settings, label settings, layout style, and export settings do not alter
++the state or properties checked here, so they are omitted rather than copied as
++independent verification state.
++*)
 +
-+사용자 정의를 책임 분리의 최상위 기준으로 사용한다.
++NoSlot == 0
++NoCsv == 0
 +
-+- **FFPX**: 저장 파일 자체가 아니라 저장·복원 대상인 영속 Fast Figure ProjectObject.
-+- **FFPX EFSM**: 그 ProjectObject의 상태, 허용 전이, validation, reference integrity, candidate/commit 결과를 소유하는 상태기계.
-+- **인터페이스 FSM**: 사용자/런타임 상호작용의 상태와 전이만 소유한다.
-+- **renderer**: commit된 FFPX authority와 인터페이스 상태를 읽어 화면을 단방향 projection한다.
++AssetLocations == {"normal", "trash"}
++MoveSources == {"asset", "trash-root"}
 +
-+따라서 "appFSM 안에서 처리된다"는 사실은 EFSM 여부의 기준이 아니다. ProjectObject를 변경하는 의미인지, UI/runtime interaction을 변경하는 의미인지가 기준이다.
++TreeMoveAllowed(source) == source # "trash-root"
++SlotConnectionAllowed(location) == location = "normal"
 +
-+## 1. 현재 권위 상태 분류
++SlotIds == 1..3
++CsvIds == 1..2
++MaxGraphObjects == 2
 +
-+| 현재 상태/구조 | 실제 의미 | 목표 소유자 | 판정 |
-+| --- | --- | --- | --- |
-+| `activeProject` / `projectState` | 영속 FFPX ProjectObject | FFPX EFSM | 이미 올바른 project authority |
-+| `projectObjects` | activeProject read adapter/registry | FFPX read boundary | 별도 authority 아님 |
-+| `projectVfs` | activeProject에서 경로를 resolve하는 helper | FFPX EFSM/helper | 별도 tree authority 아님 |
-+| `selectedSlotId` | 현재 session의 slot selection | interface FSM | FFPX state가 아님 |
-+| `appFSM.state.workspace` | project/graph/image editor UI workspace | interface FSM | UI state |
-+| `appFSM.state.overlay` | layout/label/caption/print/readme Modal 상태 | interface FSM | UI state |
-+| `assetSelection/assetPath` | tree/editor의 현재 선택 | interface FSM | persistent project state 아님 |
-+| `graphObject/index` | editor의 current object selection | interface FSM | persistent chart object가 아님 |
-+| `lifecycle` | import/export busy/error runtime 상태 | interface/application runtime FSM | FFPX state 아님 |
-+| Layout selection / form draft / pointer drag | component lifetime interaction | component local 또는 interface FSM | cross-component 필요 없으면 local 유지 |
-+| dashboard DOM / Plotly / image element | 화면 projection | renderer | authority 아님 |
-+| FFPX read/build package | ProjectObject serialization adapter | persistence boundary | FSM interaction state를 저장하지 않음 |
++SlotContentType == <<"graph", "image", "graph">>
 +
-+## 2. 현재 혼합 지점
++SlotHasContent == <<TRUE, TRUE, FALSE>>
 +
-+### 2.1 `ApplicationStateMachine`의 region은 사실상 인터페이스 상태다
++WorkspaceFor(slotId) ==
++  IF slotId = NoSlot
++    THEN "project"
++    ELSE IF SlotContentType[slotId] = "image"
++      THEN "slot.image"
++      ELSE "slot.graph"
 +
-+현재 `application_fsm.py`의 region은:
++InitialProject ==
++  [ csvIds |-> {},
++    nextCsvId |-> 1,
++    graphObjectCsvRefs |-> <<>> ]
 +
-+`lifecycle → workspace → overlay → assetSelection → graphObject`
++ValidProject(project) ==
++  /\ project.csvIds \subseteq CsvIds
++  /\ project.nextCsvId \in 1..(Cardinality(CsvIds) + 1)
++  /\ Len(project.graphObjectCsvRefs) <= MaxGraphObjects
++  /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
++       project.graphObjectCsvRefs[index] \in project.csvIds
 +
-+이며 모두 FFPX ProjectObject의 persistent state가 아니라 application/UI runtime state다.
++TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project,
++            assetLocation, assetReferenced, lastResult) ==
++  /\ selectedSlotId \in SlotIds \cup {NoSlot}
++  /\ workspace \in {"project", "slot.graph", "slot.image"}
++  /\ workspace = WorkspaceFor(selectedSlotId)
++  /\ assetSelection \in {"none", "csv"}
++  /\ selectedCsvId \in CsvIds \cup {NoCsv}
++  /\ (assetSelection = "none" <=> selectedCsvId = NoCsv)
++  /\ (selectedCsvId # NoCsv => selectedCsvId \in project.csvIds)
++  /\ ValidProject(project)
++  /\ assetLocation \in AssetLocations
++  /\ assetReferenced \in BOOLEAN
++  /\ (assetReferenced => assetLocation = "normal")
++  /\ lastResult \in {
++       "initialized",
++       "slot-selected",
++       "slot-deselected",
++       "content-pass-through",
++       "invalid-slot",
++       "empty-csv-created",
++       "empty-csv-unavailable",
++       "graph-object-added",
++       "graph-object-rejected",
++       "asset-moved-normal",
++       "asset-moved-trash",
++       "asset-move-rejected",
++       "asset-slot-connected",
++       "asset-slot-connection-rejected"
++     }
 +
-+따라서 현재 `ApplicationStateMachine` 객체의 state vector 자체를 FFPX EFSM으로 재해석해서는 안 된다. 이 state vector는 분리 후 인터페이스 FSM 쪽으로 가는 것이 일관된다.
++ModeledInteractionProjectCommands == {
++  "DATA_OBJECT_CREATED",
++  "GRAPH_OBJECTS_REPLACED",
++  "PROJECT_NODE_MOVED",
++  "SLOT_DATA_CONNECTED"
++}
 +
-+### 2.2 영속 mutation action이 `workspace` region에 결합되어 있다
++InteractionCommittedResults == {
++  "empty-csv-created",
++  "graph-object-added",
++  "asset-moved-normal",
++  "asset-moved-trash",
++  "asset-slot-connected"
++}
 +
-+현재 `WORKSPACE_MUTATION_EVENTS`에는 다음 persistent mutation이 함께 들어 있다.
++InteractionResultCommand(result) ==
++  CASE result = "empty-csv-created" -> "DATA_OBJECT_CREATED"
++    [] result = "graph-object-added" -> "GRAPH_OBJECTS_REPLACED"
++    [] result = "asset-moved-normal" -> "PROJECT_NODE_MOVED"
++    [] result = "asset-moved-trash" -> "PROJECT_NODE_MOVED"
++    [] result = "asset-slot-connected" -> "SLOT_DATA_CONNECTED"
++    [] OTHER -> "none"
 +
-+- project/VFS: PROJECT_DIRECTORY_CREATED, PROJECT_NODE_MOVED, PROJECT_TRASH_EMPTIED, PROJECT_LOADED
-+- asset: DATA_OBJECT_*, IMAGE_OBJECT_*
-+- slot: SLOT_TYPE_CHANGED, SLOTS_RESET, SLOTS_SWAPPED, SLOT_IMAGE_LINKED, SLOT_DATA_CONNECTED, imports
-+- graph/chart: GRAPH_OBJECTS_REPLACED, CHART_LAYOUT_CHANGED, CHART_MODEL_REPLACED
-+- layout: GRID_LAYOUT_CHANGED
-+- caption persistent mutation 일부
++InteractionProjectCommandOwnershipInvariant(result) ==
++  result in InteractionCommittedResults =>
++    InteractionResultCommand(result) in ModeledInteractionProjectCommands
 +
-+이 구조에서는 한 event가 `workspace` UI region의 transition/update와 FFPX ProjectObject mutation을 동시에 소유한다.
++SelectionInvariant(selectedSlotId, workspace) ==
++  workspace = WorkspaceFor(selectedSlotId)
 +
-+**이 지점이 plan-015의 핵심 분리 대상이다.**
++CsvReferenceInvariant(project, selectedCsvId) ==
++  /\ selectedCsvId = NoCsv \/ selectedCsvId \in project.csvIds
++  /\ \A index \in 1..Len(project.graphObjectCsvRefs) :
++       project.graphObjectCsvRefs[index] \in project.csvIds
 +
-+### 2.3 selection reconciliation과 project mutation의 실행 순서가 한 send loop에 의존한다
++TrashReferenceInvariant(assetLocation, assetReferenced) ==
++  assetLocation = "trash" => ~assetReferenced
 +
-+현재 `appFSM.send()`는 region order대로 같은 payload를 처리한다.
++TreeRecoveryInvariant ==
++  /\ TreeMoveAllowed("asset")
++  /\ ~TreeMoveAllowed("trash-root")
 +
-+`workspace mutation → overlay → assetSelection reconciliation → graphObject reconciliation`
++SlotConnectionInvariant(assetLocation) ==
++  SlotConnectionAllowed(assetLocation) <=> assetLocation = "normal"
 +
-+plan-014에서 dashboard projection을 send 반환 뒤로 이동했기 때문에 renderer는 final selection을 읽을 수 있게 됐지만, project commit과 UI reconciliation은 여전히 같은 state-machine dispatch에 묶여 있다.
++(*
++--algorithm FastFigureInteractionCore
++variables
++  selectedSlotId = NoSlot,
++  workspace = "project",
++  assetSelection = "none",
++  selectedCsvId = NoCsv,
++  project = InitialProject,
++  assetLocation = "normal",
++  assetReferenced = TRUE,
++  pendingCsvSelection = NoCsv,
++  reconcilePending = FALSE,
++  lastResult = "initialized";
 +
-+분리 후 이 순서는 암묵적 region order가 아니라 orchestration contract로 표현해야 한다.
++procedure ApplySlotSelection(slotId)
++variables projectBefore = project, locationBefore = assetLocation, referenceBefore = assetReferenced;
++begin
++SelectResolve:
++  if slotId = NoSlot then
++    selectedSlotId := NoSlot ||
++    workspace := "project" ||
++    lastResult := "slot-deselected";
++  elsif slotId \in SlotIds then
++    if selectedSlotId = slotId then
++      selectedSlotId := NoSlot ||
++      workspace := "project" ||
++      lastResult := "slot-deselected";
++    else
++      selectedSlotId := slotId ||
++      workspace := WorkspaceFor(slotId) ||
++      lastResult := "slot-selected";
++    end if;
++  else
++    lastResult := "invalid-slot";
++  end if;
++SelectInterfaceIsolation:
++  assert project = projectBefore /\ assetLocation = locationBefore /\ assetReferenced = referenceBefore;
++SelectReturn:
++  return;
++end procedure;
 +
-+`projectEFSM command/commit → interfaceFSM reconcile(result) → renderer invalidation`
++procedure SlotSurfaceClick(slotId)
++begin
++SurfaceResolve:
++  if slotId \in SlotIds then
++    if selectedSlotId # slotId then
++      call ApplySlotSelection(slotId);
++    else
++      if SlotHasContent[slotId] then
++        lastResult := "content-pass-through";
++      else
++        call ApplySlotSelection(slotId);
++      end if;
++    end if;
++  else
++    lastResult := "invalid-slot";
++  end if;
++SurfaceReturn:
++  return;
++end procedure;
 +
-+### 2.4 UI-local state를 interface FSM으로 과도하게 승격하면 안 된다
++procedure BookmarkClick(slotId)
++begin
++BookmarkResolve:
++  if slotId \in SlotIds then
++    call ApplySlotSelection(slotId);
++  else
++    lastResult := "invalid-slot";
++  end if;
++BookmarkReturn:
++  return;
++end procedure;
 +
-+다음은 cross-component source of truth가 필요하지 않은 한 그대로 component-local이어야 한다.
++procedure DashboardBackgroundClick()
++begin
++BackgroundDeselect:
++  if selectedSlotId # NoSlot then
++    call ApplySlotSelection(NoSlot);
++  end if;
++BackgroundReturn:
++  return;
++end procedure;
 +
-+- Layout merge/split selection Set
-+- settings overlay current height와 resize pointer state
-+- collision Modal draft/resolver
-+- palette/print form draft
-+- label pointer drag transient state
++procedure CreateEmptyCsvProject()
++variables
++  newCsvId = NoCsv,
++  previousGraphObjectCount = 0,
++  selectionBefore = assetSelection,
++  csvBefore = selectedCsvId;
++begin
++EmptyCsvRememberGraphObjects:
++  previousGraphObjectCount := Len(project.graphObjectCsvRefs);
++EmptyCsvCapacity:
++  if project.nextCsvId \in CsvIds then
++    newCsvId := project.nextCsvId;
++    project := [
++      project EXCEPT
++        !.csvIds = @ \cup {newCsvId},
++        !.nextCsvId = @ + 1
++    ] ||
++    pendingCsvSelection := newCsvId ||
++    reconcilePending := TRUE;
++  else
++    lastResult := "empty-csv-unavailable";
++  end if;
++EmptyCsvProjectDoesNotMutateInterface:
++  assert assetSelection = selectionBefore /\ selectedCsvId = csvBefore;
++EmptyCsvNoGraphObjectSideEffect:
++  assert pendingCsvSelection = NoCsv
++         \/ Len(project.graphObjectCsvRefs) = previousGraphObjectCount;
++EmptyCsvProjectReturn:
++  return;
++end procedure;
 +
-+"FSM을 둘로 나눈다"는 이유로 모든 UI state를 interface FSM에 넣는 것은 새로운 중앙집중 state와 동기화 비용을 만든다.
++procedure ReconcileEmptyCsvSelection()
++variables projectBefore = project;
++begin
++EmptyCsvReconcile:
++  if pendingCsvSelection # NoCsv then
++    assetSelection := "csv" ||
++    selectedCsvId := pendingCsvSelection ||
++    lastResult := "empty-csv-created";
++  end if;
++EmptyCsvInterfaceDoesNotMutateProject:
++  assert project = projectBefore;
++EmptyCsvClearResult:
++  pendingCsvSelection := NoCsv ||
++  reconcilePending := FALSE;
++EmptyCsvReconcileReturn:
++  return;
++end procedure;
 +
-+## 3. mutation 책임 분류
++procedure MoveAsset(assetMoveSourceArg, assetTargetLocationArg)
++begin
++AssetMoveGuard:
++  if assetMoveSourceArg \in MoveSources
++     /\ assetTargetLocationArg \in AssetLocations
++     /\ TreeMoveAllowed(assetMoveSourceArg) then
++    if assetTargetLocationArg = "trash" /\ assetLocation # "trash" then
++      assetReferenced := FALSE;
++    end if;
++    assetLocation := assetTargetLocationArg;
++    if assetTargetLocationArg = "trash" then
++      lastResult := "asset-moved-trash";
++    else
++      lastResult := "asset-moved-normal";
++    end if;
++  else
++    lastResult := "asset-move-rejected";
++  end if;
++AssetMoveReturn:
++  return;
++end procedure;
 +
-+### FFPX EFSM으로 이동할 의미
++procedure ConnectAssetToSlot()
++begin
++AssetSlotConnectionGuard:
++  if SlotConnectionAllowed(assetLocation) then
++    assetReferenced := TRUE ||
++    lastResult := "asset-slot-connected";
++  else
++    lastResult := "asset-slot-connection-rejected";
++  end if;
++AssetSlotConnectionReturn:
++  return;
++end procedure;
 +
-+1. candidate build와 precondition validation.
-+2. whole-project/reference invariant 검증.
-+3. activeProject의 단일 commit 또는 전체 ProjectObject 교체.
-+4. VFS path/reference 정합성.
-+5. chart ownership과 slot-local persistent payload.
-+6. persistent caption/label/appearance/export/layout state.
-+7. mutation result:
-+   - changed ids/path
-+   - removed reference counts
-+   - invalidation 의미에 필요한 실제 commit 결과.
-+8. 실패 시 authoritative project unchanged 보장.
++procedure CreateEmptyCsvAndReconcile()
++begin
++CreateEmptyCsvAndReconcileCreate:
++  call CreateEmptyCsvProject();
++CreateEmptyCsvAndReconcileSelection:
++  call ReconcileEmptyCsvSelection();
++CreateEmptyCsvAndReconcileReturn:
++  return;
++end procedure;
 +
-+### interface FSM에 남길 의미
++procedure AddGraphObject()
++begin
++AddGraphGuard:
++  if /\ selectedSlotId \in SlotIds
++     /\ SlotContentType[selectedSlotId] = "graph"
++     /\ selectedCsvId # NoCsv
++     /\ selectedCsvId \in project.csvIds
++     /\ Len(project.graphObjectCsvRefs) < MaxGraphObjects then
++    project := [
++      project EXCEPT
++        !.graphObjectCsvRefs = Append(@, selectedCsvId)
++    ] ||
++    lastResult := "graph-object-added";
++  else
++    lastResult := "graph-object-rejected";
++  end if;
++AddGraphReturn:
++  return;
++end procedure;
 +
-+1. lifecycle busy/error/ready.
-+2. workspace 선택.
-+3. overlay open/close.
-+4. selected slot.
-+5. asset tree/editor selection.
-+6. graph object selection.
-+7. project commit 이후 selection의 re-resolve/clear.
-+8. model-to-ui / ui-to-model direction 등 interface projection에 필요한 runtime marker.
++begin
++Main:
++  while TRUE do
++    either
++      with surfaceSlotId \in SlotIds do
++        call SlotSurfaceClick(surfaceSlotId);
++      end with;
++    or
++      with bookmarkSlotId \in SlotIds do
++        call BookmarkClick(bookmarkSlotId);
++      end with;
++    or
++      call DashboardBackgroundClick();
++    or
++      call CreateEmptyCsvAndReconcile();
++    or
++      call AddGraphObject();
++    or
++      with requestedMoveSource \in MoveSources do
++        with requestedTargetLocation \in AssetLocations do
++          call MoveAsset(requestedMoveSource, requestedTargetLocation);
++        end with;
++      end with;
++    or
++      call ConnectAssetToSlot();
++    end either;
++  end while;
++end algorithm;
++*)
 +
-+### orchestration/renderer 경계
++TypeOKSpec ==
++  TypeOKState(
++    selectedSlotId,
++    workspace,
++    assetSelection,
++    selectedCsvId,
++    project,
++    assetLocation,
++    assetReferenced,
++    lastResult)
 +
-+다음 순서를 별도 책임으로 둔다.
++SelectionInvariantSpec ==
++  SelectionInvariant(selectedSlotId, workspace)
 +
-+```text
-+UI interaction
-+→ interface command 해석
-+→ explicit FFPX command
-+→ projectEFSM validate/candidate/commit
-+→ mutation result
-+→ interfaceFSM selection/workspace reconciliation
-+→ renderer projection invalidation
-+```
++CsvReferenceInvariantSpec ==
++  CsvReferenceInvariant(project, selectedCsvId)
 +
-+renderer는 mutation result와 최종 interface selection을 읽을 수 있지만 project를 다시 변경하지 않는다.
++TrashReferenceInvariantSpec ==
++  TrashReferenceInvariant(assetLocation, assetReferenced)
 +
-+## 4. event 소유권 감사
++TreeRecoveryInvariantSpec ==
++  TreeRecoveryInvariant
 +
-+| event 종류 | 현재 | 목표 |
-+| --- | --- | --- |
-+| TOGGLE_OVERLAY / CLOSE_OVERLAY / ESCAPE / OUTSIDE_CLICK | appFSM overlay | interface FSM 단독 |
-+| SELECT_SLOT | appFSM + selectedSlotId runtime mutation | interface FSM 단독 |
-+| SELECT_ASSET / graph-object selection | appFSM | interface FSM 단독 |
-+| PROJECT_NODE_MOVED / TRASH_EMPTIED / DIRECTORY_CREATED | workspace action + selection region | project EFSM command + interface reconcile |
-+| DATA/IMAGE object mutation | workspace action | project EFSM |
-+| SLOTS_RESET / SLOTS_SWAPPED / SLOT_* link/import | workspace action + selection reconcile | project EFSM + result-driven interface reconcile |
-+| GRAPH_OBJECTS_REPLACED / chart mutation | workspace action + graph selection | project EFSM + interface reconcile |
-+| GRID_LAYOUT_CHANGED | workspace mutation + selection clear | project EFSM + interface reconcile |
-+| PROJECT_LOADED | lifecycle/orchestration + workspace mutation + selections | project EFSM whole-state replace + interface reset/reconcile |
-+| renderer invalidation | public command별 분산, plan-014 helper 도입 | orchestration의 post-commit effect |
++SlotConnectionInvariantSpec ==
++  SlotConnectionInvariant(assetLocation)
 +
-+## 5. serialization 경계
++ProjectCommandOwnershipInvariantSpec ==
++  InteractionProjectCommandOwnershipInvariant(lastResult)
+ 
+ =============================================================================
+diff --git a/verification/FastFigureInteractionCore.cfg b/verification/FastFigureInteractionCore.cfg
+--- a/verification/FastFigureInteractionCore.cfg
++++ b/verification/FastFigureInteractionCore.cfg
+@@ -9,3 +9,4 @@
+ INVARIANT TrashReferenceInvariantSpec
+ INVARIANT TreeRecoveryInvariantSpec
+ INVARIANT SlotConnectionInvariantSpec
++INVARIANT ProjectCommandOwnershipInvariantSpec
+diff --git a/verification/FastFigureSlotCore.tla b/verification/FastFigureSlotCore.tla
+--- a/verification/FastFigureSlotCore.tla
++++ b/verification/FastFigureSlotCore.tla
+@@ -16,719 +16,755 @@
+ candidate -> validate -> commit order, branch meaning, and failure behavior.
+ TLC-only state generators are explicitly named VerificationHarness* and are not
+ Fast Figure domain commands.
+-*)
+-
+-MaxRows == 3
+-MaxCols == 3
+-InitialRows == 2
+-InitialCols == 2
+-
+-NoChart == "no-chart"
+-NoImage == "no-image"
+-NoCaption == "no-caption"
+-NoSlot == 0
+-
+-ChartIds == {"chart-1", "chart-2"}
+-ImageIds == {"image-1"}
+-
+-Cell(row, col) == [row |-> row, col |-> col]
+-Cells == {Cell(row, col) : row \in 1..MaxRows, col \in 1..MaxCols}
+-
+-CellSlotId(row, col) == (row - 1) * MaxCols + col
+-SlotIds == 1..(MaxRows * MaxCols)
+-
+-SlotRow(slotId) ==
+-  CHOOSE row \in 1..MaxRows :
+-    \E col \in 1..MaxCols : CellSlotId(row, col) = slotId
+-
+-SlotCol(slotId) ==
+-  CHOOSE col \in 1..MaxCols :
+-    \E row \in 1..MaxRows : CellSlotId(row, col) = slotId
+-
+-ExpectedSlotIds(rows, cols) ==
+-  {CellSlotId(row, col) : row \in 1..rows, col \in 1..cols}
+-
+-DefaultImageSettings ==
+-  [fit |-> "contain", scale |-> 100, x |-> 50, y |-> 50]
+-
+-SLOT_LOCAL_DEFAULTS ==
+-  [ chart         |-> NoChart,
+-    imageId       |-> NoImage,
+-    contentType   |-> "graph",
+-    imageSettings |-> DefaultImageSettings,
+-    caption       |-> NoCaption ]
+-
+-DefaultContent ==
+-  [ chart         |-> SLOT_LOCAL_DEFAULTS.chart,
+-    imageId       |-> SLOT_LOCAL_DEFAULTS.imageId,
+-    contentType   |-> SLOT_LOCAL_DEFAULTS.contentType,
+-    imageSettings |-> SLOT_LOCAL_DEFAULTS.imageSettings ]
+-
+-DefaultSlot(slotId) ==
+-  [ id       |-> slotId,
+-    row      |-> SlotRow(slotId),
+-    col      |-> SlotCol(slotId),
+-    rowSpan  |-> 1,
+-    colSpan  |-> 1,
+-    hidden   |-> FALSE,
+-    content  |-> DefaultContent,
+-    caption  |-> SLOT_LOCAL_DEFAULTS.caption ]
+-
+-InitialSlots ==
+-  [slotId \in ExpectedSlotIds(InitialRows, InitialCols) |->
+-    DefaultSlot(slotId)]
+-
+-InitialProject ==
+-  [ layout |-> [gridRows |-> InitialRows, gridCols |-> InitialCols],
+-    slots  |-> InitialSlots,
+-    charts |-> {},
+-    images |-> {} ]
+-
+-SlotLocalState(slot) ==
+-  [ chart         |-> slot.content.chart,
+-    imageId       |-> slot.content.imageId,
+-    contentType   |-> slot.content.contentType,
+-    imageSettings |-> slot.content.imageSettings,
+-    caption       |-> slot.caption ]
+-
+-WithSlotLocalState(slot, localState) ==
+-  [slot EXCEPT
+-    !.content.chart = localState.chart,
+-    !.content.imageId = localState.imageId,
+-    !.content.contentType = localState.contentType,
+-    !.content.imageSettings = localState.imageSettings,
+-    !.caption = localState.caption]
+-
+-ResetSlotLocalState(slot) ==
+-  WithSlotLocalState(slot, SLOT_LOCAL_DEFAULTS)
+-
+-slotHasNonDefaultLocalState(slot) ==
+-  SlotLocalState(slot) # SLOT_LOCAL_DEFAULTS
+-
+-VisibleSlotIds(project) ==
+-  {slotId \in DOMAIN project.slots : ~project.slots[slotId].hidden}
+-
+-ActiveCells(project) ==
+-  {Cell(row, col) :
+-    row \in 1..project.layout.gridRows,
+-    col \in 1..project.layout.gridCols}
+-
+-SlotCells(slot) ==
+-  {Cell(row, col) :
+-    row \in slot.row..(slot.row + slot.rowSpan - 1),
+-    col \in slot.col..(slot.col + slot.colSpan - 1)}
+-
+-CoveringVisibleSlots(project, cell) ==
+-  {slotId \in VisibleSlotIds(project) :
+-    cell \in SlotCells(project.slots[slotId])}
+-
+-SlotBaseCell(slot) == Cell(slot.row, slot.col)
+-
+-LayoutCoverageValid(project) ==
+-  /\ \A cell \in ActiveCells(project) :
+-       Cardinality(CoveringVisibleSlots(project, cell)) = 1
+-  /\ \A slotId \in DOMAIN project.slots :
+-       LET covering == CoveringVisibleSlots(
+-                         project,
+-                         SlotBaseCell(project.slots[slotId]))
+-       IN
+-         IF project.slots[slotId].hidden
+-           THEN /\ Cardinality(covering) = 1
+-                /\ slotId \notin covering
+-           ELSE covering = {slotId}
+-
+-SlotReferenceIntegrity(project) ==
+-  \A slotId \in DOMAIN project.slots :
+-    LET local == SlotLocalState(project.slots[slotId])
+-    IN
+-      /\ (local.chart = NoChart \/ local.chart \in project.charts)
+-      /\ (local.imageId = NoImage \/ local.imageId \in project.images)
+-      /\ ~(local.chart # NoChart /\ local.imageId # NoImage)
+-      /\ (local.chart # NoChart => local.contentType = "graph")
+-      /\ (local.imageId # NoImage => local.contentType = "image")
+-
+-ChartOwnershipInvariant(project) ==
+-  \A chartId \in project.charts :
+-    Cardinality(
+-      {slotId \in DOMAIN project.slots :
+-        project.slots[slotId].content.chart = chartId}
+-    ) = 1
+-
+-SlotGeometryValid(project) ==
+-  /\ DOMAIN project.slots =
+-       ExpectedSlotIds(project.layout.gridRows, project.layout.gridCols)
+-  /\ \A slotId \in DOMAIN project.slots :
+-       LET slot == project.slots[slotId]
+-       IN
+-         /\ slot.id = slotId
+-         /\ slot.row = SlotRow(slotId)
+-         /\ slot.col = SlotCol(slotId)
+-         /\ slot.rowSpan >= 1
+-         /\ slot.colSpan >= 1
+-         /\ slot.row + slot.rowSpan - 1 <= project.layout.gridRows
+-         /\ slot.col + slot.colSpan - 1 <= project.layout.gridCols
+-
+-ValidateSlotLayoutProjection(project) ==
+-  /\ project.layout.gridRows \in 1..MaxRows
+-  /\ project.layout.gridCols \in 1..MaxCols
+-  /\ project.charts \subseteq ChartIds
+-  /\ project.images \subseteq ImageIds
+-  /\ SlotGeometryValid(project)
+-  /\ LayoutCoverageValid(project)
+-  /\ SlotReferenceIntegrity(project)
+-  /\ ChartOwnershipInvariant(project)
+-
+-(*
+-This slice models only the fields touched by the translated Source Script
+-functions below. Other ProjectObject fields are assumed unchanged and already
+-valid. Therefore a whole-project validation call in the Source Script is
+-represented here by ValidateSlotLayoutProjection for this projection only.
+-*)
+-
+-RemovedSlotIds(project, rows, cols) ==
+-  DOMAIN project.slots \ ExpectedSlotIds(rows, cols)
+-
+-GridShrinkSafe(project, rows, cols) ==
+-  /\ \A slotId \in RemovedSlotIds(project, rows, cols) :
+-       /\ ~slotHasNonDefaultLocalState(project.slots[slotId])
+-       /\ ~project.slots[slotId].hidden
+-       /\ project.slots[slotId].rowSpan = 1
+-       /\ project.slots[slotId].colSpan = 1
+-  /\ \A slotId \in
+-       ((DOMAIN project.slots \ RemovedSlotIds(project, rows, cols))
+-         \cap VisibleSlotIds(project)) :
+-       /\ project.slots[slotId].row + project.slots[slotId].rowSpan - 1 <= rows
+-       /\ project.slots[slotId].col + project.slots[slotId].colSpan - 1 <= cols
+-
+-ResizeSlots(project, rows, cols) ==
+-  [slotId \in ExpectedSlotIds(rows, cols) |->
+-    IF slotId \in DOMAIN project.slots
+-      THEN project.slots[slotId]
+-      ELSE DefaultSlot(slotId)]
+-
+-buildGridResizeCandidate(project, rows, cols) ==
+-  IF ~(rows \in 1..MaxRows /\ cols \in 1..MaxCols)
+-    THEN [accepted |-> FALSE, project |-> project, reason |-> "invalid-grid-size"]
+-  ELSE IF (rows < project.layout.gridRows \/ cols < project.layout.gridCols)
+-          /\ ~GridShrinkSafe(project, rows, cols)
+-    THEN [accepted |-> FALSE, project |-> project, reason |-> "unsafe-shrink"]
+-  ELSE
+-    LET candidate ==
+-      [project EXCEPT
+-        !.layout.gridRows = rows,
+-        !.layout.gridCols = cols,
+-        !.slots = ResizeSlots(project, rows, cols)]
+-    IN
+-      IF ValidateSlotLayoutProjection(candidate)
+-        THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
+-        ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
+-
+-ChartsOwnedBySlotIds(project, slotIds) ==
+-  {project.slots[slotId].content.chart :
+-    slotId \in
+-      {candidateSlotId \in slotIds :
+-        project.slots[candidateSlotId].content.chart # NoChart}}
+-
+-ResetSlotsCandidate(project, slotIds) ==
+-  LET candidateSlots ==
+-    [slotId \in DOMAIN project.slots |->
+-      IF slotId \in slotIds
+-        THEN ResetSlotLocalState(project.slots[slotId])
+-        ELSE project.slots[slotId]]
+-      removedCharts == ChartsOwnedBySlotIds(project, slotIds)
+-  IN
+-    [project EXCEPT
+-      !.slots = candidateSlots,
+-      !.charts = project.charts \ removedCharts]
+-
+-SwapSlotsCandidate(project, sourceId, targetId) ==
+-  LET sourceLocal == SlotLocalState(project.slots[sourceId])
+-      targetLocal == SlotLocalState(project.slots[targetId])
+-      candidateSlots ==
+-        [slotId \in DOMAIN project.slots |->
+-          IF slotId = sourceId
+-            THEN WithSlotLocalState(project.slots[slotId], targetLocal)
+-          ELSE IF slotId = targetId
+-            THEN WithSlotLocalState(project.slots[slotId], sourceLocal)
+-          ELSE project.slots[slotId]]
+-  IN [project EXCEPT !.slots = candidateSlots]
+-
+-RowsOfCells(cells) == {cell.row : cell \in cells}
+-ColsOfCells(cells) == {cell.col : cell \in cells}
+-
+-MinRow(cells) ==
+-  CHOOSE row \in RowsOfCells(cells) :
+-    \A other \in RowsOfCells(cells) : row <= other
+-
+-MaxRow(cells) ==
+-  CHOOSE row \in RowsOfCells(cells) :
+-    \A other \in RowsOfCells(cells) : row >= other
+-
+-MinCol(cells) ==
+-  CHOOSE col \in ColsOfCells(cells) :
+-    \A other \in ColsOfCells(cells) : col <= other
+-
+-MaxCol(cells) ==
+-  CHOOSE col \in ColsOfCells(cells) :
+-    \A other \in ColsOfCells(cells) : col >= other
+-
+-RectangleCells(cells) ==
+-  {Cell(row, col) :
+-    row \in MinRow(cells)..MaxRow(cells),
+-    col \in MinCol(cells)..MaxCol(cells)}
+-
+-SelectedCells(project, slotIds) ==
+-  UNION {SlotCells(project.slots[slotId]) : slotId \in slotIds}
+-
+-NonDefaultSelectedSlotIds(project, slotIds) ==
+-  {slotId \in slotIds :
+-    slotHasNonDefaultLocalState(project.slots[slotId])}
+-
+-MergePrecondition(project, slotIds) ==
+-  /\ slotIds \subseteq VisibleSlotIds(project)
+-  /\ slotIds # {}
+-  /\ Cardinality(slotIds) >= 2
+-  /\ SelectedCells(project, slotIds) =
+-       RectangleCells(SelectedCells(project, slotIds))
+-  /\ Cardinality(NonDefaultSelectedSlotIds(project, slotIds)) <= 1
+-
+-MergeAnchorId(project, slotIds) ==
+-  CHOOSE slotId \in slotIds :
+-    /\ project.slots[slotId].row = MinRow(SelectedCells(project, slotIds))
+-    /\ project.slots[slotId].col = MinCol(SelectedCells(project, slotIds))
+-
+-MergeSourceId(project, slotIds) ==
+-  IF NonDefaultSelectedSlotIds(project, slotIds) = {}
+-    THEN MergeAnchorId(project, slotIds)
+-    ELSE CHOOSE slotId \in NonDefaultSelectedSlotIds(project, slotIds) : TRUE
+-
+-MergeSlotsCandidate(project, slotIds) ==
+-  LET cells == SelectedCells(project, slotIds)
+-      anchorId == MergeAnchorId(project, slotIds)
+-      sourceId == MergeSourceId(project, slotIds)
+-      sourceLocal == SlotLocalState(project.slots[sourceId])
+-      candidateSlots ==
+-        [slotId \in DOMAIN project.slots |->
+-          IF slotId = anchorId
+-            THEN [WithSlotLocalState(project.slots[slotId], sourceLocal) EXCEPT
+-                    !.rowSpan = MaxRow(cells) - MinRow(cells) + 1,
+-                    !.colSpan = MaxCol(cells) - MinCol(cells) + 1,
+-                    !.hidden = FALSE]
+-          ELSE IF SlotBaseCell(project.slots[slotId]) \in cells
+-            THEN [ResetSlotLocalState(project.slots[slotId]) EXCEPT !.hidden = TRUE]
+-          ELSE project.slots[slotId]]
+-      candidate == [project EXCEPT !.slots = candidateSlots]
+-  IN
+-    IF ValidateSlotLayoutProjection(candidate)
+-      THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
+-      ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
+-
+-SplitAnchorPrecondition(project, slotIds) ==
+-  /\ Cardinality(slotIds) = 1
+-  /\ slotIds \subseteq VisibleSlotIds(project)
+-  /\ LET anchorId == CHOOSE slotId \in slotIds : TRUE
+-     IN
+-       \/ project.slots[anchorId].rowSpan > 1
+-       \/ project.slots[anchorId].colSpan > 1
+-
+-SplitSlotsCandidate(project, slotIds) ==
+-  LET anchorId == CHOOSE slotId \in slotIds : TRUE
+-      anchor == project.slots[anchorId]
+-      cells == SlotCells(anchor)
+-      candidateSlots ==
+-        [slotId \in DOMAIN project.slots |->
+-          IF slotId = anchorId
+-            THEN [project.slots[slotId] EXCEPT
+-                    !.rowSpan = 1,
+-                    !.colSpan = 1,
+-                    !.hidden = FALSE]
+-          ELSE IF SlotBaseCell(project.slots[slotId]) \in cells
+-            THEN [ResetSlotLocalState(project.slots[slotId]) EXCEPT
+-                    !.rowSpan = 1,
+-                    !.colSpan = 1,
+-                    !.hidden = FALSE]
+-          ELSE project.slots[slotId]]
+-      candidate == [project EXCEPT !.slots = candidateSlots]
+-  IN
+-    IF ValidateSlotLayoutProjection(candidate)
+-      THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
+-      ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
+-
+-InterfaceSelectionValid(project, selectedSlotId, reconcilePending) ==
+-  \/ reconcilePending
+-  \/ selectedSlotId = NoSlot
+-  \/ selectedSlotId \in VisibleSlotIds(project)
+-
+-TypeOK(project, result) ==
+-  /\ ValidateSlotLayoutProjection(project)
+-  /\ result \in {
+-       "initialized",
+-       "reset-committed", "reset-rejected",
+-       "swap-committed", "swap-rejected",
+-       "grid-committed", "grid-rejected",
+-       "merge-committed", "merge-rejected",
+-       "split-committed", "split-rejected",
+-       "harness-seeded"
+-     }
+-
+-(*
+---algorithm FastFigureSlotCore
+-variables
+-  activeProject = InitialProject,
+-  selectedSlotId = 1,
+-  selectionHintSource = NoSlot,
+-  selectionHintTarget = NoSlot,
+-  reconcilePending = FALSE,
+-  lastResult = "initialized";
+-
+-procedure applySlotsResetAction(slotIds)
+-variables candidate = activeProject;
+-begin
+-ResetResolve:
+-  if slotIds \subseteq DOMAIN activeProject.slots then
+-    candidate := ResetSlotsCandidate(activeProject, slotIds);
+-    if ValidateSlotLayoutProjection(candidate) then
+-      activeProject := candidate ||
+-      lastResult := "reset-committed";
+-    else
+-      lastResult := "reset-rejected";
+-    end if;
+-  else
+-    lastResult := "reset-rejected";
+-  end if;
+-ResetReturn:
+-  return;
+-end procedure;
+-
+-procedure applySlotsSwappedAction(sourceId, targetId)
+-variables
+-  candidate = activeProject,
+-  selectionBefore = selectedSlotId;
+-begin
+-SwapResolve:
+-  if /\ sourceId \in VisibleSlotIds(activeProject)
+-     /\ targetId \in VisibleSlotIds(activeProject)
+-     /\ sourceId # targetId then
+-    candidate := SwapSlotsCandidate(activeProject, sourceId, targetId);
+-    if ValidateSlotLayoutProjection(candidate) then
+-      activeProject := candidate ||
+-      selectionHintSource := sourceId ||
+-      selectionHintTarget := targetId ||
+-      reconcilePending := TRUE ||
+-      lastResult := "swap-committed";
+-    assert selectedSlotId = selectionBefore;
+-    else
+-      lastResult := "swap-rejected";
+-    end if;
+-  else
+-    lastResult := "swap-rejected";
+-  end if;
+-SwapReturn:
+-  return;
+-end procedure;
+-
+-procedure ReconcileInterfaceAfterProjectCommit()
+-variables projectBefore = activeProject;
+-begin
+-ReconcileSwapIdentity:
+-  if selectionHintSource # NoSlot then
+-    if selectedSlotId = selectionHintSource then
+-      selectedSlotId := selectionHintTarget;
+-    elsif selectedSlotId = selectionHintTarget then
+-      selectedSlotId := selectionHintSource;
+-    end if;
+-  end if;
+-ReconcileVisibility:
+-  if selectedSlotId # NoSlot /\ selectedSlotId \notin VisibleSlotIds(activeProject) then
+-    selectedSlotId := NoSlot;
+-  end if;
+-ReconcileDoesNotMutateProject:
+-  assert activeProject = projectBefore;
+-ReconcileClearHints:
+-  selectionHintSource := NoSlot ||
+-  selectionHintTarget := NoSlot ||
+-  reconcilePending := FALSE;
+-ReconcileReturn:
+-  return;
+-end procedure;
+-
+-procedure setLayoutApiGrid(rows, cols)
+-variables resizeResult = [accepted |-> FALSE,
+-                          project |-> activeProject,
+-                          reason |-> "not-run"];
+-begin
+-GridBuildCandidate:
+-  resizeResult := buildGridResizeCandidate(activeProject, rows, cols);
+-GridCommit:
+-  if resizeResult.accepted then
+-    activeProject := resizeResult.project ||
+-    reconcilePending := TRUE ||
+-    lastResult := "grid-committed";
+-  else
+-    lastResult := "grid-rejected";
+-  end if;
+-  return;
+-end procedure;
+-
+-procedure applyGridLayoutAction(rows, cols)
+-begin
+-ApplyGrid:
+-  call setLayoutApiGrid(rows, cols);
+-  return;
+-end procedure;
+-
+-procedure mergeSlots(slotIds)
+-variables mergeResult = [accepted |-> FALSE,
+-                         project |-> activeProject,
+-                         reason |-> "not-run"];
+-begin
+-MergeResolve:
+-  if MergePrecondition(activeProject, slotIds) then
+-    mergeResult := MergeSlotsCandidate(activeProject, slotIds);
+-    if mergeResult.accepted then
+-      activeProject := mergeResult.project ||
+-      reconcilePending := TRUE ||
+-      lastResult := "merge-committed";
+-    else
+-      lastResult := "merge-rejected";
+-    end if;
+-  else
+-    lastResult := "merge-rejected";
+-  end if;
+-MergeReturn:
+-  return;
+-end procedure;
+-
+-procedure splitSlots(slotIds)
+-variables splitResult = [accepted |-> FALSE,
+-                         project |-> activeProject,
+-                         reason |-> "not-run"];
+-begin
+-SplitResolve:
+-  if SplitAnchorPrecondition(activeProject, slotIds) then
+-    splitResult := SplitSlotsCandidate(activeProject, slotIds);
+-    if splitResult.accepted then
+-      activeProject := splitResult.project ||
+-      reconcilePending := TRUE ||
+-      lastResult := "split-committed";
+-    else
+-      lastResult := "split-rejected";
+-    end if;
+-  else
+-    lastResult := "split-rejected";
+-  end if;
+-SplitReturn:
+-  return;
+-end procedure;
+-
+-\* Verification harness only.
+-\* These procedures generate valid representative prestates so TLC can exercise
+-\* the translated Source Script procedures with non-default slot-local state.
+-\* They are not Fast Figure domain commands and do not participate in the
+-\* Source Script -> verification code -> source code mapping.
+-
+-procedure VerificationHarnessSeedChart(slotId, chartId)
+-variables slot = DefaultSlot(1);
+-begin
+-HarnessChart:
+-  if /\ slotId \in VisibleSlotIds(activeProject)
+-     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId])
+-     /\ chartId \in ChartIds \ activeProject.charts then
+-    slot := WithSlotLocalState(
+-              activeProject.slots[slotId],
+-              [SLOT_LOCAL_DEFAULTS EXCEPT !.chart = chartId]);
+-    activeProject :=
+-      [activeProject EXCEPT
+-        !.slots =
+-          [sid \in DOMAIN activeProject.slots |->
+-            IF sid = slotId THEN slot ELSE activeProject.slots[sid]],
+-        !.charts = activeProject.charts \cup {chartId}] ||
+-    lastResult := "harness-seeded";
+-  end if;
+-HarnessChartReturn:
+-  return;
+-end procedure;
+-
+-procedure VerificationHarnessSeedImage(slotId, imageId)
+-variables local = SLOT_LOCAL_DEFAULTS;
+-begin
+-HarnessImage:
+-  if /\ slotId \in VisibleSlotIds(activeProject)
+-     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId])
+-     /\ imageId \in ImageIds then
+-    local := [SLOT_LOCAL_DEFAULTS EXCEPT
+-               !.imageId = imageId,
+-               !.contentType = "image",
+-               !.imageSettings =
+-                 [fit |-> "manual", scale |-> 125, x |-> 40, y |-> 60]];
+-    activeProject :=
+-      [activeProject EXCEPT
+-        !.slots =
+-          [sid \in DOMAIN activeProject.slots |->
+-            IF sid = slotId
+-              THEN WithSlotLocalState(activeProject.slots[sid], local)
+-              ELSE activeProject.slots[sid]],
+-        !.images = activeProject.images \cup {imageId}] ||
+-    lastResult := "harness-seeded";
+-  end if;
+-HarnessImageReturn:
+-  return;
+-end procedure;
+-
+-procedure VerificationHarnessSeedCaption(slotId)
+-variables local = SLOT_LOCAL_DEFAULTS;
+-begin
+-HarnessCaption:
+-  if /\ slotId \in VisibleSlotIds(activeProject)
+-     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId]) then
+-    local := [SLOT_LOCAL_DEFAULTS EXCEPT !.caption = "caption"];
+-    activeProject :=
+-      [activeProject EXCEPT
+-        !.slots =
+-          [sid \in DOMAIN activeProject.slots |->
+-            IF sid = slotId
+-              THEN WithSlotLocalState(activeProject.slots[sid], local)
+-              ELSE activeProject.slots[sid]]] ||
+-    lastResult := "harness-seeded";
+-  end if;
+-HarnessCaptionReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplyResetAndReconcile(slotIds)
+-begin
+-ApplyResetAndReconcileCommit:
+-  call applySlotsResetAction(slotIds);
+-ApplyResetAndReconcileInterface:
+-  call ReconcileInterfaceAfterProjectCommit();
+-ApplyResetAndReconcileReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplySwapAndReconcile(sourceId, targetId)
+-begin
+-ApplySwapAndReconcileCommit:
+-  call applySlotsSwappedAction(sourceId, targetId);
+-ApplySwapAndReconcileInterface:
+-  call ReconcileInterfaceAfterProjectCommit();
+-ApplySwapAndReconcileReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplyGridAndReconcile(rows, cols)
+-begin
+-ApplyGridAndReconcileCommit:
+-  call applyGridLayoutAction(rows, cols);
+-ApplyGridAndReconcileInterface:
+-  call ReconcileInterfaceAfterProjectCommit();
+-ApplyGridAndReconcileReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplyMergeAndReconcile(slotIds)
+-begin
+-ApplyMergeAndReconcileCommit:
+-  call mergeSlots(slotIds);
+-ApplyMergeAndReconcileInterface:
+-  call ReconcileInterfaceAfterProjectCommit();
+-ApplyMergeAndReconcileReturn:
+-  return;
+-end procedure;
+-
+-procedure ApplySplitAndReconcile(slotIds)
+-begin
+-ApplySplitAndReconcileCommit:
+-  call splitSlots(slotIds);
+-ApplySplitAndReconcileInterface:
+-  call ReconcileInterfaceAfterProjectCommit();
+-ApplySplitAndReconcileReturn:
+-  return;
+-end procedure;
+-
+-procedure VerificationHarnessSeedImageSettings(slotId)
+-variables local = SLOT_LOCAL_DEFAULTS;
+-begin
+-HarnessSettings:
+-  if /\ slotId \in VisibleSlotIds(activeProject)
+-     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId]) then
+-    local := [SLOT_LOCAL_DEFAULTS EXCEPT
+-               !.imageSettings =
+-                 [fit |-> "manual", scale |-> 125, x |-> 40, y |-> 60]];
+-    activeProject :=
+-      [activeProject EXCEPT
+-        !.slots =
+-          [sid \in DOMAIN activeProject.slots |->
+-            IF sid = slotId
+-              THEN WithSlotLocalState(activeProject.slots[sid], local)
+-              ELSE activeProject.slots[sid]]] ||
+-    lastResult := "harness-seeded";
+-  end if;
+-HarnessSettingsReturn:
+-  return;
+-end procedure;
+-
+-begin
+-VerificationHarness:
+-  while TRUE do
+-    either
+-      with chosenResetSlotIds \in SUBSET (DOMAIN activeProject.slots) do
+-        call ApplyResetAndReconcile(chosenResetSlotIds);
+-      end with;
+-    or
+-      with chosenSourceId \in VisibleSlotIds(activeProject) do
+-        with chosenTargetId \in VisibleSlotIds(activeProject) \ {chosenSourceId} do
+-          call ApplySwapAndReconcile(chosenSourceId, chosenTargetId);
+-        end with;
+-      end with;
+-    or
+-      with chosenRows \in 1..MaxRows do
+-        with chosenCols \in 1..MaxCols do
+-          call ApplyGridAndReconcile(chosenRows, chosenCols);
+-        end with;
+-      end with;
+-    or
+-      with chosenMergeSlotIds \in SUBSET VisibleSlotIds(activeProject) do
+-        call ApplyMergeAndReconcile(chosenMergeSlotIds);
+-      end with;
+-    or
+-      with chosenSplitSlotIds \in SUBSET VisibleSlotIds(activeProject) do
+-        call ApplySplitAndReconcile(chosenSplitSlotIds);
+-      end with;
+-    or
+-      with chosenChartSlotId \in VisibleSlotIds(activeProject) do
+-        with chosenChartId \in ChartIds do
+-          call VerificationHarnessSeedChart(chosenChartSlotId, chosenChartId);
+-        end with;
+-      end with;
+-    or
+-      with chosenImageSlotId \in VisibleSlotIds(activeProject) do
+-        with chosenImageId \in ImageIds do
+-          call VerificationHarnessSeedImage(chosenImageSlotId, chosenImageId);
+-        end with;
+-      end with;
+-    or
+-      with chosenCaptionSlotId \in VisibleSlotIds(activeProject) do
+-        call VerificationHarnessSeedCaption(chosenCaptionSlotId);
+-      end with;
+-    or
+-      with chosenSettingsSlotId \in VisibleSlotIds(activeProject) do
+-        call VerificationHarnessSeedImageSettings(chosenSettingsSlotId);
+-      end with;
+-    end either;
+-  end while;
+-end algorithm;
+-*)
+-
+-TypeOKSpec ==
+-  TypeOK(activeProject, lastResult)
+-
+-ChartOwnershipInvariantSpec ==
+-  ChartOwnershipInvariant(activeProject)
+-
+-SafetyInvariant ==
+-  ValidateSlotLayoutProjection(activeProject)
+-
+-InterfaceSelectionInvariantSpec ==
+-  InterfaceSelectionValid(activeProject, selectedSlotId, reconcilePending)
 +
-+FFPX serialization은 EFSM 자체가 아니다.
++r22/r8 adds explicit project command coverage. This model does not duplicate
++settings values that do not affect slot/reference/selection invariants. It does
++verify that every persistent commit result represented in this slice maps to a
++declared projectEFSM command.
++*)
 +
-+- export: current validated ProjectObject snapshot을 읽는다.
-+- import: bytes/package를 candidate ProjectObject로 decode/normalize/validate한 뒤 **ProjectObject replacement command**를 project EFSM에 전달한다.
-+- overlay/workspace/selection/pointer state는 FFPX에 포함하지 않는다.
++MaxRows == 3
++MaxCols == 3
++InitialRows == 2
++InitialCols == 2
 +
-+따라서 파일 format code를 interface FSM 또는 EFSM transition table과 결합하지 않는다.
++NoChart == "no-chart"
++NoImage == "no-image"
++NoCaption == "no-caption"
++NoSlot == 0
 +
-+## 6. plan-014가 만든 선행 기반
++ChartIds == {"chart-1", "chart-2"}
++ImageIds == {"image-1"}
 +
-+plan-014에서 다음 순서를 이미 확보했다.
++Cell(row, col) == [row |-> row, col |-> col]
++Cells == {Cell(row, col) : row \in 1..MaxRows, col \in 1..MaxCols}
 +
-+`appFSM.send 완료 → mutation result → renderer invalidation`
++CellSlotId(row, col) == (row - 1) * MaxCols + col
++SlotIds == 1..(MaxRows * MaxCols)
 +
-+이것을 plan-015에서는 다음으로 확장한다.
++SlotRow(slotId) ==
++  CHOOSE row \in 1..MaxRows :
++    \E col \in 1..MaxCols : CellSlotId(row, col) = slotId
 +
-+`projectEFSM commit → interfaceFSM reconcile → renderer invalidation`
++SlotCol(slotId) ==
++  CHOOSE col \in 1..MaxCols :
++    \E row \in 1..MaxRows : CellSlotId(row, col) = slotId
 +
-+즉 plan-014 helper를 폐기하고 새로운 우회 bridge를 만드는 것이 아니라, logical-event completion 경계를 두 FSM 사이의 orchestration으로 확장한다.
++ExpectedSlotIds(rows, cols) ==
++  {CellSlotId(row, col) : row \in 1..rows, col \in 1..cols}
 +
-+## 7. Source Script G 단계 권장 decomposition
++DefaultImageSettings ==
++  [fit |-> "contain", scale |-> 100, x |-> 50, y |-> 50]
 +
-+Source Script에서 먼저 다음 세 책임을 독립적으로 정의하는 것이 적절하다.
++SLOT_LOCAL_DEFAULTS ==
++  [ chart         |-> NoChart,
++    imageId       |-> NoImage,
++    contentType   |-> "graph",
++    imageSettings |-> DefaultImageSettings,
++    caption       |-> NoCaption ]
 +
-+1. **project_efsm**
-+   - activeProject/ProjectObject mutation state machine.
-+   - persistent command, candidate validation, commit, mutation result.
-+2. **interface_fsm**
-+   - lifecycle/workspace/overlay/slot/asset/graph-object runtime state machine.
-+   - project mutation을 직접 수행하지 않고 command/result를 orchestration과 교환.
-+3. **application orchestration**
-+   - interface intent를 project command로 dispatch.
-+   - project result를 interface reconciliation에 전달.
-+   - 최종 상태에서 renderer invalidation 수행.
++DefaultContent ==
++  [ chart         |-> SLOT_LOCAL_DEFAULTS.chart,
++    imageId       |-> SLOT_LOCAL_DEFAULTS.imageId,
++    contentType   |-> SLOT_LOCAL_DEFAULTS.contentType,
++    imageSettings |-> SLOT_LOCAL_DEFAULTS.imageSettings ]
 +
-+기존 `application_fsm.py`의 혼합 의미를 그대로 보존하는 별도 legacy FSM은 만들지 않는다.
++DefaultSlot(slotId) ==
++  [ id       |-> slotId,
++    row      |-> SlotRow(slotId),
++    col      |-> SlotCol(slotId),
++    rowSpan  |-> 1,
++    colSpan  |-> 1,
++    hidden   |-> FALSE,
++    content  |-> DefaultContent,
++    caption  |-> SLOT_LOCAL_DEFAULTS.caption ]
 +
-+## 8. 완료 판정
++InitialSlots ==
++  [slotId \in ExpectedSlotIds(InitialRows, InitialCols) |->
++    DefaultSlot(slotId)]
 +
-+F 단계 감사 결과, 현재 구조는 영속 FFPX authority 자체가 UI state에 복제된 것은 아니지만, **영속 mutation action의 실행 책임이 interface region인 workspace에 결합되어 있어 EFSM/UI-FSM 분리가 완료된 구조는 아니다.**
++InitialProject ==
++  [ layout |-> [gridRows |-> InitialRows, gridCols |-> InitialCols],
++    slots  |-> InitialSlots,
++    charts |-> {},
++    images |-> {} ]
 +
-+다음 G 단계에서는 이 ownership을 Source Script 수준에서 먼저 분리해야 한다. Source Code의 class 이름 변경이나 파일 이동부터 시작해서는 안 된다.
++SlotLocalState(slot) ==
++  [ chart         |-> slot.content.chart,
++    imageId       |-> slot.content.imageId,
++    contentType   |-> slot.content.contentType,
++    imageSettings |-> slot.content.imageSettings,
++    caption       |-> slot.caption ]
++
++WithSlotLocalState(slot, localState) ==
++  [slot EXCEPT
++    !.content.chart = localState.chart,
++    !.content.imageId = localState.imageId,
++    !.content.contentType = localState.contentType,
++    !.content.imageSettings = localState.imageSettings,
++    !.caption = localState.caption]
++
++ResetSlotLocalState(slot) ==
++  WithSlotLocalState(slot, SLOT_LOCAL_DEFAULTS)
++
++slotHasNonDefaultLocalState(slot) ==
++  SlotLocalState(slot) # SLOT_LOCAL_DEFAULTS
++
++VisibleSlotIds(project) ==
++  {slotId \in DOMAIN project.slots : ~project.slots[slotId].hidden}
++
++ActiveCells(project) ==
++  {Cell(row, col) :
++    row \in 1..project.layout.gridRows,
++    col \in 1..project.layout.gridCols}
++
++SlotCells(slot) ==
++  {Cell(row, col) :
++    row \in slot.row..(slot.row + slot.rowSpan - 1),
++    col \in slot.col..(slot.col + slot.colSpan - 1)}
++
++CoveringVisibleSlots(project, cell) ==
++  {slotId \in VisibleSlotIds(project) :
++    cell \in SlotCells(project.slots[slotId])}
++
++SlotBaseCell(slot) == Cell(slot.row, slot.col)
++
++LayoutCoverageValid(project) ==
++  /\ \A cell \in ActiveCells(project) :
++       Cardinality(CoveringVisibleSlots(project, cell)) = 1
++  /\ \A slotId \in DOMAIN project.slots :
++       LET covering == CoveringVisibleSlots(
++                         project,
++                         SlotBaseCell(project.slots[slotId]))
++       IN
++         IF project.slots[slotId].hidden
++           THEN /\ Cardinality(covering) = 1
++                /\ slotId \notin covering
++           ELSE covering = {slotId}
++
++SlotReferenceIntegrity(project) ==
++  \A slotId \in DOMAIN project.slots :
++    LET local == SlotLocalState(project.slots[slotId])
++    IN
++      /\ (local.chart = NoChart \/ local.chart \in project.charts)
++      /\ (local.imageId = NoImage \/ local.imageId \in project.images)
++      /\ ~(local.chart # NoChart /\ local.imageId # NoImage)
++      /\ (local.chart # NoChart => local.contentType = "graph")
++      /\ (local.imageId # NoImage => local.contentType = "image")
++
++ChartOwnershipInvariant(project) ==
++  \A chartId \in project.charts :
++    Cardinality(
++      {slotId \in DOMAIN project.slots :
++        project.slots[slotId].content.chart = chartId}
++    ) = 1
++
++SlotGeometryValid(project) ==
++  /\ DOMAIN project.slots =
++       ExpectedSlotIds(project.layout.gridRows, project.layout.gridCols)
++  /\ \A slotId \in DOMAIN project.slots :
++       LET slot == project.slots[slotId]
++       IN
++         /\ slot.id = slotId
++         /\ slot.row = SlotRow(slotId)
++         /\ slot.col = SlotCol(slotId)
++         /\ slot.rowSpan >= 1
++         /\ slot.colSpan >= 1
++         /\ slot.row + slot.rowSpan - 1 <= project.layout.gridRows
++         /\ slot.col + slot.colSpan - 1 <= project.layout.gridCols
++
++ValidateSlotLayoutProjection(project) ==
++  /\ project.layout.gridRows \in 1..MaxRows
++  /\ project.layout.gridCols \in 1..MaxCols
++  /\ project.charts \subseteq ChartIds
++  /\ project.images \subseteq ImageIds
++  /\ SlotGeometryValid(project)
++  /\ LayoutCoverageValid(project)
++  /\ SlotReferenceIntegrity(project)
++  /\ ChartOwnershipInvariant(project)
++
++(*
++This slice models only the fields touched by the translated Source Script
++functions below. Other ProjectObject fields are assumed unchanged and already
++valid. Therefore a whole-project validation call in the Source Script is
++represented here by ValidateSlotLayoutProjection for this projection only.
++*)
++
++RemovedSlotIds(project, rows, cols) ==
++  DOMAIN project.slots \ ExpectedSlotIds(rows, cols)
++
++GridShrinkSafe(project, rows, cols) ==
++  /\ \A slotId \in RemovedSlotIds(project, rows, cols) :
++       /\ ~slotHasNonDefaultLocalState(project.slots[slotId])
++       /\ ~project.slots[slotId].hidden
++       /\ project.slots[slotId].rowSpan = 1
++       /\ project.slots[slotId].colSpan = 1
++  /\ \A slotId \in
++       ((DOMAIN project.slots \ RemovedSlotIds(project, rows, cols))
++         \cap VisibleSlotIds(project)) :
++       /\ project.slots[slotId].row + project.slots[slotId].rowSpan - 1 <= rows
++       /\ project.slots[slotId].col + project.slots[slotId].colSpan - 1 <= cols
++
++ResizeSlots(project, rows, cols) ==
++  [slotId \in ExpectedSlotIds(rows, cols) |->
++    IF slotId \in DOMAIN project.slots
++      THEN project.slots[slotId]
++      ELSE DefaultSlot(slotId)]
++
++buildGridResizeCandidate(project, rows, cols) ==
++  IF ~(rows \in 1..MaxRows /\ cols \in 1..MaxCols)
++    THEN [accepted |-> FALSE, project |-> project, reason |-> "invalid-grid-size"]
++  ELSE IF (rows < project.layout.gridRows \/ cols < project.layout.gridCols)
++          /\ ~GridShrinkSafe(project, rows, cols)
++    THEN [accepted |-> FALSE, project |-> project, reason |-> "unsafe-shrink"]
++  ELSE
++    LET candidate ==
++      [project EXCEPT
++        !.layout.gridRows = rows,
++        !.layout.gridCols = cols,
++        !.slots = ResizeSlots(project, rows, cols)]
++    IN
++      IF ValidateSlotLayoutProjection(candidate)
++        THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
++        ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
++
++ChartsOwnedBySlotIds(project, slotIds) ==
++  {project.slots[slotId].content.chart :
++    slotId \in
++      {candidateSlotId \in slotIds :
++        project.slots[candidateSlotId].content.chart # NoChart}}
++
++ResetSlotsCandidate(project, slotIds) ==
++  LET candidateSlots ==
++    [slotId \in DOMAIN project.slots |->
++      IF slotId \in slotIds
++        THEN ResetSlotLocalState(project.slots[slotId])
++        ELSE project.slots[slotId]]
++      removedCharts == ChartsOwnedBySlotIds(project, slotIds)
++  IN
++    [project EXCEPT
++      !.slots = candidateSlots,
++      !.charts = project.charts \ removedCharts]
++
++SwapSlotsCandidate(project, sourceId, targetId) ==
++  LET sourceLocal == SlotLocalState(project.slots[sourceId])
++      targetLocal == SlotLocalState(project.slots[targetId])
++      candidateSlots ==
++        [slotId \in DOMAIN project.slots |->
++          IF slotId = sourceId
++            THEN WithSlotLocalState(project.slots[slotId], targetLocal)
++          ELSE IF slotId = targetId
++            THEN WithSlotLocalState(project.slots[slotId], sourceLocal)
++          ELSE project.slots[slotId]]
++  IN [project EXCEPT !.slots = candidateSlots]
++
++RowsOfCells(cells) == {cell.row : cell \in cells}
++ColsOfCells(cells) == {cell.col : cell \in cells}
++
++MinRow(cells) ==
++  CHOOSE row \in RowsOfCells(cells) :
++    \A other \in RowsOfCells(cells) : row <= other
++
++MaxRow(cells) ==
++  CHOOSE row \in RowsOfCells(cells) :
++    \A other \in RowsOfCells(cells) : row >= other
++
++MinCol(cells) ==
++  CHOOSE col \in ColsOfCells(cells) :
++    \A other \in ColsOfCells(cells) : col <= other
++
++MaxCol(cells) ==
++  CHOOSE col \in ColsOfCells(cells) :
++    \A other \in ColsOfCells(cells) : col >= other
++
++RectangleCells(cells) ==
++  {Cell(row, col) :
++    row \in MinRow(cells)..MaxRow(cells),
++    col \in MinCol(cells)..MaxCol(cells)}
++
++SelectedCells(project, slotIds) ==
++  UNION {SlotCells(project.slots[slotId]) : slotId \in slotIds}
++
++NonDefaultSelectedSlotIds(project, slotIds) ==
++  {slotId \in slotIds :
++    slotHasNonDefaultLocalState(project.slots[slotId])}
++
++MergePrecondition(project, slotIds) ==
++  /\ slotIds \subseteq VisibleSlotIds(project)
++  /\ slotIds # {}
++  /\ Cardinality(slotIds) >= 2
++  /\ SelectedCells(project, slotIds) =
++       RectangleCells(SelectedCells(project, slotIds))
++  /\ Cardinality(NonDefaultSelectedSlotIds(project, slotIds)) <= 1
++
++MergeAnchorId(project, slotIds) ==
++  CHOOSE slotId \in slotIds :
++    /\ project.slots[slotId].row = MinRow(SelectedCells(project, slotIds))
++    /\ project.slots[slotId].col = MinCol(SelectedCells(project, slotIds))
++
++MergeSourceId(project, slotIds) ==
++  IF NonDefaultSelectedSlotIds(project, slotIds) = {}
++    THEN MergeAnchorId(project, slotIds)
++    ELSE CHOOSE slotId \in NonDefaultSelectedSlotIds(project, slotIds) : TRUE
++
++MergeSlotsCandidate(project, slotIds) ==
++  LET cells == SelectedCells(project, slotIds)
++      anchorId == MergeAnchorId(project, slotIds)
++      sourceId == MergeSourceId(project, slotIds)
++      sourceLocal == SlotLocalState(project.slots[sourceId])
++      candidateSlots ==
++        [slotId \in DOMAIN project.slots |->
++          IF slotId = anchorId
++            THEN [WithSlotLocalState(project.slots[slotId], sourceLocal) EXCEPT
++                    !.rowSpan = MaxRow(cells) - MinRow(cells) + 1,
++                    !.colSpan = MaxCol(cells) - MinCol(cells) + 1,
++                    !.hidden = FALSE]
++          ELSE IF SlotBaseCell(project.slots[slotId]) \in cells
++            THEN [ResetSlotLocalState(project.slots[slotId]) EXCEPT !.hidden = TRUE]
++          ELSE project.slots[slotId]]
++      candidate == [project EXCEPT !.slots = candidateSlots]
++  IN
++    IF ValidateSlotLayoutProjection(candidate)
++      THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
++      ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
++
++SplitAnchorPrecondition(project, slotIds) ==
++  /\ Cardinality(slotIds) = 1
++  /\ slotIds \subseteq VisibleSlotIds(project)
++  /\ LET anchorId == CHOOSE slotId \in slotIds : TRUE
++     IN
++       \/ project.slots[anchorId].rowSpan > 1
++       \/ project.slots[anchorId].colSpan > 1
++
++SplitSlotsCandidate(project, slotIds) ==
++  LET anchorId == CHOOSE slotId \in slotIds : TRUE
++      anchor == project.slots[anchorId]
++      cells == SlotCells(anchor)
++      candidateSlots ==
++        [slotId \in DOMAIN project.slots |->
++          IF slotId = anchorId
++            THEN [project.slots[slotId] EXCEPT
++                    !.rowSpan = 1,
++                    !.colSpan = 1,
++                    !.hidden = FALSE]
++          ELSE IF SlotBaseCell(project.slots[slotId]) \in cells
++            THEN [ResetSlotLocalState(project.slots[slotId]) EXCEPT
++                    !.rowSpan = 1,
++                    !.colSpan = 1,
++                    !.hidden = FALSE]
++          ELSE project.slots[slotId]]
++      candidate == [project EXCEPT !.slots = candidateSlots]
++  IN
++    IF ValidateSlotLayoutProjection(candidate)
++      THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
++      ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
++
++InterfaceSelectionValid(project, selectedSlotId, reconcilePending) ==
++  \/ reconcilePending
++  \/ selectedSlotId = NoSlot
++  \/ selectedSlotId \in VisibleSlotIds(project)
++
++ModeledProjectCommands == {
++  "SLOTS_RESET",
++  "SLOTS_SWAPPED",
++  "GRID_LAYOUT_CHANGED",
++  "SLOTS_MERGED",
++  "SLOTS_SPLIT"
++}
++
++CommittedProjectResults == {
++  "reset-committed",
++  "swap-committed",
++  "grid-committed",
++  "merge-committed",
++  "split-committed"
++}
++
++CommittedResultCommand(result) ==
++  CASE result = "reset-committed" -> "SLOTS_RESET"
++    [] result = "swap-committed" -> "SLOTS_SWAPPED"
++    [] result = "grid-committed" -> "GRID_LAYOUT_CHANGED"
++    [] result = "merge-committed" -> "SLOTS_MERGED"
++    [] result = "split-committed" -> "SLOTS_SPLIT"
++    [] OTHER -> "none"
++
++ProjectCommandOwnershipInvariant(result) ==
++  result in CommittedProjectResults =>
++    CommittedResultCommand(result) in ModeledProjectCommands
++
++TypeOK(project, result) ==
++  /\ ValidateSlotLayoutProjection(project)
++  /\ result \in {
++       "initialized",
++       "reset-committed", "reset-rejected",
++       "swap-committed", "swap-rejected",
++       "grid-committed", "grid-rejected",
++       "merge-committed", "merge-rejected",
++       "split-committed", "split-rejected",
++       "harness-seeded"
++     }
++
++(*
++--algorithm FastFigureSlotCore
++variables
++  activeProject = InitialProject,
++  selectedSlotId = 1,
++  selectionHintSource = NoSlot,
++  selectionHintTarget = NoSlot,
++  reconcilePending = FALSE,
++  lastResult = "initialized";
++
++procedure applySlotsResetAction(slotIds)
++variables candidate = activeProject;
++begin
++ResetResolve:
++  if slotIds \subseteq DOMAIN activeProject.slots then
++    candidate := ResetSlotsCandidate(activeProject, slotIds);
++    if ValidateSlotLayoutProjection(candidate) then
++      activeProject := candidate ||
++      lastResult := "reset-committed";
++    else
++      lastResult := "reset-rejected";
++    end if;
++  else
++    lastResult := "reset-rejected";
++  end if;
++ResetReturn:
++  return;
++end procedure;
++
++procedure applySlotsSwappedAction(sourceId, targetId)
++variables
++  candidate = activeProject,
++  selectionBefore = selectedSlotId;
++begin
++SwapResolve:
++  if /\ sourceId \in VisibleSlotIds(activeProject)
++     /\ targetId \in VisibleSlotIds(activeProject)
++     /\ sourceId # targetId then
++    candidate := SwapSlotsCandidate(activeProject, sourceId, targetId);
++    if ValidateSlotLayoutProjection(candidate) then
++      activeProject := candidate ||
++      selectionHintSource := sourceId ||
++      selectionHintTarget := targetId ||
++      reconcilePending := TRUE ||
++      lastResult := "swap-committed";
++    assert selectedSlotId = selectionBefore;
++    else
++      lastResult := "swap-rejected";
++    end if;
++  else
++    lastResult := "swap-rejected";
++  end if;
++SwapReturn:
++  return;
++end procedure;
++
++procedure ReconcileInterfaceAfterProjectCommit()
++variables projectBefore = activeProject;
++begin
++ReconcileSwapIdentity:
++  if selectionHintSource # NoSlot then
++    if selectedSlotId = selectionHintSource then
++      selectedSlotId := selectionHintTarget;
++    elsif selectedSlotId = selectionHintTarget then
++      selectedSlotId := selectionHintSource;
++    end if;
++  end if;
++ReconcileVisibility:
++  if selectedSlotId # NoSlot /\ selectedSlotId \notin VisibleSlotIds(activeProject) then
++    selectedSlotId := NoSlot;
++  end if;
++ReconcileDoesNotMutateProject:
++  assert activeProject = projectBefore;
++ReconcileClearHints:
++  selectionHintSource := NoSlot ||
++  selectionHintTarget := NoSlot ||
++  reconcilePending := FALSE;
++ReconcileReturn:
++  return;
++end procedure;
++
++procedure setLayoutApiGrid(rows, cols)
++variables resizeResult = [accepted |-> FALSE,
++                          project |-> activeProject,
++                          reason |-> "not-run"];
++begin
++GridBuildCandidate:
++  resizeResult := buildGridResizeCandidate(activeProject, rows, cols);
++GridCommit:
++  if resizeResult.accepted then
++    activeProject := resizeResult.project ||
++    reconcilePending := TRUE ||
++    lastResult := "grid-committed";
++  else
++    lastResult := "grid-rejected";
++  end if;
++  return;
++end procedure;
++
++procedure applyGridLayoutAction(rows, cols)
++begin
++ApplyGrid:
++  call setLayoutApiGrid(rows, cols);
++  return;
++end procedure;
++
++procedure mergeSlots(slotIds)
++variables mergeResult = [accepted |-> FALSE,
++                         project |-> activeProject,
++                         reason |-> "not-run"];
++begin
++MergeResolve:
++  if MergePrecondition(activeProject, slotIds) then
++    mergeResult := MergeSlotsCandidate(activeProject, slotIds);
++    if mergeResult.accepted then
++      activeProject := mergeResult.project ||
++      reconcilePending := TRUE ||
++      lastResult := "merge-committed";
++    else
++      lastResult := "merge-rejected";
++    end if;
++  else
++    lastResult := "merge-rejected";
++  end if;
++MergeReturn:
++  return;
++end procedure;
++
++procedure splitSlots(slotIds)
++variables splitResult = [accepted |-> FALSE,
++                         project |-> activeProject,
++                         reason |-> "not-run"];
++begin
++SplitResolve:
++  if SplitAnchorPrecondition(activeProject, slotIds) then
++    splitResult := SplitSlotsCandidate(activeProject, slotIds);
++    if splitResult.accepted then
++      activeProject := splitResult.project ||
++      reconcilePending := TRUE ||
++      lastResult := "split-committed";
++    else
++      lastResult := "split-rejected";
++    end if;
++  else
++    lastResult := "split-rejected";
++  end if;
++SplitReturn:
++  return;
++end procedure;
++
++\* Verification harness only.
++\* These procedures generate valid representative prestates so TLC can exercise
++\* the translated Source Script procedures with non-default slot-local state.
++\* They are not Fast Figure domain commands and do not participate in the
++\* Source Script -> verification code -> source code mapping.
++
++procedure VerificationHarnessSeedChart(slotId, chartId)
++variables slot = DefaultSlot(1);
++begin
++HarnessChart:
++  if /\ slotId \in VisibleSlotIds(activeProject)
++     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId])
++     /\ chartId \in ChartIds \ activeProject.charts then
++    slot := WithSlotLocalState(
++              activeProject.slots[slotId],
++              [SLOT_LOCAL_DEFAULTS EXCEPT !.chart = chartId]);
++    activeProject :=
++      [activeProject EXCEPT
++        !.slots =
++          [sid \in DOMAIN activeProject.slots |->
++            IF sid = slotId THEN slot ELSE activeProject.slots[sid]],
++        !.charts = activeProject.charts \cup {chartId}] ||
++    lastResult := "harness-seeded";
++  end if;
++HarnessChartReturn:
++  return;
++end procedure;
++
++procedure VerificationHarnessSeedImage(slotId, imageId)
++variables local = SLOT_LOCAL_DEFAULTS;
++begin
++HarnessImage:
++  if /\ slotId \in VisibleSlotIds(activeProject)
++     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId])
++     /\ imageId \in ImageIds then
++    local := [SLOT_LOCAL_DEFAULTS EXCEPT
++               !.imageId = imageId,
++               !.contentType = "image",
++               !.imageSettings =
++                 [fit |-> "manual", scale |-> 125, x |-> 40, y |-> 60]];
++    activeProject :=
++      [activeProject EXCEPT
++        !.slots =
++          [sid \in DOMAIN activeProject.slots |->
++            IF sid = slotId
++              THEN WithSlotLocalState(activeProject.slots[sid], local)
++              ELSE activeProject.slots[sid]],
++        !.images = activeProject.images \cup {imageId}] ||
++    lastResult := "harness-seeded";
++  end if;
++HarnessImageReturn:
++  return;
++end procedure;
++
++procedure VerificationHarnessSeedCaption(slotId)
++variables local = SLOT_LOCAL_DEFAULTS;
++begin
++HarnessCaption:
++  if /\ slotId \in VisibleSlotIds(activeProject)
++     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId]) then
++    local := [SLOT_LOCAL_DEFAULTS EXCEPT !.caption = "caption"];
++    activeProject :=
++      [activeProject EXCEPT
++        !.slots =
++          [sid \in DOMAIN activeProject.slots |->
++            IF sid = slotId
++              THEN WithSlotLocalState(activeProject.slots[sid], local)
++              ELSE activeProject.slots[sid]]] ||
++    lastResult := "harness-seeded";
++  end if;
++HarnessCaptionReturn:
++  return;
++end procedure;
++
++procedure ApplyResetAndReconcile(slotIds)
++begin
++ApplyResetAndReconcileCommit:
++  call applySlotsResetAction(slotIds);
++ApplyResetAndReconcileInterface:
++  call ReconcileInterfaceAfterProjectCommit();
++ApplyResetAndReconcileReturn:
++  return;
++end procedure;
++
++procedure ApplySwapAndReconcile(sourceId, targetId)
++begin
++ApplySwapAndReconcileCommit:
++  call applySlotsSwappedAction(sourceId, targetId);
++ApplySwapAndReconcileInterface:
++  call ReconcileInterfaceAfterProjectCommit();
++ApplySwapAndReconcileReturn:
++  return;
++end procedure;
++
++procedure ApplyGridAndReconcile(rows, cols)
++begin
++ApplyGridAndReconcileCommit:
++  call applyGridLayoutAction(rows, cols);
++ApplyGridAndReconcileInterface:
++  call ReconcileInterfaceAfterProjectCommit();
++ApplyGridAndReconcileReturn:
++  return;
++end procedure;
++
++procedure ApplyMergeAndReconcile(slotIds)
++begin
++ApplyMergeAndReconcileCommit:
++  call mergeSlots(slotIds);
++ApplyMergeAndReconcileInterface:
++  call ReconcileInterfaceAfterProjectCommit();
++ApplyMergeAndReconcileReturn:
++  return;
++end procedure;
++
++procedure ApplySplitAndReconcile(slotIds)
++begin
++ApplySplitAndReconcileCommit:
++  call splitSlots(slotIds);
++ApplySplitAndReconcileInterface:
++  call ReconcileInterfaceAfterProjectCommit();
++ApplySplitAndReconcileReturn:
++  return;
++end procedure;
++
++procedure VerificationHarnessSeedImageSettings(slotId)
++variables local = SLOT_LOCAL_DEFAULTS;
++begin
++HarnessSettings:
++  if /\ slotId \in VisibleSlotIds(activeProject)
++     /\ ~slotHasNonDefaultLocalState(activeProject.slots[slotId]) then
++    local := [SLOT_LOCAL_DEFAULTS EXCEPT
++               !.imageSettings =
++                 [fit |-> "manual", scale |-> 125, x |-> 40, y |-> 60]];
++    activeProject :=
++      [activeProject EXCEPT
++        !.slots =
++          [sid \in DOMAIN activeProject.slots |->
++            IF sid = slotId
++              THEN WithSlotLocalState(activeProject.slots[sid], local)
++              ELSE activeProject.slots[sid]]] ||
++    lastResult := "harness-seeded";
++  end if;
++HarnessSettingsReturn:
++  return;
++end procedure;
++
++begin
++VerificationHarness:
++  while TRUE do
++    either
++      with chosenResetSlotIds \in SUBSET (DOMAIN activeProject.slots) do
++        call ApplyResetAndReconcile(chosenResetSlotIds);
++      end with;
++    or
++      with chosenSourceId \in VisibleSlotIds(activeProject) do
++        with chosenTargetId \in VisibleSlotIds(activeProject) \ {chosenSourceId} do
++          call ApplySwapAndReconcile(chosenSourceId, chosenTargetId);
++        end with;
++      end with;
++    or
++      with chosenRows \in 1..MaxRows do
++        with chosenCols \in 1..MaxCols do
++          call ApplyGridAndReconcile(chosenRows, chosenCols);
++        end with;
++      end with;
++    or
++      with chosenMergeSlotIds \in SUBSET VisibleSlotIds(activeProject) do
++        call ApplyMergeAndReconcile(chosenMergeSlotIds);
++      end with;
++    or
++      with chosenSplitSlotIds \in SUBSET VisibleSlotIds(activeProject) do
++        call ApplySplitAndReconcile(chosenSplitSlotIds);
++      end with;
++    or
++      with chosenChartSlotId \in VisibleSlotIds(activeProject) do
++        with chosenChartId \in ChartIds do
++          call VerificationHarnessSeedChart(chosenChartSlotId, chosenChartId);
++        end with;
++      end with;
++    or
++      with chosenImageSlotId \in VisibleSlotIds(activeProject) do
++        with chosenImageId \in ImageIds do
++          call VerificationHarnessSeedImage(chosenImageSlotId, chosenImageId);
++        end with;
++      end with;
++    or
++      with chosenCaptionSlotId \in VisibleSlotIds(activeProject) do
++        call VerificationHarnessSeedCaption(chosenCaptionSlotId);
++      end with;
++    or
++      with chosenSettingsSlotId \in VisibleSlotIds(activeProject) do
++        call VerificationHarnessSeedImageSettings(chosenSettingsSlotId);
++      end with;
++    end either;
++  end while;
++end algorithm;
++*)
++
++TypeOKSpec ==
++  TypeOK(activeProject, lastResult)
++
++ChartOwnershipInvariantSpec ==
++  ChartOwnershipInvariant(activeProject)
++
++SafetyInvariant ==
++  ValidateSlotLayoutProjection(activeProject)
++
++InterfaceSelectionInvariantSpec ==
++  InterfaceSelectionValid(activeProject, selectedSlotId, reconcilePending)
++
++ProjectCommandOwnershipInvariantSpec ==
++  ProjectCommandOwnershipInvariant(lastResult)
+ 
+ =============================================================================
+diff --git a/verification/FastFigureSlotCore.cfg b/verification/FastFigureSlotCore.cfg
+--- a/verification/FastFigureSlotCore.cfg
++++ b/verification/FastFigureSlotCore.cfg
+@@ -4,3 +4,4 @@
+ INVARIANT SafetyInvariant
+ INVARIANT ChartOwnershipInvariantSpec
+ INVARIANT InterfaceSelectionInvariantSpec
++INVARIANT ProjectCommandOwnershipInvariantSpec
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -18,13 +18,13 @@
+       "closure_review": "agent_space/reviews/review-20261014-012-sourcescript-closure-r22.md"
+     },
+     "verification-model": {
+-      "revision": 19,
+-      "status": "stale",
+-      "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:adfe7604a801893eaa305cda72cf62fb701cb256b992da319d44322b447f5382",
+-      "derived_from": {
+-        "source-script": "sha256:20dcdebc56a6baa471e2e5b4996e7d6a13cdc5a910247eb20e1e7e50e1614563",
+-        "pseudocode": "sha256:bc89a32a69f9dd06fb7d1b982e2eceb47ce7d89274c526f18eac351e4b469eb2"
++      "revision": 20,
++      "status": "current",
++      "path_rule": "verification/**/*.{tla,cfg}",
++      "fingerprint": "sha256:44093f811a24d2f2054ecbc6b2b038b6092f400358851a84575cbfb3a35aeb29",
++      "derived_from": {
++        "source-script": "sha256:65f70d9060b0e2a802f1bc595058548ed350a2631e94069e4776af78df48bf2a",
++        "pseudocode": "sha256:532d65420b932b45f503a05aa457f515779619b934e25ffd535c89ec58443d12"
+       },
+       "tlc": "pending",
+       "validation_review": null
 diff --git a/agent_space/patches/20261014-021.md b/agent_space/patches/20261014-021.md
 new file mode 100644
 --- /dev/null
 +++ b/agent_space/patches/20261014-021.md
-@@ -0,0 +1,28 @@
-+# 20261014-021 — Audit FFPX EFSM and interface FSM responsibilities
+@@ -0,0 +1,32 @@
++# 20261014-021 — Derive verification r20 from pseudocode r8
 +
 +## 목적
 +
-+plan-015 F 단계로 현재 Source Script와 application runtime의 state/mutation/read/renderer 책임을 실제 의미 기준으로 분류한다.
++Source Script r22 / pseudocode r8의 explicit project command ownership을 verification model에 반영한다.
 +
-+## 핵심 확인
++## 변경
 +
-+- activeProject는 이미 단일 FFPX ProjectObject authority다.
-+- 현재 appFSM state vector는 lifecycle/workspace/overlay/selection 등 interface/runtime state다.
-+- 문제는 FFPX persistent mutation action이 workspace region event에 결합되어 있다는 점이다.
-+- plan-014의 send-completion renderer boundary는 두 FSM 분리의 orchestration 기반으로 재사용할 수 있다.
++- Slot Core:
++  - reset/swap/grid/merge/split commit result를 대응 projectEFSM command에 매핑한다.
++  - 모든 modeled persistent commit이 declared project command에 귀속되는 ownership invariant를 추가한다.
++- Interaction Core:
++  - CSV 생성, graph-object 변경, project node move, slot data connection commit result를 대응 project command에 매핑한다.
++  - 해당 slice의 project command ownership invariant를 추가한다.
++- 두 cfg에 새 ownership invariant를 등록한다.
++- verification r20 lineage를 Source Script r22 / pseudocode r8로 갱신하고 TLC는 pending으로 둔다.
++
++## 추상화와 생략
++
++image settings, caption settings, label settings, layout style, export settings는 이 두 verification slice가 검사하는 slot/reference/selection/tree invariant를 변경하지 않는다. 별도 authoritative/shared state도 만들지 않으므로 독립 verification state로 복제하지 않는다.
++
++이 생략은 해당 설정 값 자체의 범위 validation을 TLC로 증명한다는 뜻이 아니다. 이후 그 설정이 reference, selection, lifecycle 또는 다른 modeled invariant에 영향을 주게 되면 verification model에 다시 포함해야 한다.
 +
 +## 선택 이유
 +
-+class 이름을 먼저 나누거나 모든 UI-local state를 새 FSM에 넣는 방식이 아니라, authority와 transition 의미를 기준으로 분리 범위를 먼저 닫아야 Source Script → PlusCal → Source Code 구조가 일관된다.
++새 command 이름만 확인하기 위해 동일 project settings 전체를 verification state에 복제하면 상태공간과 중복 authority 표현만 늘어난다. 기존 commit result에서 command ownership을 파생 invariant로 검사하는 방식이 r22의 책임 경계를 보존하면서 최소 복잡도 원칙에 맞는다.
 +
-+## 기각한 방향
++## 기각
 +
-+- 현재 appFSM 전체를 FFPX EFSM으로 간주.
-+- activeProject와 별도 project-state copy를 EFSM 내부에 추가.
-+- 모든 React local state를 interface FSM으로 승격.
-+- serialization 자체를 EFSM으로 간주.
-+- legacy appFSM과 새 두 FSM을 장기간 병행하는 bridge.
-+
-+## 후속
-+
-+다음 plan-015 G 단계에서 project_efsm / interface_fsm / application orchestration의 Source Script 책임과 명령 순서를 정의한다. 이 감사 patch는 application 의미 파일을 변경하지 않으므로 development revision을 올리지 않는다.
++- 모든 r22 command payload를 상태 변수로 추가: 현재 property와 독립적인 상태를 중복 모델링한다.
++- 기존 r19 TLC 결과 재사용: r20은 새 r22/r8 lineage이므로 허용하지 않는다.
++- Source Code 진행: TLC gate 통과 전에는 금지한다.

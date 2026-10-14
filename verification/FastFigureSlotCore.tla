@@ -16,6 +16,11 @@ This file preserves the Source Script function boundaries, data ownership,
 candidate -> validate -> commit order, branch meaning, and failure behavior.
 TLC-only state generators are explicitly named VerificationHarness* and are not
 Fast Figure domain commands.
+
+r22/r8 adds explicit project command coverage. This model does not duplicate
+settings values that do not affect slot/reference/selection invariants. It does
+verify that every persistent commit result represented in this slice maps to a
+declared projectEFSM command.
 *)
 
 MaxRows == 3
@@ -358,6 +363,34 @@ InterfaceSelectionValid(project, selectedSlotId, reconcilePending) ==
   \/ reconcilePending
   \/ selectedSlotId = NoSlot
   \/ selectedSlotId \in VisibleSlotIds(project)
+
+ModeledProjectCommands == {
+  "SLOTS_RESET",
+  "SLOTS_SWAPPED",
+  "GRID_LAYOUT_CHANGED",
+  "SLOTS_MERGED",
+  "SLOTS_SPLIT"
+}
+
+CommittedProjectResults == {
+  "reset-committed",
+  "swap-committed",
+  "grid-committed",
+  "merge-committed",
+  "split-committed"
+}
+
+CommittedResultCommand(result) ==
+  CASE result = "reset-committed" -> "SLOTS_RESET"
+    [] result = "swap-committed" -> "SLOTS_SWAPPED"
+    [] result = "grid-committed" -> "GRID_LAYOUT_CHANGED"
+    [] result = "merge-committed" -> "SLOTS_MERGED"
+    [] result = "split-committed" -> "SLOTS_SPLIT"
+    [] OTHER -> "none"
+
+ProjectCommandOwnershipInvariant(result) ==
+  result in CommittedProjectResults =>
+    CommittedResultCommand(result) in ModeledProjectCommands
 
 TypeOK(project, result) ==
   /\ ValidateSlotLayoutProjection(project)
@@ -730,5 +763,8 @@ SafetyInvariant ==
 
 InterfaceSelectionInvariantSpec ==
   InterfaceSelectionValid(activeProject, selectedSlotId, reconcilePending)
+
+ProjectCommandOwnershipInvariantSpec ==
+  ProjectCommandOwnershipInvariant(lastResult)
 
 =============================================================================

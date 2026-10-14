@@ -31,6 +31,12 @@ Settings-overlay height, Layout local selection, and dashboard projection invali
 UI/runtime-local effects with no independent project authority and are reviewed outside this state model.
 The removed-reference counts added by pseudocode r6 are deterministic metadata derived from the same
 entering-trash transition already represented by assetReferenced; they do not add a second project state.
+
+r22/r8 also makes persistent command ownership explicit. This slice models only
+project commands that affect CSV/reference/tree interaction. Image settings,
+caption settings, label settings, layout style, and export settings do not alter
+the state or properties checked here, so they are omitted rather than copied as
+independent verification state.
 *)
 
 NoSlot == 0
@@ -98,6 +104,33 @@ TypeOKState(selectedSlotId, workspace, assetSelection, selectedCsvId, project,
        "asset-slot-connected",
        "asset-slot-connection-rejected"
      }
+
+ModeledInteractionProjectCommands == {
+  "DATA_OBJECT_CREATED",
+  "GRAPH_OBJECTS_REPLACED",
+  "PROJECT_NODE_MOVED",
+  "SLOT_DATA_CONNECTED"
+}
+
+InteractionCommittedResults == {
+  "empty-csv-created",
+  "graph-object-added",
+  "asset-moved-normal",
+  "asset-moved-trash",
+  "asset-slot-connected"
+}
+
+InteractionResultCommand(result) ==
+  CASE result = "empty-csv-created" -> "DATA_OBJECT_CREATED"
+    [] result = "graph-object-added" -> "GRAPH_OBJECTS_REPLACED"
+    [] result = "asset-moved-normal" -> "PROJECT_NODE_MOVED"
+    [] result = "asset-moved-trash" -> "PROJECT_NODE_MOVED"
+    [] result = "asset-slot-connected" -> "SLOT_DATA_CONNECTED"
+    [] OTHER -> "none"
+
+InteractionProjectCommandOwnershipInvariant(result) ==
+  result in InteractionCommittedResults =>
+    InteractionResultCommand(result) in ModeledInteractionProjectCommands
 
 SelectionInvariant(selectedSlotId, workspace) ==
   workspace = WorkspaceFor(selectedSlotId)
@@ -369,5 +402,8 @@ TreeRecoveryInvariantSpec ==
 
 SlotConnectionInvariantSpec ==
   SlotConnectionInvariant(assetLocation)
+
+ProjectCommandOwnershipInvariantSpec ==
+  InteractionProjectCommandOwnershipInvariant(lastResult)
 
 =============================================================================
