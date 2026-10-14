@@ -10991,8 +10991,10 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         payload.csvCount = csvFiles.length;
         payload.imageCount = images.length;
         payload.directoryCount = directories.length;
+        payload.removedGraphReferenceCount = removedReferences.removedGraphReferenceCount;
+        payload.resetImageSlotCount = removedReferences.resetImageSlotCount;
         payload.removedReferenceCount =
-          removedReferences.removedGraphReferenceCount + removedReferences.resetImageSlotCount;
+          payload.removedGraphReferenceCount + payload.resetImageSlotCount;
         validateProjectObject(activeProject, { requireSlots: true });
       }
       function applyProjectNodeMovedAction({ machine, payload }) {
@@ -11033,6 +11035,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         if(destination===source){
           payload.path=source;
           payload.trashed=false;
+          payload.removedGraphReferenceCount=0;
+          payload.resetImageSlotCount=0;
           return;
         }
 
@@ -11084,9 +11088,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           else
             machine.state=Object.freeze({...machine.state,assetPath:movedSelectionPath});
         }
+        payload.removedGraphReferenceCount=removedReferences.removedGraphReferenceCount;
+        payload.resetImageSlotCount=removedReferences.resetImageSlotCount;
         payload.clearGraphSelection=
-          removedReferences.removedGraphReferenceCount>0||
-          removedReferences.resetImageSlotCount>0;
+          payload.removedGraphReferenceCount>0||
+          payload.resetImageSlotCount>0;
         payload.path=destination;
         payload.trashed=enteringTrash;
       }
@@ -12992,13 +12998,27 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         debugLog("updateGraphView", { selectedSlotId });
         renderDashboard();
       }
+      function dashboardProjectionEffect(event, payload = {}) {
+        if (event === "PROJECT_NODE_MOVED" || event === "PROJECT_TRASH_EMPTIED")
+          return (payload.removedGraphReferenceCount || 0) > 0 ||
+            (payload.resetImageSlotCount || 0) > 0
+            ? "FULL_DASHBOARD"
+            : "NONE";
+        if (event === "SLOTS_SWAPPED") return "FULL_DASHBOARD";
+        return "NONE";
+      }
+      function dispatchDashboardAffectingEvent(event, payload = {}) {
+        appFSM.send(event, payload);
+        let projectionEffect = dashboardProjectionEffect(event, payload);
+        if (projectionEffect === "FULL_DASHBOARD") renderDashboard();
+        return { state: appFSM.state, payload, projectionEffect };
+      }
       function swapSlotContents(source, target) {
         if (!source || !target || source === target || source.hidden || target.hidden) return false;
-        appFSM.send("SLOTS_SWAPPED", {
+        dispatchDashboardAffectingEvent("SLOTS_SWAPPED", {
           sourceSlotId: source.id,
           targetSlotId: target.id,
         });
-        updateGraphView();
         return true;
       }
       function clearSlotDragState() {
@@ -15755,7 +15775,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           path: plan.path, directory: plan.directory, direction: "ui-to-fsm",
         };
         if (useUniqueName) payload.name = plan.uniqueName;
-        appFSM.send("PROJECT_NODE_MOVED", payload);
+        dispatchDashboardAffectingEvent("PROJECT_NODE_MOVED", payload);
         status(payload.trashed
           ? `${projectPathName(plan.path)}을 휴지통으로 이동했습니다.`
           : `${projectPathName(plan.path)}을 ${projectParentPath(payload.path)}로 이동했습니다.`);
@@ -15772,7 +15792,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
       function emptyProjectTrash() {
         let payload = { direction: "ui-to-fsm" };
-        appFSM.send("PROJECT_TRASH_EMPTIED", payload);
+        dispatchDashboardAffectingEvent("PROJECT_TRASH_EMPTIED", payload);
         updateFileAvailability();
         status(`휴지통을 비웠습니다. 폴더 ${payload.directoryCount}개, CSV ${payload.csvCount}개, 이미지 ${payload.imageCount}개를 삭제했습니다.`);
       }
@@ -19414,7 +19434,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
     );
   }
 
-  function FastFigureSettingsModal({ title, overlay, onClose, children }) {
+  function FastFigureSettingsModal({ title, overlay, onClose, onContentClick, children }) {
     const modalRootRef = useRef(null);
     const resizeRef = useRef(null);
     const resizeListenersRef = useRef(null);
@@ -19504,6 +19524,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       React.createElement(
         Box,
         {
+          onClick: onContentClick,
+          "data-fastfigure-settings-content": overlay,
           style: {
             minHeight: 0,
             flex: "1 1 auto",
@@ -20088,6 +20110,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         onClose: close,
         title: "레이아웃",
         overlay: "layout",
+        onContentClick: () => setLayoutSelection(new Set()),
       },
       React.createElement(
         Stack,
@@ -20246,7 +20269,10 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
                   key: slot.id,
                   disabled: busy,
                   "aria-pressed": selected,
-                  onClick: () => toggleSlot(slot.id),
+                  onClick: (event) => {
+                    event.stopPropagation();
+                    toggleSlot(slot.id);
+                  },
                   style: {
                     gridColumn: `${slot.col} / span ${slot.colSpan}`,
                     gridRow: `${slot.row} / span ${slot.rowSpan}`,
@@ -20282,7 +20308,10 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             Button,
             {
               disabled: busy || layoutSelection.size < 2,
-              onClick: () => runLayoutCommand(layoutApi.mergeSlots),
+              onClick: (event) => {
+                event.stopPropagation();
+                runLayoutCommand(layoutApi.mergeSlots);
+              },
             },
             "선택 슬롯 합치기",
           ),
@@ -20291,7 +20320,10 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             {
               variant: "light",
               disabled: busy || layoutSelection.size < 1,
-              onClick: () => runLayoutCommand(layoutApi.splitSlots),
+              onClick: (event) => {
+                event.stopPropagation();
+                runLayoutCommand(layoutApi.splitSlots);
+              },
             },
             "선택 슬롯 나누기",
           ),
@@ -20300,7 +20332,10 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             {
               variant: "subtle",
               disabled: busy || layoutSelection.size < 1,
-              onClick: () => setLayoutSelection(new Set()),
+              onClick: (event) => {
+                event.stopPropagation();
+                setLayoutSelection(new Set());
+              },
             },
             "선택 해제",
           ),
