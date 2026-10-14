@@ -5,6 +5,8 @@ EXTENDS Integers, FiniteSets, Sequences, TLC
 Executable verification translation for the r18 interaction slice.
 
 Source Script authority:
+- sourcescript/project_efsm.py
+- sourcescript/interface_fsm.py
 - sourcescript/application_fsm.py
 - sourcescript/renderer_runtime.py
 - sourcescript/assets_files.py
@@ -125,9 +127,12 @@ variables
   project = InitialProject,
   assetLocation = "normal",
   assetReferenced = TRUE,
+  pendingCsvSelection = NoCsv,
+  reconcilePending = FALSE,
   lastResult = "initialized";
 
 procedure ApplySlotSelection(slotId)
+variables projectBefore = project, locationBefore = assetLocation, referenceBefore = assetReferenced;
 begin
 SelectResolve:
   if slotId = NoSlot then
@@ -147,6 +152,8 @@ SelectResolve:
   else
     lastResult := "invalid-slot";
   end if;
+SelectInterfaceIsolation:
+  assert project = projectBefore /\ assetLocation = locationBefore /\ assetReferenced = referenceBefore;
 SelectReturn:
   return;
 end procedure;
@@ -193,10 +200,12 @@ BackgroundReturn:
   return;
 end procedure;
 
-procedure CreateEmptyCsv()
+procedure CreateEmptyCsvProject()
 variables
   newCsvId = NoCsv,
-  previousGraphObjectCount = 0;
+  previousGraphObjectCount = 0,
+  selectionBefore = assetSelection,
+  csvBefore = selectedCsvId;
 begin
 EmptyCsvRememberGraphObjects:
   previousGraphObjectCount := Len(project.graphObjectCsvRefs);
@@ -208,16 +217,35 @@ EmptyCsvCapacity:
         !.csvIds = @ \cup {newCsvId},
         !.nextCsvId = @ + 1
     ] ||
-    assetSelection := "csv" ||
-    selectedCsvId := newCsvId ||
-    lastResult := "empty-csv-created";
+    pendingCsvSelection := newCsvId ||
+    reconcilePending := TRUE;
   else
     lastResult := "empty-csv-unavailable";
   end if;
+EmptyCsvProjectDoesNotMutateInterface:
+  assert assetSelection = selectionBefore /\ selectedCsvId = csvBefore;
 EmptyCsvNoGraphObjectSideEffect:
-  assert lastResult # "empty-csv-created"
+  assert pendingCsvSelection = NoCsv
          \/ Len(project.graphObjectCsvRefs) = previousGraphObjectCount;
-EmptyCsvReturn:
+EmptyCsvProjectReturn:
+  return;
+end procedure;
+
+procedure ReconcileEmptyCsvSelection()
+variables projectBefore = project;
+begin
+EmptyCsvReconcile:
+  if pendingCsvSelection # NoCsv then
+    assetSelection := "csv" ||
+    selectedCsvId := pendingCsvSelection ||
+    lastResult := "empty-csv-created";
+  end if;
+EmptyCsvInterfaceDoesNotMutateProject:
+  assert project = projectBefore;
+EmptyCsvClearResult:
+  pendingCsvSelection := NoCsv ||
+  reconcilePending := FALSE;
+EmptyCsvReconcileReturn:
   return;
 end procedure;
 
@@ -290,7 +318,8 @@ Main:
     or
       call DashboardBackgroundClick();
     or
-      call CreateEmptyCsv();
+      call CreateEmptyCsvProject();
+      call ReconcileEmptyCsvSelection();
     or
       call AddGraphObject();
     or

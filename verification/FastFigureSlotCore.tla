@@ -6,6 +6,8 @@ Direct executable verification translation of the slot/layout/chart slice.
 
 Source Script authority:
 - sourcescript/project_state.py
+- sourcescript/project_efsm.py
+- sourcescript/interface_fsm.py
 - sourcescript/application_fsm.py
 - sourcescript/layout_annotations_export.py
 
@@ -24,6 +26,7 @@ InitialCols == 2
 NoChart == "no-chart"
 NoImage == "no-image"
 NoCaption == "no-caption"
+NoSlot == 0
 
 ChartIds == {"chart-1", "chart-2"}
 ImageIds == {"image-1"}
@@ -351,6 +354,11 @@ SplitSlotsCandidate(project, slotIds) ==
       THEN [accepted |-> TRUE, project |-> candidate, reason |-> "accepted"]
       ELSE [accepted |-> FALSE, project |-> project, reason |-> "invalid-candidate"]
 
+InterfaceSelectionValid(project, selectedSlotId, reconcilePending) ==
+  \/ reconcilePending
+  \/ selectedSlotId = NoSlot
+  \/ selectedSlotId \in VisibleSlotIds(project)
+
 TypeOK(project, result) ==
   /\ ValidateSlotLayoutProjection(project)
   /\ result \in {
@@ -368,6 +376,9 @@ TypeOK(project, result) ==
 variables
   activeProject = InitialProject,
   selectedSlotId = 1,
+  selectionHintSource = NoSlot,
+  selectionHintTarget = NoSlot,
+  reconcilePending = FALSE,
   lastResult = "initialized";
 
 procedure applySlotsResetAction(slotIds)
@@ -401,19 +412,11 @@ SwapResolve:
     candidate := SwapSlotsCandidate(activeProject, sourceId, targetId);
     if ValidateSlotLayoutProjection(candidate) then
       activeProject := candidate ||
-      selectedSlotId :=
-        IF selectedSlotId = sourceId
-          THEN targetId
-          ELSE IF selectedSlotId = targetId
-            THEN sourceId
-            ELSE selectedSlotId ||
+      selectionHintSource := sourceId ||
+      selectionHintTarget := targetId ||
+      reconcilePending := TRUE ||
       lastResult := "swap-committed";
-    assert selectedSlotId =
-      IF selectionBefore = sourceId
-        THEN targetId
-        ELSE IF selectionBefore = targetId
-          THEN sourceId
-          ELSE selectionBefore;
+    assert selectedSlotId = selectionBefore;
     else
       lastResult := "swap-rejected";
     end if;
@@ -421,6 +424,31 @@ SwapResolve:
     lastResult := "swap-rejected";
   end if;
 SwapReturn:
+  return;
+end procedure;
+
+procedure ReconcileInterfaceAfterProjectCommit()
+variables projectBefore = activeProject;
+begin
+ReconcileSwapIdentity:
+  if selectionHintSource # NoSlot then
+    if selectedSlotId = selectionHintSource then
+      selectedSlotId := selectionHintTarget;
+    elsif selectedSlotId = selectionHintTarget then
+      selectedSlotId := selectionHintSource;
+    end if;
+  end if;
+ReconcileVisibility:
+  if selectedSlotId # NoSlot /\ selectedSlotId \notin VisibleSlotIds(activeProject) then
+    selectedSlotId := NoSlot;
+  end if;
+ReconcileDoesNotMutateProject:
+  assert activeProject = projectBefore;
+ReconcileClearHints:
+  selectionHintSource := NoSlot ||
+  selectionHintTarget := NoSlot ||
+  reconcilePending := FALSE;
+ReconcileReturn:
   return;
 end procedure;
 
@@ -434,6 +462,7 @@ GridBuildCandidate:
 GridCommit:
   if resizeResult.accepted then
     activeProject := resizeResult.project ||
+    reconcilePending := TRUE ||
     lastResult := "grid-committed";
   else
     lastResult := "grid-rejected";
@@ -458,6 +487,7 @@ MergeResolve:
     mergeResult := MergeSlotsCandidate(activeProject, slotIds);
     if mergeResult.accepted then
       activeProject := mergeResult.project ||
+      reconcilePending := TRUE ||
       lastResult := "merge-committed";
     else
       lastResult := "merge-rejected";
@@ -479,6 +509,7 @@ SplitResolve:
     splitResult := SplitSlotsCandidate(activeProject, slotIds);
     if splitResult.accepted then
       activeProject := splitResult.project ||
+      reconcilePending := TRUE ||
       lastResult := "split-committed";
     else
       lastResult := "split-rejected";
@@ -592,26 +623,31 @@ VerificationHarness:
     either
       with chosenResetSlotIds \in SUBSET (DOMAIN activeProject.slots) do
         call applySlotsResetAction(chosenResetSlotIds);
+        call ReconcileInterfaceAfterProjectCommit();
       end with;
     or
       with chosenSourceId \in VisibleSlotIds(activeProject) do
         with chosenTargetId \in VisibleSlotIds(activeProject) \ {chosenSourceId} do
           call applySlotsSwappedAction(chosenSourceId, chosenTargetId);
+          call ReconcileInterfaceAfterProjectCommit();
         end with;
       end with;
     or
       with chosenRows \in 1..MaxRows do
         with chosenCols \in 1..MaxCols do
           call applyGridLayoutAction(chosenRows, chosenCols);
+          call ReconcileInterfaceAfterProjectCommit();
         end with;
       end with;
     or
       with chosenMergeSlotIds \in SUBSET VisibleSlotIds(activeProject) do
         call mergeSlots(chosenMergeSlotIds);
+        call ReconcileInterfaceAfterProjectCommit();
       end with;
     or
       with chosenSplitSlotIds \in SUBSET VisibleSlotIds(activeProject) do
         call splitSlots(chosenSplitSlotIds);
+        call ReconcileInterfaceAfterProjectCommit();
       end with;
     or
       with chosenChartSlotId \in VisibleSlotIds(activeProject) do
@@ -646,5 +682,8 @@ ChartOwnershipInvariantSpec ==
 
 SafetyInvariant ==
   ValidateSlotLayoutProjection(activeProject)
+
+InterfaceSelectionInvariantSpec ==
+  InterfaceSelectionValid(activeProject, selectedSlotId, reconcilePending)
 
 =============================================================================
