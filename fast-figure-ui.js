@@ -2079,46 +2079,58 @@
     const [height, setHeight] = useState(null);
     const contentRef = useRef(null);
     const resizeRef = useRef(null);
-    useEffect(
-      () => () => {
-        resizeRef.current = null;
-        document.body.style.userSelect = "";
-        document.body.style.cursor = "";
-      },
-      [],
-    );
-    const startResize = (event) => {
-      const content = contentRef.current;
-      if (!content) return;
-      resizeRef.current = {
-        pointerId: event.pointerId,
-        startY: event.clientY,
-        startHeight: content.getBoundingClientRect().height,
-      };
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-      document.body.style.userSelect = "none";
-      document.body.style.cursor = "ns-resize";
-      event.preventDefault();
-    };
-    const moveResize = (event) => {
-      const drag = resizeRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      const minHeight = 240;
-      const maxHeight = Math.max(minHeight, window.innerHeight - 24);
-      setHeight(
-        Math.max(
-          minHeight,
-          Math.min(maxHeight, drag.startHeight + event.clientY - drag.startY),
-        ),
-      );
-    };
-    const stopResize = (event) => {
-      if (resizeRef.current?.pointerId !== event.pointerId) return;
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    const resizeListenersRef = useRef(null);
+
+    const clearResizeListeners = () => {
+      const listeners = resizeListenersRef.current;
+      if (listeners) {
+        window.removeEventListener("pointermove", listeners.move);
+        window.removeEventListener("pointerup", listeners.end);
+        window.removeEventListener("pointercancel", listeners.end);
+      }
+      resizeListenersRef.current = null;
       resizeRef.current = null;
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
     };
+
+    useEffect(() => () => clearResizeListeners(), []);
+
+    const startResize = (event) => {
+      const content = contentRef.current;
+      if (!content) return;
+      clearResizeListeners();
+      const pointerId = event.pointerId;
+      resizeRef.current = {
+        pointerId,
+        startY: event.clientY,
+        startHeight: content.getBoundingClientRect().height,
+      };
+      const move = (moveEvent) => {
+        const drag = resizeRef.current;
+        if (!drag || drag.pointerId !== moveEvent.pointerId) return;
+        const minHeight = 240;
+        const maxHeight = Math.max(minHeight, window.innerHeight - 24);
+        setHeight(
+          Math.max(
+            minHeight,
+            Math.min(maxHeight, drag.startHeight + moveEvent.clientY - drag.startY),
+          ),
+        );
+      };
+      const end = (endEvent) => {
+        if (resizeRef.current?.pointerId !== endEvent.pointerId) return;
+        clearResizeListeners();
+      };
+      resizeListenersRef.current = { move, end };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", end);
+      window.addEventListener("pointercancel", end);
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "ns-resize";
+      event.preventDefault();
+    };
+
     return React.createElement(
       Modal.Root,
       {
@@ -2165,9 +2177,6 @@
             "aria-orientation": "horizontal",
             "aria-label": `${title} 창 높이 조절`,
             onPointerDown: startResize,
-            onPointerMove: moveResize,
-            onPointerUp: stopResize,
-            onPointerCancel: stopResize,
             "data-fastfigure-modal-resize": overlay,
             style: {
               flexShrink: 0,
