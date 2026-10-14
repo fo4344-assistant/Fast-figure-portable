@@ -1,39 +1,1107 @@
+diff --git a/sourcescript/project_efsm.py b/sourcescript/project_efsm.py
+--- a/sourcescript/project_efsm.py
++++ b/sourcescript/project_efsm.py
+@@ -22,52 +22,63 @@
+     "SLOTS_RESET": "slot-local payload reset과 owned chart 제거",
+     "SLOTS_SWAPPED": "두 GUI 위치의 slot-local payload 교환",
+     "SLOT_IMAGE_LINKED": "existing image reference를 slot에 연결",
+-    "SLOT_DATA_CONNECTED": "CSV를 graph slot/chart object에 연결",
+-    "SLOT_IMAGE_IMPORTED": "imported image와 slot reference commit",
+-    "SLOT_CHART_IMPORTED": "imported chart와 owning slot commit",
+-    "GRAPH_OBJECTS_REPLACED": "chart.editor.objects 교체",
+-    "CHART_LAYOUT_CHANGED": "chart persistent layout 설정 교체",
+-    "CHART_MODEL_REPLACED": "chart model 교체",
+-    "GRID_LAYOUT_CHANGED": "grid와 slot arrangement 변경",
+-    "CAPTION_TEXT_INPUT": "explicit global/slot caption owner text 변경",
+-    "SLOT_CAPTIONS_INSERTED": "slot captions를 global caption text에 삽입",
+-    "LABEL_SETTINGS_CHANGED": "persistent label 설정 변경",
+-    "LABEL_POSITION_CHANGED": "persistent label 위치 변경",
+-    "APPEARANCE_CHANGED": "persistent UI palette 변경",
+-    "EXPORT_SETTINGS_CHANGED": "persistent export 설정 변경",
+-}
+-
+-PROJECT_MUTATION_GROUPS = {
+-    "project": "whole ProjectObject replacement와 metadata",
+-    "assets": "CSV/image/VFS와 reference",
+-    "slot-local": "slot content/chart/image/imageSettings/caption",
+-    "graphs": "chart model과 graph object/CSV reference",
+-    "layout": "grid와 slot geometry/payload ownership",
+-    "annotations": "persistent label/global caption/slot caption",
+-    "appearance-export": "persistent palette/export settings",
+-}
+-
+-PROJECT_MUTATION_CONTRACT = [
+-    "command input의 id/path/reference를 current activeProject에서 다시 resolve한다.",
+-    "command writable scope와 precondition을 확인한다.",
+-    "activeProject를 직접 부분 변경하기 전에 candidate ProjectObject 또는 candidate patch를 만든다.",
+-    "local rule, VFS/reference integrity, chart ownership, whole-project invariant를 검증한다.",
+-    "검증 성공 뒤 activeProject authority를 정확히 한 번 commit한다.",
+-    "실패하면 activeProject는 command 시작 전 authoritative state를 유지한다.",
+-    "commit pre/post에서 실제 mutation 사실을 ProjectMutationResult로 산출한다.",
+-    "selectedSlotId, asset/graph selection, workspace, overlay 등 interface state는 직접 변경하지 않는다.",
+-    "DOM/Plotly/Mantine projection을 수행하지 않는다.",
+-]
+-
+-ProjectMutationResult = {
+-    "event": "처리한 project command",
+-    "committed": "commit 성공 여부",
+-    "changed": "command별 changed ids/path/owner",
+-    "removedGraphReferenceCount": "실제 제거한 graph-object CSV reference 수",
+-    "resetImageSlotCount": "실제 image reference를 비운 slot 수",
+-    "selectionHints": "후속 interface reconciliation에 필요한 identity/path 결과",
+-    "projectionEffect": "renderer effect를 결정할 수 있는 실제 commit 결과",
+-}
++    "SLOT_IMAGE_SETTINGS_CHANGED": "slot-local imageSettings candidate commit",
++    "SLOT_DATA_CONNECTED": "CSV를 graph slot/chart object에 연결",
++    "SLOT_IMAGE_IMPORTED": "imported image와 slot reference commit",
++    "SLOT_CHART_IMPORTED": "imported chart와 owning slot commit",
++    "GRAPH_OBJECTS_REPLACED": "chart.editor.objects 교체",
++    "CHART_LAYOUT_CHANGED": "chart persistent layout 설정 교체",
++    "CHART_MODEL_REPLACED": "chart model 교체",
++    "GRID_LAYOUT_CHANGED": "grid 크기와 slot arrangement 변경",
++    "LAYOUT_STYLE_CHANGED": "persistent slotStyle candidate commit",
++    "SLOTS_MERGED": "선택 직사각형의 slot-local payload를 top-left anchor로 원자적 병합",
++    "SLOTS_SPLIT": "merged anchor를 visible 1x1 slots로 복원",
++    "CAPTION_TEXT_INPUT": "explicit global/slot caption owner text 변경",
++    "SLOT_CAPTIONS_INSERTED": "slot captions를 global caption text에 삽입",
++    "CAPTION_SETTINGS_CHANGED": "global caption enabled/name/nameBold/presentation settings commit",
++    "LABEL_SETTINGS_CHANGED": "persistent label 설정 변경",
++    "LABEL_POSITION_CHANGED": "persistent label 위치 변경",
++    "APPEARANCE_CHANGED": "persistent UI palette 변경",
++    "EXPORT_SETTINGS_CHANGED": "persistent export 설정 변경",
++}
++
++PROJECT_MUTATION_GROUPS = {
++    "project": "whole ProjectObject replacement와 metadata",
++    "assets": "CSV/image/VFS와 reference",
++    "slot-local": "slot content/chart/image/imageSettings/caption",
++    "graphs": "chart model과 graph object/CSV reference",
++    "layout": "grid와 slot geometry/payload ownership",
++    "annotations": "persistent label/global caption/slot caption",
++    "appearance-export": "persistent palette/export settings",
++}
++
++PROJECT_MUTATION_CONTRACT = [
++    "command input의 id/path/reference를 current activeProject에서 다시 resolve한다.",
++    "command writable scope와 precondition을 확인한다.",
++    "activeProject를 직접 부분 변경하기 전에 candidate ProjectObject 또는 candidate patch를 만든다.",
++    "local rule, VFS/reference integrity, chart ownership, whole-project invariant를 검증한다.",
++    "검증 성공 뒤 activeProject authority를 정확히 한 번 commit한다.",
++    "실패하면 activeProject는 command 시작 전 authoritative state를 유지한다.",
++    "commit pre/post에서 실제 mutation 사실을 ProjectMutationResult로 산출한다.",
++    "selectedSlotId, asset/graph selection, workspace, overlay 등 interface state는 직접 변경하지 않는다.",
++    "DOM/Plotly/Mantine projection을 수행하지 않는다.",
++]
++
++ProjectMutationResult = {
++    "event": "처리한 project command",
++    "committed": "commit 성공 여부",
++    "changed": "command별 changed ids/path/owner",
++    "removedGraphReferenceCount": "실제 제거한 graph-object CSV reference 수",
++    "resetImageSlotCount": "실제 image reference를 비운 slot 수",
++    "selectionHints": "후속 interface reconciliation에 필요한 identity/path 결과",
++    "projectionEffect": "renderer effect를 결정할 수 있는 실제 commit 결과",
++}
++
++PROJECT_COMMAND_COVERAGE_RULE = (
++    "PUBLIC_API_METHODS에서 persistent ProjectObject mutation으로 분류한 operation은 PROJECT_COMMANDS 중 하나로 수렴한다. "
++    "domain helper가 candidate를 계산할 수는 있지만 activeProject commit을 독립 mutation path로 수행하지 않는다. "
++    "같은 owner를 변경하는 UI/API 진입점은 동일 project command semantics를 공유한다."
++)
+ 
+ PROJECT_RESULT_RULE = (
+     "ProjectMutationResult는 장기 authority가 아니라 한 command의 immutable result다. "
+diff --git a/sourcescript/layout_annotations_export.py b/sourcescript/layout_annotations_export.py
+--- a/sourcescript/layout_annotations_export.py
++++ b/sourcescript/layout_annotations_export.py
+@@ -157,250 +157,361 @@
+     return slotGeometry
+ 
+ 
+-def buildGridResizeCandidate(rows, cols):
+-    """
+-    Return:
+-    - candidate:
+-      requested grid size를 반영한 candidate layout/slot state.
+-    - rejected:
+-      안전한 resize가 아니면 거부 이유.
+-
+-    변경:
+-    - authoritative project를 변경하지 않는다.
+-
+-    처리:
+-    1. rows/cols가 1..8 정수인지 검증한다.
+-    2. 확대면 기존 모든 grid cell/slot id/geometry와 모든 slot-local properties를 같은 좌표에 보존하고
+-       새 좌표에만 SLOT_LOCAL_DEFAULTS를 가진 empty 1x1 slot을 추가한다.
+-    3. 축소면 삭제될 row/column과 교차하는 slot을 검사한다.
+-       - slotHasNonDefaultLocalState(slot)이 참이면 거부한다.
+-       - rowSpan/colSpan이 새 boundary를 넘거나 제거되는 merged cell이 있으면 거부한다.
+-    4. 위 조건을 통과한 경우 local state가 default인 empty 1x1 slot만 candidate에서 제거한다.
+-    5. 남은 slot geometry와 chart ownership을 whole-project candidate에서 다시 검증한다.
+-    6. content를 다른 좌표로 packing/reflow하지 않는다.
+-    """
+-    candidate = "안전한 grid resize candidate 또는 rejected result"
+-    return candidate
+-
+-
+-def setLayoutApiGrid(rows, cols):
+-    """
+-    변경:
+-    - buildGridResizeCandidate가 성공한 경우에만 activeProject grid/slot structure를 한 번 commit한다.
+-
+-    처리:
+-    candidate를 먼저 만들고 전체 project invariant를 검증한다.
+-    거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
+-    commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 interfaceFSM reconciliation이 결정한다.
+-    """
+-    return "grid 변경 또는 rejected layout state"
+-
+-
+-def mergeSlots(slotIds):
+-    """
+-    변경:
+-    - 검증된 candidate에서 선택 직사각형의 top-left anchor span과 covered slot visibility/content를 변경한다.
+-
+-    처리:
+-    1. current visible slot을 id로 resolve하고 선택 union이 빈칸 없는 하나의 직사각형인지 확인한다.
+-    2. slotHasNonDefaultLocalState로 선택 영역의 non-default slot-local state를 가진 visible slot이 1개 이하인지 확인한다.
+-       contentType, imageSettings처럼 reference 없이도 의미가 남는 local property도 같은 판정에 포함한다.
+-    3. source slot이 있으면 chart/image/contentType/imageSettings/caption을 하나의 slot-local payload로 top-left anchor candidate에 이동한다.
+-       chart id 자체는 유지하되 owning slot reference는 anchor로 이동한다.
+-    4. covered non-anchor slot은 모든 local properties를 SLOT_LOCAL_DEFAULTS로 되돌리고 hidden=true로 한다.
+-    5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
+-    6. 두 개 이상의 selected slot object가 non-default local state를 가지면 implicit merge/concatenation 없이 거부한다.
+-    7. whole-project candidate를 검증한 뒤 한 번 commit한다.
+-    """
+-    return "merge candidate commit 결과"
+-
+-
+-def splitSlots(slotIds):
+-    """
+-    변경:
+-    - merged anchor를 1x1로 되돌리고 covered cell을 visible empty slot로 복원한다.
+-
+-    처리:
+-    1. current merged visible anchor를 resolve한다.
+-    2. anchor slot object의 chart/image/contentType/imageSettings/caption 등 모든 slot-local properties를 anchor에 유지한다.
+-    3. covered cell은 visible 1x1 slot로 복원하고 모든 slot-local properties를 defaults로 시작한다.
+-    4. candidate 전체를 검증한 뒤 한 번 commit한다.
+-    """
+-    return "split candidate commit 결과"
+-
+-
+-def readImageEditorApi():
+-    """
+-    Return:
+-    - imageEditor:
+-      선택 slot이 참조하는 image name/display URL과 그 slot의 imageSettings read projection.
+-
+-    변경:
+-    - authoritative slot-local imageSettings를 변경하지 않는다.
+-    """
+-    imageEditor = "선택 image의 read-only editor projection 또는 없음"
+-    return imageEditor
+-
+-
+-def applyImageSettingsFromValues(values):
+-    """
+-    변경:
+-    - 선택 slot의 slot.content.imageSettings.
+-    - 현재 slot image renderer projection.
+-
+-    처리:
+-    fit enum과 manual scale/x/y 범위를 정규화한다.
+-    selected slot object의 local imageSettings candidate를 검증 후 commit하고 IMAGE_SETTINGS_CHANGED를 notify한다.
+-    같은 image asset을 참조하는 다른 slot의 imageSettings는 변경하지 않는다.
+-    """
+-    return "설정 적용 성공 여부"
+-
+-
+-def readLabelsApiState():
+-    """
+-    Return:
+-    - labelState:
+-      persistent label settings와 현재 선택 slot 기준 reference width/height.
+-
+-    변경:
+-    - 없음.
+-
+-    처리:
+-    reference geometry는 activeProject layout과 선택 slot span에서 계산한다.
+-    """
+-    labelState = "label editor read projection"
+-    return labelState
+-
+-
+-def setLabelsApiPosition(x, y):
+-    """
+-    변경:
+-    - activeProject의 유일한 authoritative label x/y position.
+-
+-    처리:
+-    x/y를 finite position으로 정규화한다.
+-    pointer drag 중 호출되더라도 같은 mutation path에서 persistent position을 연속 갱신한다.
+-    renderer는 mutation 뒤 authoritative position을 다시 읽는다.
+-    별도 preview position copy를 만들지 않는다.
+-    """
+-    return "변경 후 label position read state"
+-
+-
+-def finishLabelsApiPositionInteraction():
+-    """
+-    변경:
+-    - persistent label position은 변경하지 않는다.
+-    - 필요한 interaction completion telemetry/focus/history notification만 처리한다.
+-
+-    처리:
+-    position 저장의 두 번째 commit 단계로 사용하지 않는다.
+-    """
+-    return "interaction completion 결과"
+-
+-
+-def readGlobalCaptionState():
+-    """
+-    Return:
+-    - captionState:
+-      project-level global caption text/name/settings read projection.
+-
+-    변경:
+-    - 없음.
+-
+-    처리:
+-    activeProject.annotations.captions만 읽는다.
+-    selected slot이나 UI editor target mode를 global caption의 persistent state와 혼합하지 않는다.
+-    """
+-    captionState = "global caption read projection"
+-    return captionState
+-
+-
+-def readSlotCaptionState(slotId):
+-    """
+-    Return:
+-    - captionState:
+-      지정 slot object의 id/position/caption text read projection.
+-
+-    변경:
+-    - 없음.
+-
+-    처리:
+-    slotId를 current project에서 resolve하고 그 slot.caption을 읽는다.
+-    caption이 empty여도 UI는 placeholder를 별도 projection으로 표시할 수 있다.
+-    """
+-    captionState = "slot-local caption read projection"
+-    return captionState
+-
+-
+-def setGlobalCaptionText(text):
+-    """
+-    변경:
+-    - activeProject.annotations.captions.text.
+-
+-    처리:
+-    global caption project property 하나만 변경한다.
+-    slot caption 값은 변경하지 않는다.
+-    """
+-    return "변경 후 global caption state"
+-
+-
+-def setSlotCaptionText(slotId, text):
+-    """
+-    변경:
+-    - 지정 slot object의 slot.caption.
+-
+-    처리:
+-    slotId를 current project에서 resolve하고 text를 slot-local property로 commit한다.
+-    UI의 selected-slot caption editor는 이 command를 호출할 뿐 별도 persistent slotMode를 만들지 않는다.
+-    """
+-    return "변경 후 slot caption state"
+-
+-
+-def insertSlotCaptionsIntoGlobalCaption(slotIds):
+-    """
+-    변경:
+-    - project-level global caption text.
+-
+-    처리:
+-    1. 지정 또는 현재 visible slot object를 layout order로 resolve한다.
+-    2. non-empty slot.caption을 label/text projection으로 계산한다.
+-    3. 계산한 text를 사용자 명령에 따라 global caption text에 삽입한다.
+-    4. source slot.caption 값과 slot ownership은 변경하지 않는다.
+-    """
+-    return "변경 후 global caption state"
+-
+-
+-def readExportSettings():
+-    """
+-    Return:
+-    - settings:
+-      activeProject의 persistent width/heightMode/height/dpi/format read projection.
+-
+-    변경:
+-    - 없음.
+-    """
+-    settings = "현재 project export settings"
+-    return settings
+-
+-
+-def setExportSettings(values):
+-    """
+-    Return:
+-    - settings:
+-      commit된 normalized persistent export settings.
+-
+-    변경:
+-    - activeProject.export만 변경한다.
+-
+-    처리:
+-    1. current export settings에서 candidate를 만든다.
+-    2. width 100..20000, dpi 36..1200, format png/jpeg를 검증한다.
+-    3. heightMode가 auto면 height는 계산 입력으로 사용하지 않는다.
+-       explicit이면 height 100..20000을 요구한다.
+-    4. candidate를 검증한 뒤 export settings를 한 번 commit한다.
+-    """
+-    settings = "commit된 persistent export settings"
+-    return settings
++def setLayoutApiStyle(values):
++    """
++    변경:
++    - activeProject.layout.slotStyle.
++
++    처리:
++    1. current slotStyle에서 candidate를 만든다.
++    2. referenceWidth/gap/outerMargin/radius/aspect를 layoutRules 범위로 정규화한다.
++    3. candidate whole-project invariant를 확인한다.
++    4. LAYOUT_STYLE_CHANGED를 dispatchProjectCommand로 보내 한 번 commit한다.
++    5. renderer는 commit result 이후 authoritative layout을 다시 읽는다.
++    """
++    result = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", values)
++    return result
++
++
++def buildGridResizeCandidate(rows, cols):
++    """
++    Return:
++    - candidate:
++      requested grid size를 반영한 candidate layout/slot state.
++    - rejected:
++      안전한 resize가 아니면 거부 이유.
++
++    변경:
++    - authoritative project를 변경하지 않는다.
++
++    처리:
++    1. rows/cols가 1..8 정수인지 검증한다.
++    2. 확대면 기존 모든 grid cell/slot id/geometry와 모든 slot-local properties를 같은 좌표에 보존하고
++       새 좌표에만 SLOT_LOCAL_DEFAULTS를 가진 empty 1x1 slot을 추가한다.
++    3. 축소면 삭제될 row/column과 교차하는 slot을 검사한다.
++       - slotHasNonDefaultLocalState(slot)이 참이면 거부한다.
++       - rowSpan/colSpan이 새 boundary를 넘거나 제거되는 merged cell이 있으면 거부한다.
++    4. 위 조건을 통과한 경우 local state가 default인 empty 1x1 slot만 candidate에서 제거한다.
++    5. 남은 slot geometry와 chart ownership을 whole-project candidate에서 다시 검증한다.
++    6. content를 다른 좌표로 packing/reflow하지 않는다.
++    """
++    candidate = "안전한 grid resize candidate 또는 rejected result"
++    return candidate
++
++
++def setLayoutApiGrid(rows, cols):
++    """
++    변경:
++    - buildGridResizeCandidate가 성공한 경우에만 activeProject grid/slot structure를 한 번 commit한다.
++
++    처리:
++    candidate를 먼저 만들고 전체 project invariant를 검증한다.
++    거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
++    성공 candidate는 GRID_LAYOUT_CHANGED를 dispatchProjectCommand로 보내 한 번 commit한다.
++    commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 interfaceFSM reconciliation이 결정한다.
++    """
++    result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", {"rows": rows, "cols": cols})
++    return result
++
++
++def mergeSlots(slotIds):
++    """
++    변경:
++    - 검증된 candidate에서 선택 직사각형의 top-left anchor span과 covered slot visibility/content를 변경한다.
++
++    처리:
++    1. current visible slot을 id로 resolve하고 선택 union이 빈칸 없는 하나의 직사각형인지 확인한다.
++    2. slotHasNonDefaultLocalState로 선택 영역의 non-default slot-local state를 가진 visible slot이 1개 이하인지 확인한다.
++       contentType, imageSettings처럼 reference 없이도 의미가 남는 local property도 같은 판정에 포함한다.
++    3. source slot이 있으면 chart/image/contentType/imageSettings/caption을 하나의 slot-local payload로 top-left anchor candidate에 이동한다.
++       chart id 자체는 유지하되 owning slot reference는 anchor로 이동한다.
++    4. covered non-anchor slot은 모든 local properties를 SLOT_LOCAL_DEFAULTS로 되돌리고 hidden=true로 한다.
++    5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
++    6. 두 개 이상의 selected slot object가 non-default local state를 가지면 implicit merge/concatenation 없이 거부한다.
++    7. whole-project candidate를 검증한 뒤 SLOTS_MERGED를 dispatchProjectCommand로 보내 한 번 commit한다.
++    8. selectedSlotId reconciliation과 renderer update는 ProjectMutationResult 이후 interface/orchestration이 수행한다.
++    """
++    result = dispatchProjectCommand("SLOTS_MERGED", {"slotIds": slotIds})
++    return result
++
++
++def splitSlots(slotIds):
++    """
++    변경:
++    - merged anchor를 1x1로 되돌리고 covered cell을 visible empty slot로 복원한다.
++
++    처리:
++    1. current merged visible anchor를 resolve한다.
++    2. anchor slot object의 chart/image/contentType/imageSettings/caption 등 모든 slot-local properties를 anchor에 유지한다.
++    3. covered cell은 visible 1x1 slot로 복원하고 모든 slot-local properties를 defaults로 시작한다.
++    4. candidate 전체를 검증한 뒤 SLOTS_SPLIT을 dispatchProjectCommand로 보내 한 번 commit한다.
++    5. interface selection reconciliation과 renderer update는 project commit 이후 수행한다.
++    """
++    result = dispatchProjectCommand("SLOTS_SPLIT", {"slotIds": slotIds})
++    return result
++
++
++def readImageEditorApi():
++    """
++    Return:
++    - imageEditor:
++      선택 slot이 참조하는 image name/display URL과 그 slot의 imageSettings read projection.
++
++    변경:
++    - authoritative slot-local imageSettings를 변경하지 않는다.
++    """
++    imageEditor = "선택 image의 read-only editor projection 또는 없음"
++    return imageEditor
++
++
++def applyImageSettingsFromValues(values):
++    """
++    변경:
++    - 선택 slot의 slot.content.imageSettings.
++    - 현재 slot image renderer projection.
++
++    처리:
++    fit enum과 manual scale/x/y 범위를 정규화한다.
++    selected slot id와 normalized settings를 SLOT_IMAGE_SETTINGS_CHANGED로 dispatchProjectCommand에 전달한다.
++    projectEFSM은 slot-local imageSettings candidate를 검증 후 한 번 commit한다.
++    같은 image asset을 참조하는 다른 slot의 imageSettings는 변경하지 않는다.
++    renderer/interface notification은 commit result 이후 수행한다.
++    """
++    result = dispatchProjectCommand(
++        "SLOT_IMAGE_SETTINGS_CHANGED",
++        {"slotId": selectedSlotId, "settings": values},
++    )
++    return result
++
++
++def readLabelsApiState():
++    """
++    Return:
++    - labelState:
++      persistent label settings와 현재 선택 slot 기준 reference width/height.
++
++    변경:
++    - 없음.
++
++    처리:
++    reference geometry는 activeProject layout과 선택 slot span에서 계산한다.
++    """
++    labelState = "label editor read projection"
++    return labelState
++
++
++def setLabelsApiEnabled(enabled):
++    """
++    변경:
++    - activeProject.annotations.labels.enabled.
++
++    처리:
++    LABEL_SETTINGS_CHANGED에 enabled candidate를 전달한다.
++    다른 label settings 값은 current authority에서 유지한다.
++    """
++    result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"enabled": enabled})
++    return result
++
++
++def setLabelsApiSettings(values):
++    """
++    변경:
++    - activeProject.annotations.labels.settings의 format/order/parentheses/fontFamily/fontSize.
++
++    처리:
++    current labelSettings에서 candidate를 만들고 허용 enum/수치 규칙을 적용한 뒤
++    LABEL_SETTINGS_CHANGED로 한 번 commit한다. x/y position은 values에 명시되지 않으면 유지한다.
++    """
++    result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"settings": values})
++    return result
++
++
++def setLabelsApiPosition(x, y):
++    """
++    변경:
++    - activeProject의 유일한 authoritative label x/y position.
++
++    처리:
++    x/y를 finite position으로 정규화한다.
++    pointer drag 중 호출되더라도 LABEL_POSITION_CHANGED라는 같은 mutation path를 사용한다.
++    renderer는 mutation 뒤 authoritative position을 다시 읽는다.
++    별도 preview position copy를 만들지 않는다.
++    """
++    result = dispatchProjectCommand("LABEL_POSITION_CHANGED", {"x": x, "y": y})
++    return result
++
++
++def finishLabelsApiPositionInteraction():
++    """
++    변경:
++    - persistent label position은 변경하지 않는다.
++    - 필요한 interaction completion telemetry/focus/history notification만 처리한다.
++
++    처리:
++    position 저장의 두 번째 commit 단계로 사용하지 않는다.
++    """
++    return "interaction completion 결과"
++
++
++def readGlobalCaptionState():
++    """
++    Return:
++    - captionState:
++      project-level global caption text/name/settings read projection.
++
++    변경:
++    - 없음.
++
++    처리:
++    activeProject.annotations.captions만 읽는다.
++    selected slot이나 UI editor target mode를 global caption의 persistent state와 혼합하지 않는다.
++    """
++    captionState = "global caption read projection"
++    return captionState
++
++
++def readSlotCaptionState(slotId):
++    """
++    Return:
++    - captionState:
++      지정 slot object의 id/position/caption text read projection.
++
++    변경:
++    - 없음.
++
++    처리:
++    slotId를 current project에서 resolve하고 그 slot.caption을 읽는다.
++    caption이 empty여도 UI는 placeholder를 별도 projection으로 표시할 수 있다.
++    """
++    captionState = "slot-local caption read projection"
++    return captionState
++
++
++def setGlobalCaptionText(text):
++    """
++    변경:
++    - activeProject.annotations.captions.text.
++
++    처리:
++    global caption project property 하나만 변경한다.
++    slot caption 값은 변경하지 않는다.
++    CAPTION_TEXT_INPUT에 explicit global owner를 전달해 projectEFSM으로 commit한다.
++    """
++    result = dispatchProjectCommand(
++        "CAPTION_TEXT_INPUT",
++        {"target": {"kind": "global"}, "text": text},
++    )
++    return result
++
++
++def setSlotCaptionText(slotId, text):
++    """
++    변경:
++    - 지정 slot object의 slot.caption.
++
++    처리:
++    slotId를 current project에서 resolve하고 CAPTION_TEXT_INPUT에 explicit slot owner를 전달한다.
++    UI의 selected-slot caption editor는 이 command를 호출할 뿐 별도 persistent slotMode를 만들지 않는다.
++    """
++    result = dispatchProjectCommand(
++        "CAPTION_TEXT_INPUT",
++        {"target": {"kind": "slot", "id": slotId}, "text": text},
++    )
++    return result
++
++
++def insertSlotCaptionsIntoGlobalCaption(slotIds):
++    """
++    변경:
++    - project-level global caption text.
++
++    처리:
++    1. 지정 또는 현재 visible slot object를 layout order로 resolve한다.
++    2. non-empty slot.caption을 label/text projection으로 계산한다.
++    3. 계산한 text를 사용자 명령에 따라 global caption text에 삽입한다.
++    4. source slot.caption 값과 slot ownership은 변경하지 않는다.
++    5. 계산된 insertion intent를 SLOT_CAPTIONS_INSERTED project command로 commit한다.
++    """
++    result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
++    return result
++
++
++def setCaptionsApiEnabled(enabled):
++    """
++    변경:
++    - activeProject.annotations.captions.enabled.
++
++    처리:
++    CAPTION_SETTINGS_CHANGED에 enabled candidate만 전달하고 다른 caption properties는 유지한다.
++    """
++    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"enabled": enabled})
++
++
++def setCaptionsApiName(name):
++    """
++    변경:
++    - activeProject.annotations.captions.name.
++
++    처리:
++    CAPTION_SETTINGS_CHANGED의 explicit name field로 commit한다.
++    """
++    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"name": name})
++
++
++def setCaptionsApiNameBold(nameBold):
++    """
++    변경:
++    - activeProject.annotations.captions.nameBold.
++
++    처리:
++    CAPTION_SETTINGS_CHANGED의 explicit nameBold field로 commit한다.
++    """
++    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"nameBold": nameBold})
++
++
++def setCaptionsApiSettings(values):
++    """
++    변경:
++    - activeProject.annotations.captions.settings.
++
++    처리:
++    fontFamily/fontSize/lineHeight candidate를 captionSettings 규칙으로 정규화하고
++    CAPTION_SETTINGS_CHANGED로 한 번 commit한다.
++    """
++    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"settings": values})
++
++
++def readExportSettings():
++    """
++    Return:
++    - settings:
++      activeProject의 persistent width/heightMode/height/dpi/format read projection.
++
++    변경:
++    - 없음.
++    """
++    settings = "현재 project export settings"
++    return settings
++
++
++def setExportSettings(values):
++    """
++    Return:
++    - settings:
++      commit된 normalized persistent export settings.
++
++    변경:
++    - activeProject.export만 변경한다.
++
++    처리:
++    1. current export settings에서 candidate를 만든다.
++    2. width 100..20000, dpi 36..1200, format png/jpeg를 검증한다.
++    3. heightMode가 auto면 height는 계산 입력으로 사용하지 않는다.
++       explicit이면 height 100..20000을 요구한다.
++    4. candidate를 검증한 뒤 EXPORT_SETTINGS_CHANGED로 한 번 commit한다.
++    """
++    result = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", {"settings": values})
++    return result
+ 
+ 
+ def createTargetExportSnapshot():
+diff --git a/sourcescript/api_ui.py b/sourcescript/api_ui.py
+--- a/sourcescript/api_ui.py
++++ b/sourcescript/api_ui.py
+@@ -52,98 +52,98 @@
+     },
+     "images": {
+         "readEditor": "read; selected slot -> image asset + slot-local imageSettings projection",
+-        "setSettings": "mutation; selected slot.content.imageSettings candidate validation/commit",
+-        "insertEmpty": "mutation; 새 image asset + selected slot reference candidate를 함께 commit",
+-    },
+-    "assets": {
+-        "readDeletionTarget": "read/calculation; target asset과 collectAssetReferences 결과",
+-        "delete": "mutation; reference detach + asset removal candidate를 한 번 commit",
+-        "readTree": "read; current VFS/assets에서 tree projection 계산",
+-        "isTrashed": "read; canonical path의 trash subtree membership 계산",
+-        "movable": "read/calculation; current VFS에서 fixed directory 여부와 source 존재를 기준으로 tree move 가능 여부 계산; trash membership 자체는 move 금지 조건이 아님",
+-        "readTrash": "read; current trash subtree projection",
+-        "moveOptions": "read/calculation; target directory 후보 계산",
+-        "planMove": "calculation; current VFS에서 destination/collision/reference count plan",
+-        "move": "mutation; current state에서 plan을 재검증하고 candidate move commit",
+-        "createDirectory": "mutation; canonical non-conflicting directory candidate commit",
+-        "createEmptyCsv": (
+-            "mutation + runtime selection; 일반 CSV asset으로 빈 CSV.csv를 생성하고 기존 CSV selection 경로로 그 asset을 선택; "
+-            "graph object/chart는 이 command가 자동 생성하지 않음"
+-        ),
+-        "emptyTrash": "mutation; trash references/assets/directories candidate removal commit",
+-        "draggableAsset": "read/calculation; slot connection drag payload로 사용할 수 있는 non-trash CSV/image asset projection; tree move 가능 여부와는 별도 판정",
+-        "connectToSlot": "mutation; (path, kind, slotId)에서 현재 VFS asset 및 slotId로 slot을 resolve 후 명시적 연결 commit; 단순 선택은 연결하지 않음",
+-        "importToDirectory": "lifecycle mutation; batch file candidates -> collision plan -> one commit",
+-        "importToSlot": "lifecycle mutation; file asset + target slot/chart candidate -> one commit",
+-        "fileKind": "calculation; filename/MIME에서 지원 slot import kind 판정",
+-        "importFiles": "lifecycle router; supported files를 directory/slot import contract로 전달",
+-        "collisionModel": "calculation; current VFS + reserved paths에서 collision model",
+-        "resolveImportPlan": "calculation; user choice를 concrete path/replace id plan으로 변환",
+-        "selectDirectory": "runtime mutation; VFS-resolved directory selection",
+-        "selectCsv": "runtime mutation; VFS-resolved CSV selection",
+-        "selectImage": "runtime mutation; VFS-resolved image selection only; no slot mutation",
+-        "download": "read/export; asset original bytes download, project mutation 없음",
+-    },
+-    "graphs": {
+-        "readData": "read; selected chart objects + 단일 현재 CSV/columns + selected object csvId에서 별도로 resolve한 objectColumns; object reference는 현재 선택 대체 원천이 아님",
+-        "readLayout": "read; selected chart title/global/axis projection",
+-        "readPalette": "read; selected chart object color projection",
+-        "selectCsv": "runtime mutation; graph editor의 current CSV selection",
+-        "setHeaderLines": "mutation; referenced CSV headerLines candidate commit",
+-        "setEditable": "mutation; imported chart editable conversion candidate + 필요 CSV를 한 번 commit",
+-        "addObject": "mutation; selected chart object candidate append; chart 없으면 owned chart candidate도 생성",
+-        "moveObject": "mutation; objects 순서 candidate commit",
+-        "selectObject": "runtime mutation; valid object index selection",
+-        "setObjectValues": "mutation; one graph object normalized candidate commit",
+-        "deleteObject": "mutation; object 제거; 마지막 object 제거도 empty chart로 허용",
+-        "updateLayout": "mutation; chart title/global/axis candidate validation/commit",
+-        "applyPalette": "mutation; graph object color candidate commit",
+-        "defaultColors": "read; immutable default color sequence copy",
+-        "hasSelectedSlot": "read; current selected slot 존재 여부",
+-        "importFile": "lifecycle mutation; FFSX 또는 Plotly candidate -> target slot owning chart commit",
+-        "exportFfsx": "read/export; selected graph slot + referenced CSV snapshot -> FFSX",
+-        "exportPlotlyJson": "read/export; selected chart semantic figure -> Plotly JSON",
+-    },
+-    "print": {
+-        "readSettings": "read; activeProject.export persistent settings projection",
+-        "setSettings": "mutation; width/heightMode/height/dpi/format candidate validation/commit",
+-        "save": "export; persistent target settings snapshot으로 raster export, project mutation 없음",
+-        "capture": "export; current-screen one-shot capture, persistent target width/height mutation 없음",
+-    },
+-    "captions": {
+-        "readGlobal": "read; project-level global caption projection",
+-        "readSlot": "read; explicit slot id의 slot.caption projection",
+-        "setEnabled": "mutation; global caption enabled project property commit",
+-        "setGlobalText": "mutation; global caption text만 commit",
+-        "setSlotText": "mutation; explicit slot id의 slot.caption만 commit",
+-        "insertSlotCaptions": "mutation; slot.caption text projection을 global caption text에 명시적으로 삽입",
+-        "setName": "mutation; global caption name commit",
+-        "setNameBold": "mutation; global caption nameBold commit",
+-        "setSettings": "mutation; global/shared caption presentation settings candidate commit",
+-    },
+-    "labels": {
+-        "readState": "read; persistent label settings + current slot reference geometry projection",
+-        "setEnabled": "mutation; label enabled project property commit",
+-        "setSettings": "mutation; label format/order/font candidate validation/commit",
+-        "setPosition": "mutation; authoritative x/y를 continuous edit path로 commit",
+-        "finishPositionInteraction": "runtime notification; x/y의 두 번째 commit을 만들지 않음",
+-        "resetPosition": "mutation; authoritative label x/y를 default origin으로 commit",
+-    },
+-    "appearance": {
+-        "readPalette": "read; persistent UI palette projection",
+-        "setPalette": "mutation; normalized palette candidate commit",
+-        "resetPalette": "mutation; default palette candidate commit",
+-    },
+-    "layout": {
+-        "readState": "read; layout/style/visible slots/logical preview geometry projection",
+-        "setStyle": "mutation; slotStyle candidate validation/commit",
+-        "setGrid": "mutation; safe resize candidate만 commit; implicit reflow 금지",
+-        "setZoom": "runtime mutation; dashboard zoom intent only",
+-        "commitZoom": "runtime notification; persistent layout state의 두 번째 copy를 만들지 않음",
+-        "setZoomLocked": "runtime mutation; session zoom lock",
+-        "resetZoom": "runtime mutation; session zoom default",
+-        "mergeSlots": "mutation; one non-default slot-local payload만 anchor로 원자적 이동",
+-        "splitSlots": "mutation; anchor local payload 유지 + restored slots local defaults",
++        "setSettings": "mutation; SLOT_IMAGE_SETTINGS_CHANGED project command로 selected slot.content.imageSettings candidate validation/commit",
++        "insertEmpty": "mutation; 새 image asset + selected slot reference candidate를 함께 commit",
++    },
++    "assets": {
++        "readDeletionTarget": "read/calculation; target asset과 collectAssetReferences 결과",
++        "delete": "mutation; reference detach + asset removal candidate를 한 번 commit",
++        "readTree": "read; current VFS/assets에서 tree projection 계산",
++        "isTrashed": "read; canonical path의 trash subtree membership 계산",
++        "movable": "read/calculation; current VFS에서 fixed directory 여부와 source 존재를 기준으로 tree move 가능 여부 계산; trash membership 자체는 move 금지 조건이 아님",
++        "readTrash": "read; current trash subtree projection",
++        "moveOptions": "read/calculation; target directory 후보 계산",
++        "planMove": "calculation; current VFS에서 destination/collision/reference count plan",
++        "move": "mutation; current state에서 plan을 재검증하고 candidate move commit",
++        "createDirectory": "mutation; canonical non-conflicting directory candidate commit",
++        "createEmptyCsv": (
++            "mutation + runtime selection; 일반 CSV asset으로 빈 CSV.csv를 생성하고 기존 CSV selection 경로로 그 asset을 선택; "
++            "graph object/chart는 이 command가 자동 생성하지 않음"
++        ),
++        "emptyTrash": "mutation; trash references/assets/directories candidate removal commit",
++        "draggableAsset": "read/calculation; slot connection drag payload로 사용할 수 있는 non-trash CSV/image asset projection; tree move 가능 여부와는 별도 판정",
++        "connectToSlot": "mutation; (path, kind, slotId)에서 현재 VFS asset 및 slotId로 slot을 resolve 후 명시적 연결 commit; 단순 선택은 연결하지 않음",
++        "importToDirectory": "lifecycle mutation; batch file candidates -> collision plan -> one commit",
++        "importToSlot": "lifecycle mutation; file asset + target slot/chart candidate -> one commit",
++        "fileKind": "calculation; filename/MIME에서 지원 slot import kind 판정",
++        "importFiles": "lifecycle router; supported files를 directory/slot import contract로 전달",
++        "collisionModel": "calculation; current VFS + reserved paths에서 collision model",
++        "resolveImportPlan": "calculation; user choice를 concrete path/replace id plan으로 변환",
++        "selectDirectory": "runtime mutation; VFS-resolved directory selection",
++        "selectCsv": "runtime mutation; VFS-resolved CSV selection",
++        "selectImage": "runtime mutation; VFS-resolved image selection only; no slot mutation",
++        "download": "read/export; asset original bytes download, project mutation 없음",
++    },
++    "graphs": {
++        "readData": "read; selected chart objects + 단일 현재 CSV/columns + selected object csvId에서 별도로 resolve한 objectColumns; object reference는 현재 선택 대체 원천이 아님",
++        "readLayout": "read; selected chart title/global/axis projection",
++        "readPalette": "read; selected chart object color projection",
++        "selectCsv": "runtime mutation; graph editor의 current CSV selection",
++        "setHeaderLines": "mutation; referenced CSV headerLines candidate commit",
++        "setEditable": "mutation; imported chart editable conversion candidate + 필요 CSV를 한 번 commit",
++        "addObject": "mutation; selected chart object candidate append; chart 없으면 owned chart candidate도 생성",
++        "moveObject": "mutation; objects 순서 candidate commit",
++        "selectObject": "runtime mutation; valid object index selection",
++        "setObjectValues": "mutation; one graph object normalized candidate commit",
++        "deleteObject": "mutation; object 제거; 마지막 object 제거도 empty chart로 허용",
++        "updateLayout": "mutation; chart title/global/axis candidate validation/commit",
++        "applyPalette": "mutation; graph object color candidate commit",
++        "defaultColors": "read; immutable default color sequence copy",
++        "hasSelectedSlot": "read; current selected slot 존재 여부",
++        "importFile": "lifecycle mutation; FFSX 또는 Plotly candidate -> target slot owning chart commit",
++        "exportFfsx": "read/export; selected graph slot + referenced CSV snapshot -> FFSX",
++        "exportPlotlyJson": "read/export; selected chart semantic figure -> Plotly JSON",
++    },
++    "print": {
++        "readSettings": "read; activeProject.export persistent settings projection",
++        "setSettings": "mutation; width/heightMode/height/dpi/format candidate validation/commit",
++        "save": "export; persistent target settings snapshot으로 raster export, project mutation 없음",
++        "capture": "export; current-screen one-shot capture, persistent target width/height mutation 없음",
++    },
++    "captions": {
++        "readGlobal": "read; project-level global caption projection",
++        "readSlot": "read; explicit slot id의 slot.caption projection",
++        "setEnabled": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption enabled commit",
++        "setGlobalText": "mutation; global caption text만 commit",
++        "setSlotText": "mutation; explicit slot id의 slot.caption만 commit",
++        "insertSlotCaptions": "mutation; slot.caption text projection을 global caption text에 명시적으로 삽입",
++        "setName": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption name commit",
++        "setNameBold": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption nameBold commit",
++        "setSettings": "mutation; CAPTION_SETTINGS_CHANGED project command로 global/shared caption presentation settings candidate commit",
++    },
++    "labels": {
++        "readState": "read; persistent label settings + current slot reference geometry projection",
++        "setEnabled": "mutation; label enabled project property commit",
++        "setSettings": "mutation; label format/order/font candidate validation/commit",
++        "setPosition": "mutation; authoritative x/y를 continuous edit path로 commit",
++        "finishPositionInteraction": "runtime notification; x/y의 두 번째 commit을 만들지 않음",
++        "resetPosition": "mutation; authoritative label x/y를 default origin으로 commit",
++    },
++    "appearance": {
++        "readPalette": "read; persistent UI palette projection",
++        "setPalette": "mutation; normalized palette candidate commit",
++        "resetPalette": "mutation; default palette candidate commit",
++    },
++    "layout": {
++        "readState": "read; layout/style/visible slots/logical preview geometry projection",
++        "setStyle": "mutation; LAYOUT_STYLE_CHANGED project command로 slotStyle candidate validation/commit",
++        "setGrid": "mutation; safe resize candidate만 commit; implicit reflow 금지",
++        "setZoom": "runtime mutation; dashboard zoom intent only",
++        "commitZoom": "runtime notification; persistent layout state의 두 번째 copy를 만들지 않음",
++        "setZoomLocked": "runtime mutation; session zoom lock",
++        "resetZoom": "runtime mutation; session zoom default",
++        "mergeSlots": "mutation; SLOTS_MERGED project command로 one non-default slot-local payload만 anchor로 원자적 이동",
++        "splitSlots": "mutation; SLOTS_SPLIT project command로 anchor local payload 유지 + restored slots local defaults",
+     },
+ }
+ 
 diff --git a/development-versions.json b/development-versions.json
 --- a/development-versions.json
 +++ b/development-versions.json
-@@ -38,7 +38,7 @@
-         "fast-figure.js",
-         "scripts/build-portable.py"
-       ],
--      "fingerprint": "sha256:7725b2403b43693209ac3e9274009bf75c251eebe7ed8508d357993dd04100ae",
+@@ -9,46 +9,46 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode and gates Source Code where TLC validation is used.",
+   "layers": {
+     "source-script": {
+-      "revision": 21,
+-      "status": "current",
+-      "path_rule": "sourcescript/**/*.py",
+-      "fingerprint": "sha256:20dcdebc56a6baa471e2e5b4996e7d6a13cdc5a910247eb20e1e7e50e1614563",
+-      "derived_from": null,
+-      "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261014-010-sourcescript-closure-r21.md"
+-    },
+-    "verification-model": {
+-      "revision": 19,
+-      "status": "current",
+-      "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:adfe7604a801893eaa305cda72cf62fb701cb256b992da319d44322b447f5382",
+-      "derived_from": {
+-        "source-script": "sha256:20dcdebc56a6baa471e2e5b4996e7d6a13cdc5a910247eb20e1e7e50e1614563",
+-        "pseudocode": "sha256:bc89a32a69f9dd06fb7d1b982e2eceb47ce7d89274c526f18eac351e4b469eb2"
+-      },
+-      "tlc": "pending",
+-      "validation_review": null
+-    },
+-    "source-code": {
+-      "revision": 24,
+-      "status": "stale",
+-      "paths": [
+-        "Fast-figure.html",
+-        "fast-figure-ui.js",
+-        "fast-figure.js",
+-        "scripts/build-portable.py"
+-      ],
+-      "fingerprint": "sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f",
+-      "derived_from": {
+-        "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
+-        "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17",
+-        "verification-model": "sha256:c3be19be754757a5b3423f0e939cebf841f0aa9c7532ee2d231263d57aa6d75f"
+-      },
+-      "validation_review": null
+-    },
+-    "pseudocode": {
+-      "revision": 7,
+-      "status": "current",
++      "revision": 22,
++      "status": "current",
++      "path_rule": "sourcescript/**/*.py",
++      "fingerprint": "sha256:65f70d9060b0e2a802f1bc595058548ed350a2631e94069e4776af78df48bf2a",
++      "derived_from": null,
++      "closure": "closed",
++      "closure_review": "agent_space/reviews/review-20261014-012-sourcescript-closure-r22.md"
++    },
++    "verification-model": {
++      "revision": 19,
++      "status": "stale",
++      "path_rule": "verification/**/*.{tla,cfg}",
++      "fingerprint": "sha256:adfe7604a801893eaa305cda72cf62fb701cb256b992da319d44322b447f5382",
++      "derived_from": {
++        "source-script": "sha256:20dcdebc56a6baa471e2e5b4996e7d6a13cdc5a910247eb20e1e7e50e1614563",
++        "pseudocode": "sha256:bc89a32a69f9dd06fb7d1b982e2eceb47ce7d89274c526f18eac351e4b469eb2"
++      },
++      "tlc": "pending",
++      "validation_review": null
++    },
++    "source-code": {
++      "revision": 24,
++      "status": "stale",
++      "paths": [
++        "Fast-figure.html",
++        "fast-figure-ui.js",
++        "fast-figure.js",
++        "scripts/build-portable.py"
++      ],
 +      "fingerprint": "sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f",
++      "derived_from": {
++        "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
++        "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17",
++        "verification-model": "sha256:c3be19be754757a5b3423f0e939cebf841f0aa9c7532ee2d231263d57aa6d75f"
++      },
++      "validation_review": null
++    },
++    "pseudocode": {
++      "revision": 7,
++      "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+       "fingerprint": "sha256:bc89a32a69f9dd06fb7d1b982e2eceb47ce7d89274c526f18eac351e4b469eb2",
        "derived_from": {
-         "source-script": "sha256:3840b94d335d5d7b93e7eb1508cf6027603a2b4c838646a70dba03e14deaf66e",
-         "pseudocode": "sha256:f8fc0d4c8f4c051db11479d35d8da51bcad9da84a79b28504547615628287c17",
+diff --git a/agent_space/reviews/review-20261014-012-sourcescript-closure-r22.md b/agent_space/reviews/review-20261014-012-sourcescript-closure-r22.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261014-012-sourcescript-closure-r22.md
+@@ -0,0 +1,59 @@
++# Source Script r22 closure review — persistent mutation command coverage
++
++## 범위와 되돌아온 이유
++
++plan-015 J1 구현을 시작하는 과정에서 Source Script r21의 책임 선언과 실제 public persistent mutation surface 사이의 누락을 발견했다. 정책에 따라 Source Code에서 새 command 의미를 발명하지 않고 Source Script로 돌아왔다.
++
++r21 closure에서 놓친 핵심은 `PUBLIC_API_METHODS`의 persistent mutation 전체를 `PROJECT_COMMANDS`와 일대일로 대조하지 않은 것이다. 당시 review는 projectEFSM/interfaceFSM의 상위 ownership 분리에 집중했고, 각 public mutation이 실제로 하나의 명시적 project command로 수렴하는지까지 command coverage 관점에서 닫힘을 확인하지 못했다.
++
++## 논리적 완결성
++
++persistent ProjectObject mutation 가운데 r21에서 explicit project command가 빠졌던 다음 의미를 보강했다.
++
++- slot-local image settings → `SLOT_IMAGE_SETTINGS_CHANGED`
++- global caption enabled/name/nameBold/presentation settings → `CAPTION_SETTINGS_CHANGED`
++- persistent slotStyle → `LAYOUT_STYLE_CHANGED`
++- slot merge → `SLOTS_MERGED`
++- slot split → `SLOTS_SPLIT`
++
++기존 command인 `GRID_LAYOUT_CHANGED`, `CAPTION_TEXT_INPUT`, `SLOT_CAPTIONS_INSERTED`, `LABEL_SETTINGS_CHANGED`, `LABEL_POSITION_CHANGED`, `APPEARANCE_CHANGED`, `EXPORT_SETTINGS_CHANGED`도 관련 Source Script 함수에서 `dispatchProjectCommand`로 수렴하는 경로를 명시했다.
++
++`PROJECT_COMMAND_COVERAGE_RULE`을 추가해 public API에서 persistent mutation으로 분류된 operation이 독립 commit path를 만들지 않고 반드시 선언된 project command semantics에 수렴하도록 했다.
++
++## 프로젝트 목적 부합
++
++이번 변경은 새 사용자 기능을 추가하지 않는다. 기존 Fast Figure ProjectObject의 persistent state owner를 projectEFSM으로 일관되게 만들고, interfaceFSM과 renderer가 project authority를 직접 변경하지 않게 하는 plan-015의 목적만 보완한다.
++
++Layout selection, zoom, pointer interaction, form draft 같은 UI/runtime-local 상태는 project command로 승격하지 않았다.
++
++## 중복·통합·복잡도 검토
++
++- public API마다 별도 mutation engine을 만들지 않고 기존 `dispatchProjectCommand` 경계로 통합했다.
++- image settings, caption settings, layout style, merge/split을 각각 의미 있는 project command로만 추가했다.
++- enabled/name/nameBold/font settings처럼 같은 global caption owner를 변경하는 항목은 여러 command로 쪼개지 않고 `CAPTION_SETTINGS_CHANGED` 하나에 explicit fields로 통합했다.
++- label enabled/settings도 기존 `LABEL_SETTINGS_CHANGED`를 확장해 같은 owner의 중복 command를 만들지 않았다.
++- 하나의 범용 `PROJECT_PATCH` command는 precondition, writable owner, candidate validation, selection reconciliation 차이를 숨기고 예외 분기를 늘리므로 채택하지 않았다.
++- candidate 계산과 authoritative commit은 분리하며 helper 계산 결과가 별도 authority가 되지 않는다.
++
++## 권위와 데이터 흐름
++
++정상 경로는 다음 하나다.
++
++`UI/API input → candidate calculation → dispatchProjectCommand → projectEFSM validate/commit → ProjectMutationResult → interfaceFSM reconcile → renderer projection`
++
++ProjectMutationResult는 장기 상태가 아니며 interface reconciliation/renderer effect 동안만 소비한다. 영속 ProjectObject의 유일한 authority는 계속 `activeProject`다.
++
++## 닫힘 판정
++
++1. 논리적 완결성: public persistent mutation surface와 project command coverage를 대조했고 누락을 보완했다.
++2. 프로젝트 목적 부합: FFPX EFSM/UI-FSM 책임 분리 외 새 기능을 추가하지 않았다.
++3. 중복과 통합·확장: 같은 owner는 기존 command에 통합하고, 서로 다른 mutation 의미만 별도 command로 유지했다.
++
++따라서 Source Script r22를 closed로 판정한다.
++
++## 하위 계층 전파
++
++- pseudocode r7은 r22에 대해 stale이다.
++- verification r19는 pseudocode r7 lineage이므로 stale이며 기존 TLC 진행 결과를 r22의 검증 결과로 재사용하지 않는다.
++- Source Code r24는 stale 상태를 유지한다.
++- 다음 단계는 r22를 PlusCal pseudocode로 직접 번역하고 translation review를 수행하는 것이다.
 diff --git a/agent_space/patches/20261014-019.md b/agent_space/patches/20261014-019.md
 new file mode 100644
 --- /dev/null
 +++ b/agent_space/patches/20261014-019.md
-@@ -0,0 +1,22 @@
-+# 20261014-019 — Correct Source Code fingerprint path ordering
+@@ -0,0 +1,32 @@
++# 20261014-019 — Close Source Script persistent mutation command coverage r22
 +
-+## 원인
++## 변경 이유
 +
-+WIP Source Code r24 fingerprint를 계산할 때 JavaScript `localeCompare` 정렬을 사용해 파일 순서가 저장소 checker의 Python 문자열 정렬과 달라졌다.
-+
-+잘못 기록된 값:
-+`sha256:7725b2403b43693209ac3e9274009bf75c251eebe7ed8508d357993dd04100ae`
-+
-+checker와 동일한 정렬 순서:
-+`Fast-figure.html → fast-figure-ui.js → fast-figure.js → scripts/build-portable.py`
-+
-+수정 fingerprint:
-+`sha256:2b8d4f5eda1eb414ddc123cf524d6a006d67cf44251bc7c86b1425e44e3f403f`
++Source Code J1 구현 과정에서 Source Script r21의 projectEFSM 책임 선언과 public persistent mutation surface 사이에 command coverage 누락을 발견했다. 하위 구현에서 command를 임의 생성하지 않고 Source Script로 돌아가 보정한다.
 +
 +## 변경
 +
-+application source는 변경하지 않고 `development-versions.json`의 Source Code r24 fingerprint만 실제 tree에 맞게 바로잡는다. Source Code 상태는 TLC 완료 전이므로 계속 `stale`이다.
++- `project_efsm.py`: image settings, caption settings, layout style, merge, split project command와 command coverage rule 추가.
++- `layout_annotations_export.py`: 관련 persistent API mutation을 `dispatchProjectCommand` 경계로 명시.
++- `api_ui.py`: 관련 public API 설명을 대응 project command와 연결.
++- Source Script r22 fingerprint/closure review 갱신.
++- pseudocode/verification/source-code는 stale로 전환.
++
++## 선택 이유
++
++명시적 mutation path, single source of truth, 계산과 mutation 분리, 중복 추상화 금지라는 일반 코딩 원칙을 동시에 만족한다. 기존 `dispatchProjectCommand`와 projectEFSM을 자연스럽게 확장하는 것이 별도 mutation layer보다 복잡도 대비 자유도가 높다.
++
++## 기각한 방향
++
++- Source Code에서 누락 command를 먼저 구현: 계층 권위 역전.
++- public API가 activeProject를 직접 commit: projectEFSM 우회.
++- 하나의 generic patch command: 서로 다른 precondition/reference/selection 의미를 감춘다.
++- UI-local state까지 project command로 승격: persistent authority와 runtime state를 혼합한다.
++
++## 이전 닫힘에서 놓친 점
++
++r21 closure는 두 FSM의 owner 분리에 집중했고 `PUBLIC_API_METHODS`와 `PROJECT_COMMANDS`를 coverage matrix로 대조하지 않았다. 그 결과 ownership 원칙은 맞지만 concrete mutation path 일부가 닫히지 않았다.
 +
 +## 후속
 +
-+push-trigger development-layer check로 metadata가 실제 tree와 일치하는지 다시 검증한다. regression/build는 직전 구현 commit에서 이미 성공했으므로 이 metadata 수정은 기능 재검증을 대체하지 않는다.
++r22를 PlusCal pseudocode로 직접 번역하고 translation review 후 verification model/TLC를 갱신한다. TLC가 passed가 되기 전에는 Source Code를 다시 수정하지 않는다.

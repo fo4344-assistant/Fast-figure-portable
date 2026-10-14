@@ -52,7 +52,7 @@ PUBLIC_API_METHODS = {
     },
     "images": {
         "readEditor": "read; selected slot -> image asset + slot-local imageSettings projection",
-        "setSettings": "mutation; selected slot.content.imageSettings candidate validation/commit",
+        "setSettings": "mutation; SLOT_IMAGE_SETTINGS_CHANGED project command로 selected slot.content.imageSettings candidate validation/commit",
         "insertEmpty": "mutation; 새 image asset + selected slot reference candidate를 함께 commit",
     },
     "assets": {
@@ -113,13 +113,13 @@ PUBLIC_API_METHODS = {
     "captions": {
         "readGlobal": "read; project-level global caption projection",
         "readSlot": "read; explicit slot id의 slot.caption projection",
-        "setEnabled": "mutation; global caption enabled project property commit",
+        "setEnabled": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption enabled commit",
         "setGlobalText": "mutation; global caption text만 commit",
         "setSlotText": "mutation; explicit slot id의 slot.caption만 commit",
         "insertSlotCaptions": "mutation; slot.caption text projection을 global caption text에 명시적으로 삽입",
-        "setName": "mutation; global caption name commit",
-        "setNameBold": "mutation; global caption nameBold commit",
-        "setSettings": "mutation; global/shared caption presentation settings candidate commit",
+        "setName": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption name commit",
+        "setNameBold": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption nameBold commit",
+        "setSettings": "mutation; CAPTION_SETTINGS_CHANGED project command로 global/shared caption presentation settings candidate commit",
     },
     "labels": {
         "readState": "read; persistent label settings + current slot reference geometry projection",
@@ -136,14 +136,14 @@ PUBLIC_API_METHODS = {
     },
     "layout": {
         "readState": "read; layout/style/visible slots/logical preview geometry projection",
-        "setStyle": "mutation; slotStyle candidate validation/commit",
+        "setStyle": "mutation; LAYOUT_STYLE_CHANGED project command로 slotStyle candidate validation/commit",
         "setGrid": "mutation; safe resize candidate만 commit; implicit reflow 금지",
         "setZoom": "runtime mutation; dashboard zoom intent only",
         "commitZoom": "runtime notification; persistent layout state의 두 번째 copy를 만들지 않음",
         "setZoomLocked": "runtime mutation; session zoom lock",
         "resetZoom": "runtime mutation; session zoom default",
-        "mergeSlots": "mutation; one non-default slot-local payload만 anchor로 원자적 이동",
-        "splitSlots": "mutation; anchor local payload 유지 + restored slots local defaults",
+        "mergeSlots": "mutation; SLOTS_MERGED project command로 one non-default slot-local payload만 anchor로 원자적 이동",
+        "splitSlots": "mutation; SLOTS_SPLIT project command로 anchor local payload 유지 + restored slots local defaults",
     },
 }
 

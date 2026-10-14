@@ -22,15 +22,20 @@ PROJECT_COMMANDS = {
     "SLOTS_RESET": "slot-local payload reset과 owned chart 제거",
     "SLOTS_SWAPPED": "두 GUI 위치의 slot-local payload 교환",
     "SLOT_IMAGE_LINKED": "existing image reference를 slot에 연결",
+    "SLOT_IMAGE_SETTINGS_CHANGED": "slot-local imageSettings candidate commit",
     "SLOT_DATA_CONNECTED": "CSV를 graph slot/chart object에 연결",
     "SLOT_IMAGE_IMPORTED": "imported image와 slot reference commit",
     "SLOT_CHART_IMPORTED": "imported chart와 owning slot commit",
     "GRAPH_OBJECTS_REPLACED": "chart.editor.objects 교체",
     "CHART_LAYOUT_CHANGED": "chart persistent layout 설정 교체",
     "CHART_MODEL_REPLACED": "chart model 교체",
-    "GRID_LAYOUT_CHANGED": "grid와 slot arrangement 변경",
+    "GRID_LAYOUT_CHANGED": "grid 크기와 slot arrangement 변경",
+    "LAYOUT_STYLE_CHANGED": "persistent slotStyle candidate commit",
+    "SLOTS_MERGED": "선택 직사각형의 slot-local payload를 top-left anchor로 원자적 병합",
+    "SLOTS_SPLIT": "merged anchor를 visible 1x1 slots로 복원",
     "CAPTION_TEXT_INPUT": "explicit global/slot caption owner text 변경",
     "SLOT_CAPTIONS_INSERTED": "slot captions를 global caption text에 삽입",
+    "CAPTION_SETTINGS_CHANGED": "global caption enabled/name/nameBold/presentation settings commit",
     "LABEL_SETTINGS_CHANGED": "persistent label 설정 변경",
     "LABEL_POSITION_CHANGED": "persistent label 위치 변경",
     "APPEARANCE_CHANGED": "persistent UI palette 변경",
@@ -68,6 +73,12 @@ ProjectMutationResult = {
     "selectionHints": "후속 interface reconciliation에 필요한 identity/path 결과",
     "projectionEffect": "renderer effect를 결정할 수 있는 실제 commit 결과",
 }
+
+PROJECT_COMMAND_COVERAGE_RULE = (
+    "PUBLIC_API_METHODS에서 persistent ProjectObject mutation으로 분류한 operation은 PROJECT_COMMANDS 중 하나로 수렴한다. "
+    "domain helper가 candidate를 계산할 수는 있지만 activeProject commit을 독립 mutation path로 수행하지 않는다. "
+    "같은 owner를 변경하는 UI/API 진입점은 동일 project command semantics를 공유한다."
+)
 
 PROJECT_RESULT_RULE = (
     "ProjectMutationResult는 장기 authority가 아니라 한 command의 immutable result다. "

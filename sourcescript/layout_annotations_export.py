@@ -157,6 +157,22 @@ def gridSlotGeometry(layout, geometry, slot):
     return slotGeometry
 
 
+def setLayoutApiStyle(values):
+    """
+    변경:
+    - activeProject.layout.slotStyle.
+
+    처리:
+    1. current slotStyle에서 candidate를 만든다.
+    2. referenceWidth/gap/outerMargin/radius/aspect를 layoutRules 범위로 정규화한다.
+    3. candidate whole-project invariant를 확인한다.
+    4. LAYOUT_STYLE_CHANGED를 dispatchProjectCommand로 보내 한 번 commit한다.
+    5. renderer는 commit result 이후 authoritative layout을 다시 읽는다.
+    """
+    result = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", values)
+    return result
+
+
 def buildGridResizeCandidate(rows, cols):
     """
     Return:
@@ -191,9 +207,11 @@ def setLayoutApiGrid(rows, cols):
     처리:
     candidate를 먼저 만들고 전체 project invariant를 검증한다.
     거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
+    성공 candidate는 GRID_LAYOUT_CHANGED를 dispatchProjectCommand로 보내 한 번 commit한다.
     commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 interfaceFSM reconciliation이 결정한다.
     """
-    return "grid 변경 또는 rejected layout state"
+    result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", {"rows": rows, "cols": cols})
+    return result
 
 
 def mergeSlots(slotIds):
@@ -210,9 +228,11 @@ def mergeSlots(slotIds):
     4. covered non-anchor slot은 모든 local properties를 SLOT_LOCAL_DEFAULTS로 되돌리고 hidden=true로 한다.
     5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
     6. 두 개 이상의 selected slot object가 non-default local state를 가지면 implicit merge/concatenation 없이 거부한다.
-    7. whole-project candidate를 검증한 뒤 한 번 commit한다.
+    7. whole-project candidate를 검증한 뒤 SLOTS_MERGED를 dispatchProjectCommand로 보내 한 번 commit한다.
+    8. selectedSlotId reconciliation과 renderer update는 ProjectMutationResult 이후 interface/orchestration이 수행한다.
     """
-    return "merge candidate commit 결과"
+    result = dispatchProjectCommand("SLOTS_MERGED", {"slotIds": slotIds})
+    return result
 
 
 def splitSlots(slotIds):
@@ -224,9 +244,11 @@ def splitSlots(slotIds):
     1. current merged visible anchor를 resolve한다.
     2. anchor slot object의 chart/image/contentType/imageSettings/caption 등 모든 slot-local properties를 anchor에 유지한다.
     3. covered cell은 visible 1x1 slot로 복원하고 모든 slot-local properties를 defaults로 시작한다.
-    4. candidate 전체를 검증한 뒤 한 번 commit한다.
+    4. candidate 전체를 검증한 뒤 SLOTS_SPLIT을 dispatchProjectCommand로 보내 한 번 commit한다.
+    5. interface selection reconciliation과 renderer update는 project commit 이후 수행한다.
     """
-    return "split candidate commit 결과"
+    result = dispatchProjectCommand("SLOTS_SPLIT", {"slotIds": slotIds})
+    return result
 
 
 def readImageEditorApi():
@@ -250,10 +272,16 @@ def applyImageSettingsFromValues(values):
 
     처리:
     fit enum과 manual scale/x/y 범위를 정규화한다.
-    selected slot object의 local imageSettings candidate를 검증 후 commit하고 IMAGE_SETTINGS_CHANGED를 notify한다.
+    selected slot id와 normalized settings를 SLOT_IMAGE_SETTINGS_CHANGED로 dispatchProjectCommand에 전달한다.
+    projectEFSM은 slot-local imageSettings candidate를 검증 후 한 번 commit한다.
     같은 image asset을 참조하는 다른 slot의 imageSettings는 변경하지 않는다.
+    renderer/interface notification은 commit result 이후 수행한다.
     """
-    return "설정 적용 성공 여부"
+    result = dispatchProjectCommand(
+        "SLOT_IMAGE_SETTINGS_CHANGED",
+        {"slotId": selectedSlotId, "settings": values},
+    )
+    return result
 
 
 def readLabelsApiState():
@@ -272,6 +300,32 @@ def readLabelsApiState():
     return labelState
 
 
+def setLabelsApiEnabled(enabled):
+    """
+    변경:
+    - activeProject.annotations.labels.enabled.
+
+    처리:
+    LABEL_SETTINGS_CHANGED에 enabled candidate를 전달한다.
+    다른 label settings 값은 current authority에서 유지한다.
+    """
+    result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"enabled": enabled})
+    return result
+
+
+def setLabelsApiSettings(values):
+    """
+    변경:
+    - activeProject.annotations.labels.settings의 format/order/parentheses/fontFamily/fontSize.
+
+    처리:
+    current labelSettings에서 candidate를 만들고 허용 enum/수치 규칙을 적용한 뒤
+    LABEL_SETTINGS_CHANGED로 한 번 commit한다. x/y position은 values에 명시되지 않으면 유지한다.
+    """
+    result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"settings": values})
+    return result
+
+
 def setLabelsApiPosition(x, y):
     """
     변경:
@@ -279,11 +333,12 @@ def setLabelsApiPosition(x, y):
 
     처리:
     x/y를 finite position으로 정규화한다.
-    pointer drag 중 호출되더라도 같은 mutation path에서 persistent position을 연속 갱신한다.
+    pointer drag 중 호출되더라도 LABEL_POSITION_CHANGED라는 같은 mutation path를 사용한다.
     renderer는 mutation 뒤 authoritative position을 다시 읽는다.
     별도 preview position copy를 만들지 않는다.
     """
-    return "변경 후 label position read state"
+    result = dispatchProjectCommand("LABEL_POSITION_CHANGED", {"x": x, "y": y})
+    return result
 
 
 def finishLabelsApiPositionInteraction():
@@ -340,8 +395,13 @@ def setGlobalCaptionText(text):
     처리:
     global caption project property 하나만 변경한다.
     slot caption 값은 변경하지 않는다.
+    CAPTION_TEXT_INPUT에 explicit global owner를 전달해 projectEFSM으로 commit한다.
     """
-    return "변경 후 global caption state"
+    result = dispatchProjectCommand(
+        "CAPTION_TEXT_INPUT",
+        {"target": {"kind": "global"}, "text": text},
+    )
+    return result
 
 
 def setSlotCaptionText(slotId, text):
@@ -350,10 +410,14 @@ def setSlotCaptionText(slotId, text):
     - 지정 slot object의 slot.caption.
 
     처리:
-    slotId를 current project에서 resolve하고 text를 slot-local property로 commit한다.
+    slotId를 current project에서 resolve하고 CAPTION_TEXT_INPUT에 explicit slot owner를 전달한다.
     UI의 selected-slot caption editor는 이 command를 호출할 뿐 별도 persistent slotMode를 만들지 않는다.
     """
-    return "변경 후 slot caption state"
+    result = dispatchProjectCommand(
+        "CAPTION_TEXT_INPUT",
+        {"target": {"kind": "slot", "id": slotId}, "text": text},
+    )
+    return result
 
 
 def insertSlotCaptionsIntoGlobalCaption(slotIds):
@@ -366,8 +430,55 @@ def insertSlotCaptionsIntoGlobalCaption(slotIds):
     2. non-empty slot.caption을 label/text projection으로 계산한다.
     3. 계산한 text를 사용자 명령에 따라 global caption text에 삽입한다.
     4. source slot.caption 값과 slot ownership은 변경하지 않는다.
+    5. 계산된 insertion intent를 SLOT_CAPTIONS_INSERTED project command로 commit한다.
     """
-    return "변경 후 global caption state"
+    result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
+    return result
+
+
+def setCaptionsApiEnabled(enabled):
+    """
+    변경:
+    - activeProject.annotations.captions.enabled.
+
+    처리:
+    CAPTION_SETTINGS_CHANGED에 enabled candidate만 전달하고 다른 caption properties는 유지한다.
+    """
+    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"enabled": enabled})
+
+
+def setCaptionsApiName(name):
+    """
+    변경:
+    - activeProject.annotations.captions.name.
+
+    처리:
+    CAPTION_SETTINGS_CHANGED의 explicit name field로 commit한다.
+    """
+    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"name": name})
+
+
+def setCaptionsApiNameBold(nameBold):
+    """
+    변경:
+    - activeProject.annotations.captions.nameBold.
+
+    처리:
+    CAPTION_SETTINGS_CHANGED의 explicit nameBold field로 commit한다.
+    """
+    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"nameBold": nameBold})
+
+
+def setCaptionsApiSettings(values):
+    """
+    변경:
+    - activeProject.annotations.captions.settings.
+
+    처리:
+    fontFamily/fontSize/lineHeight candidate를 captionSettings 규칙으로 정규화하고
+    CAPTION_SETTINGS_CHANGED로 한 번 commit한다.
+    """
+    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"settings": values})
 
 
 def readExportSettings():
@@ -397,10 +508,10 @@ def setExportSettings(values):
     2. width 100..20000, dpi 36..1200, format png/jpeg를 검증한다.
     3. heightMode가 auto면 height는 계산 입력으로 사용하지 않는다.
        explicit이면 height 100..20000을 요구한다.
-    4. candidate를 검증한 뒤 export settings를 한 번 commit한다.
+    4. candidate를 검증한 뒤 EXPORT_SETTINGS_CHANGED로 한 번 commit한다.
     """
-    settings = "commit된 persistent export settings"
-    return settings
+    result = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", {"settings": values})
+    return result
 
 
 def createTargetExportSnapshot():
