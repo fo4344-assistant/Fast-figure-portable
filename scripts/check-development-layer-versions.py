@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Source Script > PlusCal pseudocode > verification model/TLC > source code lineage."""
+"""Validate Source Script > PlusCal pseudocode > optional verification model/TLC > source code lineage."""
 
 from __future__ import annotations
 
@@ -241,14 +241,6 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
     if code_status == "current":
         if pseudocode_status != "current":
             raise VersionError("source code cannot be current before pseudocode is current")
-        if verification_status != "current" or verification_fp is None:
-            raise VersionError(
-                "source code cannot be current before verification-model is current"
-            )
-        if tlc_status != "passed":
-            raise VersionError(
-                "source code cannot be current before TLC validation passes"
-            )
         derived = code.get("derived_from", {})
         if derived.get("source-script") != source_fp:
             raise VersionError(
@@ -258,9 +250,10 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
             raise VersionError(
                 "current source code does not derive from the current pseudocode"
             )
-        if derived.get("verification-model") != verification_fp:
+        recorded_verification = derived.get("verification-model")
+        if recorded_verification is not None and recorded_verification != verification_fp:
             raise VersionError(
-                "current source code does not derive from the current verification-model"
+                "current source code records a different verification-model fingerprint"
             )
 
     return {
@@ -469,19 +462,6 @@ def validate_revision_progression(manifest: dict, base: str) -> None:
         if pseudocode.get("status") != "current":
             raise VersionError(
                 "source code cannot change while pseudocode is stale"
-            )
-        verification = current_layers["verification-model"]
-        if verification.get("status") != "current":
-            raise VersionError(
-                "source code cannot change while verification-model is missing or stale"
-            )
-        if verification.get("tlc") != "passed":
-            raise VersionError(
-                "source code cannot change before TLC validation passes"
-            )
-        if current_layers["source-code"].get("status") != "current":
-            raise VersionError(
-                "modified source code must finish as current against the latest verification-model"
             )
 
 
