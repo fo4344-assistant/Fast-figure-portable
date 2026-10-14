@@ -1,0 +1,90 @@
+# Source Code r29 validation review — projectEFSM / interfaceFSM cutover
+
+## 기준
+
+Source Script r23과 pseudocode r10을 Source Code에 구현했는지, 그리고 일반 코딩 원칙인 단일 권위,
+명시적 mutation path, 계산과 mutation 분리, 중복 추상화 억제, renderer/interface의 authority 비소유를 확인했다.
+
+TLA+/TLC verification은 정책상 선택 단계이므로 이 review의 완료 gate로 사용하지 않았다.
+현재 verification r24의 TLC 상태는 `pending`이며 그대로 유지한다.
+
+## FSM 책임 분리
+
+- `ProjectStateMachine/projectEFSM`
+  - persistent ProjectObject command만 소유한다.
+  - command action은 authoritative project candidate를 검증한 뒤 commit한다.
+  - DOM/React overlay state를 소유하지 않는다.
+- `InterfaceStateMachine/interfaceFSM`
+  - lifecycle/workspace/overlay/asset selection/graph-object selection 등 runtime interaction state를 소유한다.
+  - project commit 뒤 `reconcileProjectResult`에서 selection hint/result만 소비한다.
+- `appFSM`
+  - 기존 호출부 호환을 위한 orchestration facade다.
+  - 별도 state authority를 갖지 않고 project command 또는 interface event로 route한다.
+
+## persistent mutation coverage
+
+Source Script r23의 `PUBLIC_PROJECT_MUTATION_ROUTES` target 31개를 Source Code와 대조했다.
+
+- missing project action: 0
+- missing Source Code send/dispatch route: 0
+- 추가 내부/기존 action: `IMAGE_OBJECT_CREATED`, `IMAGE_OBJECT_REPLACED`, `SLOTS_SWAPPED`
+
+추가 action은 public route와 충돌하는 별도 authority가 아니라 기존 내부 command 경로다.
+
+## candidate-first mutation
+
+r25-r29에서 다음 legacy mutation을 candidate-first로 정리했다.
+
+- raw directory import / raw file-to-slot import
+- CSV/image create/replace/delete
+- asset delete와 graph/image reference detach
+- imported Plotly editable conversion
+- slot data connection
+- chart layout
+- project directory creation
+- trash empty
+- caption text / slot caption insertion
+- image settings / caption settings / layout style / merge / split
+
+실패 가능한 parse/normalization/validation 이전에는 live ProjectObject를 변경하지 않고,
+검증된 candidate를 projectEFSM action에서 commit한다.
+
+## import atomicity
+
+`ASSETS_IMPORTED`는 raw CSV/image parse, id/path allocation, replace/new 결정과 선택적 slot/chart 연결을
+한 whole-project candidate로 commit한다.
+
+directory batch와 slot import는 `stageProjectAssetImport`를 공유해 parse/id/path 처리의 중복을 제거했다.
+file asset 생성과 slot 연결을 별도 commit으로 쪼개지 않는다.
+
+## UI / renderer 경계
+
+project mutation action 안에서 DOM/Mantine overlay를 직접 변경하지 않는다.
+renderer와 UI notification은 project command 반환 이후 caller/orchestration에서 수행한다.
+
+r25 batch-import refactor 중 read-only `projectDataTreeSnapshot`이 실수로 삭제되어 UI regression이 발생했으나
+r27에서 기존 projection을 그대로 복원했다. 이는 authority 변경 없이 patch 범위 오류를 수정한 것이다.
+
+## 검증 결과
+
+- r27 browser regression: success
+- r28 browser regression: success
+- r29 browser regression: success
+- r29 distribution build: success
+- r29 development-layer version check: success
+- JavaScript syntax check는 regression workflow의 선행 step에서 success
+
+## 일반 코딩 원칙 대조
+
+- single source of truth: persistent authority는 activeProject 하나다.
+- explicit mutation path: public persistent mutation은 projectEFSM command로 추적 가능하다.
+- calculation/mutation separation: candidate 계산과 commit을 분리했다.
+- 최소 복잡도: 기존 command로 표현 가능한 의미는 새 command를 만들지 않았고 mixed raw batch atomicity에만 `ASSETS_IMPORTED`를 사용했다.
+- 중복 억제: directory/slot raw import staging을 하나의 helper로 통합했다.
+- UI/runtime state와 persistent project state를 별도 FSM으로 분리했다.
+
+## 판정
+
+Source Code r29는 Source Script r23 / pseudocode r10의 현재 의미와 일치하며 current로 판정한다.
+선택적 verification model/TLC의 후속 최적화 또는 실행 결과는 이 판정을 소급 변경하지 않으며,
+향후 verification을 다시 사용할 경우 별도 validation 결과로 기록한다.
