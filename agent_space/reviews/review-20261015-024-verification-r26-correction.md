@@ -1,0 +1,85 @@
+# Verification correction review — r25 TLC failure to r26
+
+## 발생한 검증 실패
+
+GitHub Actions `TLA Slot Core` run `38703339145`에서 새 Boundary Core의 SANY parse는 통과했지만 TLC model check가 실패했다.
+
+실패 로그는 다음 두 증상을 동시에 보였다.
+
+- `phase`를 변경하면서 `UNCHANGED`로 지정했다는 TLC warning
+- `read-ready` 상태에서 deadlock
+
+counterexample 경로는 invalid/stale mutation rejection 뒤 Backend read projection에 진입한 다음 `read-ready`에서 더 진행하지 못하는 흐름이었다.
+
+## verification model 대조
+
+문제 위치는 `FastFigureBoundaryCore.tla`의 `ConsumeReadProjection`이었다.
+
+r25:
+
+```text
+/\ phase = "read-ready"
+/\ phase' = "read-consumed"
+/\ UNCHANGED vars
+```
+
+`vars`에는 `phase`가 포함되어 있으므로 같은 action이 `phase`를 변경하면서 동시에 유지하도록 요구했다. 따라서 action 자체가 만족 불가능했다.
+
+이는 read projection 소비 뒤 안정 상태로 복귀한다는 pseudocode/Application-boundary 의미를 나타내지 못한 verification 표현 오류다.
+
+## Source Script / PlusCal 대조
+
+Source Script r25와 pseudocode r11은 read projection을 Backend authority의 단방향 read로 정의하며, projection 소비가 Backend authority를 변경하지 않는다는 의미를 가진다.
+
+어느 상위 단계에도 `read-ready`에서 실행을 영구 중단하거나 `phase` 변경을 금지하는 의미는 없다.
+
+따라서 이번 TLC 실패는 Source Script 또는 PlusCal 논리 반례가 아니라 verification model 파생 오류로 판정한다.
+
+## r26 수정
+
+`ConsumeReadProjection`에서 `phase`를 제외한 나머지 state만 `UNCHANGED`로 명시했다.
+
+변경되는 값:
+
+- `phase: read-ready -> read-consumed`
+
+변경되지 않는 값:
+
+- projectRevision
+- projectBefore
+- frontendReference
+- referenceAccepted
+- resultCommitted
+- reconciliationDone
+- rendererApplied
+- projectionRevision
+
+새 domain state, branch, mutation source는 추가하지 않았다.
+
+## lineage
+
+verification model revision: r26
+
+fingerprint:
+
+`sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a`
+
+derived Source Script:
+
+`sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f`
+
+derived pseudocode:
+
+`sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5`
+
+## 재검증
+
+수정 커밋 `444927f2083652f4ce967942ae575b0c77180c7d`가 GitHub Actions run `38703609264`을 시작했다.
+
+이 review 작성 시점에:
+
+- Interaction Core: success
+- Boundary Core: success
+- Slot Core: 실행 중
+
+세 canonical model이 모두 완료되기 전에는 r26 TLC를 `passed`로 기록하지 않는다.
