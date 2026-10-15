@@ -3465,9 +3465,13 @@
       }
       function normalizeImageSettings(slot) {
         if (!slot) return null;
-        normalizeSlotContent(slot);
-        slot.content.imageSettings = readImageSettings(slot.content.imageSettings);
-        return slot.content.imageSettings;
+        const content = slot.content && typeof slot.content === "object" && !Array.isArray(slot.content)
+          ? slot.content : {};
+        const settings = content.imageSettings && typeof content.imageSettings === "object"
+          ? content.imageSettings
+          : slot.imageSettings && typeof slot.imageSettings === "object"
+            ? slot.imageSettings : DEFAULT_IMAGE_SETTINGS;
+        return readImageSettings(settings);
       }
       function readImageSettings(settings) {
         let source = settings && typeof settings === "object" && !Array.isArray(settings)
@@ -5651,10 +5655,10 @@
       }
       function readSelectedSlotApi() {
         let slot = getSelectedSlot();
-        return slot ? {
+        return slot ? Object.freeze({
           id: slot.id, row: slot.row, col: slot.col,
           contentType: slot.contentType, chart: slot.chart, imageId: slot.imageId,
-        } : null;
+        }) : null;
       }
       function resetSlotApi(slotId) {
         let payload = { slotIds: [slotId], direction: "fsm-to-model" };
@@ -5678,11 +5682,11 @@
       }
       function readImageEditorApi() {
         let slot=getSelectedSlot(), image=slotImage(slot);
-        return image&&slot?{
+        return image&&slot?Object.freeze({
           name:image.name,
           src:projectImageDisplayUrl(image),
-          settings:Object.freeze({...normalizeImageSettings(slot)}),
-        }:null;
+          settings:Object.freeze(normalizeImageSettings(slot)),
+        }):null;
       }
       function setProjectName(value, trim = false) {
         let name = (trim ? String(value).trim() : String(value)).slice(0, 120);
