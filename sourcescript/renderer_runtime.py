@@ -17,9 +17,11 @@ Fast Figure Source Script — dashboard renderer, DOM interaction, telemetry and
 - layout_annotations_export.py
 """
 
-from project_state import activeProject
-from interface_fsm import interfaceFSM, selectedSlotId
-from application_fsm import dispatchInterfaceEvent
+RENDERER_INPUT_CONTRACT = {
+    "projectProjection": "Application boundary의 Backend query가 제공한 immutable renderer project projection",
+    "interfaceState": "Frontend FSM의 final runtime state projection",
+    "frontendActions": "FastFigureApi/Application boundary가 제공하는 selection/persistent command callback surface",
+}
 
 RENDERER_HOSTS = {
     "graphArea": "dashboard와 caption을 포함하는 scroll/render host",
@@ -44,8 +46,10 @@ debugEnabled = (
 )
 
 RENDERER_RULE = (
-    "renderDashboard와 Plotly/image/caption renderer는 activeProject 또는 단일 작업 snapshot에서 읽어 "
-    "DOM/Plotly representation을 만든다. DOM은 project/domain Source of Truth가 아니다."
+    "renderer는 Frontend 책임이며 Backend internal state/helper를 직접 읽지 않는다. "
+    "renderDashboard와 Plotly/image/caption renderer는 Application boundary가 제공한 immutable projectProjection과 "
+    "Frontend final interfaceState에서 DOM/Plotly representation을 만든다. "
+    "DOM/Plotly/projectProjection은 persistent project authority가 아니며 renderer read/normalization은 Backend authority를 변경하지 않는다."
 )
 
 
@@ -92,14 +96,14 @@ def status(message):
 
 
 DASHBOARD_PROJECTION_INVALIDATION_RULE = (
-    "application orchestration은 projectEFSM commit result 뒤 interfaceFSM reconciliation을 먼저 완료하고 "
-    "final runtime selection과 mutation result를 renderer에 전달한다. "
+    "Application boundary는 Project EFSM commit result 뒤 Backend reconciliation query와 Frontend FSM reconciliation을 먼저 완료하고 "
+    "final interfaceState, mutationResult, 필요한 Backend renderer projection을 renderer에 전달한다. "
     "실제 rendered reference 제거가 있으면 FULL_DASHBOARD, path/tree 변화만 있으면 NONE, "
     "기존 narrow update가 충분하면 TARGETED_PROJECTION이다. "
-    "renderer는 activeProject와 final interface state를 읽기만 하고 두 FSM command를 재호출하지 않는다."
+    "renderer는 supplied projection만 소비하고 Backend command/query 또는 Frontend FSM command를 재귀 호출하지 않는다."
 )
 
-def applyDashboardProjectionInvalidation(event, mutationResult, interfaceState):
+def applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, projectProjection):
     """
     post-reconciliation renderer effect.
     FULL_DASHBOARD/TARGETED_PROJECTION/NONE을 project result와 final interface state에서 계산한다.
@@ -107,25 +111,26 @@ def applyDashboardProjectionInvalidation(event, mutationResult, interfaceState):
     """
     return "projection effect"
 
-def renderDashboard():
+def renderDashboard(projectProjection, interfaceState):
     """
     변경:
     - dashboard/slot/Plotly/image/label/caption DOM projection.
-    - project state 자체를 renderer 목적으로 변경하지 않는다.
+    - Backend project state와 Frontend FSM state는 변경하지 않는다.
 
     처리:
-    1. activeProject grid와 style을 dashboard CSS geometry에 반영한다.
-    2. visible slot마다 slot container와 label/bookmark control surface를 구성한다.
-    3. graph slot은 referenced chart를 resolve해 Plotly projection을 render한다.
-    4. image slot은 referenced image asset bytes와 같은 slot object의 imageSettings를 resolve해 image surface를 동기화한다.
-    5. selectedSlotId에 따라 selection/interaction class를 적용한다.
+    1. supplied projectProjection의 grid와 style을 dashboard CSS geometry에 반영한다.
+    2. visible slot projection마다 slot container와 label/bookmark control surface를 구성한다.
+    3. graph slot은 projection에 포함된 resolved chart/CSV view로 Plotly projection을 render한다.
+    4. image slot은 projection의 image bytes/view와 normalized slot-local imageSettings copy로 image surface를 동기화한다.
+    5. interfaceState.selectedSlotId에 따라 selection/interaction class를 적용한다.
     6. caption과 label projection을 동기화한다.
     7. stale Plotly instance를 purge하고 resize generation을 관리한다.
+    8. 누락/default normalization이 필요해도 projectProjection copy만 다루며 live ProjectObject에 write하지 않는다.
     """
-    return "현재 project에서 다시 생성된 dashboard projection"
+    return "supplied Backend projection에서 생성된 dashboard projection"
 
 
-def setSelectedSlot(slotId, direction):
+def setSelectedSlot(slotId, direction, frontendActions):
     """
     변경:
     - SELECT_SLOT event를 통한 runtime selection/workspace.
@@ -136,12 +141,14 @@ def setSelectedSlot(slotId, direction):
     caller가 '선택을 보장'해야 하면 현재 selected slot을 먼저 읽어야 한다.
 
     처리:
-    interfaceFSM event가 selection semantics를 결정한 뒤 graph view를 갱신하고 resize를 요청한다.
+    renderer는 slotId를 Backend에서 직접 검증하거나 interfaceFSM에 직접 주입하지 않는다.
+    frontendActions.slots.select에 selection intent를 전달하고 Application boundary의 validated SELECT_SLOT 결과를 사용한다.
+    그 뒤 반환된 final interface state와 project projection으로 graph view를 갱신하고 resize를 요청한다.
     """
-    return "선택 후 runtime state"
+    return "Application boundary를 거친 선택 후 Frontend runtime state"
 
 
-def installSlotClickController():
+def installSlotClickController(frontendActions):
     """
     변경:
     - dashboard DOM에 slot bookmark click/slot-to-slot bookmark drag event listener를 설치한다.
@@ -174,7 +181,7 @@ def installSlotClickController():
        browser가 post-drag click을 만들지 않는 경우에는 그 click dispatch 기회가 지난 뒤의 cleanup에서 suppression을 해제한다.
        따라서 drag와 같은 interaction cycle에서 생긴 click은 slot selection/toggle로 해석하지 않는다.
     7. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
-       layout_annotations_export의 operation matrix를 따른다. swap commit이 성공하면 current project와 selectedSlotId를 기준으로
+       layout_annotations_export의 operation matrix를 따른다. swap commit이 성공하면 Application boundary가 반환한 projectProjection과 final interfaceState를 기준으로
        dashboard projection을 즉시 다시 생성하며 이 renderer refresh는 domain state를 다시 변경하지 않는다.
     8. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
        Mantine FastFigureDashboardFileDrop에 넘긴다.
@@ -182,25 +189,24 @@ def installSlotClickController():
     return "설치된 dashboard interaction controller"
 
 
-def swapSlotContents(source, target):
+def swapSlotContents(source, target, frontendActions):
     """
     변경:
-    - projectEFSM command를 통한 source/target GUI 위치의 slot-local properties.
-    - selectedSlotId는 persistent mutation의 writable state가 아니며 commit 뒤 interfaceFSM이 reconcile한다.
+    - frontendActions.slots.swap public mutation API를 통한 source/target GUI 위치의 slot-local properties.
+    - Frontend selectedSlotId는 persistent mutation의 writable state가 아니며 commit 뒤 Application boundary가 reconciliation한다.
 
     처리:
-    1. source/target을 current project에서 다시 resolve한다.
-    2. row/col/span geometry는 각 GUI 위치에 유지한다.
-    3. chart/image/contentType/imageSettings/caption 등 slot-local properties 전체를 한 단위로 교환한다.
+    1. renderer는 source/target id만 public mutation API에 전달한다.
+    2. Backend Project EFSM이 current authority에서 source/target을 다시 resolve한다.
+    3. row/col/span geometry는 각 GUI 위치에 유지하고 chart/image/contentType/imageSettings/caption local payload 전체를 교환한다.
     4. chart ownership은 교환된 target slot에 맞춰 1:1을 유지한다.
-    5. projectEFSM이 candidate를 검증한 뒤 한 번 commit한다.
-    6. interfaceFSM reconciliation이 끝난 뒤 current project와 reconciled selectedSlotId를 읽어 dashboard projection을 갱신한다.
-       이 갱신은 renderer projection만 변경하고 swap mutation을 반복하지 않는다.
+    5. commit 뒤 Application boundary가 Backend reconciliation query -> Frontend FSM reconciliation을 수행한다.
+    6. renderer는 반환된 projectProjection과 reconciled interfaceState로 dashboard projection만 갱신하고 swap mutation을 반복하지 않는다.
     """
-    return "swap candidate commit과 즉시 갱신된 dashboard projection"
+    return "public API swap commit 결과와 post-reconciliation renderer projection"
 
 
-def prepareDashboardFileDrop(slotId):
+def prepareDashboardFileDrop(slotId, frontendActions):
     """
     Return:
     - accepted:
@@ -211,9 +217,9 @@ def prepareDashboardFileDrop(slotId):
     - drag runtime state를 정리한다.
 
     처리:
-    1. slotId를 current visible slot에서 resolve하고 hidden/invalid target이면 false로 끝낸다.
-    2. 유효 target이 현재 selected slot이 아니면 import target workspace를 위해 그 slot을 선택한다.
-    3. 이 함수는 file bytes, asset, chart/image reference를 변경하지 않는다.
+    1. frontendActions.slots.prepareFileDrop(slotId)가 Application boundary를 통해 target validity를 Backend에서 검증한다.
+    2. accepted target이 current selected slot이 아니면 같은 public Frontend selection 경계로 target workspace를 선택한다.
+    3. renderer 자체는 Backend slot을 resolve하거나 file bytes, asset, chart/image reference를 변경하지 않는다.
     4. 실제 file import/collision UI는 FastFigureDashboardFileDrop -> assets.importToSlot 경로가 소유한다.
     5. finishFileDrop은 drag runtime cleanup만 수행하며 domain commit을 반복하지 않는다.
     """
@@ -221,61 +227,61 @@ def prepareDashboardFileDrop(slotId):
     return accepted
 
 
-def applySlotStyle(notify):
+def applySlotStyle(projectProjection, notify):
     """
     변경:
     - dashboard/caption renderer CSS projection.
     - notify가 참이면 layout model-to-ui notification.
 
     처리:
-    activeProject.layout.slotStyle에서 border/aspect/outer-margin/gap/radius를 계산한다.
-    DOM computed state를 project authority로 되돌려 쓰지 않는다.
+    supplied projectProjection.layout.slotStyle에서 border/aspect/outer-margin/gap/radius를 계산한다.
+    DOM computed state나 renderer projection을 Backend authority로 되돌려 쓰지 않는다.
     """
     return "적용된 dashboard style projection"
 
 
-def resolveSelectedChart():
+def resolveSelectedChart(projectProjection, interfaceState):
     """
     Return:
     - chart:
-      selectedSlotId -> current slot.chart -> activeProject chart collection으로 resolve한 chart 또는 없음.
+      interfaceState.selectedSlotId -> supplied projectProjection slot/chart relation으로 resolve한 chart projection 또는 없음.
 
     변경:
     - 없음.
 
     처리:
-    선택 chart를 별도 global editing pointer로 저장하지 않는다.
-    한 작업 안에서 얻은 local chart reference는 그 작업 범위를 넘겨 authoritative runtime state로 보존하지 않는다.
+    Backend helper를 호출하지 않고 supplied projectProjection 안의 resolved relation만 사용한다.
+    선택 chart를 별도 global editing pointer로 저장하지 않으며 한 작업의 local chart projection을 authority로 보존하지 않는다.
     """
     chart = "현재 selected slot의 chart 또는 없음"
     return chart
 
 
-def updateGraphView():
+def updateGraphView(projectProjection, interfaceState):
     """
     변경:
     - 선택 slot에 대응하는 graph/image workspace renderer projection.
 
     처리:
-    selectedSlotId와 referenced project model을 현재 state에서 다시 resolve한다.
-    stale UI buffer를 project read 원천으로 사용하지 않는다.
+    interfaceState.selectedSlotId와 supplied projectProjection의 resolved chart/image view를 사용한다.
+    stale UI buffer나 DOM을 project read 원천으로 사용하지 않는다.
     """
     return "갱신된 workspace projection"
 
 
-def startupCoreRuntime():
+def startupCoreRuntime(projectProjection, interfaceState, frontendActions):
     """
     변경:
     - 기본 project runtime, renderer controller, FSM lifecycle.
 
     처리:
-    1. createProjectState/loaded ProjectObject가 이미 valid slot structure를 소유한다.
+    1. Backend가 제공한 initial projectProjection은 valid ProjectObject에서 파생된 renderer input이다.
     2. dashboard zoom projection을 적용한다.
-    3. slot click/drop controller를 설치한다.
-    4. activeProject의 existing slots를 renderDashboard로 투영한다.
-    5. slot style을 적용한다.
-    6. interfaceFSM을 ready로 전환한다.
-    7. project/reference/runtime invariant를 audit한다.
+    3. public frontendActions를 사용하는 slot click/drop controller를 설치한다.
+    4. projectProjection의 existing visible slots를 renderDashboard로 투영한다.
+    5. supplied slot style projection을 적용한다.
+    6. Frontend lifecycle ready 전환은 Application boundary가 interfaceFSM event로 수행하고 renderer가 직접 실행하지 않는다.
+    7. supplied project/reference/runtime projection contract를 audit한다.
 
     startup은 default CSV를 생성하거나 grid slot을 domain state에 다시 만드는 초기화 side effect를 수행하지 않는다.
     """
