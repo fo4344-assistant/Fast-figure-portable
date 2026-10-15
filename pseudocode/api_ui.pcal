@@ -58,6 +58,24 @@ SlotsResetReturn:
   return;
 end procedure;
 
+procedure SelectSlot(slotId, pendingContentType)
+begin
+SlotSelectionBoundary:
+  result := ApplicationDispatchSlotSelection(slotId, pendingContentType);
+SlotSelectionReturn:
+  return;
+end procedure;
+
+procedure SwapSlots(sourceId, targetId)
+begin
+SlotSwapBoundary:
+  result := ApplicationDispatchProjectCommand(
+    "SLOTS_SWAPPED",
+    [sourceId |-> sourceId, targetId |-> targetId]);
+SlotSwapReturn:
+  return;
+end procedure;
+
 procedure InsertEmptyImage(slotId)
 variables candidate = NoValue;
 begin
@@ -461,7 +479,7 @@ UpdateSidebarLocalState:
 ProjectSidebarGeometry:
   effect := ApplySidebarGeometryToRenderer(sidebarWidth, sidebarCollapsed);
 ResizePlots:
-  effect := RequestPlotResizeFromCurrentAuthority();
+  effect := RequestPlotResizeFromRendererHosts();
 ShellReturn:
   return;
 end procedure;
