@@ -1,85 +1,82 @@
-# Fast Figure verification model r11
+# Fast Figure verification model r25
 
-이 디렉터리는 PlusCal pseudocode에서 상태 기반 검증이 필요한 범위를 파생한 선택적 verification model이다. verification model은 Source Script 전체 번역 계층이 아니며 별도의 설계 권위도 아니다.
+이 디렉터리는 current PlusCal pseudocode에서 상태 기반 검증이 필요한 범위를 파생한 verification model이다.
+verification model은 Source Script/PlusCal을 재설계하는 별도 권위가 아니다.
 
 ```text
-Source Script
-→ PlusCal pseudocode
-→ [선택적] verification model
+Source Script r25
+→ PlusCal pseudocode r11
+→ verification model r25
 → TLA+/TLC
 → Source Code
 ```
 
-Source Script와 pseudocode가 충돌하면 Source Script가 원천이다. pseudocode와 verification model이 충돌하면 pseudocode가 직접 원천이며 verification model을 수정한다.
-
 ## 현재 lineage
 
-- Source Script: r17 / current / closed
-- Source Script fingerprint: `sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664`
-- PlusCal pseudocode: r3 / current
-- pseudocode fingerprint: `sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898`
-- verification-model: r11 / current
-- verification fingerprint: `sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b`
-- TLC: passed
+- Source Script: r25 / current / closed
+- Source Script fingerprint: `sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f`
+- PlusCal pseudocode: r11 / current
+- pseudocode fingerprint: `sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5`
+- verification-model: r25 / current
+- verification fingerprint: `sha256:2c1051c19c2b2ac4502d0fefe2162fbf3e5dc9d02635d8333190aab1f441cb91`
+- TLC: pending
 
-verification fingerprint는 의미 파일인 `verification/**/*.tla`와 `verification/**/*.cfg`만 대상으로 한다. README는 상태 설명 문서이며 verification 의미 fingerprint에 포함하지 않는다.
+verification fingerprint는 `verification/**/*.tla`와 `verification/**/*.cfg`만 포함한다.
+README 자체는 의미 fingerprint에 포함하지 않는다.
 
 ## canonical verification modules
 
-- `FastFigureSlotCore.tla` / `FastFigureSlotCore.cfg`: slot/layout/chart candidate와 reference consistency bounded slice.
-- `FastFigureInteractionCore.tla` / `FastFigureInteractionCore.cfg`: r17 interaction과 empty-CSV bounded slice.
+- `FastFigureSlotCore.tla` / `FastFigureSlotCore.cfg`
+  - slot/layout/chart candidate
+  - chart ownership
+  - slot reference integrity
+  - grid/merge/split/reset/image-import bounded transition
+- `FastFigureInteractionCore.tla` / `FastFigureInteractionCore.cfg`
+  - Frontend slot selection
+  - CSV/reference/tree interaction
+  - batch import atomicity
+  - trash/reference and slot-connection constraints
+- `FastFigureBoundaryCore.tla` / `FastFigureBoundaryCore.cfg`
+  - Backend project authority mutation boundary
+  - stale/invalid reference rejection and failure atomicity
+  - commit → reconciliation → renderer ordering
+  - Frontend/renderer no-write boundary
+  - one-way Backend read projection
 
-기존 slot core의 r6 TLC 결과는 해당 의미 파일이 변경되지 않아 유지된다.
+## Boundary Core abstraction
 
-r17 interaction core는 다음 pseudocode 의미를 파생해 검증한다.
+Boundary Core는 ProjectObject 전체를 다시 복제하지 않는다.
+Backend persistent authority를 bounded `projectRevision` token으로 나타내고,
+Frontend reference validation과 Application-boundary ordering에 필요한 최소 상태만 둔다.
 
-- explicit no-slot deselection
-- 미선택 visible graph/image/empty slot surface selection
-- selected graph/image content interaction pass-through
-- selected empty slot same-slot toggle
-- bookmark same-slot toggle
-- dashboard background deselection
-- 일반 empty CSV 생성
-- 새 CSV의 current selection
-- empty CSV 생성 자체가 graph-object sequence를 변경하지 않음
-- 이후 graph object가 current selected CSV를 reference함
+실제 slot/chart/image/CSV/VFS 상태는 기존 Slot Core와 Interaction Core가 소유하는 검증 범위를 유지한다.
 
-UI-local이라 verification state로 만들지 않은 항목은 trash row Menu opened 상태, concrete Mantine Modal width, layout preview DOM measurement다. 이 값들은 persistent project authority가 아니며 Source Code의 renderer/UI 구체화 영역이다.
+derivation/abstraction review:
 
-## bounded verification
+`agent_space/reviews/review-20261015-023-verification-r25-derivation.md`
 
-```text
-SlotIds = 1..3
-CsvIds = 1..2
-MaxGraphObjects = 2
-NoSlot = 0
-NoCsv = 0
-```
+## TLC 상태
 
-이 값들은 application 제한이 아니라 TLC의 유한 상태공간을 위한 verification-only bound다.
+현재 r25에서는 새 Boundary Core가 추가되었지만 실제 TLA+ parse/TLC를 아직 실행하지 못했다.
 
-## TLC validation
+이번 작업 환경에는 Java 21은 있으나 저장소 workflow가 사용하는 TLA+ tools v1.7.4 jar가 설치되어 있지 않고,
+외부 DNS 제한으로 공식 release jar를 내려받지 못했다.
 
-r11 interaction validation:
-
-- review: `agent_space/reviews/review-20261013-008-tlc-interaction-r11.md`
-- GitHub Actions run: `38357202939`
-- job: `verify-interaction-core`
-- TLA+ tools: v1.7.4
-- TLC: 2.19
-- generated states: 3,937
-- distinct states: 2,808
-- states left on queue: 0
-- complete graph depth: 34
-- maximum outdegree: 9
-- invariant violation: none
-- counterexample/error: none
+따라서 현재 상태는 다음과 같다.
 
 ```text
-verification-model r11 = current
-TLC = passed
+verification-model r25 = current derivation
+TLC = pending
+validation_review = null
 ```
 
-## coverage의 의미
+GitHub Actions는 사용하지 않았다.
 
-verification model은 pseudocode 전체를 복제하지 않는다. 상태공간 탐색이 필요한 범위를 선택적으로 파생한다. verification에 없는 asset parsing, 전체 UI renderer, serialization 등의 영역은 pseudocode 누락이 아니라 현재 TLC coverage 밖의 영역이다.
+Source Code는 TLC passed와 validation review가 확보되기 전에는 plan-016의 current implementation으로 닫지 않는다.
+
+## bounded verification의 의미
+
+모든 bound는 application 제한이 아니라 TLC 상태공간을 위한 verification-only 제한이다.
+TLC가 통과하더라도 bounded state-space 전체를 넘는 일반 증명으로 과장하지 않는다.
+
+모델에서 크게 추상화하거나 생략한 범위와 재포함 조건은 r25 derivation review에 기록한다.
