@@ -1,51 +1,183 @@
 ---- MODULE FastFigureApplicationFsmPseudocode ----
 EXTENDS Naturals
 
-\* Direct translation of sourcescript/application_fsm.py orchestration.
+\* Direct translation of Source Script r25 sourcescript/application_fsm.py.
+\* This is the Application boundary adapter/orchestrator, not a third authoritative FSM.
+
 CONSTANT NoValue
+
+BACKEND_REFERENCE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"}
 
 (*
 --algorithm FastFigureApplicationOrchestration
 variables
   projectResult = NoValue,
   interfaceState = NoValue,
-  projectionEffect = NoValue,
-  result = NoValue;
+  rendererProjection = NoValue,
+  reconciliationInput = NoValue,
+  result = NoValue,
+  effect = NoValue;
+
+procedure DispatchProjectQuery(queryName, payload)
+begin
+BackendReadBoundary:
+  result := BackendReadProjection(queryName, payload);
+BackendReadNoAuthority:
+  assert IsTransientReadProjection(result);
+ProjectQueryReturn:
+  return;
+end procedure;
 
 procedure DispatchInterfaceEvent(eventName, payload)
+variables validatedInput = NoValue;
 begin
-InterfaceOnly:
-  result := InterfaceFsmSend(eventName, payload);
+InterfaceValidationBranch:
+  if eventName \in BACKEND_REFERENCE_EVENTS then
+    validatedInput := BackendValidateFrontendIntent(eventName, payload);
+  else
+    validatedInput := FrontendOnlyAcceptedInput(eventName, payload);
+  end if;
+InterfaceDispatch:
+  interfaceState := InterfaceFsmSend(eventName, validatedInput);
+InterfaceResult:
+  result := interfaceState;
 InterfaceReturn:
   return;
 end procedure;
 
-procedure DispatchProjectCommand(eventName, payload)
+procedure DispatchSlotSelection(slotId, pendingContentType)
+variables
+  validatedInput = NoValue,
+  selectionContext = NoValue,
+  selectedSlotId = NoValue;
 begin
-ProjectCommit:
-  projectResult := ProjectEfsmSend(eventName, payload);
-ProjectCommitGuard:
-  assert projectResult.committed;
-InterfaceReconciliation:
-  interfaceState := InterfaceFsmReconcileProjectResult(eventName, projectResult);
-RendererAfterReconciliation:
-  projectionEffect := ApplyDashboardProjectionInvalidation(
-    eventName,
-    projectResult,
-    interfaceState
+SlotSelectionValidate:
+  validatedInput := BackendValidateFrontendIntent(
+    "SELECT_SLOT",
+    [slotId |-> slotId]
   );
-NoRecursiveMutation:
-  assert RendererDidNotDispatchProjectOrInterfaceCommand(projectionEffect);
-ApplicationResult:
-  result := projectResult;
+SlotSelectionReject:
+  if ~validatedInput.accepted then
+    interfaceState := InterfaceFsmReadState() ||
+    projectResult := NoValue;
+  else
+SlotSelectionFrontend:
+    interfaceState := InterfaceFsmSend("SELECT_SLOT", validatedInput);
+SlotSelectionReference:
+    selectedSlotId := interfaceState.selectedSlotId;
+SlotSelectionOptionalMutation:
+    if selectedSlotId # NoValue /\ pendingContentType # NoValue then
+      selectionContext := BackendReadProjection(
+        "slot-selection-context",
+        [slotId |-> selectedSlotId]
+      );
+      if selectionContext.empty
+         /\ selectionContext.contentType # pendingContentType then
+        call DispatchProjectCommand(
+          "SLOT_TYPE_CHANGED",
+          [slotId |-> selectedSlotId, contentType |-> pendingContentType]
+        );
+        projectResult := result;
+      end if;
+    end if;
+  end if;
+SlotSelectionResult:
+  result := [
+    interfaceState |-> interfaceState,
+    projectResult |-> projectResult
+  ];
+SlotSelectionReturn:
+  return;
+end procedure;
+
+procedure DispatchProjectCommand(eventName, payload)
+variables frontendBefore = NoValue;
+begin
+ProjectCommandGuard:
+  assert ProjectEfsmDeclares(eventName);
+ProjectCommitAttempt:
+  projectResult := ProjectEfsmSend(eventName, payload);
+ProjectFailureBranch:
+  if ~projectResult.committed then
+    frontendBefore := InterfaceFsmReadState() ||
+    interfaceState := frontendBefore ||
+    rendererProjection := NoValue ||
+    result := [
+      projectResult |-> projectResult,
+      interfaceState |-> interfaceState,
+      rendererProjection |-> rendererProjection
+    ];
+  else
+ProjectReadFrontendReferences:
+    frontendBefore := InterfaceFsmReadState();
+ProjectReconciliationQuery:
+    reconciliationInput := BackendBuildFrontendReconciliationInput(
+      eventName,
+      projectResult,
+      frontendBefore
+    );
+ProjectFrontendReconciliation:
+    interfaceState := InterfaceFsmReconcileProjectResult(
+      eventName,
+      reconciliationInput
+    );
+ProjectRendererQuery:
+    rendererProjection := BackendReadProjection(
+      "renderer",
+      [interfaceState |-> interfaceState,
+       mutationResult |-> projectResult]
+    );
+ProjectSuccessResult:
+    result := [
+      projectResult |-> projectResult,
+      interfaceState |-> interfaceState,
+      rendererProjection |-> rendererProjection
+    ];
+  end if;
+ProjectOrdering:
+  assert ~projectResult.committed \/ ReconciliationOccurredAfterCommit();
+ProjectFailureNoSuccessProjection:
+  assert projectResult.committed \/ rendererProjection = NoValue;
 ApplicationReturn:
   return;
 end procedure;
 
 procedure RunLifecycleTask(lifecycleName, eventName, task)
+variables taskResult = NoValue, failure = NoValue;
 begin
-LifecycleDelegation:
-  result := InterfaceFsmRunLifecycle(lifecycleName, eventName, task);
+LifecycleStart:
+  interfaceState := InterfaceFsmSend(
+    "LIFECYCLE_START",
+    FrontendOnlyAcceptedInput(
+      "LIFECYCLE_START",
+      [reference |-> lifecycleName, event |-> eventName]
+    )
+  );
+LifecycleExecuteInApplicationBoundary:
+  either
+    taskResult := ExecuteApplicationBoundaryTask(task);
+  or
+    failure := ExecuteApplicationBoundaryTaskFailure(task);
+  end either;
+LifecycleOutcome:
+  if failure = NoValue then
+    interfaceState := InterfaceFsmSend(
+      "LIFECYCLE_COMPLETE",
+      FrontendOnlyAcceptedInput("LIFECYCLE_COMPLETE", [event |-> eventName])
+    ) ||
+    result := taskResult;
+  else
+    interfaceState := InterfaceFsmSend(
+      "LIFECYCLE_FAILED",
+      FrontendOnlyAcceptedInput(
+        "LIFECYCLE_FAILED",
+        [reference |-> failure, event |-> eventName]
+      )
+    ) ||
+    result := failure;
+  end if;
+LifecycleOwnership:
+  assert InterfaceFsmDidNotExecuteTask(task);
 LifecycleReturn:
   return;
 end procedure;
@@ -58,8 +190,16 @@ Main:
         call DispatchInterfaceEvent(request.event, request.payload);
       end with;
     or
+      with request = NextSlotSelectionRequest() do
+        call DispatchSlotSelection(request.slotId, request.pendingContentType);
+      end with;
+    or
       with request = NextProjectMutationRequest() do
         call DispatchProjectCommand(request.event, request.payload);
+      end with;
+    or
+      with request = NextProjectReadRequest() do
+        call DispatchProjectQuery(request.query, request.payload);
       end with;
     end either;
   end while;
