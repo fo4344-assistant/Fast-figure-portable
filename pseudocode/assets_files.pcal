@@ -1,8 +1,9 @@
 ---- MODULE FastFigureAssetsFilesPseudocode ----
 EXTENDS Naturals, Sequences, FiniteSets
 
-\* Direct translation of sourcescript/assets_files.py.
-\* Persistent mutations are candidate-first and commit once after validation.
+\* Direct translation of Source Script r25 sourcescript/assets_files.py.
+\* Backend asset/package calculations and co-located Application wrappers are distinct logical responsibilities.
+\* Persistent mutations remain candidate-first and cross the Application boundary exactly once.
 
 CONSTANT NoReference
 
