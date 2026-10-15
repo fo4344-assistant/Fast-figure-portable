@@ -153,7 +153,14 @@ ReadBackendProjection ==
 ConsumeReadProjection ==
   /\ phase = "read-ready"
   /\ phase' = "read-consumed"
-  /\ UNCHANGED vars
+  /\ UNCHANGED <<projectRevision,
+                  projectBefore,
+                  frontendReference,
+                  referenceAccepted,
+                  resultCommitted,
+                  reconciliationDone,
+                  rendererApplied,
+                  projectionRevision>>
 
 Next ==
   \/ \E accepted \in BOOLEAN : BeginMutation(accepted)
