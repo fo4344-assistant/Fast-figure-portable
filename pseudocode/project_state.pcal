@@ -1,7 +1,8 @@
 ---- MODULE FastFigureProjectStatePseudocode ----
 EXTENDS Naturals, Sequences, FiniteSets
 
-\* r19 PlusCal pseudocode for sourcescript/project_state.py.
+\* Direct translation of Source Script r25 sourcescript/project_state.py.
+\* activeProject/projectAuthority is Backend-only; cross-layer reads return transient projections.
 
 CONSTANTS DefaultProject, NoReference
 
@@ -178,6 +179,55 @@ NormalizeSlotLocalComparison:
 CompareSlotLocalDefaults:
   result := local # DefaultSlotLocalPayload();
 SlotDefaultReturn:
+  return;
+end procedure;
+
+
+procedure ReadBackendProjection(kind, request)
+begin
+BackendQueryKind:
+  assert kind \in {"project-api", "slot-selection-context", "interface-intent",
+                    "interface-reconciliation", "renderer", "export"};
+BackendQueryResolve:
+  result := ResolveProjectionFromCurrentAuthority(projectAuthority, kind, request);
+BackendQueryNormalizeCopy:
+  result := NormalizeProjectionCopyWithoutAuthorityMutation(result);
+BackendQueryNoMutation:
+  assert ProjectAuthorityUnchangedByReadProjection();
+BackendQueryReturn:
+  return;
+end procedure;
+
+procedure ValidateFrontendIntent(eventName, payload)
+begin
+FrontendIntentResolve:
+  result := ValidateFrontendReferenceAgainstCurrentAuthority(
+    projectAuthority,
+    eventName,
+    payload
+  );
+FrontendIntentShape:
+  assert IsFrontendValidatedInput(result);
+FrontendIntentNoMutation:
+  assert ProjectAuthorityUnchangedByFrontendValidation();
+FrontendIntentReturn:
+  return;
+end procedure;
+
+procedure BuildFrontendReconciliationInput(eventName, mutationResult, frontendReferences)
+begin
+ReconciliationResolve:
+  result := ResolveFrontendReferencesAfterCommittedMutation(
+    projectAuthority,
+    eventName,
+    mutationResult,
+    frontendReferences
+  );
+ReconciliationShape:
+  assert IsFrontendReconciliationInput(result);
+ReconciliationNoMutation:
+  assert ProjectAuthorityUnchangedByReconciliationQuery();
+ReconciliationReturn:
   return;
 end procedure;
 
