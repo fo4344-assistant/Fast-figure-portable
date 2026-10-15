@@ -1,0 +1,1584 @@
+diff --git a/agent_space/reviews/review-20261015-020-sourcescript-closure-r24.md b/agent_space/reviews/review-20261015-020-sourcescript-closure-r24.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261015-020-sourcescript-closure-r24.md
+@@ -0,0 +1,301 @@
++# Source Script r24 closure review — Backend / Application boundary / Frontend API-Adapter 분리
++
++## 되돌아온 이유
++
++plan-015에서 Project EFSM과 interface FSM의 상태 책임은 분리했지만, plan-016과 `review-20261014-019-plan-016-boundary-audit.md`의 횡단 감사에서 두 FSM 사이의 논리 계층 경계가 충분히 분리되지 않았음을 확인했다.
++
++확인된 문제는 다음과 같다.
++
++- `system.py`가 project/domain/FSM/API/renderer/build Source Script를 모두 system의 직접 sibling responsibility로 두어 Backend와 Frontend의 의미적 hierarchy를 표현하지 않았다.
++- `interface_fsm.py`가 `activeProject`를 직접 import하여 slot/asset/graph-object selection validity와 project mutation 뒤 reconciliation을 Frontend FSM 내부에서 Backend state를 읽어 판정했다.
++- `renderer_runtime.py`가 `activeProject`와 `selectedSlotId`를 직접 읽어 DOM/Plotly projection을 만들었다.
++- `api_ui.py`가 public API와 Mantine frontend 책임을 함께 설명하면서 `activeProject`와 `selectedSlotId`를 직접 import했다.
++- `layout_annotations_export.py`의 image/label read와 image-settings mutation wrapper가 Frontend `selectedSlotId`를 직접 읽었다.
++- `assets_files.py`, `graphs.py`, `layout_annotations_export.py`는 Backend calculation/candidate와 Application-boundary dispatch wrapper가 한 물리 파일에 공존하지만 어느 함수가 어느 논리 책임인지 명시하지 않았다.
++- 기존 slot selection은 `SELECT_SLOT`의 UI transition과 `pendingSlotContentType`에 따른 조건부 `SLOT_TYPE_CHANGED` persistent mutation이 한 흐름에 있었기 때문에, 단순히 SELECT_SLOT을 Frontend-only event로 재분류하면 기존 의미를 잃는다.
++- renderer/read 경로에서 누락 field를 정규화할 때 live ProjectObject를 변경할 수 있는 구현 흔적이 있어, read projection 계산과 persistent mutation의 분리를 Source Script에서 더 강하게 닫을 필요가 있었다.
++- `portable_build.py`는 Backend나 Frontend의 하위 의미가 아니라 전체 system artifact packaging 책임인데 새 hierarchy에서 그 위치를 별도로 확정해야 했다.
++
++r23 closure가 이를 놓친 원인은 r23의 닫힘 목적이 public persistent mutation command coverage와 candidate-first commit에 집중되어 있었고, Backend↔Frontend의 read dependency와 물리 파일 안의 혼합 책임을 별도 Module decomposition 문제로 검사하지 않았기 때문이다.
++
++## Module decomposition hierarchy
++
++r24의 system-level 논리 hierarchy는 다음 네 direct child로 확정했다.
++
++```text
++Fast Figure system
++├─ Backend
++├─ Application boundary
++├─ Frontend
++└─ Portable build
++```
++
++Backend는 다음 의미를 포함한다.
++
++- `project_state.py`: `activeProject` authoritative ProjectObject, reference/invariant, Backend read/query provider.
++- `project_efsm.py`: persistent ProjectObject transition/validation/commit controller.
++- `assets_files.py`의 Backend 부분: VFS, asset/package parse/serialize, collision, candidate, validation, FFPX/FFSX semantics.
++- `graphs.py`의 Backend 부분: CSV/chart/graph-object normalization, validation, Plotly semantic conversion과 candidate calculation.
++- `layout_annotations_export.py`의 Backend 부분: persistent layout/imageSettings/label/caption/export-settings calculation, candidate, validation, snapshot semantics.
++
++Application boundary는 다음 의미를 포함한다.
++
++- `application_fsm.py`: Backend command/query, Backend reference validation, ProjectMutationResult 후 reconciliation query, lifecycle orchestration.
++- `api_ui.py`의 FastFigureApi public contract.
++- `assets_files.py`, `graphs.py`, `layout_annotations_export.py`에 물리적으로 함께 있는 public command/query wrapper.
++
++Frontend는 다음 의미를 포함한다.
++
++- `interface_fsm.py`: session/runtime state와 transition.
++- `api_ui.py`의 Mantine component 및 component-local state.
++- `renderer_runtime.py`: DOM/Plotly projection, renderer interaction, telemetry.
++- `layout_annotations_export.py`의 screen/raster presentation 부분.
++
++Portable build는 `portable_build.py`가 소유하는 split source → single-file artifact packaging이다. runtime Backend/Frontend 책임의 자식으로 재분류하지 않는다.
++
++이 hierarchy는 물리 파일 배치와 동일하지 않다. 한 물리 파일에 여러 논리 responsibility가 공존할 수 있지만 각 rule/function은 어느 logical owner에서 파생되는지 추적 가능해야 한다. 하위 PlusCal과 Source Code는 물리 파일 co-location을 이유로 Backend↔Frontend direct access를 다시 허용할 수 없다.
++
++## Backend authoritative state와 mutation
++
++`activeProject`는 계속 유일한 persistent ProjectObject authority다. r24는 새 project store, Frontend mirror, command bus 또는 두 번째 persistent state를 추가하지 않는다.
++
++persistent mutation 경로는 다음으로 고정한다.
++
++```text
++Frontend mutation intent
++→ FastFigureApi/public mutation surface
++→ Application adapter
++→ Backend Project EFSM
++→ current activeProject reference resolve
++→ candidate
++→ validation
++→ one commit
++→ ProjectMutationResult
++```
++
++Project EFSM은 Frontend FSM, DOM, Mantine/React state를 직접 변경하지 않는다. Frontend component/FSM/renderer는 `projectEFSM.send`를 직접 호출하지 않는다.
++
++`PUBLIC_PROJECT_MUTATION_ROUTES`에는 기존 route에 더해 다음 누락을 명시했다.
++
++- `slots.swap → SLOTS_SWAPPED`
++- `slots.select.pendingContentType → SLOT_TYPE_CHANGED`
++
++두 route 모두 기존 Project command를 재사용하며 새 mutation authority를 만들지 않는다.
++
++## Backend read/query 경계
++
++read와 calculation은 Project EFSM mutation path를 통과하지 않는다. 대신 Frontend에서 Backend persistent state를 읽어야 하는 모든 cross-layer read는 Application boundary의 query adapter를 통과한다.
++
++`project_state.py`에 다음 Backend read 의미를 추가했다.
++
++- `readBackendProjection(kind, request)`
++- `validateFrontendIntent(event, payload)`
++- `buildFrontendReconciliationInput(event, mutationResult, frontendReferences)`
++
++query는 current `activeProject`에서 필요한 id/path/reference를 다시 resolve하고 consumer에 필요한 field만 immutable/transient projection으로 반환한다.
++
++read projection에서 compatibility/default normalization이 필요하면 projection 또는 candidate copy에서 수행한다. read 과정이 live ProjectObject field를 변경하지 않는다.
++
++Frontend 또는 renderer가 받은 projection은 project authority가 아니며 그대로 persistent mutation candidate로 되돌려 보내지 않는다. mutation input에는 identity/reference와 새 사용자 입력을 전달하고 Project EFSM이 current authority를 다시 resolve한다.
++
++## Frontend FSM 경계
++
++`interface_fsm.py`에서 Backend import를 제거했다.
++
++Frontend FSM은 다음만 소유한다.
++
++- `selectedSlotId`
++- lifecycle
++- workspace
++- overlay
++- asset selection/path reference
++- graph-object selection/index
++- direction/revision/error
++
++Backend identity validity가 필요한 `SELECT_SLOT`, `SELECT_ASSET`, `SELECT_GRAPH_OBJECT`는 Application boundary가 Backend에서 검증한 `FrontendValidatedInput`을 전달한다.
++
++overlay, Escape, lifecycle처럼 Backend reference가 필요 없는 event는 Backend query를 만들지 않고 Frontend-only accepted input으로 전달한다.
++
++Project mutation 뒤 Frontend FSM은 `activeProject`를 다시 읽지 않는다. Application boundary가 `ProjectMutationResult`와 current Frontend id/path/index reference를 Backend에 전달해 `FrontendReconciliationInput`을 만들고, Frontend FSM은 그 input만 소비한다.
++
++`InterfaceStateMachine.readState()`는 Application boundary와 renderer가 사용할 Frontend runtime projection만 반환하며 persistent project authority가 아니다.
++
++## SELECT_SLOT과 pending content type
++
++기존 구현의 `SELECT_SLOT`에는 UI selection 외에 `pendingSlotContentType`이 지정된 경우 선택 완료 후 empty slot의 contentType을 바꾸는 조건부 persistent 동작이 있었다.
++
++r24는 이 의미를 삭제하거나 Frontend FSM 내부에 숨기지 않는다.
++
++`dispatchSlotSelection(slotId, pendingContentType)`의 순서는 다음으로 확정했다.
++
++1. Backend에서 slot reference를 검증한다.
++2. accepted SELECT_SLOT을 Frontend FSM에 보내 selection toggle/workspace를 먼저 확정한다.
++3. toggle 결과 selectedSlotId가 none이면 persistent mutation을 하지 않는다.
++4. pendingContentType이 있으면 final selectedSlotId에 대해 Backend `slot-selection-context` query를 수행한다.
++5. selected slot이 empty이고 현재 contentType과 pendingContentType이 다를 때만 별도 `SLOT_TYPE_CHANGED` Project command를 실행한다.
++6. 이 Project command는 일반 Project EFSM candidate/validation/commit 경로를 사용한다.
++
++따라서 Frontend FSM은 Project EFSM을 호출하지 않으면서 기존 조건부 persistent 의미도 보존한다.
++
++## Lifecycle
++
++r23의 `InterfaceStateMachine.run(lifecycle, event, task)`는 Frontend FSM이 Backend operation callback을 실행할 수 있는 구조였다.
++
++r24에서는 이 task 실행 책임을 Application boundary로 이동했다.
++
++```text
++Application boundary
++→ Frontend LIFECYCLE_START
++→ Backend command/query 또는 pure export task
++→ success: Frontend LIFECYCLE_COMPLETE
++→ failure: Frontend LIFECYCLE_FAILED
++```
++
++Frontend FSM은 Backend task callback을 실행하지 않고 Backend rollback 규칙도 만들지 않는다.
++
++## Renderer
++
++`renderer_runtime.py`는 Frontend responsibility로 확정했고 Backend import를 제거했다.
++
++renderer 입력은 다음 세 종류다.
++
++- Application boundary가 제공한 immutable Backend `projectProjection`
++- final Frontend `interfaceState`
++- FastFigureApi/Application boundary가 제공하는 `frontendActions`
++
++`renderDashboard`, `applySlotStyle`, `resolveSelectedChart`, `updateGraphView`, startup은 supplied projection을 사용한다.
++
++slot selection은 renderer가 interfaceFSM이나 Backend를 직접 호출하지 않고 `frontendActions.slots.select`를 사용한다.
++
++slot swap은 `frontendActions.slots.swap` public persistent mutation API를 사용한다.
++
++external file drop target 준비도 public `slots.prepareFileDrop` 경계를 사용한다.
++
++renderer는 DOM 또는 Plotly state에서 ProjectObject를 역갱신하지 않고, read-time normalization이 필요해도 supplied projection copy만 변경한다.
++
++## Graph와 layout wrapper의 explicit reference
++
++Frontend selection을 Backend domain function이 암묵적으로 읽지 않도록 public graph wrapper의 입력을 구체화했다.
++
++- `graphEditorAdd(slotId, csvId)`
++- `graphEditorCommit(chartId, objects, index)`
++- `graphEditorObjectValues(chartId, index, values)`
++- `graphEditorSetEditable(slotId, chartId, editable)`
++- `graphEditorUpdateLayout(slotId, chartId, values)`
++- `graphEditorApplyPalette(chartId, colors)`
++- `importSelectedGraphFile(slotId, file)`
++
++layout/image/label wrapper도 같은 원칙을 적용했다.
++
++- `readImageEditorApi(slotId)`
++- `applyImageSettingsFromValues(slotId, values)`
++- `readLabelsApiState(slotId)`
++
++이 id/reference는 Frontend state의 복사본을 Backend authority로 쓰는 것이 아니다. Application boundary가 현재 Frontend reference를 operation input으로 전달하고 Backend가 current authority에서 다시 resolve한다.
++
++## 물리 파일의 혼합 책임
++
++`assets_files.py`, `graphs.py`, `layout_annotations_export.py`, `api_ui.py`를 이번 Source Script 단계에서 물리적으로 분리하지 않았다.
++
++선택 이유:
++
++- 기존 함수와 domain 의미가 같은 파일 안에 이미 정리되어 있어 물리 파일 분리 자체가 Backend/Frontend 권위 문제를 해결하지 않는다.
++- Source Script 정책은 physical file hierarchy와 logical Module decomposition hierarchy를 구분한다.
++- 이번 요구는 cross-layer direct access를 제거하고 logical owner를 추적 가능하게 만드는 것이며, 새 파일 구조는 대상 언어 구현 필요성이 확인될 때 결정할 수 있다.
++- 지금 물리 파일을 의미 단위로 강제 분할하면 plan-016에 필요하지 않은 파일 재배치와 lineage 변화가 추가된다.
++
++따라서 각 혼합 파일에 logical responsibility와 boundary rule을 명시하고, 하위 단계에서 그 owner를 보존하도록 했다.
++
++## 닫힘 판정 — 논리적 완결성
++
++확인:
++
++- Backend persistent authority와 mutation controller가 명시되어 있다.
++- Backend read/query, Frontend reference validation, post-commit reconciliation query의 input/output 방향이 명시되어 있다.
++- Frontend FSM은 Backend state를 직접 읽지 않고 validated/reconciliation input만 소비한다.
++- SELECT_SLOT의 conditional Project mutation이 별도 Application orchestration으로 보존되어 있다.
++- lifecycle start/task/success/failure 순서가 Application boundary에 정의되어 있다.
++- commit failure 시 success reconciliation과 renderer commit projection을 수행하지 않는 규칙이 유지된다.
++- renderer input과 persistent mutation callback 경계가 정의되어 있다.
++- mixed physical file의 logical owner가 정의되어 있다.
++- Portable build의 system-level 위치가 정의되어 있다.
++- read normalization이 live authority를 변경하지 않는 규칙이 명시되어 있다.
++
++판정: plan-016의 Source Script architecture 범위에서 입력 → query/command → commit/result → Frontend reconciliation → renderer까지 의미가 끊기지 않는다.
++
++## 닫힘 판정 — 프로젝트 목적 부합
++
++확인:
++
++- FFPX schema와 ProjectObject field 의미를 변경하지 않았다.
++- local browser processing과 portable single-file 목적을 변경하지 않았다.
++- 새로운 network/server dependency를 추가하지 않았다.
++- UI-only state를 FFPX persistent state로 승격하지 않았다.
++- `appearance.uiPalette`와 기존 persistent project properties는 Backend ProjectObject에 그대로 남는다.
++- 기존 candidate-first/one-commit mutation contract와 chart/reference invariant를 유지한다.
++
++판정: Backend/Frontend 경계 강화는 기존 Fast Figure 기능 의미를 축소하지 않고 plan-016의 구조 요구를 충족한다.
++
++## 닫힘 판정 — 중복과 통합·확장
++
++검토한 중복 후보:
++
++- 새 project store 또는 Frontend ProjectObject mirror: 기각. `activeProject` 하나를 계속 authority로 사용한다.
++- 새 command bus/event bus: 기각. 기존 FastFigureApi, application_fsm orchestration, ProjectMutationResult를 확장한다.
++- 새로운 combined FSM: 기각. Application boundary는 state authority가 아니라 adapter/orchestrator다.
++- read를 모두 Project EFSM command로 처리: 기각. 읽기와 mutation을 분리하고 Backend read provider를 사용한다.
++- Backend/Frontend마다 별도 asset/graph/layout model 복제: 기각. 기존 domain model에서 query projection만 만든다.
++- 물리 파일 즉시 전면 분할: 기각. logical ownership을 먼저 보존하고 불필요한 파일 재배치를 만들지 않는다.
++
++판정: 같은 의미의 새 authority나 중복 처리 계층을 추가하지 않았다.
++
++## 직접 dependency 감사
++
++r24 저장 후 확인한 Source Script 관계:
++
++- `interface_fsm.py`: `project_state` / `project_efsm` import 없음.
++- `renderer_runtime.py`: `project_state` / `project_efsm` import 없음.
++- `api_ui.py`: `project_state` / `project_efsm` import 없음.
++- `layout_annotations_export.py`: `interface_fsm.selectedSlotId` import 없음.
++- `application_fsm.py`: Backend read/Project EFSM과 Frontend FSM 양쪽을 연결하는 공식 Application boundary로서 양쪽 명세를 참조한다.
++- `graphs.py`와 `layout_annotations_export.py`의 selected-state 언급은 direct Frontend state read가 아니라 boundary rule에서 금지/explicit input 의미를 설명하는 용도다.
++
++## fingerprint
++
++Source Script r24 의미 파일은 `sourcescript/**/*.py` 전체 11개다.
++
++fingerprint:
++
++`sha256:f4717433f5dd4111d9a2644b7cc5d66a9abb25fb477892eafde23d9b964ac5d3`
++
++`portable_build.py` 내용은 이번 revision에서 변경하지 않았지만 전체 Source Script fingerprint에는 포함했다.
++
++## 하위 계층 전파
++
++r24가 닫히면 기존 하위 계층은 새 hierarchy와 API/Adapter contract를 반영하지 못하므로 stale이다.
++
++- pseudocode r10: stale.
++- verification-model r24: stale. 기존 TLC pending은 r24 Source Script lineage의 검증 결과가 아니다.
++- source-code r29: stale.
++
++다음 단계는 r24 전체 의미를 PlusCal pseudocode로 직접 번역하는 것이다.
++
++특히 pseudocode에서 생략하면 안 되는 항목:
++
++- Backend / Application boundary / Frontend / Portable build hierarchy.
++- Backend query와 Project mutation의 분리.
++- validated Frontend event.
++- SELECT_SLOT → optional SLOT_TYPE_CHANGED ordering.
++- Project commit success/failure → reconciliation ordering.
++- Application-owned lifecycle task.
++- renderer projection input.
++- explicit slot/chart/csv reference flow.
++- read projection의 one-way 성질.
++
++verification model은 새 pseudocode가 current가 된 뒤 그 pseudocode에서 필요한 contract/invariant 범위를 파생한다. 현재 Fast Figure AGENT.md가 TLC gate를 요구하므로 새 Source Code lineage를 current로 닫기 전에 관련 verification model과 TLC passed가 필요하다.
++
++## 최종 판정
++
++논리적 완결성, 프로젝트 목적 부합, 중복/통합 검토의 세 닫힘 항목에 미해결 설계 항목이 없다.
++
++따라서 Source Script r24를 **closed**로 판정한다.
+
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,17 +9,17 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode and gates Source Code where TLC validation is used.",
+   "layers": {
+     "source-script": {
+-      "revision": 23,
++      "revision": 24,
+       "status": "current",
+       "path_rule": "sourcescript/**/*.py",
+-      "fingerprint": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
++      "fingerprint": "sha256:f4717433f5dd4111d9a2644b7cc5d66a9abb25fb477892eafde23d9b964ac5d3",
+       "derived_from": null,
+       "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261014-014-sourcescript-closure-r23.md"
++      "closure_review": "agent_space/reviews/review-20261015-020-sourcescript-closure-r24.md"
+     },
+     "verification-model": {
+       "revision": 24,
+-      "status": "current",
++      "status": "stale",
+       "path_rule": "verification/**/*.{tla,cfg}",
+       "fingerprint": "sha256:97c66b2980486134499d381bba0fd76d6f22fbf03062c11af484a5383a9887e4",
+       "derived_from": {
+@@ -31,7 +31,7 @@
+     },
+     "source-code": {
+       "revision": 29,
+-      "status": "current",
++      "status": "stale",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+@@ -48,7 +48,7 @@
+     },
+     "pseudocode": {
+       "revision": 10,
+-      "status": "current",
++      "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+       "fingerprint": "sha256:0753354b6c25df1f391d53991cf2631a31ab184749fd96653a60bed79d87bece",
+       "derived_from": {
+
+diff --git a/sourcescript/api_ui.py b/sourcescript/api_ui.py
+--- a/sourcescript/api_ui.py
++++ b/sourcescript/api_ui.py
+@@ -18,9 +18,22 @@
+ - layout_annotations_export.py
+ """
+ 
+-from project_state import activeProject
+-from interface_fsm import interfaceFSM, selectedSlotId
+-from application_fsm import dispatchInterfaceEvent, dispatchProjectCommand, runLifecycleTask
++from interface_fsm import interfaceFSM
++from application_fsm import (
++    dispatchInterfaceEvent,
++    dispatchProjectQuery,
++    dispatchProjectCommand,
++    dispatchSlotSelection,
++    runLifecycleTask as runApplicationLifecycleTask,
++)
++
++API_UI_LOGICAL_RESPONSIBILITIES = {
++    "Application boundary": (
++        "FastFigureApi의 Backend query/command와 validated Frontend event routing contract. "
++        "Frontend에 Backend internal state/helper를 노출하지 않는다."
++    ),
++    "Frontend": "Mantine component, component-local draft, overlay, pointer와 visual interaction semantics",
++}
+ 
+ FastFigureApi = {
+     "project": "project metadata와 FFPX project command",
+@@ -37,16 +50,22 @@
+ 
+ PUBLIC_API_METHODS = {
+     "project": {
+-        "readName": "read; args 없음; activeProject.meta.projectName projection",
++        "readName": "Backend query; args 없음; current project meta name immutable projection",
+         "setName": "mutation; PROJECT_NAME_CHANGED project command로 project name candidate commit",
+         "importFile": "lifecycle mutation; FFPX -> fully validated ProjectObject candidate -> PROJECT_LOADED",
+         "exportFile": "read/export; current validated project snapshot -> FFPX; project mutation 없음",
+     },
+     "slots": {
+-        "readSelected": "read; selectedSlotId를 current slot projection으로 resolve",
+-        "select": "runtime mutation; explicit visible slot id의 selection toggle 또는 none의 explicit deselection으로 workspace 갱신",
+-        "setContentType": "mutation; SLOT_TYPE_CHANGED project command로 selected/payload slot contentType candidate commit",
+-        "reset": "mutation; SLOTS_RESET project command로 slot-local properties reset + owned chart 제거",
++        "readSelected": (
++            "cross-layer read; Frontend selectedSlotId reference와 Backend query result를 결합한 immutable selected-slot projection"
++        ),
++        "select": (
++            "Application operation; slot reference를 Backend에서 validate한 뒤 Frontend SELECT_SLOT을 수행한다. "
++            "explicit pendingContentType intent가 있으면 selection과 분리된 SLOT_TYPE_CHANGED command를 Application adapter가 조건부 실행한다."
++        ),
++        "setContentType": "Backend command; SLOT_TYPE_CHANGED로 explicit slot/contentType candidate commit",
++        "reset": "Backend command; SLOTS_RESET로 slot-local properties reset + owned chart 제거",
++        "swap": "Backend command; SLOTS_SWAPPED로 두 GUI 위치의 slot-local payload를 교환",
+         "prepareFileDrop": "runtime calculation/mutation; drop target selection과 acceptability만 결정",
+         "finishFileDrop": "runtime completion; drag/drop interaction state 정리, domain payload 자체는 import command가 소유",
+     },
+@@ -105,7 +124,7 @@
+         "exportPlotlyJson": "read/export; selected chart semantic figure -> Plotly JSON",
+     },
+     "print": {
+-        "readSettings": "read; activeProject.export persistent settings projection",
++        "readSettings": "Backend query; current persistent export settings immutable projection",
+         "setSettings": "mutation; EXPORT_SETTINGS_CHANGED project command로 width/heightMode/height/dpi/format candidate commit",
+         "save": "export; persistent target settings snapshot으로 raster export, project mutation 없음",
+         "capture": "export; current-screen one-shot capture, persistent target width/height mutation 없음",
+@@ -158,14 +177,25 @@
+ 
+ 
+ API_BOUNDARY_RULE = (
+-    "Mantine frontend는 activeProject, projectVfs, getChart, getProjectCsv 같은 domain 구현을 "
+-    "직접 일반 변경 경계로 사용하지 않는다. persistent/domain mutation은 PUBLIC_API_METHODS의 command 또는 "
+-    "명시된 interfaceFSM runtime event를 사용한다. UI-local editor target, modal draft, pointer state는 public domain API가 아니다."
++    "Mantine component와 renderer를 포함한 Frontend는 activeProject, projectObjects, projectVfs, projectEFSM, "
++    "getChart/getProjectCsv/getProjectImage 같은 Backend internal state/helper를 직접 import/read/call하지 않는다. "
++    "persistent mutation은 FastFigureApi Backend-command method -> Application adapter -> Project EFSM으로, "
++    "project read는 FastFigureApi Backend-query method -> Application adapter -> Backend read provider로 전달한다. "
++    "Frontend runtime event도 Backend identity validity가 필요하면 Application adapter가 검증한 input을 interfaceFSM에 전달한다. "
++    "UI-local editor target, modal draft, pointer state는 public Backend API나 FFPX state가 아니다."
+ )
+ 
+ READ_RULE = (
+-    "FastFigureApi read operation은 현재 Source of Truth에서 필요한 projection을 매번 계산한다. "
+-    "React component가 받은 projection을 다른 subsystem의 장기 read authority로 배포하지 않는다."
++    "FastFigureApi Backend read operation은 current Backend authority에서 필요한 projection을 매번 계산해 immutable/transient value로 반환한다. "
++    "read-time normalization은 projection copy에서만 수행하고 live ProjectObject를 변경하지 않는다. "
++    "React/renderer가 받은 projection을 다른 subsystem의 장기 project authority 또는 무검증 mutation input으로 재사용하지 않는다."
++)
++
++PUBLIC_API_ROUTE_RULE = (
++    "PUBLIC_API_METHODS의 persistent mutation은 Backend command route, project/model read는 Backend query route, "
++    "overlay/selection/zoom 같은 session state는 Frontend event route로 구분한다. "
++    "한 public operation이 Frontend selection과 persistent mutation을 모두 포함하면 slots.select처럼 Application boundary가 "
++    "두 explicit step을 순서대로 조정하며 Frontend FSM 안에 hidden Backend command를 넣지 않는다."
+ )
+ 
+ UI_LOCAL_STATE = {
+@@ -320,14 +350,15 @@ def runLifecycleTask(lifecycle, eventName, task):
+     - task result 또는 UI error 처리 결과.
+ 
+     변경:
+-    - interfaceFSM lifecycle.
+-    - task가 호출하는 공식 command에 따른 domain state.
++    - Application boundary가 전달하는 Frontend lifecycle state.
++    - task가 호출하는 공식 Backend command에 따른 domain state.
+ 
+     처리:
+-    lifecycle sequencing은 runLifecycleTask에 위임한다.
+-    UI layer는 error를 debug telemetry에 기록하되 별도 domain rollback 규칙을 만들지 않는다.
++    Mantine Frontend는 task callback을 interfaceFSM에 직접 넘기지 않고 runApplicationLifecycleTask에 위임한다.
++    Application boundary가 LIFECYCLE_START -> task -> COMPLETE/FAILED 순서를 소유한다.
++    UI layer는 error를 debug telemetry에 기록할 수 있지만 별도 domain rollback 규칙을 만들지 않는다.
+     """
+-    return "lifecycle task 결과"
++    return runApplicationLifecycleTask(lifecycle, eventName, task)
+ 
+ 
+ def FastFigureApp():
+
+diff --git a/sourcescript/application_fsm.py b/sourcescript/application_fsm.py
+--- a/sourcescript/application_fsm.py
++++ b/sourcescript/application_fsm.py
+@@ -1,43 +1,113 @@
+ """
+-Fast Figure Source Script — application orchestration
++Fast Figure Source Script — Application boundary orchestration
+ 
+-project mutation과 interface region을 한 FSM에 결합하지 않고 두 상태기계의 causal ordering만 소유한다.
++이 파일의 application_fsm 이름은 기존 lineage 식별자를 유지하기 위한 물리 파일명이다.
++논리 책임은 세 번째 authoritative FSM이 아니라 Backend와 Frontend 사이의 command/query/result/lifecycle Adapter다.
+ """
+ 
++from project_state import (
++    readBackendProjection,
++    validateFrontendIntent,
++    buildFrontendReconciliationInput,
++)
+ from project_efsm import projectEFSM, PROJECT_COMMANDS
+ from interface_fsm import interfaceFSM
+ 
++BACKEND_REFERENCE_EVENTS = {
++    "SELECT_SLOT",
++    "SELECT_ASSET",
++    "SELECT_GRAPH_OBJECT",
++}
++
+ APPLICATION_ORDER = (
+-    "interface intent -> explicit project command -> projectEFSM validate/commit -> "
+-    "ProjectMutationResult -> interfaceFSM reconcile -> renderer projection"
++    "Frontend intent -> Application API/Adapter -> Backend query 또는 explicit project command -> "
++    "projectEFSM validate/commit -> ProjectMutationResult -> Backend reconciliation query -> "
++    "Frontend FSM reconcile -> renderer projection input"
+ )
+ 
+-ORCHESTRATION_RULES = [
+-    "interface-only event는 projectEFSM을 호출하지 않는다.",
+-    "persistent mutation event는 interfaceFSM workspace action으로 실행하지 않는다.",
+-    "projectEFSM commit 성공 뒤에만 interfaceFSM.reconcileProjectResult를 호출한다.",
+-    "project commit 실패 시 interface reconciliation과 commit projection을 실행하지 않는다.",
+-    "interface reconciliation이 끝난 final runtime selection을 renderer가 읽는다.",
+-    "renderer는 projectEFSM/interfaceFSM command를 재귀 호출하지 않는다.",
+-    "ProjectMutationResult는 orchestration call 동안만 사용하고 별도 authority로 저장하지 않는다.",
++APPLICATION_BOUNDARY_RULES = [
++    "Backend와 Frontend 사이의 모든 persistent mutation, project query/read, mutation result 전달은 이 API/Adapter 경계를 통과한다.",
++    "Frontend component/FSM/renderer는 activeProject/projectObjects/projectVfs/projectEFSM을 직접 사용하지 않는다.",
++    "Backend는 interfaceFSM/DOM/Mantine/React local state를 직접 사용하지 않는다.",
++    "Backend identity가 필요한 Frontend event만 Backend validation query를 수행하고 overlay/Escape/lifecycle 같은 Frontend-only event는 불필요한 Backend 조회를 만들지 않는다.",
++    "persistent mutation은 interfaceFSM action으로 실행하지 않고 explicit Project EFSM command로 전달한다.",
++    "projectEFSM commit 성공 뒤에만 Backend reconciliation query와 interfaceFSM.reconcileProjectResult를 실행한다.",
++    "project commit 실패 시 success reconciliation과 commit renderer projection을 실행하지 않는다.",
++    "renderer는 Backend read projection과 final Frontend state를 입력으로 받고 두 FSM command를 재귀 호출하지 않는다.",
++    "ProjectMutationResult/read projection/reconciliation input은 orchestration call 범위의 transient value이며 authority로 저장하지 않는다.",
+ ]
+ 
+-def dispatchInterfaceEvent(event, payload):
+-    """overlay/workspace/selection 등 interface-only event."""
+-    return interfaceFSM.send(event, payload)
++def dispatchProjectQuery(query, payload=None):
++    """
++    Backend public read/query adapter.
++    current activeProject는 Backend read provider만 읽고 immutable projection을 반환한다.
++    Frontend caller에 Backend mutable object/helper를 노출하지 않는다.
++    """
++    return readBackendProjection(query, payload)
++
++
++def dispatchInterfaceEvent(event, payload=None):
++    """
++    Frontend runtime event adapter.
++
++    1. event가 BACKEND_REFERENCE_EVENTS면 validateFrontendIntent로 current Backend authority에서 reference를 검증한다.
++    2. 그 외 Frontend-only event는 Backend query 없이 event/payload를 local accepted input으로 감싼다.
++    3. interfaceFSM은 validated/local input만 소비하며 Backend를 직접 조회하지 않는다.
++    """
++    validatedInput = (
++        "validateFrontendIntent(event, payload)"
++        if event in BACKEND_REFERENCE_EVENTS
++        else "Frontend-only accepted input"
++    )
++    return interfaceFSM.send(event, validatedInput)
++
++
++def dispatchSlotSelection(slotId, pendingContentType=None):
++    """
++    기존 slot selection과 선택 시 optional content-type intent를 명시적으로 분리한 Application operation.
++
++    1. slotId 또는 explicit none을 validateFrontendIntent로 Backend current authority에서 검증한다.
++    2. rejected input이면 Frontend selection과 ProjectObject를 변경하지 않고 rejection을 반환한다.
++    3. accepted SELECT_SLOT을 Frontend FSM에 보내 selection toggle/workspace를 먼저 확정한다.
++    4. toggle 결과 selectedSlotId가 none이면 persistent mutation을 수행하지 않는다.
++    5. pendingContentType이 명시되어 있으면 final selectedSlotId를 readBackendProjection("slot-selection-context")로 조회한다.
++    6. Backend projection에서 selected slot이 empty이고 current contentType과 pendingContentType이 다를 때만
++       dispatchProjectCommand("SLOT_TYPE_CHANGED", {"slotId": finalSelectedSlotId, "contentType": pendingContentType})를 실행한다.
++    7. 이 조건부 persistent command는 Frontend FSM action이 아니며 Project EFSM의 일반 candidate/validation/commit 규칙을 그대로 사용한다.
++    """
++    validatedInput = validateFrontendIntent("SELECT_SLOT", {"slotId": slotId})
++    interfaceState = "rejected면 unchanged, accepted면 interfaceFSM.send 결과"
++    selectionContext = "pendingContentType이 필요한 경우의 Backend read projection"
++    projectResult = "조건을 만족할 때의 SLOT_TYPE_CHANGED ProjectMutationResult 또는 없음"
++    return interfaceState, projectResult
++
+ 
+ def dispatchProjectCommand(event, payload):
+     """
+     1. event가 PROJECT_COMMANDS인지 확인한다.
+-    2. projectEFSM.send로 candidate validation/commit을 끝낸다.
+-    3. result를 interfaceFSM.reconcileProjectResult에 전달한다.
+-    4. renderer_runtime.applyDashboardProjectionInvalidation을 final interface state 뒤 호출한다.
+-    5. ProjectMutationResult를 caller에 반환한다.
++    2. projectEFSM.send로 current-authority resolve -> candidate -> validation -> commit을 끝낸다.
++    3. commit 실패면 Frontend success reconciliation 없이 result, interfaceFSM.readState(), rendererInput none을 반환한다.
++    4. commit 성공이면 interfaceFSM.readState()의 id/path/index reference와 result를 buildFrontendReconciliationInput에 전달한다.
++    5. interfaceFSM.reconcileProjectResult에 그 validated reconciliation input을 전달한다.
++    6. final Frontend state를 request에 포함해 readBackendProjection("renderer")로 renderer용 immutable project projection을 만든다.
++    7. ProjectMutationResult, final Frontend state, renderer project projection을 caller/Frontend renderer 경계로 반환한다.
+     """
+     result = projectEFSM.send(event, payload)
+-    interfaceState = interfaceFSM.reconcileProjectResult(event, result)
+-    return result, interfaceState
++    frontendBefore = interfaceFSM.readState()
++    reconciliationInput = "commit 성공 시 Backend에서 계산한 FrontendReconciliationInput"
++    interfaceState = "commit 실패 시 frontendBefore, 성공 시 reconciled Frontend state"
++    rendererProjection = "commit 성공 시 Backend renderer projection, 실패 시 없음"
++    return result, interfaceState, rendererProjection
++
+ 
+ def runLifecycleTask(lifecycle, event, task):
+-    """import/export busy/error sequencing은 interfaceFSM.run이 소유한다."""
+-    return interfaceFSM.run(lifecycle, event, task)
++    """
++    cross-layer import/export busy/error sequencing을 Application boundary가 소유한다.
++
++    1. interfaceFSM에 Frontend-only accepted LIFECYCLE_START input을 보낸다.
++    2. Application boundary가 task를 실행한다. task는 public Backend command/query 또는 pure export operation을 호출할 수 있다.
++    3. 성공하면 Frontend-only accepted LIFECYCLE_COMPLETE를 interfaceFSM에 보낸 뒤 task result를 반환한다.
++    4. 실패하면 LIFECYCLE_FAILED에 error projection을 담은 Frontend-only accepted input을 보내고 task failure를 caller에 반환/전파한다.
++    5. interfaceFSM은 task callback을 직접 실행하지 않으며 Backend rollback 규칙을 만들지 않는다.
++    """
++    return "task result 또는 failure"
+
+diff --git a/sourcescript/assets_files.py b/sourcescript/assets_files.py
+--- a/sourcescript/assets_files.py
++++ b/sourcescript/assets_files.py
+@@ -17,6 +17,22 @@
+ from project_state import activeProject, projectVfs, getProjectCsv, getProjectImage
+ from application_fsm import dispatchProjectCommand
+ 
++ASSET_FILE_LOGICAL_RESPONSIBILITIES = {
++    "Backend": (
++        "path/VFS resolve, parse/serialize, collision calculation, FFPX/FFSX structure, import/export candidate, "
++        "reference validation과 package persistence semantics"
++    ),
++    "Application boundary": (
++        "create/import/delete/move/trash/connect/load/applyFfsxSlot처럼 public API intent를 explicit Project EFSM command로 전달하는 wrappers"
++    ),
++}
++
++ASSET_BOUNDARY_RULE = (
++    "같은 물리 파일에 co-locate되어도 Backend asset calculation/candidate function은 Application adapter를 역호출하지 않는다. "
++    "dispatchProjectCommand를 호출하는 함수는 Application-boundary wrapper로 분류하고, 그 wrapper가 explicit id/path/slot reference를 "
++    "Backend command input으로 전달한다. Backend persistent candidate는 Frontend selection이나 DOM state를 읽지 않는다."
++)
++
+ PACKAGE_FORMAT_VERSION = "현재 FFPX/FFSX package format version 3"
+ 
+ PROJECT_ASSET_DIRECTORIES = {
+
+diff --git a/sourcescript/graphs.py b/sourcescript/graphs.py
+--- a/sourcescript/graphs.py
++++ b/sourcescript/graphs.py
+@@ -21,6 +21,23 @@
+ from project_state import activeProject, getProjectCsv, getChart
+ from application_fsm import dispatchProjectCommand
+ 
++GRAPH_FILE_LOGICAL_RESPONSIBILITIES = {
++    "Backend": (
++        "CSV column/chart/graph-object normalization, reference validation, Plotly semantic conversion과 candidate calculation"
++    ),
++    "Application boundary": (
++        "graph editor public operation에서 Frontend-selected slot/chart/csv reference를 explicit input으로 받아 "
++        "Project EFSM command/query로 전달하는 wrappers"
++    ),
++}
++
++GRAPH_BOUNDARY_RULE = (
++    "Backend graph calculation은 interfaceFSM/selectedSlotId를 직접 읽지 않는다. "
++    "selected slot/chart가 필요한 public operation은 Application boundary가 Frontend reference를 가져와 Backend에서 current authority로 검증한 뒤 "
++    "slotId/chartId/csvId 같은 explicit reference를 candidate/command input에 포함한다. "
++    "dispatchProjectCommand를 호출하는 co-located function은 Backend domain function이 아니라 Application-boundary wrapper다."
++)
++
+ 
+ axisSettings = {
+     "min": "optional numeric lower bound; empty이면 auto",
+@@ -187,12 +204,11 @@ def connectDataToSlotModel(slot, data, sourceName, projectCsv):
+ 
+ 
+ GRAPH_CSV_SELECTION_RULE = (
+-    "현재 CSV 선택은 application FSM의 assetSelection/assetPath를 단일 원천으로 한다. "
+-    "graph object의 csvId는 해당 object가 소유하는 데이터 참조이며 선택값이 아니다. "
+-    "CSV 선택 표시와 새 object 추가는 동일한 현재 선택 CSV를 참조한다. "
+-    "graph object 선택 시 참조 CSV를 같은 선택 상태에 반영할 수 있으나 "
+-    "단순 CSV 선택은 graph object 선택을 해제하되 기존 object의 csvId를 변경하지 않는다. "
+-    "기존 object의 x/y 편집에 필요한 열은 해당 object.csvId에서 resolve하며 현재 선택 CSV 열과 혼용하지 않는다."
++    "현재 CSV 선택은 Frontend FSM의 assetSelection/assetPath가 session authority이며 Backend persistent state가 아니다. "
++    "Application boundary가 graph public operation 호출 시 그 selected CSV path/id reference를 explicit input으로 받아 Backend에서 current authority로 검증한다. "
++    "graph object의 csvId는 해당 object가 소유하는 persistent data reference이며 selection 대체 원천이 아니다. "
++    "graph object 선택 시 Frontend event로 참조 CSV selection을 갱신할 수 있으나 단순 CSV 선택은 기존 object.csvId를 변경하지 않는다. "
++    "기존 object의 x/y 편집에 필요한 열은 해당 object.csvId에서 Backend query로 resolve하며 current selected CSV 열과 혼용하지 않는다."
+ )
+ 
+ EMPTY_CSV_GRAPH_RULE = (
+@@ -203,7 +219,7 @@ def connectDataToSlotModel(slot, data, sourceName, projectCsv):
+ )
+ 
+ 
+-def graphEditorAdd(csvId):
++def graphEditorAdd(slotId, csvId):
+     """
+     Return:
+     - chart:
+@@ -213,15 +229,15 @@ def graphEditorAdd(csvId):
+     - GRAPH_OBJECTS_REPLACED 또는 SLOT_DATA_CONNECTED 공식 event를 통해 chart/slot state를 변경한다.
+ 
+     처리:
+-    선택 slot과 CSV를 실제 id로 resolve한다.
+-    선택 slot에 chart가 없으면 SLOT_DATA_CONNECTED로 첫 chart/object를 만든다.
+-    chart가 있으면 현재 object 목록에 새 base graph object를 추가해 GRAPH_OBJECTS_REPLACED로 commit한다.
++    Application boundary가 받은 explicit slotId와 csvId를 Backend current authority에서 resolve한다.
++    target slot에 chart가 없으면 SLOT_DATA_CONNECTED로 첫 chart/object를 만든다.
++    chart가 있으면 owning chart id와 current object 목록을 Backend에서 resolve해 새 base graph object를 추가하고 GRAPH_OBJECTS_REPLACED로 commit한다.
+     """
+-    event = "SLOT_DATA_CONNECTED if selected slot has no chart else GRAPH_OBJECTS_REPLACED"
+-    return dispatchProjectCommand(event, {"csvId": csvId, "objects": "candidate objects"})
++    event = "SLOT_DATA_CONNECTED if target slot has no chart else GRAPH_OBJECTS_REPLACED"
++    return dispatchProjectCommand(event, {"slotId": slotId, "csvId": csvId, "objects": "candidate objects"})
+ 
+ 
+-def graphEditorCommit(objects, index):
++def graphEditorCommit(chartId, objects, index):
+     """
+     Return:
+     - chart:
+@@ -240,18 +256,18 @@ def graphEditorCommit(objects, index):
+     """
+     return dispatchProjectCommand(
+         "GRAPH_OBJECTS_REPLACED",
+-        {"objects": objects, "selectedIndexHint": index},
++        {"chartId": chartId, "objects": objects, "selectedIndexHint": index},
+     )
+ 
+ 
+-def graphEditorObjectValues(index, values):
++def graphEditorObjectValues(chartId, index, values):
+     """
+     Return:
+     - chart:
+       지정 object의 허용 field를 정규화해 commit한 chart.
+ 
+     변경:
+-    - 최종적으로 graphEditorCommit을 통해 chart object state를 변경한다.
++    - 최종적으로 graphEditorCommit(chartId, ...)을 통해 explicit chart object state를 변경한다.
+ 
+     처리:
+     CSV와 column reference를 현재 project에서 다시 resolve한다.
+@@ -262,7 +278,7 @@ def graphEditorObjectValues(index, values):
+     return chart
+ 
+ 
+-def graphEditorSetEditable(editable):
++def graphEditorSetEditable(slotId, chartId, editable):
+     """
+     Return:
+     - editable:
+@@ -279,8 +295,11 @@ def graphEditorSetEditable(editable):
+     이 command는 필요한 CSV 생성/next-id/reference remap을 chart editable 변경과 같은 candidate에 포함한다.
+     zero-trace/zero-object imported figure는 CSV를 만들지 않고 empty editable chart로 전환할 수 있다.
+     """
+-    candidate = convertImportedChartToEditable("selected chart") if editable else "editable flag candidate"
+-    return dispatchProjectCommand("CHART_MODEL_REPLACED", {"candidate": candidate})
++    candidate = convertImportedChartToEditable("explicit chartId") if editable else "editable flag candidate"
++    return dispatchProjectCommand(
++        "CHART_MODEL_REPLACED",
++        {"slotId": slotId, "chartId": chartId, "candidate": candidate},
++    )
+ 
+ 
+ def graphEditorSetHeaderLines(csvId, headerLines):
+@@ -298,7 +317,7 @@ def graphEditorSetHeaderLines(csvId, headerLines):
+     )
+ 
+ 
+-def graphEditorUpdateLayout(values):
++def graphEditorUpdateLayout(slotId, chartId, values):
+     """
+     변경:
+     - selected chart의 persistent title/global/axis settings.
+@@ -307,18 +326,21 @@ def graphEditorUpdateLayout(values):
+     normalized candidate를 CHART_LAYOUT_CHANGED로 commit한다.
+     Plotly graph layout은 commit된 chart settings에서 다시 계산하는 projection이다.
+     """
+-    return dispatchProjectCommand("CHART_LAYOUT_CHANGED", {"settings": values})
++    return dispatchProjectCommand(
++        "CHART_LAYOUT_CHANGED",
++        {"slotId": slotId, "chartId": chartId, "settings": values},
++    )
+ 
+ 
+-def graphEditorApplyPalette(colors):
++def graphEditorApplyPalette(chartId, colors):
+     """
+     변경:
+     - selected chart.editor.objects의 color fields.
+ 
+     처리:
+     current objects에서 color-only candidate를 계산하고 GRAPH_OBJECTS_REPLACED로 commit한다.
+     """
+-    return dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {"colors": colors})
++    return dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {"chartId": chartId, "colors": colors})
+ 
+ 
+ def tracesSingle(objectView):
+@@ -370,7 +392,7 @@ def rebuildEditableGraph(chart):
+     return chart
+ 
+ 
+-def importSelectedGraphFile(file):
++def importSelectedGraphFile(slotId, file):
+     """
+     변경:
+     - 선택 slot의 chart model과 package가 필요로 하는 CSV asset.
+@@ -381,7 +403,7 @@ def importSelectedGraphFile(file):
+     두 경우 모두 target slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증한 뒤
+     SLOT_CHART_IMPORTED 한 command로 commit한다.
+     """
+-    return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"file": file})
++    return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"slotId": slotId, "file": file})
+ 
+ 
+ def chartFigure(chart):
+
+diff --git a/sourcescript/interface_fsm.py b/sourcescript/interface_fsm.py
+--- a/sourcescript/interface_fsm.py
++++ b/sourcescript/interface_fsm.py
+@@ -1,80 +1,101 @@
+ """
+-Fast Figure Source Script — interface/runtime FSM
++Fast Figure Source Script — Frontend interface/runtime FSM
+ 
+-FFPX ProjectObject가 아닌 application runtime과 사용자 상호작용 상태만 소유한다.
++FFPX ProjectObject가 아닌 Frontend session/runtime과 사용자 상호작용 상태만 소유한다.
++Backend ProjectObject, projectObjects, projectVfs, projectEFSM을 직접 import/read/call하지 않는다.
+ """
+ 
+-from project_state import activeProject
+-
+ selectedSlotId = (
+-    "영속 project state가 아닌 현재 UI/runtime slot 선택 id. interfaceFSM이 소유한다."
++    "영속 project state가 아닌 현재 Frontend slot 선택 reference id. interfaceFSM이 소유한다."
+ )
+ 
+ interfaceState = {
+     "lifecycle": "booting/ready/importing/exporting/error",
+     "workspace": "project/slot.graph/slot.image",
+     "overlay": "none/layout/label/caption/print/readme",
+     "assetSelection": "none/csv/image/directory",
+-    "assetPath": "current projectVfs에서 resolve 가능한 selected path 또는 없음",
++    "assetPath": "Application boundary가 Backend에서 검증한 selected path reference 또는 없음",
+     "graphObject": "none/selected",
+-    "graphObjectIndex": "current selected chart의 object index 또는 없음",
++    "graphObjectIndex": "validated selected chart context의 object index 또는 없음",
+     "direction": "ui-to-fsm/model-to-fsm/model-to-ui",
+     "revision": "frontend external-store subscriber용 revision",
+-    "error": "마지막 lifecycle task error 또는 없음",
++    "error": "마지막 lifecycle task error projection 또는 없음",
+ }
+ 
+ INTERFACE_REGION_ORDER = ["lifecycle", "workspace", "overlay", "assetSelection", "graphObject"]
+ 
+ INTERFACE_EVENTS = {
+-    "SELECT_SLOT": "selectedSlotId와 workspace selection/toggle",
+-    "SELECT_ASSET": "asset runtime selection",
++    "SELECT_SLOT": "validated slot reference의 selectedSlotId/workspace selection/toggle",
++    "SELECT_ASSET": "validated asset reference의 runtime selection",
+     "CLEAR_ASSET_SELECTION": "asset selection 해제",
+-    "SELECT_GRAPH_OBJECT": "graph object runtime selection",
++    "SELECT_GRAPH_OBJECT": "validated graph object reference/index의 runtime selection",
+     "CLEAR_GRAPH_OBJECT": "graph object selection 해제",
+     "TOGGLE_OVERLAY": "overlay toggle",
+     "CLOSE_OVERLAY": "overlay close",
+     "OUTSIDE_CLICK": "generic overlay close",
+     "ESCAPE": "generic overlay close",
+-    "LIFECYCLE_START": "import/export runtime 시작",
+-    "LIFECYCLE_COMPLETE": "ready 복귀",
+-    "LIFECYCLE_FAILED": "error projection과 recovery",
++    "LIFECYCLE_START": "Application boundary가 시작한 import/export runtime 표시",
++    "LIFECYCLE_COMPLETE": "Application boundary가 전달한 ready 복귀",
++    "LIFECYCLE_FAILED": "Application boundary가 전달한 error projection과 recovery",
+ }
+ 
+ INTERFACE_SELECTION_INVARIANTS = {
+-    "slot": "selectedSlotId는 current activeProject visible slot 또는 none이고 workspace는 여기서 파생한다.",
+-    "asset": "asset selection/path는 current projectVfs에서 resolve되어야 한다.",
+-    "graphObject": "selected index는 current selected slot/chart object 범위 안이어야 한다.",
++    "slot": (
++        "selectedSlotId는 Application boundary가 Backend validateFrontendIntent 또는 reconciliation query로 검증한 "
++        "visible slot reference 또는 none이다. Frontend FSM이 activeProject를 직접 조회해 유효성을 판정하지 않는다."
++    ),
++    "asset": "asset selection/path는 Backend query에서 accepted된 reference 또는 none이다.",
++    "graphObject": "selected index는 Backend query가 current selected chart context에 대해 accepted한 index 또는 none이다.",
+ }
+ 
++FRONTEND_FSM_BOUNDARY_RULE = (
++    "interfaceFSM은 Frontend 내부 runtime authority다. Backend function/task callback을 실행하지 않고 "
++    "Backend command/query를 직접 호출하지 않는다. Backend identity를 가리키는 event는 Application boundary가 "
++    "검증한 input만 받고, project commit 뒤에는 Application boundary가 만든 reconciliation input만 소비한다."
++)
++
+ INTERFACE_LOCALITY_RULE = (
+     "Layout selection Set, form draft, collision resolver, pointer drag, overlay resize height 등 component lifetime 값은 "
+     "cross-component authority가 필요하지 않는 한 interfaceFSM으로 승격하지 않는다."
+ )
+ 
+ class InterfaceStateMachine:
+-    def send(self, event, payload):
++    def readState(self):
+         """
+-        interface region transition만 실행한다.
+-        persistent ProjectObject mutation action은 실행하지 않는다.
+-        target validity 확인은 current activeProject를 read-only resolve한다.
++        Return:
++        - state:
++          current Frontend runtime state의 immutable projection.
++
++        변경:
++        - 없음.
++
++        처리:
++        Application boundary와 Frontend renderer가 필요한 selectedSlotId/assetPath/graphObjectIndex/workspace/overlay/lifecycle만 읽는다.
++        반환값을 persistent ProjectObject authority로 사용하지 않는다.
+         """
+-        return "final interface state"
++        return "current Frontend runtime state projection"
+ 
+-    def reconcileProjectResult(self, event, result):
++    def send(self, event, validatedInput):
+         """
+-        projectEFSM commit 이후 호출한다.
+-        changed/moved/removed identity를 current activeProject에서 다시 resolve하고 invalid selection을 clear한다.
+-        still-valid selection은 유지하고 workspace를 reconciled selectedSlotId에서 다시 파생한다.
+-        project mutation을 다시 호출하지 않고 final interface state를 publish한다.
++        Frontend region transition만 실행한다.
++        persistent ProjectObject mutation action과 Backend read/resolve를 실행하지 않는다.
++        Backend identity가 필요한 event는 accepted FrontendValidatedInput을 받아 처리한다.
++        rejected input은 기존 runtime selection을 보존하거나 event별 failure 의미로 끝낸다.
++        Backend reference가 필요 없는 overlay/lifecycle event는 Application boundary가 만든 local accepted input을 받는다.
+         """
+-        return "reconciled interface state"
++        return "final Frontend interface state"
++
++    def reconcileProjectResult(self, event, reconciliationInput):
++        """
++        Project EFSM commit 성공 뒤 Application boundary가 계산한 FrontendReconciliationInput을 받는다.
++        valid reference는 유지하고 moved reference는 supplied identity/path result로 갱신하며 invalid reference만 clear한다.
++        workspace는 reconciled selectedSlotId와 supplied workspaceHint에서 다시 파생한다.
++        Backend를 재조회하거나 project mutation을 다시 호출하지 않고 final Frontend state를 publish한다.
++        """
++        return "reconciled Frontend interface state"
+ 
+     def notify(self, objectName, event, payload):
+         """model-to-ui projection revision만 변경하고 ProjectObject를 변경하지 않는다."""
+-        return "interface state"
+-
+-    def run(self, lifecycle, event, task):
+-        """ready/busy/error runtime sequencing. persistent task는 application orchestration을 사용한다."""
+-        return "task result"
++        return "Frontend interface state"
+ 
+-interfaceFSM = "공유 application/UI runtime state의 유일한 InterfaceStateMachine instance"
++interfaceFSM = "Frontend session/runtime state의 유일한 InterfaceStateMachine instance"
+
+diff --git a/sourcescript/layout_annotations_export.py b/sourcescript/layout_annotations_export.py
+--- a/sourcescript/layout_annotations_export.py
++++ b/sourcescript/layout_annotations_export.py
+@@ -18,9 +18,24 @@
+ """
+ 
+ from project_state import activeProject, projectObjects
+-from interface_fsm import selectedSlotId
+ from application_fsm import dispatchProjectCommand
+ 
++LAYOUT_FILE_LOGICAL_RESPONSIBILITIES = {
++    "Backend": (
++        "persistent layout/imageSettings/label/caption/export-settings calculation, candidate, validation, project snapshot semantics"
++    ),
++    "Application boundary": (
++        "public layout/image/annotation/export-setting mutation/query wrappers와 explicit Frontend reference input 조정"
++    ),
++    "Frontend": "DOM/canvas/raster presentation과 one-shot current-screen capture projection",
++}
++
++LAYOUT_BOUNDARY_RULE = (
++    "selectedSlotId 같은 Frontend runtime reference를 이 파일의 Backend calculation에서 직접 import하지 않는다. "
++    "selected target이 필요한 public operation은 Application boundary에서 explicit slotId/reference를 받아 Backend current authority에서 재검증한다. "
++    "dispatchProjectCommand를 호출하는 wrapper와 Frontend raster renderer가 Backend candidate/read helper와 같은 물리 파일에 있어도 logical owner를 혼합하지 않는다."
++)
++
+ layoutRules = {
+     "gridRows": "1..8 integer",
+     "gridCols": "1..8 integer",
+@@ -208,7 +223,7 @@ def setLayoutApiGrid(rows, cols):
+     candidate를 먼저 만들고 전체 project invariant를 검증한다.
+     거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
+     성공 candidate는 GRID_LAYOUT_CHANGED를 dispatchProjectCommand로 보내 한 번 commit한다.
+-    commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 interfaceFSM reconciliation이 결정한다.
++    commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 Application boundary의 Backend reconciliation query와 Frontend FSM transition이 결정한다.
+     """
+     result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", {"rows": rows, "cols": cols})
+     return result
+@@ -229,7 +244,7 @@ def mergeSlots(slotIds):
+     5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
+     6. 두 개 이상의 selected slot object가 non-default local state를 가지면 implicit merge/concatenation 없이 거부한다.
+     7. whole-project candidate를 검증한 뒤 SLOTS_MERGED를 dispatchProjectCommand로 보내 한 번 commit한다.
+-    8. selectedSlotId reconciliation과 renderer update는 ProjectMutationResult 이후 interface/orchestration이 수행한다.
++    8. Frontend selection reconciliation과 renderer update는 ProjectMutationResult 이후 Application boundary가 수행한다.
+     """
+     result = dispatchProjectCommand("SLOTS_MERGED", {"slotIds": slotIds})
+     return result
+@@ -251,11 +266,11 @@ def splitSlots(slotIds):
+     return result
+ 
+ 
+-def readImageEditorApi():
++def readImageEditorApi(slotId):
+     """
+     Return:
+     - imageEditor:
+-      선택 slot이 참조하는 image name/display URL과 그 slot의 imageSettings read projection.
++      explicit slotId가 current Backend authority에서 참조하는 image name/display URL과 그 slot의 imageSettings read projection.
+ 
+     변경:
+     - authoritative slot-local imageSettings를 변경하지 않는다.
+@@ -264,27 +279,27 @@ def readImageEditorApi():
+     return imageEditor
+ 
+ 
+-def applyImageSettingsFromValues(values):
++def applyImageSettingsFromValues(slotId, values):
+     """
+     변경:
+     - 선택 slot의 slot.content.imageSettings.
+     - 현재 slot image renderer projection.
+ 
+     처리:
+     fit enum과 manual scale/x/y 범위를 정규화한다.
+-    selected slot id와 normalized settings를 SLOT_IMAGE_SETTINGS_CHANGED로 dispatchProjectCommand에 전달한다.
++    Application boundary가 받은 explicit slotId와 normalized settings를 SLOT_IMAGE_SETTINGS_CHANGED로 dispatchProjectCommand에 전달한다.
+     projectEFSM은 slot-local imageSettings candidate를 검증 후 한 번 commit한다.
+     같은 image asset을 참조하는 다른 slot의 imageSettings는 변경하지 않는다.
+     renderer/interface notification은 commit result 이후 수행한다.
+     """
+     result = dispatchProjectCommand(
+         "SLOT_IMAGE_SETTINGS_CHANGED",
+-        {"slotId": selectedSlotId, "settings": values},
++        {"slotId": slotId, "settings": values},
+     )
+     return result
+ 
+ 
+-def readLabelsApiState():
++def readLabelsApiState(slotId):
+     """
+     Return:
+     - labelState:
+@@ -294,7 +309,7 @@ def readLabelsApiState():
+     - 없음.
+ 
+     처리:
+-    reference geometry는 activeProject layout과 선택 slot span에서 계산한다.
++    reference geometry는 current Backend layout과 explicit slotId로 resolve한 slot span에서 계산한다.
+     """
+     labelState = "label editor read projection"
+     return labelState
+
+diff --git a/sourcescript/project_efsm.py b/sourcescript/project_efsm.py
+--- a/sourcescript/project_efsm.py
++++ b/sourcescript/project_efsm.py
+@@ -6,6 +6,13 @@
+ 
+ from project_state import activeProject, projectObjects
+ 
++PROJECT_EFSM_BOUNDARY_RULE = (
++    "Project EFSM은 Backend 내부 persistent mutation controller다. "
++    "Frontend component/FSM/renderer는 projectEFSM.send를 직접 호출하지 않는다. "
++    "persistent mutation intent는 public mutation API와 Application adapter를 통해 command로 전달된다. "
++    "Project EFSM은 Frontend state, DOM, Mantine/React state를 import하거나 변경하지 않는다."
++)
++
+ PROJECT_COMMANDS = {
+     "PROJECT_LOADED": "검증된 ProjectObject 전체 교체",
+     "PROJECT_NAME_CHANGED": "project metadata 이름 변경",
+@@ -47,7 +54,9 @@
+     "project.setName": "PROJECT_NAME_CHANGED",
+     "project.importFile": "PROJECT_LOADED",
+     "slots.setContentType": "SLOT_TYPE_CHANGED",
++    "slots.select.pendingContentType": "SLOT_TYPE_CHANGED",
+     "slots.reset": "SLOTS_RESET",
++    "slots.swap": "SLOTS_SWAPPED",
+     "images.setSettings": "SLOT_IMAGE_SETTINGS_CHANGED",
+     "images.insertEmpty": "SLOT_IMAGE_IMPORTED",
+     "assets.delete.csv": "DATA_OBJECT_DELETED",
+@@ -101,6 +110,7 @@
+ }
+ 
+ PROJECT_MUTATION_CONTRACT = [
++    "Application boundary에서 전달된 declared command만 persistent mutation entry로 받으며 Frontend/renderer direct call을 공식 route로 두지 않는다.",
+     "command input의 id/path/reference를 current activeProject에서 다시 resolve한다.",
+     "command writable scope와 precondition을 확인한다.",
+     "activeProject를 직접 부분 변경하기 전에 candidate ProjectObject 또는 candidate patch를 만든다.",
+@@ -132,7 +142,8 @@
+ 
+ PROJECT_RESULT_RULE = (
+     "ProjectMutationResult는 장기 authority가 아니라 한 command의 immutable result다. "
+-    "interface reconciliation과 renderer projection에서만 소비한다."
++    "Backend는 result를 Application boundary에 반환하고, Application adapter가 Backend reconciliation query를 거쳐 "
++    "Frontend reconciliation input과 renderer effect로 변환한다. Project EFSM이 Frontend FSM 또는 renderer를 직접 호출하지 않는다."
+ )
+ 
+ class ProjectStateMachine:
+
+diff --git a/sourcescript/project_state.py b/sourcescript/project_state.py
+--- a/sourcescript/project_state.py
++++ b/sourcescript/project_state.py
+@@ -205,20 +205,111 @@
+ }
+ 
+ activeProject = (
+-    "현재 세션의 유일한 authoritative ProjectObject. "
+-    "영속 project 값의 일반 읽기 원천이며 변경은 core command/API/FSM 경계를 통해 수행한다."
++    "현재 세션의 유일한 authoritative ProjectObject이며 Backend 내부 persistent state다. "
++    "영속 project mutation은 Project EFSM contract를 통해서만 수행한다. "
++    "Frontend는 activeProject를 직접 import/read하지 않고 Application boundary의 public query projection만 사용한다."
+ )
+ 
+ projectObjects = (
+-    "ProjectObjectRegistry. 이름을 PROJECT_OBJECT_PATHS 또는 명시적 read adapter와 연결하고 "
+-    "매 read 시 activeProject에서 값을 다시 읽는다. snapshot은 export 같은 단일 작업용 복사본이다."
++    "Backend ProjectObjectRegistry. 이름을 PROJECT_OBJECT_PATHS 또는 Backend read provider와 연결하고 "
++    "매 read 시 activeProject에서 값을 다시 읽는다. snapshot은 export/query 같은 단일 작업용 복사본이며 Frontend authority가 아니다."
+ )
+ 
+ projectVfs = (
+-    "activeProject.fileSystem.directories와 asset directory/name을 함께 해석하는 VFS helper. "
+-    "별도 파일 트리 SoT를 갖지 않고 activeProject state에서 resolve한다."
++    "Backend에서 activeProject.fileSystem.directories와 asset directory/name을 함께 해석하는 VFS helper. "
++    "별도 파일 트리 SoT를 갖지 않고 activeProject state에서 resolve한다. Frontend는 직접 호출하지 않는다."
+ )
+ 
++BACKEND_QUERY_KINDS = {
++    "project-api": "FastFigureApi read operation에 필요한 project/asset/chart/layout/caption/label/export projection",
++    "slot-selection-context": "validated slot selection 뒤 optional contentType intent 판단에 필요한 empty/contentType projection",
++    "interface-intent": "Frontend selection/reference event를 current Backend authority에서 검증한 input",
++    "interface-reconciliation": "ProjectMutationResult 뒤 current Backend authority에서 계산한 Frontend reconciliation input",
++    "renderer": "DOM/Plotly renderer가 한 projection 작업에 사용할 immutable project view",
++    "export": "한 export 작업 동안 사용할 immutable persistent project snapshot",
++}
++
++BACKEND_READ_BOUNDARY_RULE = (
++    "Backend query는 current activeProject에서 필요한 값만 resolve하여 read-only projection을 반환한다. "
++    "query/read 계산은 activeProject를 변경하지 않으며 누락 field normalization이 필요하면 authority가 아닌 projection/candidate copy에서 수행한다. "
++    "반환 projection은 다른 subsystem의 project authority 또는 무검증 mutation candidate로 재사용하지 않는다. "
++    "Frontend가 mutation을 요청하면 id/path/reference와 새 사용자 입력만 전달하고 Project EFSM이 current activeProject에서 다시 resolve한다."
++)
++
++FrontendValidatedInput = {
++    "event": "Frontend FSM event",
++    "accepted": "Backend reference validation 성공 여부",
++    "reference": "validated slot/path/chart/object identity 또는 explicit none",
++    "workspaceHint": "Frontend가 project/slot.graph/slot.image workspace를 결정하는 데 필요한 immutable hint",
++    "selectionHint": "selection toggle/clear를 위한 Backend-derived immutable hint",
++}
++
++FrontendReconciliationInput = {
++    "event": "commit된 project command",
++    "selectedSlot": "현재 selected slot reference의 valid/invalid/moved 결과",
++    "assetSelection": "현재 asset reference의 valid/invalid/moved 결과",
++    "graphObject": "현재 graph-object reference/index의 valid/invalid 결과",
++    "workspaceHint": "reconciled selection에서 파생할 workspace hint",
++    "projectionEffect": "renderer가 사용할 commit effect",
++}
++
++
++def readBackendProjection(kind, request):
++    """
++    Return:
++    - projection:
++      BACKEND_QUERY_KINDS 중 요청 kind에 필요한 current-authority read-only projection.
++
++    변경:
++    - activeProject와 Frontend state를 변경하지 않는다.
++
++    처리:
++    1. kind와 request의 id/path/reference를 current activeProject에서 resolve한다.
++    2. consumer가 실제로 필요한 field만 새 projection/snapshot으로 구성한다.
++    3. compatibility/default normalization이 필요하면 projection copy에서 수행하고 live ProjectObject field를 read 과정에서 쓰지 않는다.
++    4. projection에는 Backend 내부 mutable object reference를 장기 authority로 노출하지 않는다.
++    """
++    projection = "current Backend authority에서 계산한 immutable read projection"
++    return projection
++
++
++def validateFrontendIntent(event, payload):
++    """
++    Return:
++    - validatedInput:
++      FrontendValidatedInput.
++
++    변경:
++    - activeProject와 Frontend state를 변경하지 않는다.
++
++    처리:
++    SELECT_SLOT/SELECT_ASSET/SELECT_GRAPH_OBJECT처럼 Backend identity validity가 필요한 event는
++    payload reference를 current activeProject/projectVfs/chart에서 resolve한다.
++    explicit deselection처럼 Backend reference가 필요 없는 input은 accepted none으로 표현한다.
++    resolve 실패는 rejected input으로 반환하며 Frontend FSM이 Backend를 직접 재조회하지 않게 한다.
++    """
++    validatedInput = FrontendValidatedInput
++    return validatedInput
++
++
++def buildFrontendReconciliationInput(event, mutationResult, frontendReferences):
++    """
++    Return:
++    - reconciliationInput:
++      FrontendReconciliationInput.
++
++    변경:
++    - activeProject와 Frontend state를 변경하지 않는다.
++
++    처리:
++    commit된 ProjectMutationResult와 Frontend가 현재 보유한 id/path/index reference를 입력으로 받아
++    current activeProject에서 각 reference의 valid/moved/removed 상태를 resolve한다.
++    result는 Frontend runtime state를 어떻게 갱신할지 판단하는 데 필요한 값만 포함하며
++    ProjectObject 또는 mutable Backend helper를 Frontend로 넘기지 않는다.
++    """
++    reconciliationInput = FrontendReconciliationInput
++    return reconciliationInput
++
+ class ProjectObject:
+     def read(self, path):
+         """
+
+diff --git a/sourcescript/renderer_runtime.py b/sourcescript/renderer_runtime.py
+--- a/sourcescript/renderer_runtime.py
++++ b/sourcescript/renderer_runtime.py
+@@ -17,9 +17,11 @@
+ - layout_annotations_export.py
+ """
+ 
+-from project_state import activeProject
+-from interface_fsm import interfaceFSM, selectedSlotId
+-from application_fsm import dispatchInterfaceEvent
++RENDERER_INPUT_CONTRACT = {
++    "projectProjection": "Application boundary의 Backend query가 제공한 immutable renderer project projection",
++    "interfaceState": "Frontend FSM의 final runtime state projection",
++    "frontendActions": "FastFigureApi/Application boundary가 제공하는 selection/persistent command callback surface",
++}
+ 
+ RENDERER_HOSTS = {
+     "graphArea": "dashboard와 caption을 포함하는 scroll/render host",
+@@ -44,8 +46,10 @@
+ )
+ 
+ RENDERER_RULE = (
+-    "renderDashboard와 Plotly/image/caption renderer는 activeProject 또는 단일 작업 snapshot에서 읽어 "
+-    "DOM/Plotly representation을 만든다. DOM은 project/domain Source of Truth가 아니다."
++    "renderer는 Frontend 책임이며 Backend internal state/helper를 직접 읽지 않는다. "
++    "renderDashboard와 Plotly/image/caption renderer는 Application boundary가 제공한 immutable projectProjection과 "
++    "Frontend final interfaceState에서 DOM/Plotly representation을 만든다. "
++    "DOM/Plotly/projectProjection은 persistent project authority가 아니며 renderer read/normalization은 Backend authority를 변경하지 않는다."
+ )
+ 
+ 
+@@ -92,40 +96,41 @@ def status(message):
+ 
+ 
+ DASHBOARD_PROJECTION_INVALIDATION_RULE = (
+-    "application orchestration은 projectEFSM commit result 뒤 interfaceFSM reconciliation을 먼저 완료하고 "
+-    "final runtime selection과 mutation result를 renderer에 전달한다. "
++    "Application boundary는 Project EFSM commit result 뒤 Backend reconciliation query와 Frontend FSM reconciliation을 먼저 완료하고 "
++    "final interfaceState, mutationResult, 필요한 Backend renderer projection을 renderer에 전달한다. "
+     "실제 rendered reference 제거가 있으면 FULL_DASHBOARD, path/tree 변화만 있으면 NONE, "
+     "기존 narrow update가 충분하면 TARGETED_PROJECTION이다. "
+-    "renderer는 activeProject와 final interface state를 읽기만 하고 두 FSM command를 재호출하지 않는다."
++    "renderer는 supplied projection만 소비하고 Backend command/query 또는 Frontend FSM command를 재귀 호출하지 않는다."
+ )
+ 
+-def applyDashboardProjectionInvalidation(event, mutationResult, interfaceState):
++def applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, projectProjection):
+     """
+     post-reconciliation renderer effect.
+     FULL_DASHBOARD/TARGETED_PROJECTION/NONE을 project result와 final interface state에서 계산한다.
+     ProjectObject 또는 interface state를 변경하지 않는다.
+     """
+     return "projection effect"
+ 
+-def renderDashboard():
++def renderDashboard(projectProjection, interfaceState):
+     """
+     변경:
+     - dashboard/slot/Plotly/image/label/caption DOM projection.
+-    - project state 자체를 renderer 목적으로 변경하지 않는다.
++    - Backend project state와 Frontend FSM state는 변경하지 않는다.
+ 
+     처리:
+-    1. activeProject grid와 style을 dashboard CSS geometry에 반영한다.
+-    2. visible slot마다 slot container와 label/bookmark control surface를 구성한다.
+-    3. graph slot은 referenced chart를 resolve해 Plotly projection을 render한다.
+-    4. image slot은 referenced image asset bytes와 같은 slot object의 imageSettings를 resolve해 image surface를 동기화한다.
+-    5. selectedSlotId에 따라 selection/interaction class를 적용한다.
++    1. supplied projectProjection의 grid와 style을 dashboard CSS geometry에 반영한다.
++    2. visible slot projection마다 slot container와 label/bookmark control surface를 구성한다.
++    3. graph slot은 projection에 포함된 resolved chart/CSV view로 Plotly projection을 render한다.
++    4. image slot은 projection의 image bytes/view와 normalized slot-local imageSettings copy로 image surface를 동기화한다.
++    5. interfaceState.selectedSlotId에 따라 selection/interaction class를 적용한다.
+     6. caption과 label projection을 동기화한다.
+     7. stale Plotly instance를 purge하고 resize generation을 관리한다.
++    8. 누락/default normalization이 필요해도 projectProjection copy만 다루며 live ProjectObject에 write하지 않는다.
+     """
+-    return "현재 project에서 다시 생성된 dashboard projection"
++    return "supplied Backend projection에서 생성된 dashboard projection"
+ 
+ 
+-def setSelectedSlot(slotId, direction):
++def setSelectedSlot(slotId, direction, frontendActions):
+     """
+     변경:
+     - SELECT_SLOT event를 통한 runtime selection/workspace.
+@@ -136,12 +141,14 @@ def setSelectedSlot(slotId, direction):
+     caller가 '선택을 보장'해야 하면 현재 selected slot을 먼저 읽어야 한다.
+ 
+     처리:
+-    interfaceFSM event가 selection semantics를 결정한 뒤 graph view를 갱신하고 resize를 요청한다.
++    renderer는 slotId를 Backend에서 직접 검증하거나 interfaceFSM에 직접 주입하지 않는다.
++    frontendActions.slots.select에 selection intent를 전달하고 Application boundary의 validated SELECT_SLOT 결과를 사용한다.
++    그 뒤 반환된 final interface state와 project projection으로 graph view를 갱신하고 resize를 요청한다.
+     """
+-    return "선택 후 runtime state"
++    return "Application boundary를 거친 선택 후 Frontend runtime state"
+ 
+ 
+-def installSlotClickController():
++def installSlotClickController(frontendActions):
+     """
+     변경:
+     - dashboard DOM에 slot bookmark click/slot-to-slot bookmark drag event listener를 설치한다.
+@@ -174,33 +181,32 @@ def installSlotClickController():
+        browser가 post-drag click을 만들지 않는 경우에는 그 click dispatch 기회가 지난 뒤의 cleanup에서 suppression을 해제한다.
+        따라서 drag와 같은 interaction cycle에서 생긴 click은 slot selection/toggle로 해석하지 않는다.
+     7. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
+-       layout_annotations_export의 operation matrix를 따른다. swap commit이 성공하면 current project와 selectedSlotId를 기준으로
++       layout_annotations_export의 operation matrix를 따른다. swap commit이 성공하면 Application boundary가 반환한 projectProjection과 final interfaceState를 기준으로
+        dashboard projection을 즉시 다시 생성하며 이 renderer refresh는 domain state를 다시 변경하지 않는다.
+     8. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
+        Mantine FastFigureDashboardFileDrop에 넘긴다.
+     """
+     return "설치된 dashboard interaction controller"
+ 
+ 
+-def swapSlotContents(source, target):
++def swapSlotContents(source, target, frontendActions):
+     """
+     변경:
+-    - projectEFSM command를 통한 source/target GUI 위치의 slot-local properties.
+-    - selectedSlotId는 persistent mutation의 writable state가 아니며 commit 뒤 interfaceFSM이 reconcile한다.
++    - frontendActions.slots.swap public mutation API를 통한 source/target GUI 위치의 slot-local properties.
++    - Frontend selectedSlotId는 persistent mutation의 writable state가 아니며 commit 뒤 Application boundary가 reconciliation한다.
+ 
+     처리:
+-    1. source/target을 current project에서 다시 resolve한다.
+-    2. row/col/span geometry는 각 GUI 위치에 유지한다.
+-    3. chart/image/contentType/imageSettings/caption 등 slot-local properties 전체를 한 단위로 교환한다.
++    1. renderer는 source/target id만 public mutation API에 전달한다.
++    2. Backend Project EFSM이 current authority에서 source/target을 다시 resolve한다.
++    3. row/col/span geometry는 각 GUI 위치에 유지하고 chart/image/contentType/imageSettings/caption local payload 전체를 교환한다.
+     4. chart ownership은 교환된 target slot에 맞춰 1:1을 유지한다.
+-    5. projectEFSM이 candidate를 검증한 뒤 한 번 commit한다.
+-    6. interfaceFSM reconciliation이 끝난 뒤 current project와 reconciled selectedSlotId를 읽어 dashboard projection을 갱신한다.
+-       이 갱신은 renderer projection만 변경하고 swap mutation을 반복하지 않는다.
++    5. commit 뒤 Application boundary가 Backend reconciliation query -> Frontend FSM reconciliation을 수행한다.
++    6. renderer는 반환된 projectProjection과 reconciled interfaceState로 dashboard projection만 갱신하고 swap mutation을 반복하지 않는다.
+     """
+-    return "swap candidate commit과 즉시 갱신된 dashboard projection"
++    return "public API swap commit 결과와 post-reconciliation renderer projection"
+ 
+ 
+-def prepareDashboardFileDrop(slotId):
++def prepareDashboardFileDrop(slotId, frontendActions):
+     """
+     Return:
+     - accepted:
+@@ -211,71 +217,71 @@ def prepareDashboardFileDrop(slotId):
+     - drag runtime state를 정리한다.
+ 
+     처리:
+-    1. slotId를 current visible slot에서 resolve하고 hidden/invalid target이면 false로 끝낸다.
+-    2. 유효 target이 현재 selected slot이 아니면 import target workspace를 위해 그 slot을 선택한다.
+-    3. 이 함수는 file bytes, asset, chart/image reference를 변경하지 않는다.
++    1. frontendActions.slots.prepareFileDrop(slotId)가 Application boundary를 통해 target validity를 Backend에서 검증한다.
++    2. accepted target이 current selected slot이 아니면 같은 public Frontend selection 경계로 target workspace를 선택한다.
++    3. renderer 자체는 Backend slot을 resolve하거나 file bytes, asset, chart/image reference를 변경하지 않는다.
+     4. 실제 file import/collision UI는 FastFigureDashboardFileDrop -> assets.importToSlot 경로가 소유한다.
+     5. finishFileDrop은 drag runtime cleanup만 수행하며 domain commit을 반복하지 않는다.
+     """
+     accepted = "drop target 유효 여부"
+     return accepted
+ 
+ 
+-def applySlotStyle(notify):
++def applySlotStyle(projectProjection, notify):
+     """
+     변경:
+     - dashboard/caption renderer CSS projection.
+     - notify가 참이면 layout model-to-ui notification.
+ 
+     처리:
+-    activeProject.layout.slotStyle에서 border/aspect/outer-margin/gap/radius를 계산한다.
+-    DOM computed state를 project authority로 되돌려 쓰지 않는다.
++    supplied projectProjection.layout.slotStyle에서 border/aspect/outer-margin/gap/radius를 계산한다.
++    DOM computed state나 renderer projection을 Backend authority로 되돌려 쓰지 않는다.
+     """
+     return "적용된 dashboard style projection"
+ 
+ 
+-def resolveSelectedChart():
++def resolveSelectedChart(projectProjection, interfaceState):
+     """
+     Return:
+     - chart:
+-      selectedSlotId -> current slot.chart -> activeProject chart collection으로 resolve한 chart 또는 없음.
++      interfaceState.selectedSlotId -> supplied projectProjection slot/chart relation으로 resolve한 chart projection 또는 없음.
+ 
+     변경:
+     - 없음.
+ 
+     처리:
+-    선택 chart를 별도 global editing pointer로 저장하지 않는다.
+-    한 작업 안에서 얻은 local chart reference는 그 작업 범위를 넘겨 authoritative runtime state로 보존하지 않는다.
++    Backend helper를 호출하지 않고 supplied projectProjection 안의 resolved relation만 사용한다.
++    선택 chart를 별도 global editing pointer로 저장하지 않으며 한 작업의 local chart projection을 authority로 보존하지 않는다.
+     """
+     chart = "현재 selected slot의 chart 또는 없음"
+     return chart
+ 
+ 
+-def updateGraphView():
++def updateGraphView(projectProjection, interfaceState):
+     """
+     변경:
+     - 선택 slot에 대응하는 graph/image workspace renderer projection.
+ 
+     처리:
+-    selectedSlotId와 referenced project model을 현재 state에서 다시 resolve한다.
+-    stale UI buffer를 project read 원천으로 사용하지 않는다.
++    interfaceState.selectedSlotId와 supplied projectProjection의 resolved chart/image view를 사용한다.
++    stale UI buffer나 DOM을 project read 원천으로 사용하지 않는다.
+     """
+     return "갱신된 workspace projection"
+ 
+ 
+-def startupCoreRuntime():
++def startupCoreRuntime(projectProjection, interfaceState, frontendActions):
+     """
+     변경:
+     - 기본 project runtime, renderer controller, FSM lifecycle.
+ 
+     처리:
+-    1. createProjectState/loaded ProjectObject가 이미 valid slot structure를 소유한다.
++    1. Backend가 제공한 initial projectProjection은 valid ProjectObject에서 파생된 renderer input이다.
+     2. dashboard zoom projection을 적용한다.
+-    3. slot click/drop controller를 설치한다.
+-    4. activeProject의 existing slots를 renderDashboard로 투영한다.
+-    5. slot style을 적용한다.
+-    6. interfaceFSM을 ready로 전환한다.
+-    7. project/reference/runtime invariant를 audit한다.
++    3. public frontendActions를 사용하는 slot click/drop controller를 설치한다.
++    4. projectProjection의 existing visible slots를 renderDashboard로 투영한다.
++    5. supplied slot style projection을 적용한다.
++    6. Frontend lifecycle ready 전환은 Application boundary가 interfaceFSM event로 수행하고 renderer가 직접 실행하지 않는다.
++    7. supplied project/reference/runtime projection contract를 audit한다.
+ 
+     startup은 default CSV를 생성하거나 grid slot을 domain state에 다시 만드는 초기화 side effect를 수행하지 않는다.
+     """
+
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -29,23 +29,63 @@
+ }
+ 
+ SOURCE_SCRIPT_MODULES = {
+-    "project_state.py": "authoritative project state, runtime references, invariants",
+-    "project_efsm.py": "FFPX ProjectObject persistent transition/validation/commit",
+-    "interface_fsm.py": "application/UI runtime regions, selections and interaction transitions",
+-    "application_fsm.py": "project EFSM → interface reconciliation → renderer orchestration",
+-    "assets_files.py": "VFS, asset lifecycle, FFPX/FFSX import/export",
+-    "graphs.py": "CSV-to-chart semantics, graph objects, Plotly conversion",
+-    "layout_annotations_export.py": "layout geometry, image/label/caption, raster export",
+-    "api_ui.py": "FastFigureApi boundary and Mantine frontend responsibilities",
+-    "renderer_runtime.py": "dashboard renderer, DOM interaction, telemetry and startup",
+-    "portable_build.py": "split-to-portable build specification",
++    "project_state.py": "Backend project authority와 Backend read/query provider",
++    "project_efsm.py": "Backend ProjectObject persistent transition/validation/commit",
++    "interface_fsm.py": "Frontend FSM runtime regions, selections and interaction transitions",
++    "application_fsm.py": "Application boundary command/query/result/lifecycle orchestration",
++    "assets_files.py": "Backend asset/package semantics와 co-located Application-boundary asset wrappers",
++    "graphs.py": "Backend graph semantics와 co-located Application-boundary graph wrappers",
++    "layout_annotations_export.py": "Backend layout/annotation semantics, Application-boundary wrappers, Frontend export projection",
++    "api_ui.py": "Application-boundary FastFigureApi contract와 Frontend Mantine responsibilities",
++    "renderer_runtime.py": "Frontend dashboard renderer, DOM interaction, telemetry and startup projection",
++    "portable_build.py": "system-level split-to-portable build specification",
+ }
+ 
++SOURCE_SCRIPT_LOGICAL_HIERARCHY = {
++    "Backend": {
++        "project-state": "project_state.py의 activeProject, reference/invariant, Backend query/read semantics",
++        "project-efsm": "project_efsm.py의 persistent ProjectObject command controller",
++        "asset-domain": "assets_files.py의 VFS/asset/package parse, candidate, validation, persistence semantics",
++        "graph-domain": "graphs.py의 chart/CSV/graph-object calculation, candidate, validation semantics",
++        "layout-annotation-domain": (
++            "layout_annotations_export.py의 persistent layout/image-setting/label/caption/export-setting "
++            "calculation과 candidate semantics"
++        ),
++    },
++    "Application boundary": {
++        "command-query-adapter": (
++            "application_fsm.py의 Backend command/query와 Frontend validated-event/result/lifecycle orchestration"
++        ),
++        "public-api": (
++            "api_ui.py의 FastFigureApi contract와 assets_files.py/graphs.py/layout_annotations_export.py에 "
++            "물리적으로 함께 있는 public command/query wrapper semantics"
++        ),
++    },
++    "Frontend": {
++        "frontend-fsm": "interface_fsm.py의 session/runtime state와 transition",
++        "mantine-ui": "api_ui.py의 Mantine component와 component-local interaction",
++        "renderer": (
++            "renderer_runtime.py의 DOM/Plotly projection과 layout_annotations_export.py의 "
++            "screen/raster rendering presentation semantics"
++        ),
++    },
++    "Portable build": {
++        "portable-build": "portable_build.py의 split source -> single-file artifact packaging",
++    },
++}
++
++SOURCE_SCRIPT_FILE_PLACEMENT_RULE = (
++    "Source Script의 물리 파일과 논리 Module decomposition은 1:1일 필요가 없다. "
++    "assets_files.py, graphs.py, layout_annotations_export.py, api_ui.py처럼 기존 물리 파일에 둘 이상의 논리 책임이 함께 있으면 "
++    "각 함수/규칙의 logical owner를 위 hierarchy로 추적하고, 파일의 import 관계를 Backend↔Frontend 직접 호출 권한으로 해석하지 않는다. "
++    "하위 단계는 이 논리 owner를 보존하되 대상 언어 구현을 위해 물리 파일을 나눌 수 있다."
++)
++
+ SOURCE_SCRIPT_DECOMPOSITION_RULE = (
+-    "system.py가 Fast Figure 전체 시스템 경계를 나타내는 최상위 Source Script module이고, "
+-    "project_state/project_efsm/interface_fsm/application_fsm/assets_files/graphs/layout_annotations_export/api_ui/renderer_runtime/portable_build는 "
+-    "그 시스템 의미의 서로 다른 직접 하위 책임이다. 이들 형제 module 사이의 import/call 관계는 의미적 부모-자식 관계가 아니다. "
+-    "하위 단계는 이 sibling responsibility를 새 중간 계층으로 재분류하지 않는다."
++    "system.py가 Fast Figure 전체 시스템 경계다. 그 직접 논리 하위는 Backend, Application boundary, Frontend, Portable build다. "
++    "Backend와 Frontend는 서로의 내부 state/helper/FSM을 직접 호출하거나 읽지 않고 모든 cross-layer command/query/result를 "
++    "Application boundary의 API/Adapter contract로 교환한다. Portable build는 runtime 계층의 자식이 아니라 system-level packaging 책임이다. "
++    "하위 PlusCal/verification/Source Code는 이 논리 hierarchy를 평탄화·병합·우회하거나 새로운 중간 authority를 추가하지 않는다."
+ )
+ 
+ 
+@@ -84,9 +124,11 @@
+ ]
+ 
+ AUTHORITATIVE_STATE_RULE = (
+-    "영속 프로젝트 상태의 권위 원천은 activeProject의 ProjectObject state다. "
+-    "UI는 FastFigureApi 또는 interfaceFSM event를 사용하고 persistent mutation은 application orchestration을 통해 projectEFSM으로 전달한다. "
+-    "renderer snapshot과 React local state는 독립적인 project authority가 아니다."
++    "영속 프로젝트 상태의 권위 원천은 Backend activeProject의 ProjectObject state다. "
++    "Frontend component/FSM/renderer는 activeProject, projectObjects, projectVfs, projectEFSM을 직접 읽거나 호출하지 않는다. "
++    "persistent mutation은 public mutation API -> Application adapter -> Backend projectEFSM으로 전달하고, "
++    "project read는 public query/read API -> Application adapter -> Backend read provider에서 immutable projection으로 반환한다. "
++    "Frontend runtime state, renderer projection, React local state와 adapter-local result는 persistent project authority가 아니다."
+ )
+ 
+ RUNTIME_STATE_RULE = (
+@@ -137,8 +179,9 @@
+         "prepare/finish는 runtime 책임이고 assets.importToSlot만 persistent import candidate를 commit한다."
+     ),
+     (
+-        "Source Script module hierarchy는 system.py 아래의 직접 sibling responsibility로 둔다. "
+-        "형제 module의 import/call 관계를 추가적인 의미적 부모-자식 hierarchy로 해석하지 않는다."
++        "Source Script module hierarchy는 system.py 아래 Backend / Application boundary / Frontend / Portable build로 둔다. "
++        "기존 물리 파일의 co-location과 import/call 관계는 이 logical hierarchy를 바꾸지 않으며, Backend↔Frontend cross-layer access는 "
++        "Application boundary의 API/Adapter contract만 사용한다."
+     ),
+     (
+         "asset import collision Modal은 rename/replace의 명시적 선택만 import plan으로 변환한다. "
+@@ -173,8 +216,8 @@ def initializeFastFigure():
+     3. dashboard zoom projection과 slot interaction controller를 준비한다.
+     4. project에 이미 존재하는 초기 empty slot을 renderer에 투영한다.
+     5. slot style과 dashboard geometry를 적용한다.
+-    6. interfaceFSM을 ready로 전환하고 workspace/overlay 초기 상태를 동기화한다.
+-    7. FastFigureApi를 frontend 변경 경계로 공개한다.
++    6. Application boundary가 Backend initial read projection을 만들고 Frontend lifecycle ready event를 interfaceFSM에 전달한다.
++    7. FastFigureApi를 Backend↔Frontend public command/query/event 경계로 공개하고 renderer에는 public action surface와 read projection만 제공한다.
+     8. MantineProvider와 FastFigureShell을 기존 React root에 mount한다.
+     9. startup 과정은 default CSV나 fake graph object를 생성하지 않는다.
+     10. 마지막에 project/reference/runtime invariant를 검사한다.
