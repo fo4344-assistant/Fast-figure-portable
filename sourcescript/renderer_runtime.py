@@ -217,8 +217,8 @@ def prepareDashboardFileDrop(slotId, frontendActions):
     - drag runtime state를 정리한다.
 
     처리:
-    1. frontendActions.slots.prepareFileDrop(slotId)가 Application boundary를 통해 target validity를 Backend에서 검증한다.
-    2. accepted target이 current selected slot이 아니면 같은 public Frontend selection 경계로 target workspace를 선택한다.
+    1. 기존 public frontendActions.slots.select(slotId)를 사용해 Application boundary에서 target validity를 Backend 기준으로 검증하고 accepted target을 선택한다.
+    2. selection 결과가 rejected 또는 explicit deselection이면 file-drop target 준비를 false로 끝낸다. 별도 prepareFileDrop API를 만들지 않는다.
     3. renderer 자체는 Backend slot을 resolve하거나 file bytes, asset, chart/image reference를 변경하지 않는다.
     4. 실제 file import/collision UI는 FastFigureDashboardFileDrop -> assets.importToSlot 경로가 소유한다.
     5. finishFileDrop은 drag runtime cleanup만 수행하며 domain commit을 반복하지 않는다.
