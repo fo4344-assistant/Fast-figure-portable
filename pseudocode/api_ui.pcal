@@ -1,8 +1,8 @@
 ---- MODULE FastFigureApiUiPseudocode ----
 EXTENDS Naturals
 
-\* Direct translation of sourcescript/api_ui.py.
-\* Collision/form/sidebar/drop-receiver values are UI-local and never project authority.
+\* Direct translation of Source Script r25 sourcescript/api_ui.py.
+\* FastFigureApi is the Application boundary; Mantine values are Frontend-local and never project authority.
 
 CONSTANT NoValue
 
@@ -105,45 +105,15 @@ SubscribeReturn:
 end procedure;
 
 procedure ReadGraphData()
-variables
-  chart = NoValue,
-  objects = <<>>,
-  selectedIndex = NoValue,
-  currentCsv = NoValue,
-  objectCsv = NoValue,
-  currentColumns = <<>>,
-  objectColumns = <<>>;
 begin
-ReadGraphDataChart:
-  chart := ResolveSelectedChartForRead();
-ReadGraphDataObjects:
-  if chart # NoValue then
-    objects := chart.editor.objects;
-  end if;
-ReadGraphDataSelection:
-  selectedIndex := ReadGraphObjectSelectionIndex();
-ReadGraphDataCurrentCsv:
-  currentCsv := ResolveCsvFromCurrentAssetSelection();
-ReadGraphDataCurrentColumns:
-  if currentCsv # NoValue then
-    currentColumns := ColumnDefinitionsForCsv(currentCsv);
-  end if;
-ReadGraphDataObjectCsv:
-  if ValidGraphObjectIndex(objects, selectedIndex) then
-    objectCsv := ResolveProjectCsv(objects[selectedIndex].csvId);
-  end if;
-ReadGraphDataObjectColumns:
-  if objectCsv # NoValue then
-    objectColumns := ColumnDefinitionsForCsv(objectCsv);
-  end if;
-ReadGraphDataResult:
-  result := [
-    objects |-> objects,
-    selectedIndex |-> selectedIndex,
-    currentCsv |-> currentCsv,
-    columns |-> currentColumns,
-    objectColumns |-> objectColumns
-  ];
+ReadGraphDataBoundary:
+  result := ApplicationDispatchProjectQuery(
+    "project-api",
+    [operation |-> "graphs.readData",
+     frontendState |-> ReadFrontendStateProjection()]
+  );
+ReadGraphDataProjection:
+  assert IsImmutableGraphEditorProjection(result);
 ReadGraphDataReturn:
   return;
 end procedure;
@@ -187,13 +157,15 @@ end procedure;
 procedure PrepareFileDrop(slotId)
 begin
 PrepareFileDropRuntime:
-  result := SlotApiPrepareFileDrop(slotId);
+  result := ApplicationDispatchSlotSelection(slotId, NoValue);
 PrepareFileDropState:
-  if result then
+  if result.interfaceState.selectedSlotId = slotId then
     preparedSlot := slotId ||
-    dragRuntimeActive := TRUE;
+    dragRuntimeActive := TRUE ||
+    result := TRUE;
   else
-    preparedSlot := NoValue;
+    preparedSlot := NoValue ||
+    result := FALSE;
   end if;
 PrepareDropReturn:
   return;
@@ -288,13 +260,19 @@ EmptyCsvReturn:
 end procedure;
 
 procedure SelectProjectTreeNode(path)
-variables node = NoValue;
+variables nodeProjection = NoValue;
 begin
-ProjectTreeSelectResolve:
-  node := ResolveProjectTreeNodeFromCurrentVfs(path);
+ProjectTreeSelectQuery:
+  nodeProjection := ApplicationDispatchProjectQuery(
+    "project-api",
+    [operation |-> "assets.resolveTreeSelection", path |-> path]
+  );
 ProjectTreeSelect:
-  if node # NoValue then
-    effect := SelectProjectTreeNodeThroughExistingSelectionCommand(node);
+  if nodeProjection.accepted then
+    effect := ApplicationDispatchInterfaceEvent(
+      "SELECT_ASSET",
+      [kind |-> nodeProjection.kind, path |-> nodeProjection.path]
+    );
   end if;
 ProjectTreeSelectReturn:
   return;
@@ -303,31 +281,36 @@ end procedure;
 procedure MoveProjectTreeNode(path, directory)
 variables movePlan = NoValue;
 begin
-ProjectTreeMoveEligibility:
-  if TreeMoveSourceEligible(path) then
-    movePlan := AssetApiPlanMove(path, directory);
-  else
-    movePlan := NoValue;
-  end if;
+ProjectTreeMovePlan:
+  movePlan := ApplicationDispatchProjectQuery(
+    "project-api",
+    [operation |-> "assets.planMove", path |-> path, directory |-> directory]
+  );
 ProjectTreeMoveCommit:
   if movePlan # NoValue then
     lastPersistentCommand := [
       name |-> "assets.move",
       plan |-> movePlan
     ] ||
-    effect := AssetApiMove(movePlan);
+    effect := ApplicationDispatchProjectCommand(
+      "PROJECT_NODE_MOVED",
+      [plan |-> movePlan]
+    );
   end if;
 ProjectTreeMoveReturn:
   return;
 end procedure;
 
 procedure OpenTrashAssetRowMenu(path)
-variables asset = NoValue;
+variables assetProjection = NoValue;
 begin
-TrashMenuResolve:
-  asset := ResolveProjectAsset(path);
+TrashMenuQuery:
+  assetProjection := ApplicationDispatchProjectQuery(
+    "project-api",
+    [operation |-> "assets.readDeletionTarget", path |-> path]
+  );
 TrashMenuOpen:
-  if asset # NoValue /\ IsTrashedAsset(asset) then
+  if assetProjection # NoValue /\ assetProjection.trashed then
     effect := OpenRowActionMenu(path);
   end if;
 TrashMenuReturn:
@@ -421,7 +404,10 @@ end procedure;
 procedure ReadLayoutPreview(renderedWidth)
 begin
 LayoutPreviewRead:
-  result := LayoutApiReadState(renderedWidth);
+  result := ApplicationDispatchProjectQuery(
+    "project-api",
+    [operation |-> "layout.readState", renderedWidth |-> renderedWidth]
+  );
 LayoutPreviewAspect:
   assert PreviewGeometryUsesRenderedWidthAndConfiguredAspect(
     result.previewGeometry,
@@ -451,7 +437,12 @@ end procedure;
 procedure FastFigureApp()
 begin
 ReadAppearance:
-  result := MantineProviderFromPersistentPalette(ReadAppearancePalette());
+  result := ApplicationDispatchProjectQuery(
+    "project-api",
+    [operation |-> "appearance.readPalette"]
+  );
+ProjectPaletteProjection:
+  result := MantineProviderFromPersistentPalette(result);
 MountShell:
   result := MountFastFigureShell(result);
 MountDropReceiver:
