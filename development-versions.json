@@ -9,17 +9,17 @@
   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode and gates Source Code where TLC validation is used.",
   "layers": {
     "source-script": {
-      "revision": 23,
+      "revision": 24,
       "status": "current",
       "path_rule": "sourcescript/**/*.py",
-      "fingerprint": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
+      "fingerprint": "sha256:f4717433f5dd4111d9a2644b7cc5d66a9abb25fb477892eafde23d9b964ac5d3",
       "derived_from": null,
       "closure": "closed",
-      "closure_review": "agent_space/reviews/review-20261014-014-sourcescript-closure-r23.md"
+      "closure_review": "agent_space/reviews/review-20261015-020-sourcescript-closure-r24.md"
     },
     "verification-model": {
       "revision": 24,
-      "status": "current",
+      "status": "stale",
       "path_rule": "verification/**/*.{tla,cfg}",
       "fingerprint": "sha256:97c66b2980486134499d381bba0fd76d6f22fbf03062c11af484a5383a9887e4",
       "derived_from": {
@@ -31,7 +31,7 @@
     },
     "source-code": {
       "revision": 29,
-      "status": "current",
+      "status": "stale",
       "paths": [
         "Fast-figure.html",
         "fast-figure-ui.js",
@@ -48,7 +48,7 @@
     },
     "pseudocode": {
       "revision": 10,
-      "status": "current",
+      "status": "stale",
       "path_rule": "pseudocode/**/*.pcal",
       "fingerprint": "sha256:0753354b6c25df1f391d53991cf2631a31ab184749fd96653a60bed79d87bece",
       "derived_from": {
