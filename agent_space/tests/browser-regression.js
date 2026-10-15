@@ -1068,6 +1068,47 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(JSON.stringify(slot.content.imageSettings) === valuesBefore,
         "image projection read changed authoritative settings values");
     });
+    await run(36, "application lifecycle task owns execution and Frontend FSM receives events", async () => {
+      const published = [];
+      const unsubscribe = appFSM.subscribe((_state, event) => {
+        if (event?.startsWith("LIFECYCLE_PROBE_")) published.push(event);
+      });
+      try {
+        const outcome = await appFSM.run("importing", "LIFECYCLE_PROBE_SYNC", () => {
+          check(appFSM.state.lifecycle === "importing", "lifecycle start not published before task");
+          return { outcome: "rejected" };
+        });
+        check(outcome.outcome === "rejected" && appFSM.state.lifecycle === "ready",
+          "rejected lifecycle did not return to ready");
+        let finish;
+        const pending = appFSM.run("exporting", "LIFECYCLE_PROBE_ASYNC",
+          () => new Promise((resolve) => { finish = resolve; }));
+        check(appFSM.state.lifecycle === "exporting", "async lifecycle not busy");
+        let invokedWhileBusy = false;
+        const busyError = await appFSM.run("importing", "LIFECYCLE_PROBE_BLOCKED", () => {
+          invokedWhileBusy = true;
+        }).then(() => null, (error) => error);
+        check(!!busyError && !invokedWhileBusy, "busy lifecycle accepted nested task");
+        finish({ outcome: "complete" });
+        await pending;
+        check(appFSM.state.lifecycle === "ready", "async lifecycle did not complete");
+        const failure = await appFSM.run("importing", "LIFECYCLE_PROBE_FAIL", () => {
+          throw Error("expected lifecycle failure");
+        }).then(() => null, (error) => error);
+        check(failure?.message === "expected lifecycle failure",
+          "lifecycle failure was not returned");
+        check(appFSM.state.lifecycle === "ready" &&
+          appFSM.state.error?.message === "expected lifecycle failure",
+          "Frontend FSM did not record and recover from lifecycle failure");
+        check(published.some((event) => event.includes("LIFECYCLE_PROBE_SYNC:rejected")),
+          "lifecycle rejection event was not published");
+        check(published.some((event) => event.includes("LIFECYCLE_PROBE_FAIL:failed")) &&
+          published.some((event) => event.includes("LIFECYCLE_PROBE_FAIL:recovered")),
+          "lifecycle failure/recovery events were not published");
+      } finally {
+        unsubscribe();
+      }
+    });
 
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
