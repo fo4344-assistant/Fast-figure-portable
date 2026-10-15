@@ -21,6 +21,23 @@ Fast Figure Source Script — CSV data, chart model, graph objects and Plotly re
 from project_state import activeProject, getProjectCsv, getChart
 from application_fsm import dispatchProjectCommand
 
+GRAPH_FILE_LOGICAL_RESPONSIBILITIES = {
+    "Backend": (
+        "CSV column/chart/graph-object normalization, reference validation, Plotly semantic conversion과 candidate calculation"
+    ),
+    "Application boundary": (
+        "graph editor public operation에서 Frontend-selected slot/chart/csv reference를 explicit input으로 받아 "
+        "Project EFSM command/query로 전달하는 wrappers"
+    ),
+}
+
+GRAPH_BOUNDARY_RULE = (
+    "Backend graph calculation은 interfaceFSM/selectedSlotId를 직접 읽지 않는다. "
+    "selected slot/chart가 필요한 public operation은 Application boundary가 Frontend reference를 가져와 Backend에서 current authority로 검증한 뒤 "
+    "slotId/chartId/csvId 같은 explicit reference를 candidate/command input에 포함한다. "
+    "dispatchProjectCommand를 호출하는 co-located function은 Backend domain function이 아니라 Application-boundary wrapper다."
+)
+
 
 axisSettings = {
     "min": "optional numeric lower bound; empty이면 auto",
@@ -187,12 +204,11 @@ def connectDataToSlotModel(slot, data, sourceName, projectCsv):
 
 
 GRAPH_CSV_SELECTION_RULE = (
-    "현재 CSV 선택은 application FSM의 assetSelection/assetPath를 단일 원천으로 한다. "
-    "graph object의 csvId는 해당 object가 소유하는 데이터 참조이며 선택값이 아니다. "
-    "CSV 선택 표시와 새 object 추가는 동일한 현재 선택 CSV를 참조한다. "
-    "graph object 선택 시 참조 CSV를 같은 선택 상태에 반영할 수 있으나 "
-    "단순 CSV 선택은 graph object 선택을 해제하되 기존 object의 csvId를 변경하지 않는다. "
-    "기존 object의 x/y 편집에 필요한 열은 해당 object.csvId에서 resolve하며 현재 선택 CSV 열과 혼용하지 않는다."
+    "현재 CSV 선택은 Frontend FSM의 assetSelection/assetPath가 session authority이며 Backend persistent state가 아니다. "
+    "Application boundary가 graph public operation 호출 시 그 selected CSV path/id reference를 explicit input으로 받아 Backend에서 current authority로 검증한다. "
+    "graph object의 csvId는 해당 object가 소유하는 persistent data reference이며 selection 대체 원천이 아니다. "
+    "graph object 선택 시 Frontend event로 참조 CSV selection을 갱신할 수 있으나 단순 CSV 선택은 기존 object.csvId를 변경하지 않는다. "
+    "기존 object의 x/y 편집에 필요한 열은 해당 object.csvId에서 Backend query로 resolve하며 current selected CSV 열과 혼용하지 않는다."
 )
 
 EMPTY_CSV_GRAPH_RULE = (
@@ -203,7 +219,7 @@ EMPTY_CSV_GRAPH_RULE = (
 )
 
 
-def graphEditorAdd(csvId):
+def graphEditorAdd(slotId, csvId):
     """
     Return:
     - chart:
@@ -213,15 +229,15 @@ def graphEditorAdd(csvId):
     - GRAPH_OBJECTS_REPLACED 또는 SLOT_DATA_CONNECTED 공식 event를 통해 chart/slot state를 변경한다.
 
     처리:
-    선택 slot과 CSV를 실제 id로 resolve한다.
-    선택 slot에 chart가 없으면 SLOT_DATA_CONNECTED로 첫 chart/object를 만든다.
-    chart가 있으면 현재 object 목록에 새 base graph object를 추가해 GRAPH_OBJECTS_REPLACED로 commit한다.
+    Application boundary가 받은 explicit slotId와 csvId를 Backend current authority에서 resolve한다.
+    target slot에 chart가 없으면 SLOT_DATA_CONNECTED로 첫 chart/object를 만든다.
+    chart가 있으면 owning chart id와 current object 목록을 Backend에서 resolve해 새 base graph object를 추가하고 GRAPH_OBJECTS_REPLACED로 commit한다.
     """
-    event = "SLOT_DATA_CONNECTED if selected slot has no chart else GRAPH_OBJECTS_REPLACED"
-    return dispatchProjectCommand(event, {"csvId": csvId, "objects": "candidate objects"})
+    event = "SLOT_DATA_CONNECTED if target slot has no chart else GRAPH_OBJECTS_REPLACED"
+    return dispatchProjectCommand(event, {"slotId": slotId, "csvId": csvId, "objects": "candidate objects"})
 
 
-def graphEditorCommit(objects, index):
+def graphEditorCommit(chartId, objects, index):
     """
     Return:
     - chart:
@@ -240,18 +256,18 @@ def graphEditorCommit(objects, index):
     """
     return dispatchProjectCommand(
         "GRAPH_OBJECTS_REPLACED",
-        {"objects": objects, "selectedIndexHint": index},
+        {"chartId": chartId, "objects": objects, "selectedIndexHint": index},
     )
 
 
-def graphEditorObjectValues(index, values):
+def graphEditorObjectValues(chartId, index, values):
     """
     Return:
     - chart:
       지정 object의 허용 field를 정규화해 commit한 chart.
 
     변경:
-    - 최종적으로 graphEditorCommit을 통해 chart object state를 변경한다.
+    - 최종적으로 graphEditorCommit(chartId, ...)을 통해 explicit chart object state를 변경한다.
 
     처리:
     CSV와 column reference를 현재 project에서 다시 resolve한다.
@@ -262,7 +278,7 @@ def graphEditorObjectValues(index, values):
     return chart
 
 
-def graphEditorSetEditable(editable):
+def graphEditorSetEditable(slotId, chartId, editable):
     """
     Return:
     - editable:
@@ -279,8 +295,11 @@ def graphEditorSetEditable(editable):
     이 command는 필요한 CSV 생성/next-id/reference remap을 chart editable 변경과 같은 candidate에 포함한다.
     zero-trace/zero-object imported figure는 CSV를 만들지 않고 empty editable chart로 전환할 수 있다.
     """
-    candidate = convertImportedChartToEditable("selected chart") if editable else "editable flag candidate"
-    return dispatchProjectCommand("CHART_MODEL_REPLACED", {"candidate": candidate})
+    candidate = convertImportedChartToEditable("explicit chartId") if editable else "editable flag candidate"
+    return dispatchProjectCommand(
+        "CHART_MODEL_REPLACED",
+        {"slotId": slotId, "chartId": chartId, "candidate": candidate},
+    )
 
 
 def graphEditorSetHeaderLines(csvId, headerLines):
@@ -298,7 +317,7 @@ def graphEditorSetHeaderLines(csvId, headerLines):
     )
 
 
-def graphEditorUpdateLayout(values):
+def graphEditorUpdateLayout(slotId, chartId, values):
     """
     변경:
     - selected chart의 persistent title/global/axis settings.
@@ -307,10 +326,13 @@ def graphEditorUpdateLayout(values):
     normalized candidate를 CHART_LAYOUT_CHANGED로 commit한다.
     Plotly graph layout은 commit된 chart settings에서 다시 계산하는 projection이다.
     """
-    return dispatchProjectCommand("CHART_LAYOUT_CHANGED", {"settings": values})
+    return dispatchProjectCommand(
+        "CHART_LAYOUT_CHANGED",
+        {"slotId": slotId, "chartId": chartId, "settings": values},
+    )
 
 
-def graphEditorApplyPalette(colors):
+def graphEditorApplyPalette(chartId, colors):
     """
     변경:
     - selected chart.editor.objects의 color fields.
@@ -318,7 +340,7 @@ def graphEditorApplyPalette(colors):
     처리:
     current objects에서 color-only candidate를 계산하고 GRAPH_OBJECTS_REPLACED로 commit한다.
     """
-    return dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {"colors": colors})
+    return dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {"chartId": chartId, "colors": colors})
 
 
 def tracesSingle(objectView):
@@ -370,7 +392,7 @@ def rebuildEditableGraph(chart):
     return chart
 
 
-def importSelectedGraphFile(file):
+def importSelectedGraphFile(slotId, file):
     """
     변경:
     - 선택 slot의 chart model과 package가 필요로 하는 CSV asset.
@@ -381,7 +403,7 @@ def importSelectedGraphFile(file):
     두 경우 모두 target slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증한 뒤
     SLOT_CHART_IMPORTED 한 command로 commit한다.
     """
-    return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"file": file})
+    return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"slotId": slotId, "file": file})
 
 
 def chartFigure(chart):
