@@ -1044,6 +1044,30 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(slotAt(target.id).imageId == null, "trash move did not detach image reference");
       check(!slotElement(target.id)?.querySelector(".slot-image"), "dashboard retained stale image projection");
     });
+    await run(35, "image editor and dashboard reads preserve project authority", async () => {
+      const target = activeProject.slots.find((slot) => !slot.hidden);
+      check(!!target, "image read regression slot absent");
+      select(target);
+      if (slotAt(target.id).contentType !== "image") api.slots.setContentType("image");
+      if (!slotAt(target.id).imageId) api.images.insertEmpty();
+      const slot = slotAt(target.id);
+      check(!!slot?.imageId, "image read regression asset absent");
+      const contentBefore = slot.content;
+      const settingsBefore = contentBefore.imageSettings;
+      const valuesBefore = JSON.stringify(settingsBefore);
+      const selected = api.slots.readSelected();
+      const editor = api.images.readEditor();
+      check(Object.isFrozen(selected), "selected slot read is not immutable");
+      check(!!editor && Object.isFrozen(editor), "image editor read is not immutable");
+      check(Object.isFrozen(editor.settings), "image settings read is not immutable");
+      check(slot.content === contentBefore, "image editor read replaced live slot content");
+      check(slot.content.imageSettings === settingsBefore, "image editor read replaced live settings");
+      renderDashboard();
+      check(slot.content === contentBefore, "dashboard render replaced live slot content");
+      check(slot.content.imageSettings === settingsBefore, "dashboard render replaced live settings");
+      check(JSON.stringify(slot.content.imageSettings) === valuesBefore,
+        "image projection read changed authoritative settings values");
+    });
 
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
