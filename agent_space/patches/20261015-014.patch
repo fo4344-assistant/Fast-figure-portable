@@ -1,0 +1,321 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index ca80336a959a6f7b6b9422a771c869ef5e980ca8..67b77e2cd808dbc0b9b5b3bda92a6ac8dae8cf94 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1068,6 +1068,47 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       check(JSON.stringify(slot.content.imageSettings) === valuesBefore,
+         "image projection read changed authoritative settings values");
+     });
++    await run(36, "application lifecycle task owns execution and Frontend FSM receives events", async () => {
++      const published = [];
++      const unsubscribe = appFSM.subscribe((_state, event) => {
++        if (event?.startsWith("LIFECYCLE_PROBE_")) published.push(event);
++      });
++      try {
++        const outcome = await appFSM.run("importing", "LIFECYCLE_PROBE_SYNC", () => {
++          check(appFSM.state.lifecycle === "importing", "lifecycle start not published before task");
++          return { outcome: "rejected" };
++        });
++        check(outcome.outcome === "rejected" && appFSM.state.lifecycle === "ready",
++          "rejected lifecycle did not return to ready");
++        let finish;
++        const pending = appFSM.run("exporting", "LIFECYCLE_PROBE_ASYNC",
++          () => new Promise((resolve) => { finish = resolve; }));
++        check(appFSM.state.lifecycle === "exporting", "async lifecycle not busy");
++        let invokedWhileBusy = false;
++        const busyError = await appFSM.run("importing", "LIFECYCLE_PROBE_BLOCKED", () => {
++          invokedWhileBusy = true;
++        }).then(() => null, (error) => error);
++        check(!!busyError && !invokedWhileBusy, "busy lifecycle accepted nested task");
++        finish({ outcome: "complete" });
++        await pending;
++        check(appFSM.state.lifecycle === "ready", "async lifecycle did not complete");
++        const failure = await appFSM.run("importing", "LIFECYCLE_PROBE_FAIL", () => {
++          throw Error("expected lifecycle failure");
++        }).then(() => null, (error) => error);
++        check(failure?.message === "expected lifecycle failure",
++          "lifecycle failure was not returned");
++        check(appFSM.state.lifecycle === "ready" &&
++          appFSM.state.error?.message === "expected lifecycle failure",
++          "Frontend FSM did not record and recover from lifecycle failure");
++        check(published.some((event) => event.includes("LIFECYCLE_PROBE_SYNC:rejected")),
++          "lifecycle rejection event was not published");
++        check(published.some((event) => event.includes("LIFECYCLE_PROBE_FAIL:failed")) &&
++          published.some((event) => event.includes("LIFECYCLE_PROBE_FAIL:recovered")),
++          "lifecycle failure/recovery events were not published");
++      } finally {
++        unsubscribe();
++      }
++    });
+ 
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+diff --git a/development-versions.json b/development-versions.json
+index 57d6051540661af7da1331283be35075ced03889..46f26d7d99fabb4630cbcd21a1cf7f72612cb060 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,15 +30,15 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 30,
++      "revision": 31,
+       "status": "stale",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:b906b8ffcb62cfac948946b7a7e3120ec3fda76b1da059a35d274c129b0eab18",
++      "fingerprint": "sha256:82854953e4608d8bd350a1968e1642fa1bd2af41b90a82786ee13ee27130593a",
+       "derived_from": {
+         "source-script": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
+         "pseudocode": "sha256:0753354b6c25df1f391d53991cf2631a31ab184749fd96653a60bed79d87bece",
+diff --git a/dist/inline/Fast-figure.html b/dist/inline/Fast-figure.html
+index a2984fe47799f6e4060cb1e17ff62ff0d9c5d9f3..fc94500e92854d70239cb9ec6943d04ed45fe83d 100644
+--- a/dist/inline/Fast-figure.html
++++ b/dist/inline/Fast-figure.html
+@@ -10396,7 +10396,31 @@ <h2>License</h2>
+           }
+           return this.publish(`${event}:${region}:${previous}->${target}`);
+         }
++        transitionLifecycle(event, payload = {}) {
++          const origin = payload.event || event;
++          if (event === "LIFECYCLE_START") {
++            this.state = Object.freeze({ ...this.state, error: null });
++            return this.transition("lifecycle", payload.lifecycle, `${origin}:start`);
++          }
++          if (event === "LIFECYCLE_COMPLETE") {
++            this.state = Object.freeze({ ...this.state, error: null });
++            return this.transition("lifecycle", "ready", `${origin}:${payload.outcome || "complete"}`);
++          }
++          if (event === "LIFECYCLE_FAILED") {
++            const error = payload.error;
++            this.state = Object.freeze({
++              ...this.state,
++              error: { event: origin, message: error?.message || String(error) },
++            });
++            this.transition("lifecycle", "error", `${origin}:failed`, { error });
++            return this.transition("lifecycle", "ready", `${origin}:recovered`);
++          }
++          return this.state;
++        }
+         send(event, payload = {}) {
++          if (event === "LIFECYCLE_START" || event === "LIFECYCLE_COMPLETE" ||
++              event === "LIFECYCLE_FAILED")
++            return this.transitionLifecycle(event, payload);
+           let handled = false;
+           for (let region of [
+             "lifecycle",
+@@ -10505,40 +10529,6 @@ <h2>License</h2>
+           }
+           return this.publish(event);
+         }
+-        run(lifecycle, event, task) {
+-          if (this.state.lifecycle !== "ready")
+-            return Promise.reject(
+-              Error(`현재 ${this.state.lifecycle} 상태에서는 ${event} 작업을 시작할 수 없습니다.`),
+-            );
+-          this.transition("lifecycle", lifecycle, `${event}:start`);
+-          let complete = (result) => {
+-              let outcome =
+-                result?.outcome === "rejected" ? "rejected" : result?.outcome || "complete";
+-              this.transition("lifecycle", "ready", `${event}:${outcome}`);
+-              return result;
+-            },
+-            fail = (error) => {
+-              this.state = Object.freeze({
+-                ...this.state,
+-                error: { event, message: error?.message || String(error) },
+-              });
+-              this.transition("lifecycle", "error", `${event}:failed`, { error });
+-              this.transition("lifecycle", "ready", `${event}:recovered`);
+-              throw error;
+-            };
+-          try {
+-            let result = task();
+-            return result && typeof result.then === "function"
+-              ? result.then(complete, fail)
+-              : Promise.resolve(complete(result));
+-          } catch (error) {
+-            try {
+-              fail(error);
+-            } catch (failed) {
+-              return Promise.reject(failed);
+-            }
+-          }
+-        }
+         ready() {
+           this.transition("lifecycle", "ready", "READY");
+           this.transition("workspace", workspaceStateFromModel(), "WORKSPACE_INIT", {
+@@ -11795,6 +11785,35 @@ <h2>License</h2>
+       const interfaceFSM = new InterfaceStateMachine(projectObjects, APP_STATE_DEFINITIONS);
+       const projectEFSM = new ProjectStateMachine(projectObjects, PROJECT_COMMAND_ACTIONS);
+ 
++      function runLifecycleTask(lifecycle, event, task) {
++        if (interfaceFSM.state.lifecycle !== "ready")
++          return Promise.reject(
++            Error(`현재 ${interfaceFSM.state.lifecycle} 상태에서는 ${event} 작업을 시작할 수 없습니다.`),
++          );
++        interfaceFSM.send("LIFECYCLE_START", { lifecycle, event });
++        const complete = (result) => {
++          const outcome = result?.outcome === "rejected" ? "rejected" : result?.outcome || "complete";
++          interfaceFSM.send("LIFECYCLE_COMPLETE", { event, outcome });
++          return result;
++        };
++        const fail = (error) => {
++          interfaceFSM.send("LIFECYCLE_FAILED", { event, error });
++          throw error;
++        };
++        try {
++          const result = task();
++          return result && typeof result.then === "function"
++            ? result.then(complete, fail)
++            : Promise.resolve(complete(result));
++        } catch (error) {
++          try {
++            fail(error);
++          } catch (failed) {
++            return Promise.reject(failed);
++          }
++        }
++      }
++
+       function dispatchProjectCommand(event, payload = {}) {
+         let result = projectEFSM.send(event, payload);
+         interfaceFSM.reconcileProjectResult(event, result);
+@@ -11829,7 +11848,7 @@ <h2>License</h2>
+           return state;
+         },
+         notify: (...args) => interfaceFSM.notify(...args),
+-        run: (...args) => interfaceFSM.run(...args),
++        run: (...args) => runLifecycleTask(...args),
+         ready: (...args) => interfaceFSM.ready(...args),
+         subscribe: (...args) => interfaceFSM.subscribe(...args),
+       });
+diff --git a/dist/split/Fast-figure.zip b/dist/split/Fast-figure.zip
+index ba8324f4352b44fa7086b2b11a4f8454ee409023..70fba9b8a682cec4faceee634435d19004ce0925 100644
+Binary files a/dist/split/Fast-figure.zip and b/dist/split/Fast-figure.zip differ
+diff --git a/fast-figure.js b/fast-figure.js
+index 9515f02a2e325a4ae4c9d49fe3faff062fbde82e..a6d8e039f68062c29a76b7829df49becd3d7578d 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -503,7 +503,31 @@
+           }
+           return this.publish(`${event}:${region}:${previous}->${target}`);
+         }
++        transitionLifecycle(event, payload = {}) {
++          const origin = payload.event || event;
++          if (event === "LIFECYCLE_START") {
++            this.state = Object.freeze({ ...this.state, error: null });
++            return this.transition("lifecycle", payload.lifecycle, `${origin}:start`);
++          }
++          if (event === "LIFECYCLE_COMPLETE") {
++            this.state = Object.freeze({ ...this.state, error: null });
++            return this.transition("lifecycle", "ready", `${origin}:${payload.outcome || "complete"}`);
++          }
++          if (event === "LIFECYCLE_FAILED") {
++            const error = payload.error;
++            this.state = Object.freeze({
++              ...this.state,
++              error: { event: origin, message: error?.message || String(error) },
++            });
++            this.transition("lifecycle", "error", `${origin}:failed`, { error });
++            return this.transition("lifecycle", "ready", `${origin}:recovered`);
++          }
++          return this.state;
++        }
+         send(event, payload = {}) {
++          if (event === "LIFECYCLE_START" || event === "LIFECYCLE_COMPLETE" ||
++              event === "LIFECYCLE_FAILED")
++            return this.transitionLifecycle(event, payload);
+           let handled = false;
+           for (let region of [
+             "lifecycle",
+@@ -612,40 +636,6 @@
+           }
+           return this.publish(event);
+         }
+-        run(lifecycle, event, task) {
+-          if (this.state.lifecycle !== "ready")
+-            return Promise.reject(
+-              Error(`현재 ${this.state.lifecycle} 상태에서는 ${event} 작업을 시작할 수 없습니다.`),
+-            );
+-          this.transition("lifecycle", lifecycle, `${event}:start`);
+-          let complete = (result) => {
+-              let outcome =
+-                result?.outcome === "rejected" ? "rejected" : result?.outcome || "complete";
+-              this.transition("lifecycle", "ready", `${event}:${outcome}`);
+-              return result;
+-            },
+-            fail = (error) => {
+-              this.state = Object.freeze({
+-                ...this.state,
+-                error: { event, message: error?.message || String(error) },
+-              });
+-              this.transition("lifecycle", "error", `${event}:failed`, { error });
+-              this.transition("lifecycle", "ready", `${event}:recovered`);
+-              throw error;
+-            };
+-          try {
+-            let result = task();
+-            return result && typeof result.then === "function"
+-              ? result.then(complete, fail)
+-              : Promise.resolve(complete(result));
+-          } catch (error) {
+-            try {
+-              fail(error);
+-            } catch (failed) {
+-              return Promise.reject(failed);
+-            }
+-          }
+-        }
+         ready() {
+           this.transition("lifecycle", "ready", "READY");
+           this.transition("workspace", workspaceStateFromModel(), "WORKSPACE_INIT", {
+@@ -1902,6 +1892,35 @@
+       const interfaceFSM = new InterfaceStateMachine(projectObjects, APP_STATE_DEFINITIONS);
+       const projectEFSM = new ProjectStateMachine(projectObjects, PROJECT_COMMAND_ACTIONS);
+ 
++      function runLifecycleTask(lifecycle, event, task) {
++        if (interfaceFSM.state.lifecycle !== "ready")
++          return Promise.reject(
++            Error(`현재 ${interfaceFSM.state.lifecycle} 상태에서는 ${event} 작업을 시작할 수 없습니다.`),
++          );
++        interfaceFSM.send("LIFECYCLE_START", { lifecycle, event });
++        const complete = (result) => {
++          const outcome = result?.outcome === "rejected" ? "rejected" : result?.outcome || "complete";
++          interfaceFSM.send("LIFECYCLE_COMPLETE", { event, outcome });
++          return result;
++        };
++        const fail = (error) => {
++          interfaceFSM.send("LIFECYCLE_FAILED", { event, error });
++          throw error;
++        };
++        try {
++          const result = task();
++          return result && typeof result.then === "function"
++            ? result.then(complete, fail)
++            : Promise.resolve(complete(result));
++        } catch (error) {
++          try {
++            fail(error);
++          } catch (failed) {
++            return Promise.reject(failed);
++          }
++        }
++      }
++
+       function dispatchProjectCommand(event, payload = {}) {
+         let result = projectEFSM.send(event, payload);
+         interfaceFSM.reconcileProjectResult(event, result);
+@@ -1936,7 +1955,7 @@
+           return state;
+         },
+         notify: (...args) => interfaceFSM.notify(...args),
+-        run: (...args) => interfaceFSM.run(...args),
++        run: (...args) => runLifecycleTask(...args),
+         ready: (...args) => interfaceFSM.ready(...args),
+         subscribe: (...args) => interfaceFSM.subscribe(...args),
+       });
