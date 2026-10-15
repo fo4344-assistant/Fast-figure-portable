@@ -1,8 +1,8 @@
 ---- MODULE FastFigureGraphsPseudocode ----
 EXTENDS Naturals, Sequences
 
-\* Direct translation of sourcescript/graphs.py.
-\* Persistent chart/project changes are emitted through existing mutation commands.
+\* Direct translation of Source Script r25 sourcescript/graphs.py.
+\* Backend graph calculations use explicit references; co-located public wrappers cross through Application boundary.
 
 CONSTANT NoReference
 
@@ -79,23 +79,20 @@ ConnectReturn:
   return;
 end procedure;
 
-procedure AddGraphObject(csvId)
+procedure AddGraphObject(slotId, csvId)
 variables slotValue = NoReference, csv = NoReference, chart = NoReference;
 begin
-AddResolveSlot:
-  slotValue := ResolveSelectedSlot();
-AddResolveCsv:
-  csv := ResolveProjectCsv(csvId);
-AddSelectedCsvContract:
-  assert csvId = SelectedCsvId();
+AddResolveExplicitReferences:
+  slotValue := ResolveSlotFromCurrentAuthority(slotId) ||
+  csv := ResolveProjectCsvFromCurrentAuthority(csvId);
 AddObjectBranch:
   if slotValue # NoReference /\ csv # NoReference then
     if slotValue.chart = NoReference then
       result := ApplicationDispatchProjectCommand(
         "SLOT_DATA_CONNECTED",
-        [slotId |-> slotValue.id, csvId |-> csv.id]);
+        [slotId |-> slotId, csvId |-> csvId]);
     else
-      chart := ResolveChart(slotValue.chart);
+      chart := ResolveChartFromCurrentAuthority(slotValue.chart);
       if chart # NoReference /\ chart.editor.editable = TRUE then
         chartCandidate := AppendBaseGraphObject(chart, csv);
         assert ValidateChartModel(chartCandidate);
@@ -109,11 +106,11 @@ AddObjectReturn:
   return;
 end procedure;
 
-procedure CommitGraphObjects(objects, requestedIndex)
+procedure CommitGraphObjects(chartId, objects, requestedIndex)
 variables chart = NoReference;
 begin
 CommitResolveChart:
-  chart := ResolveSelectedChart();
+  chart := ResolveChartFromCurrentAuthority(chartId);
 CommitNormalize:
   if chart # NoReference /\ chart.editor.editable = TRUE then
     chartCandidate := NormalizeGraphObjects(chart, objects);
@@ -121,7 +118,7 @@ CommitNormalize:
     chartCandidate := RebuildEditableProjection(chartCandidate);
     result := ApplicationDispatchProjectCommand(
       "GRAPH_OBJECTS_REPLACED",
-      [chartId |-> chart.id,
+      [chartId |-> chartId,
        objects |-> chartCandidate.editor.objects,
        selectedIndexHint |-> requestedIndex]);
   end if;
@@ -129,36 +126,37 @@ CommitObjectsReturn:
   return;
 end procedure;
 
-procedure SetObjectValues(index, values)
+procedure SetObjectValues(chartId, index, values)
 variables chart = NoReference, objectValue = NoReference, csv = NoReference;
 begin
 ObjectValuesResolveChart:
-  chart := ResolveSelectedChart();
+  chart := ResolveChartFromCurrentAuthority(chartId);
 ObjectValuesResolveObject:
-  objectValue := ResolveGraphObject(index);
+  if chart # NoReference then
+    objectValue := ResolveGraphObjectFromChart(chart, index);
+  end if;
 ObjectValuesResolveCsv:
-  if chart # NoReference /\ objectValue # NoReference
-     /\ chart.editor.editable = TRUE then
-    csv := ResolveRequestedOrExistingCsv(values, objectValue.csvId);
+  if objectValue # NoReference /\ chart.editor.editable = TRUE then
+    csv := ResolveProjectCsvFromCurrentAuthority(objectValue.csvId);
   end if;
 ObjectValuesBuild:
-  if csv # NoReference then
+  if csv # NoReference /\ ObjectColumnsResolve(csv, objectValue) then
     chartCandidate := ReplaceOneObjectWithNormalizedValues(
       chart,
       index,
       values,
       csv);
-    call CommitGraphObjects(chartCandidate.editor.objects, index);
+    call CommitGraphObjects(chartId, chartCandidate.editor.objects, index);
   end if;
 ObjectValuesReturn:
   return;
 end procedure;
 
-procedure SetEditable(editable)
+procedure SetEditable(slotId, chartId, editable)
 variables chart = NoReference;
 begin
 EditableResolve:
-  chart := ResolveSelectedChart();
+  chart := ResolveChartFromCurrentAuthority(chartId);
 EditableBuild:
   if chart # NoReference then
     if editable = TRUE /\ chart.editor.editable = FALSE then
@@ -166,11 +164,11 @@ EditableBuild:
       assert ValidateWholeProject(projectCandidate);
       result := ApplicationDispatchProjectCommand(
         "CHART_MODEL_REPLACED",
-        [chartId |-> chart.id, candidate |-> projectCandidate]);
+        [slotId |-> slotId, chartId |-> chartId, candidate |-> projectCandidate]);
     else
       result := ApplicationDispatchProjectCommand(
         "CHART_MODEL_REPLACED",
-        [chartId |-> chart.id, editable |-> editable]);
+        [slotId |-> slotId, chartId |-> chartId, editable |-> editable]);
     end if;
   end if;
 EditableReturn:
@@ -187,22 +185,22 @@ HeaderReturn:
   return;
 end procedure;
 
-procedure UpdateChartLayout(values)
+procedure UpdateChartLayout(slotId, chartId, values)
 begin
 LayoutDispatch:
   result := ApplicationDispatchProjectCommand(
     "CHART_LAYOUT_CHANGED",
-    [settings |-> values]);
+    [slotId |-> slotId, chartId |-> chartId, settings |-> values]);
 LayoutReturn:
   return;
 end procedure;
 
-procedure ApplyGraphPalette(colors)
+procedure ApplyGraphPalette(chartId, colors)
 begin
 PaletteDispatch:
   result := ApplicationDispatchProjectCommand(
     "GRAPH_OBJECTS_REPLACED",
-    [colors |-> colors]);
+    [chartId |-> chartId, colors |-> colors]);
 PaletteReturn:
   return;
 end procedure;
@@ -244,23 +242,20 @@ RebuildReturn:
   return;
 end procedure;
 
-procedure ImportGraphFile(file)
-variables slotValue = NoReference;
+procedure ImportGraphFile(file, slotId)
 begin
-ImportGraphResolveSlot:
-  slotValue := ResolveSelectedSlot();
 ImportGraphBuild:
-  if slotValue # NoReference then
-    if IsFfsx(file) then
-      projectCandidate := ReadAndRemapFfsx(file, slotValue);
-    else
-      chartCandidate := ParsePlotlyPreservingOriginal(file);
-      projectCandidate := AttachImportedChartToSlot(chartCandidate, slotValue);
-    end if;
-    assert ValidateWholeProject(projectCandidate);
+  if IsFfsx(file) then
+    projectCandidate := ReadAndRemapFfsxForExplicitSlot(file, slotId);
+  else
+    chartCandidate := ParsePlotlyPreservingOriginal(file);
+    projectCandidate := AttachImportedChartToExplicitSlot(chartCandidate, slotId);
+  end if;
+ImportGraphDispatch:
+  if projectCandidate # NoReference /\ ValidateWholeProject(projectCandidate) then
     result := ApplicationDispatchProjectCommand(
       "SLOT_CHART_IMPORTED",
-      [slotId |-> slotValue.id, candidate |-> projectCandidate]);
+      [slotId |-> slotId, candidate |-> projectCandidate]);
   end if;
 ImportGraphReturn:
   return;
@@ -370,20 +365,20 @@ begin
 Main:
   while TRUE do
     either
-      with csvId = SelectedCsvId() do
-        call AddGraphObject(csvId);
+      with slotId = RequestedSlotId(), csvId = RequestedCsvId() do
+        call AddGraphObject(slotId, csvId);
       end with;
     or
-      with objects = EditedObjectList(), index = RequestedObjectIndex() do
-        call CommitGraphObjects(objects, index);
+      with chartId = RequestedChartId(), objects = EditedObjectList(), index = RequestedObjectIndex() do
+        call CommitGraphObjects(chartId, objects, index);
       end with;
     or
-      with index = RequestedObjectIndex(), values = EditedObjectValues() do
-        call SetObjectValues(index, values);
+      with chartId = RequestedChartId(), index = RequestedObjectIndex(), values = EditedObjectValues() do
+        call SetObjectValues(chartId, index, values);
       end with;
     or
-      with editable = RequestedEditableState() do
-        call SetEditable(editable);
+      with slotId = RequestedSlotId(), chartId = RequestedChartId(), editable = RequestedEditableState() do
+        call SetEditable(slotId, chartId, editable);
       end with;
     end either;
   end while;
