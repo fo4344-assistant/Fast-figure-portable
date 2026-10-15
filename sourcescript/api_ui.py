@@ -18,9 +18,22 @@ Fast Figure Source Script — FastFigureApi boundary and Mantine frontend
 - layout_annotations_export.py
 """
 
-from project_state import activeProject
-from interface_fsm import interfaceFSM, selectedSlotId
-from application_fsm import dispatchInterfaceEvent, dispatchProjectCommand, runLifecycleTask
+from interface_fsm import interfaceFSM
+from application_fsm import (
+    dispatchInterfaceEvent,
+    dispatchProjectQuery,
+    dispatchProjectCommand,
+    dispatchSlotSelection,
+    runLifecycleTask as runApplicationLifecycleTask,
+)
+
+API_UI_LOGICAL_RESPONSIBILITIES = {
+    "Application boundary": (
+        "FastFigureApi의 Backend query/command와 validated Frontend event routing contract. "
+        "Frontend에 Backend internal state/helper를 노출하지 않는다."
+    ),
+    "Frontend": "Mantine component, component-local draft, overlay, pointer와 visual interaction semantics",
+}
 
 FastFigureApi = {
     "project": "project metadata와 FFPX project command",
@@ -37,16 +50,22 @@ FastFigureApi = {
 
 PUBLIC_API_METHODS = {
     "project": {
-        "readName": "read; args 없음; activeProject.meta.projectName projection",
+        "readName": "Backend query; args 없음; current project meta name immutable projection",
         "setName": "mutation; PROJECT_NAME_CHANGED project command로 project name candidate commit",
         "importFile": "lifecycle mutation; FFPX -> fully validated ProjectObject candidate -> PROJECT_LOADED",
         "exportFile": "read/export; current validated project snapshot -> FFPX; project mutation 없음",
     },
     "slots": {
-        "readSelected": "read; selectedSlotId를 current slot projection으로 resolve",
-        "select": "runtime mutation; explicit visible slot id의 selection toggle 또는 none의 explicit deselection으로 workspace 갱신",
-        "setContentType": "mutation; SLOT_TYPE_CHANGED project command로 selected/payload slot contentType candidate commit",
-        "reset": "mutation; SLOTS_RESET project command로 slot-local properties reset + owned chart 제거",
+        "readSelected": (
+            "cross-layer read; Frontend selectedSlotId reference와 Backend query result를 결합한 immutable selected-slot projection"
+        ),
+        "select": (
+            "Application operation; slot reference를 Backend에서 validate한 뒤 Frontend SELECT_SLOT을 수행한다. "
+            "explicit pendingContentType intent가 있으면 selection과 분리된 SLOT_TYPE_CHANGED command를 Application adapter가 조건부 실행한다."
+        ),
+        "setContentType": "Backend command; SLOT_TYPE_CHANGED로 explicit slot/contentType candidate commit",
+        "reset": "Backend command; SLOTS_RESET로 slot-local properties reset + owned chart 제거",
+        "swap": "Backend command; SLOTS_SWAPPED로 두 GUI 위치의 slot-local payload를 교환",
         "prepareFileDrop": "runtime calculation/mutation; drop target selection과 acceptability만 결정",
         "finishFileDrop": "runtime completion; drag/drop interaction state 정리, domain payload 자체는 import command가 소유",
     },
@@ -105,7 +124,7 @@ PUBLIC_API_METHODS = {
         "exportPlotlyJson": "read/export; selected chart semantic figure -> Plotly JSON",
     },
     "print": {
-        "readSettings": "read; activeProject.export persistent settings projection",
+        "readSettings": "Backend query; current persistent export settings immutable projection",
         "setSettings": "mutation; EXPORT_SETTINGS_CHANGED project command로 width/heightMode/height/dpi/format candidate commit",
         "save": "export; persistent target settings snapshot으로 raster export, project mutation 없음",
         "capture": "export; current-screen one-shot capture, persistent target width/height mutation 없음",
@@ -158,14 +177,25 @@ LOWER_LAYER_API_REPLACEMENTS = {
 
 
 API_BOUNDARY_RULE = (
-    "Mantine frontend는 activeProject, projectVfs, getChart, getProjectCsv 같은 domain 구현을 "
-    "직접 일반 변경 경계로 사용하지 않는다. persistent/domain mutation은 PUBLIC_API_METHODS의 command 또는 "
-    "명시된 interfaceFSM runtime event를 사용한다. UI-local editor target, modal draft, pointer state는 public domain API가 아니다."
+    "Mantine component와 renderer를 포함한 Frontend는 activeProject, projectObjects, projectVfs, projectEFSM, "
+    "getChart/getProjectCsv/getProjectImage 같은 Backend internal state/helper를 직접 import/read/call하지 않는다. "
+    "persistent mutation은 FastFigureApi Backend-command method -> Application adapter -> Project EFSM으로, "
+    "project read는 FastFigureApi Backend-query method -> Application adapter -> Backend read provider로 전달한다. "
+    "Frontend runtime event도 Backend identity validity가 필요하면 Application adapter가 검증한 input을 interfaceFSM에 전달한다. "
+    "UI-local editor target, modal draft, pointer state는 public Backend API나 FFPX state가 아니다."
 )
 
 READ_RULE = (
-    "FastFigureApi read operation은 현재 Source of Truth에서 필요한 projection을 매번 계산한다. "
-    "React component가 받은 projection을 다른 subsystem의 장기 read authority로 배포하지 않는다."
+    "FastFigureApi Backend read operation은 current Backend authority에서 필요한 projection을 매번 계산해 immutable/transient value로 반환한다. "
+    "read-time normalization은 projection copy에서만 수행하고 live ProjectObject를 변경하지 않는다. "
+    "React/renderer가 받은 projection을 다른 subsystem의 장기 project authority 또는 무검증 mutation input으로 재사용하지 않는다."
+)
+
+PUBLIC_API_ROUTE_RULE = (
+    "PUBLIC_API_METHODS의 persistent mutation은 Backend command route, project/model read는 Backend query route, "
+    "overlay/selection/zoom 같은 session state는 Frontend event route로 구분한다. "
+    "한 public operation이 Frontend selection과 persistent mutation을 모두 포함하면 slots.select처럼 Application boundary가 "
+    "두 explicit step을 순서대로 조정하며 Frontend FSM 안에 hidden Backend command를 넣지 않는다."
 )
 
 UI_LOCAL_STATE = {
@@ -320,14 +350,15 @@ def runLifecycleTask(lifecycle, eventName, task):
     - task result 또는 UI error 처리 결과.
 
     변경:
-    - interfaceFSM lifecycle.
-    - task가 호출하는 공식 command에 따른 domain state.
+    - Application boundary가 전달하는 Frontend lifecycle state.
+    - task가 호출하는 공식 Backend command에 따른 domain state.
 
     처리:
-    lifecycle sequencing은 runLifecycleTask에 위임한다.
-    UI layer는 error를 debug telemetry에 기록하되 별도 domain rollback 규칙을 만들지 않는다.
+    Mantine Frontend는 task callback을 interfaceFSM에 직접 넘기지 않고 runApplicationLifecycleTask에 위임한다.
+    Application boundary가 LIFECYCLE_START -> task -> COMPLETE/FAILED 순서를 소유한다.
+    UI layer는 error를 debug telemetry에 기록할 수 있지만 별도 domain rollback 규칙을 만들지 않는다.
     """
-    return "lifecycle task 결과"
+    return runApplicationLifecycleTask(lifecycle, eventName, task)
 
 
 def FastFigureApp():
