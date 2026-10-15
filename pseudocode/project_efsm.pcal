@@ -1,7 +1,8 @@
 ---- MODULE FastFigureProjectEfsmPseudocode ----
 EXTENDS Naturals, Sequences
 
-\* Direct translation of sourcescript/project_efsm.py.
+\* Direct translation of Source Script r25 sourcescript/project_efsm.py.
+\* Backend command controller; ProjectMutationResult crosses to Application boundary only.
 CONSTANT NoReference
 
 PROJECT_COMMANDS == {
@@ -50,7 +51,7 @@ variables
   effect = NoReference;
 
 procedure DispatchProjectCommand(eventName, payload)
-variables preProject = NoReference;
+variables preProject = NoReference, resolved = FALSE, validCandidate = FALSE;
 begin
 ProjectCommandMembership:
   assert eventName \in PROJECT_COMMANDS;
@@ -60,20 +61,34 @@ ProjectCommandCoverage:
 ProjectReadCurrent:
   preProject := projectAuthority;
 ProjectResolve:
-  assert ResolveAllProjectCommandInputs(preProject, eventName, payload);
+  resolved := ResolveAllProjectCommandInputs(preProject, eventName, payload);
 ProjectCandidate:
-  candidate := BuildDomainCandidate(preProject, eventName, payload);
+  if resolved then
+    candidate := BuildDomainCandidate(preProject, eventName, payload);
+  else
+    candidate := NoReference;
+  end if;
 ProjectValidate:
-  assert candidate # NoReference /\ ValidateWholeProject(candidate);
-ProjectCommit:
-  projectAuthority := candidate;
-ProjectResult:
-  result := BuildProjectMutationResult(
-    eventName,
-    preProject,
-    projectAuthority,
-    payload
-  );
+  validCandidate := candidate # NoReference /\ ValidateWholeProject(candidate);
+ProjectCommitOrReject:
+  if validCandidate then
+    projectAuthority := candidate ||
+    result := BuildProjectMutationResult(
+      eventName,
+      preProject,
+      projectAuthority,
+      payload
+    );
+  else
+    projectAuthority := preProject ||
+    result := BuildRejectedProjectMutationResult(
+      eventName,
+      preProject,
+      payload
+    );
+  end if;
+ProjectFailureAtomicity:
+  assert result.committed \/ projectAuthority = preProject;
 ProjectNoInterfaceMutation:
   assert InterfaceAuthorityUnchangedByProjectEfsm();
 ProjectNoRendererMutation:
