@@ -25,6 +25,32 @@
 - 임시값을 여러 부분에서 공유해야 한다면 임시값 자체를 공유하지 말고 원래 source of truth에서 다시 읽거나, 정말 공용 상태가 필요한 경우 하나의 명시적인 source of truth로 승격할 것.
 - source of truth와 임시값 사이를 양방향으로 동기화하거나 어느 쪽이 최신인지 판정해야 하는 구조를 만들지 말 것.
 
+## GitHub 저장소 작업 방식
+
+- 연결된 GitHub 저장소의 일반적인 파일 수정은 GitHub Contents API에 대응하는 파일 단위 경로를 우선 사용할 것.
+  - 기존 파일은 먼저 현재 branch의 파일 내용을 읽고 blob SHA를 확인한 뒤 `update_file` 방식으로 교체한다.
+  - 새 파일은 대상 경로가 존재하지 않는지 확인한 뒤 `create_file` 방식으로 생성한다.
+  - 같은 경로의 update/delete를 병렬로 실행하지 말고 순차적으로 처리한다.
+- 일반 수정에서 `create_blob → create_tree → create_commit → update_ref` 같은 저수준 Git Data API 경로를 기본 쓰기 방식으로 사용하지 말 것.
+  - 저수준 Git 객체 생성은 Contents API로 표현할 수 없는 명시적 필요가 있거나, 쓰기 경로 자체를 진단해야 하는 경우에만 제한적으로 검토한다.
+  - 진단용 blob/tree/commit을 만들더라도 branch ref에 연결하지 않는 비파괴 검사를 우선한다.
+  - branch ref를 실제로 이동해야 할 때는 현재 HEAD와 expected SHA를 다시 확인하고, stale ref를 강제로 덮어쓰지 말 것.
+- 저장소에 쓰기 직전마다 현재 branch HEAD를 다시 확인할 것.
+  - 작업 시작 시 읽었던 HEAD와 달라졌다면 기존 계획을 그대로 쓰지 말고 최신 상태를 다시 읽어 이미 완료된 작업과 충돌 여부를 판단한다.
+  - 대상 기존 파일은 쓰기 직전에 현재 blob SHA도 다시 확인한다.
+  - 새 patch/plan/review 파일은 쓰기 직전에 대상 경로와 해당 날짜 순번이 아직 비어 있는지 다시 확인한다.
+- 여러 파일로 이루어진 하나의 coherent 변경을 Contents API로 수행할 때는 파일을 순차적으로 반영하고 각 write 뒤 새 HEAD를 다음 write의 기준으로 사용할 것.
+  - Contents API의 파일 단위 commit을 하나의 원자적 multi-file commit인 것처럼 설명하지 말 것.
+  - 해당 변경의 최종 patch 기록은 변경 시작 기준 HEAD부터 의미 변경이 끝난 HEAD까지의 실제 누적 diff를 기준으로 작성하여, 물리적으로 여러 commit에 나뉘어도 하나의 rollback 가능한 변경 단위를 추적할 수 있게 한다.
+  - 기존 정책이 특정 산출물을 같은 commit에 요구하지만 현재 사용 가능한 GitHub 쓰기 경로로 이를 만족시킬 수 없다면, 충족했다고 주장하지 말고 그 제한과 실제 기록 방식을 설명 문서에 명시한다.
+- concurrent run 또는 다른 작업자가 같은 저장소를 변경할 가능성이 있으면 변경 전후의 HEAD, 관련 plan/patch/review, `development-versions.json`을 다시 읽어 중복 작업을 피할 것.
+  - 이미 같은 단계가 완료되었으면 새 patch나 review를 중복 생성하지 않는다.
+  - 동시 작업 여부를 안전하게 구분할 수 없으면 stale 상태에서 쓰지 말고 재조회한다.
+- GitHub Actions는 사용자가 해당 작업에서 명시적으로 허용한 경우에만 실행할 것. workflow 존재 여부나 과거 run을 읽는 것과 새 workflow run을 시작하거나 재실행하는 것은 구분한다.
+- 로컬 `git clone`, 테스트, version checker 또는 빌드가 실행 환경의 네트워크·파일 접근 제한 때문에 실제로 실행되지 않았다면, GitHub tree/blob를 이용한 원격 대조를 실제 로컬 명령 실행 성공으로 표현하지 말 것.
+  - 원격 tree/blob 기반으로 동일한 fingerprint나 정적 조건을 재계산할 수는 있지만, 실제 명령을 실행한 검증과 구분하여 기록한다.
+- 저장소 외부의 추측된 파일명, branch명, API 이름, workflow 입력값을 만들어내지 말고 현재 저장소 내용이나 GitHub 도구가 반환한 실제 식별자를 사용한다.
+
 ## 정책 원천
 
 - Source Script, PlusCal pseudocode, 선택적 TLA+/TLC verification model, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
