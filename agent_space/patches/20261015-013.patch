@@ -1,0 +1,165 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index e260c22699c4b21cc4f203b893cea3e8464d54d7..ca80336a959a6f7b6b9422a771c869ef5e980ca8 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1044,6 +1044,30 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       check(slotAt(target.id).imageId == null, "trash move did not detach image reference");
+       check(!slotElement(target.id)?.querySelector(".slot-image"), "dashboard retained stale image projection");
+     });
++    await run(35, "image editor and dashboard reads preserve project authority", async () => {
++      const target = activeProject.slots.find((slot) => !slot.hidden);
++      check(!!target, "image read regression slot absent");
++      select(target);
++      if (slotAt(target.id).contentType !== "image") api.slots.setContentType("image");
++      if (!slotAt(target.id).imageId) api.images.insertEmpty();
++      const slot = slotAt(target.id);
++      check(!!slot?.imageId, "image read regression asset absent");
++      const contentBefore = slot.content;
++      const settingsBefore = contentBefore.imageSettings;
++      const valuesBefore = JSON.stringify(settingsBefore);
++      const selected = api.slots.readSelected();
++      const editor = api.images.readEditor();
++      check(Object.isFrozen(selected), "selected slot read is not immutable");
++      check(!!editor && Object.isFrozen(editor), "image editor read is not immutable");
++      check(Object.isFrozen(editor.settings), "image settings read is not immutable");
++      check(slot.content === contentBefore, "image editor read replaced live slot content");
++      check(slot.content.imageSettings === settingsBefore, "image editor read replaced live settings");
++      renderDashboard();
++      check(slot.content === contentBefore, "dashboard render replaced live slot content");
++      check(slot.content.imageSettings === settingsBefore, "dashboard render replaced live settings");
++      check(JSON.stringify(slot.content.imageSettings) === valuesBefore,
++        "image projection read changed authoritative settings values");
++    });
+ 
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+diff --git a/development-versions.json b/development-versions.json
+index c72e9f675ae0b89ce228793ee8727c715f31b8e5..57d6051540661af7da1331283be35075ced03889 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,21 +30,21 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 29,
++      "revision": 30,
+       "status": "stale",
+       "paths": [
+         "Fast-figure.html",
+         "fast-figure-ui.js",
+         "fast-figure.js",
+         "scripts/build-portable.py"
+       ],
+-      "fingerprint": "sha256:cef96a25737072edca273f280c3ea3f03cc7eef09adf60ec739e3f31e34b180f",
++      "fingerprint": "sha256:b906b8ffcb62cfac948946b7a7e3120ec3fda76b1da059a35d274c129b0eab18",
+       "derived_from": {
+         "source-script": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
+         "pseudocode": "sha256:0753354b6c25df1f391d53991cf2631a31ab184749fd96653a60bed79d87bece",
+         "verification-model": "sha256:97c66b2980486134499d381bba0fd76d6f22fbf03062c11af484a5383a9887e4"
+       },
+-      "validation_review": "agent_space/reviews/review-20261014-017-source-code-r29.md"
++      "validation_review": null
+     },
+     "pseudocode": {
+       "revision": 11,
+diff --git a/dist/inline/Fast-figure.html b/dist/inline/Fast-figure.html
+index 58e594449a815d69d251e262e35a213246ac80ce..a2984fe47799f6e4060cb1e17ff62ff0d9c5d9f3 100644
+--- a/dist/inline/Fast-figure.html
++++ b/dist/inline/Fast-figure.html
+@@ -13358,9 +13358,13 @@ <h2>License</h2>
+       }
+       function normalizeImageSettings(slot) {
+         if (!slot) return null;
+-        normalizeSlotContent(slot);
+-        slot.content.imageSettings = readImageSettings(slot.content.imageSettings);
+-        return slot.content.imageSettings;
++        const content = slot.content && typeof slot.content === "object" && !Array.isArray(slot.content)
++          ? slot.content : {};
++        const settings = content.imageSettings && typeof content.imageSettings === "object"
++          ? content.imageSettings
++          : slot.imageSettings && typeof slot.imageSettings === "object"
++            ? slot.imageSettings : DEFAULT_IMAGE_SETTINGS;
++        return readImageSettings(settings);
+       }
+       function readImageSettings(settings) {
+         let source = settings && typeof settings === "object" && !Array.isArray(settings)
+@@ -15544,10 +15548,10 @@ <h2>License</h2>
+       }
+       function readSelectedSlotApi() {
+         let slot = getSelectedSlot();
+-        return slot ? {
++        return slot ? Object.freeze({
+           id: slot.id, row: slot.row, col: slot.col,
+           contentType: slot.contentType, chart: slot.chart, imageId: slot.imageId,
+-        } : null;
++        }) : null;
+       }
+       function resetSlotApi(slotId) {
+         let payload = { slotIds: [slotId], direction: "fsm-to-model" };
+@@ -15571,11 +15575,11 @@ <h2>License</h2>
+       }
+       function readImageEditorApi() {
+         let slot=getSelectedSlot(), image=slotImage(slot);
+-        return image&&slot?{
++        return image&&slot?Object.freeze({
+           name:image.name,
+           src:projectImageDisplayUrl(image),
+-          settings:Object.freeze({...normalizeImageSettings(slot)}),
+-        }:null;
++          settings:Object.freeze(normalizeImageSettings(slot)),
++        }):null;
+       }
+       function setProjectName(value, trim = false) {
+         let name = (trim ? String(value).trim() : String(value)).slice(0, 120);
+diff --git a/dist/split/Fast-figure.zip b/dist/split/Fast-figure.zip
+index cd5bbf6e09cb2b6c428736111245d9b0a48f290d..ba8324f4352b44fa7086b2b11a4f8454ee409023 100644
+Binary files a/dist/split/Fast-figure.zip and b/dist/split/Fast-figure.zip differ
+diff --git a/fast-figure.js b/fast-figure.js
+index 0571c7d15997c6632d73847188a11837766d3a2c..9515f02a2e325a4ae4c9d49fe3faff062fbde82e 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -3465,9 +3465,13 @@
+       }
+       function normalizeImageSettings(slot) {
+         if (!slot) return null;
+-        normalizeSlotContent(slot);
+-        slot.content.imageSettings = readImageSettings(slot.content.imageSettings);
+-        return slot.content.imageSettings;
++        const content = slot.content && typeof slot.content === "object" && !Array.isArray(slot.content)
++          ? slot.content : {};
++        const settings = content.imageSettings && typeof content.imageSettings === "object"
++          ? content.imageSettings
++          : slot.imageSettings && typeof slot.imageSettings === "object"
++            ? slot.imageSettings : DEFAULT_IMAGE_SETTINGS;
++        return readImageSettings(settings);
+       }
+       function readImageSettings(settings) {
+         let source = settings && typeof settings === "object" && !Array.isArray(settings)
+@@ -5651,10 +5655,10 @@
+       }
+       function readSelectedSlotApi() {
+         let slot = getSelectedSlot();
+-        return slot ? {
++        return slot ? Object.freeze({
+           id: slot.id, row: slot.row, col: slot.col,
+           contentType: slot.contentType, chart: slot.chart, imageId: slot.imageId,
+-        } : null;
++        }) : null;
+       }
+       function resetSlotApi(slotId) {
+         let payload = { slotIds: [slotId], direction: "fsm-to-model" };
+@@ -5678,11 +5682,11 @@
+       }
+       function readImageEditorApi() {
+         let slot=getSelectedSlot(), image=slotImage(slot);
+-        return image&&slot?{
++        return image&&slot?Object.freeze({
+           name:image.name,
+           src:projectImageDisplayUrl(image),
+-          settings:Object.freeze({...normalizeImageSettings(slot)}),
+-        }:null;
++          settings:Object.freeze(normalizeImageSettings(slot)),
++        }):null;
+       }
+       function setProjectName(value, trim = false) {
+         let name = (trim ? String(value).trim() : String(value)).slice(0, 120);
