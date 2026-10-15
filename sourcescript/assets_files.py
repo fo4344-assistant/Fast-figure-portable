@@ -17,6 +17,22 @@ Fast Figure Source Script — project VFS, assets, FFPX/FFSX and import transact
 from project_state import activeProject, projectVfs, getProjectCsv, getProjectImage
 from application_fsm import dispatchProjectCommand
 
+ASSET_FILE_LOGICAL_RESPONSIBILITIES = {
+    "Backend": (
+        "path/VFS resolve, parse/serialize, collision calculation, FFPX/FFSX structure, import/export candidate, "
+        "reference validation과 package persistence semantics"
+    ),
+    "Application boundary": (
+        "create/import/delete/move/trash/connect/load/applyFfsxSlot처럼 public API intent를 explicit Project EFSM command로 전달하는 wrappers"
+    ),
+}
+
+ASSET_BOUNDARY_RULE = (
+    "같은 물리 파일에 co-locate되어도 Backend asset calculation/candidate function은 Application adapter를 역호출하지 않는다. "
+    "dispatchProjectCommand를 호출하는 함수는 Application-boundary wrapper로 분류하고, 그 wrapper가 explicit id/path/slot reference를 "
+    "Backend command input으로 전달한다. Backend persistent candidate는 Frontend selection이나 DOM state를 읽지 않는다."
+)
+
 PACKAGE_FORMAT_VERSION = "현재 FFPX/FFSX package format version 3"
 
 PROJECT_ASSET_DIRECTORIES = {
