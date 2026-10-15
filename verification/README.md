@@ -6,9 +6,9 @@ verification model은 Source Script/PlusCal을 재설계하는 별도 권위가 
 ```text
 Source Script r25
 → PlusCal pseudocode r11
-→ verification model r26
-→ TLA+/TLC
 → Source Code
+
+선택적 검증: PlusCal pseudocode r11 → verification model r26 → TLA+/TLC
 ```
 
 ## 현재 lineage
@@ -82,8 +82,8 @@ TLC = pending
 validation_review = null
 ```
 
-세 canonical model이 모두 성공한 뒤에만 `passed`와 validation review를 기록한다.
-Source Code는 TLC passed와 validation review가 확보되기 전에는 plan-016의 current implementation으로 닫지 않는다.
+실제 검증 결과가 확인된 경우에만 그에 맞는 상태와 validation review를 기록한다.
+TLC 실행·통과는 plan-016 Source Code 구현 또는 `current` 판정의 필수 조건이 아니다.
 
 ## bounded verification의 의미
 
