@@ -1,7 +1,8 @@
 ---- MODULE FastFigureLayoutAnnotationsExportPseudocode ----
 EXTENDS Naturals, Sequences, FiniteSets
 
-\* Direct translation of sourcescript/layout_annotations_export.py.
+\* Direct translation of Source Script r25 sourcescript/layout_annotations_export.py.
+\* Backend calculations, Application wrappers, and Frontend raster projection remain distinct logical owners.
 
 CONSTANT NoReference
 
@@ -154,44 +155,45 @@ SplitReturn:
   return;
 end procedure;
 
-procedure ReadImageEditor()
+procedure ReadImageEditor(slotId)
 begin
 ImageEditorRead:
-  result := ReadSelectedImageNameUrlAndSlotSettings(projectView);
+  result := ReadImageEditorProjectionFromExplicitSlot(projectView, slotId);
+ImageEditorReadOnly:
+  assert ProjectAuthorityUnchangedByImageEditorRead();
 ImageEditorReturn:
   return;
 end procedure;
 
-procedure SetImageSettings(values)
+procedure SetImageSettings(slotId, values)
 variables slotValue = NoReference;
 begin
 ImageSettingsResolve:
-  slotValue := ResolveSelectedImageSlot(projectView);
+  slotValue := ResolveSlotFromCurrentAuthority(projectView, slotId);
 ImageSettingsBuild:
   if slotValue # NoReference then
-    candidate := UpdateOnlySelectedSlotImageSettings(
+    candidate := UpdateOnlyExplicitSlotImageSettings(
       projectView,
       slotValue,
       values);
   end if;
 ImageSettingsDispatch:
-  if candidate # NoReference then
-    assert ValidateWholeProject(candidate);
+  if candidate # NoReference /\ ValidateWholeProject(candidate) then
     result := ApplicationDispatchProjectCommand(
       "SLOT_IMAGE_SETTINGS_CHANGED",
-      [slotId |-> slotValue.id, settings |-> values]);
+      [slotId |-> slotId, settings |-> values]);
     projectView := ReadActiveProject();
   end if;
 ImageSettingsReturn:
   return;
 end procedure;
 
-procedure ReadLabels()
+procedure ReadLabels(slotId)
 begin
 LabelsRead:
   result := ReadLabelSettings(projectView);
 LabelsGeometry:
-  result := AddSelectedSlotReferenceWidthHeight(result, projectView);
+  result := AddExplicitSlotReferenceWidthHeight(result, projectView, slotId);
 LabelsReadReturn:
   return;
 end procedure;
@@ -455,8 +457,8 @@ Main:
         call SplitSlots(ids);
       end with;
     or
-      with values = RequestedImageSettings() do
-        call SetImageSettings(values);
+      with slotId = RequestedSlotId(), values = RequestedImageSettings() do
+        call SetImageSettings(slotId, values);
       end with;
     or
       with enabled = RequestedLabelEnabled() do
