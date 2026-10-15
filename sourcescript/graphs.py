@@ -270,12 +270,13 @@ def graphEditorObjectValues(chartId, index, values):
     - 최종적으로 graphEditorCommit(chartId, ...)을 통해 explicit chart object state를 변경한다.
 
     처리:
-    CSV와 column reference를 현재 project에서 다시 resolve한다.
-    enum 값과 numeric range를 검증/제한한다.
-    허용 field만 새 object에 반영한다.
+    1. chartId와 index를 Backend current authority에서 resolve하고 대상 object의 csvId/column reference를 함께 확인한다.
+    2. enum 값과 numeric range를 검증/제한하여 current object array에서 해당 index만 바꾼 candidate objects를 만든다.
+    3. 허용 field만 candidate object에 반영하고 다른 object/reference는 유지한다.
+    4. graphEditorCommit(chartId, candidateObjects, index)를 호출해 GRAPH_OBJECTS_REPLACED 공식 command로 commit한다.
     """
-    chart = "object 변경 후 chart"
-    return chart
+    candidateObjects = "chartId의 current objects에서 index object만 values로 정규화한 candidate"
+    return graphEditorCommit(chartId, candidateObjects, index)
 
 
 def graphEditorSetEditable(slotId, chartId, editable):
