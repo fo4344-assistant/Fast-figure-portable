@@ -1,0 +1,46 @@
+diff --git a/pseudocode/system.pcal b/pseudocode/system.pcal
+--- a/pseudocode/system.pcal
++++ b/pseudocode/system.pcal
+@@ -1,9 +1,8 @@
+ ---- MODULE FastFigureSystemPseudocode ----
+ EXTENDS Naturals
+ 
+-\* Source Script r25 hierarchy: Backend, Application boundary, Frontend, Portable build.
+-\* Runtime load order is physical, not the semantic module decomposition.
+-\* Backend project authority is never read directly by Frontend renderer.
++\* r16 PlusCal pseudocode for sourcescript/system.py.
++\* system.py is the semantic root; responsibility modules remain siblings.
+ 
+ CONSTANT NoValue
+ 
+@@ -14,8 +13,6 @@ variables
+   coreRuntime = "uninitialized",
+   interfaceLifecycle = "booting",
+   apiExposed = FALSE,
+-  projectProjection = NoValue,
+-  finalInterfaceState = NoValue,
+   mantineMounted = FALSE,
+   result = NoValue,
+   effect = NoValue;
+@@ -34,17 +31,14 @@ InitializeRendererHosts:
+ InitializeDashboardProjection:
+   effect := ApplyDashboardZoomProjection();
+ InitializeSlotController:
+-  effect := InstallSlotInteractionController(ApplicationPublicActionSurface());
+-InitializeRendererInputs:
+-  finalInterfaceState := ReadFrontendStateProjection() ||
+-  projectProjection := ApplicationDispatchProjectQuery("renderer", finalInterfaceState);
++  effect := InstallSlotInteractionController();
+ InitializeRender:
+-  effect := RenderDashboardFrom(projectProjection, finalInterfaceState);
++  effect := RenderDashboardFrom(activeProject);
+ InitializeStyle:
+-  effect := ApplySlotStyleFrom(projectProjection);
++  effect := ApplySlotStyleFrom(activeProject);
+ InitializeReady:
+   interfaceLifecycle := "ready" ||
+-  effect := ApplicationDispatchInterfaceEvent("LIFECYCLE_COMPLETE", [accepted |-> TRUE]);
++  effect := InitializeInterfaceFsmReady();
+ InitializeWorkspace:
+   effect := SynchronizeInitialWorkspaceAndOverlay();
+ InitializeApi:
