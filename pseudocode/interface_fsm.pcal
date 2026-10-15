@@ -1,7 +1,9 @@
 ---- MODULE FastFigureInterfaceFsmPseudocode ----
 EXTENDS Naturals, Sequences
 
-\* Direct translation of sourcescript/interface_fsm.py.
+\* Direct translation of Source Script r25 sourcescript/interface_fsm.py.
+\* Frontend runtime authority consumes validated/reconciliation inputs and never reads Backend state.
+
 CONSTANT NoSelection
 
 (*
@@ -29,126 +31,205 @@ PublishReturn:
   return;
 end procedure;
 
-procedure SelectSlot(payload)
-variables slot = NoSelection;
+procedure ReadState()
 begin
-ResolveSlot:
-  if payload.slotId # NoSelection then
-    slot := ResolveVisibleSlotFromCurrentProject(payload.slotId);
-  end if;
-CommitSlotSelection:
-  if payload.slotId = NoSelection then
-    selectedSlotId := NoSelection ||
-    graphObject := "none" ||
-    graphObjectIndex := NoSelection ||
-    workspace := "project";
-  elsif slot # NoSelection then
-    if PayloadUsesUiToggle(payload) /\ selectedSlotId = slot.id then
+ReadStateProjection:
+  result := [
+    lifecycle |-> lifecycle,
+    workspace |-> workspace,
+    overlay |-> overlay,
+    assetSelection |-> assetSelection,
+    assetPath |-> assetPath,
+    graphObject |-> graphObject,
+    graphObjectIndex |-> graphObjectIndex,
+    direction |-> direction,
+    revision |-> revision,
+    error |-> error,
+    selectedSlotId |-> selectedSlotId
+  ];
+ReadStateReturn:
+  return;
+end procedure;
+
+procedure SelectSlot(validatedInput)
+begin
+SelectSlotAccepted:
+  if validatedInput.accepted then
+    if validatedInput.reference = NoSelection then
+      selectedSlotId := NoSelection ||
+      graphObject := "none" ||
+      graphObjectIndex := NoSelection ||
+      workspace := "project";
+    elsif validatedInput.selectionHint = "toggle-clear"
+          /\ selectedSlotId = validatedInput.reference then
       selectedSlotId := NoSelection ||
       graphObject := "none" ||
       graphObjectIndex := NoSelection ||
       workspace := "project";
     else
-      selectedSlotId := slot.id ||
-      workspace := IF slot.contentType = "image" THEN "slot.image" ELSE "slot.graph";
-      if ~GraphObjectSelectionValidForSlot(slot, graphObjectIndex) then
+      selectedSlotId := validatedInput.reference ||
+      workspace := validatedInput.workspaceHint;
+      if validatedInput.selectionHint = "clear-graph-object" then
         graphObject := "none" ||
         graphObjectIndex := NoSelection;
       end if;
     end if;
+    call PublishState();
   end if;
-SelectSlotPublish:
-  call PublishState();
 SelectSlotReturn:
   return;
 end procedure;
 
-procedure SelectAsset(kind, path)
+procedure SelectAsset(validatedInput)
 begin
-ResolveAsset:
-  if ResolveCurrentProjectAssetKind(path) = kind then
+SelectAssetAccepted:
+  if validatedInput.accepted then
     graphObject := "none" ||
-    graphObjectIndex := NoSelection ||
-    assetSelection := kind ||
-    assetPath := path;
+    graphObjectIndex := NoSelection;
+    if validatedInput.reference = NoSelection then
+      assetSelection := "none" ||
+      assetPath := NoSelection;
+    else
+      assetSelection := validatedInput.selectionHint ||
+      assetPath := validatedInput.reference;
+    end if;
     call PublishState();
   end if;
 SelectAssetReturn:
   return;
 end procedure;
 
-procedure SelectGraphObject(index)
-variables csvPath = NoSelection;
+procedure SelectGraphObject(validatedInput)
 begin
-ResolveObject:
-  csvPath := ResolveCurrentSelectedGraphObjectCsvPath(index);
-CommitGraphObject:
-  if csvPath # NoSelection then
-    assetSelection := "csv" ||
-    assetPath := csvPath ||
-    graphObject := "selected" ||
-    graphObjectIndex := index;
+SelectGraphAccepted:
+  if validatedInput.accepted then
+    if validatedInput.reference = NoSelection then
+      graphObject := "none" ||
+      graphObjectIndex := NoSelection;
+    else
+      graphObject := "selected" ||
+      graphObjectIndex := validatedInput.reference ||
+      assetSelection := "csv" ||
+      assetPath := validatedInput.selectionHint;
+    end if;
     call PublishState();
   end if;
 SelectGraphReturn:
   return;
 end procedure;
 
-procedure TransitionOverlay(eventName, payload)
+procedure TransitionOverlay(eventName, validatedInput)
 begin
 OverlayTransition:
-  overlay := ResolveOverlayTarget(overlay, eventName, payload);
-OverlayPublish:
-  call PublishState();
+  if validatedInput.accepted then
+    overlay := ResolveFrontendOverlayTarget(overlay, eventName, validatedInput);
+    call PublishState();
+  end if;
 OverlayReturn:
   return;
 end procedure;
 
-procedure ReconcileProjectResult(eventName, mutationResult)
+procedure TransitionLifecycle(eventName, validatedInput)
 begin
+LifecycleTransition:
+  if validatedInput.accepted then
+    if eventName = "LIFECYCLE_START" then
+      lifecycle := validatedInput.reference ||
+      error := NoSelection;
+    elsif eventName = "LIFECYCLE_COMPLETE" then
+      lifecycle := "ready" ||
+      error := NoSelection;
+    elsif eventName = "LIFECYCLE_FAILED" then
+      error := validatedInput.reference ||
+      lifecycle := "error";
+    end if;
+    call PublishState();
+  end if;
+LifecycleReturn:
+  return;
+end procedure;
+
+procedure Send(eventName, validatedInput)
+begin
+SendValidatedInput:
+  assert IsFrontendValidatedOrLocalInput(eventName, validatedInput);
+SendDispatch:
+  if eventName = "SELECT_SLOT" then
+    call SelectSlot(validatedInput);
+  elsif eventName = "SELECT_ASSET" then
+    call SelectAsset(validatedInput);
+  elsif eventName = "CLEAR_ASSET_SELECTION" then
+    assetSelection := "none" ||
+    assetPath := NoSelection;
+    call PublishState();
+  elsif eventName = "SELECT_GRAPH_OBJECT" then
+    call SelectGraphObject(validatedInput);
+  elsif eventName = "CLEAR_GRAPH_OBJECT" then
+    graphObject := "none" ||
+    graphObjectIndex := NoSelection;
+    call PublishState();
+  elsif eventName = "TOGGLE_OVERLAY"
+        \/ eventName = "CLOSE_OVERLAY"
+        \/ eventName = "OUTSIDE_CLICK"
+        \/ eventName = "ESCAPE" then
+    call TransitionOverlay(eventName, validatedInput);
+  elsif eventName = "LIFECYCLE_START"
+        \/ eventName = "LIFECYCLE_COMPLETE"
+        \/ eventName = "LIFECYCLE_FAILED" then
+    call TransitionLifecycle(eventName, validatedInput);
+  end if;
+SendNoBackendAccess:
+  assert BackendAuthorityUnchangedAndUnreadByFrontendFsm();
+SendResult:
+  call ReadState();
+SendReturn:
+  return;
+end procedure;
+
+procedure ReconcileProjectResult(eventName, reconciliationInput)
+begin
+ReconcileInput:
+  assert IsFrontendReconciliationInput(reconciliationInput);
 ReconcileSlot:
-  selectedSlotId := ReResolveOrClearSelectedSlot(ReadActiveProject(), selectedSlotId);
-ReconcileAsset:
-  assetPath := ReResolveOrClearAssetPath(ReadActiveProject(), assetPath) ||
-  assetSelection := ReResolveOrClearAssetKind(ReadActiveProject(), assetPath);
-ReconcileGraph:
-  graphObjectIndex := ReResolveOrClearGraphObject(
-    ReadActiveProject(),
+  selectedSlotId := ReconciledReferenceOrClear(
     selectedSlotId,
-    graphObjectIndex
+    reconciliationInput.selectedSlot
+  );
+ReconcileAsset:
+  assetPath := ReconciledReferenceOrClear(
+    assetPath,
+    reconciliationInput.assetSelection
+  ) ||
+  assetSelection := ReconciledAssetKindOrNone(
+    assetSelection,
+    reconciliationInput.assetSelection
+  );
+ReconcileGraph:
+  graphObjectIndex := ReconciledReferenceOrClear(
+    graphObjectIndex,
+    reconciliationInput.graphObject
   ) ||
   graphObject := IF graphObjectIndex = NoSelection THEN "none" ELSE "selected";
-ReconcileHints:
-  effect := ApplyProjectResultSelectionHints(mutationResult);
 ReconcileWorkspace:
-  workspace := WorkspaceFromSelectedSlot(ReadActiveProject(), selectedSlotId);
+  workspace := reconciliationInput.workspaceHint;
 ReconcileNoProjectMutation:
   assert ProjectAuthorityUnchangedByInterfaceReconciliation();
 ReconcilePublish:
   call PublishState();
+ReconcileResult:
+  call ReadState();
 ReconcileReturn:
-  result := CurrentInterfaceState();
   return;
 end procedure;
 
-procedure RunLifecycle(requestedLifecycle, eventName, task)
+procedure Notify(objectName, eventName, payload)
 begin
-LifecycleGuard:
-  assert lifecycle = "ready";
-LifecycleStart:
-  lifecycle := requestedLifecycle;
+NotifyProjectionOnly:
+  direction := "model-to-ui" ||
+  effect := FrontendProjectionNotification(objectName, eventName, payload);
+NotifyPublish:
   call PublishState();
-LifecycleTask:
-  either
-    result := ExecuteTask(task);
-  or
-    error := ExecuteTaskFailure(task) ||
-    lifecycle := "error";
-  end either;
-LifecycleRestore:
-  lifecycle := "ready";
-  call PublishState();
-LifecycleReturn:
+NotifyReturn:
   return;
 end procedure;
 
@@ -156,12 +237,12 @@ begin
 Main:
   while TRUE do
     either
-      with request = NextInterfaceEvent() do
-        effect := ApplyInterfaceOnlyEvent(request);
+      with request = NextValidatedInterfaceEvent() do
+        call Send(request.event, request.validatedInput);
       end with;
     or
-      with projectResult = NextCommittedProjectResult() do
-        call ReconcileProjectResult(projectResult.event, projectResult);
+      with reconciliation = NextFrontendReconciliationInput() do
+        call ReconcileProjectResult(reconciliation.event, reconciliation.input);
       end with;
     end either;
   end while;
