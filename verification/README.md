@@ -1,4 +1,4 @@
-# Fast Figure verification model r25
+# Fast Figure verification model r26
 
 이 디렉터리는 current PlusCal pseudocode에서 상태 기반 검증이 필요한 범위를 파생한 verification model이다.
 verification model은 Source Script/PlusCal을 재설계하는 별도 권위가 아니다.
@@ -6,7 +6,7 @@ verification model은 Source Script/PlusCal을 재설계하는 별도 권위가 
 ```text
 Source Script r25
 → PlusCal pseudocode r11
-→ verification model r25
+→ verification model r26
 → TLA+/TLC
 → Source Code
 ```
@@ -17,8 +17,8 @@ Source Script r25
 - Source Script fingerprint: `sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f`
 - PlusCal pseudocode: r11 / current
 - pseudocode fingerprint: `sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5`
-- verification-model: r25 / current
-- verification fingerprint: `sha256:2c1051c19c2b2ac4502d0fefe2162fbf3e5dc9d02635d8333190aab1f441cb91`
+- verification-model: r26 / current
+- verification fingerprint: `sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a`
 - TLC: pending
 
 verification fingerprint는 `verification/**/*.tla`와 `verification/**/*.cfg`만 포함한다.
@@ -55,23 +55,34 @@ derivation/abstraction review:
 
 `agent_space/reviews/review-20261015-023-verification-r25-derivation.md`
 
+r26 correction review:
+
+`agent_space/reviews/review-20261015-024-verification-r26-correction.md`
+
 ## TLC 상태
 
-현재 r25에서는 새 Boundary Core가 추가되었지만 실제 TLA+ parse/TLC를 아직 실행하지 못했다.
+r25 최초 GitHub Actions 실행 `38703339145`에서 Boundary Core의 SANY parse는 성공했지만
+`ConsumeReadProjection`의 `phase'` 변경과 `UNCHANGED vars`가 충돌하여 `read-ready` deadlock이 발견되었다.
 
-이번 작업 환경에는 Java 21은 있으나 저장소 workflow가 사용하는 TLA+ tools v1.7.4 jar가 설치되어 있지 않고,
-외부 DNS 제한으로 공식 release jar를 내려받지 못했다.
+이 오류는 Source Script/PlusCal 의미가 아니라 verification model 표현 오류로 판정했고,
+r26에서 `phase`를 제외한 나머지 state만 `UNCHANGED`로 수정했다.
+
+수정 커밋 `444927f2083652f4ce967942ae575b0c77180c7d`의 GitHub Actions run
+`38703609264`에서 현재 확인된 상태는 다음과 같다.
+
+- Interaction Core: success
+- Boundary Core: success
+- Slot Core: model check 실행 중
 
 따라서 현재 상태는 다음과 같다.
 
 ```text
-verification-model r25 = current derivation
+verification-model r26 = current derivation
 TLC = pending
 validation_review = null
 ```
 
-GitHub Actions는 사용하지 않았다.
-
+세 canonical model이 모두 성공한 뒤에만 `passed`와 validation review를 기록한다.
 Source Code는 TLC passed와 validation review가 확보되기 전에는 plan-016의 current implementation으로 닫지 않는다.
 
 ## bounded verification의 의미
