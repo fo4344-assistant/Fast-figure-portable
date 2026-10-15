@@ -29,23 +29,63 @@ IMPLEMENTATION_SOURCES = {
 }
 
 SOURCE_SCRIPT_MODULES = {
-    "project_state.py": "authoritative project state, runtime references, invariants",
-    "project_efsm.py": "FFPX ProjectObject persistent transition/validation/commit",
-    "interface_fsm.py": "application/UI runtime regions, selections and interaction transitions",
-    "application_fsm.py": "project EFSM → interface reconciliation → renderer orchestration",
-    "assets_files.py": "VFS, asset lifecycle, FFPX/FFSX import/export",
-    "graphs.py": "CSV-to-chart semantics, graph objects, Plotly conversion",
-    "layout_annotations_export.py": "layout geometry, image/label/caption, raster export",
-    "api_ui.py": "FastFigureApi boundary and Mantine frontend responsibilities",
-    "renderer_runtime.py": "dashboard renderer, DOM interaction, telemetry and startup",
-    "portable_build.py": "split-to-portable build specification",
+    "project_state.py": "Backend project authority와 Backend read/query provider",
+    "project_efsm.py": "Backend ProjectObject persistent transition/validation/commit",
+    "interface_fsm.py": "Frontend FSM runtime regions, selections and interaction transitions",
+    "application_fsm.py": "Application boundary command/query/result/lifecycle orchestration",
+    "assets_files.py": "Backend asset/package semantics와 co-located Application-boundary asset wrappers",
+    "graphs.py": "Backend graph semantics와 co-located Application-boundary graph wrappers",
+    "layout_annotations_export.py": "Backend layout/annotation semantics, Application-boundary wrappers, Frontend export projection",
+    "api_ui.py": "Application-boundary FastFigureApi contract와 Frontend Mantine responsibilities",
+    "renderer_runtime.py": "Frontend dashboard renderer, DOM interaction, telemetry and startup projection",
+    "portable_build.py": "system-level split-to-portable build specification",
 }
 
+SOURCE_SCRIPT_LOGICAL_HIERARCHY = {
+    "Backend": {
+        "project-state": "project_state.py의 activeProject, reference/invariant, Backend query/read semantics",
+        "project-efsm": "project_efsm.py의 persistent ProjectObject command controller",
+        "asset-domain": "assets_files.py의 VFS/asset/package parse, candidate, validation, persistence semantics",
+        "graph-domain": "graphs.py의 chart/CSV/graph-object calculation, candidate, validation semantics",
+        "layout-annotation-domain": (
+            "layout_annotations_export.py의 persistent layout/image-setting/label/caption/export-setting "
+            "calculation과 candidate semantics"
+        ),
+    },
+    "Application boundary": {
+        "command-query-adapter": (
+            "application_fsm.py의 Backend command/query와 Frontend validated-event/result/lifecycle orchestration"
+        ),
+        "public-api": (
+            "api_ui.py의 FastFigureApi contract와 assets_files.py/graphs.py/layout_annotations_export.py에 "
+            "물리적으로 함께 있는 public command/query wrapper semantics"
+        ),
+    },
+    "Frontend": {
+        "frontend-fsm": "interface_fsm.py의 session/runtime state와 transition",
+        "mantine-ui": "api_ui.py의 Mantine component와 component-local interaction",
+        "renderer": (
+            "renderer_runtime.py의 DOM/Plotly projection과 layout_annotations_export.py의 "
+            "screen/raster rendering presentation semantics"
+        ),
+    },
+    "Portable build": {
+        "portable-build": "portable_build.py의 split source -> single-file artifact packaging",
+    },
+}
+
+SOURCE_SCRIPT_FILE_PLACEMENT_RULE = (
+    "Source Script의 물리 파일과 논리 Module decomposition은 1:1일 필요가 없다. "
+    "assets_files.py, graphs.py, layout_annotations_export.py, api_ui.py처럼 기존 물리 파일에 둘 이상의 논리 책임이 함께 있으면 "
+    "각 함수/규칙의 logical owner를 위 hierarchy로 추적하고, 파일의 import 관계를 Backend↔Frontend 직접 호출 권한으로 해석하지 않는다. "
+    "하위 단계는 이 논리 owner를 보존하되 대상 언어 구현을 위해 물리 파일을 나눌 수 있다."
+)
+
 SOURCE_SCRIPT_DECOMPOSITION_RULE = (
-    "system.py가 Fast Figure 전체 시스템 경계를 나타내는 최상위 Source Script module이고, "
-    "project_state/project_efsm/interface_fsm/application_fsm/assets_files/graphs/layout_annotations_export/api_ui/renderer_runtime/portable_build는 "
-    "그 시스템 의미의 서로 다른 직접 하위 책임이다. 이들 형제 module 사이의 import/call 관계는 의미적 부모-자식 관계가 아니다. "
-    "하위 단계는 이 sibling responsibility를 새 중간 계층으로 재분류하지 않는다."
+    "system.py가 Fast Figure 전체 시스템 경계다. 그 직접 논리 하위는 Backend, Application boundary, Frontend, Portable build다. "
+    "Backend와 Frontend는 서로의 내부 state/helper/FSM을 직접 호출하거나 읽지 않고 모든 cross-layer command/query/result를 "
+    "Application boundary의 API/Adapter contract로 교환한다. Portable build는 runtime 계층의 자식이 아니라 system-level packaging 책임이다. "
+    "하위 PlusCal/verification/Source Code는 이 논리 hierarchy를 평탄화·병합·우회하거나 새로운 중간 authority를 추가하지 않는다."
 )
 
 
@@ -84,9 +124,11 @@ RUNTIME_LOAD_ORDER = [
 ]
 
 AUTHORITATIVE_STATE_RULE = (
-    "영속 프로젝트 상태의 권위 원천은 activeProject의 ProjectObject state다. "
-    "UI는 FastFigureApi 또는 interfaceFSM event를 사용하고 persistent mutation은 application orchestration을 통해 projectEFSM으로 전달한다. "
-    "renderer snapshot과 React local state는 독립적인 project authority가 아니다."
+    "영속 프로젝트 상태의 권위 원천은 Backend activeProject의 ProjectObject state다. "
+    "Frontend component/FSM/renderer는 activeProject, projectObjects, projectVfs, projectEFSM을 직접 읽거나 호출하지 않는다. "
+    "persistent mutation은 public mutation API -> Application adapter -> Backend projectEFSM으로 전달하고, "
+    "project read는 public query/read API -> Application adapter -> Backend read provider에서 immutable projection으로 반환한다. "
+    "Frontend runtime state, renderer projection, React local state와 adapter-local result는 persistent project authority가 아니다."
 )
 
 RUNTIME_STATE_RULE = (
@@ -137,8 +179,9 @@ RESOLVED_REVIEW_ITEMS = [
         "prepare/finish는 runtime 책임이고 assets.importToSlot만 persistent import candidate를 commit한다."
     ),
     (
-        "Source Script module hierarchy는 system.py 아래의 직접 sibling responsibility로 둔다. "
-        "형제 module의 import/call 관계를 추가적인 의미적 부모-자식 hierarchy로 해석하지 않는다."
+        "Source Script module hierarchy는 system.py 아래 Backend / Application boundary / Frontend / Portable build로 둔다. "
+        "기존 물리 파일의 co-location과 import/call 관계는 이 logical hierarchy를 바꾸지 않으며, Backend↔Frontend cross-layer access는 "
+        "Application boundary의 API/Adapter contract만 사용한다."
     ),
     (
         "asset import collision Modal은 rename/replace의 명시적 선택만 import plan으로 변환한다. "
@@ -173,8 +216,8 @@ def initializeFastFigure():
     3. dashboard zoom projection과 slot interaction controller를 준비한다.
     4. project에 이미 존재하는 초기 empty slot을 renderer에 투영한다.
     5. slot style과 dashboard geometry를 적용한다.
-    6. interfaceFSM을 ready로 전환하고 workspace/overlay 초기 상태를 동기화한다.
-    7. FastFigureApi를 frontend 변경 경계로 공개한다.
+    6. Application boundary가 Backend initial read projection을 만들고 Frontend lifecycle ready event를 interfaceFSM에 전달한다.
+    7. FastFigureApi를 Backend↔Frontend public command/query/event 경계로 공개하고 renderer에는 public action surface와 read projection만 제공한다.
     8. MantineProvider와 FastFigureShell을 기존 React root에 mount한다.
     9. startup 과정은 default CSV나 fake graph object를 생성하지 않는다.
     10. 마지막에 project/reference/runtime invariant를 검사한다.
