@@ -1,0 +1,551 @@
+diff --git a/agent_space/reviews/review-20261015-023-verification-r25-derivation.md b/agent_space/reviews/review-20261015-023-verification-r25-derivation.md
+--- /dev/null
++++ b/agent_space/reviews/review-20261015-023-verification-r25-derivation.md
+@@ -0,0 +1,145 @@
++# Verification derivation review — Source Script r25 / pseudocode r11 / verification r25
++
++## 범위
++
++plan-016의 verification 단계에서 current Source Script r25와 pseudocode r11의
++Backend / Application boundary / Frontend 계약을 bounded verification model로 파생했다.
++
++직접 원천:
++
++- `pseudocode/project_state.pcal`
++- `pseudocode/project_efsm.pcal`
++- `pseudocode/interface_fsm.pcal`
++- `pseudocode/application_fsm.pcal`
++- `pseudocode/renderer_runtime.pcal`
++
++기존 `FastFigureSlotCore`와 `FastFigureInteractionCore`는 project slot/layout/reference 및
++asset/selection interaction의 domain 상태를 계속 담당한다. 이번 변경은 그 내부 상태를 복제하지 않고
++cross-layer ordering과 authority flow만 별도 interface-contract slice로 추가한다.
++
++## 새 Boundary Core의 상태와 추적 관계
++
++`verification/FastFigureBoundaryCore.tla`의 상태는 다음 pseudocode 의미에서 직접 파생했다.
++
++- `projectRevision`: Backend `activeProject` authority의 bounded revision token.
++- `projectBefore`: 한 mutation attempt 시작 시점의 authority revision.
++- `frontendReference`: Frontend가 보유한 project identity reference의 valid/stale/none abstraction.
++- `referenceAccepted`: `BackendValidateFrontendIntent` 결과.
++- `resultCommitted`: Project EFSM의 `ProjectMutationResult.committed`.
++- `reconciliationDone`: commit 뒤 `BackendBuildFrontendReconciliationInput -> InterfaceFsmReconcileProjectResult` 완료 여부.
++- `projectionRevision`: Backend read/renderer projection이 파생된 authority revision.
++- `rendererApplied`: post-reconciliation renderer projection 완료 여부.
++- `phase`: application boundary의 validated -> committed/rejected -> reconciled -> projected 또는 read flow ordering.
++
++실제 ProjectObject field를 별도의 model state로 복제하지 않는다. 이 model의 property는
++도메인 값 자체가 아니라 authority 변경과 ordering에 의존하므로 bounded revision token으로 축약했다.
++
++## 검증 property
++
++CFG에는 다음 invariant를 등록했다.
++
++- `FailureAtomicityInvariant`
++  - stale/invalid reference 또는 candidate rejection 뒤 project revision은 mutation 시작 전과 같다.
++  - rejected mutation은 success reconciliation/renderer effect를 만들지 않는다.
++- `CommitResultInvariant`
++  - committed/reconciled/projected phase는 accepted reference에서 시작한 실제 commit이어야 한다.
++  - committed authority는 pre-command revision의 다음 revision이다.
++- `ReconciliationOrderingInvariant`
++  - reconciliation은 commit 이후에만 존재하며 stale Frontend reference를 success state로 남기지 않는다.
++- `RendererOrderingInvariant`
++  - renderer success projection은 commit과 reconciliation 뒤에만 발생한다.
++  - projection revision은 최종 Backend authority revision과 일치한다.
++- `ReadProjectionOneWayInvariant`
++  - Backend public read projection은 authority를 변경하지 않는다.
++  - read projection 자체가 success mutation/reconciliation/renderer mutation result로 취급되지 않는다.
++- `TypeOK`
++  - bounded verification state domain을 유지한다.
++
++## 모델에서 구조적으로 보존되는 경계
++
++다음 항목은 별도의 boolean invariant를 만들기보다 action dependency 자체에서 보존한다.
++
++- Frontend reconciliation action은 `projectRevision`을 변경하지 않는다.
++- renderer action은 `projectRevision`을 변경하지 않는다.
++- read projection action은 `projectRevision`을 변경하지 않는다.
++- commit action은 `projectionRevision`을 mutation input으로 읽지 않는다.
++- Backend mutation은 `CommitMutation` action 하나로만 authority revision을 변경한다.
++- rejected reference는 `validated` phase에 진입하지 않으므로 commit action에 도달할 수 없다.
++
++이는 새로운 mutation source나 duplicated project authority를 verification model에 추가하지 않는 방향이다.
++
++## 추상화 및 생략
++
++### 기존 Slot/Interaction state
++
++grid/slot/chart/image/CSV/VFS 구체 값은 기존 canonical Slot Core/Interaction Core가 이미 검증하는
++domain state이므로 Boundary Core에 다시 복제하지 않는다.
++
++Boundary Core의 `projectRevision`은 기존 model을 대체하지 않고, cross-layer contract에서
++authority가 변경되었는지 여부와 ordering만 나타낸다.
++
++### renderer DOM/Plotly 세부
++
++DOM/Plotly representation은 project authority가 아니며 현재 property는 renderer가 Backend를 다시
++mutate하지 않는 ordering에 집중한다. 따라서 concrete DOM state는 생략한다.
++
++### lifecycle task
++
++pseudocode r11에서 lifecycle task owner가 Application boundary로 이동한 구조는 translation review에서
++직접 확인했다. 이번 bounded model에는 별도 lifecycle task state를 추가하지 않았다.
++현재 plan-016 verification property의 핵심인 project commit/reconciliation/renderer/read authority ordering과
++독립적인 task UI 표시 상태를 추가하면 상태공간만 증가한다.
++
++추후 lifecycle task의 failure/interleaving이 project transaction property에 직접 영향을 주는 요구가 생기면
++Application-boundary projection으로 이 model에 추가해야 한다.
++
++### graph object value 세부
++
++r25의 graph-object value edit는 pseudocode r11에서 explicit chart/object/CSV reference resolve 후 기존
++`GRAPH_OBJECTS_REPLACED` command로 수렴한다. 이번 Boundary Core는 command payload의 graph 값 자체가 아니라
++accepted reference -> commit/reject ordering을 검증한다. 구체 graph model validation은 이 model의 범위가 아니다.
++
++## TLC 실행 상태
++
++현재 실행 환경에서 Java 21은 확인했다.
++
++그러나 저장소 workflow가 사용하는 TLA+ tools v1.7.4 `tla2tools.jar`는 설치되어 있지 않으며,
++실행 환경의 외부 DNS가 차단되어 다음 공식 URL에서 jar를 내려받을 수 없었다.
++
++`https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar`
++
++따라서 이번 review는 **derivation/abstraction review**이며 TLC validation review가 아니다.
++
++- PlusCal/TLA parse: 미실행
++- TLC: 미실행
++- TLC status: `pending`
++- validation_review: `null`
++
++GitHub Actions는 사용하지 않았다.
++
++TLC를 실제 실행하고 모든 configured invariant가 통과한 뒤에만 별도 validation review를 기록하고
++`tlc: passed`로 변경할 수 있다.
++
++## lineage
++
++verification r25 fingerprint:
++
++`sha256:2c1051c19c2b2ac4502d0fefe2162fbf3e5dc9d02635d8333190aab1f441cb91`
++
++derived Source Script r25:
++
++`sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f`
++
++derived pseudocode r11:
++
++`sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5`
++
++verification r25는 새 model을 포함하는 current derivation으로 기록하되 TLC는 pending이다.
++Source Code r29는 stale 상태를 유지한다.
++
++## 다음 단계
++
++1. TLA+ tools v1.7.4가 사용 가능한 로컬 실행 환경에서 Boundary Core를 parse/TLC 실행한다.
++2. 기존 Slot Core와 Interaction Core도 현재 동일 blob 기준으로 함께 실행하여 전체 canonical verification model을 재검증한다.
++3. 세 model이 통과하면 validation review를 작성하고 `tlc: passed`를 기록한다.
++4. 그 뒤에만 plan-016 Source Code 구현 단계로 진행한다.
+
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -18,13 +18,13 @@
+       "closure_review": "agent_space/reviews/review-20261015-021-sourcescript-closure-r25.md"
+     },
+     "verification-model": {
+-      "revision": 24,
+-      "status": "stale",
++      "revision": 25,
++      "status": "current",
+       "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:97c66b2980486134499d381bba0fd76d6f22fbf03062c11af484a5383a9887e4",
++      "fingerprint": "sha256:2c1051c19c2b2ac4502d0fefe2162fbf3e5dc9d02635d8333190aab1f441cb91",
+       "derived_from": {
+-        "source-script": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
+-        "pseudocode": "sha256:0753354b6c25df1f391d53991cf2631a31ab184749fd96653a60bed79d87bece"
++        "source-script": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f",
++        "pseudocode": "sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5"
+       },
+       "tlc": "pending",
+       "validation_review": null
+
+diff --git a/verification/FastFigureBoundaryCore.cfg b/verification/FastFigureBoundaryCore.cfg
+--- /dev/null
++++ b/verification/FastFigureBoundaryCore.cfg
+@@ -0,0 +1,8 @@
++SPECIFICATION Spec
++
++INVARIANT TypeOK
++INVARIANT FailureAtomicityInvariant
++INVARIANT CommitResultInvariant
++INVARIANT ReconciliationOrderingInvariant
++INVARIANT RendererOrderingInvariant
++INVARIANT ReadProjectionOneWayInvariant
+
+diff --git a/verification/FastFigureBoundaryCore.tla b/verification/FastFigureBoundaryCore.tla
+--- /dev/null
++++ b/verification/FastFigureBoundaryCore.tla
+@@ -0,0 +1,215 @@
++-------------------------- MODULE FastFigureBoundaryCore --------------------------
++EXTENDS Integers, TLC
++
++(*
++Bounded verification model derived from the Source Script r25 / pseudocode r11
++Application-boundary slice.
++
++Direct pseudocode sources:
++- pseudocode/project_state.pcal
++- pseudocode/project_efsm.pcal
++- pseudocode/interface_fsm.pcal
++- pseudocode/application_fsm.pcal
++- pseudocode/renderer_runtime.pcal
++
++This model verifies the cross-layer properties introduced by plan-016:
++- Backend project authority changes only on a committed project command.
++- rejected/stale-reference mutations leave Backend authority unchanged.
++- successful reconciliation occurs only after commit.
++- renderer projection occurs only after reconciliation.
++- Frontend reconciliation and renderer projection do not mutate Backend authority.
++- Backend read projections are one-way reads and do not become mutation authority.
++
++The concrete ProjectObject, DOM, graph, asset, and layout values remain in the
++existing Slot Core / Interaction Core slices. Here they are represented by a
++bounded authoritative revision token because the properties above depend on
++ordering and authority flow, not on those domain values.
++*)
++
++NoProjection == -1
++MaxProjectRevision == 2
++
++Phases == {
++  "idle",
++  "validated",
++  "committed",
++  "reconciled",
++  "projected",
++  "rejected",
++  "read-ready",
++  "read-consumed"
++}
++
++StablePhases == {"idle", "projected", "rejected", "read-consumed"}
++FrontendReferenceStates == {"none", "valid", "stale"}
++
++VARIABLES
++  projectRevision,
++  projectBefore,
++  frontendReference,
++  phase,
++  referenceAccepted,
++  resultCommitted,
++  reconciliationDone,
++  rendererApplied,
++  projectionRevision
++
++vars ==
++  <<projectRevision,
++    projectBefore,
++    frontendReference,
++    phase,
++    referenceAccepted,
++    resultCommitted,
++    reconciliationDone,
++    rendererApplied,
++    projectionRevision>>
++
++Init ==
++  /\ projectRevision = 0
++  /\ projectBefore = 0
++  /\ frontendReference = "valid"
++  /\ phase = "idle"
++  /\ referenceAccepted = FALSE
++  /\ resultCommitted = FALSE
++  /\ reconciliationDone = FALSE
++  /\ rendererApplied = FALSE
++  /\ projectionRevision = NoProjection
++
++BeginMutation(accepted) ==
++  /\ phase \in StablePhases
++  /\ projectBefore' = projectRevision
++  /\ referenceAccepted' = accepted
++  /\ resultCommitted' = FALSE
++  /\ reconciliationDone' = FALSE
++  /\ rendererApplied' = FALSE
++  /\ projectionRevision' = NoProjection
++  /\ IF accepted
++        THEN phase' = "validated"
++        ELSE phase' = "rejected"
++  /\ IF accepted
++        THEN frontendReference' = "valid"
++        ELSE frontendReference' = "stale"
++  /\ UNCHANGED projectRevision
++
++CommitMutation ==
++  /\ phase = "validated"
++  /\ projectRevision < MaxProjectRevision
++  /\ projectRevision' = projectRevision + 1
++  /\ phase' = "committed"
++  /\ resultCommitted' = TRUE
++  /\ UNCHANGED <<projectBefore,
++                  frontendReference,
++                  referenceAccepted,
++                  reconciliationDone,
++                  rendererApplied,
++                  projectionRevision>>
++
++RejectCandidate ==
++  /\ phase = "validated"
++  /\ projectRevision' = projectBefore
++  /\ phase' = "rejected"
++  /\ resultCommitted' = FALSE
++  /\ reconciliationDone' = FALSE
++  /\ rendererApplied' = FALSE
++  /\ projectionRevision' = NoProjection
++  /\ UNCHANGED <<projectBefore, frontendReference, referenceAccepted>>
++
++ReconcileFrontend ==
++  /\ phase = "committed"
++  /\ frontendReference' \in {"none", "valid"}
++  /\ phase' = "reconciled"
++  /\ reconciliationDone' = TRUE
++  /\ UNCHANGED <<projectRevision,
++                  projectBefore,
++                  referenceAccepted,
++                  resultCommitted,
++                  rendererApplied,
++                  projectionRevision>>
++
++RenderProjection ==
++  /\ phase = "reconciled"
++  /\ projectionRevision' = projectRevision
++  /\ rendererApplied' = TRUE
++  /\ phase' = "projected"
++  /\ UNCHANGED <<projectRevision,
++                  projectBefore,
++                  frontendReference,
++                  referenceAccepted,
++                  resultCommitted,
++                  reconciliationDone>>
++
++ReadBackendProjection ==
++  /\ phase \in StablePhases
++  /\ projectBefore' = projectRevision
++  /\ projectionRevision' = projectRevision
++  /\ phase' = "read-ready"
++  /\ referenceAccepted' = FALSE
++  /\ resultCommitted' = FALSE
++  /\ reconciliationDone' = FALSE
++  /\ rendererApplied' = FALSE
++  /\ UNCHANGED <<projectRevision, frontendReference>>
++
++ConsumeReadProjection ==
++  /\ phase = "read-ready"
++  /\ phase' = "read-consumed"
++  /\ UNCHANGED vars
++
++Next ==
++  \/ \E accepted \in BOOLEAN : BeginMutation(accepted)
++  \/ CommitMutation
++  \/ RejectCandidate
++  \/ ReconcileFrontend
++  \/ RenderProjection
++  \/ ReadBackendProjection
++  \/ ConsumeReadProjection
++
++Spec ==
++  Init /\ [][Next]_vars
++
++TypeOK ==
++  /\ projectRevision \in 0..MaxProjectRevision
++  /\ projectBefore \in 0..MaxProjectRevision
++  /\ frontendReference \in FrontendReferenceStates
++  /\ phase \in Phases
++  /\ referenceAccepted \in BOOLEAN
++  /\ resultCommitted \in BOOLEAN
++  /\ reconciliationDone \in BOOLEAN
++  /\ rendererApplied \in BOOLEAN
++  /\ projectionRevision \in ({NoProjection} \cup (0..MaxProjectRevision))
++
++FailureAtomicityInvariant ==
++  phase = "rejected" =>
++    /\ ~resultCommitted
++    /\ projectRevision = projectBefore
++    /\ ~reconciliationDone
++    /\ ~rendererApplied
++
++CommitResultInvariant ==
++  phase \in {"committed", "reconciled", "projected"} =>
++    /\ resultCommitted
++    /\ referenceAccepted
++    /\ projectRevision = projectBefore + 1
++
++ReconciliationOrderingInvariant ==
++  reconciliationDone =>
++    /\ resultCommitted
++    /\ phase \in {"reconciled", "projected"}
++    /\ frontendReference # "stale"
++
++RendererOrderingInvariant ==
++  rendererApplied =>
++    /\ resultCommitted
++    /\ reconciliationDone
++    /\ phase = "projected"
++    /\ projectionRevision = projectRevision
++
++ReadProjectionOneWayInvariant ==
++  phase \in {"read-ready", "read-consumed"} =>
++    /\ projectRevision = projectBefore
++    /\ projectionRevision = projectRevision
++    /\ ~resultCommitted
++    /\ ~reconciliationDone
++    /\ ~rendererApplied
++
++=============================================================================
+
+diff --git a/verification/README.md b/verification/README.md
+--- a/verification/README.md
++++ b/verification/README.md
+@@ -1,85 +1,82 @@
+-# Fast Figure verification model r11
++# Fast Figure verification model r25
+ 
+-이 디렉터리는 PlusCal pseudocode에서 상태 기반 검증이 필요한 범위를 파생한 선택적 verification model이다. verification model은 Source Script 전체 번역 계층이 아니며 별도의 설계 권위도 아니다.
++이 디렉터리는 current PlusCal pseudocode에서 상태 기반 검증이 필요한 범위를 파생한 verification model이다.
++verification model은 Source Script/PlusCal을 재설계하는 별도 권위가 아니다.
+ 
+ ```text
+-Source Script
+-→ PlusCal pseudocode
+-→ [선택적] verification model
++Source Script r25
++→ PlusCal pseudocode r11
++→ verification model r25
+ → TLA+/TLC
+ → Source Code
+ ```
+ 
+-Source Script와 pseudocode가 충돌하면 Source Script가 원천이다. pseudocode와 verification model이 충돌하면 pseudocode가 직접 원천이며 verification model을 수정한다.
+-
+ ## 현재 lineage
+ 
+-- Source Script: r17 / current / closed
+-- Source Script fingerprint: `sha256:2fec6d0c59f9b29a3d1d824ced75db46787fb566dd81373b07812db03b357664`
+-- PlusCal pseudocode: r3 / current
+-- pseudocode fingerprint: `sha256:459b4ea5f5eefe9cda1e27b9241e4deb379df5c5ec9e2e82b0649751b8caf898`
+-- verification-model: r11 / current
+-- verification fingerprint: `sha256:b4156896514d84f2b38b2d9346aaf93111249e927297ff3173485c702bd70a2b`
+-- TLC: passed
++- Source Script: r25 / current / closed
++- Source Script fingerprint: `sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f`
++- PlusCal pseudocode: r11 / current
++- pseudocode fingerprint: `sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5`
++- verification-model: r25 / current
++- verification fingerprint: `sha256:2c1051c19c2b2ac4502d0fefe2162fbf3e5dc9d02635d8333190aab1f441cb91`
++- TLC: pending
+ 
+-verification fingerprint는 의미 파일인 `verification/**/*.tla`와 `verification/**/*.cfg`만 대상으로 한다. README는 상태 설명 문서이며 verification 의미 fingerprint에 포함하지 않는다.
++verification fingerprint는 `verification/**/*.tla`와 `verification/**/*.cfg`만 포함한다.
++README 자체는 의미 fingerprint에 포함하지 않는다.
+ 
+ ## canonical verification modules
+ 
+-- `FastFigureSlotCore.tla` / `FastFigureSlotCore.cfg`: slot/layout/chart candidate와 reference consistency bounded slice.
+-- `FastFigureInteractionCore.tla` / `FastFigureInteractionCore.cfg`: r17 interaction과 empty-CSV bounded slice.
+-
+-기존 slot core의 r6 TLC 결과는 해당 의미 파일이 변경되지 않아 유지된다.
++- `FastFigureSlotCore.tla` / `FastFigureSlotCore.cfg`
++  - slot/layout/chart candidate
++  - chart ownership
++  - slot reference integrity
++  - grid/merge/split/reset/image-import bounded transition
++- `FastFigureInteractionCore.tla` / `FastFigureInteractionCore.cfg`
++  - Frontend slot selection
++  - CSV/reference/tree interaction
++  - batch import atomicity
++  - trash/reference and slot-connection constraints
++- `FastFigureBoundaryCore.tla` / `FastFigureBoundaryCore.cfg`
++  - Backend project authority mutation boundary
++  - stale/invalid reference rejection and failure atomicity
++  - commit → reconciliation → renderer ordering
++  - Frontend/renderer no-write boundary
++  - one-way Backend read projection
+ 
+-r17 interaction core는 다음 pseudocode 의미를 파생해 검증한다.
++## Boundary Core abstraction
+ 
+-- explicit no-slot deselection
+-- 미선택 visible graph/image/empty slot surface selection
+-- selected graph/image content interaction pass-through
+-- selected empty slot same-slot toggle
+-- bookmark same-slot toggle
+-- dashboard background deselection
+-- 일반 empty CSV 생성
+-- 새 CSV의 current selection
+-- empty CSV 생성 자체가 graph-object sequence를 변경하지 않음
+-- 이후 graph object가 current selected CSV를 reference함
++Boundary Core는 ProjectObject 전체를 다시 복제하지 않는다.
++Backend persistent authority를 bounded `projectRevision` token으로 나타내고,
++Frontend reference validation과 Application-boundary ordering에 필요한 최소 상태만 둔다.
+ 
+-UI-local이라 verification state로 만들지 않은 항목은 trash row Menu opened 상태, concrete Mantine Modal width, layout preview DOM measurement다. 이 값들은 persistent project authority가 아니며 Source Code의 renderer/UI 구체화 영역이다.
++실제 slot/chart/image/CSV/VFS 상태는 기존 Slot Core와 Interaction Core가 소유하는 검증 범위를 유지한다.
+ 
+-## bounded verification
++derivation/abstraction review:
+ 
+-```text
+-SlotIds = 1..3
+-CsvIds = 1..2
+-MaxGraphObjects = 2
+-NoSlot = 0
+-NoCsv = 0
+-```
++`agent_space/reviews/review-20261015-023-verification-r25-derivation.md`
+ 
+-이 값들은 application 제한이 아니라 TLC의 유한 상태공간을 위한 verification-only bound다.
++## TLC 상태
+ 
+-## TLC validation
++현재 r25에서는 새 Boundary Core가 추가되었지만 실제 TLA+ parse/TLC를 아직 실행하지 못했다.
+ 
+-r11 interaction validation:
++이번 작업 환경에는 Java 21은 있으나 저장소 workflow가 사용하는 TLA+ tools v1.7.4 jar가 설치되어 있지 않고,
++외부 DNS 제한으로 공식 release jar를 내려받지 못했다.
+ 
+-- review: `agent_space/reviews/review-20261013-008-tlc-interaction-r11.md`
+-- GitHub Actions run: `38357202939`
+-- job: `verify-interaction-core`
+-- TLA+ tools: v1.7.4
+-- TLC: 2.19
+-- generated states: 3,937
+-- distinct states: 2,808
+-- states left on queue: 0
+-- complete graph depth: 34
+-- maximum outdegree: 9
+-- invariant violation: none
+-- counterexample/error: none
++따라서 현재 상태는 다음과 같다.
+ 
+ ```text
+-verification-model r11 = current
+-TLC = passed
++verification-model r25 = current derivation
++TLC = pending
++validation_review = null
+ ```
+ 
+-## coverage의 의미
++GitHub Actions는 사용하지 않았다.
++
++Source Code는 TLC passed와 validation review가 확보되기 전에는 plan-016의 current implementation으로 닫지 않는다.
++
++## bounded verification의 의미
++
++모든 bound는 application 제한이 아니라 TLC 상태공간을 위한 verification-only 제한이다.
++TLC가 통과하더라도 bounded state-space 전체를 넘는 일반 증명으로 과장하지 않는다.
+ 
+-verification model은 pseudocode 전체를 복제하지 않는다. 상태공간 탐색이 필요한 범위를 선택적으로 파생한다. verification에 없는 asset parsing, 전체 UI renderer, serialization 등의 영역은 pseudocode 누락이 아니라 현재 TLC coverage 밖의 영역이다.
++모델에서 크게 추상화하거나 생략한 범위와 재포함 조건은 r25 derivation review에 기록한다.
+
