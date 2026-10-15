@@ -18,8 +18,23 @@ Fast Figure Source Script — layout geometry, image settings, annotations and r
 """
 
 from project_state import activeProject, projectObjects
-from interface_fsm import selectedSlotId
 from application_fsm import dispatchProjectCommand
+
+LAYOUT_FILE_LOGICAL_RESPONSIBILITIES = {
+    "Backend": (
+        "persistent layout/imageSettings/label/caption/export-settings calculation, candidate, validation, project snapshot semantics"
+    ),
+    "Application boundary": (
+        "public layout/image/annotation/export-setting mutation/query wrappers와 explicit Frontend reference input 조정"
+    ),
+    "Frontend": "DOM/canvas/raster presentation과 one-shot current-screen capture projection",
+}
+
+LAYOUT_BOUNDARY_RULE = (
+    "selectedSlotId 같은 Frontend runtime reference를 이 파일의 Backend calculation에서 직접 import하지 않는다. "
+    "selected target이 필요한 public operation은 Application boundary에서 explicit slotId/reference를 받아 Backend current authority에서 재검증한다. "
+    "dispatchProjectCommand를 호출하는 wrapper와 Frontend raster renderer가 Backend candidate/read helper와 같은 물리 파일에 있어도 logical owner를 혼합하지 않는다."
+)
 
 layoutRules = {
     "gridRows": "1..8 integer",
@@ -208,7 +223,7 @@ def setLayoutApiGrid(rows, cols):
     candidate를 먼저 만들고 전체 project invariant를 검증한다.
     거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
     성공 candidate는 GRID_LAYOUT_CHANGED를 dispatchProjectCommand로 보내 한 번 commit한다.
-    commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 interfaceFSM reconciliation이 결정한다.
+    commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 Application boundary의 Backend reconciliation query와 Frontend FSM transition이 결정한다.
     """
     result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", {"rows": rows, "cols": cols})
     return result
@@ -229,7 +244,7 @@ def mergeSlots(slotIds):
     5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
     6. 두 개 이상의 selected slot object가 non-default local state를 가지면 implicit merge/concatenation 없이 거부한다.
     7. whole-project candidate를 검증한 뒤 SLOTS_MERGED를 dispatchProjectCommand로 보내 한 번 commit한다.
-    8. selectedSlotId reconciliation과 renderer update는 ProjectMutationResult 이후 interface/orchestration이 수행한다.
+    8. Frontend selection reconciliation과 renderer update는 ProjectMutationResult 이후 Application boundary가 수행한다.
     """
     result = dispatchProjectCommand("SLOTS_MERGED", {"slotIds": slotIds})
     return result
@@ -251,11 +266,11 @@ def splitSlots(slotIds):
     return result
 
 
-def readImageEditorApi():
+def readImageEditorApi(slotId):
     """
     Return:
     - imageEditor:
-      선택 slot이 참조하는 image name/display URL과 그 slot의 imageSettings read projection.
+      explicit slotId가 current Backend authority에서 참조하는 image name/display URL과 그 slot의 imageSettings read projection.
 
     변경:
     - authoritative slot-local imageSettings를 변경하지 않는다.
@@ -264,7 +279,7 @@ def readImageEditorApi():
     return imageEditor
 
 
-def applyImageSettingsFromValues(values):
+def applyImageSettingsFromValues(slotId, values):
     """
     변경:
     - 선택 slot의 slot.content.imageSettings.
@@ -272,19 +287,19 @@ def applyImageSettingsFromValues(values):
 
     처리:
     fit enum과 manual scale/x/y 범위를 정규화한다.
-    selected slot id와 normalized settings를 SLOT_IMAGE_SETTINGS_CHANGED로 dispatchProjectCommand에 전달한다.
+    Application boundary가 받은 explicit slotId와 normalized settings를 SLOT_IMAGE_SETTINGS_CHANGED로 dispatchProjectCommand에 전달한다.
     projectEFSM은 slot-local imageSettings candidate를 검증 후 한 번 commit한다.
     같은 image asset을 참조하는 다른 slot의 imageSettings는 변경하지 않는다.
     renderer/interface notification은 commit result 이후 수행한다.
     """
     result = dispatchProjectCommand(
         "SLOT_IMAGE_SETTINGS_CHANGED",
-        {"slotId": selectedSlotId, "settings": values},
+        {"slotId": slotId, "settings": values},
     )
     return result
 
 
-def readLabelsApiState():
+def readLabelsApiState(slotId):
     """
     Return:
     - labelState:
@@ -294,7 +309,7 @@ def readLabelsApiState():
     - 없음.
 
     처리:
-    reference geometry는 activeProject layout과 선택 slot span에서 계산한다.
+    reference geometry는 current Backend layout과 explicit slotId로 resolve한 slot span에서 계산한다.
     """
     labelState = "label editor read projection"
     return labelState
