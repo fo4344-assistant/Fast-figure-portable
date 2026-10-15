@@ -205,19 +205,110 @@ REFERENCE_RELATIONS = {
 }
 
 activeProject = (
-    "현재 세션의 유일한 authoritative ProjectObject. "
-    "영속 project 값의 일반 읽기 원천이며 변경은 core command/API/FSM 경계를 통해 수행한다."
+    "현재 세션의 유일한 authoritative ProjectObject이며 Backend 내부 persistent state다. "
+    "영속 project mutation은 Project EFSM contract를 통해서만 수행한다. "
+    "Frontend는 activeProject를 직접 import/read하지 않고 Application boundary의 public query projection만 사용한다."
 )
 
 projectObjects = (
-    "ProjectObjectRegistry. 이름을 PROJECT_OBJECT_PATHS 또는 명시적 read adapter와 연결하고 "
-    "매 read 시 activeProject에서 값을 다시 읽는다. snapshot은 export 같은 단일 작업용 복사본이다."
+    "Backend ProjectObjectRegistry. 이름을 PROJECT_OBJECT_PATHS 또는 Backend read provider와 연결하고 "
+    "매 read 시 activeProject에서 값을 다시 읽는다. snapshot은 export/query 같은 단일 작업용 복사본이며 Frontend authority가 아니다."
 )
 
 projectVfs = (
-    "activeProject.fileSystem.directories와 asset directory/name을 함께 해석하는 VFS helper. "
-    "별도 파일 트리 SoT를 갖지 않고 activeProject state에서 resolve한다."
+    "Backend에서 activeProject.fileSystem.directories와 asset directory/name을 함께 해석하는 VFS helper. "
+    "별도 파일 트리 SoT를 갖지 않고 activeProject state에서 resolve한다. Frontend는 직접 호출하지 않는다."
 )
+
+BACKEND_QUERY_KINDS = {
+    "project-api": "FastFigureApi read operation에 필요한 project/asset/chart/layout/caption/label/export projection",
+    "slot-selection-context": "validated slot selection 뒤 optional contentType intent 판단에 필요한 empty/contentType projection",
+    "interface-intent": "Frontend selection/reference event를 current Backend authority에서 검증한 input",
+    "interface-reconciliation": "ProjectMutationResult 뒤 current Backend authority에서 계산한 Frontend reconciliation input",
+    "renderer": "DOM/Plotly renderer가 한 projection 작업에 사용할 immutable project view",
+    "export": "한 export 작업 동안 사용할 immutable persistent project snapshot",
+}
+
+BACKEND_READ_BOUNDARY_RULE = (
+    "Backend query는 current activeProject에서 필요한 값만 resolve하여 read-only projection을 반환한다. "
+    "query/read 계산은 activeProject를 변경하지 않으며 누락 field normalization이 필요하면 authority가 아닌 projection/candidate copy에서 수행한다. "
+    "반환 projection은 다른 subsystem의 project authority 또는 무검증 mutation candidate로 재사용하지 않는다. "
+    "Frontend가 mutation을 요청하면 id/path/reference와 새 사용자 입력만 전달하고 Project EFSM이 current activeProject에서 다시 resolve한다."
+)
+
+FrontendValidatedInput = {
+    "event": "Frontend FSM event",
+    "accepted": "Backend reference validation 성공 여부",
+    "reference": "validated slot/path/chart/object identity 또는 explicit none",
+    "workspaceHint": "Frontend가 project/slot.graph/slot.image workspace를 결정하는 데 필요한 immutable hint",
+    "selectionHint": "selection toggle/clear를 위한 Backend-derived immutable hint",
+}
+
+FrontendReconciliationInput = {
+    "event": "commit된 project command",
+    "selectedSlot": "현재 selected slot reference의 valid/invalid/moved 결과",
+    "assetSelection": "현재 asset reference의 valid/invalid/moved 결과",
+    "graphObject": "현재 graph-object reference/index의 valid/invalid 결과",
+    "workspaceHint": "reconciled selection에서 파생할 workspace hint",
+    "projectionEffect": "renderer가 사용할 commit effect",
+}
+
+
+def readBackendProjection(kind, request):
+    """
+    Return:
+    - projection:
+      BACKEND_QUERY_KINDS 중 요청 kind에 필요한 current-authority read-only projection.
+
+    변경:
+    - activeProject와 Frontend state를 변경하지 않는다.
+
+    처리:
+    1. kind와 request의 id/path/reference를 current activeProject에서 resolve한다.
+    2. consumer가 실제로 필요한 field만 새 projection/snapshot으로 구성한다.
+    3. compatibility/default normalization이 필요하면 projection copy에서 수행하고 live ProjectObject field를 read 과정에서 쓰지 않는다.
+    4. projection에는 Backend 내부 mutable object reference를 장기 authority로 노출하지 않는다.
+    """
+    projection = "current Backend authority에서 계산한 immutable read projection"
+    return projection
+
+
+def validateFrontendIntent(event, payload):
+    """
+    Return:
+    - validatedInput:
+      FrontendValidatedInput.
+
+    변경:
+    - activeProject와 Frontend state를 변경하지 않는다.
+
+    처리:
+    SELECT_SLOT/SELECT_ASSET/SELECT_GRAPH_OBJECT처럼 Backend identity validity가 필요한 event는
+    payload reference를 current activeProject/projectVfs/chart에서 resolve한다.
+    explicit deselection처럼 Backend reference가 필요 없는 input은 accepted none으로 표현한다.
+    resolve 실패는 rejected input으로 반환하며 Frontend FSM이 Backend를 직접 재조회하지 않게 한다.
+    """
+    validatedInput = FrontendValidatedInput
+    return validatedInput
+
+
+def buildFrontendReconciliationInput(event, mutationResult, frontendReferences):
+    """
+    Return:
+    - reconciliationInput:
+      FrontendReconciliationInput.
+
+    변경:
+    - activeProject와 Frontend state를 변경하지 않는다.
+
+    처리:
+    commit된 ProjectMutationResult와 Frontend가 현재 보유한 id/path/index reference를 입력으로 받아
+    current activeProject에서 각 reference의 valid/moved/removed 상태를 resolve한다.
+    result는 Frontend runtime state를 어떻게 갱신할지 판단하는 데 필요한 값만 포함하며
+    ProjectObject 또는 mutable Backend helper를 Frontend로 넘기지 않는다.
+    """
+    reconciliationInput = FrontendReconciliationInput
+    return reconciliationInput
 
 class ProjectObject:
     def read(self, path):
