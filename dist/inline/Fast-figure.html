@@ -10396,7 +10396,31 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           }
           return this.publish(`${event}:${region}:${previous}->${target}`);
         }
+        transitionLifecycle(event, payload = {}) {
+          const origin = payload.event || event;
+          if (event === "LIFECYCLE_START") {
+            this.state = Object.freeze({ ...this.state, error: null });
+            return this.transition("lifecycle", payload.lifecycle, `${origin}:start`);
+          }
+          if (event === "LIFECYCLE_COMPLETE") {
+            this.state = Object.freeze({ ...this.state, error: null });
+            return this.transition("lifecycle", "ready", `${origin}:${payload.outcome || "complete"}`);
+          }
+          if (event === "LIFECYCLE_FAILED") {
+            const error = payload.error;
+            this.state = Object.freeze({
+              ...this.state,
+              error: { event: origin, message: error?.message || String(error) },
+            });
+            this.transition("lifecycle", "error", `${origin}:failed`, { error });
+            return this.transition("lifecycle", "ready", `${origin}:recovered`);
+          }
+          return this.state;
+        }
         send(event, payload = {}) {
+          if (event === "LIFECYCLE_START" || event === "LIFECYCLE_COMPLETE" ||
+              event === "LIFECYCLE_FAILED")
+            return this.transitionLifecycle(event, payload);
           let handled = false;
           for (let region of [
             "lifecycle",
@@ -10504,40 +10528,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
               );
           }
           return this.publish(event);
-        }
-        run(lifecycle, event, task) {
-          if (this.state.lifecycle !== "ready")
-            return Promise.reject(
-              Error(`현재 ${this.state.lifecycle} 상태에서는 ${event} 작업을 시작할 수 없습니다.`),
-            );
-          this.transition("lifecycle", lifecycle, `${event}:start`);
-          let complete = (result) => {
-              let outcome =
-                result?.outcome === "rejected" ? "rejected" : result?.outcome || "complete";
-              this.transition("lifecycle", "ready", `${event}:${outcome}`);
-              return result;
-            },
-            fail = (error) => {
-              this.state = Object.freeze({
-                ...this.state,
-                error: { event, message: error?.message || String(error) },
-              });
-              this.transition("lifecycle", "error", `${event}:failed`, { error });
-              this.transition("lifecycle", "ready", `${event}:recovered`);
-              throw error;
-            };
-          try {
-            let result = task();
-            return result && typeof result.then === "function"
-              ? result.then(complete, fail)
-              : Promise.resolve(complete(result));
-          } catch (error) {
-            try {
-              fail(error);
-            } catch (failed) {
-              return Promise.reject(failed);
-            }
-          }
         }
         ready() {
           this.transition("lifecycle", "ready", "READY");
@@ -11795,6 +11785,35 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       const interfaceFSM = new InterfaceStateMachine(projectObjects, APP_STATE_DEFINITIONS);
       const projectEFSM = new ProjectStateMachine(projectObjects, PROJECT_COMMAND_ACTIONS);
 
+      function runLifecycleTask(lifecycle, event, task) {
+        if (interfaceFSM.state.lifecycle !== "ready")
+          return Promise.reject(
+            Error(`현재 ${interfaceFSM.state.lifecycle} 상태에서는 ${event} 작업을 시작할 수 없습니다.`),
+          );
+        interfaceFSM.send("LIFECYCLE_START", { lifecycle, event });
+        const complete = (result) => {
+          const outcome = result?.outcome === "rejected" ? "rejected" : result?.outcome || "complete";
+          interfaceFSM.send("LIFECYCLE_COMPLETE", { event, outcome });
+          return result;
+        };
+        const fail = (error) => {
+          interfaceFSM.send("LIFECYCLE_FAILED", { event, error });
+          throw error;
+        };
+        try {
+          const result = task();
+          return result && typeof result.then === "function"
+            ? result.then(complete, fail)
+            : Promise.resolve(complete(result));
+        } catch (error) {
+          try {
+            fail(error);
+          } catch (failed) {
+            return Promise.reject(failed);
+          }
+        }
+      }
+
       function dispatchProjectCommand(event, payload = {}) {
         let result = projectEFSM.send(event, payload);
         interfaceFSM.reconcileProjectResult(event, result);
@@ -11829,7 +11848,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           return state;
         },
         notify: (...args) => interfaceFSM.notify(...args),
-        run: (...args) => interfaceFSM.run(...args),
+        run: (...args) => runLifecycleTask(...args),
         ready: (...args) => interfaceFSM.ready(...args),
         subscribe: (...args) => interfaceFSM.subscribe(...args),
       });
