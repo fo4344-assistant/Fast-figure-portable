@@ -78,15 +78,11 @@ Backend read API 또는 read adapter가 current authoritative state에서 projec
 
 새 설계는 이 기존 구조를 조사해 확장 또는 재배치하는 것을 우선한다. 같은 의미의 새 command bus, 별도 project store, 별도 frontend project model, 별도 event broker를 구현 편의를 위해 추가하지 않는다.
 
-### 1.6 Fast Figure 프로젝트의 verification gate는 현재 AGENT.md를 따른다
+### 1.6 상태 기반 검증은 선택적이다
 
-현재 agent_space/AGENT.md에는 Fast Figure가 verification-model/TLC gate를 사용하며 application source code가 current가 되려면 현재 pseudocode에서 파생된 verification model이 current이고 TLC가 passed여야 한다고 명시되어 있다.
+Source Script와 PlusCal pseudocode는 필수 개발 계층이며, verification-model/TLC는 필요한 범위에서 선택적으로 수행한다. 검증의 실행 여부 또는 TLC 통과 여부는 Plan 016의 Source Code 구현과 `current` 판정을 막지 않는다.
 
-현재 development-versions.json은 source-code.status가 current인 동시에 verification-model.tlc가 pending이다. plan-015의 완료 기록에도 TLC를 선택 단계로 취급했다는 정정 문구가 있다.
-
-이 둘은 현재 AGENT.md의 gate 규칙과 일치하지 않는다.
-
-이번 계획은 정책을 임의로 재해석하거나 plan-015의 실행 기록을 근거로 AGENT.md 규칙을 약화하지 않는다. 따라서 plan-016 구현에서 Source Code를 current로 닫으려면 관련 verification model의 TLC를 실제로 실행하여 passed 상태를 확보하거나, 사용자가 별도로 정책 변경을 지시해야 한다.
+실제로 수행한 검증의 결과와 검토 기록은 사실대로 유지한다. 검증을 수행하지 않았거나 완료되지 않은 경우 이를 성공으로 표시하지 않는다. 이 변경은 plan-015의 과거 실행 기록을 수정하지 않는다.
 
 ---
 
@@ -872,7 +868,7 @@ renderer에서 Backend mutation으로 되돌아가는 path를 두지 않는다.
 
 ## 23. Verification model 변경 계획
 
-현재 Fast Figure의 AGENT.md gate를 기준으로 이번 변경과 관련된 verification model을 갱신하고 TLC를 실제 실행한다.
+verification model은 필요한 범위에서 선택적으로 구성하고, TLC도 필요한 경우에만 실행한다. 장시간 검증이 미완료라는 이유로 Source Code 구현을 보류하지 않는다.
 
 검증할 invariant와 transition property는 다음과 같다.
 
@@ -920,28 +916,19 @@ verification model은 Source Script/PlusCal hierarchy를 임의로 재설계하�
 
 ---
 
-## 24. TLC와 development lineage
+## 24. 선택적 검증과 development lineage
 
-작업 순서는 다음 gate를 따른다.
+필수 개발 순서는 다음과 같다.
 
-1. Source Script 수정.
-2. Source Script closure review.
-3. development-versions.json의 Source Script revision/fingerprint 갱신.
-4. PlusCal pseudocode 직접 번역.
-5. PlusCal translation review.
-6. pseudocode revision/fingerprint와 derived_from 갱신.
-7. verification model 갱신.
-8. verification validation review.
-9. TLC 실제 실행.
-10. TLC passed 확인.
-11. Source Code 구현.
-12. Source Code regression/build/version check.
-13. Source Code validation review.
-14. source-code revision/fingerprint/derived_from 갱신.
+1. Source Script 수정 및 closure review.
+2. development-versions.json의 Source Script revision/fingerprint 갱신.
+3. PlusCal pseudocode 직접 번역 및 translation review.
+4. pseudocode revision/fingerprint와 derived_from 갱신.
+5. Source Code 구현.
+6. Source Code regression/build/version check 및 validation review.
+7. source-code revision/fingerprint/derived_from 갱신.
 
-TLC를 실행하지 못하거나 실패한 경우 passed로 기록하지 않는다.
-
-현재 AGENT.md가 gate를 요구하는 동안 TLC pending 상태에서 새 Source Code revision을 current로 닫지 않는다.
+필요한 경우 pseudocode에서 verification model을 파생하고 TLC를 별도로 실행·기록한다. 이 선택적 검증은 Source Code의 구현 순서를 막는 gate가 아니다. 미실행·미완료·실패를 통과로 기록하지 않으며, 검증 결과를 구현 완료 여부와 구분한다.
 
 GitHub Actions를 이 작업의 필수 실행 수단으로 사용하지 않는다. 로컬 또는 현재 허용된 실행 환경에서 필요한 검사 명령을 사용한다. 사용자가 별도로 GitHub Actions 실행을 지시하지 않는 한 workflow를 임의 실행하지 않는다.
 
@@ -1110,7 +1097,7 @@ Frontend가 Backend helper를 직접 읽지 않고 read API result만 사용하�
 - reference validation.
 - commit/reconciliation ordering.
 - read projection one-way property.
-- TLC 실행과 validation review.
+- TLC를 선택적으로 실행했다면 실제 결과와 validation review.
 - verification lineage.
 
 ### D. Source Code Backend/API patch
@@ -1218,9 +1205,9 @@ Application boundary를 세 번째 authoritative FSM으로 만들지 않는다.
 25. 기존 FFPX/FFSX 의미와 호환성이 유지된다.
 26. Source Script closure review가 완료된다.
 27. PlusCal pseudocode가 새 Source Script hierarchy와 ordering을 직접 번역한다.
-28. verification model이 새 pseudocode에서 파생된다.
-29. 관련 TLC가 실제로 실행되어 passed 상태다. 현재 AGENT.md gate가 변경되지 않는 한 pending으로 완료 처리하지 않는다.
-30. Source Code가 PlusCal 및 passed verification lineage에서 파생된다.
+28. verification model을 사용하는 경우 현재 pseudocode에서 파생된다.
+29. TLC 실행·통과 여부를 Source Code 구현 또는 `current` 판정의 필수 조건으로 두지 않는다.
+30. Source Code가 현재 Source Script와 PlusCal lineage에서 파생된다. 선택적 검증 결과는 별도로 사실대로 기록한다.
 31. browser regression이 Backend mutation, Backend query, Frontend-only transition, cross-layer reconciliation, renderer projection을 모두 포함한다.
 32. distribution build와 development layer version check가 통과한다.
 33. 모든 완료된 변경은 정확한 YYYYMMDD-NNN.patch / .md 쌍으로 기록된다.
