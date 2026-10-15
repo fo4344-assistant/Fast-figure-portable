@@ -6,6 +6,13 @@ EFSM 대상은 저장 파일이 아니라 저장·복원되는 authoritative Pro
 
 from project_state import activeProject, projectObjects
 
+PROJECT_EFSM_BOUNDARY_RULE = (
+    "Project EFSM은 Backend 내부 persistent mutation controller다. "
+    "Frontend component/FSM/renderer는 projectEFSM.send를 직접 호출하지 않는다. "
+    "persistent mutation intent는 public mutation API와 Application adapter를 통해 command로 전달된다. "
+    "Project EFSM은 Frontend state, DOM, Mantine/React state를 import하거나 변경하지 않는다."
+)
+
 PROJECT_COMMANDS = {
     "PROJECT_LOADED": "검증된 ProjectObject 전체 교체",
     "PROJECT_NAME_CHANGED": "project metadata 이름 변경",
@@ -47,7 +54,9 @@ PUBLIC_PROJECT_MUTATION_ROUTES = {
     "project.setName": "PROJECT_NAME_CHANGED",
     "project.importFile": "PROJECT_LOADED",
     "slots.setContentType": "SLOT_TYPE_CHANGED",
+    "slots.select.pendingContentType": "SLOT_TYPE_CHANGED",
     "slots.reset": "SLOTS_RESET",
+    "slots.swap": "SLOTS_SWAPPED",
     "images.setSettings": "SLOT_IMAGE_SETTINGS_CHANGED",
     "images.insertEmpty": "SLOT_IMAGE_IMPORTED",
     "assets.delete.csv": "DATA_OBJECT_DELETED",
@@ -101,6 +110,7 @@ PROJECT_MUTATION_GROUPS = {
 }
 
 PROJECT_MUTATION_CONTRACT = [
+    "Application boundary에서 전달된 declared command만 persistent mutation entry로 받으며 Frontend/renderer direct call을 공식 route로 두지 않는다.",
     "command input의 id/path/reference를 current activeProject에서 다시 resolve한다.",
     "command writable scope와 precondition을 확인한다.",
     "activeProject를 직접 부분 변경하기 전에 candidate ProjectObject 또는 candidate patch를 만든다.",
@@ -132,7 +142,8 @@ PROJECT_COMMAND_COVERAGE_RULE = (
 
 PROJECT_RESULT_RULE = (
     "ProjectMutationResult는 장기 authority가 아니라 한 command의 immutable result다. "
-    "interface reconciliation과 renderer projection에서만 소비한다."
+    "Backend는 result를 Application boundary에 반환하고, Application adapter가 Backend reconciliation query를 거쳐 "
+    "Frontend reconciliation input과 renderer effect로 변환한다. Project EFSM이 Frontend FSM 또는 renderer를 직접 호출하지 않는다."
 )
 
 class ProjectStateMachine:
