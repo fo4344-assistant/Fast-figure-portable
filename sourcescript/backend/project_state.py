@@ -8,28 +8,19 @@ Fast Figure Source Script — authoritative project state and references
   getProjectCsv/getProjectImage/getChart/slotAt.
 """
 
-SLOT_STYLE_DEFAULTS = {
-    "referenceWidth": 1200,
-    "gap": 0,
-    "outerMargin": 0,
-    "radius": 0,
-    "aspect": 1.618,
-    "showBorders": True,
-}
-
-# Project appearance의 기본값 원천. graph object의 색 순환과는 별개다.
-DEFAULT_UI_PALETTE = {
-    "uiColor": "#B0CFCE",
-    "uiBackgroundColor": "#FAFAFA",
-    "uiSurfaceColor": "#FFFFFF",
-    "uiMutedColor": "#4F525D",
-    "uiSubtleColor": "#94A3B8",
-    "uiDisabledBgColor": "#E5E7EB",
-    "uiDisabledTextColor": "#64748B",
-    "uiShadowColor": "#383A42",
-    "paperColor": "#FFFFFF",
-    "fontColor": "#383A42",
-}
+BACKEND_SETTINGS_RULE = (
+    "sourcescript/backend/settings.json의 backend만 Backend 설정 원천이다. frontend block은 이 파일에 두지 않는다. "
+    "backend.project_object는 layout/annotations/appearance/export의 저장 설정 구조에 대응한다. ffpx는 package 호환 설정이다. "
+    "backend.defaults는 생성 prototype/동작 한계/표시 기본값이며 Project에 통째로 넣지 않는다. "
+    "아래 DEFAULT 이름은 JSON 경로의 read-only 참조 표기이지 독립 값 정의·cache·새 settings service가 아니다. "
+    "기존 Backend owner가 필요한 leaf만 해당 작업의 입력으로 사용한다. 현재 Project 설정은 유일한 runtime authority다. "
+    "create/reset은 명시된 설정만 copy하고 load는 missing 설정만 보완한다. valid saved false/0/empty는 유지한다. "
+    "asset/CSV rows/bytes/chart figure/slot instance/id/nextId/caption 본문/사용자 이름을 config에 넣지 않는다. "
+    "config에 없는 instance data는 기존 생성·검증 알고리즘으로 만든다. config 변경은 기존 Project 자동 migration이 아니다. "
+    "missing/malformed/필수 경로 누락은 구성 오류이며 흩어진 코드 기본값으로 대체하지 않는다."
+)
+SLOT_STYLE_DEFAULTS = "config reference: backend.project_object.layout.slotStyle"
+DEFAULT_UI_PALETTE = "config reference: backend.project_object.appearance.uiPalette"
 
 APPEARANCE_PALETTE_RULE = (
     "위 10개 field만 persistent uiPalette로 소유한다. 새 project/reset은 DEFAULT_UI_PALETTE의 copy다. "
@@ -63,14 +54,14 @@ projectState = {
         "appBuild": "이 project state를 생성/저장한 application build 표식",
     },
     "layout": {
-        "gridRows": "1..8 범위의 grid 행 수",
-        "gridCols": "1..8 범위의 grid 열 수",
+        "gridRows": "backend.defaults.limits.layout.gridRows 범위의 grid 행 수",
+        "gridCols": "backend.defaults.limits.layout.gridCols 범위의 grid 열 수",
         "slotStyle": {
-            "referenceWidth": "dashboard 기준 폭; 현재 허용 범위 100..20000",
-            "gap": "slot 사이 기준 간격; 현재 허용 범위 0..2000",
-            "outerMargin": "dashboard 기준 바깥 여백; 현재 허용 범위 0..5000, 새 project 기본값 0",
-            "radius": "slot 기준 모서리 반경; 현재 허용 범위 0..2000",
-            "aspect": "dashboard 종횡비; 현재 허용 범위 0.1..10",
+            "referenceWidth": "dashboard 기준 폭; backend.defaults.limits.layout.referenceWidth",
+            "gap": "slot 사이 기준 간격; backend.defaults.limits.layout.gap",
+            "outerMargin": "dashboard 기준 바깥 여백; backend.defaults.limits.layout.outerMargin",
+            "radius": "slot 기준 모서리 반경; backend.defaults.limits.layout.radius",
+            "aspect": "dashboard 종횡비; backend.defaults.limits.layout.aspect",
             "showBorders": "slot 외곽선 표시 여부",
         },
     },
@@ -94,8 +85,8 @@ projectState = {
     },
     "fileSystem": {
         "directories": (
-            "project VFS directory 목록. 현재 고정 root는 "
-            "/assets, /assets/csv, /assets/images, /assets/trash"
+            "project VFS directory 목록. 고정 root 설정은 backend.defaults.vfs에서 읽고 "
+            "실제 directory instance는 생성/복원 알고리즘이 만든다."
         ),
     },
     "charts": "프로젝트 chart model의 authoritative collection",
@@ -109,10 +100,10 @@ projectState = {
         "uiPalette": "프로젝트에 영속되는 Fast Figure UI 색상 palette",
     },
     "export": {
-        "width": "target raster width; 허용 범위 100..20000",
+        "width": "target raster width; backend.defaults.limits.export.logicalWidth",
         "heightMode": "auto 또는 explicit",
-        "height": "heightMode가 explicit일 때 target raster height; 허용 범위 100..20000",
-        "dpi": "raster metadata DPI; 허용 범위 36..1200",
+        "height": "explicit target raster height; backend.defaults.limits.export.logicalHeight",
+        "dpi": "raster metadata DPI; backend.defaults.limits.export.dpi",
         "format": "png 또는 jpeg",
     },
 }
@@ -167,18 +158,11 @@ SLOT_LOCAL_PROPERTY_RULE = (
     "global caption처럼 figure 전체에 적용되는 값만 project-level property로 둔다."
 )
 
-SLOT_LOCAL_DEFAULTS = {
-    "chart": None,
-    "imageId": None,
-    "contentType": "graph",
-    "imageSettings": {
-        "fit": "contain",
-        "scale": 100,
-        "x": 50,
-        "y": 50,
-    },
-    "caption": None,
-}
+SLOT_LOCAL_DEFAULTS = (
+    "config backend.defaults.slotSettings.content의 설정을 복사하고, "
+    "chart/imageId/caption은 기존 empty-instance 생성 규칙에 따라 none으로 구성한 local state. "
+    "이 none reference/data를 config에 저장하지 않는다."
+)
 
 SLOT_LOCAL_DEFAULT_RULE = (
     "slot의 local state가 비어 있는지/보존해야 하는지를 판단할 때 개별 field를 다시 나열하지 않고 "
@@ -317,7 +301,7 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
     "captions.readGlobal": "project annotations.captions의 enabled/text/afterText/name/nameBold/settings copy",
     "captions.readSlot": "explicit slotId의 slot.caption copy; 없는 slot이면 none; placeholder는 반환 presentation일 뿐 저장하지 않음",
     "labels.readState": "sourcescript.backend.layout_annotations readLabelsApiState(slotId)의 label settings와 explicit slot reference geometry copy",
-    "layout.readState": "gridRows/gridCols/slotStyle/visibleSlots와 renderedWidth로 계산한 previewGeometry copy; width finite 1..20000 invalid 600; Backend는 session zoom/lock을 읽지 않으며 Application만 public read에 합성; DOM 역추론/preview 저장 없음",
+    "layout.readState": "gridRows/gridCols/slotStyle/visibleSlots와 renderedWidth로 계산한 previewGeometry copy; width는 backend.defaults.preview.widthRange/fallbackWidth 사용; Backend는 session zoom/lock을 읽지 않으며 Application만 public read에 합성; DOM 역추론/preview 저장 없음",
     "assets.readTree": "sourcescript.backend.assets_files의 current directories/assets로 계산한 canonical VFS tree copy",
     "assets.readTrash": "같은 tree 계산의 trash subtree copy",
     "assets.isTrashed": "canonical requested path의 trash subtree membership boolean",
@@ -357,7 +341,7 @@ RENDERER_BACKEND_READ_CONTRACT = {
     "whole": (
         "default renderer request는 final frontendState와 optional mutationResult를 받는다. "
         "current layout/grid/style, appearance, annotations, visible slots와 slot-local content/caption/settings를 detached copy로 구성한다. "
-        "label 번호/표시는 layout_annotations.orderedSlotLabels(current project)로 계산하며 captionReferenceStyle은 backend/settings.json에서 복사한다. "
+        "label 번호/표시는 layout_annotations.orderedSlotLabels(current project)로 계산하며 captionReferenceStyle은 backend/settings.json의 backend.defaults.captionReferenceStyle에서 복사한다. "
         "각 visible graph slot의 owning chart, 실제 project object의 참조 CSV/columns와 graphs.chartFigure(chart, project) 계산 결과를 포함한다. "
         "project는 이번 query가 읽는 같은 current authority이며 chart copy와 CSV가 같은 read 작업에 속한다. "
         "non-editable imported conversion chartFigure는 imported representation을 보존하며 conversion view로 project CSV를 resolve하지 않는다. "
@@ -592,7 +576,7 @@ def validateProjectObjectState(state, requireSlots):
     - project top-level structure와 필수 nested object가 존재한다.
     - gridRows/gridCols는 1..8 정수다.
     - slotStyle 수치와 boolean이 허용 범위에 있다.
-    - label position은 finite이고 fontSize는 현재 최소 6이다.
+    - label position은 finite이고 fontSize는 backend.defaults.limits.labels.fontSizeMin 이상이다.
     - export width/height mode/height/dpi/format이 정의된 범위와 관계를 만족한다.
     - figure 의미가 없는 legacy layoutMapWidth를 authoritative state로 요구하지 않는다.
     - persistent UI palette의 필수 색상은 유효한 6-digit hex다.
@@ -618,10 +602,10 @@ def validateProjectObjectState(state, requireSlots):
 
 
 DEFAULT_PROJECT_RULES = {
-    "grid": "새 project는 2 x 2 grid에서 시작한다.",
+    "grid": "backend.project_object.layout.gridRows/gridCols에서 초기 grid 설정을 읽는다.",
     "slotStyle": (
         "새 project의 layout.slotStyle은 SLOT_STYLE_DEFAULTS를 사용한다. "
-        "outerMargin 기본값은 0이며 저장된 project에 명시된 outerMargin은 그대로 유지한다."
+        "저장된 project에 명시된 유효 slotStyle은 그대로 유지한다."
     ),
     "slots": (
         "초기 grid의 각 cell은 1 x 1 empty slot이며 chart/image reference, caption은 empty, "
@@ -629,16 +613,17 @@ DEFAULT_PROJECT_RULES = {
     ),
     "assets": "초기 CSV/image collection은 비어 있으며 보호된 default CSV를 만들지 않는다.",
     "charts": "초기 chart collection은 비어 있다.",
-    "labels": "sourcescript/backend/settings.json의 labels를 deep-copy한다. create/load missing 처리는 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다.",
+    "labels": "settings.json의 backend.project_object.annotations.labels 설정만 deep-copy한다. create/load missing 처리는 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다.",
     "captions": (
-        "sourcescript/backend/settings.json의 captions를 deep-copy하며 load missing은 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다. "
+        "settings.json의 backend.project_object.annotations.captions 설정만 복사하며 load missing은 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다. "
+        "text/afterText/name은 config가 아닌 새 instance 생성 시 empty text로 만들고 저장 데이터는 그대로 복원한다. "
         "각 초기 slot.caption도 empty이며 slot caption editor mode는 project state에 저장하지 않는다."
     ),
     "export": (
-        "target width는 초기 layout reference width를 기본으로 하고 height는 auto, "
-        "DPI는 300, raster format은 png로 시작한다."
+        "target width는 초기 layout referenceWidth에서 계산하고 나머지 설정은 backend.project_object.export에서 읽는다. "
+        "auto의 미지정 height는 기존 생성 알고리즘으로 만들며 config에 geometry 결과를 저장하지 않는다."
     ),
-    "vfs": "고정 directory /assets, /assets/csv, /assets/images, /assets/trash를 만든다.",
+    "vfs": "backend.defaults.vfs의 root/csv/image/trash 설정으로 고정 directory instance를 만든다.",
     "nextId": "csv/image/chart 모두 collection의 첫 새 id를 가리키는 값에서 시작한다.",
     "appearance": "DEFAULT_UI_PALETTE를 복사해 project persistent palette로 시작한다. reset/set/load도 APPEARANCE_PALETTE_RULE을 공유한다.",
 }
@@ -654,14 +639,14 @@ def createProjectState():
     - activeProject를 직접 변경하지 않는다.
 
     처리:
-    1. project meta와 2 x 2 layout을 만들고 slotStyle은 SLOT_STYLE_DEFAULTS에서 복사한다.
+    1. project meta는 instance data로 만들고 layout은 backend.project_object.layout 설정에서 만든다.
     2. label/caption authoritative state를 기본값으로 만든다.
        slot caption placeholder는 저장하지 않는다.
     3. CSV/image/chart collection은 empty로 시작한다.
        빈 graph용 default CSV나 fake graph object를 만들지 않는다.
     4. 고정 VFS directory와 next-id sequence를 만든다.
     5. persistent appearance와 export settings를 만든다.
-    6. 2 x 2의 empty 1 x 1 slot 네 개를 만든다.
+    6. 설정된 grid의 각 cell에 empty 1 x 1 slot을 만든다. id/좌표/reference는 config가 아니라 생성 알고리즘이 만든다.
     7. validateProjectObjectState를 통과한 candidate를 반환한다.
     """
     state = "새 project invariant를 만족하는 candidate ProjectObject state"
