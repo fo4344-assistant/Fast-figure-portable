@@ -14,14 +14,11 @@ GRAPH_BOUNDARY_RULE = (
     "graphEditorCommit/convertImportedChartToEditable는 candidate만 반환한다."
 )
 # Graph object의 fallback 순환만 소유한다. Project UI palette와 동기화하지 않는다.
-DEFAULT_COLORS = (
-    "#383A42", "#E45649", "#50A14F", "#B37901",
-    "#0184BC", "#A626A4", "#0997B3", "#FAFAFA",
-)
+DEFAULT_COLORS = "config reference: backend.defaults.graphColors (read-only sequence)"
 
 GRAPH_PALETTE_RULE = (
-    "새 base object는 DEFAULT_COLORS[0], imported object에 line/marker color가 없으면 원 trace index modulo 8의 색, "
-    "trace projection에서 object.color가 없으면 object index modulo 8의 색을 사용한다. 명시된 object color가 우선한다. "
+    "새 base object는 DEFAULT_COLORS[0], imported object에 line/marker color가 없으면 원 trace index modulo sequence length의 색, "
+    "trace projection에서 object.color가 없으면 object index modulo sequence length의 색을 사용한다. 명시된 object color가 우선한다. "
     "graphs.defaultColors는 이 immutable sequence의 detached copy이고 graphs.readPalette는 owning chart의 실제 object color 순서다. "
     "graphs.applyPalette는 non-empty color text array를 받고 current editable chart objects의 i번째 color만 colors[i modulo length]로 바꾼다. "
     "각 color element는 trim 뒤 non-empty text여야 하며 그 text를 저장한다. empty/비배열/이 조건을 만족하지 않는 element는 "
@@ -31,16 +28,11 @@ GRAPH_PALETTE_RULE = (
     "graph color는 Plotly color text로서 named/rgb/hex 표현을 보존하며 UI palette의 6-digit hex 제한을 강제하지 않는다."
 )
 
-AXIS_DEFAULTS = {
-    "min": "", "max": "", "tick": "", "tickMode": "plotly", "minorTicks": False,
-    "notation": "none", "scaleType": "linear", "divide": 1, "title": "",
-    "titleSize": 14, "lineWidth": 1, "showGrid": True, "showValues": True, "fontSize": 12,
-}
-
-GRAPH_GLOBAL_DEFAULTS = {
-    "showLegend": True, "showTitle": True, "showZeroLine": False,
-    "graphFontFamily": "", "titleFontSize": "", "legendFontSize": "",
-}
+AXIS_DEFAULTS = "config reference: backend.defaults.chartSettings.editor.axis"
+GRAPH_GLOBAL_DEFAULTS = "config reference: backend.defaults.chartSettings.editor.globalSettings"
+GRAPH_STYLE_DEFAULTS = "config reference: backend.defaults.chartSettings.editor.objectStyle"
+GRAPH_RENDER_DEFAULTS = "config reference: backend.defaults.graphRendering"
+GRAPH_STYLE_LIMITS = "config reference: backend.defaults.limits.graphObject"
 
 axisSettings = {
     "min": "optional numeric lower bound; empty이면 auto",
@@ -101,12 +93,12 @@ graphObject = {
     "type": "scatter, markers, lines+markers, bar, hidden 중 하나",
     "color": "현재 graph object color",
     "legendName": "legend에서 사용할 optional 이름",
-    "lineWidth": "현재 허용 범위 0.1..20",
+    "lineWidth": "GRAPH_STYLE_LIMITS.lineWidth",
     "lineDash": "solid, dot, dash, dashdot 중 하나",
     "markerSymbol": "현재 지원 marker symbol",
-    "markerSize": "현재 허용 범위 1..40",
-    "barOpacity": "현재 허용 범위 0.05..1",
-    "barLineWidth": "현재 허용 범위 0..10",
+    "markerSize": "GRAPH_STYLE_LIMITS.markerSize",
+    "barOpacity": "GRAPH_STYLE_LIMITS.barOpacity",
+    "barLineWidth": "GRAPH_STYLE_LIMITS.barLineWidth",
     "plotlyTrace": "imported Plotly trace에서 보존할 확장 속성의 optional copy",
 }
 
@@ -303,9 +295,10 @@ def tracesSingle(objectView):
        editor type=scatter는 mode=lines, markers/lines+markers는 같은 mode, hidden은 mode=lines/visible=false다.
        다른 type은 visible=true다. x/y는 위 paired sequence, name은 y column identifier다.
        color는 호출자가 GRAPH_PALETTE_RULE로 정한 값이며 line.color/marker.color 모두 같은 색이다.
-       line.width는 non-bar 0.1..20(default 2), bar 0..10(default 0); line.dash는 non-bar의 solid/dot/dash/dashdot(default solid)다.
-       marker.symbol은 object의 지원 symbol(default circle), marker.size는 1..40(default 6)이다.
-       bar만 opacity=0.05..1(default 1), marker.line={color, width=bar line width}를 추가한다.
+       line.width 범위는 non-bar GRAPH_STYLE_LIMITS.lineWidth, bar GRAPH_STYLE_LIMITS.barLineWidth다.
+       missing/invalid 기본값은 각각 GRAPH_STYLE_DEFAULTS.lineWidth/barLineWidth다. non-bar line.dash의 기본값도 GRAPH_STYLE_DEFAULTS.lineDash다.
+       marker.symbol/size는 GRAPH_STYLE_DEFAULTS의 markerSymbol/markerSize를 사용하고 size 범위는 GRAPH_STYLE_LIMITS.markerSize다.
+       bar만 opacity를 GRAPH_STYLE_LIMITS.barOpacity로 제한하고 기본값은 GRAPH_STYLE_DEFAULTS.barOpacity, marker.line은 {color,width=bar line width}다.
        numeric style은 유한 수치로 변환 후 범위 제한하고 missing/invalid는 default다. 유효한 0은 bar width에서 유지한다.
        non-bar에는 opacity/bar marker.line, bar에는 line.dash를 계산 field로 추가하지 않는다.
        hidden도 data 변환을 우회하거나 editor object를 삭제하지 않는다.
@@ -397,17 +390,17 @@ def layout(chart, project):
     1. normalizeGlobalSettings(chart.editor.globalSettings)와 네 normalizeAxisSettings를 사용한다.
        아래 omitted는 field 자체를 출력하지 않음을 뜻하며 null/0이나 이전 renderer 값을 뜻하지 않는다.
     2. 모든 axis의 Plotly type은 log일 때 log, linear/reciprocal일 때 linear다.
-       title={text: visible이면 title 아니면 empty, font:{size:titleSize 또는 14}}, visible=true다.
+       title={text: visible이면 title 아니면 empty, font:{size:titleSize 또는 AXIS_DEFAULTS.titleSize}}, visible=true다.
        visible=true 유지 이유는 데이터/overlay 축 영역을 보존하기 위함이며 표시 토글은 다음 field에 적용한다.
        showgrid=visible and showGrid, showticklabels=visible and showValues, ticks=visible이면 outside 아니면 empty,
-       showline=visible, linewidth=lineWidth, tickfont={size:fontSize 또는 12}, automargin=true다.
-       gridcolor=#E5E7EB, zeroline=visible and showZeroLine, zerolinecolor=#CBD5E1이다.
+       showline=visible, linewidth=lineWidth, tickfont={size:fontSize 또는 AXIS_DEFAULTS.fontSize}, automargin=true다.
+       gridcolor=GRAPH_RENDER_DEFAULTS.gridColor, zeroline=visible and showZeroLine, zerolinecolor=GRAPH_RENDER_DEFAULTS.zeroLineColor다.
        min/max가 모두 유한 수치면 linear/reciprocal range=[min,max]; 하나라도 empty/invalid면 range omitted다.
        log는 두 경계가 모두 >0일 때만 range=[log10(min),log10(max)], 아니면 omitted다.
        경계 순서는 보존하므로 reversed axis도 허용한다. reciprocal에 역수를 다시 적용하지 않는다.
        log dtick=1; non-log는 tick이 유한 양수이면 dtick=tick 아니면 omitted다.
        tickMode는 입력 UI 모드이며 저장된 명시적 tick을 삭제하지 않는다.
-       log minorTicks=true면 minor={dtick:D1, ticks:outside, showgrid:visible and showGrid, gridcolor:#E5E7EB},
+       log minorTicks=true면 minor={dtick:D1, ticks:outside, showgrid:visible and showGrid, gridcolor:GRAPH_RENDER_DEFAULTS.gridColor},
        false면 minor={ticks:empty, showgrid:false}; log에만 minorloglabels=none이다. non-log는 이 두 field omitted다.
        notation=power/e/none을 exponentformat으로 사용한다. showexponent는 none이면 none 아니면 all,
        tickformat은 e이면 .3e, 그 외 omitted다.
@@ -415,10 +408,10 @@ def layout(chart, project):
        yLeft->yaxis, yRight->yaxis2(+overlaying:y, side:right)로 연결한다.
        uirevision=chart.id의 text, showlegend=showLegend,
        title={text:showTitle이면 editor.title 아니면 empty, automargin:true,
-              font:{size:positive titleFontSize 또는 17, optional family:non-empty graphFontFamily}},
-       legend={font:{size:positive legendFontSize 또는 12, optional family:동일 family}}다.
+              font:{size:positive titleFontSize 또는 GRAPH_RENDER_DEFAULTS.titleFontSize, optional family:non-empty graphFontFamily}},
+       legend={font:{size:positive legendFontSize 또는 GRAPH_RENDER_DEFAULTS.legendFontSize, optional family:동일 family}}다.
        paper_bgcolor/plot_bgcolor=project.appearance.uiPalette.paperColor,
-       font={color:동 palette.fontColor, optional family:동일 family}, margin={l:58,r:58,t:42,b:50}다.
+       font={color:동 palette.fontColor, optional family:동일 family}, margin=GRAPH_RENDER_DEFAULTS.margin의 copy다.
        UI background/surface 색을 graph paper로 대신 사용하지 않는다.
     4. editor.plotlyExtensions.layout이 record면 detached copy, 아니면 empty record 위에 계산 layout을 merge한다.
        title/legend/font/margin과 네 axis는 record level에서 extension 먼저/계산 나중이다.
@@ -442,14 +435,14 @@ def normalizeAxisSettings(axis, key):
     - 없음.
 
     처리:
-    AXIS_DEFAULTS를 복사하고 bottom x/left y의 visible=True, top x/right y의 visible=False를 설정한다.
+    AXIS_DEFAULTS를 복사하고 backend.defaults.chartSettings.editor.axisVisibility[key]로 visible을 설정한다.
     입력의 알려진 field를 정규화해 덮어쓰며 unknown field는 의미 원천으로 사용하지 않는다.
     min/max/tick은 missing/null/literal empty text면 empty이고 그 외 유한 numeric text/number면 수치, invalid면 empty다.
-    title은 text 아니면 empty, titleSize/fontSize는 유한 양수 아니면 각각 14/12,
-    lineWidth는 유한 0 이상 아니면 1이다. 명시적 lineWidth=0은 유지한다.
+    title은 text 아니면 AXIS_DEFAULTS.title, titleSize/fontSize는 유한 양수 아니면 각 AXIS_DEFAULTS field,
+    lineWidth는 유한 0 이상 아니면 AXIS_DEFAULTS.lineWidth다. 명시적 lineWidth=0은 유지한다.
     showGrid/showValues는 명시적 false만 false, visible은 boolean 아니면 axis별 default,
     minorTicks는 명시적 true만 true다. notation enum invalid는 none, tickMode invalid는 plotly다.
-    bottom x와 left y는 기본 visible, top x와 right y는 기본 hidden이다.
+    axis별 기본 visible은 위 config의 axisVisibility만 사용한다.
     scaleType은 linear/log/reciprocal이며 생략/invalid는 항등 변환인 linear다.
     reciprocal을 linear의 별칭으로 지우지 않는다. data 변환은 tracesSingle의 divide 다음 역수 순서다.
     enum과 numeric/empty field를 정규화하며 divide는 유한 non-zero 수치, 생략/invalid/0은 항등 divisor 1이다.
