@@ -1,32 +1,68 @@
 {
-  "labels": {
-    "enabled": false,
-    "settings": {
-      "format": "lower-alpha",
-      "parentheses": false,
-      "x": 0,
-      "y": 0,
-      "order": "row-major",
-      "fontFamily": "system-ui, sans-serif",
-      "fontSize": 14
+  "backend": {
+    "project_object": {
+      "ffpx": { "formatVersion": 3 },
+      "layout": {
+        "gridRows": 2,
+        "gridCols": 2,
+        "slotStyle": { "referenceWidth": 1200, "gap": 0, "outerMargin": 0, "radius": 0, "aspect": 1.618, "showBorders": true }
+      },
+      "annotations": {
+        "labels": {
+          "enabled": false,
+          "settings": { "format": "lower-alpha", "parentheses": false, "x": 0, "y": 0, "order": "row-major", "fontFamily": "system-ui, sans-serif", "fontSize": 14 }
+        },
+        "captions": {
+          "enabled": false,
+          "nameBold": false,
+          "settings": { "fontFamily": "system-ui, sans-serif", "fontSize": 14, "lineHeight": 1.45 }
+        }
+      },
+      "appearance": {
+        "uiPalette": {
+          "uiColor": "#B0CFCE", "uiBackgroundColor": "#FAFAFA", "uiSurfaceColor": "#FFFFFF",
+          "uiMutedColor": "#4F525D", "uiSubtleColor": "#94A3B8", "uiDisabledBgColor": "#E5E7EB",
+          "uiDisabledTextColor": "#64748B", "uiShadowColor": "#383A42", "paperColor": "#FFFFFF", "fontColor": "#383A42"
+        }
+      },
+      "export": { "heightMode": "auto", "dpi": 300, "format": "png" }
+    },
+    "defaults": {
+      "slotSettings": {
+        "content": { "contentType": "graph", "imageSettings": { "fit": "contain", "scale": 100, "x": 50, "y": 50 } }
+      },
+      "chartSettings": {
+        "editor": {
+          "globalSettings": {
+            "showLegend": true, "showTitle": true, "showZeroLine": false,
+            "graphFontFamily": "", "titleFontSize": "", "legendFontSize": ""
+          },
+          "axis": {
+            "min": "", "max": "", "tick": "", "tickMode": "plotly", "minorTicks": false,
+            "notation": "none", "scaleType": "linear", "divide": 1, "title": "",
+            "titleSize": 14, "lineWidth": 1, "showGrid": true, "showValues": true, "fontSize": 12
+          },
+          "axisVisibility": { "xBottom": true, "xTop": false, "yLeft": true, "yRight": false },
+          "objectStyle": { "lineWidth": 2, "lineDash": "solid", "markerSymbol": "circle", "markerSize": 6, "barOpacity": 1, "barLineWidth": 0 }
+        }
+      },
+      "graphColors": ["#383A42", "#E45649", "#50A14F", "#B37901", "#0184BC", "#A626A4", "#0997B3", "#FAFAFA"],
+      "graphRendering": {
+        "titleFontSize": 17, "legendFontSize": 12, "gridColor": "#E5E7EB", "zeroLineColor": "#CBD5E1",
+        "margin": { "l": 58, "r": 58, "t": 42, "b": 50 }
+      },
+      "captionReferenceStyle": { "padding": 8, "dashboardGap": 10, "borderHeight": 2, "minimumTextWidth": 10 },
+      "limits": {
+        "layout": { "gridRows": [1, 8], "gridCols": [1, 8], "referenceWidth": [100, 20000], "gap": [0, 2000], "outerMargin": [0, 5000], "radius": [0, 2000], "aspect": [0.1, 10] },
+        "imageSettings": { "scale": [1, 1000], "x": [-100, 200], "y": [-100, 200] },
+        "labels": { "fontSizeMin": 6 },
+        "captions": { "fontSize": [6, 96], "lineHeight": [0.8, 4] },
+        "graphObject": { "lineWidth": [0.1, 20], "markerSize": [1, 40], "barOpacity": [0.05, 1], "barLineWidth": [0, 10] },
+        "export": { "logicalWidth": [100, 20000], "logicalHeight": [100, 20000], "dpi": [36, 1200], "rasterDimension": 16384, "rasterArea": 64000000 }
+      },
+      "vfs": { "root": "/assets", "csv": "/assets/csv", "image": "/assets/images", "trash": "/assets/trash" },
+      "naming": { "projectNameMaxLength": 120, "exportStemMaxLength": 100 },
+      "preview": { "widthRange": [1, 20000], "fallbackWidth": 600 }
     }
-  },
-  "captions": {
-    "enabled": false,
-    "text": "",
-    "afterText": "",
-    "name": "",
-    "nameBold": false,
-    "settings": {
-      "fontFamily": "system-ui, sans-serif",
-      "fontSize": 14,
-      "lineHeight": 1.45
-    }
-  },
-  "captionReferenceStyle": {
-    "padding": 8,
-    "dashboardGap": 10,
-    "borderHeight": 2,
-    "minimumTextWidth": 10
   }
 }
