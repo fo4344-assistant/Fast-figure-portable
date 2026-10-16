@@ -230,7 +230,12 @@ BACKEND_QUERY_KINDS = {
     "interface-intent": "Frontend selection/reference event를 current Backend authority에서 검증한 input",
     "interface-reconciliation": "ProjectMutationResult 뒤 current Backend authority에서 계산한 Frontend reconciliation input",
     "renderer": "DOM/Plotly renderer가 한 projection 작업에 사용할 immutable project view",
-    "export": "한 export 작업 동안 사용할 immutable persistent project snapshot",
+    "export": (
+        "한 작업용 immutable snapshot. 일반 project export/import 반환은 기존 whole-project snapshot이다. "
+        "print.save/print.capture 요청은 같은 작업의 project settings/geometry와 renderer contract의 "
+        "slot별 precomputed figure/image 입력을 함께 제공한다. 저장 schema가 아닌 transient export input이며 "
+        "Frontend가 whole-project copy에서 graph domain 계산을 재실행하는 경로를 만들지 않는다."
+    ),
 }
 
 BACKEND_READ_BOUNDARY_RULE = (
@@ -304,7 +309,8 @@ RENDERER_BACKEND_READ_CONTRACT = {
     "whole": (
         "default renderer request는 final frontendState와 optional mutationResult를 받는다. "
         "current layout/grid/style, appearance, annotations, visible slots와 slot-local content/caption/settings를 detached copy로 구성한다. "
-        "각 visible graph slot의 owning chart, 실제 project object의 참조 CSV/columns와 chartFigure 계산 결과를 포함한다. "
+        "각 visible graph slot의 owning chart, 실제 project object의 참조 CSV/columns와 graphs.chartFigure(chart, project) 계산 결과를 포함한다. "
+        "project는 이번 query가 읽는 같은 current authority이며 chart copy와 CSV가 같은 read 작업에 속한다. "
         "non-editable imported conversion chartFigure는 imported representation을 보존하며 conversion view로 project CSV를 resolve하지 않는다. "
         "image slot은 images.readEditor와 같은 copied bytes/name/display URL 의미를 사용한다. "
         "slot/chart/CSV resolve와 graph projection 계산은 Backend에서 끝내며 renderer가 Backend를 다시 조회하지 않는다. "
@@ -333,6 +339,11 @@ def readBackendProjection(kind, request):
     3. public read는 PUBLIC_BACKEND_READ_CONTRACTS의 domain 계산을 호출한 detached 값이다. 없는 선택 대상은 해당 계약의 none/empty 결과다.
        slot-selection-context는 visible slot이면 id/empty/contentType, invalid면 none이다. empty는 chart/image reference가 모두 없는 경우다.
     4. renderer는 RENDERER_BACKEND_READ_CONTRACT의 whole/targeted 입력을, export는 현재 whole-project snapshot을 구성한다.
+       chart/CSV/figure 계산은 같은 Backend read 작업의 project를 graphs.chartFigure(chart, project)에 명시적으로 전달한다.
+       export의 print.save/print.capture 입력에는 같은 작업의 chart/CSV에서 계산한 figure를 제공한다.
+       이는 한 작업용 projection이며 저장 ProjectObject/FFPX schema에 figure 필드나 별도 authority를 추가하지 않는다.
+       일반 project export/import 반환용 whole-project snapshot은 기존 계약을 유지한다.
+       supplied renderer input을 받은 Frontend가 Backend helper를 재호출하거나 프로젝트 mirror를 별도로 구성하지 않는다.
        interface-intent/reconciliation kind는 아래 validation/reconciliation 계산과 같은 contract를 사용하며 별도 판정 규칙을 만들지 않는다.
     5. compatibility/default normalization은 detached copy에서만 수행한다. 중첩 array/object까지 read-only로 반환하고
        Backend 내부 mutable reference, event handler, DOM node, query/command callback은 projection에 포함하지 않는다.
