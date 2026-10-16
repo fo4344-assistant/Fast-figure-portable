@@ -182,3 +182,12 @@
 - project/asset/FFSX/Plotly/print export query → copied payload → Frontend handoff/자원 정리/반환을 연결했다. handoff와 사용자 disk 저장 확인은 다르다.
 - 근거·정적 시나리오·기각 대안·남은 계약: `agent_space/reviews/review-20261016-012-api-runtime-export-r33-open.md`. project/slot/image/asset의 남은 반환 및 selection/전체 왕복·목적·중복통합 검토가 있어 closure open을 유지한다.
 - source r33 current/open과 하위 stale 유지. 정책·PlusCal/model/JS/test/build/dist 변경이나 로컬 실행은 없다. 실제 누적 patch/Actions 검사: `agent_space/patches/20261016-016.patch` 및 같은 basename `.md`.
+
+## 16. 먼저 남은 반환 작성 — r34 / OPEN
+
+- 기준 main `9377a15c0539c7d0c67183a457b7aadab3e9dc6e`. 사용자 요청에 따라 project name/slot type·reset·swap/empty image/asset delete·move·directory·trash·connect의 10개 public 반환을 먼저 마저 작성했다.
+- 완료 값 없는 None, committed boolean, fresh detached read, 실제 changed path 기반 결과를 구별한다. 모든 API를 bool/envelope로 획일화하거나 adapter tuple을 공개하지 않는다.
+- explicit target은 current Backend에서 재검증하고 image model/name/slot payload 계산은 command가 소유한다. directory/connection의 사후 selection은 기존 Application event 경로만 사용한다. 실패 시 성공 후 query/selection을 실행하지 않고 사후 실패로 이미 commit한 state를 숨은 rollback하지 않는다.
+- 근거/operation별 표/정적 시나리오/하위 호환 차이: `agent_space/reviews/review-20261016-013-api-final-returns-r34-open.md`.
+- 이 10개 반환 작성과 전체 Source closure는 다르다. 전체 selection 교차 대조·왕복·목적/중복통합 검토가 남아 source r34 current/open, closure_review null 및 하위 stale을 유지한다.
+- 정책·PlusCal/model/JS/test/build/dist 변경/로컬 실행 없음. 실제 누적 patch와 Actions 검사: `agent_space/patches/20261016-017.patch` 및 같은 basename `.md`.
