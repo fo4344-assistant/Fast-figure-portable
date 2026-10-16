@@ -52,7 +52,7 @@ PUBLIC_API_METHODS = {
     "project": {
         "readName": "Backend query; args 없음; current project meta name immutable projection",
         "setName": "mutation; PROJECT_NAME_CHANGED project command로 project name candidate commit",
-        "importFile": "lifecycle mutation; FFPX -> fully validated ProjectObject candidate -> PROJECT_LOADED",
+        "importFile": "lifecycle mutation; file 입력 -> PROJECT_LOADED 내부 FFPX parse/candidate/검증/commit -> 성공 시 immutable project snapshot; 실패/취소는 기존 경로로 전달",
         "exportFile": "read/export; current validated project snapshot -> FFPX; project mutation 없음",
     },
     "slots": {
@@ -115,10 +115,10 @@ PUBLIC_API_METHODS = {
         "setHeaderLines": "mutation; DATA_OBJECT_REPLACED project command로 referenced CSV headerLines candidate commit",
         "setEditable": "mutation; CHART_MODEL_REPLACED project command로 editable conversion + 필요한 CSV를 한 candidate로 commit",
         "addObject": "mutation; chart 있으면 GRAPH_OBJECTS_REPLACED, 없으면 SLOT_DATA_CONNECTED project command",
-        "moveObject": "mutation; GRAPH_OBJECTS_REPLACED project command로 objects 순서 candidate commit",
+        "moveObject": "mutation; chartId/from/to와 operation=graphs.moveObject -> GRAPH_OBJECTS_REPLACED 내부 순서 계산/commit; result hint는 to",
         "selectObject": "runtime mutation; explicit public object selection은 valid index와 그 object의 CSV path를 함께 선택; commit index-only 갱신은 기존 CSV 선택 보존",
         "setObjectValues": "mutation; explicit chart/index와 새 values를 전달; Backend가 요청 csvId 또는 기존 CSV를 resolve한 one-object candidate를 GRAPH_OBJECTS_REPLACED로 commit",
-        "deleteObject": "mutation; GRAPH_OBJECTS_REPLACED project command로 object 제거; 마지막 object 제거도 empty chart로 허용",
+        "deleteObject": "mutation; chartId/index와 operation=graphs.deleteObject -> GRAPH_OBJECTS_REPLACED 내부 제거/commit; result hint는 explicit none; 마지막 object도 empty chart로 허용",
         "updateLayout": "mutation; CHART_LAYOUT_CHANGED project command로 chart title/global/axis candidate commit",
         "applyPalette": "mutation; GRAPH_OBJECTS_REPLACED project command로 graph object color candidate commit",
         "defaultColors": "read; immutable default color sequence copy",
@@ -185,6 +185,9 @@ API_BOUNDARY_RULE = (
     "getChart/getProjectCsv/getProjectImage 같은 Backend internal state/helper를 직접 import/read/call하지 않는다. "
     "persistent mutation은 FastFigureApi Backend-command method -> Application adapter -> Project EFSM으로, "
     "project read는 FastFigureApi Backend-query method -> Application adapter -> Backend read provider로 전달한다. "
+    "Application 내부 결과 tuple과 public 반환값은 구분하며 application_fsm.py의 공통 결과 규칙을 따른다. "
+    "graph add/move/setObjectValues/delete가 선언한 chart 반환은 commit 성공 뒤 graphs.readData의 chart copy를 반환한다. "
+    "실패/취소에는 그 operation의 기존 실패 결과를 전달하고 성공 chart query를 하지 않는다. "
     "Frontend runtime event도 Backend identity validity가 필요하면 Application adapter가 검증한 input을 interfaceFSM에 전달한다. "
     "UI-local editor target, modal draft, pointer state는 public Backend API나 FFPX state가 아니다."
 )
@@ -247,7 +250,8 @@ MANTINE_COMPONENT_OWNERSHIP = {
 DASHBOARD_DROP_FLOW = (
     "external file drop은 FastFigureDashboardFileDrop이 DOM target slotId를 얻고 slots.prepareFileDrop으로 "
     "target validity/runtime selection만 확정한 뒤 lifecycle 안에서 assets.importToSlot(file, slotId, choosePlan)을 호출한다. "
-    "importToSlot만 asset/chart/image의 persistent candidate를 만들고 검증·commit한다. "
+    "importToSlot의 Backend ASSETS_IMPORTED command만 asset/chart/image의 persistent candidate를 만들고 검증·commit한다. "
+    "collision Modal의 resolver는 Application에서 완료하고 Backend에는 명시적 choice 값만 전달한다. "
     "finally에서 slots.finishFileDrop은 drag runtime state만 정리한다. "
     "project tree의 기존 asset drop은 assets.connectToSlot(path, kind, slotId)의 별도 explicit connection 경로를 사용한다."
 )
