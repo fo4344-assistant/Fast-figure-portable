@@ -482,7 +482,7 @@
     const settings = image?.settings;
     const updateSettings = (patch) => {
       if (!settings) return;
-      imageApi.setSettings({ ...settings, ...patch });
+      imageApi.setSettings(patch);
     };
 
     return React.createElement(
