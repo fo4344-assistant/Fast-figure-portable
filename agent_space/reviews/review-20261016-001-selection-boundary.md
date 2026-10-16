@@ -18,7 +18,8 @@
 - 초기 r32 `db12b16e9a1919ced318b97e6a6b1a317421f726`: version 검사 [38842191341](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842191341) 성공. build [38842194014](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842194014) 성공 (동일 source의 dist bot 후속 commit `c4f4dcb84babee914205486d56020ff4b000184a`).
 - 초기 regression [38842189150](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842189150)은 inline/split 모두 24/37/38 실패. 24는 object 수정 후 현재 CSV 선택을 object CSV로 바꾸는 회귀, 37은 이미지 자산이 남은 슬롯 fixture, 38은 존재하지 않는 `/assets/data` fixture 경로였다.
 - r33 보정: explicit public graph selection에만 검증된 CSV selection hint를 적용한다. object commit의 index 갱신은 별도 current CSV 선택을 덮어쓰지 않는다. 37은 slot reset으로 독립 fixture를 만들고 38은 기본 `/assets/csv`를 사용한다.
-- r33 Actions 재검증: pending.
+- r33 `31d468d92244c9622415c5af36317e6d01919d7c`: version [38842435975](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842435975), build [38842438473](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842438473) 성공. regression [38842433848](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842433848)은 양쪽 모두 1–37 통과, 38의 moved path assertion만 실패했다. 원인은 directory creation API가 새 directory를 선택하는 기존 UI 동작을 fixture에서 빠뜨린 것이다. move 전에 원래 CSV를 다시 선택하도록 test 38만 보정한다 (application 의미 변경 없음).
+- 최종 Actions 재검증: pending.
 
 ## 한계와 다음 ownership 단위
 
