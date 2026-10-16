@@ -5,10 +5,10 @@ Fast Figure Source Script — Application boundary / public-api — layout, anno
 Python 표기의 구현 명세이며 application runtime을 실행하는 모듈이 아니다.
 """
 
-from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery
+from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection
 from sourcescript.backend.project_state import DEFAULT_UI_PALETTE
 from sourcescript.frontend.interface_fsm import interfaceFSM
-from sourcescript.frontend.renderer import renderDashboardTarget, renderDashboardCurrent
+from sourcescript.frontend.renderer import renderDashboardTarget, renderDashboardCurrent, readDashboardRenderedWidth, finishDashboardFileDropInteraction
 
 
 ANNOTATION_APPEARANCE_RESULT_RULE = (
@@ -23,6 +23,65 @@ ANNOTATION_APPEARANCE_RESULT_RULE = (
     "오래된 read/성공 tuple로 위장하지 않는다. labels.finishPositionInteraction은 command가 아니라 현재 label read를 반환하는 완료 알림이다."
 )
 
+def prepareDashboardFileDrop(slotId):
+    """
+    slots.prepareFileDrop: slot-selection-context query의 visible target이 없으면 False이며 selection/Project는 그대로다.
+    valid target이면 dispatchSlotSelection(slotId, pendingContentType=None, direction="model-to-fsm")으로 선택을 보장한다.
+    기존 선택이면 toggle하지 않는다. rejected selection은 False이며 selection을 변경하지 않는다.
+    이미 selected target이면 transition 없이 True다. 다른 target의 accepted final selection만 True다.
+    content type command나 중복 drop-target state를 만들지 않는다. 오류는 전파한다.
+    """
+    context = dispatchProjectQuery("slot-selection-context", {"slotId": slotId})
+    return "missing이면 False; already selected면 True; 다른 valid target이면 위 selection accepted 여부"
+
+
+def finishDashboardFileDrop():
+    """slots.finishFileDrop: Frontend-owned drag interaction cleanup 뒤 None; selection/lifecycle/Project 유지."""
+    finishDashboardFileDropInteraction()
+    return None
+
+
+def readLayoutApiState(previewWidth=600):
+    """
+    current layout.readState Backend query에 previewWidth만 전달한다.
+    previewWidth는 finite 1..20000, invalid는 600으로 read copy에서 정규화한다.
+    반환은 gridRows/gridCols/slotStyle/visibleSlots/previewGeometry와 현재 Frontend zoom/zoomLocked다.
+    Application이 interfaceFSM의 zoom/lock scalar를 합성하며 previewGeometry를 session/Project에 저장하지 않는다.
+    """
+    layout = dispatchProjectQuery("project-api", {"operation": "layout.readState", "renderedWidth": previewWidth})
+    session = interfaceFSM.readState()
+    return "layout detached fields에 session.dashboardZoomIntent/Locked를 zoom/zoomLocked로 합성한 immutable public state"
+
+
+def setLayoutApiZoom(value):
+    """session event 뒤 fresh layout state; lock 중 no-op도 현재 read 반환, Project command 없음."""
+    dispatchInterfaceEvent("SET_DASHBOARD_ZOOM", {"value": value})
+    return readLayoutApiState()
+
+
+def commitLayoutApiZoom():
+    """기존 layout zoom completion 알림 한 번 후 fresh read; 두 번째 저장/commit/Project field 없음."""
+    interfaceFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED", {})
+    return readLayoutApiState()
+
+
+def setLayoutApiZoomLocked(locked):
+    """
+    public 인자는 locked 하나다. 처음 lock일 때만 기존 Frontend surface의 readDashboardRenderedWidth로 현재 width를 측정한다.
+    DOM access는 Frontend 책임이며 측정 실패/invalid width는 unchanged False다.
+    unlock/repeated lock은 재측정하지 않는다. accepted/no-op은 fresh layout state를 반환한다.
+    """
+    renderedWidth = "처음 lock이면 readDashboardRenderedWidth(), 그 외 none"
+    finalState = dispatchInterfaceEvent("SET_DASHBOARD_ZOOM_LOCK", {"locked": locked is True, "renderedWidth": renderedWidth})
+    return "invalid first-lock width이면 False, 그 외 readLayoutApiState()"
+
+
+def resetLayoutApiZoom():
+    """단일 RESET event로 unlock/100 percent 복귀 후 fresh read. persistent command 없음."""
+    dispatchInterfaceEvent("RESET_DASHBOARD_ZOOM", {})
+    return readLayoutApiState()
+
+
 def setLayoutApiStyle(values):
     """
     변경:
@@ -35,8 +94,10 @@ def setLayoutApiStyle(values):
     4. LAYOUT_STYLE_CHANGED command가 한 번 commit한다. Application wrapper는 values만 전달한다.
     5. renderer는 commit result 이후 authoritative layout을 다시 읽는다.
     """
-    result = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", values)
-    return result
+    result, interfaceState, rendererInput = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", values)
+    if not result.committed:
+        return False
+    return readLayoutApiState()
 
 
 def setLayoutApiGrid(rows, cols):
@@ -50,8 +111,10 @@ def setLayoutApiGrid(rows, cols):
     성공 candidate는 그 command가 한 번 commit한다.
     commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 Application boundary의 Backend reconciliation query와 Frontend FSM transition이 결정한다.
     """
-    result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", {"rows": rows, "cols": cols})
-    return result
+    result, interfaceState, rendererInput = dispatchProjectCommand("GRID_LAYOUT_CHANGED", {"rows": rows, "cols": cols})
+    if not result.committed:
+        return False
+    return readLayoutApiState()
 
 
 def mergeSlots(slotIds):
@@ -71,8 +134,10 @@ def mergeSlots(slotIds):
     7. SLOTS_MERGED 내부에서 whole-project candidate를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
     8. Frontend selection reconciliation과 renderer update는 ProjectMutationResult 이후 Application boundary가 수행한다.
     """
-    result = dispatchProjectCommand("SLOTS_MERGED", {"slotIds": slotIds})
-    return result
+    result, interfaceState, rendererInput = dispatchProjectCommand("SLOTS_MERGED", {"slotIds": slotIds})
+    if not result.committed:
+        return False
+    return readLayoutApiState()
 
 
 def splitSlots(slotIds):
@@ -87,8 +152,10 @@ def splitSlots(slotIds):
     4. SLOTS_SPLIT 내부에서 candidate 전체를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
     5. interface selection reconciliation과 renderer update는 project commit 이후 수행한다.
     """
-    result = dispatchProjectCommand("SLOTS_SPLIT", {"slotIds": slotIds})
-    return result
+    result, interfaceState, rendererInput = dispatchProjectCommand("SLOTS_SPLIT", {"slotIds": slotIds})
+    if not result.committed:
+        return False
+    return readLayoutApiState()
 
 
 def applyImageSettingsFromValues(slotId, values):
