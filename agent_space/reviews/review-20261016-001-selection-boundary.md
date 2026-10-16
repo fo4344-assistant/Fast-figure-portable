@@ -19,7 +19,10 @@
 - 초기 regression [38842189150](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842189150)은 inline/split 모두 24/37/38 실패. 24는 object 수정 후 현재 CSV 선택을 object CSV로 바꾸는 회귀, 37은 이미지 자산이 남은 슬롯 fixture, 38은 존재하지 않는 `/assets/data` fixture 경로였다.
 - r33 보정: explicit public graph selection에만 검증된 CSV selection hint를 적용한다. object commit의 index 갱신은 별도 current CSV 선택을 덮어쓰지 않는다. 37은 slot reset으로 독립 fixture를 만들고 38은 기본 `/assets/csv`를 사용한다.
 - r33 `31d468d92244c9622415c5af36317e6d01919d7c`: version [38842435975](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842435975), build [38842438473](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842438473) 성공. regression [38842433848](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842433848)은 양쪽 모두 1–37 통과, 38의 moved path assertion만 실패했다. 원인은 directory creation API가 새 directory를 선택하는 기존 UI 동작을 fixture에서 빠뜨린 것이다. move 전에 원래 CSV를 다시 선택하도록 test 38만 보정한다 (application 의미 변경 없음).
-- 최종 Actions 재검증: pending.
+- 최종 `5614061ccde797e16a2ee4afff6805254f22922e`: regression [38842589879](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842589879) **성공** — inline file:// 38개, split ZIP file:// 38개 모두 통과. version [38842592395](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842592395) **성공**.
+- distribution build/verify [38842438473](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842438473) **성공**. build source `31d468d92244c9622415c5af36317e6d01919d7c`, bot artifact commit `f2bcedbcd3b3b586291e70a4e31cdd5c066d4924`. 이후 변경은 test fixture/기록뿐이며 application source fingerprint는 동일한 r33이다.
+- source commit 직후 metadata commit 이전의 push version 검사 실패는 sequential Contents publication의 중간 상태이며 최종 dispatch 성공과 구분한다. r32의 실패 기록은 위에 보존한다.
+- 기록 감사: 002/003 patch 생성 시 local index에서 untracked였던 review를 삭제로 잘못 표현한 것을 발견했다. patch 001–003을 명시된 실제 시작/종료 Git commit의 semantic diff로 재생성했다 (001은 경로 정렬만 정규화). application 변경 없음. 004 patch가 이 기록 정정과 검증 결과 갱신을 기록한다.
 
 ## 한계와 다음 ownership 단위
 
