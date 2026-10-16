@@ -1,0 +1,805 @@
+diff --git a/agent_space/plans/plan-016.md b/agent_space/plans/plan-016.md
+index 8ad8b11..4f4e874 100644
+--- a/agent_space/plans/plan-016.md
++++ b/agent_space/plans/plan-016.md
+@@ -1265,3 +1265,12 @@ Application boundary를 세 번째 authoritative FSM으로 만들지 않는다.
+     Backend helper → Frontend local draft
+ 
+ 이 경계가 이번 계획의 핵심 구현 계약이며, 하위 PlusCal, verification model, Source Code는 이 계약을 축약하거나 약화하지 않는다.
++
++---
++
++## 32. 2026-10-16 구현 진행 — selection/reconciliation ownership
++
++- Source Code r32 (WIP): Backend validated selection / post-commit reconciliation query provider와 Application adapter를 구현한다. Frontend FSM의 live ProjectObject context, workspace chart normalization, persistent command action 연결을 제거한다.
++- invalid reference는 Frontend state를 보존하고 explicit null만 deselection한다. graph selection은 live graph mutation 없이 CSV reference를 함께 선택한다.
++- 회귀 항목 37/38과 기존 전체 split/portable browser regression, version checker, distribution build는 사용자 요청에 따라 GitHub Actions에서 실행한다. 결과는 `agent_space/reviews/review-20261016-001-selection-boundary.md`에 기록한다.
++- 전체 완료 아님: renderer와 남은 API/domain consumer의 direct access cutover, read projection 완성, 최종 통합 검증이 남는다. Source Code `stale` 유지. TLC 미실행.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 67b77e2..185ef13 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1110,6 +1110,79 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(37, "selection validation is read-only and rejected references preserve Frontend state", async () => {
++      const target = activeProject.slots.find((slot) => !slot.hidden);
++      select(target);
++      api.slots.setContentType("graph");
++      const resource = createProjectCsv([["X", "Y"], ["1", "2"]], "boundary-selection.csv");
++      api.graphs.addObject(resource.id);
++      const authority = JSON.stringify(activeProject._state);
++      const chart = getChart(slotAt(target.id).chart);
++      const editor = chart.editor, objects = editor.objects;
++      api.graphs.selectObject(0);
++      check(appFSM.state.graphObjectIndex === 0 && appFSM.state.assetSelection === "csv",
++        "validated graph selection did not select CSV");
++      check(appFSM.state.assetPath === projectAssetPath(getProjectCsv(objects[0].csvId)),
++        "graph selection CSV path mismatch");
++      check(JSON.stringify(activeProject._state) === authority && chart.editor === editor &&
++        chart.editor.objects === objects, "selection normalized or mutated live graph state");
++      appFSM.send("TOGGLE_OVERLAY", { overlay: "layout" });
++      const previous = appFSM.state, slotId = selectedSlotId;
++      for (const [event, payload] of [
++        ["SELECT_SLOT", { slotId: -999 }],
++        ["SELECT_ASSET", { kind: "csv", path: "/missing-boundary.csv" }],
++        ["SELECT_ASSET", { kind: "image", path: projectAssetPath(resource) }],
++        ["SELECT_GRAPH_OBJECT", { index: -1 }],
++        ["SELECT_GRAPH_OBJECT", { index: 999999 }],
++      ]) {
++        appFSM.send(event, payload);
++        check(appFSM.state === previous && selectedSlotId === slotId,
++          `${event} rejected reference changed Frontend state`);
++      }
++      api.graphs.selectObject(-1);
++      check(appFSM.state === previous, "public graph selector cleared invalid input");
++      check(JSON.stringify(activeProject._state) === authority, "validation changed project authority");
++      const validated = validateFrontendIntent("SELECT_SLOT", { slotId: target.id });
++      check(Object.isFrozen(validated) && validated.reference === target.id,
++        "validated reference is not immutable");
++      appFSM.send("CLOSE_OVERLAY");
++      appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(resource) });
++      check(appFSM.state.graphObjectIndex === null && appFSM.state.graphObject === "none",
++        "asset selection retained graph selection");
++      api.slots.select(null);
++      check(selectedSlotId === null && appFSM.state.workspace === "project",
++        "explicit deselection did not clear slot workspace");
++    });
++    await run(38, "post-commit reconciliation preserves unrelated references and resolves moved assets", async () => {
++      const target = activeProject.slots.find((slot) => !slot.hidden);
++      select(target);
++      const resource = createProjectCsv([["X", "Y"], ["3", "4"]], "boundary-reconcile.csv");
++      appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(resource) });
++      const original = appFSM.state.assetPath;
++      api.project.setName("boundary reconciliation");
++      check(selectedSlotId === target.id && appFSM.state.assetPath === original,
++        "unrelated project command cleared selection");
++      const beforeFailure = appFSM.state, beforeAuthority = JSON.stringify(activeProject._state);
++      let failed = false;
++      try { appFSM.send("SLOT_TYPE_CHANGED", { slotId: -999, type: "image" }); }
++      catch { failed = true; }
++      check(failed && appFSM.state === beforeFailure &&
++        JSON.stringify(activeProject._state) === beforeAuthority,
++        "failed Backend command reconciled success or changed authority");
++      api.assets.createDirectory("/assets/data", "boundary-reconcile");
++      const destination = "/assets/data/boundary-reconcile";
++      api.assets.move(api.assets.planMove(original, destination));
++      check(appFSM.state.assetPath === `${destination}/boundary-reconcile.csv`,
++        "asset move did not reconcile selected path");
++      const input = buildFrontendReconciliationInput("PROBE", { payload: {} }, interfaceFSM.readState());
++      check(Object.isFrozen(input) && input.selectedSlot === target.id,
++        "reconciliation input is not an immutable resolved reference");
++      const moved = appFSM.state.assetPath;
++      api.assets.move(api.assets.planMove(moved, "/assets/trash"));
++      check(appFSM.state.assetPath === null && appFSM.state.assetSelection === "none",
++        "trash move retained selected asset");
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 46f26d7..4b10b7c 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -1,59 +1,59 @@
+ {
+-  "schema": 2,
++  "schema": 2, 
+   "precedence": [
+-    "source-script",
+-    "pseudocode",
++    "source-script", 
++    "pseudocode", 
+     "source-code"
+-  ],
+-  "fingerprint_algorithm": "sha256(sorted path + NUL + git-blob-sha1 + LF)",
+-  "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.",
++  ], 
++  "fingerprint_algorithm": "sha256(sorted path + NUL + git-blob-sha1 + LF)", 
++  "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 25,
+-      "status": "current",
+-      "path_rule": "sourcescript/**/*.py",
+-      "fingerprint": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f",
+-      "derived_from": null,
+-      "closure": "closed",
++      "revision": 25, 
++      "status": "current", 
++      "path_rule": "sourcescript/**/*.py", 
++      "fingerprint": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f", 
++      "derived_from": null, 
++      "closure": "closed", 
+       "closure_review": "agent_space/reviews/review-20261015-021-sourcescript-closure-r25.md"
+-    },
++    }, 
+     "verification-model": {
+-      "revision": 26,
+-      "status": "current",
+-      "path_rule": "verification/**/*.{tla,cfg}",
+-      "fingerprint": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a",
++      "revision": 26, 
++      "status": "current", 
++      "path_rule": "verification/**/*.{tla,cfg}", 
++      "fingerprint": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a", 
+       "derived_from": {
+-        "source-script": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f",
++        "source-script": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f", 
+         "pseudocode": "sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5"
+-      },
+-      "tlc": "pending",
++      }, 
++      "tlc": "pending", 
+       "validation_review": null
+-    },
++    }, 
+     "source-code": {
+-      "revision": 31,
+-      "status": "stale",
++      "revision": 32, 
++      "status": "stale", 
+       "paths": [
+-        "Fast-figure.html",
+-        "fast-figure-ui.js",
+-        "fast-figure.js",
++        "Fast-figure.html", 
++        "fast-figure-ui.js", 
++        "fast-figure.js", 
+         "scripts/build-portable.py"
+-      ],
+-      "fingerprint": "sha256:82854953e4608d8bd350a1968e1642fa1bd2af41b90a82786ee13ee27130593a",
++      ], 
++      "fingerprint": "sha256:0036ffa5de009262bef6d2820f7baa20030fbe465aedf02aa3bd9920fc714ac2", 
+       "derived_from": {
+-        "source-script": "sha256:ab2846581d770c96562e57cca9d31d6c734abb46c1c1225c090b340d5d9146f7",
+-        "pseudocode": "sha256:0753354b6c25df1f391d53991cf2631a31ab184749fd96653a60bed79d87bece",
+-        "verification-model": "sha256:97c66b2980486134499d381bba0fd76d6f22fbf03062c11af484a5383a9887e4"
+-      },
+-      "validation_review": null
+-    },
++        "source-script": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f", 
++        "pseudocode": "sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5", 
++        "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
++      }, 
++      "validation_review": "agent_space/reviews/review-20261016-001-selection-boundary.md"
++    }, 
+     "pseudocode": {
+-      "revision": 11,
+-      "status": "current",
+-      "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5",
++      "revision": 11, 
++      "status": "current", 
++      "path_rule": "pseudocode/**/*.pcal", 
++      "fingerprint": "sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5", 
+       "derived_from": {
+         "source-script": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f"
+-      },
++      }, 
+       "translation_review": "agent_space/reviews/review-20261015-022-pluscal-r25.md"
+     }
+   }
+diff --git a/fast-figure.js b/fast-figure.js
+index a6d8e03..71272c6 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -402,9 +402,95 @@
+           return [...this.adapters.keys()];
+         }
+       }
++      // Backend read providers: resolve references from current authority, never normalize live models.
++      function readBackendProjection(kind, request = {}) {
++        if (kind !== "slot-selection-context") throw Error(`알 수 없는 Backend query: ${kind}`);
++        let slot = request.slotId == null ? null : slotAt(request.slotId);
++        return slot && !slot.hidden ? Object.freeze({
++          id: slot.id,
++          empty: !slot.chart && !slot.imageId,
++          contentType: slot.contentType,
++        }) : null;
++      }
++      function validateFrontendIntent(event, payload = {}) {
++        let input = { event, accepted: true, reference: null, workspaceHint: "project", selectionHint: null };
++        if (event === "SELECT_SLOT") {
++          if (payload.slotId != null) {
++            let slot = slotAt(payload.slotId);
++            if (!slot || slot.hidden) input.accepted = false;
++            else {
++              input.reference = slot.id;
++              input.workspaceHint = slot.contentType === "image" ? "slot.image" : "slot.graph";
++              input.selectionHint = payload.direction === "model-to-fsm" ? "clear-graph-object" : "toggle-clear";
++            }
++          }
++        } else if (event === "SELECT_ASSET") {
++          if (payload.path != null) {
++            let match = projectVfs.resolve(payload.path);
++            if (!match || match.kind !== payload.kind || !["csv", "image", "directory"].includes(match.kind))
++              input.accepted = false;
++            else {
++              input.reference = match.kind === "directory" ? match.path : projectAssetPath(match.asset);
++              input.selectionHint = match.kind;
++            }
++          }
++        } else if (event === "SELECT_GRAPH_OBJECT") {
++          if (payload.index != null) {
++            let slot = slotAt(payload.selectedSlotId),
++              chart = slot && !slot.hidden && slot.contentType !== "image" ? getChart(slot.chart) : null,
++              object = Number.isInteger(payload.index) && payload.index >= 0
++                ? chart?.editor?.objects?.[payload.index] : null,
++              csv = object ? getProjectCsv(object.csvId) : null;
++            if (!object || !csv) input.accepted = false;
++            else {
++              input.reference = payload.index;
++              input.selectionHint = projectAssetPath(csv);
++            }
++          }
++        } else input.accepted = false;
++        return Object.freeze(input);
++      }
++      function buildFrontendReconciliationInput(event, result, references) {
++        let payload = result.payload || {}, hints = result.selectionHints || {},
++          slotId = references.selectedSlotId,
++          assetPath = references.assetPath,
++          graphObjectIndex = references.graphObjectIndex;
++        if (hints.resetInterfaceSelection) {
++          slotId = assetPath = graphObjectIndex = null;
++        } else {
++          if (Array.isArray(hints.swapSlotIds) && hints.swapSlotIds.length === 2) {
++            let [source, target] = hints.swapSlotIds;
++            if (slotId === source) slotId = target;
++            else if (slotId === target) slotId = source;
++          }
++          if (hints.mergeSlotIds?.includes(slotId)) slotId = hints.anchorId;
++          if (assetPath && hints.movedPathFrom && projectPathInDirectory(assetPath, hints.movedPathFrom))
++            assetPath = `${hints.movedPathTo}${assetPath.slice(hints.movedPathFrom.length)}`;
++        }
++        let slot = slotId == null ? null : slotAt(slotId);
++        if (!slot || slot.hidden) slotId = null;
++        let asset = assetPath ? projectVfs.resolve(assetPath) : null;
++        if (hints.clearAssetSelection || !asset ||
++            (hints.enteringTrash && projectVfs.isTrashed(assetPath))) {
++          asset = null;
++          assetPath = null;
++        }
++        let chart = slotId !== null && slot.contentType !== "image" ? getChart(slot.chart) : null;
++        if (payload.clearGraphSelection || hints.clearGraphSelection ||
++            !Number.isInteger(graphObjectIndex) || graphObjectIndex < 0 ||
++            graphObjectIndex >= (chart?.editor?.objects?.length || 0))
++          graphObjectIndex = null;
++        return Object.freeze({
++          event, selectedSlot: slotId,
++          assetSelection: assetPath, assetKind: asset?.kind || "none",
++          graphObject: graphObjectIndex,
++          workspaceHint: slotId === null ? "project" : slot.contentType === "image" ? "slot.image" : "slot.graph",
++        });
++      }
++      const BACKEND_REFERENCE_EVENTS = new Set(["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]);
++
+       class InterfaceStateMachine {
+-        constructor(objects, definitions) {
+-          this.objects = objects;
++        constructor(definitions) {
+           this.definitions = definitions;
+           this.state = Object.freeze({
+             lifecycle: "booting",
+@@ -428,8 +514,6 @@
+           return definition;
+         }
+         context(region, state, event, payload) {
+-          let definition = this.definition(region, state),
+-            names = definition.objects || [];
+           return {
+             machine: this,
+             region,
+@@ -438,7 +522,6 @@
+             payload,
+             direction: payload.direction || this.state.direction || "model-to-ui",
+             canWrite: (scope) => !this.writeLocks.has(scope),
+-            objects: Object.fromEntries(names.map((name) => [name, this.objects.read(name)])),
+           };
+         }
+         withWriteLocks(scopes, operation) {
+@@ -525,6 +608,9 @@
+           return this.state;
+         }
+         send(event, payload = {}) {
++          if (PROJECT_COMMANDS.has(event)) return this.state;
++          if (BACKEND_REFERENCE_EVENTS.has(event) && payload.validatedInput?.accepted !== true)
++            return this.state;
+           if (event === "LIFECYCLE_START" || event === "LIFECYCLE_COMPLETE" ||
+               event === "LIFECYCLE_FAILED")
+             return this.transitionLifecycle(event, payload);
+@@ -548,70 +634,18 @@
+           if (!handled) debugLog("fsm:event-unhandled", { event, state: this.state }, "warn");
+           return this.state;
+         }
+-        reconcileProjectResult(event, result) {
+-          let payload = result?.payload || {},
+-            hints = payload.selectionHints || {};
+-
+-          if (hints.resetInterfaceSelection) {
+-            selectedSlotId = null;
+-            this.state = Object.freeze({
+-              ...this.state,
+-              workspace: "project",
+-              assetSelection: "none",
+-              assetPath: null,
+-              graphObject: "none",
+-              graphObjectIndex: null,
+-              direction: "model-to-ui",
+-              revision: this.state.revision + 1,
+-            });
+-            return this.publish(`${event}:reconcile`);
+-          }
+-
+-          if (Array.isArray(hints.swapSlotIds) && hints.swapSlotIds.length === 2) {
+-            let [sourceId, targetId] = hints.swapSlotIds;
+-            if (selectedSlotId === sourceId) selectedSlotId = targetId;
+-            else if (selectedSlotId === targetId) selectedSlotId = sourceId;
+-          }
+-
+-          if (Array.isArray(hints.mergeSlotIds) && hints.mergeSlotIds.includes(selectedSlotId))
+-            selectedSlotId = hints.anchorId;
+-          if (hints.reResolveSlotSelection && selectedSlotId !== null && !slotAt(selectedSlotId))
+-            selectedSlotId = null;
+-
+-          let assetPath = this.state.assetPath;
+-          if (assetPath && hints.movedPathFrom && projectPathInDirectory(assetPath, hints.movedPathFrom)) {
+-            assetPath = `${hints.movedPathTo}${assetPath.slice(hints.movedPathFrom.length)}`;
+-          }
+-          let selectedAsset = assetPath ? projectVfs.resolve(assetPath) : null;
+-          if (
+-            hints.clearAssetSelection ||
+-            (hints.enteringTrash && assetPath && projectVfs.isTrashed(assetPath)) ||
+-            !selectedAsset
+-          ) {
+-            assetPath = null;
+-            selectedAsset = null;
+-          }
+-
+-          let graphObjectIndex = this.state.graphObjectIndex,
+-            selectedSlot = selectedSlotId === null ? null : slotAt(selectedSlotId),
+-            selectedChart = selectedSlot?.chart ? getChart(selectedSlot.chart) : null,
+-            objects = selectedChart ? ensureGraphObjects(selectedChart) : [];
+-          if (
+-            payload.clearGraphSelection ||
+-            hints.clearGraphSelection ||
+-            !Number.isInteger(graphObjectIndex) ||
+-            graphObjectIndex < 0 ||
+-            graphObjectIndex >= objects.length
+-          )
+-            graphObjectIndex = null;
+-
++        readState() {
++          return Object.freeze({ ...this.state, selectedSlotId });
++        }
++        reconcileProjectResult(event, input) {
++          selectedSlotId = input.selectedSlot;
+           this.state = Object.freeze({
+             ...this.state,
+-            workspace: workspaceStateFromModel(selectedSlotId),
+-            assetSelection: selectedAsset?.kind || "none",
+-            assetPath,
+-            graphObject: graphObjectIndex === null ? "none" : "selected",
+-            graphObjectIndex,
++            workspace: input.workspaceHint,
++            assetSelection: input.assetKind,
++            assetPath: input.assetSelection,
++            graphObject: input.graphObject === null ? "none" : "selected",
++            graphObjectIndex: input.graphObject,
+             direction: "model-to-ui",
+             revision: this.state.revision + 1,
+           });
+@@ -636,9 +670,9 @@
+           }
+           return this.publish(event);
+         }
+-        ready() {
++        ready(workspaceHint = "project") {
+           this.transition("lifecycle", "ready", "READY");
+-          this.transition("workspace", workspaceStateFromModel(), "WORKSPACE_INIT", {
++          this.transition("workspace", workspaceHint, "WORKSPACE_INIT", {
+             direction: "model-to-fsm",
+           });
+           this.transition("overlay", "none", "OVERLAY_INIT", { reenter: true });
+@@ -675,26 +709,18 @@
+         }
+       }
+ 
+-      function workspaceStateForSelection() {
+-        let slot = getSelectedSlot();
+-        if (!slot) return "project";
+-        return slot.contentType === "image" ? "slot.image" : "slot.graph";
+-      }
+       function workspaceStateFromModel(slotId = selectedSlotId) {
+         let slot = slotId == null ? null : slotAt(slotId);
+         return !slot ? "project" : slot.contentType === "image" ? "slot.image" : "slot.graph";
+       }
+       function requestedWorkspaceState({ payload }) {
+-        return payload.direction === "model-to-fsm"
+-          ? workspaceStateFromModel(payload.slotId)
+-          : workspaceStateForSelection();
++        return selectedSlotId === null ? "project" : payload.validatedInput.workspaceHint;
+       }
+       function applySlotSelectionAction({ machine, payload }) {
+-        let slot = payload.slotId == null ? null : slotAt(payload.slotId),
+-          same = !!slot && selectedSlotId === slot.id,
+-          hydrating = payload.direction === "model-to-fsm";
++        let input = payload.validatedInput,
++          same = input.reference !== null && selectedSlotId === input.reference;
+         machine.assertWritable("workspace", "SELECT_SLOT");
+-        selectedSlotId = !slot || (!hydrating && same) ? null : slot.id;
++        selectedSlotId = same && input.selectionHint === "toggle-clear" ? null : input.reference;
+         machine.state = Object.freeze({
+           ...machine.state,
+           graphObject: "none",
+@@ -710,15 +736,14 @@
+       }
+       function applyGraphObjectSelectionAction({ machine, payload }) {
+         machine.assertWritable("editor", "SELECT_GRAPH_OBJECT");
+-        let slot = getSelectedSlot(),
+-          chart = slot?.chart ? getChart(slot.chart) : null,
+-          objects = ensureGraphObjects(chart),
+-          index = Number.isInteger(payload.index) ? payload.index : null;
+-        if (!slot || slot.contentType === "image" || !chart || index < 0 || index >= objects.length)
+-          index = null;
++        let index = payload.validatedInput?.event === "SELECT_GRAPH_OBJECT"
++          ? payload.validatedInput.reference : null;
+         machine.state = Object.freeze({
+           ...machine.state,
+           graphObjectIndex: index,
++          ...(index !== null ? {
++            assetSelection: "csv", assetPath: payload.validatedInput.selectionHint,
++          } : {}),
+         });
+       }
+       function selectedGraphObjectGuard() {
+@@ -1473,27 +1498,19 @@
+       }
+ 
+       function applyAssetSelectionAction({ machine, payload }) {
+-        let kind = ["csv", "image", "directory"].includes(payload.kind) ? payload.kind : null,
+-          match = payload.path ? projectVfs.resolve(payload.path) : null,
+-          asset = match?.kind === kind ? match.asset : null,
+-          path = kind === "directory" && match?.kind === "directory" ? match.path : asset ? projectAssetPath(asset) : null;
++        let path = payload.validatedInput?.event === "SELECT_ASSET"
++          ? payload.validatedInput.reference : null;
+         machine.state = Object.freeze({
+           ...machine.state,
+           assetPath: path ?? null,
+         });
+       }
+       function assetSelectionTarget({ payload }) {
+-        let match = payload.path ? projectVfs.resolve(payload.path) : null;
+-        if (match?.kind === payload.kind) return payload.kind;
+-        return "none";
++        return payload.validatedInput.selectionHint || "none";
+       }
+       function requestedOverlayState({ state, payload }) {
+         return state === payload.overlay ? "none" : payload.overlay;
+       }
+-      function syncGraphWorkspaceState() {
+-        let slot=getSelectedSlot();
+-        if(slot?.chart)activateChartModel(slot.chart);
+-      }
+       function exitGraphWorkspaceState({ machine }) {
+         machine.state = Object.freeze({
+           ...machine.state,
+@@ -1517,98 +1534,6 @@
+             action: applySlotSelectionAction,
+             target: requestedWorkspaceState,
+           },
+-          SLOT_TYPE_CHANGED: {
+-            action: applySlotTypeAction,
+-            target: requestedWorkspaceState,
+-          },
+-          CAPTION_TEXT_INPUT: {
+-            action: applyCaptionTextAction,
+-            target: ({ state }) => state,
+-          },
+-          SLOT_CAPTIONS_INSERTED: {
+-            action: applySlotCaptionsInsertedAction,
+-            target: ({ state }) => state,
+-          },
+-          PROJECT_DIRECTORY_CREATED: {
+-            action: applyProjectDirectoryCreatedAction,
+-            target: ({ state }) => state,
+-          },
+-          PROJECT_NODE_MOVED: {
+-            action: applyProjectNodeMovedAction,
+-            target: requestedWorkspaceState,
+-          },
+-          PROJECT_TRASH_EMPTIED: {
+-            action: applyProjectTrashEmptiedAction,
+-            target: ({ state }) => state,
+-          },
+-          DATA_OBJECT_CREATED: {
+-            action: applyDataObjectCreatedAction,
+-            target: ({ state }) => state,
+-          },
+-          DATA_OBJECT_REPLACED: {
+-            action: applyDataObjectReplacedAction,
+-            target: ({ state }) => state,
+-          },
+-          DATA_OBJECT_DELETED: {
+-            action: applyDataObjectDeletedAction,
+-            target: ({ state }) => state,
+-          },
+-          IMAGE_OBJECT_CREATED: {
+-            action: applyImageObjectCreatedAction,
+-            target: ({ state }) => state,
+-          },
+-          IMAGE_OBJECT_REPLACED: {
+-            action: applyImageObjectReplacedAction,
+-            target: ({ state }) => state,
+-          },
+-          IMAGE_OBJECT_DELETED: {
+-            action: applyImageObjectDeletedAction,
+-            target: ({ state }) => state,
+-          },
+-          SLOTS_RESET: {
+-            action: applySlotsResetAction,
+-            target: requestedWorkspaceState,
+-          },
+-          SLOTS_SWAPPED: {
+-            action: applySlotsSwappedAction,
+-            target: requestedWorkspaceState,
+-          },
+-          SLOT_IMAGE_LINKED: {
+-            action: applySlotImageLinkedAction,
+-            target: ({ state }) => state,
+-          },
+-          SLOT_DATA_CONNECTED: {
+-            action: applySlotDataConnectedAction,
+-            target: requestedWorkspaceState,
+-          },
+-          GRAPH_OBJECTS_REPLACED: {
+-            action: applyGraphObjectsReplacedAction,
+-            target: ({ state }) => state,
+-          },
+-          CHART_LAYOUT_CHANGED: {
+-            action: applyChartLayoutChangedAction,
+-            target: ({ state }) => state,
+-          },
+-          CHART_MODEL_REPLACED: {
+-            action: applyChartModelReplacedAction,
+-            target: ({ state }) => state,
+-          },
+-          SLOT_IMAGE_IMPORTED: {
+-            action: applySlotImageImportedAction,
+-            target: requestedWorkspaceState,
+-          },
+-          SLOT_CHART_IMPORTED: {
+-            action: applySlotChartImportedAction,
+-            target: requestedWorkspaceState,
+-          },
+-          GRID_LAYOUT_CHANGED: {
+-            action: applyGridLayoutChangedAction,
+-            target: "project",
+-          },
+-          PROJECT_LOADED: {
+-            action: applyProjectLoadedAction,
+-            target: "project",
+-          },
+         },
+         SHARED_OVERLAY_EVENTS = {
+           TOGGLE_OVERLAY: { target: requestedOverlayState },
+@@ -1618,49 +1543,21 @@
+           SELECT_SLOT: {
+             target: ({ state, payload }) => payload.slotId == null ? state : "none",
+           },
+-          CAPTION_TEXT_INPUT: { target: ({ state }) => state },
+-          SLOT_CAPTIONS_INSERTED: { target: ({ state }) => state },
+-          SLOTS_SWAPPED: { target: ({ state }) => state },
+         },
+         GRAPH_OBJECT_EVENTS = {
+-          SELECT_GRAPH_OBJECT: {
+-            action: applyGraphObjectSelectionAction,
+-            target: ({ payload }) => Number.isInteger(payload.index) ? "selected" : "none",
+-          },
+-          CLEAR_GRAPH_OBJECT: {
+-            action: applyGraphObjectSelectionAction,
+-            target: "none",
+-          },
+-          SELECT_SLOT: {
+-            action: applyGraphObjectSelectionAction,
+-            target: "none",
+-          },
+-          SLOT_TYPE_CHANGED: {
+-            action: applyGraphObjectSelectionAction,
+-            target: "none",
+-          },
+-          SLOTS_RESET: {
+-            action: applyGraphObjectSelectionAction,
+-            target: "none",
+-          },
+-          SLOTS_SWAPPED: {
++          SELECT_ASSET: {
+             action: applyGraphObjectSelectionAction,
+             target: "none",
+           },
+-          GRAPH_OBJECTS_REPLACED: {
++          SELECT_GRAPH_OBJECT: {
+             action: applyGraphObjectSelectionAction,
+-            target: ({ machine }) =>
+-              Number.isInteger(machine.state.graphObjectIndex) ? "selected" : "none",
++            target: ({ payload }) => payload.validatedInput.reference !== null ? "selected" : "none",
+           },
+-          PROJECT_NODE_MOVED: ({ state, payload }) =>
+-            payload.clearGraphSelection
+-              ? { action: applyGraphObjectSelectionAction, target: "none" }
+-              : { target: state },
+-          GRID_LAYOUT_CHANGED: {
++          CLEAR_GRAPH_OBJECT: {
+             action: applyGraphObjectSelectionAction,
+             target: "none",
+           },
+-          PROJECT_LOADED: {
++          SELECT_SLOT: {
+             action: applyGraphObjectSelectionAction,
+             target: "none",
+           },
+@@ -1674,28 +1571,10 @@
+             action: applyAssetSelectionAction,
+             target: "none",
+           },
+-          DATA_OBJECT_REPLACED: { target: ({ state }) => state },
+-          IMAGE_OBJECT_REPLACED: { target: ({ state }) => state },
+-          PROJECT_NODE_MOVED: ({ state, payload }) =>
+-            payload.clearAssetSelection
+-              ? { action: applyAssetSelectionAction, target: "none" }
+-              : { target: state },
+           SELECT_SLOT: {
+             action: applyAssetSelectionAction,
+             target: "none",
+           },
+-          SLOTS_SWAPPED: {
+-            action: applyAssetSelectionAction,
+-            target: "none",
+-          },
+-          GRID_LAYOUT_CHANGED: {
+-            action: applyAssetSelectionAction,
+-            target: "none",
+-          },
+-          PROJECT_LOADED: {
+-            action: applyAssetSelectionAction,
+-            target: "none",
+-          },
+         },
+         APP_STATE_DEFINITIONS = {
+           lifecycle: {
+@@ -1757,9 +1636,7 @@
+                 "captions",
+                 "ui",
+               ],
+-              entry: syncGraphWorkspaceState,
+               exit: exitGraphWorkspaceState,
+-              update: syncGraphWorkspaceState,
+               on: SHARED_WORKSPACE_EVENTS,
+             },
+             "slot.image": {
+@@ -1889,7 +1766,7 @@
+         ASSETS_IMPORTED: applyAssetsImportedAction,
+       });
+       const PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
+-      const interfaceFSM = new InterfaceStateMachine(projectObjects, APP_STATE_DEFINITIONS);
++      const interfaceFSM = new InterfaceStateMachine(APP_STATE_DEFINITIONS);
+       const projectEFSM = new ProjectStateMachine(projectObjects, PROJECT_COMMAND_ACTIONS);
+ 
+       function runLifecycleTask(lifecycle, event, task) {
+@@ -1923,7 +1800,9 @@
+ 
+       function dispatchProjectCommand(event, payload = {}) {
+         let result = projectEFSM.send(event, payload);
+-        interfaceFSM.reconcileProjectResult(event, result);
++        if (result.committed)
++          interfaceFSM.reconcileProjectResult(event,
++            buildFrontendReconciliationInput(event, result, interfaceFSM.readState()));
+         return result;
+       }
+ 
+@@ -1936,15 +1815,13 @@
+             dispatchProjectCommand(event, payload);
+             return interfaceFSM.state;
+           }
+-          let state = interfaceFSM.send(event, payload);
++          let validatedInput = BACKEND_REFERENCE_EVENTS.has(event)
++            ? validateFrontendIntent(event, { ...payload, selectedSlotId }) : null;
++          if (validatedInput && !validatedInput.accepted) return interfaceFSM.state;
++          interfaceFSM.send(event, validatedInput ? { ...payload, validatedInput } : payload);
+           if (event === "SELECT_SLOT") {
+-            let slot = selectedSlotId === null ? null : slotAt(selectedSlotId);
+-            if (
+-              slot &&
+-              !slot.chart &&
+-              !slot.imageId &&
+-              slot.contentType !== pendingSlotContentType
+-            ) {
++            let slot = readBackendProjection("slot-selection-context", { slotId: selectedSlotId });
++            if (slot?.empty && slot.contentType !== pendingSlotContentType) {
+               dispatchProjectCommand("SLOT_TYPE_CHANGED", {
+                 slotId: slot.id,
+                 type: pendingSlotContentType,
+@@ -1952,11 +1829,11 @@
+               });
+             }
+           }
+-          return state;
++          return interfaceFSM.state;
+         },
+         notify: (...args) => interfaceFSM.notify(...args),
+         run: (...args) => runLifecycleTask(...args),
+-        ready: (...args) => interfaceFSM.ready(...args),
++        ready: () => interfaceFSM.ready(workspaceStateFromModel()),
+         subscribe: (...args) => interfaceFSM.subscribe(...args),
+       });
+       function selectedProjectAsset() {
+@@ -5935,12 +5812,11 @@
+         return csv;
+       }
+       function graphEditorSelectObject(index) {
+-        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
+-        let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
+-        if (selected !== null) graphEditorSelectCsv(objects[selected].csvId);
+-        appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
++        let input = validateFrontendIntent("SELECT_GRAPH_OBJECT", { index, selectedSlotId });
++        if (!input.accepted) return null;
++        appFSM.send("SELECT_GRAPH_OBJECT", { index: input.reference, direction: "fsm-to-model" });
+         appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
+-        return selected;
++        return input.reference;
+       }
+       function graphEditorObjectValues(index, values = {}) {
+         let chart = graphEditorChart(), objects = ensureGraphObjects(chart), current = objects[index];
+diff --git a/agent_space/reviews/review-20261016-001-selection-boundary.md b/agent_space/reviews/review-20261016-001-selection-boundary.md
+new file mode 100644
+index 0000000..6f94319
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-001-selection-boundary.md
+@@ -0,0 +1,24 @@
++# Plan 016 — selection/reconciliation boundary (Source Code r32, WIP)
++
++## 대상과 추적
++
++- 기준 main: `2ce0c59d4aaf90e753478899d4ea18998e1e19fd`.
++- Source Script r25 / PlusCal r11의 `project_state` Backend query providers, `interface_fsm` validated selection / reconciliation, `application_fsm` dispatch 순서를 구현한다.
++- Frontend FSM은 ProjectObject registry를 받지 않으며 context에 live Backend object를 전달하지 않는다. workspace의 chart activation/normalization hook과 persistent command action table 연결을 제거한다.
++- Application adapter가 current Backend authority에서 선택 reference를 검증한 뒤 accepted input만 전달한다. invalid slot/path/index는 기존 Frontend state를 유지하고 explicit null은 deselection이다.
++- Backend query provider가 commit result와 current Frontend reference를 resolve한 immutable scalar reconciliation input을 만든다. Frontend FSM은 이를 적용할 뿐 domain lookup/normalization을 수행하지 않는다.
++- graph public selection도 live graph normalization 없이 검증 후 graph index와 CSV path를 함께 선택한다.
++- commit 실패는 success reconciliation을 발생시키지 않는다. unrelated command는 유효 reference를 유지하고 asset move/trash는 실제 결과와 current authority로 path를 갱신/clear한다.
++
++## 검증
++
++- browser regression 37: graph selection read-only/identity 보존, invalid slot/path/kind/index 무변경, public invalid graph selection, immutable validated input, asset 선택 시 graph clear, explicit slot deselection.
++- browser regression 38: unrelated commit의 reference 보존, 실패 command의 authority/Frontend 무변경, move/trash reconciliation, immutable reconciliation input.
++- 검증 실행은 사용자 요청에 따라 GitHub Actions만 사용한다. 로컬 application/test/build/version checker 실행은 하지 않는다.
++- Actions 실행 결과: pending. 실제 run/commit/result 확인 후 갱신한다.
++
++## 한계와 다음 ownership 단위
++
++- Plan 016 전체 완료가 아니다. renderer와 남은 API/domain consumer의 direct Backend access cutover, public read projection 완성 및 전체 회귀 감사가 남는다.
++- source-code status는 `stale`로 유지한다. r32는 r25/r11의 이 ownership 단위 구현이며 전체 Source Code가 최신 경계를 구현했다는 뜻이 아니다.
++- Source Script/PlusCal/verification 의미는 변경하지 않는다. TLC는 실행하지 않으며 기존 pending 기록을 유지한다.
