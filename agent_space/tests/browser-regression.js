@@ -1110,6 +1110,79 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+    await run(37, "selection validation is read-only and rejected references preserve Frontend state", async () => {
+      const target = activeProject.slots.find((slot) => !slot.hidden);
+      select(target);
+      api.slots.setContentType("graph");
+      const resource = createProjectCsv([["X", "Y"], ["1", "2"]], "boundary-selection.csv");
+      api.graphs.addObject(resource.id);
+      const authority = JSON.stringify(activeProject._state);
+      const chart = getChart(slotAt(target.id).chart);
+      const editor = chart.editor, objects = editor.objects;
+      api.graphs.selectObject(0);
+      check(appFSM.state.graphObjectIndex === 0 && appFSM.state.assetSelection === "csv",
+        "validated graph selection did not select CSV");
+      check(appFSM.state.assetPath === projectAssetPath(getProjectCsv(objects[0].csvId)),
+        "graph selection CSV path mismatch");
+      check(JSON.stringify(activeProject._state) === authority && chart.editor === editor &&
+        chart.editor.objects === objects, "selection normalized or mutated live graph state");
+      appFSM.send("TOGGLE_OVERLAY", { overlay: "layout" });
+      const previous = appFSM.state, slotId = selectedSlotId;
+      for (const [event, payload] of [
+        ["SELECT_SLOT", { slotId: -999 }],
+        ["SELECT_ASSET", { kind: "csv", path: "/missing-boundary.csv" }],
+        ["SELECT_ASSET", { kind: "image", path: projectAssetPath(resource) }],
+        ["SELECT_GRAPH_OBJECT", { index: -1 }],
+        ["SELECT_GRAPH_OBJECT", { index: 999999 }],
+      ]) {
+        appFSM.send(event, payload);
+        check(appFSM.state === previous && selectedSlotId === slotId,
+          `${event} rejected reference changed Frontend state`);
+      }
+      api.graphs.selectObject(-1);
+      check(appFSM.state === previous, "public graph selector cleared invalid input");
+      check(JSON.stringify(activeProject._state) === authority, "validation changed project authority");
+      const validated = validateFrontendIntent("SELECT_SLOT", { slotId: target.id });
+      check(Object.isFrozen(validated) && validated.reference === target.id,
+        "validated reference is not immutable");
+      appFSM.send("CLOSE_OVERLAY");
+      appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(resource) });
+      check(appFSM.state.graphObjectIndex === null && appFSM.state.graphObject === "none",
+        "asset selection retained graph selection");
+      api.slots.select(null);
+      check(selectedSlotId === null && appFSM.state.workspace === "project",
+        "explicit deselection did not clear slot workspace");
+    });
+    await run(38, "post-commit reconciliation preserves unrelated references and resolves moved assets", async () => {
+      const target = activeProject.slots.find((slot) => !slot.hidden);
+      select(target);
+      const resource = createProjectCsv([["X", "Y"], ["3", "4"]], "boundary-reconcile.csv");
+      appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(resource) });
+      const original = appFSM.state.assetPath;
+      api.project.setName("boundary reconciliation");
+      check(selectedSlotId === target.id && appFSM.state.assetPath === original,
+        "unrelated project command cleared selection");
+      const beforeFailure = appFSM.state, beforeAuthority = JSON.stringify(activeProject._state);
+      let failed = false;
+      try { appFSM.send("SLOT_TYPE_CHANGED", { slotId: -999, type: "image" }); }
+      catch { failed = true; }
+      check(failed && appFSM.state === beforeFailure &&
+        JSON.stringify(activeProject._state) === beforeAuthority,
+        "failed Backend command reconciled success or changed authority");
+      api.assets.createDirectory("/assets/data", "boundary-reconcile");
+      const destination = "/assets/data/boundary-reconcile";
+      api.assets.move(api.assets.planMove(original, destination));
+      check(appFSM.state.assetPath === `${destination}/boundary-reconcile.csv`,
+        "asset move did not reconcile selected path");
+      const input = buildFrontendReconciliationInput("PROBE", { payload: {} }, interfaceFSM.readState());
+      check(Object.isFrozen(input) && input.selectedSlot === target.id,
+        "reconciliation input is not an immutable resolved reference");
+      const moved = appFSM.state.assetPath;
+      api.assets.move(api.assets.planMove(moved, "/assets/trash"));
+      check(appFSM.state.assetPath === null && appFSM.state.assetSelection === "none",
+        "trash move retained selected asset");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
