@@ -5,8 +5,56 @@ Fast Figure Source Script — Application boundary / public-api — asset wrappe
 Python 표기의 구현 명세이며 application runtime을 실행하는 모듈이 아니다.
 """
 
-from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery
+from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent
 from sourcescript.backend.assets_files import EMPTY_CSV_TEMPLATE
+
+def readAssetFileKind(file):
+    """assets.fileKind: copied name/type만 공식 pure query에 전달하고 kind 문자열을 그대로 반환한다."""
+    return dispatchProjectQuery("project-api", {"operation": "assets.fileKind", "file": "file의 name/type copy"})
+
+
+def readAssetCollisionModel(file, directory, reservedPaths):
+    """assets.collisionModel: immutable 한 작업용 model; UI choice는 이 query 밖에서 수집한다."""
+    return dispatchProjectQuery("project-api", {
+        "operation": "assets.collisionModel", "file": file, "directory": directory, "reservedPaths": reservedPaths,
+    })
+
+
+def readAssetImportPlan(model, choice, reservedPaths):
+    """assets.resolveImportPlan: UI 제안과 explicit choice만 전달; 오류는 전파하고 commit/예약으로 취급하지 않는다."""
+    return dispatchProjectQuery("project-api", {
+        "operation": "assets.resolveImportPlan", "model": model, "choice": choice, "reservedPaths": reservedPaths,
+    })
+
+
+def selectProjectCsv(path):
+    """
+    assets.selectCsv의 Application operation. current assets.readDeletionTarget으로 CSV identity를 확인한다.
+    missing/wrong-kind면 none 반환, event/notify/Project/Frontend 변경 없음.
+    valid면 scalar canonical path/kind만 dispatchInterfaceEvent SELECT_ASSET에 전달한다.
+    Backend 재검증을 통과한 SELECT_ASSET이 asset selection을 바꾸고 graphObject/index를 함께 clear한다.
+    slot/workspace와 ProjectObject는 유지한다. 별도 CLEAR_GRAPH_OBJECT 선행 전이는 만들지 않는다.
+    거부되면 none이고 selection을 성공으로 반환하지 않는다. 성공하면 공식 query의 detached CSV를 반환한다.
+    query/adapter throw는 전파한다. projection 전체를 command candidate로 전달하거나 장기 저장하지 않는다.
+    """
+    resolved = dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": path})
+    target = "resolved의 detached CSV target; missing/wrong-kind면 event 전에 즉시 none 반환"
+    finalState = dispatchInterfaceEvent("SELECT_ASSET", {"kind": "csv", "path": "target의 canonical path"})
+    return "finalState가 요청 CSV selection이면 공식 query의 detached CSV, 아니면 none"
+
+
+def createEmptyProjectCsvAndSelect():
+    """
+    assets.createEmptyCsv의 public create-and-select operation.
+    1. createEmptyProjectCsv의 일반 create command를 정확히 한 번 실행한다.
+    2. 미commit 결과면 그대로 반환하며 SELECT_ASSET/성공 read를 하지 않는다. throw는 전파한다.
+    3. committed CSV의 scalar canonical path로 selectProjectCsv를 호출한다. graph object/chart 생성 없음.
+    4. 성공 시 선택된 detached CSV를 반환한다. selection 거부는 none, query/adapter throw는 전파한다.
+       create는 이미 commit되었으므로 사후 selection/read 실패를 미commit으로 위장하거나 asset을 rollback하지 않는다.
+    """
+    csv = createEmptyProjectCsv()
+    return "미commit이면 원래 failure; committed CSV이면 selectProjectCsv(csv canonical path) 결과"
+
 
 def importProjectFilesToDirectory(files, directory, planImport):
     """
@@ -14,7 +62,7 @@ def importProjectFilesToDirectory(files, directory, planImport):
     - 전체 candidate가 검증된 뒤 CSV/image collection과 관련 reference를 한 번 commit한다.
 
     처리:
-    1. Application은 pure file-byte read/parse와 기존 collision query/UI choice 수집을 수행할 수 있다.
+    1. Application은 pure file-byte read/parse와 readAssetFileKind/readAssetCollisionModel/readAssetImportPlan의 공식 query 및 UI choice 수집을 수행할 수 있다.
        planImport의 UI-local resolver를 완료하여 이번 batch의 명시적 choices를 얻는다. 취소면 command 없이 취소 결과를 반환한다.
        path/id를 포함한 candidate project를 만들거나 Backend에 resolver callback을 넘기지 않는다.
     2. ASSETS_IMPORTED에 copied file inputs, explicit directory와 choices만 전달한다.
