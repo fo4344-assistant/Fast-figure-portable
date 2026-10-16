@@ -152,7 +152,7 @@ GRAPH_OBJECT_EDIT_INPUT_CONTRACT = {
 ProjectMutationResult = {
     "event": "처리한 project command",
     "committed": "commit 성공 여부",
-    "changed": "command별 실제 changed ids/path/owner; create/import는 input 순서의 실제 생성 asset path/id와 owning chart/slot id, DATA_OBJECT_REPLACED는 실제 updated CSV path를 포함하여 기존 공식 query로 post-commit read한다",
+    "changed": "command별 실제 changed ids/path/owner; create/import는 input 순서의 실제 생성 asset path/id와 owning chart/slot id, DATA_OBJECT_REPLACED는 실제 updated CSV path, PROJECT_DIRECTORY_CREATED는 실제 생성 directory path, PROJECT_NODE_MOVED는 실제 final destination path를 포함한다. 기존 공식 query의 post-commit read에 사용하며 stale input/plan path를 성공 결과로 재사용하지 않는다",
     "removedGraphReferenceCount": "실제 제거한 graph-object CSV reference 수",
     "resetImageSlotCount": "실제 image reference를 비운 slot 수",
     "selectionHints": "후속 interface reconciliation의 identity/path 결과와 해당 chartId에 한정된 optional selectedIndexHint; absence와 explicit none을 구별",
@@ -187,6 +187,16 @@ class ProjectStateMachine:
            선택된 replace id/path가 더 이상 같은 대상을 가리키지 않으면 거부한다. stale 계획으로 덮어쓰거나 자동 재선택하지 않는다.
            candidate의 원천이 된 authority가 commit 전 바뀌면 그대로 commit하지 않고 현재 authority에 대해 재계산/검증한다.
            실패/취소는 미commit 결과이며 부분 변경/복구용 rollback/성공 hint를 만들지 않는다.
+           PROJECT_NAME_CHANGED는 value를 문자열로 변환하고 trim=True이면 양끝 공백 제거 뒤 최대 120문자로 제한해 meta.projectName candidate를 만든다.
+           SLOT_TYPE_CHANGED는 explicit visible slotId를 resolve하며 type은 image일 때 image, 그 외 graph로 정규화한다.
+           missing/hidden slot은 거부하며 선택되지 않았다고 pending type을 별도 저장하지 않는다.
+           SLOTS_RESET은 explicit visible slotIds의 SLOT_LOCAL_DEFAULTS 복원과 owned chart 제거를 같은 candidate로 수행한다.
+           SLOTS_SWAPPED는 서로 다른 visible 두 slot만 허용한다. missing/hidden/same-id는 미commit이며
+           slot-local payload 전체를 교환하고 위치/geometry identity는 유지한다. result hint로 공통 selection reconciliation을 수행한다.
+           SLOT_IMAGE_IMPORTED의 images.insertEmpty는 new SVG bytes/name/MIME만 받아 current next-id/VFS로 model을 만들고
+           current target이 visible image slot인지 재검증한다. asset 생성과 slot reference를 한 번에 commit한다.
+           ASSET delete의 없는 target은 미commit이며 kind/id/path가 다른 asset으로 바뀌었으면 자동 재선택하지 않는다.
+           PROJECT_NODE_MOVED/PROJECT_DIRECTORY_CREATED는 actual final canonical path를 changed에 기록한다.
            APPEARANCE_CHANGED는 project_state.APPEARANCE_PALETTE_RULE에 따라 10개 field의 전체 palette candidate를 만든다.
            CHART_LAYOUT_CHANGED는 current owning chart의 title/global/axis field에 새 edit만 적용하고 graphs의 normalize/layout을 사용한다.
            새 값에 없는 current title/axis field는 유지하며 invalid 새 값은 graph default/empty 규칙으로 정규화한다.
