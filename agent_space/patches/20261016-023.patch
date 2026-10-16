@@ -1,0 +1,879 @@
+diff --git a/agent_space/plans/plan-021.md b/agent_space/plans/plan-021.md
+new file mode 100644
+index 0000000..450169d
+--- /dev/null
++++ b/agent_space/plans/plan-021.md
+@@ -0,0 +1,30 @@
++# Plan 021 — Backend 설정 데이터의 계층·원천 통합
++
++## 요구·범위
++
++프로젝트 오브젝트에 저장되는 설정의 기본값과 Backend 동작/생성 기본값을 분리한다. 전체 설정의 backend 부분만 기존 `sourcescript/backend/settings.json` 하나가 담당한다. Frontend placeholder/설정, 실제 project instance/asset/chart/slot 데이터, caption 본문, id/nextId, bytes/rows 등을 넣지 않는다. Python settings 모듈이나 파일별 registry를 추가하지 않는다.
++
++## 위치·형태
++
++- `backend.project_object`: ProjectObject의 layout / annotations.labels·captions / appearance.uiPalette / export 경로에 대응하는 **설정 field만** 기록한다. ffpx.formatVersion은 package 호환 설정이며 Project instance로 복사할 field가 아니다.
++- `backend.defaults`: 새 slot/chart의 설정 prototype, graph color sequence, caption reference style, VFS root, name length, validation/export 한계 및 graph presentation 기본값. 실제 slot/chart instance는 만들지 않는다.
++- schema/command/event/파일 codec/계산 알고리즘/참조 관계는 기존 Source owner에 남긴다. 설정과 무관한 상수·숫자까지 무차별 JSON화하지 않는다.
++
++## 작업 순서
++
++1. 기존 Backend 다섯 파일의 기본값/제한/설정 목록을 대조하고 config를 재구성한다. 기존 숫자·색·허용 범위의 의미는 유지한다.
++2. project_state/graphs/layout_annotations/assets_files/project_efsm의 정의·reset/load/render 참조를 같은 config 경로로 연결한다. 기존 이름은 config 참조일 뿐 독립 값 목록/복제 권위가 아니다.
++3. 기존 caption 본문/name/afterText 초기 empty는 데이터 생성 알고리즘에 남기고 config에서 제거한다. slot의 null chart/image/caption도 설정 prototype에 넣지 않는다.
++4. Frontend는 supplied projection만 소비한다. Backend config를 직접 import/read하지 않는다. 기존 Application의 Backend default import는 config로 파생된 공식 default read 경로와 일치하도록 유지한다.
++5. Source r37 fingerprint/lineage 기록, checker가 backend 구조와 데이터 혼입을 검증하도록 한정 보완한다. actual cumulative patch와 review 기록 후 GitHub Actions cumulative checker 실행.
++
++## 진행 기록
++
++- 계획 먼저 main `17aae6445abd3a388d1a2f03b1cbb2e9a9be070e`에 게시한 뒤 Source r37 변경.
++- `backend.project_object`와 `backend.defaults`로 기존 한 JSON을 재구성하고 Backend 5개 owner 및 Application/renderer의 관련 경로 참조를 정리했다. 실제 프로젝트 데이터와 Frontend 설정을 config에서 제외했다.
++- 상세 이동·잔류 목록, 정적 생성→소비 대조, 제외 범위: `agent_space/reviews/review-20261016-018-backend-config-r37-open.md`.
++- Source37 current/open, lower stale 유지. cumulative Actions와 actual patch 기록은 게시 후 review/patch 023에서 결과를 확인한다. 정적 대조는 runtime/전체 closure 증거로 부풀리지 않는다.
++
++## 제외·완료 조건
++
++정책/lower JS/PlusCal/model/tests/dist 변경과 Source closure 선언 제외. 아직 실제 소비 경로가 없는 값을 상상해 추가하지 않는다. Config는 mutable Project와 동기화하지 않으며 valid 저장값은 유지한다. JSON 변경만으로 기존 Project나 package version을 자동 migration하지 않는다. 전체 Backend 설정 목록의 이동/잔류 이유와 생성→소비 경로를 review에 기록한다. 새 framework를 만드는 비용은 필요하지 않다.
+diff --git a/agent_space/reviews/review-20261016-018-backend-config-r37-open.md b/agent_space/reviews/review-20261016-018-backend-config-r37-open.md
+new file mode 100644
+index 0000000..55e7b02
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-018-backend-config-r37-open.md
+@@ -0,0 +1,60 @@
++# Source r37 — Backend 설정 계층/데이터 분리
++
++## 기준·결론
++
++사용자 요구: 프로젝트 오브젝트의 저장 설정과 Backend 기본 설정을 분리하고, 전체 설정 중 Backend만 한 config에 모은다. ProjectObject와 비슷한 경로를 사용하되 프로젝트 데이터 자체를 넣지 않는다.
++
++- baseline `a65decea01ca08639cc9d207f560dfececdb72b9`, Plan 021 먼저 게시 `17aae6445abd3a388d1a2f03b1cbb2e9a9be070e`.
++- Source37 current/open, fingerprint `sha256:c94c310a8611c1f8994e5fe38ab5d0f8cd74ed0ecf4d902cada885d92278de5b`. 하위 stale 유지. 설정 소유권을 통합한 것이며 전체 closure 판정이 아니다.
++
++## 파일·구조
++
++`sourcescript/backend/settings.json` 한 파일이며 루트는 `backend`만 둔다. Frontend 블록을 빈 placeholder로도 만들지 않는다. 전체 설정이 결합될 때 이 JSON의 backend 섹션이 해당 부분을 담당한다.
++
++| 경로 | 값의 의미 / 소비 owner |
++|---|---|
++| backend.project_object.ffpx.formatVersion | Project package 호환 설정, assets_files의 version 검사/기록. Project instance에 ffpx block을 추가하지 않음 |
++| backend.project_object.layout | gridRows/gridCols/slotStyle의 초기 저장 설정, project_state create/load 및 layout reset |
++| backend.project_object.annotations.labels/captions | enabled/settings/nameBold 등 저장 설정, annotation create/load/reset |
++| backend.project_object.appearance.uiPalette | 실제 프로젝트 palette의 기본값, Project appearance create/reset/normalize |
++| backend.project_object.export | heightMode/dpi/format 기본 설정. width는 layout.referenceWidth에서 계산하며 결과 geometry는 config에 저장하지 않음 |
++| backend.defaults.slotSettings.content | 새 slot의 contentType/imageSettings prototype. chart/image/caption reference는 생성 알고리즘이 별도로 empty 구성 |
++| backend.defaults.chartSettings.editor | axis/globalSettings/axisVisibility/objectStyle의 설정 prototype, graph normalization/trace fallback. chart/object instance 아님 |
++| backend.defaults.graphColors | graph object 색 순환. appearance UI palette와 별도 의미 유지 |
++| backend.defaults.graphRendering | title/legend font fallback, grid/zero-line 색, margin. figure는 기존 graph 계산이 만듦 |
++| backend.defaults.captionReferenceStyle | caption reference 측정 입력. Backend가 export 작업 projection에 copy하고 Frontend는 supplied 값만 소비 |
++| backend.defaults.limits | layout/image/label/caption/graphObject/export 수치 한계. 기존 validation과 numeric clamp가 사용 |
++| backend.defaults.vfs | root/csv/image/trash 고정 경로. directory instance는 생성/복원 알고리즘이 만듦 |
++| backend.defaults.naming | 프로젝트 이름/다운로드 stem 길이 한계 |
++| backend.defaults.preview | Backend layout query의 preview width bounds/fallback. session zoom/lock은 포함하지 않음 |
++
++`project_object`는 설정 leaf의 구조를 Project와 대응시킨 것이지 프로젝트 직렬화 payload가 아니다. `defaults`는 저장 설정 바깥의 생성/동작 prototype이다. 두 블록 모두 immutable config 데이터이며 현재 Project와 양방향 동기화하지 않는다.
++
++## 제거·잔류 항목 대조
++
++- project_state의 slotStyle/UI palette/slot-local 설정 목록, graphs의 color/axis/global/style/render defaults, layout의 수치 제한, assets의 version/VFS, EFSM의 이름 길이 값을 config로 이동했다. 기존 DEFAULT 이름은 값 목록을 다시 가진 상수가 아니라 **Source 표기의 config 경로 참조**다. Python runtime에서 문자열을 설정 객체로 실행한다고 주장하지 않는다.
++- Backend 밖 Application 문서의 preview/reset/print/naming/VFS 복제값도 같은 Backend 경로를 사용하도록 수정했다. readLayoutApiState omitted default는 None으로 전달하고 Backend가 기존 fallback을 적용한다. 유효 caller width의 의미는 바꾸지 않았다.
++- 기존 JSON의 captions.text/afterText/name은 제거했다. 신규 Project의 empty 본문/이름은 instance 생성 알고리즘에서 만들고 valid 저장 데이터는 복원한다. config가 caption 본문/asset bytes/CSV rows/chart/slot collections/id/nextId를 소유하지 않는다.
++- EMPTY_CSV_TEMPLATE의 rows/filename과 빈 SVG의 bytes/dimension은 **생성되는 asset 데이터의 구조**이므로 config에 이동하지 않았다. 각 codec 파일 경로/ZIP STORE/CRC32/UTF-8, event/command/모델 schema·enum 의미도 설정값이 아니라 기존 형식/알고리즘이다.
++- 1x1 cell 구성, Roman/base26 numbering, log10/reciprocal, zero identity, geometry의 0.49 안전 clamp는 계산 규칙이며 동작값 목록을 만드는 옵션으로 변환하지 않았다. Frontend zoom/lock/contrast/theme 계산도 Backend 설정으로 가져오지 않았다.
++- 이전 flat JSON 경로는 현행 Source에서 새 backend 경로로 교체했다. Python settings 모듈/loader/service/registry, 두 config를 동기화하는 호환 bridge는 추가하지 않았다. 과거 plan/review/patch의 기록은 역사 자료로 유지한다.
++
++## 정적 생성→소비 대조 — runtime test 아님
++
++1. create: configured grid 크기로 cells 생성 → 저장 설정만 복사 → assets/charts empty, data references/ids 별도 생성 → whole validation. config에 실제 project instance 없음.
++2. load: valid stored settings/data 유지 → missing 설정만 owner 경로로 보완 → whole validation. config 변경으로 기존 Project 전체를 덮지 않음.
++3. reset: 대상 설정만 config leaf에서 복사하고 다른 사용자 데이터는 기존 reset 의미 유지. labels position도 새 annotations 경로 사용.
++4. graph: current object/axis 값 우선 → config fallback/bounds → same-project trace/layout. 실제 object/data/figure를 config에 넣지 않음. palette index는 고정 8 대신 config sequence length 사용.
++5. export: current pixel width/DPI/heightMode 유지 → limits/naming/style만 config에서 참조 → snapshot에 필요한 값 전달 → renderer는 config를 직접 읽지 않음.
++6. VFS: config 경로를 create/lookup/trash/export가 함께 사용. 상이한 hardcoded directory를 새 권위로 남기지 않음.
++7. checker: JSON이 Source fingerprint/revision/patch 범위에 포함. backend/project_object/defaults 및 필수 object 경로와 graphColors를 검사하고 project data/Frontend key 혼입을 거부한다. 모든 수치/enum의 application validation을 이 checker가 대신한다고 주장하지 않음.
++
++## 복잡도·전파·제외
++
++하나의 데이터 파일과 기존 owner의 경로 참조로 통합했다. config 전체를 Project에 merge하거나 현재 Project를 config의 사본으로 유지하는 대안은 instance/기본 설정 권위를 섞으므로 기각했다. 설정마다 파일/새 Python settings package를 만드는 대안도 불필요하다. 일반 schema engine을 도입하지 않았다.
++
++정책/하위 JS/PlusCal/model/tests/dist 변경 없음. 설정 재배치는 값·허용 범위를 유지한다. Source closure는 open이며 lower 번역 때 이 backend 경로/기본값 참조를 반영해야 한다. 전체 왕복·purpose/integration 검토나 runtime/시각 성공을 선언하지 않는다.
++
++## 실제 검사 기록
++
++로컬 Source/application/checker/test/build/TLC 실행 없음. bytes-only fingerprint, actual diff/check 및 격리 index patch 검사는 runtime 검증과 구분한다. 순차 Contents API로 source-before-metadata push는 일시 실패할 수 있다. 실제 cumulative Actions run/HEAD/BASE_SHA/결과는 patch 023 게시 후 기록한다. 실행 전 결과를 PASS로 쓰지 않는다.
+diff --git a/development-versions.json b/development-versions.json
+index ce71283..8c80d31 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 36,
++      "revision": 37,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+-      "fingerprint": "sha256:9faab3f5111e06acfc3c498b6bfef0a68811c178a4d00ce975f9d7261fbe7212",
++      "fingerprint": "sha256:c94c310a8611c1f8994e5fe38ab5d0f8cd74ed0ecf4d902cada885d92278de5b",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/scripts/check-development-layer-versions.py b/scripts/check-development-layer-versions.py
+index f5ce019..db177c4 100644
+--- a/scripts/check-development-layer-versions.py
++++ b/scripts/check-development-layer-versions.py
+@@ -60,8 +60,47 @@ def source_script_paths() -> list[Path]:
+         settings = json.loads(SOURCE_SETTINGS_PATH.read_text(encoding="utf-8"))
+     except (OSError, UnicodeError, json.JSONDecodeError) as error:
+         raise VersionError(f"Source settings JSON is invalid: {error}") from error
+-    if not isinstance(settings, dict):
+-        raise VersionError("Source settings JSON must be an object")
++    if not isinstance(settings, dict) or set(settings) != {"backend"}:
++        raise VersionError("Source settings must contain only the backend section")
++    backend = settings["backend"]
++    if not isinstance(backend, dict) or set(backend) != {"project_object", "defaults"}:
++        raise VersionError("Backend settings must separate project_object and defaults")
++    required_objects = (
++        "project_object.ffpx", "project_object.layout.slotStyle",
++        "project_object.annotations.labels.settings", "project_object.annotations.captions.settings",
++        "project_object.appearance.uiPalette", "project_object.export",
++        "defaults.slotSettings.content.imageSettings", "defaults.chartSettings.editor.axis",
++        "defaults.chartSettings.editor.axisVisibility", "defaults.chartSettings.editor.globalSettings",
++        "defaults.chartSettings.editor.objectStyle", "defaults.graphRendering", "defaults.captionReferenceStyle",
++        "defaults.limits.layout", "defaults.limits.imageSettings", "defaults.limits.labels",
++        "defaults.limits.captions", "defaults.limits.graphObject", "defaults.limits.export",
++        "defaults.vfs", "defaults.naming", "defaults.preview",
++    )
++    for dotted_path in required_objects:
++        value = backend
++        for part in dotted_path.split("."):
++            value = value.get(part) if isinstance(value, dict) else None
++        if not isinstance(value, dict):
++            raise VersionError(f"Backend settings object is missing: {dotted_path}")
++    colors = backend["defaults"].get("graphColors")
++    if not isinstance(colors, list) or not colors or not all(isinstance(c, str) and c.strip() for c in colors):
++        raise VersionError("Backend default graphColors must be non-empty color text")
++    # Configuration is not a saved ProjectObject or an asset/template payload.
++    forbidden_data = {
++        "meta", "projectName", "assets", "charts", "slots", "nextId", "sequences",
++        "id", "csvId", "imageId", "rows", "bytes", "bytesBase64", "data", "conversionRows",
++        "text", "afterText", "name", "frontend",
++    }
++    def reject_project_data(value: object) -> None:
++        if isinstance(value, dict):
++            for key, child in value.items():
++                if key in forbidden_data:
++                    raise VersionError(f"Project data/Frontend section is not allowed in Backend config: {key}")
++                reject_project_data(child)
++        elif isinstance(value, list):
++            for child in value:
++                reject_project_data(child)
++    reject_project_data(backend)
+     paths.append(SOURCE_SETTINGS_PATH)
+     return paths
+ 
+diff --git a/sourcescript/application/public_api/assets.py b/sourcescript/application/public_api/assets.py
+index dd0305a..1030380 100644
+--- a/sourcescript/application/public_api/assets.py
++++ b/sourcescript/application/public_api/assets.py
+@@ -119,7 +119,7 @@ def createEmptyProjectCsv():
+     1. EMPTY_CSV_TEMPLATE의 rows를 그대로 사용한다: [["X", "Y"], ["", ""]].
+     2. name은 "빈 CSV.csv", MIME은 "text/csv", headerLines는 1을 사용한다.
+     3. bytes는 rows를 project CSV writer와 같은 CSV serializer로 직렬화한 UTF-8 bytes를 사용한다.
+-    4. 기본 directory는 /assets/csv다.
++    4. 기본 directory는 Backend PROJECT_ASSET_DIRECTORIES.csv의 config 참조다.
+     5. Backend create command가 같은 canonical path를 current VFS에서 검사하고 projectVfs.uniquePath의 일반 collision-free naming을 적용한다.
+        wrapper가 사전 unique path를 authoritative 결과로 확정하지 않으며 existing asset을 replace하지 않는다.
+     6. createProjectCsv의 일반 DATA_OBJECT_CREATED 경로로 등록한다.
+@@ -130,7 +130,7 @@ def createEmptyProjectCsv():
+         EMPTY_CSV_TEMPLATE["rows"], EMPTY_CSV_TEMPLATE["name"], None,
+         "template rows를 동일 CSV serializer로 만든 UTF-8 bytes의 base64",
+         EMPTY_CSV_TEMPLATE["mime"], EMPTY_CSV_TEMPLATE["headerLines"],
+-        "기본 directory /assets/csv와 template name으로 요청한 path",
++        "Backend PROJECT_ASSET_DIRECTORIES.csv와 template name으로 요청한 path",
+     )
+ 
+ 
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index dce62d6..842b93d 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -34,7 +34,7 @@ PROJECT_SLOT_RESULT_RULE = (
+ 
+ 
+ def setProjectName(value, trim=False):
+-    """문자열 변환, trim 요청 시 공백 제거, 최대 120문자. name 정규화/commit은 Backend가 소유한다."""
++    """문자열 변환과 선택적 trim, Backend naming 설정의 길이 제한. name 정규화/commit은 Backend가 소유한다."""
+     result, interfaceState, rendererInput = dispatchProjectCommand(
+         "PROJECT_NAME_CHANGED", {"value": value, "trim": trim},
+     )
+@@ -106,10 +106,10 @@ def finishDashboardFileDrop():
+     return None
+ 
+ 
+-def readLayoutApiState(previewWidth=600):
++def readLayoutApiState(previewWidth=None):
+     """
+     current layout.readState Backend query에 previewWidth만 전달한다.
+-    previewWidth는 finite 1..20000, invalid는 600으로 read copy에서 정규화한다.
++    previewWidth의 omitted/invalid 기본값과 bounds는 Backend의 backend.defaults.preview에서만 read copy에 적용한다. Application은 값을 복제하지 않는다.
+     반환은 gridRows/gridCols/slotStyle/visibleSlots/previewGeometry와 현재 Frontend zoom/zoomLocked다.
+     Application이 interfaceFSM의 zoom/lock scalar를 합성하며 previewGeometry를 session/Project에 저장하지 않는다.
+     """
+@@ -313,7 +313,7 @@ def setLabelsApiPosition(x, y):
+ 
+ 
+ def resetLabelsApiPosition():
+-    """labels.resetPosition: Backend가 settings.json labels.settings.x/y를 같은 position command에서 적용한다."""
++    """labels.resetPosition: Backend가 settings.json backend.project_object.annotations.labels.settings.x/y를 같은 position command에서 적용한다."""
+     result, interfaceState, rendererInput = dispatchProjectCommand("LABEL_POSITION_CHANGED", {"reset": True})
+     if not result.committed:
+         return False
+@@ -476,7 +476,7 @@ def setExportSettings(values):
+     처리:
+     1. 이 procedure는 Application operation이며 새 edit 값만 EXPORT_SETTINGS_CHANGED command로 전달한다.
+     2. Backend command가 current export settings를 resolve해 candidate를 만든다. 생략되거나 숫자로 변환되지 않는 입력은 current 값을 사용하고
+-       유효한 숫자는 width/explicit height 100..20000, dpi 36..1200으로 제한한다. heightMode/format의 invalid/missing enum도 current 값을 유지한다.
++       유효한 숫자는 Backend의 backend.defaults.limits.export에서 width/height/DPI 범위를 읽어 제한한다. heightMode/format의 invalid/missing enum도 current 값을 유지한다.
+     3. heightMode가 auto면 candidate.height는 none이다. explicit이면 current height 또는 100을 fallback으로 사용한다.
+     4. Backend가 whole-project candidate를 검증한 뒤 한 번 commit한다. Application은 별도 project clone/candidate validation을 만들지 않는다.
+     5. 성공 후에만 새 Backend read projection을 반환한다. rejected result는 False, command failure는 caller에 전파하며 기존 settings는 유지한다.
+diff --git a/sourcescript/backend/assets_files.py b/sourcescript/backend/assets_files.py
+index 24219f7..0cb69c4 100644
+--- a/sourcescript/backend/assets_files.py
++++ b/sourcescript/backend/assets_files.py
+@@ -14,20 +14,15 @@ ASSET_BOUNDARY_RULE = (
+     "current-state resolve/normalize/id/path/candidate/validation은 Project EFSM command 내부 계산이다. "
+     "Backend는 Frontend selection, DOM 또는 UI callback을 읽거나 실행하지 않는다."
+ )
+-PACKAGE_FORMAT_VERSION = "현재 FFPX/FFSX package format version 3"
++PACKAGE_FORMAT_VERSION = "config reference: backend.project_object.ffpx.formatVersion; FFSX도 같은 compatibility version 사용"
+ 
+ 
+-PROJECT_ASSET_DIRECTORIES = {
+-    "csv": "/assets/csv",
+-    "image": "/assets/images",
+-}
+-
+-
+-PROJECT_TRASH_DIRECTORY = "project trash root; 현재 구현 path /assets/trash"
++PROJECT_ASSET_DIRECTORIES = "config reference: backend.defaults.vfs의 csv/image"
++PROJECT_TRASH_DIRECTORY = "config reference: backend.defaults.vfs.trash"
+ 
+ 
+ FIXED_DIRECTORY_RULE = (
+-    "현재 구현의 고정 directory는 /assets, /assets/csv, /assets/images, /assets/trash다. "
++    "고정 directory의 유일한 값 원천은 backend.defaults.vfs의 root/csv/image/trash다. "
+     "삭제 또는 이동 대상으로 취급하지 않는다."
+ )
+ 
+@@ -67,7 +62,7 @@ PACKAGE_CONTAINER_RULES = [
+ 
+ 
+ EXPORT_TRASH_RULE = (
+-    "FFPX export는 /assets/trash 아래의 CSV, image, directory를 package에 포함하지 않는다. "
++    "FFPX export는 PROJECT_TRASH_DIRECTORY 아래의 CSV, image, directory를 package에 포함하지 않는다. "
+     "export 대상 chart/slot이 trash asset을 참조하면 실패한다."
+ )
+ 
+@@ -136,7 +131,7 @@ EMPTY_CSV_RULE = (
+ 
+ 
+ FORMAT_EVOLUTION_RULE = (
+-    "현재 package format version 3의 구조를 유지하되 persistent export settings는 additive project setting으로 기록한다. "
++    "PACKAGE_FORMAT_VERSION이 지정하는 현재 package format 구조를 유지하되 persistent export settings는 additive project setting으로 기록한다. "
+     "같은 version의 기존 파일에 export settings가 없으면 project default로 정규화한다. "
+     "향후 기존 field 의미를 바꾸거나 기존 reader가 구조를 해석할 수 없는 변경을 하면 package version을 올린다."
+ )
+@@ -278,7 +273,7 @@ def projectFileStem(value):
+     """
+     project export filename의 pure sanitize. missing/null은 empty text, text trim 뒤
+     backslash/slash/colon/star/question/double-quote/angle-bracket/pipe 및 U+0000..001F를 hyphen으로 바꾼다.
+-    whitespace run은 space 하나로 합치고 trailing dot/space를 없앤 뒤 최대 100 text units로 제한한다.
++    whitespace run은 space 하나로 합치고 trailing dot/space를 없앤 뒤 backend.defaults.naming.exportStemMaxLength text units로 제한한다.
+     결과 empty면 fast-figure-project다. 원래 project metadata/name은 바꾸지 않는다.
+     """
+     return "위 규칙의 safe project filename stem"
+diff --git a/sourcescript/backend/graphs.py b/sourcescript/backend/graphs.py
+index cc47f89..083b716 100644
+--- a/sourcescript/backend/graphs.py
++++ b/sourcescript/backend/graphs.py
+@@ -14,14 +14,11 @@ GRAPH_BOUNDARY_RULE = (
+     "graphEditorCommit/convertImportedChartToEditable는 candidate만 반환한다."
+ )
+ # Graph object의 fallback 순환만 소유한다. Project UI palette와 동기화하지 않는다.
+-DEFAULT_COLORS = (
+-    "#383A42", "#E45649", "#50A14F", "#B37901",
+-    "#0184BC", "#A626A4", "#0997B3", "#FAFAFA",
+-)
++DEFAULT_COLORS = "config reference: backend.defaults.graphColors (read-only sequence)"
+ 
+ GRAPH_PALETTE_RULE = (
+-    "새 base object는 DEFAULT_COLORS[0], imported object에 line/marker color가 없으면 원 trace index modulo 8의 색, "
+-    "trace projection에서 object.color가 없으면 object index modulo 8의 색을 사용한다. 명시된 object color가 우선한다. "
++    "새 base object는 DEFAULT_COLORS[0], imported object에 line/marker color가 없으면 원 trace index modulo sequence length의 색, "
++    "trace projection에서 object.color가 없으면 object index modulo sequence length의 색을 사용한다. 명시된 object color가 우선한다. "
+     "graphs.defaultColors는 이 immutable sequence의 detached copy이고 graphs.readPalette는 owning chart의 실제 object color 순서다. "
+     "graphs.applyPalette는 non-empty color text array를 받고 current editable chart objects의 i번째 color만 colors[i modulo length]로 바꾼다. "
+     "각 color element는 trim 뒤 non-empty text여야 하며 그 text를 저장한다. empty/비배열/이 조건을 만족하지 않는 element는 "
+@@ -31,16 +28,11 @@ GRAPH_PALETTE_RULE = (
+     "graph color는 Plotly color text로서 named/rgb/hex 표현을 보존하며 UI palette의 6-digit hex 제한을 강제하지 않는다."
+ )
+ 
+-AXIS_DEFAULTS = {
+-    "min": "", "max": "", "tick": "", "tickMode": "plotly", "minorTicks": False,
+-    "notation": "none", "scaleType": "linear", "divide": 1, "title": "",
+-    "titleSize": 14, "lineWidth": 1, "showGrid": True, "showValues": True, "fontSize": 12,
+-}
+-
+-GRAPH_GLOBAL_DEFAULTS = {
+-    "showLegend": True, "showTitle": True, "showZeroLine": False,
+-    "graphFontFamily": "", "titleFontSize": "", "legendFontSize": "",
+-}
++AXIS_DEFAULTS = "config reference: backend.defaults.chartSettings.editor.axis"
++GRAPH_GLOBAL_DEFAULTS = "config reference: backend.defaults.chartSettings.editor.globalSettings"
++GRAPH_STYLE_DEFAULTS = "config reference: backend.defaults.chartSettings.editor.objectStyle"
++GRAPH_RENDER_DEFAULTS = "config reference: backend.defaults.graphRendering"
++GRAPH_STYLE_LIMITS = "config reference: backend.defaults.limits.graphObject"
+ 
+ axisSettings = {
+     "min": "optional numeric lower bound; empty이면 auto",
+@@ -101,12 +93,12 @@ graphObject = {
+     "type": "scatter, markers, lines+markers, bar, hidden 중 하나",
+     "color": "현재 graph object color",
+     "legendName": "legend에서 사용할 optional 이름",
+-    "lineWidth": "현재 허용 범위 0.1..20",
++    "lineWidth": "GRAPH_STYLE_LIMITS.lineWidth",
+     "lineDash": "solid, dot, dash, dashdot 중 하나",
+     "markerSymbol": "현재 지원 marker symbol",
+-    "markerSize": "현재 허용 범위 1..40",
+-    "barOpacity": "현재 허용 범위 0.05..1",
+-    "barLineWidth": "현재 허용 범위 0..10",
++    "markerSize": "GRAPH_STYLE_LIMITS.markerSize",
++    "barOpacity": "GRAPH_STYLE_LIMITS.barOpacity",
++    "barLineWidth": "GRAPH_STYLE_LIMITS.barLineWidth",
+     "plotlyTrace": "imported Plotly trace에서 보존할 확장 속성의 optional copy",
+ }
+ 
+@@ -303,9 +295,10 @@ def tracesSingle(objectView):
+        editor type=scatter는 mode=lines, markers/lines+markers는 같은 mode, hidden은 mode=lines/visible=false다.
+        다른 type은 visible=true다. x/y는 위 paired sequence, name은 y column identifier다.
+        color는 호출자가 GRAPH_PALETTE_RULE로 정한 값이며 line.color/marker.color 모두 같은 색이다.
+-       line.width는 non-bar 0.1..20(default 2), bar 0..10(default 0); line.dash는 non-bar의 solid/dot/dash/dashdot(default solid)다.
+-       marker.symbol은 object의 지원 symbol(default circle), marker.size는 1..40(default 6)이다.
+-       bar만 opacity=0.05..1(default 1), marker.line={color, width=bar line width}를 추가한다.
++       line.width 범위는 non-bar GRAPH_STYLE_LIMITS.lineWidth, bar GRAPH_STYLE_LIMITS.barLineWidth다.
++       missing/invalid 기본값은 각각 GRAPH_STYLE_DEFAULTS.lineWidth/barLineWidth다. non-bar line.dash의 기본값도 GRAPH_STYLE_DEFAULTS.lineDash다.
++       marker.symbol/size는 GRAPH_STYLE_DEFAULTS의 markerSymbol/markerSize를 사용하고 size 범위는 GRAPH_STYLE_LIMITS.markerSize다.
++       bar만 opacity를 GRAPH_STYLE_LIMITS.barOpacity로 제한하고 기본값은 GRAPH_STYLE_DEFAULTS.barOpacity, marker.line은 {color,width=bar line width}다.
+        numeric style은 유한 수치로 변환 후 범위 제한하고 missing/invalid는 default다. 유효한 0은 bar width에서 유지한다.
+        non-bar에는 opacity/bar marker.line, bar에는 line.dash를 계산 field로 추가하지 않는다.
+        hidden도 data 변환을 우회하거나 editor object를 삭제하지 않는다.
+@@ -397,17 +390,17 @@ def layout(chart, project):
+     1. normalizeGlobalSettings(chart.editor.globalSettings)와 네 normalizeAxisSettings를 사용한다.
+        아래 omitted는 field 자체를 출력하지 않음을 뜻하며 null/0이나 이전 renderer 값을 뜻하지 않는다.
+     2. 모든 axis의 Plotly type은 log일 때 log, linear/reciprocal일 때 linear다.
+-       title={text: visible이면 title 아니면 empty, font:{size:titleSize 또는 14}}, visible=true다.
++       title={text: visible이면 title 아니면 empty, font:{size:titleSize 또는 AXIS_DEFAULTS.titleSize}}, visible=true다.
+        visible=true 유지 이유는 데이터/overlay 축 영역을 보존하기 위함이며 표시 토글은 다음 field에 적용한다.
+        showgrid=visible and showGrid, showticklabels=visible and showValues, ticks=visible이면 outside 아니면 empty,
+-       showline=visible, linewidth=lineWidth, tickfont={size:fontSize 또는 12}, automargin=true다.
+-       gridcolor=#E5E7EB, zeroline=visible and showZeroLine, zerolinecolor=#CBD5E1이다.
++       showline=visible, linewidth=lineWidth, tickfont={size:fontSize 또는 AXIS_DEFAULTS.fontSize}, automargin=true다.
++       gridcolor=GRAPH_RENDER_DEFAULTS.gridColor, zeroline=visible and showZeroLine, zerolinecolor=GRAPH_RENDER_DEFAULTS.zeroLineColor다.
+        min/max가 모두 유한 수치면 linear/reciprocal range=[min,max]; 하나라도 empty/invalid면 range omitted다.
+        log는 두 경계가 모두 >0일 때만 range=[log10(min),log10(max)], 아니면 omitted다.
+        경계 순서는 보존하므로 reversed axis도 허용한다. reciprocal에 역수를 다시 적용하지 않는다.
+        log dtick=1; non-log는 tick이 유한 양수이면 dtick=tick 아니면 omitted다.
+        tickMode는 입력 UI 모드이며 저장된 명시적 tick을 삭제하지 않는다.
+-       log minorTicks=true면 minor={dtick:D1, ticks:outside, showgrid:visible and showGrid, gridcolor:#E5E7EB},
++       log minorTicks=true면 minor={dtick:D1, ticks:outside, showgrid:visible and showGrid, gridcolor:GRAPH_RENDER_DEFAULTS.gridColor},
+        false면 minor={ticks:empty, showgrid:false}; log에만 minorloglabels=none이다. non-log는 이 두 field omitted다.
+        notation=power/e/none을 exponentformat으로 사용한다. showexponent는 none이면 none 아니면 all,
+        tickformat은 e이면 .3e, 그 외 omitted다.
+@@ -415,10 +408,10 @@ def layout(chart, project):
+        yLeft->yaxis, yRight->yaxis2(+overlaying:y, side:right)로 연결한다.
+        uirevision=chart.id의 text, showlegend=showLegend,
+        title={text:showTitle이면 editor.title 아니면 empty, automargin:true,
+-              font:{size:positive titleFontSize 또는 17, optional family:non-empty graphFontFamily}},
+-       legend={font:{size:positive legendFontSize 또는 12, optional family:동일 family}}다.
++              font:{size:positive titleFontSize 또는 GRAPH_RENDER_DEFAULTS.titleFontSize, optional family:non-empty graphFontFamily}},
++       legend={font:{size:positive legendFontSize 또는 GRAPH_RENDER_DEFAULTS.legendFontSize, optional family:동일 family}}다.
+        paper_bgcolor/plot_bgcolor=project.appearance.uiPalette.paperColor,
+-       font={color:동 palette.fontColor, optional family:동일 family}, margin={l:58,r:58,t:42,b:50}다.
++       font={color:동 palette.fontColor, optional family:동일 family}, margin=GRAPH_RENDER_DEFAULTS.margin의 copy다.
+        UI background/surface 색을 graph paper로 대신 사용하지 않는다.
+     4. editor.plotlyExtensions.layout이 record면 detached copy, 아니면 empty record 위에 계산 layout을 merge한다.
+        title/legend/font/margin과 네 axis는 record level에서 extension 먼저/계산 나중이다.
+@@ -442,14 +435,14 @@ def normalizeAxisSettings(axis, key):
+     - 없음.
+ 
+     처리:
+-    AXIS_DEFAULTS를 복사하고 bottom x/left y의 visible=True, top x/right y의 visible=False를 설정한다.
++    AXIS_DEFAULTS를 복사하고 backend.defaults.chartSettings.editor.axisVisibility[key]로 visible을 설정한다.
+     입력의 알려진 field를 정규화해 덮어쓰며 unknown field는 의미 원천으로 사용하지 않는다.
+     min/max/tick은 missing/null/literal empty text면 empty이고 그 외 유한 numeric text/number면 수치, invalid면 empty다.
+-    title은 text 아니면 empty, titleSize/fontSize는 유한 양수 아니면 각각 14/12,
+-    lineWidth는 유한 0 이상 아니면 1이다. 명시적 lineWidth=0은 유지한다.
++    title은 text 아니면 AXIS_DEFAULTS.title, titleSize/fontSize는 유한 양수 아니면 각 AXIS_DEFAULTS field,
++    lineWidth는 유한 0 이상 아니면 AXIS_DEFAULTS.lineWidth다. 명시적 lineWidth=0은 유지한다.
+     showGrid/showValues는 명시적 false만 false, visible은 boolean 아니면 axis별 default,
+     minorTicks는 명시적 true만 true다. notation enum invalid는 none, tickMode invalid는 plotly다.
+-    bottom x와 left y는 기본 visible, top x와 right y는 기본 hidden이다.
++    axis별 기본 visible은 위 config의 axisVisibility만 사용한다.
+     scaleType은 linear/log/reciprocal이며 생략/invalid는 항등 변환인 linear다.
+     reciprocal을 linear의 별칭으로 지우지 않는다. data 변환은 tracesSingle의 divide 다음 역수 순서다.
+     enum과 numeric/empty field를 정규화하며 divide는 유한 non-zero 수치, 생략/invalid/0은 항등 divisor 1이다.
+diff --git a/sourcescript/backend/layout_annotations.py b/sourcescript/backend/layout_annotations.py
+index 75c35dc..9d3e37d 100644
+--- a/sourcescript/backend/layout_annotations.py
++++ b/sourcescript/backend/layout_annotations.py
+@@ -8,12 +8,12 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈
+ from sourcescript.backend.project_state import activeProject, projectObjects, SLOT_LOCAL_DEFAULTS, slotHasNonDefaultLocalState
+ 
+ ANNOTATION_SETTINGS_RULE = (
+-    "기본값의 단일 데이터 원천은 sourcescript/backend/settings.json의 labels/captions/captionReferenceStyle이다. "
++    "기본값의 단일 데이터 원천은 sourcescript/backend/settings.json의 backend.project_object.annotations 및 backend.defaults.captionReferenceStyle이다. "
+     "이 JSON은 code/loader/별도 mutable authority가 아니라 기존 Backend annotation 책임의 설정 데이터다. "
+-    "create는 labels/captions를 deep-copy하고 load는 missing object/field만 재귀 보완하며 valid saved 값과 false/0/empty를 보존한다. "
++    "create는 annotations.labels/captions의 설정 field만 deep-copy한다. text/afterText/name은 별도 새 instance data로 empty text를 생성한다. load는 missing 설정만 재귀 보완하며 valid saved 값과 false/0/empty 및 본문 data를 보존한다. "
+     "supplied invalid 값은 기존 normalization/whole-project validation으로 처리하며 invalid state를 commit하지 않는다. "
+     "partial edit는 현재 Project의 omitted field를 유지한다. read는 기본값을 채우기 위해 Project를 mutate하지 않는다. "
+-    "position reset도 JSON labels.settings.x/y를 사용한다. FFPX에는 실제 Project 값을 저장한다. "
++    "position reset도 JSON backend.project_object.annotations.labels.settings.x/y를 사용한다. FFPX에는 실제 Project 값을 저장한다. "
+     "Frontend는 Backend/Application이 supplied projection/export input에 포함한 값을 소비하며 JSON/Backend를 직접 읽지 않는다. "
+     "settings.json이 missing/malformed면 구성 오류이며 별도의 코드 상수로 조용히 대체하지 않는다. "
+     "설정 파일별 registry/synchronization/cache authority를 만들지 않는다."
+@@ -25,24 +25,16 @@ LAYOUT_BOUNDARY_RULE = (
+     "Application wrapper는 identity와 새 edit 값만 보내며 candidate는 Project EFSM command 내부에서 계산한다. "
+     "Frontend renderer는 Application이 제공한 immutable snapshot/projection만 소비한다."
+ )
+-layoutRules = {
+-    "gridRows": "1..8 integer",
+-    "gridCols": "1..8 integer",
+-    "referenceWidth": "100..20000",
+-    "gap": "0..2000",
+-    "outerMargin": "0..5000",
+-    "radius": "0..2000",
+-    "aspect": "0.1..10",
+-    "zoom": "runtime dashboard zoom intent; 현재 UI/API 범위 50..200 percent",
+-}
++layoutRules = "config reference: backend.defaults.limits.layout; bounds 적용 알고리즘은 기존 layout owner가 수행한다."
++# zoom은 Frontend session/UI 의미이며 Backend config에 옮기지 않는다.
+ 
+ 
+ imageSettings = {
+     "owner": "slot.content.imageSettings; image asset의 속성이 아니다.",
+     "fit": "contain, cover, manual 중 하나",
+-    "scale": "manual fit에서 현재 허용 범위 1..1000 percent",
+-    "x": "manual image center x; 현재 허용 범위 -100..200 percent",
+-    "y": "manual image center y; 현재 허용 범위 -100..200 percent",
++    "scale": "manual fit percent; backend.defaults.limits.imageSettings.scale",
++    "x": "manual image center x; backend.defaults.limits.imageSettings.x",
++    "y": "manual image center y; backend.defaults.limits.imageSettings.y",
+ }
+ 
+ 
+@@ -53,25 +45,19 @@ labelSettings = {
+     "y": "slot reference 좌표계의 label y position",
+     "order": "row-major 또는 column-major",
+     "fontFamily": "label font family",
+-    "fontSize": "현재 최소 6; 구현상 별도 최대는 두지 않음",
++    "fontSize": "backend.defaults.limits.labels.fontSizeMin 이상; 별도 최대 없음",
+ }
+ 
+ 
+ captionSettings = {
+     "fontFamily": "caption font family",
+-    "fontSize": "현재 6..96",
+-    "lineHeight": "현재 0.8..4",
++    "fontSize": "backend.defaults.limits.captions.fontSize",
++    "lineHeight": "backend.defaults.limits.captions.lineHeight",
+ }
+ 
+ 
+-EXPORT_LIMITS = {
+-    "logicalWidth": "현재 100..20000 px",
+-    "logicalHeight": "auto는 referenceWidth의 dashboard/caption 전체를 target width로 비례 scaling해 ceil, explicit은 total height 100..20000 px",
+-    "dpi": "현재 36..1200",
+-    "format": "png 또는 jpeg",
+-    "rasterDimension": "현재 한 변 최대 16384 px",
+-    "rasterArea": "현재 최대 64,000,000 pixels",
+-}
++EXPORT_LIMITS = "config reference: backend.defaults.limits.export"
++# format png/jpeg와 auto/explicit의 의미·높이 계산은 기존 export 알고리즘이며 숫자 한계만 config에서 읽는다.
+ 
+ 
+ SLOT_OPERATION_CAPTION_RULES = {
+@@ -330,7 +316,7 @@ def createTargetExportSnapshot():
+     projectObjects.snapshot으로 영속 입력을 한 시점에 복사한다.
+     export target geometry는 snapshot.export에서 계산한다.
+     renderer style projection은 export 작업 범위를 벗어나 일반 authority로 재사용하지 않는다.
+-    captionReferenceStyle은 settings.json에서 이 작업 input으로 복사한다. Frontend가 파일을 직접 읽지 않는다.
++    captionReferenceStyle은 settings.json의 backend.defaults.captionReferenceStyle에서 이 작업 input으로 복사한다. Frontend가 파일을 직접 읽지 않는다.
+     reference width R=layout.slotStyle.referenceWidth, dashboard 기준 높이 H0=R/layout.slotStyle.aspect다.
+     목표 width W의 배율 s=W/R이다. renderer는 R에서 측정한 caption block/gap과 dashboard H0를 같은 s로 변환한다.
+     export width는 이미 pixel 단위이므로 DPI를 다시 곱하지 않는다. DPI는 기존 출력 metadata 의미다.
+diff --git a/sourcescript/backend/project_efsm.py b/sourcescript/backend/project_efsm.py
+index bf1c772..7edb302 100644
+--- a/sourcescript/backend/project_efsm.py
++++ b/sourcescript/backend/project_efsm.py
+@@ -192,7 +192,7 @@ class ProjectStateMachine:
+            선택된 replace id/path가 더 이상 같은 대상을 가리키지 않으면 거부한다. stale 계획으로 덮어쓰거나 자동 재선택하지 않는다.
+            candidate의 원천이 된 authority가 commit 전 바뀌면 그대로 commit하지 않고 현재 authority에 대해 재계산/검증한다.
+            실패/취소는 미commit 결과이며 부분 변경/복구용 rollback/성공 hint를 만들지 않는다.
+-           PROJECT_NAME_CHANGED는 value를 문자열로 변환하고 trim=True이면 양끝 공백 제거 뒤 최대 120문자로 제한해 meta.projectName candidate를 만든다.
++           PROJECT_NAME_CHANGED는 value를 문자열로 변환하고 trim=True이면 양끝 공백 제거 뒤 backend.defaults.naming.projectNameMaxLength로 제한해 meta.projectName candidate를 만든다.
+            SLOT_TYPE_CHANGED는 explicit visible slotId를 resolve하며 type은 image일 때 image, 그 외 graph로 정규화한다.
+            missing/hidden slot은 거부하며 선택되지 않았다고 pending type을 별도 저장하지 않는다.
+            SLOTS_RESET은 explicit visible slotIds의 SLOT_LOCAL_DEFAULTS 복원과 owned chart 제거를 같은 candidate로 수행한다.
+@@ -208,7 +208,7 @@ class ProjectStateMachine:
+            nested axis patch는 해당 axis의 명시된 field에만 적용하고 다른 axis/global field를 버리지 않는다.
+            project.appearance와 chart.editor가 각 의미의 원천이며 graph.data/layout/CSS는 candidate 계산/표시 결과다.
+            label/caption create/load/missing/partial edit는 layout_annotations.ANNOTATION_SETTINGS_RULE을 사용한다.
+-           LABEL_POSITION_CHANGED의 reset=True는 settings.json labels.settings.x/y를 Backend 내부에서 읽어 적용한다.
++           LABEL_POSITION_CHANGED의 reset=True는 settings.json backend.project_object.annotations.labels.settings.x/y를 Backend 내부에서 읽어 적용한다.
+            SLOT_CAPTIONS_INSERTED는 current candidate와 payload.slotIds로 layout_annotations.insertSlotCaptions를 계산한다.
+            no target이면 committed=False/unchanged이고 success read나 selection을 실행하지 않는다.
+            JSON config 값/계산 결과를 Frontend state에서 다시 만들거나 별도 authority로 저장하지 않는다.
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index 102fa68..2110205 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -8,28 +8,19 @@ Fast Figure Source Script — authoritative project state and references
+   getProjectCsv/getProjectImage/getChart/slotAt.
+ """
+ 
+-SLOT_STYLE_DEFAULTS = {
+-    "referenceWidth": 1200,
+-    "gap": 0,
+-    "outerMargin": 0,
+-    "radius": 0,
+-    "aspect": 1.618,
+-    "showBorders": True,
+-}
+-
+-# Project appearance의 기본값 원천. graph object의 색 순환과는 별개다.
+-DEFAULT_UI_PALETTE = {
+-    "uiColor": "#B0CFCE",
+-    "uiBackgroundColor": "#FAFAFA",
+-    "uiSurfaceColor": "#FFFFFF",
+-    "uiMutedColor": "#4F525D",
+-    "uiSubtleColor": "#94A3B8",
+-    "uiDisabledBgColor": "#E5E7EB",
+-    "uiDisabledTextColor": "#64748B",
+-    "uiShadowColor": "#383A42",
+-    "paperColor": "#FFFFFF",
+-    "fontColor": "#383A42",
+-}
++BACKEND_SETTINGS_RULE = (
++    "sourcescript/backend/settings.json의 backend만 Backend 설정 원천이다. frontend block은 이 파일에 두지 않는다. "
++    "backend.project_object는 layout/annotations/appearance/export의 저장 설정 구조에 대응한다. ffpx는 package 호환 설정이다. "
++    "backend.defaults는 생성 prototype/동작 한계/표시 기본값이며 Project에 통째로 넣지 않는다. "
++    "아래 DEFAULT 이름은 JSON 경로의 read-only 참조 표기이지 독립 값 정의·cache·새 settings service가 아니다. "
++    "기존 Backend owner가 필요한 leaf만 해당 작업의 입력으로 사용한다. 현재 Project 설정은 유일한 runtime authority다. "
++    "create/reset은 명시된 설정만 copy하고 load는 missing 설정만 보완한다. valid saved false/0/empty는 유지한다. "
++    "asset/CSV rows/bytes/chart figure/slot instance/id/nextId/caption 본문/사용자 이름을 config에 넣지 않는다. "
++    "config에 없는 instance data는 기존 생성·검증 알고리즘으로 만든다. config 변경은 기존 Project 자동 migration이 아니다. "
++    "missing/malformed/필수 경로 누락은 구성 오류이며 흩어진 코드 기본값으로 대체하지 않는다."
++)
++SLOT_STYLE_DEFAULTS = "config reference: backend.project_object.layout.slotStyle"
++DEFAULT_UI_PALETTE = "config reference: backend.project_object.appearance.uiPalette"
+ 
+ APPEARANCE_PALETTE_RULE = (
+     "위 10개 field만 persistent uiPalette로 소유한다. 새 project/reset은 DEFAULT_UI_PALETTE의 copy다. "
+@@ -63,14 +54,14 @@ projectState = {
+         "appBuild": "이 project state를 생성/저장한 application build 표식",
+     },
+     "layout": {
+-        "gridRows": "1..8 범위의 grid 행 수",
+-        "gridCols": "1..8 범위의 grid 열 수",
++        "gridRows": "backend.defaults.limits.layout.gridRows 범위의 grid 행 수",
++        "gridCols": "backend.defaults.limits.layout.gridCols 범위의 grid 열 수",
+         "slotStyle": {
+-            "referenceWidth": "dashboard 기준 폭; 현재 허용 범위 100..20000",
+-            "gap": "slot 사이 기준 간격; 현재 허용 범위 0..2000",
+-            "outerMargin": "dashboard 기준 바깥 여백; 현재 허용 범위 0..5000, 새 project 기본값 0",
+-            "radius": "slot 기준 모서리 반경; 현재 허용 범위 0..2000",
+-            "aspect": "dashboard 종횡비; 현재 허용 범위 0.1..10",
++            "referenceWidth": "dashboard 기준 폭; backend.defaults.limits.layout.referenceWidth",
++            "gap": "slot 사이 기준 간격; backend.defaults.limits.layout.gap",
++            "outerMargin": "dashboard 기준 바깥 여백; backend.defaults.limits.layout.outerMargin",
++            "radius": "slot 기준 모서리 반경; backend.defaults.limits.layout.radius",
++            "aspect": "dashboard 종횡비; backend.defaults.limits.layout.aspect",
+             "showBorders": "slot 외곽선 표시 여부",
+         },
+     },
+@@ -94,8 +85,8 @@ projectState = {
+     },
+     "fileSystem": {
+         "directories": (
+-            "project VFS directory 목록. 현재 고정 root는 "
+-            "/assets, /assets/csv, /assets/images, /assets/trash"
++            "project VFS directory 목록. 고정 root 설정은 backend.defaults.vfs에서 읽고 "
++            "실제 directory instance는 생성/복원 알고리즘이 만든다."
+         ),
+     },
+     "charts": "프로젝트 chart model의 authoritative collection",
+@@ -109,10 +100,10 @@ projectState = {
+         "uiPalette": "프로젝트에 영속되는 Fast Figure UI 색상 palette",
+     },
+     "export": {
+-        "width": "target raster width; 허용 범위 100..20000",
++        "width": "target raster width; backend.defaults.limits.export.logicalWidth",
+         "heightMode": "auto 또는 explicit",
+-        "height": "heightMode가 explicit일 때 target raster height; 허용 범위 100..20000",
+-        "dpi": "raster metadata DPI; 허용 범위 36..1200",
++        "height": "explicit target raster height; backend.defaults.limits.export.logicalHeight",
++        "dpi": "raster metadata DPI; backend.defaults.limits.export.dpi",
+         "format": "png 또는 jpeg",
+     },
+ }
+@@ -167,18 +158,11 @@ SLOT_LOCAL_PROPERTY_RULE = (
+     "global caption처럼 figure 전체에 적용되는 값만 project-level property로 둔다."
+ )
+ 
+-SLOT_LOCAL_DEFAULTS = {
+-    "chart": None,
+-    "imageId": None,
+-    "contentType": "graph",
+-    "imageSettings": {
+-        "fit": "contain",
+-        "scale": 100,
+-        "x": 50,
+-        "y": 50,
+-    },
+-    "caption": None,
+-}
++SLOT_LOCAL_DEFAULTS = (
++    "config backend.defaults.slotSettings.content의 설정을 복사하고, "
++    "chart/imageId/caption은 기존 empty-instance 생성 규칙에 따라 none으로 구성한 local state. "
++    "이 none reference/data를 config에 저장하지 않는다."
++)
+ 
+ SLOT_LOCAL_DEFAULT_RULE = (
+     "slot의 local state가 비어 있는지/보존해야 하는지를 판단할 때 개별 field를 다시 나열하지 않고 "
+@@ -317,7 +301,7 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
+     "captions.readGlobal": "project annotations.captions의 enabled/text/afterText/name/nameBold/settings copy",
+     "captions.readSlot": "explicit slotId의 slot.caption copy; 없는 slot이면 none; placeholder는 반환 presentation일 뿐 저장하지 않음",
+     "labels.readState": "sourcescript.backend.layout_annotations readLabelsApiState(slotId)의 label settings와 explicit slot reference geometry copy",
+-    "layout.readState": "gridRows/gridCols/slotStyle/visibleSlots와 renderedWidth로 계산한 previewGeometry copy; width finite 1..20000 invalid 600; Backend는 session zoom/lock을 읽지 않으며 Application만 public read에 합성; DOM 역추론/preview 저장 없음",
++    "layout.readState": "gridRows/gridCols/slotStyle/visibleSlots와 renderedWidth로 계산한 previewGeometry copy; width는 backend.defaults.preview.widthRange/fallbackWidth 사용; Backend는 session zoom/lock을 읽지 않으며 Application만 public read에 합성; DOM 역추론/preview 저장 없음",
+     "assets.readTree": "sourcescript.backend.assets_files의 current directories/assets로 계산한 canonical VFS tree copy",
+     "assets.readTrash": "같은 tree 계산의 trash subtree copy",
+     "assets.isTrashed": "canonical requested path의 trash subtree membership boolean",
+@@ -357,7 +341,7 @@ RENDERER_BACKEND_READ_CONTRACT = {
+     "whole": (
+         "default renderer request는 final frontendState와 optional mutationResult를 받는다. "
+         "current layout/grid/style, appearance, annotations, visible slots와 slot-local content/caption/settings를 detached copy로 구성한다. "
+-        "label 번호/표시는 layout_annotations.orderedSlotLabels(current project)로 계산하며 captionReferenceStyle은 backend/settings.json에서 복사한다. "
++        "label 번호/표시는 layout_annotations.orderedSlotLabels(current project)로 계산하며 captionReferenceStyle은 backend/settings.json의 backend.defaults.captionReferenceStyle에서 복사한다. "
+         "각 visible graph slot의 owning chart, 실제 project object의 참조 CSV/columns와 graphs.chartFigure(chart, project) 계산 결과를 포함한다. "
+         "project는 이번 query가 읽는 같은 current authority이며 chart copy와 CSV가 같은 read 작업에 속한다. "
+         "non-editable imported conversion chartFigure는 imported representation을 보존하며 conversion view로 project CSV를 resolve하지 않는다. "
+@@ -592,7 +576,7 @@ def validateProjectObjectState(state, requireSlots):
+     - project top-level structure와 필수 nested object가 존재한다.
+     - gridRows/gridCols는 1..8 정수다.
+     - slotStyle 수치와 boolean이 허용 범위에 있다.
+-    - label position은 finite이고 fontSize는 현재 최소 6이다.
++    - label position은 finite이고 fontSize는 backend.defaults.limits.labels.fontSizeMin 이상이다.
+     - export width/height mode/height/dpi/format이 정의된 범위와 관계를 만족한다.
+     - figure 의미가 없는 legacy layoutMapWidth를 authoritative state로 요구하지 않는다.
+     - persistent UI palette의 필수 색상은 유효한 6-digit hex다.
+@@ -618,10 +602,10 @@ def validateProjectObjectState(state, requireSlots):
+ 
+ 
+ DEFAULT_PROJECT_RULES = {
+-    "grid": "새 project는 2 x 2 grid에서 시작한다.",
++    "grid": "backend.project_object.layout.gridRows/gridCols에서 초기 grid 설정을 읽는다.",
+     "slotStyle": (
+         "새 project의 layout.slotStyle은 SLOT_STYLE_DEFAULTS를 사용한다. "
+-        "outerMargin 기본값은 0이며 저장된 project에 명시된 outerMargin은 그대로 유지한다."
++        "저장된 project에 명시된 유효 slotStyle은 그대로 유지한다."
+     ),
+     "slots": (
+         "초기 grid의 각 cell은 1 x 1 empty slot이며 chart/image reference, caption은 empty, "
+@@ -629,16 +613,17 @@ DEFAULT_PROJECT_RULES = {
+     ),
+     "assets": "초기 CSV/image collection은 비어 있으며 보호된 default CSV를 만들지 않는다.",
+     "charts": "초기 chart collection은 비어 있다.",
+-    "labels": "sourcescript/backend/settings.json의 labels를 deep-copy한다. create/load missing 처리는 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다.",
++    "labels": "settings.json의 backend.project_object.annotations.labels 설정만 deep-copy한다. create/load missing 처리는 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다.",
+     "captions": (
+-        "sourcescript/backend/settings.json의 captions를 deep-copy하며 load missing은 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다. "
++        "settings.json의 backend.project_object.annotations.captions 설정만 복사하며 load missing은 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다. "
++        "text/afterText/name은 config가 아닌 새 instance 생성 시 empty text로 만들고 저장 데이터는 그대로 복원한다. "
+         "각 초기 slot.caption도 empty이며 slot caption editor mode는 project state에 저장하지 않는다."
+     ),
+     "export": (
+-        "target width는 초기 layout reference width를 기본으로 하고 height는 auto, "
+-        "DPI는 300, raster format은 png로 시작한다."
++        "target width는 초기 layout referenceWidth에서 계산하고 나머지 설정은 backend.project_object.export에서 읽는다. "
++        "auto의 미지정 height는 기존 생성 알고리즘으로 만들며 config에 geometry 결과를 저장하지 않는다."
+     ),
+-    "vfs": "고정 directory /assets, /assets/csv, /assets/images, /assets/trash를 만든다.",
++    "vfs": "backend.defaults.vfs의 root/csv/image/trash 설정으로 고정 directory instance를 만든다.",
+     "nextId": "csv/image/chart 모두 collection의 첫 새 id를 가리키는 값에서 시작한다.",
+     "appearance": "DEFAULT_UI_PALETTE를 복사해 project persistent palette로 시작한다. reset/set/load도 APPEARANCE_PALETTE_RULE을 공유한다.",
+ }
+@@ -654,14 +639,14 @@ def createProjectState():
+     - activeProject를 직접 변경하지 않는다.
+ 
+     처리:
+-    1. project meta와 2 x 2 layout을 만들고 slotStyle은 SLOT_STYLE_DEFAULTS에서 복사한다.
++    1. project meta는 instance data로 만들고 layout은 backend.project_object.layout 설정에서 만든다.
+     2. label/caption authoritative state를 기본값으로 만든다.
+        slot caption placeholder는 저장하지 않는다.
+     3. CSV/image/chart collection은 empty로 시작한다.
+        빈 graph용 default CSV나 fake graph object를 만들지 않는다.
+     4. 고정 VFS directory와 next-id sequence를 만든다.
+     5. persistent appearance와 export settings를 만든다.
+-    6. 2 x 2의 empty 1 x 1 slot 네 개를 만든다.
++    6. 설정된 grid의 각 cell에 empty 1 x 1 slot을 만든다. id/좌표/reference는 config가 아니라 생성 알고리즘이 만든다.
+     7. validateProjectObjectState를 통과한 candidate를 반환한다.
+     """
+     state = "새 project invariant를 만족하는 candidate ProjectObject state"
+diff --git a/sourcescript/backend/settings.json b/sourcescript/backend/settings.json
+index 4caf3ba..2503509 100644
+--- a/sourcescript/backend/settings.json
++++ b/sourcescript/backend/settings.json
+@@ -1,32 +1,68 @@
+ {
+-  "labels": {
+-    "enabled": false,
+-    "settings": {
+-      "format": "lower-alpha",
+-      "parentheses": false,
+-      "x": 0,
+-      "y": 0,
+-      "order": "row-major",
+-      "fontFamily": "system-ui, sans-serif",
+-      "fontSize": 14
++  "backend": {
++    "project_object": {
++      "ffpx": { "formatVersion": 3 },
++      "layout": {
++        "gridRows": 2,
++        "gridCols": 2,
++        "slotStyle": { "referenceWidth": 1200, "gap": 0, "outerMargin": 0, "radius": 0, "aspect": 1.618, "showBorders": true }
++      },
++      "annotations": {
++        "labels": {
++          "enabled": false,
++          "settings": { "format": "lower-alpha", "parentheses": false, "x": 0, "y": 0, "order": "row-major", "fontFamily": "system-ui, sans-serif", "fontSize": 14 }
++        },
++        "captions": {
++          "enabled": false,
++          "nameBold": false,
++          "settings": { "fontFamily": "system-ui, sans-serif", "fontSize": 14, "lineHeight": 1.45 }
++        }
++      },
++      "appearance": {
++        "uiPalette": {
++          "uiColor": "#B0CFCE", "uiBackgroundColor": "#FAFAFA", "uiSurfaceColor": "#FFFFFF",
++          "uiMutedColor": "#4F525D", "uiSubtleColor": "#94A3B8", "uiDisabledBgColor": "#E5E7EB",
++          "uiDisabledTextColor": "#64748B", "uiShadowColor": "#383A42", "paperColor": "#FFFFFF", "fontColor": "#383A42"
++        }
++      },
++      "export": { "heightMode": "auto", "dpi": 300, "format": "png" }
++    },
++    "defaults": {
++      "slotSettings": {
++        "content": { "contentType": "graph", "imageSettings": { "fit": "contain", "scale": 100, "x": 50, "y": 50 } }
++      },
++      "chartSettings": {
++        "editor": {
++          "globalSettings": {
++            "showLegend": true, "showTitle": true, "showZeroLine": false,
++            "graphFontFamily": "", "titleFontSize": "", "legendFontSize": ""
++          },
++          "axis": {
++            "min": "", "max": "", "tick": "", "tickMode": "plotly", "minorTicks": false,
++            "notation": "none", "scaleType": "linear", "divide": 1, "title": "",
++            "titleSize": 14, "lineWidth": 1, "showGrid": true, "showValues": true, "fontSize": 12
++          },
++          "axisVisibility": { "xBottom": true, "xTop": false, "yLeft": true, "yRight": false },
++          "objectStyle": { "lineWidth": 2, "lineDash": "solid", "markerSymbol": "circle", "markerSize": 6, "barOpacity": 1, "barLineWidth": 0 }
++        }
++      },
++      "graphColors": ["#383A42", "#E45649", "#50A14F", "#B37901", "#0184BC", "#A626A4", "#0997B3", "#FAFAFA"],
++      "graphRendering": {
++        "titleFontSize": 17, "legendFontSize": 12, "gridColor": "#E5E7EB", "zeroLineColor": "#CBD5E1",
++        "margin": { "l": 58, "r": 58, "t": 42, "b": 50 }
++      },
++      "captionReferenceStyle": { "padding": 8, "dashboardGap": 10, "borderHeight": 2, "minimumTextWidth": 10 },
++      "limits": {
++        "layout": { "gridRows": [1, 8], "gridCols": [1, 8], "referenceWidth": [100, 20000], "gap": [0, 2000], "outerMargin": [0, 5000], "radius": [0, 2000], "aspect": [0.1, 10] },
++        "imageSettings": { "scale": [1, 1000], "x": [-100, 200], "y": [-100, 200] },
++        "labels": { "fontSizeMin": 6 },
++        "captions": { "fontSize": [6, 96], "lineHeight": [0.8, 4] },
++        "graphObject": { "lineWidth": [0.1, 20], "markerSize": [1, 40], "barOpacity": [0.05, 1], "barLineWidth": [0, 10] },
++        "export": { "logicalWidth": [100, 20000], "logicalHeight": [100, 20000], "dpi": [36, 1200], "rasterDimension": 16384, "rasterArea": 64000000 }
++      },
++      "vfs": { "root": "/assets", "csv": "/assets/csv", "image": "/assets/images", "trash": "/assets/trash" },
++      "naming": { "projectNameMaxLength": 120, "exportStemMaxLength": 100 },
++      "preview": { "widthRange": [1, 20000], "fallbackWidth": 600 }
+     }
+-  },
+-  "captions": {
+-    "enabled": false,
+-    "text": "",
+-    "afterText": "",
+-    "name": "",
+-    "nameBold": false,
+-    "settings": {
+-      "fontFamily": "system-ui, sans-serif",
+-      "fontSize": 14,
+-      "lineHeight": 1.45
+-    }
+-  },
+-  "captionReferenceStyle": {
+-    "padding": 8,
+-    "dashboardGap": 10,
+-    "borderHeight": 2,
+-    "minimumTextWidth": 10
+   }
+ }
+diff --git a/sourcescript/frontend/renderer.py b/sourcescript/frontend/renderer.py
+index 844a70f..d3c53c5 100644
+--- a/sourcescript/frontend/renderer.py
++++ b/sourcescript/frontend/renderer.py
+@@ -358,7 +358,7 @@ def downloadExportPayload(payload):
+ def exportCaptionLayout(snapshot, measureText):
+     """
+     One-export immutable reference layout; no Backend/config access or Project writes.
+-    R=snapshot.layout.slotStyle.referenceWidth. style=supplied captionReferenceStyle from Backend settings.json.
++    R=snapshot.layout.slotStyle.referenceWidth. style=supplied captionReferenceStyle projection (Backend defaults에서 해당 작업에 복사). Frontend는 config를 직접 읽지 않는다.
+     Use current snapshot captions.enabled/name/nameBold/text/settings. Ordinary global caption body is text;
+     afterText remains stored separately and is not implicitly appended or populated from slot captions.
+     If disabled, return zero height/gap and no lines. Enabled empty caption reserves one blank line as before.
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index 8080403..3f3a2f6 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -39,7 +39,7 @@ SOURCE_SCRIPT_LOGICAL_HIERARCHY = {
+         "project-efsm": "sourcescript.backend.project_efsm — persistent command validation/commit",
+         "asset-domain": "sourcescript.backend.assets_files — VFS, asset/package parse와 candidate calculation",
+         "graph-domain": "sourcescript.backend.graphs — chart/CSV/object normalization, validation과 projection calculation",
+-        "layout-annotation-domain": "sourcescript.backend.layout_annotations — persistent layout/image/annotation/export calculation과 read; backend/settings.json은 같은 책임의 공통 설정 데이터",
++        "layout-annotation-domain": "sourcescript.backend.layout_annotations — persistent layout/image/annotation/export calculation과 read; backend/settings.json의 backend.project_object.annotations/defaults는 기존 각 Backend owner가 소비하는 공통 데이터",
+     },
+     "Application boundary": {
+         "command-query-adapter": "sourcescript.application.adapter — command/query/result/lifecycle orchestration",
+@@ -61,7 +61,7 @@ SOURCE_SCRIPT_FILE_PLACEMENT_RULE = (
+     "application/public_api/__init__.py, assets.py, graphs.py, layout_annotations.py는 하나의 기존 public-api 논리 모듈을 "
+     "구성하는 물리 파일이다. 새 독립 논리 자식이나 별도 API authority가 아니다. "
+     "domain 계산, public wrapper, UI/renderer 책임을 각 owner 경로에 두고 평면 compatibility 재수출 파일은 남기지 않는다. "
+-    "backend/settings.json 하나에 label/caption 설정 데이터를 두며 설정 종류별 Python module/파일/loader 계층은 추가하지 않는다. "
++    "backend/settings.json 하나의 backend.project_object에 저장 설정 구조를, backend.defaults에 Backend 동작/생성 설정을 둔다. 실제 Project 데이터·Frontend 설정·별도 Python settings module/registry는 넣지 않는다. "
+     "이는 기존 layout-annotation-domain의 데이터 구성 파일이고 새 logical child나 mutable settings authority가 아니다. "
+     "import는 다른 명세의 책임과 식별자를 재사용하며 Backend↔Frontend direct state 접근 권한을 만들지 않는다. "
+     "하위 단계는 이 논리 hierarchy를 보존한다. 이 파일 이동만으로 하위 계층의 번역 완료를 주장하지 않는다."
+@@ -183,7 +183,7 @@ RESOLVED_REVIEW_ITEMS = [
+ 
+ UNRESOLVED_REVIEW_ITEMS = [
+     (
+-        "Plan 020: annotation 기본값은 backend/settings.json으로, label/order/group/append는 기존 annotation 계산으로 명시했다. "
++        "Plan 021: Backend 분산 기본값은 계층형 backend/settings.json으로, label/order/group/append는 기존 annotation 계산으로 명시했다. "
+         "target export는 layout referenceWidth의 dashboard/caption을 목표 pixel width 비율로 scaling한다. "
+         "review 016 C1–C3의 명세 공백을 보완했지만 전체 create/load/FFPX/render 왕복·purpose/통합 검토 완료나 Source closure를 뜻하지 않는다."
+     ),
