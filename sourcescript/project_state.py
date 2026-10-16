@@ -241,16 +241,67 @@ FrontendValidatedInput = {
     "accepted": "Backend reference validation 성공 여부",
     "reference": "validated slot/path/chart/object identity 또는 explicit none",
     "workspaceHint": "Frontend가 project/slot.graph/slot.image workspace를 결정하는 데 필요한 immutable hint",
-    "selectionHint": "selection toggle/clear를 위한 Backend-derived immutable hint",
+    "selectionHint": (
+        "event별 tagged meaning: SELECT_SLOT은 toggle-clear 또는 clear-graph-object; "
+        "SELECT_ASSET은 csv/image/directory 또는 none; SELECT_GRAPH_OBJECT는 selectAsset=True일 때만 CSV canonical path, 그 외 none"
+    ),
 }
 
 FrontendReconciliationInput = {
     "event": "commit된 project command",
     "selectedSlot": "현재 selected slot reference의 valid/invalid/moved 결과",
-    "assetSelection": "현재 asset reference의 valid/invalid/moved 결과",
+    "assetSelection": "현재 asset reference를 resolve한 canonical path 또는 none",
+    "assetKind": "assetSelection이 resolve된 csv/image/directory kind; none이면 none",
     "graphObject": "현재 graph-object reference/index의 valid/invalid 결과",
     "workspaceHint": "reconciled selection에서 파생할 workspace hint",
     "projectionEffect": "renderer가 사용할 commit effect",
+}
+
+
+# operation 名은 public API와 대응한다. Backend domain 함수의 기존 계산을 재사용하며
+# transport/DOM 표현, UI state copy 또는 별도 read store를 추가하지 않는다.
+PUBLIC_BACKEND_READ_CONTRACTS = {
+    "project.readName": "meta.projectName 문자열 copy",
+    "slots.readSelected": "frontendState.selectedSlotId -> visible slot; id/row/col/contentType/chart/imageId copy, 없으면 none",
+    "images.readEditor": "explicit slotId -> visible slot -> image asset; slotId/name/display URL와 normalized slot-local settings copy, 없으면 none",
+    "print.readSettings": "export의 width/heightMode/height/dpi/format scalar copy",
+    "appearance.readPalette": "current appearance.uiPalette의 field copy; persistent palette hex validation과 defaults는 이 파일의 ProjectObject 규칙 사용",
+    "graphs.readData": (
+        "frontendState.selectedSlotId로 graph chart를 resolve; objects copy와 graphObjectIndex의 valid selectedIndex, "
+        "assetSelection=csv인 assetPath에서 currentCsv/columns, selected object.csvId에서 별도 objectColumns를 계산. "
+        "object.csvId를 currentCsv 대체 원천으로 쓰지 않는다. chart 없으면 objects=[], selectedIndex=none; CSV 없으면 해당 columns=[]"
+    ),
+    "graphs.readLayout": "explicit selectedSlotId로 owning chart를 resolve한 title/globalSettings/axis copy; 없으면 none",
+    "graphs.readPalette": "같은 owning chart의 editor object color sequence copy; 없으면 empty sequence",
+    "graphs.hasSelectedSlot": "explicit selectedSlotId가 visible graph slot인지 boolean; chart가 없어도 graph slot이면 true",
+    "graphs.defaultColors": "graphs.py의 immutable default color sequence copy; ProjectObject read 불필요",
+    "captions.readGlobal": "project annotations.captions의 enabled/text/afterText/name/nameBold/settings copy",
+    "captions.readSlot": "explicit slotId의 slot.caption copy; 없는 slot이면 none; placeholder는 반환 presentation일 뿐 저장하지 않음",
+    "labels.readState": "layout_annotations_export.py readLabelsApiState(slotId)의 label settings와 explicit slot reference geometry copy",
+    "layout.readState": "current layout/style/visible slot geometry copy와 renderedWidth를 사용한 기존 layout preview 계산; DOM에서 project 값을 역추론하지 않음",
+    "assets.readTree": "assets_files.py의 current directories/assets로 계산한 canonical VFS tree copy",
+    "assets.readTrash": "같은 tree 계산의 trash subtree copy",
+    "assets.isTrashed": "canonical requested path의 trash subtree membership boolean",
+    "assets.movable": "current VFS source 존재와 fixed-root 규칙으로 계산한 boolean; trash 소속만으로 거부하지 않음",
+    "assets.draggableAsset": "존재하는 non-trash csv/image의 kind/id/path/name copy 또는 none; slot 연결용이며 tree move와 구별",
+    "assets.readDeletionTarget": "explicit path asset과 collectAssetReferences의 사용 count/owner copy; 없으면 none",
+    "assets.moveOptions": "current directories와 기존 move eligibility 규칙에서 계산한 destination 후보 copy",
+    "assets.planMove": "explicit source/destination을 current VFS에서 resolve한 collision/reference-count plan copy; commit 때 반드시 재검증",
+    "assets.resolveTreeSelection": "path를 resolve한 accepted/kind/canonical path scalar input; invalid면 accepted=False",
+    "assets.collisionModel": "current VFS와 이번 import의 reserved paths로 계산한 collision model; 다른 작업의 권위로 보존하지 않음",
+}
+
+RENDERER_BACKEND_READ_CONTRACT = {
+    "whole": (
+        "default renderer request는 final frontendState와 optional mutationResult를 받는다. "
+        "current layout/grid/style, appearance, annotations, visible slots와 slot-local content/caption/settings를 detached copy로 구성한다. "
+        "각 visible graph slot의 owning chart, 참조 CSV/columns와 chartFigure 계산 결과를 포함하고 image slot은 asset name/display URL를 포함한다. "
+        "slot/chart/CSV resolve와 graph projection 계산은 Backend에서 끝내며 renderer가 Backend를 다시 조회하지 않는다. "
+        "Backend authority에 없는 default/compatibility 값은 copy에만 적용한다. final Frontend state는 ProjectObject에 합치지 않는다."
+    ),
+    "slot-image": "explicit slotId에 대한 images.readEditor와 동일한 Backend 계산; UI selection을 query 내부에서 읽지 않음",
+    "ui-palette": "appearance.readPalette와 동일한 palette copy; CSS variable 적용은 Frontend가 수행",
+    "lifetime": "한 render 작업에만 소비; 다음 작업은 current authority에서 재조회; mutation 입력이나 장기 project mirror로 재사용 금지",
 }
 
 
@@ -264,10 +315,16 @@ def readBackendProjection(kind, request):
     - activeProject와 Frontend state를 변경하지 않는다.
 
     처리:
-    1. kind와 request의 id/path/reference를 current activeProject에서 resolve한다.
-    2. consumer가 실제로 필요한 field만 새 projection/snapshot으로 구성한다.
-    3. compatibility/default normalization이 필요하면 projection copy에서 수행하고 live ProjectObject field를 read 과정에서 쓰지 않는다.
-    4. projection에는 Backend 내부 mutable object reference를 장기 authority로 노출하지 않는다.
+    1. kind가 BACKEND_QUERY_KINDS에 속하는지 확인한다. project-api는 PUBLIC_BACKEND_READ_CONTRACTS의 operation을 확인한다.
+       미등록 kind/operation은 query 오류이며 ProjectObject/Frontend state를 변경하지 않는다.
+    2. request의 explicit identity와 frontendState의 selectedSlotId/assetPath/graphObjectIndex를 아래 계약에 따라
+       current activeProject/VFS에서 resolve한다. Frontend object copy를 read authority로 받지 않는다.
+    3. public read는 PUBLIC_BACKEND_READ_CONTRACTS의 domain 계산을 호출한 detached 값이다. 없는 선택 대상은 해당 계약의 none/empty 결과다.
+       slot-selection-context는 visible slot이면 id/empty/contentType, invalid면 none이다. empty는 chart/image reference가 모두 없는 경우다.
+    4. renderer는 RENDERER_BACKEND_READ_CONTRACT의 whole/targeted 입력을, export는 현재 whole-project snapshot을 구성한다.
+       interface-intent/reconciliation kind는 아래 validation/reconciliation 계산과 같은 contract를 사용하며 별도 판정 규칙을 만들지 않는다.
+    5. compatibility/default normalization은 detached copy에서만 수행한다. 중첩 array/object까지 read-only로 반환하고
+       Backend 내부 mutable reference, event handler, DOM node, query/command callback은 projection에 포함하지 않는다.
     """
     projection = "current Backend authority에서 계산한 immutable read projection"
     return projection
@@ -283,10 +340,20 @@ def validateFrontendIntent(event, payload):
     - activeProject와 Frontend state를 변경하지 않는다.
 
     처리:
-    SELECT_SLOT/SELECT_ASSET/SELECT_GRAPH_OBJECT처럼 Backend identity validity가 필요한 event는
-    payload reference를 current activeProject/projectVfs/chart에서 resolve한다.
-    explicit deselection처럼 Backend reference가 필요 없는 input은 accepted none으로 표현한다.
-    resolve 실패는 rejected input으로 반환하며 Frontend FSM이 Backend를 직접 재조회하지 않게 한다.
+    공통: event/accepted/reference/workspaceHint/selectionHint를 새 immutable input으로 구성한다.
+    미등록 event 또는 invalid reference는 accepted=False이며 Frontend state를 변경하지 않는다.
+    explicit none은 accepted deselection이다. invalid identity를 none으로 바꾸어 승인하지 않는다.
+    SELECT_SLOT:
+      slotId를 visible slot에서 resolve한다. workspaceHint는 contentType image이면 slot.image, 아니면 slot.graph다.
+      direction=model-to-fsm이면 clear-graph-object, 그 외 일반 selection은 toggle-clear hint를 반환한다.
+    SELECT_ASSET:
+      path를 current VFS에서 resolve하고 요청 kind와 일치하는 csv/image/directory만 승인한다.
+      reference는 canonical path, selectionHint는 resolved kind다. none이면 hint도 none이다.
+    SELECT_GRAPH_OBJECT:
+      payload.selectedSlotId -> visible graph slot -> owning chart -> integer index의 existing editor object를 resolve한다.
+      read 과정에서 ensure/normalize로 live chart를 변경하지 않는다. object.csvId가 current CSV에서 resolve되어야 승인한다.
+      reference는 index다. selectAsset=True일 때만 CSV canonical path를 selectionHint로 반환하고, False/생략이면 hint none이다.
+      explicit index none은 graph selection clear이며 asset selection에 대한 hint를 생성하지 않는다.
     """
     validatedInput = FrontendValidatedInput
     return validatedInput
@@ -302,10 +369,19 @@ def buildFrontendReconciliationInput(event, mutationResult, frontendReferences):
     - activeProject와 Frontend state를 변경하지 않는다.
 
     처리:
-    commit된 ProjectMutationResult와 Frontend가 현재 보유한 id/path/index reference를 입력으로 받아
-    current activeProject에서 각 reference의 valid/moved/removed 상태를 resolve한다.
-    result는 Frontend runtime state를 어떻게 갱신할지 판단하는 데 필요한 값만 포함하며
-    ProjectObject 또는 mutable Backend helper를 Frontend로 넘기지 않는다.
+    1. committed result와 Frontend의 selectedSlotId/assetPath/graphObjectIndex를 입력으로 받는다. failed result로 이 query를 실행하지 않는다.
+    2. result.selectionHints.resetInterfaceSelection이면 세 reference를 none으로 만든다. 아니면 swapSlotIds에 따라 선택 slot id를 교환하고,
+       mergeSlotIds에 포함된 선택 id는 anchorId로 바꾼다. movedPathFrom subtree의 선택 path는 movedPathTo와 기존 상대 suffix로 옮긴다.
+    3. 변환된 slot id를 current visible slot에서 resolve하고 invalid면 none으로 만든다.
+       asset path를 current VFS에서 resolve한다. clearAssetSelection, removed target 또는 enteringTrash인 trashed target이면 clear한다.
+       여전히 존재하는 unrelated selection은 유지한다.
+    4. reconciled slot의 graph chart와 현재 integer index를 resolve한다. clearGraphSelection hint 또는 command의 explicit clearGraphSelection이면 clear한다.
+       image workspace/no chart/out-of-range index면 clear한다. 그 외 index를 유지한다. graph object를 ensure/normalize하지 않는다.
+       object-array edit의 selectedIndexHint는 별도의 index-only Frontend transition 입력이며, 임의 CSV 선택 변경으로 해석하지 않는다.
+    5. selectedSlot/assetSelection/assetKind/graphObject에 resolved scalar를 반환한다. workspaceHint는 none이면 project,
+       visible image slot이면 slot.image, 그 외 slot.graph다. projectionEffect는 committed result의 실제 reference 제거/targeted 변경 정보로
+       renderer_runtime.py의 DASHBOARD_PROJECTION_INVALIDATION_RULE에 맞춰 결정할 수 있는 값이며 Frontend state write를 수행하지 않는다.
+    6. ProjectObject/Backend helper를 결과에 넣지 않고 Frontend selection 또는 Backend authority를 이 query에서 변경하지 않는다.
     """
     reconciliationInput = FrontendReconciliationInput
     return reconciliationInput
