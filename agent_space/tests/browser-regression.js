@@ -1185,6 +1185,52 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "trash move retained selected asset");
     });
 
+    await run(39, "image settings use current Backend authority and projection-only renderer", async () => {
+      const target = activeProject.slots.find((slot) => !slot.hidden);
+      api.slots.reset(target.id);
+      select(slotAt(target.id));
+      api.slots.setContentType("image");
+      api.images.insertEmpty();
+      const imageId = slotAt(target.id).imageId;
+      const other = activeProject.slots.find((slot) => !slot.hidden && slot.id !== target.id);
+      if (other) {
+        api.assets.connectToSlot(projectAssetPath(getProjectImage(imageId)), "image", other.id);
+        select(slotAt(target.id));
+      }
+      const othersBefore = JSON.stringify(activeProject.slots.filter((slot) => slot.id !== target.id));
+      const stale = api.images.readEditor();
+      const result = api.images.setSettings({ fit: "manual", scale: 175, x: 25, y: 75 });
+      check(result.slotId === target.id && Object.isFrozen(result.settings), "image query projection missing");
+      check(result.settings.scale === 175 && stale.settings.scale === 100, "image read snapshot became authority");
+      check(JSON.stringify(activeProject.slots.filter((slot) => slot.id !== target.id)) === othersBefore,
+        "image settings changed another slot sharing the asset");
+      const image = slotElement(target.id)?.querySelector(".slot-image");
+      check(image?.classList.contains("manual") && image.style.width === "175%" &&
+        image.style.left === "25%" && image.style.top === "75%", "targeted image projection missing");
+      const projection = appFSM.query("renderer", { operation: "slot-image", slotId: target.id });
+      const authority = JSON.stringify(activeProject._state), frontend = appFSM.state;
+      check(syncSlotImageElement(projection), "renderer rejected supplied image projection");
+      check(JSON.stringify(activeProject._state) === authority && appFSM.state === frontend,
+        "image renderer changed Backend or Frontend authority");
+      check(!/slotAt|slotImage|normalizeImageSettings|activeProject|appFSM/.test(syncSlotImageElement.toString()),
+        "narrow image renderer retains direct query or command path");
+      api.images.setSettings({ fit: "contain" });
+      check(!image.classList.contains("manual") && image.style.objectFit === "contain" && image.style.width === "",
+        "contain projection retained manual styling");
+      api.images.setSettings({ fit: "manual", scale: 5000, x: -500, y: 500 });
+      check(slotAt(target.id).imageSettings.scale === 1000 && slotAt(target.id).imageSettings.x === -100 &&
+        slotAt(target.id).imageSettings.y === 200, "Backend did not normalize image settings");
+      const beforeFailure = JSON.stringify(activeProject._state), frontendBeforeFailure = appFSM.state;
+      let failed = false;
+      try { dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId: -999, settings: { fit: "cover" } }); }
+      catch { failed = true; }
+      check(failed && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === frontendBeforeFailure,
+        "failed image command changed authority or reconciled success");
+      api.slots.select(target.id);
+      check(api.images.readEditor() === null && api.images.setSettings({ fit: "cover" }) === false,
+        "missing selection must not update an image");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
