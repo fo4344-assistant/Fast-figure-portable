@@ -1218,8 +1218,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(!image.classList.contains("manual") && image.style.objectFit === "contain" && image.style.width === "",
         "contain projection retained manual styling");
       api.images.setSettings({ fit: "manual", scale: 5000, x: -500, y: 500 });
-      check(slotAt(target.id).imageSettings.scale === 1000 && slotAt(target.id).imageSettings.x === -100 &&
-        slotAt(target.id).imageSettings.y === 200, "Backend did not normalize image settings");
+      const normalized = slotAt(target.id).content.imageSettings;
+      check(normalized.scale === 1000 && normalized.x === -100 && normalized.y === 200,
+        "Backend did not normalize image settings");
       const beforeFailure = JSON.stringify(activeProject._state), frontendBeforeFailure = appFSM.state;
       let failed = false;
       try { dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId: -999, settings: { fit: "cover" } }); }
