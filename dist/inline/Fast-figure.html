@@ -10295,9 +10295,95 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           return [...this.adapters.keys()];
         }
       }
+      // Backend read providers: resolve references from current authority, never normalize live models.
+      function readBackendProjection(kind, request = {}) {
+        if (kind !== "slot-selection-context") throw Error(`알 수 없는 Backend query: ${kind}`);
+        let slot = request.slotId == null ? null : slotAt(request.slotId);
+        return slot && !slot.hidden ? Object.freeze({
+          id: slot.id,
+          empty: !slot.chart && !slot.imageId,
+          contentType: slot.contentType,
+        }) : null;
+      }
+      function validateFrontendIntent(event, payload = {}) {
+        let input = { event, accepted: true, reference: null, workspaceHint: "project", selectionHint: null };
+        if (event === "SELECT_SLOT") {
+          if (payload.slotId != null) {
+            let slot = slotAt(payload.slotId);
+            if (!slot || slot.hidden) input.accepted = false;
+            else {
+              input.reference = slot.id;
+              input.workspaceHint = slot.contentType === "image" ? "slot.image" : "slot.graph";
+              input.selectionHint = payload.direction === "model-to-fsm" ? "clear-graph-object" : "toggle-clear";
+            }
+          }
+        } else if (event === "SELECT_ASSET") {
+          if (payload.path != null) {
+            let match = projectVfs.resolve(payload.path);
+            if (!match || match.kind !== payload.kind || !["csv", "image", "directory"].includes(match.kind))
+              input.accepted = false;
+            else {
+              input.reference = match.kind === "directory" ? match.path : projectAssetPath(match.asset);
+              input.selectionHint = match.kind;
+            }
+          }
+        } else if (event === "SELECT_GRAPH_OBJECT") {
+          if (payload.index != null) {
+            let slot = slotAt(payload.selectedSlotId),
+              chart = slot && !slot.hidden && slot.contentType !== "image" ? getChart(slot.chart) : null,
+              object = Number.isInteger(payload.index) && payload.index >= 0
+                ? chart?.editor?.objects?.[payload.index] : null,
+              csv = object ? getProjectCsv(object.csvId) : null;
+            if (!object || !csv) input.accepted = false;
+            else {
+              input.reference = payload.index;
+              input.selectionHint = projectAssetPath(csv);
+            }
+          }
+        } else input.accepted = false;
+        return Object.freeze(input);
+      }
+      function buildFrontendReconciliationInput(event, result, references) {
+        let payload = result.payload || {}, hints = result.selectionHints || {},
+          slotId = references.selectedSlotId,
+          assetPath = references.assetPath,
+          graphObjectIndex = references.graphObjectIndex;
+        if (hints.resetInterfaceSelection) {
+          slotId = assetPath = graphObjectIndex = null;
+        } else {
+          if (Array.isArray(hints.swapSlotIds) && hints.swapSlotIds.length === 2) {
+            let [source, target] = hints.swapSlotIds;
+            if (slotId === source) slotId = target;
+            else if (slotId === target) slotId = source;
+          }
+          if (hints.mergeSlotIds?.includes(slotId)) slotId = hints.anchorId;
+          if (assetPath && hints.movedPathFrom && projectPathInDirectory(assetPath, hints.movedPathFrom))
+            assetPath = `${hints.movedPathTo}${assetPath.slice(hints.movedPathFrom.length)}`;
+        }
+        let slot = slotId == null ? null : slotAt(slotId);
+        if (!slot || slot.hidden) slotId = null;
+        let asset = assetPath ? projectVfs.resolve(assetPath) : null;
+        if (hints.clearAssetSelection || !asset ||
+            (hints.enteringTrash && projectVfs.isTrashed(assetPath))) {
+          asset = null;
+          assetPath = null;
+        }
+        let chart = slotId !== null && slot.contentType !== "image" ? getChart(slot.chart) : null;
+        if (payload.clearGraphSelection || hints.clearGraphSelection ||
+            !Number.isInteger(graphObjectIndex) || graphObjectIndex < 0 ||
+            graphObjectIndex >= (chart?.editor?.objects?.length || 0))
+          graphObjectIndex = null;
+        return Object.freeze({
+          event, selectedSlot: slotId,
+          assetSelection: assetPath, assetKind: asset?.kind || "none",
+          graphObject: graphObjectIndex,
+          workspaceHint: slotId === null ? "project" : slot.contentType === "image" ? "slot.image" : "slot.graph",
+        });
+      }
+      const BACKEND_REFERENCE_EVENTS = new Set(["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]);
+
       class InterfaceStateMachine {
-        constructor(objects, definitions) {
-          this.objects = objects;
+        constructor(definitions) {
           this.definitions = definitions;
           this.state = Object.freeze({
             lifecycle: "booting",
@@ -10321,8 +10407,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           return definition;
         }
         context(region, state, event, payload) {
-          let definition = this.definition(region, state),
-            names = definition.objects || [];
           return {
             machine: this,
             region,
@@ -10331,7 +10415,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             payload,
             direction: payload.direction || this.state.direction || "model-to-ui",
             canWrite: (scope) => !this.writeLocks.has(scope),
-            objects: Object.fromEntries(names.map((name) => [name, this.objects.read(name)])),
           };
         }
         withWriteLocks(scopes, operation) {
@@ -10418,6 +10501,9 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           return this.state;
         }
         send(event, payload = {}) {
+          if (PROJECT_COMMANDS.has(event)) return this.state;
+          if (BACKEND_REFERENCE_EVENTS.has(event) && payload.validatedInput?.accepted !== true)
+            return this.state;
           if (event === "LIFECYCLE_START" || event === "LIFECYCLE_COMPLETE" ||
               event === "LIFECYCLE_FAILED")
             return this.transitionLifecycle(event, payload);
@@ -10441,70 +10527,18 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           if (!handled) debugLog("fsm:event-unhandled", { event, state: this.state }, "warn");
           return this.state;
         }
-        reconcileProjectResult(event, result) {
-          let payload = result?.payload || {},
-            hints = payload.selectionHints || {};
-
-          if (hints.resetInterfaceSelection) {
-            selectedSlotId = null;
-            this.state = Object.freeze({
-              ...this.state,
-              workspace: "project",
-              assetSelection: "none",
-              assetPath: null,
-              graphObject: "none",
-              graphObjectIndex: null,
-              direction: "model-to-ui",
-              revision: this.state.revision + 1,
-            });
-            return this.publish(`${event}:reconcile`);
-          }
-
-          if (Array.isArray(hints.swapSlotIds) && hints.swapSlotIds.length === 2) {
-            let [sourceId, targetId] = hints.swapSlotIds;
-            if (selectedSlotId === sourceId) selectedSlotId = targetId;
-            else if (selectedSlotId === targetId) selectedSlotId = sourceId;
-          }
-
-          if (Array.isArray(hints.mergeSlotIds) && hints.mergeSlotIds.includes(selectedSlotId))
-            selectedSlotId = hints.anchorId;
-          if (hints.reResolveSlotSelection && selectedSlotId !== null && !slotAt(selectedSlotId))
-            selectedSlotId = null;
-
-          let assetPath = this.state.assetPath;
-          if (assetPath && hints.movedPathFrom && projectPathInDirectory(assetPath, hints.movedPathFrom)) {
-            assetPath = `${hints.movedPathTo}${assetPath.slice(hints.movedPathFrom.length)}`;
-          }
-          let selectedAsset = assetPath ? projectVfs.resolve(assetPath) : null;
-          if (
-            hints.clearAssetSelection ||
-            (hints.enteringTrash && assetPath && projectVfs.isTrashed(assetPath)) ||
-            !selectedAsset
-          ) {
-            assetPath = null;
-            selectedAsset = null;
-          }
-
-          let graphObjectIndex = this.state.graphObjectIndex,
-            selectedSlot = selectedSlotId === null ? null : slotAt(selectedSlotId),
-            selectedChart = selectedSlot?.chart ? getChart(selectedSlot.chart) : null,
-            objects = selectedChart ? ensureGraphObjects(selectedChart) : [];
-          if (
-            payload.clearGraphSelection ||
-            hints.clearGraphSelection ||
-            !Number.isInteger(graphObjectIndex) ||
-            graphObjectIndex < 0 ||
-            graphObjectIndex >= objects.length
-          )
-            graphObjectIndex = null;
-
+        readState() {
+          return Object.freeze({ ...this.state, selectedSlotId });
+        }
+        reconcileProjectResult(event, input) {
+          selectedSlotId = input.selectedSlot;
           this.state = Object.freeze({
             ...this.state,
-            workspace: workspaceStateFromModel(selectedSlotId),
-            assetSelection: selectedAsset?.kind || "none",
-            assetPath,
-            graphObject: graphObjectIndex === null ? "none" : "selected",
-            graphObjectIndex,
+            workspace: input.workspaceHint,
+            assetSelection: input.assetKind,
+            assetPath: input.assetSelection,
+            graphObject: input.graphObject === null ? "none" : "selected",
+            graphObjectIndex: input.graphObject,
             direction: "model-to-ui",
             revision: this.state.revision + 1,
           });
@@ -10529,9 +10563,9 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           }
           return this.publish(event);
         }
-        ready() {
+        ready(workspaceHint = "project") {
           this.transition("lifecycle", "ready", "READY");
-          this.transition("workspace", workspaceStateFromModel(), "WORKSPACE_INIT", {
+          this.transition("workspace", workspaceHint, "WORKSPACE_INIT", {
             direction: "model-to-fsm",
           });
           this.transition("overlay", "none", "OVERLAY_INIT", { reenter: true });
@@ -10568,26 +10602,18 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         }
       }
 
-      function workspaceStateForSelection() {
-        let slot = getSelectedSlot();
-        if (!slot) return "project";
-        return slot.contentType === "image" ? "slot.image" : "slot.graph";
-      }
       function workspaceStateFromModel(slotId = selectedSlotId) {
         let slot = slotId == null ? null : slotAt(slotId);
         return !slot ? "project" : slot.contentType === "image" ? "slot.image" : "slot.graph";
       }
       function requestedWorkspaceState({ payload }) {
-        return payload.direction === "model-to-fsm"
-          ? workspaceStateFromModel(payload.slotId)
-          : workspaceStateForSelection();
+        return selectedSlotId === null ? "project" : payload.validatedInput.workspaceHint;
       }
       function applySlotSelectionAction({ machine, payload }) {
-        let slot = payload.slotId == null ? null : slotAt(payload.slotId),
-          same = !!slot && selectedSlotId === slot.id,
-          hydrating = payload.direction === "model-to-fsm";
+        let input = payload.validatedInput,
+          same = input.reference !== null && selectedSlotId === input.reference;
         machine.assertWritable("workspace", "SELECT_SLOT");
-        selectedSlotId = !slot || (!hydrating && same) ? null : slot.id;
+        selectedSlotId = same && input.selectionHint === "toggle-clear" ? null : input.reference;
         machine.state = Object.freeze({
           ...machine.state,
           graphObject: "none",
@@ -10603,15 +10629,14 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
       function applyGraphObjectSelectionAction({ machine, payload }) {
         machine.assertWritable("editor", "SELECT_GRAPH_OBJECT");
-        let slot = getSelectedSlot(),
-          chart = slot?.chart ? getChart(slot.chart) : null,
-          objects = ensureGraphObjects(chart),
-          index = Number.isInteger(payload.index) ? payload.index : null;
-        if (!slot || slot.contentType === "image" || !chart || index < 0 || index >= objects.length)
-          index = null;
+        let index = payload.validatedInput?.event === "SELECT_GRAPH_OBJECT"
+          ? payload.validatedInput.reference : null;
         machine.state = Object.freeze({
           ...machine.state,
           graphObjectIndex: index,
+          ...(index !== null ? {
+            assetSelection: "csv", assetPath: payload.validatedInput.selectionHint,
+          } : {}),
         });
       }
       function selectedGraphObjectGuard() {
@@ -11366,26 +11391,18 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
 
       function applyAssetSelectionAction({ machine, payload }) {
-        let kind = ["csv", "image", "directory"].includes(payload.kind) ? payload.kind : null,
-          match = payload.path ? projectVfs.resolve(payload.path) : null,
-          asset = match?.kind === kind ? match.asset : null,
-          path = kind === "directory" && match?.kind === "directory" ? match.path : asset ? projectAssetPath(asset) : null;
+        let path = payload.validatedInput?.event === "SELECT_ASSET"
+          ? payload.validatedInput.reference : null;
         machine.state = Object.freeze({
           ...machine.state,
           assetPath: path ?? null,
         });
       }
       function assetSelectionTarget({ payload }) {
-        let match = payload.path ? projectVfs.resolve(payload.path) : null;
-        if (match?.kind === payload.kind) return payload.kind;
-        return "none";
+        return payload.validatedInput.selectionHint || "none";
       }
       function requestedOverlayState({ state, payload }) {
         return state === payload.overlay ? "none" : payload.overlay;
-      }
-      function syncGraphWorkspaceState() {
-        let slot=getSelectedSlot();
-        if(slot?.chart)activateChartModel(slot.chart);
       }
       function exitGraphWorkspaceState({ machine }) {
         machine.state = Object.freeze({
@@ -11410,98 +11427,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             action: applySlotSelectionAction,
             target: requestedWorkspaceState,
           },
-          SLOT_TYPE_CHANGED: {
-            action: applySlotTypeAction,
-            target: requestedWorkspaceState,
-          },
-          CAPTION_TEXT_INPUT: {
-            action: applyCaptionTextAction,
-            target: ({ state }) => state,
-          },
-          SLOT_CAPTIONS_INSERTED: {
-            action: applySlotCaptionsInsertedAction,
-            target: ({ state }) => state,
-          },
-          PROJECT_DIRECTORY_CREATED: {
-            action: applyProjectDirectoryCreatedAction,
-            target: ({ state }) => state,
-          },
-          PROJECT_NODE_MOVED: {
-            action: applyProjectNodeMovedAction,
-            target: requestedWorkspaceState,
-          },
-          PROJECT_TRASH_EMPTIED: {
-            action: applyProjectTrashEmptiedAction,
-            target: ({ state }) => state,
-          },
-          DATA_OBJECT_CREATED: {
-            action: applyDataObjectCreatedAction,
-            target: ({ state }) => state,
-          },
-          DATA_OBJECT_REPLACED: {
-            action: applyDataObjectReplacedAction,
-            target: ({ state }) => state,
-          },
-          DATA_OBJECT_DELETED: {
-            action: applyDataObjectDeletedAction,
-            target: ({ state }) => state,
-          },
-          IMAGE_OBJECT_CREATED: {
-            action: applyImageObjectCreatedAction,
-            target: ({ state }) => state,
-          },
-          IMAGE_OBJECT_REPLACED: {
-            action: applyImageObjectReplacedAction,
-            target: ({ state }) => state,
-          },
-          IMAGE_OBJECT_DELETED: {
-            action: applyImageObjectDeletedAction,
-            target: ({ state }) => state,
-          },
-          SLOTS_RESET: {
-            action: applySlotsResetAction,
-            target: requestedWorkspaceState,
-          },
-          SLOTS_SWAPPED: {
-            action: applySlotsSwappedAction,
-            target: requestedWorkspaceState,
-          },
-          SLOT_IMAGE_LINKED: {
-            action: applySlotImageLinkedAction,
-            target: ({ state }) => state,
-          },
-          SLOT_DATA_CONNECTED: {
-            action: applySlotDataConnectedAction,
-            target: requestedWorkspaceState,
-          },
-          GRAPH_OBJECTS_REPLACED: {
-            action: applyGraphObjectsReplacedAction,
-            target: ({ state }) => state,
-          },
-          CHART_LAYOUT_CHANGED: {
-            action: applyChartLayoutChangedAction,
-            target: ({ state }) => state,
-          },
-          CHART_MODEL_REPLACED: {
-            action: applyChartModelReplacedAction,
-            target: ({ state }) => state,
-          },
-          SLOT_IMAGE_IMPORTED: {
-            action: applySlotImageImportedAction,
-            target: requestedWorkspaceState,
-          },
-          SLOT_CHART_IMPORTED: {
-            action: applySlotChartImportedAction,
-            target: requestedWorkspaceState,
-          },
-          GRID_LAYOUT_CHANGED: {
-            action: applyGridLayoutChangedAction,
-            target: "project",
-          },
-          PROJECT_LOADED: {
-            action: applyProjectLoadedAction,
-            target: "project",
-          },
         },
         SHARED_OVERLAY_EVENTS = {
           TOGGLE_OVERLAY: { target: requestedOverlayState },
@@ -11511,49 +11436,21 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           SELECT_SLOT: {
             target: ({ state, payload }) => payload.slotId == null ? state : "none",
           },
-          CAPTION_TEXT_INPUT: { target: ({ state }) => state },
-          SLOT_CAPTIONS_INSERTED: { target: ({ state }) => state },
-          SLOTS_SWAPPED: { target: ({ state }) => state },
         },
         GRAPH_OBJECT_EVENTS = {
+          SELECT_ASSET: {
+            action: applyGraphObjectSelectionAction,
+            target: "none",
+          },
           SELECT_GRAPH_OBJECT: {
             action: applyGraphObjectSelectionAction,
-            target: ({ payload }) => Number.isInteger(payload.index) ? "selected" : "none",
+            target: ({ payload }) => payload.validatedInput.reference !== null ? "selected" : "none",
           },
           CLEAR_GRAPH_OBJECT: {
             action: applyGraphObjectSelectionAction,
             target: "none",
           },
           SELECT_SLOT: {
-            action: applyGraphObjectSelectionAction,
-            target: "none",
-          },
-          SLOT_TYPE_CHANGED: {
-            action: applyGraphObjectSelectionAction,
-            target: "none",
-          },
-          SLOTS_RESET: {
-            action: applyGraphObjectSelectionAction,
-            target: "none",
-          },
-          SLOTS_SWAPPED: {
-            action: applyGraphObjectSelectionAction,
-            target: "none",
-          },
-          GRAPH_OBJECTS_REPLACED: {
-            action: applyGraphObjectSelectionAction,
-            target: ({ machine }) =>
-              Number.isInteger(machine.state.graphObjectIndex) ? "selected" : "none",
-          },
-          PROJECT_NODE_MOVED: ({ state, payload }) =>
-            payload.clearGraphSelection
-              ? { action: applyGraphObjectSelectionAction, target: "none" }
-              : { target: state },
-          GRID_LAYOUT_CHANGED: {
-            action: applyGraphObjectSelectionAction,
-            target: "none",
-          },
-          PROJECT_LOADED: {
             action: applyGraphObjectSelectionAction,
             target: "none",
           },
@@ -11567,25 +11464,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             action: applyAssetSelectionAction,
             target: "none",
           },
-          DATA_OBJECT_REPLACED: { target: ({ state }) => state },
-          IMAGE_OBJECT_REPLACED: { target: ({ state }) => state },
-          PROJECT_NODE_MOVED: ({ state, payload }) =>
-            payload.clearAssetSelection
-              ? { action: applyAssetSelectionAction, target: "none" }
-              : { target: state },
           SELECT_SLOT: {
-            action: applyAssetSelectionAction,
-            target: "none",
-          },
-          SLOTS_SWAPPED: {
-            action: applyAssetSelectionAction,
-            target: "none",
-          },
-          GRID_LAYOUT_CHANGED: {
-            action: applyAssetSelectionAction,
-            target: "none",
-          },
-          PROJECT_LOADED: {
             action: applyAssetSelectionAction,
             target: "none",
           },
@@ -11650,9 +11529,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
                 "captions",
                 "ui",
               ],
-              entry: syncGraphWorkspaceState,
               exit: exitGraphWorkspaceState,
-              update: syncGraphWorkspaceState,
               on: SHARED_WORKSPACE_EVENTS,
             },
             "slot.image": {
@@ -11782,7 +11659,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         ASSETS_IMPORTED: applyAssetsImportedAction,
       });
       const PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
-      const interfaceFSM = new InterfaceStateMachine(projectObjects, APP_STATE_DEFINITIONS);
+      const interfaceFSM = new InterfaceStateMachine(APP_STATE_DEFINITIONS);
       const projectEFSM = new ProjectStateMachine(projectObjects, PROJECT_COMMAND_ACTIONS);
 
       function runLifecycleTask(lifecycle, event, task) {
@@ -11816,7 +11693,9 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
 
       function dispatchProjectCommand(event, payload = {}) {
         let result = projectEFSM.send(event, payload);
-        interfaceFSM.reconcileProjectResult(event, result);
+        if (result.committed)
+          interfaceFSM.reconcileProjectResult(event,
+            buildFrontendReconciliationInput(event, result, interfaceFSM.readState()));
         return result;
       }
 
@@ -11829,15 +11708,13 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             dispatchProjectCommand(event, payload);
             return interfaceFSM.state;
           }
-          let state = interfaceFSM.send(event, payload);
+          let validatedInput = BACKEND_REFERENCE_EVENTS.has(event)
+            ? validateFrontendIntent(event, { ...payload, selectedSlotId }) : null;
+          if (validatedInput && !validatedInput.accepted) return interfaceFSM.state;
+          interfaceFSM.send(event, validatedInput ? { ...payload, validatedInput } : payload);
           if (event === "SELECT_SLOT") {
-            let slot = selectedSlotId === null ? null : slotAt(selectedSlotId);
-            if (
-              slot &&
-              !slot.chart &&
-              !slot.imageId &&
-              slot.contentType !== pendingSlotContentType
-            ) {
+            let slot = readBackendProjection("slot-selection-context", { slotId: selectedSlotId });
+            if (slot?.empty && slot.contentType !== pendingSlotContentType) {
               dispatchProjectCommand("SLOT_TYPE_CHANGED", {
                 slotId: slot.id,
                 type: pendingSlotContentType,
@@ -11845,11 +11722,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
               });
             }
           }
-          return state;
+          return interfaceFSM.state;
         },
         notify: (...args) => interfaceFSM.notify(...args),
         run: (...args) => runLifecycleTask(...args),
-        ready: (...args) => interfaceFSM.ready(...args),
+        ready: () => interfaceFSM.ready(workspaceStateFromModel()),
         subscribe: (...args) => interfaceFSM.subscribe(...args),
       });
       function selectedProjectAsset() {
@@ -15828,12 +15705,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return csv;
       }
       function graphEditorSelectObject(index) {
-        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
-        let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
-        if (selected !== null) graphEditorSelectCsv(objects[selected].csvId);
-        appFSM.send(selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT", { index: selected, direction: "fsm-to-model" });
+        let input = validateFrontendIntent("SELECT_GRAPH_OBJECT", { index, selectedSlotId });
+        if (!input.accepted) return null;
+        appFSM.send("SELECT_GRAPH_OBJECT", { index: input.reference, direction: "fsm-to-model" });
         appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
-        return selected;
+        return input.reference;
       }
       function graphEditorObjectValues(index, values = {}) {
         let chart = graphEditorChart(), objects = ensureGraphObjects(chart), current = objects[index];
