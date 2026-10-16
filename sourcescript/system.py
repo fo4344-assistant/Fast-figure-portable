@@ -39,7 +39,7 @@ SOURCE_SCRIPT_LOGICAL_HIERARCHY = {
         "project-efsm": "sourcescript.backend.project_efsm — persistent command validation/commit",
         "asset-domain": "sourcescript.backend.assets_files — VFS, asset/package parse와 candidate calculation",
         "graph-domain": "sourcescript.backend.graphs — chart/CSV/object normalization, validation과 projection calculation",
-        "layout-annotation-domain": "sourcescript.backend.layout_annotations — persistent layout/image/annotation/export calculation과 read; backend/settings.json은 같은 책임의 공통 설정 데이터",
+        "layout-annotation-domain": "sourcescript.backend.layout_annotations — persistent layout/image/annotation/export calculation과 read; backend/settings.json의 backend.project_object.annotations/defaults는 기존 각 Backend owner가 소비하는 공통 데이터",
     },
     "Application boundary": {
         "command-query-adapter": "sourcescript.application.adapter — command/query/result/lifecycle orchestration",
@@ -61,7 +61,7 @@ SOURCE_SCRIPT_FILE_PLACEMENT_RULE = (
     "application/public_api/__init__.py, assets.py, graphs.py, layout_annotations.py는 하나의 기존 public-api 논리 모듈을 "
     "구성하는 물리 파일이다. 새 독립 논리 자식이나 별도 API authority가 아니다. "
     "domain 계산, public wrapper, UI/renderer 책임을 각 owner 경로에 두고 평면 compatibility 재수출 파일은 남기지 않는다. "
-    "backend/settings.json 하나에 label/caption 설정 데이터를 두며 설정 종류별 Python module/파일/loader 계층은 추가하지 않는다. "
+    "backend/settings.json 하나의 backend.project_object에 저장 설정 구조를, backend.defaults에 Backend 동작/생성 설정을 둔다. 실제 Project 데이터·Frontend 설정·별도 Python settings module/registry는 넣지 않는다. "
     "이는 기존 layout-annotation-domain의 데이터 구성 파일이고 새 logical child나 mutable settings authority가 아니다. "
     "import는 다른 명세의 책임과 식별자를 재사용하며 Backend↔Frontend direct state 접근 권한을 만들지 않는다. "
     "하위 단계는 이 논리 hierarchy를 보존한다. 이 파일 이동만으로 하위 계층의 번역 완료를 주장하지 않는다."
@@ -183,7 +183,7 @@ RESOLVED_REVIEW_ITEMS = [
 
 UNRESOLVED_REVIEW_ITEMS = [
     (
-        "Plan 020: annotation 기본값은 backend/settings.json으로, label/order/group/append는 기존 annotation 계산으로 명시했다. "
+        "Plan 021: Backend 분산 기본값은 계층형 backend/settings.json으로, label/order/group/append는 기존 annotation 계산으로 명시했다. "
         "target export는 layout referenceWidth의 dashboard/caption을 목표 pixel width 비율로 scaling한다. "
         "review 016 C1–C3의 명세 공백을 보완했지만 전체 create/load/FFPX/render 왕복·purpose/통합 검토 완료나 Source closure를 뜻하지 않는다."
     ),
