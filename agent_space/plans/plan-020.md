@@ -54,3 +54,7 @@
 ## 6. 제외·중단 조건
 
 정책 변경, 새 설정 프레임워크, lower JS/PlusCal/model/tests/dist 구현, 전체 closure 선언은 제외한다. 이 보완 계획의 게시에는 Source/metadata 수정이나 runtime/checker 실행을 섞지 않는다. 원격 HEAD 충돌이나 사용자 요구와 다른 새 의미가 발견되면 먼저 대조하고 stale 기준으로 덮어쓰지 않는다.
+
+## 7. 실행 진행 — Source r36
+
+공통 `sourcescript/backend/settings.json`을 추가하고 미게시 Python settings 파일/전용 디렉터리/import를 제거했다. 기존 annotation 책임 안에서 기본값 참조·caption 순서/group/append·reference-width export 계산을 연결했다. JSON을 포함한 Source fingerprint/revision/patch 감지를 checker에 반영했다. 이 단계는 계획 게시 이후의 별도 변경이며 patch 022에 기록한다. 상세 정적 대조·제외·실제 Actions 결과는 `agent_space/reviews/review-20261016-017-annotation-r36-open.md`를 따른다. Source closure는 open이며 lower stale를 유지한다.
