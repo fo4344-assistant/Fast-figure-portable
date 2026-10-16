@@ -56,4 +56,5 @@ C1–C3의 구체적인 원천/알고리즘은 기록했지만 전체 create/loa
 
 - 로컬 Source/application/checker/test/build/TLC 실행 없음. fingerprint는 파일 경로/byte의 git blob hash를 계산한 것으로 Source 실행과 다르다.
 - 누적 patch와 GitHub Actions cumulative version checker의 실제 결과는 patch 022 설명과 아래 후속 결과에 기록한다. 순차 Contents API의 source-before-metadata 상태는 최종 coherent snapshot 검증과 구분한다.
-- 검증 실행 전 작성 문서다. 이후 실제 run ID/HEAD/BASE_SHA/result만 추가하며 checker PASS를 semantic/runtime 성공으로 취급하지 않는다.
+- 검증 실행 전 작성 후 결과 추가: cumulative GitHub Actions `38865899313` PASS. 실행 HEAD `7122e86ab3964dfe487ee7792cac1d620867e156`, 실제 BASE_SHA `e5b9d3ec7cbd68fee578e202f714f69ceb1fd9c0`, 로그 Source r36 current/open 및 fingerprint 위 값 일치. https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38865899313
+- 이 결과 추가는 실행 HEAD 이후의 documentation-only commit이다. 같은 최종 HEAD를 실행했다고 주장하지 않으며 checker PASS는 semantic/runtime/시각 성공이나 Source closure를 뜻하지 않는다.
