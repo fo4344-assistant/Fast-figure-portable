@@ -43,7 +43,7 @@ PROJECT_COMMANDS = {
     "SLOTS_MERGED": "선택 직사각형의 slot-local payload를 top-left anchor로 원자적 병합",
     "SLOTS_SPLIT": "merged anchor를 visible 1x1 slots로 복원",
     "CAPTION_TEXT_INPUT": "explicit global/slot caption owner text 변경",
-    "SLOT_CAPTIONS_INSERTED": "slot captions를 global caption text에 삽입",
+    "SLOT_CAPTIONS_INSERTED": "layout_annotations.insertSlotCaptions의 current-order label grouping/append 계산을 한 candidate로 commit",
     "CAPTION_SETTINGS_CHANGED": "global caption enabled/name/nameBold/presentation settings commit",
     "LABEL_SETTINGS_CHANGED": "persistent label 설정 변경",
     "LABEL_POSITION_CHANGED": "persistent label 위치 변경",
@@ -207,6 +207,11 @@ class ProjectStateMachine:
            새 값에 없는 current title/axis field는 유지하며 invalid 새 값은 graph default/empty 규칙으로 정규화한다.
            nested axis patch는 해당 axis의 명시된 field에만 적용하고 다른 axis/global field를 버리지 않는다.
            project.appearance와 chart.editor가 각 의미의 원천이며 graph.data/layout/CSS는 candidate 계산/표시 결과다.
+           label/caption create/load/missing/partial edit는 layout_annotations.ANNOTATION_SETTINGS_RULE을 사용한다.
+           LABEL_POSITION_CHANGED의 reset=True는 settings.json labels.settings.x/y를 Backend 내부에서 읽어 적용한다.
+           SLOT_CAPTIONS_INSERTED는 current candidate와 payload.slotIds로 layout_annotations.insertSlotCaptions를 계산한다.
+           no target이면 committed=False/unchanged이고 success read나 selection을 실행하지 않는다.
+           JSON config 값/계산 결과를 Frontend state에서 다시 만들거나 별도 authority로 저장하지 않는다.
         4. candidate whole-project invariant를 검증한다.
         5. 성공 candidate만 activeProject에 한 번 commit한다.
         6. 실제 pre/post 차이에서 ProjectMutationResult를 계산한다. 생성/import의 changed id/path/owner는 실제 commit 결과를 사용한다.
