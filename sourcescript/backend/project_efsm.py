@@ -155,7 +155,12 @@ ProjectMutationResult = {
     "changed": "command별 실제 changed ids/path/owner; create/import는 input 순서의 실제 생성 asset path/id와 owning chart/slot id, DATA_OBJECT_REPLACED는 실제 updated CSV path, PROJECT_DIRECTORY_CREATED는 실제 생성 directory path, PROJECT_NODE_MOVED는 실제 final destination path를 포함한다. 기존 공식 query의 post-commit read에 사용하며 stale input/plan path를 성공 결과로 재사용하지 않는다",
     "removedGraphReferenceCount": "실제 제거한 graph-object CSV reference 수",
     "resetImageSlotCount": "실제 image reference를 비운 slot 수",
-    "selectionHints": "후속 interface reconciliation의 identity/path 결과와 해당 chartId에 한정된 optional selectedIndexHint; absence와 explicit none을 구별",
+    "selectionHints": (
+        "후속 reconciliation의 identity/path 결과와 chartId에 한정된 optional selectedIndexHint; absence와 explicit none을 구별. "
+        "CSV cascade는 graphObjectIndexMaps=[{chartId, indices}]를 사용한다. chartId는 중복 없는 실제 affected chart의 id, "
+        "indices는 제거 전 object 개수 길이의 배열이며 각 old index entry는 retained object의 post index 또는 제거된 경우 none이다. "
+        "identity/path나 objects snapshot을 대체하지 않는 한 command의 immutable delta다"
+    ),
     "projectionEffect": "renderer effect를 결정할 수 있는 실제 commit 결과",
 }
 
@@ -209,7 +214,17 @@ class ProjectStateMachine:
            graphs.addObject는 append된 index, graphs.moveObject는 제거 후 목적 위치 to, graphs.setObjectValues는 편집한 index,
            graphs.deleteObject는 explicit none을 계산한다. current chart/index/from/to를 command에서 resolve하고 유효하지 않으면 commit 전에 거부한다.
            이동은 from object를 제거해 최종 to 위치에 삽입하고 나머지 상대 순서를 유지한다. 마지막 object 삭제도 empty 배열로 유효하다.
-           hint가 없는 command는 그 key를 생략하며 none과 혼동하지 않는다. 실패 결과에는 성공 hint를 넣지 않는다.
+           DATA_OBJECT_DELETED, PROJECT_NODE_MOVED의 entering-trash detach, PROJECT_TRASH_EMPTIED가 실제 graph reference를 제거하면
+           같은 candidate의 filter에서 chart별 retained original index 순서를 사용해 graphObjectIndexMaps를 계산한다.
+           원래 n개 object에 대해 indices를 n개의 none으로 시작하고 retained original indices [k0,k1,...]의
+           indices[kj]=j로 채운다. 예: [A,B,C]에서 A 제거는 [none,0,1], B 제거는 [0,none,1]이다.
+           동일 값의 중복 object/같은 CSV의 여러 reference도 original 위치로 구별한다. equality로 post 배열을 역매칭하지 않는다.
+           실제 제거가 있는 retained chart만 항목을 만들고 다른 chart/단순 path 이동/image-only detach에는 mapping을 만들지 않는다.
+           이 filter와 reference count는 asset-domain의 동일 actual reference set을 사용한다. conversion view는 그 집합에서 제외한다.
+           삭제된 chart는 current owner resolve 실패로 clear되므로 map이 필요 없다. 여러 affected chart는 각각 별도 항목을 만든다.
+           candidate 재계산 시 mapping도 새 authority에서 다시 계산한다. mapping을 persistent chart에 저장하거나 Frontend 선택을 읽지 않는다.
+           direct graphs.deleteObject의 explicit-none hint는 그대로 유지하며 cascade와 다른 선택 의미를 임의로 합치지 않는다.
+           hint가 없는 command는 그 key를 생략하며 none과 혼동하지 않는다. 실패 결과에는 성공 hint/map을 넣지 않는다.
         7. interface state와 renderer를 변경하지 않고 result를 반환한다.
         """
         result = "ProjectMutationResult"
