@@ -195,7 +195,17 @@ RESOLVED_REVIEW_ITEMS = [
     ),
 ]
 
-UNRESOLVED_REVIEW_ITEMS = []
+UNRESOLVED_REVIEW_ITEMS = [
+    (
+        "Plan 017 E: trace numeric conversion/exclusion, reciprocal axis의 schema/default, "
+        "global/axis에서 Plotly layout으로의 field-by-field conversion과 palette/default colors의 concrete source를 "
+        "기존 graph/projection procedure에서 완결해야 한다. placeholder/default 참조만으로 닫힘을 선언하지 않는다."
+    ),
+    (
+        "Plan 017 D/E: 전체 public operation의 입력/성공/실패/취소 반환과 command/query/reconciliation/renderer를 "
+        "실제 producer/consumer로 대조해야 한다. 개별 wrapper 수정이나 resource lifetime만으로 전체 closure 근거를 삼지 않는다."
+    ),
+]
 
 
 def initializeFastFigure():
