@@ -30,9 +30,9 @@
 
 - agent_space/AGENT.md
 - agent_space/policies/policies.md
-- agent_space/policies/source-script-policy.md
+- agent_space/policies/development-policy.md
 
-source-script-policy.md는 현재 v0.2.6이며 Source Script → PlusCal pseudocode → 선택적 verification model → Source Code의 권위 관계, authoritative state 변경 경로, Single Source of Truth, 참조 무결성, Module decomposition hierarchy, Source Script 닫힘, pseudocode 직접 번역, verification decomposition, 대상 언어 구현 원칙을 정의한다.
+development-policy.md는 현재 v0.2.6이며 Source Script → PlusCal pseudocode → 선택적 verification model → Source Code의 권위 관계, authoritative state 변경 경로, Single Source of Truth, 참조 무결성, Module decomposition hierarchy, Source Script 닫힘, pseudocode 직접 번역, verification decomposition, 대상 언어 구현 원칙을 정의한다.
 
 이 계획에 직접 적용되는 정책 판정은 다음과 같다.
 
@@ -50,7 +50,7 @@ Frontend component, Frontend FSM, renderer가 activeProject 내부 field를 직�
 
 ### 1.3 읽기와 mutation은 같은 경로일 필요가 없지만 계층 경계는 보존한다
 
-source-script-policy.md는 읽기와 계산까지 mutation 경로와 동일하게 강제할 필요는 없다고 명시한다.
+development-policy.md는 읽기와 계산까지 mutation 경로와 동일하게 강제할 필요는 없다고 명시한다.
 
 따라서 Frontend read request가 Project EFSM.send를 통과할 필요는 없다.
 
