@@ -6,7 +6,7 @@ Fast Figure Source Script — system boundary and reverse-review index
 - 이 파일은 실행 가능한 Python 구현이 아니라 Python 문법을 작성 표기법으로 사용하는 구현 명세다.
 
 권위와 검증 원천:
-- ../agent_space/policies/source-script-policy.md:
+- ../agent_space/policies/development-policy.md:
   Source Script 작성·닫힘·Source of Truth·참조·최소 구현 원칙의 상위 정책 원천.
 - ../README.md:
   Fast Figure의 공개 목적과 project/FFPX/FFSX/Plotly 계약을 확인하는 프로젝트 문서.
@@ -28,57 +28,41 @@ IMPLEMENTATION_SOURCES = {
     "scripts/build-portable.py": "portable single-file packaging 원천",
 }
 
-SOURCE_SCRIPT_MODULES = {
-    "project_state.py": "Backend project authority와 Backend read/query provider",
-    "project_efsm.py": "Backend ProjectObject persistent transition/validation/commit",
-    "interface_fsm.py": "Frontend FSM runtime regions, selections and interaction transitions",
-    "application_fsm.py": "Application boundary command/query/result/lifecycle orchestration",
-    "assets_files.py": "Backend asset/package semantics와 co-located Application-boundary asset wrappers",
-    "graphs.py": "Backend graph semantics와 co-located Application-boundary graph wrappers",
-    "layout_annotations_export.py": "Backend layout/annotation semantics, Application-boundary wrappers, Frontend export projection",
-    "api_ui.py": "Application-boundary FastFigureApi contract와 Frontend Mantine responsibilities",
-    "renderer_runtime.py": "Frontend dashboard renderer, DOM interaction, telemetry and startup projection",
-    "portable_build.py": "system-level split-to-portable build specification",
-}
+from sourcescript.backend import project_state, project_efsm, assets_files, graphs, layout_annotations
+from sourcescript.application import adapter, public_api
+from sourcescript.frontend import interface_fsm, mantine_ui, renderer
+from sourcescript.portable_build import portable_build
 
 SOURCE_SCRIPT_LOGICAL_HIERARCHY = {
     "Backend": {
-        "project-state": "project_state.py의 activeProject, reference/invariant, Backend query/read semantics",
-        "project-efsm": "project_efsm.py의 persistent ProjectObject command controller",
-        "asset-domain": "assets_files.py의 VFS/asset/package parse, candidate, validation, persistence semantics",
-        "graph-domain": "graphs.py의 chart/CSV/graph-object calculation, candidate, validation semantics",
-        "layout-annotation-domain": (
-            "layout_annotations_export.py의 persistent layout/image-setting/label/caption/export-setting "
-            "calculation과 candidate semantics"
-        ),
+        "project-state": "sourcescript.backend.project_state — project authority, reference/invariant와 query provider",
+        "project-efsm": "sourcescript.backend.project_efsm — persistent command validation/commit",
+        "asset-domain": "sourcescript.backend.assets_files — VFS, asset/package parse와 candidate calculation",
+        "graph-domain": "sourcescript.backend.graphs — chart/CSV/object normalization, validation과 projection calculation",
+        "layout-annotation-domain": "sourcescript.backend.layout_annotations — persistent layout/image/annotation/export calculation과 read",
     },
     "Application boundary": {
-        "command-query-adapter": (
-            "application_fsm.py의 Backend command/query와 Frontend validated-event/result/lifecycle orchestration"
-        ),
-        "public-api": (
-            "api_ui.py의 FastFigureApi contract와 assets_files.py/graphs.py/layout_annotations_export.py에 "
-            "물리적으로 함께 있는 public command/query wrapper semantics"
-        ),
+        "command-query-adapter": "sourcescript.application.adapter — command/query/result/lifecycle orchestration",
+        "public-api": "sourcescript.application.public_api — FastFigureApi contract와 public wrappers",
     },
     "Frontend": {
-        "frontend-fsm": "interface_fsm.py의 session/runtime state와 transition",
-        "mantine-ui": "api_ui.py의 Mantine component와 component-local interaction",
-        "renderer": (
-            "renderer_runtime.py의 DOM/Plotly projection과 layout_annotations_export.py의 "
-            "screen/raster rendering presentation semantics"
-        ),
+        "frontend-fsm": "sourcescript.frontend.interface_fsm — session/runtime transitions",
+        "mantine-ui": "sourcescript.frontend.mantine_ui — component-local interaction과 UI composition",
+        "renderer": "sourcescript.frontend.renderer — DOM/Plotly/image/raster presentation과 display resource lifetime",
     },
     "Portable build": {
-        "portable-build": "portable_build.py의 split source -> single-file artifact packaging",
+        "portable-build": "sourcescript.portable_build.portable_build — split source -> single-file artifact packaging",
     },
 }
 
 SOURCE_SCRIPT_FILE_PLACEMENT_RULE = (
-    "Source Script의 물리 파일과 논리 Module decomposition은 1:1일 필요가 없다. "
-    "assets_files.py, graphs.py, layout_annotations_export.py, api_ui.py처럼 기존 물리 파일에 둘 이상의 논리 책임이 함께 있으면 "
-    "각 함수/규칙의 logical owner를 위 hierarchy로 추적하고, 파일의 import 관계를 Backend↔Frontend 직접 호출 권한으로 해석하지 않는다. "
-    "하위 단계는 이 논리 owner를 보존하되 대상 언어 구현을 위해 물리 파일을 나눌 수 있다."
+    "system.py 아래 backend/, application/, frontend/, portable_build/는 위 의미 영역을 물리 경로에 반영한다. "
+    "각 자식의 의미는 부모의 의미 영역에 포함되며 호출 관계/파일 편의 때문에 부모를 정하지 않는다. "
+    "application/public_api/__init__.py, assets.py, graphs.py, layout_annotations.py는 하나의 기존 public-api 논리 모듈을 "
+    "구성하는 물리 파일이다. 새 독립 논리 자식이나 별도 API authority가 아니다. "
+    "domain 계산, public wrapper, UI/renderer 책임을 각 owner 경로에 두고 평면 compatibility 재수출 파일은 남기지 않는다. "
+    "import는 다른 명세의 책임과 식별자를 재사용하며 Backend↔Frontend direct state 접근 권한을 만들지 않는다. "
+    "하위 단계는 이 논리 hierarchy를 보존한다. 이 파일 이동만으로 하위 계층의 번역 완료를 주장하지 않는다."
 )
 
 SOURCE_SCRIPT_DECOMPOSITION_RULE = (
@@ -180,7 +164,7 @@ RESOLVED_REVIEW_ITEMS = [
     ),
     (
         "Source Script module hierarchy는 system.py 아래 Backend / Application boundary / Frontend / Portable build로 둔다. "
-        "기존 물리 파일의 co-location과 import/call 관계는 이 logical hierarchy를 바꾸지 않으며, Backend↔Frontend cross-layer access는 "
+        "물리 파일은 각 logical owner의 경로에 두며 import/call 관계가 의미 포함관계를 바꾸지 않는다. Backend↔Frontend cross-layer access는 "
         "Application boundary의 API/Adapter contract만 사용한다."
     ),
     (
