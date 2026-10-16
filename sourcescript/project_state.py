@@ -195,7 +195,11 @@ REFERENCE_RELATIONS = {
         "각 chart id는 정확히 하나의 slot에서만 나타나야 한다."
     ),
     "slot.imageId": "activeProject.images에서 같은 image id를 resolve해야 한다.",
-    "chart.editor.objects[].csvId": "activeProject.csvFiles에서 같은 CSV id를 resolve해야 한다.",
+    "chart.editor.objects[].csvId": (
+        "validateChartModel이 실제 project CSV object로 판정한 object만 activeProject.csvFiles에서 같은 CSV id를 resolve한다. "
+        "non-editable imported chart의 conversion view는 project CSV 참조 집합에 넣지 않는다. "
+        "검증·reference 수집·package remap은 graphs.py의 validateChartModel과 같은 editable 판정을 사용한다."
+    ),
     "asset path": "asset.directory와 asset.name을 projectVfs에서 결합해 resolve한다.",
     "nextId": "각 collection에 존재하는 최대 id보다 커야 한다.",
     "slot.caption": (
@@ -263,13 +267,18 @@ FrontendReconciliationInput = {
 PUBLIC_BACKEND_READ_CONTRACTS = {
     "project.readName": "meta.projectName 문자열 copy",
     "slots.readSelected": "frontendState.selectedSlotId -> visible slot; id/row/col/contentType/chart/imageId copy, 없으면 none",
-    "images.readEditor": "explicit slotId -> visible slot -> image asset; slotId/name/display URL와 normalized slot-local settings copy, 없으면 none",
+    "images.readEditor": (
+        "explicit slotId -> visible slot -> image asset; slotId/name/copied bytes와 그 bytes에서 순수 계산한 display URL, normalized slot-local settings copy, 없으면 none. "
+        "Backend query는 revocable display resource를 할당하거나 runtime handle을 Project에 저장하지 않는다. surface resource lifetime은 renderer_runtime.py의 renderDashboard가 소유한다."
+    ),
     "print.readSettings": "export의 width/heightMode/height/dpi/format scalar copy",
     "appearance.readPalette": "current appearance.uiPalette의 field copy; persistent palette hex validation과 defaults는 이 파일의 ProjectObject 규칙 사용",
     "graphs.readData": (
-        "frontendState.selectedSlotId로 graph chart를 resolve; objects copy와 graphObjectIndex의 valid selectedIndex, "
+        "frontendState.selectedSlotId로 graph chart를 resolve; Application의 post-commit read에 explicit chartId가 있으면 유일한 owning slot까지 resolve한다. "
+        "chart의 detached copy(없으면 none), objects copy와 graphObjectIndex의 valid selectedIndex, "
         "assetSelection=csv인 assetPath에서 currentCsv/columns, selected object.csvId에서 별도 objectColumns를 계산. "
-        "object.csvId를 currentCsv 대체 원천으로 쓰지 않는다. chart 없으면 objects=[], selectedIndex=none; CSV 없으면 해당 columns=[]"
+        "object.csvId를 currentCsv 대체 원천으로 쓰지 않는다. non-editable conversion view는 표시용 copy일 뿐 editable selectedIndex/objectColumns를 만들지 않는다. "
+        "chart 없으면 objects=[], selectedIndex=none; CSV 없으면 해당 columns=[]"
     ),
     "graphs.readLayout": "explicit selectedSlotId로 owning chart를 resolve한 title/globalSettings/axis copy; 없으면 none",
     "graphs.readPalette": "같은 owning chart의 editor object color sequence copy; 없으면 empty sequence",
@@ -284,7 +293,7 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
     "assets.isTrashed": "canonical requested path의 trash subtree membership boolean",
     "assets.movable": "current VFS source 존재와 fixed-root 규칙으로 계산한 boolean; trash 소속만으로 거부하지 않음",
     "assets.draggableAsset": "존재하는 non-trash csv/image의 kind/id/path/name copy 또는 none; slot 연결용이며 tree move와 구별",
-    "assets.readDeletionTarget": "explicit path asset과 collectAssetReferences의 사용 count/owner copy; 없으면 none",
+    "assets.readDeletionTarget": "explicit path -> target asset의 detached copy와 collectAssetReferences의 사용 count/owner copy; 없으면 none; 생성 wrapper도 성공 뒤 target만 반환할 수 있음",
     "assets.moveOptions": "current directories와 기존 move eligibility 규칙에서 계산한 destination 후보 copy",
     "assets.planMove": "explicit source/destination을 current VFS에서 resolve한 collision/reference-count plan copy; commit 때 반드시 재검증",
     "assets.resolveTreeSelection": "path를 resolve한 accepted/kind/canonical path scalar input; invalid면 accepted=False",
@@ -295,7 +304,9 @@ RENDERER_BACKEND_READ_CONTRACT = {
     "whole": (
         "default renderer request는 final frontendState와 optional mutationResult를 받는다. "
         "current layout/grid/style, appearance, annotations, visible slots와 slot-local content/caption/settings를 detached copy로 구성한다. "
-        "각 visible graph slot의 owning chart, 참조 CSV/columns와 chartFigure 계산 결과를 포함하고 image slot은 asset name/display URL를 포함한다. "
+        "각 visible graph slot의 owning chart, 실제 project object의 참조 CSV/columns와 chartFigure 계산 결과를 포함한다. "
+        "non-editable imported conversion chartFigure는 imported representation을 보존하며 conversion view로 project CSV를 resolve하지 않는다. "
+        "image slot은 images.readEditor와 같은 copied bytes/name/display URL 의미를 사용한다. "
         "slot/chart/CSV resolve와 graph projection 계산은 Backend에서 끝내며 renderer가 Backend를 다시 조회하지 않는다. "
         "Backend authority에 없는 default/compatibility 값은 copy에만 적용한다. final Frontend state는 ProjectObject에 합치지 않는다."
     ),
@@ -351,7 +362,8 @@ def validateFrontendIntent(event, payload):
       reference는 canonical path, selectionHint는 resolved kind다. none이면 hint도 none이다.
     SELECT_GRAPH_OBJECT:
       payload.selectedSlotId -> visible graph slot -> owning chart -> integer index의 existing editor object를 resolve한다.
-      read 과정에서 ensure/normalize로 live chart를 변경하지 않는다. object.csvId가 current CSV에서 resolve되어야 승인한다.
+      read 과정에서 ensure/normalize로 live chart를 변경하지 않는다. editable chart의 object.csvId가 current CSV에서 resolve되어야 승인한다.
+      non-editable conversion object는 public editable-object selection 대상이 아니며 project CSV를 찾아 가짜 승인을 만들지 않는다.
       reference는 index다. selectAsset=True일 때만 CSV canonical path를 selectionHint로 반환하고, False/생략이면 hint none이다.
       explicit index none은 graph selection clear이며 asset selection에 대한 hint를 생성하지 않는다.
     """
@@ -375,9 +387,12 @@ def buildFrontendReconciliationInput(event, mutationResult, frontendReferences):
     3. 변환된 slot id를 current visible slot에서 resolve하고 invalid면 none으로 만든다.
        asset path를 current VFS에서 resolve한다. clearAssetSelection, removed target 또는 enteringTrash인 trashed target이면 clear한다.
        여전히 존재하는 unrelated selection은 유지한다.
-    4. reconciled slot의 graph chart와 현재 integer index를 resolve한다. clearGraphSelection hint 또는 command의 explicit clearGraphSelection이면 clear한다.
-       image workspace/no chart/out-of-range index면 clear한다. 그 외 index를 유지한다. graph object를 ensure/normalize하지 않는다.
-       object-array edit의 selectedIndexHint는 별도의 index-only Frontend transition 입력이며, 임의 CSV 선택 변경으로 해석하지 않는다.
+    4. resetInterfaceSelection 또는 clearGraphSelection이면 graph selection을 clear한다. 그 외 reconciled slot의 editable graph chart를 resolve한다.
+       result.selectionHints에 selectedIndexHint가 있고 함께 제공된 chartId가 그 owning chart와 같으면 그 hint를 index 후보로 사용한다.
+       hint 없음은 기존 integer index 유지이며, 명시적 none은 clear다. 다른 chart에 대한 hint는 현재 선택에 적용하지 않는다.
+       image workspace/non-editable/no chart/none/out-of-range/non-integer 후보면 clear하고, 유효한 후보면 그 index를 반환한다.
+       hint는 command의 계산 결과로서 post-commit object 배열에 대해 검증한다. graph object를 ensure/normalize하지 않는다.
+       이 index-only 갱신은 asset selection/path를 변경하지 않는다. 별도 SELECT_GRAPH_OBJECT 전이나 사후 hint 적용은 없다.
     5. selectedSlot/assetSelection/assetKind/graphObject에 resolved scalar를 반환한다. workspaceHint는 none이면 project,
        visible image slot이면 slot.image, 그 외 slot.graph다. projectionEffect는 committed result의 실제 reference 제거/targeted 변경 정보로
        renderer_runtime.py의 DASHBOARD_PROJECTION_INVALIDATION_RULE에 맞춰 결정할 수 있는 값이며 Frontend state write를 수행하지 않는다.
@@ -513,7 +528,9 @@ def validateProjectObjectState(state, requireSlots):
     - CSV/image id와 전체 asset path는 중복되지 않는다.
     - asset directory는 VFS에 존재한다.
     - chart id는 유일하다.
-    - editable chart는 graph object가 0개여도 유효하며, 존재하는 graph object의 CSV 참조는 모두 resolve된다.
+    - 모든 chart에 graphs.py의 validateChartModel을 적용한다. editable chart는 graph object가 0개여도 유효하다.
+      해당 validator가 실제 project CSV object로 판정한 object만 CSV/column 참조 검증 집합에 넣는다. non-editable conversion view는 넣지 않으며
+      chart/Plotly/imported representation의 구조 검증은 그대로 수행한다. 이곳에 별도 완화/강화 validator를 만들지 않는다.
     - slot id와 geometry가 유효하고 grid 범위를 넘지 않는다.
     - slot은 chart와 image를 동시에 참조하지 않는다.
     - slot chart/image 참조 대상이 존재한다.
