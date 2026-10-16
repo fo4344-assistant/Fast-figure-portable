@@ -326,7 +326,13 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
     "assets.moveOptions": "current directories와 기존 move eligibility 규칙에서 계산한 destination 후보 copy",
     "assets.planMove": "explicit source/destination을 current VFS에서 resolve한 collision/reference-count plan copy; commit 때 반드시 재검증",
     "assets.resolveTreeSelection": "path를 resolve한 accepted/kind/canonical path scalar input; invalid면 accepted=False",
-    "assets.collisionModel": "current VFS와 이번 import의 reserved paths로 계산한 collision model; 다른 작업의 권위로 보존하지 않음",
+    "assets.fileKind": "request.file의 copied name/type -> assets_files.slotFileKind의 kind 문자열; ProjectObject/Frontend read 불필요; bytes는 읽지 않음",
+    "assets.collisionModel": "request.file/directory/reservedPaths -> assets_files.projectAssetImportCollisionModel; current VFS의 detached collision model; 다른 작업의 권위로 보존하지 않음",
+    "assets.resolveImportPlan": (
+        "request.model/choice/reservedPaths -> assets_files.resolveProjectAssetImportPlan; model은 identity/choice 제안일 뿐이다. "
+        "같은 current VFS의 충돌/replace target을 재검증한 detached path/replaceId; invalid/stale replace는 오류, input/Project/Frontend 변경 없음. "
+        "이 query 성공은 예약/commit이 아니며 ASSETS_IMPORTED는 current authority를 다시 검증한다"
+    ),
 }
 
 RENDERER_BACKEND_READ_CONTRACT = {
@@ -372,6 +378,8 @@ def readBackendProjection(kind, request):
     5. compatibility/default normalization은 detached copy에서만 수행한다. 중첩 array/object까지 read-only로 반환하고
        Backend 내부 mutable reference, event handler, DOM node, query/command callback은 projection에 포함하지 않는다.
     """
+    from sourcescript.backend import assets_files
+    # asset pure query는 위 등록 contract와 assets_files domain 계산을 사용한다. 별도 공개 계산 store를 만들지 않는다.
     projection = "current Backend authority에서 계산한 immutable read projection"
     return projection
 
