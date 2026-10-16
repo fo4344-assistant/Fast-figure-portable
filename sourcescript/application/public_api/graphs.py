@@ -55,6 +55,36 @@ def graphEditorObjectValues(chartId, index, values):
     return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]
 
 
+def graphEditorMove(chartId, fromIndex, toIndex):
+    """current chart의 from/to를 command에서 재검증하고 성공 뒤 detached chart를 반환한다.
+    from=to는 기존 no-op이며 authority/selection을 변경하지 않는다.
+    invalid identity/index는 command rejection이고 success read/reconciliation을 실행하지 않는다.
+    """
+    context = dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})
+    if fromIndex == toIndex and "context의 editable chart에 fromIndex가 유효한 정수 index":
+        return context["chart"]
+    result, interfaceState, rendererProjection = dispatchProjectCommand(
+        "GRAPH_OBJECTS_REPLACED",
+        {"chartId": chartId, "operation": "graphs.moveObject", "from": fromIndex, "to": toIndex},
+    )
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]
+
+
+def graphEditorDelete(chartId, index):
+    """current index 제거와 explicit-none selection hint는 Backend가 계산한다.
+    마지막 object 삭제도 empty chart 성공이다. 실패는 result, 성공만 post-commit chart copy다.
+    """
+    result, interfaceState, rendererProjection = dispatchProjectCommand(
+        "GRAPH_OBJECTS_REPLACED",
+        {"chartId": chartId, "operation": "graphs.deleteObject", "index": index},
+    )
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]
+
+
 def graphEditorSetEditable(slotId, chartId, editable):
     """
     Return:
