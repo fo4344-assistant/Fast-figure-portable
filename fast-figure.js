@@ -404,6 +404,8 @@
       }
       // Backend read providers: resolve references from current authority, never normalize live models.
       function readBackendProjection(kind, request = {}) {
+        if (kind === "project-api" && request.operation === "print.readSettings")
+          return Object.freeze({ ...activeProject.exportSettings });
         if ((kind === "project-api" && request.operation === "images.readEditor") ||
             (kind === "renderer" && request.operation === "slot-image")) {
           let slot = request.slotId == null ? null : slotAt(request.slotId),
@@ -1376,8 +1378,18 @@
       }
       function applyExportSettingsChangedAction({ machine, payload }) {
         machine.assertWritable("export", "EXPORT_SETTINGS_CHANGED");
-        let candidate = projectClone(activeProject._state);
-        candidate.export = projectClone(payload.settings);
+        let candidate = projectClone(activeProject._state),
+          current = candidate.export, values = payload.settings || {},
+          heightMode = values.heightMode === "explicit" ? "explicit" :
+            values.heightMode === "auto" ? "auto" : current.heightMode;
+        candidate.export = {
+          width: readProjectNumber(values.width, current.width, 100, 20000),
+          heightMode,
+          height: heightMode === "explicit"
+            ? readProjectNumber(values.height, current.height ?? 100, 100, 20000) : null,
+          dpi: readProjectNumber(values.dpi, current.dpi, 36, 1200),
+          format: values.format === "jpeg" ? "jpeg" : values.format === "png" ? "png" : current.format,
+        };
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
       }
@@ -7447,25 +7459,14 @@
         return readGlobalCaptionState();
       }
       function readPrintApiSettings() {
-        return Object.freeze({...activeProject.exportSettings});
+        return appFSM.query("project-api", { operation: "print.readSettings" });
       }
       function setPrintApiSettings(values={}) {
-        let current=activeProject.exportSettings,
-          heightMode=values.heightMode==="explicit"?"explicit":
-            values.heightMode==="auto"?"auto":current.heightMode,
-          candidate={
-            width:readProjectNumber(values.width,current.width,100,20000),
-            heightMode,
-            height:heightMode==="explicit"
-              ?readProjectNumber(values.height,current.height??100,100,20000):null,
-            dpi:readProjectNumber(values.dpi,current.dpi,36,1200),
-            format:values.format==="jpeg"?"jpeg":values.format==="png"?"png":current.format,
-          };
-        appFSM.send("EXPORT_SETTINGS_CHANGED", {
-          settings: candidate,
+        let result = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", {
+          settings: { ...values },
           direction: "ui-to-fsm",
         });
-        return readPrintApiSettings();
+        return result.committed ? readPrintApiSettings() : false;
       }
       function savePrintApi(options={}) {
         let settings=readPrintApiSettings();
