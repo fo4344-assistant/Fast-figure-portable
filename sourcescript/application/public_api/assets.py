@@ -5,7 +5,7 @@ Fast Figure Source Script — Application boundary / public-api — asset wrappe
 Python 표기의 구현 명세이며 application runtime을 실행하는 모듈이 아니다.
 """
 
-from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent
+from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection
 from sourcescript.backend.assets_files import EMPTY_CSV_TEMPLATE
 from sourcescript.frontend.interface_fsm import interfaceFSM
 from sourcescript.frontend.renderer import downloadExportPayload
@@ -155,6 +155,16 @@ def createProjectImage(bytes, name, mime, id, path):
     return dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": "result.changed의 생성 image path"})["target"]
 
 
+ASSET_MUTATION_RESULT_RULE = (
+    "delete/emptyTrash/connectToSlot은 완료 값 없는 operation으로 성공/미commit 모두 None이다. "
+    "move는 성공 시 immutable {path, trashed}, 미commit None; createDirectory는 성공 시 canonical path 문자열, 미commit None이다. "
+    "path는 실제 committed result.changed의 값이며 stale plan/input에서 성공값을 만들지 않는다. "
+    "미commit에는 성공 read/selection/notification을 수행하지 않는다. validation/query/render/selection 오류는 전파한다. "
+    "후속 오류/selection 거부는 이미 commit한 mutation을 rollback하지 않는다. 내부 adapter tuple/result는 공개 반환하지 않는다. "
+    "delete/emptyTrash의 반환 None은 성공 boolean이 아니다. 실패 이유는 기존 command rejection 또는 전파된 오류 경로를 따른다."
+)
+
+
 def deleteProjectAsset(target):
     """
     변경:
@@ -172,8 +182,12 @@ def deleteProjectAsset(target):
 
     보호된 default CSV 같은 예외 asset은 존재하지 않는다.
     """
-    event = "DATA_OBJECT_DELETED if requested target kind == csv else IMAGE_OBJECT_DELETED"
-    return dispatchProjectCommand(event, {"target": "explicit kind/id/path reference만; asset object copy는 아님"})
+    if target is None:
+        return None
+    # kind가 csv/image가 아니면 unchanged None이며 다른 delete command로 추정하지 않는다.
+    event = "validated requested kind의 DATA_OBJECT_DELETED 또는 IMAGE_OBJECT_DELETED"
+    result, interfaceState, rendererInput = dispatchProjectCommand(event, {"target": "explicit kind/id/path reference만; asset object copy는 아님"})
+    return None
 
 
 def moveProjectNode(plan, useUniqueName):
@@ -193,10 +207,17 @@ def moveProjectNode(plan, useUniqueName):
        ProjectMutationResult에 기록한다. path-only 이동과 trash 밖 복구에서는 두 값이 0이다.
        renderer는 이 commit 결과를 사용하고 VFS/DOM에서 변화 여부를 역추론하지 않는다.
     """
-    return dispatchProjectCommand(
+    if plan is None:
+        return None
+    result, interfaceState, rendererInput = dispatchProjectCommand(
         "PROJECT_NODE_MOVED",
         {"path": "plan의 source path", "directory": "plan의 target directory", "useUniqueName": useUniqueName},
     )
+    if not result.committed:
+        return None
+    path = "result.changed의 실제 final canonical destination path"
+    trashed = dispatchProjectQuery("project-api", {"operation": "assets.isTrashed", "path": path})
+    return {"path": path, "trashed": trashed}  # immutable public copy
 
 
 def emptyProjectTrash():
@@ -213,7 +234,8 @@ def emptyProjectTrash():
     6. 이 commit으로 실제 제거된 graph-object reference 수와 image slot reset 수를 ProjectMutationResult에 기록한다.
        실제 제거된 reference가 없으면 dashboard content projection effect는 없다.
     """
-    return dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {})
+    result, interfaceState, rendererInput = dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {})
+    return None
 
 
 def createProjectDirectory(parent, name):
@@ -224,10 +246,17 @@ def createProjectDirectory(parent, name):
     처리:
     current parent와 normalized name을 검증하고 PROJECT_DIRECTORY_CREATED로 commit한다.
     """
-    return dispatchProjectCommand(
+    result, interfaceState, rendererInput = dispatchProjectCommand(
         "PROJECT_DIRECTORY_CREATED",
         {"parent": parent, "name": name},
     )
+    if not result.committed:
+        return None
+    path = "result.changed의 실제 생성 canonical directory path"
+    dispatchInterfaceEvent("SELECT_ASSET", {"kind": "directory", "path": path})
+    # selection은 current Backend 검증을 통과해야 하며 rejection은 기존 selection을 유지한다.
+    # 이미 생성된 directory의 성공 path는 selection 거부 때문에 취소/다른 경로로 바꾸지 않는다.
+    return path
 
 
 def connectProjectAssetToSlot(path, kind, slotId):
@@ -242,7 +271,12 @@ def connectProjectAssetToSlot(path, kind, slotId):
     단순 asset selection은 이 함수에서 변경하지 않는다.
     """
     event = "SLOT_DATA_CONNECTED if kind == csv else SLOT_IMAGE_LINKED"
-    return dispatchProjectCommand(event, {"path": path, "slotId": slotId})
+    # kind는 csv/image만 허용; 그 외 오류. command는 current path의 kind 일치/non-trash/visible slot을 재검증한다.
+    result, interfaceState, rendererInput = dispatchProjectCommand(event, {"path": path, "kind": kind, "slotId": slotId})
+    if not result.committed:
+        return None
+    dispatchSlotSelection(slotId, pendingContentType=None, direction="model-to-fsm")
+    return None
 
 
 def importProjectFileToSlot(file, slotId, planImport):
