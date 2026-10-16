@@ -34,7 +34,7 @@ PROJECT_SLOT_RESULT_RULE = (
 
 
 def setProjectName(value, trim=False):
-    """문자열 변환, trim 요청 시 공백 제거, 최대 120문자. name 정규화/commit은 Backend가 소유한다."""
+    """문자열 변환과 선택적 trim, Backend naming 설정의 길이 제한. name 정규화/commit은 Backend가 소유한다."""
     result, interfaceState, rendererInput = dispatchProjectCommand(
         "PROJECT_NAME_CHANGED", {"value": value, "trim": trim},
     )
@@ -106,10 +106,10 @@ def finishDashboardFileDrop():
     return None
 
 
-def readLayoutApiState(previewWidth=600):
+def readLayoutApiState(previewWidth=None):
     """
     current layout.readState Backend query에 previewWidth만 전달한다.
-    previewWidth는 finite 1..20000, invalid는 600으로 read copy에서 정규화한다.
+    previewWidth의 omitted/invalid 기본값과 bounds는 Backend의 backend.defaults.preview에서만 read copy에 적용한다. Application은 값을 복제하지 않는다.
     반환은 gridRows/gridCols/slotStyle/visibleSlots/previewGeometry와 현재 Frontend zoom/zoomLocked다.
     Application이 interfaceFSM의 zoom/lock scalar를 합성하며 previewGeometry를 session/Project에 저장하지 않는다.
     """
@@ -313,7 +313,7 @@ def setLabelsApiPosition(x, y):
 
 
 def resetLabelsApiPosition():
-    """labels.resetPosition: Backend가 settings.json labels.settings.x/y를 같은 position command에서 적용한다."""
+    """labels.resetPosition: Backend가 settings.json backend.project_object.annotations.labels.settings.x/y를 같은 position command에서 적용한다."""
     result, interfaceState, rendererInput = dispatchProjectCommand("LABEL_POSITION_CHANGED", {"reset": True})
     if not result.committed:
         return False
@@ -476,7 +476,7 @@ def setExportSettings(values):
     처리:
     1. 이 procedure는 Application operation이며 새 edit 값만 EXPORT_SETTINGS_CHANGED command로 전달한다.
     2. Backend command가 current export settings를 resolve해 candidate를 만든다. 생략되거나 숫자로 변환되지 않는 입력은 current 값을 사용하고
-       유효한 숫자는 width/explicit height 100..20000, dpi 36..1200으로 제한한다. heightMode/format의 invalid/missing enum도 current 값을 유지한다.
+       유효한 숫자는 Backend의 backend.defaults.limits.export에서 width/height/DPI 범위를 읽어 제한한다. heightMode/format의 invalid/missing enum도 current 값을 유지한다.
     3. heightMode가 auto면 candidate.height는 none이다. explicit이면 current height 또는 100을 fallback으로 사용한다.
     4. Backend가 whole-project candidate를 검증한 뒤 한 번 commit한다. Application은 별도 project clone/candidate validation을 만들지 않는다.
     5. 성공 후에만 새 Backend read projection을 반환한다. rejected result는 False, command failure는 caller에 전파하며 기존 settings는 유지한다.
