@@ -146,6 +146,8 @@ def gridSlotGeometry(layout, geometry, slot):
     colWidth = (width - 2*outerMargin - gap*(gridCols-1)) / gridCols
     rowHeight = (height - 2*outerMargin - gap*(gridRows-1)) / gridRows
     merged slot width/height는 span 내부 gap까지 포함한다.
+    label editor의 target slot이 none/missing이면 width=colWidth, height=rowHeight인 기본 1x1 reference를 사용한다.
+    이 fallback은 표시 geometry일 뿐 기본 slot을 생성하거나 Frontend selection을 변경하지 않는다.
     """
     slotGeometry = "layout grid에서 계산한 slot geometry"
     return slotGeometry
@@ -194,7 +196,11 @@ def readLabelsApiState(slotId):
     """
     Return:
     - labelState:
-      persistent label settings와 현재 선택 slot 기준 reference width/height.
+      persistent label enabled/settings copy와 현재 선택 slot 기준 reference width/height.
+    reference는 현재 layout의 referenceWidth dashboardGeometry와 gridSlotGeometry로 계산한다.
+    explicit slotId가 none/missing이면 같은 grid의 1x1 cell 크기이며 merged slot이면 해당 span 크기다.
+    sampleText는 현재 label format/parentheses로 계산한 index 0의 예시다. 선택 slot의 caption을 sample 원천으로 쓰지 않는다.
+    이 read는 label position/settings/Frontend selection을 변경하지 않는다.
 
     변경:
     - 없음.
