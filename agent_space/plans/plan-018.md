@@ -61,4 +61,6 @@ PlusCal/model/Source Code, 정책, test/build/dist는 수정하지 않는다. �
 - 계획 선행 게시: `3cd65831e800c8836bfeaa20894c5123936dc314`. 이후 R1~R4를 위 순서대로 Source에 반영했다.
 - Source r35 current/open, fingerprint `sha256:6b1b16ef3e2a0e5725c9fa7b7191bda06265b96cc1844d7a94a130d4d3c97ef9`. 하위 layer는 stale 유지.
 - 결과/20개 정적 시나리오: `agent_space/reviews/review-20261016-015-review-fixes-r35-open.md`. 실행 테스트로 표시하지 않는다.
-- 누적 실제 diff/변경 이유/대안/제외 사항은 `agent_space/patches/20261016-019.patch/.md`로 기록한다. cumulative-base Actions checker는 pair 게시 후 실행하고 결과를 추가 기록한다.
+- 누적 실제 diff/변경 이유/대안/제외 사항: `agent_space/patches/20261016-019.patch/.md`. actual endpoint `04012b5ac024f3574663b6fb8c5912b823ae2f49`; pair는 자기참조 없이 이후 게시했다.
+- Actions cumulative checker [38862733364](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38862733364): PASS. executed HEAD `97e39fd54a03c6610e49f7c246047936834df3c5`, 실제 BASE_SHA `9d3a5b970223805f410d9e92425269cf1872992f`와 r35 fingerprint를 로그에서 확인했다.
+- 순차 Source-before-metadata 중간 push 실패와 최종 cumulative PASS는 구분한다. 이 결과 문서는 run 이후 commit이며 동일 executed HEAD로 주장하지 않는다. 의미적 전체 closure/application regression 실행을 의미하지 않는다.
