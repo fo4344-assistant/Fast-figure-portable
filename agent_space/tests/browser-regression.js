@@ -1112,7 +1112,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
 
     await run(37, "selection validation is read-only and rejected references preserve Frontend state", async () => {
       const target = activeProject.slots.find((slot) => !slot.hidden);
-      select(target);
+      api.slots.reset(target.id);
+      select(slotAt(target.id));
       api.slots.setContentType("graph");
       const resource = createProjectCsv([["X", "Y"], ["1", "2"]], "boundary-selection.csv");
       api.graphs.addObject(resource.id);
@@ -1169,8 +1170,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(failed && appFSM.state === beforeFailure &&
         JSON.stringify(activeProject._state) === beforeAuthority,
         "failed Backend command reconciled success or changed authority");
-      api.assets.createDirectory("/assets/data", "boundary-reconcile");
-      const destination = "/assets/data/boundary-reconcile";
+      api.assets.createDirectory("/assets/csv", "boundary-reconcile");
+      const destination = "/assets/csv/boundary-reconcile";
       api.assets.move(api.assets.planMove(original, destination));
       check(appFSM.state.assetPath === `${destination}/boundary-reconcile.csv`,
         "asset move did not reconcile selected path");
