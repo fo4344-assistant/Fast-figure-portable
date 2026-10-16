@@ -124,8 +124,21 @@ def renderDashboard(projectProjection, interfaceState):
     4. image slot은 projection의 image bytes/view와 normalized slot-local imageSettings copy로 image surface를 동기화한다.
     5. interfaceState.selectedSlotId에 따라 selection/interaction class를 적용한다.
     6. caption과 label projection을 동기화한다.
-    7. stale Plotly instance를 purge하고 resize generation을 관리한다.
-    8. 누락/default normalization이 필요해도 projectProjection copy만 다루며 live ProjectObject에 write하지 않는다.
+    7. 현재 dashboard render generation을 기준으로 visible slot id/chart id와 instance 소유 관계를 대조한다.
+       같은 host/slot/chart가 유지되면 기존 graph instance를 갱신한다. 사라진 slot, 다른 chart로 교체된 host,
+       graph에서 image/empty로 바뀐 host의 이전 instance는 purge한 뒤 현재 view만 설치한다.
+       새 content/style/geometry를 적용한 뒤 살아 있는 current graph host에만 resize를 요청한다.
+       비동기 graph 완료/resize는 시작 당시 generation과 host/slot/chart가 여전히 current일 때만 적용한다.
+       더 오래된 작업의 완료는 새 DOM/view를 덮어쓰거나 없어진 instance를 되살리지 않고 자기 임시 자원만 해제한다.
+       generation/instance association은 renderer-local lifetime 정보이며 Project/Frontend FSM state를 복제하지 않는다.
+    8. image projection은 copied bytes 또는 그 bytes에서 순수 계산한 display URL과 slot-local settings를 사용한다.
+       renderer가 decode/display handle이나 revocable URL을 만들면 해당 image surface/render 작업이 소유한다.
+       image 교체/slot 제거/cleanup에서 이전 surface를 분리한 뒤 더 이상 쓰이지 않는 handle/URL을 해제한다.
+       오래된 decode/load 완료에는 generation과 slot/image 입력이 일치하는지 확인하고 아니면 결과를 버리고 자원을 해제한다.
+       여러 surface가 같은 image를 보여도 한 surface의 해제가 다른 살아 있는 surface의 자원을 무효화하지 않아야 한다.
+       교체 실패도 현재 Project를 바꾸지 않으며, 실패한 임시 자원을 남기거나 다음 render에 완료를 재적용하지 않는다.
+       구체 Plotly 호출/URL 표현/scheduler primitive는 이 수명 의미를 보존하는 하위 구현 선택이다.
+    9. 누락/default normalization이 필요해도 projectProjection copy만 다루며 live ProjectObject에 write하지 않는다.
     """
     return "supplied Backend projection에서 생성된 dashboard projection"
 
