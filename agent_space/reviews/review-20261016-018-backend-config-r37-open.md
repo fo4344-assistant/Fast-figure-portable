@@ -57,4 +57,9 @@
 
 ## 실제 검사 기록
 
-로컬 Source/application/checker/test/build/TLC 실행 없음. bytes-only fingerprint, actual diff/check 및 격리 index patch 검사는 runtime 검증과 구분한다. 순차 Contents API로 source-before-metadata push는 일시 실패할 수 있다. 실제 cumulative Actions run/HEAD/BASE_SHA/결과는 patch 023 게시 후 기록한다. 실행 전 결과를 PASS로 쓰지 않는다.
+로컬 Source/application/checker/test/build/TLC 실행 없음. bytes-only fingerprint, actual diff/check 및 격리 index patch 검사는 runtime 검증과 구분한다.
+
+- Actual patch 023: baseline `a65decea01ca08639cc9d207f560dfececdb72b9` → semantic endpoint `646914219dbb142214f3b846f73235c3e0863619`; diff --check 및 격리 index reverse cached apply check PASS.
+- GitHub Actions cumulative checker [38867034222](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38867034222) **PASS**, 실행 HEAD `1478969a5638ceaad8ba83f76a954b925d563bb3`, 실제 BASE_SHA `a65decea01ca08639cc9d207f560dfececdb72b9`. 로그 Source r37 current/open 및 위 fingerprint 확인. 이 결과 문서 후속 commit은 실행 HEAD와 다르다.
+- 순차 Contents source-before-metadata push `38866906823`은 `development-layer-version: FAIL: Source Script fingerprint changed without updating development-versions.json`으로 실패했다. metadata/review snapshot `38866910976`/`38866915150`은 성공했으나 cumulative audit와 구분한다.
+- checker 성공은 계층/설정 구조/fingerprint/patch 검사의 결과이며 runtime/시각/전체 Source closure 증거가 아니다. regression/build/TLC는 실행하지 않았다.
