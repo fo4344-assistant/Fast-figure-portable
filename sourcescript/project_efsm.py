@@ -123,24 +123,38 @@ PROJECT_MUTATION_CONTRACT = [
 ]
 
 GRAPH_OBJECT_EDIT_INPUT_CONTRACT = {
-    "one-object": (
-        "GRAPH_OBJECTS_REPLACED accepts explicit chartId/index/values/selectedIndexHint for graphEditorSetObjectValues. "
-        "Backend resolves current chart/objects/CSV and computes the candidate using graphs.py; new values are not a complete object-array authority."
+    "input": (
+        "GRAPH_OBJECTS_REPLACED receives chartId (add also accepts slotId/csvId), the existing public operation name, "
+        "and only that operation's new values/index/from/to/colors. Current objects/candidate arrays are not Application inputs. "
+        "Backend resolves current owning editable chart, CSV and index, calculates objects using graphs.py, "
+        "and uses graphEditorCommit as a Backend-only candidate helper. SLOT_DATA_CONNECTED add rejects a now-occupied target; "
+        "GRAPH_OBJECTS_REPLACED add rejects a now-missing/non-editable chart rather than trusting the earlier routing read."
     ),
-    "objects": (
-        "Existing add/move/delete/palette operations keep their declared intent and Backend candidate calculation. "
-        "A Backend-internal graphEditorCommit may pass computed candidate objects; a Frontend read projection is not an alternative mutation source."
+    "add": "append the base object from the resolved CSV; result hint is the appended post-edit index.",
+    "move": (
+        "resolve the requested existing from/to indices, not just adjacent moves; invalid/out-of-bounds rejects without commit. "
+        "Move that object and result hint selects to, not the previous numeric index; from=to preserves the no-op meaning."
     ),
-    "selection": "selectedIndexHint is an index-only runtime hint, not an instruction to replace current selected CSV from object.csvId.",
+    "one-object": "resolve index and values using graphEditorObjectValues rules; result hint selects that same post-edit index.",
+    "delete": (
+        "remove the resolved requested index; result hint is explicit none, retaining the existing selection-clear meaning. "
+        "Do not invent selection of a neighboring object. Empty chart remains valid."
+    ),
+    "palette": "change only object colors using the declared palette rule; omit the index hint so existing selection remains.",
+    "selection": (
+        "Backend writes selectionHints.chartId and selectedIndexHint from the actual post-edit array. "
+        "Missing hint preserves the current index; explicit none clears. Application forwards it through the common "
+        "buildFrontendReconciliationInput path only, and never substitutes object.csvId for current CSV selection."
+    ),
 }
 
 ProjectMutationResult = {
     "event": "처리한 project command",
     "committed": "commit 성공 여부",
-    "changed": "command별 changed ids/path/owner",
+    "changed": "command별 실제 changed ids/path/owner; create/import는 post-commit read에 필요한 생성 asset path/id와 owning chart/slot id를 포함",
     "removedGraphReferenceCount": "실제 제거한 graph-object CSV reference 수",
     "resetImageSlotCount": "실제 image reference를 비운 slot 수",
-    "selectionHints": "후속 interface reconciliation에 필요한 identity/path 결과",
+    "selectionHints": "후속 interface reconciliation의 identity/path 결과와 해당 chartId에 한정된 optional selectedIndexHint; absence와 explicit none을 구별",
     "projectionEffect": "renderer effect를 결정할 수 있는 실제 commit 결과",
 }
 
@@ -163,10 +177,23 @@ class ProjectStateMachine:
         """
         1. PROJECT_COMMANDS membership과 precondition을 검증한다.
         2. current activeProject에서 모든 input/reference를 다시 resolve한다.
-        3. 해당 domain module의 candidate builder를 실행한다.
+        3. 해당 domain module의 candidate builder를 실행한다. Application-provided project/model/objects candidate는 받지 않는다.
+           asset import는 buildProjectAssetImportCandidate, project load는 ffpxReadProject/buildProjectObject,
+           slot package import는 ffsxReadSlot/applyFfsxSlot, editable 전환은 convertImportedChartToEditable를 내부에서 호출한다.
+           file bytes 읽기/parsing 동안 authority를 변경하지 않는다. collision prompt와 choice 수집은 Application이 dispatch 전에 완료한다.
+           Backend는 UI resolver/callback을 호출하지 않는다. file 대기가 끝난 뒤에는 전달된 choice와
+           current directory/target/reference/collision/next-id를 다시 resolve하고 candidate를 완성한다.
+           선택된 replace id/path가 더 이상 같은 대상을 가리키지 않으면 거부한다. stale 계획으로 덮어쓰거나 자동 재선택하지 않는다.
+           candidate의 원천이 된 authority가 commit 전 바뀌면 그대로 commit하지 않고 현재 authority에 대해 재계산/검증한다.
+           실패/취소는 미commit 결과이며 부분 변경/복구용 rollback/성공 hint를 만들지 않는다.
         4. candidate whole-project invariant를 검증한다.
         5. 성공 candidate만 activeProject에 한 번 commit한다.
-        6. 실제 pre/post 차이에서 ProjectMutationResult를 계산한다.
+        6. 실제 pre/post 차이에서 ProjectMutationResult를 계산한다. 생성/import의 changed id/path/owner는 실제 commit 결과를 사용한다.
+           graphEditorCommit이 계산한 index hint가 있으면 실제 owning chart id와 함께 selectionHints.chartId/selectedIndexHint에 담는다.
+           graphs.addObject는 append된 index, graphs.moveObject는 제거 후 목적 위치 to, graphs.setObjectValues는 편집한 index,
+           graphs.deleteObject는 explicit none을 계산한다. current chart/index/from/to를 command에서 resolve하고 유효하지 않으면 commit 전에 거부한다.
+           이동은 from object를 제거해 최종 to 위치에 삽입하고 나머지 상대 순서를 유지한다. 마지막 object 삭제도 empty 배열로 유효하다.
+           hint가 없는 command는 그 key를 생략하며 none과 혼동하지 않는다. 실패 결과에는 성공 hint를 넣지 않는다.
         7. interface state와 renderer를 변경하지 않고 result를 반환한다.
         """
         result = "ProjectMutationResult"
