@@ -1,0 +1,583 @@
+diff --git a/agent_space/plans/plan-017.md b/agent_space/plans/plan-017.md
+index cb8b83f..e4894ac 100644
+--- a/agent_space/plans/plan-017.md
++++ b/agent_space/plans/plan-017.md
+@@ -148,3 +148,11 @@
+ - renderer/export의 Backend-supplied figure 소비를 연결했다. Frontend는 CSV/trace를 재계산하지 않고 geometry/presentation만 적용한다. 일반 FFPX snapshot 반환과 persistent schema는 유지한다.
+ - 부분 정적 시나리오·선택 이유·한계: `agent_space/reviews/review-20261016-007-sourcescript-r29-trace-open.md`. 실제 누적 diff와 Actions 근거: `agent_space/patches/20261016-012.patch` 및 같은 basename `.md`.
+ - D 전체 API trace, E layout/style/extension/axis 보조 표시와 palette/default 원천 및 전체 왕복 검토는 남아 있다. source r29 current/open, closure_review null이고 하위 stale을 유지한다. 정책·PlusCal/model/JS/test/build/distribution을 변경하거나 전체 closure/실행 성공을 선언하지 않는다.
++
++## 12. 사용자 지정 순서 — r30 layout/palette 다음 전체 API trace / OPEN
++
++- 기준 main `eef0d9252c30a5f85dcb268cb2c32d2fc7e97cce`. 먼저 E의 layout field 변환/정규화/default, trace style/extension merge/axis 보조 표시와 UI·graph palette의 서로 다른 원천/적용 규칙을 기존 owner에 구체화했다. UI palette는 전체 설정, chart layout은 current authority에 partial edit임을 구분한다.
++- Backend의 같은 chart/project 문맥에서 figure를 계산하며 Frontend Mantine/renderer는 supplied palette/figure를 표시한다. 새 authority/bridge나 하위 코드 변경은 없다. 상세 검토: `agent_space/reviews/review-20261016-008-sourcescript-r30-layout-palette-open.md`.
++- 이어 공개 inventory 87개를 입력 → owner/command/query/event → 반환/실패/취소까지 정적으로 대조했다. 이미 chart 반환이 선언된 move/delete wrapper를 기존 성공 후 query로 연결했다. 전체 대조표: `agent_space/reviews/review-20261016-009-public-api-trace-r30-open.md`.
++- **전체 목록 대조는 수행했으나 전체 계약 완결은 아니다.** public 반환 shape, runtime composition/zoom/create-and-select, pure calculation query 연결, router/export completion이 남았다. 이를 구버전 API 잔존과 혼동하지 않는다. Source `slots.swap`의 하위 공개 누락은 번역 시 보완 대상이다.
++- source r30 current/open, closure_review null과 하위 stale을 유지한다. 남은 계약 및 전체 import/edit/export 왕복·목적·중복통합 근거를 확보하기 전에는 닫힘/하위 번역 완료를 선언하지 않는다. 실제 누적 patch·검사 근거: `agent_space/patches/20261016-013.patch`와 같은 basename `.md`.
+diff --git a/agent_space/reviews/review-20261016-008-sourcescript-r30-layout-palette-open.md b/agent_space/reviews/review-20261016-008-sourcescript-r30-layout-palette-open.md
+new file mode 100644
+index 0000000..b8d9bc2
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-008-sourcescript-r30-layout-palette-open.md
+@@ -0,0 +1,39 @@
++# Source Script r30 — layout/palette / OPEN
++
++## 요구와 범위
++
++사용자 지시대로 layout/palette 명세를 먼저 구체화한 뒤 전체 API trace를 수행했다. 기준 main은 `eef0d9252c30a5f85dcb268cb2c32d2fc7e97cce`(r29)다. 이 검토는 Source Script 정적 검토이며 하위 JavaScript를 수정하거나 실행하지 않았다.
++
++## 의미와 ownership
++
++- `sourcescript/backend/graphs.py`에 axis/global default와 `layout(chart, project)`를 명시했다. 네 axis reference, range/log 변환, reciprocal 표시 좌표, visibility/tick/notation/font/title/legend/margin/paper/ink를 같은 Backend 작업의 chart/project에서 계산한다.
++- imported layout extension보다 editor-owned field가 우선한다. auto/omitted인 range/tick 등은 extension의 같은 key도 제거하며 unknown field는 보존한다. non-editable imported figure는 원본 data/layout/config/frames 보존 경로를 유지한다.
++- trace style과 line/marker extension merge, object-independent axis placeholder의 순서/field를 명시했다. placeholder는 renderer 결과이며 persistent object/CSV가 아니다.
++- UI palette는 `sourcescript/backend/project_state.py:DEFAULT_UI_PALETTE`의 10개 field가 원천이다. 전체 palette 설정은 missing/invalid field를 각 default로 정규화한다. UI CSS/DOM/default graph colors를 읽어 project를 역수정하지 않는다.
++- graph 색은 `sourcescript/backend/graphs.py:DEFAULT_COLORS`의 독립 8색 sequence다. base/import/fallback 적용 위치를 명시했다. applyPalette는 non-empty color text sequence를 현재 editable objects에 순환 적용하고 다른 field/selection/UI palette를 변경하지 않는다.
++- `sourcescript/frontend/mantine_ui.py`와 `sourcescript/frontend/renderer.py`는 supplied palette의 CSS/contrast projection을 계산한다. current authority나 임의 CSS fallback을 두 번째 project 원천으로 사용하지 않는다.
++- EFSM layout edit는 current axis/global field에 새 patch만 적용한다. UI palette의 전체 설정과 chart layout의 partial edit를 혼동하지 않는다.
++
++## 선택 이유·대안
++
++- 과학 figure의 축/데이터 pairing과 imported 확장 보존을 유지하면서 표시 default와 merge 순서를 상위에서 결정하기 위해 기존 graph domain에 계산을 모았다. 새 theme/domain authority나 palette 동기화 framework를 만들지 않았다.
++- 하위 JS는 기존 호환 동작과 field 누락을 확인하는 자료로 읽었다. 이를 이유만으로 Source Script closure나 최신 번역을 주장하지 않는다. 특히 editor auto field가 stale extension에 의해 되살아나는 경로는 상위 우선순위를 명시해 제거했다.
++- UI/graph palette 통합은 의미와 적용 대상이 달라 제외했다. renderer에서 live Backend를 읽거나 style snapshot을 mutation source로 보내는 우회도 제외했다.
++- API 반환 미정 항목을 모든 operation에 bool/내부 tuple로 일괄 통일하지 않았다. 구체 계약은 기존 소비자/목적과 대조해 보완해야 한다.
++
++## 정적 시나리오 대조
++
++1. empty chart에도 global/layout을 계산하고 visible-axis 조합용 표시 trace만 추가한다. fake CSV/object는 생성하지 않는다.
++2. log range는 양수 경계만 log10으로 변환한다. reciprocal range는 이미 변환 후 표시 좌표이며 재역수하지 않는다. reversed range는 보존한다.
++3. editor range auto는 imported extension range를 제거한다. unknown annotations/config/frames는 보존한다.
++4. graph paperColor/fontColor와 UI background/surface는 다른 의미다. graph palette 적용은 object 색만 바꾸고 UI palette를 변경하지 않는다.
++5. palette 길이보다 objects가 많으면 modulo 순환, objects가 0개이면 새 object 없이 유효하다. invalid 입력은 command failure로 state를 보존한다.
++6. UI palette partial input은 전체 설정 규칙에 따라 나머지 field가 default가 된다. chart axis partial edit는 다른 current field를 보존한다.
++7. non-editable imported representation은 layout 재생성/CSV validation 우회가 아니라 원본 보존 경로를 사용한다.
++
++## API trace·닫힘·하위 전파
++
++- 후속 전체 inventory 87개 대조 및 미정 사항은 `review-20261016-009-public-api-trace-r30-open.md`에 기록했다. 이미 chart 반환을 선언한 graph move/delete는 기존 post-commit query 경로로 연결했다.
++- 위 시나리오는 정적 producer/consumer 대조이며 실행 테스트가 아니다. 전체 API의 반환·runtime composition·query route·export completion 및 전체 왕복/목적/중복통합 검토가 남는다.
++- source r30은 current/open, closure_review=null이다. PlusCal/model/code는 stale이며 정책·하위 코드·테스트·배포는 변경하지 않는다. Source closure 후 PlusCal을 충실하게 번역하고 API/Backend projection/renderer/theme/EFSM 의미를 차례로 전파해야 한다.
++- 실제 누적 diff, Contents API 비원자성, Actions 검사 결과와 실행 HEAD는 `agent_space/patches/20261016-013.md`에 기록한다. metadata 검사는 의미적 closure/실행 증명이 아니다.
+diff --git a/agent_space/reviews/review-20261016-009-public-api-trace-r30-open.md b/agent_space/reviews/review-20261016-009-public-api-trace-r30-open.md
+new file mode 100644
+index 0000000..fec99af
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-009-public-api-trace-r30-open.md
+@@ -0,0 +1,116 @@
++# Public API trace — Source Script r30 / OPEN
++
++## 범위·판정 기준
++
++- 사용자 지시 순서대로 layout/palette 명세 구체화 후 전체 공개 API를 정적으로 대조했다. 기준 main `eef0d9252c30a5f85dcb268cb2c32d2fc7e97cce`의 r29에서 출발한다.
++- 목록의 권위는 `sourcescript/application/public_api/__init__.py:PUBLIC_API_METHODS`다. 아래 표는 검토 기록이며 별도 API registry/계약이 아니다. 독립 함수가 없다는 사실만으로 누락이라고 판정하지 않는다. 공통 query/command 절차와 operation 계약으로 의미를 결정할 수 있으면 그 경로를 추적한다.
++- Q = `application.adapter.dispatchProjectQuery` → `backend.project_state.readBackendProjection`; C = `dispatchProjectCommand` → `backend.project_efsm.PUBLIC_PROJECT_MUTATION_ROUTES/ProjectStateMachine.send` → 성공 시 reconciliation → renderer input. F = `dispatchInterfaceEvent` → Backend identity 검증이 필요하면 `validateFrontendIntent` → Frontend FSM. X = 한 작업용 query/snapshot → package/download 또는 Frontend raster renderer. L = Application lifecycle ready/busy/start/complete/failed 공통 절차.
++- Q는 immutable copy이며 state 변경 없음, C 실패는 미commit·success reconciliation 없음, F invalid는 state/revision 그대로다. L 취소는 성공 commit으로 바꾸지 않는다. X의 I/O 실패를 project rollback으로 해석하지 않는다. 아래 반환란의 `미정`은 이 공통 안전 규칙과 별개로 **공개 성공값/실패값의 구체 형태가 아직 완결되지 않음**을 뜻한다.
++- `연결`은 Source 계약의 producer/consumer 연결을 확인했다는 뜻이지 실행 통과/전체 닫힘이 아니다. `보완`은 이번에 기존 의미를 연결한 항목, `열림`은 아래 F1–F5에 해당하는 정적 발견이다.
++
++## 전체 inventory 대조
++
++| API | 입력 → owner/경로 | 반환·실패/취소 대조 | 판정 |
++|---|---|---|---|
++| project.readName | 없음 → Q project.readName/meta | name copy; query 오류 전파 | 연결 |
++| project.setName | 새 name → C PROJECT_NAME_CHANGED | public 성공/거부값 미정 F1 | 열림 |
++| project.importFile | raw FFPX → L/C PROJECT_LOADED | committed 후 X project snapshot; 실패 result, throw 전파 | 연결 |
++| project.exportFile | current project → X ffpxBuildProject | package/download 결과·취소 반환 세부 미정 F4 | 열림 |
++| slots.readSelected | Frontend selectedSlotId → Q slots.readSelected | visible slot copy 또는 none | 연결 |
++| slots.select | slotId/direction/pending type → adapter.dispatchSlotSelection | Frontend/conditional C는 연결; public 반환 미정 F1 | 열림 |
++| slots.setContentType | slotId/type → C SLOT_TYPE_CHANGED | public 반환 미정 F1 | 열림 |
++| slots.reset | slot ids → C SLOTS_RESET | 소유 chart 제거/local reset; public 반환 미정 F1 | 열림 |
++| slots.swap | source/target ids → C SLOTS_SWAPPED | payload 교환/reconcile; public 반환 미정 F1; JS surface 누락 F5 | 열림 |
++| slots.prepareFileDrop | explicit visible target → Q/F model-to-fsm | invalid false unchanged, valid true; 같은 target toggle 없음 | 연결 |
++| slots.finishFileDrop | drag completion → runtime cleanup | persistent commit 없음; completion 반환 미정 F2 | 열림 |
++| images.readEditor | explicit selected slot → Q images.readEditor | image bytes/settings copy 또는 none; resource allocation 없음 | 연결 |
++| images.setSettings | slotId/new settings → layout wrapper/C SLOT_IMAGE_SETTINGS_CHANGED | editor 없음/미commit false, 성공 fresh editor, throw 전파 | 연결 |
++| images.insertEmpty | selected slot/new empty image → C SLOT_IMAGE_IMPORTED | empty image 입력/공개 반환 세부 미정 F1 | 열림 |
++| assets.readDeletionTarget | path → Q + collectAssetReferences | detached target/reference count 또는 none | 연결 |
++| assets.delete | kind/id/path → C CSV/image delete branch | detach+removal one candidate; public 반환 미정 F1 | 열림 |
++| assets.readTree | 없음 → Q current VFS | detached tree | 연결 |
++| assets.isTrashed | canonical path → Q membership | boolean | 연결 |
++| assets.movable | source path → Q fixed-root/source check | boolean; trash만으로 거부 안 함 | 연결 |
++| assets.readTrash | 없음 → Q subtree | detached trash tree | 연결 |
++| assets.moveOptions | source path → Q directories/eligibility | destination copy | 연결 |
++| assets.planMove | source/destination → Q planProjectNodeMove | transient collision/reference plan; mutation 입력은 identity만 | 연결 |
++| assets.move | source/target/useUniqueName → C PROJECT_NODE_MOVED | current authority 재검증; public 반환 미정 F1 | 열림 |
++| assets.createDirectory | parent/name → C PROJECT_DIRECTORY_CREATED | public 결과·selection 연계 미정 F1/F2 | 열림 |
++| assets.createEmptyCsv | template → DATA_OBJECT_CREATED → selection | create helper는 immutable CSV 반환; public select step 없음 F2 | 열림 |
++| assets.emptyTrash | 없음 → C PROJECT_TRASH_EMPTIED | detach+delete one commit; public 반환 미정 F1 | 열림 |
++| assets.draggableAsset | path → Q current non-trash asset | kind/id/path/name 또는 none | 연결 |
++| assets.connectToSlot | path/kind/slotId → C CSV/image branch | reference candidate; public 반환 미정 F1 | 열림 |
++| assets.importToDirectory | files/directory/completed choices → L/C ASSETS_IMPORTED | choice cancel는 무command; 내부 tuple의 public 반환 미정 F1 | 열림 |
++| assets.importToSlot | file/slotId/completed choices → L/C ASSETS_IMPORTED | asset+slot one candidate; public 반환 미정 F1 | 열림 |
++| assets.fileKind | filename/MIME → calculation | named query/공식 pure route 등록 없음 F3 | 열림 |
++| assets.importFiles | files/target → Application router | directory/slot branch 선택·batch 반환/취소 집계 미정 F4 | 열림 |
++| assets.collisionModel | file/directory/reserved paths → Q domain helper | transient model; mutation 없음 | 연결 |
++| assets.resolveImportPlan | model/explicit choice/reserved paths → domain helper | helper 존재, 공식 query route 없음 F3; commit은 재검증 | 열림 |
++| assets.selectDirectory | path/kind directory → F SELECT_ASSET | accepted selection/state; public 반환 미정 F2 | 열림 |
++| assets.selectCsv | path/kind csv → F SELECT_ASSET | invalid unchanged; public 반환 미정 F2 | 열림 |
++| assets.selectImage | path/kind image → F SELECT_ASSET | slot mutation 없음; public 반환 미정 F2 | 열림 |
++| assets.download | asset path → X copied original bytes | public I/O 결과/없는 target 처리 세부 미정 F4 | 열림 |
++| graphs.readData | selected slot/current CSV/index → Q graphs.readData | chart/objects/currentCsv/columns/objectColumns; missing none/empty | 연결 |
++| graphs.readLayout | selected slot → Q owning chart/editor | detached title/global/axis 또는 none | 연결 |
++| graphs.readPalette | selected slot → Q owning object colors | detached sequence 또는 empty | 연결 |
++| graphs.selectCsv | selected CSV path/id → F SELECT_ASSET | object reference 변경 없음; public 반환 미정 F2 | 열림 |
++| graphs.setHeaderLines | csvId/new count → C DATA_OBJECT_REPLACED | current CSV replacement; public 반환 미정 F1 | 열림 |
++| graphs.setEditable | slotId/chartId/flag → C CHART_MODEL_REPLACED | 성공 Q editable scalar, 실패 result; CSV conversion도 one candidate | 연결 |
++| graphs.addObject | slotId/csvId → Q route → C connect/replace | 성공 Q chart, 실패 result; route stale시 reject | 연결 |
++| graphs.moveObject | chartId/from/to → C GRAPH_OBJECTS_REPLACED | 추가한 wrapper: valid same-index no-op read; 성공 Q chart/실패 result | 보완 |
++| graphs.selectObject | selected slot/index/selectAsset → F SELECT_GRAPH_OBJECT | validated index+CSV path; public 반환 미정 F2 | 열림 |
++| graphs.setObjectValues | chartId/index/new values → C GRAPH_OBJECTS_REPLACED | 성공 Q chart; 실패 result; hint와 독립 CSV 분리 | 연결 |
++| graphs.deleteObject | chartId/index → C GRAPH_OBJECTS_REPLACED | 추가한 wrapper: 성공 Q chart/실패 result; 마지막 삭제 empty chart | 보완 |
++| graphs.updateLayout | slotId/chartId/new patch → C CHART_LAYOUT_CHANGED | layout 계산 명시; public 반환 미정 F1 | 열림 |
++| graphs.applyPalette | chartId/non-empty colors → C GRAPH_OBJECTS_REPLACED | color-only cycling 명시; public 반환 미정 F1 | 열림 |
++| graphs.defaultColors | 없음 → Q immutable domain constant | 8-color detached sequence | 연결 |
++| graphs.hasSelectedSlot | selected slot reference → Q visible graph slot | boolean; chart 존재와 구별 | 연결 |
++| graphs.importFile | slotId/raw FFSX/Plotly → L/C SLOT_CHART_IMPORTED | conversion/package candidate; public 반환 미정 F1 | 열림 |
++| graphs.exportFfsx | selected graph slot → X ffsxBuildSlot | referenced CSV copy; I/O/없는 target 결과 미정 F4 | 열림 |
++| graphs.exportPlotlyJson | selected graph slot → Q chartFigure → X | imported 원본/일반 재계산 경로 연결; I/O 결과 미정 F4 | 열림 |
++| print.readSettings | 없음 → Q export settings | width/heightMode/height/dpi/format copy | 연결 |
++| print.setSettings | new values → C EXPORT_SETTINGS_CHANGED | 성공 Q settings, rejected false, throw 전파 | 연결 |
++| print.save | target settings → L/X export/rendererTarget | output/status, I/O 전파; 구체 public 반환 미정 F4 | 열림 |
++| print.capture | current screen → L/X export/rendererCurrent | persistent target 변경 없음; public 반환 미정 F4 | 열림 |
++| captions.readGlobal | 없음 → Q project captions | global copy | 연결 |
++| captions.readSlot | explicit slotId → Q slot.caption | local copy 또는 none; placeholder 저장 안 함 | 연결 |
++| captions.setEnabled | flag → C CAPTION_SETTINGS_CHANGED | public 반환 미정 F1 | 열림 |
++| captions.setGlobalText | text/global owner → C CAPTION_TEXT_INPUT | slot caption 보존; public 반환 미정 F1 | 열림 |
++| captions.setSlotText | slotId/text → C CAPTION_TEXT_INPUT | global caption 보존; public 반환 미정 F1 | 열림 |
++| captions.insertSlotCaptions | slot ids → C SLOT_CAPTIONS_INSERTED | source local 보존/global 삽입; public 반환 미정 F1 | 열림 |
++| captions.setName | name → C CAPTION_SETTINGS_CHANGED | public 반환 미정 F1 | 열림 |
++| captions.setNameBold | flag → C CAPTION_SETTINGS_CHANGED | public 반환 미정 F1 | 열림 |
++| captions.setSettings | new presentation → C CAPTION_SETTINGS_CHANGED | public 반환 미정 F1 | 열림 |
++| labels.readState | explicit slot reference → Q label/geometry | detached projection | 연결 |
++| labels.setEnabled | flag → C LABEL_SETTINGS_CHANGED | public 반환 미정 F1 | 열림 |
++| labels.setSettings | new fields → C LABEL_SETTINGS_CHANGED | position 생략 시 보존; public 반환 미정 F1 | 열림 |
++| labels.setPosition | new x/y → C LABEL_POSITION_CHANGED | 단일 persistent position; public 반환 미정 F1 | 열림 |
++| labels.finishPositionInteraction | completion → runtime notify | 두 번째 commit 없음; 반환 미정 F2 | 열림 |
++| labels.resetPosition | default origin → C LABEL_POSITION_CHANGED | public 반환 미정 F1 | 열림 |
++| appearance.readPalette | 없음 → Q appearance | 10-field detached palette | 연결 |
++| appearance.setPalette | new palette → C APPEARANCE_CHANGED | 전체 palette/default 정규화; public 반환 미정 F1 | 열림 |
++| appearance.resetPalette | default palette → C APPEARANCE_CHANGED | 같은 owner/command; public 반환 미정 F1 | 열림 |
++| layout.readState | explicit geometry input → Q layout | style/visible slots/logical preview copy | 연결 |
++| layout.setStyle | new style → C LAYOUT_STYLE_CHANGED | public 반환 미정 F1 | 열림 |
++| layout.setGrid | rows/cols → C GRID_LAYOUT_CHANGED | safe resize만; public 반환 미정 F1 | 열림 |
++| layout.setZoom | runtime percent → Frontend-only | 50..200 intent; event/owner/return 절차 미정 F2 | 열림 |
++| layout.commitZoom | interaction completion → runtime | persistent second copy 없음; event/return 미정 F2 | 열림 |
++| layout.setZoomLocked | flag → runtime lock | event/owner/return 미정 F2 | 열림 |
++| layout.resetZoom | runtime default → runtime | default/reset/lock sequencing·return 미정 F2 | 열림 |
++| layout.mergeSlots | slot ids → C SLOTS_MERGED | rectangular/≤1 local payload; public 반환 미정 F1 | 열림 |
++| layout.splitSlots | anchors → C SLOTS_SPLIT | anchor payload 보존/covered defaults; public 반환 미정 F1 | 열림 |
++
++## 발견·후속 작업
++
++1. **F1 — public result shape**: 여러 wrapper의 `return dispatchProjectCommand(...)`는 내부 `(result, interfaceState, rendererInput)`이다. `API_BOUNDARY_RULE`은 이를 public settings/chart/bool로 자동 간주하지 말라고 하지만, 여러 operation은 성공/거부 반환을 아직 선언하지 않았다. 내부 tuple을 임의로 공개하거나 모든 command를 bool로 획일화하지 않는다. 다음 단위에서 기존 public 소비자를 대조해 각 값을 상위에서 결정해야 한다. 이번에는 이미 chart 반환을 선언한 move/delete만 동일 post-commit read 경로로 연결했다.
++2. **F2 — runtime composition**: `createEmptyProjectCsv`는 domain create helper이고 public create-and-select wrapper가 없다. selected identity F 경로 자체는 존재하지만 public 반환/selection sequencing 대조가 남는다. zoom은 `RUNTIME_STATE_RULE`과 API inventory에는 있지만 Frontend owner/event/lock/reset 절차가 구체화되지 않았다. Backend command나 project field를 새로 만들어 메우면 안 된다.
++3. **F3 — pure calculation route**: `assets.fileKind`, `assets.resolveImportPlan`은 API inventory에 있으나 `PUBLIC_BACKEND_READ_CONTRACTS`에 named route가 없다. `readBackendProjection`은 미등록 operation을 오류로 처리한다. pure helper 존재만으로 public adapter 연결을 주장하지 않는다. current-authority 재검증/choice cancellation 규칙은 이미 유지한다.
++4. **F4 — router/export completion**: package builders와 raster 소비자는 있지만 공개 router의 target 분기·batch 취소/결과와 download 완료/미선택/실패 반환의 전 operation 명세가 부족하다. renderer resource lifetime 및 L 공통 오류 전파만으로 이 구멍을 닫지 않는다.
++5. **F5 — lower drift와 구버전 API**: 현재 `fast-figure.js`의 `window.FastFigureApi`는 Source의 `slots.swap`을 공개하지 않는다. 이는 Source에서 제거하라는 뜻이 아니라 향후 번역에서 보완할 하위 누락이다. Source의 `LOWER_LAYER_API_REPLACEMENTS` 6개는 별도 대체/제거 의도가 이미 명시돼 있다. 현재 JS object에는 그 6개 이름이 공개되어 있지 않다. 내부 legacy helper나 다른 direct Backend 접근의 제거 완료까지 주장하지 않는다.
++
++## 근거·한계
++
++- Source 확인: `sourcescript/application/public_api/{__init__,assets,graphs,layout_annotations}.py`, `sourcescript/application/adapter.py`, `sourcescript/backend/{project_state,project_efsm,assets_files,graphs,layout_annotations}.py`, `sourcescript/frontend/{interface_fsm,mantine_ui,renderer}.py`.
++- 하위 비교 자료: `fast-figure.js`의 `window.FastFigureApi`, graph move/delete 및 이미 선언된 post-commit query 반환. 하위 동작을 자동 상위 권위로 삼지 않는다.
++- 전체 inventory의 87개 operation을 대조했다. **전체 대조표 작성 완료 ≠ 모든 API 계약 완결/검증 완료**다. F1–F4 및 왕복·목적·중복통합 최종 검토가 남으므로 source closure는 open이다.
++- 정적 검토이며 API/Source Script/app/browser/TLC를 실행하지 않았다. Actions metadata 검사도 이 표의 의미적 완결성 증명이 아니다.
+diff --git a/development-versions.json b/development-versions.json
+index 3982156..7189106 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 29,
++      "revision": 30,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py", 
+-      "fingerprint": "sha256:65988fb2920510d8cb35eceb5c7c33fc2d186eb4ae5b112e5261b1ed3f76b943",
++      "fingerprint": "sha256:07b8debe10d7893723a65483326dbb49139bdcc458e46e4b8f2be9c36b8117af",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/sourcescript/application/public_api/graphs.py b/sourcescript/application/public_api/graphs.py
+index e4f1876..9821ee7 100644
+--- a/sourcescript/application/public_api/graphs.py
++++ b/sourcescript/application/public_api/graphs.py
+@@ -55,6 +55,36 @@ def graphEditorObjectValues(chartId, index, values):
+     return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]
+ 
+ 
++def graphEditorMove(chartId, fromIndex, toIndex):
++    """current chart의 from/to를 command에서 재검증하고 성공 뒤 detached chart를 반환한다.
++    from=to는 기존 no-op이며 authority/selection을 변경하지 않는다.
++    invalid identity/index는 command rejection이고 success read/reconciliation을 실행하지 않는다.
++    """
++    context = dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})
++    if fromIndex == toIndex and "context의 editable chart에 fromIndex가 유효한 정수 index":
++        return context["chart"]
++    result, interfaceState, rendererProjection = dispatchProjectCommand(
++        "GRAPH_OBJECTS_REPLACED",
++        {"chartId": chartId, "operation": "graphs.moveObject", "from": fromIndex, "to": toIndex},
++    )
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]
++
++
++def graphEditorDelete(chartId, index):
++    """current index 제거와 explicit-none selection hint는 Backend가 계산한다.
++    마지막 object 삭제도 empty chart 성공이다. 실패는 result, 성공만 post-commit chart copy다.
++    """
++    result, interfaceState, rendererProjection = dispatchProjectCommand(
++        "GRAPH_OBJECTS_REPLACED",
++        {"chartId": chartId, "operation": "graphs.deleteObject", "index": index},
++    )
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]
++
++
+ def graphEditorSetEditable(slotId, chartId, editable):
+     """
+     Return:
+diff --git a/sourcescript/backend/graphs.py b/sourcescript/backend/graphs.py
+index eee4e76..141eb29 100644
+--- a/sourcescript/backend/graphs.py
++++ b/sourcescript/backend/graphs.py
+@@ -13,11 +13,40 @@ GRAPH_BOUNDARY_RULE = (
+     "current-state resolve/normalize/candidate 계산은 Project EFSM command 내부에서 이 domain의 규칙을 사용한다. "
+     "graphEditorCommit/convertImportedChartToEditable는 candidate만 반환한다."
+ )
++# Graph object의 fallback 순환만 소유한다. Project UI palette와 동기화하지 않는다.
++DEFAULT_COLORS = (
++    "#383A42", "#E45649", "#50A14F", "#B37901",
++    "#0184BC", "#A626A4", "#0997B3", "#FAFAFA",
++)
++
++GRAPH_PALETTE_RULE = (
++    "새 base object는 DEFAULT_COLORS[0], imported object에 line/marker color가 없으면 원 trace index modulo 8의 색, "
++    "trace projection에서 object.color가 없으면 object index modulo 8의 색을 사용한다. 명시된 object color가 우선한다. "
++    "graphs.defaultColors는 이 immutable sequence의 detached copy이고 graphs.readPalette는 owning chart의 실제 object color 순서다. "
++    "graphs.applyPalette는 non-empty color text array를 받고 current editable chart objects의 i번째 color만 colors[i modulo length]로 바꾼다. "
++    "각 color element는 trim 뒤 non-empty text여야 하며 그 text를 저장한다. empty/비배열/이 조건을 만족하지 않는 element는 "
++    "command 실패이며 project/selection을 보존한다. Plotly color parser를 별도 project authority로 만들지 않는다. "
++    "object id/order/data/style/axes, UI palette, 다른 chart의 색은 바꾸지 않고 새 object/CSV를 만들지 않는다. "
++    "zero-object editable chart에도 non-empty palette 입력은 유효하나 object는 생기지 않는다. index hint를 생략해 기존 선택을 보존한다. "
++    "graph color는 Plotly color text로서 named/rgb/hex 표현을 보존하며 UI palette의 6-digit hex 제한을 강제하지 않는다."
++)
++
++AXIS_DEFAULTS = {
++    "min": "", "max": "", "tick": "", "tickMode": "plotly", "minorTicks": False,
++    "notation": "none", "scaleType": "linear", "divide": 1, "title": "",
++    "titleSize": 14, "lineWidth": 1, "showGrid": True, "showValues": True, "fontSize": 12,
++}
++
++GRAPH_GLOBAL_DEFAULTS = {
++    "showLegend": True, "showTitle": True, "showZeroLine": False,
++    "graphFontFamily": "", "titleFontSize": "", "legendFontSize": "",
++}
++
+ axisSettings = {
+     "min": "optional numeric lower bound; empty이면 auto",
+     "max": "optional numeric upper bound; empty이면 auto",
+-    "tick": "increment mode에서 사용할 optional numeric interval",
+-    "tickMode": "plotly 또는 increment; log scale에서는 plotly만 사용",
++    "tick": "non-log 축에 명시할 optional positive numeric interval; empty이면 Plotly auto",
++    "tickMode": "plotly 또는 increment인 editor 입력 모드; log에서는 plotly만, 저장된 positive tick의 projection 여부와는 별개",
+     "minorTicks": "log axis의 dense/minor tick 표시 여부",
+     "notation": "none, e, power 중 하나",
+     "scaleType": "linear, log 또는 reciprocal; reciprocal은 data를 역수 변환하고 Plotly axis는 linear로 표시",
+@@ -268,9 +297,16 @@ def tracesSingle(objectView):
+     5. 어느 한 축이라도 제외 조건이면 같은 row의 x/y를 함께 버린다. 각각 별도 filter로 정렬하거나
+        누락 좌표를 이웃 row의 값으로 채우지 않는다. 통과한 paired x/y를 같은 순서로 사용한다.
+        통과 row가 없으면 []이다. 한 object를 category 값마다 별도 group/trace로 나누지 않는다.
+-    6. bar/scatter/hidden 의미와 line/marker style 범위를 보존한다. hidden도 data 변환을 우회하거나
+-       editor object를 삭제하지 않는다. visible/style/extension 및 axis 표시 field의 전체 매핑은 같은 graph domain의
+-       projection 규칙으로 정하며 이 numeric 절차가 임의 renderer 기본값이나 새로운 persistent field를 만들지 않는다.
++    6. 통과 row가 있으면 한 trace를 만든다. bar는 type=bar/mode 생략, 그 외는 type=scatter다.
++       editor type=scatter는 mode=lines, markers/lines+markers는 같은 mode, hidden은 mode=lines/visible=false다.
++       다른 type은 visible=true다. x/y는 위 paired sequence, name은 y column identifier다.
++       color는 호출자가 GRAPH_PALETTE_RULE로 정한 값이며 line.color/marker.color 모두 같은 색이다.
++       line.width는 non-bar 0.1..20(default 2), bar 0..10(default 0); line.dash는 non-bar의 solid/dot/dash/dashdot(default solid)다.
++       marker.symbol은 object의 지원 symbol(default circle), marker.size는 1..40(default 6)이다.
++       bar만 opacity=0.05..1(default 1), marker.line={color, width=bar line width}를 추가한다.
++       numeric style은 유한 수치로 변환 후 범위 제한하고 missing/invalid는 default다. 유효한 0은 bar width에서 유지한다.
++       non-bar에는 opacity/bar marker.line, bar에는 line.dash를 계산 field로 추가하지 않는다.
++       hidden도 data 변환을 우회하거나 editor object를 삭제하지 않는다.
+     """
+     plotlyTraces = "graph object에서 파생된 Plotly trace 목록"
+     return plotlyTraces
+@@ -294,9 +330,17 @@ def traces(chart, project):
+        없는 실제 CSV reference는 validation 실패이며 current selected CSV나 conversionRows로 대체하지 않는다.
+     3. xAxisSide/yAxisSide를 그 chart의 네 axis에 연결해 objectView를 만들고 tracesSingle을 호출한다.
+        bottom/top은 Plotly x/x2, left/right는 y/y2로 연결한다. 각 object의 data 순서를 보존한다.
+-    4. object.plotlyTrace extension은 복사해 사용하며 계산된 x/y/axis reference를 덮어쓰는 authority로 쓰지 않는다.
+-       object color/legend/style과 renderer layout/표시 field의 기존 mapping은 같은 graph domain이 소유한다.
+-    5. rows/objectView/trace 결과는 이 작업 범위 값이다. object에 row copy를 저장하지 않으며
++    4. object.plotlyTrace의 record copy 위에 계산된 trace를 덮어쓴다. line/marker record는 각 level에서
++       extension 먼저, 계산 field 나중으로 merge하며 다른 unknown field는 보존한다. bar marker.line은 계산 record가 우선한다.
++       name은 non-empty object.legendName 또는 y column identifier, xaxis/yaxis는 위 owning axis reference를 마지막에 덮어쓴다.
++       extension의 x/y/type/mode/visible/name/axis 값으로 editor 계산을 역전하지 않는다.
++    5. axis만 표시하고 실제 object가 없을 때도 Plotly axis를 유지하려고 보조 trace를 마지막에 추가한다.
++       visible인 xBottom/xTop 순서의 x/x2 목록, yLeft/yRight 순서의 y/y2 목록을 사용하고
++       어느 축 방향 목록이 비면 각각 x 또는 y 한 개로 fallback한다. x 목록 바깥/y 목록 안쪽의 Cartesian 순서다.
++       각 보조 trace는 x=[], y=[], type=scatter, mode=markers, xaxis/yaxis=해당 조합,
++       showlegend=false, hoverinfo=skip, visible=true, marker={size:0, opacity:0}, line={width:0}, name="",
++       meta={fastFigureAxisPlaceholder:true}다. 이는 renderer figure에만 존재하며 persistent object/CSV나 readPalette에 포함하지 않는다.
++    6. rows/objectView/trace 결과는 이 작업 범위 값이다. object에 row copy를 저장하지 않으며
+        Backend projection을 소비하는 Frontend renderer가 CSV resolve/trace 계산을 다시 수행하지 않는다.
+     non-editable imported conversion representation은 이 절차로 CSV를 찾지 않고 chartFigure의 보존 경로를 사용한다.
+     """
+@@ -312,7 +356,7 @@ def rebuildEditableGraph(chart, project):
+ 
+     처리:
+     project는 traces와 동일한 작업의 current authority 또는 Backend command candidate다.
+-    chart.editor와 그 project의 referenced CSV에서 traces(chart, project)와 layout을 다시 계산한다.
++    chart.editor와 그 project의 referenced CSV에서 traces(chart, project)와 layout(chart, project)을 다시 계산한다.
+     candidate에 새로 생성/교체/삭제한 CSV를 candidate chart와 함께 사용하며 pre-commit live CSV와 혼합하지 않는다.
+     objects가 비어 있으면 object trace는 빈 배열이고 layout/global settings 계산은 계속한다.
+     renderer 표시용 axis 보조 trace가 필요하더라도 persistent graph object/default CSV를 생성하지 않는다.
+@@ -343,6 +387,49 @@ def chartFigure(chart, project):
+     return figure
+ 
+ 
++def layout(chart, project):
++    """
++    Return: 같은 Backend 작업의 chart/editor와 project.appearance에서 계산한 detached Plotly layout.
++    변경: 없음. query-local copy 또는 command candidate에서만 계산하며 DOM/Frontend/다른 read snapshot을 조회하지 않는다.
++
++    1. normalizeGlobalSettings(chart.editor.globalSettings)와 네 normalizeAxisSettings를 사용한다.
++       아래 omitted는 field 자체를 출력하지 않음을 뜻하며 null/0이나 이전 renderer 값을 뜻하지 않는다.
++    2. 모든 axis의 Plotly type은 log일 때 log, linear/reciprocal일 때 linear다.
++       title={text: visible이면 title 아니면 empty, font:{size:titleSize 또는 14}}, visible=true다.
++       visible=true 유지 이유는 데이터/overlay 축 영역을 보존하기 위함이며 표시 토글은 다음 field에 적용한다.
++       showgrid=visible and showGrid, showticklabels=visible and showValues, ticks=visible이면 outside 아니면 empty,
++       showline=visible, linewidth=lineWidth, tickfont={size:fontSize 또는 12}, automargin=true다.
++       gridcolor=#E5E7EB, zeroline=visible and showZeroLine, zerolinecolor=#CBD5E1이다.
++       min/max가 모두 유한 수치면 linear/reciprocal range=[min,max]; 하나라도 empty/invalid면 range omitted다.
++       log는 두 경계가 모두 >0일 때만 range=[log10(min),log10(max)], 아니면 omitted다.
++       경계 순서는 보존하므로 reversed axis도 허용한다. reciprocal에 역수를 다시 적용하지 않는다.
++       log dtick=1; non-log는 tick이 유한 양수이면 dtick=tick 아니면 omitted다.
++       tickMode는 입력 UI 모드이며 저장된 명시적 tick을 삭제하지 않는다.
++       log minorTicks=true면 minor={dtick:D1, ticks:outside, showgrid:visible and showGrid, gridcolor:#E5E7EB},
++       false면 minor={ticks:empty, showgrid:false}; log에만 minorloglabels=none이다. non-log는 이 두 field omitted다.
++       notation=power/e/none을 exponentformat으로 사용한다. showexponent는 none이면 none 아니면 all,
++       tickformat은 e이면 .3e, 그 외 omitted다.
++    3. xBottom->xaxis, xTop->xaxis2(+overlaying:x, side:top),
++       yLeft->yaxis, yRight->yaxis2(+overlaying:y, side:right)로 연결한다.
++       uirevision=chart.id의 text, showlegend=showLegend,
++       title={text:showTitle이면 editor.title 아니면 empty, automargin:true,
++              font:{size:positive titleFontSize 또는 17, optional family:non-empty graphFontFamily}},
++       legend={font:{size:positive legendFontSize 또는 12, optional family:동일 family}}다.
++       paper_bgcolor/plot_bgcolor=project.appearance.uiPalette.paperColor,
++       font={color:동 palette.fontColor, optional family:동일 family}, margin={l:58,r:58,t:42,b:50}다.
++       UI background/surface 색을 graph paper로 대신 사용하지 않는다.
++    4. editor.plotlyExtensions.layout이 record면 detached copy, 아니면 empty record 위에 계산 layout을 merge한다.
++       title/legend/font/margin과 네 axis는 record level에서 extension 먼저/계산 나중이다.
++       title.font와 legend.font는 한 level 더 같은 순서로 merge한다. 다른 unknown field는 보존한다.
++       위에서 omitted로 정한 optional field(range/dtick/minor/minorloglabels/tickformat 등)는 소유 field이므로
++       extension의 같은 key도 제거한다. optional font family를 생략한 경우 extension family는 유지한다.
++       이것이 stale imported range/tick이 editor auto 설정을 되돌리지 못하게 하는 규칙이다.
++       config/frames는 기존 detached copy로 보존하며 이 layout 함수가 새 의미/default로 덮어쓰지 않는다.
++    non-editable imported figure는 chartFigure의 원본 보존 경로이므로 이 재계산으로 원본 layout을 손실시키지 않는다.
++    """
++    return "detached Plotly layout"
++
++
+ def normalizeAxisSettings(axis, key):
+     """
+     Return:
+@@ -353,6 +440,13 @@ def normalizeAxisSettings(axis, key):
+     - 없음.
+ 
+     처리:
++    AXIS_DEFAULTS를 복사하고 bottom x/left y의 visible=True, top x/right y의 visible=False를 설정한다.
++    입력의 알려진 field를 정규화해 덮어쓰며 unknown field는 의미 원천으로 사용하지 않는다.
++    min/max/tick은 missing/null/literal empty text면 empty이고 그 외 유한 numeric text/number면 수치, invalid면 empty다.
++    title은 text 아니면 empty, titleSize/fontSize는 유한 양수 아니면 각각 14/12,
++    lineWidth는 유한 0 이상 아니면 1이다. 명시적 lineWidth=0은 유지한다.
++    showGrid/showValues는 명시적 false만 false, visible은 boolean 아니면 axis별 default,
++    minorTicks는 명시적 true만 true다. notation enum invalid는 none, tickMode invalid는 plotly다.
+     bottom x와 left y는 기본 visible, top x와 right y는 기본 hidden이다.
+     scaleType은 linear/log/reciprocal이며 생략/invalid는 항등 변환인 linear다.
+     reciprocal을 linear의 별칭으로 지우지 않는다. data 변환은 tracesSingle의 divide 다음 역수 순서다.
+@@ -375,7 +469,12 @@ def normalizeGlobalSettings(settings):
+     - 없음.
+ 
+     처리:
+-    missing value는 project graph default로 채우고 imported extension과 직접 소유 field를 분리한다.
++    GRAPH_GLOBAL_DEFAULTS를 복사하고 showLegend/showTitle은 명시적 false만 false,
++    showZeroLine은 명시적 true만 true, graphFontFamily는 text 아니면 empty다.
++    titleFontSize/legendFontSize는 empty 또는 유한 양수이고 invalid/non-positive는 empty로 정규화한다.
++    네 axis는 AXIS_DEFAULTS와 normalizeAxisSettings(axis,key)를 사용한다.
++    query는 normalized copy만 반환하며 live editor를 고치지 않는다. command는 candidate에만 반영한다.
++    imported extension은 layout의 merge 규칙으로 보존하며 직접 소유 field의 다른 authority로 쓰지 않는다.
+     """
+     normalized = "정규화된 graph global settings"
+     return normalized
+@@ -427,8 +526,19 @@ def parsePlotlyToEditor(figure, chartId):
+        - 그 외 mode를 scatter/markers/lines+markers 계열 의미로 정규화
+        - line/marker color, legend name, widths, dash, marker symbol/size, opacity를 가능한 범위에서 매핑
+        - x/y를 제외한 원 trace field는 plotlyTrace extension으로 보존
+-    4. layout title/legend/font/xaxis/xaxis2/yaxis/yaxis2를 globalSettings와 axisSettings로 변환한다.
+-       editor가 직접 소유하지 않는 layout/config는 plotlyExtensions에 보존한다.
++    4. layout title text는 title이 text면 그 값, record면 title.text 또는 empty다. showTitle은 text의 non-empty 여부,
++       showLegend는 layout.showlegend가 명시적 false인 경우만 false다.
++       graphFontFamily는 title.font.family -> layout.font.family -> legend.font.family 중 첫 non-empty text 또는 empty,
++       titleFontSize/legendFontSize는 각 font.size 또는 empty를 normalizeGlobalSettings로 정규화한다.
++       xaxis/xaxis2/yaxis/yaxis2를 xBottom/xTop/yLeft/yRight로 연결한다. axis.type=log만 log, 그 외 linear다.
++       유한 axis.range의 각 경계는 log일 때 10**value로 역변환 후 유한 수치, 그 외 그대로; 누락/overflow는 empty다.
++       reciprocal을 Plotly linear에서 추측하지 않는다. divide는 default 1이다.
++       dtick이 L 뒤 수치인 text면 tick=그 수치/tickMode=increment, non-log numeric dtick이면 tick=그 값/tickMode=plotly,
++       그 외 empty/plotly다. log tick은 empty이며 dtick=D1 또는 minor의 dtick=D1/ticks=inside|outside/showgrid=true면 minorTicks=true다.
++       axis.title(text 또는 title.text), title.font.size, tickfont.size, linewidth를 대응 field로 정규화한다.
++       showGrid/showValues/visible은 각각 showgrid/showticklabels/visible의 명시적 false만 false,
++       notation은 exponentformat=e/power 외에는 none이다. showZeroLine은 editor default false를 유지한다.
++       editor가 직접 소유하지 않는 layout/config는 plotlyExtensions에 detached copy로 보존한다.
+     5. trace가 없거나 모든 trace에 data point가 없어도 conversionRows/objects를 empty로 유지한다.
+        fake X/Y row나 default CSV를 만들지 않는다.
+     6. editor.editable=false로 반환한다.
+diff --git a/sourcescript/backend/project_efsm.py b/sourcescript/backend/project_efsm.py
+index c2e5114..13408bb 100644
+--- a/sourcescript/backend/project_efsm.py
++++ b/sourcescript/backend/project_efsm.py
+@@ -141,7 +141,7 @@ GRAPH_OBJECT_EDIT_INPUT_CONTRACT = {
+         "remove the resolved requested index; result hint is explicit none, retaining the existing selection-clear meaning. "
+         "Do not invent selection of a neighboring object. Empty chart remains valid."
+     ),
+-    "palette": "change only object colors using the declared palette rule; omit the index hint so existing selection remains.",
++    "palette": "use graphs.GRAPH_PALETTE_RULE on current editable objects, cycling the non-empty input; omit index hint so existing selection remains.",
+     "selection": (
+         "Backend writes selectionHints.chartId and selectedIndexHint from the actual post-edit array. "
+         "Missing hint preserves the current index; explicit none clears. Application forwards it through the common "
+@@ -187,6 +187,11 @@ class ProjectStateMachine:
+            선택된 replace id/path가 더 이상 같은 대상을 가리키지 않으면 거부한다. stale 계획으로 덮어쓰거나 자동 재선택하지 않는다.
+            candidate의 원천이 된 authority가 commit 전 바뀌면 그대로 commit하지 않고 현재 authority에 대해 재계산/검증한다.
+            실패/취소는 미commit 결과이며 부분 변경/복구용 rollback/성공 hint를 만들지 않는다.
++           APPEARANCE_CHANGED는 project_state.APPEARANCE_PALETTE_RULE에 따라 10개 field의 전체 palette candidate를 만든다.
++           CHART_LAYOUT_CHANGED는 current owning chart의 title/global/axis field에 새 edit만 적용하고 graphs의 normalize/layout을 사용한다.
++           새 값에 없는 current title/axis field는 유지하며 invalid 새 값은 graph default/empty 규칙으로 정규화한다.
++           nested axis patch는 해당 axis의 명시된 field에만 적용하고 다른 axis/global field를 버리지 않는다.
++           project.appearance와 chart.editor가 각 의미의 원천이며 graph.data/layout/CSS는 candidate 계산/표시 결과다.
+         4. candidate whole-project invariant를 검증한다.
+         5. 성공 candidate만 activeProject에 한 번 commit한다.
+         6. 실제 pre/post 차이에서 ProjectMutationResult를 계산한다. 생성/import의 changed id/path/owner는 실제 commit 결과를 사용한다.
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index 3027a00..403cba2 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -17,6 +17,30 @@ SLOT_STYLE_DEFAULTS = {
+     "showBorders": True,
+ }
+ 
++# Project appearance의 기본값 원천. graph object의 색 순환과는 별개다.
++DEFAULT_UI_PALETTE = {
++    "uiColor": "#B0CFCE",
++    "uiBackgroundColor": "#FAFAFA",
++    "uiSurfaceColor": "#FFFFFF",
++    "uiMutedColor": "#4F525D",
++    "uiSubtleColor": "#94A3B8",
++    "uiDisabledBgColor": "#E5E7EB",
++    "uiDisabledTextColor": "#64748B",
++    "uiShadowColor": "#383A42",
++    "paperColor": "#FFFFFF",
++    "fontColor": "#383A42",
++}
++
++APPEARANCE_PALETTE_RULE = (
++    "위 10개 field만 persistent uiPalette로 소유한다. 새 project/reset은 DEFAULT_UI_PALETTE의 copy다. "
++    "APPEARANCE_CHANGED는 전체 palette 설정이며 partial merge가 아니다. 각 field의 새 값이 #와 6개 hex digit인 text면 "
++    "대소문자를 보존하고 사용하며 missing/invalid는 그 field의 DEFAULT_UI_PALETTE 값으로 돌아간다. unknown field는 버린다. "
++    "이를 적용한 whole-project candidate를 검증한 뒤 한 번 commit한다. read/render는 current palette의 detached copy만 사용한다. "
++    "UI draft/DOM/CSS/graph color list를 persistent palette 원천으로 사용하지 않는다. "
++    "FFPX load의 missing/invalid appearance field도 같은 기본값 규칙으로 candidate에 정규화하며 valid 저장 색은 유지한다. "
++    "schema 검증에서는 10개 필수 색의 유효성을 확인하며 invalid authority를 renderer가 고치지 않는다."
++)
++
+ PROJECT_OBJECT_PATHS = {
+     "project": "meta project information의 공식 read path",
+     "layout": "grid와 slotStyle의 공식 read path",
+@@ -579,7 +603,7 @@ DEFAULT_PROJECT_RULES = {
+     ),
+     "vfs": "고정 directory /assets, /assets/csv, /assets/images, /assets/trash를 만든다.",
+     "nextId": "csv/image/chart 모두 collection의 첫 새 id를 가리키는 값에서 시작한다.",
+-    "appearance": "기본 UI palette를 복사해 project persistent palette로 시작한다.",
++    "appearance": "DEFAULT_UI_PALETTE를 복사해 project persistent palette로 시작한다. reset/set/load도 APPEARANCE_PALETTE_RULE을 공유한다.",
+ }
+ 
+ 
+diff --git a/sourcescript/frontend/mantine_ui.py b/sourcescript/frontend/mantine_ui.py
+index aa28aae..e7946da 100644
+--- a/sourcescript/frontend/mantine_ui.py
++++ b/sourcescript/frontend/mantine_ui.py
+@@ -194,8 +194,19 @@ def FastFigureApp():
+     - project state를 render 자체에서 변경하지 않는다.
+ 
+     처리:
+-    persistent appearance palette를 FastFigureApi에서 읽어 Mantine CSS variable로 투영한다.
+-    UI color luminance에서 primary contrast text를 계산한다.
++    persistent appearance palette의 이번 read copy를 FastFigureApi.appearance.readPalette에서 읽는다.
++    Backend default를 재정의하거나 UI draft와 병합하지 않는다. 매 render는 current read를 사용하고 장기 palette mirror를 만들지 않는다.
++    theme.colors.ffui의 10개 shade는 모두 uiColor, primaryColor=ffui, color scheme=light다.
++    body=uiBackgroundColor, text/default-color/primary-light-color=fontColor, default=uiSurfaceColor,
++    default-border/primary-filled=uiColor, dimmed=uiMutedColor, placeholder=uiSubtleColor,
++    disabled/disabled-border=uiDisabledBgColor, disabled-color=uiDisabledTextColor를 Mantine CSS 변수로 투영한다.
++    default-hover는 sRGB color-mix(uiColor 12%, uiSurfaceColor), filled-hover는 sRGB mix(uiColor 75%, #64748B),
++    primary-light/light-hover는 sRGB mix(uiColor 18%/24%, transparent)다.
++    uiColor의 각 hex channel을 0..1로 나누고 c<=0.04045이면 c/12.92, 아니면 ((c+0.055)/1.055)**2.4로 선형화한다.
++    luminance=0.2126*r+0.7152*g+0.0722*b이며 >0.179이면 primary contrast=#000000, 그 외 #FFFFFF다.
++    ffui filled/filled-hover/light/light-hover/light-color/contrast 변수는 위 primary 변수의 alias일 뿐 별도 값 authority가 아니다.
++    theme shadow의 black-alpha 색만 같은 alpha의 uiShadowColor/transparent sRGB mix로 바꾸며 shadow geometry는 유지한다.
++    paperColor는 graph paper, fontColor는 graph ink에도 쓰지만 UI surface/background와 graph paper를 같은 field로 합치지 않는다.
+     FastFigureShell을 하나의 기존 React root에 render한다.
+     """
+     uiTree = "Fast Figure Mantine application tree"
+diff --git a/sourcescript/frontend/renderer.py b/sourcescript/frontend/renderer.py
+index 99b297a..1ec20ae 100644
+--- a/sourcescript/frontend/renderer.py
++++ b/sourcescript/frontend/renderer.py
+@@ -245,6 +245,18 @@ def prepareDashboardFileDrop(slotId, frontendActions):
+     return accepted
+ 
+ 
++def applyUiPalette(projectProjection, notify):
++    """
++    supplied renderer ui-palette projection의 scalar field만 CSS에 적용한다.
++    --ui-color=uiColor, --paper=uiBackgroundColor, --ui-subtle=uiSubtleColor,
++    --ink=fontColor, --graph-bg=paperColor다. Backend를 조회하거나 default/DOM 색으로 project를 수정하지 않는다.
++    Application이 같은 current project의 figure projection도 전달하므로 graph paper/ink 변경을 새 figure로 표시한다.
++    notify가 참이면 기존 UI_PALETTE_CHANGED notification이며 추가 command/독립 render authority는 아니다.
++    MantineProvider의 전체 UI 변수 계산은 mantine_ui.FastFigureApp이 소유한다.
++    """
++    return "palette CSS projection"
++
++
+ def applySlotStyle(projectProjection, notify):
+     """
+     변경:
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index 646c5d6..3c8c868 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -181,14 +181,16 @@ RESOLVED_REVIEW_ITEMS = [
+ 
+ UNRESOLVED_REVIEW_ITEMS = [
+     (
+-        "Plan 017 E: trace numeric conversion/exclusion과 reciprocal 축의 schema/계산 순서는 graph domain에 구체화했다. "
+-        "global/axis에서 Plotly layout으로의 field-by-field conversion과 palette/default colors의 concrete source, "
+-        "imported extension/style/axis 보조 표시의 전체 mapping을 "
+-        "기존 graph/projection procedure에서 완결해야 한다. placeholder/default 참조만으로 닫힘을 선언하지 않는다."
++        "Plan 017 E: graph domain에 trace style/axis 보조 표시와 layout field 변환·extension 우선순위를, "
++        "project-state/graph domain에 UI palette/graph color 기본값의 서로 다른 원천을 구체화했다. "
++        "renderer/Mantine은 one-way projection만 소비한다. field 정의만으로 전체 import/edit/export 왕복이나 "
++        "purpose/duplicate-integration 검토가 끝났다고 간주하지 않는다."
+     ),
+     (
+-        "Plan 017 D/E: 전체 public operation의 입력/성공/실패/취소 반환과 command/query/reconciliation/renderer를 "
+-        "실제 producer/consumer로 대조해야 한다. 개별 wrapper 수정이나 resource lifetime만으로 전체 closure 근거를 삼지 않는다."
++        "Plan 017 D: 전체 public operation의 정적 trace에서 공개 반환 shape, runtime composition, "
++        "일부 pure calculation의 공식 query 연결과 router/export 완료 규칙에 미정 의미가 남았다. "
++        "기존 operation의 계약과 공통 adapter를 보완해야 하며 내부 command triple을 public 값으로 자동 간주하지 않는다. "
++        "정적 대조표 작성이나 개별 wrapper 수정만으로 전체 closure 근거를 삼지 않는다."
+     ),
+ ]
+ 
