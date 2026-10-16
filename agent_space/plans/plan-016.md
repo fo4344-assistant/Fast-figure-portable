@@ -1282,3 +1282,9 @@ Application boundary를 세 번째 authoritative FSM으로 만들지 않는다.
 - 현재 Backend slot-local settings를 기준으로 candidate를 구성·정규화·검증·commit한다. 같은 image asset을 참조하는 다른 slot은 변경하지 않는다. 실패 시 success reconciliation/render를 수행하지 않는다.
 - 최종 distribution HEAD `43a3a05bdbc82a125d34e603a5fbd858dd48c012`: Actions regression 38845564973 (inline 39 + split 39), version 38845567464 통과. 해당 application source build/verify 38845342850 통과. 실패·보정·파일별 commit 제한은 `agent_space/reviews/review-20261016-002-image-boundary.md`에 기록한다.
 - 이 단위는 전체 image/API/renderer cutover 완료가 아니다. full renderer, 나머지 API/domain consumer와 전체 lineage 대조가 남으며 Source Code `stale` 유지, TLC 미실행.
+
+## 34. 2026-10-16 구현 진행 — print/export settings ownership
+
+- Source Code r36 (WIP): print settings read는 Backend immutable query → Application 경유 projection으로 전환한다. public setter는 새 edit patch만 전달하고, Backend command가 현재 export settings로 candidate를 구성·정규화·검증·commit한다. 기존 범위/enum/auto-height 의미는 유지한다.
+- Actions regression 38847409115: inline 40 + split 40 통과. version 38847412408 통과. build/verify 38847405535는 실제 checkout `8c8208100c1ff8675b37c62d22db60b3aadb635a`에서 통과하고 distribution bot commit `a7444e2e3c84da67e99d648ce2915c78dd0dd788`을 생성했다.
+- 기준 commit과 중간 metadata 실패를 포함한 결과는 `agent_space/reviews/review-20261016-003-print-settings-boundary.md`에 기록한다. 정책·상위 명세 의미는 변경하지 않았다. full renderer와 나머지 API/domain consumer가 남으며 Source Code `stale` 유지, TLC 미실행.
