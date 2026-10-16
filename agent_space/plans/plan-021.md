@@ -23,7 +23,7 @@
 - 계획 먼저 main `17aae6445abd3a388d1a2f03b1cbb2e9a9be070e`에 게시한 뒤 Source r37 변경.
 - `backend.project_object`와 `backend.defaults`로 기존 한 JSON을 재구성하고 Backend 5개 owner 및 Application/renderer의 관련 경로 참조를 정리했다. 실제 프로젝트 데이터와 Frontend 설정을 config에서 제외했다.
 - 상세 이동·잔류 목록, 정적 생성→소비 대조, 제외 범위: `agent_space/reviews/review-20261016-018-backend-config-r37-open.md`.
-- Source37 current/open, lower stale 유지. cumulative Actions와 actual patch 기록은 게시 후 review/patch 023에서 결과를 확인한다. 정적 대조는 runtime/전체 closure 증거로 부풀리지 않는다.
+- Source37 current/open, lower stale 유지. actual patch 023 및 endpoint diff/reverse cached apply check PASS. cumulative Actions `38867034222`도 PASS (HEAD `1478969a5638ceaad8ba83f76a954b925d563bb3`, base `a65decea01ca08639cc9d207f560dfececdb72b9`). 이 결과 문서는 실행 후 후속 기록이다. 정적/checker 검사는 runtime/전체 closure 증거로 부풀리지 않는다.
 
 ## 제외·완료 조건
 
