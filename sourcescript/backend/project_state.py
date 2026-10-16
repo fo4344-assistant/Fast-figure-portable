@@ -316,7 +316,7 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
     "captions.readGlobal": "project annotations.captions의 enabled/text/afterText/name/nameBold/settings copy",
     "captions.readSlot": "explicit slotId의 slot.caption copy; 없는 slot이면 none; placeholder는 반환 presentation일 뿐 저장하지 않음",
     "labels.readState": "sourcescript.backend.layout_annotations readLabelsApiState(slotId)의 label settings와 explicit slot reference geometry copy",
-    "layout.readState": "current layout/style/visible slot geometry copy와 renderedWidth를 사용한 기존 layout preview 계산; DOM에서 project 값을 역추론하지 않음",
+    "layout.readState": "gridRows/gridCols/slotStyle/visibleSlots와 renderedWidth로 계산한 previewGeometry copy; width finite 1..20000 invalid 600; Backend는 session zoom/lock을 읽지 않으며 Application만 public read에 합성; DOM 역추론/preview 저장 없음",
     "assets.readTree": "sourcescript.backend.assets_files의 current directories/assets로 계산한 canonical VFS tree copy",
     "assets.readTrash": "같은 tree 계산의 trash subtree copy",
     "assets.isTrashed": "canonical requested path의 trash subtree membership boolean",
@@ -334,6 +334,23 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
         "이 query 성공은 예약/commit이 아니며 ASSETS_IMPORTED는 current authority를 다시 검증한다"
     ),
 }
+
+EXPORT_BACKEND_READ_CONTRACT = {
+    "project.exportFile": (
+        "current whole-project validation 후 assets_files.ffpxBuildProject의 FFPX entries copy; MIME application/vnd.fast-figure-project. "
+        "Frontend selected slot 금지는 Application precondition이며 Backend는 Frontend를 조회하지 않음"
+    ),
+    "assets.download": "explicit canonical path로 CSV/image original bytes/name/MIME copy; absent/wrong kind/no original bytes는 none; fallback MIME application/octet-stream",
+    "graphs.exportFfsx": "explicit visible graph slotId -> unique owning chart -> assets_files.ffsxBuildSlot의 entries copy; MIME application/vnd.fast-figure-slot; missing slot/chart는 none",
+    "graphs.exportPlotlyJson": "같은 target의 graphs.chartFigure(chart, current project) -> UTF-8 JSON bytes copy; MIME application/json; noneditable imported figure/frame 보존; missing은 none",
+    "filename": (
+        "request.stamp는 Application이 이번 호출에 만든 UTC ISO timestamp의 colon/dot을 hyphen으로 바꾼 값이며 Project field가 아니다. "
+        "project는 assets_files.projectFileStem의 project-name sanitize + stamp + .ffpx; slot은 fast-figure-slot-{slotId}-{stamp}.ffsx; "
+        "Plotly는 plotly-figure-{slotId}-{stamp}.json; original asset은 asset.name을 그대로 사용한다."
+    ),
+    "lifetime": "한 download 작업의 copied entries/bytes/name/MIME만 반환; resource URL 할당이나 다운로드는 하지 않으며 원본을 mutation input으로 쓰지 않음",
+}
+
 
 RENDERER_BACKEND_READ_CONTRACT = {
     "whole": (
@@ -372,7 +389,10 @@ def readBackendProjection(kind, request):
        chart/CSV/figure 계산은 같은 Backend read 작업의 project를 graphs.chartFigure(chart, project)에 명시적으로 전달한다.
        export의 print.save/print.capture 입력에는 같은 작업의 chart/CSV에서 계산한 figure를 제공한다.
        이는 한 작업용 projection이며 저장 ProjectObject/FFPX schema에 figure 필드나 별도 authority를 추가하지 않는다.
-       일반 project export/import 반환용 whole-project snapshot은 기존 계약을 유지한다.
+       operation 없는 일반 project export/import 반환용 whole-project snapshot은 기존 계약을 유지한다.
+       project.exportFile/assets.download/graphs.exportFfsx/graphs.exportPlotlyJson은 EXPORT_BACKEND_READ_CONTRACT를 따른다.
+       그 외 알 수 없는 export operation은 query error다. package builder가 사용하는 operation 없는 export read는
+       plain snapshot일 뿐 같은 package operation을 재귀 호출하지 않는다. 같은 read 작업의 chart/CSV를 끝까지 사용한다.
        supplied renderer input을 받은 Frontend가 Backend helper를 재호출하거나 프로젝트 mirror를 별도로 구성하지 않는다.
        interface-intent/reconciliation kind는 아래 validation/reconciliation 계산과 같은 contract를 사용하며 별도 판정 규칙을 만들지 않는다.
     5. compatibility/default normalization은 detached copy에서만 수행한다. 중첩 array/object까지 read-only로 반환하고
