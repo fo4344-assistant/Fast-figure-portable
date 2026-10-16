@@ -1,4 +1,4 @@
-# Plan 016 — selection/reconciliation boundary (Source Code r32, WIP)
+# Plan 016 — selection/reconciliation boundary (Source Code r32 → r33, WIP)
 
 ## 대상과 추적
 
@@ -15,10 +15,13 @@
 - browser regression 37: graph selection read-only/identity 보존, invalid slot/path/kind/index 무변경, public invalid graph selection, immutable validated input, asset 선택 시 graph clear, explicit slot deselection.
 - browser regression 38: unrelated commit의 reference 보존, 실패 command의 authority/Frontend 무변경, move/trash reconciliation, immutable reconciliation input.
 - 검증 실행은 사용자 요청에 따라 GitHub Actions만 사용한다. 로컬 application/test/build/version checker 실행은 하지 않는다.
-- Actions 실행 결과: pending. 실제 run/commit/result 확인 후 갱신한다.
+- 초기 r32 `db12b16e9a1919ced318b97e6a6b1a317421f726`: version 검사 [38842191341](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842191341) 성공. build [38842194014](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842194014) 성공 (동일 source의 dist bot 후속 commit `c4f4dcb84babee914205486d56020ff4b000184a`).
+- 초기 regression [38842189150](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38842189150)은 inline/split 모두 24/37/38 실패. 24는 object 수정 후 현재 CSV 선택을 object CSV로 바꾸는 회귀, 37은 이미지 자산이 남은 슬롯 fixture, 38은 존재하지 않는 `/assets/data` fixture 경로였다.
+- r33 보정: explicit public graph selection에만 검증된 CSV selection hint를 적용한다. object commit의 index 갱신은 별도 current CSV 선택을 덮어쓰지 않는다. 37은 slot reset으로 독립 fixture를 만들고 38은 기본 `/assets/csv`를 사용한다.
+- r33 Actions 재검증: pending.
 
 ## 한계와 다음 ownership 단위
 
 - Plan 016 전체 완료가 아니다. renderer와 남은 API/domain consumer의 direct Backend access cutover, public read projection 완성 및 전체 회귀 감사가 남는다.
-- source-code status는 `stale`로 유지한다. r32는 r25/r11의 이 ownership 단위 구현이며 전체 Source Code가 최신 경계를 구현했다는 뜻이 아니다.
+- source-code status는 `stale`로 유지한다. r32/r33은 r25/r11의 이 ownership 단위 구현이며 전체 Source Code가 최신 경계를 구현했다는 뜻이 아니다.
 - Source Script/PlusCal/verification 의미는 변경하지 않는다. TLC는 실행하지 않으며 기존 pending 기록을 유지한다.
