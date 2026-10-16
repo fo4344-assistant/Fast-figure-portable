@@ -1,0 +1,280 @@
+diff --git a/agent_space/plans/plan-017.md b/agent_space/plans/plan-017.md
+index e4894ac..25b583e 100644
+--- a/agent_space/plans/plan-017.md
++++ b/agent_space/plans/plan-017.md
+@@ -156,3 +156,12 @@
+ - 이어 공개 inventory 87개를 입력 → owner/command/query/event → 반환/실패/취소까지 정적으로 대조했다. 이미 chart 반환이 선언된 move/delete wrapper를 기존 성공 후 query로 연결했다. 전체 대조표: `agent_space/reviews/review-20261016-009-public-api-trace-r30-open.md`.
+ - **전체 목록 대조는 수행했으나 전체 계약 완결은 아니다.** public 반환 shape, runtime composition/zoom/create-and-select, pure calculation query 연결, router/export completion이 남았다. 이를 구버전 API 잔존과 혼동하지 않는다. Source `slots.swap`의 하위 공개 누락은 번역 시 보완 대상이다.
+ - source r30 current/open, closure_review null과 하위 stale을 유지한다. 남은 계약 및 전체 import/edit/export 왕복·목적·중복통합 근거를 확보하기 전에는 닫힘/하위 번역 완료를 선언하지 않는다. 실제 누적 patch·검사 근거: `agent_space/patches/20261016-013.patch`와 같은 basename `.md`.
++
++## 13. API 보완 — r31 asset planning / create-and-select / OPEN
++
++- 기준 main `4871dc952bdfb291d79de28948918c1f587d4410`. F3의 assets.fileKind/resolveImportPlan을 기존 project-api query에 등록하고 collisionModel과 함께 public Application wrapper → Backend domain 계산을 연결했다. 별도 계산 authority나 command를 추가하지 않는다.
++- transient collision model은 current VFS에서 다시 검증한다. stale replace는 available/rename으로 조용히 바꾸지 않으며 조회 결과는 예약/commit이 아니다. 실제 import command의 current-authority 재검증을 유지한다.
++- F2의 assets.createEmptyCsv는 기존 domain create 성공 뒤 Application의 selectProjectCsv를 호출한다. SELECT_ASSET 한 전이로 CSV 선택/graph index clear를 수행하며 slot/chart/Project는 selection 단계에서 변경하지 않는다. 생성 실패에는 선택하지 않고 사후 선택 실패로 생성 asset을 숨은 rollback하지 않는다.
++- 근거/정적 시나리오/반환·실패 경로: `agent_space/reviews/review-20261016-010-api-assets-r31-open.md`. r30 전체 trace는 역사적 발견 기록으로 보존한다.
++- 다른 mutation public 반환, runtime selection/zoom 완료 및 router/export completion과 전체 closure 근거는 남아 있다. source r31 current/open, closure_review null, 하위 stale을 유지한다. 정책·PlusCal/model/JS/test/build/dist 변경이나 로컬 실행은 없다.
++- 실제 누적 patch와 Actions 검사: `agent_space/patches/20261016-014.patch` 및 같은 basename `.md`.
+diff --git a/agent_space/reviews/review-20261016-010-api-assets-r31-open.md b/agent_space/reviews/review-20261016-010-api-assets-r31-open.md
+new file mode 100644
+index 0000000..320b50f
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-010-api-assets-r31-open.md
+@@ -0,0 +1,40 @@
++# API asset planning / create-and-select — Source Script r31 / OPEN
++
++## 범위와 권위
++
++- 사용자 API 보완 요청에 따라 r30 전체 trace의 F3와 F2 중 asset create-and-select를 먼저 연결했다. 기준 main: `4871dc952bdfb291d79de28948918c1f587d4410`.
++- 의미의 권위는 Source Script다. 이 문서는 추가 API registry가 아닌 정적 검토 기록이다. 기존 Backend domain / Application public wrapper / Frontend FSM 경계를 유지한다.
++- 하위 `fast-figure.js`의 `slotFileKind`, `resolveProjectAssetImportPlan`, `createEmptyProjectCsvAndSelect`, `graphEditorSelectCsv`를 호환성 자료로 읽었다. 하위 동작을 무조건 채택하지 않는다. stale replace 제안을 current authority에서 재검증하고 selection은 이미 선언된 SELECT_ASSET의 단일 전이로 수행한다.
++
++## producer → consumer / 반환
++
++| 기존 public API | 구체 경로 | 성공 / 실패 |
++|---|---|---|
++| assets.fileKind | readAssetFileKind → dispatchProjectQuery(project-api) → assets.fileKind → assets_files.slotFileKind | filename/MIME의 slot/data/image/empty 문자열; query 오류 전파; bytes/Project/Frontend 변경 없음 |
++| assets.collisionModel | readAssetCollisionModel → 같은 query adapter → current VFS의 projectAssetImportCollisionModel | 한 작업용 detached collision model; unsupported raw asset/invalid directory는 오류 |
++| assets.resolveImportPlan | readAssetImportPlan → 같은 query adapter → resolveProjectAssetImportPlan | current path/replaceId; invalid model/parent/stale replace는 오류; 예약/commit 아님 |
++| assets.selectCsv | selectProjectCsv → assets.readDeletionTarget → validated SELECT_ASSET | 선택된 detached CSV; missing/wrong-kind/거부 none; throw 전파 |
++| assets.createEmptyCsv | createEmptyProjectCsvAndSelect → 기존 DATA_OBJECT_CREATED → 성공 시 selectProjectCsv | 성공 detached CSV; 미commit은 기존 failure, 사후 selection 거부 none; throw 전파 |
++
++- fileKind의 우선순위는 FFSX → CSV/TSV/JSON → image MIME/확장자 → unsupported다. 이 분류가 explicit Plotly graph import나 FFPX project import parser를 대신하지 않는다.
++- collision/plan은 input/reservedPaths를 변경하지 않는다. 제안 model을 권위로 저장하지 않고 current VFS에서 동일 충돌 규칙을 다시 계산한다. ASSETS_IMPORTED는 query 성공과 별개로 commit 직전 current id/path/kind를 재검증한다.
++- selectCsv의 SELECT_ASSET은 graphObject/index를 함께 clear하고 slot/workspace를 유지한다. 따라서 별도 CLEAR_GRAPH_OBJECT 선행 전이를 추가하지 않는다. invalid CSV를 선택하려는 경우 graph selection까지 먼저 지우는 부분 변경이 없다.
++- createEmptyProjectCsv는 여전히 일반 domain 생성 helper이며 selection을 소유하지 않는다. public create-and-select는 Application에서 이를 조정한다. chart/graph object를 만들거나 보호된 기본 CSV 예외를 추가하지 않는다.
++- create commit 뒤 selection/query가 실패하더라도 생성 asset은 이미 존재한다. 실패를 미commit 성공/실패로 위장하거나 숨은 rollback을 만들지 않는다.
++
++## 정적 시나리오 대조 — 실행 시험 아님
++
++1. `.FFSX`는 slot, `.json`은 data, 확장자 없는 `image/*`는 image, 미지원은 empty다. 어떤 경우도 file bytes를 읽지 않는다.
++2. current available이면 canonical path, same-kind replace가 허용되고 같은 id면 그 id, rename이면 current VFS/reservedPaths에 없는 unique path를 계산한다.
++3. replace choice 대기 중 대상이 삭제되면 available로 새 asset을 생성하는 대신 stale replace를 먼저 거부한다. 대상 id/kind가 바뀌어도 다른 asset을 덮어쓰지 않는다.
++4. plan 조회 뒤 다른 작업이 경로를 차지하면 조회 결과는 예약이 아니므로 command의 current-authority 재검증이 적용된다.
++5. 빈 CSV 생성 실패면 selection event가 없다. 생성 성공이면 실제 canonical collision-free path를 선택하고 그래프/선택 slot은 유지한다.
++6. missing/image/directory path의 selectCsv는 none이며 graphObject/index와 기존 CSV 선택을 보존한다. valid CSV는 SELECT_ASSET 한 전이로 asset 선택과 graph index clear를 함께 수행한다.
++7. 읽기 결과는 scalar identity 전달에만 쓰며 Project candidate나 다른 작업의 장기 read store가 되지 않는다.
++
++## 닫힘·후속
++
++- F3의 두 미등록 operation을 공식 query에 등록했다. F2의 빈 CSV public composition과 CSV selection 반환/거부 경로를 명시했다. r30의 trace 표는 당시 발견 기록으로 보존한다.
++- F1의 다른 public mutation 반환, F2의 다른 selection/zoom/runtime 완료, F4의 import router/export completion, 전체 왕복·목적·중복통합 검토는 남아 있다. 전체 API 보완 완료나 Source closure를 선언하지 않는다.
++- Source r31 current/open, closure_review null. PlusCal/model/code는 stale이고 이번에 변경하지 않았다. 하위 구현으로 전파하지 않았다.
++- 로컬 Source Script/app/checker/test/build/TLC를 실행하지 않았다. 정적 diff/byte fingerprint 계산은 실행 검증과 구별한다. 누적 Actions 검사와 실제 patch endpoint는 `agent_space/patches/20261016-014.md`에 기록한다.
+diff --git a/development-versions.json b/development-versions.json
+index 7189106..42b6717 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 30,
++      "revision": 31,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py", 
+-      "fingerprint": "sha256:07b8debe10d7893723a65483326dbb49139bdcc458e46e4b8f2be9c36b8117af",
++      "fingerprint": "sha256:d2519623076e8dda860186f3532cc6dd45780e46bef6ec49cdea153dbd85254f",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/sourcescript/application/public_api/__init__.py b/sourcescript/application/public_api/__init__.py
+index fd76908..c78877a 100644
+--- a/sourcescript/application/public_api/__init__.py
++++ b/sourcescript/application/public_api/__init__.py
+@@ -65,20 +65,20 @@ PUBLIC_API_METHODS = {
+         "move": "mutation; PROJECT_NODE_MOVED project command가 current state에서 plan을 재검증하고 candidate move commit",
+         "createDirectory": "mutation; PROJECT_DIRECTORY_CREATED project command로 canonical non-conflicting directory commit",
+         "createEmptyCsv": (
+-            "mutation + runtime selection; 일반 CSV asset으로 빈 CSV.csv를 생성하고 기존 CSV selection 경로로 그 asset을 선택; "
+-            "graph object/chart는 이 command가 자동 생성하지 않음"
++            "assets.createEmptyProjectCsvAndSelect; DATA_OBJECT_CREATED 성공 뒤 assets.selectProjectCsv로 생성 asset을 선택하고 detached CSV 반환; "
++            "미commit은 기존 failure, selection 거부는 none, throw는 전파하며 이미 생성된 asset은 rollback하지 않음; chart/object 자동 생성 없음"
+         ),
+         "emptyTrash": "mutation; PROJECT_TRASH_EMPTIED project command로 trash references/assets/directories candidate removal commit",
+         "draggableAsset": "read/calculation; slot connection drag payload로 사용할 수 있는 non-trash CSV/image asset projection; tree move 가능 여부와는 별도 판정",
+         "connectToSlot": "mutation; CSV는 SLOT_DATA_CONNECTED, image는 SLOT_IMAGE_LINKED project command로 명시적 연결 commit",
+         "importToDirectory": "lifecycle mutation; ASSETS_IMPORTED project command로 batch file candidates -> collision plan -> one atomic commit",
+         "importToSlot": "lifecycle mutation; ASSETS_IMPORTED project command로 raw file asset + target slot/chart candidate -> one atomic commit",
+-        "fileKind": "calculation; filename/MIME에서 지원 slot import kind 판정",
++        "fileKind": "assets.readAssetFileKind -> Q assets.fileKind; copied name/type의 slot/data/image/empty kind 문자열; bytes/Project/Frontend 변경 없음",
+         "importFiles": "lifecycle router; supported files를 directory/slot import contract로 전달",
+-        "collisionModel": "calculation; current VFS + reserved paths에서 collision model",
+-        "resolveImportPlan": "calculation; user choice를 concrete path/replace id plan으로 변환",
++        "collisionModel": "assets.readAssetCollisionModel -> Q assets.collisionModel; current VFS + reserved paths의 immutable 한 작업용 model",
++        "resolveImportPlan": "assets.readAssetImportPlan -> Q assets.resolveImportPlan; current VFS 재검증한 path/replaceId; stale replace/invalid model은 오류, command commit은 별도 재검증",
+         "selectDirectory": "runtime mutation; VFS-resolved directory selection",
+-        "selectCsv": "runtime mutation; VFS-resolved CSV selection",
++        "selectCsv": "assets.selectProjectCsv(path) -> Q current CSV 확인 -> F SELECT_ASSET; 성공 detached CSV, missing/wrong-kind/거부 none; Project/slot 보존, graph object index clear",
+         "selectImage": "runtime mutation; VFS-resolved image selection only; no slot mutation",
+         "download": "read/export; asset original bytes download, project mutation 없음",
+     },
+diff --git a/sourcescript/application/public_api/assets.py b/sourcescript/application/public_api/assets.py
+index e4c4652..6d51231 100644
+--- a/sourcescript/application/public_api/assets.py
++++ b/sourcescript/application/public_api/assets.py
+@@ -5,16 +5,64 @@ Fast Figure Source Script — Application boundary / public-api — asset wrappe
+ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈이 아니다.
+ """
+ 
+-from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery
++from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent
+ from sourcescript.backend.assets_files import EMPTY_CSV_TEMPLATE
+ 
++def readAssetFileKind(file):
++    """assets.fileKind: copied name/type만 공식 pure query에 전달하고 kind 문자열을 그대로 반환한다."""
++    return dispatchProjectQuery("project-api", {"operation": "assets.fileKind", "file": "file의 name/type copy"})
++
++
++def readAssetCollisionModel(file, directory, reservedPaths):
++    """assets.collisionModel: immutable 한 작업용 model; UI choice는 이 query 밖에서 수집한다."""
++    return dispatchProjectQuery("project-api", {
++        "operation": "assets.collisionModel", "file": file, "directory": directory, "reservedPaths": reservedPaths,
++    })
++
++
++def readAssetImportPlan(model, choice, reservedPaths):
++    """assets.resolveImportPlan: UI 제안과 explicit choice만 전달; 오류는 전파하고 commit/예약으로 취급하지 않는다."""
++    return dispatchProjectQuery("project-api", {
++        "operation": "assets.resolveImportPlan", "model": model, "choice": choice, "reservedPaths": reservedPaths,
++    })
++
++
++def selectProjectCsv(path):
++    """
++    assets.selectCsv의 Application operation. current assets.readDeletionTarget으로 CSV identity를 확인한다.
++    missing/wrong-kind면 none 반환, event/notify/Project/Frontend 변경 없음.
++    valid면 scalar canonical path/kind만 dispatchInterfaceEvent SELECT_ASSET에 전달한다.
++    Backend 재검증을 통과한 SELECT_ASSET이 asset selection을 바꾸고 graphObject/index를 함께 clear한다.
++    slot/workspace와 ProjectObject는 유지한다. 별도 CLEAR_GRAPH_OBJECT 선행 전이는 만들지 않는다.
++    거부되면 none이고 selection을 성공으로 반환하지 않는다. 성공하면 공식 query의 detached CSV를 반환한다.
++    query/adapter throw는 전파한다. projection 전체를 command candidate로 전달하거나 장기 저장하지 않는다.
++    """
++    resolved = dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": path})
++    target = "resolved의 detached CSV target; missing/wrong-kind면 event 전에 즉시 none 반환"
++    finalState = dispatchInterfaceEvent("SELECT_ASSET", {"kind": "csv", "path": "target의 canonical path"})
++    return "finalState가 요청 CSV selection이면 공식 query의 detached CSV, 아니면 none"
++
++
++def createEmptyProjectCsvAndSelect():
++    """
++    assets.createEmptyCsv의 public create-and-select operation.
++    1. createEmptyProjectCsv의 일반 create command를 정확히 한 번 실행한다.
++    2. 미commit 결과면 그대로 반환하며 SELECT_ASSET/성공 read를 하지 않는다. throw는 전파한다.
++    3. committed CSV의 scalar canonical path로 selectProjectCsv를 호출한다. graph object/chart 생성 없음.
++    4. 성공 시 선택된 detached CSV를 반환한다. selection 거부는 none, query/adapter throw는 전파한다.
++       create는 이미 commit되었으므로 사후 selection/read 실패를 미commit으로 위장하거나 asset을 rollback하지 않는다.
++    """
++    csv = createEmptyProjectCsv()
++    return "미commit이면 원래 failure; committed CSV이면 selectProjectCsv(csv canonical path) 결과"
++
++
+ def importProjectFilesToDirectory(files, directory, planImport):
+     """
+     변경:
+     - 전체 candidate가 검증된 뒤 CSV/image collection과 관련 reference를 한 번 commit한다.
+ 
+     처리:
+-    1. Application은 pure file-byte read/parse와 기존 collision query/UI choice 수집을 수행할 수 있다.
++    1. Application은 pure file-byte read/parse와 readAssetFileKind/readAssetCollisionModel/readAssetImportPlan의 공식 query 및 UI choice 수집을 수행할 수 있다.
+        planImport의 UI-local resolver를 완료하여 이번 batch의 명시적 choices를 얻는다. 취소면 command 없이 취소 결과를 반환한다.
+        path/id를 포함한 candidate project를 만들거나 Backend에 resolver callback을 넘기지 않는다.
+     2. ASSETS_IMPORTED에 copied file inputs, explicit directory와 choices만 전달한다.
+diff --git a/sourcescript/backend/assets_files.py b/sourcescript/backend/assets_files.py
+index 9e96e45..19bd79d 100644
+--- a/sourcescript/backend/assets_files.py
++++ b/sourcescript/backend/assets_files.py
+@@ -177,6 +177,17 @@ def projectAssetPath(asset):
+     return path
+ 
+ 
++def slotFileKind(file):
++    """
++    순수 filename/MIME 분류. name/type 누락은 empty text로, 비교는 case-insensitive로 처리한다.
++    우선순위: .ffsx -> "slot"; .csv/.tsv/.json -> "data";
++    image/ MIME 또는 .png/.jpg/.jpeg/.gif/.webp/.bmp/.svg -> "image"; 나머지는 "".
++    bytes parse/다운로드/ProjectObject/Frontend 변경은 없다. .json은 여기서 data로 분류하며,
++    명시적 graphs.importFile의 Plotly parser나 project.importFile의 FFPX 판정을 대신하지 않는다.
++    """
++    return "filename/MIME의 위 우선순위에 따른 kind 문자열"
++
++
+ def projectAssetImportCollisionModel(file, directory, reservedPaths):
+     """
+     Return:
+@@ -187,7 +198,8 @@ def projectAssetImportCollisionModel(file, directory, reservedPaths):
+     - project state를 변경하지 않는다.
+ 
+     처리:
+-    1. file 종류를 data/image로 판별한다.
++    1. slotFileKind(file)로 판별하고 raw asset import 대상인 data/image만 허용한다.
++       slot/unsupported 분류는 이 asset collision 계산에서 오류이며 state를 변경하지 않는다.
+     2. target directory와 file name으로 candidate path를 계산한다.
+     3. projectVfs 및 현재 batch reservedPaths와 collision을 검사한다.
+     4. 같은 asset kind의 existing asset이면 replace-or-rename을 허용한다.
+@@ -207,11 +219,18 @@ def resolveProjectAssetImportPlan(model, choice, reservedPaths):
+     - 없음.
+ 
+     처리:
+-    available이면 candidate path를 그대로 사용한다.
+-    replace 선택이 허용된 같은-kind asset이면 기존 id를 유지한다.
+-    그 외에는 projectVfs.uniquePath로 새 이름을 계산한다.
+-    """
+-    plan = assetImportPlan
++    model은 이번 작업의 UI 제안이며 authority가 아니다. kind/parent/name/path/mode/replaceId 형식을 검증한다.
++    current VFS에서 parent/name/assetKind와 reservedPaths로 projectAssetImportCollisionModel과 같은 충돌 규칙을 다시 계산한다.
++    먼저 choice=replace이고 제안 replaceId가 있으면 current same-kind 충돌/id가 정확히 일치하는지 검사한다.
++    대기 중 대상 삭제/교체/종류 변경이면 available 분기보다 먼저 오류로 거부하며 choice를 다른 asset/새 create로 옮기지 않는다.
++    current available이고 위 stale replace가 아니면 canonical path와 replaceId none을 반환한다.
++    choice=replace이며 current same-kind 충돌이 replace를 허용하고 제안 id가 일치하면 기존 id를 유지한다.
++    그 외에는 current VFS와 reservedPaths에 대해 projectVfs.uniquePath로 rename plan을 계산한다.
++    malformed model/invalid parent는 query 오류다. 입력 model/reservedPaths와 Project/Frontend는 변경하지 않는다.
++    plan은 한 작업용 detached path/replaceId이고 ASSETS_IMPORTED command는 commit 전에 다시 current authority에서 검증한다.
++    UI 취소/선택 대기 자체는 Application 책임이며 이 helper가 callback/modal/task를 실행하지 않는다.
++    """
++    plan = "current VFS에서 재계산한 detached path/replaceId"
+     return plan
+ 
+ 
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index 403cba2..8c57864 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -326,7 +326,13 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
+     "assets.moveOptions": "current directories와 기존 move eligibility 규칙에서 계산한 destination 후보 copy",
+     "assets.planMove": "explicit source/destination을 current VFS에서 resolve한 collision/reference-count plan copy; commit 때 반드시 재검증",
+     "assets.resolveTreeSelection": "path를 resolve한 accepted/kind/canonical path scalar input; invalid면 accepted=False",
+-    "assets.collisionModel": "current VFS와 이번 import의 reserved paths로 계산한 collision model; 다른 작업의 권위로 보존하지 않음",
++    "assets.fileKind": "request.file의 copied name/type -> assets_files.slotFileKind의 kind 문자열; ProjectObject/Frontend read 불필요; bytes는 읽지 않음",
++    "assets.collisionModel": "request.file/directory/reservedPaths -> assets_files.projectAssetImportCollisionModel; current VFS의 detached collision model; 다른 작업의 권위로 보존하지 않음",
++    "assets.resolveImportPlan": (
++        "request.model/choice/reservedPaths -> assets_files.resolveProjectAssetImportPlan; model은 identity/choice 제안일 뿐이다. "
++        "같은 current VFS의 충돌/replace target을 재검증한 detached path/replaceId; invalid/stale replace는 오류, input/Project/Frontend 변경 없음. "
++        "이 query 성공은 예약/commit이 아니며 ASSETS_IMPORTED는 current authority를 다시 검증한다"
++    ),
+ }
+ 
+ RENDERER_BACKEND_READ_CONTRACT = {
+@@ -372,6 +378,8 @@ def readBackendProjection(kind, request):
+     5. compatibility/default normalization은 detached copy에서만 수행한다. 중첩 array/object까지 read-only로 반환하고
+        Backend 내부 mutable reference, event handler, DOM node, query/command callback은 projection에 포함하지 않는다.
+     """
++    from sourcescript.backend import assets_files
++    # asset pure query는 위 등록 contract와 assets_files domain 계산을 사용한다. 별도 공개 계산 store를 만들지 않는다.
+     projection = "current Backend authority에서 계산한 immutable read projection"
+     return projection
+ 
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index 3c8c868..b0d4c94 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -188,7 +188,8 @@ UNRESOLVED_REVIEW_ITEMS = [
+     ),
+     (
+         "Plan 017 D: 전체 public operation의 정적 trace에서 공개 반환 shape, runtime composition, "
+-        "일부 pure calculation의 공식 query 연결과 router/export 완료 규칙에 미정 의미가 남았다. "
++        "asset fileKind/resolveImportPlan의 공식 query와 createEmptyCsv의 create-and-select는 연결했다. "
++        "다른 runtime operation과 router/export 완료 규칙에는 미정 의미가 남았다. "
+         "기존 operation의 계약과 공통 adapter를 보완해야 하며 내부 command triple을 public 값으로 자동 간주하지 않는다. "
+         "정적 대조표 작성이나 개별 wrapper 수정만으로 전체 closure 근거를 삼지 않는다."
+     ),
