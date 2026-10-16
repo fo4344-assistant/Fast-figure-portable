@@ -122,6 +122,18 @@ PROJECT_MUTATION_CONTRACT = [
     "DOM/Plotly/Mantine projection을 수행하지 않는다.",
 ]
 
+GRAPH_OBJECT_EDIT_INPUT_CONTRACT = {
+    "one-object": (
+        "GRAPH_OBJECTS_REPLACED accepts explicit chartId/index/values/selectedIndexHint for graphEditorSetObjectValues. "
+        "Backend resolves current chart/objects/CSV and computes the candidate using graphs.py; new values are not a complete object-array authority."
+    ),
+    "objects": (
+        "Existing add/move/delete/palette operations keep their declared intent and Backend candidate calculation. "
+        "A Backend-internal graphEditorCommit may pass computed candidate objects; a Frontend read projection is not an alternative mutation source."
+    ),
+    "selection": "selectedIndexHint is an index-only runtime hint, not an instruction to replace current selected CSV from object.csvId.",
+}
+
 ProjectMutationResult = {
     "event": "처리한 project command",
     "committed": "commit 성공 여부",
