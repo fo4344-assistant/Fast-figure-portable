@@ -67,5 +67,5 @@ R1~R3은 기존 문장의 불일치를 해소했다. R4는 이전에 빠져 있�
 - Source r35 current/open, closure_review null. fingerprint `sha256:6b1b16ef3e2a0e5725c9fa7b7191bda06265b96cc1844d7a94a130d4d3c97ef9`.
 - 이 단위의 R1~R4에는 생성/소비 owner와 반례의 처리 의미를 명시했다. 전체 selection/import-edit-export 왕복, 목적 적합성/중복통합의 최종 닫힘 검토가 완료되었다고 주장하지 않는다.
 - PlusCal r11/model r26/source-code r36은 stale 그대로다. 추후 Source closure 후 같은 경로/선택 hint/cascade delta를 PlusCal부터 번역하고 code로 전파해야 한다. 하위 layer의 lineage를 새 Source에 맞춘 것처럼 기록하지 않는다.
-- 정책/하위 코드/test/build/dist 변경 없음. metadata version checker는 GitHub Actions에서 cumulative baseline으로 확인할 예정이며 실제 결과는 실행 후 진행/패치 설명에 기록한다.
+- 정책/하위 코드/test/build/dist 변경 없음. GitHub Actions cumulative version checker [38862733364](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/38862733364) PASS. executed HEAD `97e39fd54a03c6610e49f7c246047936834df3c5`, BASE_SHA `9d3a5b970223805f410d9e92425269cf1872992f`와 r35 fingerprint를 로그에서 확인했다. 의미적 검토/실행 테스트의 대체 증거는 아니다. 본 결과 기록은 run 이후 commit이다.
 - 기록은 Contents API 순차 commit이다. 최종 actual cumulative diff와 같은-commit 산출물 제한은 `agent_space/patches/20261016-019.patch/.md`에 남긴다.
