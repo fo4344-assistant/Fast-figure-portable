@@ -1,0 +1,125 @@
+diff --git a/agent_space/plans/plan-016.md b/agent_space/plans/plan-016.md
+index 4f4e874..662f74c 100644
+--- a/agent_space/plans/plan-016.md
++++ b/agent_space/plans/plan-016.md
+@@ -1270,7 +1270,7 @@ Application boundary를 세 번째 authoritative FSM으로 만들지 않는다.
+ 
+ ## 32. 2026-10-16 구현 진행 — selection/reconciliation ownership
+ 
+-- Source Code r32 (WIP): Backend validated selection / post-commit reconciliation query provider와 Application adapter를 구현한다. Frontend FSM의 live ProjectObject context, workspace chart normalization, persistent command action 연결을 제거한다.
+-- invalid reference는 Frontend state를 보존하고 explicit null만 deselection한다. graph selection은 live graph mutation 없이 CSV reference를 함께 선택한다.
++- Source Code r32/r33 (WIP): Backend validated selection / post-commit reconciliation query provider와 Application adapter를 구현한다. Frontend FSM의 live ProjectObject context, workspace chart normalization, persistent command action 연결을 제거한다.
++- invalid reference는 Frontend state를 보존하고 explicit null만 deselection한다. explicit public graph selection은 live graph mutation 없이 CSV reference를 함께 선택한다. object commit index 갱신은 기존 current CSV 선택을 보존한다.
+ - 회귀 항목 37/38과 기존 전체 split/portable browser regression, version checker, distribution build는 사용자 요청에 따라 GitHub Actions에서 실행한다. 결과는 `agent_space/reviews/review-20261016-001-selection-boundary.md`에 기록한다.
+ - 전체 완료 아님: renderer와 남은 API/domain consumer의 direct access cutover, read projection 완성, 최종 통합 검증이 남는다. Source Code `stale` 유지. TLC 미실행.
+diff --git a/agent_space/reviews/review-20261016-001-selection-boundary.md b/agent_space/reviews/review-20261016-001-selection-boundary.md
+deleted file mode 100644
+index 6f94319..0000000
+--- a/agent_space/reviews/review-20261016-001-selection-boundary.md
++++ /dev/null
+@@ -1,24 +0,0 @@
+-# Plan 016 — selection/reconciliation boundary (Source Code r32, WIP)
+-
+-## 대상과 추적
+-
+-- 기준 main: `2ce0c59d4aaf90e753478899d4ea18998e1e19fd`.
+-- Source Script r25 / PlusCal r11의 `project_state` Backend query providers, `interface_fsm` validated selection / reconciliation, `application_fsm` dispatch 순서를 구현한다.
+-- Frontend FSM은 ProjectObject registry를 받지 않으며 context에 live Backend object를 전달하지 않는다. workspace의 chart activation/normalization hook과 persistent command action table 연결을 제거한다.
+-- Application adapter가 current Backend authority에서 선택 reference를 검증한 뒤 accepted input만 전달한다. invalid slot/path/index는 기존 Frontend state를 유지하고 explicit null은 deselection이다.
+-- Backend query provider가 commit result와 current Frontend reference를 resolve한 immutable scalar reconciliation input을 만든다. Frontend FSM은 이를 적용할 뿐 domain lookup/normalization을 수행하지 않는다.
+-- graph public selection도 live graph normalization 없이 검증 후 graph index와 CSV path를 함께 선택한다.
+-- commit 실패는 success reconciliation을 발생시키지 않는다. unrelated command는 유효 reference를 유지하고 asset move/trash는 실제 결과와 current authority로 path를 갱신/clear한다.
+-
+-## 검증
+-
+-- browser regression 37: graph selection read-only/identity 보존, invalid slot/path/kind/index 무변경, public invalid graph selection, immutable validated input, asset 선택 시 graph clear, explicit slot deselection.
+-- browser regression 38: unrelated commit의 reference 보존, 실패 command의 authority/Frontend 무변경, move/trash reconciliation, immutable reconciliation input.
+-- 검증 실행은 사용자 요청에 따라 GitHub Actions만 사용한다. 로컬 application/test/build/version checker 실행은 하지 않는다.
+-- Actions 실행 결과: pending. 실제 run/commit/result 확인 후 갱신한다.
+-
+-## 한계와 다음 ownership 단위
+-
+-- Plan 016 전체 완료가 아니다. renderer와 남은 API/domain consumer의 direct Backend access cutover, public read projection 완성 및 전체 회귀 감사가 남는다.
+-- source-code status는 `stale`로 유지한다. r32는 r25/r11의 이 ownership 단위 구현이며 전체 Source Code가 최신 경계를 구현했다는 뜻이 아니다.
+-- Source Script/PlusCal/verification 의미는 변경하지 않는다. TLC는 실행하지 않으며 기존 pending 기록을 유지한다.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 185ef13..c046f5c 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1112,7 +1112,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+ 
+     await run(37, "selection validation is read-only and rejected references preserve Frontend state", async () => {
+       const target = activeProject.slots.find((slot) => !slot.hidden);
+-      select(target);
++      api.slots.reset(target.id);
++      select(slotAt(target.id));
+       api.slots.setContentType("graph");
+       const resource = createProjectCsv([["X", "Y"], ["1", "2"]], "boundary-selection.csv");
+       api.graphs.addObject(resource.id);
+@@ -1169,8 +1170,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       check(failed && appFSM.state === beforeFailure &&
+         JSON.stringify(activeProject._state) === beforeAuthority,
+         "failed Backend command reconciled success or changed authority");
+-      api.assets.createDirectory("/assets/data", "boundary-reconcile");
+-      const destination = "/assets/data/boundary-reconcile";
++      api.assets.createDirectory("/assets/csv", "boundary-reconcile");
++      const destination = "/assets/csv/boundary-reconcile";
+       api.assets.move(api.assets.planMove(original, destination));
+       check(appFSM.state.assetPath === `${destination}/boundary-reconcile.csv`,
+         "asset move did not reconcile selected path");
+diff --git a/development-versions.json b/development-versions.json
+index 4b10b7c..9671f59 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 32, 
++      "revision": 33, 
+       "status": "stale", 
+       "paths": [
+         "Fast-figure.html", 
+@@ -38,7 +38,7 @@
+         "fast-figure.js", 
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:0036ffa5de009262bef6d2820f7baa20030fbe465aedf02aa3bd9920fc714ac2", 
++      "fingerprint": "sha256:ed3ac75dcef9674fee1426aa8a263fb568050b89103f87fec374f800e3821fdd", 
+       "derived_from": {
+         "source-script": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f", 
+         "pseudocode": "sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5", 
+diff --git a/fast-figure.js b/fast-figure.js
+index 71272c6..7e49b4f 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -444,7 +444,7 @@
+             if (!object || !csv) input.accepted = false;
+             else {
+               input.reference = payload.index;
+-              input.selectionHint = projectAssetPath(csv);
++              input.selectionHint = payload.selectAsset === true ? projectAssetPath(csv) : null;
+             }
+           }
+         } else input.accepted = false;
+@@ -741,7 +741,7 @@
+         machine.state = Object.freeze({
+           ...machine.state,
+           graphObjectIndex: index,
+-          ...(index !== null ? {
++          ...(index !== null && payload.validatedInput.selectionHint ? {
+             assetSelection: "csv", assetPath: payload.validatedInput.selectionHint,
+           } : {}),
+         });
+@@ -5812,9 +5812,9 @@
+         return csv;
+       }
+       function graphEditorSelectObject(index) {
+-        let input = validateFrontendIntent("SELECT_GRAPH_OBJECT", { index, selectedSlotId });
++        let input = validateFrontendIntent("SELECT_GRAPH_OBJECT", { index, selectedSlotId, selectAsset: true });
+         if (!input.accepted) return null;
+-        appFSM.send("SELECT_GRAPH_OBJECT", { index: input.reference, direction: "fsm-to-model" });
++        appFSM.send("SELECT_GRAPH_OBJECT", { index: input.reference, selectAsset: true, direction: "fsm-to-model" });
+         appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
+         return input.reference;
+       }
