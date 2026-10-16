@@ -152,7 +152,7 @@ GRAPH_OBJECT_EDIT_INPUT_CONTRACT = {
 ProjectMutationResult = {
     "event": "처리한 project command",
     "committed": "commit 성공 여부",
-    "changed": "command별 실제 changed ids/path/owner; create/import는 post-commit read에 필요한 생성 asset path/id와 owning chart/slot id를 포함",
+    "changed": "command별 실제 changed ids/path/owner; create/import는 input 순서의 실제 생성 asset path/id와 owning chart/slot id, DATA_OBJECT_REPLACED는 실제 updated CSV path를 포함하여 기존 공식 query로 post-commit read한다",
     "removedGraphReferenceCount": "실제 제거한 graph-object CSV reference 수",
     "resetImageSlotCount": "실제 image reference를 비운 slot 수",
     "selectionHints": "후속 interface reconciliation의 identity/path 결과와 해당 chartId에 한정된 optional selectedIndexHint; absence와 explicit none을 구별",
