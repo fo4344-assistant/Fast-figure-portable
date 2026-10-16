@@ -189,7 +189,8 @@ UNRESOLVED_REVIEW_ITEMS = [
     (
         "Plan 017 D: asset fileKind/resolveImportPlan의 공식 query와 createEmptyCsv의 create-and-select를 연결했고, "
         "caption/label/UI-palette의 성공 read·미commit False·오류 전파와 label reset/interaction-finish 반환을 구체화했다. "
-        "project/slot/asset/graph/layout의 나머지 public 반환과 selection/zoom runtime, router/export 완료에는 미정 의미가 남았다. "
+        "layout 반환/zoom lock과 drop 준비·정리, graph header/layout/palette/import 반환, ordered import router와 download handoff/lifecycle를 구체화했다. "
+        "project name/slot mutation/image insertion 및 asset delete/move/directory/trash/connect의 남은 public 반환, 전체 selection 대조와 왕복 검토는 아직 미완료다. "
         "기존 operation의 계약과 공통 adapter를 보완해야 하며 내부 command triple을 public 값으로 자동 간주하지 않는다. "
         "정적 대조표 작성이나 개별 wrapper 수정만으로 전체 closure 근거를 삼지 않는다."
     ),
