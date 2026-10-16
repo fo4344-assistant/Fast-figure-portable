@@ -68,3 +68,32 @@
 정적 경계 사례 대조: invalid selection 무변경/명시적 deselection, index 0 유지, unrelated chart hint 무시, explicit none 우선, `[A,B,C]`의 A/B cascade 제거와 duplicate object 위치 구분, model-to-fsm 같은 slot 선택의 asset 보존, direct delete의 explicit-none 대 cascade-map 차이, file wait 뒤 stale candidate 재계산, 미commit 시 성공 hint 부재, first/repeated/invalid zoom lock, lifecycle 실패 error→ready를 Source와 대조했다. 이는 실제 PlusCal translation/parser/TLC 실행 또는 전체 파일 연결 검증이 아니다.
 
 Source/metadata/활성 pseudocode/Source Code는 이번 진행에서 변경하지 않았다. 나머지 Backend registry/config/query/whole validation, asset/package, graph 계산과 각 domain branch, public API 전체, renderer/UI 및 imported operation 연결을 이어가야 한다. 모든 작업본의 전체 충실도 검토가 끝날 때만 활성 경로로 cutover한다.
+
+## 7. 후속 진행 — 전체 목표 경로로 번역 작업 확대
+
+사용자의 가능한 한 충실한 최대 진행 요청에 따라 기준 HEAD `e9c1a795aa7cf9fafc919bf484ca5c47be138408`의 Source r37을 직접 읽고 아래 작업본을 확장했다. **전체 목표 15개 경로에 작업본이 존재한다는 뜻이지, 전체 번역이 끝났다는 뜻은 아니다.** 현재 일시 작업본은 총 4,582행이며 branch 밖 `.work/plan022/pseudocode/`에만 있다. 이번 branch patch는 이 진행 기록만 포함하고 작업본을 포함하지 않는다.
+
+| 작업본 경로(§3 임시 루트 기준) | 이번 전개 내용 |
+|---|---|
+| backend/assets_files.pcal | 21개 Source 함수의 VFS canonical path/이동 계획/충돌 choice 재검증, 파일 분류, asset candidate, FFPX/FFSX byte inventory·typed XML/CSV·package remap, reference 수집 절차와 private 계산 전개 |
+| backend/graphs.pcal | 15개 Source 함수의 table/header/column, object candidate, paired numeric/divide/log/reciprocal, trace/axis placeholder, layout/extension 병합, 정규화/검증, Plotly import와 editable 전환 전개 |
+| backend/project_state.pcal | intent/reconciliation 외 registry/current read/snapshot, config 기반 create, slot 정규화, whole validation과 query kind/operation dispatch 추가. call-local query 조립 helper의 세부 연결은 남음 |
+| backend/project_efsm.pcal | graph object 편집을 graph-domain 계산과 연결하고 load/import/graph/slot/grid/annotation/palette/export의 명시 branch 추가. 일반 미완성 호출 하나로 전체 command를 완료했다고 취급하지 않음 |
+| application/public_api/contract.pcal | Source의 87개 공개 operation과 namespace/route/lifecycle 계약 연결. Source Python author notation의 조건부 의미를 절차로 옮기며 공통 성공 envelope를 새로 만들지 않음 |
+| application/public_api/assets.pcal | 20개 Source 함수. current CSV 선택/create-and-select, collision 선택 수집, 명시 directory batch와 input-order router의 서로 다른 atomic/부분 완료, 생성·삭제·이동·연결·download의 기존 반환 의미 |
+| application/public_api/graphs.pcal | 10개 Source wrapper. add routing, arbitrary move/delete·no-op, header/layout/palette/import의 committed-gated fresh read와 graph export |
+| application/public_api/layout_annotations.pcal | 35개 Source 함수. runtime slot/drop/zoom와 persistent slot/grid/style/image/label/caption/palette/print를 구별하고 성공·미commit·사후 실패 출력을 전개 |
+| frontend/renderer.pcal | 20개 Source 함수와 private event/resource 계산. supplied projection 전용, generation/identity 기반 plot·image lifetime, drop/click 구분, reference-width export·caption measurement·raster 제한·download finally |
+| frontend/mantine_ui.pcal | 8개 Source component의 UI-local draft, overlay/selection/drag cleanup, keyboard/focus, supplied palette/Mantine role·contrast 계산과 public action 연결 |
+
+앞서 작성한 system, Backend annotation, Application adapter, Frontend FSM, portable build 작업본도 유지한다. identifier/subscript 대조 중 graph wrapper 수(10), graph Source 함수 수(15), `SLOTS_SWAPPED`의 `sourceSlotId/targetSlotId`, caption `target.kind/id`, `globalSettings.axes` 위치 및 `normalizeAxisSettings(axis,key)` 호출을 Source에 맞추어 바로잡았다. 이는 정적 파일 대조이며 PlusCal parser/TLC 실행이 아니다.
+
+### 남은 충실도 대조와 cutover 조건
+
+1. EFSM의 asset create/replace/delete·trash/move/directory, image link/import, merge/split/style candidate 및 actual result/cascade 연결을 빠짐없이 전개한다. 현재 `PendingSourceDomainCandidate`는 **미번역 표시**이며 최종 pseudo의 새 모듈/engine으로 유지하지 않는다.
+2. query 조립, candidate/context 전달, Source import별 동명 함수, helper 인자·반환·exception/await 연결을 전체 15개 파일 사이에서 대조한다. `ProjectObject` class method의 기계적 명명 변환은 독립 authority를 만들지 않는다. 설정은 기존 Backend config 참조로만 연결한다.
+3. private helper가 Source의 고수준 branch/계산을 호출명으로 가리지 않았는지 확인하고 필요한 부분을 계속 전개한다. 모든 primitive가 아직 확정/검증되었다고 주장하지 않는다.
+4. public 87개 operation을 Source 함수→실제 Backend command/query 또는 Frontend event→반환 소비자까지 다시 대조하고, exception/미commit/취소/부분 완료/commit 후 failure를 구별한다.
+5. 그 뒤에만 활성 hierarchy 전체 교체와 flat 파일 삭제, 새 pseudocode revision/fingerprint/lineage/review 및 Actions cumulative checker를 수행한다. 지금은 Source r37 closed, 활성 pseudocode r11 stale과 하위 stale을 그대로 유지한다.
+
+로컬 Source/application/PlusCal/parser/checker/test/build/TLC를 실행하지 않았고 delegation도 하지 않았다. 이번 branch 변경은 문서뿐이므로 새 Actions를 dispatch하지 않는다. 임시 작업본은 다른 계층의 authority가 아니며 후속 전체 활성화 시 이동·정리한다.
