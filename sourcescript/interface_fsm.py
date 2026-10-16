@@ -114,6 +114,8 @@ class InterfaceStateMachine:
         """
         Project EFSM commit 성공 뒤 Application boundary가 계산한 FrontendReconciliationInput을 받는다.
         valid reference는 유지하고 moved reference는 supplied identity/path result로 갱신하며 invalid reference만 clear한다.
+        graphObject에는 Backend가 current chart와 post-edit index hint를 함께 검증한 최종 scalar만 적용한다.
+        별도 selectedIndexHint 저장/사후 SELECT_GRAPH_OBJECT 전이를 만들지 않으며 asset selection은 supplied assetKind/path만 따른다.
         workspace는 reconciled selectedSlotId와 supplied workspaceHint에서 다시 파생한다.
         Backend를 재조회하거나 project mutation을 다시 호출하지 않고 final Frontend state를 publish한다.
         """
