@@ -18,8 +18,8 @@ PACKAGE_FORMAT_VERSION = "현재 FFPX/FFSX package format version 3"
 
 
 PROJECT_ASSET_DIRECTORIES = {
-    "csv": "CSV 기본 directory; 현재 구현 path /assets/csv",
-    "image": "image 기본 directory; 현재 구현 path /assets/images",
+    "csv": "/assets/csv",
+    "image": "/assets/images",
 }
 
 
@@ -456,6 +456,9 @@ def collectAssetReferences(csvIds, imageIds, state):
     같은 chart 안에서 같은 실제 CSV를 여러 graph object가 참조하면 각각 별도 reference로 센다.
     image는 참조하는 slot마다 하나의 reference로 센다.
     confirmation count와 실제 cascade mutation이 같은 reference set을 사용한다.
+    CSV delete/trash 진입/empty-trash의 candidate filter는 제거 전 chart별 original object index를 구별한다.
+    실제 제거 위치는 projectEFSM의 공통 cascade index-map 계산에 사용하며 값이 같은 object를 equality로 재매칭하지 않는다.
+    conversion view는 위 reference 판정에 따라 제외하고, Frontend 선택이나 별도 persistent object id를 읽거나 만들지 않는다.
     """
     references = "asset reference object 목록"
     return references
