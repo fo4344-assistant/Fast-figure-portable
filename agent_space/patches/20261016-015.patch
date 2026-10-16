@@ -1,0 +1,402 @@
+diff --git a/agent_space/plans/plan-017.md b/agent_space/plans/plan-017.md
+index 25b583e..69a32e5 100644
+--- a/agent_space/plans/plan-017.md
++++ b/agent_space/plans/plan-017.md
+@@ -165,3 +165,11 @@
+ - 근거/정적 시나리오/반환·실패 경로: `agent_space/reviews/review-20261016-010-api-assets-r31-open.md`. r30 전체 trace는 역사적 발견 기록으로 보존한다.
+ - 다른 mutation public 반환, runtime selection/zoom 완료 및 router/export completion과 전체 closure 근거는 남아 있다. source r31 current/open, closure_review null, 하위 stale을 유지한다. 정책·PlusCal/model/JS/test/build/dist 변경이나 로컬 실행은 없다.
+ - 실제 누적 patch와 Actions 검사: `agent_space/patches/20261016-014.patch` 및 같은 basename `.md`.
++
++## 14. API 보완 — r32 annotation / UI-palette 반환 / OPEN
++
++- 기준 main `8e4f5242ea6c11ca51ea497d59b076ddc688fcc6`. F1의 captions/labels/appearance 14개 operation을 기존 Application command/query 경로에 연결했다. command 13개는 committed 뒤 그 owner의 fresh read를 반환하며 미commit False/throw 전파를 명시한다. 다른 API 실패 계약을 bool로 획일화하지 않는다.
++- label public read는 Frontend selectedSlotId scalar와 current Backend geometry를 합성한다. reset은 기존 position command를 재사용하고 finish는 두 번째 commit 없이 현재 label read를 반환한다. palette reset은 기존 유일한 default를 같은 set path에 전달한다.
++- 근거/성공·거부·사후 실패 시나리오: `agent_space/reviews/review-20261016-011-api-settings-r32-open.md`. 내부 tuple을 공개 read로 간주하거나 projection을 mutation 원천으로 사용하지 않는다.
++- project/slot/asset/graph/layout의 남은 반환, 다른 selection/drop/zoom runtime과 router/export completion 및 전체 closure 검토는 계속 남아 있다. source r32 current/open, closure_review null, 하위 stale을 유지한다.
++- 정책·PlusCal/model/JS/test/build/dist는 변경하지 않고 로컬 실행도 하지 않는다. 실제 누적 patch/Actions 검사: `agent_space/patches/20261016-015.patch` 및 같은 basename `.md`.
+diff --git a/agent_space/reviews/review-20261016-011-api-settings-r32-open.md b/agent_space/reviews/review-20261016-011-api-settings-r32-open.md
+new file mode 100644
+index 0000000..55edc53
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-011-api-settings-r32-open.md
+@@ -0,0 +1,51 @@
++# Annotation / UI-palette public results — Source Script r32 / OPEN
++
++## 범위와 근거
++
++- 사용자 지시에 따라 공개 반환 보완(F1)을 계속한다. 기준 main `8e4f5242ea6c11ca51ea497d59b076ddc688fcc6`.
++- 권위는 Source Script다. 하위 JS의 caption/label/appearance wrapper와 UI 소비자를 정적으로 대조했다. annotation UI는 주로 변경 알림 후 다시 읽고, appearance reset UI는 반환 palette를 새 draft로 복사한다. bool/내부 triple로 성공을 획일화하면 이 사용을 보존하지 못한다.
++- 기존 `dispatchProjectCommand`의 committed 검사 및 성공 후 공식 query 규칙을 재사용한다. 새 API/envelope/framework나 persistent/runtime authority는 추가하지 않는다.
++- 변경 owner: `sourcescript/application/public_api/{__init__,layout_annotations}.py`, `sourcescript/backend/layout_annotations.py`, `sourcescript/system.py`.
++
++## 공개 반환 trace
++
++| API | command / 완료 | 성공 반환 |
++|---|---|---|
++| captions.setEnabled | CAPTION_SETTINGS_CHANGED | captions.readGlobal |
++| captions.setGlobalText | CAPTION_TEXT_INPUT(global) | captions.readGlobal |
++| captions.setSlotText | CAPTION_TEXT_INPUT(explicit slotId) | 그 slotId의 captions.readSlot |
++| captions.insertSlotCaptions | SLOT_CAPTIONS_INSERTED | captions.readGlobal |
++| captions.setName | CAPTION_SETTINGS_CHANGED | captions.readGlobal |
++| captions.setNameBold | CAPTION_SETTINGS_CHANGED | captions.readGlobal |
++| captions.setSettings | CAPTION_SETTINGS_CHANGED | captions.readGlobal |
++| labels.setEnabled | LABEL_SETTINGS_CHANGED | public labels.readState |
++| labels.setSettings | LABEL_SETTINGS_CHANGED | public labels.readState |
++| labels.setPosition | LABEL_POSITION_CHANGED | public labels.readState |
++| labels.resetPosition | 같은 setPosition(0, 0) | public labels.readState |
++| labels.finishPositionInteraction | 기존 완료 알림, command 없음 | public labels.readState |
++| appearance.setPalette | APPEARANCE_CHANGED | appearance.readPalette |
++| appearance.resetPalette | 같은 setPalette(DEFAULT_UI_PALETTE copy) | appearance.readPalette |
++
++- command operation 13개는 미commit/명시적 취소면 False, 성공 read/선택/completion notification 없음이다. validation throw/rejection은 False로 삼키지 않고 전파한다. 새 cancel dialog는 없다. 이 미commit 규칙을 graph/asset/lifecycle의 다른 실패 계약에 일괄 적용하지 않는다.
++- public label read는 Application이 현재 Frontend selectedSlotId만 scalar로 Backend query에 전달한다. Backend는 current layout/referenceWidth와 slot span을 계산한다. none/missing slot은 기본 1x1 cell 크기이며 fake slot 생성/selection 변경은 없다. label sampleText는 현재 format/parentheses의 index 0 예시다.
++- label reset은 x/y origin을 같은 command에 전달한다. finish는 저장의 두 번째 commit이나 preview mirror가 아니며 현재 read 값을 반환한다.
++- palette reset은 project-state의 유일한 default를 import해 사용한다. set은 r30 전체 palette 규칙(누락/invalid field는 default)을 사용하며 current palette partial merge로 바꾸지 않는다.
++- 반환 projection은 immutable/detached이고 mutation 원천이나 장기 read store가 아니다. command 성공 뒤 read/render/notification failure는 caller에 전파한다. 이미 commit한 state를 숨은 rollback하거나 오래된 성공 read로 위장하지 않는다.
++- Application result/reconciliation/renderer 경계는 기존 공통 adapter 의미를 사용한다. 공개 반환을 renderer input 전달의 대용으로 삼지 않는다. 이 단위는 renderer 하위 구현의 실행/완료 증명이 아니다.
++
++## 정적 시나리오 — 실행 시험 아님
++
++1. global text/name/enabled/settings 변경은 global read, slot text 변경은 explicit slot read다. 다른 owner를 반환하거나 selected slot으로 다시 바인딩하지 않는다.
++2. command가 거부되면 fresh 성공 query가 없고 Project/Frontend는 공통 command failure 규칙으로 보존된다. throw는 원래 실패로 전파한다.
++3. commit 뒤 read 오류는 성공 전 값이나 False로 위장하지 않는다. 이미 commit한 변경은 남는다.
++4. merged slot 선택의 label reference는 span 크기이고, none/missing selection은 1x1 reference다. position/settings read가 선택을 만들거나 변경하지 않는다.
++5. position 연속 edit는 같은 persistent x/y를 변경한다. finish에는 command가 없고 reset에는 같은 position command 한 번만 있다.
++6. appearance reset은 fresh default palette를 반환하므로 UI가 draft copy를 만들 수 있다. 이후 draft 편집은 Project를 변경하지 않으며 적용 때 새 값만 command에 전달한다.
++7. 기존 public inventory 87개와 logical hierarchy를 유지한다. 14개 operation의 이 반환 연결을 전체 API 계약 완료로 확장하지 않는다.
++
++## 남은 보완 / 닫힘
++
++- F1: project/slot/image creation/asset/graph/layout 등 나머지 미완결 반환. image/print 설정처럼 이미 read/False가 선언된 operation을 중복 재설계하지 않는다.
++- F2: 다른 selection/drop/zoom runtime과 알림 완료, F4: import router/batch/export completion, 전체 import/edit/export 왕복·purpose·duplicate-integration 검토가 남아 있다.
++- Source r32 current/open, closure_review null. PlusCal/model/code는 stale을 유지하고 하위 파일/lineage는 변경하지 않는다.
++- 로컬 Source Script/app/checker/test/build/TLC를 실행하지 않았다. metadata Actions의 성공은 API 실행/semantic closure 증명이 아니다. 실제 누적 diff/검사는 `agent_space/patches/20261016-015.patch` 및 같은 basename 설명에 기록한다.
+diff --git a/development-versions.json b/development-versions.json
+index 42b6717..50c15db 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 31,
++      "revision": 32,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py", 
+-      "fingerprint": "sha256:d2519623076e8dda860186f3532cc6dd45780e46bef6ec49cdea153dbd85254f",
++      "fingerprint": "sha256:843ab1d947d03712586f7bbc319963354cefd1ec8b40da355eeb95b6972a2756",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/sourcescript/application/public_api/__init__.py b/sourcescript/application/public_api/__init__.py
+index c78877a..ad6f6d8 100644
+--- a/sourcescript/application/public_api/__init__.py
++++ b/sourcescript/application/public_api/__init__.py
+@@ -111,26 +111,26 @@ PUBLIC_API_METHODS = {
+     "captions": {
+         "readGlobal": "read; project-level global caption projection",
+         "readSlot": "read; explicit slot id의 slot.caption projection",
+-        "setEnabled": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption enabled commit",
+-        "setGlobalText": "mutation; global caption text만 commit",
+-        "setSlotText": "mutation; explicit slot id의 slot.caption만 commit",
+-        "insertSlotCaptions": "mutation; slot.caption text projection을 global caption text에 명시적으로 삽입",
+-        "setName": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption name commit",
+-        "setNameBold": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption nameBold commit",
+-        "setSettings": "mutation; CAPTION_SETTINGS_CHANGED project command로 global/shared caption presentation settings candidate commit",
++        "setEnabled": "layout_annotations.setCaptionsApiEnabled; CAPTION_SETTINGS_CHANGED -> ANNOTATION_APPEARANCE_RESULT_RULE의 fresh global caption/False",
++        "setGlobalText": "layout_annotations.setGlobalCaptionText; global text만 commit -> fresh global caption/False",
++        "setSlotText": "layout_annotations.setSlotCaptionText; explicit slot text만 commit -> 그 slot의 fresh caption/False",
++        "insertSlotCaptions": "layout_annotations.insertSlotCaptionsIntoGlobalCaption; Backend에서 layout-order text를 global에 삽입 -> fresh global caption/False",
++        "setName": "layout_annotations.setCaptionsApiName; CAPTION_SETTINGS_CHANGED -> fresh global caption/False",
++        "setNameBold": "layout_annotations.setCaptionsApiNameBold; CAPTION_SETTINGS_CHANGED -> fresh global caption/False",
++        "setSettings": "layout_annotations.setCaptionsApiSettings; CAPTION_SETTINGS_CHANGED -> fresh global caption/False",
+     },
+     "labels": {
+-        "readState": "read; persistent label settings + current slot reference geometry projection",
+-        "setEnabled": "mutation; LABEL_SETTINGS_CHANGED project command로 label enabled commit",
+-        "setSettings": "mutation; LABEL_SETTINGS_CHANGED project command로 label format/order/font candidate commit",
+-        "setPosition": "mutation; LABEL_POSITION_CHANGED project command로 authoritative x/y continuous commit",
+-        "finishPositionInteraction": "runtime notification; x/y의 두 번째 commit을 만들지 않음",
+-        "resetPosition": "mutation; LABEL_POSITION_CHANGED project command로 label x/y default origin commit",
++        "readState": "layout_annotations.readLabelsApiState; Frontend selectedSlotId를 explicit Backend query에 전달 -> persistent enabled/settings + reference geometry/sampleText copy",
++        "setEnabled": "layout_annotations.setLabelsApiEnabled; LABEL_SETTINGS_CHANGED -> fresh public label state/False",
++        "setSettings": "layout_annotations.setLabelsApiSettings; LABEL_SETTINGS_CHANGED -> fresh public label state/False",
++        "setPosition": "layout_annotations.setLabelsApiPosition; LABEL_POSITION_CHANGED로 x/y 연속 commit -> fresh public label state/False",
++        "finishPositionInteraction": "layout_annotations.finishLabelsApiPositionInteraction; 완료 알림 뒤 fresh public label state, 두 번째 commit 없음; read/알림 오류 전파",
++        "resetPosition": "layout_annotations.resetLabelsApiPosition; 같은 position command로 (0, 0) -> fresh public label state/False",
+     },
+     "appearance": {
+         "readPalette": "read; persistent UI palette projection",
+-        "setPalette": "mutation; APPEARANCE_CHANGED project command로 normalized palette candidate commit",
+-        "resetPalette": "mutation; APPEARANCE_CHANGED project command로 default palette candidate commit",
++        "setPalette": "layout_annotations.setAppearanceApiPalette; APPEARANCE_CHANGED 전체 palette 정규화/commit -> fresh palette/False",
++        "resetPalette": "layout_annotations.resetAppearanceApiPalette; 유일한 default를 같은 setPalette 경로로 commit -> fresh palette/False",
+     },
+     "layout": {
+         "readState": "read; layout/style/visible slots/logical preview geometry projection",
+@@ -162,6 +162,8 @@ API_BOUNDARY_RULE = (
+     "persistent mutation은 FastFigureApi Backend-command method -> Application adapter -> Project EFSM으로, "
+     "project read는 FastFigureApi Backend-query method -> Application adapter -> Backend read provider로 전달한다. "
+     "Application 내부 결과 tuple과 public 반환값은 구분하며 sourcescript.application.adapter의 공통 결과 규칙을 따른다. "
++    "caption/label/UI-palette wrapper의 공개 반환은 layout_annotations.ANNOTATION_APPEARANCE_RESULT_RULE을 따른다. "
++    "이 operation의 미commit False를 graph/asset/lifecycle의 기존 실패 결과에 일괄 적용하지 않는다. "
+     "graph add/move/setObjectValues/delete가 선언한 chart 반환은 commit 성공 뒤 graphs.readData의 chart copy를 반환한다. "
+     "실패/취소에는 그 operation의 기존 실패 결과를 전달하고 성공 chart query를 하지 않는다. "
+     "Frontend runtime event도 Backend identity validity가 필요하면 Application adapter가 검증한 input을 interfaceFSM에 전달한다. "
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index aa1f72c..b24d234 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -6,8 +6,23 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈
+ """
+ 
+ from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery
++from sourcescript.backend.project_state import DEFAULT_UI_PALETTE
++from sourcescript.frontend.interface_fsm import interfaceFSM
+ from sourcescript.frontend.renderer import renderDashboardTarget, renderDashboardCurrent
+ 
++
++ANNOTATION_APPEARANCE_RESULT_RULE = (
++    "이 파일의 captions set/insert, labels set/reset과 appearance set/reset은 committed 확인 뒤 "
++    "그 owner의 공식 public read와 같은 detached 값을 반환한다. caption global 변경은 captions.readGlobal, "
++    "slot text 변경은 explicit slotId의 captions.readSlot, label 변경은 현재 선택 geometry를 합성한 labels.readState, "
++    "palette 변경은 appearance.readPalette다. command 내부 tuple 또는 read projection을 mutation candidate로 사용하지 않는다. "
++    "미commit/명시적 취소는 False이며 success read/selection/completion notification을 실행하지 않는다. "
++    "Backend validation이 throw하면 False로 삼키지 않고 caller에 전파한다. "
++    "이 설정 변경은 UI 선택 대기를 요구하지 않으므로 새 cancel dialog/protocol을 추가하지 않는다. "
++    "command 성공 뒤 query/render/notification 오류는 caller에 전파하며 이미 commit한 state를 숨은 rollback하거나 "
++    "오래된 read/성공 tuple로 위장하지 않는다. labels.finishPositionInteraction은 command가 아니라 현재 label read를 반환하는 완료 알림이다."
++)
++
+ def setLayoutApiStyle(values):
+     """
+     변경:
+@@ -106,6 +121,18 @@ def applyImageSettingsFromValues(slotId, values):
+     return dispatchProjectQuery("project-api", {"operation": "images.readEditor", "slotId": slotId})
+ 
+ 
++def readLabelsApiState():
++    """
++    labels.readState의 Application read composition.
++    이번 호출의 interfaceFSM.readState().selectedSlotId만 scalar로 공식 labels.readState query에 전달한다.
++    Backend는 그때의 layout/slot span으로 reference geometry를 계산한다. none/missing slot은 기본 1x1 reference다.
++    선택 identity를 별도 저장하거나 이전 renderer geometry를 재사용하지 않는다.
++    read/query 오류는 전파하고 Project/Frontend state는 변경하지 않는다.
++    """
++    slotId = interfaceFSM.readState().selectedSlotId
++    return dispatchProjectQuery("project-api", {"operation": "labels.readState", "slotId": slotId})
++
++
+ def setLabelsApiEnabled(enabled):
+     """
+     변경:
+@@ -115,8 +142,10 @@ def setLabelsApiEnabled(enabled):
+     LABEL_SETTINGS_CHANGED에 enabled candidate를 전달한다.
+     다른 label settings 값은 current authority에서 유지한다.
+     """
+-    result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"enabled": enabled})
+-    return result
++    result, interfaceState, rendererInput = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"enabled": enabled})
++    if not result.committed:
++        return False
++    return readLabelsApiState()
+ 
+ 
+ def setLabelsApiSettings(values):
+@@ -128,8 +157,10 @@ def setLabelsApiSettings(values):
+     current labelSettings에서 candidate를 만들고 허용 enum/수치 규칙을 적용한 뒤
+     LABEL_SETTINGS_CHANGED로 한 번 commit한다. x/y position은 values에 명시되지 않으면 유지한다.
+     """
+-    result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"settings": values})
+-    return result
++    result, interfaceState, rendererInput = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"settings": values})
++    if not result.committed:
++        return False
++    return readLabelsApiState()
+ 
+ 
+ def setLabelsApiPosition(x, y):
+@@ -143,8 +174,15 @@ def setLabelsApiPosition(x, y):
+     renderer는 mutation 뒤 authoritative position을 다시 읽는다.
+     별도 preview position copy를 만들지 않는다.
+     """
+-    result = dispatchProjectCommand("LABEL_POSITION_CHANGED", {"x": x, "y": y})
+-    return result
++    result, interfaceState, rendererInput = dispatchProjectCommand("LABEL_POSITION_CHANGED", {"x": x, "y": y})
++    if not result.committed:
++        return False
++    return readLabelsApiState()
++
++
++def resetLabelsApiPosition():
++    """labels.resetPosition: 기존 origin (0, 0) edit를 같은 position command에 전달하고 fresh label state/False를 반환한다."""
++    return setLabelsApiPosition(0, 0)
+ 
+ 
+ def finishLabelsApiPositionInteraction():
+@@ -155,8 +193,11 @@ def finishLabelsApiPositionInteraction():
+ 
+     처리:
+     position 저장의 두 번째 commit 단계로 사용하지 않는다.
++    Application은 기존 label-position interaction completion notification을 한 번 전달한다.
++    성공 반환은 현재 labels.readState의 detached projection이다. read/notification 오류는 caller에 전파한다.
++    Project command, rollback, position 변경 또는 별도 position mirror를 만들지 않는다.
+     """
+-    return "interaction completion 결과"
++    return readLabelsApiState()
+ 
+ 
+ def setGlobalCaptionText(text):
+@@ -169,11 +210,13 @@ def setGlobalCaptionText(text):
+     slot caption 값은 변경하지 않는다.
+     CAPTION_TEXT_INPUT에 explicit global owner를 전달해 projectEFSM으로 commit한다.
+     """
+-    result = dispatchProjectCommand(
++    result, interfaceState, rendererInput = dispatchProjectCommand(
+         "CAPTION_TEXT_INPUT",
+         {"target": {"kind": "global"}, "text": text},
+     )
+-    return result
++    if not result.committed:
++        return False
++    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
+ 
+ 
+ def setSlotCaptionText(slotId, text):
+@@ -185,11 +228,13 @@ def setSlotCaptionText(slotId, text):
+     slotId를 current project에서 resolve하고 CAPTION_TEXT_INPUT에 explicit slot owner를 전달한다.
+     UI의 selected-slot caption editor는 이 command를 호출할 뿐 별도 persistent slotMode를 만들지 않는다.
+     """
+-    result = dispatchProjectCommand(
++    result, interfaceState, rendererInput = dispatchProjectCommand(
+         "CAPTION_TEXT_INPUT",
+         {"target": {"kind": "slot", "id": slotId}, "text": text},
+     )
+-    return result
++    if not result.committed:
++        return False
++    return dispatchProjectQuery("project-api", {"operation": "captions.readSlot", "slotId": slotId})
+ 
+ 
+ def insertSlotCaptionsIntoGlobalCaption(slotIds):
+@@ -204,8 +249,10 @@ def insertSlotCaptionsIntoGlobalCaption(slotIds):
+     4. source slot.caption 값과 slot ownership은 변경하지 않는다.
+     5. wrapper는 slotIds만 전달하고 SLOT_CAPTIONS_INSERTED command가 위 resolve/insertion 계산과 commit을 수행한다.
+     """
+-    result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
+-    return result
++    result, interfaceState, rendererInput = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
++    if not result.committed:
++        return False
++    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
+ 
+ 
+ def setCaptionsApiEnabled(enabled):
+@@ -216,7 +263,10 @@ def setCaptionsApiEnabled(enabled):
+     처리:
+     CAPTION_SETTINGS_CHANGED에 enabled candidate만 전달하고 다른 caption properties는 유지한다.
+     """
+-    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"enabled": enabled})
++    result, interfaceState, rendererInput = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"enabled": enabled})
++    if not result.committed:
++        return False
++    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
+ 
+ 
+ def setCaptionsApiName(name):
+@@ -227,7 +277,10 @@ def setCaptionsApiName(name):
+     처리:
+     CAPTION_SETTINGS_CHANGED의 explicit name field로 commit한다.
+     """
+-    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"name": name})
++    result, interfaceState, rendererInput = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"name": name})
++    if not result.committed:
++        return False
++    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
+ 
+ 
+ def setCaptionsApiNameBold(nameBold):
+@@ -238,7 +291,10 @@ def setCaptionsApiNameBold(nameBold):
+     처리:
+     CAPTION_SETTINGS_CHANGED의 explicit nameBold field로 commit한다.
+     """
+-    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"nameBold": nameBold})
++    result, interfaceState, rendererInput = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"nameBold": nameBold})
++    if not result.committed:
++        return False
++    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
+ 
+ 
+ def setCaptionsApiSettings(values):
+@@ -250,7 +306,27 @@ def setCaptionsApiSettings(values):
+     fontFamily/fontSize/lineHeight candidate를 captionSettings 규칙으로 정규화하고
+     CAPTION_SETTINGS_CHANGED로 한 번 commit한다.
+     """
+-    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"settings": values})
++    result, interfaceState, rendererInput = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"settings": values})
++    if not result.committed:
++        return False
++    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
++
++
++def setAppearanceApiPalette(values):
++    """
++    appearance.setPalette: 새 edit만 APPEARANCE_CHANGED에 전달한다.
++    Backend APPEARANCE_PALETTE_RULE의 전체 palette 정규화/commit 뒤 fresh palette copy를 반환한다.
++    missing field를 current palette와 merge하지 않는다. 미commit False, throw/rejection 전파; 성공 read로 위장하지 않는다.
++    """
++    result, interfaceState, rendererInput = dispatchProjectCommand("APPEARANCE_CHANGED", {"palette": values})
++    if not result.committed:
++        return False
++    return dispatchProjectQuery("project-api", {"operation": "appearance.readPalette"})
++
++
++def resetAppearanceApiPalette():
++    """appearance.resetPalette: 유일한 DEFAULT_UI_PALETTE를 같은 command path로 적용; fresh palette/False 반환."""
++    return setAppearanceApiPalette(dict(DEFAULT_UI_PALETTE))
+ 
+ 
+ def setExportSettings(values):
+diff --git a/sourcescript/backend/layout_annotations.py b/sourcescript/backend/layout_annotations.py
+index 1f11c95..8b81d5a 100644
+--- a/sourcescript/backend/layout_annotations.py
++++ b/sourcescript/backend/layout_annotations.py
+@@ -146,6 +146,8 @@ def gridSlotGeometry(layout, geometry, slot):
+     colWidth = (width - 2*outerMargin - gap*(gridCols-1)) / gridCols
+     rowHeight = (height - 2*outerMargin - gap*(gridRows-1)) / gridRows
+     merged slot width/height는 span 내부 gap까지 포함한다.
++    label editor의 target slot이 none/missing이면 width=colWidth, height=rowHeight인 기본 1x1 reference를 사용한다.
++    이 fallback은 표시 geometry일 뿐 기본 slot을 생성하거나 Frontend selection을 변경하지 않는다.
+     """
+     slotGeometry = "layout grid에서 계산한 slot geometry"
+     return slotGeometry
+@@ -194,7 +196,11 @@ def readLabelsApiState(slotId):
+     """
+     Return:
+     - labelState:
+-      persistent label settings와 현재 선택 slot 기준 reference width/height.
++      persistent label enabled/settings copy와 현재 선택 slot 기준 reference width/height.
++    reference는 현재 layout의 referenceWidth dashboardGeometry와 gridSlotGeometry로 계산한다.
++    explicit slotId가 none/missing이면 같은 grid의 1x1 cell 크기이며 merged slot이면 해당 span 크기다.
++    sampleText는 현재 label format/parentheses로 계산한 index 0의 예시다. 선택 slot의 caption을 sample 원천으로 쓰지 않는다.
++    이 read는 label position/settings/Frontend selection을 변경하지 않는다.
+ 
+     변경:
+     - 없음.
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index b0d4c94..b86812a 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -187,9 +187,9 @@ UNRESOLVED_REVIEW_ITEMS = [
+         "purpose/duplicate-integration 검토가 끝났다고 간주하지 않는다."
+     ),
+     (
+-        "Plan 017 D: 전체 public operation의 정적 trace에서 공개 반환 shape, runtime composition, "
+-        "asset fileKind/resolveImportPlan의 공식 query와 createEmptyCsv의 create-and-select는 연결했다. "
+-        "다른 runtime operation과 router/export 완료 규칙에는 미정 의미가 남았다. "
++        "Plan 017 D: asset fileKind/resolveImportPlan의 공식 query와 createEmptyCsv의 create-and-select를 연결했고, "
++        "caption/label/UI-palette의 성공 read·미commit False·오류 전파와 label reset/interaction-finish 반환을 구체화했다. "
++        "project/slot/asset/graph/layout의 나머지 public 반환과 selection/zoom runtime, router/export 완료에는 미정 의미가 남았다. "
+         "기존 operation의 계약과 공통 adapter를 보완해야 하며 내부 command triple을 public 값으로 자동 간주하지 않는다. "
+         "정적 대조표 작성이나 개별 wrapper 수정만으로 전체 closure 근거를 삼지 않는다."
+     ),
