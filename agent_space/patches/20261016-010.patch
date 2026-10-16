@@ -1,0 +1,1079 @@
+diff --git a/.github/workflows/development-layer-version.yml b/.github/workflows/development-layer-version.yml
+index ed846bc..601e99d 100644
+--- a/.github/workflows/development-layer-version.yml
++++ b/.github/workflows/development-layer-version.yml
+@@ -18,6 +18,11 @@ on:
+       - 'agent_space/reviews/**'
+       - '.github/workflows/development-layer-version.yml'
+   workflow_dispatch:
++    inputs:
++      base_sha:
++        description: 'Optional baseline commit for cumulative revision and patch-record validation'
++        required: false
++        type: string
+ 
+ permissions:
+   contents: read
+@@ -32,7 +37,7 @@ jobs:
+           fetch-depth: 0
+       - name: Validate development layer versions
+         env:
+-          BASE_SHA: ${{ github.event.before }}
++          BASE_SHA: ${{ github.event.inputs.base_sha || github.event.before }}
+         run: |
+           if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+             python scripts/check-development-layer-versions.py --base "$BASE_SHA"
+diff --git a/agent_space/plans/plan-017.md b/agent_space/plans/plan-017.md
+index 7d6a9ec..f702598 100644
+--- a/agent_space/plans/plan-017.md
++++ b/agent_space/plans/plan-017.md
+@@ -1,17 +1,18 @@
+ # Plan 017 — Source Script r26 검토 후 공통 계약 정리
+ 
+ - 작성일: 2026-10-16
+-- 상태: planned / 명세·구현 수정 미착수
++- 상태: in_progress / Source Script r27 통합 수정, D/E 잔여 / closure open
+ - 기준 main: `bf85187f2f76552891844d0396d62a073ac3bed5`
+ - 선행 계획: `agent_space/plans/plan-016.md` §35
+ - 선행 검토: `agent_space/reviews/review-20261016-004-sourcescript-r26-open.md` 및 후속 사용자 검토 대화
+-- 현재 계층: Source Script r26 `current/open`, PlusCal r11 `stale`, verification-model r26 `stale`/TLC pending, Source Code r36 `stale`.
++- 현재 계층: Source Script r27 `current/open`, PlusCal r11 `stale`, verification-model r26 `stale`/TLC pending, Source Code r36 `stale`.
++- 실행 작업 기준 main: `7ec2c1112459020af9b321568cce3a2fcd91e5bf`; 실행 검토: `agent_space/reviews/review-20261016-005-plan017-r27-open.md`.
+ 
+ ## 1. 요구와 목적
+ 
+ 사용자는 non-editable 상태의 conversion graph object를 project CSV 참조 검증 대상에 추가하지 않도록 수정하고, 새로운 계약을 추가하기보다 기존 공통 계약으로 묶는 방향을 우선하도록 지시했다. 이 계획은 Plan 016의 분리 목적을 유지하면서 Source Script의 충돌·누락을 먼저 해소하는 후속 계획이다. 기존 구현에 맞춰 상위 의미를 소급 확정하거나 과거 변경을 일괄 rollback하지 않는다.
+ 
+-이번 문서 작성은 계획 수립만을 수행한다. 아래 명세 수정, 닫힘 판정, PlusCal 번역과 코드 구현을 이미 완료한 것으로 기록하지 않는다.
++최초 문서 작성은 계획 수립만 수행했다. 이후 사용자 실행 지시에 따른 Source Script 수정 경과는 §9에 구분해 기록한다. 전체 닫힘, PlusCal 번역과 코드 구현은 완료하지 않았다.
+ 
+ ## 2. 재확인한 정책과 적용
+ 
+@@ -98,11 +99,11 @@
+ 
+ ## 6. 산출물·계층 전파와 검증
+ 
+-1. 이번 단위: 이 plan과 실제 문서 변경의 dated patch/.md 쌍만 작성한다. Source Script/lineage metadata는 변경하지 않는다.
++1. 최초 계획 작성 단위: plan과 실제 문서 변경의 dated patch/.md 쌍만 작성했고 Source Script/lineage metadata는 변경하지 않았다. 이후 실행 단위는 §9에 기록한다.
+ 2. 후속 Source Script 수정: 변경 이유·기각 대안·미포함 범위·실제 누적 diff를 patch 쌍으로 기록하고 revision/fingerprint를 갱신한다. 닫힘은 별도 근거 review로 판단한다.
+ 3. Source Script 수정 중 PlusCal/model/code는 stale을 유지한다. 파일 내용이나 derived_from을 최신인 것처럼 맞추지 않는다.
+ 4. Source Script 닫힘 후 PlusCal 직접 번역과 충실도/구체성 검토를 수행한다. Source Code는 확인된 PlusCal 이후에 진행한다. TLC는 선택이며 미실행을 통과로 기록하지 않는다.
+-5. version checker·application/test/build 실행은 GitHub Actions에서만 한다. 이번 계획 문서 작성에서는 새 Actions run을 요청하지 않는다. 이후 실제 변경 범위에 맞는 workflow/trigger와 실행 허가를 확인하고 run ID·기준 commit·로그·한계를 기록한다.
++5. version checker·application/test/build 실행은 GitHub Actions에서만 한다. 최초 계획 작성에서는 새 Actions run을 요청하지 않았다. 실행 단위에서는 실제 범위와 기존 실행 허가에 따라 run ID·기준 commit·로그·한계를 기록한다. 누적 baseline 검사를 위해 기존 version workflow의 선택적 `base_sha` dispatch 입력을 사용한다.
+ 6. 로컬 작업은 파일 읽기/작성과 Git diff/hash/transport 등으로 제한한다. helper/temp는 현재 작업 디렉터리 아래에 둔다.
+ 
+ ## 7. 중단 조건과 제외 범위
+@@ -110,7 +111,7 @@
+ - 적용 직전 main HEAD나 대상 blob/순번이 바뀌면 최신 plan/review/metadata를 다시 읽고 중복·충돌을 확인한다.
+ - 기존 계약의 통합으로 설명되지 않는 새 의미, schema 변경 또는 기능 축소가 필요하면 임의 구현하지 않고 설계 문제를 기록한다. 사용자 의도가 필요한 사항은 확인한다.
+ - Source Script에 미정 의미가 남거나 hierarchy/참조/실패 흐름이 맞지 않으면 closed로 올리지 않고 하위 구현을 재개하지 않는다.
+-- 이번 작성에는 정책 개정, Source Script 수정, PlusCal/model/JS/test/build/distribution 변경, 새 framework나 bridge 도입을 포함하지 않는다.
++- 최초 계획 작성에는 Source Script 수정도 포함하지 않았다. 후속 실행 단위에서도 정책 개정, PlusCal/model/JS/test/build/distribution 변경, 새 framework나 bridge 도입은 포함하지 않는다.
+ - 과거 성공한 Actions 결과는 이 계획이나 향후 수정의 검증 근거로 재사용하지 않는다.
+ 
+ ## 8. 선택하지 않은 방향
+@@ -120,3 +121,13 @@
+ - hint 전용 후처리·candidate 전달 예외·새 결과 envelope 추가: 기존 공통 경로와 중복되고 추적 비용을 늘리므로 제외한다.
+ - renderer/JS부터 수정하고 상위 계약을 나중에 맞추기: 하위가 새 의미를 결정하게 되므로 제외한다.
+ - 모든 read 계산을 command로 통합: query와 mutation 책임을 혼합하고 불필요한 결합을 만들므로 제외한다.
++
++## 9. 실행 경과 — Source Script r27 / OPEN
++
++- 기준 `7ec2c1112459020af9b321568cce3a2fcd91e5bf`에서 A의 검증 scope를 기존 `validateChartModel`에 통합하고 project/package/reference 수집이 같은 representation 판정을 사용하도록 수정했다. non-editable conversion에 가짜 CSV를 생성하지 않고 실제 CSV를 가진 일반 chart의 검증은 보존한다.
++- B의 wrapper identity/new-input 전달과 Backend 내부 candidate 계산을 asset/import/graph/layout 경로에 맞췄다. Backend는 완료된 collision choice를 current authority에서 확인하며 UI callback을 실행하지 않는다.
++- C의 index hint를 기존 result → Backend reconciliation query → Frontend scalar 적용에 연결했다. 이동 `from/to`, 삭제 clear, 독립 current CSV 보존을 유지하며 별도 사후 선택 전이를 추가하지 않았다.
++- D의 수정 대상 chart/asset/import wrapper는 성공 뒤 공식 query를 사용하고 command triple을 공개 chart/asset로 잘못 반환하지 않도록 고쳤다. **전체 API trace는 미완료다.**
++- E의 chart/image lifetime·stale completion 의미를 기존 renderer 절차에 구체화했다. field별 trace/layout 계산·기본값/변환 제외 조건·palette/default color source와 전체 왕복 trace는 남아 있다.
++- 상세 근거/미정 항목: `agent_space/reviews/review-20261016-005-plan017-r27-open.md`. source revision/fingerprint를 갱신하되 closure는 open, closure_review는 null이다. PlusCal/model/code는 stale이고 하위 구현을 재개하지 않았다.
++- patch/실제 Actions run/누적 endpoint: `agent_space/patches/20261016-010.patch` 및 같은 basename `.md`. metadata checker 결과를 semantic closure로 해석하지 않는다.
+diff --git a/agent_space/reviews/review-20261016-005-plan017-r27-open.md b/agent_space/reviews/review-20261016-005-plan017-r27-open.md
+new file mode 100644
+index 0000000..5b7fe99
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-005-plan017-r27-open.md
+@@ -0,0 +1,64 @@
++# Plan 017 — Source Script r27 통합 작업 / OPEN
++
++## 기준과 검토 성격
++
++- 작업 기준 main: `7ec2c1112459020af9b321568cce3a2fcd91e5bf` (Plan 017 문서 및 patch 009 게시 뒤).
++- 상위 작업 계획: `agent_space/plans/plan-017.md`. 사용자 지시에 따라 non-editable conversion object를 project CSV 참조 검증에서 제외하고 새 결과 체계보다 기존 command/query/reconciliation에 통합한다.
++- 이 기록은 실제 Source Script 수정의 정적 자기검토다. 독립 검토, 실행 테스트, 전체 논리 닫힘 판정이 아니다. 정책, PlusCal/model, application JS/test/build/distribution은 수정하지 않는다.
++
++## 적용한 변경과 판단
++
++### A. representation별 검증 — 기존 validator 공유
++
++`sourcescript/graphs.py`의 `validateChartModel`이 실제 project CSV object와 non-editable imported conversion view를 구별한다. 후자는 project CSV resolve를 요구하지 않지만 conversion table/column/style, chart/Plotly/imported 구조는 검증한다. `conversionRows`의 존재와 non-editable 상태로 기존 representation을 식별하며 새 면제 registry/validator/가짜 CSV를 추가하지 않는다. 이미 실제 CSV를 가진 일반 chart는 편집을 잠시 꺼도 그 CSV 참조 검증을 유지한다.
++
++`sourcescript/project_state.py`의 whole-project 검증과 `sourcescript/assets_files.py`의 reference 수집, FFPX/FFSX read/write/apply가 같은 판정을 사용한다. conversion view가 package CSV 수집/remap 대상에 끼지 않는다. editable 전환은 command 내부에서 필요한 CSV/id/path와 object 참조를 함께 계산한다. zero-object에는 fake CSV를 만들지 않으며 이미 project CSV로 전환된 chart의 CSV를 다시 생성하지 않는다.
++
++### B. candidate ownership — current authority에서 계산
++
++`sourcescript/application_fsm.py`, `sourcescript/project_efsm.py`의 공통 경로에 따라 wrapper는 identity/new input/file/완료된 choice만 전달한다. `sourcescript/assets_files.py`, `sourcescript/graphs.py`, `sourcescript/layout_annotations_export.py`의 기존 builder는 command 내부 Backend 계산으로 구별한다. wrapper가 whole-project/model/objects candidate를 만들고 command로 다시 넘기는 경로를 제거했다.
++
++- 파일과 순수 parsing 입력을 current VFS/id/path/target에 의존하는 candidate와 구별한다.
++- collision prompt는 Application 소유이며 Backend가 callback/UI resolver를 호출하지 않는다.
++- 비동기 file 처리 뒤 current authority를 다시 확인한다. replace 대상 identity/path가 달라지면 자동 재선택/덮어쓰기하지 않는다. candidate의 기준 authority가 바뀌면 재계산·검증한다.
++- Project 실패/취소/거부는 부분 commit이나 성공 reconciliation/render를 발생시키지 않는다. 기존 lifecycle의 busy/ready/error 알림과 Project commit 성공을 혼동하지 않는다.
++
++### C. selection hint — 기존 성공 reconciliation에서 한 번 소비
++
++기존 `ProjectMutationResult.selectionHints`가 대상 chart와 optional index를 전달하고 `buildFrontendReconciliationInput`이 post-commit chart/index를 검증한다. hint 없음은 이전 index 유지 후보, explicit none은 clear다. Frontend는 검증된 최종 scalar를 소비하며 별도 사후 `SELECT_GRAPH_OBJECT`나 hint 상태 저장소를 추가하지 않는다.
++
++- 이동은 기존 `from/to`의 `to`를, 삭제는 기존 선택 해제를 유지한다. 추가는 command가 계산한 새 object 위치를 쓴다.
++- `[A,B,C]`에서 B(index 1)를 0으로 옮기면 유효하지만 다른 object인 옛 index 1을 유지하지 않고 hint 0을 검증한다.
++- 다른 chart의 hint는 현재 chart 선택에 적용하지 않는다. non-editable/없는 chart/범위 밖 index는 clear한다.
++- 인덱스 보정은 독립 current CSV를 변경하지 않는다. 명시적 object 선택의 CSV 연동과 구별한다.
++
++### D. 공개 반환 정합화 — 완료 주장 아님
++
++수정한 chart add/object-value/editable wrapper와 CSV/image 생성, batch/slot/project import wrapper는 공통 Application 반환 triple을 공개 chart/asset/settings로 위장하지 않는다. 성공 뒤 기존 공식 query의 detached 결과를 취득하고 실패 결과/예외/취소는 성공 read로 바꾸지 않는다. 생성/import의 실제 id/path는 기존 `ProjectMutationResult.changed`에서 얻으며 새 result envelope를 만들지 않는다.
++
++`sourcescript/api_ui.py`는 move/delete의 기존 입력과 hint 의미, project import의 post-commit snapshot 반환을 기존 operation 기술에 맞췄다. `sourcescript/layout_annotations_export.py`는 다른 layout/annotation mutation도 wrapper의 새 입력 전달과 command 내부 candidate 계산을 구별한다. **전체 public API의 호출/반환/실패 trace가 끝났다는 의미는 아니다.**
++
++### E. renderer — resource lifetime 일부 구체화
++
++`sourcescript/renderer_runtime.py`의 기존 `renderDashboard`에 host/slot/chart identity 기준 재사용/교체/purge, 현재 geometry 적용 뒤 resize, 오래된 generation/host 결과 폐기, image surface의 display handle/URL 소유·교체·해제를 기술했다. generation/instance 연결은 renderer-local lifetime 정보이며 Project/Frontend의 두 번째 authority가 아니다. 여러 image surface 중 하나의 정리가 다른 surface의 자원을 무효화하지 않아야 한다.
++
++`sourcescript/project_state.py`의 image query는 copied bytes/순수 display URL projection이며 revocable resource를 할당하지 않는다. resource를 실제 생성하는 renderer가 그 lifetime을 소유한다. 구체 Plotly/DOM API 문법이나 scheduler primitive는 고정하지 않는다.
++
++## 남은 문제와 닫힘 결정
++
++**r27 = current/open. closure_review는 null을 유지한다.** 국소 통합 수정은 전체 Source Script 논리 닫힘의 증거가 아니다.
++
++1. `sourcescript/graphs.py`의 trace numeric conversion/비유한 값/제외 조건, reciprocal axis의 schema/default와 global/axis → Plotly layout field별 계산을 완결해야 한다. non-editable 보존과 editable toggle/재계산의 전체 왕복 trace도 재검토한다.
++2. UI palette/default graph color sequence의 실제 값·부분 입력/초기화 의미가 여전히 다른 기본 규칙을 참조하는 수준이다. 현재 JS를 정답으로 베끼거나 임의 새 기본값을 정하지 않는다.
++3. `sourcescript/api_ui.py`의 모든 public operation을 실제 wrapper/command/query/result/reconciliation/renderer와 대조해야 한다. 이번에 수정한 wrapper 목록으로 전체 trace 완료를 대체하지 않는다.
++4. merge/move/trash/reset, 독립 CSV와 graph 선택, import 중 authority 변화, lifecycle 거부/복구, stale render/resource cleanup의 조합을 다시 대조하고 프로젝트 목적·중복/통합 근거까지 갖춘 별도 closure review가 필요하다.
++
++`sourcescript/system.py`의 빈 unresolved 목록도 위 남은 D/E 항목을 가리키도록 고쳤다. PlusCal r11/model r26/code r36은 stale을 유지하며 파일·fingerprint·과거 derived_from을 최신처럼 바꾸지 않는다. 하위 번역/구현은 재개하지 않는다.
++
++## 검증 방법과 한계
++
++- 로컬은 파일/Git diff/hash/transport만 사용한다. Source Script/application/checker/test/build/TLC를 로컬 실행하지 않는다. helper/temp는 작업 디렉터리 아래 `.work/`만 사용한다.
++- fingerprint는 업로드할 canonical LF Git blob과 정렬 path 레코드로 계산한다. 이 byte 계산은 semantic checker 실행이 아니다.
++- `.github/workflows/development-layer-version.yml`에 선택적 manual `base_sha` 입력을 추가해 기존 checker를 작업 기준 commit부터의 누적 diff에도 실행할 수 있게 한다. push 동작은 기존 `github.event.before`를 유지한다. 새 checker/framework는 추가하지 않는다.
++- 실제 GitHub Actions run/head/result와 실제 누적 patch endpoint는 `agent_space/patches/20261016-010.md`에 기록한다. metadata checker 성공은 Source Script의 논리 닫힘이나 browser/build/TLC 성공이 아니다.
++- Contents API 게시가 여러 commit이므로 중간 source/metadata/patch 상태는 불완전할 수 있다. patch 자체와 그 설명은 semantic endpoint 뒤에 기록하며 자기참조를 제외한다.
+diff --git a/development-versions.json b/development-versions.json
+index b2ff08d..5c029af 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 26,
++      "revision": 27,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py", 
+-      "fingerprint": "sha256:f9e3ddf30c2f1835215a032a30645f92a8497bf2a16475e52870402107bdeaf4",
++      "fingerprint": "sha256:878c285c7f91a2769e6f69c1f4fdba3edb315ba4afe16fcc815c70f08434c373",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/sourcescript/api_ui.py b/sourcescript/api_ui.py
+index 5ff3a20..e0899ec 100644
+--- a/sourcescript/api_ui.py
++++ b/sourcescript/api_ui.py
+@@ -52,7 +52,7 @@ PUBLIC_API_METHODS = {
+     "project": {
+         "readName": "Backend query; args 없음; current project meta name immutable projection",
+         "setName": "mutation; PROJECT_NAME_CHANGED project command로 project name candidate commit",
+-        "importFile": "lifecycle mutation; FFPX -> fully validated ProjectObject candidate -> PROJECT_LOADED",
++        "importFile": "lifecycle mutation; file 입력 -> PROJECT_LOADED 내부 FFPX parse/candidate/검증/commit -> 성공 시 immutable project snapshot; 실패/취소는 기존 경로로 전달",
+         "exportFile": "read/export; current validated project snapshot -> FFPX; project mutation 없음",
+     },
+     "slots": {
+@@ -115,10 +115,10 @@ PUBLIC_API_METHODS = {
+         "setHeaderLines": "mutation; DATA_OBJECT_REPLACED project command로 referenced CSV headerLines candidate commit",
+         "setEditable": "mutation; CHART_MODEL_REPLACED project command로 editable conversion + 필요한 CSV를 한 candidate로 commit",
+         "addObject": "mutation; chart 있으면 GRAPH_OBJECTS_REPLACED, 없으면 SLOT_DATA_CONNECTED project command",
+-        "moveObject": "mutation; GRAPH_OBJECTS_REPLACED project command로 objects 순서 candidate commit",
++        "moveObject": "mutation; chartId/from/to와 operation=graphs.moveObject -> GRAPH_OBJECTS_REPLACED 내부 순서 계산/commit; result hint는 to",
+         "selectObject": "runtime mutation; explicit public object selection은 valid index와 그 object의 CSV path를 함께 선택; commit index-only 갱신은 기존 CSV 선택 보존",
+         "setObjectValues": "mutation; explicit chart/index와 새 values를 전달; Backend가 요청 csvId 또는 기존 CSV를 resolve한 one-object candidate를 GRAPH_OBJECTS_REPLACED로 commit",
+-        "deleteObject": "mutation; GRAPH_OBJECTS_REPLACED project command로 object 제거; 마지막 object 제거도 empty chart로 허용",
++        "deleteObject": "mutation; chartId/index와 operation=graphs.deleteObject -> GRAPH_OBJECTS_REPLACED 내부 제거/commit; result hint는 explicit none; 마지막 object도 empty chart로 허용",
+         "updateLayout": "mutation; CHART_LAYOUT_CHANGED project command로 chart title/global/axis candidate commit",
+         "applyPalette": "mutation; GRAPH_OBJECTS_REPLACED project command로 graph object color candidate commit",
+         "defaultColors": "read; immutable default color sequence copy",
+@@ -185,6 +185,9 @@ API_BOUNDARY_RULE = (
+     "getChart/getProjectCsv/getProjectImage 같은 Backend internal state/helper를 직접 import/read/call하지 않는다. "
+     "persistent mutation은 FastFigureApi Backend-command method -> Application adapter -> Project EFSM으로, "
+     "project read는 FastFigureApi Backend-query method -> Application adapter -> Backend read provider로 전달한다. "
++    "Application 내부 결과 tuple과 public 반환값은 구분하며 application_fsm.py의 공통 결과 규칙을 따른다. "
++    "graph add/move/setObjectValues/delete가 선언한 chart 반환은 commit 성공 뒤 graphs.readData의 chart copy를 반환한다. "
++    "실패/취소에는 그 operation의 기존 실패 결과를 전달하고 성공 chart query를 하지 않는다. "
+     "Frontend runtime event도 Backend identity validity가 필요하면 Application adapter가 검증한 input을 interfaceFSM에 전달한다. "
+     "UI-local editor target, modal draft, pointer state는 public Backend API나 FFPX state가 아니다."
+ )
+@@ -247,7 +250,8 @@ MANTINE_COMPONENT_OWNERSHIP = {
+ DASHBOARD_DROP_FLOW = (
+     "external file drop은 FastFigureDashboardFileDrop이 DOM target slotId를 얻고 slots.prepareFileDrop으로 "
+     "target validity/runtime selection만 확정한 뒤 lifecycle 안에서 assets.importToSlot(file, slotId, choosePlan)을 호출한다. "
+-    "importToSlot만 asset/chart/image의 persistent candidate를 만들고 검증·commit한다. "
++    "importToSlot의 Backend ASSETS_IMPORTED command만 asset/chart/image의 persistent candidate를 만들고 검증·commit한다. "
++    "collision Modal의 resolver는 Application에서 완료하고 Backend에는 명시적 choice 값만 전달한다. "
+     "finally에서 slots.finishFileDrop은 drag runtime state만 정리한다. "
+     "project tree의 기존 asset drop은 assets.connectToSlot(path, kind, slotId)의 별도 explicit connection 경로를 사용한다."
+ )
+diff --git a/sourcescript/application_fsm.py b/sourcescript/application_fsm.py
+index cac0228..a6cc81c 100644
+--- a/sourcescript/application_fsm.py
++++ b/sourcescript/application_fsm.py
+@@ -95,9 +95,15 @@ def dispatchProjectCommand(event, payload):
+        read projection 전체를 mutation candidate로 보내거나 Application에서 current project의 복제본을 별도 검증하지 않는다.
+     3. commit 실패면 Frontend success reconciliation 없이 result, interfaceFSM.readState(), rendererInput none을 반환한다.
+     4. commit 성공이면 interfaceFSM.readState()의 id/path/index reference와 result를 buildFrontendReconciliationInput에 전달한다.
++       object 편집의 selectionHints.chartId/selectedIndexHint도 이 경로에서만 post-commit 대상에 대해 검증한다.
+     5. interfaceFSM.reconcileProjectResult에 그 validated reconciliation input을 전달한다.
++       SELECT_GRAPH_OBJECT를 사후 재호출하지 않는다. index 보정 때문에 독립 current CSV 선택을 덮어쓰지 않는다.
+     6. final Frontend state를 request에 포함해 readBackendProjection("renderer")로 renderer용 immutable project projection을 만든다.
+     7. ProjectMutationResult, final Frontend state, renderer project projection을 caller/Frontend renderer 경계로 반환한다.
++       이 tuple은 내부 orchestration 결과이며 chart/settings/bool 같은 public API 반환값으로 자동 간주하지 않는다.
++       기존 public wrapper가 read 값을 선언했다면 committed를 확인한 뒤 official dispatchProjectQuery의 detached 값을 반환한다.
++       미commit/취소 결과에는 성공 read를 수행하지 않고 그 wrapper의 기존 실패값/결과를 반환한다. throw/rejection은 caller에 전파한다.
++       post-commit query/render 실패는 이미 성공한 command를 실패 전 상태로 rollback하지 않으며 성공 payload로 위장하지 않는다.
+     """
+     result = projectEFSM.send(event, payload)
+     frontendBefore = interfaceFSM.readState()
+diff --git a/sourcescript/assets_files.py b/sourcescript/assets_files.py
+index 1883c25..f7ee68f 100644
+--- a/sourcescript/assets_files.py
++++ b/sourcescript/assets_files.py
+@@ -15,7 +15,7 @@ Fast Figure Source Script — project VFS, assets, FFPX/FFSX and import transact
+ """
+ 
+ from project_state import activeProject, projectVfs, getProjectCsv, getProjectImage
+-from application_fsm import dispatchProjectCommand
++from application_fsm import dispatchProjectCommand, dispatchProjectQuery
+ 
+ ASSET_FILE_LOGICAL_RESPONSIBILITIES = {
+     "Backend": (
+@@ -23,14 +23,16 @@ ASSET_FILE_LOGICAL_RESPONSIBILITIES = {
+         "reference validation과 package persistence semantics"
+     ),
+     "Application boundary": (
+-        "create/import/delete/move/trash/connect/load/applyFfsxSlot처럼 public API intent를 explicit Project EFSM command로 전달하는 wrappers"
++        "create/import/delete/move/trash/connect/load처럼 public API intent를 explicit Project EFSM command로 전달하는 wrappers"
+     ),
+ }
+ 
+ ASSET_BOUNDARY_RULE = (
+     "같은 물리 파일에 co-locate되어도 Backend asset calculation/candidate function은 Application adapter를 역호출하지 않는다. "
+     "dispatchProjectCommand를 호출하는 함수는 Application-boundary wrapper로 분류하고, 그 wrapper가 explicit id/path/slot reference를 "
+-    "Backend command input으로 전달한다. Backend persistent candidate는 Frontend selection이나 DOM state를 읽지 않는다."
++    "Backend command input으로 전달한다. Backend persistent candidate는 Frontend selection이나 DOM state를 읽지 않는다. "
++    "mutation wrapper에 적힌 current-state resolve/normalize/id/path/candidate/validation 단계는 대응 Project EFSM command 내부 계산이다. "
++    "Application은 새 입력과 완료된 user choice만 전달하고 candidate project/model이나 callback을 넘기지 않는다."
+ )
+ 
+ PACKAGE_FORMAT_VERSION = "현재 FFPX/FFSX package format version 3"
+@@ -230,8 +232,11 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
+     - authoritative project를 변경하지 않는다.
+ 
+     처리:
++    ASSETS_IMPORTED command 내부에서만 호출한다. planImport는 Application이 이미 수집한 명시적 collision choice/plan 값이며
++    callback/Frontend resolver가 아니다. Backend는 Modal/task를 호출하지 않는다.
+     directory/target slot을 current project에서 resolve하고 모든 file parse/collision plan/id/path/reference를
+     candidate 안에서 계산한다. targetSlotId가 있으면 그 slot 연결까지 같은 candidate에 포함한다.
++    이미 선택한 replace id/path와 current kind/target이 일치해야 한다. 대기 중 바뀐 대상에 choice를 옮겨 적용하지 않는다.
+     parse/collision/reference/whole-project validation 실패는 candidate rejection으로 끝나며 commit을 수행하지 않는다.
+     """
+     candidate = "검증된 asset import whole-project candidate 또는 rejected result"
+@@ -244,38 +249,41 @@ def importProjectFilesToDirectory(files, directory, planImport):
+     - 전체 candidate가 검증된 뒤 CSV/image collection과 관련 reference를 한 번 commit한다.
+ 
+     처리:
+-    1. target directory가 존재하고 trash가 아닌지 확인한다.
+-    2. 모든 file bytes를 읽고 data/image candidate model을 authority 밖에서 만든다.
+-    3. 전체 batch의 collision choice를 받아 path/replace id를 확정하고 reserved path 충돌을 검사한다.
+-    4. 현재 project snapshot에서 candidate asset collection, VFS location, next-id를 계산한다.
+-    5. import-to-slot이면 target slot/chart candidate도 같은 candidate project에 적용한다.
+-    6. candidate 전체의 VFS/reference/project invariant를 검증한다.
+-    7. 모두 성공한 경우에만 importing lifecycle 안에서 authoritative project 부분을 commit한다.
+-    8. parse, collision, validation 중 하나라도 실패하면 activeProject는 변경하지 않는다.
++    1. Application은 pure file-byte read/parse와 기존 collision query/UI choice 수집을 수행할 수 있다.
++       planImport의 UI-local resolver를 완료하여 이번 batch의 명시적 choices를 얻는다. 취소면 command 없이 취소 결과를 반환한다.
++       path/id를 포함한 candidate project를 만들거나 Backend에 resolver callback을 넘기지 않는다.
++    2. ASSETS_IMPORTED에 copied file inputs, explicit directory와 choices만 전달한다.
++    3. Backend command가 buildProjectAssetImportCandidate로 current directory/collision/id/reference와 whole-project candidate를 계산한다.
++       choice 대기 뒤의 current state 재검증과 one commit은 project_efsm.py의 공통 send 규칙을 사용한다.
++    4. parse/collision/reference/validation 실패는 미commit 결과로 끝난다. Application은 공통 결과를 반환하며 성공 read로 위장하지 않는다.
+ 
+     의미:
+-    batch import는 mutate 후 rollback이 아니라 candidate-first commit을 기본으로 한다.
+-    buildProjectAssetImportCandidate로 계산한 candidate를 ASSETS_IMPORTED에 전달하고 projectEFSM이 최종 invariant를 다시 확인한 뒤 commit한다.
++    batch import는 mutate 후 rollback이 아니라 command 안의 candidate-first commit을 기본으로 한다.
+     """
+-    candidate = buildProjectAssetImportCandidate(files, directory, planImport)
+-    return dispatchProjectCommand("ASSETS_IMPORTED", {"candidate": candidate})
++    choices = "기존 collision query와 planImport UI resolver로 완료한 이번 batch의 choice 값; 취소면 즉시 반환"
++    return dispatchProjectCommand("ASSETS_IMPORTED", {"files": files, "directory": directory, "choices": choices})
+ 
+ 
+ def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
+     """
+     Return:
+     - csv:
+-      activeProject에 등록된 CSV asset.
++      성공 뒤 공식 query로 읽은 등록 CSV의 immutable projection; 미commit이면 해당 command failure를 반환한다.
+ 
+     변경:
+     - DATA_OBJECT_CREATED event를 통해 activeProject.csvFiles와 next csv id를 변경한다.
+ 
+     처리:
+-    data table과 bytes representation을 정규화하고 VFS location을 정한 뒤
+-    dispatchProjectCommand를 통한 projectEFSM의 공식 create command로 등록한다.
++    Application은 새 data/name/bytes/MIME/headerLines/path/id 입력만 전달한다.
++    Backend command가 data table/bytes/VFS location/current next-id를 정규화/검증해 등록한다.
+     """
+-    model = "정규화된 CSV candidate"
+-    return dispatchProjectCommand("DATA_OBJECT_CREATED", {"model": model})
++    result, interfaceState, rendererProjection = dispatchProjectCommand(
++        "DATA_OBJECT_CREATED", {"data": data, "name": name, "id": id, "bytesBase64": bytesBase64,
++                                "mime": mime, "headerLines": headerLines, "path": path}
++    )
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": "result.changed의 생성 CSV path"})["target"]
+ 
+ 
+ def createEmptyProjectCsv():
+@@ -293,21 +301,25 @@ def createEmptyProjectCsv():
+     2. name은 "빈 CSV.csv", MIME은 "text/csv", headerLines는 1을 사용한다.
+     3. bytes는 rows를 project CSV writer와 같은 CSV serializer로 직렬화한 UTF-8 bytes를 사용한다.
+     4. 기본 directory는 /assets/csv다.
+-    5. 같은 canonical path가 이미 존재하면 projectVfs.uniquePath와 같은 일반 collision-free naming 규칙으로 새 path를 계산한다.
+-       existing asset을 replace하지 않는다.
++    5. Backend create command가 같은 canonical path를 current VFS에서 검사하고 projectVfs.uniquePath의 일반 collision-free naming을 적용한다.
++       wrapper가 사전 unique path를 authoritative 결과로 확정하지 않으며 existing asset을 replace하지 않는다.
+     6. createProjectCsv의 일반 DATA_OBJECT_CREATED 경로로 등록한다.
+     7. 생성된 CSV에 protected/default 전용 field를 추가하지 않는다.
+     8. chart, graph object, interface selection은 이 함수에서 변경하지 않는다.
+     """
+-    csv = "등록된 일반 빈 CSV asset"
+-    return csv
++    return createProjectCsv(
++        EMPTY_CSV_TEMPLATE["rows"], EMPTY_CSV_TEMPLATE["name"], None,
++        "template rows를 동일 CSV serializer로 만든 UTF-8 bytes의 base64",
++        EMPTY_CSV_TEMPLATE["mime"], EMPTY_CSV_TEMPLATE["headerLines"],
++        "기본 directory /assets/csv와 template name으로 요청한 path",
++    )
+ 
+ 
+ def createProjectImage(bytes, name, mime, id, path):
+     """
+     Return:
+     - image:
+-      activeProject에 등록된 image asset.
++      성공 뒤 공식 query로 읽은 등록 image의 immutable projection; 미commit이면 해당 command failure를 반환한다.
+ 
+     변경:
+     - IMAGE_OBJECT_CREATED event를 통해 activeProject.images와 next image id를 변경한다.
+@@ -316,8 +328,12 @@ def createProjectImage(bytes, name, mime, id, path):
+     image asset은 copied bytes/name/MIME/location만 소유한다.
+     fit/scale/x/y 같은 display settings는 연결 slot의 slot.content.imageSettings에 둔다.
+     """
+-    model = "정규화된 image candidate"
+-    return dispatchProjectCommand("IMAGE_OBJECT_CREATED", {"model": model})
++    result, interfaceState, rendererProjection = dispatchProjectCommand(
++        "IMAGE_OBJECT_CREATED", {"bytes": bytes, "name": name, "mime": mime, "id": id, "path": path}
++    )
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": "result.changed의 생성 image path"})["target"]
+ 
+ 
+ def deleteProjectAsset(target):
+@@ -326,22 +342,19 @@ def deleteProjectAsset(target):
+     - target CSV/image와 target을 참조하던 graph object 또는 image slot.
+ 
+     처리:
++    Application wrapper는 target의 kind/id/path reference만 전달한다. 아래는 Backend delete command 내부 계산이다.
+     1. collectAssetReferences로 현재 reference를 순수 계산한다.
+     2. current project에서 target asset과 해당 references를 제거한 candidate를 만든다.
+     3. CSV reference 제거 결과 graph object가 0개가 되어도 empty editable chart를 그대로 허용한다.
+     4. image reference는 해당 slot의 image reference만 비운 candidate를 만든다.
+     5. candidate 전체를 검증한다.
+-    6. resolved target kind가 CSV면 DATA_OBJECT_DELETED, image면 IMAGE_OBJECT_DELETED에 candidate와 target id를 전달한다.
+-       두 command 모두 asset과 해당 reference detach를 같은 whole-project commit으로 소유한다.
++    6. resolved target kind가 CSV면 DATA_OBJECT_DELETED, image면 IMAGE_OBJECT_DELETED가 이 candidate를 한 번 commit한다.
++       두 command 모두 asset과 해당 reference detach를 같은 whole-project commit으로 소유한다. routing read와 현재 kind가 다르면 거부한다.
+ 
+     보호된 default CSV 같은 예외 asset은 존재하지 않는다.
+     """
+-    resolved = "current project에서 다시 resolve한 target"
+-    event = "DATA_OBJECT_DELETED if resolved.kind == csv else IMAGE_OBJECT_DELETED"
+-    return dispatchProjectCommand(
+-        event,
+-        {"target": resolved, "candidate": "asset+reference removal candidate"},
+-    )
++    event = "DATA_OBJECT_DELETED if requested target kind == csv else IMAGE_OBJECT_DELETED"
++    return dispatchProjectCommand(event, {"target": "explicit kind/id/path reference만; asset object copy는 아님"})
+ 
+ 
+ def planProjectNodeMove(path, directory):
+@@ -382,7 +395,7 @@ def moveProjectNode(plan, useUniqueName):
+     """
+     return dispatchProjectCommand(
+         "PROJECT_NODE_MOVED",
+-        {"plan": plan, "useUniqueName": useUniqueName},
++        {"path": "plan의 source path", "directory": "plan의 target directory", "useUniqueName": useUniqueName},
+     )
+ 
+ 
+@@ -438,16 +451,14 @@ def importProjectFileToSlot(file, slotId, planImport):
+     - raw CSV/image asset과 target slot/chart candidate.
+ 
+     처리:
+-    buildProjectAssetImportCandidate의 targetSlotId 경로로 한 whole-project candidate를 만든 뒤
+-    ASSETS_IMPORTED 한 command로 commit한다. file asset 생성과 slot 연결을 별도 commit으로 쪼개지 않는다.
+-    """
+-    candidate = buildProjectAssetImportCandidate(
+-        [file],
+-        "target file plan의 directory",
+-        planImport,
+-        targetSlotId=slotId,
++    Application은 importProjectFilesToDirectory와 같은 pure file input/명시적 collision choice 수집을 수행한다.
++    취소면 command를 보내지 않는다. Backend ASSETS_IMPORTED가 buildProjectAssetImportCandidate의 targetSlotId 경로로
++    current asset와 target slot/chart를 한 candidate로 만든다. asset 생성과 slot 연결을 별도 commit으로 쪼개지 않는다.
++    """
++    choices = "기존 collision query와 planImport UI resolver로 완료한 choice 값; 취소면 즉시 반환"
++    return dispatchProjectCommand(
++        "ASSETS_IMPORTED", {"files": [file], "directory": "choice의 explicit target directory", "choices": choices, "targetSlotId": slotId}
+     )
+-    return dispatchProjectCommand("ASSETS_IMPORTED", {"candidate": candidate})
+ 
+ 
+ def ffpxBuildProject():
+@@ -499,20 +510,23 @@ def ffpxReadProject(file):
+ def importProjectFile(file):
+     """
+     Return:
+-    - activeProject:
+-      import 성공 후의 authoritative project.
++    - project:
++      import 성공 뒤 공식 export query로 읽은 immutable project snapshot. Backend mutable authority를 반환하지 않는다.
++      실패/취소는 기존 command/lifecycle 실패/취소로 전달하며 성공 snapshot을 반환하지 않는다.
+ 
+     변경:
+     - 최종 단계에서 PROJECT_LOADED event를 통해 activeProject 전체를 교체한다.
+ 
+     처리:
+     current FFPX package만 project import 입력으로 인정한다.
+-    ffpxReadProject 결과를 buildProjectObject로 candidate ProjectObject로 정규화하고 완전 검증한 뒤
+-    PROJECT_LOADED 경계를 통해 authoritative project를 한 번 교체한다.
++    Application은 file 입력만 PROJECT_LOADED에 전달한다. Backend command가 ffpxReadProject 결과를
++    buildProjectObject로 정규화/완전 검증한 뒤 authoritative project를 한 번 교체한다.
+     현재 package가 아닌 legacy conversion은 application 내부에서 추측하지 않고 외부 converter 책임으로 둔다.
+     """
+-    candidate = buildProjectObject(ffpxReadProject(file), "file name")
+-    return dispatchProjectCommand("PROJECT_LOADED", {"project": candidate})
++    result, interfaceState, rendererProjection = dispatchProjectCommand("PROJECT_LOADED", {"file": file})
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("export", {})
+ 
+ 
+ def ffsxBuildSlot(slot, chart):
+@@ -525,8 +539,9 @@ def ffsxBuildSlot(slot, chart):
+     - 없음.
+ 
+     처리:
+-    chart object가 참조하는 실제 CSV만 package-local 연속 id로 remap한다.
+-    chart object csvId도 같은 mapping으로 변경한다.
++    validateChartModel이 실제 project CSV object로 판정한 object가 참조하는 CSV만 package-local 연속 id로 remap한다.
++    그 object csvId도 같은 mapping으로 변경한다. non-editable imported conversion chart는 원본과 conversion view를 보존하며
++    conversion object를 CSV 수집/remap 대상에 넣지 않는다. validateChartModel의 representation 판정을 그대로 사용한다.
+     graph object가 0개인 blank editable chart는 CSV entry 없이 유효하게 package한다.
+     CSV bytes는 assets/data subtree에 별도 저장한다.
+     """
+@@ -544,7 +559,8 @@ def ffsxReadSlot(file):
+     - activeProject를 변경하지 않는다.
+ 
+     처리:
+-    package schema/version, chart object -> package-local CSV reference, CSV dataRef와 bytes를 검증한다.
++    package schema/version, 실제 project object -> package-local CSV reference, CSV dataRef와 bytes를 검증한다.
++    non-editable conversion view에는 project/package CSV resolve를 요구하지 않고 validateChartModel의 구조 검증을 적용한다.
+     graph object가 0개이면 CSV asset이 없어도 blank chart로 허용한다.
+     package-local id 0 또는 protected default CSV 같은 특수 reference를 만들지 않는다.
+     validateChartModel을 통과한 payload만 반환한다.
+@@ -633,7 +649,9 @@ def collectAssetReferences(csvIds, imageIds, state):
+     - 없음.
+ 
+     처리:
+-    같은 chart 안에서 같은 CSV를 여러 graph object가 참조하면 각각 별도 reference로 센다.
++    validateChartModel과 같은 representation 판정으로 실제 project object.csvId만 수집한다. 편집을 잠시 끈 일반 chart도 포함한다.
++    non-editable conversion rows/object는 project CSV reference가 아니므로 포함하지 않는다.
++    같은 chart 안에서 같은 실제 CSV를 여러 graph object가 참조하면 각각 별도 reference로 센다.
+     image는 참조하는 slot마다 하나의 reference로 센다.
+     confirmation count와 실제 cascade mutation이 같은 reference set을 사용한다.
+     """
+@@ -689,7 +707,8 @@ def buildProjectObject(payload, fileName):
+     1. current schema/version과 project name/grid shape를 검증한다.
+     2. CSV/image id, bytes, canonical VFS location을 candidate collection으로 정규화한다.
+        image asset에는 slot-local display settings를 두지 않는다.
+-    3. chart와 graph object를 정규화하고 CSV reference를 resolve한다.
++    3. chart와 graph object를 정규화하고 validateChartModel의 representation 판정을 적용한다.
++       실제 project object의 CSV reference만 resolve한다. non-editable conversion view에는 project CSV를 만들거나 요구하지 않는다.
+        zero-object editable chart는 그대로 허용한다.
+     4. slot geometry, chart/image reference, slot-local imageSettings/caption을 정규화한다.
+     5. chart마다 owning slot이 정확히 하나인지 확인한다.
+@@ -706,21 +725,21 @@ def buildProjectObject(payload, fileName):
+ def applyFfsxSlot(slotPayload, targetSlot):
+     """
+     Return:
+-    - result:
+-      새 CSV id mapping과 새 chart id를 포함한 commit 결과.
++    - candidate:
++      새 CSV id mapping과 새 chart id를 포함한 target slot/project candidate.
+ 
+     변경:
+-    - candidate 검증 성공 후 target slot, chart collection, 필요한 CSV collection과 next-id를 한 번 commit한다.
++    - candidate만 계산한다. SLOT_CHART_IMPORTED 내부 Backend helper이며 자체 commit/Application 역호출은 없다.
+ 
+     처리:
+     1. targetSlot을 current project에서 다시 resolve한다.
+-    2. package-local CSV마다 새 project id/path candidate를 만든다.
+-    3. chart object csvId를 새 mapping으로 바꾼 독립 chart candidate를 만든다.
++    2. validateChartModel이 실제 project CSV object로 판정한 object가 참조하는 package-local CSV마다 새 project id/path candidate를 만든다.
++    3. 그 object csvId만 새 mapping으로 바꾼다. non-editable conversion chart의 imported/conversion view는 그대로 보존한다.
+     4. 새 chart id를 할당하고 target slot이 그 chart를 유일하게 소유하도록 candidate를 만든다.
+     5. FFSX가 제공하는 slot caption을 target slot annotation candidate에 적용한다.
+     6. whole-project invariant를 검증한다.
+-    7. SLOT_CHART_IMPORTED에 candidate를 전달하고 projectEFSM이 최종 검증 후 한 번 commit한다.
++    7. caller인 SLOT_CHART_IMPORTED가 최종 검증 후 한 번 commit한다.
+     """
+     candidate = "target slot + remapped CSV + chart whole-project candidate"
+-    return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"candidate": candidate})
++    return candidate
+ 
+diff --git a/sourcescript/graphs.py b/sourcescript/graphs.py
+index 7df8180..e3cc437 100644
+--- a/sourcescript/graphs.py
++++ b/sourcescript/graphs.py
+@@ -19,7 +19,7 @@ Fast Figure Source Script — CSV data, chart model, graph objects and Plotly re
+ """
+ 
+ from project_state import activeProject, getProjectCsv, getChart
+-from application_fsm import dispatchProjectCommand
++from application_fsm import dispatchProjectCommand, dispatchProjectQuery
+ 
+ GRAPH_FILE_LOGICAL_RESPONSIBILITIES = {
+     "Backend": (
+@@ -35,7 +35,9 @@ GRAPH_BOUNDARY_RULE = (
+     "Backend graph calculation은 interfaceFSM/selectedSlotId를 직접 읽지 않는다. "
+     "selected slot/chart가 필요한 public operation은 Application boundary가 Frontend reference를 가져와 Backend에서 current authority로 검증한 뒤 "
+     "slotId/chartId/csvId 같은 explicit reference를 candidate/command input에 포함한다. "
+-    "dispatchProjectCommand를 호출하는 co-located function은 Backend domain function이 아니라 Application-boundary wrapper다."
++    "dispatchProjectCommand를 호출하는 co-located function은 Backend domain function이 아니라 Application-boundary wrapper다. "
++    "그 procedure에 기술된 current-state resolve/normalize/candidate 단계는 대응 command 내부의 Backend 계산이다. "
++    "Backend helper graphEditorCommit/convertImportedChartToEditable는 Application 역호출 없이 candidate를 반환한다."
+ )
+ 
+ 
+@@ -80,11 +82,13 @@ GRAPH_EMPTY_RULE = (
+ PLOTLY_IMPORT_RULE = (
+     "원본 Plotly figure는 non-editable imported representation으로 손실 없이 보존하고, "
+     "Fast Figure가 이해하는 trace/axis subset만 editor conversion view로 계산한다. "
+-    "editable 전환 전에는 conversion rows가 project CSV authority가 아니다."
++    "editable 전환 전에는 conversion rows가 project CSV authority가 아니다. "
++    "validateChartModel이 representation에 따라 CSV/column 참조 검증 대상을 정한다. "
++    "project 검증·reference 수집·FFPX/FFSX 입출력은 이 판정을 공유하며 conversion object를 project CSV 참조로 수집하지 않는다."
+ )
+ 
+ graphObject = {
+-    "csvId": "activeProject.csvFiles의 CSV reference id",
++    "csvId": "실제 project object의 activeProject.csvFiles reference id; non-editable conversion object의 값은 project CSV 참조로 해석하지 않음",
+     "x": "C1, C2 형식의 x column identifier",
+     "y": "C1, C2 형식의 y column identifier",
+     "xAxisSide": "bottom 또는 top",
+@@ -106,6 +110,7 @@ chartModel = {
+     "editor": {
+         "objects": "graphObject 목록; editable chart의 data reference 원천",
+         "editable": "Fast Figure editor로 수정 가능한지 여부",
++        "conversionRows": "non-editable imported conversion view에만 있는 optional table; empty 가능, editable 전환 후 제거, project CSV authority 아님",
+         "globalSettings": "globalSettings 구조의 title/legend/font/4개 axis 설정",
+         "title": "chart title",
+         "plotlyExtensions": "imported Plotly layout/config 중 editor가 직접 소유하지 않는 보존 영역",
+@@ -126,7 +131,7 @@ AXIS_REFERENCE_RULE = (
+ 
+ GRAPH_PROJECTION_RULE = (
+     "chart.graph.data/layout은 project CSV와 chart.editor 설정에서 다시 만들 수 있는 renderer projection이다. "
+-    "editable chart에서 graph.editor.objects와 project CSV reference가 편집 의미의 원천이다."
++    "editable chart에서 chart.editor.objects와 project CSV reference가 편집 의미의 원천이다."
+ )
+ 
+ 
+@@ -233,31 +238,34 @@ def graphEditorAdd(slotId, csvId):
+     target slot에 chart가 없으면 SLOT_DATA_CONNECTED로 첫 chart/object를 만든다.
+     chart가 있으면 owning chart id와 current object 목록을 Backend에서 resolve해 새 base graph object를 추가하고 GRAPH_OBJECTS_REPLACED로 commit한다.
+     """
+-    event = "SLOT_DATA_CONNECTED if target slot has no chart else GRAPH_OBJECTS_REPLACED"
+-    return dispatchProjectCommand(event, {"slotId": slotId, "csvId": csvId, "objects": "candidate objects"})
++    slot = dispatchProjectQuery("project-api", {"operation": "slots.readSelected", "frontendState": {"selectedSlotId": slotId}})
++    event = "SLOT_DATA_CONNECTED if slot has no chart else GRAPH_OBJECTS_REPLACED"
++    result, interfaceState, rendererProjection = dispatchProjectCommand(
++        event, {"slotId": slotId, "csvId": csvId, "operation": "graphs.addObject"}
++    )
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "frontendState": {"selectedSlotId": slotId}})["chart"]
+ 
+ 
+ def graphEditorCommit(chartId, objects, index):
+     """
+     Return:
+-    - chart:
+-      object list commit 후 chart.
++    - candidate:
++      command 내부에서 계산한 objects를 적용한 candidate chart와 post-edit index hint.
+ 
+     변경:
+-    - GRAPH_OBJECTS_REPLACED event
+-    - graph object selection state
+-    - editable graph renderer projection
++    - candidate만 계산한다. 이름은 기존 식별자를 유지하지만 자체 commit/Frontend 전이/Application 역호출은 없다.
+ 
+     처리:
+-    object array 자체를 UI/local state의 장기 원천으로 두지 않는다.
+-    0개 object도 유효한 candidate로 받아 normalize/reference validation 후 GRAPH_OBJECTS_REPLACED로 chart SoT에 commit한다.
+-    fake default object를 복구하지 않는다.
+-    interface object selection은 ProjectMutationResult 이후 별도 reconciliation한다.
++    Project EFSM의 graph-object branch가 current chart를 resolve한 뒤 이 Backend helper를 사용한다.
++    objects는 그 command 안의 add/move/edit/delete/palette 계산 결과이며 public wrapper/read projection에서 받지 않는다.
++    0개 object도 유효하다. normalize/reference validation 후 whole-project candidate에 포함하며 fake object를 복구하지 않는다.
++    index는 post-edit 배열에 대한 hint로서 command result의 selectionHints.chartId/selectedIndexHint에 넣는다.
++    최종 commit은 projectEFSM.send, 선택 갱신은 공통 reconciliation만 소유한다.
+     """
+-    return dispatchProjectCommand(
+-        "GRAPH_OBJECTS_REPLACED",
+-        {"chartId": chartId, "objects": objects, "selectedIndexHint": index},
+-    )
++    candidate = "current chart copy에 command-calculated objects를 적용한 candidate와 index hint"
++    return candidate
+ 
+ 
+ def graphEditorObjectValues(chartId, index, values):
+@@ -267,7 +275,7 @@ def graphEditorObjectValues(chartId, index, values):
+       지정 object의 허용 field를 정규화해 commit한 chart.
+ 
+     변경:
+-    - 최종적으로 graphEditorCommit(chartId, ...)을 통해 explicit chart object state를 변경한다.
++    - Backend command 내부의 graphEditorCommit 계산 결과를 projectEFSM이 한 번 commit한다.
+ 
+     처리:
+     1. Application wrapper는 chartId/index와 새 values만 GRAPH_OBJECTS_REPLACED command input으로 전달한다.
+@@ -281,13 +289,16 @@ def graphEditorObjectValues(chartId, index, values):
+        current object array에서 index object만 바꾸고 다른 object/reference와 Frontend current CSV selection은 유지한다.
+     6. whole-project candidate를 검증한 뒤 GRAPH_OBJECTS_REPLACED로 한 번 commit한다.
+        post-commit requestedIndex는 index-only Frontend input이며 CSV selection을 강제로 변경하지 않는다.
+-       graphEditorCommit(chartId, objects, index)는 Backend 내부에서 이미 계산한 candidate objects를 전달하는 wrapper에만 사용하고
++       graphEditorCommit(chartId, objects, index)는 Backend command 내부의 candidate helper이며 Application을 호출하지 않는다.
+        Frontend read projection을 일반 object replacement authority로 취급하지 않는다.
+     """
+-    return dispatchProjectCommand(
++    result, interfaceState, rendererProjection = dispatchProjectCommand(
+         "GRAPH_OBJECTS_REPLACED",
+-        {"chartId": chartId, "index": index, "values": values, "selectedIndexHint": index},
++        {"chartId": chartId, "operation": "graphs.setObjectValues", "index": index, "values": values},
+     )
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]
+ 
+ 
+ def graphEditorSetEditable(slotId, chartId, editable):
+@@ -307,11 +318,13 @@ def graphEditorSetEditable(slotId, chartId, editable):
+     이 command는 필요한 CSV 생성/next-id/reference remap을 chart editable 변경과 같은 candidate에 포함한다.
+     zero-trace/zero-object imported figure는 CSV를 만들지 않고 empty editable chart로 전환할 수 있다.
+     """
+-    candidate = convertImportedChartToEditable("explicit chartId") if editable else "editable flag candidate"
+-    return dispatchProjectCommand(
++    result, interfaceState, rendererProjection = dispatchProjectCommand(
+         "CHART_MODEL_REPLACED",
+-        {"slotId": slotId, "chartId": chartId, "candidate": candidate},
++        {"slotId": slotId, "chartId": chartId, "editable": editable},
+     )
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]["editor"]["editable"]
+ 
+ 
+ def graphEditorSetHeaderLines(csvId, headerLines):
+@@ -335,7 +348,7 @@ def graphEditorUpdateLayout(slotId, chartId, values):
+     - selected chart의 persistent title/global/axis settings.
+ 
+     처리:
+-    normalized candidate를 CHART_LAYOUT_CHANGED로 commit한다.
++    Backend command가 current owning chart에 새 values를 적용/정규화한 candidate를 CHART_LAYOUT_CHANGED로 commit한다.
+     Plotly graph layout은 commit된 chart settings에서 다시 계산하는 projection이다.
+     """
+     return dispatchProjectCommand(
+@@ -352,7 +365,9 @@ def graphEditorApplyPalette(chartId, colors):
+     처리:
+     current objects에서 color-only candidate를 계산하고 GRAPH_OBJECTS_REPLACED로 commit한다.
+     """
+-    return dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {"chartId": chartId, "colors": colors})
++    return dispatchProjectCommand(
++        "GRAPH_OBJECTS_REPLACED", {"chartId": chartId, "operation": "graphs.applyPalette", "colors": colors}
++    )
+ 
+ 
+ def tracesSingle(objectView):
+@@ -410,10 +425,10 @@ def importSelectedGraphFile(slotId, file):
+     - 선택 slot의 chart model과 package가 필요로 하는 CSV asset.
+ 
+     처리:
+-    FFSX면 ffsxReadSlot 검증 결과로 target slot candidate를 만든다.
++    Application은 explicit slotId와 file만 전달한다. Backend SLOT_CHART_IMPORTED가 다음 계산을 수행한다.
++    FFSX면 ffsxReadSlot 검증 결과로 applyFfsxSlot candidate를 만든다.
+     Plotly JSON이면 parsePlotlyToEditor로 non-editable imported chart candidate를 만든다.
+-    두 경우 모두 target slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증한 뒤
+-    SLOT_CHART_IMPORTED 한 command로 commit한다.
++    두 경우 모두 target slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증한 뒤 그 command가 한 번 commit한다.
+     """
+     return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"slotId": slotId, "file": file})
+ 
+@@ -480,9 +495,14 @@ def validateChartModel(chart, csvCollection):
+ 
+     검증:
+     - chart id와 editor/graph shape가 유효하다.
+-    - editor.objects는 배열이며 editable 여부와 관계없이 0개일 수 있다.
+-    - 각 존재 graph object의 csvId는 csvCollection에서 resolve된다.
+-    - x/y column identifier와 enum/numeric style field가 유효하다.
++    - editor.editable은 boolean이고 editor.objects는 배열이며 두 representation 모두 0개일 수 있다.
++    - imported conversion representation(editor.editable=False이고 editor.conversionRows가 존재함)의 object/rows는
++      project CSV/column 참조 검증 대상에 넣지 않는다. conversionRows가 table shape인지,
++      conversion object의 x/y가 그 table column인지와 style shape는 검증한다.
++    - 그 밖의 실제 project CSV object는 editable flag와 무관하게 각 csvId를 csvCollection에서 resolve하고
++      해당 CSV의 x/y column identifier를 검증한다. 편집 가능했던 일반 chart를 잠시 non-editable로 바꿔도 이 reference는 보존한다.
++    - fake CSV/id를 생성하지 않으며 dangling project reference를 conversion view로 간주해 검증을 우회하지 않는다.
++    - 두 경우 모두 enum/numeric style field와 아래 chart/imported 구조를 검증한다.
+     - globalSettings와 네 axis가 정규화 가능한 shape다.
+     - graph data/layout/config/frames와 imported extension shape가 유효하다.
+     """
+@@ -530,12 +550,15 @@ def convertImportedChartToEditable(chart):
+     - 없음.
+ 
+     처리:
++    이 함수는 CHART_MODEL_REPLACED의 Backend candidate builder로만 호출하며 Application wrapper를 호출하지 않는다.
++    chart는 command가 current authority에서 다시 resolve한 chart다. 이미 editable이면 새 CSV를 중복 생성하지 않는다.
+     1. chart의 imported representation은 보존한다.
+-    2. conversion object가 0개면 CSV 없이 editor.editable=true인 empty chart candidate를 만든다.
+-    3. conversion object가 있으면 conversionRows를 하나의 project CSV candidate로 만들고
+-       모든 conversion object가 그 실제 CSV id를 참조하도록 연결한다.
++    2. conversionRows가 없으면 기존 project CSV reference를 유지한 채 editable=true로 전환하며 CSV를 재생성하지 않는다.
++       conversionRows가 있고 conversion object가 0개면 CSV 없이 editor.editable=true인 empty chart candidate를 만든다.
++    3. conversionRows가 있고 conversion object가 있으면 그 rows를 하나의 project CSV candidate로 만들고
++       모든 conversion object가 그 실제 CSV id를 참조하도록 연결한다. 연결 후 conversionRows를 제거한다.
+     4. global/axis settings를 유지한 채 editable Plotly projection을 다시 계산한다.
+-    5. whole-project 검증 후 상위 mutation 경계가 commit한다.
++    5. caller인 Project EFSM이 current next-id/path/ownership까지 포함한 whole-project candidate를 검증하고 한 번 commit한다.
+     """
+     candidate = "editable conversion candidate"
+     return candidate
+diff --git a/sourcescript/interface_fsm.py b/sourcescript/interface_fsm.py
+index 3ddaf8d..da3e8c3 100644
+--- a/sourcescript/interface_fsm.py
++++ b/sourcescript/interface_fsm.py
+@@ -114,6 +114,8 @@ class InterfaceStateMachine:
+         """
+         Project EFSM commit 성공 뒤 Application boundary가 계산한 FrontendReconciliationInput을 받는다.
+         valid reference는 유지하고 moved reference는 supplied identity/path result로 갱신하며 invalid reference만 clear한다.
++        graphObject에는 Backend가 current chart와 post-edit index hint를 함께 검증한 최종 scalar만 적용한다.
++        별도 selectedIndexHint 저장/사후 SELECT_GRAPH_OBJECT 전이를 만들지 않으며 asset selection은 supplied assetKind/path만 따른다.
+         workspace는 reconciled selectedSlotId와 supplied workspaceHint에서 다시 파생한다.
+         Backend를 재조회하거나 project mutation을 다시 호출하지 않고 final Frontend state를 publish한다.
+         """
+diff --git a/sourcescript/layout_annotations_export.py b/sourcescript/layout_annotations_export.py
+index 0b808db..b117650 100644
+--- a/sourcescript/layout_annotations_export.py
++++ b/sourcescript/layout_annotations_export.py
+@@ -33,7 +33,9 @@ LAYOUT_FILE_LOGICAL_RESPONSIBILITIES = {
+ LAYOUT_BOUNDARY_RULE = (
+     "selectedSlotId 같은 Frontend runtime reference를 이 파일의 Backend calculation에서 직접 import하지 않는다. "
+     "selected target이 필요한 public operation은 Application boundary에서 explicit slotId/reference를 받아 Backend current authority에서 재검증한다. "
+-    "dispatchProjectCommand를 호출하는 wrapper와 Frontend raster renderer가 Backend candidate/read helper와 같은 물리 파일에 있어도 logical owner를 혼합하지 않는다."
++    "dispatchProjectCommand를 호출하는 wrapper와 Frontend raster renderer가 Backend candidate/read helper와 같은 물리 파일에 있어도 logical owner를 혼합하지 않는다. "
++    "아래 mutation procedure의 current-state resolve/merge/normalization/candidate/validation 단계는 해당 Project EFSM command 내부 Backend 계산이다. "
++    "Application wrapper는 아래 dispatch에 명시된 identity/new edit 값만 보내며 candidate를 먼저 계산한 뒤 전달하지 않는다."
+ )
+ 
+ layoutRules = {
+@@ -181,7 +183,7 @@ def setLayoutApiStyle(values):
+     1. current slotStyle에서 candidate를 만든다.
+     2. referenceWidth/gap/outerMargin/radius/aspect를 layoutRules 범위로 정규화한다.
+     3. candidate whole-project invariant를 확인한다.
+-    4. LAYOUT_STYLE_CHANGED를 dispatchProjectCommand로 보내 한 번 commit한다.
++    4. LAYOUT_STYLE_CHANGED command가 한 번 commit한다. Application wrapper는 values만 전달한다.
+     5. renderer는 commit result 이후 authoritative layout을 다시 읽는다.
+     """
+     result = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", values)
+@@ -220,9 +222,9 @@ def setLayoutApiGrid(rows, cols):
+     - buildGridResizeCandidate가 성공한 경우에만 activeProject grid/slot structure를 한 번 commit한다.
+ 
+     처리:
+-    candidate를 먼저 만들고 전체 project invariant를 검증한다.
++    Application은 rows/cols만 GRID_LAYOUT_CHANGED에 전달한다. Backend command가 buildGridResizeCandidate와 전체 project 검증을 수행한다.
+     거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
+-    성공 candidate는 GRID_LAYOUT_CHANGED를 dispatchProjectCommand로 보내 한 번 commit한다.
++    성공 candidate는 그 command가 한 번 commit한다.
+     commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 Application boundary의 Backend reconciliation query와 Frontend FSM transition이 결정한다.
+     """
+     result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", {"rows": rows, "cols": cols})
+@@ -243,7 +245,7 @@ def mergeSlots(slotIds):
+     4. covered non-anchor slot은 모든 local properties를 SLOT_LOCAL_DEFAULTS로 되돌리고 hidden=true로 한다.
+     5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
+     6. 두 개 이상의 selected slot object가 non-default local state를 가지면 implicit merge/concatenation 없이 거부한다.
+-    7. whole-project candidate를 검증한 뒤 SLOTS_MERGED를 dispatchProjectCommand로 보내 한 번 commit한다.
++    7. SLOTS_MERGED 내부에서 whole-project candidate를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
+     8. Frontend selection reconciliation과 renderer update는 ProjectMutationResult 이후 Application boundary가 수행한다.
+     """
+     result = dispatchProjectCommand("SLOTS_MERGED", {"slotIds": slotIds})
+@@ -259,7 +261,7 @@ def splitSlots(slotIds):
+     1. current merged visible anchor를 resolve한다.
+     2. anchor slot object의 chart/image/contentType/imageSettings/caption 등 모든 slot-local properties를 anchor에 유지한다.
+     3. covered cell은 visible 1x1 slot로 복원하고 모든 slot-local properties를 defaults로 시작한다.
+-    4. candidate 전체를 검증한 뒤 SLOTS_SPLIT을 dispatchProjectCommand로 보내 한 번 commit한다.
++    4. SLOTS_SPLIT 내부에서 candidate 전체를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
+     5. interface selection reconciliation과 renderer update는 project commit 이후 수행한다.
+     """
+     result = dispatchProjectCommand("SLOTS_SPLIT", {"slotIds": slotIds})
+@@ -455,7 +457,7 @@ def insertSlotCaptionsIntoGlobalCaption(slotIds):
+     2. non-empty slot.caption을 label/text projection으로 계산한다.
+     3. 계산한 text를 사용자 명령에 따라 global caption text에 삽입한다.
+     4. source slot.caption 값과 slot ownership은 변경하지 않는다.
+-    5. 계산된 insertion intent를 SLOT_CAPTIONS_INSERTED project command로 commit한다.
++    5. wrapper는 slotIds만 전달하고 SLOT_CAPTIONS_INSERTED command가 위 resolve/insertion 계산과 commit을 수행한다.
+     """
+     result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
+     return result
+diff --git a/sourcescript/project_efsm.py b/sourcescript/project_efsm.py
+index 06e549b..fb377e1 100644
+--- a/sourcescript/project_efsm.py
++++ b/sourcescript/project_efsm.py
+@@ -123,24 +123,38 @@ PROJECT_MUTATION_CONTRACT = [
+ ]
+ 
+ GRAPH_OBJECT_EDIT_INPUT_CONTRACT = {
+-    "one-object": (
+-        "GRAPH_OBJECTS_REPLACED accepts explicit chartId/index/values/selectedIndexHint for graphEditorSetObjectValues. "
+-        "Backend resolves current chart/objects/CSV and computes the candidate using graphs.py; new values are not a complete object-array authority."
++    "input": (
++        "GRAPH_OBJECTS_REPLACED receives chartId (add also accepts slotId/csvId), the existing public operation name, "
++        "and only that operation's new values/index/from/to/colors. Current objects/candidate arrays are not Application inputs. "
++        "Backend resolves current owning editable chart, CSV and index, calculates objects using graphs.py, "
++        "and uses graphEditorCommit as a Backend-only candidate helper. SLOT_DATA_CONNECTED add rejects a now-occupied target; "
++        "GRAPH_OBJECTS_REPLACED add rejects a now-missing/non-editable chart rather than trusting the earlier routing read."
+     ),
+-    "objects": (
+-        "Existing add/move/delete/palette operations keep their declared intent and Backend candidate calculation. "
+-        "A Backend-internal graphEditorCommit may pass computed candidate objects; a Frontend read projection is not an alternative mutation source."
++    "add": "append the base object from the resolved CSV; result hint is the appended post-edit index.",
++    "move": (
++        "resolve the requested existing from/to indices, not just adjacent moves; invalid/out-of-bounds rejects without commit. "
++        "Move that object and result hint selects to, not the previous numeric index; from=to preserves the no-op meaning."
++    ),
++    "one-object": "resolve index and values using graphEditorObjectValues rules; result hint selects that same post-edit index.",
++    "delete": (
++        "remove the resolved requested index; result hint is explicit none, retaining the existing selection-clear meaning. "
++        "Do not invent selection of a neighboring object. Empty chart remains valid."
++    ),
++    "palette": "change only object colors using the declared palette rule; omit the index hint so existing selection remains.",
++    "selection": (
++        "Backend writes selectionHints.chartId and selectedIndexHint from the actual post-edit array. "
++        "Missing hint preserves the current index; explicit none clears. Application forwards it through the common "
++        "buildFrontendReconciliationInput path only, and never substitutes object.csvId for current CSV selection."
+     ),
+-    "selection": "selectedIndexHint is an index-only runtime hint, not an instruction to replace current selected CSV from object.csvId.",
+ }
+ 
+ ProjectMutationResult = {
+     "event": "처리한 project command",
+     "committed": "commit 성공 여부",
+-    "changed": "command별 changed ids/path/owner",
++    "changed": "command별 실제 changed ids/path/owner; create/import는 post-commit read에 필요한 생성 asset path/id와 owning chart/slot id를 포함",
+     "removedGraphReferenceCount": "실제 제거한 graph-object CSV reference 수",
+     "resetImageSlotCount": "실제 image reference를 비운 slot 수",
+-    "selectionHints": "후속 interface reconciliation에 필요한 identity/path 결과",
++    "selectionHints": "후속 interface reconciliation의 identity/path 결과와 해당 chartId에 한정된 optional selectedIndexHint; absence와 explicit none을 구별",
+     "projectionEffect": "renderer effect를 결정할 수 있는 실제 commit 결과",
+ }
+ 
+@@ -163,10 +177,23 @@ class ProjectStateMachine:
+         """
+         1. PROJECT_COMMANDS membership과 precondition을 검증한다.
+         2. current activeProject에서 모든 input/reference를 다시 resolve한다.
+-        3. 해당 domain module의 candidate builder를 실행한다.
++        3. 해당 domain module의 candidate builder를 실행한다. Application-provided project/model/objects candidate는 받지 않는다.
++           asset import는 buildProjectAssetImportCandidate, project load는 ffpxReadProject/buildProjectObject,
++           slot package import는 ffsxReadSlot/applyFfsxSlot, editable 전환은 convertImportedChartToEditable를 내부에서 호출한다.
++           file bytes 읽기/parsing 동안 authority를 변경하지 않는다. collision prompt와 choice 수집은 Application이 dispatch 전에 완료한다.
++           Backend는 UI resolver/callback을 호출하지 않는다. file 대기가 끝난 뒤에는 전달된 choice와
++           current directory/target/reference/collision/next-id를 다시 resolve하고 candidate를 완성한다.
++           선택된 replace id/path가 더 이상 같은 대상을 가리키지 않으면 거부한다. stale 계획으로 덮어쓰거나 자동 재선택하지 않는다.
++           candidate의 원천이 된 authority가 commit 전 바뀌면 그대로 commit하지 않고 현재 authority에 대해 재계산/검증한다.
++           실패/취소는 미commit 결과이며 부분 변경/복구용 rollback/성공 hint를 만들지 않는다.
+         4. candidate whole-project invariant를 검증한다.
+         5. 성공 candidate만 activeProject에 한 번 commit한다.
+-        6. 실제 pre/post 차이에서 ProjectMutationResult를 계산한다.
++        6. 실제 pre/post 차이에서 ProjectMutationResult를 계산한다. 생성/import의 changed id/path/owner는 실제 commit 결과를 사용한다.
++           graphEditorCommit이 계산한 index hint가 있으면 실제 owning chart id와 함께 selectionHints.chartId/selectedIndexHint에 담는다.
++           graphs.addObject는 append된 index, graphs.moveObject는 제거 후 목적 위치 to, graphs.setObjectValues는 편집한 index,
++           graphs.deleteObject는 explicit none을 계산한다. current chart/index/from/to를 command에서 resolve하고 유효하지 않으면 commit 전에 거부한다.
++           이동은 from object를 제거해 최종 to 위치에 삽입하고 나머지 상대 순서를 유지한다. 마지막 object 삭제도 empty 배열로 유효하다.
++           hint가 없는 command는 그 key를 생략하며 none과 혼동하지 않는다. 실패 결과에는 성공 hint를 넣지 않는다.
+         7. interface state와 renderer를 변경하지 않고 result를 반환한다.
+         """
+         result = "ProjectMutationResult"
+diff --git a/sourcescript/project_state.py b/sourcescript/project_state.py
+index c64cd34..9e43301 100644
+--- a/sourcescript/project_state.py
++++ b/sourcescript/project_state.py
+@@ -195,7 +195,11 @@ REFERENCE_RELATIONS = {
+         "각 chart id는 정확히 하나의 slot에서만 나타나야 한다."
+     ),
+     "slot.imageId": "activeProject.images에서 같은 image id를 resolve해야 한다.",
+-    "chart.editor.objects[].csvId": "activeProject.csvFiles에서 같은 CSV id를 resolve해야 한다.",
++    "chart.editor.objects[].csvId": (
++        "validateChartModel이 실제 project CSV object로 판정한 object만 activeProject.csvFiles에서 같은 CSV id를 resolve한다. "
++        "non-editable imported chart의 conversion view는 project CSV 참조 집합에 넣지 않는다. "
++        "검증·reference 수집·package remap은 graphs.py의 validateChartModel과 같은 editable 판정을 사용한다."
++    ),
+     "asset path": "asset.directory와 asset.name을 projectVfs에서 결합해 resolve한다.",
+     "nextId": "각 collection에 존재하는 최대 id보다 커야 한다.",
+     "slot.caption": (
+@@ -263,13 +267,18 @@ FrontendReconciliationInput = {
+ PUBLIC_BACKEND_READ_CONTRACTS = {
+     "project.readName": "meta.projectName 문자열 copy",
+     "slots.readSelected": "frontendState.selectedSlotId -> visible slot; id/row/col/contentType/chart/imageId copy, 없으면 none",
+-    "images.readEditor": "explicit slotId -> visible slot -> image asset; slotId/name/display URL와 normalized slot-local settings copy, 없으면 none",
++    "images.readEditor": (
++        "explicit slotId -> visible slot -> image asset; slotId/name/copied bytes와 그 bytes에서 순수 계산한 display URL, normalized slot-local settings copy, 없으면 none. "
++        "Backend query는 revocable display resource를 할당하거나 runtime handle을 Project에 저장하지 않는다. surface resource lifetime은 renderer_runtime.py의 renderDashboard가 소유한다."
++    ),
+     "print.readSettings": "export의 width/heightMode/height/dpi/format scalar copy",
+     "appearance.readPalette": "current appearance.uiPalette의 field copy; persistent palette hex validation과 defaults는 이 파일의 ProjectObject 규칙 사용",
+     "graphs.readData": (
+-        "frontendState.selectedSlotId로 graph chart를 resolve; objects copy와 graphObjectIndex의 valid selectedIndex, "
++        "frontendState.selectedSlotId로 graph chart를 resolve; Application의 post-commit read에 explicit chartId가 있으면 유일한 owning slot까지 resolve한다. "
++        "chart의 detached copy(없으면 none), objects copy와 graphObjectIndex의 valid selectedIndex, "
+         "assetSelection=csv인 assetPath에서 currentCsv/columns, selected object.csvId에서 별도 objectColumns를 계산. "
+-        "object.csvId를 currentCsv 대체 원천으로 쓰지 않는다. chart 없으면 objects=[], selectedIndex=none; CSV 없으면 해당 columns=[]"
++        "object.csvId를 currentCsv 대체 원천으로 쓰지 않는다. non-editable conversion view는 표시용 copy일 뿐 editable selectedIndex/objectColumns를 만들지 않는다. "
++        "chart 없으면 objects=[], selectedIndex=none; CSV 없으면 해당 columns=[]"
+     ),
+     "graphs.readLayout": "explicit selectedSlotId로 owning chart를 resolve한 title/globalSettings/axis copy; 없으면 none",
+     "graphs.readPalette": "같은 owning chart의 editor object color sequence copy; 없으면 empty sequence",
+@@ -284,7 +293,7 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
+     "assets.isTrashed": "canonical requested path의 trash subtree membership boolean",
+     "assets.movable": "current VFS source 존재와 fixed-root 규칙으로 계산한 boolean; trash 소속만으로 거부하지 않음",
+     "assets.draggableAsset": "존재하는 non-trash csv/image의 kind/id/path/name copy 또는 none; slot 연결용이며 tree move와 구별",
+-    "assets.readDeletionTarget": "explicit path asset과 collectAssetReferences의 사용 count/owner copy; 없으면 none",
++    "assets.readDeletionTarget": "explicit path -> target asset의 detached copy와 collectAssetReferences의 사용 count/owner copy; 없으면 none; 생성 wrapper도 성공 뒤 target만 반환할 수 있음",
+     "assets.moveOptions": "current directories와 기존 move eligibility 규칙에서 계산한 destination 후보 copy",
+     "assets.planMove": "explicit source/destination을 current VFS에서 resolve한 collision/reference-count plan copy; commit 때 반드시 재검증",
+     "assets.resolveTreeSelection": "path를 resolve한 accepted/kind/canonical path scalar input; invalid면 accepted=False",
+@@ -295,7 +304,9 @@ RENDERER_BACKEND_READ_CONTRACT = {
+     "whole": (
+         "default renderer request는 final frontendState와 optional mutationResult를 받는다. "
+         "current layout/grid/style, appearance, annotations, visible slots와 slot-local content/caption/settings를 detached copy로 구성한다. "
+-        "각 visible graph slot의 owning chart, 참조 CSV/columns와 chartFigure 계산 결과를 포함하고 image slot은 asset name/display URL를 포함한다. "
++        "각 visible graph slot의 owning chart, 실제 project object의 참조 CSV/columns와 chartFigure 계산 결과를 포함한다. "
++        "non-editable imported conversion chartFigure는 imported representation을 보존하며 conversion view로 project CSV를 resolve하지 않는다. "
++        "image slot은 images.readEditor와 같은 copied bytes/name/display URL 의미를 사용한다. "
+         "slot/chart/CSV resolve와 graph projection 계산은 Backend에서 끝내며 renderer가 Backend를 다시 조회하지 않는다. "
+         "Backend authority에 없는 default/compatibility 값은 copy에만 적용한다. final Frontend state는 ProjectObject에 합치지 않는다."
+     ),
+@@ -351,7 +362,8 @@ def validateFrontendIntent(event, payload):
+       reference는 canonical path, selectionHint는 resolved kind다. none이면 hint도 none이다.
+     SELECT_GRAPH_OBJECT:
+       payload.selectedSlotId -> visible graph slot -> owning chart -> integer index의 existing editor object를 resolve한다.
+-      read 과정에서 ensure/normalize로 live chart를 변경하지 않는다. object.csvId가 current CSV에서 resolve되어야 승인한다.
++      read 과정에서 ensure/normalize로 live chart를 변경하지 않는다. editable chart의 object.csvId가 current CSV에서 resolve되어야 승인한다.
++      non-editable conversion object는 public editable-object selection 대상이 아니며 project CSV를 찾아 가짜 승인을 만들지 않는다.
+       reference는 index다. selectAsset=True일 때만 CSV canonical path를 selectionHint로 반환하고, False/생략이면 hint none이다.
+       explicit index none은 graph selection clear이며 asset selection에 대한 hint를 생성하지 않는다.
+     """
+@@ -375,9 +387,12 @@ def buildFrontendReconciliationInput(event, mutationResult, frontendReferences):
+     3. 변환된 slot id를 current visible slot에서 resolve하고 invalid면 none으로 만든다.
+        asset path를 current VFS에서 resolve한다. clearAssetSelection, removed target 또는 enteringTrash인 trashed target이면 clear한다.
+        여전히 존재하는 unrelated selection은 유지한다.
+-    4. reconciled slot의 graph chart와 현재 integer index를 resolve한다. clearGraphSelection hint 또는 command의 explicit clearGraphSelection이면 clear한다.
+-       image workspace/no chart/out-of-range index면 clear한다. 그 외 index를 유지한다. graph object를 ensure/normalize하지 않는다.
+-       object-array edit의 selectedIndexHint는 별도의 index-only Frontend transition 입력이며, 임의 CSV 선택 변경으로 해석하지 않는다.
++    4. resetInterfaceSelection 또는 clearGraphSelection이면 graph selection을 clear한다. 그 외 reconciled slot의 editable graph chart를 resolve한다.
++       result.selectionHints에 selectedIndexHint가 있고 함께 제공된 chartId가 그 owning chart와 같으면 그 hint를 index 후보로 사용한다.
++       hint 없음은 기존 integer index 유지이며, 명시적 none은 clear다. 다른 chart에 대한 hint는 현재 선택에 적용하지 않는다.
++       image workspace/non-editable/no chart/none/out-of-range/non-integer 후보면 clear하고, 유효한 후보면 그 index를 반환한다.
++       hint는 command의 계산 결과로서 post-commit object 배열에 대해 검증한다. graph object를 ensure/normalize하지 않는다.
++       이 index-only 갱신은 asset selection/path를 변경하지 않는다. 별도 SELECT_GRAPH_OBJECT 전이나 사후 hint 적용은 없다.
+     5. selectedSlot/assetSelection/assetKind/graphObject에 resolved scalar를 반환한다. workspaceHint는 none이면 project,
+        visible image slot이면 slot.image, 그 외 slot.graph다. projectionEffect는 committed result의 실제 reference 제거/targeted 변경 정보로
+        renderer_runtime.py의 DASHBOARD_PROJECTION_INVALIDATION_RULE에 맞춰 결정할 수 있는 값이며 Frontend state write를 수행하지 않는다.
+@@ -513,7 +528,9 @@ def validateProjectObjectState(state, requireSlots):
+     - CSV/image id와 전체 asset path는 중복되지 않는다.
+     - asset directory는 VFS에 존재한다.
+     - chart id는 유일하다.
+-    - editable chart는 graph object가 0개여도 유효하며, 존재하는 graph object의 CSV 참조는 모두 resolve된다.
++    - 모든 chart에 graphs.py의 validateChartModel을 적용한다. editable chart는 graph object가 0개여도 유효하다.
++      해당 validator가 실제 project CSV object로 판정한 object만 CSV/column 참조 검증 집합에 넣는다. non-editable conversion view는 넣지 않으며
++      chart/Plotly/imported representation의 구조 검증은 그대로 수행한다. 이곳에 별도 완화/강화 validator를 만들지 않는다.
+     - slot id와 geometry가 유효하고 grid 범위를 넘지 않는다.
+     - slot은 chart와 image를 동시에 참조하지 않는다.
+     - slot chart/image 참조 대상이 존재한다.
+diff --git a/sourcescript/renderer_runtime.py b/sourcescript/renderer_runtime.py
+index 6c92d20..de8642b 100644
+--- a/sourcescript/renderer_runtime.py
++++ b/sourcescript/renderer_runtime.py
+@@ -124,8 +124,21 @@ def renderDashboard(projectProjection, interfaceState):
+     4. image slot은 projection의 image bytes/view와 normalized slot-local imageSettings copy로 image surface를 동기화한다.
+     5. interfaceState.selectedSlotId에 따라 selection/interaction class를 적용한다.
+     6. caption과 label projection을 동기화한다.
+-    7. stale Plotly instance를 purge하고 resize generation을 관리한다.
+-    8. 누락/default normalization이 필요해도 projectProjection copy만 다루며 live ProjectObject에 write하지 않는다.
++    7. 현재 dashboard render generation을 기준으로 visible slot id/chart id와 instance 소유 관계를 대조한다.
++       같은 host/slot/chart가 유지되면 기존 graph instance를 갱신한다. 사라진 slot, 다른 chart로 교체된 host,
++       graph에서 image/empty로 바뀐 host의 이전 instance는 purge한 뒤 현재 view만 설치한다.
++       새 content/style/geometry를 적용한 뒤 살아 있는 current graph host에만 resize를 요청한다.
++       비동기 graph 완료/resize는 시작 당시 generation과 host/slot/chart가 여전히 current일 때만 적용한다.
++       더 오래된 작업의 완료는 새 DOM/view를 덮어쓰거나 없어진 instance를 되살리지 않고 자기 임시 자원만 해제한다.
++       generation/instance association은 renderer-local lifetime 정보이며 Project/Frontend FSM state를 복제하지 않는다.
++    8. image projection은 copied bytes 또는 그 bytes에서 순수 계산한 display URL과 slot-local settings를 사용한다.
++       renderer가 decode/display handle이나 revocable URL을 만들면 해당 image surface/render 작업이 소유한다.
++       image 교체/slot 제거/cleanup에서 이전 surface를 분리한 뒤 더 이상 쓰이지 않는 handle/URL을 해제한다.
++       오래된 decode/load 완료에는 generation과 slot/image 입력이 일치하는지 확인하고 아니면 결과를 버리고 자원을 해제한다.
++       여러 surface가 같은 image를 보여도 한 surface의 해제가 다른 살아 있는 surface의 자원을 무효화하지 않아야 한다.
++       교체 실패도 현재 Project를 바꾸지 않으며, 실패한 임시 자원을 남기거나 다음 render에 완료를 재적용하지 않는다.
++       구체 Plotly 호출/URL 표현/scheduler primitive는 이 수명 의미를 보존하는 하위 구현 선택이다.
++    9. 누락/default normalization이 필요해도 projectProjection copy만 다루며 live ProjectObject에 write하지 않는다.
+     """
+     return "supplied Backend projection에서 생성된 dashboard projection"
+ 
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index 7ff2477..e270198 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -195,7 +195,17 @@ RESOLVED_REVIEW_ITEMS = [
+     ),
+ ]
+ 
+-UNRESOLVED_REVIEW_ITEMS = []
++UNRESOLVED_REVIEW_ITEMS = [
++    (
++        "Plan 017 E: trace numeric conversion/exclusion, reciprocal axis의 schema/default, "
++        "global/axis에서 Plotly layout으로의 field-by-field conversion과 palette/default colors의 concrete source를 "
++        "기존 graph/projection procedure에서 완결해야 한다. placeholder/default 참조만으로 닫힘을 선언하지 않는다."
++    ),
++    (
++        "Plan 017 D/E: 전체 public operation의 입력/성공/실패/취소 반환과 command/query/reconciliation/renderer를 "
++        "실제 producer/consumer로 대조해야 한다. 개별 wrapper 수정이나 resource lifetime만으로 전체 closure 근거를 삼지 않는다."
++    ),
++]
+ 
+ 
+ def initializeFastFigure():
