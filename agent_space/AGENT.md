@@ -59,7 +59,7 @@
 
 ## 정책 원천
 
-- Source Script, PlusCal pseudocode, 선택적 TLA+/TLC verification model, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
+- Source Script, PlusCal pseudocode, 선택적 TLA+/TLC verification model, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/development-policy.md`를 상위 정책 원천으로 사용한다.
 - 해당 정책 원문은 사용자가 명시적으로 정책 변경을 지시한 경우에만 수정한다.
 - 프로젝트 고유의 데이터 구조, 책임 배치, 식별자, 파일 형식, 해결 방안은 정책 문서에 추가하지 않고 `sourcescript/`, `agent_space/plans/`, `agent_space/docs/` 중 해당 책임 경로에 기록한다.
 
