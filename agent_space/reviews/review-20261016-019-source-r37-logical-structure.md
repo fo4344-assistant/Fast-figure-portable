@@ -1,0 +1,69 @@
+# Source r37 — 논리 구조 검토
+
+## 대상과 판정
+
+- 요청: 현재 Source Script의 논리 구조를 있는 그대로 검토한다. 구현 세부의 생략을 고수준 결함으로 바꾸거나 문제를 만들기 위한 문제를 추가하지 않는다.
+- 기준 HEAD: `30af22573c0180d0a76ec596ac73e5c9bebee3c8`.
+- Source r37 fingerprint: `sha256:c94c310a8611c1f8994e5fe38ab5d0f8cd74ed0ecf4d902cada885d92278de5b`.
+- 대상: `sourcescript/system.py`, Backend 5개 명세와 `backend/settings.json`, Application adapter/public-api 4개 파일, Frontend 3개 명세, portable-build 명세. Python 표기는 실행 코드가 아닌 알고리즘 작성 표기법으로 읽었다.
+- 기준 정책: `agent_space/AGENT.md`, `agent_space/policies/development-policy.md`의 고수준/저수준 경계 및 §4.6. 기존 정책 전체 열람 기록에 더해 이번 검토에서 AGENT와 닫힘 판정 기준을 다시 확인했다.
+
+**판정: 검토한 현재 Source에서 논리 구조의 완결성을 깨는 차단 문제를 발견하지 못했다.** 책임 경계와 입력→검증→변경→결과→표시 흐름이 연결되어 있다. 아래 근거 없이 과거의 open 문구를 새 결함으로 반복하지 않는다.
+
+이는 정적 논리 검토의 결론이지 실제 구현·화면·파일 호환 시험의 성공 선언은 아니다. 이번 변경은 검토 기록만 추가하며 Source 의미, revision/fingerprint 및 기존 `closure: open` 메타데이터는 변경하지 않는다. 새로운 미정의 규칙이나 수정 계획을 임의로 추가하지 않는다.
+
+## 1. 논리적 완결성 — 경로별 대조
+
+| 확인 경로 | 연결과 판단 근거 |
+|---|---|
+| 초기 생성/시작 | `backend/project_state.py`의 createProjectState가 config의 저장 설정을 복사하고 실제 collections/references/ids는 instance로 생성한다. whole validation 후 `system.py` initializeFastFigure가 Application projection, Frontend ready, renderer와 UI mount로 연결한다. startup에서 fake CSV/chart를 추가하지 않는다. |
+| 영속 변경 | public-api의 persistent intent가 `backend/project_efsm.py`의 route/command로 수렴한다. send는 current identity resolve→Backend candidate→whole validation→한 번 commit→actual result다. 실패는 기존 Project 보존이며 Frontend 변경을 Backend에 숨기지 않는다. |
+| 변경 후 선택/표시 | `application/adapter.py` dispatchProjectCommand는 성공 뒤에만 Backend reconciliation→Frontend reconcile→renderer read로 진행한다. query/render 사후 실패는 이미 성공한 commit을 숨은 rollback하거나 미commit으로 위장하지 않는다. |
+| read/일시 입력 | `backend/project_state.py` readBackendProjection은 current authority에서 detached 값을 만든다. UI draft/renderer projection/config copy가 live Project를 대체하거나 mutation candidate로 역류하지 않는다. figure 계산에도 같은 read/candidate의 project를 사용한다. |
+| slot/asset/object 선택 | validateFrontendIntent의 invalid identity와 explicit none은 구별된다. Frontend는 validated scalar/hint만 소비한다. model-to-fsm은 graph 선택만 clear하고 유효한 독립 asset 선택을 보존하며, 일반 toggle/deselect의 clear 범위는 별도로 정의되어 있다. |
+| 참조 제거/이동 | CSV/image 삭제·trash 진입은 actual reference set을 candidate에서 함께 제거한다. cascade의 chart별 old-index→post-index/none map이 reconciliation으로 전달되어 이전 숫자 index가 다른 object를 가리키지 않게 한다. 순수 path 이동은 subtree 상대 경로를 보존하고 복구가 이전 graph 연결을 자동 재생성하지 않는다. |
+| slot 구조 변경 | swap은 위치 geometry와 local payload를 구별한다. merge는 non-default local payload 최대 하나, split은 anchor payload 유지, resize 축소는 손실될 non-default/merged 상태 거부다. caption/imageSettings와 chart ownership이 같은 규칙을 따른다. |
+| graph/CSV | `backend/graphs.py`의 table/header/column→paired trace→layout/figure 경로와 current CSV 참조가 연결된다. blank editable chart는 zero-object로 유효하다. imported conversion view와 실제 project CSV object는 같은 representation 판정을 validation/reference 수집/package에서 재사용한다. |
+| import/저장/복원 | assets_files의 bytes/typed XML/ZIP read→buildProjectObject→whole validation→PROJECT_LOADED와 FFPX writer가 대응한다. FFSX는 실제 참조 CSV만 remap하고 slot caption을 함께 이동한다. copied bytes가 원본 filesystem에 대한 의존을 끊는다. plain project snapshot read는 package operation을 재귀 호출하지 않는다. |
+| import 취소/경합 | UI collision choice는 Application에서 완료하고 Backend가 대기 후 current VFS/id/target을 다시 검증한다. stale replace는 다른 대상/create로 이동하지 않는다. directory batch는 one candidate, ordered router는 이전 파일 commit을 유지하고 중단하는 별도 명시 계약이다. 이 차이를 모순으로 보지 않았다. |
+| annotation 기본값 | `backend/settings.json`이 설정 기본값을 제공하고 실제 caption text/name 등은 Project instance가 소유한다. load는 valid 저장값을 유지하고 missing 설정만 보완한다. read가 defaults를 live Project에 써 넣지 않는다. 이전의 기본값 원천 공백은 현재 규칙에 남아 있지 않다. |
+| caption 삽입 | orderedSlotLabels→insertSlotCaptions→SLOT_CAPTIONS_INSERTED→global read로 연결된다. 연속 동일/후속 empty의 범위, 시작 empty의 label-only, exact 문자열 비교, 공백 구분과 기존 global 끝 append가 정의되어 있다. source slot caption을 별도 global collection으로 복제하지 않는다. |
+| 목표 raster 높이 | `frontend/renderer.py` exportCaptionLayout과 renderDashboardTarget이 같은 caption line list를 측정/그리기에 쓴다. 기준 폭 R, 목표 폭 W에서 s=W/R, H=ceil((R/aspect+C0+G0)*s)다. explicit height/disabled caption/limit·invalid geometry 거부가 명시되어 있다. DPI는 metadata이며 pixel 높이에 다시 곱하지 않는다. |
+| lifecycle/resource | public lifecycle binding은 한 번 진입하고 nested helper는 재진입하지 않는다. 취소/미commit도 ready 복귀, 예외는 failure→ready 후 전파다. renderer generation과 surface-owned Plotly/image/URL cleanup이 성공·거부·예외를 포함하고 Project를 바꾸지 않는다. |
+| portable build | portable_build의 expected tag 확인→순서 있는 inline 치환→external script 잔존 검사→output 기록은 runtime 알고리즘을 다시 설계하지 않는다. standalone/local processing 목적과 연결된다. |
+
+### 대표 경계 사례의 정적 추적
+
+1. invalid selection: Backend accepted=False → FSM no publish/no revision change. invalid id를 deselect로 오인하지 않는다.
+2. [A,B,C]에서 A의 CSV cascade 제거: map `[none,0,1]` → 기존 B index 1은 0. removed object는 none이고 인접 object로 자동 선택하지 않는다.
+3. 같은 값의 중복 object 제거: original index로 map을 만들므로 equality 역매칭이 필요 없다.
+4. imported zero-trace figure: CSV 없이 non-editable view 보존, editable 전환도 zero-object 유효. 가짜 기본 CSV를 요구하지 않는다.
+5. caption [A,A,empty] → `(a-c) A`; [empty,B] → `(a) (b) B`; [empty,empty] → `(a-b)`. 기존 global 본문은 끝 append의 원본으로 유지한다.
+6. auto export에서 W=R이면 s=1, W=2R이면 dashboard/caption/gap/label이 함께 두 배다. caption disabled는 C0=G0=0이고 DPI만 바꾸면 pixel geometry는 같다.
+7. export/후속 read 실패는 Project 수정 실패와 구별된다. 명시된 reject/failure 경로가 있다는 사실을 알고리즘 단절로 보지 않았다.
+
+위 항목은 함수/계약 사이를 연결한 정적 추적이며 실행 테스트 결과가 아니다.
+
+## 2. 프로젝트 목적 부합
+
+- tabular data/image로 scientific figure workspace를 구성하는 목적에 graph/image/slot layout/label/caption/export 경로가 대응한다.
+- FFPX는 complete persistent project, FFSX는 graph slot+referenced CSV+caption, Plotly JSON은 graph interchange로 분리된다. session selection/zoom/modal draft를 FFPX에 섞지 않는다.
+- 파일 복원에 원본 local path를 요구하지 않고 core 사용에 server/account/network를 추가하지 않는다.
+- 사용자가 정한 config 분리, 기준 폭에 따른 목표 높이, label-prefix caption append 규칙이 기존 owner 안에서 연결된다. 이를 위해 새 기능·설정 service·독립 authority를 추가하지 않았다.
+
+## 3. 중복·통합·확장 판단
+
+- **config vs Project**: config는 기본 설정, Project는 현재 사용자 상태이므로 분리가 필요하다. 두 값을 동기화하는 store로 합치지 않는다. 각 DEFAULT 이름은 동일 config 경로 참조이며 별도 값 목록의 authority가 아니다.
+- **Project EFSM vs Frontend FSM**: persistent transaction과 runtime 선택/lifecycle은 다른 의미다. 합치지 않고 Application에서 조정하는 편이 Backend의 UI 역참조를 피한다.
+- **conversion view vs 실제 CSV objects**: 표현 차이는 유지하되 판정은 validateChartModel 기준을 validation/collector/package에서 공유한다. fake CSV나 병렬 validator를 추가할 필요가 없다.
+- **공개 반환 vs 내부 tuple**: operation별 None/bool/detached read/result의 의미는 기존 wrapper 계약에 있다. 내부 triple을 노출하거나 모든 반환을 새 공통 envelope로 통일할 필요가 없다.
+- **graph layout vs slot layout, UI palette vs graph colors**: 이름이 비슷해도 각각 chart 축/스타일 대 dashboard geometry, UI 색 역할 대 object 색 순환이다. 의미가 다른 것을 통합하지 않는다.
+- **renderer projection/export 입력**: 같은 authority의 단방향 작업용 read다. renderer의 resource/generation 상태는 수명 정보이지 Project mirror가 아니다. 제2 persistent authority를 발견하지 못했다.
+- **물리 public_api 4개 파일**: 하나의 Application public-api 논리 책임을 나눈 파일이며 새 계층으로 해석하지 않는다. 현재 검토에서 추가 framework/분해/통합이 필요하다는 근거는 발견하지 못했다.
+
+## 판정의 한계와 기록 상태
+
+- §4.6의 세 축을 위 경로·경계 사례·분리 이유로 대조했다. 현재 논리 구조를 막는 새 발견 사항은 없다. 과거 review의 open은 당시 검토 범위/기록 상태이며 그 단어만으로 현재 결함을 추론하지 않는다.
+- 특정 browser/canvas/Plotly API, scheduler/URL primitive, CSS 길이 표현, 대상 언어 syntax는 이 의미를 보존할 하위 구체화 사항이다. Source가 실행 Python이 아니라는 사실을 결함으로 기록하지 않았다.
+- 하위 구현과의 등가성, runtime/시각/실제 파일 round-trip 시험은 수행하지 않았다. 이 검토는 그 성공을 대신하지 않는다. PlusCal/verification/source-code의 stale 상태도 이번 정적 Source 검토와 구별한다.
+- Source/정책/하위 코드/설정/metadata를 수정하지 않았으며 Actions/app/Source/checker/test/build/TLC를 실행하지 않았다. 검토 문서의 실제 diff와 patch 적용 가능성 확인은 별도로 기록한다.
