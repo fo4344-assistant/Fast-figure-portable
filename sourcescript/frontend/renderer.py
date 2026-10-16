@@ -358,7 +358,7 @@ def downloadExportPayload(payload):
 def exportCaptionLayout(snapshot, measureText):
     """
     One-export immutable reference layout; no Backend/config access or Project writes.
-    R=snapshot.layout.slotStyle.referenceWidth. style=supplied captionReferenceStyle from Backend settings.json.
+    R=snapshot.layout.slotStyle.referenceWidth. style=supplied captionReferenceStyle projection (Backend defaults에서 해당 작업에 복사). Frontend는 config를 직접 읽지 않는다.
     Use current snapshot captions.enabled/name/nameBold/text/settings. Ordinary global caption body is text;
     afterText remains stored separately and is not implicitly appended or populated from slot captions.
     If disabled, return zero height/gap and no lines. Enabled empty caption reserves one blank line as before.
