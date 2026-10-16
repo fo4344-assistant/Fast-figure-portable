@@ -404,6 +404,17 @@
       }
       // Backend read providers: resolve references from current authority, never normalize live models.
       function readBackendProjection(kind, request = {}) {
+        if ((kind === "project-api" && request.operation === "images.readEditor") ||
+            (kind === "renderer" && request.operation === "slot-image")) {
+          let slot = request.slotId == null ? null : slotAt(request.slotId),
+            image = slot && !slot.hidden ? slotImage(slot) : null;
+          return image ? Object.freeze({
+            slotId: slot.id,
+            name: image.name,
+            src: projectImageDisplayUrl(image),
+            settings: Object.freeze(normalizeImageSettings(slot)),
+          }) : null;
+        }
         if (kind !== "slot-selection-context") throw Error(`알 수 없는 Backend query: ${kind}`);
         let slot = request.slotId == null ? null : slotAt(request.slotId);
         return slot && !slot.hidden ? Object.freeze({
@@ -1379,7 +1390,14 @@
         let candidate = projectClone(activeProject._state);
         normalizeSlotContents(candidate.slots);
         let target = candidate.slots.find((item) => item.id === slot.id);
-        target.content.imageSettings = readImageSettings(payload.settings);
+        let current = normalizeImageSettings(target), values = payload.settings || {},
+          next = { ...current, fit: ["contain", "cover", "manual"].includes(values.fit) ? values.fit : current.fit };
+        if (next.fit === "manual") {
+          next.scale = Math.max(1, Math.min(1000, Number(values.scale) || 100));
+          next.x = Math.max(-100, Math.min(200, Number(values.x) || 50));
+          next.y = Math.max(-100, Math.min(200, Number(values.y) || 50));
+        }
+        target.content.imageSettings = readImageSettings(next);
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
       }
@@ -1809,6 +1827,8 @@
       const appFSM = Object.freeze({
         get state() { return interfaceFSM.state; },
         get writeLocks() { return interfaceFSM.writeLocks; },
+        readState: () => interfaceFSM.readState(),
+        query: (kind, request) => readBackendProjection(kind, request),
         definition: (...args) => interfaceFSM.definition(...args),
         send(event, payload = {}) {
           if (PROJECT_COMMANDS.has(event)) {
@@ -5515,10 +5535,11 @@
           direction: "fsm-to-model",
         });
       }
-      function syncSlotImageElement(slot,image) {
-        let element=slot&&document.querySelector(`.slot[data-slot="${slot.id}"] .slot-image`);
-        if(!element||!image)return false;
-        let settings=normalizeImageSettings(slot);
+      function syncSlotImageElement(projectProjection) {
+        if (!projectProjection) return false;
+        let element=document.querySelector(`.slot[data-slot="${projectProjection.slotId}"] .slot-image`);
+        if(!element)return false;
+        let settings=projectProjection.settings;
         element.classList.toggle("manual",settings.fit==="manual");
         element.removeAttribute("style");
         if(settings.fit==="manual"){
@@ -5529,23 +5550,16 @@
         return true;
       }
       function applyImageSettingsFromValues(values={}) {
-        let slot=getSelectedSlot(), image=slotImage(slot);
-        if(!slot||!image)return false;
-        let current=normalizeImageSettings(slot),
-          next={...current,fit:["contain","cover","manual"].includes(values.fit)?values.fit:current.fit};
-        if(next.fit==="manual"){
-          next.scale=Math.max(1,Math.min(1000,Number(values.scale)||100));
-          next.x=Math.max(-100,Math.min(200,Number(values.x)||50));
-          next.y=Math.max(-100,Math.min(200,Number(values.y)||50));
-        }
-        appFSM.send("SLOT_IMAGE_SETTINGS_CHANGED", {
-          slotId: slot.id,
-          settings: readImageSettings(next),
+        let slotId=appFSM.readState().selectedSlotId;
+        if (!appFSM.query("project-api", { operation: "images.readEditor", slotId })) return false;
+        let result=dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", {
+          slotId,
+          settings: { ...values },
           direction: "ui-to-fsm",
         });
-        slot = slotAt(slot.id);
-        image = slotImage(slot);
-        syncSlotImageElement(slot,image);
+        if (!result.committed) return false;
+        // Reconciliation has finished; the renderer receives only a fresh read projection.
+        syncSlotImageElement(appFSM.query("renderer", { operation: "slot-image", slotId }));
         appFSM.notify("images","IMAGE_SETTINGS_CHANGED");
         return readImageEditorApi();
       }
@@ -5577,12 +5591,9 @@
         clearSlotDragState();
       }
       function readImageEditorApi() {
-        let slot=getSelectedSlot(), image=slotImage(slot);
-        return image&&slot?Object.freeze({
-          name:image.name,
-          src:projectImageDisplayUrl(image),
-          settings:Object.freeze(normalizeImageSettings(slot)),
-        }):null;
+        return appFSM.query("project-api", {
+          operation: "images.readEditor", slotId: appFSM.readState().selectedSlotId,
+        });
       }
       function setProjectName(value, trim = false) {
         let name = (trim ? String(value).trim() : String(value)).slice(0, 120);
