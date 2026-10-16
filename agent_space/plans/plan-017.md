@@ -1,11 +1,11 @@
 # Plan 017 — Source Script r26 검토 후 공통 계약 정리
 
 - 작성일: 2026-10-16
-- 상태: in_progress / Source Script r27 통합 수정, D/E 잔여 / closure open
+- 상태: in_progress / Source Script r28 import·계층 파일 배치 정리, D/E 잔여 / closure open
 - 기준 main: `bf85187f2f76552891844d0396d62a073ac3bed5`
 - 선행 계획: `agent_space/plans/plan-016.md` §35
 - 선행 검토: `agent_space/reviews/review-20261016-004-sourcescript-r26-open.md` 및 후속 사용자 검토 대화
-- 현재 계층: Source Script r27 `current/open`, PlusCal r11 `stale`, verification-model r26 `stale`/TLC pending, Source Code r36 `stale`.
+- 현재 계층: Source Script r28 `current/open`, PlusCal r11 `stale`, verification-model r26 `stale`/TLC pending, Source Code r36 `stale`.
 - 실행 작업 기준 main: `7ec2c1112459020af9b321568cce3a2fcd91e5bf`; 실행 검토: `agent_space/reviews/review-20261016-005-plan017-r27-open.md`.
 
 ## 1. 요구와 목적
@@ -131,3 +131,12 @@
 - E의 chart/image lifetime·stale completion 의미를 기존 renderer 절차에 구체화했다. field별 trace/layout 계산·기본값/변환 제외 조건·palette/default color source와 전체 왕복 trace는 남아 있다.
 - 상세 근거/미정 항목: `agent_space/reviews/review-20261016-005-plan017-r27-open.md`. source revision/fingerprint를 갱신하되 closure는 open, closure_review는 null이다. PlusCal/model/code는 stale이고 하위 구현을 재개하지 않았다.
 - patch/실제 Actions run/누적 endpoint: `agent_space/patches/20261016-010.patch` 및 같은 basename `.md`. metadata checker 결과를 semantic closure로 해석하지 않는다.
+
+## 10. 후속 사용자 지시 — Source Script r28 import·hierarchy 정리
+
+- 기준 main `b3cd9648ff6705f07510c8b3c4947d4276ffdb61`. 정책 §3.2의 의미 포함관계와 §4.3.2의 import 기준을 확인했다. `참조 Source Script` 목록 대신 실제 module import 표기를 사용한다.
+- 기존 Backend / Application boundary / Frontend / Portable build hierarchy를 `sourcescript/backend/`, `sourcescript/application/`, `sourcescript/frontend/`, `sourcescript/portable_build/`로 반영했다. Backend domain / Application public wrapper / Frontend UI·renderer를 각 owner의 경로에 분리했다.
+- `sourcescript/application/public_api/`의 네 파일은 기존 public-api 모듈의 물리적 구성이다. 새 의미 계층을 추가하지 않는다. 제거한 평면 파일의 compatibility bridge는 남기지 않는다.
+- §3의 평면 경로는 r26 검토 당시의 역사적 위치다. 현재 owner와 import 경로는 `sourcescript/system.py` 및 `agent_space/reviews/review-20261016-006-sourcescript-r28-hierarchy-open.md`에 기록한다.
+- source revision/fingerprint만 갱신하고 closure open / closure_review null 및 하위 stale을 유지한다. 정책, PlusCal/model/JS/test/build/distribution은 변경하지 않는다. D/E의 미정 의미와 전체 trace는 여전히 남아 있다.
+- 실제 누적 diff/전송 한계/Actions 근거: `agent_space/patches/20261016-011.patch`와 같은 basename `.md`. 이번 구조 정리를 전체 Plan 017 완료나 번역 충실도 검증으로 주장하지 않는다.
