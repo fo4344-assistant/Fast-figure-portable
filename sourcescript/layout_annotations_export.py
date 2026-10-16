@@ -33,7 +33,9 @@ LAYOUT_FILE_LOGICAL_RESPONSIBILITIES = {
 LAYOUT_BOUNDARY_RULE = (
     "selectedSlotId 같은 Frontend runtime reference를 이 파일의 Backend calculation에서 직접 import하지 않는다. "
     "selected target이 필요한 public operation은 Application boundary에서 explicit slotId/reference를 받아 Backend current authority에서 재검증한다. "
-    "dispatchProjectCommand를 호출하는 wrapper와 Frontend raster renderer가 Backend candidate/read helper와 같은 물리 파일에 있어도 logical owner를 혼합하지 않는다."
+    "dispatchProjectCommand를 호출하는 wrapper와 Frontend raster renderer가 Backend candidate/read helper와 같은 물리 파일에 있어도 logical owner를 혼합하지 않는다. "
+    "아래 mutation procedure의 current-state resolve/merge/normalization/candidate/validation 단계는 해당 Project EFSM command 내부 Backend 계산이다. "
+    "Application wrapper는 아래 dispatch에 명시된 identity/new edit 값만 보내며 candidate를 먼저 계산한 뒤 전달하지 않는다."
 )
 
 layoutRules = {
@@ -181,7 +183,7 @@ def setLayoutApiStyle(values):
     1. current slotStyle에서 candidate를 만든다.
     2. referenceWidth/gap/outerMargin/radius/aspect를 layoutRules 범위로 정규화한다.
     3. candidate whole-project invariant를 확인한다.
-    4. LAYOUT_STYLE_CHANGED를 dispatchProjectCommand로 보내 한 번 commit한다.
+    4. LAYOUT_STYLE_CHANGED command가 한 번 commit한다. Application wrapper는 values만 전달한다.
     5. renderer는 commit result 이후 authoritative layout을 다시 읽는다.
     """
     result = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", values)
@@ -220,9 +222,9 @@ def setLayoutApiGrid(rows, cols):
     - buildGridResizeCandidate가 성공한 경우에만 activeProject grid/slot structure를 한 번 commit한다.
 
     처리:
-    candidate를 먼저 만들고 전체 project invariant를 검증한다.
+    Application은 rows/cols만 GRID_LAYOUT_CHANGED에 전달한다. Backend command가 buildGridResizeCandidate와 전체 project 검증을 수행한다.
     거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
-    성공 candidate는 GRID_LAYOUT_CHANGED를 dispatchProjectCommand로 보내 한 번 commit한다.
+    성공 candidate는 그 command가 한 번 commit한다.
     commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 Application boundary의 Backend reconciliation query와 Frontend FSM transition이 결정한다.
     """
     result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", {"rows": rows, "cols": cols})
@@ -243,7 +245,7 @@ def mergeSlots(slotIds):
     4. covered non-anchor slot은 모든 local properties를 SLOT_LOCAL_DEFAULTS로 되돌리고 hidden=true로 한다.
     5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
     6. 두 개 이상의 selected slot object가 non-default local state를 가지면 implicit merge/concatenation 없이 거부한다.
-    7. whole-project candidate를 검증한 뒤 SLOTS_MERGED를 dispatchProjectCommand로 보내 한 번 commit한다.
+    7. SLOTS_MERGED 내부에서 whole-project candidate를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
     8. Frontend selection reconciliation과 renderer update는 ProjectMutationResult 이후 Application boundary가 수행한다.
     """
     result = dispatchProjectCommand("SLOTS_MERGED", {"slotIds": slotIds})
@@ -259,7 +261,7 @@ def splitSlots(slotIds):
     1. current merged visible anchor를 resolve한다.
     2. anchor slot object의 chart/image/contentType/imageSettings/caption 등 모든 slot-local properties를 anchor에 유지한다.
     3. covered cell은 visible 1x1 slot로 복원하고 모든 slot-local properties를 defaults로 시작한다.
-    4. candidate 전체를 검증한 뒤 SLOTS_SPLIT을 dispatchProjectCommand로 보내 한 번 commit한다.
+    4. SLOTS_SPLIT 내부에서 candidate 전체를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
     5. interface selection reconciliation과 renderer update는 project commit 이후 수행한다.
     """
     result = dispatchProjectCommand("SLOTS_SPLIT", {"slotIds": slotIds})
@@ -455,7 +457,7 @@ def insertSlotCaptionsIntoGlobalCaption(slotIds):
     2. non-empty slot.caption을 label/text projection으로 계산한다.
     3. 계산한 text를 사용자 명령에 따라 global caption text에 삽입한다.
     4. source slot.caption 값과 slot ownership은 변경하지 않는다.
-    5. 계산된 insertion intent를 SLOT_CAPTIONS_INSERTED project command로 commit한다.
+    5. wrapper는 slotIds만 전달하고 SLOT_CAPTIONS_INSERTED command가 위 resolve/insertion 계산과 commit을 수행한다.
     """
     result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
     return result
