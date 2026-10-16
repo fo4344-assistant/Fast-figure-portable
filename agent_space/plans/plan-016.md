@@ -1270,7 +1270,7 @@ Application boundary를 세 번째 authoritative FSM으로 만들지 않는다.
 
 ## 32. 2026-10-16 구현 진행 — selection/reconciliation ownership
 
-- Source Code r32 (WIP): Backend validated selection / post-commit reconciliation query provider와 Application adapter를 구현한다. Frontend FSM의 live ProjectObject context, workspace chart normalization, persistent command action 연결을 제거한다.
-- invalid reference는 Frontend state를 보존하고 explicit null만 deselection한다. graph selection은 live graph mutation 없이 CSV reference를 함께 선택한다.
+- Source Code r32/r33 (WIP): Backend validated selection / post-commit reconciliation query provider와 Application adapter를 구현한다. Frontend FSM의 live ProjectObject context, workspace chart normalization, persistent command action 연결을 제거한다.
+- invalid reference는 Frontend state를 보존하고 explicit null만 deselection한다. explicit public graph selection은 live graph mutation 없이 CSV reference를 함께 선택한다. object commit index 갱신은 기존 current CSV 선택을 보존한다.
 - 회귀 항목 37/38과 기존 전체 split/portable browser regression, version checker, distribution build는 사용자 요청에 따라 GitHub Actions에서 실행한다. 결과는 `agent_space/reviews/review-20261016-001-selection-boundary.md`에 기록한다.
 - 전체 완료 아님: renderer와 남은 API/domain consumer의 direct access cutover, read projection 완성, 최종 통합 검증이 남는다. Source Code `stale` 유지. TLC 미실행.
