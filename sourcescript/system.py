@@ -187,9 +187,9 @@ UNRESOLVED_REVIEW_ITEMS = [
         "purpose/duplicate-integration 검토가 끝났다고 간주하지 않는다."
     ),
     (
-        "Plan 017 D: 전체 public operation의 정적 trace에서 공개 반환 shape, runtime composition, "
-        "asset fileKind/resolveImportPlan의 공식 query와 createEmptyCsv의 create-and-select는 연결했다. "
-        "다른 runtime operation과 router/export 완료 규칙에는 미정 의미가 남았다. "
+        "Plan 017 D: asset fileKind/resolveImportPlan의 공식 query와 createEmptyCsv의 create-and-select를 연결했고, "
+        "caption/label/UI-palette의 성공 read·미commit False·오류 전파와 label reset/interaction-finish 반환을 구체화했다. "
+        "project/slot/asset/graph/layout의 나머지 public 반환과 selection/zoom runtime, router/export 완료에는 미정 의미가 남았다. "
         "기존 operation의 계약과 공통 adapter를 보완해야 하며 내부 command triple을 public 값으로 자동 간주하지 않는다. "
         "정적 대조표 작성이나 개별 wrapper 수정만으로 전체 closure 근거를 삼지 않는다."
     ),
