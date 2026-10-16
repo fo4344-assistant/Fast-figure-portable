@@ -444,7 +444,7 @@
             if (!object || !csv) input.accepted = false;
             else {
               input.reference = payload.index;
-              input.selectionHint = projectAssetPath(csv);
+              input.selectionHint = payload.selectAsset === true ? projectAssetPath(csv) : null;
             }
           }
         } else input.accepted = false;
@@ -741,7 +741,7 @@
         machine.state = Object.freeze({
           ...machine.state,
           graphObjectIndex: index,
-          ...(index !== null ? {
+          ...(index !== null && payload.validatedInput.selectionHint ? {
             assetSelection: "csv", assetPath: payload.validatedInput.selectionHint,
           } : {}),
         });
@@ -5812,9 +5812,9 @@
         return csv;
       }
       function graphEditorSelectObject(index) {
-        let input = validateFrontendIntent("SELECT_GRAPH_OBJECT", { index, selectedSlotId });
+        let input = validateFrontendIntent("SELECT_GRAPH_OBJECT", { index, selectedSlotId, selectAsset: true });
         if (!input.accepted) return null;
-        appFSM.send("SELECT_GRAPH_OBJECT", { index: input.reference, direction: "fsm-to-model" });
+        appFSM.send("SELECT_GRAPH_OBJECT", { index: input.reference, selectAsset: true, direction: "fsm-to-model" });
         appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
         return input.reference;
       }
