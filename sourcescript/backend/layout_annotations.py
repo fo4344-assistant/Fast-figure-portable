@@ -8,12 +8,12 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈�
 from sourcescript.backend.project_state import activeProject, projectObjects, SLOT_LOCAL_DEFAULTS, slotHasNonDefaultLocalState
 
 ANNOTATION_SETTINGS_RULE = (
-    "기본값의 단일 데이터 원천은 sourcescript/backend/settings.json의 labels/captions/captionReferenceStyle이다. "
+    "기본값의 단일 데이터 원천은 sourcescript/backend/settings.json의 backend.project_object.annotations 및 backend.defaults.captionReferenceStyle이다. "
     "이 JSON은 code/loader/별도 mutable authority가 아니라 기존 Backend annotation 책임의 설정 데이터다. "
-    "create는 labels/captions를 deep-copy하고 load는 missing object/field만 재귀 보완하며 valid saved 값과 false/0/empty를 보존한다. "
+    "create는 annotations.labels/captions의 설정 field만 deep-copy한다. text/afterText/name은 별도 새 instance data로 empty text를 생성한다. load는 missing 설정만 재귀 보완하며 valid saved 값과 false/0/empty 및 본문 data를 보존한다. "
     "supplied invalid 값은 기존 normalization/whole-project validation으로 처리하며 invalid state를 commit하지 않는다. "
     "partial edit는 현재 Project의 omitted field를 유지한다. read는 기본값을 채우기 위해 Project를 mutate하지 않는다. "
-    "position reset도 JSON labels.settings.x/y를 사용한다. FFPX에는 실제 Project 값을 저장한다. "
+    "position reset도 JSON backend.project_object.annotations.labels.settings.x/y를 사용한다. FFPX에는 실제 Project 값을 저장한다. "
     "Frontend는 Backend/Application이 supplied projection/export input에 포함한 값을 소비하며 JSON/Backend를 직접 읽지 않는다. "
     "settings.json이 missing/malformed면 구성 오류이며 별도의 코드 상수로 조용히 대체하지 않는다. "
     "설정 파일별 registry/synchronization/cache authority를 만들지 않는다."
@@ -25,24 +25,16 @@ LAYOUT_BOUNDARY_RULE = (
     "Application wrapper는 identity와 새 edit 값만 보내며 candidate는 Project EFSM command 내부에서 계산한다. "
     "Frontend renderer는 Application이 제공한 immutable snapshot/projection만 소비한다."
 )
-layoutRules = {
-    "gridRows": "1..8 integer",
-    "gridCols": "1..8 integer",
-    "referenceWidth": "100..20000",
-    "gap": "0..2000",
-    "outerMargin": "0..5000",
-    "radius": "0..2000",
-    "aspect": "0.1..10",
-    "zoom": "runtime dashboard zoom intent; 현재 UI/API 범위 50..200 percent",
-}
+layoutRules = "config reference: backend.defaults.limits.layout; bounds 적용 알고리즘은 기존 layout owner가 수행한다."
+# zoom은 Frontend session/UI 의미이며 Backend config에 옮기지 않는다.
 
 
 imageSettings = {
     "owner": "slot.content.imageSettings; image asset의 속성이 아니다.",
     "fit": "contain, cover, manual 중 하나",
-    "scale": "manual fit에서 현재 허용 범위 1..1000 percent",
-    "x": "manual image center x; 현재 허용 범위 -100..200 percent",
-    "y": "manual image center y; 현재 허용 범위 -100..200 percent",
+    "scale": "manual fit percent; backend.defaults.limits.imageSettings.scale",
+    "x": "manual image center x; backend.defaults.limits.imageSettings.x",
+    "y": "manual image center y; backend.defaults.limits.imageSettings.y",
 }
 
 
@@ -53,25 +45,19 @@ labelSettings = {
     "y": "slot reference 좌표계의 label y position",
     "order": "row-major 또는 column-major",
     "fontFamily": "label font family",
-    "fontSize": "현재 최소 6; 구현상 별도 최대는 두지 않음",
+    "fontSize": "backend.defaults.limits.labels.fontSizeMin 이상; 별도 최대 없음",
 }
 
 
 captionSettings = {
     "fontFamily": "caption font family",
-    "fontSize": "현재 6..96",
-    "lineHeight": "현재 0.8..4",
+    "fontSize": "backend.defaults.limits.captions.fontSize",
+    "lineHeight": "backend.defaults.limits.captions.lineHeight",
 }
 
 
-EXPORT_LIMITS = {
-    "logicalWidth": "현재 100..20000 px",
-    "logicalHeight": "auto는 referenceWidth의 dashboard/caption 전체를 target width로 비례 scaling해 ceil, explicit은 total height 100..20000 px",
-    "dpi": "현재 36..1200",
-    "format": "png 또는 jpeg",
-    "rasterDimension": "현재 한 변 최대 16384 px",
-    "rasterArea": "현재 최대 64,000,000 pixels",
-}
+EXPORT_LIMITS = "config reference: backend.defaults.limits.export"
+# format png/jpeg와 auto/explicit의 의미·높이 계산은 기존 export 알고리즘이며 숫자 한계만 config에서 읽는다.
 
 
 SLOT_OPERATION_CAPTION_RULES = {
@@ -330,7 +316,7 @@ def createTargetExportSnapshot():
     projectObjects.snapshot으로 영속 입력을 한 시점에 복사한다.
     export target geometry는 snapshot.export에서 계산한다.
     renderer style projection은 export 작업 범위를 벗어나 일반 authority로 재사용하지 않는다.
-    captionReferenceStyle은 settings.json에서 이 작업 input으로 복사한다. Frontend가 파일을 직접 읽지 않는다.
+    captionReferenceStyle은 settings.json의 backend.defaults.captionReferenceStyle에서 이 작업 input으로 복사한다. Frontend가 파일을 직접 읽지 않는다.
     reference width R=layout.slotStyle.referenceWidth, dashboard 기준 높이 H0=R/layout.slotStyle.aspect다.
     목표 width W의 배율 s=W/R이다. renderer는 R에서 측정한 caption block/gap과 dashboard H0를 같은 s로 변환한다.
     export width는 이미 pixel 단위이므로 DPI를 다시 곱하지 않는다. DPI는 기존 출력 metadata 의미다.
