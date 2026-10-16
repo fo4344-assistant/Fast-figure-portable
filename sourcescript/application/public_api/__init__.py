@@ -65,20 +65,20 @@ PUBLIC_API_METHODS = {
         "move": "mutation; PROJECT_NODE_MOVED project command가 current state에서 plan을 재검증하고 candidate move commit",
         "createDirectory": "mutation; PROJECT_DIRECTORY_CREATED project command로 canonical non-conflicting directory commit",
         "createEmptyCsv": (
-            "mutation + runtime selection; 일반 CSV asset으로 빈 CSV.csv를 생성하고 기존 CSV selection 경로로 그 asset을 선택; "
-            "graph object/chart는 이 command가 자동 생성하지 않음"
+            "assets.createEmptyProjectCsvAndSelect; DATA_OBJECT_CREATED 성공 뒤 assets.selectProjectCsv로 생성 asset을 선택하고 detached CSV 반환; "
+            "미commit은 기존 failure, selection 거부는 none, throw는 전파하며 이미 생성된 asset은 rollback하지 않음; chart/object 자동 생성 없음"
         ),
         "emptyTrash": "mutation; PROJECT_TRASH_EMPTIED project command로 trash references/assets/directories candidate removal commit",
         "draggableAsset": "read/calculation; slot connection drag payload로 사용할 수 있는 non-trash CSV/image asset projection; tree move 가능 여부와는 별도 판정",
         "connectToSlot": "mutation; CSV는 SLOT_DATA_CONNECTED, image는 SLOT_IMAGE_LINKED project command로 명시적 연결 commit",
         "importToDirectory": "lifecycle mutation; ASSETS_IMPORTED project command로 batch file candidates -> collision plan -> one atomic commit",
         "importToSlot": "lifecycle mutation; ASSETS_IMPORTED project command로 raw file asset + target slot/chart candidate -> one atomic commit",
-        "fileKind": "calculation; filename/MIME에서 지원 slot import kind 판정",
+        "fileKind": "assets.readAssetFileKind -> Q assets.fileKind; copied name/type의 slot/data/image/empty kind 문자열; bytes/Project/Frontend 변경 없음",
         "importFiles": "lifecycle router; supported files를 directory/slot import contract로 전달",
-        "collisionModel": "calculation; current VFS + reserved paths에서 collision model",
-        "resolveImportPlan": "calculation; user choice를 concrete path/replace id plan으로 변환",
+        "collisionModel": "assets.readAssetCollisionModel -> Q assets.collisionModel; current VFS + reserved paths의 immutable 한 작업용 model",
+        "resolveImportPlan": "assets.readAssetImportPlan -> Q assets.resolveImportPlan; current VFS 재검증한 path/replaceId; stale replace/invalid model은 오류, command commit은 별도 재검증",
         "selectDirectory": "runtime mutation; VFS-resolved directory selection",
-        "selectCsv": "runtime mutation; VFS-resolved CSV selection",
+        "selectCsv": "assets.selectProjectCsv(path) -> Q current CSV 확인 -> F SELECT_ASSET; 성공 detached CSV, missing/wrong-kind/거부 none; Project/slot 보존, graph object index clear",
         "selectImage": "runtime mutation; VFS-resolved image selection only; no slot mutation",
         "download": "read/export; asset original bytes download, project mutation 없음",
     },
