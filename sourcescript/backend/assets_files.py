@@ -14,20 +14,15 @@ ASSET_BOUNDARY_RULE = (
     "current-state resolve/normalize/id/path/candidate/validation은 Project EFSM command 내부 계산이다. "
     "Backend는 Frontend selection, DOM 또는 UI callback을 읽거나 실행하지 않는다."
 )
-PACKAGE_FORMAT_VERSION = "현재 FFPX/FFSX package format version 3"
+PACKAGE_FORMAT_VERSION = "config reference: backend.project_object.ffpx.formatVersion; FFSX도 같은 compatibility version 사용"
 
 
-PROJECT_ASSET_DIRECTORIES = {
-    "csv": "/assets/csv",
-    "image": "/assets/images",
-}
-
-
-PROJECT_TRASH_DIRECTORY = "project trash root; 현재 구현 path /assets/trash"
+PROJECT_ASSET_DIRECTORIES = "config reference: backend.defaults.vfs의 csv/image"
+PROJECT_TRASH_DIRECTORY = "config reference: backend.defaults.vfs.trash"
 
 
 FIXED_DIRECTORY_RULE = (
-    "현재 구현의 고정 directory는 /assets, /assets/csv, /assets/images, /assets/trash다. "
+    "고정 directory의 유일한 값 원천은 backend.defaults.vfs의 root/csv/image/trash다. "
     "삭제 또는 이동 대상으로 취급하지 않는다."
 )
 
@@ -67,7 +62,7 @@ PACKAGE_CONTAINER_RULES = [
 
 
 EXPORT_TRASH_RULE = (
-    "FFPX export는 /assets/trash 아래의 CSV, image, directory를 package에 포함하지 않는다. "
+    "FFPX export는 PROJECT_TRASH_DIRECTORY 아래의 CSV, image, directory를 package에 포함하지 않는다. "
     "export 대상 chart/slot이 trash asset을 참조하면 실패한다."
 )
 
@@ -136,7 +131,7 @@ EMPTY_CSV_RULE = (
 
 
 FORMAT_EVOLUTION_RULE = (
-    "현재 package format version 3의 구조를 유지하되 persistent export settings는 additive project setting으로 기록한다. "
+    "PACKAGE_FORMAT_VERSION이 지정하는 현재 package format 구조를 유지하되 persistent export settings는 additive project setting으로 기록한다. "
     "같은 version의 기존 파일에 export settings가 없으면 project default로 정규화한다. "
     "향후 기존 field 의미를 바꾸거나 기존 reader가 구조를 해석할 수 없는 변경을 하면 package version을 올린다."
 )
@@ -278,7 +273,7 @@ def projectFileStem(value):
     """
     project export filename의 pure sanitize. missing/null은 empty text, text trim 뒤
     backslash/slash/colon/star/question/double-quote/angle-bracket/pipe 및 U+0000..001F를 hyphen으로 바꾼다.
-    whitespace run은 space 하나로 합치고 trailing dot/space를 없앤 뒤 최대 100 text units로 제한한다.
+    whitespace run은 space 하나로 합치고 trailing dot/space를 없앤 뒤 backend.defaults.naming.exportStemMaxLength text units로 제한한다.
     결과 empty면 fast-figure-project다. 원래 project metadata/name은 바꾸지 않는다.
     """
     return "위 규칙의 safe project filename stem"
