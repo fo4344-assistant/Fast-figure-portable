@@ -17,6 +17,30 @@ SLOT_STYLE_DEFAULTS = {
     "showBorders": True,
 }
 
+# Project appearance의 기본값 원천. graph object의 색 순환과는 별개다.
+DEFAULT_UI_PALETTE = {
+    "uiColor": "#B0CFCE",
+    "uiBackgroundColor": "#FAFAFA",
+    "uiSurfaceColor": "#FFFFFF",
+    "uiMutedColor": "#4F525D",
+    "uiSubtleColor": "#94A3B8",
+    "uiDisabledBgColor": "#E5E7EB",
+    "uiDisabledTextColor": "#64748B",
+    "uiShadowColor": "#383A42",
+    "paperColor": "#FFFFFF",
+    "fontColor": "#383A42",
+}
+
+APPEARANCE_PALETTE_RULE = (
+    "위 10개 field만 persistent uiPalette로 소유한다. 새 project/reset은 DEFAULT_UI_PALETTE의 copy다. "
+    "APPEARANCE_CHANGED는 전체 palette 설정이며 partial merge가 아니다. 각 field의 새 값이 #와 6개 hex digit인 text면 "
+    "대소문자를 보존하고 사용하며 missing/invalid는 그 field의 DEFAULT_UI_PALETTE 값으로 돌아간다. unknown field는 버린다. "
+    "이를 적용한 whole-project candidate를 검증한 뒤 한 번 commit한다. read/render는 current palette의 detached copy만 사용한다. "
+    "UI draft/DOM/CSS/graph color list를 persistent palette 원천으로 사용하지 않는다. "
+    "FFPX load의 missing/invalid appearance field도 같은 기본값 규칙으로 candidate에 정규화하며 valid 저장 색은 유지한다. "
+    "schema 검증에서는 10개 필수 색의 유효성을 확인하며 invalid authority를 renderer가 고치지 않는다."
+)
+
 PROJECT_OBJECT_PATHS = {
     "project": "meta project information의 공식 read path",
     "layout": "grid와 slotStyle의 공식 read path",
@@ -579,7 +603,7 @@ DEFAULT_PROJECT_RULES = {
     ),
     "vfs": "고정 directory /assets, /assets/csv, /assets/images, /assets/trash를 만든다.",
     "nextId": "csv/image/chart 모두 collection의 첫 새 id를 가리키는 값에서 시작한다.",
-    "appearance": "기본 UI palette를 복사해 project persistent palette로 시작한다.",
+    "appearance": "DEFAULT_UI_PALETTE를 복사해 project persistent palette로 시작한다. reset/set/load도 APPEARANCE_PALETTE_RULE을 공유한다.",
 }
 
 
