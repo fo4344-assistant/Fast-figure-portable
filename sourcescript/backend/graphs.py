@@ -20,8 +20,8 @@ axisSettings = {
     "tickMode": "plotly 또는 increment; log scale에서는 plotly만 사용",
     "minorTicks": "log axis의 dense/minor tick 표시 여부",
     "notation": "none, e, power 중 하나",
-    "scaleType": "linear 또는 log",
-    "divide": "trace numeric values에 적용할 non-zero numeric divisor",
+    "scaleType": "linear, log 또는 reciprocal; reciprocal은 data를 역수 변환하고 Plotly axis는 linear로 표시",
+    "divide": "trace numeric values에 적용할 유한 non-zero numeric divisor; 생략/invalid/0이면 항등 divisor 1",
     "title": "axis title text",
     "titleSize": "axis title font size",
     "lineWidth": "axis line width",
@@ -243,17 +243,40 @@ def tracesSingle(objectView):
     변경:
     - 없음.
 
+    입력 범위:
+    objectView는 traces가 같은 작업의 project CSV에서 resolve한 rows/headerLines/column identifier,
+    해당 object의 style과 연결된 x/y axis의 divide/scaleType만 담는 호출 범위 값이다.
+    live authority, current CSV selection 또는 DOM을 다시 조회하지 않는다.
+
     확정 계산:
-    - x/y divide 값으로 numeric data를 나눈다.
-    - reciprocal axis는 0을 제외하고 1/value를 사용한다.
-    - log axis는 0 이하 값을 제외한다.
-    - bar/scatter/hidden 의미와 line/marker style 범위를 보존한다.
+    1. x/y의 C1..Cn을 0-based column index로 resolve한다. identifier가 없거나 column 범위 밖이면 trace는 없다.
+       columnDefinitions와 동일한 최대 row 폭을 사용하며 짧은 row의 누락 cell은 별도로 판정한다.
+       CSV의 정규화된 headerLines만큼 앞 row를 제외하고 body를 원래 순서대로 순회한다.
+    2. scalar 숫자 변환은 유한 number 또는 숫자로 변환 가능한 text를 사용한다.
+       CSV 호환상 y의 empty/whitespace text와 null은 0, boolean은 false=0/true=1이다.
+       누락 cell, 변환 불가능한 y, NaN/무한 수치 y는 해당 row 전체를 제외한다.
+       x는 literal empty text "" 또는 누락 cell이면 row 전체를 제외한다. 유한 수치로 변환 가능한 scalar는 numeric x로,
+       그 외 text는 원래 categorical x로 유지한다. whitespace-only x text는 scalar 변환 결과인 0이다. null/boolean은 같은 scalar 숫자 변환을 사용한다.
+       실제 numeric x가 NaN/무한 값이면 제외하며, 비수치 text를 임의로 숫자 0으로 바꾸지 않는다.
+    3. 유한 non-zero divisor로 numeric x와 numeric y를 각각 나눈다. categorical x는 divide로 바꾸지 않는다.
+       divisor 생략/invalid/0은 1이다. 나눗셈 결과가 비유한 수치이면 해당 row 전체를 제외한다.
+    4. divide 뒤의 각 축 값에 scaleType을 적용한다.
+       linear는 유한 numeric 또는 x의 category를 유지한다.
+       log는 유한 numeric 값이면서 0보다 큰 경우에만 유지한다. text category는 log 축에서 제외한다.
+       reciprocal은 유한 numeric이면서 0이 아닐 때 1/value를 사용한다. 음수는 허용하고 category는 제외한다.
+       역수 결과가 비유한 수치이면 제외한다. y는 항상 numeric이며 axis마다 다른 변환을 적용할 수 있다.
+    5. 어느 한 축이라도 제외 조건이면 같은 row의 x/y를 함께 버린다. 각각 별도 filter로 정렬하거나
+       누락 좌표를 이웃 row의 값으로 채우지 않는다. 통과한 paired x/y를 같은 순서로 사용한다.
+       통과 row가 없으면 []이다. 한 object를 category 값마다 별도 group/trace로 나누지 않는다.
+    6. bar/scatter/hidden 의미와 line/marker style 범위를 보존한다. hidden도 data 변환을 우회하거나
+       editor object를 삭제하지 않는다. visible/style/extension 및 axis 표시 field의 전체 매핑은 같은 graph domain의
+       projection 규칙으로 정하며 이 numeric 절차가 임의 renderer 기본값이나 새로운 persistent field를 만들지 않는다.
     """
     plotlyTraces = "graph object에서 파생된 Plotly trace 목록"
     return plotlyTraces
 
 
-def traces(chart):
+def traces(chart, project):
     """
     Return:
     - plotlyTraces:
@@ -262,28 +285,43 @@ def traces(chart):
     변경:
     - 없음.
 
-    참조:
-    각 object.csvId는 getProjectCsv를 통해 authoritative CSV를 다시 resolve한다.
-    object에 저장된 row copy를 일반 원천으로 사용하지 않는다.
+    처리:
+    project는 이 Backend 작업이 읽는 current authority 또는 command 내부의 같은 whole-project candidate다.
+    public read projection을 project 대신 받거나 Application/Frontend가 candidate를 넘기는 경로는 없다.
+    1. chart의 owning slot/id와 editor.objects를 같은 project에서 resolve한다.
+    2. object 순서대로 csvId를 그 project의 CSV collection에서 resolve하고 rows/headerLines를 읽는다.
+       getProjectCsv의 current-authority 기본 조회로 candidate에 새로 생성된 CSV를 찾으려 하지 않는다.
+       없는 실제 CSV reference는 validation 실패이며 current selected CSV나 conversionRows로 대체하지 않는다.
+    3. xAxisSide/yAxisSide를 그 chart의 네 axis에 연결해 objectView를 만들고 tracesSingle을 호출한다.
+       bottom/top은 Plotly x/x2, left/right는 y/y2로 연결한다. 각 object의 data 순서를 보존한다.
+    4. object.plotlyTrace extension은 복사해 사용하며 계산된 x/y/axis reference를 덮어쓰는 authority로 쓰지 않는다.
+       object color/legend/style과 renderer layout/표시 field의 기존 mapping은 같은 graph domain이 소유한다.
+    5. rows/objectView/trace 결과는 이 작업 범위 값이다. object에 row copy를 저장하지 않으며
+       Backend projection을 소비하는 Frontend renderer가 CSV resolve/trace 계산을 다시 수행하지 않는다.
+    non-editable imported conversion representation은 이 절차로 CSV를 찾지 않고 chartFigure의 보존 경로를 사용한다.
     """
     plotlyTraces = "chart의 Plotly data projection"
     return plotlyTraces
 
 
-def rebuildEditableGraph(chart):
+def rebuildEditableGraph(chart, project):
     """
     변경:
-    - chart.graph.data/layout/config renderer projection.
+    - command 내부 candidate 또는 query-local chart copy의 graph.data/layout/config renderer projection만 변경한다.
+    - query에서 받은 live chart를 in-place 정규화하거나 독립적으로 activeProject를 commit하지 않는다.
 
     처리:
-    chart.editor와 referenced project CSV에서 traces/layout을 다시 계산한다.
-    objects가 비어 있으면 trace projection은 빈 배열이고 layout/global settings는 계속 계산한다.
-    project/domain 의미를 Plotly renderer 형식으로 투영한다.
+    project는 traces와 동일한 작업의 current authority 또는 Backend command candidate다.
+    chart.editor와 그 project의 referenced CSV에서 traces(chart, project)와 layout을 다시 계산한다.
+    candidate에 새로 생성/교체/삭제한 CSV를 candidate chart와 함께 사용하며 pre-commit live CSV와 혼합하지 않는다.
+    objects가 비어 있으면 object trace는 빈 배열이고 layout/global settings 계산은 계속한다.
+    renderer 표시용 axis 보조 trace가 필요하더라도 persistent graph object/default CSV를 생성하지 않는다.
+    project/domain 의미를 Plotly 형식으로 투영하며 실제 project commit은 Project EFSM만 수행한다.
     """
     return chart
 
 
-def chartFigure(chart):
+def chartFigure(chart, project):
     """
     Return:
     - figure:
@@ -293,8 +331,13 @@ def chartFigure(chart):
     - 없음.
 
     처리:
-    editable chart는 현재 editor/CSV에서 figure를 계산한다.
-    imported non-editable chart는 보존된 Plotly semantics를 유지한다.
+    project는 같은 Backend read/export 작업의 current authority 또는 command-local candidate다.
+    chart를 작업용으로 복사한 뒤 아래 한 경로만 사용한다. 원본 chart/CSV/Frontend selection을 변경하지 않는다.
+    - non-editable이고 graph.imported가 있으면 그 원본 data/layout/config/frames의 detached copy를 반환한다.
+      conversionRows/object view에서 project CSV를 resolve하거나 원본 trace를 재생성/손실 정규화하지 않는다.
+    - 그 외에는 chart copy의 editor와 같은 project CSV에서 rebuildEditableGraph(copy, project)로 figure를 계산한다.
+      일반 CSV chart의 editable flag를 껐다는 이유만으로 실제 project reference를 conversion view로 바꾸지 않는다.
+    export와 dashboard projection은 같은 절차를 사용하고 renderer가 이 결과를 mutation 입력으로 돌려보내지 않는다.
     """
     figure = "export 가능한 Plotly figure"
     return figure
@@ -311,9 +354,12 @@ def normalizeAxisSettings(axis, key):
 
     처리:
     bottom x와 left y는 기본 visible, top x와 right y는 기본 hidden이다.
-    enum과 numeric/empty field를 정규화한다.
-    divide는 0이 될 수 없다.
-    log scale에서는 increment tick mode를 허용하지 않는다.
+    scaleType은 linear/log/reciprocal이며 생략/invalid는 항등 변환인 linear다.
+    reciprocal을 linear의 별칭으로 지우지 않는다. data 변환은 tracesSingle의 divide 다음 역수 순서다.
+    enum과 numeric/empty field를 정규화하며 divide는 유한 non-zero 수치, 생략/invalid/0은 항등 divisor 1이다.
+    log scale에서는 increment tick mode를 허용하지 않는다. reciprocal은 log가 아니므로 기존 increment 선택을 보존한다.
+    reciprocal의 Plotly axis type은 linear이고 min/max는 역수 변환 후 표시 좌표의 경계다.
+    이 단계에서 범위에 다시 역수를 취하거나 원본 CSV를 재작성하지 않는다.
     """
     normalized = "정규화된 axis settings"
     return normalized
@@ -408,7 +454,9 @@ def convertImportedChartToEditable(chart):
        conversionRows가 있고 conversion object가 0개면 CSV 없이 editor.editable=true인 empty chart candidate를 만든다.
     3. conversionRows가 있고 conversion object가 있으면 그 rows를 하나의 project CSV candidate로 만들고
        모든 conversion object가 그 실제 CSV id를 참조하도록 연결한다. 연결 후 conversionRows를 제거한다.
-    4. global/axis settings를 유지한 채 editable Plotly projection을 다시 계산한다.
+    4. global/axis settings를 유지한 채 같은 whole-project candidate의 chart/CSV로 editable Plotly projection을 다시 계산한다.
+       traces/chartFigure/rebuildEditableGraph의 project 인자에 그 candidate를 사용한다. 아직 commit되지 않은 CSV를
+       live activeProject에서 조회하거나 새 CSV reference를 맞추기 위해 부분 commit하지 않는다.
     5. caller인 Project EFSM이 current next-id/path/ownership까지 포함한 whole-project candidate를 검증하고 한 번 commit한다.
     """
     candidate = "editable conversion candidate"
