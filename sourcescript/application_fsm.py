@@ -95,9 +95,15 @@ def dispatchProjectCommand(event, payload):
        read projection 전체를 mutation candidate로 보내거나 Application에서 current project의 복제본을 별도 검증하지 않는다.
     3. commit 실패면 Frontend success reconciliation 없이 result, interfaceFSM.readState(), rendererInput none을 반환한다.
     4. commit 성공이면 interfaceFSM.readState()의 id/path/index reference와 result를 buildFrontendReconciliationInput에 전달한다.
+       object 편집의 selectionHints.chartId/selectedIndexHint도 이 경로에서만 post-commit 대상에 대해 검증한다.
     5. interfaceFSM.reconcileProjectResult에 그 validated reconciliation input을 전달한다.
+       SELECT_GRAPH_OBJECT를 사후 재호출하지 않는다. index 보정 때문에 독립 current CSV 선택을 덮어쓰지 않는다.
     6. final Frontend state를 request에 포함해 readBackendProjection("renderer")로 renderer용 immutable project projection을 만든다.
     7. ProjectMutationResult, final Frontend state, renderer project projection을 caller/Frontend renderer 경계로 반환한다.
+       이 tuple은 내부 orchestration 결과이며 chart/settings/bool 같은 public API 반환값으로 자동 간주하지 않는다.
+       기존 public wrapper가 read 값을 선언했다면 committed를 확인한 뒤 official dispatchProjectQuery의 detached 값을 반환한다.
+       미commit/취소 결과에는 성공 read를 수행하지 않고 그 wrapper의 기존 실패값/결과를 반환한다. throw/rejection은 caller에 전파한다.
+       post-commit query/render 실패는 이미 성공한 command를 실패 전 상태로 rollback하지 않으며 성공 payload로 위장하지 않는다.
     """
     result = projectEFSM.send(event, payload)
     frontendBefore = interfaceFSM.readState()
