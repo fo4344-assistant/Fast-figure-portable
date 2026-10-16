@@ -227,7 +227,9 @@ GRAPH_CSV_SELECTION_RULE = (
 
 EMPTY_CSV_GRAPH_RULE = (
     "assets.createEmptyCsv로 생성한 빈 CSV도 다른 project CSV와 동일한 csvId reference 대상이다. "
-    "생성 command는 CSV를 선택 상태로 만들 뿐 chart/object를 자동 생성하지 않는다. "
+    "Backend 생성 command/helper는 일반 CSV 생성만 소유하고 Frontend 선택이나 chart/object를 변경하지 않는다. "
+    "public Application createEmptyProjectCsvAndSelect가 commit 성공 뒤 실제 CSV path로 검증된 SELECT_ASSET을 보낸다. "
+    "사후 선택 거부/오류는 이미 생성된 CSV를 rollback하거나 Backend 선택으로 대체하지 않는다. "
     "사용자가 오브젝트 추가를 실행하면 graphEditorAdd는 그 현재 선택 CSV id를 resolve하여 기존 SLOT_DATA_CONNECTED 또는 "
     "GRAPH_OBJECTS_REPLACED 경로로 graph object를 생성한다. 빈 CSV 전용 chart type, protected object, fake default object를 만들지 않는다."
 )
