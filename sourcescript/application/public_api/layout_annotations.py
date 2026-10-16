@@ -6,7 +6,22 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈�
 """
 
 from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery
+from sourcescript.backend.project_state import DEFAULT_UI_PALETTE
+from sourcescript.frontend.interface_fsm import interfaceFSM
 from sourcescript.frontend.renderer import renderDashboardTarget, renderDashboardCurrent
+
+
+ANNOTATION_APPEARANCE_RESULT_RULE = (
+    "이 파일의 captions set/insert, labels set/reset과 appearance set/reset은 committed 확인 뒤 "
+    "그 owner의 공식 public read와 같은 detached 값을 반환한다. caption global 변경은 captions.readGlobal, "
+    "slot text 변경은 explicit slotId의 captions.readSlot, label 변경은 현재 선택 geometry를 합성한 labels.readState, "
+    "palette 변경은 appearance.readPalette다. command 내부 tuple 또는 read projection을 mutation candidate로 사용하지 않는다. "
+    "미commit/명시적 취소는 False이며 success read/selection/completion notification을 실행하지 않는다. "
+    "Backend validation이 throw하면 False로 삼키지 않고 caller에 전파한다. "
+    "이 설정 변경은 UI 선택 대기를 요구하지 않으므로 새 cancel dialog/protocol을 추가하지 않는다. "
+    "command 성공 뒤 query/render/notification 오류는 caller에 전파하며 이미 commit한 state를 숨은 rollback하거나 "
+    "오래된 read/성공 tuple로 위장하지 않는다. labels.finishPositionInteraction은 command가 아니라 현재 label read를 반환하는 완료 알림이다."
+)
 
 def setLayoutApiStyle(values):
     """
@@ -106,6 +121,18 @@ def applyImageSettingsFromValues(slotId, values):
     return dispatchProjectQuery("project-api", {"operation": "images.readEditor", "slotId": slotId})
 
 
+def readLabelsApiState():
+    """
+    labels.readState의 Application read composition.
+    이번 호출의 interfaceFSM.readState().selectedSlotId만 scalar로 공식 labels.readState query에 전달한다.
+    Backend는 그때의 layout/slot span으로 reference geometry를 계산한다. none/missing slot은 기본 1x1 reference다.
+    선택 identity를 별도 저장하거나 이전 renderer geometry를 재사용하지 않는다.
+    read/query 오류는 전파하고 Project/Frontend state는 변경하지 않는다.
+    """
+    slotId = interfaceFSM.readState().selectedSlotId
+    return dispatchProjectQuery("project-api", {"operation": "labels.readState", "slotId": slotId})
+
+
 def setLabelsApiEnabled(enabled):
     """
     변경:
@@ -115,8 +142,10 @@ def setLabelsApiEnabled(enabled):
     LABEL_SETTINGS_CHANGED에 enabled candidate를 전달한다.
     다른 label settings 값은 current authority에서 유지한다.
     """
-    result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"enabled": enabled})
-    return result
+    result, interfaceState, rendererInput = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"enabled": enabled})
+    if not result.committed:
+        return False
+    return readLabelsApiState()
 
 
 def setLabelsApiSettings(values):
@@ -128,8 +157,10 @@ def setLabelsApiSettings(values):
     current labelSettings에서 candidate를 만들고 허용 enum/수치 규칙을 적용한 뒤
     LABEL_SETTINGS_CHANGED로 한 번 commit한다. x/y position은 values에 명시되지 않으면 유지한다.
     """
-    result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"settings": values})
-    return result
+    result, interfaceState, rendererInput = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", {"settings": values})
+    if not result.committed:
+        return False
+    return readLabelsApiState()
 
 
 def setLabelsApiPosition(x, y):
@@ -143,8 +174,15 @@ def setLabelsApiPosition(x, y):
     renderer는 mutation 뒤 authoritative position을 다시 읽는다.
     별도 preview position copy를 만들지 않는다.
     """
-    result = dispatchProjectCommand("LABEL_POSITION_CHANGED", {"x": x, "y": y})
-    return result
+    result, interfaceState, rendererInput = dispatchProjectCommand("LABEL_POSITION_CHANGED", {"x": x, "y": y})
+    if not result.committed:
+        return False
+    return readLabelsApiState()
+
+
+def resetLabelsApiPosition():
+    """labels.resetPosition: 기존 origin (0, 0) edit를 같은 position command에 전달하고 fresh label state/False를 반환한다."""
+    return setLabelsApiPosition(0, 0)
 
 
 def finishLabelsApiPositionInteraction():
@@ -155,8 +193,11 @@ def finishLabelsApiPositionInteraction():
 
     처리:
     position 저장의 두 번째 commit 단계로 사용하지 않는다.
+    Application은 기존 label-position interaction completion notification을 한 번 전달한다.
+    성공 반환은 현재 labels.readState의 detached projection이다. read/notification 오류는 caller에 전파한다.
+    Project command, rollback, position 변경 또는 별도 position mirror를 만들지 않는다.
     """
-    return "interaction completion 결과"
+    return readLabelsApiState()
 
 
 def setGlobalCaptionText(text):
@@ -169,11 +210,13 @@ def setGlobalCaptionText(text):
     slot caption 값은 변경하지 않는다.
     CAPTION_TEXT_INPUT에 explicit global owner를 전달해 projectEFSM으로 commit한다.
     """
-    result = dispatchProjectCommand(
+    result, interfaceState, rendererInput = dispatchProjectCommand(
         "CAPTION_TEXT_INPUT",
         {"target": {"kind": "global"}, "text": text},
     )
-    return result
+    if not result.committed:
+        return False
+    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
 
 
 def setSlotCaptionText(slotId, text):
@@ -185,11 +228,13 @@ def setSlotCaptionText(slotId, text):
     slotId를 current project에서 resolve하고 CAPTION_TEXT_INPUT에 explicit slot owner를 전달한다.
     UI의 selected-slot caption editor는 이 command를 호출할 뿐 별도 persistent slotMode를 만들지 않는다.
     """
-    result = dispatchProjectCommand(
+    result, interfaceState, rendererInput = dispatchProjectCommand(
         "CAPTION_TEXT_INPUT",
         {"target": {"kind": "slot", "id": slotId}, "text": text},
     )
-    return result
+    if not result.committed:
+        return False
+    return dispatchProjectQuery("project-api", {"operation": "captions.readSlot", "slotId": slotId})
 
 
 def insertSlotCaptionsIntoGlobalCaption(slotIds):
@@ -204,8 +249,10 @@ def insertSlotCaptionsIntoGlobalCaption(slotIds):
     4. source slot.caption 값과 slot ownership은 변경하지 않는다.
     5. wrapper는 slotIds만 전달하고 SLOT_CAPTIONS_INSERTED command가 위 resolve/insertion 계산과 commit을 수행한다.
     """
-    result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
-    return result
+    result, interfaceState, rendererInput = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
+    if not result.committed:
+        return False
+    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
 
 
 def setCaptionsApiEnabled(enabled):
@@ -216,7 +263,10 @@ def setCaptionsApiEnabled(enabled):
     처리:
     CAPTION_SETTINGS_CHANGED에 enabled candidate만 전달하고 다른 caption properties는 유지한다.
     """
-    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"enabled": enabled})
+    result, interfaceState, rendererInput = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"enabled": enabled})
+    if not result.committed:
+        return False
+    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
 
 
 def setCaptionsApiName(name):
@@ -227,7 +277,10 @@ def setCaptionsApiName(name):
     처리:
     CAPTION_SETTINGS_CHANGED의 explicit name field로 commit한다.
     """
-    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"name": name})
+    result, interfaceState, rendererInput = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"name": name})
+    if not result.committed:
+        return False
+    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
 
 
 def setCaptionsApiNameBold(nameBold):
@@ -238,7 +291,10 @@ def setCaptionsApiNameBold(nameBold):
     처리:
     CAPTION_SETTINGS_CHANGED의 explicit nameBold field로 commit한다.
     """
-    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"nameBold": nameBold})
+    result, interfaceState, rendererInput = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"nameBold": nameBold})
+    if not result.committed:
+        return False
+    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
 
 
 def setCaptionsApiSettings(values):
@@ -250,7 +306,27 @@ def setCaptionsApiSettings(values):
     fontFamily/fontSize/lineHeight candidate를 captionSettings 규칙으로 정규화하고
     CAPTION_SETTINGS_CHANGED로 한 번 commit한다.
     """
-    return dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"settings": values})
+    result, interfaceState, rendererInput = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", {"settings": values})
+    if not result.committed:
+        return False
+    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
+
+
+def setAppearanceApiPalette(values):
+    """
+    appearance.setPalette: 새 edit만 APPEARANCE_CHANGED에 전달한다.
+    Backend APPEARANCE_PALETTE_RULE의 전체 palette 정규화/commit 뒤 fresh palette copy를 반환한다.
+    missing field를 current palette와 merge하지 않는다. 미commit False, throw/rejection 전파; 성공 read로 위장하지 않는다.
+    """
+    result, interfaceState, rendererInput = dispatchProjectCommand("APPEARANCE_CHANGED", {"palette": values})
+    if not result.committed:
+        return False
+    return dispatchProjectQuery("project-api", {"operation": "appearance.readPalette"})
+
+
+def resetAppearanceApiPalette():
+    """appearance.resetPalette: 유일한 DEFAULT_UI_PALETTE를 같은 command path로 적용; fresh palette/False 반환."""
+    return setAppearanceApiPalette(dict(DEFAULT_UI_PALETTE))
 
 
 def setExportSettings(values):
