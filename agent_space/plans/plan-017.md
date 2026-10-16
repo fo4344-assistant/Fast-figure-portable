@@ -156,3 +156,12 @@
 - 이어 공개 inventory 87개를 입력 → owner/command/query/event → 반환/실패/취소까지 정적으로 대조했다. 이미 chart 반환이 선언된 move/delete wrapper를 기존 성공 후 query로 연결했다. 전체 대조표: `agent_space/reviews/review-20261016-009-public-api-trace-r30-open.md`.
 - **전체 목록 대조는 수행했으나 전체 계약 완결은 아니다.** public 반환 shape, runtime composition/zoom/create-and-select, pure calculation query 연결, router/export completion이 남았다. 이를 구버전 API 잔존과 혼동하지 않는다. Source `slots.swap`의 하위 공개 누락은 번역 시 보완 대상이다.
 - source r30 current/open, closure_review null과 하위 stale을 유지한다. 남은 계약 및 전체 import/edit/export 왕복·목적·중복통합 근거를 확보하기 전에는 닫힘/하위 번역 완료를 선언하지 않는다. 실제 누적 patch·검사 근거: `agent_space/patches/20261016-013.patch`와 같은 basename `.md`.
+
+## 13. API 보완 — r31 asset planning / create-and-select / OPEN
+
+- 기준 main `4871dc952bdfb291d79de28948918c1f587d4410`. F3의 assets.fileKind/resolveImportPlan을 기존 project-api query에 등록하고 collisionModel과 함께 public Application wrapper → Backend domain 계산을 연결했다. 별도 계산 authority나 command를 추가하지 않는다.
+- transient collision model은 current VFS에서 다시 검증한다. stale replace는 available/rename으로 조용히 바꾸지 않으며 조회 결과는 예약/commit이 아니다. 실제 import command의 current-authority 재검증을 유지한다.
+- F2의 assets.createEmptyCsv는 기존 domain create 성공 뒤 Application의 selectProjectCsv를 호출한다. SELECT_ASSET 한 전이로 CSV 선택/graph index clear를 수행하며 slot/chart/Project는 selection 단계에서 변경하지 않는다. 생성 실패에는 선택하지 않고 사후 선택 실패로 생성 asset을 숨은 rollback하지 않는다.
+- 근거/정적 시나리오/반환·실패 경로: `agent_space/reviews/review-20261016-010-api-assets-r31-open.md`. r30 전체 trace는 역사적 발견 기록으로 보존한다.
+- 다른 mutation public 반환, runtime selection/zoom 완료 및 router/export completion과 전체 closure 근거는 남아 있다. source r31 current/open, closure_review null, 하위 stale을 유지한다. 정책·PlusCal/model/JS/test/build/dist 변경이나 로컬 실행은 없다.
+- 실제 누적 patch와 Actions 검사: `agent_space/patches/20261016-014.patch` 및 같은 basename `.md`.
