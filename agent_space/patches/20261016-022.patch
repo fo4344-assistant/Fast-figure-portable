@@ -1,0 +1,492 @@
+diff --git a/agent_space/plans/plan-020.md b/agent_space/plans/plan-020.md
+index dc2057a..aafc287 100644
+--- a/agent_space/plans/plan-020.md
++++ b/agent_space/plans/plan-020.md
+@@ -54,3 +54,7 @@
+ ## 6. 제외·중단 조건
+ 
+ 정책 변경, 새 설정 프레임워크, lower JS/PlusCal/model/tests/dist 구현, 전체 closure 선언은 제외한다. 이 보완 계획의 게시에는 Source/metadata 수정이나 runtime/checker 실행을 섞지 않는다. 원격 HEAD 충돌이나 사용자 요구와 다른 새 의미가 발견되면 먼저 대조하고 stale 기준으로 덮어쓰지 않는다.
++
++## 7. 실행 진행 — Source r36
++
++공통 `sourcescript/backend/settings.json`을 추가하고 미게시 Python settings 파일/전용 디렉터리/import를 제거했다. 기존 annotation 책임 안에서 기본값 참조·caption 순서/group/append·reference-width export 계산을 연결했다. JSON을 포함한 Source fingerprint/revision/patch 감지를 checker에 반영했다. 이 단계는 계획 게시 이후의 별도 변경이며 patch 022에 기록한다. 상세 정적 대조·제외·실제 Actions 결과는 `agent_space/reviews/review-20261016-017-annotation-r36-open.md`를 따른다. Source closure는 open이며 lower stale를 유지한다.
+diff --git a/agent_space/reviews/review-20261016-017-annotation-r36-open.md b/agent_space/reviews/review-20261016-017-annotation-r36-open.md
+new file mode 100644
+index 0000000..0a1df52
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-017-annotation-r36-open.md
+@@ -0,0 +1,59 @@
++# Annotation r36 — 공통 설정 데이터 / caption append / reference-width export
++
++## 기준·판정
++
++- Source 변경 시작 main: `e5b9d3ec7cbd68fee578e202f714f69ceb1fd9c0`. Plan 019를 먼저 게시했고 사용자 정정 후 Plan 020을 추가·수정하고 patch 021로 기록한 다음 추가 Source 수정을 진행했다.
++- Source r36 current/open, fingerprint `sha256:9faab3f5111e06acfc3c498b6bfef0a68811c178a4d00ce975f9d7261fbe7212`. closure_review null, 하위 stale 유지.
++- review 016의 C1–C3에 해당하는 구체화다. 설정값뿐 아니라 numbering/group/append와 측정·높이 합성 경로를 같은 annotation 책임으로 연결했다. 전체 의미 closure나 lower fidelity/시각 테스트 완료를 주장하지 않는다.
++
++## 위치·정리·선택 이유
++
++- `sourcescript/backend/settings.json` **한 공통 파일**에 labels/captions/captionReferenceStyle 값만 두었다. 코드·import·정책 설명 없음. label용/caption용 파일을 따로 만들거나 다른 설정까지 일괄 이전하지 않았다.
++- 기존 `sourcescript/backend/layout_annotations.py`가 해석·계산 책임을 유지한다. 별도 loader/registry/service/state authority 없음. Backend 내부 Project가 현재 사용자 설정의 원천이며 defaults 데이터와 동기화하지 않는다.
++- 미게시 `sourcescript/backend/settings/annotations.py`와 전용 디렉터리, 관련 Python import를 삭제했다. 이 잘못된 파일은 원격에 게시한 적이 없어 actual git diff에 삭제로 나오지 않는다. `annotation-settings.json`은 제안한 경로일 뿐 생성하지 않았다.
++- 기존 layout_annotations.py는 최초 새 모듈을 이번에 만든 것이 아니라 r28의 역할 재배치 결과다. 이번에는 기존 책임을 사용하며 삭제·새 wrapper bridge를 만들지 않았다.
++- 기본값은 기존 createProjectState의 label/caption 값과 호환되도록 채택했다: initial disabled, lower-alpha/row-major, parentheses false, origin position, font system-ui 및 size14, caption lineHeight1.45. 이는 사용자 요구와 초기 출력 보존을 위한 채택 근거이지 lower code를 자동 권위로 삼는 절차가 아니다. 실제 값의 단일 정의는 JSON이다.
++- caption reference padding/gap/border/minimum-width도 같은 JSON에서 정의해 숫자를 renderer 기본값과 따로 소유하지 않는다. application position reset은 새 숫자를 복제하지 않고 Backend reset intent로 단일 기본값을 참조한다.
++
++## 생성→소비 경로
++
++1. create/load missing → JSON labels/captions → current Project. valid saved false/0/empty 보존. read는 Project를 채우지 않으며 partial edits는 current 값 보존.
++2. current Project → orderedSlotLabels → current visible anchors의 전체 ordinal/identifier. row/column order, merged covered 제외, sampleText와 renderer map의 같은 formatter.
++3. SLOT_CAPTIONS_INSERTED → current candidate+slotIds → insertSlotCaptions → whole validation → one commit → 기존 공식 captions.readGlobal. wrapper는 model/candidate를 만들지 않는다.
++4. snapshot input → copied captionReferenceStyle + current label/caption/layout → Frontend reference font 측정 → 하나의 emitted line list로 높이/painting → width ratio scaling. Frontend는 Backend/JSON을 직접 읽지 않는다.
++5. settings JSON → checker의 Source file collection/fingerprint 및 --base 변경 감지/patch marker/revision 검사. Python file만 변경된 것으로 한정하지 않는다. JSON missing/malformed/non-object는 checker 오류다. 설정 전체 application schema 검증을 checker가 대체한다고 주장하지 않는다.
++
++## 정적 시나리오 — 실행 결과가 아님
++
++| 입력·경로 | 명세 대조 결과 |
++|---|---|
++| 새 project와 saved 설정 | 초기값 JSON deep-copy; 유효 저장값 유지, missing만 보완, read mutation 없음 |
++| position reset | wrapper는 reset=True만 전달; Backend가 JSON의 x/y 적용; 이전 독립 0,0 상수 제거 |
++| a=A,b=B | `(a) A (b) B` |
++| a=A,b=A / a=A,b=empty / a=A,b=empty,c=A | `(a-b) A` / `(a-b) A` / `(a-c) A` |
++| a=empty,b=B / a=empty,b=empty | `(a) (b) B` / `(a-b)` |
++| a=A,b=B,c=A / A와 a / A와 A+space | nonadjacent 또는 문자열이 다른 항목은 합치지 않음 |
++| filter a,c / hidden/merged / column-major | filtered ordinal을 재번호 매기지 않음; a,c를 a-c로 묶지 않음; 전체 visible anchor 순서 사용 |
++| labels disabled/parentheses false | label drawing만 끄며 caption은 `(identifier)`로 생성 |
++| 기존 global text / no target / 재호출 | 기존 내용을 보존해 뒤에 append; trailing U+0020 재사용; no target unchanged/미commit; 재호출은 다시 append |
++| name/afterText/slot.caption | insertion은 global text만 변경. ordinary export caption body는 기존 text이며 afterText를 암묵적으로 추가하지 않음 |
++| 기준 폭 R=1200, aspect=2, caption disabled, 목표 W=2400 | H0=600, s=2, auto H=1200. reference dashboard/typography/gap 동일 배율 |
++| C0=100,G0=10를 같은 R에서 측정, W=2400 | auto H=ceil((600+100+10)*2)=1420, dashboard1200/caption200/gap20 |
++| DPI만 변경 | 목표 width가 pixel이므로 geometry 불변, 기존 DPI metadata만 변경 |
++| enabled empty / multiline/overlong word | enabled empty는 기존처럼 blank line 예약; newline/greedy word-wrap/prefix 측정 후 같은 lines로 height와 drawing. 긴 단어는 분할하지 않고 caption drawing 영역에서 clip |
++| explicit H 부족 / raster limit / font 측정 실패 | 다운로드 전 rejected 또는 원래 예외 전파; Project/settings에 숨은 수정 없음; 작업 resource finally 정리 |
++| JSON-only Source change | is_source_script_path가 exact settings.json을 포함하며 source collection과 patch/revision 경로도 같은 범위 |
++
++## 복잡도·통합·닫힘 영향
++
++설정별 파일/Python settings package를 추가하는 이득을 입증하지 못한 점을 수정했다. 공통 데이터 파일 하나와 기존 owner 함수만 사용한다. JSON 경로를 fingerprint 범위에 포함하는 변경은 값 변경의 revision 우회를 막기 위한 필요한 비용이다. 새로운 schema registry나 general loader는 없다.
++
++Caption label 생성은 기존 label formatting을 공유하되 괄호는 사용자 caption 규칙에 따라 항상 표시한다. metadata/FFPX/Backend current state와 config를 양방향 동기화하지 않는다. dashboard/render/export가 독립 numbering 알고리즘을 갖지 않도록 공급 projection을 연결했다.
++
++C1–C3의 구체적인 원천/알고리즘은 기록했지만 전체 create/load/FFPX 왕복, selection, output purpose/duplicate-integration의 최종 검토는 별도다. 하위 JS/PlusCal/model/test/dist를 이번에 번역하지 않았다. Source를 자동 close하지 않는다.
++
++## 검증·게시 기록
++
++- 로컬 Source/application/checker/test/build/TLC 실행 없음. fingerprint는 파일 경로/byte의 git blob hash를 계산한 것으로 Source 실행과 다르다.
++- 누적 patch와 GitHub Actions cumulative version checker의 실제 결과는 patch 022 설명과 아래 후속 결과에 기록한다. 순차 Contents API의 source-before-metadata 상태는 최종 coherent snapshot 검증과 구분한다.
++- 검증 실행 전 작성 문서다. 이후 실제 run ID/HEAD/BASE_SHA/result만 추가하며 checker PASS를 semantic/runtime 성공으로 취급하지 않는다.
+diff --git a/development-versions.json b/development-versions.json
+index e69558f..ce71283 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 35,
++      "revision": 36,
+       "status": "current", 
+-      "path_rule": "sourcescript/**/*.py", 
+-      "fingerprint": "sha256:6b1b16ef3e2a0e5725c9fa7b7191bda06265b96cc1844d7a94a130d4d3c97ef9",
++      "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
++      "fingerprint": "sha256:9faab3f5111e06acfc3c498b6bfef0a68811c178a4d00ce975f9d7261fbe7212",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/scripts/check-development-layer-versions.py b/scripts/check-development-layer-versions.py
+index 9e7190a..f5ce019 100644
+--- a/scripts/check-development-layer-versions.py
++++ b/scripts/check-development-layer-versions.py
+@@ -13,6 +13,7 @@ from pathlib import Path
+ ROOT = Path(__file__).resolve().parents[1]
+ MANIFEST_PATH = ROOT / "development-versions.json"
+ SOURCE_SCRIPT_DIR = ROOT / "sourcescript"
++SOURCE_SETTINGS_PATH = SOURCE_SCRIPT_DIR / "backend" / "settings.json"
+ VERIFICATION_DIR = ROOT / "verification"
+ PSEUDOCODE_DIR = ROOT / "pseudocode"
+ EXPECTED_PRECEDENCE = ["source-script", "pseudocode", "source-code"]
+@@ -37,6 +38,12 @@ def layer_fingerprint(paths: list[Path]) -> str:
+     return f"sha256:{digest}"
+ 
+ 
++def is_source_script_path(path: str) -> bool:
++    return (path.startswith("sourcescript/") and path.endswith(".py")) or (
++        path == SOURCE_SETTINGS_PATH.relative_to(ROOT).as_posix()
++    )
++
++
+ def source_script_paths() -> list[Path]:
+     if not SOURCE_SCRIPT_DIR.is_dir():
+         raise VersionError("sourcescript directory is missing")
+@@ -47,6 +54,15 @@ def source_script_paths() -> list[Path]:
+     ]
+     if not paths:
+         raise VersionError("no Source Script files found")
++    if not SOURCE_SETTINGS_PATH.is_file():
++        raise VersionError("Source settings file is missing: sourcescript/backend/settings.json")
++    try:
++        settings = json.loads(SOURCE_SETTINGS_PATH.read_text(encoding="utf-8"))
++    except (OSError, UnicodeError, json.JSONDecodeError) as error:
++        raise VersionError(f"Source settings JSON is invalid: {error}") from error
++    if not isinstance(settings, dict):
++        raise VersionError("Source settings JSON must be an object")
++    paths.append(SOURCE_SETTINGS_PATH)
+     return paths
+ 
+ 
+@@ -306,7 +322,7 @@ def validate_source_script_patch_record(changed: set[str], base: str) -> None:
+     source_paths = sorted(
+         path
+         for path in changed
+-        if path.startswith("sourcescript/") and path.endswith(".py")
++        if is_source_script_path(path)
+     )
+     if not source_paths:
+         return
+@@ -363,10 +379,7 @@ def validate_revision_progression(manifest: dict, base: str) -> None:
+     current_layers = manifest["layers"]
+     base_layers = base_manifest.get("layers", {})
+ 
+-    source_changed = any(
+-        path.startswith("sourcescript/") and path.endswith(".py")
+-        for path in changed
+-    )
++    source_changed = any(is_source_script_path(path) for path in changed)
+     pseudocode_changed = any(
+         path.startswith("pseudocode/") and path.endswith(".pcal")
+         for path in changed
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index 08a11df..dce62d6 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -313,8 +313,11 @@ def setLabelsApiPosition(x, y):
+ 
+ 
+ def resetLabelsApiPosition():
+-    """labels.resetPosition: 기존 origin (0, 0) edit를 같은 position command에 전달하고 fresh label state/False를 반환한다."""
+-    return setLabelsApiPosition(0, 0)
++    """labels.resetPosition: Backend가 settings.json labels.settings.x/y를 같은 position command에서 적용한다."""
++    result, interfaceState, rendererInput = dispatchProjectCommand("LABEL_POSITION_CHANGED", {"reset": True})
++    if not result.committed:
++        return False
++    return readLabelsApiState()
+ 
+ 
+ def finishLabelsApiPositionInteraction():
+@@ -369,17 +372,17 @@ def setSlotCaptionText(slotId, text):
+     return dispatchProjectQuery("project-api", {"operation": "captions.readSlot", "slotId": slotId})
+ 
+ 
+-def insertSlotCaptionsIntoGlobalCaption(slotIds):
++def insertSlotCaptionsIntoGlobalCaption(slotIds=None):
+     """
+     변경:
+     - project-level global caption text.
+ 
+     처리:
+-    1. 지정 또는 현재 visible slot object를 layout order로 resolve한다.
+-    2. non-empty slot.caption을 label/text projection으로 계산한다.
+-    3. 계산한 text를 사용자 명령에 따라 global caption text에 삽입한다.
+-    4. source slot.caption 값과 slot ownership은 변경하지 않는다.
+-    5. wrapper는 slotIds만 전달하고 SLOT_CAPTIONS_INSERTED command가 위 resolve/insertion 계산과 commit을 수행한다.
++    1. wrapper는 slotIds만 전달한다. None은 전체, []는 no target이다.
++    2. Backend layout_annotations.insertSlotCaptions가 current visible anchor의 전체 label 순서와 정확한 caption 문자열로 계산한다.
++    3. 연속 동일/뒤따르는 empty를 label range로 묶고, 시작 empty는 label만 두며 기존 global text의 맨 뒤에 공백 구분으로 append한다.
++    4. source slot.caption/ownership/afterText/name/settings는 변경하지 않는다. no target은 unchanged False다.
++    5. SLOT_CAPTIONS_INSERTED 내부의 candidate 계산/전체 검증/one commit 이후에만 공식 read를 반환한다.
+     """
+     result, interfaceState, rendererInput = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
+     if not result.committed:
+diff --git a/sourcescript/backend/layout_annotations.py b/sourcescript/backend/layout_annotations.py
+index 8b81d5a..75c35dc 100644
+--- a/sourcescript/backend/layout_annotations.py
++++ b/sourcescript/backend/layout_annotations.py
+@@ -7,6 +7,18 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈
+ 
+ from sourcescript.backend.project_state import activeProject, projectObjects, SLOT_LOCAL_DEFAULTS, slotHasNonDefaultLocalState
+ 
++ANNOTATION_SETTINGS_RULE = (
++    "기본값의 단일 데이터 원천은 sourcescript/backend/settings.json의 labels/captions/captionReferenceStyle이다. "
++    "이 JSON은 code/loader/별도 mutable authority가 아니라 기존 Backend annotation 책임의 설정 데이터다. "
++    "create는 labels/captions를 deep-copy하고 load는 missing object/field만 재귀 보완하며 valid saved 값과 false/0/empty를 보존한다. "
++    "supplied invalid 값은 기존 normalization/whole-project validation으로 처리하며 invalid state를 commit하지 않는다. "
++    "partial edit는 현재 Project의 omitted field를 유지한다. read는 기본값을 채우기 위해 Project를 mutate하지 않는다. "
++    "position reset도 JSON labels.settings.x/y를 사용한다. FFPX에는 실제 Project 값을 저장한다. "
++    "Frontend는 Backend/Application이 supplied projection/export input에 포함한 값을 소비하며 JSON/Backend를 직접 읽지 않는다. "
++    "settings.json이 missing/malformed면 구성 오류이며 별도의 코드 상수로 조용히 대체하지 않는다. "
++    "설정 파일별 registry/synchronization/cache authority를 만들지 않는다."
++)
++
+ LAYOUT_BOUNDARY_RULE = (
+     "Backend layout/annotation 계산은 explicit slotId/reference와 current project authority만 사용한다. "
+     "selectedSlotId 같은 Frontend runtime reference를 직접 읽거나 Application adapter를 호출하지 않는다. "
+@@ -54,7 +66,7 @@ captionSettings = {
+ 
+ EXPORT_LIMITS = {
+     "logicalWidth": "현재 100..20000 px",
+-    "logicalHeight": "빈 값이면 aspect/caption에서 자동 계산, 지정 시 현재 100..20000 px",
++    "logicalHeight": "auto는 referenceWidth의 dashboard/caption 전체를 target width로 비례 scaling해 ceil, explicit은 total height 100..20000 px",
+     "dpi": "현재 36..1200",
+     "format": "png 또는 jpeg",
+     "rasterDimension": "현재 한 변 최대 16384 px",
+@@ -112,6 +124,51 @@ EXPORT_SETTINGS_RULE = (
+ )
+ 
+ 
++def orderedSlotLabels(project):
++    """
++    Pure call-scoped calculation from the supplied current authority or Backend command candidate.
++    visible anchor slots only: exclude hidden/merged covered cells. Sort row-major by (row,col),
++    column-major by (col,row), using current project.annotations.labels.settings.order.
++    Assign ordinal 0..N-1 across ALL visible anchors, including empty image/graph slots.
++    format lower/upper-alpha uses bijective base26: a..z, aa..; decimal is ordinal+1;
++    lower/upper-roman uses conventional subtractive Roman notation (I,IV,IX,XL,XC,CD,CM),
++    repeated M above 3999, then requested case. No slotId-based renumbering.
++    Return immutable {slotId, ordinal, identifier, displayLabel}: displayLabel wraps identifier
++    in parentheses only when label settings.parentheses is true. enabled controls drawing only,
++    not numbering. labels.readState sampleText uses the same formatter for ordinal 0.
++    Caption insertion always wraps its group identifier/range in parentheses independently of enabled/parentheses.
++    Do not persist this list or share it as another operation's authority.
++    """
++    return "ordered labels derived from this project"
++
++
++def insertSlotCaptions(project, slotIds=None):
++    """
++    Backend command-internal pure calculation, returning candidate global caption text; no commit/Frontend access.
++    1. Read current global text, slot.caption strings and orderedSlotLabels(project) in this one calculation.
++       None means all visible anchors; [] means no targets. Explicit ids are deduplicated, must resolve to
++       visible anchors, otherwise reject unchanged. Filter ordered labels without renumbering.
++    2. Scan selected entries in layout/label order. Start a group with its ordinal/identifier and EXACT caption
++       string (no trim, case-fold or whitespace/newline normalization). Empty means length zero only.
++    3. Extend the current group only if the next ordinal is immediately consecutive AND its caption is empty
++       or exactly equals the group's stored text. Extending with empty never replaces stored nonempty text.
++       A group starting empty therefore stays empty until a nonempty, different caption starts a new group.
++       Gaps between selected ordinals terminate a group; nonadjacent equal texts never merge.
++    4. Render singleton as (identifier), multi-entry as (firstIdentifier-lastIdentifier), e.g. (a-c).
++       Append one U+0020 then the stored text only when that text is nonempty. Empty groups render label only.
++       Join rendered groups with one U+0020. Preserve original caption contents, including their own whitespace.
++    5. No rendered entries means unchanged text/no commit. Otherwise append this string to the END of current
++       global text; if current text is empty use the string alone, if it ends in U+0020 reuse that boundary space,
++       otherwise insert one U+0020. Never trim/replace existing text. afterText/name/settings remain unchanged.
++       Repeated calls append again; there is no hidden history/deduplication of existing global text.
++    6. SLOT_CAPTIONS_INSERTED applies this result to its current candidate, validates, and commits once.
++       Calculation/validation failure changes neither Project nor Frontend; success uses normal reconciliation.
++    Examples: [A,A,empty] -> (a-c) A; [empty,B] -> (a) (b) B;
++       [empty,empty] -> (a-b); [A,B,A] -> (a) A (b) B (c) A.
++    """
++    return "candidate appended global caption text or unchanged"
++
++
+ def dashboardGeometry(width, heightOverride):
+     """
+     Return:
+@@ -199,7 +256,7 @@ def readLabelsApiState(slotId):
+       persistent label enabled/settings copy와 현재 선택 slot 기준 reference width/height.
+     reference는 현재 layout의 referenceWidth dashboardGeometry와 gridSlotGeometry로 계산한다.
+     explicit slotId가 none/missing이면 같은 grid의 1x1 cell 크기이며 merged slot이면 해당 span 크기다.
+-    sampleText는 현재 label format/parentheses로 계산한 index 0의 예시다. 선택 slot의 caption을 sample 원천으로 쓰지 않는다.
++    sampleText는 orderedSlotLabels의 formatter를 현재 label format/parentheses와 ordinal 0에 적용한 예시다. 선택 slot의 caption을 sample 원천으로 쓰지 않는다.
+     이 read는 label position/settings/Frontend selection을 변경하지 않는다.
+ 
+     변경:
+@@ -273,6 +330,10 @@ def createTargetExportSnapshot():
+     projectObjects.snapshot으로 영속 입력을 한 시점에 복사한다.
+     export target geometry는 snapshot.export에서 계산한다.
+     renderer style projection은 export 작업 범위를 벗어나 일반 authority로 재사용하지 않는다.
++    captionReferenceStyle은 settings.json에서 이 작업 input으로 복사한다. Frontend가 파일을 직접 읽지 않는다.
++    reference width R=layout.slotStyle.referenceWidth, dashboard 기준 높이 H0=R/layout.slotStyle.aspect다.
++    목표 width W의 배율 s=W/R이다. renderer는 R에서 측정한 caption block/gap과 dashboard H0를 같은 s로 변환한다.
++    export width는 이미 pixel 단위이므로 DPI를 다시 곱하지 않는다. DPI는 기존 출력 metadata 의미다.
+     DOM 현재 크기는 target figure geometry의 Source of Truth로 사용하지 않는다.
+     """
+     snapshot = "단일 export 작업용 immutable input snapshot"
+diff --git a/sourcescript/backend/project_efsm.py b/sourcescript/backend/project_efsm.py
+index c425127..bf1c772 100644
+--- a/sourcescript/backend/project_efsm.py
++++ b/sourcescript/backend/project_efsm.py
+@@ -43,7 +43,7 @@ PROJECT_COMMANDS = {
+     "SLOTS_MERGED": "선택 직사각형의 slot-local payload를 top-left anchor로 원자적 병합",
+     "SLOTS_SPLIT": "merged anchor를 visible 1x1 slots로 복원",
+     "CAPTION_TEXT_INPUT": "explicit global/slot caption owner text 변경",
+-    "SLOT_CAPTIONS_INSERTED": "slot captions를 global caption text에 삽입",
++    "SLOT_CAPTIONS_INSERTED": "layout_annotations.insertSlotCaptions의 current-order label grouping/append 계산을 한 candidate로 commit",
+     "CAPTION_SETTINGS_CHANGED": "global caption enabled/name/nameBold/presentation settings commit",
+     "LABEL_SETTINGS_CHANGED": "persistent label 설정 변경",
+     "LABEL_POSITION_CHANGED": "persistent label 위치 변경",
+@@ -207,6 +207,11 @@ class ProjectStateMachine:
+            새 값에 없는 current title/axis field는 유지하며 invalid 새 값은 graph default/empty 규칙으로 정규화한다.
+            nested axis patch는 해당 axis의 명시된 field에만 적용하고 다른 axis/global field를 버리지 않는다.
+            project.appearance와 chart.editor가 각 의미의 원천이며 graph.data/layout/CSS는 candidate 계산/표시 결과다.
++           label/caption create/load/missing/partial edit는 layout_annotations.ANNOTATION_SETTINGS_RULE을 사용한다.
++           LABEL_POSITION_CHANGED의 reset=True는 settings.json labels.settings.x/y를 Backend 내부에서 읽어 적용한다.
++           SLOT_CAPTIONS_INSERTED는 current candidate와 payload.slotIds로 layout_annotations.insertSlotCaptions를 계산한다.
++           no target이면 committed=False/unchanged이고 success read나 selection을 실행하지 않는다.
++           JSON config 값/계산 결과를 Frontend state에서 다시 만들거나 별도 authority로 저장하지 않는다.
+         4. candidate whole-project invariant를 검증한다.
+         5. 성공 candidate만 activeProject에 한 번 commit한다.
+         6. 실제 pre/post 차이에서 ProjectMutationResult를 계산한다. 생성/import의 changed id/path/owner는 실제 commit 결과를 사용한다.
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index c600424..102fa68 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -357,6 +357,7 @@ RENDERER_BACKEND_READ_CONTRACT = {
+     "whole": (
+         "default renderer request는 final frontendState와 optional mutationResult를 받는다. "
+         "current layout/grid/style, appearance, annotations, visible slots와 slot-local content/caption/settings를 detached copy로 구성한다. "
++        "label 번호/표시는 layout_annotations.orderedSlotLabels(current project)로 계산하며 captionReferenceStyle은 backend/settings.json에서 복사한다. "
+         "각 visible graph slot의 owning chart, 실제 project object의 참조 CSV/columns와 graphs.chartFigure(chart, project) 계산 결과를 포함한다. "
+         "project는 이번 query가 읽는 같은 current authority이며 chart copy와 CSV가 같은 read 작업에 속한다. "
+         "non-editable imported conversion chartFigure는 imported representation을 보존하며 conversion view로 project CSV를 resolve하지 않는다. "
+@@ -628,9 +629,9 @@ DEFAULT_PROJECT_RULES = {
+     ),
+     "assets": "초기 CSV/image collection은 비어 있으며 보호된 default CSV를 만들지 않는다.",
+     "charts": "초기 chart collection은 비어 있다.",
+-    "labels": "초기에는 disabled, position은 reference origin, 기본 formatting/font settings를 사용한다.",
++    "labels": "sourcescript/backend/settings.json의 labels를 deep-copy한다. create/load missing 처리는 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다.",
+     "captions": (
+-        "project-level global caption은 초기 disabled/empty 상태다. "
++        "sourcescript/backend/settings.json의 captions를 deep-copy하며 load missing은 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다. "
+         "각 초기 slot.caption도 empty이며 slot caption editor mode는 project state에 저장하지 않는다."
+     ),
+     "export": (
+diff --git a/sourcescript/backend/settings.json b/sourcescript/backend/settings.json
+new file mode 100644
+index 0000000..4caf3ba
+--- /dev/null
++++ b/sourcescript/backend/settings.json
+@@ -0,0 +1,32 @@
++{
++  "labels": {
++    "enabled": false,
++    "settings": {
++      "format": "lower-alpha",
++      "parentheses": false,
++      "x": 0,
++      "y": 0,
++      "order": "row-major",
++      "fontFamily": "system-ui, sans-serif",
++      "fontSize": 14
++    }
++  },
++  "captions": {
++    "enabled": false,
++    "text": "",
++    "afterText": "",
++    "name": "",
++    "nameBold": false,
++    "settings": {
++      "fontFamily": "system-ui, sans-serif",
++      "fontSize": 14,
++      "lineHeight": 1.45
++    }
++  },
++  "captionReferenceStyle": {
++    "padding": 8,
++    "dashboardGap": 10,
++    "borderHeight": 2,
++    "minimumTextWidth": 10
++  }
++}
+diff --git a/sourcescript/frontend/renderer.py b/sourcescript/frontend/renderer.py
+index aa8934b..844a70f 100644
+--- a/sourcescript/frontend/renderer.py
++++ b/sourcescript/frontend/renderer.py
+@@ -126,7 +126,8 @@ def renderDashboard(projectProjection, interfaceState):
+        CSV를 resolve해 Backend figure를 다른 결과로 바꾸지 않는다.
+     4. image slot은 projection의 image bytes/view와 normalized slot-local imageSettings copy로 image surface를 동기화한다.
+     5. interfaceState.selectedSlotId에 따라 selection/interaction class를 적용한다.
+-    6. caption과 label projection을 동기화한다.
++    6. caption과 label projection을 동기화한다. label 번호/문자열은 supplied orderedSlotLabels 결과를 사용한다.
++       label format/order를 renderer가 독립 재정의하지 않으며 설정 JSON/Backend를 직접 읽지 않는다.
+     7. 현재 dashboard render generation을 기준으로 visible slot id/chart id와 instance 소유 관계를 대조한다.
+        같은 host/slot/chart가 유지되면 기존 graph instance를 갱신한다. 사라진 slot, 다른 chart로 교체된 host,
+        graph에서 image/empty로 바뀐 host의 이전 instance는 purge한 뒤 현재 view만 설치한다.
+@@ -354,6 +355,31 @@ def downloadExportPayload(payload):
+     return "handoff 완료 시 None; 실패는 throw/rejection"
+ 
+ 
++def exportCaptionLayout(snapshot, measureText):
++    """
++    One-export immutable reference layout; no Backend/config access or Project writes.
++    R=snapshot.layout.slotStyle.referenceWidth. style=supplied captionReferenceStyle from Backend settings.json.
++    Use current snapshot captions.enabled/name/nameBold/text/settings. Ordinary global caption body is text;
++    afterText remains stored separately and is not implicitly appended or populated from slot captions.
++    If disabled, return zero height/gap and no lines. Enabled empty caption reserves one blank line as before.
++    Measure at reference width R, unscaled caption fontSize/fontFamily. padding=style.padding,
++    available=max(style.minimumTextWidth, R-2*padding), lineHeight=fontSize*settings.lineHeight.
++    Name is a prefix on first line only; measure name plus one space at weight 700 if nameBold else 400.
++    Body uses weight 400. Split text into newline paragraphs, each paragraph into nonempty whitespace-separated
++    words. Greedily append each word with one space; if a nonempty current line plus next word exceeds
++    max(minimumTextWidth, available minus first-line prefix width), emit line and retry word on a new line.
++    Never split a single overlong word; retain it on its own line within the clipped caption drawing area.
++    Preserve explicit paragraph breaks including blank paragraphs. Name-only produces one prefix line;
++    no name/no body produces one blank line. Same emitted line list is used for height AND painting.
++    height=2*padding + numberOfLines*lineHeight + style.borderHeight; gap=style.dashboardGap.
++    Font measurement is a Frontend rendering primitive, with the same resolved font used for painting;
++    await required font availability before measuring or propagate failure. This contract fixes what is measured,
++    not a particular canvas/browser API. Resource/measurement failure does not mutate Project.
++    Return reference lines/prefix positions/font metrics/height/gap for this export only.
++    """
++    return "one-shot reference caption layout"
++
++
+ def renderDashboardTarget(snapshot, statusSink):
+     """
+     Return:
+@@ -367,10 +393,18 @@ def renderDashboardTarget(snapshot, statusSink):
+     처리:
+     1. Application이 공식 export query로 제공한 immutable snapshot을 사용한다.
+     2. snapshot의 persistent export settings에서 width/height mode/dpi/format을 읽는다.
+-    3. auto height면 logical dashboard geometry와 caption layout에서 height를 계산한다.
+-    4. explicit height면 persistent height를 사용한다.
++    3. layout 팝업의 이미지 폭 R=snapshot.layout.slotStyle.referenceWidth를 기준 폭으로 사용한다.
++       W=export.width는 목표 pixel width, s=W/R, H0=R/layout.slotStyle.aspect다.
++       exportCaptionLayout으로 R 기준 caption height C0와 gap G0를 한 번 측정한다.
++       auto total height H=ceil((H0+C0+G0)*s). dashboard/caption/fonts/gap/label/image를 동일 s로 scaling한다.
++       캡션 disabled면 C0=G0=0이다. raster width=round(W), height=round(H)이며 DPI를 다시 곱하지 않는다.
++       DPI는 기존 metadata 의미이고 DPI만 변경하면 pixel geometry는 같다. DOM viewport/zoom은 target 원천이 아니다.
++    4. explicit height면 persistent total height H를 사용하고 dashboardHeight=H-(C0+G0)*s로 배치한다.
++       auto dashboardHeight는 H0*s이며 ceil 잔여 pixel은 바닥 여유로 둔다. caption은 dashboard 아래 gap 뒤에 그린다.
+     5. supplied snapshot의 raster dimension/area limit을 넘으면 project를 변경하지 않고 rejected를 반환한다.
+-    6. grid geometry가 유효한지 확인한다.
++    6. outerMargin=min(configuredOuterMargin*s,min(W,dashboardHeight)*0.49), gap=configuredGap*s로 계산하고
++       gridSlotGeometry의 모든 rowHeight/colWidth가 positive인지 검사한다. explicit height가 caption과 grid를 담지 못하면
++       download 전 rejected outcome이다. 설정값을 몰래 줄이거나 auto height로 대체하지 않는다.
+     7. 각 visible slot의 Backend-supplied figure 또는 image를 target geometry로 다시 render한다.
+        graph의 CSV resolve/numeric transform은 Backend export query에서 끝나며 여기서 재실행하지 않는다.
+        target geometry/font/line/marker의 presentation scaling은 figure copy에만 적용하고 supplied snapshot/Project를 변경하지 않는다.
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index e1aab95..8080403 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -39,7 +39,7 @@ SOURCE_SCRIPT_LOGICAL_HIERARCHY = {
+         "project-efsm": "sourcescript.backend.project_efsm — persistent command validation/commit",
+         "asset-domain": "sourcescript.backend.assets_files — VFS, asset/package parse와 candidate calculation",
+         "graph-domain": "sourcescript.backend.graphs — chart/CSV/object normalization, validation과 projection calculation",
+-        "layout-annotation-domain": "sourcescript.backend.layout_annotations — persistent layout/image/annotation/export calculation과 read",
++        "layout-annotation-domain": "sourcescript.backend.layout_annotations — persistent layout/image/annotation/export calculation과 read; backend/settings.json은 같은 책임의 공통 설정 데이터",
+     },
+     "Application boundary": {
+         "command-query-adapter": "sourcescript.application.adapter — command/query/result/lifecycle orchestration",
+@@ -61,6 +61,8 @@ SOURCE_SCRIPT_FILE_PLACEMENT_RULE = (
+     "application/public_api/__init__.py, assets.py, graphs.py, layout_annotations.py는 하나의 기존 public-api 논리 모듈을 "
+     "구성하는 물리 파일이다. 새 독립 논리 자식이나 별도 API authority가 아니다. "
+     "domain 계산, public wrapper, UI/renderer 책임을 각 owner 경로에 두고 평면 compatibility 재수출 파일은 남기지 않는다. "
++    "backend/settings.json 하나에 label/caption 설정 데이터를 두며 설정 종류별 Python module/파일/loader 계층은 추가하지 않는다. "
++    "이는 기존 layout-annotation-domain의 데이터 구성 파일이고 새 logical child나 mutable settings authority가 아니다. "
+     "import는 다른 명세의 책임과 식별자를 재사용하며 Backend↔Frontend direct state 접근 권한을 만들지 않는다. "
+     "하위 단계는 이 논리 hierarchy를 보존한다. 이 파일 이동만으로 하위 계층의 번역 완료를 주장하지 않는다."
+ )
+@@ -180,6 +182,11 @@ RESOLVED_REVIEW_ITEMS = [
+ ]
+ 
+ UNRESOLVED_REVIEW_ITEMS = [
++    (
++        "Plan 020: annotation 기본값은 backend/settings.json으로, label/order/group/append는 기존 annotation 계산으로 명시했다. "
++        "target export는 layout referenceWidth의 dashboard/caption을 목표 pixel width 비율로 scaling한다. "
++        "review 016 C1–C3의 명세 공백을 보완했지만 전체 create/load/FFPX/render 왕복·purpose/통합 검토 완료나 Source closure를 뜻하지 않는다."
++    ),
+     (
+         "Plan 017 E: graph domain에 trace style/axis 보조 표시와 layout field 변환·extension 우선순위를, "
+         "project-state/graph domain에 UI palette/graph color 기본값의 서로 다른 원천을 구체화했다. "
