@@ -117,7 +117,9 @@ def renderDashboard(projectProjection, interfaceState):
     처리:
     1. supplied projectProjection의 grid와 style을 dashboard CSS geometry에 반영한다.
     2. visible slot projection마다 slot container와 label/bookmark control surface를 구성한다.
-    3. graph slot은 projection에 포함된 resolved chart/CSV view로 Plotly projection을 render한다.
+    3. graph slot은 Backend가 같은 project read에서 계산해 projection에 포함한 figure를 Plotly로 표시한다.
+       supplied CSV/columns는 editor 표시용 read 값이며 Frontend에서 traces/chartFigure를 다시 계산하거나
+       CSV를 resolve해 Backend figure를 다른 결과로 바꾸지 않는다.
     4. image slot은 projection의 image bytes/view와 normalized slot-local imageSettings copy로 image surface를 동기화한다.
     5. interfaceState.selectedSlotId에 따라 selection/interaction class를 적용한다.
     6. caption과 label projection을 동기화한다.
@@ -321,7 +323,10 @@ def renderDashboardTarget(snapshot, statusSink):
     4. explicit height면 persistent height를 사용한다.
     5. supplied snapshot의 raster dimension/area limit을 넘으면 project를 변경하지 않고 rejected를 반환한다.
     6. grid geometry가 유효한지 확인한다.
-    7. 각 visible slot의 chart 또는 image를 target geometry로 다시 render한다.
+    7. 각 visible slot의 Backend-supplied figure 또는 image를 target geometry로 다시 render한다.
+       graph의 CSV resolve/numeric transform은 Backend export query에서 끝나며 여기서 재실행하지 않는다.
+       target geometry/font/line/marker의 presentation scaling은 figure copy에만 적용하고 supplied snapshot/Project를 변경하지 않는다.
+       ordinary FFPX whole-project snapshot을 raster용 precomputed figure input인 것처럼 대신 사용하지 않는다.
     8. label/caption을 같은 logical reference geometry에서 변환해 그린다.
     9. PNG/JPEG blob에 DPI metadata를 적용하고 다운로드한다.
     """
