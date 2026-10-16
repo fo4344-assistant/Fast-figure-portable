@@ -1,17 +1,18 @@
 # Plan 017 — Source Script r26 검토 후 공통 계약 정리
 
 - 작성일: 2026-10-16
-- 상태: planned / 명세·구현 수정 미착수
+- 상태: in_progress / Source Script r27 통합 수정, D/E 잔여 / closure open
 - 기준 main: `bf85187f2f76552891844d0396d62a073ac3bed5`
 - 선행 계획: `agent_space/plans/plan-016.md` §35
 - 선행 검토: `agent_space/reviews/review-20261016-004-sourcescript-r26-open.md` 및 후속 사용자 검토 대화
-- 현재 계층: Source Script r26 `current/open`, PlusCal r11 `stale`, verification-model r26 `stale`/TLC pending, Source Code r36 `stale`.
+- 현재 계층: Source Script r27 `current/open`, PlusCal r11 `stale`, verification-model r26 `stale`/TLC pending, Source Code r36 `stale`.
+- 실행 작업 기준 main: `7ec2c1112459020af9b321568cce3a2fcd91e5bf`; 실행 검토: `agent_space/reviews/review-20261016-005-plan017-r27-open.md`.
 
 ## 1. 요구와 목적
 
 사용자는 non-editable 상태의 conversion graph object를 project CSV 참조 검증 대상에 추가하지 않도록 수정하고, 새로운 계약을 추가하기보다 기존 공통 계약으로 묶는 방향을 우선하도록 지시했다. 이 계획은 Plan 016의 분리 목적을 유지하면서 Source Script의 충돌·누락을 먼저 해소하는 후속 계획이다. 기존 구현에 맞춰 상위 의미를 소급 확정하거나 과거 변경을 일괄 rollback하지 않는다.
 
-이번 문서 작성은 계획 수립만을 수행한다. 아래 명세 수정, 닫힘 판정, PlusCal 번역과 코드 구현을 이미 완료한 것으로 기록하지 않는다.
+최초 문서 작성은 계획 수립만 수행했다. 이후 사용자 실행 지시에 따른 Source Script 수정 경과는 §9에 구분해 기록한다. 전체 닫힘, PlusCal 번역과 코드 구현은 완료하지 않았다.
 
 ## 2. 재확인한 정책과 적용
 
@@ -98,11 +99,11 @@
 
 ## 6. 산출물·계층 전파와 검증
 
-1. 이번 단위: 이 plan과 실제 문서 변경의 dated patch/.md 쌍만 작성한다. Source Script/lineage metadata는 변경하지 않는다.
+1. 최초 계획 작성 단위: plan과 실제 문서 변경의 dated patch/.md 쌍만 작성했고 Source Script/lineage metadata는 변경하지 않았다. 이후 실행 단위는 §9에 기록한다.
 2. 후속 Source Script 수정: 변경 이유·기각 대안·미포함 범위·실제 누적 diff를 patch 쌍으로 기록하고 revision/fingerprint를 갱신한다. 닫힘은 별도 근거 review로 판단한다.
 3. Source Script 수정 중 PlusCal/model/code는 stale을 유지한다. 파일 내용이나 derived_from을 최신인 것처럼 맞추지 않는다.
 4. Source Script 닫힘 후 PlusCal 직접 번역과 충실도/구체성 검토를 수행한다. Source Code는 확인된 PlusCal 이후에 진행한다. TLC는 선택이며 미실행을 통과로 기록하지 않는다.
-5. version checker·application/test/build 실행은 GitHub Actions에서만 한다. 이번 계획 문서 작성에서는 새 Actions run을 요청하지 않는다. 이후 실제 변경 범위에 맞는 workflow/trigger와 실행 허가를 확인하고 run ID·기준 commit·로그·한계를 기록한다.
+5. version checker·application/test/build 실행은 GitHub Actions에서만 한다. 최초 계획 작성에서는 새 Actions run을 요청하지 않았다. 실행 단위에서는 실제 범위와 기존 실행 허가에 따라 run ID·기준 commit·로그·한계를 기록한다. 누적 baseline 검사를 위해 기존 version workflow의 선택적 `base_sha` dispatch 입력을 사용한다.
 6. 로컬 작업은 파일 읽기/작성과 Git diff/hash/transport 등으로 제한한다. helper/temp는 현재 작업 디렉터리 아래에 둔다.
 
 ## 7. 중단 조건과 제외 범위
@@ -110,7 +111,7 @@
 - 적용 직전 main HEAD나 대상 blob/순번이 바뀌면 최신 plan/review/metadata를 다시 읽고 중복·충돌을 확인한다.
 - 기존 계약의 통합으로 설명되지 않는 새 의미, schema 변경 또는 기능 축소가 필요하면 임의 구현하지 않고 설계 문제를 기록한다. 사용자 의도가 필요한 사항은 확인한다.
 - Source Script에 미정 의미가 남거나 hierarchy/참조/실패 흐름이 맞지 않으면 closed로 올리지 않고 하위 구현을 재개하지 않는다.
-- 이번 작성에는 정책 개정, Source Script 수정, PlusCal/model/JS/test/build/distribution 변경, 새 framework나 bridge 도입을 포함하지 않는다.
+- 최초 계획 작성에는 Source Script 수정도 포함하지 않았다. 후속 실행 단위에서도 정책 개정, PlusCal/model/JS/test/build/distribution 변경, 새 framework나 bridge 도입은 포함하지 않는다.
 - 과거 성공한 Actions 결과는 이 계획이나 향후 수정의 검증 근거로 재사용하지 않는다.
 
 ## 8. 선택하지 않은 방향
@@ -120,3 +121,13 @@
 - hint 전용 후처리·candidate 전달 예외·새 결과 envelope 추가: 기존 공통 경로와 중복되고 추적 비용을 늘리므로 제외한다.
 - renderer/JS부터 수정하고 상위 계약을 나중에 맞추기: 하위가 새 의미를 결정하게 되므로 제외한다.
 - 모든 read 계산을 command로 통합: query와 mutation 책임을 혼합하고 불필요한 결합을 만들므로 제외한다.
+
+## 9. 실행 경과 — Source Script r27 / OPEN
+
+- 기준 `7ec2c1112459020af9b321568cce3a2fcd91e5bf`에서 A의 검증 scope를 기존 `validateChartModel`에 통합하고 project/package/reference 수집이 같은 representation 판정을 사용하도록 수정했다. non-editable conversion에 가짜 CSV를 생성하지 않고 실제 CSV를 가진 일반 chart의 검증은 보존한다.
+- B의 wrapper identity/new-input 전달과 Backend 내부 candidate 계산을 asset/import/graph/layout 경로에 맞췄다. Backend는 완료된 collision choice를 current authority에서 확인하며 UI callback을 실행하지 않는다.
+- C의 index hint를 기존 result → Backend reconciliation query → Frontend scalar 적용에 연결했다. 이동 `from/to`, 삭제 clear, 독립 current CSV 보존을 유지하며 별도 사후 선택 전이를 추가하지 않았다.
+- D의 수정 대상 chart/asset/import wrapper는 성공 뒤 공식 query를 사용하고 command triple을 공개 chart/asset로 잘못 반환하지 않도록 고쳤다. **전체 API trace는 미완료다.**
+- E의 chart/image lifetime·stale completion 의미를 기존 renderer 절차에 구체화했다. field별 trace/layout 계산·기본값/변환 제외 조건·palette/default color source와 전체 왕복 trace는 남아 있다.
+- 상세 근거/미정 항목: `agent_space/reviews/review-20261016-005-plan017-r27-open.md`. source revision/fingerprint를 갱신하되 closure는 open, closure_review는 null이다. PlusCal/model/code는 stale이고 하위 구현을 재개하지 않았다.
+- patch/실제 Actions run/누적 endpoint: `agent_space/patches/20261016-010.patch` 및 같은 basename `.md`. metadata checker 결과를 semantic closure로 해석하지 않는다.
