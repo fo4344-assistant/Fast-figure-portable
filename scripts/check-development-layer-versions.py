@@ -60,8 +60,47 @@ def source_script_paths() -> list[Path]:
         settings = json.loads(SOURCE_SETTINGS_PATH.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise VersionError(f"Source settings JSON is invalid: {error}") from error
-    if not isinstance(settings, dict):
-        raise VersionError("Source settings JSON must be an object")
+    if not isinstance(settings, dict) or set(settings) != {"backend"}:
+        raise VersionError("Source settings must contain only the backend section")
+    backend = settings["backend"]
+    if not isinstance(backend, dict) or set(backend) != {"project_object", "defaults"}:
+        raise VersionError("Backend settings must separate project_object and defaults")
+    required_objects = (
+        "project_object.ffpx", "project_object.layout.slotStyle",
+        "project_object.annotations.labels.settings", "project_object.annotations.captions.settings",
+        "project_object.appearance.uiPalette", "project_object.export",
+        "defaults.slotSettings.content.imageSettings", "defaults.chartSettings.editor.axis",
+        "defaults.chartSettings.editor.axisVisibility", "defaults.chartSettings.editor.globalSettings",
+        "defaults.chartSettings.editor.objectStyle", "defaults.graphRendering", "defaults.captionReferenceStyle",
+        "defaults.limits.layout", "defaults.limits.imageSettings", "defaults.limits.labels",
+        "defaults.limits.captions", "defaults.limits.graphObject", "defaults.limits.export",
+        "defaults.vfs", "defaults.naming", "defaults.preview",
+    )
+    for dotted_path in required_objects:
+        value = backend
+        for part in dotted_path.split("."):
+            value = value.get(part) if isinstance(value, dict) else None
+        if not isinstance(value, dict):
+            raise VersionError(f"Backend settings object is missing: {dotted_path}")
+    colors = backend["defaults"].get("graphColors")
+    if not isinstance(colors, list) or not colors or not all(isinstance(c, str) and c.strip() for c in colors):
+        raise VersionError("Backend default graphColors must be non-empty color text")
+    # Configuration is not a saved ProjectObject or an asset/template payload.
+    forbidden_data = {
+        "meta", "projectName", "assets", "charts", "slots", "nextId", "sequences",
+        "id", "csvId", "imageId", "rows", "bytes", "bytesBase64", "data", "conversionRows",
+        "text", "afterText", "name", "frontend",
+    }
+    def reject_project_data(value: object) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key in forbidden_data:
+                    raise VersionError(f"Project data/Frontend section is not allowed in Backend config: {key}")
+                reject_project_data(child)
+        elif isinstance(value, list):
+            for child in value:
+                reject_project_data(child)
+    reject_project_data(backend)
     paths.append(SOURCE_SETTINGS_PATH)
     return paths
 
