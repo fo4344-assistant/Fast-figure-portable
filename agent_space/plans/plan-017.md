@@ -148,3 +148,11 @@
 - renderer/export의 Backend-supplied figure 소비를 연결했다. Frontend는 CSV/trace를 재계산하지 않고 geometry/presentation만 적용한다. 일반 FFPX snapshot 반환과 persistent schema는 유지한다.
 - 부분 정적 시나리오·선택 이유·한계: `agent_space/reviews/review-20261016-007-sourcescript-r29-trace-open.md`. 실제 누적 diff와 Actions 근거: `agent_space/patches/20261016-012.patch` 및 같은 basename `.md`.
 - D 전체 API trace, E layout/style/extension/axis 보조 표시와 palette/default 원천 및 전체 왕복 검토는 남아 있다. source r29 current/open, closure_review null이고 하위 stale을 유지한다. 정책·PlusCal/model/JS/test/build/distribution을 변경하거나 전체 closure/실행 성공을 선언하지 않는다.
+
+## 12. 사용자 지정 순서 — r30 layout/palette 다음 전체 API trace / OPEN
+
+- 기준 main `eef0d9252c30a5f85dcb268cb2c32d2fc7e97cce`. 먼저 E의 layout field 변환/정규화/default, trace style/extension merge/axis 보조 표시와 UI·graph palette의 서로 다른 원천/적용 규칙을 기존 owner에 구체화했다. UI palette는 전체 설정, chart layout은 current authority에 partial edit임을 구분한다.
+- Backend의 같은 chart/project 문맥에서 figure를 계산하며 Frontend Mantine/renderer는 supplied palette/figure를 표시한다. 새 authority/bridge나 하위 코드 변경은 없다. 상세 검토: `agent_space/reviews/review-20261016-008-sourcescript-r30-layout-palette-open.md`.
+- 이어 공개 inventory 87개를 입력 → owner/command/query/event → 반환/실패/취소까지 정적으로 대조했다. 이미 chart 반환이 선언된 move/delete wrapper를 기존 성공 후 query로 연결했다. 전체 대조표: `agent_space/reviews/review-20261016-009-public-api-trace-r30-open.md`.
+- **전체 목록 대조는 수행했으나 전체 계약 완결은 아니다.** public 반환 shape, runtime composition/zoom/create-and-select, pure calculation query 연결, router/export completion이 남았다. 이를 구버전 API 잔존과 혼동하지 않는다. Source `slots.swap`의 하위 공개 누락은 번역 시 보완 대상이다.
+- source r30 current/open, closure_review null과 하위 stale을 유지한다. 남은 계약 및 전체 import/edit/export 왕복·목적·중복통합 근거를 확보하기 전에는 닫힘/하위 번역 완료를 선언하지 않는다. 실제 누적 patch·검사 근거: `agent_space/patches/20261016-013.patch`와 같은 basename `.md`.
