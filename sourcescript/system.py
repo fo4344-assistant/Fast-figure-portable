@@ -181,8 +181,9 @@ RESOLVED_REVIEW_ITEMS = [
 
 UNRESOLVED_REVIEW_ITEMS = [
     (
-        "Plan 017 E: trace numeric conversion/exclusion, reciprocal axis의 schema/default, "
-        "global/axis에서 Plotly layout으로의 field-by-field conversion과 palette/default colors의 concrete source를 "
+        "Plan 017 E: trace numeric conversion/exclusion과 reciprocal 축의 schema/계산 순서는 graph domain에 구체화했다. "
+        "global/axis에서 Plotly layout으로의 field-by-field conversion과 palette/default colors의 concrete source, "
+        "imported extension/style/axis 보조 표시의 전체 mapping을 "
         "기존 graph/projection procedure에서 완결해야 한다. placeholder/default 참조만으로 닫힘을 선언하지 않는다."
     ),
     (
