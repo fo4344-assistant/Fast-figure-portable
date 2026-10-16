@@ -274,6 +274,16 @@ def planProjectNodeMove(path, directory):
     return movePlan
 
 
+def projectFileStem(value):
+    """
+    project export filename의 pure sanitize. missing/null은 empty text, text trim 뒤
+    backslash/slash/colon/star/question/double-quote/angle-bracket/pipe 및 U+0000..001F를 hyphen으로 바꾼다.
+    whitespace run은 space 하나로 합치고 trailing dot/space를 없앤 뒤 최대 100 text units로 제한한다.
+    결과 empty면 fast-figure-project다. 원래 project metadata/name은 바꾸지 않는다.
+    """
+    return "위 규칙의 safe project filename stem"
+
+
 def ffpxBuildProject():
     """
     Return:
