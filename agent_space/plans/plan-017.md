@@ -140,3 +140,11 @@
 - §3의 평면 경로는 r26 검토 당시의 역사적 위치다. 현재 owner와 import 경로는 `sourcescript/system.py` 및 `agent_space/reviews/review-20261016-006-sourcescript-r28-hierarchy-open.md`에 기록한다.
 - source revision/fingerprint만 갱신하고 closure open / closure_review null 및 하위 stale을 유지한다. 정책, PlusCal/model/JS/test/build/distribution은 변경하지 않는다. D/E의 미정 의미와 전체 trace는 여전히 남아 있다.
 - 실제 누적 diff/전송 한계/Actions 근거: `agent_space/patches/20261016-011.patch`와 같은 basename `.md`. 이번 구조 정리를 전체 Plan 017 완료나 번역 충실도 검증으로 주장하지 않는다.
+
+## 11. 후속 실행 — Source Script r29 trace 계산 / OPEN
+
+- 기준 `2da42296aa71cb662605fbbe991591654900297a`. E의 기존 graph domain 절차에 header/body, scalar 변환, divide 다음 scale, paired row 제외, category/비유한 값/빈 결과 의미를 구체화했다. reciprocal을 schema와 normalize 규칙에 연결하고 Plotly 표시 축은 linear, 범위는 변환 후 좌표로 명시했다.
+- trace/chartFigure/rebuildEditableGraph가 같은 Backend read 또는 command candidate의 chart/CSV를 사용하도록 project 문맥을 명시했다. 미commit CSV 조회를 위한 부분 commit이나 live fallback은 없다. non-editable imported figure와 일반 실제 CSV chart의 representation을 구분한다.
+- renderer/export의 Backend-supplied figure 소비를 연결했다. Frontend는 CSV/trace를 재계산하지 않고 geometry/presentation만 적용한다. 일반 FFPX snapshot 반환과 persistent schema는 유지한다.
+- 부분 정적 시나리오·선택 이유·한계: `agent_space/reviews/review-20261016-007-sourcescript-r29-trace-open.md`. 실제 누적 diff와 Actions 근거: `agent_space/patches/20261016-012.patch` 및 같은 basename `.md`.
+- D 전체 API trace, E layout/style/extension/axis 보조 표시와 palette/default 원천 및 전체 왕복 검토는 남아 있다. source r29 current/open, closure_review null이고 하위 stale을 유지한다. 정책·PlusCal/model/JS/test/build/distribution을 변경하거나 전체 closure/실행 성공을 선언하지 않는다.
