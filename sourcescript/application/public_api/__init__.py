@@ -26,7 +26,7 @@ FastFigureApi = {
 PUBLIC_API_METHODS = {
     "project": {
         "readName": "Backend query; args 없음; current project meta name immutable projection",
-        "setName": "mutation; PROJECT_NAME_CHANGED project command로 project name candidate commit",
+        "setName": "layout_annotations.setProjectName(value, trim=False); PROJECT_NAME_CHANGED -> fresh project.readName 문자열; 미commit None, 오류 전파",
         "importFile": "lifecycle mutation; file 입력 -> PROJECT_LOADED 내부 FFPX parse/candidate/검증/commit -> 성공 시 immutable project snapshot; 실패/취소는 기존 경로로 전달",
         "exportFile": "assets.downloadProject; selected slot이면 None/no download, 그 외 FFPX handoff 후 None; 오류 전파/Project 보존",
     },
@@ -38,9 +38,9 @@ PUBLIC_API_METHODS = {
             "Application operation; slot reference를 Backend에서 validate한 뒤 Frontend SELECT_SLOT을 수행한다. "
             "explicit pendingContentType intent가 있으면 selection과 분리된 SLOT_TYPE_CHANGED command를 Application adapter가 조건부 실행한다."
         ),
-        "setContentType": "Backend command; SLOT_TYPE_CHANGED로 explicit slot/contentType candidate commit",
-        "reset": "Backend command; SLOTS_RESET로 slot-local properties reset + owned chart 제거",
-        "swap": "Backend command; SLOTS_SWAPPED로 두 GUI 위치의 slot-local payload를 교환",
+        "setContentType": "layout_annotations.setSlotContentType(slotId, contentType); explicit target SLOT_TYPE_CHANGED; 성공/미commit None, 오류 전파; pending state 없음",
+        "reset": "layout_annotations.resetSlotApi(slotId); SLOTS_RESET local reset/owned chart 제거; 성공/미commit None, 오류 전파",
+        "swap": "layout_annotations.swapSlots(sourceSlotId, targetSlotId); SLOTS_SWAPPED -> committed True, missing/hidden/same-id/미commit False; 오류 전파",
         "prepareFileDrop": (
             "Application runtime operation; Backend에서 explicit visible target을 검증하고 invalid면 unchanged false. "
             "이미 선택된 valid target이면 selection 유지, 다른 target이면 model-to-fsm selection 보장 후 true. "
@@ -51,26 +51,26 @@ PUBLIC_API_METHODS = {
     "images": {
         "readEditor": "read; selected slot -> image asset + slot-local imageSettings projection",
         "setSettings": "mutation; SLOT_IMAGE_SETTINGS_CHANGED project command로 selected slot.content.imageSettings candidate validation/commit",
-        "insertEmpty": "mutation; SLOT_IMAGE_IMPORTED project command로 새 image asset + selected slot reference candidate를 함께 commit",
+        "insertEmpty": "layout_annotations.insertEmptyImageIntoSelectedSlot(); SVG asset+selected image-slot reference one commit -> detached image; missing/non-image/미commit None, 오류 전파",
     },
     "assets": {
         "readDeletionTarget": "read/calculation; target asset과 collectAssetReferences 결과",
-        "delete": "mutation; resolved kind에 따라 DATA_OBJECT_DELETED/IMAGE_OBJECT_DELETED가 reference detach + asset removal candidate를 한 번 commit",
+        "delete": "assets.deleteProjectAsset(target); kind-specific delete/detach one commit; 성공/missing/미commit None, 오류 전파; 내부 tuple 반환 없음",
         "readTree": "read; current VFS/assets에서 tree projection 계산",
         "isTrashed": "read; canonical path의 trash subtree membership 계산",
         "movable": "read/calculation; current VFS에서 fixed directory 여부와 source 존재를 기준으로 tree move 가능 여부 계산; trash membership 자체는 move 금지 조건이 아님",
         "readTrash": "read; current trash subtree projection",
         "moveOptions": "read/calculation; target directory 후보 계산",
         "planMove": "calculation; current VFS에서 destination/collision/reference count plan",
-        "move": "mutation; PROJECT_NODE_MOVED project command가 current state에서 plan을 재검증하고 candidate move commit",
-        "createDirectory": "mutation; PROJECT_DIRECTORY_CREATED project command로 canonical non-conflicting directory commit",
+        "move": "assets.moveProjectNode(plan, useUniqueName); actual committed path + fresh assets.isTrashed -> immutable {path, trashed}; no plan/미commit None, 오류 전파",
+        "createDirectory": "assets.createProjectDirectory(parent, name); commit -> validated SELECT_ASSET -> actual canonical path 문자열; 미commit None, 후속 오류 전파/숨은 rollback 없음",
         "createEmptyCsv": (
             "assets.createEmptyProjectCsvAndSelect; DATA_OBJECT_CREATED 성공 뒤 assets.selectProjectCsv로 생성 asset을 선택하고 detached CSV 반환; "
             "미commit은 기존 failure, selection 거부는 none, throw는 전파하며 이미 생성된 asset은 rollback하지 않음; chart/object 자동 생성 없음"
         ),
-        "emptyTrash": "mutation; PROJECT_TRASH_EMPTIED project command로 trash references/assets/directories candidate removal commit",
+        "emptyTrash": "assets.emptyProjectTrash(); PROJECT_TRASH_EMPTIED; 성공/미commit None, 오류 전파; 내부 counts/tuple 공개 안 함",
         "draggableAsset": "read/calculation; slot connection drag payload로 사용할 수 있는 non-trash CSV/image asset projection; tree move 가능 여부와는 별도 판정",
-        "connectToSlot": "mutation; CSV는 SLOT_DATA_CONNECTED, image는 SLOT_IMAGE_LINKED project command로 명시적 연결 commit",
+        "connectToSlot": "assets.connectProjectAssetToSlot(path, kind, slotId); kind-specific commit 후 target selection 보장; 성공/미commit None, 오류 전파; asset selection 별도 변경 안 함",
         "importToDirectory": "assets.importProjectFilesToDirectory; batch ASSETS_IMPORTED one commit -> input-order detached asset list; empty [], 취소 None, 미commit result, 오류 전파",
         "importToSlot": "assets.importProjectFileToSlot; data/image asset + slot/chart ASSETS_IMPORTED one commit -> detached asset; slot package는 기존 graphs import로 detached chart; 취소 None, 미commit result, 오류 전파",
         "fileKind": "assets.readAssetFileKind -> Q assets.fileKind; copied name/type의 slot/data/image/empty kind 문자열; bytes/Project/Frontend 변경 없음",
