@@ -177,6 +177,17 @@ def projectAssetPath(asset):
     return path
 
 
+def slotFileKind(file):
+    """
+    순수 filename/MIME 분류. name/type 누락은 empty text로, 비교는 case-insensitive로 처리한다.
+    우선순위: .ffsx -> "slot"; .csv/.tsv/.json -> "data";
+    image/ MIME 또는 .png/.jpg/.jpeg/.gif/.webp/.bmp/.svg -> "image"; 나머지는 "".
+    bytes parse/다운로드/ProjectObject/Frontend 변경은 없다. .json은 여기서 data로 분류하며,
+    명시적 graphs.importFile의 Plotly parser나 project.importFile의 FFPX 판정을 대신하지 않는다.
+    """
+    return "filename/MIME의 위 우선순위에 따른 kind 문자열"
+
+
 def projectAssetImportCollisionModel(file, directory, reservedPaths):
     """
     Return:
@@ -187,7 +198,8 @@ def projectAssetImportCollisionModel(file, directory, reservedPaths):
     - project state를 변경하지 않는다.
 
     처리:
-    1. file 종류를 data/image로 판별한다.
+    1. slotFileKind(file)로 판별하고 raw asset import 대상인 data/image만 허용한다.
+       slot/unsupported 분류는 이 asset collision 계산에서 오류이며 state를 변경하지 않는다.
     2. target directory와 file name으로 candidate path를 계산한다.
     3. projectVfs 및 현재 batch reservedPaths와 collision을 검사한다.
     4. 같은 asset kind의 existing asset이면 replace-or-rename을 허용한다.
@@ -207,11 +219,18 @@ def resolveProjectAssetImportPlan(model, choice, reservedPaths):
     - 없음.
 
     처리:
-    available이면 candidate path를 그대로 사용한다.
-    replace 선택이 허용된 같은-kind asset이면 기존 id를 유지한다.
-    그 외에는 projectVfs.uniquePath로 새 이름을 계산한다.
+    model은 이번 작업의 UI 제안이며 authority가 아니다. kind/parent/name/path/mode/replaceId 형식을 검증한다.
+    current VFS에서 parent/name/assetKind와 reservedPaths로 projectAssetImportCollisionModel과 같은 충돌 규칙을 다시 계산한다.
+    먼저 choice=replace이고 제안 replaceId가 있으면 current same-kind 충돌/id가 정확히 일치하는지 검사한다.
+    대기 중 대상 삭제/교체/종류 변경이면 available 분기보다 먼저 오류로 거부하며 choice를 다른 asset/새 create로 옮기지 않는다.
+    current available이고 위 stale replace가 아니면 canonical path와 replaceId none을 반환한다.
+    choice=replace이며 current same-kind 충돌이 replace를 허용하고 제안 id가 일치하면 기존 id를 유지한다.
+    그 외에는 current VFS와 reservedPaths에 대해 projectVfs.uniquePath로 rename plan을 계산한다.
+    malformed model/invalid parent는 query 오류다. 입력 model/reservedPaths와 Project/Frontend는 변경하지 않는다.
+    plan은 한 작업용 detached path/replaceId이고 ASSETS_IMPORTED command는 commit 전에 다시 current authority에서 검증한다.
+    UI 취소/선택 대기 자체는 Application 책임이며 이 helper가 callback/modal/task를 실행하지 않는다.
     """
-    plan = assetImportPlan
+    plan = "current VFS에서 재계산한 detached path/replaceId"
     return plan
 
 
