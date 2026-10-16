@@ -275,7 +275,8 @@ FrontendValidatedInput = {
     "reference": "validated slot/path/chart/object identity 또는 explicit none",
     "workspaceHint": "Frontend가 project/slot.graph/slot.image workspace를 결정하는 데 필요한 immutable hint",
     "selectionHint": (
-        "event별 tagged meaning: SELECT_SLOT은 toggle-clear 또는 clear-graph-object; "
+        "event별 tagged meaning: SELECT_SLOT은 toggle-clear(일반 선택/전체 deselection의 graph+asset clear) 또는 "
+        "clear-graph-object(non-null model-to-fsm의 graph clear/asset 유지); "
         "SELECT_ASSET은 csv/image/directory 또는 none; SELECT_GRAPH_OBJECT는 selectAsset=True일 때만 CSV canonical path, 그 외 none"
     ),
 }
@@ -419,7 +420,9 @@ def validateFrontendIntent(event, payload):
     explicit none은 accepted deselection이다. invalid identity를 none으로 바꾸어 승인하지 않는다.
     SELECT_SLOT:
       slotId를 visible slot에서 resolve한다. workspaceHint는 contentType image이면 slot.image, 아니면 slot.graph다.
-      direction=model-to-fsm이면 clear-graph-object, 그 외 일반 selection은 toggle-clear hint를 반환한다.
+      non-null slot에 direction=model-to-fsm이면 clear-graph-object, 그 외 일반 selection은 toggle-clear hint를 반환한다.
+      explicit none은 direction과 무관하게 toggle-clear의 명시적 deselection이며 graph/asset 선택을 함께 해제한다.
+      hint가 Frontend의 clear 범위를 결정한다. raw direction이나 보존할 asset snapshot을 Frontend input에 추가하지 않는다.
     SELECT_ASSET:
       path를 current VFS에서 resolve하고 요청 kind와 일치하는 csv/image/directory만 승인한다.
       reference는 canonical path, selectionHint는 resolved kind다. none이면 hint도 none이다.
@@ -452,7 +455,12 @@ def buildFrontendReconciliationInput(event, mutationResult, frontendReferences):
        여전히 존재하는 unrelated selection은 유지한다.
     4. resetInterfaceSelection 또는 clearGraphSelection이면 graph selection을 clear한다. 그 외 reconciled slot의 editable graph chart를 resolve한다.
        result.selectionHints에 selectedIndexHint가 있고 함께 제공된 chartId가 그 owning chart와 같으면 그 hint를 index 후보로 사용한다.
-       hint 없음은 기존 integer index 유지이며, 명시적 none은 clear다. 다른 chart에 대한 hint는 현재 선택에 적용하지 않는다.
+       명시적 none은 clear다. matching explicit index hint가 없고 result.selectionHints.graphObjectIndexMaps에
+       current owning chartId의 항목이 있으면 기존 index를 그 indices의 old-index 위치에서 찾아 post-index/none으로 바꾼다.
+       original index가 none/non-integer/out-of-range이거나 mapping 값이 none이면 clear한다. 인접 object를 새로 선택하지 않는다.
+       mapping은 original index별 한 entry이며 0도 유효한 post-index다. 남은 숫자 index의 단순 범위 검사로 mapping을 대체하지 않는다.
+       matching hint/map이 없을 때만 기존 integer index를 유지한다. 다른 chart의 hint/map은 현재 선택에 적용하지 않는다.
+       resetInterfaceSelection/clearGraphSelection이 최우선, 그 다음 matching explicit index hint, 그 다음 cascade map 순서다.
        image workspace/non-editable/no chart/none/out-of-range/non-integer 후보면 clear하고, 유효한 후보면 그 index를 반환한다.
        hint는 command의 계산 결과로서 post-commit object 배열에 대해 검증한다. graph object를 ensure/normalize하지 않는다.
        이 index-only 갱신은 asset selection/path를 변경하지 않는다. 별도 SELECT_GRAPH_OBJECT 전이나 사후 hint 적용은 없다.
