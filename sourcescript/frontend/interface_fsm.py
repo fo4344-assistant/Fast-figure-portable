@@ -20,6 +20,9 @@ interfaceState = {
     "direction": "ui-to-fsm/model-to-fsm/model-to-ui",
     "revision": "frontend external-store subscriber용 revision",
     "error": "마지막 lifecycle task error projection 또는 없음",
+    "dashboardZoomIntent": "session zoom percent; initial 100, finite 50..200",
+    "dashboardZoomLocked": "session width lock; initial False",
+    "dashboardZoomLockedWidth": "lock 때의 finite positive rendered width 또는 none; initial none",
 }
 
 INTERFACE_REGION_ORDER = ["lifecycle", "workspace", "overlay", "assetSelection", "graphObject"]
@@ -34,6 +37,9 @@ INTERFACE_EVENTS = {
     "CLOSE_OVERLAY": "overlay close",
     "OUTSIDE_CLICK": "generic overlay close",
     "ESCAPE": "generic overlay close",
+    "SET_DASHBOARD_ZOOM": "session zoom intent 변경; lock 중에는 유지",
+    "SET_DASHBOARD_ZOOM_LOCK": "명시적 current renderedWidth로 lock; unlock은 100 percent로 복귀",
+    "RESET_DASHBOARD_ZOOM": "unlock/width clear/100 percent를 한 runtime transition으로 수행",
     "LIFECYCLE_START": "Application boundary가 시작한 import/export runtime 표시",
     "LIFECYCLE_COMPLETE": "Application boundary가 전달한 ready 복귀",
     "LIFECYCLE_FAILED": "Application boundary가 전달한 error projection과 recovery",
@@ -70,6 +76,16 @@ FRONTEND_TRANSITION_RULES = {
     ),
     "CLEAR_ASSET_SELECTION": "assetSelection/path만 none으로 만든다.",
     "CLEAR_GRAPH_OBJECT": "graphObject/index만 none으로 만든다. current CSV 선택을 변경하지 않는다.",
+    "SET_DASHBOARD_ZOOM": (
+        "lock이면 no-op. 아니면 finite numeric input을 50..200으로 제한하며 invalid는 100이다. "
+        "실제 값이 달라질 때만 publish한다. Project layout/referenceWidth는 바꾸지 않는다."
+    ),
+    "SET_DASHBOARD_ZOOM_LOCK": (
+        "locked=True이면 처음 lock할 때만 supplied finite positive renderedWidth를 width anchor로 저장한다. "
+        "invalid width는 rejected unchanged이며 이미 locked면 기존 anchor를 유지한다. "
+        "locked=False이면 lock=False/width=none/zoom=100으로 돌아간다. actual change만 publish한다."
+    ),
+    "RESET_DASHBOARD_ZOOM": "lock=False/width=none/zoom=100으로 함께 바꾸고 actual change만 publish한다.",
     "LIFECYCLE_START": "Application이 전달한 importing/exporting으로 전환하고 이전 error를 clear한 뒤 publish한다.",
     "LIFECYCLE_COMPLETE": "ready로 전환하고 error를 clear한 뒤 publish한다. outcome은 project commit result를 대체하지 않는다.",
     "LIFECYCLE_FAILED": (
@@ -94,7 +110,7 @@ class InterfaceStateMachine:
         - 없음.
 
         처리:
-        Application boundary와 Frontend renderer가 필요한 selectedSlotId/assetPath/graphObjectIndex/workspace/overlay/lifecycle만 읽는다.
+        Application boundary와 Frontend renderer가 필요한 selection/workspace/overlay/lifecycle 및 zoom/lock scalar를 읽는다.
         반환값을 persistent ProjectObject authority로 사용하지 않는다.
         """
         return "current Frontend runtime state projection"
