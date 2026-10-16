@@ -173,3 +173,12 @@
 - 근거/성공·거부·사후 실패 시나리오: `agent_space/reviews/review-20261016-011-api-settings-r32-open.md`. 내부 tuple을 공개 read로 간주하거나 projection을 mutation 원천으로 사용하지 않는다.
 - project/slot/asset/graph/layout의 남은 반환, 다른 selection/drop/zoom runtime과 router/export completion 및 전체 closure 검토는 계속 남아 있다. source r32 current/open, closure_review null, 하위 stale을 유지한다.
 - 정책·PlusCal/model/JS/test/build/dist는 변경하지 않고 로컬 실행도 하지 않는다. 실제 누적 patch/Actions 검사: `agent_space/patches/20261016-015.patch` 및 같은 basename `.md`.
+
+## 15. API 보완 — r33 반환 / runtime / import-export / OPEN
+
+- 기준 main `1ead53f4d4a3eb076f17835c060e2ba52b7dc49e`. layout mutation의 성공 후 public read/미commit False, graph header/layout/palette/import의 성공 read/미commit result를 연결했다. header 전용 query 없이 result.changed 실제 CSV path와 기존 assets read를 재사용한다.
+- Frontend session의 zoom/lock/anchor 전이와 supplied geometry, drop prepare/finish를 구체화했다. duplicate drop target/project zoom store나 Frontend Backend 조회를 추가하지 않는다.
+- ordered import router의 file별 commit/stop-on-cancel과 explicit directory batch의 one-candidate atomic을 구분했다. public lifecycle은 기존 Application task를 한 번 사용하고 helper 재진입을 막는다.
+- project/asset/FFSX/Plotly/print export query → copied payload → Frontend handoff/자원 정리/반환을 연결했다. handoff와 사용자 disk 저장 확인은 다르다.
+- 근거·정적 시나리오·기각 대안·남은 계약: `agent_space/reviews/review-20261016-012-api-runtime-export-r33-open.md`. project/slot/image/asset의 남은 반환 및 selection/전체 왕복·목적·중복통합 검토가 있어 closure open을 유지한다.
+- source r33 current/open과 하위 stale 유지. 정책·PlusCal/model/JS/test/build/dist 변경이나 로컬 실행은 없다. 실제 누적 patch/Actions 검사: `agent_space/patches/20261016-016.patch` 및 같은 basename `.md`.
