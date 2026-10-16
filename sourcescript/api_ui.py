@@ -66,7 +66,11 @@ PUBLIC_API_METHODS = {
         "setContentType": "Backend command; SLOT_TYPE_CHANGED로 explicit slot/contentType candidate commit",
         "reset": "Backend command; SLOTS_RESET로 slot-local properties reset + owned chart 제거",
         "swap": "Backend command; SLOTS_SWAPPED로 두 GUI 위치의 slot-local payload를 교환",
-        "prepareFileDrop": "runtime calculation/mutation; drop target selection과 acceptability만 결정",
+        "prepareFileDrop": (
+            "Application runtime operation; Backend에서 explicit visible target을 검증하고 invalid면 unchanged false. "
+            "이미 선택된 valid target이면 selection 유지, 다른 target이면 model-to-fsm selection 보장 후 true. "
+            "toggle 또는 pending content-type mutation 없음; drag runtime 정리만 수행"
+        ),
         "finishFileDrop": "runtime completion; drag/drop interaction state 정리, domain payload 자체는 import command가 소유",
     },
     "images": {
@@ -112,8 +116,8 @@ PUBLIC_API_METHODS = {
         "setEditable": "mutation; CHART_MODEL_REPLACED project command로 editable conversion + 필요한 CSV를 한 candidate로 commit",
         "addObject": "mutation; chart 있으면 GRAPH_OBJECTS_REPLACED, 없으면 SLOT_DATA_CONNECTED project command",
         "moveObject": "mutation; GRAPH_OBJECTS_REPLACED project command로 objects 순서 candidate commit",
-        "selectObject": "runtime mutation; valid object index selection",
-        "setObjectValues": "mutation; GRAPH_OBJECTS_REPLACED project command로 one graph object normalized candidate commit",
+        "selectObject": "runtime mutation; explicit public object selection은 valid index와 그 object의 CSV path를 함께 선택; commit index-only 갱신은 기존 CSV 선택 보존",
+        "setObjectValues": "mutation; explicit chart/index와 새 values를 전달; Backend가 요청 csvId 또는 기존 CSV를 resolve한 one-object candidate를 GRAPH_OBJECTS_REPLACED로 commit",
         "deleteObject": "mutation; GRAPH_OBJECTS_REPLACED project command로 object 제거; 마지막 object 제거도 empty chart로 허용",
         "updateLayout": "mutation; CHART_LAYOUT_CHANGED project command로 chart title/global/axis candidate commit",
         "applyPalette": "mutation; GRAPH_OBJECTS_REPLACED project command로 graph object color candidate commit",
