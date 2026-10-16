@@ -7,6 +7,9 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈�
 
 from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent
 from sourcescript.backend.assets_files import EMPTY_CSV_TEMPLATE
+from sourcescript.frontend.interface_fsm import interfaceFSM
+from sourcescript.frontend.renderer import downloadExportPayload
+from sourcescript.application.public_api.graphs import importSelectedGraphFile
 
 def readAssetFileKind(file):
     """assets.fileKind: copied name/type만 공식 pure query에 전달하고 kind 문자열을 그대로 반환한다."""
@@ -63,18 +66,21 @@ def importProjectFilesToDirectory(files, directory, planImport):
 
     처리:
     1. Application은 pure file-byte read/parse와 readAssetFileKind/readAssetCollisionModel/readAssetImportPlan의 공식 query 및 UI choice 수집을 수행할 수 있다.
-       planImport의 UI-local resolver를 완료하여 이번 batch의 명시적 choices를 얻는다. 취소면 command 없이 취소 결과를 반환한다.
+       planImport의 UI-local resolver를 완료하여 이번 batch의 명시적 choices를 얻는다. 취소면 command 없이 None을 반환한다.
        path/id를 포함한 candidate project를 만들거나 Backend에 resolver callback을 넘기지 않는다.
     2. ASSETS_IMPORTED에 copied file inputs, explicit directory와 choices만 전달한다.
     3. Backend command가 buildProjectAssetImportCandidate로 current directory/collision/id/reference와 whole-project candidate를 계산한다.
        choice 대기 뒤의 current state 재검증과 one commit은 sourcescript.backend.project_efsm의 공통 send 규칙을 사용한다.
-    4. parse/collision/reference/validation 실패는 미commit 결과로 끝난다. Application은 공통 결과를 반환하며 성공 read로 위장하지 않는다.
+    4. parse/collision/reference/validation 실패는 미commit result로 끝난다. 성공만 result.changed에 기록된 input 순서의 실제 asset path를 공식 query로 다시 읽어 detached asset 목록을 반환한다. empty input은 []이며 command가 없다.
 
     의미:
     batch import는 mutate 후 rollback이 아니라 command 안의 candidate-first commit을 기본으로 한다.
     """
     choices = "기존 collision query와 planImport UI resolver로 완료한 이번 batch의 choice 값; 취소면 즉시 반환"
-    return dispatchProjectCommand("ASSETS_IMPORTED", {"files": files, "directory": directory, "choices": choices})
+    result, interfaceState, rendererInput = dispatchProjectCommand("ASSETS_IMPORTED", {"files": files, "directory": directory, "choices": choices})
+    if not result.committed:
+        return result
+    return "result.changed의 input-order asset paths 각각을 assets.readDeletionTarget query한 target 목록"
 
 
 def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
@@ -245,14 +251,19 @@ def importProjectFileToSlot(file, slotId, planImport):
     - raw CSV/image asset과 target slot/chart candidate.
 
     처리:
-    Application은 importProjectFilesToDirectory와 같은 pure file input/명시적 collision choice 수집을 수행한다.
-    취소면 command를 보내지 않는다. Backend ASSETS_IMPORTED가 buildProjectAssetImportCandidate의 targetSlotId 경로로
+    explicit visible slotId를 current query로 검증한 뒤 공식 fileKind를 읽는다. slot이면 collision choice 없이
+    importSelectedGraphFile(slotId, file)의 FFSX 경로로 반환하고, unknown이면 command 없이 오류를 전파한다.
+    data/image만 importProjectFilesToDirectory와 같은 pure file input/명시적 collision choice 수집을 수행한다.
+    취소면 command 없이 None을 반환한다. Backend ASSETS_IMPORTED가 buildProjectAssetImportCandidate의 targetSlotId 경로로
     current asset와 target slot/chart를 한 candidate로 만든다. asset 생성과 slot 연결을 별도 commit으로 쪼개지 않는다.
     """
     choices = "기존 collision query와 planImport UI resolver로 완료한 choice 값; 취소면 즉시 반환"
-    return dispatchProjectCommand(
+    result, interfaceState, rendererInput = dispatchProjectCommand(
         "ASSETS_IMPORTED", {"files": [file], "directory": "choice의 explicit target directory", "choices": choices, "targetSlotId": slotId}
     )
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": "result.changed의 실제 imported asset path"})["target"]
 
 
 def importProjectFile(file):
@@ -275,3 +286,46 @@ def importProjectFile(file):
     if not result.committed:
         return result
     return dispatchProjectQuery("export", {})
+
+
+def importProjectAssetFiles(files, planImport):
+    """
+    assets.importFiles의 ordered router. 한 public 호출의 importing lifecycle 안에서 실행한다.
+    1. input을 순서 있는 file 목록으로 만든다. empty input은 []이며 query/command/choice가 없다.
+    2. 시작 시 interfaceFSM.selectedSlotId scalar만 target으로 잡는다. 이후 modal/await 동안 다른 선택으로 갈아타지 않는다.
+    3. 각 file을 공식 fileKind query로 분류한다. data/image/slot만 지원하며 unknown은 throw, 뒤 input은 처리하지 않는다.
+       slot package는 target이 있어야 importSelectedGraphFile로 보낸다. .json은 fileKind에 따라 data이며 Plotly 추측 분기를 만들지 않는다.
+       Plotly JSON은 explicit graphs.importFile 경로를 사용한다. package 자체는 SLOT_CHART_IMPORTED 한 commit이다.
+       data/image와 target이 있으면 importProjectFileToSlot, 없으면 kind별 /assets/csv 또는 /assets/image에
+       importProjectFilesToDirectory([file], directory, planImport)를 사용한다. FFPX는 project.importFile 전용이며 여기서 추측하지 않는다.
+    4. 파일마다 command가 current visible target/VFS/choice를 다시 검증한다. 성공 결과의 detached asset/chart를 input 순서로 모은다.
+       directory helper의 single-item 목록은 router 결과에 한 item으로 펼친다. 전체 성공은 그 목록을 반환한다.
+    5. choice 취소는 None, 미commit은 그 result를 반환하고 즉시 멈춘다. throw/rejection은 전파한다.
+       이미 끝난 이전 file의 commit은 유지한다. router 전체를 atomic batch로 주장하거나 숨은 rollback하지 않는다.
+       명시적 importToDirectory의 여러 file batch만 그 helper의 one-candidate atomic 계약을 유지한다.
+    6. file 누락/중복 처리나 무시되는 두 번째 file을 만들지 않는다. 각 file별 한 helper 호출이며 성공 item도 한 번만 추가한다.
+    """
+    return "순서대로 완료한 detached item 목록, 취소 None, 미commit result 또는 원래 failure"
+
+
+def downloadProjectAsset(path):
+    """assets.download: 원본 bytes handoff 성공 True, absent/wrong-kind/no bytes False; 오류 전파.
+    path 생략은 public binding이 현재 Frontend assetPath scalar를 전달한다. 새 Project query는 이 작업에만 소비한다.
+    browser disk 저장 확인이 아니라 handoff 완료다. selection/Project/asset bytes를 변경하지 않는다.
+    """
+    payload = dispatchProjectQuery("export", {"operation": "assets.download", "path": path})
+    if payload is None:
+        return False
+    downloadExportPayload(payload)
+    return True
+
+
+def downloadProject():
+    """project.exportFile: selected slot이 있으면 경고 후 None, query/download 없음.
+    선택 없음은 current validated FFPX payload를 한 번 handoff하고 None 반환한다.
+    error는 원래 failure로 전파한다. 이 side-effect API의 None은 disk 저장 보증이나 Project commit 성공 값이 아니다.
+    """
+    if interfaceFSM.readState()["selectedSlotId"] is not None:
+        return None
+    payload = dispatchProjectQuery("export", {"operation": "project.exportFile", "stamp": "이번 호출의 UTC ISO timestamp"})
+    return downloadExportPayload(payload)
