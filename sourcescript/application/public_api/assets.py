@@ -119,7 +119,7 @@ def createEmptyProjectCsv():
     1. EMPTY_CSV_TEMPLATE의 rows를 그대로 사용한다: [["X", "Y"], ["", ""]].
     2. name은 "빈 CSV.csv", MIME은 "text/csv", headerLines는 1을 사용한다.
     3. bytes는 rows를 project CSV writer와 같은 CSV serializer로 직렬화한 UTF-8 bytes를 사용한다.
-    4. 기본 directory는 /assets/csv다.
+    4. 기본 directory는 Backend PROJECT_ASSET_DIRECTORIES.csv의 config 참조다.
     5. Backend create command가 같은 canonical path를 current VFS에서 검사하고 projectVfs.uniquePath의 일반 collision-free naming을 적용한다.
        wrapper가 사전 unique path를 authoritative 결과로 확정하지 않으며 existing asset을 replace하지 않는다.
     6. createProjectCsv의 일반 DATA_OBJECT_CREATED 경로로 등록한다.
@@ -130,7 +130,7 @@ def createEmptyProjectCsv():
         EMPTY_CSV_TEMPLATE["rows"], EMPTY_CSV_TEMPLATE["name"], None,
         "template rows를 동일 CSV serializer로 만든 UTF-8 bytes의 base64",
         EMPTY_CSV_TEMPLATE["mime"], EMPTY_CSV_TEMPLATE["headerLines"],
-        "기본 directory /assets/csv와 template name으로 요청한 path",
+        "Backend PROJECT_ASSET_DIRECTORIES.csv와 template name으로 요청한 path",
     )
 
 
