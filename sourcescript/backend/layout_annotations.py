@@ -7,6 +7,18 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈�
 
 from sourcescript.backend.project_state import activeProject, projectObjects, SLOT_LOCAL_DEFAULTS, slotHasNonDefaultLocalState
 
+ANNOTATION_SETTINGS_RULE = (
+    "기본값의 단일 데이터 원천은 sourcescript/backend/settings.json의 labels/captions/captionReferenceStyle이다. "
+    "이 JSON은 code/loader/별도 mutable authority가 아니라 기존 Backend annotation 책임의 설정 데이터다. "
+    "create는 labels/captions를 deep-copy하고 load는 missing object/field만 재귀 보완하며 valid saved 값과 false/0/empty를 보존한다. "
+    "supplied invalid 값은 기존 normalization/whole-project validation으로 처리하며 invalid state를 commit하지 않는다. "
+    "partial edit는 현재 Project의 omitted field를 유지한다. read는 기본값을 채우기 위해 Project를 mutate하지 않는다. "
+    "position reset도 JSON labels.settings.x/y를 사용한다. FFPX에는 실제 Project 값을 저장한다. "
+    "Frontend는 Backend/Application이 supplied projection/export input에 포함한 값을 소비하며 JSON/Backend를 직접 읽지 않는다. "
+    "settings.json이 missing/malformed면 구성 오류이며 별도의 코드 상수로 조용히 대체하지 않는다. "
+    "설정 파일별 registry/synchronization/cache authority를 만들지 않는다."
+)
+
 LAYOUT_BOUNDARY_RULE = (
     "Backend layout/annotation 계산은 explicit slotId/reference와 current project authority만 사용한다. "
     "selectedSlotId 같은 Frontend runtime reference를 직접 읽거나 Application adapter를 호출하지 않는다. "
@@ -54,7 +66,7 @@ captionSettings = {
 
 EXPORT_LIMITS = {
     "logicalWidth": "현재 100..20000 px",
-    "logicalHeight": "빈 값이면 aspect/caption에서 자동 계산, 지정 시 현재 100..20000 px",
+    "logicalHeight": "auto는 referenceWidth의 dashboard/caption 전체를 target width로 비례 scaling해 ceil, explicit은 total height 100..20000 px",
     "dpi": "현재 36..1200",
     "format": "png 또는 jpeg",
     "rasterDimension": "현재 한 변 최대 16384 px",
@@ -110,6 +122,51 @@ EXPORT_SETTINGS_RULE = (
     "target width, height mode/height, DPI, raster format은 persistent project export settings다. "
     "계산된 target geometry, status callback, DOM bounds, generated blob은 persistent state가 아니다."
 )
+
+
+def orderedSlotLabels(project):
+    """
+    Pure call-scoped calculation from the supplied current authority or Backend command candidate.
+    visible anchor slots only: exclude hidden/merged covered cells. Sort row-major by (row,col),
+    column-major by (col,row), using current project.annotations.labels.settings.order.
+    Assign ordinal 0..N-1 across ALL visible anchors, including empty image/graph slots.
+    format lower/upper-alpha uses bijective base26: a..z, aa..; decimal is ordinal+1;
+    lower/upper-roman uses conventional subtractive Roman notation (I,IV,IX,XL,XC,CD,CM),
+    repeated M above 3999, then requested case. No slotId-based renumbering.
+    Return immutable {slotId, ordinal, identifier, displayLabel}: displayLabel wraps identifier
+    in parentheses only when label settings.parentheses is true. enabled controls drawing only,
+    not numbering. labels.readState sampleText uses the same formatter for ordinal 0.
+    Caption insertion always wraps its group identifier/range in parentheses independently of enabled/parentheses.
+    Do not persist this list or share it as another operation's authority.
+    """
+    return "ordered labels derived from this project"
+
+
+def insertSlotCaptions(project, slotIds=None):
+    """
+    Backend command-internal pure calculation, returning candidate global caption text; no commit/Frontend access.
+    1. Read current global text, slot.caption strings and orderedSlotLabels(project) in this one calculation.
+       None means all visible anchors; [] means no targets. Explicit ids are deduplicated, must resolve to
+       visible anchors, otherwise reject unchanged. Filter ordered labels without renumbering.
+    2. Scan selected entries in layout/label order. Start a group with its ordinal/identifier and EXACT caption
+       string (no trim, case-fold or whitespace/newline normalization). Empty means length zero only.
+    3. Extend the current group only if the next ordinal is immediately consecutive AND its caption is empty
+       or exactly equals the group's stored text. Extending with empty never replaces stored nonempty text.
+       A group starting empty therefore stays empty until a nonempty, different caption starts a new group.
+       Gaps between selected ordinals terminate a group; nonadjacent equal texts never merge.
+    4. Render singleton as (identifier), multi-entry as (firstIdentifier-lastIdentifier), e.g. (a-c).
+       Append one U+0020 then the stored text only when that text is nonempty. Empty groups render label only.
+       Join rendered groups with one U+0020. Preserve original caption contents, including their own whitespace.
+    5. No rendered entries means unchanged text/no commit. Otherwise append this string to the END of current
+       global text; if current text is empty use the string alone, if it ends in U+0020 reuse that boundary space,
+       otherwise insert one U+0020. Never trim/replace existing text. afterText/name/settings remain unchanged.
+       Repeated calls append again; there is no hidden history/deduplication of existing global text.
+    6. SLOT_CAPTIONS_INSERTED applies this result to its current candidate, validates, and commits once.
+       Calculation/validation failure changes neither Project nor Frontend; success uses normal reconciliation.
+    Examples: [A,A,empty] -> (a-c) A; [empty,B] -> (a) (b) B;
+       [empty,empty] -> (a-b); [A,B,A] -> (a) A (b) B (c) A.
+    """
+    return "candidate appended global caption text or unchanged"
 
 
 def dashboardGeometry(width, heightOverride):
@@ -199,7 +256,7 @@ def readLabelsApiState(slotId):
       persistent label enabled/settings copy와 현재 선택 slot 기준 reference width/height.
     reference는 현재 layout의 referenceWidth dashboardGeometry와 gridSlotGeometry로 계산한다.
     explicit slotId가 none/missing이면 같은 grid의 1x1 cell 크기이며 merged slot이면 해당 span 크기다.
-    sampleText는 현재 label format/parentheses로 계산한 index 0의 예시다. 선택 slot의 caption을 sample 원천으로 쓰지 않는다.
+    sampleText는 orderedSlotLabels의 formatter를 현재 label format/parentheses와 ordinal 0에 적용한 예시다. 선택 slot의 caption을 sample 원천으로 쓰지 않는다.
     이 read는 label position/settings/Frontend selection을 변경하지 않는다.
 
     변경:
@@ -273,6 +330,10 @@ def createTargetExportSnapshot():
     projectObjects.snapshot으로 영속 입력을 한 시점에 복사한다.
     export target geometry는 snapshot.export에서 계산한다.
     renderer style projection은 export 작업 범위를 벗어나 일반 authority로 재사용하지 않는다.
+    captionReferenceStyle은 settings.json에서 이 작업 input으로 복사한다. Frontend가 파일을 직접 읽지 않는다.
+    reference width R=layout.slotStyle.referenceWidth, dashboard 기준 높이 H0=R/layout.slotStyle.aspect다.
+    목표 width W의 배율 s=W/R이다. renderer는 R에서 측정한 caption block/gap과 dashboard H0를 같은 s로 변환한다.
+    export width는 이미 pixel 단위이므로 DPI를 다시 곱하지 않는다. DPI는 기존 출력 metadata 의미다.
     DOM 현재 크기는 target figure geometry의 Source of Truth로 사용하지 않는다.
     """
     snapshot = "단일 export 작업용 immutable input snapshot"
