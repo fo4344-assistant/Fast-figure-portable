@@ -141,7 +141,7 @@ GRAPH_OBJECT_EDIT_INPUT_CONTRACT = {
         "remove the resolved requested index; result hint is explicit none, retaining the existing selection-clear meaning. "
         "Do not invent selection of a neighboring object. Empty chart remains valid."
     ),
-    "palette": "change only object colors using the declared palette rule; omit the index hint so existing selection remains.",
+    "palette": "use graphs.GRAPH_PALETTE_RULE on current editable objects, cycling the non-empty input; omit index hint so existing selection remains.",
     "selection": (
         "Backend writes selectionHints.chartId and selectedIndexHint from the actual post-edit array. "
         "Missing hint preserves the current index; explicit none clears. Application forwards it through the common "
@@ -187,6 +187,11 @@ class ProjectStateMachine:
            선택된 replace id/path가 더 이상 같은 대상을 가리키지 않으면 거부한다. stale 계획으로 덮어쓰거나 자동 재선택하지 않는다.
            candidate의 원천이 된 authority가 commit 전 바뀌면 그대로 commit하지 않고 현재 authority에 대해 재계산/검증한다.
            실패/취소는 미commit 결과이며 부분 변경/복구용 rollback/성공 hint를 만들지 않는다.
+           APPEARANCE_CHANGED는 project_state.APPEARANCE_PALETTE_RULE에 따라 10개 field의 전체 palette candidate를 만든다.
+           CHART_LAYOUT_CHANGED는 current owning chart의 title/global/axis field에 새 edit만 적용하고 graphs의 normalize/layout을 사용한다.
+           새 값에 없는 current title/axis field는 유지하며 invalid 새 값은 graph default/empty 규칙으로 정규화한다.
+           nested axis patch는 해당 axis의 명시된 field에만 적용하고 다른 axis/global field를 버리지 않는다.
+           project.appearance와 chart.editor가 각 의미의 원천이며 graph.data/layout/CSS는 candidate 계산/표시 결과다.
         4. candidate whole-project invariant를 검증한다.
         5. 성공 candidate만 activeProject에 한 번 commit한다.
         6. 실제 pre/post 차이에서 ProjectMutationResult를 계산한다. 생성/import의 changed id/path/owner는 실제 commit 결과를 사용한다.
