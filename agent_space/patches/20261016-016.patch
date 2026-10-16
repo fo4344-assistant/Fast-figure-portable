@@ -1,0 +1,781 @@
+diff --git a/agent_space/plans/plan-017.md b/agent_space/plans/plan-017.md
+index 69a32e5..3b85d81 100644
+--- a/agent_space/plans/plan-017.md
++++ b/agent_space/plans/plan-017.md
+@@ -173,3 +173,12 @@
+ - 근거/성공·거부·사후 실패 시나리오: `agent_space/reviews/review-20261016-011-api-settings-r32-open.md`. 내부 tuple을 공개 read로 간주하거나 projection을 mutation 원천으로 사용하지 않는다.
+ - project/slot/asset/graph/layout의 남은 반환, 다른 selection/drop/zoom runtime과 router/export completion 및 전체 closure 검토는 계속 남아 있다. source r32 current/open, closure_review null, 하위 stale을 유지한다.
+ - 정책·PlusCal/model/JS/test/build/dist는 변경하지 않고 로컬 실행도 하지 않는다. 실제 누적 patch/Actions 검사: `agent_space/patches/20261016-015.patch` 및 같은 basename `.md`.
++
++## 15. API 보완 — r33 반환 / runtime / import-export / OPEN
++
++- 기준 main `1ead53f4d4a3eb076f17835c060e2ba52b7dc49e`. layout mutation의 성공 후 public read/미commit False, graph header/layout/palette/import의 성공 read/미commit result를 연결했다. header 전용 query 없이 result.changed 실제 CSV path와 기존 assets read를 재사용한다.
++- Frontend session의 zoom/lock/anchor 전이와 supplied geometry, drop prepare/finish를 구체화했다. duplicate drop target/project zoom store나 Frontend Backend 조회를 추가하지 않는다.
++- ordered import router의 file별 commit/stop-on-cancel과 explicit directory batch의 one-candidate atomic을 구분했다. public lifecycle은 기존 Application task를 한 번 사용하고 helper 재진입을 막는다.
++- project/asset/FFSX/Plotly/print export query → copied payload → Frontend handoff/자원 정리/반환을 연결했다. handoff와 사용자 disk 저장 확인은 다르다.
++- 근거·정적 시나리오·기각 대안·남은 계약: `agent_space/reviews/review-20261016-012-api-runtime-export-r33-open.md`. project/slot/image/asset의 남은 반환 및 selection/전체 왕복·목적·중복통합 검토가 있어 closure open을 유지한다.
++- source r33 current/open과 하위 stale 유지. 정책·PlusCal/model/JS/test/build/dist 변경이나 로컬 실행은 없다. 실제 누적 patch/Actions 검사: `agent_space/patches/20261016-016.patch` 및 같은 basename `.md`.
+diff --git a/agent_space/reviews/review-20261016-012-api-runtime-export-r33-open.md b/agent_space/reviews/review-20261016-012-api-runtime-export-r33-open.md
+new file mode 100644
+index 0000000..0436d96
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-012-api-runtime-export-r33-open.md
+@@ -0,0 +1,72 @@
++# Plan 017 — Source Script r33 API 반환 / runtime / import-export — OPEN
++
++## 1. 범위와 근거
++
++- 사용자 요청: API 반환·runtime·import/export 보완. 기준 main `1ead53f4d4a3eb076f17835c060e2ba52b7dc49e` (Source r32).
++- Source Script를 먼저 개선한다. 기존 공개 87-operation inventory와 r30 trace의 F1/F2/F4를 대상으로 한다. 새 API registry, 공통 성공 envelope, legacy bridge를 만들지 않는다.
++- 기존 Source의 command/candidate-first/공식 query/Frontend session/lifecycle 의미가 기준이다. `fast-figure.js`의 public wrapper, zoom geometry, import router와 download 반환을 정적으로 읽어 호환 동작을 대조했으나, 하위 코드 자체를 상위 권위로 삼거나 전부 정답으로 복제하지 않았다.
++- 이번 수정은 `sourcescript/application/public_api/{__init__,assets,graphs,layout_annotations}.py`, `sourcescript/backend/{assets_files,project_state,project_efsm}.py`, `sourcescript/frontend/{interface_fsm,renderer}.py`, `sourcescript/system.py`에 있다. 실행 코드 변경/실행 검증이 아니다.
++
++## 2. 연결한 경로
++
++| operation | 입력 → owner / 기존 경로 | 공개 결과 / 실패 의미 |
++|---|---|---|
++| layout.readState | explicit previewWidth → Q layout.readState + Frontend zoom/lock scalar | detached layout/preview + zoom/zoomLocked; preview 기본 600, 저장 없음 |
++| layout.setStyle/setGrid/mergeSlots/splitSlots | 새 값/identity → 기존 command → committed gate → fresh layout read | current public layout state; 미commit False, throw 전파 |
++| layout.setZoom/resetZoom/setZoomLocked | Application → Frontend local event; first lock만 surface width 측정 | fresh layout state; invalid first-lock width False/unchanged; locked setZoom no-op |
++| layout.commitZoom | 기존 Frontend completion notification → current layout read | layout state; Project commit 없음 |
++| slots.prepareFileDrop/finishFileDrop | current target query → model-to-fsm selection / Frontend interaction cleanup | 준비 True/False; finish None, 중복 no-op; Project mutation 없음 |
++| graphs.setHeaderLines | CSV identity/new header → DATA_OBJECT_REPLACED → result.changed 실제 CSV path → Q assets.readDeletionTarget | normalized headerLines scalar; 미commit result, 오류 전파 |
++| graphs.updateLayout/applyPalette/importFile | 기존 command → committed gate → 기존 graphs read | layout projection / detached chart / detached chart; 미commit result, 오류 전파 |
++| assets.importToDirectory | file batch + 완료 choices → ASSETS_IMPORTED candidate 한 번 | input-order detached assets; empty [], cancel None, 미commit result, throw 전파 |
++| assets.importToSlot | data/image + explicit target → ASSETS_IMPORTED; FFSX는 기존 graph import | detached asset/chart; 취소/거부/throw는 성공 read하지 않음 |
++| assets.importFiles | 시작 target scalar capture → fileKind → file별 기존 helper | input-order list; 취소/미commit/throw에서 stop, 이전 성공 commit 유지 |
++| project.exportFile | selected-slot precondition → Q export project.exportFile → Frontend handoff | target 선택이면 None/no download, 정상도 None; 오류 전파 |
++| assets.download | explicit/current assetPath → Q copied original bytes → Frontend handoff | missing/no bytes False, handoff True, 오류 전파 |
++| graphs.exportFfsx/exportPlotlyJson | explicit selected slot → Q 같은 chart/CSV의 package/semantic figure → handoff | target 없음 None/no download, 정상 None; 오류 전파 |
++| print.save/capture | 기존 Q snapshot → Frontend raster → handoff/finally | 기존 outcome 유지; saved는 handoff 의미, rejected/throw 구분 |
++
++`ProjectMutationResult.changed`의 실제 changed ids/path를 기존 성공 후 query에 사용한다. header 전용 query를 추가하지 않았다. command tuple은 Application 내부 조정 값이지 공개 성공 반환이 아니다. 사후 read/render/download 실패는 이미 끝난 commit을 rollback하거나 미commit으로 위장하지 않는다.
++
++## 3. Runtime / routing / 자원 의미
++
++- zoom 100, unlocked, anchor none이 초기값이다. finite input은 50..200, invalid는 100; lock 중 intent 변경은 no-op. first lock만 finite positive rendered width를 저장하고 repeated lock은 anchor 유지, unlock/reset은 100/anchor clear다. state 변경 때만 publish한다.
++- Frontend는 supplied referenceWidth × zoom/100 또는 lock anchor로 geometry를 표시한다. referenceWidth 변경/host resize 중 lock width는 유지한다. DOM은 lock anchor의 측정 원천이지 Project layout의 역방향 권위가 아니다. previewGeometry도 session/Project 저장값이 아니다.
++- drop prepare는 invalid target에서 unchanged, 같은 target에서 toggle 없음, 다른 target의 accepted selection만 성공이다. finish는 현재 drag interaction만 정리하며 bookmark post-drag suppression의 기존 click 소비/dispatch 이후 cleanup 규칙을 손상하지 않는다.
++- ordered router와 explicit directory batch는 다르다. directory batch는 one-candidate atomic, router는 file별 commit이며 전체 atomic/rollback을 약속하지 않는다. 취소/오류 뒤 파일은 실행하지 않는다. `.json`은 fileKind의 data 규칙을 유지하고 Plotly를 임의 판별하지 않는다. Plotly는 explicit graphs.importFile이다.
++- PUBLIC_LIFECYCLE_RULE이 import/export public binding을 기존 runLifecycleTask에 연결한다. nested helper는 public binding을 재진입하지 않는다. busy는 helper 실행 전 거부, 정상/취소/미commit은 COMPLETE, throw는 FAILED → ready recovery 후 전파다.
++- Backend export read는 copied bytes/entries/name/MIME만 계산한다. FFPX/FFSX builder와 plain snapshot read를 구분하여 package operation 재귀 호출을 만들지 않는다. timestamp는 호출 입력이며 Project field가 아니다.
++- Frontend는 ZIP STORE encode/download의 작업 자원만 소유한다. 안전한 browser handoff 전 조기 revoke하지 않고 이후 finally에서 정리한다. 다른 surface 자원을 해제하지 않는다. 브라우저 handoff가 disk 저장 확인은 아니며 관찰 불가능한 cancel을 새 반환으로 만들지 않는다.
++
++## 4. 정적 경로 대조 — 실행 테스트 아님
++
++1. layout command 실패 → False, success query 없음; 성공 → 최신 layout read, 기존 tuple 미노출.
++2. lock 중 setZoom → anchor/intent 유지; repeated lock → 재측정/anchor 덮어쓰기 없음.
++3. first-lock 측정 실패 → False, runtime unchanged; unlock/reset → 최신 referenceWidth에서 100 percent 표시.
++4. invalid drop target → selection 유지; 이미 선택된 target → True, toggle/slot-type command 없음.
++5. drop finish 두 번 → None/no-op; post-bookmark-drag click guard 조기 해제 없음.
++6. CSV header update → current normalized scalar를 실제 updated path에서 조회; 별도 CSV 선택/신규 query route 없음.
++7. graph layout/palette/import 실패 → 성공 read 없음; 성공 → 기존 공식 read의 detached 결과.
++8. directory 여러 file → choice 대기 후 Backend current-state 재검증, 전체 candidate 검증 뒤 한 commit.
++9. ordered router A 성공/B 취소/C 대기 → A 유지, None 반환, C 실행 없음; 미commit/throw도 같은 stop 경계.
++10. FFSX explicit slot import → graph helper 한 번, asset collision callback 없음; unsupported/target 소실은 commit 전 거부.
++11. empty router/directory input → [], command/choice 없음; 두 번째 file을 조용히 버리는 분기 없음.
++12. nested import helper → lifecycle 중복 START/busy 자기거부 없음; 실패는 기존 recovery 뒤 원래 오류 전달.
++13. project export 중 slot selected → None/no download; asset missing → False; graph missing → None.
++14. export 성공 → query의 같은 chart/CSV copied payload 사용; persistent settings/selection 변경 없음.
++15. encoding/raster/handoff 예외 → 작업 소유 host/URL/handle 정리; 다른 surface와 Project 보존.
++16. print current capture → one-shot viewport, persistent target size 변경 없음; saved는 disk 보증 아님.
++
++## 5. 선택 이유 / 기각 대안
++
++- 모든 API를 bool/result envelope로 통일하지 않았다. 기존 operation의 chart/scalar/state/list/side-effect 반환 자유도를 유지하면서 공통 adapter와 성공 후 read를 재사용하는 편이 계약 자유도 대비 복잡도가 낮다.
++- header 전용 query, 중복 drop target store, public router의 별도 project snapshot authority, Frontend의 Backend 재조회, helper별 중첩 lifecycle을 기각했다. 기존 result/query/event/한 task로 같은 의미를 충족한다.
++- 순차 router를 거대한 atomic transaction으로 바꾸거나 commit 후 UI 실패를 숨은 rollback으로 처리하지 않았다. 명시적 batch의 atomic 의미와 구분하고 실제 commit 경계를 드러낸다.
++- 하위 코드의 첫 file 조기 반환, stale raw object 반환, browser saved-disk 판정을 상위 의미로 복제하지 않았다. ordered input 보존/단일 권위/실패 구분이라는 project 목적과 충돌하기 때문이다.
++
++## 6. 상태와 미포함
++
++- Source r33 current / closure open / closure_review null. fingerprint `sha256:7e8e88d617cb0c68d48711abe4a3515ac33e813233e83bac14831f43a41b8119`.
++- 여전히 남은 API 계약: project name, slot mutation, image insertion, asset delete/move/directory/trash/connect의 공개 반환과 전체 selection cross-check. 전체 import/edit/export roundtrip, purpose/duplicate-integration 근거도 미완료다. inventory 87개를 전부 완결했다고 주장하지 않는다.
++- PlusCal r11 / optional model r26 / code r36은 stale 유지. 정책·하위 구현·테스트·build·dist 변경 없음. 로컬 Source import/실행, application/test/checker/build/TLC 실행 없음.
++- patch `agent_space/patches/20261016-016.patch`와 같은 basename `.md`에 실제 cumulative endpoint, 전송 제한과 Actions 결과를 기록한다. metadata 검사는 의미 완결/실행 검증이 아니다.
+diff --git a/development-versions.json b/development-versions.json
+index 50c15db..127c6a1 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 32,
++      "revision": 33,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py", 
+-      "fingerprint": "sha256:843ab1d947d03712586f7bbc319963354cefd1ec8b40da355eeb95b6972a2756",
++      "fingerprint": "sha256:7e8e88d617cb0c68d48711abe4a3515ac33e813233e83bac14831f43a41b8119",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/sourcescript/application/public_api/__init__.py b/sourcescript/application/public_api/__init__.py
+index ad6f6d8..cdb43cd 100644
+--- a/sourcescript/application/public_api/__init__.py
++++ b/sourcescript/application/public_api/__init__.py
+@@ -28,7 +28,7 @@ PUBLIC_API_METHODS = {
+         "readName": "Backend query; args 없음; current project meta name immutable projection",
+         "setName": "mutation; PROJECT_NAME_CHANGED project command로 project name candidate commit",
+         "importFile": "lifecycle mutation; file 입력 -> PROJECT_LOADED 내부 FFPX parse/candidate/검증/commit -> 성공 시 immutable project snapshot; 실패/취소는 기존 경로로 전달",
+-        "exportFile": "read/export; current validated project snapshot -> FFPX; project mutation 없음",
++        "exportFile": "assets.downloadProject; selected slot이면 None/no download, 그 외 FFPX handoff 후 None; 오류 전파/Project 보존",
+     },
+     "slots": {
+         "readSelected": (
+@@ -46,7 +46,7 @@ PUBLIC_API_METHODS = {
+             "이미 선택된 valid target이면 selection 유지, 다른 target이면 model-to-fsm selection 보장 후 true. "
+             "toggle 또는 pending content-type mutation 없음; drag runtime 정리만 수행"
+         ),
+-        "finishFileDrop": "runtime completion; drag/drop interaction state 정리, domain payload 자체는 import command가 소유",
++        "finishFileDrop": "layout_annotations.finishDashboardFileDrop; Frontend controller의 drag interaction cleanup 후 None; selection/Project 보존",
+     },
+     "images": {
+         "readEditor": "read; selected slot -> image asset + slot-local imageSettings projection",
+@@ -71,36 +71,36 @@ PUBLIC_API_METHODS = {
+         "emptyTrash": "mutation; PROJECT_TRASH_EMPTIED project command로 trash references/assets/directories candidate removal commit",
+         "draggableAsset": "read/calculation; slot connection drag payload로 사용할 수 있는 non-trash CSV/image asset projection; tree move 가능 여부와는 별도 판정",
+         "connectToSlot": "mutation; CSV는 SLOT_DATA_CONNECTED, image는 SLOT_IMAGE_LINKED project command로 명시적 연결 commit",
+-        "importToDirectory": "lifecycle mutation; ASSETS_IMPORTED project command로 batch file candidates -> collision plan -> one atomic commit",
+-        "importToSlot": "lifecycle mutation; ASSETS_IMPORTED project command로 raw file asset + target slot/chart candidate -> one atomic commit",
++        "importToDirectory": "assets.importProjectFilesToDirectory; batch ASSETS_IMPORTED one commit -> input-order detached asset list; empty [], 취소 None, 미commit result, 오류 전파",
++        "importToSlot": "assets.importProjectFileToSlot; data/image asset + slot/chart ASSETS_IMPORTED one commit -> detached asset; slot package는 기존 graphs import로 detached chart; 취소 None, 미commit result, 오류 전파",
+         "fileKind": "assets.readAssetFileKind -> Q assets.fileKind; copied name/type의 slot/data/image/empty kind 문자열; bytes/Project/Frontend 변경 없음",
+-        "importFiles": "lifecycle router; supported files를 directory/slot import contract로 전달",
++        "importFiles": "assets.importProjectAssetFiles; captured explicit target과 input-order per-file helper; success detached item list, empty [], 취소 None/미commit result/throw에서 stop; earlier commit 유지, router 전체 atomic 아님",
+         "collisionModel": "assets.readAssetCollisionModel -> Q assets.collisionModel; current VFS + reserved paths의 immutable 한 작업용 model",
+         "resolveImportPlan": "assets.readAssetImportPlan -> Q assets.resolveImportPlan; current VFS 재검증한 path/replaceId; stale replace/invalid model은 오류, command commit은 별도 재검증",
+         "selectDirectory": "runtime mutation; VFS-resolved directory selection",
+         "selectCsv": "assets.selectProjectCsv(path) -> Q current CSV 확인 -> F SELECT_ASSET; 성공 detached CSV, missing/wrong-kind/거부 none; Project/slot 보존, graph object index clear",
+         "selectImage": "runtime mutation; VFS-resolved image selection only; no slot mutation",
+-        "download": "read/export; asset original bytes download, project mutation 없음",
++        "download": "assets.downloadProjectAsset; original bytes handoff True, missing/no bytes False, 오류 전파; disk 저장 보증 아님",
+     },
+     "graphs": {
+         "readData": "read; selected chart objects + 단일 현재 CSV/columns + selected object csvId에서 별도로 resolve한 objectColumns; object reference는 현재 선택 대체 원천이 아님",
+         "readLayout": "read; selected chart title/global/axis projection",
+         "readPalette": "read; selected chart object color projection",
+         "selectCsv": "runtime mutation; graph editor의 current CSV selection",
+-        "setHeaderLines": "mutation; DATA_OBJECT_REPLACED project command로 referenced CSV headerLines candidate commit",
++        "setHeaderLines": "graphs.graphEditorSetHeaderLines; DATA_OBJECT_REPLACED -> fresh normalized headerLines scalar, 미commit result/오류 전파",
+         "setEditable": "mutation; CHART_MODEL_REPLACED project command로 editable conversion + 필요한 CSV를 한 candidate로 commit",
+         "addObject": "mutation; chart 있으면 GRAPH_OBJECTS_REPLACED, 없으면 SLOT_DATA_CONNECTED project command",
+         "moveObject": "mutation; chartId/from/to와 operation=graphs.moveObject -> GRAPH_OBJECTS_REPLACED 내부 순서 계산/commit; result hint는 to",
+         "selectObject": "runtime mutation; explicit public object selection은 valid index와 그 object의 CSV path를 함께 선택; commit index-only 갱신은 기존 CSV 선택 보존",
+         "setObjectValues": "mutation; explicit chart/index와 새 values를 전달; Backend가 요청 csvId 또는 기존 CSV를 resolve한 one-object candidate를 GRAPH_OBJECTS_REPLACED로 commit",
+         "deleteObject": "mutation; chartId/index와 operation=graphs.deleteObject -> GRAPH_OBJECTS_REPLACED 내부 제거/commit; result hint는 explicit none; 마지막 object도 empty chart로 허용",
+-        "updateLayout": "mutation; CHART_LAYOUT_CHANGED project command로 chart title/global/axis candidate commit",
+-        "applyPalette": "mutation; GRAPH_OBJECTS_REPLACED project command로 graph object color candidate commit",
++        "updateLayout": "graphs.graphEditorUpdateLayout; CHART_LAYOUT_CHANGED -> fresh title/global/axis read, 미commit result/오류 전파",
++        "applyPalette": "graphs.graphEditorApplyPalette; GRAPH_OBJECTS_REPLACED -> fresh detached chart, 미commit result/오류 전파",
+         "defaultColors": "read; immutable default color sequence copy",
+         "hasSelectedSlot": "read; current selected slot 존재 여부",
+-        "importFile": "lifecycle mutation; SLOT_CHART_IMPORTED project command로 FFSX/Plotly candidate + target slot commit",
+-        "exportFfsx": "read/export; selected graph slot + referenced CSV snapshot -> FFSX",
+-        "exportPlotlyJson": "read/export; selected chart semantic figure -> Plotly JSON",
++        "importFile": "graphs.importSelectedGraphFile; SLOT_CHART_IMPORTED -> fresh detached chart, 미commit result/오류 전파",
++        "exportFfsx": "graphs.exportSelectedGraph operation graphs.exportFfsx; selected slot FFSX handoff 후 None; target 없음 None/no download, 오류 전파",
++        "exportPlotlyJson": "graphs.exportSelectedGraph operation graphs.exportPlotlyJson; semantic figure JSON handoff 후 None; target 없음 None/no download, 오류 전파",
+     },
+     "print": {
+         "readSettings": "Backend query; current persistent export settings immutable projection",
+@@ -133,15 +133,15 @@ PUBLIC_API_METHODS = {
+         "resetPalette": "layout_annotations.resetAppearanceApiPalette; 유일한 default를 같은 setPalette 경로로 commit -> fresh palette/False",
+     },
+     "layout": {
+-        "readState": "read; layout/style/visible slots/logical preview geometry projection",
+-        "setStyle": "mutation; LAYOUT_STYLE_CHANGED project command로 slotStyle candidate validation/commit",
+-        "setGrid": "mutation; GRID_LAYOUT_CHANGED project command로 safe resize candidate만 commit; implicit reflow 금지",
+-        "setZoom": "runtime mutation; dashboard zoom intent only",
+-        "commitZoom": "runtime notification; persistent layout state의 두 번째 copy를 만들지 않음",
+-        "setZoomLocked": "runtime mutation; session zoom lock",
+-        "resetZoom": "runtime mutation; session zoom default",
+-        "mergeSlots": "mutation; SLOTS_MERGED project command로 one non-default slot-local payload만 anchor로 원자적 이동",
+-        "splitSlots": "mutation; SLOTS_SPLIT project command로 anchor local payload 유지 + restored slots local defaults",
++        "readState": "layout_annotations.readLayoutApiState; Backend layout/preview copy + Frontend zoom/zoomLocked 합성; previewWidth 기본 600, transient read",
++        "setStyle": "layout_annotations.setLayoutApiStyle; LAYOUT_STYLE_CHANGED -> fresh public layout state/False",
++        "setGrid": "layout_annotations.setLayoutApiGrid; GRID_LAYOUT_CHANGED -> fresh public layout state/False; implicit reflow 금지",
++        "setZoom": "layout_annotations.setLayoutApiZoom; SET_DASHBOARD_ZOOM -> fresh layout state; finite 50..200/invalid 100, locked no-op",
++        "commitZoom": "layout_annotations.commitLayoutApiZoom; 완료 알림 한 번 -> fresh layout state; Project commit 없음",
++        "setZoomLocked": "layout_annotations.setLayoutApiZoomLocked; 처음 lock 시 Frontend measured width anchor, invalid False; repeated lock/no-op 또는 unlock 후 fresh read",
++        "resetZoom": "layout_annotations.resetLayoutApiZoom; unlock/width clear/100 percent 한 event -> fresh layout state",
++        "mergeSlots": "layout_annotations.mergeSlots; SLOTS_MERGED one commit -> fresh layout state/False; one non-default payload만 anchor로 이동",
++        "splitSlots": "layout_annotations.splitSlots; SLOTS_SPLIT one commit -> fresh layout state/False; anchor payload 유지/restored local defaults",
+     },
+ }
+ 
+@@ -171,6 +171,19 @@ API_BOUNDARY_RULE = (
+ )
+ 
+ 
++PUBLIC_LIFECYCLE_RULE = (
++    "public project.importFile, assets.importToDirectory/importToSlot/importFiles, graphs.importFile은 "
++    "adapter.runLifecycleTask(importing, 해당 operation, helper task) 안에서 한 번 실행한다. "
++    "project.exportFile/assets.download/graphs.exportFfsx/exportPlotlyJson/print.save/capture는 exporting으로 동일하다. "
++    "nested helper 호출은 public binding을 재진입하지 않으며 같은 task 안에서 command/query/helper를 직접 조정한다. "
++    "따라서 router가 child import helper를 호출해도 busy/self-rejection이나 중복 lifecycle start를 만들지 않는다. "
++    "ready가 아니면 query/choice/file read/download 전에 기존 busy rejection이며 task를 실행하지 않는다. "
++    "취소 None/미commit result/missing-target 반환도 LIFECYCLE_COMPLETE 후 원래 결과를 전달한다. "
++    "throw/rejection은 LIFECYCLE_FAILED -> ready recovery 뒤 원래 오류를 caller에 전파한다. "
++    "download 성공은 browser handoff일 뿐 사용자 disk 저장 확인을 뜻하지 않는다."
++)
++
++
+ READ_RULE = (
+     "FastFigureApi Backend read operation은 current Backend authority에서 필요한 projection을 매번 계산해 immutable/transient value로 반환한다. "
+     "read-time normalization은 projection copy에서만 수행하고 live ProjectObject를 변경하지 않는다. "
+diff --git a/sourcescript/application/public_api/assets.py b/sourcescript/application/public_api/assets.py
+index 6d51231..a606a72 100644
+--- a/sourcescript/application/public_api/assets.py
++++ b/sourcescript/application/public_api/assets.py
+@@ -7,6 +7,9 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈
+ 
+ from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent
+ from sourcescript.backend.assets_files import EMPTY_CSV_TEMPLATE
++from sourcescript.frontend.interface_fsm import interfaceFSM
++from sourcescript.frontend.renderer import downloadExportPayload
++from sourcescript.application.public_api.graphs import importSelectedGraphFile
+ 
+ def readAssetFileKind(file):
+     """assets.fileKind: copied name/type만 공식 pure query에 전달하고 kind 문자열을 그대로 반환한다."""
+@@ -63,18 +66,21 @@ def importProjectFilesToDirectory(files, directory, planImport):
+ 
+     처리:
+     1. Application은 pure file-byte read/parse와 readAssetFileKind/readAssetCollisionModel/readAssetImportPlan의 공식 query 및 UI choice 수집을 수행할 수 있다.
+-       planImport의 UI-local resolver를 완료하여 이번 batch의 명시적 choices를 얻는다. 취소면 command 없이 취소 결과를 반환한다.
++       planImport의 UI-local resolver를 완료하여 이번 batch의 명시적 choices를 얻는다. 취소면 command 없이 None을 반환한다.
+        path/id를 포함한 candidate project를 만들거나 Backend에 resolver callback을 넘기지 않는다.
+     2. ASSETS_IMPORTED에 copied file inputs, explicit directory와 choices만 전달한다.
+     3. Backend command가 buildProjectAssetImportCandidate로 current directory/collision/id/reference와 whole-project candidate를 계산한다.
+        choice 대기 뒤의 current state 재검증과 one commit은 sourcescript.backend.project_efsm의 공통 send 규칙을 사용한다.
+-    4. parse/collision/reference/validation 실패는 미commit 결과로 끝난다. Application은 공통 결과를 반환하며 성공 read로 위장하지 않는다.
++    4. parse/collision/reference/validation 실패는 미commit result로 끝난다. 성공만 result.changed에 기록된 input 순서의 실제 asset path를 공식 query로 다시 읽어 detached asset 목록을 반환한다. empty input은 []이며 command가 없다.
+ 
+     의미:
+     batch import는 mutate 후 rollback이 아니라 command 안의 candidate-first commit을 기본으로 한다.
+     """
+     choices = "기존 collision query와 planImport UI resolver로 완료한 이번 batch의 choice 값; 취소면 즉시 반환"
+-    return dispatchProjectCommand("ASSETS_IMPORTED", {"files": files, "directory": directory, "choices": choices})
++    result, interfaceState, rendererInput = dispatchProjectCommand("ASSETS_IMPORTED", {"files": files, "directory": directory, "choices": choices})
++    if not result.committed:
++        return result
++    return "result.changed의 input-order asset paths 각각을 assets.readDeletionTarget query한 target 목록"
+ 
+ 
+ def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
+@@ -245,14 +251,19 @@ def importProjectFileToSlot(file, slotId, planImport):
+     - raw CSV/image asset과 target slot/chart candidate.
+ 
+     처리:
+-    Application은 importProjectFilesToDirectory와 같은 pure file input/명시적 collision choice 수집을 수행한다.
+-    취소면 command를 보내지 않는다. Backend ASSETS_IMPORTED가 buildProjectAssetImportCandidate의 targetSlotId 경로로
++    explicit visible slotId를 current query로 검증한 뒤 공식 fileKind를 읽는다. slot이면 collision choice 없이
++    importSelectedGraphFile(slotId, file)의 FFSX 경로로 반환하고, unknown이면 command 없이 오류를 전파한다.
++    data/image만 importProjectFilesToDirectory와 같은 pure file input/명시적 collision choice 수집을 수행한다.
++    취소면 command 없이 None을 반환한다. Backend ASSETS_IMPORTED가 buildProjectAssetImportCandidate의 targetSlotId 경로로
+     current asset와 target slot/chart를 한 candidate로 만든다. asset 생성과 slot 연결을 별도 commit으로 쪼개지 않는다.
+     """
+     choices = "기존 collision query와 planImport UI resolver로 완료한 choice 값; 취소면 즉시 반환"
+-    return dispatchProjectCommand(
++    result, interfaceState, rendererInput = dispatchProjectCommand(
+         "ASSETS_IMPORTED", {"files": [file], "directory": "choice의 explicit target directory", "choices": choices, "targetSlotId": slotId}
+     )
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": "result.changed의 실제 imported asset path"})["target"]
+ 
+ 
+ def importProjectFile(file):
+@@ -275,3 +286,46 @@ def importProjectFile(file):
+     if not result.committed:
+         return result
+     return dispatchProjectQuery("export", {})
++
++
++def importProjectAssetFiles(files, planImport):
++    """
++    assets.importFiles의 ordered router. 한 public 호출의 importing lifecycle 안에서 실행한다.
++    1. input을 순서 있는 file 목록으로 만든다. empty input은 []이며 query/command/choice가 없다.
++    2. 시작 시 interfaceFSM.selectedSlotId scalar만 target으로 잡는다. 이후 modal/await 동안 다른 선택으로 갈아타지 않는다.
++    3. 각 file을 공식 fileKind query로 분류한다. data/image/slot만 지원하며 unknown은 throw, 뒤 input은 처리하지 않는다.
++       slot package는 target이 있어야 importSelectedGraphFile로 보낸다. .json은 fileKind에 따라 data이며 Plotly 추측 분기를 만들지 않는다.
++       Plotly JSON은 explicit graphs.importFile 경로를 사용한다. package 자체는 SLOT_CHART_IMPORTED 한 commit이다.
++       data/image와 target이 있으면 importProjectFileToSlot, 없으면 kind별 /assets/csv 또는 /assets/image에
++       importProjectFilesToDirectory([file], directory, planImport)를 사용한다. FFPX는 project.importFile 전용이며 여기서 추측하지 않는다.
++    4. 파일마다 command가 current visible target/VFS/choice를 다시 검증한다. 성공 결과의 detached asset/chart를 input 순서로 모은다.
++       directory helper의 single-item 목록은 router 결과에 한 item으로 펼친다. 전체 성공은 그 목록을 반환한다.
++    5. choice 취소는 None, 미commit은 그 result를 반환하고 즉시 멈춘다. throw/rejection은 전파한다.
++       이미 끝난 이전 file의 commit은 유지한다. router 전체를 atomic batch로 주장하거나 숨은 rollback하지 않는다.
++       명시적 importToDirectory의 여러 file batch만 그 helper의 one-candidate atomic 계약을 유지한다.
++    6. file 누락/중복 처리나 무시되는 두 번째 file을 만들지 않는다. 각 file별 한 helper 호출이며 성공 item도 한 번만 추가한다.
++    """
++    return "순서대로 완료한 detached item 목록, 취소 None, 미commit result 또는 원래 failure"
++
++
++def downloadProjectAsset(path):
++    """assets.download: 원본 bytes handoff 성공 True, absent/wrong-kind/no bytes False; 오류 전파.
++    path 생략은 public binding이 현재 Frontend assetPath scalar를 전달한다. 새 Project query는 이 작업에만 소비한다.
++    browser disk 저장 확인이 아니라 handoff 완료다. selection/Project/asset bytes를 변경하지 않는다.
++    """
++    payload = dispatchProjectQuery("export", {"operation": "assets.download", "path": path})
++    if payload is None:
++        return False
++    downloadExportPayload(payload)
++    return True
++
++
++def downloadProject():
++    """project.exportFile: selected slot이 있으면 경고 후 None, query/download 없음.
++    선택 없음은 current validated FFPX payload를 한 번 handoff하고 None 반환한다.
++    error는 원래 failure로 전파한다. 이 side-effect API의 None은 disk 저장 보증이나 Project commit 성공 값이 아니다.
++    """
++    if interfaceFSM.readState()["selectedSlotId"] is not None:
++        return None
++    payload = dispatchProjectQuery("export", {"operation": "project.exportFile", "stamp": "이번 호출의 UTC ISO timestamp"})
++    return downloadExportPayload(payload)
+diff --git a/sourcescript/application/public_api/graphs.py b/sourcescript/application/public_api/graphs.py
+index 9821ee7..a547743 100644
+--- a/sourcescript/application/public_api/graphs.py
++++ b/sourcescript/application/public_api/graphs.py
+@@ -6,6 +6,7 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈
+ """
+ 
+ from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery
++from sourcescript.frontend.renderer import downloadExportPayload
+ 
+ def graphEditorAdd(slotId, csvId):
+     """
+@@ -120,10 +121,12 @@ def graphEditorSetHeaderLines(csvId, headerLines):
+     current CSV를 id로 resolve하고 같은 id/path/bytes/rows를 유지한 replacement candidate를 만든 뒤
+     DATA_OBJECT_REPLACED로 commit한다.
+     """
+-    return dispatchProjectCommand(
+-        "DATA_OBJECT_REPLACED",
+-        {"csvId": csvId, "headerLines": headerLines},
++    result, interfaceState, rendererInput = dispatchProjectCommand(
++        "DATA_OBJECT_REPLACED", {"csvId": csvId, "headerLines": headerLines},
+     )
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": "result.changed의 실제 updated CSV path"})["target"]["headerLines"]
+ 
+ 
+ def graphEditorUpdateLayout(slotId, chartId, values):
+@@ -135,10 +138,12 @@ def graphEditorUpdateLayout(slotId, chartId, values):
+     Backend command가 current owning chart에 새 values를 적용/정규화한 candidate를 CHART_LAYOUT_CHANGED로 commit한다.
+     Plotly graph layout은 commit된 chart settings에서 다시 계산하는 projection이다.
+     """
+-    return dispatchProjectCommand(
+-        "CHART_LAYOUT_CHANGED",
+-        {"slotId": slotId, "chartId": chartId, "settings": values},
++    result, interfaceState, rendererInput = dispatchProjectCommand(
++        "CHART_LAYOUT_CHANGED", {"slotId": slotId, "chartId": chartId, "settings": values},
+     )
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "graphs.readLayout", "selectedSlotId": slotId})
+ 
+ 
+ def graphEditorApplyPalette(chartId, colors):
+@@ -149,9 +154,12 @@ def graphEditorApplyPalette(chartId, colors):
+     처리:
+     current objects에서 color-only candidate를 계산하고 GRAPH_OBJECTS_REPLACED로 commit한다.
+     """
+-    return dispatchProjectCommand(
++    result, interfaceState, rendererInput = dispatchProjectCommand(
+         "GRAPH_OBJECTS_REPLACED", {"chartId": chartId, "operation": "graphs.applyPalette", "colors": colors}
+     )
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]
+ 
+ 
+ def importSelectedGraphFile(slotId, file):
+@@ -165,4 +173,20 @@ def importSelectedGraphFile(slotId, file):
+     Plotly JSON이면 parsePlotlyToEditor로 non-editable imported chart candidate를 만든다.
+     두 경우 모두 target slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증한 뒤 그 command가 한 번 commit한다.
+     """
+-    return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"slotId": slotId, "file": file})
++    result, interfaceState, rendererInput = dispatchProjectCommand("SLOT_CHART_IMPORTED", {"slotId": slotId, "file": file})
++    if not result.committed:
++        return result
++    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "frontendState": {"selectedSlotId": slotId}})["chart"]
++
++
++def exportSelectedGraph(slotId, operation):
++    """
++    graphs.exportFfsx/exportPlotlyJson의 public binding이 현재 selectedSlotId와 두 기존 operation 중 하나를 전달한다.
++    export query는 visible graph slot/chart를 같은 current authority에서 resolve하고 package 또는 semantic figure를 복사한다.
++    target 없음은 경고 후 None이며 download하지 않는다. 정상 download handoff 반환도 기존 side-effect API의 None이다.
++    None을 disk 저장 성공 신호로 해석하지 않는다. query/encoding/handoff 오류는 lifecycle을 거쳐 전파한다.
++    """
++    payload = dispatchProjectQuery("export", {"operation": operation, "slotId": slotId, "stamp": "이번 호출의 UTC ISO timestamp"})
++    if payload is None:
++        return None
++    return downloadExportPayload(payload)
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index b24d234..6254896 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -5,10 +5,10 @@ Fast Figure Source Script — Application boundary / public-api — layout, anno
+ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈이 아니다.
+ """
+ 
+-from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery
++from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection
+ from sourcescript.backend.project_state import DEFAULT_UI_PALETTE
+ from sourcescript.frontend.interface_fsm import interfaceFSM
+-from sourcescript.frontend.renderer import renderDashboardTarget, renderDashboardCurrent
++from sourcescript.frontend.renderer import renderDashboardTarget, renderDashboardCurrent, readDashboardRenderedWidth, finishDashboardFileDropInteraction
+ 
+ 
+ ANNOTATION_APPEARANCE_RESULT_RULE = (
+@@ -23,6 +23,65 @@ ANNOTATION_APPEARANCE_RESULT_RULE = (
+     "오래된 read/성공 tuple로 위장하지 않는다. labels.finishPositionInteraction은 command가 아니라 현재 label read를 반환하는 완료 알림이다."
+ )
+ 
++def prepareDashboardFileDrop(slotId):
++    """
++    slots.prepareFileDrop: slot-selection-context query의 visible target이 없으면 False이며 selection/Project는 그대로다.
++    valid target이면 dispatchSlotSelection(slotId, pendingContentType=None, direction="model-to-fsm")으로 선택을 보장한다.
++    기존 선택이면 toggle하지 않는다. rejected selection은 False이며 selection을 변경하지 않는다.
++    이미 selected target이면 transition 없이 True다. 다른 target의 accepted final selection만 True다.
++    content type command나 중복 drop-target state를 만들지 않는다. 오류는 전파한다.
++    """
++    context = dispatchProjectQuery("slot-selection-context", {"slotId": slotId})
++    return "missing이면 False; already selected면 True; 다른 valid target이면 위 selection accepted 여부"
++
++
++def finishDashboardFileDrop():
++    """slots.finishFileDrop: Frontend-owned drag interaction cleanup 뒤 None; selection/lifecycle/Project 유지."""
++    finishDashboardFileDropInteraction()
++    return None
++
++
++def readLayoutApiState(previewWidth=600):
++    """
++    current layout.readState Backend query에 previewWidth만 전달한다.
++    previewWidth는 finite 1..20000, invalid는 600으로 read copy에서 정규화한다.
++    반환은 gridRows/gridCols/slotStyle/visibleSlots/previewGeometry와 현재 Frontend zoom/zoomLocked다.
++    Application이 interfaceFSM의 zoom/lock scalar를 합성하며 previewGeometry를 session/Project에 저장하지 않는다.
++    """
++    layout = dispatchProjectQuery("project-api", {"operation": "layout.readState", "renderedWidth": previewWidth})
++    session = interfaceFSM.readState()
++    return "layout detached fields에 session.dashboardZoomIntent/Locked를 zoom/zoomLocked로 합성한 immutable public state"
++
++
++def setLayoutApiZoom(value):
++    """session event 뒤 fresh layout state; lock 중 no-op도 현재 read 반환, Project command 없음."""
++    dispatchInterfaceEvent("SET_DASHBOARD_ZOOM", {"value": value})
++    return readLayoutApiState()
++
++
++def commitLayoutApiZoom():
++    """기존 layout zoom completion 알림 한 번 후 fresh read; 두 번째 저장/commit/Project field 없음."""
++    interfaceFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED", {})
++    return readLayoutApiState()
++
++
++def setLayoutApiZoomLocked(locked):
++    """
++    public 인자는 locked 하나다. 처음 lock일 때만 기존 Frontend surface의 readDashboardRenderedWidth로 현재 width를 측정한다.
++    DOM access는 Frontend 책임이며 측정 실패/invalid width는 unchanged False다.
++    unlock/repeated lock은 재측정하지 않는다. accepted/no-op은 fresh layout state를 반환한다.
++    """
++    renderedWidth = "처음 lock이면 readDashboardRenderedWidth(), 그 외 none"
++    finalState = dispatchInterfaceEvent("SET_DASHBOARD_ZOOM_LOCK", {"locked": locked is True, "renderedWidth": renderedWidth})
++    return "invalid first-lock width이면 False, 그 외 readLayoutApiState()"
++
++
++def resetLayoutApiZoom():
++    """단일 RESET event로 unlock/100 percent 복귀 후 fresh read. persistent command 없음."""
++    dispatchInterfaceEvent("RESET_DASHBOARD_ZOOM", {})
++    return readLayoutApiState()
++
++
+ def setLayoutApiStyle(values):
+     """
+     변경:
+@@ -35,8 +94,10 @@ def setLayoutApiStyle(values):
+     4. LAYOUT_STYLE_CHANGED command가 한 번 commit한다. Application wrapper는 values만 전달한다.
+     5. renderer는 commit result 이후 authoritative layout을 다시 읽는다.
+     """
+-    result = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", values)
+-    return result
++    result, interfaceState, rendererInput = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", values)
++    if not result.committed:
++        return False
++    return readLayoutApiState()
+ 
+ 
+ def setLayoutApiGrid(rows, cols):
+@@ -50,8 +111,10 @@ def setLayoutApiGrid(rows, cols):
+     성공 candidate는 그 command가 한 번 commit한다.
+     commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 Application boundary의 Backend reconciliation query와 Frontend FSM transition이 결정한다.
+     """
+-    result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", {"rows": rows, "cols": cols})
+-    return result
++    result, interfaceState, rendererInput = dispatchProjectCommand("GRID_LAYOUT_CHANGED", {"rows": rows, "cols": cols})
++    if not result.committed:
++        return False
++    return readLayoutApiState()
+ 
+ 
+ def mergeSlots(slotIds):
+@@ -71,8 +134,10 @@ def mergeSlots(slotIds):
+     7. SLOTS_MERGED 내부에서 whole-project candidate를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
+     8. Frontend selection reconciliation과 renderer update는 ProjectMutationResult 이후 Application boundary가 수행한다.
+     """
+-    result = dispatchProjectCommand("SLOTS_MERGED", {"slotIds": slotIds})
+-    return result
++    result, interfaceState, rendererInput = dispatchProjectCommand("SLOTS_MERGED", {"slotIds": slotIds})
++    if not result.committed:
++        return False
++    return readLayoutApiState()
+ 
+ 
+ def splitSlots(slotIds):
+@@ -87,8 +152,10 @@ def splitSlots(slotIds):
+     4. SLOTS_SPLIT 내부에서 candidate 전체를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
+     5. interface selection reconciliation과 renderer update는 project commit 이후 수행한다.
+     """
+-    result = dispatchProjectCommand("SLOTS_SPLIT", {"slotIds": slotIds})
+-    return result
++    result, interfaceState, rendererInput = dispatchProjectCommand("SLOTS_SPLIT", {"slotIds": slotIds})
++    if not result.committed:
++        return False
++    return readLayoutApiState()
+ 
+ 
+ def applyImageSettingsFromValues(slotId, values):
+diff --git a/sourcescript/backend/assets_files.py b/sourcescript/backend/assets_files.py
+index 19bd79d..7634425 100644
+--- a/sourcescript/backend/assets_files.py
++++ b/sourcescript/backend/assets_files.py
+@@ -274,6 +274,16 @@ def planProjectNodeMove(path, directory):
+     return movePlan
+ 
+ 
++def projectFileStem(value):
++    """
++    project export filename의 pure sanitize. missing/null은 empty text, text trim 뒤
++    backslash/slash/colon/star/question/double-quote/angle-bracket/pipe 및 U+0000..001F를 hyphen으로 바꾼다.
++    whitespace run은 space 하나로 합치고 trailing dot/space를 없앤 뒤 최대 100 text units로 제한한다.
++    결과 empty면 fast-figure-project다. 원래 project metadata/name은 바꾸지 않는다.
++    """
++    return "위 규칙의 safe project filename stem"
++
++
+ def ffpxBuildProject():
+     """
+     Return:
+diff --git a/sourcescript/backend/project_efsm.py b/sourcescript/backend/project_efsm.py
+index 13408bb..c633bb8 100644
+--- a/sourcescript/backend/project_efsm.py
++++ b/sourcescript/backend/project_efsm.py
+@@ -152,7 +152,7 @@ GRAPH_OBJECT_EDIT_INPUT_CONTRACT = {
+ ProjectMutationResult = {
+     "event": "처리한 project command",
+     "committed": "commit 성공 여부",
+-    "changed": "command별 실제 changed ids/path/owner; create/import는 post-commit read에 필요한 생성 asset path/id와 owning chart/slot id를 포함",
++    "changed": "command별 실제 changed ids/path/owner; create/import는 input 순서의 실제 생성 asset path/id와 owning chart/slot id, DATA_OBJECT_REPLACED는 실제 updated CSV path를 포함하여 기존 공식 query로 post-commit read한다",
+     "removedGraphReferenceCount": "실제 제거한 graph-object CSV reference 수",
+     "resetImageSlotCount": "실제 image reference를 비운 slot 수",
+     "selectionHints": "후속 interface reconciliation의 identity/path 결과와 해당 chartId에 한정된 optional selectedIndexHint; absence와 explicit none을 구별",
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index 8c57864..de726f3 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -316,7 +316,7 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
+     "captions.readGlobal": "project annotations.captions의 enabled/text/afterText/name/nameBold/settings copy",
+     "captions.readSlot": "explicit slotId의 slot.caption copy; 없는 slot이면 none; placeholder는 반환 presentation일 뿐 저장하지 않음",
+     "labels.readState": "sourcescript.backend.layout_annotations readLabelsApiState(slotId)의 label settings와 explicit slot reference geometry copy",
+-    "layout.readState": "current layout/style/visible slot geometry copy와 renderedWidth를 사용한 기존 layout preview 계산; DOM에서 project 값을 역추론하지 않음",
++    "layout.readState": "gridRows/gridCols/slotStyle/visibleSlots와 renderedWidth로 계산한 previewGeometry copy; width finite 1..20000 invalid 600; Backend는 session zoom/lock을 읽지 않으며 Application만 public read에 합성; DOM 역추론/preview 저장 없음",
+     "assets.readTree": "sourcescript.backend.assets_files의 current directories/assets로 계산한 canonical VFS tree copy",
+     "assets.readTrash": "같은 tree 계산의 trash subtree copy",
+     "assets.isTrashed": "canonical requested path의 trash subtree membership boolean",
+@@ -335,6 +335,23 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
+     ),
+ }
+ 
++EXPORT_BACKEND_READ_CONTRACT = {
++    "project.exportFile": (
++        "current whole-project validation 후 assets_files.ffpxBuildProject의 FFPX entries copy; MIME application/vnd.fast-figure-project. "
++        "Frontend selected slot 금지는 Application precondition이며 Backend는 Frontend를 조회하지 않음"
++    ),
++    "assets.download": "explicit canonical path로 CSV/image original bytes/name/MIME copy; absent/wrong kind/no original bytes는 none; fallback MIME application/octet-stream",
++    "graphs.exportFfsx": "explicit visible graph slotId -> unique owning chart -> assets_files.ffsxBuildSlot의 entries copy; MIME application/vnd.fast-figure-slot; missing slot/chart는 none",
++    "graphs.exportPlotlyJson": "같은 target의 graphs.chartFigure(chart, current project) -> UTF-8 JSON bytes copy; MIME application/json; noneditable imported figure/frame 보존; missing은 none",
++    "filename": (
++        "request.stamp는 Application이 이번 호출에 만든 UTC ISO timestamp의 colon/dot을 hyphen으로 바꾼 값이며 Project field가 아니다. "
++        "project는 assets_files.projectFileStem의 project-name sanitize + stamp + .ffpx; slot은 fast-figure-slot-{slotId}-{stamp}.ffsx; "
++        "Plotly는 plotly-figure-{slotId}-{stamp}.json; original asset은 asset.name을 그대로 사용한다."
++    ),
++    "lifetime": "한 download 작업의 copied entries/bytes/name/MIME만 반환; resource URL 할당이나 다운로드는 하지 않으며 원본을 mutation input으로 쓰지 않음",
++}
++
++
+ RENDERER_BACKEND_READ_CONTRACT = {
+     "whole": (
+         "default renderer request는 final frontendState와 optional mutationResult를 받는다. "
+@@ -372,7 +389,10 @@ def readBackendProjection(kind, request):
+        chart/CSV/figure 계산은 같은 Backend read 작업의 project를 graphs.chartFigure(chart, project)에 명시적으로 전달한다.
+        export의 print.save/print.capture 입력에는 같은 작업의 chart/CSV에서 계산한 figure를 제공한다.
+        이는 한 작업용 projection이며 저장 ProjectObject/FFPX schema에 figure 필드나 별도 authority를 추가하지 않는다.
+-       일반 project export/import 반환용 whole-project snapshot은 기존 계약을 유지한다.
++       operation 없는 일반 project export/import 반환용 whole-project snapshot은 기존 계약을 유지한다.
++       project.exportFile/assets.download/graphs.exportFfsx/graphs.exportPlotlyJson은 EXPORT_BACKEND_READ_CONTRACT를 따른다.
++       그 외 알 수 없는 export operation은 query error다. package builder가 사용하는 operation 없는 export read는
++       plain snapshot일 뿐 같은 package operation을 재귀 호출하지 않는다. 같은 read 작업의 chart/CSV를 끝까지 사용한다.
+        supplied renderer input을 받은 Frontend가 Backend helper를 재호출하거나 프로젝트 mirror를 별도로 구성하지 않는다.
+        interface-intent/reconciliation kind는 아래 validation/reconciliation 계산과 같은 contract를 사용하며 별도 판정 규칙을 만들지 않는다.
+     5. compatibility/default normalization은 detached copy에서만 수행한다. 중첩 array/object까지 read-only로 반환하고
+diff --git a/sourcescript/frontend/interface_fsm.py b/sourcescript/frontend/interface_fsm.py
+index da3e8c3..856bd16 100644
+--- a/sourcescript/frontend/interface_fsm.py
++++ b/sourcescript/frontend/interface_fsm.py
+@@ -20,6 +20,9 @@ interfaceState = {
+     "direction": "ui-to-fsm/model-to-fsm/model-to-ui",
+     "revision": "frontend external-store subscriber용 revision",
+     "error": "마지막 lifecycle task error projection 또는 없음",
++    "dashboardZoomIntent": "session zoom percent; initial 100, finite 50..200",
++    "dashboardZoomLocked": "session width lock; initial False",
++    "dashboardZoomLockedWidth": "lock 때의 finite positive rendered width 또는 none; initial none",
+ }
+ 
+ INTERFACE_REGION_ORDER = ["lifecycle", "workspace", "overlay", "assetSelection", "graphObject"]
+@@ -34,6 +37,9 @@ INTERFACE_EVENTS = {
+     "CLOSE_OVERLAY": "overlay close",
+     "OUTSIDE_CLICK": "generic overlay close",
+     "ESCAPE": "generic overlay close",
++    "SET_DASHBOARD_ZOOM": "session zoom intent 변경; lock 중에는 유지",
++    "SET_DASHBOARD_ZOOM_LOCK": "명시적 current renderedWidth로 lock; unlock은 100 percent로 복귀",
++    "RESET_DASHBOARD_ZOOM": "unlock/width clear/100 percent를 한 runtime transition으로 수행",
+     "LIFECYCLE_START": "Application boundary가 시작한 import/export runtime 표시",
+     "LIFECYCLE_COMPLETE": "Application boundary가 전달한 ready 복귀",
+     "LIFECYCLE_FAILED": "Application boundary가 전달한 error projection과 recovery",
+@@ -70,6 +76,16 @@ FRONTEND_TRANSITION_RULES = {
+     ),
+     "CLEAR_ASSET_SELECTION": "assetSelection/path만 none으로 만든다.",
+     "CLEAR_GRAPH_OBJECT": "graphObject/index만 none으로 만든다. current CSV 선택을 변경하지 않는다.",
++    "SET_DASHBOARD_ZOOM": (
++        "lock이면 no-op. 아니면 finite numeric input을 50..200으로 제한하며 invalid는 100이다. "
++        "실제 값이 달라질 때만 publish한다. Project layout/referenceWidth는 바꾸지 않는다."
++    ),
++    "SET_DASHBOARD_ZOOM_LOCK": (
++        "locked=True이면 처음 lock할 때만 supplied finite positive renderedWidth를 width anchor로 저장한다. "
++        "invalid width는 rejected unchanged이며 이미 locked면 기존 anchor를 유지한다. "
++        "locked=False이면 lock=False/width=none/zoom=100으로 돌아간다. actual change만 publish한다."
++    ),
++    "RESET_DASHBOARD_ZOOM": "lock=False/width=none/zoom=100으로 함께 바꾸고 actual change만 publish한다.",
+     "LIFECYCLE_START": "Application이 전달한 importing/exporting으로 전환하고 이전 error를 clear한 뒤 publish한다.",
+     "LIFECYCLE_COMPLETE": "ready로 전환하고 error를 clear한 뒤 publish한다. outcome은 project commit result를 대체하지 않는다.",
+     "LIFECYCLE_FAILED": (
+@@ -94,7 +110,7 @@ class InterfaceStateMachine:
+         - 없음.
+ 
+         처리:
+-        Application boundary와 Frontend renderer가 필요한 selectedSlotId/assetPath/graphObjectIndex/workspace/overlay/lifecycle만 읽는다.
++        Application boundary와 Frontend renderer가 필요한 selection/workspace/overlay/lifecycle 및 zoom/lock scalar를 읽는다.
+         반환값을 persistent ProjectObject authority로 사용하지 않는다.
+         """
+         return "current Frontend runtime state projection"
+diff --git a/sourcescript/frontend/renderer.py b/sourcescript/frontend/renderer.py
+index 1ec20ae..aa8934b 100644
+--- a/sourcescript/frontend/renderer.py
++++ b/sourcescript/frontend/renderer.py
+@@ -116,6 +116,10 @@ def renderDashboard(projectProjection, interfaceState):
+ 
+     처리:
+     1. supplied projectProjection의 grid와 style을 dashboard CSS geometry에 반영한다.
++       width는 interfaceState의 lock이면 dashboardZoomLockedWidth, 아니면 supplied slotStyle.referenceWidth * dashboardZoomIntent / 100이다.
++       이 width에서 같은 supplied slotStyle의 aspect/gap/outerMargin/radius를 비례 계산한다. DOM/control로 Project 값을 역추론하지 않는다.
++       host resize나 referenceWidth 변경에도 lock width는 그대로며 unlock/reset 이후에는 최신 supplied referenceWidth의 100 percent를 사용한다.
++       geometry 변경 뒤 current host만 resize하며 zoom/anchor를 Project/FFPX에 저장하지 않는다.
+     2. visible slot projection마다 slot container와 label/bookmark control surface를 구성한다.
+     3. graph slot은 Backend가 같은 project read에서 계산해 projection에 포함한 figure를 Plotly로 표시한다.
+        supplied CSV/columns는 editor 표시용 read 값이며 Frontend에서 traces/chartFigure를 다시 계산하거나
+@@ -220,6 +224,17 @@ def swapSlotContents(source, target, frontendActions):
+     return "public API swap commit 결과와 post-reconciliation renderer projection"
+ 
+ 
++def finishDashboardFileDropInteraction():
++    """
++    dashboard interaction controller의 drag-only bookkeeping/hover를 완료/중단 경로에서 정리한다.
++    event listener가 현재 정리 중인 interaction만 끝내며 unrelated pointer/resource는 건드리지 않는다.
++    bookmark 내부 drag의 post-drag click suppression은 여기서 즉시 풀지 않는다. 기존 click 소비/dispatch 이후 cleanup 규칙을 유지한다.
++    중복 finish는 no-op/None이다. selection/zoom/lifecycle/Backend를 읽거나 바꾸지 않는다.
++    이 pointer 상태는 Frontend controller 소유이며 Application/FSM에 두 번째 drop-target copy를 만들지 않는다.
++    """
++    return None
++
++
+ def prepareDashboardFileDrop(slotId, frontendActions):
+     """
+     Return:
+@@ -318,6 +333,27 @@ def startupCoreRuntime(projectProjection, interfaceState, frontendActions):
+     return "ready core runtime"
+ 
+ 
++def readDashboardRenderedWidth():
++    """Frontend surface가 현재 dashboard bounding width를 한 번 측정해 finite positive scalar 또는 none을 반환한다.
++    DOM/control 값으로 Project layout을 역추론하지 않으며 session lock anchor 생성에만 사용한다.
++    """
++    return "현재 rendered dashboard width 또는 none"
++
++
++def downloadExportPayload(payload):
++    """
++    Backend export query의 copied name/MIME/bytes 또는 FFPX/FFSX entry list만 소비한다.
++    entry list는 기존 package ZIP STORE 형식으로 직렬화하며 graph/CSV/Project를 재조회하지 않는다.
++    copied bytes로 download resource를 만들고 브라우저에 한 번 전달한다. 정상 반환은 None이다.
++    이 완료는 브라우저에 전달했다는 뜻이지 disk 저장 완료/사용자 선택 확인이 아니다.
++    브라우저가 취소를 관찰할 수 없는 download에 가상의 cancelled/saved-disk 결과를 만들지 않는다.
++    resource URL/handle은 이 surface 한 작업의 try/finally에서 안전한 handoff 뒤 정리한다.
++    브라우저가 bytes를 소비하기 전 조기 revoke하지 않으며 구체 scheduler/URL primitive는 이 수명을 보존하는 하위 구현 선택이다.
++    encoding/handoff 오류는 원래 failure로 전파하며 Project/다른 surface resource를 변경하지 않는다.
++    """
++    return "handoff 완료 시 None; 실패는 throw/rejection"
++
++
+ def renderDashboardTarget(snapshot, statusSink):
+     """
+     Return:
+@@ -340,7 +376,11 @@ def renderDashboardTarget(snapshot, statusSink):
+        target geometry/font/line/marker의 presentation scaling은 figure copy에만 적용하고 supplied snapshot/Project를 변경하지 않는다.
+        ordinary FFPX whole-project snapshot을 raster용 precomputed figure input인 것처럼 대신 사용하지 않는다.
+     8. label/caption을 같은 logical reference geometry에서 변환해 그린다.
+-    9. PNG/JPEG blob에 DPI metadata를 적용하고 다운로드한다.
++    9. PNG/JPEG blob에 DPI metadata를 적용하고 downloadExportPayload로 한 번 전달한다.
++    10. 정상 handoff 뒤 기존 saved outcome을 반환한다. saved는 disk 저장 확인이 아니라 handoff 완료다.
++        raster limit/invalid geometry는 download 전 rejected outcome이며 throw/rejection은 caller에 전파한다.
++        statusSink는 진행 표시일 뿐 결과/취소 authority가 아니고 실패로 이미 전달한 파일을 rollback하지 않는다.
++        작업에서 만든 임시 render host/Plotly/image/URL은 성공/거부/예외 모두 finally에서 작업 소유분만 정리한다.
+     """
+     result = "persistent settings를 사용한 raster export outcome"
+     return result
+@@ -359,6 +399,9 @@ def renderDashboardCurrent(snapshot, statusSink):
+     capture는 project의 target width/height를 바꾸는 export preset이 아니다.
+     Application이 제공한 snapshot과 현재 rendered viewport geometry를 one-shot source size로 사용할 수 있으며
+     persistent dpi/format은 output encoding default로 읽을 수 있다.
++    current viewport는 Frontend surface가 이번 capture에 한 번 측정하며 Project target width/height로 저장하지 않는다.
++    target export와 같은 limit/encoding/download completion/error/finally 규칙을 적용한다.
++    이미 캡처한 snapshot/viewport는 이 작업에서만 소비하고 다음 export의 원천으로 보관하지 않는다.
+     """
+     result = "current-screen capture outcome"
+     return result
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index b86812a..89b6009 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -189,7 +189,8 @@ UNRESOLVED_REVIEW_ITEMS = [
+     (
+         "Plan 017 D: asset fileKind/resolveImportPlan의 공식 query와 createEmptyCsv의 create-and-select를 연결했고, "
+         "caption/label/UI-palette의 성공 read·미commit False·오류 전파와 label reset/interaction-finish 반환을 구체화했다. "
+-        "project/slot/asset/graph/layout의 나머지 public 반환과 selection/zoom runtime, router/export 완료에는 미정 의미가 남았다. "
++        "layout 반환/zoom lock과 drop 준비·정리, graph header/layout/palette/import 반환, ordered import router와 download handoff/lifecycle를 구체화했다. "
++        "project name/slot mutation/image insertion 및 asset delete/move/directory/trash/connect의 남은 public 반환, 전체 selection 대조와 왕복 검토는 아직 미완료다. "
+         "기존 operation의 계약과 공통 adapter를 보완해야 하며 내부 command triple을 public 값으로 자동 간주하지 않는다. "
+         "정적 대조표 작성이나 개별 wrapper 수정만으로 전체 closure 근거를 삼지 않는다."
+     ),
