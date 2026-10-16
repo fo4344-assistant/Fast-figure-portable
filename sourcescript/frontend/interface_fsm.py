@@ -64,8 +64,11 @@ FRONTEND_TRANSITION_RULES = {
     "rejected": "accepted=False이면 state/revision/selection을 그대로 유지하고 publish하지 않는다.",
     "SELECT_SLOT": (
         "reference none이면 deselect; toggle-clear hint이며 같은 id이면 deselect; 그 외 validated id를 선택한다. "
-        "workspace는 none이면 project, 아니면 workspaceHint다. 모든 accepted slot selection은 graphObject/index와 assetSelection/path를 clear한다. "
-        "같은 id의 model-to-fsm 선택은 toggle하지 않는다. overlay는 explicit deselection이면 유지하고 non-null slot 선택이면 닫는다."
+        "workspace는 none이면 project, 아니면 workspaceHint다. 모든 accepted slot selection은 graphObject/index를 clear한다. "
+        "최종 reference가 none이거나 hint가 toggle-clear이면 assetSelection/path도 clear한다. "
+        "non-null reference와 clear-graph-object hint이면 현재 assetSelection/path를 그대로 유지한다. "
+        "따라서 model-to-fsm 선택은 같은 id도 toggle하지 않고 독립 asset 선택을 보존한다. raw direction이나 Backend를 다시 읽지 않는다. "
+        "overlay는 explicit deselection이면 유지하고 non-null slot 선택이면 닫는다."
     ),
     "SELECT_ASSET": (
         "validated kind/path 또는 none을 assetSelection/path에 반영하고 graphObject/index를 clear한다. slot/workspace는 유지한다."
