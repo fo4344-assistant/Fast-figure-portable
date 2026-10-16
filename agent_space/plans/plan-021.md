@@ -18,6 +18,13 @@
 4. Frontend는 supplied projection만 소비한다. Backend config를 직접 import/read하지 않는다. 기존 Application의 Backend default import는 config로 파생된 공식 default read 경로와 일치하도록 유지한다.
 5. Source r37 fingerprint/lineage 기록, checker가 backend 구조와 데이터 혼입을 검증하도록 한정 보완한다. actual cumulative patch와 review 기록 후 GitHub Actions cumulative checker 실행.
 
+## 진행 기록
+
+- 계획 먼저 main `17aae6445abd3a388d1a2f03b1cbb2e9a9be070e`에 게시한 뒤 Source r37 변경.
+- `backend.project_object`와 `backend.defaults`로 기존 한 JSON을 재구성하고 Backend 5개 owner 및 Application/renderer의 관련 경로 참조를 정리했다. 실제 프로젝트 데이터와 Frontend 설정을 config에서 제외했다.
+- 상세 이동·잔류 목록, 정적 생성→소비 대조, 제외 범위: `agent_space/reviews/review-20261016-018-backend-config-r37-open.md`.
+- Source37 current/open, lower stale 유지. cumulative Actions와 actual patch 기록은 게시 후 review/patch 023에서 결과를 확인한다. 정적 대조는 runtime/전체 closure 증거로 부풀리지 않는다.
+
 ## 제외·완료 조건
 
 정책/lower JS/PlusCal/model/tests/dist 변경과 Source closure 선언 제외. 아직 실제 소비 경로가 없는 값을 상상해 추가하지 않는다. Config는 mutable Project와 동기화하지 않으며 valid 저장값은 유지한다. JSON 변경만으로 기존 Project나 package version을 자동 migration하지 않는다. 전체 Backend 설정 목록의 이동/잔류 이유와 생성→소비 경로를 review에 기록한다. 새 framework를 만드는 비용은 필요하지 않다.
