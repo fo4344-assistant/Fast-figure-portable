@@ -111,26 +111,26 @@ PUBLIC_API_METHODS = {
     "captions": {
         "readGlobal": "read; project-level global caption projection",
         "readSlot": "read; explicit slot id의 slot.caption projection",
-        "setEnabled": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption enabled commit",
-        "setGlobalText": "mutation; global caption text만 commit",
-        "setSlotText": "mutation; explicit slot id의 slot.caption만 commit",
-        "insertSlotCaptions": "mutation; slot.caption text projection을 global caption text에 명시적으로 삽입",
-        "setName": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption name commit",
-        "setNameBold": "mutation; CAPTION_SETTINGS_CHANGED project command로 global caption nameBold commit",
-        "setSettings": "mutation; CAPTION_SETTINGS_CHANGED project command로 global/shared caption presentation settings candidate commit",
+        "setEnabled": "layout_annotations.setCaptionsApiEnabled; CAPTION_SETTINGS_CHANGED -> ANNOTATION_APPEARANCE_RESULT_RULE의 fresh global caption/False",
+        "setGlobalText": "layout_annotations.setGlobalCaptionText; global text만 commit -> fresh global caption/False",
+        "setSlotText": "layout_annotations.setSlotCaptionText; explicit slot text만 commit -> 그 slot의 fresh caption/False",
+        "insertSlotCaptions": "layout_annotations.insertSlotCaptionsIntoGlobalCaption; Backend에서 layout-order text를 global에 삽입 -> fresh global caption/False",
+        "setName": "layout_annotations.setCaptionsApiName; CAPTION_SETTINGS_CHANGED -> fresh global caption/False",
+        "setNameBold": "layout_annotations.setCaptionsApiNameBold; CAPTION_SETTINGS_CHANGED -> fresh global caption/False",
+        "setSettings": "layout_annotations.setCaptionsApiSettings; CAPTION_SETTINGS_CHANGED -> fresh global caption/False",
     },
     "labels": {
-        "readState": "read; persistent label settings + current slot reference geometry projection",
-        "setEnabled": "mutation; LABEL_SETTINGS_CHANGED project command로 label enabled commit",
-        "setSettings": "mutation; LABEL_SETTINGS_CHANGED project command로 label format/order/font candidate commit",
-        "setPosition": "mutation; LABEL_POSITION_CHANGED project command로 authoritative x/y continuous commit",
-        "finishPositionInteraction": "runtime notification; x/y의 두 번째 commit을 만들지 않음",
-        "resetPosition": "mutation; LABEL_POSITION_CHANGED project command로 label x/y default origin commit",
+        "readState": "layout_annotations.readLabelsApiState; Frontend selectedSlotId를 explicit Backend query에 전달 -> persistent enabled/settings + reference geometry/sampleText copy",
+        "setEnabled": "layout_annotations.setLabelsApiEnabled; LABEL_SETTINGS_CHANGED -> fresh public label state/False",
+        "setSettings": "layout_annotations.setLabelsApiSettings; LABEL_SETTINGS_CHANGED -> fresh public label state/False",
+        "setPosition": "layout_annotations.setLabelsApiPosition; LABEL_POSITION_CHANGED로 x/y 연속 commit -> fresh public label state/False",
+        "finishPositionInteraction": "layout_annotations.finishLabelsApiPositionInteraction; 완료 알림 뒤 fresh public label state, 두 번째 commit 없음; read/알림 오류 전파",
+        "resetPosition": "layout_annotations.resetLabelsApiPosition; 같은 position command로 (0, 0) -> fresh public label state/False",
     },
     "appearance": {
         "readPalette": "read; persistent UI palette projection",
-        "setPalette": "mutation; APPEARANCE_CHANGED project command로 normalized palette candidate commit",
-        "resetPalette": "mutation; APPEARANCE_CHANGED project command로 default palette candidate commit",
+        "setPalette": "layout_annotations.setAppearanceApiPalette; APPEARANCE_CHANGED 전체 palette 정규화/commit -> fresh palette/False",
+        "resetPalette": "layout_annotations.resetAppearanceApiPalette; 유일한 default를 같은 setPalette 경로로 commit -> fresh palette/False",
     },
     "layout": {
         "readState": "read; layout/style/visible slots/logical preview geometry projection",
@@ -162,6 +162,8 @@ API_BOUNDARY_RULE = (
     "persistent mutation은 FastFigureApi Backend-command method -> Application adapter -> Project EFSM으로, "
     "project read는 FastFigureApi Backend-query method -> Application adapter -> Backend read provider로 전달한다. "
     "Application 내부 결과 tuple과 public 반환값은 구분하며 sourcescript.application.adapter의 공통 결과 규칙을 따른다. "
+    "caption/label/UI-palette wrapper의 공개 반환은 layout_annotations.ANNOTATION_APPEARANCE_RESULT_RULE을 따른다. "
+    "이 operation의 미commit False를 graph/asset/lifecycle의 기존 실패 결과에 일괄 적용하지 않는다. "
     "graph add/move/setObjectValues/delete가 선언한 chart 반환은 commit 성공 뒤 graphs.readData의 chart copy를 반환한다. "
     "실패/취소에는 그 operation의 기존 실패 결과를 전달하고 성공 chart query를 하지 않는다. "
     "Frontend runtime event도 Backend identity validity가 필요하면 Application adapter가 검증한 input을 interfaceFSM에 전달한다. "
