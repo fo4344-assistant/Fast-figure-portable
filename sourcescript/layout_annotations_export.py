@@ -18,7 +18,7 @@ Fast Figure Source Script — layout geometry, image settings, annotations and r
 """
 
 from project_state import activeProject, projectObjects
-from application_fsm import dispatchProjectCommand
+from application_fsm import dispatchProjectCommand, dispatchProjectQuery
 
 LAYOUT_FILE_LOGICAL_RESPONSIBILITIES = {
     "Backend": (
@@ -286,17 +286,27 @@ def applyImageSettingsFromValues(slotId, values):
     - 현재 slot image renderer projection.
 
     처리:
-    fit enum과 manual scale/x/y 범위를 정규화한다.
-    Application boundary가 받은 explicit slotId와 normalized settings를 SLOT_IMAGE_SETTINGS_CHANGED로 dispatchProjectCommand에 전달한다.
-    projectEFSM은 slot-local imageSettings candidate를 검증 후 한 번 commit한다.
+    이 procedure는 Application operation이다. image editor query가 none이면 command 없이 False를 반환한다.
+    Application boundary는 explicit slotId와 새 values patch만 SLOT_IMAGE_SETTINGS_CHANGED로 전달한다.
+    Backend command는 current visible slot/image와 slot.content.imageSettings를 resolve하고 current settings에 제공된 field만 덮어쓴 candidate를 만든다.
+    fit은 contain/cover/manual 중 유효한 입력만 적용하고 invalid/missing이면 current fit을 유지한다.
+    manual일 때 유효한 유한 숫자 scale은 1..1000, x/y는 -100..200으로 제한한다.
+    x/y의 0은 유효한 좌표이며 false-like 값이라는 이유로 50으로 바꾸지 않는다.
+    생략되거나 숫자로 변환되지 않는 field는 current 값을 유지한다. JS truthiness를 정규화 규칙으로 가져오지 않는다.
+    projectEFSM은 그 whole-project candidate를 검증 후 한 번 commit한다. read projection을 candidate 원천으로 사용하지 않는다.
     같은 image asset을 참조하는 다른 slot의 imageSettings는 변경하지 않는다.
     renderer/interface notification은 commit result 이후 수행한다.
     """
-    result = dispatchProjectCommand(
+    editor = dispatchProjectQuery("project-api", {"operation": "images.readEditor", "slotId": slotId})
+    if editor is None:
+        return False
+    result, interfaceState, rendererInput = dispatchProjectCommand(
         "SLOT_IMAGE_SETTINGS_CHANGED",
         {"slotId": slotId, "settings": values},
     )
-    return result
+    if not result.committed:
+        return False
+    return dispatchProjectQuery("project-api", {"operation": "images.readEditor", "slotId": slotId})
 
 
 def readLabelsApiState(slotId):
@@ -519,14 +529,17 @@ def setExportSettings(values):
     - activeProject.export만 변경한다.
 
     처리:
-    1. current export settings에서 candidate를 만든다.
-    2. width 100..20000, dpi 36..1200, format png/jpeg를 검증한다.
-    3. heightMode가 auto면 height는 계산 입력으로 사용하지 않는다.
-       explicit이면 height 100..20000을 요구한다.
-    4. candidate를 검증한 뒤 EXPORT_SETTINGS_CHANGED로 한 번 commit한다.
+    1. 이 procedure는 Application operation이며 새 edit 값만 EXPORT_SETTINGS_CHANGED command로 전달한다.
+    2. Backend command가 current export settings를 resolve해 candidate를 만든다. 생략되거나 숫자로 변환되지 않는 입력은 current 값을 사용하고
+       유효한 숫자는 width/explicit height 100..20000, dpi 36..1200으로 제한한다. heightMode/format의 invalid/missing enum도 current 값을 유지한다.
+    3. heightMode가 auto면 candidate.height는 none이다. explicit이면 current height 또는 100을 fallback으로 사용한다.
+    4. Backend가 whole-project candidate를 검증한 뒤 한 번 commit한다. Application은 별도 project clone/candidate validation을 만들지 않는다.
+    5. 성공 후에만 새 Backend read projection을 반환한다. rejected result는 False, command failure는 caller에 전파하며 기존 settings는 유지한다.
     """
-    result = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", {"settings": values})
-    return result
+    result, interfaceState, rendererInput = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", {"settings": values})
+    if not result.committed:
+        return False
+    return dispatchProjectQuery("project-api", {"operation": "print.readSettings"})
 
 
 def createTargetExportSnapshot():
