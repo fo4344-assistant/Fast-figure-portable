@@ -165,3 +165,11 @@
 - 근거/정적 시나리오/반환·실패 경로: `agent_space/reviews/review-20261016-010-api-assets-r31-open.md`. r30 전체 trace는 역사적 발견 기록으로 보존한다.
 - 다른 mutation public 반환, runtime selection/zoom 완료 및 router/export completion과 전체 closure 근거는 남아 있다. source r31 current/open, closure_review null, 하위 stale을 유지한다. 정책·PlusCal/model/JS/test/build/dist 변경이나 로컬 실행은 없다.
 - 실제 누적 patch와 Actions 검사: `agent_space/patches/20261016-014.patch` 및 같은 basename `.md`.
+
+## 14. API 보완 — r32 annotation / UI-palette 반환 / OPEN
+
+- 기준 main `8e4f5242ea6c11ca51ea497d59b076ddc688fcc6`. F1의 captions/labels/appearance 14개 operation을 기존 Application command/query 경로에 연결했다. command 13개는 committed 뒤 그 owner의 fresh read를 반환하며 미commit False/throw 전파를 명시한다. 다른 API 실패 계약을 bool로 획일화하지 않는다.
+- label public read는 Frontend selectedSlotId scalar와 current Backend geometry를 합성한다. reset은 기존 position command를 재사용하고 finish는 두 번째 commit 없이 현재 label read를 반환한다. palette reset은 기존 유일한 default를 같은 set path에 전달한다.
+- 근거/성공·거부·사후 실패 시나리오: `agent_space/reviews/review-20261016-011-api-settings-r32-open.md`. 내부 tuple을 공개 read로 간주하거나 projection을 mutation 원천으로 사용하지 않는다.
+- project/slot/asset/graph/layout의 남은 반환, 다른 selection/drop/zoom runtime과 router/export completion 및 전체 closure 검토는 계속 남아 있다. source r32 current/open, closure_review null, 하위 stale을 유지한다.
+- 정책·PlusCal/model/JS/test/build/dist는 변경하지 않고 로컬 실행도 하지 않는다. 실제 누적 patch/Actions 검사: `agent_space/patches/20261016-015.patch` 및 같은 basename `.md`.
