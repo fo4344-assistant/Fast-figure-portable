@@ -116,6 +116,10 @@ def renderDashboard(projectProjection, interfaceState):
 
     처리:
     1. supplied projectProjection의 grid와 style을 dashboard CSS geometry에 반영한다.
+       width는 interfaceState의 lock이면 dashboardZoomLockedWidth, 아니면 supplied slotStyle.referenceWidth * dashboardZoomIntent / 100이다.
+       이 width에서 같은 supplied slotStyle의 aspect/gap/outerMargin/radius를 비례 계산한다. DOM/control로 Project 값을 역추론하지 않는다.
+       host resize나 referenceWidth 변경에도 lock width는 그대로며 unlock/reset 이후에는 최신 supplied referenceWidth의 100 percent를 사용한다.
+       geometry 변경 뒤 current host만 resize하며 zoom/anchor를 Project/FFPX에 저장하지 않는다.
     2. visible slot projection마다 slot container와 label/bookmark control surface를 구성한다.
     3. graph slot은 Backend가 같은 project read에서 계산해 projection에 포함한 figure를 Plotly로 표시한다.
        supplied CSV/columns는 editor 표시용 read 값이며 Frontend에서 traces/chartFigure를 다시 계산하거나
@@ -220,6 +224,17 @@ def swapSlotContents(source, target, frontendActions):
     return "public API swap commit 결과와 post-reconciliation renderer projection"
 
 
+def finishDashboardFileDropInteraction():
+    """
+    dashboard interaction controller의 drag-only bookkeeping/hover를 완료/중단 경로에서 정리한다.
+    event listener가 현재 정리 중인 interaction만 끝내며 unrelated pointer/resource는 건드리지 않는다.
+    bookmark 내부 drag의 post-drag click suppression은 여기서 즉시 풀지 않는다. 기존 click 소비/dispatch 이후 cleanup 규칙을 유지한다.
+    중복 finish는 no-op/None이다. selection/zoom/lifecycle/Backend를 읽거나 바꾸지 않는다.
+    이 pointer 상태는 Frontend controller 소유이며 Application/FSM에 두 번째 drop-target copy를 만들지 않는다.
+    """
+    return None
+
+
 def prepareDashboardFileDrop(slotId, frontendActions):
     """
     Return:
@@ -318,6 +333,27 @@ def startupCoreRuntime(projectProjection, interfaceState, frontendActions):
     return "ready core runtime"
 
 
+def readDashboardRenderedWidth():
+    """Frontend surface가 현재 dashboard bounding width를 한 번 측정해 finite positive scalar 또는 none을 반환한다.
+    DOM/control 값으로 Project layout을 역추론하지 않으며 session lock anchor 생성에만 사용한다.
+    """
+    return "현재 rendered dashboard width 또는 none"
+
+
+def downloadExportPayload(payload):
+    """
+    Backend export query의 copied name/MIME/bytes 또는 FFPX/FFSX entry list만 소비한다.
+    entry list는 기존 package ZIP STORE 형식으로 직렬화하며 graph/CSV/Project를 재조회하지 않는다.
+    copied bytes로 download resource를 만들고 브라우저에 한 번 전달한다. 정상 반환은 None이다.
+    이 완료는 브라우저에 전달했다는 뜻이지 disk 저장 완료/사용자 선택 확인이 아니다.
+    브라우저가 취소를 관찰할 수 없는 download에 가상의 cancelled/saved-disk 결과를 만들지 않는다.
+    resource URL/handle은 이 surface 한 작업의 try/finally에서 안전한 handoff 뒤 정리한다.
+    브라우저가 bytes를 소비하기 전 조기 revoke하지 않으며 구체 scheduler/URL primitive는 이 수명을 보존하는 하위 구현 선택이다.
+    encoding/handoff 오류는 원래 failure로 전파하며 Project/다른 surface resource를 변경하지 않는다.
+    """
+    return "handoff 완료 시 None; 실패는 throw/rejection"
+
+
 def renderDashboardTarget(snapshot, statusSink):
     """
     Return:
@@ -340,7 +376,11 @@ def renderDashboardTarget(snapshot, statusSink):
        target geometry/font/line/marker의 presentation scaling은 figure copy에만 적용하고 supplied snapshot/Project를 변경하지 않는다.
        ordinary FFPX whole-project snapshot을 raster용 precomputed figure input인 것처럼 대신 사용하지 않는다.
     8. label/caption을 같은 logical reference geometry에서 변환해 그린다.
-    9. PNG/JPEG blob에 DPI metadata를 적용하고 다운로드한다.
+    9. PNG/JPEG blob에 DPI metadata를 적용하고 downloadExportPayload로 한 번 전달한다.
+    10. 정상 handoff 뒤 기존 saved outcome을 반환한다. saved는 disk 저장 확인이 아니라 handoff 완료다.
+        raster limit/invalid geometry는 download 전 rejected outcome이며 throw/rejection은 caller에 전파한다.
+        statusSink는 진행 표시일 뿐 결과/취소 authority가 아니고 실패로 이미 전달한 파일을 rollback하지 않는다.
+        작업에서 만든 임시 render host/Plotly/image/URL은 성공/거부/예외 모두 finally에서 작업 소유분만 정리한다.
     """
     result = "persistent settings를 사용한 raster export outcome"
     return result
@@ -359,6 +399,9 @@ def renderDashboardCurrent(snapshot, statusSink):
     capture는 project의 target width/height를 바꾸는 export preset이 아니다.
     Application이 제공한 snapshot과 현재 rendered viewport geometry를 one-shot source size로 사용할 수 있으며
     persistent dpi/format은 output encoding default로 읽을 수 있다.
+    current viewport는 Frontend surface가 이번 capture에 한 번 측정하며 Project target width/height로 저장하지 않는다.
+    target export와 같은 limit/encoding/download completion/error/finally 규칙을 적용한다.
+    이미 캡처한 snapshot/viewport는 이 작업에서만 소비하고 다음 export의 원천으로 보관하지 않는다.
     """
     result = "current-screen capture outcome"
     return result
