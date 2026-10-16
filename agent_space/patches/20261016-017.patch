@@ -1,0 +1,383 @@
+diff --git a/agent_space/plans/plan-017.md b/agent_space/plans/plan-017.md
+index 3b85d81..617a469 100644
+--- a/agent_space/plans/plan-017.md
++++ b/agent_space/plans/plan-017.md
+@@ -182,3 +182,12 @@
+ - project/asset/FFSX/Plotly/print export query → copied payload → Frontend handoff/자원 정리/반환을 연결했다. handoff와 사용자 disk 저장 확인은 다르다.
+ - 근거·정적 시나리오·기각 대안·남은 계약: `agent_space/reviews/review-20261016-012-api-runtime-export-r33-open.md`. project/slot/image/asset의 남은 반환 및 selection/전체 왕복·목적·중복통합 검토가 있어 closure open을 유지한다.
+ - source r33 current/open과 하위 stale 유지. 정책·PlusCal/model/JS/test/build/dist 변경이나 로컬 실행은 없다. 실제 누적 patch/Actions 검사: `agent_space/patches/20261016-016.patch` 및 같은 basename `.md`.
++
++## 16. 먼저 남은 반환 작성 — r34 / OPEN
++
++- 기준 main `9377a15c0539c7d0c67183a457b7aadab3e9dc6e`. 사용자 요청에 따라 project name/slot type·reset·swap/empty image/asset delete·move·directory·trash·connect의 10개 public 반환을 먼저 마저 작성했다.
++- 완료 값 없는 None, committed boolean, fresh detached read, 실제 changed path 기반 결과를 구별한다. 모든 API를 bool/envelope로 획일화하거나 adapter tuple을 공개하지 않는다.
++- explicit target은 current Backend에서 재검증하고 image model/name/slot payload 계산은 command가 소유한다. directory/connection의 사후 selection은 기존 Application event 경로만 사용한다. 실패 시 성공 후 query/selection을 실행하지 않고 사후 실패로 이미 commit한 state를 숨은 rollback하지 않는다.
++- 근거/operation별 표/정적 시나리오/하위 호환 차이: `agent_space/reviews/review-20261016-013-api-final-returns-r34-open.md`.
++- 이 10개 반환 작성과 전체 Source closure는 다르다. 전체 selection 교차 대조·왕복·목적/중복통합 검토가 남아 source r34 current/open, closure_review null 및 하위 stale을 유지한다.
++- 정책·PlusCal/model/JS/test/build/dist 변경/로컬 실행 없음. 실제 누적 patch와 Actions 검사: `agent_space/patches/20261016-017.patch` 및 같은 basename `.md`.
+diff --git a/agent_space/reviews/review-20261016-013-api-final-returns-r34-open.md b/agent_space/reviews/review-20261016-013-api-final-returns-r34-open.md
+new file mode 100644
+index 0000000..2f6f850
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-013-api-final-returns-r34-open.md
+@@ -0,0 +1,57 @@
++# Plan 017 — Source Script r34 잔여 public 반환 / OPEN
++
++## 범위와 원천
++
++- 사용자 요청: 앞서 열거한 일부 API의 반환 명세를 먼저 마저 작성한다.
++- 기준 main: `9377a15c0539c7d0c67183a457b7aadab3e9dc6e` (Source r33).
++- 기존 Source의 explicit identity/new edit → command → current authority/candidate/검증/한 commit → reconciliation 의미를 유지한다. 공개 inventory는 87개 그대로다.
++- `fast-figure.js`의 해당 wrapper 반환을 정적으로 대조했다. 하위 코드의 live object 반환, candidate 입력, 독립 selection clear는 상위 의미로 복사하지 않는다. 이번 변경은 Source 명세이며 하위 구현 변경/실행이 아니다.
++
++## 남아 있던 10개 operation의 반환
++
++| API / Application wrapper | 성공 | 미commit / 대상 없음 | 오류 |
++|---|---|---|---|
++| project.setName / setProjectName(value, trim=False) | 공식 project.readName의 최신 문자열 | None | 전파 |
++| slots.setContentType / setSlotContentType(slotId, contentType) | None | None | 전파 |
++| slots.reset / resetSlotApi(slotId) | None | None | 전파 |
++| slots.swap / swapSlots(sourceSlotId, targetSlotId) | True | False (missing/hidden/same-id 포함) | 전파 |
++| images.insertEmpty / insertEmptyImageIntoSelectedSlot() | 공식 assets.readDeletionTarget의 detached image | None (selected image slot 아님 포함) | 전파 |
++| assets.delete / deleteProjectAsset(target) | None | None | 전파 |
++| assets.move / moveProjectNode(plan, useUniqueName) | immutable {path, trashed} | None (no plan 포함) | 전파 |
++| assets.createDirectory / createProjectDirectory(parent, name) | 실제 canonical path 문자열 | None | 전파 |
++| assets.emptyTrash / emptyProjectTrash() | None | None | 전파 |
++| assets.connectToSlot / connectProjectAssetToSlot(path, kind, slotId) | None | None | 전파 |
++
++None은 완료 값 부재이며 성공 boolean이 아니다. void operation에 새 bool/result envelope를 추가하지 않는다. Backend validation throw와 명시적 non-commit을 구별하고, 내부 adapter tuple을 공개하지 않는다. 실패 경로에서는 성공 후 query/selection/completion을 수행하지 않는다. 이미 commit한 뒤 query/render/selection이 실패해도 숨은 rollback이나 이전 read로 성공을 위장하지 않는다.
++
++## owner / 경계
++
++- name 문자열 변환/optional trim/최대 120문자는 Backend command의 candidate 계산이다. wrapper는 새 value/trim만 전달한다.
++- slots.setContentType은 기존 Source inventory의 explicit slotId/type 경로다. 하위 selected-slot-only wrapper의 pending global을 authority로 되살리지 않는다. 선택 시 explicit pendingContentType을 전달하는 기존 adapter 경로는 유지한다. 하위 API는 추후 번역 시 explicit target에 맞춰 연결해야 한다.
++- reset은 slot-local defaults/owned chart의 동일 candidate를 사용하고, swap은 전체 payload 교환/위치 identity 유지 및 실제 hint에 따른 공통 reconciliation을 사용한다. 사후 blanket selection clear를 만들지 않는다.
++- insertEmpty는 고정 1600×900 transparent SVG bytes/name/MIME와 captured slotId만 입력한다. Backend에서 current next-id/VFS/model 생성 및 target image-slot 재검증 후 asset+reference를 한 번 commit한다. 성공 후 실제 생성 path로 detached asset을 읽는다.
++- move/directory 결과 path는 command의 실제 changed 값이다. stale plan의 예정 path/uniqueName을 성공값으로 반환하지 않는다. move의 trashed는 기존 assets.isTrashed query를 사용한다.
++- directory 생성 뒤 SELECT_ASSET은 Application에서 current target을 검증한다. 선택 거부는 기존 선택을 보존하며 이미 생성된 directory/path를 취소하지 않는다.
++- connect는 current kind/non-trash/visible target을 검증한 기존 kind-specific command 성공 후 model-to-fsm dispatchSlotSelection으로 target 선택을 보장한다. 같은 target의 toggle 해제가 없고 asset selection 자체는 변경하지 않는다.
++
++## 정적 대조 시나리오 — 실행 테스트 아님
++
++1. name commit 성공 → fresh string; throw/미commit → 성공 read 없음.
++2. explicit slot type/reset → None; missing/hidden → 미commit/None, 무관한 selected slot로 대체하지 않음.
++3. swap A/B 성공 → True와 실제 payload reconciliation; A/A 또는 missing → False/unchanged.
++4. image slot 없음/graph slot → None/no command; 대기 사이 target 변경 → Backend 재검증으로 거부.
++5. empty image 생성 성공 → 실제 id/path의 detached image; read 오류 → 전파, commit은 유지.
++6. delete missing/None → None; 삭제 성공도 None, 참조 제거와 asset 제거는 동일 candidate.
++7. move collision unique-name → actual final path, 현재 trash membership; 예정 path를 반환하지 않음.
++8. directory commit 거부 → None/no SELECT_ASSET; 성공 → path, selection throw → 전파/생성 유지.
++9. trash 이미 비어 있음 → 완료 값 None, 별도 directory/asset/count envelope 없음.
++10. connect 성공 → target selection 보장/None; command 실패 → selection 없음; selection 사후 거부 → 기존 runtime 선택 유지/commit 유지.
++11. void operation의 None으로 caller가 success=True를 추정하지 않도록 공개 inventory와 owner rule 일치 확인.
++12. 모든 성공값은 immutable scalar/read/새 결과 copy이며 mutable Backend object나 internal tuple이 아니다.
++
++## 상태와 미포함
++
++- Source r34 current/open, closure_review null. fingerprint `sha256:024c9de52803c2743ab65742753e94b09dd15fdaa1f3f1d40f34567c648478ac`.
++- 앞서 열거한 10개 반환 명세는 작성했다. 전체 selection 교차 검토, import/edit/export 왕복, 목적 적합성/중복통합 근거는 남아 있다. 전체 Source closure를 선언하지 않는다.
++- PlusCal r11 / optional model r26 / source-code r36 stale 유지. 정책·하위 코드·테스트·빌드·dist 변경 없음. 로컬 Source import/application/test/checker/build/TLC 실행 없음.
++- 실제 누적 diff/Contents 전송 한계/Actions 검사는 `agent_space/patches/20261016-017.patch`와 같은 basename `.md`에 기록한다.
+diff --git a/development-versions.json b/development-versions.json
+index 127c6a1..8031c16 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 33,
++      "revision": 34,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py", 
+-      "fingerprint": "sha256:7e8e88d617cb0c68d48711abe4a3515ac33e813233e83bac14831f43a41b8119",
++      "fingerprint": "sha256:024c9de52803c2743ab65742753e94b09dd15fdaa1f3f1d40f34567c648478ac",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/sourcescript/application/public_api/__init__.py b/sourcescript/application/public_api/__init__.py
+index cdb43cd..8cf74d0 100644
+--- a/sourcescript/application/public_api/__init__.py
++++ b/sourcescript/application/public_api/__init__.py
+@@ -26,7 +26,7 @@ FastFigureApi = {
+ PUBLIC_API_METHODS = {
+     "project": {
+         "readName": "Backend query; args 없음; current project meta name immutable projection",
+-        "setName": "mutation; PROJECT_NAME_CHANGED project command로 project name candidate commit",
++        "setName": "layout_annotations.setProjectName(value, trim=False); PROJECT_NAME_CHANGED -> fresh project.readName 문자열; 미commit None, 오류 전파",
+         "importFile": "lifecycle mutation; file 입력 -> PROJECT_LOADED 내부 FFPX parse/candidate/검증/commit -> 성공 시 immutable project snapshot; 실패/취소는 기존 경로로 전달",
+         "exportFile": "assets.downloadProject; selected slot이면 None/no download, 그 외 FFPX handoff 후 None; 오류 전파/Project 보존",
+     },
+@@ -38,9 +38,9 @@ PUBLIC_API_METHODS = {
+             "Application operation; slot reference를 Backend에서 validate한 뒤 Frontend SELECT_SLOT을 수행한다. "
+             "explicit pendingContentType intent가 있으면 selection과 분리된 SLOT_TYPE_CHANGED command를 Application adapter가 조건부 실행한다."
+         ),
+-        "setContentType": "Backend command; SLOT_TYPE_CHANGED로 explicit slot/contentType candidate commit",
+-        "reset": "Backend command; SLOTS_RESET로 slot-local properties reset + owned chart 제거",
+-        "swap": "Backend command; SLOTS_SWAPPED로 두 GUI 위치의 slot-local payload를 교환",
++        "setContentType": "layout_annotations.setSlotContentType(slotId, contentType); explicit target SLOT_TYPE_CHANGED; 성공/미commit None, 오류 전파; pending state 없음",
++        "reset": "layout_annotations.resetSlotApi(slotId); SLOTS_RESET local reset/owned chart 제거; 성공/미commit None, 오류 전파",
++        "swap": "layout_annotations.swapSlots(sourceSlotId, targetSlotId); SLOTS_SWAPPED -> committed True, missing/hidden/same-id/미commit False; 오류 전파",
+         "prepareFileDrop": (
+             "Application runtime operation; Backend에서 explicit visible target을 검증하고 invalid면 unchanged false. "
+             "이미 선택된 valid target이면 selection 유지, 다른 target이면 model-to-fsm selection 보장 후 true. "
+@@ -51,26 +51,26 @@ PUBLIC_API_METHODS = {
+     "images": {
+         "readEditor": "read; selected slot -> image asset + slot-local imageSettings projection",
+         "setSettings": "mutation; SLOT_IMAGE_SETTINGS_CHANGED project command로 selected slot.content.imageSettings candidate validation/commit",
+-        "insertEmpty": "mutation; SLOT_IMAGE_IMPORTED project command로 새 image asset + selected slot reference candidate를 함께 commit",
++        "insertEmpty": "layout_annotations.insertEmptyImageIntoSelectedSlot(); SVG asset+selected image-slot reference one commit -> detached image; missing/non-image/미commit None, 오류 전파",
+     },
+     "assets": {
+         "readDeletionTarget": "read/calculation; target asset과 collectAssetReferences 결과",
+-        "delete": "mutation; resolved kind에 따라 DATA_OBJECT_DELETED/IMAGE_OBJECT_DELETED가 reference detach + asset removal candidate를 한 번 commit",
++        "delete": "assets.deleteProjectAsset(target); kind-specific delete/detach one commit; 성공/missing/미commit None, 오류 전파; 내부 tuple 반환 없음",
+         "readTree": "read; current VFS/assets에서 tree projection 계산",
+         "isTrashed": "read; canonical path의 trash subtree membership 계산",
+         "movable": "read/calculation; current VFS에서 fixed directory 여부와 source 존재를 기준으로 tree move 가능 여부 계산; trash membership 자체는 move 금지 조건이 아님",
+         "readTrash": "read; current trash subtree projection",
+         "moveOptions": "read/calculation; target directory 후보 계산",
+         "planMove": "calculation; current VFS에서 destination/collision/reference count plan",
+-        "move": "mutation; PROJECT_NODE_MOVED project command가 current state에서 plan을 재검증하고 candidate move commit",
+-        "createDirectory": "mutation; PROJECT_DIRECTORY_CREATED project command로 canonical non-conflicting directory commit",
++        "move": "assets.moveProjectNode(plan, useUniqueName); actual committed path + fresh assets.isTrashed -> immutable {path, trashed}; no plan/미commit None, 오류 전파",
++        "createDirectory": "assets.createProjectDirectory(parent, name); commit -> validated SELECT_ASSET -> actual canonical path 문자열; 미commit None, 후속 오류 전파/숨은 rollback 없음",
+         "createEmptyCsv": (
+             "assets.createEmptyProjectCsvAndSelect; DATA_OBJECT_CREATED 성공 뒤 assets.selectProjectCsv로 생성 asset을 선택하고 detached CSV 반환; "
+             "미commit은 기존 failure, selection 거부는 none, throw는 전파하며 이미 생성된 asset은 rollback하지 않음; chart/object 자동 생성 없음"
+         ),
+-        "emptyTrash": "mutation; PROJECT_TRASH_EMPTIED project command로 trash references/assets/directories candidate removal commit",
++        "emptyTrash": "assets.emptyProjectTrash(); PROJECT_TRASH_EMPTIED; 성공/미commit None, 오류 전파; 내부 counts/tuple 공개 안 함",
+         "draggableAsset": "read/calculation; slot connection drag payload로 사용할 수 있는 non-trash CSV/image asset projection; tree move 가능 여부와는 별도 판정",
+-        "connectToSlot": "mutation; CSV는 SLOT_DATA_CONNECTED, image는 SLOT_IMAGE_LINKED project command로 명시적 연결 commit",
++        "connectToSlot": "assets.connectProjectAssetToSlot(path, kind, slotId); kind-specific commit 후 target selection 보장; 성공/미commit None, 오류 전파; asset selection 별도 변경 안 함",
+         "importToDirectory": "assets.importProjectFilesToDirectory; batch ASSETS_IMPORTED one commit -> input-order detached asset list; empty [], 취소 None, 미commit result, 오류 전파",
+         "importToSlot": "assets.importProjectFileToSlot; data/image asset + slot/chart ASSETS_IMPORTED one commit -> detached asset; slot package는 기존 graphs import로 detached chart; 취소 None, 미commit result, 오류 전파",
+         "fileKind": "assets.readAssetFileKind -> Q assets.fileKind; copied name/type의 slot/data/image/empty kind 문자열; bytes/Project/Frontend 변경 없음",
+diff --git a/sourcescript/application/public_api/assets.py b/sourcescript/application/public_api/assets.py
+index a606a72..f5aca93 100644
+--- a/sourcescript/application/public_api/assets.py
++++ b/sourcescript/application/public_api/assets.py
+@@ -5,7 +5,7 @@ Fast Figure Source Script — Application boundary / public-api — asset wrappe
+ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈이 아니다.
+ """
+ 
+-from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent
++from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection
+ from sourcescript.backend.assets_files import EMPTY_CSV_TEMPLATE
+ from sourcescript.frontend.interface_fsm import interfaceFSM
+ from sourcescript.frontend.renderer import downloadExportPayload
+@@ -155,6 +155,16 @@ def createProjectImage(bytes, name, mime, id, path):
+     return dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": "result.changed의 생성 image path"})["target"]
+ 
+ 
++ASSET_MUTATION_RESULT_RULE = (
++    "delete/emptyTrash/connectToSlot은 완료 값 없는 operation으로 성공/미commit 모두 None이다. "
++    "move는 성공 시 immutable {path, trashed}, 미commit None; createDirectory는 성공 시 canonical path 문자열, 미commit None이다. "
++    "path는 실제 committed result.changed의 값이며 stale plan/input에서 성공값을 만들지 않는다. "
++    "미commit에는 성공 read/selection/notification을 수행하지 않는다. validation/query/render/selection 오류는 전파한다. "
++    "후속 오류/selection 거부는 이미 commit한 mutation을 rollback하지 않는다. 내부 adapter tuple/result는 공개 반환하지 않는다. "
++    "delete/emptyTrash의 반환 None은 성공 boolean이 아니다. 실패 이유는 기존 command rejection 또는 전파된 오류 경로를 따른다."
++)
++
++
+ def deleteProjectAsset(target):
+     """
+     변경:
+@@ -172,8 +182,12 @@ def deleteProjectAsset(target):
+ 
+     보호된 default CSV 같은 예외 asset은 존재하지 않는다.
+     """
+-    event = "DATA_OBJECT_DELETED if requested target kind == csv else IMAGE_OBJECT_DELETED"
+-    return dispatchProjectCommand(event, {"target": "explicit kind/id/path reference만; asset object copy는 아님"})
++    if target is None:
++        return None
++    # kind가 csv/image가 아니면 unchanged None이며 다른 delete command로 추정하지 않는다.
++    event = "validated requested kind의 DATA_OBJECT_DELETED 또는 IMAGE_OBJECT_DELETED"
++    result, interfaceState, rendererInput = dispatchProjectCommand(event, {"target": "explicit kind/id/path reference만; asset object copy는 아님"})
++    return None
+ 
+ 
+ def moveProjectNode(plan, useUniqueName):
+@@ -193,10 +207,17 @@ def moveProjectNode(plan, useUniqueName):
+        ProjectMutationResult에 기록한다. path-only 이동과 trash 밖 복구에서는 두 값이 0이다.
+        renderer는 이 commit 결과를 사용하고 VFS/DOM에서 변화 여부를 역추론하지 않는다.
+     """
+-    return dispatchProjectCommand(
++    if plan is None:
++        return None
++    result, interfaceState, rendererInput = dispatchProjectCommand(
+         "PROJECT_NODE_MOVED",
+         {"path": "plan의 source path", "directory": "plan의 target directory", "useUniqueName": useUniqueName},
+     )
++    if not result.committed:
++        return None
++    path = "result.changed의 실제 final canonical destination path"
++    trashed = dispatchProjectQuery("project-api", {"operation": "assets.isTrashed", "path": path})
++    return {"path": path, "trashed": trashed}  # immutable public copy
+ 
+ 
+ def emptyProjectTrash():
+@@ -213,7 +234,8 @@ def emptyProjectTrash():
+     6. 이 commit으로 실제 제거된 graph-object reference 수와 image slot reset 수를 ProjectMutationResult에 기록한다.
+        실제 제거된 reference가 없으면 dashboard content projection effect는 없다.
+     """
+-    return dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {})
++    result, interfaceState, rendererInput = dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {})
++    return None
+ 
+ 
+ def createProjectDirectory(parent, name):
+@@ -224,10 +246,17 @@ def createProjectDirectory(parent, name):
+     처리:
+     current parent와 normalized name을 검증하고 PROJECT_DIRECTORY_CREATED로 commit한다.
+     """
+-    return dispatchProjectCommand(
++    result, interfaceState, rendererInput = dispatchProjectCommand(
+         "PROJECT_DIRECTORY_CREATED",
+         {"parent": parent, "name": name},
+     )
++    if not result.committed:
++        return None
++    path = "result.changed의 실제 생성 canonical directory path"
++    dispatchInterfaceEvent("SELECT_ASSET", {"kind": "directory", "path": path})
++    # selection은 current Backend 검증을 통과해야 하며 rejection은 기존 selection을 유지한다.
++    # 이미 생성된 directory의 성공 path는 selection 거부 때문에 취소/다른 경로로 바꾸지 않는다.
++    return path
+ 
+ 
+ def connectProjectAssetToSlot(path, kind, slotId):
+@@ -242,7 +271,12 @@ def connectProjectAssetToSlot(path, kind, slotId):
+     단순 asset selection은 이 함수에서 변경하지 않는다.
+     """
+     event = "SLOT_DATA_CONNECTED if kind == csv else SLOT_IMAGE_LINKED"
+-    return dispatchProjectCommand(event, {"path": path, "slotId": slotId})
++    # kind는 csv/image만 허용; 그 외 오류. command는 current path의 kind 일치/non-trash/visible slot을 재검증한다.
++    result, interfaceState, rendererInput = dispatchProjectCommand(event, {"path": path, "kind": kind, "slotId": slotId})
++    if not result.committed:
++        return None
++    dispatchSlotSelection(slotId, pendingContentType=None, direction="model-to-fsm")
++    return None
+ 
+ 
+ def importProjectFileToSlot(file, slotId, planImport):
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index 6254896..08a11df 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -23,6 +23,71 @@ ANNOTATION_APPEARANCE_RESULT_RULE = (
+     "오래된 read/성공 tuple로 위장하지 않는다. labels.finishPositionInteraction은 command가 아니라 현재 label read를 반환하는 완료 알림이다."
+ )
+ 
++PROJECT_SLOT_RESULT_RULE = (
++    "project.setName은 성공 뒤 project.readName의 문자열, slots.swap은 committed boolean을 반환한다. "
++    "slots.setContentType/reset은 완료 값이 없는 operation이므로 성공/미commit 모두 None이다. "
++    "images.insertEmpty는 성공 뒤 실제 생성 asset의 detached copy, 미commit은 None이다. "
++    "미commit에는 success query/selection/completion을 실행하지 않는다. Backend/후속 query/render 오류는 caller에 전파한다. "
++    "후속 실패는 이미 commit한 Project를 rollback하지 않는다. 내부 adapter tuple을 공개하지 않는다. "
++    "명시 slotId를 받는 operation은 current Backend command가 검증하며 selected slot을 대신 사용하지 않는다."
++)
++
++
++def setProjectName(value, trim=False):
++    """문자열 변환, trim 요청 시 공백 제거, 최대 120문자. name 정규화/commit은 Backend가 소유한다."""
++    result, interfaceState, rendererInput = dispatchProjectCommand(
++        "PROJECT_NAME_CHANGED", {"value": value, "trim": trim},
++    )
++    if not result.committed:
++        return None
++    return dispatchProjectQuery("project-api", {"operation": "project.readName"})
++
++
++def setSlotContentType(slotId, contentType):
++    """slots.setContentType의 explicit slotId/type 입력. pending intent를 별도 session authority로 저장하지 않는다."""
++    result, interfaceState, rendererInput = dispatchProjectCommand(
++        "SLOT_TYPE_CHANGED", {"slotId": slotId, "contentType": contentType},
++    )
++    return None
++
++
++def resetSlotApi(slotId):
++    """explicit slot 하나의 local payload/owned chart reset. selection 변경은 성공 시 공통 reconciliation만 사용한다."""
++    result, interfaceState, rendererInput = dispatchProjectCommand("SLOTS_RESET", {"slotIds": [slotId]})
++    return None
++
++
++def swapSlots(sourceSlotId, targetSlotId):
++    """서로 다른 visible slot의 payload 교환. missing/hidden/same-id는 unchanged False, 성공 True. 오류는 전파."""
++    result, interfaceState, rendererInput = dispatchProjectCommand(
++        "SLOTS_SWAPPED", {"sourceSlotId": sourceSlotId, "targetSlotId": targetSlotId},
++    )
++    return result.committed
++
++
++def insertEmptyImageIntoSelectedSlot():
++    """
++    selectedSlotId scalar를 한 번 capture한다. slot-selection-context에서 visible image slot이 아니면 None/no command.
++    유효하면 아래 새 image 입력과 captured slotId만 SLOT_IMAGE_IMPORTED에 보낸다.
++    UTF-8 SVG: <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>
++    name="빈 이미지.svg", MIME="image/svg+xml". Backend가 current next-id/path와 image model을 계산하고
++    여전히 visible image slot인지 재검증하여 asset 생성+reference를 한 candidate로 commit한다.
++    이미지 표시 설정은 slot-local 규칙을 따른다. asset/model/project snapshot을 command 입력으로 만들지 않는다.
++    """
++    slotId = interfaceFSM.readState().selectedSlotId
++    context = dispatchProjectQuery("slot-selection-context", {"slotId": slotId})
++    if "context missing 또는 contentType != image":
++        return None
++    result, interfaceState, rendererInput = dispatchProjectCommand(
++        "SLOT_IMAGE_IMPORTED", {"slotId": slotId, "operation": "images.insertEmpty", "imageInput": "위 SVG bytes/name/MIME"},
++    )
++    if not result.committed:
++        return None
++    return dispatchProjectQuery("project-api", {
++        "operation": "assets.readDeletionTarget", "path": "result.changed의 실제 생성 image path",
++    })["target"]
++
++
+ def prepareDashboardFileDrop(slotId):
+     """
+     slots.prepareFileDrop: slot-selection-context query의 visible target이 없으면 False이며 selection/Project는 그대로다.
+diff --git a/sourcescript/backend/project_efsm.py b/sourcescript/backend/project_efsm.py
+index c633bb8..835f499 100644
+--- a/sourcescript/backend/project_efsm.py
++++ b/sourcescript/backend/project_efsm.py
+@@ -152,7 +152,7 @@ GRAPH_OBJECT_EDIT_INPUT_CONTRACT = {
+ ProjectMutationResult = {
+     "event": "처리한 project command",
+     "committed": "commit 성공 여부",
+-    "changed": "command별 실제 changed ids/path/owner; create/import는 input 순서의 실제 생성 asset path/id와 owning chart/slot id, DATA_OBJECT_REPLACED는 실제 updated CSV path를 포함하여 기존 공식 query로 post-commit read한다",
++    "changed": "command별 실제 changed ids/path/owner; create/import는 input 순서의 실제 생성 asset path/id와 owning chart/slot id, DATA_OBJECT_REPLACED는 실제 updated CSV path, PROJECT_DIRECTORY_CREATED는 실제 생성 directory path, PROJECT_NODE_MOVED는 실제 final destination path를 포함한다. 기존 공식 query의 post-commit read에 사용하며 stale input/plan path를 성공 결과로 재사용하지 않는다",
+     "removedGraphReferenceCount": "실제 제거한 graph-object CSV reference 수",
+     "resetImageSlotCount": "실제 image reference를 비운 slot 수",
+     "selectionHints": "후속 interface reconciliation의 identity/path 결과와 해당 chartId에 한정된 optional selectedIndexHint; absence와 explicit none을 구별",
+@@ -187,6 +187,16 @@ class ProjectStateMachine:
+            선택된 replace id/path가 더 이상 같은 대상을 가리키지 않으면 거부한다. stale 계획으로 덮어쓰거나 자동 재선택하지 않는다.
+            candidate의 원천이 된 authority가 commit 전 바뀌면 그대로 commit하지 않고 현재 authority에 대해 재계산/검증한다.
+            실패/취소는 미commit 결과이며 부분 변경/복구용 rollback/성공 hint를 만들지 않는다.
++           PROJECT_NAME_CHANGED는 value를 문자열로 변환하고 trim=True이면 양끝 공백 제거 뒤 최대 120문자로 제한해 meta.projectName candidate를 만든다.
++           SLOT_TYPE_CHANGED는 explicit visible slotId를 resolve하며 type은 image일 때 image, 그 외 graph로 정규화한다.
++           missing/hidden slot은 거부하며 선택되지 않았다고 pending type을 별도 저장하지 않는다.
++           SLOTS_RESET은 explicit visible slotIds의 SLOT_LOCAL_DEFAULTS 복원과 owned chart 제거를 같은 candidate로 수행한다.
++           SLOTS_SWAPPED는 서로 다른 visible 두 slot만 허용한다. missing/hidden/same-id는 미commit이며
++           slot-local payload 전체를 교환하고 위치/geometry identity는 유지한다. result hint로 공통 selection reconciliation을 수행한다.
++           SLOT_IMAGE_IMPORTED의 images.insertEmpty는 new SVG bytes/name/MIME만 받아 current next-id/VFS로 model을 만들고
++           current target이 visible image slot인지 재검증한다. asset 생성과 slot reference를 한 번에 commit한다.
++           ASSET delete의 없는 target은 미commit이며 kind/id/path가 다른 asset으로 바뀌었으면 자동 재선택하지 않는다.
++           PROJECT_NODE_MOVED/PROJECT_DIRECTORY_CREATED는 actual final canonical path를 changed에 기록한다.
+            APPEARANCE_CHANGED는 project_state.APPEARANCE_PALETTE_RULE에 따라 10개 field의 전체 palette candidate를 만든다.
+            CHART_LAYOUT_CHANGED는 current owning chart의 title/global/axis field에 새 edit만 적용하고 graphs의 normalize/layout을 사용한다.
+            새 값에 없는 current title/axis field는 유지하며 invalid 새 값은 graph default/empty 규칙으로 정규화한다.
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index 89b6009..e1aab95 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -190,7 +190,8 @@ UNRESOLVED_REVIEW_ITEMS = [
+         "Plan 017 D: asset fileKind/resolveImportPlan의 공식 query와 createEmptyCsv의 create-and-select를 연결했고, "
+         "caption/label/UI-palette의 성공 read·미commit False·오류 전파와 label reset/interaction-finish 반환을 구체화했다. "
+         "layout 반환/zoom lock과 drop 준비·정리, graph header/layout/palette/import 반환, ordered import router와 download handoff/lifecycle를 구체화했다. "
+-        "project name/slot mutation/image insertion 및 asset delete/move/directory/trash/connect의 남은 public 반환, 전체 selection 대조와 왕복 검토는 아직 미완료다. "
++        "project name/slot mutation/image insertion 및 asset delete/move/directory/trash/connect의 public 반환도 owner wrapper에 구체화했다. "
++        "완료 값 없는 None, boolean, detached read, actual path 결과를 operation별로 구별했으며 전체 selection 대조와 왕복 검토는 아직 미완료다. "
+         "기존 operation의 계약과 공통 adapter를 보완해야 하며 내부 command triple을 public 값으로 자동 간주하지 않는다. "
+         "정적 대조표 작성이나 개별 wrapper 수정만으로 전체 closure 근거를 삼지 않는다."
+     ),
