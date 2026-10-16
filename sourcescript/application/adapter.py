@@ -71,6 +71,8 @@ def dispatchSlotSelection(slotId, pendingContentType=None, direction="ui-to-fsm"
 
     1. slotId 또는 explicit none과 direction을 validateFrontendIntent로 Backend current authority에서 검증한다.
        ui-to-fsm은 같은 slot 재선택 시 toggle-clear, model-to-fsm은 같은 slot도 선택을 유지한다.
+       non-null model-to-fsm의 clear-graph-object hint는 graph 선택만 clear하고 현재 asset 선택을 유지한다.
+       explicit none은 direction과 무관한 전체 선택 해제이며 user toggle-clear의 기존 asset clear 의미도 유지한다.
     2. rejected input이면 Frontend selection과 ProjectObject를 변경하지 않고 rejection을 반환한다.
     3. accepted SELECT_SLOT을 Frontend FSM에 보내 selection toggle/workspace를 먼저 확정한다.
     4. toggle 결과 selectedSlotId가 none이면 persistent mutation을 수행하지 않는다.
@@ -95,7 +97,8 @@ def dispatchProjectCommand(event, payload):
        read projection 전체를 mutation candidate로 보내거나 Application에서 current project의 복제본을 별도 검증하지 않는다.
     3. commit 실패면 Frontend success reconciliation 없이 result, interfaceFSM.readState(), rendererInput none을 반환한다.
     4. commit 성공이면 interfaceFSM.readState()의 id/path/index reference와 result를 buildFrontendReconciliationInput에 전달한다.
-       object 편집의 selectionHints.chartId/selectedIndexHint도 이 경로에서만 post-commit 대상에 대해 검증한다.
+       object 편집의 selectionHints.chartId/selectedIndexHint와 cascade의 chart별 graphObjectIndexMaps도
+       이 경로에서만 post-commit 대상에 대해 검증한다. mapping은 command-local delta이며 저장/재사용하지 않는다.
     5. interfaceFSM.reconcileProjectResult에 그 validated reconciliation input을 전달한다.
        SELECT_GRAPH_OBJECT를 사후 재호출하지 않는다. index 보정 때문에 독립 current CSV 선택을 덮어쓰지 않는다.
     6. final Frontend state를 request에 포함해 readBackendProjection("renderer")로 renderer용 immutable project projection을 만든다.
