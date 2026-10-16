@@ -19,7 +19,7 @@ Fast Figure Source Script — CSV data, chart model, graph objects and Plotly re
 """
 
 from project_state import activeProject, getProjectCsv, getChart
-from application_fsm import dispatchProjectCommand
+from application_fsm import dispatchProjectCommand, dispatchProjectQuery
 
 GRAPH_FILE_LOGICAL_RESPONSIBILITIES = {
     "Backend": (
@@ -35,7 +35,9 @@ GRAPH_BOUNDARY_RULE = (
     "Backend graph calculation은 interfaceFSM/selectedSlotId를 직접 읽지 않는다. "
     "selected slot/chart가 필요한 public operation은 Application boundary가 Frontend reference를 가져와 Backend에서 current authority로 검증한 뒤 "
     "slotId/chartId/csvId 같은 explicit reference를 candidate/command input에 포함한다. "
-    "dispatchProjectCommand를 호출하는 co-located function은 Backend domain function이 아니라 Application-boundary wrapper다."
+    "dispatchProjectCommand를 호출하는 co-located function은 Backend domain function이 아니라 Application-boundary wrapper다. "
+    "그 procedure에 기술된 current-state resolve/normalize/candidate 단계는 대응 command 내부의 Backend 계산이다. "
+    "Backend helper graphEditorCommit/convertImportedChartToEditable는 Application 역호출 없이 candidate를 반환한다."
 )
 
 
@@ -80,11 +82,13 @@ GRAPH_EMPTY_RULE = (
 PLOTLY_IMPORT_RULE = (
     "원본 Plotly figure는 non-editable imported representation으로 손실 없이 보존하고, "
     "Fast Figure가 이해하는 trace/axis subset만 editor conversion view로 계산한다. "
-    "editable 전환 전에는 conversion rows가 project CSV authority가 아니다."
+    "editable 전환 전에는 conversion rows가 project CSV authority가 아니다. "
+    "validateChartModel이 representation에 따라 CSV/column 참조 검증 대상을 정한다. "
+    "project 검증·reference 수집·FFPX/FFSX 입출력은 이 판정을 공유하며 conversion object를 project CSV 참조로 수집하지 않는다."
 )
 
 graphObject = {
-    "csvId": "activeProject.csvFiles의 CSV reference id",
+    "csvId": "실제 project object의 activeProject.csvFiles reference id; non-editable conversion object의 값은 project CSV 참조로 해석하지 않음",
     "x": "C1, C2 형식의 x column identifier",
     "y": "C1, C2 형식의 y column identifier",
     "xAxisSide": "bottom 또는 top",
@@ -106,6 +110,7 @@ chartModel = {
     "editor": {
         "objects": "graphObject 목록; editable chart의 data reference 원천",
         "editable": "Fast Figure editor로 수정 가능한지 여부",
+        "conversionRows": "non-editable imported conversion view에만 있는 optional table; empty 가능, editable 전환 후 제거, project CSV authority 아님",
         "globalSettings": "globalSettings 구조의 title/legend/font/4개 axis 설정",
         "title": "chart title",
         "plotlyExtensions": "imported Plotly layout/config 중 editor가 직접 소유하지 않는 보존 영역",
@@ -126,7 +131,7 @@ AXIS_REFERENCE_RULE = (
 
 GRAPH_PROJECTION_RULE = (
     "chart.graph.data/layout은 project CSV와 chart.editor 설정에서 다시 만들 수 있는 renderer projection이다. "
-    "editable chart에서 graph.editor.objects와 project CSV reference가 편집 의미의 원천이다."
+    "editable chart에서 chart.editor.objects와 project CSV reference가 편집 의미의 원천이다."
 )
 
 
@@ -233,31 +238,34 @@ def graphEditorAdd(slotId, csvId):
     target slot에 chart가 없으면 SLOT_DATA_CONNECTED로 첫 chart/object를 만든다.
     chart가 있으면 owning chart id와 current object 목록을 Backend에서 resolve해 새 base graph object를 추가하고 GRAPH_OBJECTS_REPLACED로 commit한다.
     """
-    event = "SLOT_DATA_CONNECTED if target slot has no chart else GRAPH_OBJECTS_REPLACED"
-    return dispatchProjectCommand(event, {"slotId": slotId, "csvId": csvId, "objects": "candidate objects"})
+    slot = dispatchProjectQuery("project-api", {"operation": "slots.readSelected", "frontendState": {"selectedSlotId": slotId}})
+    event = "SLOT_DATA_CONNECTED if slot has no chart else GRAPH_OBJECTS_REPLACED"
+    result, interfaceState, rendererProjection = dispatchProjectCommand(
+        event, {"slotId": slotId, "csvId": csvId, "operation": "graphs.addObject"}
+    )
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "frontendState": {"selectedSlotId": slotId}})["chart"]
 
 
 def graphEditorCommit(chartId, objects, index):
     """
     Return:
-    - chart:
-      object list commit 후 chart.
+    - candidate:
+      command 내부에서 계산한 objects를 적용한 candidate chart와 post-edit index hint.
 
     변경:
-    - GRAPH_OBJECTS_REPLACED event
-    - graph object selection state
-    - editable graph renderer projection
+    - candidate만 계산한다. 이름은 기존 식별자를 유지하지만 자체 commit/Frontend 전이/Application 역호출은 없다.
 
     처리:
-    object array 자체를 UI/local state의 장기 원천으로 두지 않는다.
-    0개 object도 유효한 candidate로 받아 normalize/reference validation 후 GRAPH_OBJECTS_REPLACED로 chart SoT에 commit한다.
-    fake default object를 복구하지 않는다.
-    interface object selection은 ProjectMutationResult 이후 별도 reconciliation한다.
+    Project EFSM의 graph-object branch가 current chart를 resolve한 뒤 이 Backend helper를 사용한다.
+    objects는 그 command 안의 add/move/edit/delete/palette 계산 결과이며 public wrapper/read projection에서 받지 않는다.
+    0개 object도 유효하다. normalize/reference validation 후 whole-project candidate에 포함하며 fake object를 복구하지 않는다.
+    index는 post-edit 배열에 대한 hint로서 command result의 selectionHints.chartId/selectedIndexHint에 넣는다.
+    최종 commit은 projectEFSM.send, 선택 갱신은 공통 reconciliation만 소유한다.
     """
-    return dispatchProjectCommand(
-        "GRAPH_OBJECTS_REPLACED",
-        {"chartId": chartId, "objects": objects, "selectedIndexHint": index},
-    )
+    candidate = "current chart copy에 command-calculated objects를 적용한 candidate와 index hint"
+    return candidate
 
 
 def graphEditorObjectValues(chartId, index, values):
@@ -267,7 +275,7 @@ def graphEditorObjectValues(chartId, index, values):
       지정 object의 허용 field를 정규화해 commit한 chart.
 
     변경:
-    - 최종적으로 graphEditorCommit(chartId, ...)을 통해 explicit chart object state를 변경한다.
+    - Backend command 내부의 graphEditorCommit 계산 결과를 projectEFSM이 한 번 commit한다.
 
     처리:
     1. Application wrapper는 chartId/index와 새 values만 GRAPH_OBJECTS_REPLACED command input으로 전달한다.
@@ -281,13 +289,16 @@ def graphEditorObjectValues(chartId, index, values):
        current object array에서 index object만 바꾸고 다른 object/reference와 Frontend current CSV selection은 유지한다.
     6. whole-project candidate를 검증한 뒤 GRAPH_OBJECTS_REPLACED로 한 번 commit한다.
        post-commit requestedIndex는 index-only Frontend input이며 CSV selection을 강제로 변경하지 않는다.
-       graphEditorCommit(chartId, objects, index)는 Backend 내부에서 이미 계산한 candidate objects를 전달하는 wrapper에만 사용하고
+       graphEditorCommit(chartId, objects, index)는 Backend command 내부의 candidate helper이며 Application을 호출하지 않는다.
        Frontend read projection을 일반 object replacement authority로 취급하지 않는다.
     """
-    return dispatchProjectCommand(
+    result, interfaceState, rendererProjection = dispatchProjectCommand(
         "GRAPH_OBJECTS_REPLACED",
-        {"chartId": chartId, "index": index, "values": values, "selectedIndexHint": index},
+        {"chartId": chartId, "operation": "graphs.setObjectValues", "index": index, "values": values},
     )
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]
 
 
 def graphEditorSetEditable(slotId, chartId, editable):
@@ -307,11 +318,13 @@ def graphEditorSetEditable(slotId, chartId, editable):
     이 command는 필요한 CSV 생성/next-id/reference remap을 chart editable 변경과 같은 candidate에 포함한다.
     zero-trace/zero-object imported figure는 CSV를 만들지 않고 empty editable chart로 전환할 수 있다.
     """
-    candidate = convertImportedChartToEditable("explicit chartId") if editable else "editable flag candidate"
-    return dispatchProjectCommand(
+    result, interfaceState, rendererProjection = dispatchProjectCommand(
         "CHART_MODEL_REPLACED",
-        {"slotId": slotId, "chartId": chartId, "candidate": candidate},
+        {"slotId": slotId, "chartId": chartId, "editable": editable},
     )
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]["editor"]["editable"]
 
 
 def graphEditorSetHeaderLines(csvId, headerLines):
@@ -335,7 +348,7 @@ def graphEditorUpdateLayout(slotId, chartId, values):
     - selected chart의 persistent title/global/axis settings.
 
     처리:
-    normalized candidate를 CHART_LAYOUT_CHANGED로 commit한다.
+    Backend command가 current owning chart에 새 values를 적용/정규화한 candidate를 CHART_LAYOUT_CHANGED로 commit한다.
     Plotly graph layout은 commit된 chart settings에서 다시 계산하는 projection이다.
     """
     return dispatchProjectCommand(
@@ -352,7 +365,9 @@ def graphEditorApplyPalette(chartId, colors):
     처리:
     current objects에서 color-only candidate를 계산하고 GRAPH_OBJECTS_REPLACED로 commit한다.
     """
-    return dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {"chartId": chartId, "colors": colors})
+    return dispatchProjectCommand(
+        "GRAPH_OBJECTS_REPLACED", {"chartId": chartId, "operation": "graphs.applyPalette", "colors": colors}
+    )
 
 
 def tracesSingle(objectView):
@@ -410,10 +425,10 @@ def importSelectedGraphFile(slotId, file):
     - 선택 slot의 chart model과 package가 필요로 하는 CSV asset.
 
     처리:
-    FFSX면 ffsxReadSlot 검증 결과로 target slot candidate를 만든다.
+    Application은 explicit slotId와 file만 전달한다. Backend SLOT_CHART_IMPORTED가 다음 계산을 수행한다.
+    FFSX면 ffsxReadSlot 검증 결과로 applyFfsxSlot candidate를 만든다.
     Plotly JSON이면 parsePlotlyToEditor로 non-editable imported chart candidate를 만든다.
-    두 경우 모두 target slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증한 뒤
-    SLOT_CHART_IMPORTED 한 command로 commit한다.
+    두 경우 모두 target slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증한 뒤 그 command가 한 번 commit한다.
     """
     return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"slotId": slotId, "file": file})
 
@@ -480,9 +495,14 @@ def validateChartModel(chart, csvCollection):
 
     검증:
     - chart id와 editor/graph shape가 유효하다.
-    - editor.objects는 배열이며 editable 여부와 관계없이 0개일 수 있다.
-    - 각 존재 graph object의 csvId는 csvCollection에서 resolve된다.
-    - x/y column identifier와 enum/numeric style field가 유효하다.
+    - editor.editable은 boolean이고 editor.objects는 배열이며 두 representation 모두 0개일 수 있다.
+    - imported conversion representation(editor.editable=False이고 editor.conversionRows가 존재함)의 object/rows는
+      project CSV/column 참조 검증 대상에 넣지 않는다. conversionRows가 table shape인지,
+      conversion object의 x/y가 그 table column인지와 style shape는 검증한다.
+    - 그 밖의 실제 project CSV object는 editable flag와 무관하게 각 csvId를 csvCollection에서 resolve하고
+      해당 CSV의 x/y column identifier를 검증한다. 편집 가능했던 일반 chart를 잠시 non-editable로 바꿔도 이 reference는 보존한다.
+    - fake CSV/id를 생성하지 않으며 dangling project reference를 conversion view로 간주해 검증을 우회하지 않는다.
+    - 두 경우 모두 enum/numeric style field와 아래 chart/imported 구조를 검증한다.
     - globalSettings와 네 axis가 정규화 가능한 shape다.
     - graph data/layout/config/frames와 imported extension shape가 유효하다.
     """
@@ -530,12 +550,15 @@ def convertImportedChartToEditable(chart):
     - 없음.
 
     처리:
+    이 함수는 CHART_MODEL_REPLACED의 Backend candidate builder로만 호출하며 Application wrapper를 호출하지 않는다.
+    chart는 command가 current authority에서 다시 resolve한 chart다. 이미 editable이면 새 CSV를 중복 생성하지 않는다.
     1. chart의 imported representation은 보존한다.
-    2. conversion object가 0개면 CSV 없이 editor.editable=true인 empty chart candidate를 만든다.
-    3. conversion object가 있으면 conversionRows를 하나의 project CSV candidate로 만들고
-       모든 conversion object가 그 실제 CSV id를 참조하도록 연결한다.
+    2. conversionRows가 없으면 기존 project CSV reference를 유지한 채 editable=true로 전환하며 CSV를 재생성하지 않는다.
+       conversionRows가 있고 conversion object가 0개면 CSV 없이 editor.editable=true인 empty chart candidate를 만든다.
+    3. conversionRows가 있고 conversion object가 있으면 그 rows를 하나의 project CSV candidate로 만들고
+       모든 conversion object가 그 실제 CSV id를 참조하도록 연결한다. 연결 후 conversionRows를 제거한다.
     4. global/axis settings를 유지한 채 editable Plotly projection을 다시 계산한다.
-    5. whole-project 검증 후 상위 mutation 경계가 commit한다.
+    5. caller인 Project EFSM이 current next-id/path/ownership까지 포함한 whole-project candidate를 검증하고 한 번 commit한다.
     """
     candidate = "editable conversion candidate"
     return candidate
