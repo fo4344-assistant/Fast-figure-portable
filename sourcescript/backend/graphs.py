@@ -13,11 +13,40 @@ GRAPH_BOUNDARY_RULE = (
     "current-state resolve/normalize/candidate 계산은 Project EFSM command 내부에서 이 domain의 규칙을 사용한다. "
     "graphEditorCommit/convertImportedChartToEditable는 candidate만 반환한다."
 )
+# Graph object의 fallback 순환만 소유한다. Project UI palette와 동기화하지 않는다.
+DEFAULT_COLORS = (
+    "#383A42", "#E45649", "#50A14F", "#B37901",
+    "#0184BC", "#A626A4", "#0997B3", "#FAFAFA",
+)
+
+GRAPH_PALETTE_RULE = (
+    "새 base object는 DEFAULT_COLORS[0], imported object에 line/marker color가 없으면 원 trace index modulo 8의 색, "
+    "trace projection에서 object.color가 없으면 object index modulo 8의 색을 사용한다. 명시된 object color가 우선한다. "
+    "graphs.defaultColors는 이 immutable sequence의 detached copy이고 graphs.readPalette는 owning chart의 실제 object color 순서다. "
+    "graphs.applyPalette는 non-empty color text array를 받고 current editable chart objects의 i번째 color만 colors[i modulo length]로 바꾼다. "
+    "각 color element는 trim 뒤 non-empty text여야 하며 그 text를 저장한다. empty/비배열/이 조건을 만족하지 않는 element는 "
+    "command 실패이며 project/selection을 보존한다. Plotly color parser를 별도 project authority로 만들지 않는다. "
+    "object id/order/data/style/axes, UI palette, 다른 chart의 색은 바꾸지 않고 새 object/CSV를 만들지 않는다. "
+    "zero-object editable chart에도 non-empty palette 입력은 유효하나 object는 생기지 않는다. index hint를 생략해 기존 선택을 보존한다. "
+    "graph color는 Plotly color text로서 named/rgb/hex 표현을 보존하며 UI palette의 6-digit hex 제한을 강제하지 않는다."
+)
+
+AXIS_DEFAULTS = {
+    "min": "", "max": "", "tick": "", "tickMode": "plotly", "minorTicks": False,
+    "notation": "none", "scaleType": "linear", "divide": 1, "title": "",
+    "titleSize": 14, "lineWidth": 1, "showGrid": True, "showValues": True, "fontSize": 12,
+}
+
+GRAPH_GLOBAL_DEFAULTS = {
+    "showLegend": True, "showTitle": True, "showZeroLine": False,
+    "graphFontFamily": "", "titleFontSize": "", "legendFontSize": "",
+}
+
 axisSettings = {
     "min": "optional numeric lower bound; empty이면 auto",
     "max": "optional numeric upper bound; empty이면 auto",
-    "tick": "increment mode에서 사용할 optional numeric interval",
-    "tickMode": "plotly 또는 increment; log scale에서는 plotly만 사용",
+    "tick": "non-log 축에 명시할 optional positive numeric interval; empty이면 Plotly auto",
+    "tickMode": "plotly 또는 increment인 editor 입력 모드; log에서는 plotly만, 저장된 positive tick의 projection 여부와는 별개",
     "minorTicks": "log axis의 dense/minor tick 표시 여부",
     "notation": "none, e, power 중 하나",
     "scaleType": "linear, log 또는 reciprocal; reciprocal은 data를 역수 변환하고 Plotly axis는 linear로 표시",
@@ -268,9 +297,16 @@ def tracesSingle(objectView):
     5. 어느 한 축이라도 제외 조건이면 같은 row의 x/y를 함께 버린다. 각각 별도 filter로 정렬하거나
        누락 좌표를 이웃 row의 값으로 채우지 않는다. 통과한 paired x/y를 같은 순서로 사용한다.
        통과 row가 없으면 []이다. 한 object를 category 값마다 별도 group/trace로 나누지 않는다.
-    6. bar/scatter/hidden 의미와 line/marker style 범위를 보존한다. hidden도 data 변환을 우회하거나
-       editor object를 삭제하지 않는다. visible/style/extension 및 axis 표시 field의 전체 매핑은 같은 graph domain의
-       projection 규칙으로 정하며 이 numeric 절차가 임의 renderer 기본값이나 새로운 persistent field를 만들지 않는다.
+    6. 통과 row가 있으면 한 trace를 만든다. bar는 type=bar/mode 생략, 그 외는 type=scatter다.
+       editor type=scatter는 mode=lines, markers/lines+markers는 같은 mode, hidden은 mode=lines/visible=false다.
+       다른 type은 visible=true다. x/y는 위 paired sequence, name은 y column identifier다.
+       color는 호출자가 GRAPH_PALETTE_RULE로 정한 값이며 line.color/marker.color 모두 같은 색이다.
+       line.width는 non-bar 0.1..20(default 2), bar 0..10(default 0); line.dash는 non-bar의 solid/dot/dash/dashdot(default solid)다.
+       marker.symbol은 object의 지원 symbol(default circle), marker.size는 1..40(default 6)이다.
+       bar만 opacity=0.05..1(default 1), marker.line={color, width=bar line width}를 추가한다.
+       numeric style은 유한 수치로 변환 후 범위 제한하고 missing/invalid는 default다. 유효한 0은 bar width에서 유지한다.
+       non-bar에는 opacity/bar marker.line, bar에는 line.dash를 계산 field로 추가하지 않는다.
+       hidden도 data 변환을 우회하거나 editor object를 삭제하지 않는다.
     """
     plotlyTraces = "graph object에서 파생된 Plotly trace 목록"
     return plotlyTraces
@@ -294,9 +330,17 @@ def traces(chart, project):
        없는 실제 CSV reference는 validation 실패이며 current selected CSV나 conversionRows로 대체하지 않는다.
     3. xAxisSide/yAxisSide를 그 chart의 네 axis에 연결해 objectView를 만들고 tracesSingle을 호출한다.
        bottom/top은 Plotly x/x2, left/right는 y/y2로 연결한다. 각 object의 data 순서를 보존한다.
-    4. object.plotlyTrace extension은 복사해 사용하며 계산된 x/y/axis reference를 덮어쓰는 authority로 쓰지 않는다.
-       object color/legend/style과 renderer layout/표시 field의 기존 mapping은 같은 graph domain이 소유한다.
-    5. rows/objectView/trace 결과는 이 작업 범위 값이다. object에 row copy를 저장하지 않으며
+    4. object.plotlyTrace의 record copy 위에 계산된 trace를 덮어쓴다. line/marker record는 각 level에서
+       extension 먼저, 계산 field 나중으로 merge하며 다른 unknown field는 보존한다. bar marker.line은 계산 record가 우선한다.
+       name은 non-empty object.legendName 또는 y column identifier, xaxis/yaxis는 위 owning axis reference를 마지막에 덮어쓴다.
+       extension의 x/y/type/mode/visible/name/axis 값으로 editor 계산을 역전하지 않는다.
+    5. axis만 표시하고 실제 object가 없을 때도 Plotly axis를 유지하려고 보조 trace를 마지막에 추가한다.
+       visible인 xBottom/xTop 순서의 x/x2 목록, yLeft/yRight 순서의 y/y2 목록을 사용하고
+       어느 축 방향 목록이 비면 각각 x 또는 y 한 개로 fallback한다. x 목록 바깥/y 목록 안쪽의 Cartesian 순서다.
+       각 보조 trace는 x=[], y=[], type=scatter, mode=markers, xaxis/yaxis=해당 조합,
+       showlegend=false, hoverinfo=skip, visible=true, marker={size:0, opacity:0}, line={width:0}, name="",
+       meta={fastFigureAxisPlaceholder:true}다. 이는 renderer figure에만 존재하며 persistent object/CSV나 readPalette에 포함하지 않는다.
+    6. rows/objectView/trace 결과는 이 작업 범위 값이다. object에 row copy를 저장하지 않으며
        Backend projection을 소비하는 Frontend renderer가 CSV resolve/trace 계산을 다시 수행하지 않는다.
     non-editable imported conversion representation은 이 절차로 CSV를 찾지 않고 chartFigure의 보존 경로를 사용한다.
     """
@@ -312,7 +356,7 @@ def rebuildEditableGraph(chart, project):
 
     처리:
     project는 traces와 동일한 작업의 current authority 또는 Backend command candidate다.
-    chart.editor와 그 project의 referenced CSV에서 traces(chart, project)와 layout을 다시 계산한다.
+    chart.editor와 그 project의 referenced CSV에서 traces(chart, project)와 layout(chart, project)을 다시 계산한다.
     candidate에 새로 생성/교체/삭제한 CSV를 candidate chart와 함께 사용하며 pre-commit live CSV와 혼합하지 않는다.
     objects가 비어 있으면 object trace는 빈 배열이고 layout/global settings 계산은 계속한다.
     renderer 표시용 axis 보조 trace가 필요하더라도 persistent graph object/default CSV를 생성하지 않는다.
@@ -343,6 +387,49 @@ def chartFigure(chart, project):
     return figure
 
 
+def layout(chart, project):
+    """
+    Return: 같은 Backend 작업의 chart/editor와 project.appearance에서 계산한 detached Plotly layout.
+    변경: 없음. query-local copy 또는 command candidate에서만 계산하며 DOM/Frontend/다른 read snapshot을 조회하지 않는다.
+
+    1. normalizeGlobalSettings(chart.editor.globalSettings)와 네 normalizeAxisSettings를 사용한다.
+       아래 omitted는 field 자체를 출력하지 않음을 뜻하며 null/0이나 이전 renderer 값을 뜻하지 않는다.
+    2. 모든 axis의 Plotly type은 log일 때 log, linear/reciprocal일 때 linear다.
+       title={text: visible이면 title 아니면 empty, font:{size:titleSize 또는 14}}, visible=true다.
+       visible=true 유지 이유는 데이터/overlay 축 영역을 보존하기 위함이며 표시 토글은 다음 field에 적용한다.
+       showgrid=visible and showGrid, showticklabels=visible and showValues, ticks=visible이면 outside 아니면 empty,
+       showline=visible, linewidth=lineWidth, tickfont={size:fontSize 또는 12}, automargin=true다.
+       gridcolor=#E5E7EB, zeroline=visible and showZeroLine, zerolinecolor=#CBD5E1이다.
+       min/max가 모두 유한 수치면 linear/reciprocal range=[min,max]; 하나라도 empty/invalid면 range omitted다.
+       log는 두 경계가 모두 >0일 때만 range=[log10(min),log10(max)], 아니면 omitted다.
+       경계 순서는 보존하므로 reversed axis도 허용한다. reciprocal에 역수를 다시 적용하지 않는다.
+       log dtick=1; non-log는 tick이 유한 양수이면 dtick=tick 아니면 omitted다.
+       tickMode는 입력 UI 모드이며 저장된 명시적 tick을 삭제하지 않는다.
+       log minorTicks=true면 minor={dtick:D1, ticks:outside, showgrid:visible and showGrid, gridcolor:#E5E7EB},
+       false면 minor={ticks:empty, showgrid:false}; log에만 minorloglabels=none이다. non-log는 이 두 field omitted다.
+       notation=power/e/none을 exponentformat으로 사용한다. showexponent는 none이면 none 아니면 all,
+       tickformat은 e이면 .3e, 그 외 omitted다.
+    3. xBottom->xaxis, xTop->xaxis2(+overlaying:x, side:top),
+       yLeft->yaxis, yRight->yaxis2(+overlaying:y, side:right)로 연결한다.
+       uirevision=chart.id의 text, showlegend=showLegend,
+       title={text:showTitle이면 editor.title 아니면 empty, automargin:true,
+              font:{size:positive titleFontSize 또는 17, optional family:non-empty graphFontFamily}},
+       legend={font:{size:positive legendFontSize 또는 12, optional family:동일 family}}다.
+       paper_bgcolor/plot_bgcolor=project.appearance.uiPalette.paperColor,
+       font={color:동 palette.fontColor, optional family:동일 family}, margin={l:58,r:58,t:42,b:50}다.
+       UI background/surface 색을 graph paper로 대신 사용하지 않는다.
+    4. editor.plotlyExtensions.layout이 record면 detached copy, 아니면 empty record 위에 계산 layout을 merge한다.
+       title/legend/font/margin과 네 axis는 record level에서 extension 먼저/계산 나중이다.
+       title.font와 legend.font는 한 level 더 같은 순서로 merge한다. 다른 unknown field는 보존한다.
+       위에서 omitted로 정한 optional field(range/dtick/minor/minorloglabels/tickformat 등)는 소유 field이므로
+       extension의 같은 key도 제거한다. optional font family를 생략한 경우 extension family는 유지한다.
+       이것이 stale imported range/tick이 editor auto 설정을 되돌리지 못하게 하는 규칙이다.
+       config/frames는 기존 detached copy로 보존하며 이 layout 함수가 새 의미/default로 덮어쓰지 않는다.
+    non-editable imported figure는 chartFigure의 원본 보존 경로이므로 이 재계산으로 원본 layout을 손실시키지 않는다.
+    """
+    return "detached Plotly layout"
+
+
 def normalizeAxisSettings(axis, key):
     """
     Return:
@@ -353,6 +440,13 @@ def normalizeAxisSettings(axis, key):
     - 없음.
 
     처리:
+    AXIS_DEFAULTS를 복사하고 bottom x/left y의 visible=True, top x/right y의 visible=False를 설정한다.
+    입력의 알려진 field를 정규화해 덮어쓰며 unknown field는 의미 원천으로 사용하지 않는다.
+    min/max/tick은 missing/null/literal empty text면 empty이고 그 외 유한 numeric text/number면 수치, invalid면 empty다.
+    title은 text 아니면 empty, titleSize/fontSize는 유한 양수 아니면 각각 14/12,
+    lineWidth는 유한 0 이상 아니면 1이다. 명시적 lineWidth=0은 유지한다.
+    showGrid/showValues는 명시적 false만 false, visible은 boolean 아니면 axis별 default,
+    minorTicks는 명시적 true만 true다. notation enum invalid는 none, tickMode invalid는 plotly다.
     bottom x와 left y는 기본 visible, top x와 right y는 기본 hidden이다.
     scaleType은 linear/log/reciprocal이며 생략/invalid는 항등 변환인 linear다.
     reciprocal을 linear의 별칭으로 지우지 않는다. data 변환은 tracesSingle의 divide 다음 역수 순서다.
@@ -375,7 +469,12 @@ def normalizeGlobalSettings(settings):
     - 없음.
 
     처리:
-    missing value는 project graph default로 채우고 imported extension과 직접 소유 field를 분리한다.
+    GRAPH_GLOBAL_DEFAULTS를 복사하고 showLegend/showTitle은 명시적 false만 false,
+    showZeroLine은 명시적 true만 true, graphFontFamily는 text 아니면 empty다.
+    titleFontSize/legendFontSize는 empty 또는 유한 양수이고 invalid/non-positive는 empty로 정규화한다.
+    네 axis는 AXIS_DEFAULTS와 normalizeAxisSettings(axis,key)를 사용한다.
+    query는 normalized copy만 반환하며 live editor를 고치지 않는다. command는 candidate에만 반영한다.
+    imported extension은 layout의 merge 규칙으로 보존하며 직접 소유 field의 다른 authority로 쓰지 않는다.
     """
     normalized = "정규화된 graph global settings"
     return normalized
@@ -427,8 +526,19 @@ def parsePlotlyToEditor(figure, chartId):
        - 그 외 mode를 scatter/markers/lines+markers 계열 의미로 정규화
        - line/marker color, legend name, widths, dash, marker symbol/size, opacity를 가능한 범위에서 매핑
        - x/y를 제외한 원 trace field는 plotlyTrace extension으로 보존
-    4. layout title/legend/font/xaxis/xaxis2/yaxis/yaxis2를 globalSettings와 axisSettings로 변환한다.
-       editor가 직접 소유하지 않는 layout/config는 plotlyExtensions에 보존한다.
+    4. layout title text는 title이 text면 그 값, record면 title.text 또는 empty다. showTitle은 text의 non-empty 여부,
+       showLegend는 layout.showlegend가 명시적 false인 경우만 false다.
+       graphFontFamily는 title.font.family -> layout.font.family -> legend.font.family 중 첫 non-empty text 또는 empty,
+       titleFontSize/legendFontSize는 각 font.size 또는 empty를 normalizeGlobalSettings로 정규화한다.
+       xaxis/xaxis2/yaxis/yaxis2를 xBottom/xTop/yLeft/yRight로 연결한다. axis.type=log만 log, 그 외 linear다.
+       유한 axis.range의 각 경계는 log일 때 10**value로 역변환 후 유한 수치, 그 외 그대로; 누락/overflow는 empty다.
+       reciprocal을 Plotly linear에서 추측하지 않는다. divide는 default 1이다.
+       dtick이 L 뒤 수치인 text면 tick=그 수치/tickMode=increment, non-log numeric dtick이면 tick=그 값/tickMode=plotly,
+       그 외 empty/plotly다. log tick은 empty이며 dtick=D1 또는 minor의 dtick=D1/ticks=inside|outside/showgrid=true면 minorTicks=true다.
+       axis.title(text 또는 title.text), title.font.size, tickfont.size, linewidth를 대응 field로 정규화한다.
+       showGrid/showValues/visible은 각각 showgrid/showticklabels/visible의 명시적 false만 false,
+       notation은 exponentformat=e/power 외에는 none이다. showZeroLine은 editor default false를 유지한다.
+       editor가 직접 소유하지 않는 layout/config는 plotlyExtensions에 detached copy로 보존한다.
     5. trace가 없거나 모든 trace에 data point가 없어도 conversionRows/objects를 empty로 유지한다.
        fake X/Y row나 default CSV를 만들지 않는다.
     6. editor.editable=false로 반환한다.
