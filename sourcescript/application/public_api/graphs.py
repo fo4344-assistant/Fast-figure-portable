@@ -6,6 +6,7 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈�
 """
 
 from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery
+from sourcescript.frontend.renderer import downloadExportPayload
 
 def graphEditorAdd(slotId, csvId):
     """
@@ -120,10 +121,12 @@ def graphEditorSetHeaderLines(csvId, headerLines):
     current CSV를 id로 resolve하고 같은 id/path/bytes/rows를 유지한 replacement candidate를 만든 뒤
     DATA_OBJECT_REPLACED로 commit한다.
     """
-    return dispatchProjectCommand(
-        "DATA_OBJECT_REPLACED",
-        {"csvId": csvId, "headerLines": headerLines},
+    result, interfaceState, rendererInput = dispatchProjectCommand(
+        "DATA_OBJECT_REPLACED", {"csvId": csvId, "headerLines": headerLines},
     )
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": "result.changed의 실제 updated CSV path"})["target"]["headerLines"]
 
 
 def graphEditorUpdateLayout(slotId, chartId, values):
@@ -135,10 +138,12 @@ def graphEditorUpdateLayout(slotId, chartId, values):
     Backend command가 current owning chart에 새 values를 적용/정규화한 candidate를 CHART_LAYOUT_CHANGED로 commit한다.
     Plotly graph layout은 commit된 chart settings에서 다시 계산하는 projection이다.
     """
-    return dispatchProjectCommand(
-        "CHART_LAYOUT_CHANGED",
-        {"slotId": slotId, "chartId": chartId, "settings": values},
+    result, interfaceState, rendererInput = dispatchProjectCommand(
+        "CHART_LAYOUT_CHANGED", {"slotId": slotId, "chartId": chartId, "settings": values},
     )
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "graphs.readLayout", "selectedSlotId": slotId})
 
 
 def graphEditorApplyPalette(chartId, colors):
@@ -149,9 +154,12 @@ def graphEditorApplyPalette(chartId, colors):
     처리:
     current objects에서 color-only candidate를 계산하고 GRAPH_OBJECTS_REPLACED로 commit한다.
     """
-    return dispatchProjectCommand(
+    result, interfaceState, rendererInput = dispatchProjectCommand(
         "GRAPH_OBJECTS_REPLACED", {"chartId": chartId, "operation": "graphs.applyPalette", "colors": colors}
     )
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})["chart"]
 
 
 def importSelectedGraphFile(slotId, file):
@@ -165,4 +173,20 @@ def importSelectedGraphFile(slotId, file):
     Plotly JSON이면 parsePlotlyToEditor로 non-editable imported chart candidate를 만든다.
     두 경우 모두 target slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증한 뒤 그 command가 한 번 commit한다.
     """
-    return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"slotId": slotId, "file": file})
+    result, interfaceState, rendererInput = dispatchProjectCommand("SLOT_CHART_IMPORTED", {"slotId": slotId, "file": file})
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "graphs.readData", "frontendState": {"selectedSlotId": slotId}})["chart"]
+
+
+def exportSelectedGraph(slotId, operation):
+    """
+    graphs.exportFfsx/exportPlotlyJson의 public binding이 현재 selectedSlotId와 두 기존 operation 중 하나를 전달한다.
+    export query는 visible graph slot/chart를 같은 current authority에서 resolve하고 package 또는 semantic figure를 복사한다.
+    target 없음은 경고 후 None이며 download하지 않는다. 정상 download handoff 반환도 기존 side-effect API의 None이다.
+    None을 disk 저장 성공 신호로 해석하지 않는다. query/encoding/handoff 오류는 lifecycle을 거쳐 전파한다.
+    """
+    payload = dispatchProjectQuery("export", {"operation": operation, "slotId": slotId, "stamp": "이번 호출의 UTC ISO timestamp"})
+    if payload is None:
+        return None
+    return downloadExportPayload(payload)
