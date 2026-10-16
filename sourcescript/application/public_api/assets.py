@@ -6,7 +6,7 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈�
 """
 
 from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection
-from sourcescript.backend.assets_files import EMPTY_CSV_TEMPLATE
+from sourcescript.backend.assets_files import EMPTY_CSV_TEMPLATE, PROJECT_ASSET_DIRECTORIES
 from sourcescript.frontend.interface_fsm import interfaceFSM
 from sourcescript.frontend.renderer import downloadExportPayload
 from sourcescript.application.public_api.graphs import importSelectedGraphFile
@@ -268,7 +268,8 @@ def connectProjectAssetToSlot(path, kind, slotId):
     처리:
     path와 slotId를 current project에서 다시 resolve한다.
     CSV는 SLOT_DATA_CONNECTED, image는 SLOT_IMAGE_LINKED라는 기존 kind-specific command로 수렴한다.
-    단순 asset selection은 이 함수에서 변경하지 않는다.
+    command reconciliation 후에도 유효한 독립 asset selection은 model-to-fsm 선택에서 유지한다.
+    target graph selection은 clear하지만 asset을 다시 선택하거나 제거된 선택을 snapshot에서 복구하지 않는다.
     """
     event = "SLOT_DATA_CONNECTED if kind == csv else SLOT_IMAGE_LINKED"
     # kind는 csv/image만 허용; 그 외 오류. command는 current path의 kind 일치/non-trash/visible slot을 재검증한다.
@@ -330,8 +331,10 @@ def importProjectAssetFiles(files, planImport):
     3. 각 file을 공식 fileKind query로 분류한다. data/image/slot만 지원하며 unknown은 throw, 뒤 input은 처리하지 않는다.
        slot package는 target이 있어야 importSelectedGraphFile로 보낸다. .json은 fileKind에 따라 data이며 Plotly 추측 분기를 만들지 않는다.
        Plotly JSON은 explicit graphs.importFile 경로를 사용한다. package 자체는 SLOT_CHART_IMPORTED 한 commit이다.
-       data/image와 target이 있으면 importProjectFileToSlot, 없으면 kind별 /assets/csv 또는 /assets/image에
-       importProjectFilesToDirectory([file], directory, planImport)를 사용한다. FFPX는 project.importFile 전용이며 여기서 추측하지 않는다.
+       data/image와 target이 있으면 importProjectFileToSlot, 없으면 immutable PROJECT_ASSET_DIRECTORIES에서
+       data는 csv key, image는 image key의 canonical path를 골라 importProjectFilesToDirectory([file], directory, planImport)를 사용한다.
+       이 상수는 기본 schema 값이지 current VFS projection이 아니다. directory의 실제 존재/권한은 command가 다시 검증한다.
+       단수 image alias/누락 root 자동 생성을 하지 않는다. FFPX는 project.importFile 전용이며 여기서 추측하지 않는다.
     4. 파일마다 command가 current visible target/VFS/choice를 다시 검증한다. 성공 결과의 detached asset/chart를 input 순서로 모은다.
        directory helper의 single-item 목록은 router 결과에 한 item으로 펼친다. 전체 성공은 그 목록을 반환한다.
     5. choice 취소는 None, 미commit은 그 result를 반환하고 즉시 멈춘다. throw/rejection은 전파한다.
