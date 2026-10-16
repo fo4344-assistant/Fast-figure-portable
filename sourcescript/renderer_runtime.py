@@ -138,11 +138,13 @@ def setSelectedSlot(slotId, direction, frontendActions):
 
     중요 semantics:
     기본 UI 방향에서 이미 선택된 동일 slot id를 다시 보내면 선택 해제된다.
-    caller가 '선택을 보장'해야 하면 현재 selected slot을 먼저 읽어야 한다.
+    direction=model-to-fsm이면 같은 slot도 선택을 유지한다. caller가 동일 target의 부수 selection clear까지 피해야 하면
+    현재 selected slot을 먼저 읽어 같은 id일 때 transition을 생략한다.
 
     처리:
     renderer는 slotId를 Backend에서 직접 검증하거나 interfaceFSM에 직접 주입하지 않는다.
-    frontendActions.slots.select에 selection intent를 전달하고 Application boundary의 validated SELECT_SLOT 결과를 사용한다.
+    frontendActions.slots.select에 slotId/direction selection intent를 전달하고 Application boundary의 validated SELECT_SLOT 결과를 사용한다.
+    direction을 renderer에서 누락시키거나 새 toggle 판정으로 대체하지 않는다.
     그 뒤 반환된 final interface state와 project projection으로 graph view를 갱신하고 resize를 요청한다.
     """
     return "Application boundary를 거친 선택 후 Frontend runtime state"
@@ -217,8 +219,12 @@ def prepareDashboardFileDrop(slotId, frontendActions):
     - drag runtime state를 정리한다.
 
     처리:
-    1. 기존 public frontendActions.slots.select(slotId)를 사용해 Application boundary에서 target validity를 Backend 기준으로 검증하고 accepted target을 선택한다.
-    2. selection 결과가 rejected 또는 explicit deselection이면 file-drop target 준비를 false로 끝낸다. 별도 prepareFileDrop API를 만들지 않는다.
+    1. 기존 public frontendActions.slots.prepareFileDrop(slotId)를 호출한다. 이 API는 api_ui.py의 PUBLIC_API_METHODS에 이미 선언된
+       선택 보장 operation이며 일반 slots.select의 toggle을 대신 호출하지 않는다.
+    2. Application이 explicit slotId를 Backend에서 검증한다. invalid/hidden/none target이면 기존 selection을 보존하고 false를 반환한다.
+       valid target이 이미 선택되어 있으면 Frontend transition 없이 현재 selection/workspace를 유지한다.
+       다른 valid target이면 model-to-fsm SELECT_SLOT으로 선택을 보장한다. 같은 target을 toggle-clear하지 않는다.
+       pendingContentType intent를 전달하지 않으며 이 준비 operation은 persistent content-type command를 만들지 않는다.
     3. renderer 자체는 Backend slot을 resolve하거나 file bytes, asset, chart/image reference를 변경하지 않는다.
     4. 실제 file import/collision UI는 FastFigureDashboardFileDrop -> assets.importToSlot 경로가 소유한다.
     5. finishFileDrop은 drag runtime cleanup만 수행하며 domain commit을 반복하지 않는다.
