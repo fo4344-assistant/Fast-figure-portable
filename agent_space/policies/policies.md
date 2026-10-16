@@ -4,7 +4,7 @@
 
 현재 정책 원천:
 
-- `source-script-policy.md`
+- `development-policy.md`
   - 사용자 지시에 따라 개정된 `v0.2.6`
   - Source Script → PlusCal/TLA+ pseudo code → TLC 검사 (선택) → Source Code (대상 언어 구현) -> Source Script 개선 순서
   - verification code의 독립 재설계 금지
