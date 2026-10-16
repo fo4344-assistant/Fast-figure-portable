@@ -15,7 +15,7 @@ Fast Figure Source Script — project VFS, assets, FFPX/FFSX and import transact
 """
 
 from project_state import activeProject, projectVfs, getProjectCsv, getProjectImage
-from application_fsm import dispatchProjectCommand
+from application_fsm import dispatchProjectCommand, dispatchProjectQuery
 
 ASSET_FILE_LOGICAL_RESPONSIBILITIES = {
     "Backend": (
@@ -23,14 +23,16 @@ ASSET_FILE_LOGICAL_RESPONSIBILITIES = {
         "reference validation과 package persistence semantics"
     ),
     "Application boundary": (
-        "create/import/delete/move/trash/connect/load/applyFfsxSlot처럼 public API intent를 explicit Project EFSM command로 전달하는 wrappers"
+        "create/import/delete/move/trash/connect/load처럼 public API intent를 explicit Project EFSM command로 전달하는 wrappers"
     ),
 }
 
 ASSET_BOUNDARY_RULE = (
     "같은 물리 파일에 co-locate되어도 Backend asset calculation/candidate function은 Application adapter를 역호출하지 않는다. "
     "dispatchProjectCommand를 호출하는 함수는 Application-boundary wrapper로 분류하고, 그 wrapper가 explicit id/path/slot reference를 "
-    "Backend command input으로 전달한다. Backend persistent candidate는 Frontend selection이나 DOM state를 읽지 않는다."
+    "Backend command input으로 전달한다. Backend persistent candidate는 Frontend selection이나 DOM state를 읽지 않는다. "
+    "mutation wrapper에 적힌 current-state resolve/normalize/id/path/candidate/validation 단계는 대응 Project EFSM command 내부 계산이다. "
+    "Application은 새 입력과 완료된 user choice만 전달하고 candidate project/model이나 callback을 넘기지 않는다."
 )
 
 PACKAGE_FORMAT_VERSION = "현재 FFPX/FFSX package format version 3"
@@ -230,8 +232,11 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
     - authoritative project를 변경하지 않는다.
 
     처리:
+    ASSETS_IMPORTED command 내부에서만 호출한다. planImport는 Application이 이미 수집한 명시적 collision choice/plan 값이며
+    callback/Frontend resolver가 아니다. Backend는 Modal/task를 호출하지 않는다.
     directory/target slot을 current project에서 resolve하고 모든 file parse/collision plan/id/path/reference를
     candidate 안에서 계산한다. targetSlotId가 있으면 그 slot 연결까지 같은 candidate에 포함한다.
+    이미 선택한 replace id/path와 current kind/target이 일치해야 한다. 대기 중 바뀐 대상에 choice를 옮겨 적용하지 않는다.
     parse/collision/reference/whole-project validation 실패는 candidate rejection으로 끝나며 commit을 수행하지 않는다.
     """
     candidate = "검증된 asset import whole-project candidate 또는 rejected result"
@@ -244,38 +249,41 @@ def importProjectFilesToDirectory(files, directory, planImport):
     - 전체 candidate가 검증된 뒤 CSV/image collection과 관련 reference를 한 번 commit한다.
 
     처리:
-    1. target directory가 존재하고 trash가 아닌지 확인한다.
-    2. 모든 file bytes를 읽고 data/image candidate model을 authority 밖에서 만든다.
-    3. 전체 batch의 collision choice를 받아 path/replace id를 확정하고 reserved path 충돌을 검사한다.
-    4. 현재 project snapshot에서 candidate asset collection, VFS location, next-id를 계산한다.
-    5. import-to-slot이면 target slot/chart candidate도 같은 candidate project에 적용한다.
-    6. candidate 전체의 VFS/reference/project invariant를 검증한다.
-    7. 모두 성공한 경우에만 importing lifecycle 안에서 authoritative project 부분을 commit한다.
-    8. parse, collision, validation 중 하나라도 실패하면 activeProject는 변경하지 않는다.
+    1. Application은 pure file-byte read/parse와 기존 collision query/UI choice 수집을 수행할 수 있다.
+       planImport의 UI-local resolver를 완료하여 이번 batch의 명시적 choices를 얻는다. 취소면 command 없이 취소 결과를 반환한다.
+       path/id를 포함한 candidate project를 만들거나 Backend에 resolver callback을 넘기지 않는다.
+    2. ASSETS_IMPORTED에 copied file inputs, explicit directory와 choices만 전달한다.
+    3. Backend command가 buildProjectAssetImportCandidate로 current directory/collision/id/reference와 whole-project candidate를 계산한다.
+       choice 대기 뒤의 current state 재검증과 one commit은 project_efsm.py의 공통 send 규칙을 사용한다.
+    4. parse/collision/reference/validation 실패는 미commit 결과로 끝난다. Application은 공통 결과를 반환하며 성공 read로 위장하지 않는다.
 
     의미:
-    batch import는 mutate 후 rollback이 아니라 candidate-first commit을 기본으로 한다.
-    buildProjectAssetImportCandidate로 계산한 candidate를 ASSETS_IMPORTED에 전달하고 projectEFSM이 최종 invariant를 다시 확인한 뒤 commit한다.
+    batch import는 mutate 후 rollback이 아니라 command 안의 candidate-first commit을 기본으로 한다.
     """
-    candidate = buildProjectAssetImportCandidate(files, directory, planImport)
-    return dispatchProjectCommand("ASSETS_IMPORTED", {"candidate": candidate})
+    choices = "기존 collision query와 planImport UI resolver로 완료한 이번 batch의 choice 값; 취소면 즉시 반환"
+    return dispatchProjectCommand("ASSETS_IMPORTED", {"files": files, "directory": directory, "choices": choices})
 
 
 def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
     """
     Return:
     - csv:
-      activeProject에 등록된 CSV asset.
+      성공 뒤 공식 query로 읽은 등록 CSV의 immutable projection; 미commit이면 해당 command failure를 반환한다.
 
     변경:
     - DATA_OBJECT_CREATED event를 통해 activeProject.csvFiles와 next csv id를 변경한다.
 
     처리:
-    data table과 bytes representation을 정규화하고 VFS location을 정한 뒤
-    dispatchProjectCommand를 통한 projectEFSM의 공식 create command로 등록한다.
+    Application은 새 data/name/bytes/MIME/headerLines/path/id 입력만 전달한다.
+    Backend command가 data table/bytes/VFS location/current next-id를 정규화/검증해 등록한다.
     """
-    model = "정규화된 CSV candidate"
-    return dispatchProjectCommand("DATA_OBJECT_CREATED", {"model": model})
+    result, interfaceState, rendererProjection = dispatchProjectCommand(
+        "DATA_OBJECT_CREATED", {"data": data, "name": name, "id": id, "bytesBase64": bytesBase64,
+                                "mime": mime, "headerLines": headerLines, "path": path}
+    )
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": "result.changed의 생성 CSV path"})["target"]
 
 
 def createEmptyProjectCsv():
@@ -293,21 +301,25 @@ def createEmptyProjectCsv():
     2. name은 "빈 CSV.csv", MIME은 "text/csv", headerLines는 1을 사용한다.
     3. bytes는 rows를 project CSV writer와 같은 CSV serializer로 직렬화한 UTF-8 bytes를 사용한다.
     4. 기본 directory는 /assets/csv다.
-    5. 같은 canonical path가 이미 존재하면 projectVfs.uniquePath와 같은 일반 collision-free naming 규칙으로 새 path를 계산한다.
-       existing asset을 replace하지 않는다.
+    5. Backend create command가 같은 canonical path를 current VFS에서 검사하고 projectVfs.uniquePath의 일반 collision-free naming을 적용한다.
+       wrapper가 사전 unique path를 authoritative 결과로 확정하지 않으며 existing asset을 replace하지 않는다.
     6. createProjectCsv의 일반 DATA_OBJECT_CREATED 경로로 등록한다.
     7. 생성된 CSV에 protected/default 전용 field를 추가하지 않는다.
     8. chart, graph object, interface selection은 이 함수에서 변경하지 않는다.
     """
-    csv = "등록된 일반 빈 CSV asset"
-    return csv
+    return createProjectCsv(
+        EMPTY_CSV_TEMPLATE["rows"], EMPTY_CSV_TEMPLATE["name"], None,
+        "template rows를 동일 CSV serializer로 만든 UTF-8 bytes의 base64",
+        EMPTY_CSV_TEMPLATE["mime"], EMPTY_CSV_TEMPLATE["headerLines"],
+        "기본 directory /assets/csv와 template name으로 요청한 path",
+    )
 
 
 def createProjectImage(bytes, name, mime, id, path):
     """
     Return:
     - image:
-      activeProject에 등록된 image asset.
+      성공 뒤 공식 query로 읽은 등록 image의 immutable projection; 미commit이면 해당 command failure를 반환한다.
 
     변경:
     - IMAGE_OBJECT_CREATED event를 통해 activeProject.images와 next image id를 변경한다.
@@ -316,8 +328,12 @@ def createProjectImage(bytes, name, mime, id, path):
     image asset은 copied bytes/name/MIME/location만 소유한다.
     fit/scale/x/y 같은 display settings는 연결 slot의 slot.content.imageSettings에 둔다.
     """
-    model = "정규화된 image candidate"
-    return dispatchProjectCommand("IMAGE_OBJECT_CREATED", {"model": model})
+    result, interfaceState, rendererProjection = dispatchProjectCommand(
+        "IMAGE_OBJECT_CREATED", {"bytes": bytes, "name": name, "mime": mime, "id": id, "path": path}
+    )
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": "result.changed의 생성 image path"})["target"]
 
 
 def deleteProjectAsset(target):
@@ -326,22 +342,19 @@ def deleteProjectAsset(target):
     - target CSV/image와 target을 참조하던 graph object 또는 image slot.
 
     처리:
+    Application wrapper는 target의 kind/id/path reference만 전달한다. 아래는 Backend delete command 내부 계산이다.
     1. collectAssetReferences로 현재 reference를 순수 계산한다.
     2. current project에서 target asset과 해당 references를 제거한 candidate를 만든다.
     3. CSV reference 제거 결과 graph object가 0개가 되어도 empty editable chart를 그대로 허용한다.
     4. image reference는 해당 slot의 image reference만 비운 candidate를 만든다.
     5. candidate 전체를 검증한다.
-    6. resolved target kind가 CSV면 DATA_OBJECT_DELETED, image면 IMAGE_OBJECT_DELETED에 candidate와 target id를 전달한다.
-       두 command 모두 asset과 해당 reference detach를 같은 whole-project commit으로 소유한다.
+    6. resolved target kind가 CSV면 DATA_OBJECT_DELETED, image면 IMAGE_OBJECT_DELETED가 이 candidate를 한 번 commit한다.
+       두 command 모두 asset과 해당 reference detach를 같은 whole-project commit으로 소유한다. routing read와 현재 kind가 다르면 거부한다.
 
     보호된 default CSV 같은 예외 asset은 존재하지 않는다.
     """
-    resolved = "current project에서 다시 resolve한 target"
-    event = "DATA_OBJECT_DELETED if resolved.kind == csv else IMAGE_OBJECT_DELETED"
-    return dispatchProjectCommand(
-        event,
-        {"target": resolved, "candidate": "asset+reference removal candidate"},
-    )
+    event = "DATA_OBJECT_DELETED if requested target kind == csv else IMAGE_OBJECT_DELETED"
+    return dispatchProjectCommand(event, {"target": "explicit kind/id/path reference만; asset object copy는 아님"})
 
 
 def planProjectNodeMove(path, directory):
@@ -382,7 +395,7 @@ def moveProjectNode(plan, useUniqueName):
     """
     return dispatchProjectCommand(
         "PROJECT_NODE_MOVED",
-        {"plan": plan, "useUniqueName": useUniqueName},
+        {"path": "plan의 source path", "directory": "plan의 target directory", "useUniqueName": useUniqueName},
     )
 
 
@@ -438,16 +451,14 @@ def importProjectFileToSlot(file, slotId, planImport):
     - raw CSV/image asset과 target slot/chart candidate.
 
     처리:
-    buildProjectAssetImportCandidate의 targetSlotId 경로로 한 whole-project candidate를 만든 뒤
-    ASSETS_IMPORTED 한 command로 commit한다. file asset 생성과 slot 연결을 별도 commit으로 쪼개지 않는다.
+    Application은 importProjectFilesToDirectory와 같은 pure file input/명시적 collision choice 수집을 수행한다.
+    취소면 command를 보내지 않는다. Backend ASSETS_IMPORTED가 buildProjectAssetImportCandidate의 targetSlotId 경로로
+    current asset와 target slot/chart를 한 candidate로 만든다. asset 생성과 slot 연결을 별도 commit으로 쪼개지 않는다.
     """
-    candidate = buildProjectAssetImportCandidate(
-        [file],
-        "target file plan의 directory",
-        planImport,
-        targetSlotId=slotId,
+    choices = "기존 collision query와 planImport UI resolver로 완료한 choice 값; 취소면 즉시 반환"
+    return dispatchProjectCommand(
+        "ASSETS_IMPORTED", {"files": [file], "directory": "choice의 explicit target directory", "choices": choices, "targetSlotId": slotId}
     )
-    return dispatchProjectCommand("ASSETS_IMPORTED", {"candidate": candidate})
 
 
 def ffpxBuildProject():
@@ -499,20 +510,23 @@ def ffpxReadProject(file):
 def importProjectFile(file):
     """
     Return:
-    - activeProject:
-      import 성공 후의 authoritative project.
+    - project:
+      import 성공 뒤 공식 export query로 읽은 immutable project snapshot. Backend mutable authority를 반환하지 않는다.
+      실패/취소는 기존 command/lifecycle 실패/취소로 전달하며 성공 snapshot을 반환하지 않는다.
 
     변경:
     - 최종 단계에서 PROJECT_LOADED event를 통해 activeProject 전체를 교체한다.
 
     처리:
     current FFPX package만 project import 입력으로 인정한다.
-    ffpxReadProject 결과를 buildProjectObject로 candidate ProjectObject로 정규화하고 완전 검증한 뒤
-    PROJECT_LOADED 경계를 통해 authoritative project를 한 번 교체한다.
+    Application은 file 입력만 PROJECT_LOADED에 전달한다. Backend command가 ffpxReadProject 결과를
+    buildProjectObject로 정규화/완전 검증한 뒤 authoritative project를 한 번 교체한다.
     현재 package가 아닌 legacy conversion은 application 내부에서 추측하지 않고 외부 converter 책임으로 둔다.
     """
-    candidate = buildProjectObject(ffpxReadProject(file), "file name")
-    return dispatchProjectCommand("PROJECT_LOADED", {"project": candidate})
+    result, interfaceState, rendererProjection = dispatchProjectCommand("PROJECT_LOADED", {"file": file})
+    if not result.committed:
+        return result
+    return dispatchProjectQuery("export", {})
 
 
 def ffsxBuildSlot(slot, chart):
@@ -525,8 +539,9 @@ def ffsxBuildSlot(slot, chart):
     - 없음.
 
     처리:
-    chart object가 참조하는 실제 CSV만 package-local 연속 id로 remap한다.
-    chart object csvId도 같은 mapping으로 변경한다.
+    validateChartModel이 실제 project CSV object로 판정한 object가 참조하는 CSV만 package-local 연속 id로 remap한다.
+    그 object csvId도 같은 mapping으로 변경한다. non-editable imported conversion chart는 원본과 conversion view를 보존하며
+    conversion object를 CSV 수집/remap 대상에 넣지 않는다. validateChartModel의 representation 판정을 그대로 사용한다.
     graph object가 0개인 blank editable chart는 CSV entry 없이 유효하게 package한다.
     CSV bytes는 assets/data subtree에 별도 저장한다.
     """
@@ -544,7 +559,8 @@ def ffsxReadSlot(file):
     - activeProject를 변경하지 않는다.
 
     처리:
-    package schema/version, chart object -> package-local CSV reference, CSV dataRef와 bytes를 검증한다.
+    package schema/version, 실제 project object -> package-local CSV reference, CSV dataRef와 bytes를 검증한다.
+    non-editable conversion view에는 project/package CSV resolve를 요구하지 않고 validateChartModel의 구조 검증을 적용한다.
     graph object가 0개이면 CSV asset이 없어도 blank chart로 허용한다.
     package-local id 0 또는 protected default CSV 같은 특수 reference를 만들지 않는다.
     validateChartModel을 통과한 payload만 반환한다.
@@ -633,7 +649,9 @@ def collectAssetReferences(csvIds, imageIds, state):
     - 없음.
 
     처리:
-    같은 chart 안에서 같은 CSV를 여러 graph object가 참조하면 각각 별도 reference로 센다.
+    validateChartModel과 같은 representation 판정으로 실제 project object.csvId만 수집한다. 편집을 잠시 끈 일반 chart도 포함한다.
+    non-editable conversion rows/object는 project CSV reference가 아니므로 포함하지 않는다.
+    같은 chart 안에서 같은 실제 CSV를 여러 graph object가 참조하면 각각 별도 reference로 센다.
     image는 참조하는 slot마다 하나의 reference로 센다.
     confirmation count와 실제 cascade mutation이 같은 reference set을 사용한다.
     """
@@ -689,7 +707,8 @@ def buildProjectObject(payload, fileName):
     1. current schema/version과 project name/grid shape를 검증한다.
     2. CSV/image id, bytes, canonical VFS location을 candidate collection으로 정규화한다.
        image asset에는 slot-local display settings를 두지 않는다.
-    3. chart와 graph object를 정규화하고 CSV reference를 resolve한다.
+    3. chart와 graph object를 정규화하고 validateChartModel의 representation 판정을 적용한다.
+       실제 project object의 CSV reference만 resolve한다. non-editable conversion view에는 project CSV를 만들거나 요구하지 않는다.
        zero-object editable chart는 그대로 허용한다.
     4. slot geometry, chart/image reference, slot-local imageSettings/caption을 정규화한다.
     5. chart마다 owning slot이 정확히 하나인지 확인한다.
@@ -706,21 +725,21 @@ def buildProjectObject(payload, fileName):
 def applyFfsxSlot(slotPayload, targetSlot):
     """
     Return:
-    - result:
-      새 CSV id mapping과 새 chart id를 포함한 commit 결과.
+    - candidate:
+      새 CSV id mapping과 새 chart id를 포함한 target slot/project candidate.
 
     변경:
-    - candidate 검증 성공 후 target slot, chart collection, 필요한 CSV collection과 next-id를 한 번 commit한다.
+    - candidate만 계산한다. SLOT_CHART_IMPORTED 내부 Backend helper이며 자체 commit/Application 역호출은 없다.
 
     처리:
     1. targetSlot을 current project에서 다시 resolve한다.
-    2. package-local CSV마다 새 project id/path candidate를 만든다.
-    3. chart object csvId를 새 mapping으로 바꾼 독립 chart candidate를 만든다.
+    2. validateChartModel이 실제 project CSV object로 판정한 object가 참조하는 package-local CSV마다 새 project id/path candidate를 만든다.
+    3. 그 object csvId만 새 mapping으로 바꾼다. non-editable conversion chart의 imported/conversion view는 그대로 보존한다.
     4. 새 chart id를 할당하고 target slot이 그 chart를 유일하게 소유하도록 candidate를 만든다.
     5. FFSX가 제공하는 slot caption을 target slot annotation candidate에 적용한다.
     6. whole-project invariant를 검증한다.
-    7. SLOT_CHART_IMPORTED에 candidate를 전달하고 projectEFSM이 최종 검증 후 한 번 commit한다.
+    7. caller인 SLOT_CHART_IMPORTED가 최종 검증 후 한 번 commit한다.
     """
     candidate = "target slot + remapped CSV + chart whole-project candidate"
-    return dispatchProjectCommand("SLOT_CHART_IMPORTED", {"candidate": candidate})
+    return candidate
 
