@@ -1,0 +1,89 @@
+diff --git a/agent_space/reviews/review-20261016-016-source-r35-closure.md b/agent_space/reviews/review-20261016-016-source-r35-closure.md
+new file mode 100644
+index 0000000..26b80a7
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-016-source-r35-closure.md
+@@ -0,0 +1,83 @@
++# Source r35 재검토 — closure 보류 / OPEN
++
++## 요청·기준·방법
++
++사용자 요청: 다시 검토하고 문제가 없다면 Source Script를 일단 닫는다.
++
++- 검토 기준 main: `ecf33e7f53f3eaf07159d859e13e8e96b90fdcfc`.
++- Source r35 current/open, fingerprint `sha256:6b1b16ef3e2a0e5725c9fa7b7191bda06265b96cc1844d7a94a130d4d3c97ef9`.
++- AGENT를 다시 읽고 development-policy §4.3.1–4.6의 고수준 의미/외부 원천/닫힘 조건을 원문 대조했다. 정책 변경은 없다.
++- 이전 review 014의 R1–R4와 Plan 018 수정 결과를 생성→소비 경로로 다시 대조하고, PUBLIC_API_METHODS의 기능군과 system의 목적/미해결 항목에서 annotation·저장·export로 범위를 넓혔다.
++- Source는 실행 가능한 Python이 아닌 구현 명세로 읽었다. 설명용 문자열/자연어 본문을 runtime 오류로 취급하지 않는다. 아래 문제는 출력 의미를 결정할 규칙의 공백이다.
++- 로컬 Source/application/test/checker/build/TLC 실행 없음. 이 문서는 정적 검토이며 기존 version checker PASS를 의미적 closure 증거로 대체하지 않는다.
++
++## 판정
++
++**닫지 않는다.** R1–R4에는 이번 대조에서 새로운 모순을 확인하지 못했지만, annotation→caption→raster 출력 경로에 아직 하위 번역자가 고수준 의미를 선택해야 하는 공백 C1–C3이 있다. 조건부 요청의 “문제가 없다면”을 만족하지 않는다.
++
++Source/metadata를 수정하지 않는다. r35 current/open, closure_review null을 유지하고 PlusCal/model/code의 stale 상태도 유지한다. 단순히 system의 UNRESOLVED 목록이나 metadata flag만 지워 닫힘을 만들지 않는다.
++
++## R1–R4 재대조 결과 — 정적 확인
++
++| 항목 | 생성→소비 대조 | 결과 |
++|---|---|---|
++| R1 | backend/assets_files.py PROJECT_ASSET_DIRECTORIES → application/public_api/assets.py importProjectAssetFiles → ASSETS_IMPORTED current directory 검증 | image=/assets/images, data=/assets/csv로 일치; alias/자동 root 생성 없음 |
++| R2 | project_state.validateFrontendIntent → adapter.dispatchSlotSelection → interface_fsm SELECT_SLOT | non-null model-to-fsm의 clear-graph-object만 asset 보존; 일반 user toggle/explicit none은 전체 clear |
++| R3 | graphs.EMPTY_CSV_GRAPH_RULE → asset Backend create → public createEmptyProjectCsvAndSelect → validated SELECT_ASSET | Backend create-only, Application 선택, 실패 시 숨은 rollback 없음 |
++| R4 | collectAssetReferences/filter → ProjectStateMachine.send의 graphObjectIndexMaps → buildFrontendReconciliationInput → Frontend scalar 적용 | old position 기반, 0/none 구별, explicit hint 우선, 다른 chart map 무시, 독립 CSV 선택에 역쓰기 없음 |
++
++R4는 `[A,B,C]`에서 A/B/C 각각 제거, 같은 값의 복수 object, all-removed, unrelated chart, direct delete의 explicit-none을 문장/알고리즘으로 다시 대조했다. 이는 lower application의 실행 성공 판정이 아니다.
++
++## 닫힘 차단 항목
++
++### C1 / P2 — label·caption 초기 설정의 실제 원천이 없다
++
++근거:
++- `sourcescript/backend/project_state.py:631-635`: labels는 “기본 formatting/font settings”, captions는 disabled/empty만 지정한다.
++- `sourcescript/backend/layout_annotations.py:37-52`: label/caption field의 종류·일부 범위는 있으나 기본 format/order/parentheses/fontFamily/fontSize와 caption font/size/lineHeight의 값 또는 그것을 제공하는 식별 가능한 Source 원천은 없다.
++- `sourcescript/backend/layout_annotations.py:194-209`: labels.readState의 sampleText는 현재 format/parentheses에 의존한다.
++- `sourcescript/application/public_api/layout_annotations.py:269-299`: enabled만 바꾸는 command는 다른 settings를 유지한다.
++
++반례 경로: 새 project → labels.setEnabled(True) → labels.readState/render. 현재 문장만으로는 initial format이 lower-alpha인지 decimal인지, fontSize가 무엇인지 결정되지 않는다. 둘 다 선언된 enum/범위를 만족하지만 sampleText와 figure 출력이 달라진다. captions도 enabled만 켠 뒤 어떤 기본 typography를 읽는지 완결되지 않는다.
++
++필요한 수정: 기존 Backend annotation owner에 기본값과 missing/invalid 설정 처리 원천을 명시하고 create/load/reset/read의 참조를 연결한다. 값은 이번 review에서 임의로 정하지 않는다. 브라우저 font API 선택이 아니라 persistent 설정과 초기 출력 의미의 문제다.
++
++### C2 / P2 — insertSlotCaptions의 출력 text 결정 규칙이 끊겨 있다
++
++근거:
++- `sourcescript/application/public_api/layout_annotations.py:372-390`: slotIds를 보내고 “layout order”, “label/text projection”, “사용자 명령에 따라 삽입”이라고만 한다.
++- `sourcescript/backend/project_efsm.py`의 SLOT_CAPTIONS_INSERTED route는 이 계산을 수행하는 owner를 정하지만 구체적인 조합 규칙은 더 제공하지 않는다.
++- public 입력은 slotIds뿐이고 별도 append/replace/위치/구분자 명령은 없다.
++
++반례 경로: 기존 global text가 T이고 두 slot caption이 P/Q일 때 호출한다. 결과가 T에 append인지 replacement인지, P/Q 사이 separator와 label prefix는 무엇인지 Source만으로 유일하게 결정되지 않는다. label order가 column-major일 때 “layout order”가 그것을 따르는지, hidden/merged slot의 번호 및 empty caption을 어떻게 처리하는지도 결과 text에 영향을 준다.
++
++필요한 수정: Backend annotation의 단일 formatting/ordering 원천과 insertion 대상·기존 text 보존·구분자·빈 입력·반복 호출의 의미를 구체화한다. wrapper별 문자열 조합이나 하위 코드의 현재 문자열을 자동 권위로 삼는 방안은 피한다.
++
++### C3 / P2 — caption 포함 auto export 높이의 계산 계약이 없다
++
++근거:
++- `sourcescript/frontend/renderer.py:357-388`, 특히 `:370`: auto height를 “logical dashboard geometry와 caption layout”으로 계산한다고만 한다.
++- `sourcescript/backend/layout_annotations.py:115-154`: dashboard naturalHeight와 grid slot geometry는 정해져 있으나 caption block의 측정 입력/영역/높이 합성 규칙은 없다.
++- `sourcescript/frontend/renderer.py`와 다른 Source의 caption 관련 선언에도 export caption layout을 산출하는 식별 가능한 원천/알고리즘은 없다.
++
++반례 경로: 같은 width/aspect에서 caption을 enabled로 켜고 긴 text를 넣은 뒤 print.save(auto)를 실행한다. caption 영역을 figure 아래 추가할지 dashboard 영역 안에서 줄일지, name/body/afterText 및 줄바꿈의 어느 측정 결과를 전체 높이에 더할지가 미정이다. 출력 크기와 clipping, raster limit 판정이 달라질 수 있다.
++
++필요한 수정: caption layout의 입력(text/name/afterText/settings/available width), 측정 결과의 의미, enabled/empty 처리, dashboard와 caption 높이의 합성 및 explicit-height와의 관계를 명시한다. 실제 canvas/font 측정 API나 scheduler/PNG encoding primitive까지 Source에서 고정하라는 뜻은 아니다. 플랫폼 종속 측정을 허용하더라도 무엇을 측정하고 어디에 합치는지는 공통 계약이어야 한다.
++
++## 정책 §4.6 세 축의 실제 근거
++
++| 축 | 확인 내용·판단 | 판정 |
++|---|---|---|
++| 논리적 완결성 | command current resolve/candidate/validation/one commit, public 성공 read/미commit, selection hint 생성·소비를 대조. R1–R4는 이어지지만 C1–C3의 초기 상태→문자열→geometry 출력이 미결정 | 미충족 |
++| 프로젝트 목적 부합 | README의 scientific figure/labels/captions/image export 및 system.PROJECT_PURPOSE_INVARIANTS와 대조. local/portable/copied-asset 책임은 유지되지만 필수 annotation/export 의미를 하위 단계로 미룰 수 없음 | 전체 충족 증거 부족 |
++| 중복·통합·확장 | 기본 path는 asset-domain, palette는 UI/graph의 별개 의미, selection은 validated hint와 공통 reconciliation, runtime zoom은 Frontend로 분리한 이유 확인. annotation formatting을 삽입/sample/dashboard/export가 공유해야 할 후보가 드러났으나 식별 가능한 단일 원천은 아직 없음 | 해당 통합 판단·구체화 미완료 |
++
++색상 UI palette와 graph palette는 소유/기능이 달라 합치지 않는 것이 맞다. cascade map은 기존 result의 한 command delta이며 새 persistent object-id/selection authority보다 작은 책임으로 남는다. 반면 label formatting/slot ordering/caption layout을 각 wrapper나 export 경로에서 독립 발명하면 중복 의미가 생기므로 Source의 기존 annotation 책임 안에서 원천을 정해야 한다.
++
++## 한계·다음 조건
++
++- 전수 runtime/regression/시각 비교 또는 lower fidelity 검증은 수행하지 않았다. 미확인 lower drift를 Source 문제로 역전시키지 않았다.
++- 새로운 C1–C3을 이번 요청에서 임의 수정하지 않았다. R1–R4 수정의 회귀로 단정하지 않으며, 이전 검토가 반환·선택 경계에 집중하면서 놓친 annotation 내부 계산/초기값의 공백이다.
++- 후속은 하나의 annotation 계산 ownership 단위에서 기본값·format/order·삽입·caption/export geometry를 구체화하고 create→enable→insert→export/FFPX roundtrip을 대조하는 것이다. 각 항목을 별도 bridge/registry로 만들지 않는다.
++- 문제가 해소된 뒤 세 축의 증거를 갱신하고 그때 Source closure를 판정한다. PlusCal stale/TLC 미실행/하위 코드 미반영 자체를 Source closure의 필수 실행 gate로 추가하지 않는다.
++- 이번 변경은 review 문서뿐이다. 실제 cumulative diff와 이유/대안/제외/순차 게시 한계는 `agent_space/patches/20261016-020.patch/.md`에 기록한다.
