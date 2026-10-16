@@ -1275,3 +1275,10 @@ Application boundary를 세 번째 authoritative FSM으로 만들지 않는다.
 - 회귀 항목 37/38과 기존 전체 split/portable browser regression, version checker, distribution build는 사용자 요청에 따라 GitHub Actions에서 실행한다. 결과는 `agent_space/reviews/review-20261016-001-selection-boundary.md`에 기록한다.
 - 검증 완료: 최종 code/test HEAD `5614061ccde797e16a2ee4afff6805254f22922e`에서 Actions regression 38842589879 (inline 38 + split 38), version 38842592395 통과. 같은 r33 application source의 distribution build/verify 38842438473 통과. 초기 실패와 보정/기록 감사는 review에 보존한다.
 - 전체 완료 아님: renderer와 남은 API/domain consumer의 direct access cutover, read projection 완성, 최종 통합 검증이 남는다. Source Code `stale` 유지. TLC 미실행.
+
+## 33. 2026-10-16 구현 진행 — image settings ownership
+
+- Source Code r34/r35 (WIP): image editor read와 targeted image renderer에 Backend immutable projection / Application query 경계를 연결한다. React editor는 read projection 전체를 mutation으로 재전송하지 않고 새 edit patch만 전달한다.
+- 현재 Backend slot-local settings를 기준으로 candidate를 구성·정규화·검증·commit한다. 같은 image asset을 참조하는 다른 slot은 변경하지 않는다. 실패 시 success reconciliation/render를 수행하지 않는다.
+- 최종 distribution HEAD `43a3a05bdbc82a125d34e603a5fbd858dd48c012`: Actions regression 38845564973 (inline 39 + split 39), version 38845567464 통과. 해당 application source build/verify 38845342850 통과. 실패·보정·파일별 commit 제한은 `agent_space/reviews/review-20261016-002-image-boundary.md`에 기록한다.
+- 이 단위는 전체 image/API/renderer cutover 완료가 아니다. full renderer, 나머지 API/domain consumer와 전체 lineage 대조가 남으며 Source Code `stale` 유지, TLC 미실행.
