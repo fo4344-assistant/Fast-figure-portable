@@ -194,8 +194,19 @@ def FastFigureApp():
     - project state를 render 자체에서 변경하지 않는다.
 
     처리:
-    persistent appearance palette를 FastFigureApi에서 읽어 Mantine CSS variable로 투영한다.
-    UI color luminance에서 primary contrast text를 계산한다.
+    persistent appearance palette의 이번 read copy를 FastFigureApi.appearance.readPalette에서 읽는다.
+    Backend default를 재정의하거나 UI draft와 병합하지 않는다. 매 render는 current read를 사용하고 장기 palette mirror를 만들지 않는다.
+    theme.colors.ffui의 10개 shade는 모두 uiColor, primaryColor=ffui, color scheme=light다.
+    body=uiBackgroundColor, text/default-color/primary-light-color=fontColor, default=uiSurfaceColor,
+    default-border/primary-filled=uiColor, dimmed=uiMutedColor, placeholder=uiSubtleColor,
+    disabled/disabled-border=uiDisabledBgColor, disabled-color=uiDisabledTextColor를 Mantine CSS 변수로 투영한다.
+    default-hover는 sRGB color-mix(uiColor 12%, uiSurfaceColor), filled-hover는 sRGB mix(uiColor 75%, #64748B),
+    primary-light/light-hover는 sRGB mix(uiColor 18%/24%, transparent)다.
+    uiColor의 각 hex channel을 0..1로 나누고 c<=0.04045이면 c/12.92, 아니면 ((c+0.055)/1.055)**2.4로 선형화한다.
+    luminance=0.2126*r+0.7152*g+0.0722*b이며 >0.179이면 primary contrast=#000000, 그 외 #FFFFFF다.
+    ffui filled/filled-hover/light/light-hover/light-color/contrast 변수는 위 primary 변수의 alias일 뿐 별도 값 authority가 아니다.
+    theme shadow의 black-alpha 색만 같은 alpha의 uiShadowColor/transparent sRGB mix로 바꾸며 shadow geometry는 유지한다.
+    paperColor는 graph paper, fontColor는 graph ink에도 쓰지만 UI surface/background와 graph paper를 같은 field로 합치지 않는다.
     FastFigureShell을 하나의 기존 React root에 render한다.
     """
     uiTree = "Fast Figure Mantine application tree"
