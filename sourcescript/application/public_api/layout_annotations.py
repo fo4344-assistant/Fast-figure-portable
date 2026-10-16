@@ -23,6 +23,71 @@ ANNOTATION_APPEARANCE_RESULT_RULE = (
     "오래된 read/성공 tuple로 위장하지 않는다. labels.finishPositionInteraction은 command가 아니라 현재 label read를 반환하는 완료 알림이다."
 )
 
+PROJECT_SLOT_RESULT_RULE = (
+    "project.setName은 성공 뒤 project.readName의 문자열, slots.swap은 committed boolean을 반환한다. "
+    "slots.setContentType/reset은 완료 값이 없는 operation이므로 성공/미commit 모두 None이다. "
+    "images.insertEmpty는 성공 뒤 실제 생성 asset의 detached copy, 미commit은 None이다. "
+    "미commit에는 success query/selection/completion을 실행하지 않는다. Backend/후속 query/render 오류는 caller에 전파한다. "
+    "후속 실패는 이미 commit한 Project를 rollback하지 않는다. 내부 adapter tuple을 공개하지 않는다. "
+    "명시 slotId를 받는 operation은 current Backend command가 검증하며 selected slot을 대신 사용하지 않는다."
+)
+
+
+def setProjectName(value, trim=False):
+    """문자열 변환, trim 요청 시 공백 제거, 최대 120문자. name 정규화/commit은 Backend가 소유한다."""
+    result, interfaceState, rendererInput = dispatchProjectCommand(
+        "PROJECT_NAME_CHANGED", {"value": value, "trim": trim},
+    )
+    if not result.committed:
+        return None
+    return dispatchProjectQuery("project-api", {"operation": "project.readName"})
+
+
+def setSlotContentType(slotId, contentType):
+    """slots.setContentType의 explicit slotId/type 입력. pending intent를 별도 session authority로 저장하지 않는다."""
+    result, interfaceState, rendererInput = dispatchProjectCommand(
+        "SLOT_TYPE_CHANGED", {"slotId": slotId, "contentType": contentType},
+    )
+    return None
+
+
+def resetSlotApi(slotId):
+    """explicit slot 하나의 local payload/owned chart reset. selection 변경은 성공 시 공통 reconciliation만 사용한다."""
+    result, interfaceState, rendererInput = dispatchProjectCommand("SLOTS_RESET", {"slotIds": [slotId]})
+    return None
+
+
+def swapSlots(sourceSlotId, targetSlotId):
+    """서로 다른 visible slot의 payload 교환. missing/hidden/same-id는 unchanged False, 성공 True. 오류는 전파."""
+    result, interfaceState, rendererInput = dispatchProjectCommand(
+        "SLOTS_SWAPPED", {"sourceSlotId": sourceSlotId, "targetSlotId": targetSlotId},
+    )
+    return result.committed
+
+
+def insertEmptyImageIntoSelectedSlot():
+    """
+    selectedSlotId scalar를 한 번 capture한다. slot-selection-context에서 visible image slot이 아니면 None/no command.
+    유효하면 아래 새 image 입력과 captured slotId만 SLOT_IMAGE_IMPORTED에 보낸다.
+    UTF-8 SVG: <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+    name="빈 이미지.svg", MIME="image/svg+xml". Backend가 current next-id/path와 image model을 계산하고
+    여전히 visible image slot인지 재검증하여 asset 생성+reference를 한 candidate로 commit한다.
+    이미지 표시 설정은 slot-local 규칙을 따른다. asset/model/project snapshot을 command 입력으로 만들지 않는다.
+    """
+    slotId = interfaceFSM.readState().selectedSlotId
+    context = dispatchProjectQuery("slot-selection-context", {"slotId": slotId})
+    if "context missing 또는 contentType != image":
+        return None
+    result, interfaceState, rendererInput = dispatchProjectCommand(
+        "SLOT_IMAGE_IMPORTED", {"slotId": slotId, "operation": "images.insertEmpty", "imageInput": "위 SVG bytes/name/MIME"},
+    )
+    if not result.committed:
+        return None
+    return dispatchProjectQuery("project-api", {
+        "operation": "assets.readDeletionTarget", "path": "result.changed의 실제 생성 image path",
+    })["target"]
+
+
 def prepareDashboardFileDrop(slotId):
     """
     slots.prepareFileDrop: slot-selection-context query의 visible target이 없으면 False이며 selection/Project는 그대로다.
