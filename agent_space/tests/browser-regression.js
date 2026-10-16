@@ -1207,6 +1207,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       const image = slotElement(target.id)?.querySelector(".slot-image");
       check(image?.classList.contains("manual") && image.style.width === "175%" &&
         image.style.left === "25%" && image.style.top === "75%", "targeted image projection missing");
+      const patched = api.images.setSettings({ scale: 190 });
+      check(patched.settings.scale === 190 && patched.settings.x === 25 && patched.settings.y === 75,
+        "partial image edit did not preserve untouched current Backend settings");
       const projection = appFSM.query("renderer", { operation: "slot-image", slotId: target.id });
       const authority = JSON.stringify(activeProject._state), frontend = appFSM.state;
       check(syncSlotImageElement(projection), "renderer rejected supplied image projection");
