@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "development-versions.json"
 SOURCE_SCRIPT_DIR = ROOT / "sourcescript"
+SOURCE_SETTINGS_PATH = SOURCE_SCRIPT_DIR / "backend" / "settings.json"
 VERIFICATION_DIR = ROOT / "verification"
 PSEUDOCODE_DIR = ROOT / "pseudocode"
 EXPECTED_PRECEDENCE = ["source-script", "pseudocode", "source-code"]
@@ -37,6 +38,12 @@ def layer_fingerprint(paths: list[Path]) -> str:
     return f"sha256:{digest}"
 
 
+def is_source_script_path(path: str) -> bool:
+    return (path.startswith("sourcescript/") and path.endswith(".py")) or (
+        path == SOURCE_SETTINGS_PATH.relative_to(ROOT).as_posix()
+    )
+
+
 def source_script_paths() -> list[Path]:
     if not SOURCE_SCRIPT_DIR.is_dir():
         raise VersionError("sourcescript directory is missing")
@@ -47,6 +54,15 @@ def source_script_paths() -> list[Path]:
     ]
     if not paths:
         raise VersionError("no Source Script files found")
+    if not SOURCE_SETTINGS_PATH.is_file():
+        raise VersionError("Source settings file is missing: sourcescript/backend/settings.json")
+    try:
+        settings = json.loads(SOURCE_SETTINGS_PATH.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise VersionError(f"Source settings JSON is invalid: {error}") from error
+    if not isinstance(settings, dict):
+        raise VersionError("Source settings JSON must be an object")
+    paths.append(SOURCE_SETTINGS_PATH)
     return paths
 
 
@@ -306,7 +322,7 @@ def validate_source_script_patch_record(changed: set[str], base: str) -> None:
     source_paths = sorted(
         path
         for path in changed
-        if path.startswith("sourcescript/") and path.endswith(".py")
+        if is_source_script_path(path)
     )
     if not source_paths:
         return
@@ -363,10 +379,7 @@ def validate_revision_progression(manifest: dict, base: str) -> None:
     current_layers = manifest["layers"]
     base_layers = base_manifest.get("layers", {})
 
-    source_changed = any(
-        path.startswith("sourcescript/") and path.endswith(".py")
-        for path in changed
-    )
+    source_changed = any(is_source_script_path(path) for path in changed)
     pseudocode_changed = any(
         path.startswith("pseudocode/") and path.endswith(".pcal")
         for path in changed
