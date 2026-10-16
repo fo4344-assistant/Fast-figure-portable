@@ -1391,11 +1391,11 @@
         normalizeSlotContents(candidate.slots);
         let target = candidate.slots.find((item) => item.id === slot.id);
         let current = normalizeImageSettings(target), values = payload.settings || {},
-          next = { ...current, fit: ["contain", "cover", "manual"].includes(values.fit) ? values.fit : current.fit };
+          next = { ...current, ...values, fit: ["contain", "cover", "manual"].includes(values.fit) ? values.fit : current.fit };
         if (next.fit === "manual") {
-          next.scale = Math.max(1, Math.min(1000, Number(values.scale) || 100));
-          next.x = Math.max(-100, Math.min(200, Number(values.x) || 50));
-          next.y = Math.max(-100, Math.min(200, Number(values.y) || 50));
+          next.scale = Math.max(1, Math.min(1000, Number(next.scale) || 100));
+          next.x = Math.max(-100, Math.min(200, Number(next.x) || 50));
+          next.y = Math.max(-100, Math.min(200, Number(next.y) || 50));
         }
         target.content.imageSettings = readImageSettings(next);
         validateProjectObjectState(candidate, { requireSlots: true });
