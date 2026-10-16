@@ -245,6 +245,18 @@ def prepareDashboardFileDrop(slotId, frontendActions):
     return accepted
 
 
+def applyUiPalette(projectProjection, notify):
+    """
+    supplied renderer ui-palette projection의 scalar field만 CSS에 적용한다.
+    --ui-color=uiColor, --paper=uiBackgroundColor, --ui-subtle=uiSubtleColor,
+    --ink=fontColor, --graph-bg=paperColor다. Backend를 조회하거나 default/DOM 색으로 project를 수정하지 않는다.
+    Application이 같은 current project의 figure projection도 전달하므로 graph paper/ink 변경을 새 figure로 표시한다.
+    notify가 참이면 기존 UI_PALETTE_CHANGED notification이며 추가 command/독립 render authority는 아니다.
+    MantineProvider의 전체 UI 변수 계산은 mantine_ui.FastFigureApp이 소유한다.
+    """
+    return "palette CSS projection"
+
+
 def applySlotStyle(projectProjection, notify):
     """
     변경:
