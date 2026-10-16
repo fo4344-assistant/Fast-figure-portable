@@ -192,7 +192,7 @@ class ProjectStateMachine:
            선택된 replace id/path가 더 이상 같은 대상을 가리키지 않으면 거부한다. stale 계획으로 덮어쓰거나 자동 재선택하지 않는다.
            candidate의 원천이 된 authority가 commit 전 바뀌면 그대로 commit하지 않고 현재 authority에 대해 재계산/검증한다.
            실패/취소는 미commit 결과이며 부분 변경/복구용 rollback/성공 hint를 만들지 않는다.
-           PROJECT_NAME_CHANGED는 value를 문자열로 변환하고 trim=True이면 양끝 공백 제거 뒤 최대 120문자로 제한해 meta.projectName candidate를 만든다.
+           PROJECT_NAME_CHANGED는 value를 문자열로 변환하고 trim=True이면 양끝 공백 제거 뒤 backend.defaults.naming.projectNameMaxLength로 제한해 meta.projectName candidate를 만든다.
            SLOT_TYPE_CHANGED는 explicit visible slotId를 resolve하며 type은 image일 때 image, 그 외 graph로 정규화한다.
            missing/hidden slot은 거부하며 선택되지 않았다고 pending type을 별도 저장하지 않는다.
            SLOTS_RESET은 explicit visible slotIds의 SLOT_LOCAL_DEFAULTS 복원과 owned chart 제거를 같은 candidate로 수행한다.
@@ -208,7 +208,7 @@ class ProjectStateMachine:
            nested axis patch는 해당 axis의 명시된 field에만 적용하고 다른 axis/global field를 버리지 않는다.
            project.appearance와 chart.editor가 각 의미의 원천이며 graph.data/layout/CSS는 candidate 계산/표시 결과다.
            label/caption create/load/missing/partial edit는 layout_annotations.ANNOTATION_SETTINGS_RULE을 사용한다.
-           LABEL_POSITION_CHANGED의 reset=True는 settings.json labels.settings.x/y를 Backend 내부에서 읽어 적용한다.
+           LABEL_POSITION_CHANGED의 reset=True는 settings.json backend.project_object.annotations.labels.settings.x/y를 Backend 내부에서 읽어 적용한다.
            SLOT_CAPTIONS_INSERTED는 current candidate와 payload.slotIds로 layout_annotations.insertSlotCaptions를 계산한다.
            no target이면 committed=False/unchanged이고 success read나 selection을 실행하지 않는다.
            JSON config 값/계산 결과를 Frontend state에서 다시 만들거나 별도 authority로 저장하지 않는다.
