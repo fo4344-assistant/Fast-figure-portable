@@ -1,0 +1,68 @@
+diff --git a/.github/workflows/development-layer-version.yml b/.github/workflows/development-layer-version.yml
+index 2503efe..ed846bc 100644
+--- a/.github/workflows/development-layer-version.yml
++++ b/.github/workflows/development-layer-version.yml
+@@ -14,7 +14,7 @@ on:
+       - 'scripts/build-portable.py'
+       - 'scripts/check-development-layer-versions.py'
+       - 'agent_space/AGENT.md'
+-      - 'agent_space/policies/source-script-policy.md'
++      - 'agent_space/policies/development-policy.md'
+       - 'agent_space/reviews/**'
+       - '.github/workflows/development-layer-version.yml'
+   workflow_dispatch:
+diff --git a/agent_space/AGENT.md b/agent_space/AGENT.md
+index 843b3d5..e8c4822 100644
+--- a/agent_space/AGENT.md
++++ b/agent_space/AGENT.md
+@@ -59,7 +59,7 @@
+ 
+ ## 정책 원천
+ 
+-- Source Script, PlusCal pseudocode, 선택적 TLA+/TLC verification model, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/source-script-policy.md`를 상위 정책 원천으로 사용한다.
++- Source Script, PlusCal pseudocode, 선택적 TLA+/TLC verification model, 대상 언어 구현의 작성·검토 원칙은 `agent_space/policies/development-policy.md`를 상위 정책 원천으로 사용한다.
+ - 해당 정책 원문은 사용자가 명시적으로 정책 변경을 지시한 경우에만 수정한다.
+ - 프로젝트 고유의 데이터 구조, 책임 배치, 식별자, 파일 형식, 해결 방안은 정책 문서에 추가하지 않고 `sourcescript/`, `agent_space/plans/`, `agent_space/docs/` 중 해당 책임 경로에 기록한다.
+ 
+diff --git a/agent_space/plans/plan-016.md b/agent_space/plans/plan-016.md
+index 113045a..32d99d5 100644
+--- a/agent_space/plans/plan-016.md
++++ b/agent_space/plans/plan-016.md
+@@ -30,9 +30,9 @@
+ 
+ - agent_space/AGENT.md
+ - agent_space/policies/policies.md
+-- agent_space/policies/source-script-policy.md
++- agent_space/policies/development-policy.md
+ 
+-source-script-policy.md는 현재 v0.2.6이며 Source Script → PlusCal pseudocode → 선택적 verification model → Source Code의 권위 관계, authoritative state 변경 경로, Single Source of Truth, 참조 무결성, Module decomposition hierarchy, Source Script 닫힘, pseudocode 직접 번역, verification decomposition, 대상 언어 구현 원칙을 정의한다.
++development-policy.md는 현재 v0.2.6이며 Source Script → PlusCal pseudocode → 선택적 verification model → Source Code의 권위 관계, authoritative state 변경 경로, Single Source of Truth, 참조 무결성, Module decomposition hierarchy, Source Script 닫힘, pseudocode 직접 번역, verification decomposition, 대상 언어 구현 원칙을 정의한다.
+ 
+ 이 계획에 직접 적용되는 정책 판정은 다음과 같다.
+ 
+@@ -50,7 +50,7 @@ Frontend component, Frontend FSM, renderer가 activeProject 내부 field를 직
+ 
+ ### 1.3 읽기와 mutation은 같은 경로일 필요가 없지만 계층 경계는 보존한다
+ 
+-source-script-policy.md는 읽기와 계산까지 mutation 경로와 동일하게 강제할 필요는 없다고 명시한다.
++development-policy.md는 읽기와 계산까지 mutation 경로와 동일하게 강제할 필요는 없다고 명시한다.
+ 
+ 따라서 Frontend read request가 Project EFSM.send를 통과할 필요는 없다.
+ 
+diff --git a/agent_space/policies/source-script-policy.md b/agent_space/policies/development-policy.md
+similarity index 100%
+rename from agent_space/policies/source-script-policy.md
+rename to agent_space/policies/development-policy.md
+diff --git a/agent_space/policies/policies.md b/agent_space/policies/policies.md
+index b74c43b..d035013 100644
+--- a/agent_space/policies/policies.md
++++ b/agent_space/policies/policies.md
+@@ -4,7 +4,7 @@
+ 
+ 현재 정책 원천:
+ 
+-- `source-script-policy.md`
++- `development-policy.md`
+   - 사용자 지시에 따라 개정된 `v0.2.6`
+   - Source Script → PlusCal/TLA+ pseudo code → TLC 검사 (선택) → Source Code (대상 언어 구현) -> Source Script 개선 순서
+   - verification code의 독립 재설계 금지
