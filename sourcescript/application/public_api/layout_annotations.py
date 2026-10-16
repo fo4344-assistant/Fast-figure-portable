@@ -313,8 +313,11 @@ def setLabelsApiPosition(x, y):
 
 
 def resetLabelsApiPosition():
-    """labels.resetPosition: 기존 origin (0, 0) edit를 같은 position command에 전달하고 fresh label state/False를 반환한다."""
-    return setLabelsApiPosition(0, 0)
+    """labels.resetPosition: Backend가 settings.json labels.settings.x/y를 같은 position command에서 적용한다."""
+    result, interfaceState, rendererInput = dispatchProjectCommand("LABEL_POSITION_CHANGED", {"reset": True})
+    if not result.committed:
+        return False
+    return readLabelsApiState()
 
 
 def finishLabelsApiPositionInteraction():
@@ -369,17 +372,17 @@ def setSlotCaptionText(slotId, text):
     return dispatchProjectQuery("project-api", {"operation": "captions.readSlot", "slotId": slotId})
 
 
-def insertSlotCaptionsIntoGlobalCaption(slotIds):
+def insertSlotCaptionsIntoGlobalCaption(slotIds=None):
     """
     변경:
     - project-level global caption text.
 
     처리:
-    1. 지정 또는 현재 visible slot object를 layout order로 resolve한다.
-    2. non-empty slot.caption을 label/text projection으로 계산한다.
-    3. 계산한 text를 사용자 명령에 따라 global caption text에 삽입한다.
-    4. source slot.caption 값과 slot ownership은 변경하지 않는다.
-    5. wrapper는 slotIds만 전달하고 SLOT_CAPTIONS_INSERTED command가 위 resolve/insertion 계산과 commit을 수행한다.
+    1. wrapper는 slotIds만 전달한다. None은 전체, []는 no target이다.
+    2. Backend layout_annotations.insertSlotCaptions가 current visible anchor의 전체 label 순서와 정확한 caption 문자열로 계산한다.
+    3. 연속 동일/뒤따르는 empty를 label range로 묶고, 시작 empty는 label만 두며 기존 global text의 맨 뒤에 공백 구분으로 append한다.
+    4. source slot.caption/ownership/afterText/name/settings는 변경하지 않는다. no target은 unchanged False다.
+    5. SLOT_CAPTIONS_INSERTED 내부의 candidate 계산/전체 검증/one commit 이후에만 공식 read를 반환한다.
     """
     result, interfaceState, rendererInput = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
     if not result.committed:
