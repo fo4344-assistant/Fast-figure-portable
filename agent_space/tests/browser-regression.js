@@ -1235,6 +1235,34 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "missing selection must not update an image");
     });
 
+    await run(40, "print settings use Backend queries and current-authority partial commands", async () => {
+      api.print.setSettings({ width: 1400, heightMode: "explicit", height: 800, dpi: 300, format: "png" });
+      const beforeRead = JSON.stringify(activeProject._state), frontendBeforeRead = appFSM.state;
+      const stale = api.print.readSettings();
+      check(Object.isFrozen(stale) && stale !== activeProject.exportSettings, "print projection is not immutable/detached");
+      check(JSON.stringify(activeProject._state) === beforeRead && appFSM.state === frontendBeforeRead,
+        "print query changed authority");
+      api.print.setSettings({ width: 1800, dpi: 600 });
+      const result = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", { settings: { format: "jpeg" } });
+      const current = api.print.readSettings();
+      check(result.committed && current.width === 1800 && current.dpi === 600 && current.height === 800 &&
+        current.format === "jpeg" && stale.width === 1400 && stale.format === "png",
+        "partial command used defaults or stale projection instead of Backend authority");
+      check(!/activeProject|projectEFSM|readProjectNumber/.test(readPrintApiSettings.toString() + setPrintApiSettings.toString()),
+        "print API retains direct Backend authority or candidate calculations");
+      const clamped = api.print.setSettings({ width: 99999, heightMode: "explicit", height: 1, dpi: 9999 });
+      check(clamped.width === 20000 && clamped.height === 100 && clamped.dpi === 1200 && clamped.format === "jpeg",
+        "Backend did not preserve print normalization semantics");
+      const auto = api.print.setSettings({ heightMode: "auto", height: 1234, format: "invalid" });
+      check(auto.height === null && auto.format === "jpeg" && auto.width === 20000,
+        "auto height or invalid-format fallback changed");
+      const beforeFailure = JSON.stringify(activeProject._state), frontendBeforeFailure = appFSM.state;
+      let failed = false;
+      try { api.print.setSettings({ width: Symbol("invalid-width") }); } catch { failed = true; }
+      check(failed && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === frontendBeforeFailure,
+        "failed print command changed Project or reconciled Frontend success");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
