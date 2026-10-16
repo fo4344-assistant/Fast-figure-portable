@@ -1172,6 +1172,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "failed Backend command reconciled success or changed authority");
       api.assets.createDirectory("/assets/csv", "boundary-reconcile");
       const destination = "/assets/csv/boundary-reconcile";
+      appFSM.send("SELECT_ASSET", { kind: "csv", path: original });
       api.assets.move(api.assets.planMove(original, destination));
       check(appFSM.state.assetPath === `${destination}/boundary-reconcile.csv`,
         "asset move did not reconcile selected path");
