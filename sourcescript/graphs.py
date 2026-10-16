@@ -270,13 +270,24 @@ def graphEditorObjectValues(chartId, index, values):
     - 최종적으로 graphEditorCommit(chartId, ...)을 통해 explicit chart object state를 변경한다.
 
     처리:
-    1. chartId와 index를 Backend current authority에서 resolve하고 대상 object의 csvId/column reference를 함께 확인한다.
-    2. enum 값과 numeric range를 검증/제한하여 current object array에서 해당 index만 바꾼 candidate objects를 만든다.
-    3. 허용 field만 candidate object에 반영하고 다른 object/reference는 유지한다.
-    4. graphEditorCommit(chartId, candidateObjects, index)를 호출해 GRAPH_OBJECTS_REPLACED 공식 command로 commit한다.
+    1. Application wrapper는 chartId/index와 새 values만 GRAPH_OBJECTS_REPLACED command input으로 전달한다.
+       아래 계산은 Backend command의 one-object edit candidate branch가 수행한다. Frontend objects projection 전체를 되돌려 보내지 않는다.
+    2. Backend current authority에서 chartId/index와 editable object를 resolve한다. 없으면 state 변경 없이 거부한다.
+    3. values.csvId가 current project에서 유효한 CSV로 resolve되면 그 CSV를 사용한다. 없거나 invalid면 기존 object.csvId를 resolve한다.
+       둘 다 resolve되지 않으면 거부한다. 요청 CSV로 reference를 바꾸는 기존 기능을 없애지 않는다.
+    4. 선택한 CSV의 headerLines/rows로 columns와 base object defaults를 계산한다. 새 x/y가 유효하면 사용하고,
+       아니면 기존 x/y가 그 CSV에 유효할 때 유지하며, 둘 다 아니면 해당 CSV의 기본 column을 사용한다.
+    5. type/axis/color/style enum과 numeric range는 기존 graph-object 규칙으로 검증/제한한다.
+       current object array에서 index object만 바꾸고 다른 object/reference와 Frontend current CSV selection은 유지한다.
+    6. whole-project candidate를 검증한 뒤 GRAPH_OBJECTS_REPLACED로 한 번 commit한다.
+       post-commit requestedIndex는 index-only Frontend input이며 CSV selection을 강제로 변경하지 않는다.
+       graphEditorCommit(chartId, objects, index)는 Backend 내부에서 이미 계산한 candidate objects를 전달하는 wrapper에만 사용하고
+       Frontend read projection을 일반 object replacement authority로 취급하지 않는다.
     """
-    candidateObjects = "chartId의 current objects에서 index object만 values로 정규화한 candidate"
-    return graphEditorCommit(chartId, candidateObjects, index)
+    return dispatchProjectCommand(
+        "GRAPH_OBJECTS_REPLACED",
+        {"chartId": chartId, "index": index, "values": values, "selectedIndexHint": index},
+    )
 
 
 def graphEditorSetEditable(slotId, chartId, editable):
