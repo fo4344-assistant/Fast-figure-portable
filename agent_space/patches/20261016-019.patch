@@ -1,0 +1,357 @@
+diff --git a/agent_space/plans/plan-018.md b/agent_space/plans/plan-018.md
+new file mode 100644
+index 0000000..744b7b0
+--- /dev/null
++++ b/agent_space/plans/plan-018.md
+@@ -0,0 +1,64 @@
++# Plan 018 — Source r34 review R1–R4 수정
++
++## 요청·기준
++
++사용자 요청: 리뷰 결과를 확인하고 수정 계획을 작성한 다음 그 계획에 따라 작업한다.
++
++- 기준 main: `9d3a5b970223805f410d9e92425269cf1872992f`.
++- 근거: `agent_space/reviews/review-20261016-014-policy-first-source-r34.md`.
++- Plan 017의 Source-first 작업을 잇는 한정 수정 단위다. Source의 전체 closed 또는 하위 번역 재개를 목표로 하지 않는다.
++- 수정 전에 본 계획을 작성한다. 실제 실행 결과는 진행 절에 별도로 기록한다. 정책은 변경하지 않는다.
++
++## 수정 순서·결정
++
++### 1. R1: 기본 import directory 단일화
++
++`PROJECT_ASSET_DIRECTORIES`를 실제 immutable canonical path 값으로 명확히 하고 router가 그 정의를 사용하게 한다. data 분류는 기존 csv key, image 분류는 image key를 사용한다. `/assets/image` alias나 새 root, 새 query를 만들지 않는다. 전달된 기본 path도 command에서 current VFS 검증을 거친다.
++
++### 2. R2: programmatic slot 선택과 일반 선택 구별
++
++기존 `SELECT_SLOT`의 검증된 `selectionHint` 의미를 끝까지 따른다.
++- ui-to-fsm/toggle-clear: 일반 사용자 선택이며 기존 graph/asset clear 의미 유지.
++- model-to-fsm/clear-graph-object: 같은 slot도 toggle하지 않고 graph selection만 clear하며 current asset selection은 유지.
++- explicit none: 명시적 deselection의 기존 전체 선택 해제 의미 유지.
++
++Backend validation → Application adapter → Frontend FSM의 같은 경로를 수정한다. raw direction을 Frontend가 다시 해석하거나, wrapper가 선택 snapshot을 저장했다가 복구하지 않는다. 이미 command reconciliation이 제거한 invalid asset을 되살리지 않는다.
++
++### 3. R3: 빈 CSV create와 선택 owner 서술 통일
++
++Backend create command/helper는 일반 CSV 생성만 소유하고 Frontend를 변경하지 않는다. public `createEmptyProjectCsvAndSelect()`가 committed asset의 실제 path로 별도 검증된 SELECT_ASSET을 보낸다. chart/object 자동 생성, 추가 command, 숨은 rollback은 없다.
++
++### 4. R4: cascade reference 제거의 chart별 index remap
++
++CSV 삭제·trash 진입 detach·trash 비우기는 기존 candidate 안의 실제 reference 제거 순서에서 chart별 old index → post index/none 관계를 계산한다. 중복된 object 값도 배열의 원래 위치로 구별하며 persistent object id를 새로 만들지 않는다.
++
++- 제거된 선택 object → none. 살아 있는 선택 object → 동일 object의 새 index.
++- affected chart만 command-local `ProjectMutationResult.selectionHints`에 mapping을 기록한다.
++- 기존 Backend reconciliation이 현재 owning chart와 old index에 대해 mapping을 소비해 최종 scalar만 Frontend에 전달한다.
++- reset/explicit clear가 우선이고, graph 직접 편집의 기존 explicit index hint 의미는 유지한다. cascade mapping이 없는 unrelated chart는 기존 선택을 유지한다.
++- 실패에는 mapping/성공 reconciliation이 없고, 제거 count를 mapping 대신 쓰지 않는다. 독립 CSV 선택은 기존 asset reference 검증만 따른다.
++- mapping은 한 command의 immutable delta이며 공유 snapshot/selection authority가 아니다. wrapper/Frontend에 old objects 배열을 전달하거나 post-hoc SELECT_GRAPH_OBJECT를 호출하지 않는다.
++
++## 확인 항목
++
++1. 선택 slot 없는 새 project에 image/data import: 선언된 fixed directory로 라우팅.
++2. 같은/다른 target connect 성공: target 선택, graph 선택 clear, 유효한 독립 asset 선택 보존. 거부/미commit은 성공 선택 없음.
++3. 사용자 slot 선택/toggle 및 explicit none: 기존 clear 의미 유지.
++4. 빈 CSV 생성 성공/selection 거부: 한 create, 선택은 Application 소유, 이미 commit된 asset 유지.
++5. `[A,B,C]`에서 B 선택 후 A 제거 → `[B,C]`의 index 0; B 제거 → none; C 제거 → B의 index 1.
++6. 동일 CSV의 여러 object, 값이 같은 중복 object, 여러 affected chart, unrelated selected chart, 마지막 object 삭제를 대조.
++7. delete/trash/empty-trash의 같은 cascade 규칙 및 failed candidate에서 unchanged를 대조.
++8. metadata revision/fingerprint와 실제 누적 patch 기록을 갱신하고 GitHub Actions의 cumulative-base version checker를 실행한다. 의미 대조는 정적 검토이며 실행 테스트와 구별한다.
++
++## 산출물·제외
++
++Source r35 current/open, 대응 revision/fingerprint, 후속 검토 문서와 `YYYYMMDD-NNN.patch/.md`를 작성한다. Contents API의 순차 commit 및 같은-commit 기록 한계는 patch 설명에 명시한다. 모든 helper/임시 파일은 현재 작업 경로 아래에 두고 Source/application/checker/test/build/TLC를 로컬 실행하지 않는다.
++
++PlusCal/model/Source Code, 정책, test/build/dist는 수정하지 않는다. 전체 selection/import-edit-export 왕복과 목적/중복통합의 닫힘 검토는 후속이다. checker 성공을 의미적 전체 closure로 표현하지 않는다.
++
++## 진행
++
++- 계획 선행 게시: `3cd65831e800c8836bfeaa20894c5123936dc314`. 이후 R1~R4를 위 순서대로 Source에 반영했다.
++- Source r35 current/open, fingerprint `sha256:6b1b16ef3e2a0e5725c9fa7b7191bda06265b96cc1844d7a94a130d4d3c97ef9`. 하위 layer는 stale 유지.
++- 결과/20개 정적 시나리오: `agent_space/reviews/review-20261016-015-review-fixes-r35-open.md`. 실행 테스트로 표시하지 않는다.
++- 누적 실제 diff/변경 이유/대안/제외 사항은 `agent_space/patches/20261016-019.patch/.md`로 기록한다. cumulative-base Actions checker는 pair 게시 후 실행하고 결과를 추가 기록한다.
+diff --git a/agent_space/reviews/review-20261016-015-review-fixes-r35-open.md b/agent_space/reviews/review-20261016-015-review-fixes-r35-open.md
+new file mode 100644
+index 0000000..87ad154
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-015-review-fixes-r35-open.md
+@@ -0,0 +1,71 @@
++# Plan 018 — R1–R4 수정 후 Source r35 정적 대조 / OPEN
++
++## 기준·범위
++
++- 사용자 요청: review 결과 확인 → 수정 계획 작성 → 계획에 따라 작업.
++- 기준 main: `9d3a5b970223805f410d9e92425269cf1872992f`.
++- 근거 검토: `agent_space/reviews/review-20261016-014-policy-first-source-r34.md`.
++- 먼저 `agent_space/plans/plan-018.md`를 작성·게시했다(`3cd65831e800c8836bfeaa20894c5123936dc314`). 그 다음 Source 의미를 수정했다.
++- 직전 검토에서 개발 정책 전체를 재독했으며 이번 변경 전에 AGENT와 관련 Source 원문을 다시 확인했다. 정책 변경은 없다.
++- Source Python 표기의 알고리즘/계약 대조다. Source/application/test/checker/build/TLC를 로컬 실행하지 않았다.
++
++## 수정 결과
++
++| 항목 | 실제 변경 | 정적 판정 |
++|---|---|---|
++| R1 기본 경로 | assets_files.PROJECT_ASSET_DIRECTORIES를 실제 canonical path scalar로 명확히 하고 Application router가 data→csv key / image→image key를 사용 | 기존 `/assets/images` root와 일치, 단수 alias/새 query 없음 |
++| R2 connect 선택 | Backend 검증의 기존 clear-graph-object hint를 Frontend SELECT_SLOT까지 적용 | non-null model-to-fsm은 graph만 clear/asset 유지, user toggle 및 explicit none은 기존 전체 clear |
++| R3 빈 CSV owner | Backend graph 규칙을 create-only로 수정하고 Application의 committed create-and-select 경로를 명시 | command의 Frontend 직접 선택 서술 제거 |
++| R4 cascade index | 기존 ProjectMutationResult.selectionHints에 chart별 graphObjectIndexMaps를 구체화하고 reconciliation이 소비 | 제거된 object는 clear, retained object는 같은 object의 새 index, unrelated chart 유지 |
++
++R1~R3은 기존 문장의 불일치를 해소했다. R4는 이전에 빠져 있던 delta 생성/소비 알고리즘을 상위 Source에 추가한 것이며, 단지 하위 코드의 현재 동작으로 추정해 통과시킨 것이 아니다. 실제 application 구현/실행 확인은 아직 하지 않았다.
++
++## 책임·참조 관계
++
++- 기본 directory 정의는 asset-domain의 immutable schema 값이다. 현재 VFS 상태의 우회 read/query가 아니며 command는 여전히 current directory를 검증한다. 새 root/호환 alias/자동 root 생성은 없다.
++- model-to-fsm의 asset 보존은 이미 reconciliation을 통과한 현재 Frontend 선택에 적용한다. 제거된 target을 예전 snapshot에서 복구하지 않는다. Frontend는 raw direction 또는 Backend registry를 다시 읽지 않고 validated hint만 소비한다.
++- empty CSV create helper/command는 persistent CSV만 생성한다. 선택은 Application public composition의 기존 SELECT_ASSET 검증 경로다. selection 거부가 이미 완료된 create를 숨은 rollback하지 않는다.
++- cascade filter는 command가 실제로 제거한 original positions를 사용한다. 결과 mapping은 `[{chartId, indices}]`이며 chart별 old index entry에 post index 또는 none을 담는다. 같은 값의 object도 위치로 구별한다.
++- Backend reconciliation은 reset/clear → matching explicit index hint → matching cascade map → 기존 index 순으로 후보를 결정하고 current chart/post array에 대해 최종 검증한다. direct graph delete의 명시적 none은 바꾸지 않는다.
++- 이 delta는 한 command의 immutable 결과다. persistent object id/새 selection authority/별도 Frontend 전이/old objects projection을 추가하지 않았다. Application은 mapping을 저장하지 않고 최종 scalar를 Frontend에 전달한다.
++
++## 정적 시나리오 — 실행 테스트 아님
++
++| # | 입력/경로 | 선언된 결과 |
++|---|---|---|
++| 1 | slot 미선택 image file | 기본 image key → `/assets/images`, current directory 검증 |
++| 2 | slot 미선택 csv/tsv/json data | 기본 csv key → `/assets/csv`, 기존 분류/단일 helper 유지 |
++| 3 | explicit target 있음 | 기존 importToSlot, 기본 directory router로 우회하지 않음 |
++| 4 | 같은 target connect 성공 | target 선택 유지/no toggle, graph clear, 유효한 독립 asset 유지 |
++| 5 | 다른 target connect 성공 | target/workspace 변경, graph clear, 유효한 독립 asset 유지 |
++| 6 | connect 미commit/invalid target | 성공 SELECT_SLOT 없음; rejected input이면 기존 runtime 유지 |
++| 7 | 일반 user slot 선택/동일 id toggle | 기존 asset+graph clear 및 toggle 유지 |
++| 8 | explicit none, model-to-fsm 포함 | direction과 무관한 전체 deselection |
++| 9 | 빈 CSV create 성공/선택 거부 | create 한 번; 선택만 거부, CSV commit 유지, 자동 chart 없음 |
++| 10 | `[A,B,C]`, B 선택, A 제거 | map `[none,0,1]`, old index 1→0으로 B 유지 |
++| 11 | 같은 배열, B 선택, B 제거 | map `[0,none,1]`, old index 1→none; C를 선택하지 않음 |
++| 12 | 같은 배열, B 선택, C 제거 | map `[0,1,none]`, B index 1 유지 |
++| 13 | 동일 값/동일 CSV의 복수 reference | actual removed original indices로 계산; equality 매칭/제거 count 추정 없음 |
++| 14 | 여러 chart에서 CSV 제거 | affected chart별 별도 map, 현재 owning chart의 항목만 적용 |
++| 15 | unrelated selected chart/image-only detach/단순 path move | cascade map 없음, 기존 유효 graph 선택 유지 |
++| 16 | 모두 제거/마지막 object/direct graph delete | cascade는 all-none map, 직접 delete는 기존 explicit-none; 이웃 자동 선택 없음 |
++| 17 | delete/trash 진입/empty-trash | 같은 actual reference filter와 공통 mapping 알고리즘 사용 |
++| 18 | candidate 실패/authority 재계산 | 실패는 성공 map/reconciliation 없음; 재계산은 새 authority 기준 mapping |
++| 19 | CSV asset 선택과 graph object 선택이 독립 | remap은 index-only; asset path의 제거/trash 판정은 기존 별도 reconciliation |
++| 20 | imported conversion object | 기존 representation/reference 판정으로 cascade 수집 대상에서 제외 |
++
++## 대안·복잡도 판단
++
++- R2에서 모든 slot 선택의 asset clear를 없애면 사용자 선택의 기존 의미까지 바뀐다. 검증된 기존 hint의 구분만 적용했다.
++- affected chart를 무조건 clear하면 retained object 선택을 불필요하게 잃는다. 새 persistent object id보다 기존 배열 filter의 old→new delta가 작고 목적에 맞는다.
++- equality 검색은 같은 값의 중복 object를 구별하지 못한다. 제거 count는 어느 index가 제거되었는지 나타내지 못한다.
++- Application의 선택 snapshot 복구/사후 SELECT_GRAPH_OBJECT는 현재 독립 CSV 선택과 단일 reconciliation을 훼손하므로 사용하지 않았다.
++- 새로운 API/query registry, schema migration, bridge, 실행 가능한 Source framework는 추가하지 않았다.
++
++## 닫힘·전파·검증 상태
++
++- Source r35 current/open, closure_review null. fingerprint `sha256:6b1b16ef3e2a0e5725c9fa7b7191bda06265b96cc1844d7a94a130d4d3c97ef9`.
++- 이 단위의 R1~R4에는 생성/소비 owner와 반례의 처리 의미를 명시했다. 전체 selection/import-edit-export 왕복, 목적 적합성/중복통합의 최종 닫힘 검토가 완료되었다고 주장하지 않는다.
++- PlusCal r11/model r26/source-code r36은 stale 그대로다. 추후 Source closure 후 같은 경로/선택 hint/cascade delta를 PlusCal부터 번역하고 code로 전파해야 한다. 하위 layer의 lineage를 새 Source에 맞춘 것처럼 기록하지 않는다.
++- 정책/하위 코드/test/build/dist 변경 없음. metadata version checker는 GitHub Actions에서 cumulative baseline으로 확인할 예정이며 실제 결과는 실행 후 진행/패치 설명에 기록한다.
++- 기록은 Contents API 순차 commit이다. 최종 actual cumulative diff와 같은-commit 산출물 제한은 `agent_space/patches/20261016-019.patch/.md`에 남긴다.
+diff --git a/development-versions.json b/development-versions.json
+index 8031c16..e69558f 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 34,
++      "revision": 35,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py", 
+-      "fingerprint": "sha256:024c9de52803c2743ab65742753e94b09dd15fdaa1f3f1d40f34567c648478ac",
++      "fingerprint": "sha256:6b1b16ef3e2a0e5725c9fa7b7191bda06265b96cc1844d7a94a130d4d3c97ef9",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/sourcescript/application/adapter.py b/sourcescript/application/adapter.py
+index b080611..0c462b7 100644
+--- a/sourcescript/application/adapter.py
++++ b/sourcescript/application/adapter.py
+@@ -71,6 +71,8 @@ def dispatchSlotSelection(slotId, pendingContentType=None, direction="ui-to-fsm"
+ 
+     1. slotId 또는 explicit none과 direction을 validateFrontendIntent로 Backend current authority에서 검증한다.
+        ui-to-fsm은 같은 slot 재선택 시 toggle-clear, model-to-fsm은 같은 slot도 선택을 유지한다.
++       non-null model-to-fsm의 clear-graph-object hint는 graph 선택만 clear하고 현재 asset 선택을 유지한다.
++       explicit none은 direction과 무관한 전체 선택 해제이며 user toggle-clear의 기존 asset clear 의미도 유지한다.
+     2. rejected input이면 Frontend selection과 ProjectObject를 변경하지 않고 rejection을 반환한다.
+     3. accepted SELECT_SLOT을 Frontend FSM에 보내 selection toggle/workspace를 먼저 확정한다.
+     4. toggle 결과 selectedSlotId가 none이면 persistent mutation을 수행하지 않는다.
+@@ -95,7 +97,8 @@ def dispatchProjectCommand(event, payload):
+        read projection 전체를 mutation candidate로 보내거나 Application에서 current project의 복제본을 별도 검증하지 않는다.
+     3. commit 실패면 Frontend success reconciliation 없이 result, interfaceFSM.readState(), rendererInput none을 반환한다.
+     4. commit 성공이면 interfaceFSM.readState()의 id/path/index reference와 result를 buildFrontendReconciliationInput에 전달한다.
+-       object 편집의 selectionHints.chartId/selectedIndexHint도 이 경로에서만 post-commit 대상에 대해 검증한다.
++       object 편집의 selectionHints.chartId/selectedIndexHint와 cascade의 chart별 graphObjectIndexMaps도
++       이 경로에서만 post-commit 대상에 대해 검증한다. mapping은 command-local delta이며 저장/재사용하지 않는다.
+     5. interfaceFSM.reconcileProjectResult에 그 validated reconciliation input을 전달한다.
+        SELECT_GRAPH_OBJECT를 사후 재호출하지 않는다. index 보정 때문에 독립 current CSV 선택을 덮어쓰지 않는다.
+     6. final Frontend state를 request에 포함해 readBackendProjection("renderer")로 renderer용 immutable project projection을 만든다.
+diff --git a/sourcescript/application/public_api/assets.py b/sourcescript/application/public_api/assets.py
+index f5aca93..dd0305a 100644
+--- a/sourcescript/application/public_api/assets.py
++++ b/sourcescript/application/public_api/assets.py
+@@ -6,7 +6,7 @@ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈
+ """
+ 
+ from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection
+-from sourcescript.backend.assets_files import EMPTY_CSV_TEMPLATE
++from sourcescript.backend.assets_files import EMPTY_CSV_TEMPLATE, PROJECT_ASSET_DIRECTORIES
+ from sourcescript.frontend.interface_fsm import interfaceFSM
+ from sourcescript.frontend.renderer import downloadExportPayload
+ from sourcescript.application.public_api.graphs import importSelectedGraphFile
+@@ -268,7 +268,8 @@ def connectProjectAssetToSlot(path, kind, slotId):
+     처리:
+     path와 slotId를 current project에서 다시 resolve한다.
+     CSV는 SLOT_DATA_CONNECTED, image는 SLOT_IMAGE_LINKED라는 기존 kind-specific command로 수렴한다.
+-    단순 asset selection은 이 함수에서 변경하지 않는다.
++    command reconciliation 후에도 유효한 독립 asset selection은 model-to-fsm 선택에서 유지한다.
++    target graph selection은 clear하지만 asset을 다시 선택하거나 제거된 선택을 snapshot에서 복구하지 않는다.
+     """
+     event = "SLOT_DATA_CONNECTED if kind == csv else SLOT_IMAGE_LINKED"
+     # kind는 csv/image만 허용; 그 외 오류. command는 current path의 kind 일치/non-trash/visible slot을 재검증한다.
+@@ -330,8 +331,10 @@ def importProjectAssetFiles(files, planImport):
+     3. 각 file을 공식 fileKind query로 분류한다. data/image/slot만 지원하며 unknown은 throw, 뒤 input은 처리하지 않는다.
+        slot package는 target이 있어야 importSelectedGraphFile로 보낸다. .json은 fileKind에 따라 data이며 Plotly 추측 분기를 만들지 않는다.
+        Plotly JSON은 explicit graphs.importFile 경로를 사용한다. package 자체는 SLOT_CHART_IMPORTED 한 commit이다.
+-       data/image와 target이 있으면 importProjectFileToSlot, 없으면 kind별 /assets/csv 또는 /assets/image에
+-       importProjectFilesToDirectory([file], directory, planImport)를 사용한다. FFPX는 project.importFile 전용이며 여기서 추측하지 않는다.
++       data/image와 target이 있으면 importProjectFileToSlot, 없으면 immutable PROJECT_ASSET_DIRECTORIES에서
++       data는 csv key, image는 image key의 canonical path를 골라 importProjectFilesToDirectory([file], directory, planImport)를 사용한다.
++       이 상수는 기본 schema 값이지 current VFS projection이 아니다. directory의 실제 존재/권한은 command가 다시 검증한다.
++       단수 image alias/누락 root 자동 생성을 하지 않는다. FFPX는 project.importFile 전용이며 여기서 추측하지 않는다.
+     4. 파일마다 command가 current visible target/VFS/choice를 다시 검증한다. 성공 결과의 detached asset/chart를 input 순서로 모은다.
+        directory helper의 single-item 목록은 router 결과에 한 item으로 펼친다. 전체 성공은 그 목록을 반환한다.
+     5. choice 취소는 None, 미commit은 그 result를 반환하고 즉시 멈춘다. throw/rejection은 전파한다.
+diff --git a/sourcescript/backend/assets_files.py b/sourcescript/backend/assets_files.py
+index 7634425..24219f7 100644
+--- a/sourcescript/backend/assets_files.py
++++ b/sourcescript/backend/assets_files.py
+@@ -18,8 +18,8 @@ PACKAGE_FORMAT_VERSION = "현재 FFPX/FFSX package format version 3"
+ 
+ 
+ PROJECT_ASSET_DIRECTORIES = {
+-    "csv": "CSV 기본 directory; 현재 구현 path /assets/csv",
+-    "image": "image 기본 directory; 현재 구현 path /assets/images",
++    "csv": "/assets/csv",
++    "image": "/assets/images",
+ }
+ 
+ 
+@@ -456,6 +456,9 @@ def collectAssetReferences(csvIds, imageIds, state):
+     같은 chart 안에서 같은 실제 CSV를 여러 graph object가 참조하면 각각 별도 reference로 센다.
+     image는 참조하는 slot마다 하나의 reference로 센다.
+     confirmation count와 실제 cascade mutation이 같은 reference set을 사용한다.
++    CSV delete/trash 진입/empty-trash의 candidate filter는 제거 전 chart별 original object index를 구별한다.
++    실제 제거 위치는 projectEFSM의 공통 cascade index-map 계산에 사용하며 값이 같은 object를 equality로 재매칭하지 않는다.
++    conversion view는 위 reference 판정에 따라 제외하고, Frontend 선택이나 별도 persistent object id를 읽거나 만들지 않는다.
+     """
+     references = "asset reference object 목록"
+     return references
+diff --git a/sourcescript/backend/graphs.py b/sourcescript/backend/graphs.py
+index 141eb29..cc47f89 100644
+--- a/sourcescript/backend/graphs.py
++++ b/sourcescript/backend/graphs.py
+@@ -227,7 +227,9 @@ GRAPH_CSV_SELECTION_RULE = (
+ 
+ EMPTY_CSV_GRAPH_RULE = (
+     "assets.createEmptyCsv로 생성한 빈 CSV도 다른 project CSV와 동일한 csvId reference 대상이다. "
+-    "생성 command는 CSV를 선택 상태로 만들 뿐 chart/object를 자동 생성하지 않는다. "
++    "Backend 생성 command/helper는 일반 CSV 생성만 소유하고 Frontend 선택이나 chart/object를 변경하지 않는다. "
++    "public Application createEmptyProjectCsvAndSelect가 commit 성공 뒤 실제 CSV path로 검증된 SELECT_ASSET을 보낸다. "
++    "사후 선택 거부/오류는 이미 생성된 CSV를 rollback하거나 Backend 선택으로 대체하지 않는다. "
+     "사용자가 오브젝트 추가를 실행하면 graphEditorAdd는 그 현재 선택 CSV id를 resolve하여 기존 SLOT_DATA_CONNECTED 또는 "
+     "GRAPH_OBJECTS_REPLACED 경로로 graph object를 생성한다. 빈 CSV 전용 chart type, protected object, fake default object를 만들지 않는다."
+ )
+diff --git a/sourcescript/backend/project_efsm.py b/sourcescript/backend/project_efsm.py
+index 835f499..c425127 100644
+--- a/sourcescript/backend/project_efsm.py
++++ b/sourcescript/backend/project_efsm.py
+@@ -155,7 +155,12 @@ ProjectMutationResult = {
+     "changed": "command별 실제 changed ids/path/owner; create/import는 input 순서의 실제 생성 asset path/id와 owning chart/slot id, DATA_OBJECT_REPLACED는 실제 updated CSV path, PROJECT_DIRECTORY_CREATED는 실제 생성 directory path, PROJECT_NODE_MOVED는 실제 final destination path를 포함한다. 기존 공식 query의 post-commit read에 사용하며 stale input/plan path를 성공 결과로 재사용하지 않는다",
+     "removedGraphReferenceCount": "실제 제거한 graph-object CSV reference 수",
+     "resetImageSlotCount": "실제 image reference를 비운 slot 수",
+-    "selectionHints": "후속 interface reconciliation의 identity/path 결과와 해당 chartId에 한정된 optional selectedIndexHint; absence와 explicit none을 구별",
++    "selectionHints": (
++        "후속 reconciliation의 identity/path 결과와 chartId에 한정된 optional selectedIndexHint; absence와 explicit none을 구별. "
++        "CSV cascade는 graphObjectIndexMaps=[{chartId, indices}]를 사용한다. chartId는 중복 없는 실제 affected chart의 id, "
++        "indices는 제거 전 object 개수 길이의 배열이며 각 old index entry는 retained object의 post index 또는 제거된 경우 none이다. "
++        "identity/path나 objects snapshot을 대체하지 않는 한 command의 immutable delta다"
++    ),
+     "projectionEffect": "renderer effect를 결정할 수 있는 실제 commit 결과",
+ }
+ 
+@@ -209,7 +214,17 @@ class ProjectStateMachine:
+            graphs.addObject는 append된 index, graphs.moveObject는 제거 후 목적 위치 to, graphs.setObjectValues는 편집한 index,
+            graphs.deleteObject는 explicit none을 계산한다. current chart/index/from/to를 command에서 resolve하고 유효하지 않으면 commit 전에 거부한다.
+            이동은 from object를 제거해 최종 to 위치에 삽입하고 나머지 상대 순서를 유지한다. 마지막 object 삭제도 empty 배열로 유효하다.
+-           hint가 없는 command는 그 key를 생략하며 none과 혼동하지 않는다. 실패 결과에는 성공 hint를 넣지 않는다.
++           DATA_OBJECT_DELETED, PROJECT_NODE_MOVED의 entering-trash detach, PROJECT_TRASH_EMPTIED가 실제 graph reference를 제거하면
++           같은 candidate의 filter에서 chart별 retained original index 순서를 사용해 graphObjectIndexMaps를 계산한다.
++           원래 n개 object에 대해 indices를 n개의 none으로 시작하고 retained original indices [k0,k1,...]의
++           indices[kj]=j로 채운다. 예: [A,B,C]에서 A 제거는 [none,0,1], B 제거는 [0,none,1]이다.
++           동일 값의 중복 object/같은 CSV의 여러 reference도 original 위치로 구별한다. equality로 post 배열을 역매칭하지 않는다.
++           실제 제거가 있는 retained chart만 항목을 만들고 다른 chart/단순 path 이동/image-only detach에는 mapping을 만들지 않는다.
++           이 filter와 reference count는 asset-domain의 동일 actual reference set을 사용한다. conversion view는 그 집합에서 제외한다.
++           삭제된 chart는 current owner resolve 실패로 clear되므로 map이 필요 없다. 여러 affected chart는 각각 별도 항목을 만든다.
++           candidate 재계산 시 mapping도 새 authority에서 다시 계산한다. mapping을 persistent chart에 저장하거나 Frontend 선택을 읽지 않는다.
++           direct graphs.deleteObject의 explicit-none hint는 그대로 유지하며 cascade와 다른 선택 의미를 임의로 합치지 않는다.
++           hint가 없는 command는 그 key를 생략하며 none과 혼동하지 않는다. 실패 결과에는 성공 hint/map을 넣지 않는다.
+         7. interface state와 renderer를 변경하지 않고 result를 반환한다.
+         """
+         result = "ProjectMutationResult"
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index de726f3..c600424 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -275,7 +275,8 @@ FrontendValidatedInput = {
+     "reference": "validated slot/path/chart/object identity 또는 explicit none",
+     "workspaceHint": "Frontend가 project/slot.graph/slot.image workspace를 결정하는 데 필요한 immutable hint",
+     "selectionHint": (
+-        "event별 tagged meaning: SELECT_SLOT은 toggle-clear 또는 clear-graph-object; "
++        "event별 tagged meaning: SELECT_SLOT은 toggle-clear(일반 선택/전체 deselection의 graph+asset clear) 또는 "
++        "clear-graph-object(non-null model-to-fsm의 graph clear/asset 유지); "
+         "SELECT_ASSET은 csv/image/directory 또는 none; SELECT_GRAPH_OBJECT는 selectAsset=True일 때만 CSV canonical path, 그 외 none"
+     ),
+ }
+@@ -419,7 +420,9 @@ def validateFrontendIntent(event, payload):
+     explicit none은 accepted deselection이다. invalid identity를 none으로 바꾸어 승인하지 않는다.
+     SELECT_SLOT:
+       slotId를 visible slot에서 resolve한다. workspaceHint는 contentType image이면 slot.image, 아니면 slot.graph다.
+-      direction=model-to-fsm이면 clear-graph-object, 그 외 일반 selection은 toggle-clear hint를 반환한다.
++      non-null slot에 direction=model-to-fsm이면 clear-graph-object, 그 외 일반 selection은 toggle-clear hint를 반환한다.
++      explicit none은 direction과 무관하게 toggle-clear의 명시적 deselection이며 graph/asset 선택을 함께 해제한다.
++      hint가 Frontend의 clear 범위를 결정한다. raw direction이나 보존할 asset snapshot을 Frontend input에 추가하지 않는다.
+     SELECT_ASSET:
+       path를 current VFS에서 resolve하고 요청 kind와 일치하는 csv/image/directory만 승인한다.
+       reference는 canonical path, selectionHint는 resolved kind다. none이면 hint도 none이다.
+@@ -452,7 +455,12 @@ def buildFrontendReconciliationInput(event, mutationResult, frontendReferences):
+        여전히 존재하는 unrelated selection은 유지한다.
+     4. resetInterfaceSelection 또는 clearGraphSelection이면 graph selection을 clear한다. 그 외 reconciled slot의 editable graph chart를 resolve한다.
+        result.selectionHints에 selectedIndexHint가 있고 함께 제공된 chartId가 그 owning chart와 같으면 그 hint를 index 후보로 사용한다.
+-       hint 없음은 기존 integer index 유지이며, 명시적 none은 clear다. 다른 chart에 대한 hint는 현재 선택에 적용하지 않는다.
++       명시적 none은 clear다. matching explicit index hint가 없고 result.selectionHints.graphObjectIndexMaps에
++       current owning chartId의 항목이 있으면 기존 index를 그 indices의 old-index 위치에서 찾아 post-index/none으로 바꾼다.
++       original index가 none/non-integer/out-of-range이거나 mapping 값이 none이면 clear한다. 인접 object를 새로 선택하지 않는다.
++       mapping은 original index별 한 entry이며 0도 유효한 post-index다. 남은 숫자 index의 단순 범위 검사로 mapping을 대체하지 않는다.
++       matching hint/map이 없을 때만 기존 integer index를 유지한다. 다른 chart의 hint/map은 현재 선택에 적용하지 않는다.
++       resetInterfaceSelection/clearGraphSelection이 최우선, 그 다음 matching explicit index hint, 그 다음 cascade map 순서다.
+        image workspace/non-editable/no chart/none/out-of-range/non-integer 후보면 clear하고, 유효한 후보면 그 index를 반환한다.
+        hint는 command의 계산 결과로서 post-commit object 배열에 대해 검증한다. graph object를 ensure/normalize하지 않는다.
+        이 index-only 갱신은 asset selection/path를 변경하지 않는다. 별도 SELECT_GRAPH_OBJECT 전이나 사후 hint 적용은 없다.
+diff --git a/sourcescript/frontend/interface_fsm.py b/sourcescript/frontend/interface_fsm.py
+index 856bd16..9fbdfd8 100644
+--- a/sourcescript/frontend/interface_fsm.py
++++ b/sourcescript/frontend/interface_fsm.py
+@@ -64,8 +64,11 @@ FRONTEND_TRANSITION_RULES = {
+     "rejected": "accepted=False이면 state/revision/selection을 그대로 유지하고 publish하지 않는다.",
+     "SELECT_SLOT": (
+         "reference none이면 deselect; toggle-clear hint이며 같은 id이면 deselect; 그 외 validated id를 선택한다. "
+-        "workspace는 none이면 project, 아니면 workspaceHint다. 모든 accepted slot selection은 graphObject/index와 assetSelection/path를 clear한다. "
+-        "같은 id의 model-to-fsm 선택은 toggle하지 않는다. overlay는 explicit deselection이면 유지하고 non-null slot 선택이면 닫는다."
++        "workspace는 none이면 project, 아니면 workspaceHint다. 모든 accepted slot selection은 graphObject/index를 clear한다. "
++        "최종 reference가 none이거나 hint가 toggle-clear이면 assetSelection/path도 clear한다. "
++        "non-null reference와 clear-graph-object hint이면 현재 assetSelection/path를 그대로 유지한다. "
++        "따라서 model-to-fsm 선택은 같은 id도 toggle하지 않고 독립 asset 선택을 보존한다. raw direction이나 Backend를 다시 읽지 않는다. "
++        "overlay는 explicit deselection이면 유지하고 non-null slot 선택이면 닫는다."
+     ),
+     "SELECT_ASSET": (
+         "validated kind/path 또는 none을 assetSelection/path에 반영하고 graphObject/index를 clear한다. slot/workspace는 유지한다."
