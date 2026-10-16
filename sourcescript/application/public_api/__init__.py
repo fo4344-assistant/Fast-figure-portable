@@ -28,7 +28,7 @@ PUBLIC_API_METHODS = {
         "readName": "Backend query; args 없음; current project meta name immutable projection",
         "setName": "mutation; PROJECT_NAME_CHANGED project command로 project name candidate commit",
         "importFile": "lifecycle mutation; file 입력 -> PROJECT_LOADED 내부 FFPX parse/candidate/검증/commit -> 성공 시 immutable project snapshot; 실패/취소는 기존 경로로 전달",
-        "exportFile": "read/export; current validated project snapshot -> FFPX; project mutation 없음",
+        "exportFile": "assets.downloadProject; selected slot이면 None/no download, 그 외 FFPX handoff 후 None; 오류 전파/Project 보존",
     },
     "slots": {
         "readSelected": (
@@ -46,7 +46,7 @@ PUBLIC_API_METHODS = {
             "이미 선택된 valid target이면 selection 유지, 다른 target이면 model-to-fsm selection 보장 후 true. "
             "toggle 또는 pending content-type mutation 없음; drag runtime 정리만 수행"
         ),
-        "finishFileDrop": "runtime completion; drag/drop interaction state 정리, domain payload 자체는 import command가 소유",
+        "finishFileDrop": "layout_annotations.finishDashboardFileDrop; Frontend controller의 drag interaction cleanup 후 None; selection/Project 보존",
     },
     "images": {
         "readEditor": "read; selected slot -> image asset + slot-local imageSettings projection",
@@ -71,36 +71,36 @@ PUBLIC_API_METHODS = {
         "emptyTrash": "mutation; PROJECT_TRASH_EMPTIED project command로 trash references/assets/directories candidate removal commit",
         "draggableAsset": "read/calculation; slot connection drag payload로 사용할 수 있는 non-trash CSV/image asset projection; tree move 가능 여부와는 별도 판정",
         "connectToSlot": "mutation; CSV는 SLOT_DATA_CONNECTED, image는 SLOT_IMAGE_LINKED project command로 명시적 연결 commit",
-        "importToDirectory": "lifecycle mutation; ASSETS_IMPORTED project command로 batch file candidates -> collision plan -> one atomic commit",
-        "importToSlot": "lifecycle mutation; ASSETS_IMPORTED project command로 raw file asset + target slot/chart candidate -> one atomic commit",
+        "importToDirectory": "assets.importProjectFilesToDirectory; batch ASSETS_IMPORTED one commit -> input-order detached asset list; empty [], 취소 None, 미commit result, 오류 전파",
+        "importToSlot": "assets.importProjectFileToSlot; data/image asset + slot/chart ASSETS_IMPORTED one commit -> detached asset; slot package는 기존 graphs import로 detached chart; 취소 None, 미commit result, 오류 전파",
         "fileKind": "assets.readAssetFileKind -> Q assets.fileKind; copied name/type의 slot/data/image/empty kind 문자열; bytes/Project/Frontend 변경 없음",
-        "importFiles": "lifecycle router; supported files를 directory/slot import contract로 전달",
+        "importFiles": "assets.importProjectAssetFiles; captured explicit target과 input-order per-file helper; success detached item list, empty [], 취소 None/미commit result/throw에서 stop; earlier commit 유지, router 전체 atomic 아님",
         "collisionModel": "assets.readAssetCollisionModel -> Q assets.collisionModel; current VFS + reserved paths의 immutable 한 작업용 model",
         "resolveImportPlan": "assets.readAssetImportPlan -> Q assets.resolveImportPlan; current VFS 재검증한 path/replaceId; stale replace/invalid model은 오류, command commit은 별도 재검증",
         "selectDirectory": "runtime mutation; VFS-resolved directory selection",
         "selectCsv": "assets.selectProjectCsv(path) -> Q current CSV 확인 -> F SELECT_ASSET; 성공 detached CSV, missing/wrong-kind/거부 none; Project/slot 보존, graph object index clear",
         "selectImage": "runtime mutation; VFS-resolved image selection only; no slot mutation",
-        "download": "read/export; asset original bytes download, project mutation 없음",
+        "download": "assets.downloadProjectAsset; original bytes handoff True, missing/no bytes False, 오류 전파; disk 저장 보증 아님",
     },
     "graphs": {
         "readData": "read; selected chart objects + 단일 현재 CSV/columns + selected object csvId에서 별도로 resolve한 objectColumns; object reference는 현재 선택 대체 원천이 아님",
         "readLayout": "read; selected chart title/global/axis projection",
         "readPalette": "read; selected chart object color projection",
         "selectCsv": "runtime mutation; graph editor의 current CSV selection",
-        "setHeaderLines": "mutation; DATA_OBJECT_REPLACED project command로 referenced CSV headerLines candidate commit",
+        "setHeaderLines": "graphs.graphEditorSetHeaderLines; DATA_OBJECT_REPLACED -> fresh normalized headerLines scalar, 미commit result/오류 전파",
         "setEditable": "mutation; CHART_MODEL_REPLACED project command로 editable conversion + 필요한 CSV를 한 candidate로 commit",
         "addObject": "mutation; chart 있으면 GRAPH_OBJECTS_REPLACED, 없으면 SLOT_DATA_CONNECTED project command",
         "moveObject": "mutation; chartId/from/to와 operation=graphs.moveObject -> GRAPH_OBJECTS_REPLACED 내부 순서 계산/commit; result hint는 to",
         "selectObject": "runtime mutation; explicit public object selection은 valid index와 그 object의 CSV path를 함께 선택; commit index-only 갱신은 기존 CSV 선택 보존",
         "setObjectValues": "mutation; explicit chart/index와 새 values를 전달; Backend가 요청 csvId 또는 기존 CSV를 resolve한 one-object candidate를 GRAPH_OBJECTS_REPLACED로 commit",
         "deleteObject": "mutation; chartId/index와 operation=graphs.deleteObject -> GRAPH_OBJECTS_REPLACED 내부 제거/commit; result hint는 explicit none; 마지막 object도 empty chart로 허용",
-        "updateLayout": "mutation; CHART_LAYOUT_CHANGED project command로 chart title/global/axis candidate commit",
-        "applyPalette": "mutation; GRAPH_OBJECTS_REPLACED project command로 graph object color candidate commit",
+        "updateLayout": "graphs.graphEditorUpdateLayout; CHART_LAYOUT_CHANGED -> fresh title/global/axis read, 미commit result/오류 전파",
+        "applyPalette": "graphs.graphEditorApplyPalette; GRAPH_OBJECTS_REPLACED -> fresh detached chart, 미commit result/오류 전파",
         "defaultColors": "read; immutable default color sequence copy",
         "hasSelectedSlot": "read; current selected slot 존재 여부",
-        "importFile": "lifecycle mutation; SLOT_CHART_IMPORTED project command로 FFSX/Plotly candidate + target slot commit",
-        "exportFfsx": "read/export; selected graph slot + referenced CSV snapshot -> FFSX",
-        "exportPlotlyJson": "read/export; selected chart semantic figure -> Plotly JSON",
+        "importFile": "graphs.importSelectedGraphFile; SLOT_CHART_IMPORTED -> fresh detached chart, 미commit result/오류 전파",
+        "exportFfsx": "graphs.exportSelectedGraph operation graphs.exportFfsx; selected slot FFSX handoff 후 None; target 없음 None/no download, 오류 전파",
+        "exportPlotlyJson": "graphs.exportSelectedGraph operation graphs.exportPlotlyJson; semantic figure JSON handoff 후 None; target 없음 None/no download, 오류 전파",
     },
     "print": {
         "readSettings": "Backend query; current persistent export settings immutable projection",
@@ -133,15 +133,15 @@ PUBLIC_API_METHODS = {
         "resetPalette": "layout_annotations.resetAppearanceApiPalette; 유일한 default를 같은 setPalette 경로로 commit -> fresh palette/False",
     },
     "layout": {
-        "readState": "read; layout/style/visible slots/logical preview geometry projection",
-        "setStyle": "mutation; LAYOUT_STYLE_CHANGED project command로 slotStyle candidate validation/commit",
-        "setGrid": "mutation; GRID_LAYOUT_CHANGED project command로 safe resize candidate만 commit; implicit reflow 금지",
-        "setZoom": "runtime mutation; dashboard zoom intent only",
-        "commitZoom": "runtime notification; persistent layout state의 두 번째 copy를 만들지 않음",
-        "setZoomLocked": "runtime mutation; session zoom lock",
-        "resetZoom": "runtime mutation; session zoom default",
-        "mergeSlots": "mutation; SLOTS_MERGED project command로 one non-default slot-local payload만 anchor로 원자적 이동",
-        "splitSlots": "mutation; SLOTS_SPLIT project command로 anchor local payload 유지 + restored slots local defaults",
+        "readState": "layout_annotations.readLayoutApiState; Backend layout/preview copy + Frontend zoom/zoomLocked 합성; previewWidth 기본 600, transient read",
+        "setStyle": "layout_annotations.setLayoutApiStyle; LAYOUT_STYLE_CHANGED -> fresh public layout state/False",
+        "setGrid": "layout_annotations.setLayoutApiGrid; GRID_LAYOUT_CHANGED -> fresh public layout state/False; implicit reflow 금지",
+        "setZoom": "layout_annotations.setLayoutApiZoom; SET_DASHBOARD_ZOOM -> fresh layout state; finite 50..200/invalid 100, locked no-op",
+        "commitZoom": "layout_annotations.commitLayoutApiZoom; 완료 알림 한 번 -> fresh layout state; Project commit 없음",
+        "setZoomLocked": "layout_annotations.setLayoutApiZoomLocked; 처음 lock 시 Frontend measured width anchor, invalid False; repeated lock/no-op 또는 unlock 후 fresh read",
+        "resetZoom": "layout_annotations.resetLayoutApiZoom; unlock/width clear/100 percent 한 event -> fresh layout state",
+        "mergeSlots": "layout_annotations.mergeSlots; SLOTS_MERGED one commit -> fresh layout state/False; one non-default payload만 anchor로 이동",
+        "splitSlots": "layout_annotations.splitSlots; SLOTS_SPLIT one commit -> fresh layout state/False; anchor payload 유지/restored local defaults",
     },
 }
 
@@ -168,6 +168,19 @@ API_BOUNDARY_RULE = (
     "실패/취소에는 그 operation의 기존 실패 결과를 전달하고 성공 chart query를 하지 않는다. "
     "Frontend runtime event도 Backend identity validity가 필요하면 Application adapter가 검증한 input을 interfaceFSM에 전달한다. "
     "UI-local editor target, modal draft, pointer state는 public Backend API나 FFPX state가 아니다."
+)
+
+
+PUBLIC_LIFECYCLE_RULE = (
+    "public project.importFile, assets.importToDirectory/importToSlot/importFiles, graphs.importFile은 "
+    "adapter.runLifecycleTask(importing, 해당 operation, helper task) 안에서 한 번 실행한다. "
+    "project.exportFile/assets.download/graphs.exportFfsx/exportPlotlyJson/print.save/capture는 exporting으로 동일하다. "
+    "nested helper 호출은 public binding을 재진입하지 않으며 같은 task 안에서 command/query/helper를 직접 조정한다. "
+    "따라서 router가 child import helper를 호출해도 busy/self-rejection이나 중복 lifecycle start를 만들지 않는다. "
+    "ready가 아니면 query/choice/file read/download 전에 기존 busy rejection이며 task를 실행하지 않는다. "
+    "취소 None/미commit result/missing-target 반환도 LIFECYCLE_COMPLETE 후 원래 결과를 전달한다. "
+    "throw/rejection은 LIFECYCLE_FAILED -> ready recovery 뒤 원래 오류를 caller에 전파한다. "
+    "download 성공은 browser handoff일 뿐 사용자 disk 저장 확인을 뜻하지 않는다."
 )
 
 
