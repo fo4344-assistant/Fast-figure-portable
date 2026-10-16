@@ -18,6 +18,11 @@ on:
       - 'agent_space/reviews/**'
       - '.github/workflows/development-layer-version.yml'
   workflow_dispatch:
+    inputs:
+      base_sha:
+        description: 'Optional baseline commit for cumulative revision and patch-record validation'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -32,7 +37,7 @@ jobs:
           fetch-depth: 0
       - name: Validate development layer versions
         env:
-          BASE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.inputs.base_sha || github.event.before }}
         run: |
           if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
             python scripts/check-development-layer-versions.py --base "$BASE_SHA"
