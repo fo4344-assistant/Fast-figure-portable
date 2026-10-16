@@ -357,6 +357,7 @@ RENDERER_BACKEND_READ_CONTRACT = {
     "whole": (
         "default renderer request는 final frontendState와 optional mutationResult를 받는다. "
         "current layout/grid/style, appearance, annotations, visible slots와 slot-local content/caption/settings를 detached copy로 구성한다. "
+        "label 번호/표시는 layout_annotations.orderedSlotLabels(current project)로 계산하며 captionReferenceStyle은 backend/settings.json에서 복사한다. "
         "각 visible graph slot의 owning chart, 실제 project object의 참조 CSV/columns와 graphs.chartFigure(chart, project) 계산 결과를 포함한다. "
         "project는 이번 query가 읽는 같은 current authority이며 chart copy와 CSV가 같은 read 작업에 속한다. "
         "non-editable imported conversion chartFigure는 imported representation을 보존하며 conversion view로 project CSV를 resolve하지 않는다. "
@@ -628,9 +629,9 @@ DEFAULT_PROJECT_RULES = {
     ),
     "assets": "초기 CSV/image collection은 비어 있으며 보호된 default CSV를 만들지 않는다.",
     "charts": "초기 chart collection은 비어 있다.",
-    "labels": "초기에는 disabled, position은 reference origin, 기본 formatting/font settings를 사용한다.",
+    "labels": "sourcescript/backend/settings.json의 labels를 deep-copy한다. create/load missing 처리는 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다.",
     "captions": (
-        "project-level global caption은 초기 disabled/empty 상태다. "
+        "sourcescript/backend/settings.json의 captions를 deep-copy하며 load missing은 layout_annotations.ANNOTATION_SETTINGS_RULE을 따른다. "
         "각 초기 slot.caption도 empty이며 slot caption editor mode는 project state에 저장하지 않는다."
     ),
     "export": (
