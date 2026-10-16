@@ -1288,3 +1288,12 @@ Application boundary를 세 번째 authoritative FSM으로 만들지 않는다.
 - Source Code r36 (WIP): print settings read는 Backend immutable query → Application 경유 projection으로 전환한다. public setter는 새 edit patch만 전달하고, Backend command가 현재 export settings로 candidate를 구성·정규화·검증·commit한다. 기존 범위/enum/auto-height 의미는 유지한다.
 - Actions regression 38847409115: inline 40 + split 40 통과. version 38847412408 통과. build/verify 38847405535는 실제 checkout `8c8208100c1ff8675b37c62d22db60b3aadb635a`에서 통과하고 distribution bot commit `a7444e2e3c84da67e99d648ce2915c78dd0dd788`을 생성했다.
 - 기준 commit과 중간 metadata 실패를 포함한 결과는 `agent_space/reviews/review-20261016-003-print-settings-boundary.md`에 기록한다. 정책·상위 명세 의미는 변경하지 않았다. full renderer와 나머지 API/domain consumer가 남으며 Source Code `stale` 유지, TLC 미실행.
+
+## 35. 2026-10-16 재검토 후 개선 — Source Script r26 (open)
+
+- 사용자 요청에 따라 rollback하지 않고 Source Script의 불충분한 계약부터 수정한다. 미커밋 palette JS/test 변경은 이미 폐기했으며 이번 단위에서 복원하지 않는다.
+- query의 identity 입력/권위 resolve/분리된 반환, invalid와 explicit none 구별, selection 부수 해제와 direction, reset/swap/merge/move/trash reconciliation, file-drop 선택 보장, lifecycle 호출·실패·ready 복귀 순서를 명시한다.
+- graph one-object edit의 Backend current-authority 계산과 CSV 참조 변경 자유를 보존한다. image/print wrapper는 새 edit만 전달하고 Backend가 candidate를 계산하며, 성공 후에만 새 read projection을 반환하도록 책임을 분리한다. image x/y=0은 허용 좌표이지 JS truthiness fallback 사유가 아니다.
+- Source Script r26은 `current/open`이다. r25의 closed 판정을 승계하지 않으며 closure review는 null이다. PlusCal r11/model r26은 `stale`, Source Code r36은 `stale` 유지한다. 하위 파일을 이번에 변경하지 않는다.
+- 전체 renderer의 field별 계산/자원 수명, 전체 API와 domain producer-consumer trace 및 논리 완결·목적·중복 검토가 남는다. 이것들을 확인해 별도 닫힘 review를 작성하기 전에는 PlusCal/JS 보완으로 빈 의미를 메우지 않는다.
+- 상세 변경과 미완료 범위: `agent_space/reviews/review-20261016-004-sourcescript-r26-open.md`. 실제 누적 변경 patch와 검증 결과: `agent_space/patches/20261016-008.patch`, `agent_space/patches/20261016-008.md`.
