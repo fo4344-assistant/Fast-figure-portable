@@ -54,6 +54,30 @@ FRONTEND_FSM_BOUNDARY_RULE = (
     "검증한 input만 받고, project commit 뒤에는 Application boundary가 만든 reconciliation input만 소비한다."
 )
 
+FRONTEND_TRANSITION_RULES = {
+    "rejected": "accepted=False이면 state/revision/selection을 그대로 유지하고 publish하지 않는다.",
+    "SELECT_SLOT": (
+        "reference none이면 deselect; toggle-clear hint이며 같은 id이면 deselect; 그 외 validated id를 선택한다. "
+        "workspace는 none이면 project, 아니면 workspaceHint다. 모든 accepted slot selection은 graphObject/index와 assetSelection/path를 clear한다. "
+        "같은 id의 model-to-fsm 선택은 toggle하지 않는다. overlay는 explicit deselection이면 유지하고 non-null slot 선택이면 닫는다."
+    ),
+    "SELECT_ASSET": (
+        "validated kind/path 또는 none을 assetSelection/path에 반영하고 graphObject/index를 clear한다. slot/workspace는 유지한다."
+    ),
+    "SELECT_GRAPH_OBJECT": (
+        "reference none이면 graphObject/index만 clear한다. accepted index면 graphObject=selected/index를 반영한다. "
+        "selectionHint에 CSV path가 제공된 경우에만 assetSelection=csv/path를 함께 바꾼다. hint none이면 기존 asset selection을 유지한다."
+    ),
+    "CLEAR_ASSET_SELECTION": "assetSelection/path만 none으로 만든다.",
+    "CLEAR_GRAPH_OBJECT": "graphObject/index만 none으로 만든다. current CSV 선택을 변경하지 않는다.",
+    "LIFECYCLE_START": "Application이 전달한 importing/exporting으로 전환하고 이전 error를 clear한 뒤 publish한다.",
+    "LIFECYCLE_COMPLETE": "ready로 전환하고 error를 clear한 뒤 publish한다. outcome은 project commit result를 대체하지 않는다.",
+    "LIFECYCLE_FAILED": (
+        "event/message error projection을 저장하고 error 상태를 publish한 다음, 같은 failure 처리에서 ready recovery를 publish한다. "
+        "error projection은 다음 START/COMPLETE까지 유지한다. task 실행 또는 Backend mutation은 없다."
+    ),
+}
+
 INTERFACE_LOCALITY_RULE = (
     "Layout selection Set, form draft, collision resolver, pointer drag, overlay resize height 등 component lifetime 값은 "
     "cross-component authority가 필요하지 않는 한 interfaceFSM으로 승격하지 않는다."
@@ -80,7 +104,8 @@ class InterfaceStateMachine:
         Frontend region transition만 실행한다.
         persistent ProjectObject mutation action과 Backend read/resolve를 실행하지 않는다.
         Backend identity가 필요한 event는 accepted FrontendValidatedInput을 받아 처리한다.
-        rejected input은 기존 runtime selection을 보존하거나 event별 failure 의미로 끝낸다.
+        rejected input은 state/revision을 그대로 보존하며 publish하지 않는다.
+        accepted input의 값 변경과 publish 순서는 FRONTEND_TRANSITION_RULES를 따른다.
         Backend reference가 필요 없는 overlay/lifecycle event는 Application boundary가 만든 local accepted input을 받는다.
         """
         return "final Frontend interface state"
