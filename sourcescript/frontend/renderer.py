@@ -126,7 +126,8 @@ def renderDashboard(projectProjection, interfaceState):
        CSV를 resolve해 Backend figure를 다른 결과로 바꾸지 않는다.
     4. image slot은 projection의 image bytes/view와 normalized slot-local imageSettings copy로 image surface를 동기화한다.
     5. interfaceState.selectedSlotId에 따라 selection/interaction class를 적용한다.
-    6. caption과 label projection을 동기화한다.
+    6. caption과 label projection을 동기화한다. label 번호/문자열은 supplied orderedSlotLabels 결과를 사용한다.
+       label format/order를 renderer가 독립 재정의하지 않으며 설정 JSON/Backend를 직접 읽지 않는다.
     7. 현재 dashboard render generation을 기준으로 visible slot id/chart id와 instance 소유 관계를 대조한다.
        같은 host/slot/chart가 유지되면 기존 graph instance를 갱신한다. 사라진 slot, 다른 chart로 교체된 host,
        graph에서 image/empty로 바뀐 host의 이전 instance는 purge한 뒤 현재 view만 설치한다.
@@ -354,6 +355,31 @@ def downloadExportPayload(payload):
     return "handoff 완료 시 None; 실패는 throw/rejection"
 
 
+def exportCaptionLayout(snapshot, measureText):
+    """
+    One-export immutable reference layout; no Backend/config access or Project writes.
+    R=snapshot.layout.slotStyle.referenceWidth. style=supplied captionReferenceStyle from Backend settings.json.
+    Use current snapshot captions.enabled/name/nameBold/text/settings. Ordinary global caption body is text;
+    afterText remains stored separately and is not implicitly appended or populated from slot captions.
+    If disabled, return zero height/gap and no lines. Enabled empty caption reserves one blank line as before.
+    Measure at reference width R, unscaled caption fontSize/fontFamily. padding=style.padding,
+    available=max(style.minimumTextWidth, R-2*padding), lineHeight=fontSize*settings.lineHeight.
+    Name is a prefix on first line only; measure name plus one space at weight 700 if nameBold else 400.
+    Body uses weight 400. Split text into newline paragraphs, each paragraph into nonempty whitespace-separated
+    words. Greedily append each word with one space; if a nonempty current line plus next word exceeds
+    max(minimumTextWidth, available minus first-line prefix width), emit line and retry word on a new line.
+    Never split a single overlong word; retain it on its own line within the clipped caption drawing area.
+    Preserve explicit paragraph breaks including blank paragraphs. Name-only produces one prefix line;
+    no name/no body produces one blank line. Same emitted line list is used for height AND painting.
+    height=2*padding + numberOfLines*lineHeight + style.borderHeight; gap=style.dashboardGap.
+    Font measurement is a Frontend rendering primitive, with the same resolved font used for painting;
+    await required font availability before measuring or propagate failure. This contract fixes what is measured,
+    not a particular canvas/browser API. Resource/measurement failure does not mutate Project.
+    Return reference lines/prefix positions/font metrics/height/gap for this export only.
+    """
+    return "one-shot reference caption layout"
+
+
 def renderDashboardTarget(snapshot, statusSink):
     """
     Return:
@@ -367,10 +393,18 @@ def renderDashboardTarget(snapshot, statusSink):
     처리:
     1. Application이 공식 export query로 제공한 immutable snapshot을 사용한다.
     2. snapshot의 persistent export settings에서 width/height mode/dpi/format을 읽는다.
-    3. auto height면 logical dashboard geometry와 caption layout에서 height를 계산한다.
-    4. explicit height면 persistent height를 사용한다.
+    3. layout 팝업의 이미지 폭 R=snapshot.layout.slotStyle.referenceWidth를 기준 폭으로 사용한다.
+       W=export.width는 목표 pixel width, s=W/R, H0=R/layout.slotStyle.aspect다.
+       exportCaptionLayout으로 R 기준 caption height C0와 gap G0를 한 번 측정한다.
+       auto total height H=ceil((H0+C0+G0)*s). dashboard/caption/fonts/gap/label/image를 동일 s로 scaling한다.
+       캡션 disabled면 C0=G0=0이다. raster width=round(W), height=round(H)이며 DPI를 다시 곱하지 않는다.
+       DPI는 기존 metadata 의미이고 DPI만 변경하면 pixel geometry는 같다. DOM viewport/zoom은 target 원천이 아니다.
+    4. explicit height면 persistent total height H를 사용하고 dashboardHeight=H-(C0+G0)*s로 배치한다.
+       auto dashboardHeight는 H0*s이며 ceil 잔여 pixel은 바닥 여유로 둔다. caption은 dashboard 아래 gap 뒤에 그린다.
     5. supplied snapshot의 raster dimension/area limit을 넘으면 project를 변경하지 않고 rejected를 반환한다.
-    6. grid geometry가 유효한지 확인한다.
+    6. outerMargin=min(configuredOuterMargin*s,min(W,dashboardHeight)*0.49), gap=configuredGap*s로 계산하고
+       gridSlotGeometry의 모든 rowHeight/colWidth가 positive인지 검사한다. explicit height가 caption과 grid를 담지 못하면
+       download 전 rejected outcome이다. 설정값을 몰래 줄이거나 auto height로 대체하지 않는다.
     7. 각 visible slot의 Backend-supplied figure 또는 image를 target geometry로 다시 render한다.
        graph의 CSV resolve/numeric transform은 Backend export query에서 끝나며 여기서 재실행하지 않는다.
        target geometry/font/line/marker의 presentation scaling은 figure copy에만 적용하고 supplied snapshot/Project를 변경하지 않는다.
