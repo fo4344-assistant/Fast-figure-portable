@@ -1,0 +1,120 @@
+diff --git a/agent_space/reviews/review-20261016-014-policy-first-source-r34.md b/agent_space/reviews/review-20261016-014-policy-first-source-r34.md
+new file mode 100644
+index 0000000..b6795cd
+--- /dev/null
++++ b/agent_space/reviews/review-20261016-014-policy-first-source-r34.md
+@@ -0,0 +1,114 @@
++# Plan 017 — 정책 재독 후 Source r34 API/선택 경로 검토
++
++## 기준·범위·방법
++
++- 사용자 요청: 정책 문서를 반드시 다시 읽은 다음 검토하고 결과를 적절한 위치에 문서로 남긴다.
++- 검토 기준 main: `34b300a7afdfb577eb5a3555d61f2406c2bc6486`.
++- 검토 전에 `agent_space/AGENT.md`, `agent_space/policies/policies.md`, `agent_space/policies/development-policy.md` v0.2.6 전체를 다시 읽었다. 긴 개발 정책은 처음부터 끝까지 연속 구간으로 나누어 읽었다.
++- 적용 기준: Source Script → PlusCal → Source Code 순서, persistent authority/Frontend runtime owner 분리, current authority에서 candidate 검증 후 한 번 commit, 실패 시 상태 보존, read projection의 역방향 mutation 금지, Source closed의 논리적 완결성·목적 적합성·중복/통합 검토 근거.
++- `sourcescript/system.py`, Backend state/EFSM/assets/graphs, Application adapter/public API, Frontend FSM/renderer 관련 계약을 정적으로 대조했다. 최근 반환 보완뿐 아니라 그 반환에 앞서는 command와 후속 선택 전이를 따라갔다.
++- 이 문서는 독립 검토 결과다. 정책, Source 의미, 공개 API inventory 또는 새 계약을 추가하는 문서가 아니다. 해결 방향은 권고이며 실제 명세 수정은 별도 작업이다.
++- Source Script는 Python 표기의 구현 명세다. 이 검토에서 Source import/application/test/checker/build/TLC를 로컬 실행하지 않았다. 아래 시나리오는 문서 규칙의 대조/반례이며 실행 테스트 결과가 아니다.
++
++## 결론
++
++**수정이 필요한 명세 불일치 3건과 선택 정합성의 미정의 경로 1건을 확인했다. Source r34는 계속 OPEN이어야 한다.**
++
++10개 API의 성공/미commit 반환표를 작성한 것과 전체 command·선택 경로가 일치하는 것은 별개다. 특히 기존 r34 검토 문서의 connect 선택 보존 주장은 실제로 선언된 Frontend 전이와 일치하지 않는다. 이번 검토에서는 구현이나 명세를 수정하지 않고 근거를 남긴다.
++
++| ID | 우선순위 | 분류 | 요약 |
++|---|---|---|---|
++| R1 | P2 | 확정된 경로 불일치 | 선택 slot 없는 image import가 선언되지 않은 `/assets/image`로 라우팅됨 |
++| R2 | P2 | 확정된 계약 불일치 | connect의 asset 선택 비변경 약속과 후속 SELECT_SLOT의 무조건 clear가 충돌 |
++| R3 | P2 | 확정된 owner 서술 불일치 | 빈 CSV 생성 command가 선택을 바꾼다는 Backend 규칙이 Application 소유 규칙과 충돌 |
++| R4 | P2 | 미정의 경로/정적 반례 | CSV cascade 삭제 후 살아 있는 숫자 index가 다른 graph object를 가리킬 수 있음 |
++
++## R1 — image import 기본 directory의 단수/복수 경로 불일치
++
++근거:
++- `sourcescript/application/public_api/assets.py:333-334`: `importProjectAssetFiles(files, planImport)`는 시작 target이 없으면 data/image를 각각 `/assets/csv` 또는 `/assets/image`로 보낸다.
++- `sourcescript/backend/assets_files.py:20-32`: `PROJECT_ASSET_DIRECTORIES`와 `FIXED_DIRECTORY_RULE`의 image 기본/fixed directory는 `/assets/images`다.
++- `sourcescript/backend/project_state.py:632`: 새 project의 VFS 고정 directory도 `/assets/images`다.
++- `sourcescript/backend/assets_files.py:249-252`: import candidate 계산은 current directory를 resolve한 뒤 candidate를 만들도록 되어 있다.
++
++반례와 영향:
++1. 새 project에서 slot을 선택하지 않는다.
++2. `assets.importFiles`로 image file 하나를 입력한다.
++3. router는 `/assets/image`를 전달하지만 새 project에는 그 directory가 없다.
++4. current-directory 검증을 지키면 지원되는 기본 image import가 실패한다. 누락 directory를 임의 생성하면 선언된 기본 경로와 별도 의미가 생긴다.
++
++권고: router의 기본 목적지를 기존 단일 directory 원천과 일치시킨다. 단수 경로 alias/legacy bridge 또는 새로운 fixed root를 만들 이유는 없다. 실제 runtime에서 실패를 실행 확인했다는 주장은 하지 않는다.
++
++## R2 — connect 후 model-to-fsm 선택도 asset selection을 clear함
++
++근거:
++- `sourcescript/application/public_api/assets.py:263-278`: `connectProjectAssetToSlot(path, kind, slotId)`는 asset selection을 변경하지 않는다고 적고, commit 성공 후 `dispatchSlotSelection(slotId, pendingContentType=None, direction="model-to-fsm")`을 호출한다.
++- `sourcescript/application/adapter.py:75-82`: 해당 adapter 경로는 Backend 검증 후 `SELECT_SLOT`을 보낸다.
++- `sourcescript/backend/project_state.py:420-422`: model-to-fsm의 `clear-graph-object` hint는 같은 slot toggle 해제를 막는 구분이다.
++- `sourcescript/frontend/interface_fsm.py:65-70`: 모든 accepted slot selection은 `graphObject/index`와 `assetSelection/path`를 clear한다. model-to-fsm은 toggle만 하지 않는다고 명시한다.
++- `agent_space/reviews/review-20261016-013-api-final-returns-r34-open.md`의 owner/경계 절도 connect가 asset selection을 변경하지 않는다고 주장한다.
++
++반례와 영향:
++1. 독립적인 CSV/image asset selection을 둔다.
++2. 유효한 asset을 visible target slot에 연결한다.
++3. command/reconciliation이 기존 선택을 유지해도, 그 뒤 accepted `SELECT_SLOT`이 asset selection을 clear한다.
++4. 같은 target에 연결해도 toggle 방지만 적용될 뿐 clear는 발생한다.
++
++반환 `None`이나 Backend commit 원자성의 문제가 아니라, 후속 Frontend 효과가 API의 약속과 충돌하는 문제다. 기존 r34 검토의 asset 선택 비변경 주장은 이 경로에 대해서는 성립하지 않는다.
++
++권고: 일반 사용자 slot 선택의 clear 의미와 programmatic connect 후 선택 의미를 기존 adapter/검증/FSM 경로에서 일관되게 정한다. wrapper의 사후 선택 복구나 별도 selection authority로 덮지 않는다. 이번 검토는 어느 의미로 바꿀지를 대신 결정하지 않는다.
++
++## R3 — 빈 CSV 선택의 owner가 Backend 규칙에 다르게 서술됨
++
++근거:
++- `sourcescript/backend/graphs.py:228-232`, `EMPTY_CSV_GRAPH_RULE`: `생성 command는 CSV를 선택 상태로 만들 뿐 chart/object를 자동 생성하지 않는다.`
++- `sourcescript/application/public_api/assets.py:49-61`, `createEmptyProjectCsvAndSelect()`: 일반 create helper를 한 번 실행하고 성공한 실제 asset에 대해 Application이 별도로 `selectProjectCsv`를 수행한다. 선택 거부/오류가 이미 commit된 CSV 생성을 rollback하지 않는다.
++- `sourcescript/application/public_api/assets.py:116`: domain create helper는 asset selection 자체를 소유하지 않는다.
++- `sourcescript/backend/project_efsm.py:214`: command는 interface state와 renderer를 변경하지 않고 result를 반환한다.
++
++영향:
++- 실제 owner 경로는 persistent create와 Frontend selection을 분리했지만, Backend graph 규칙만 따르면 생성 command가 runtime 선택까지 책임진다고 번역할 수 있다.
++- 생성 성공 뒤 selection이 거부되는 기존 public 계약도 command 자체가 이미 선택을 끝냈다는 문장과 함께 유지할 수 없다.
++- 이는 새 기능을 요구하는 문제가 아니라 같은 작업의 책임 원천이 두 가지로 서술된 문제다. 단순 축약 표현이라고 추정해 하위 번역자가 의미를 선택해서는 안 된다.
++
++권고: 기존 create helper/command는 asset 생성만, public Application composition은 성공 후 선택을 소유한다는 의미로 단일화한다. Backend의 Frontend 직접 변경이나 새 자동 chart 생성은 필요하지 않다.
++
++## R4 — cascade reference 제거 뒤 graph selection index 처리 미정의
++
++근거:
++- `sourcescript/application/public_api/assets.py:174-181`: asset delete는 실제 graph-object reference 제거와 asset 삭제를 같은 candidate로 수행한다.
++- `sourcescript/application/public_api/assets.py:206-207,234-235`: move-to-trash/empty-trash도 실제 제거 reference 수를 result에 기록한다.
++- `sourcescript/backend/project_efsm.py:208-212`: index hint 계산은 graph add/move/edit/delete에 대해 구체화되어 있다. cascade asset 삭제/여러 chart detach에 대한 clear 또는 remap 생성 규칙은 없다.
++- `sourcescript/backend/project_state.py:453-458`: 명시적 clear/index hint가 없으면 기존 integer index를 유지하고 post-commit 범위만 확인한다.
++
++반례:
++1. 같은 editable chart에 서로 다른 CSV를 참조하는 `[A, B, C]`가 있고 index 1의 B가 선택되어 있다.
++2. A의 CSV를 삭제해 chart가 `[B, C]`가 된다.
++3. cascade command가 graph-selection clear/remap hint를 내야 한다는 규칙이 없는 상태에서, 선언된 기본 reconciliation은 index 1을 유효하다고 유지한다.
++4. 그 index는 이제 B가 아니라 C다. B 자체를 삭제한 경우에도 남은 길이에 따라 같은 숫자가 다른 object를 가리킬 수 있다.
++
++분류와 한계:
++- 모든 cascade가 실제로 잘못 동작한다고 단정하지 않는다. `clearGraphSelection`이라는 소비 규칙은 있으나 해당 command가 언제 생성할지 정해지지 않은 것이 지적 사항이다.
++- 따라서 이는 실행 버그 확정이 아니라 Source의 논리적 완결성을 막는 미정의 경로다. 제거 count만으로 다중 chart의 기존 object 선택을 복원할 수 있다고 보지 않는다.
++
++권고: 실제 affected chart/reference에 근거한 selection clear 또는 보존/remap 의미를 Source에서 먼저 정하고, 기존 `ProjectMutationResult` → Backend reconciliation → Frontend 경로로 처리한다. 모든 unrelated 선택을 blanket-clear하거나 독립 current CSV를 object reference로 덮어쓰는 방식은 피한다.
++
++## 정책상 닫힘 판단
++
++| 근거 축 | 이번 검토 결과 |
++|---|---|
++| 논리적 완결성 | R1~R3의 상충 문장 및 R4의 미정의 전이가 남아 있어 충족하지 못함 |
++| project 목적 적합성 | 독립 CSV 선택, 기본 image import, reference-safe 편집이라는 기존 목적을 R1/R2/R4 반례가 충분히 뒷받침하지 못함 |
++| 중복/통합 검토 | command/선택 owner와 기본 directory를 단일 원천에 맞춰야 함. 새 registry/bridge가 필요한 근거는 없음 |
++
++긍정적으로 확인한 구조는 유지할 가치가 있다: Backend current authority의 candidate-first commit, Application의 committed-gated fresh query, domain create와 public create-and-select 분리, supplied renderer projection과 surface resource 수명, non-editable imported conversion object의 별도 CSV-reference 판정이다. 그러나 구조적 방향이 맞다는 사실로 위 반례나 전체 왕복 검토를 대체하지 않는다.
++
++## 후속 순서·미포함
++
++1. R1~R3의 기존 의미를 Source에서 일치시키고 R4의 cascade selection 의미를 결정한다.
++2. connect/create/delete/trash 및 imported↔editable 전환을 포함한 selection 교차 경로와 import/edit/export 왕복을 다시 검토한다.
++3. 논리적 완결성·목적 적합성·중복/통합 근거가 모두 갖춰진 후에만 Source closed 여부를 판단한다. 그 전 PlusCal/Source Code 번역을 재개하지 않는다.
++
++이 작업은 검토 기록만 추가한다. Source r34 current/open 및 fingerprint, closure_review null, PlusCal r11/model r26/source-code r36 stale 상태를 바꾸지 않는다. 버전 checker 통과를 의미 검토 통과로 간주하지 않으며, 수동 Actions dispatch 또는 application regression/build/TLC 실행은 하지 않았다. 기록 push의 자동 workflow가 있더라도 정적 검토의 증거를 대신하지 않는다.
++
++기록 변경의 실제 누적 diff/기준점·종료점/순차 Contents API의 한계는 `agent_space/patches/20261016-018.patch`와 동명 `.md`에 남긴다. 패치 쌍은 자신을 포함하지 않는다.
