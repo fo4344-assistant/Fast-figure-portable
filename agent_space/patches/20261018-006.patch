@@ -1,0 +1,409 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index deb8ae0..62f0a76 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -37,6 +37,10 @@ Baseline `767c4086dbb3057a1f41ca1ed002d201d8a665c6`. Translate the six label API
+ 
+ Baseline `b9017660a7add509234d4e706529447d9830e364`. Code r40 translates whole-palette normalization/default fallback, official immutable `appearance.readPalette`/renderer `ui-palette` reads, commit-gated public set/reset, and pure supplied-palette `applyUiPalette` CSS mapping. Application coordinates the query and existing dashboard render; renderer does neither. Browser case44 covers whole-set versus partial-merge semantics, case/known-key/default rules, no Backend query/write from CSS rendering, exception preservation and noncommit no-render/no-success gates. Upper layers unchanged; whole implementation remains stale/open. Review003 and patch20261018-004 record the actual unit. Implementation commit `1b72633bddb19281435ccf608f4ded88d779d5fd` passed regression39052893119 (44 inline +44 split), version39052893232 and build39052893168; dist-only bot commit `5f7544e0aa087bff2346585d250eb82298a6f186` fast-forwarded locally. Actual logs and whole-goal uncovered requirements are in review003. This later result record is not the executed HEAD; code r40 remains stale and the active goal incomplete.
+ 
++## Fifth implementation unit — layout query/style and Frontend zoom
++
++Baseline `47fcc75b370e9bdcfbed6fdc3232f173b80fdb2a`. Backend now owns immutable layout.readState with config-only preview normalization and same-project geometry, plus current-authority partial style candidates. Application sends only new edits and returns fresh reads with Frontend zoom scalars. Zoom/lock/reset mutation moves to existing FSM events; initial lock measures once, repeated lock/locked intent/no-op do not publish or replace the anchor, and unlock/reset clear the anchor and restore100. No duplicate session state or persistent zoom is introduced. Browser cases45/46 and review004 map actual boundaries; code r41 remains stale. Existing style/zoom DOM render orchestration is retained, but its Backend-reading geometry is explicitly not the completed supplied-projection renderer cutover. Grid/merge/split, export geometry, graph/assets and whole integration still remain. Patch20261018-006 and modified files commit together; Actions pending at preparation.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-004-code-layout-zoom-open.md b/agent_space/reviews/review-20261018-004-code-layout-zoom-open.md
+new file mode 100644
+index 0000000..5ce99b7
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-004-code-layout-zoom-open.md
+@@ -0,0 +1,28 @@
++# Source-code r41 — layout read/style and session zoom (OPEN)
++
++Baseline `47fcc75b370e9bdcfbed6fdc3232f173b80fdb2a`. Source r38 closed/current and pseudocode r12 current remain unchanged; code stays stale. This bounded unit does not complete the direct-translation goal.
++
++## Prompt-to-artifact checklist
++
++| Explicit requirement | Actual artifact/evidence | Coverage |
++| --- | --- | --- |
++| Direct pseudocode implementation | `pseudocode/backend/project_state.pcal` layout.readState/NormalizePreviewReadWidth; `backend/project_efsm.pcal` LAYOUT_STYLE_CHANGED; `application/public_api/layout_annotations.pcal` read/style and five zoom procedures; `frontend/interface_fsm.pcal` ZoomIntent/Lock/Reset | Corresponding flat JS Backend, Application and Frontend ownership translated |
++| Preserve logical boundaries despite physical flattening | Existing `fast-figure.js`; no new module/package/authority or legacy bridge | Backend owns style normalization/query; Application passes edits/composes session read; FSM owns zoom mutations |
++| Consult Source rather than invent meaning | Source layout query width config, setStyle procedure, SET_DASHBOARD_ZOOM/LOCK/RESET rules and renderer readDashboardRenderedWidth | No new high-level meaning, Source/pseudocode edit or fabricated lineage |
++| Current-authority mutation and failure | Command merges only supplied scalar fields against its current candidate; config limits; whole validation before replacement; noncommit skips read/render | Browser case45; throwing later field cannot partially commit earlier field |
++| Immutable query and geometry | Backend captures one current source, copies/freezes style/visible-anchor list/preview geometry; config preview bounds/fallback; Backend does not read zoom | Browser case45 |
++| Session-only zoom | Existing session scalars have one mutation owner (FSM); lock ignores intent changes; first valid lock captures width; repeated lock does not measure; unlock/reset clear anchor and reset100; no-op does not publish | Browser case46; direct API tests and exact runtime identity/Project snapshots |
++| Completion notification | commitZoom sends existing completion once without Project mutation; other zoom setters use events rather than second persistent commands | Browser case46 |
++| Actual version/patch record | code r41 fingerprint/current Source+pcal lineage; actual semantic diff plus numeric patch006 pair in same commit | File checks and Actions required |
++
++## Translation and verification limits
++
++Preview null/absent means the pseudocode NoValue and uses the sole configured fallback width; supplied finite values clamp to the configured width range. Style invalid finite conversion falls back to the current value, absent keys preserve current values, numeric zero survives, and explicit showBorders is true only for true. No Application-made whole-style candidate is sent. Runtime zoom invalid input falls back100, including non-convertible scalar input; finite0 clamps50 rather than becoming100 through truthiness. Existing runtime globals are not mirrored: their post-initialization writes now occur only inside the Frontend FSM, and readState projects them immutably.
++
++Cases45/46 supplement the actual prior44 cases in both inline and split artifacts. They cover query isolation, config ranges, current-authority partial commands, exception/noncommit preservation, lock measurement/no-op/reset and public/runtime return boundaries. Actions pending at preparation; no local Source/application/PlusCal/parser/test/checker/build/TLC execution, and no delegation. Static Git diff/reverse-apply checks are file-only, not runtime proof.
++
++Application retains existing post-success DOM render orchestration while translating these commands/reads. The existing applySlotStyle/applyDashboardZoom/dashboard render code still directly reads Backend geometry/style and awaits the full supplied-projection renderer cutover. This unit removes renderer-owned zoom mutation, not all renderer reads. Grid resize/merge/split, raster/caption export geometry, graph/asset command candidates and selection maps, whole renderer/public API and lifecycle alignment remain uncovered. Green bounded tests do not prove those requirements; the whole goal is not achieved. Source/pseudocode policies and optional TLC state are unchanged.
++
++## Actions results
++
++Pending execution on the actual implementation commit. Do not treat previous runs, manifest counts or preparation checks as r41 verification.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 4973df5..eef197b 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1477,6 +1477,97 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       check(!/appFSM.query|renderDashboard/.test(applyUiPalette.toString()), "palette renderer performs queries or dashboard orchestration");
+     });
+ 
++    await run(45, "Layout reads and partial style commands use current Backend authority", async () => {
++      const preview = BackendSettings.defaults.preview, limits = BackendSettings.defaults.limits.layout,
++        beforeRead = JSON.stringify(activeProject._state), frontend = appFSM.state,
++        read = api.layout.readState(800), backend = appFSM.query("project-api", { operation: "layout.readState", renderedWidth: 800 });
++      check(Object.isFrozen(read) && Object.isFrozen(read.slotStyle) && Object.isFrozen(read.visibleSlots) &&
++        read.visibleSlots.every(Object.isFrozen) && Object.isFrozen(read.previewGeometry), "layout projection contains mutable fields");
++      check(JSON.stringify(activeProject._state) === beforeRead && appFSM.state === frontend &&
++        !("zoom" in backend) && !("zoomLocked" in backend), "layout query mutated state or Backend read Frontend zoom");
++      check(read.zoom === interfaceFSM.readState().dashboardZoomIntent &&
++        read.zoomLocked === interfaceFSM.readState().dashboardZoomLocked, "Application did not compose Frontend zoom scalars");
++      check(api.layout.readState(null).previewGeometry.width === preview.fallbackWidth &&
++        api.layout.readState(Infinity).previewGeometry.width === preview.fallbackWidth &&
++        api.layout.readState(0).previewGeometry.width === preview.widthRange[0] &&
++        api.layout.readState(1e9).previewGeometry.width === preview.widthRange[1], "preview width does not use Backend config");
++      const current = api.layout.setStyle({ referenceWidth: 1600, gap: 14, outerMargin: 12, radius: 0, aspect: 2, showBorders: false });
++      check(current.slotStyle.referenceWidth === 1600 && current.slotStyle.gap === 14 && current.slotStyle.radius === 0 &&
++        !current.slotStyle.showBorders && read.slotStyle !== current.slotStyle && read.previewGeometry.width === 800,
++        "style edit discarded zero/false or rewrote detached snapshot");
++      dispatchProjectCommand("LAYOUT_STYLE_CHANGED", { gap: 21 });
++      const partial = api.layout.setStyle({ aspect: 4 });
++      check(partial.slotStyle.gap === 21 && partial.slotStyle.referenceWidth === 1600 && partial.slotStyle.aspect === 4 &&
++        !partial.slotStyle.showBorders, "Application sent a stale full style instead of new edits");
++      check(partial.previewGeometry.height === preview.fallbackWidth / 4 &&
++        partial.previewGeometry.scale === preview.fallbackWidth / 1600, "preview uses inconsistent width/reference context");
++      const bounded = api.layout.setStyle({ referenceWidth: 1e9, gap: -1, outerMargin: 1e9, radius: -1, aspect: NaN, showBorders: 1, ignored: 7 });
++      check(bounded.slotStyle.referenceWidth === limits.referenceWidth[1] && bounded.slotStyle.gap === limits.gap[0] &&
++        bounded.slotStyle.outerMargin === limits.outerMargin[1] && bounded.slotStyle.radius === limits.radius[0] &&
++        bounded.slotStyle.aspect === 4 && !bounded.slotStyle.showBorders && !("ignored" in bounded.slotStyle),
++        "style limits/invalid fallback/known-field Boolean rule differ from pseudocode");
++      const beforeFailure = JSON.stringify(activeProject._state), beforeFrontend = appFSM.state, broken = { gap: 19 };
++      Object.defineProperty(broken, "aspect", { get() { throw Error("broken layout edit"); } });
++      let failed = false;
++      try { api.layout.setStyle(broken); } catch { failed = true; }
++      check(failed && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === beforeFrontend,
++        "failed style normalization partially committed or reconciled");
++      const send = projectEFSM.send, apply = applySlotStyle, zoom = applyDashboardZoom, resize = schedulePlotResize;
++      let rendered = 0;
++      try {
++        projectEFSM.send = () => Object.freeze({ committed: false });
++        applySlotStyle = applyDashboardZoom = schedulePlotResize = () => { rendered++; };
++        check(api.layout.setStyle({ gap: 8 }) === false, "uncommitted style returned successful layout read");
++      } finally { projectEFSM.send = send; applySlotStyle = apply; applyDashboardZoom = zoom; schedulePlotResize = resize; }
++      check(rendered === 0 && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === beforeFrontend,
++        "uncommitted style rendered or mutated state");
++      check(!/activeProject|projectObjects|readProjectNumber|dashboardGeometry/.test(readLayoutApiState.toString() + setLayoutApiStyle.toString()),
++        "layout Application still owns Backend reads or normalization");
++      api.layout.setStyle(BackendSettings.project_object.layout.slotStyle);
++    });
++
++    await run(46, "Layout zoom is Frontend-owned with stable lock anchor and no persistent writes", async () => {
++      api.layout.resetZoom();
++      const authority = JSON.stringify(activeProject._state);
++      check(api.layout.setZoom(125).zoom === 125, "zoom intent event not applied");
++      const stable = appFSM.state;
++      api.layout.setZoom(125);
++      check(appFSM.state === stable, "same zoom republished runtime");
++      check(api.layout.setZoom(0).zoom === 50 && api.layout.setZoom(1000).zoom === 200 &&
++        api.layout.setZoom(NaN).zoom === 100 && api.layout.setZoom(Symbol("invalid zoom")).zoom === 100,
++        "zoom limits/invalid fallback do not match Frontend contract");
++      const readWidth = readDashboardRenderedWidth;
++      let measured = 0;
++      try {
++        readDashboardRenderedWidth = () => { measured++; return 0; };
++        const beforeInvalid = appFSM.state;
++        check(api.layout.setZoomLocked(true) === false && appFSM.state === beforeInvalid &&
++          !interfaceFSM.readState().dashboardZoomLocked, "invalid initial lock changed runtime");
++        readDashboardRenderedWidth = () => { measured++; return 840; };
++        check(api.layout.setZoomLocked(true).zoomLocked && measured === 2 &&
++          interfaceFSM.readState().dashboardZoomLockedWidth === 840, "initial lock did not capture exactly one valid width");
++        const locked = appFSM.state;
++        readDashboardRenderedWidth = () => { throw Error("repeated lock measured again"); };
++        api.layout.setZoomLocked(true);
++        api.layout.setZoom(175);
++        check(appFSM.state === locked && interfaceFSM.readState().dashboardZoomLockedWidth === 840 &&
++          api.layout.readState().zoom === 100, "lock changed anchor/intent or republished on no-op");
++        check(!api.layout.setZoomLocked(false).zoomLocked && api.layout.readState().zoom === 100 &&
++          interfaceFSM.readState().dashboardZoomLockedWidth === null, "unlock did not reset session atomically");
++        api.layout.setZoom(150);
++        api.layout.resetZoom();
++        const reset = appFSM.state;
++        api.layout.resetZoom();
++        check(appFSM.state === reset && api.layout.readState().zoom === 100, "repeated reset published a change");
++      } finally { readDashboardRenderedWidth = readWidth; }
++      const revision = appFSM.state.revision;
++      api.layout.commitZoom();
++      check(appFSM.state.revision === revision + 1 && JSON.stringify(activeProject._state) === authority,
++        "zoom completion did not notify once or zoom wrote persistent layout");
++      check(!/dashboardZoom\w*\s*=|activeProject|readProjectNumber/.test(setLayoutApiZoom.toString() +
++        setLayoutApiZoomLocked.toString() + resetLayoutApiZoom.toString()), "zoom Application owns session mutation or Backend normalization");
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 9b467ba..ae1eaf8 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 40,
++      "revision": 41,
+       "status": "stale", 
+       "paths": [
+         "Fast-figure.html", 
+@@ -38,13 +38,13 @@
+         "fast-figure.js", 
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:628c7be52a868a56e4fc487abc8c049222e47ca0ad7b5d20183a1a555bae014d",
++      "fingerprint": "sha256:c359f18d294241d81fd73c0a176f032f8b0f7de5333d1f86b5fb3ac729f82746",
+       "derived_from": {
+         "source-script": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4",
+         "pseudocode": "sha256:bbc26a0c283ea18b8790e70677017afd2322bc1e1b1b69880cf089036a58343c",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-003-code-palette-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-004-code-layout-zoom-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 12,
+diff --git a/fast-figure.js b/fast-figure.js
+index 13546e7..a52a005 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -369,6 +369,19 @@
+         if ((kind === "project-api" && request.operation === "appearance.readPalette") ||
+             (kind === "renderer" && request.operation === "ui-palette"))
+           return Object.freeze({ ...activeProject._state.appearance.uiPalette });
++        if (kind === "project-api" && request.operation === "layout.readState") {
++          const source = activeProject._state, preview = BackendSettings.defaults.preview,
++            width = request.renderedWidth == null ? preview.fallbackWidth : readProjectNumber(
++              request.renderedWidth, preview.fallbackWidth, ...preview.widthRange);
++          return Object.freeze({
++            gridRows: source.layout.gridRows, gridCols: source.layout.gridCols,
++            slotStyle: Object.freeze({ ...source.layout.slotStyle }),
++            visibleSlots: Object.freeze(source.slots.filter((slot) => !slot.hidden).map((slot) => Object.freeze({
++              id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
++            }))),
++            previewGeometry: Object.freeze(dashboardGeometryInProject(source, width)),
++          });
++        }
+         if (kind === "project-api" && request.operation === "labels.readState") {
+           const source = activeProject._state, labels = source.annotations.labels,
+             slot = source.slots.find((item) => item.id === request.slotId && !item.hidden) ?? null,
+@@ -618,6 +631,28 @@
+           if (event === "LIFECYCLE_START" || event === "LIFECYCLE_COMPLETE" ||
+               event === "LIFECYCLE_FAILED")
+             return this.transitionLifecycle(event, payload);
++          if (event === "SET_DASHBOARD_ZOOM") {
++            if (dashboardZoomLocked) return this.state;
++            let numeric;
++            try { numeric = Number(payload.value); } catch { numeric = NaN; }
++            const value = Number.isFinite(numeric) ? Math.max(50, Math.min(200, numeric)) : 100;
++            if (value === dashboardZoomIntent) return this.state;
++            dashboardZoomIntent = value;
++            return this.notify("layout", event);
++          }
++          if (event === "SET_DASHBOARD_ZOOM_LOCK" || event === "RESET_DASHBOARD_ZOOM") {
++            if (event === "SET_DASHBOARD_ZOOM_LOCK" && payload.locked === true) {
++              if (dashboardZoomLocked || !Number.isFinite(payload.renderedWidth) || payload.renderedWidth <= 0) return this.state;
++              dashboardZoomLocked = true;
++              dashboardZoomLockedWidth = payload.renderedWidth;
++            } else {
++              if (!dashboardZoomLocked && dashboardZoomLockedWidth === null && dashboardZoomIntent === 100) return this.state;
++              dashboardZoomLocked = false;
++              dashboardZoomLockedWidth = null;
++              dashboardZoomIntent = 100;
++            }
++            return this.notify("layout", event);
++          }
+           let handled = false;
+           for (let region of [
+             "lifecycle",
+@@ -639,7 +674,8 @@
+           return this.state;
+         }
+         readState() {
+-          return Object.freeze({ ...this.state, selectedSlotId });
++          return Object.freeze({ ...this.state, selectedSlotId,
++            dashboardZoomIntent, dashboardZoomLocked, dashboardZoomLockedWidth });
+         }
+         reconcileProjectResult(event, input) {
+           selectedSlotId = input.selectedSlot;
+@@ -1450,7 +1486,13 @@
+       function applyLayoutStyleChangedAction({ machine, payload }) {
+         machine.assertWritable("layout", "LAYOUT_STYLE_CHANGED");
+         let candidate = projectClone(activeProject._state);
+-        candidate.layout.slotStyle = projectClone(payload.style);
++        const style = candidate.layout.slotStyle, limits = BackendSettings.defaults.limits.layout;
++        for (const key of ["referenceWidth", "gap", "outerMargin", "radius", "aspect"]) {
++          if (!Object.prototype.hasOwnProperty.call(payload, key)) continue;
++          style[key] = readProjectNumber(payload[key], style[key], ...limits[key]);
++        }
++        if (Object.prototype.hasOwnProperty.call(payload, "showBorders"))
++          style.showBorders = payload.showBorders === true;
+         validateProjectObjectState(candidate, { requireSlots: true });
+         activeProject.initialize(candidate);
+       }
+@@ -7344,9 +7386,7 @@
+           schema: payload?.schema || "plotly",
+         });
+       }
+-      function applyDashboardZoom(resize = true, requestedValue = null) {
+-        if (requestedValue !== null && !dashboardZoomLocked)
+-          dashboardZoomIntent = Math.max(50, Math.min(200, Number(requestedValue) || 100));
++      function applyDashboardZoom(resize = true) {
+         let dashboard = $("dashboard"),
+           width;
+         if (dashboardZoomLocked && Number.isFinite(dashboardZoomLockedWidth)) {
+@@ -7361,27 +7401,8 @@
+         if (resize) schedulePlotResize();
+         requestAnimationFrame(syncDashboardZoomDisplay);
+       }
+-      function commitDashboardScale(reason) {
+-        renderDashboard();
+-        debugLog("dashboard:scale-commit", {
+-          reason,
+-          zoom: dashboardZoomIntent,
+-          width: $("dashboard").getBoundingClientRect().width,
+-        });
+-        appFSM.notify("layout", "DASHBOARD_SCALE_COMMITTED");
+-      }
+-      function setDashboardZoomLocked(locked) {
+-        let dashboard = $("dashboard");
+-        dashboardZoomLocked = locked;
+-        if (locked) dashboardZoomLockedWidth = dashboard.getBoundingClientRect().width;
+-        else {
+-          dashboardZoomLockedWidth = null;
+-          dashboardZoomIntent = 100;
+-        }
+-        applyDashboardZoom(false);
+-        if (locked) schedulePlotResize();
+-        else commitDashboardScale("unlock-reset-100");
+-        debugLog("dashboard:zoom-lock", { locked, width: dashboardZoomLockedWidth });
++      function readDashboardRenderedWidth() {
++        return $("dashboard")?.getBoundingClientRect().width ?? 0;
+       }
+       function applyUiPalette(palette, notify = true) {
+         document.documentElement.style.setProperty("--ui-color", palette.uiColor);
+@@ -7552,60 +7573,14 @@
+       function resetAppearanceApiPalette() {
+         return applyUiPaletteValues({ ...DEFAULT_UI_PALETTE });
+       }
+-      function readLayoutApiState(previewWidth = 600) {
+-        let width = readProjectNumber(previewWidth, 600, 1, 20000),
+-          geometry = dashboardGeometry(width);
+-        return Object.freeze({
+-          gridRows: activeProject.gridRows,
+-          gridCols: activeProject.gridCols,
+-          slotStyle: Object.freeze({ ...activeProject.layout.slotStyle }),
+-          visibleSlots: Object.freeze(
+-            activeProject.slots
+-              .filter((slot) => !slot.hidden)
+-              .map((slot) =>
+-                Object.freeze({
+-                  id: slot.id,
+-                  row: slot.row,
+-                  col: slot.col,
+-                  rowSpan: slot.rowSpan,
+-                  colSpan: slot.colSpan,
+-                }),
+-              ),
+-          ),
+-          previewGeometry: Object.freeze({ ...geometry }),
+-          zoom: dashboardZoomIntent,
+-          zoomLocked: dashboardZoomLocked,
+-        });
++      function readLayoutApiState(previewWidth = null) {
++        const layout = appFSM.query("project-api", { operation: "layout.readState", renderedWidth: previewWidth }),
++          session = interfaceFSM.readState();
++        return Object.freeze({ ...layout, zoom: session.dashboardZoomIntent, zoomLocked: session.dashboardZoomLocked });
+       }
+       function setLayoutApiStyle(patch = {}) {
+-        let current = activeProject.layout.slotStyle,
+-          next = { ...current };
+-        if (Object.prototype.hasOwnProperty.call(patch, "referenceWidth"))
+-          next.referenceWidth = readProjectNumber(
+-            patch.referenceWidth,
+-            current.referenceWidth,
+-            100,
+-            20000,
+-          );
+-        if (Object.prototype.hasOwnProperty.call(patch, "gap"))
+-          next.gap = readProjectNumber(patch.gap, current.gap, 0, 2000);
+-        if (Object.prototype.hasOwnProperty.call(patch, "outerMargin"))
+-          next.outerMargin = readProjectNumber(
+-            patch.outerMargin,
+-            current.outerMargin,
+-            0,
+-            5000,
+-          );
+-        if (Object.prototype.hasOwnProperty.call(patch, "radius"))
+-          next.radius = readProjectNumber(patch.radius, current.radius, 0, 2000);
+-        if (Object.prototype.hasOwnProperty.call(patch, "aspect"))
+-          next.aspect = readProjectNumber(patch.aspect, current.aspect, 0.1, 10);
+-        if (Object.prototype.hasOwnProperty.call(patch, "showBorders"))
+-          next.showBorders = patch.showBorders === true;
+-        appFSM.send("LAYOUT_STYLE_CHANGED", {
+-          style: next,
+-          direction: "ui-to-fsm",
+-        });
++        const result = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
++        if (!result.committed) return false;
+         applySlotStyle(false);
+         applyDashboardZoom(false);
+         schedulePlotResize();
+@@ -7629,26 +7604,31 @@
+         return readLayoutApiState();
+       }
+       function setLayoutApiZoom(value) {
+-        applyDashboardZoom(false, readProjectNumber(value, 100, 50, 200));
+-        appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
++        appFSM.send("SET_DASHBOARD_ZOOM", { value });
++        applyDashboardZoom(false);
+         return readLayoutApiState();
+       }
+       function commitLayoutApiZoom() {
+-        commitDashboardScale("layout-api");
++        renderDashboard();
++        appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
+         return readLayoutApiState();
+       }
+       function setLayoutApiZoomLocked(locked) {
+-        setDashboardZoomLocked(locked === true);
+-        if (locked === true)
+-          appFSM.notify("layout", "DASHBOARD_ZOOM_LOCK_CHANGED");
++        const session = interfaceFSM.readState();
++        let renderedWidth = null;
++        if (locked === true && !session.dashboardZoomLocked) {
++          renderedWidth = readDashboardRenderedWidth();
++          if (!Number.isFinite(renderedWidth) || renderedWidth <= 0) return false;
++        }
++        appFSM.send("SET_DASHBOARD_ZOOM_LOCK", { locked: locked === true, renderedWidth });
++        applyDashboardZoom(false);
++        schedulePlotResize();
+         return readLayoutApiState();
+       }
+       function resetLayoutApiZoom() {
+-        if (dashboardZoomLocked) setDashboardZoomLocked(false);
+-        else {
+-          applyDashboardZoom(false, 100);
+-          commitDashboardScale("layout-api-reset");
+-        }
++        appFSM.send("RESET_DASHBOARD_ZOOM");
++        applyDashboardZoom(false);
++        schedulePlotResize();
+         return readLayoutApiState();
+       }
+       window.FastFigureApi = Object.freeze({

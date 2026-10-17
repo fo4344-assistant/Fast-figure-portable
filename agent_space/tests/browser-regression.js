@@ -1477,6 +1477,97 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(!/appFSM.query|renderDashboard/.test(applyUiPalette.toString()), "palette renderer performs queries or dashboard orchestration");
     });
 
+    await run(45, "Layout reads and partial style commands use current Backend authority", async () => {
+      const preview = BackendSettings.defaults.preview, limits = BackendSettings.defaults.limits.layout,
+        beforeRead = JSON.stringify(activeProject._state), frontend = appFSM.state,
+        read = api.layout.readState(800), backend = appFSM.query("project-api", { operation: "layout.readState", renderedWidth: 800 });
+      check(Object.isFrozen(read) && Object.isFrozen(read.slotStyle) && Object.isFrozen(read.visibleSlots) &&
+        read.visibleSlots.every(Object.isFrozen) && Object.isFrozen(read.previewGeometry), "layout projection contains mutable fields");
+      check(JSON.stringify(activeProject._state) === beforeRead && appFSM.state === frontend &&
+        !("zoom" in backend) && !("zoomLocked" in backend), "layout query mutated state or Backend read Frontend zoom");
+      check(read.zoom === interfaceFSM.readState().dashboardZoomIntent &&
+        read.zoomLocked === interfaceFSM.readState().dashboardZoomLocked, "Application did not compose Frontend zoom scalars");
+      check(api.layout.readState(null).previewGeometry.width === preview.fallbackWidth &&
+        api.layout.readState(Infinity).previewGeometry.width === preview.fallbackWidth &&
+        api.layout.readState(0).previewGeometry.width === preview.widthRange[0] &&
+        api.layout.readState(1e9).previewGeometry.width === preview.widthRange[1], "preview width does not use Backend config");
+      const current = api.layout.setStyle({ referenceWidth: 1600, gap: 14, outerMargin: 12, radius: 0, aspect: 2, showBorders: false });
+      check(current.slotStyle.referenceWidth === 1600 && current.slotStyle.gap === 14 && current.slotStyle.radius === 0 &&
+        !current.slotStyle.showBorders && read.slotStyle !== current.slotStyle && read.previewGeometry.width === 800,
+        "style edit discarded zero/false or rewrote detached snapshot");
+      dispatchProjectCommand("LAYOUT_STYLE_CHANGED", { gap: 21 });
+      const partial = api.layout.setStyle({ aspect: 4 });
+      check(partial.slotStyle.gap === 21 && partial.slotStyle.referenceWidth === 1600 && partial.slotStyle.aspect === 4 &&
+        !partial.slotStyle.showBorders, "Application sent a stale full style instead of new edits");
+      check(partial.previewGeometry.height === preview.fallbackWidth / 4 &&
+        partial.previewGeometry.scale === preview.fallbackWidth / 1600, "preview uses inconsistent width/reference context");
+      const bounded = api.layout.setStyle({ referenceWidth: 1e9, gap: -1, outerMargin: 1e9, radius: -1, aspect: NaN, showBorders: 1, ignored: 7 });
+      check(bounded.slotStyle.referenceWidth === limits.referenceWidth[1] && bounded.slotStyle.gap === limits.gap[0] &&
+        bounded.slotStyle.outerMargin === limits.outerMargin[1] && bounded.slotStyle.radius === limits.radius[0] &&
+        bounded.slotStyle.aspect === 4 && !bounded.slotStyle.showBorders && !("ignored" in bounded.slotStyle),
+        "style limits/invalid fallback/known-field Boolean rule differ from pseudocode");
+      const beforeFailure = JSON.stringify(activeProject._state), beforeFrontend = appFSM.state, broken = { gap: 19 };
+      Object.defineProperty(broken, "aspect", { get() { throw Error("broken layout edit"); } });
+      let failed = false;
+      try { api.layout.setStyle(broken); } catch { failed = true; }
+      check(failed && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === beforeFrontend,
+        "failed style normalization partially committed or reconciled");
+      const send = projectEFSM.send, apply = applySlotStyle, zoom = applyDashboardZoom, resize = schedulePlotResize;
+      let rendered = 0;
+      try {
+        projectEFSM.send = () => Object.freeze({ committed: false });
+        applySlotStyle = applyDashboardZoom = schedulePlotResize = () => { rendered++; };
+        check(api.layout.setStyle({ gap: 8 }) === false, "uncommitted style returned successful layout read");
+      } finally { projectEFSM.send = send; applySlotStyle = apply; applyDashboardZoom = zoom; schedulePlotResize = resize; }
+      check(rendered === 0 && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === beforeFrontend,
+        "uncommitted style rendered or mutated state");
+      check(!/activeProject|projectObjects|readProjectNumber|dashboardGeometry/.test(readLayoutApiState.toString() + setLayoutApiStyle.toString()),
+        "layout Application still owns Backend reads or normalization");
+      api.layout.setStyle(BackendSettings.project_object.layout.slotStyle);
+    });
+
+    await run(46, "Layout zoom is Frontend-owned with stable lock anchor and no persistent writes", async () => {
+      api.layout.resetZoom();
+      const authority = JSON.stringify(activeProject._state);
+      check(api.layout.setZoom(125).zoom === 125, "zoom intent event not applied");
+      const stable = appFSM.state;
+      api.layout.setZoom(125);
+      check(appFSM.state === stable, "same zoom republished runtime");
+      check(api.layout.setZoom(0).zoom === 50 && api.layout.setZoom(1000).zoom === 200 &&
+        api.layout.setZoom(NaN).zoom === 100 && api.layout.setZoom(Symbol("invalid zoom")).zoom === 100,
+        "zoom limits/invalid fallback do not match Frontend contract");
+      const readWidth = readDashboardRenderedWidth;
+      let measured = 0;
+      try {
+        readDashboardRenderedWidth = () => { measured++; return 0; };
+        const beforeInvalid = appFSM.state;
+        check(api.layout.setZoomLocked(true) === false && appFSM.state === beforeInvalid &&
+          !interfaceFSM.readState().dashboardZoomLocked, "invalid initial lock changed runtime");
+        readDashboardRenderedWidth = () => { measured++; return 840; };
+        check(api.layout.setZoomLocked(true).zoomLocked && measured === 2 &&
+          interfaceFSM.readState().dashboardZoomLockedWidth === 840, "initial lock did not capture exactly one valid width");
+        const locked = appFSM.state;
+        readDashboardRenderedWidth = () => { throw Error("repeated lock measured again"); };
+        api.layout.setZoomLocked(true);
+        api.layout.setZoom(175);
+        check(appFSM.state === locked && interfaceFSM.readState().dashboardZoomLockedWidth === 840 &&
+          api.layout.readState().zoom === 100, "lock changed anchor/intent or republished on no-op");
+        check(!api.layout.setZoomLocked(false).zoomLocked && api.layout.readState().zoom === 100 &&
+          interfaceFSM.readState().dashboardZoomLockedWidth === null, "unlock did not reset session atomically");
+        api.layout.setZoom(150);
+        api.layout.resetZoom();
+        const reset = appFSM.state;
+        api.layout.resetZoom();
+        check(appFSM.state === reset && api.layout.readState().zoom === 100, "repeated reset published a change");
+      } finally { readDashboardRenderedWidth = readWidth; }
+      const revision = appFSM.state.revision;
+      api.layout.commitZoom();
+      check(appFSM.state.revision === revision + 1 && JSON.stringify(activeProject._state) === authority,
+        "zoom completion did not notify once or zoom wrote persistent layout");
+      check(!/dashboardZoom\w*\s*=|activeProject|readProjectNumber/.test(setLayoutApiZoom.toString() +
+        setLayoutApiZoomLocked.toString() + resetLayoutApiZoom.toString()), "zoom Application owns session mutation or Backend normalization");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
