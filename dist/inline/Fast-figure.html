@@ -11391,14 +11391,21 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
       }
+      function resolveLayoutCommandSlots(candidate, slotIds) {
+        if (!Array.isArray(slotIds) || !slotIds.length || !slotIds.every(Number.isInteger))
+          throw Error("현재 표시된 슬롯 ID를 선택하세요.");
+        return [...new Set(slotIds)].map((id) => {
+          const slot = candidate.slots.find((item) => item.id === id);
+          if (!slot || slot.hidden) throw Error("현재 표시된 슬롯을 확인할 수 없습니다.");
+          return slot;
+        });
+      }
       function applySlotsMergedAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOTS_MERGED");
         machine.assertWritable("charts", "SLOTS_MERGED");
-        let slotIds = [...new Set((Array.isArray(payload.slotIds) ? payload.slotIds : [])
-          .map(Number).filter(Number.isInteger))],
-          selected = slotIds.map(slotAt).filter((slot) => slot && !slot.hidden);
-        if (selected.length !== slotIds.length || selected.length < 2)
-          throw Error("합칠 슬롯을 둘 이상 선택하세요.");
+        let candidate = projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        let selected = resolveLayoutCommandSlots(candidate, payload.slotIds);
         let top = Math.min(...selected.map((slot) => slot.row)),
           left = Math.min(...selected.map((slot) => slot.col)),
           bottom = Math.max(...selected.map((slot) => slot.row + slot.rowSpan - 1)),
@@ -11411,20 +11418,16 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         });
         if (selectedCells.size !== (bottom - top + 1) * (right - left + 1))
           throw Error("선택한 슬롯의 전체 영역이 빈칸 없는 직사각형이어야 합니다.");
-        let candidate = projectClone(activeProject._state);
-        normalizeSlotContents(candidate.slots);
         let cells = candidate.slots.filter((slot) =>
           slot.row >= top && slot.row <= bottom && slot.col >= left && slot.col <= right);
         if (cells.length !== selectedCells.size) throw Error("선택 영역을 확인할 수 없습니다.");
-        let nonDefault = cells.filter(slotHasNonDefaultLocalState);
+        let nonDefault = selected.filter(slotHasNonDefaultLocalState);
         if (nonDefault.length > 1)
           throw Error("로컬 상태가 두 개 이상 있는 슬롯은 합칠 수 없습니다.");
         let anchor = cells.find((slot) => slot.row === top && slot.col === left),
           source = nonDefault[0] || anchor,
           local = slotLocalState(source);
         cells.forEach((cell) => {
-          cell.rowSpan = 1;
-          cell.colSpan = 1;
           cell.hidden = cell !== anchor;
           if (cell !== anchor) resetSlotLocalState(cell);
         });
@@ -11434,22 +11437,18 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         anchor.hidden = false;
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
-        payload.anchorId = anchor.id;
         payload.selectionHints = {
-          mergeSlotIds: cells.map((slot) => slot.id),
+          mergeSlotIds: selected.map((slot) => slot.id),
           anchorId: anchor.id,
         };
       }
       function applySlotsSplitAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOTS_SPLIT");
-        let ids = [...new Set((Array.isArray(payload.slotIds) ? payload.slotIds : [])
-          .map(Number).filter(Number.isInteger))],
-          selected = ids.map(slotAt).filter((slot) =>
-            slot && !slot.hidden && (slot.rowSpan > 1 || slot.colSpan > 1));
-        if (!selected.length) throw Error("나눌 합쳐진 슬롯을 선택하세요.");
         let candidate = projectClone(activeProject._state);
         normalizeSlotContents(candidate.slots);
-        let restored = new Set();
+        let selected = resolveLayoutCommandSlots(candidate, payload.slotIds);
+        if (selected.some((slot) => slot.rowSpan <= 1 && slot.colSpan <= 1))
+          throw Error("나눌 합쳐진 슬롯을 선택하세요.");
         for (let source of selected) {
           let anchor = candidate.slots.find((slot) => slot.id === source.id),
             endRow = anchor.row + anchor.rowSpan,
@@ -11465,14 +11464,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
               cell.colSpan = 1;
               if (cell.id === anchor.id) setSlotLocalState(cell, local);
               else resetSlotLocalState(cell);
-              restored.add(cell.id);
             }
           });
         }
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
-        payload.restoredSlotIds = [...restored];
-        payload.selectionHints = { reResolveSlotSelection: true };
       }
       function applyAssetsImportedAction({ machine, payload }) {
         for (let scope of ["data", "images", "files", "charts", "slots"])
@@ -13885,28 +13881,16 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return chart;
       }
       function mergeSlots(slotIds=[]) {
-        let payload = { slotIds, direction: "ui-to-fsm" };
-        try {
-          appFSM.send("SLOTS_MERGED", payload);
-        } catch (error) {
-          status(error.message);
-          return null;
-        }
+        const result = dispatchProjectCommand("SLOTS_MERGED", { slotIds });
+        if (!result.committed) return false;
         renderDashboard();
-        appFSM.notify("layout","SLOTS_MERGED");
-        return Number.isInteger(payload.anchorId) ? [payload.anchorId] : null;
+        return readLayoutApiState();
       }
       function splitSlots(slotIds=[]) {
-        let payload = { slotIds, direction: "ui-to-fsm" };
-        try {
-          appFSM.send("SLOTS_SPLIT", payload);
-        } catch (error) {
-          status(error.message);
-          return null;
-        }
+        const result = dispatchProjectCommand("SLOTS_SPLIT", { slotIds });
+        if (!result.committed) return false;
         renderDashboard();
-        appFSM.notify("layout","SLOTS_SPLIT");
-        return payload.restoredSlotIds || [];
+        return readLayoutApiState();
       }
       function createChartModel({ id = null, editor = {}, graph = {} } = {}) {
         let model = {
@@ -14206,7 +14190,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         slot.content.imageId = Number.isInteger(next.imageId) ? next.imageId : null;
         slot.content.contentType = next.contentType === "image" ? "image" : "graph";
         slot.content.imageSettings = readImageSettings(next.imageSettings);
-        slot.caption = typeof next.caption === "string" && next.caption ? next.caption : null;
+        slot.caption = typeof next.caption === "string" ? next.caption : null;
         return slot;
       }
       function resetSlotLocalState(slot) {
@@ -14243,12 +14227,9 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             slot.content && typeof slot.content === "object" && !Array.isArray(slot.content)
               ? slot.content
               : {},
-          legacyCaption =
-            typeof slot.caption === "string"
-              ? slot.caption
-              : typeof sourceContent.caption === "string"
-                ? sourceContent.caption
-                : null,
+          legacyCaption = Object.prototype.hasOwnProperty.call(slot, "caption")
+            ? slot.caption
+            : Object.prototype.hasOwnProperty.call(sourceContent, "caption") ? sourceContent.caption : null,
           legacySettings =
             sourceContent.imageSettings && typeof sourceContent.imageSettings === "object"
               ? sourceContent.imageSettings
@@ -14268,7 +14249,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           imageSettings: readImageSettings(legacySettings),
         };
         delete slot.content.caption;
-        slot.caption = legacyCaption && legacyCaption !== "슬롯 캡션" ? legacyCaption : null;
+        slot.caption = legacyCaption;
         Object.defineProperties(slot, {
           chart: {
             configurable: true,
@@ -20391,9 +20372,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       });
     };
     const runLayoutCommand = (command) => {
-      const nextSelection = command([...layoutSelection]);
-      if (Array.isArray(nextSelection))
-        setLayoutSelection(new Set(nextSelection));
+      const layoutState = command([...layoutSelection]);
+      if (layoutState !== false) {
+        const visibleIds = new Set(layoutState.visibleSlots.map((slot) => slot.id));
+        setLayoutSelection((current) => new Set([...current].filter((id) => visibleIds.has(id))));
+      }
     };
     const changeZoom = (value) =>
       layoutApi.setZoom(clamp(value, 100, 50, 200));
