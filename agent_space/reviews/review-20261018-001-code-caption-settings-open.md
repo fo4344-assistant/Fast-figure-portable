@@ -16,8 +16,8 @@ The user's physical-module flattening exception is applied only to implementatio
 | Current-authority mutation, not Application snapshot input | `setCaptionsApiSettings` passes only patch; `applyCaptionSettingsChangedAction` merges supplied fields into Backend candidate using config bounds/fallbacks before whole validation/commit | Implemented |
 | Failure must not expose successful read | Text/settings/enabled/name/nameBold wrappers return false for noncommit; throws propagate; slot read is an official immutable Backend query | Implemented |
 | Physical flattening only | No new application JS module/package; common JSON belongs to existing Source config path and is packaged as data | Preserved |
-| Policy/version/recording | AGENT and relevant direct-translation policy consulted; code revision/fingerprint/lineage recorded, remains stale; actual files and numeric patch pair in same commit | Prepared |
-| Tests cover actual artifacts | Browser case42 covers frozen config, independent instance copies, same-command current state, patch-only input, bounds/fallback, exception preservation and all six noncommit gates. Prior41 cases retained. Build verification checks embedded JSON equals the source in both artifacts | Execution pending at preparation |
+| Policy/version/recording | AGENT and relevant direct-translation policy consulted; code revision/fingerprint/lineage recorded, remains stale; actual files and numeric patch pair in the same commit `b8944bc83332ac149f89409a31e1ec930982366b` | Verified |
+| Tests cover actual artifacts | Browser case42 covers frozen config, independent instance copies, same-command current state, patch-only input, bounds/fallback, exception preservation and all six noncommit gates. Prior41 cases retained. Build verification checks embedded JSON equals the source in both artifacts | Actions passed for this bounded unit; not whole-goal proof |
 
 ## Implementation decisions
 
@@ -31,6 +31,16 @@ The user's physical-module flattening exception is applied only to implementatio
 
 All application, builder and checker execution is reserved for authorized GitHub Actions. Local activity is text/file/hash/Git work only. No local Source/PlusCal execution, application test/build, parser or TLC run. No delegation.
 
-At preparation: Actions results pending. Static `git diff --check` passes. Static comparison and test additions are not execution proof. Build escaping is explicitly implemented, but adversarial configuration values are not yet covered by a dedicated executable test.
+At preparation Actions were pending; actual execution results are recorded below. Static `git diff --check` and isolated-index reverse applicability of the actual patch passed. These are file checks, not application tests. Build escaping is explicitly implemented, but adversarial configuration values are not yet covered by a dedicated executable test.
+
+## Actual Actions results
+
+All three runs used implementation commit `b8944bc83332ac149f89409a31e1ec930982366b`:
+
+- [Regression39051983860](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39051983860): success, actual logs show cases1–42 passed in both inline and split-zip file:// browsers (84 case executions). Case42 exercises the newly packaged data and actual public APIs, not a manifest proxy.
+- [Versions39051983808](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39051983808): success; logs show source-code r38 **stale**, fingerprint `sha256:785a369300df83e4e499ec0f3c79eb3b7906d2f9c856020462f8b355d4048678`, pseudocode r12 current. This checks lineage/fingerprints, not whole semantic conformance.
+- [Build39051983865](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39051983865): build and verify success, including inline/split embedded JSON equality with the common source; generated artifacts committed as `e14c499e87f24ad29f6ff3174ef2ca033609dd77`. That bot commit changes only generated dist files and was fast-forwarded locally. The user's patch/source same-commit rule applies to the authored change and is satisfied by patch001 in the implementation commit; bot generation is a separately identified automatic output step.
+
+This post-execution record is a later documentation-only change, not itself the executed implementation HEAD. No failures were observed in these runs. The initial local commit attempt failed because author identity was unset; it wrote no commit. Retrying used the authenticated GitHub account's existing verified noreply identity via per-command Git options (no global identity change).
 
 Whole-goal blockers remain: label and layout ownership, graph/assets current-attempt commands, selection maps and lifecycle/API adaptation, renderer direct-read cutover, export geometry and full Source/pseudocode conformance audit. Green bounded tests cannot close those gaps. Do not mark the active implementation goal complete.
