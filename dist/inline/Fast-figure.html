@@ -10263,6 +10263,19 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         if ((kind === "project-api" && request.operation === "appearance.readPalette") ||
             (kind === "renderer" && request.operation === "ui-palette"))
           return Object.freeze({ ...activeProject._state.appearance.uiPalette });
+        if (kind === "project-api" && request.operation === "layout.readState") {
+          const source = activeProject._state, preview = BackendSettings.defaults.preview,
+            width = request.renderedWidth == null ? preview.fallbackWidth : readProjectNumber(
+              request.renderedWidth, preview.fallbackWidth, ...preview.widthRange);
+          return Object.freeze({
+            gridRows: source.layout.gridRows, gridCols: source.layout.gridCols,
+            slotStyle: Object.freeze({ ...source.layout.slotStyle }),
+            visibleSlots: Object.freeze(source.slots.filter((slot) => !slot.hidden).map((slot) => Object.freeze({
+              id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
+            }))),
+            previewGeometry: Object.freeze(dashboardGeometryInProject(source, width)),
+          });
+        }
         if (kind === "project-api" && request.operation === "labels.readState") {
           const source = activeProject._state, labels = source.annotations.labels,
             slot = source.slots.find((item) => item.id === request.slotId && !item.hidden) ?? null,
@@ -10512,6 +10525,28 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           if (event === "LIFECYCLE_START" || event === "LIFECYCLE_COMPLETE" ||
               event === "LIFECYCLE_FAILED")
             return this.transitionLifecycle(event, payload);
+          if (event === "SET_DASHBOARD_ZOOM") {
+            if (dashboardZoomLocked) return this.state;
+            let numeric;
+            try { numeric = Number(payload.value); } catch { numeric = NaN; }
+            const value = Number.isFinite(numeric) ? Math.max(50, Math.min(200, numeric)) : 100;
+            if (value === dashboardZoomIntent) return this.state;
+            dashboardZoomIntent = value;
+            return this.notify("layout", event);
+          }
+          if (event === "SET_DASHBOARD_ZOOM_LOCK" || event === "RESET_DASHBOARD_ZOOM") {
+            if (event === "SET_DASHBOARD_ZOOM_LOCK" && payload.locked === true) {
+              if (dashboardZoomLocked || !Number.isFinite(payload.renderedWidth) || payload.renderedWidth <= 0) return this.state;
+              dashboardZoomLocked = true;
+              dashboardZoomLockedWidth = payload.renderedWidth;
+            } else {
+              if (!dashboardZoomLocked && dashboardZoomLockedWidth === null && dashboardZoomIntent === 100) return this.state;
+              dashboardZoomLocked = false;
+              dashboardZoomLockedWidth = null;
+              dashboardZoomIntent = 100;
+            }
+            return this.notify("layout", event);
+          }
           let handled = false;
           for (let region of [
             "lifecycle",
@@ -10533,7 +10568,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           return this.state;
         }
         readState() {
-          return Object.freeze({ ...this.state, selectedSlotId });
+          return Object.freeze({ ...this.state, selectedSlotId,
+            dashboardZoomIntent, dashboardZoomLocked, dashboardZoomLockedWidth });
         }
         reconcileProjectResult(event, input) {
           selectedSlotId = input.selectedSlot;
@@ -11344,7 +11380,13 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       function applyLayoutStyleChangedAction({ machine, payload }) {
         machine.assertWritable("layout", "LAYOUT_STYLE_CHANGED");
         let candidate = projectClone(activeProject._state);
-        candidate.layout.slotStyle = projectClone(payload.style);
+        const style = candidate.layout.slotStyle, limits = BackendSettings.defaults.limits.layout;
+        for (const key of ["referenceWidth", "gap", "outerMargin", "radius", "aspect"]) {
+          if (!Object.prototype.hasOwnProperty.call(payload, key)) continue;
+          style[key] = readProjectNumber(payload[key], style[key], ...limits[key]);
+        }
+        if (Object.prototype.hasOwnProperty.call(payload, "showBorders"))
+          style.showBorders = payload.showBorders === true;
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
       }
@@ -17238,9 +17280,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           schema: payload?.schema || "plotly",
         });
       }
-      function applyDashboardZoom(resize = true, requestedValue = null) {
-        if (requestedValue !== null && !dashboardZoomLocked)
-          dashboardZoomIntent = Math.max(50, Math.min(200, Number(requestedValue) || 100));
+      function applyDashboardZoom(resize = true) {
         let dashboard = $("dashboard"),
           width;
         if (dashboardZoomLocked && Number.isFinite(dashboardZoomLockedWidth)) {
@@ -17255,27 +17295,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         if (resize) schedulePlotResize();
         requestAnimationFrame(syncDashboardZoomDisplay);
       }
-      function commitDashboardScale(reason) {
-        renderDashboard();
-        debugLog("dashboard:scale-commit", {
-          reason,
-          zoom: dashboardZoomIntent,
-          width: $("dashboard").getBoundingClientRect().width,
-        });
-        appFSM.notify("layout", "DASHBOARD_SCALE_COMMITTED");
-      }
-      function setDashboardZoomLocked(locked) {
-        let dashboard = $("dashboard");
-        dashboardZoomLocked = locked;
-        if (locked) dashboardZoomLockedWidth = dashboard.getBoundingClientRect().width;
-        else {
-          dashboardZoomLockedWidth = null;
-          dashboardZoomIntent = 100;
-        }
-        applyDashboardZoom(false);
-        if (locked) schedulePlotResize();
-        else commitDashboardScale("unlock-reset-100");
-        debugLog("dashboard:zoom-lock", { locked, width: dashboardZoomLockedWidth });
+      function readDashboardRenderedWidth() {
+        return $("dashboard")?.getBoundingClientRect().width ?? 0;
       }
       function applyUiPalette(palette, notify = true) {
         document.documentElement.style.setProperty("--ui-color", palette.uiColor);
@@ -17446,60 +17467,14 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       function resetAppearanceApiPalette() {
         return applyUiPaletteValues({ ...DEFAULT_UI_PALETTE });
       }
-      function readLayoutApiState(previewWidth = 600) {
-        let width = readProjectNumber(previewWidth, 600, 1, 20000),
-          geometry = dashboardGeometry(width);
-        return Object.freeze({
-          gridRows: activeProject.gridRows,
-          gridCols: activeProject.gridCols,
-          slotStyle: Object.freeze({ ...activeProject.layout.slotStyle }),
-          visibleSlots: Object.freeze(
-            activeProject.slots
-              .filter((slot) => !slot.hidden)
-              .map((slot) =>
-                Object.freeze({
-                  id: slot.id,
-                  row: slot.row,
-                  col: slot.col,
-                  rowSpan: slot.rowSpan,
-                  colSpan: slot.colSpan,
-                }),
-              ),
-          ),
-          previewGeometry: Object.freeze({ ...geometry }),
-          zoom: dashboardZoomIntent,
-          zoomLocked: dashboardZoomLocked,
-        });
+      function readLayoutApiState(previewWidth = null) {
+        const layout = appFSM.query("project-api", { operation: "layout.readState", renderedWidth: previewWidth }),
+          session = interfaceFSM.readState();
+        return Object.freeze({ ...layout, zoom: session.dashboardZoomIntent, zoomLocked: session.dashboardZoomLocked });
       }
       function setLayoutApiStyle(patch = {}) {
-        let current = activeProject.layout.slotStyle,
-          next = { ...current };
-        if (Object.prototype.hasOwnProperty.call(patch, "referenceWidth"))
-          next.referenceWidth = readProjectNumber(
-            patch.referenceWidth,
-            current.referenceWidth,
-            100,
-            20000,
-          );
-        if (Object.prototype.hasOwnProperty.call(patch, "gap"))
-          next.gap = readProjectNumber(patch.gap, current.gap, 0, 2000);
-        if (Object.prototype.hasOwnProperty.call(patch, "outerMargin"))
-          next.outerMargin = readProjectNumber(
-            patch.outerMargin,
-            current.outerMargin,
-            0,
-            5000,
-          );
-        if (Object.prototype.hasOwnProperty.call(patch, "radius"))
-          next.radius = readProjectNumber(patch.radius, current.radius, 0, 2000);
-        if (Object.prototype.hasOwnProperty.call(patch, "aspect"))
-          next.aspect = readProjectNumber(patch.aspect, current.aspect, 0.1, 10);
-        if (Object.prototype.hasOwnProperty.call(patch, "showBorders"))
-          next.showBorders = patch.showBorders === true;
-        appFSM.send("LAYOUT_STYLE_CHANGED", {
-          style: next,
-          direction: "ui-to-fsm",
-        });
+        const result = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
+        if (!result.committed) return false;
         applySlotStyle(false);
         applyDashboardZoom(false);
         schedulePlotResize();
@@ -17523,26 +17498,31 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return readLayoutApiState();
       }
       function setLayoutApiZoom(value) {
-        applyDashboardZoom(false, readProjectNumber(value, 100, 50, 200));
-        appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
+        appFSM.send("SET_DASHBOARD_ZOOM", { value });
+        applyDashboardZoom(false);
         return readLayoutApiState();
       }
       function commitLayoutApiZoom() {
-        commitDashboardScale("layout-api");
+        renderDashboard();
+        appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
         return readLayoutApiState();
       }
       function setLayoutApiZoomLocked(locked) {
-        setDashboardZoomLocked(locked === true);
-        if (locked === true)
-          appFSM.notify("layout", "DASHBOARD_ZOOM_LOCK_CHANGED");
+        const session = interfaceFSM.readState();
+        let renderedWidth = null;
+        if (locked === true && !session.dashboardZoomLocked) {
+          renderedWidth = readDashboardRenderedWidth();
+          if (!Number.isFinite(renderedWidth) || renderedWidth <= 0) return false;
+        }
+        appFSM.send("SET_DASHBOARD_ZOOM_LOCK", { locked: locked === true, renderedWidth });
+        applyDashboardZoom(false);
+        schedulePlotResize();
         return readLayoutApiState();
       }
       function resetLayoutApiZoom() {
-        if (dashboardZoomLocked) setDashboardZoomLocked(false);
-        else {
-          applyDashboardZoom(false, 100);
-          commitDashboardScale("layout-api-reset");
-        }
+        appFSM.send("RESET_DASHBOARD_ZOOM");
+        applyDashboardZoom(false);
+        schedulePlotResize();
         return readLayoutApiState();
       }
       window.FastFigureApi = Object.freeze({
