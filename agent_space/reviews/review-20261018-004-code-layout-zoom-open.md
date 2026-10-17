@@ -25,4 +25,14 @@ Application retains existing post-success DOM render orchestration while transla
 
 ## Actions results
 
-Pending execution on the actual implementation commit. Do not treat previous runs, manifest counts or preparation checks as r41 verification.
+Implementation and patch006 pair committed together as `84761a44efbebcdc5652cbc24636420792bb5823`.
+
+- [Regression39053607221](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39053607221): SUCCESS; actual logs show cases1–46 passing in both inline and split ZIP file-browser artifacts, including new layout/zoom cases45/46 (92 case executions).
+- [Versions39053607246](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39053607246): PASS, source-code r41 stale fingerprint `sha256:c359f18d294241d81fd73c0a176f032f8b0f7de5333d1f86b5fb3ac729f82746` and unchanged current Source/pseudocode lineage.
+- [Build39053607372](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39053607372): SUCCESS on that source commit; generated dist-only bot commit `2eafd93a6ac612d8f1ec6126fed6f116ebbd4b4c` was fast-forwarded locally. No generated file was edited by hand.
+
+Before commit, actual semantic diff check and isolated-index reverse application passed. This result-only documentation update is later than the executed source HEAD, not another execution of it. No failed r41 run was observed. No local runtime/test/build/checker/TLC or delegation occurred. Temporary record scripts/indexes are collected for the single work-end cleanup; verification evidence and reusable/unrelated helpers are retained.
+
+### Completion audit against the active goal
+
+Concrete whole-goal deliverables are direct pseudocode implementation of the current application, only physical hierarchy flattening, preserved logical ownership/input-output/failure/resource contracts, Source-first resolution of semantic gaps, and verification covering the actual whole implementation. The table above maps this unit, not all163 Source entries or87 APIs. Actual current code still has Backend-reading style/geometry renderer helpers, legacy grid/merge/split and export paths, Application-owned graph/asset candidates, and pending whole result-map/lifecycle/API alignment. The regression verifies changed actual behaviors but does not prove those uncovered ownership requirements. Therefore the whole goal is **not achieved**; source-code stays stale and no goal-complete action is justified. Next unit is safe grid resizing/merge/split and supplied geometry/export, followed by remaining domain and renderer/API cutover.
