@@ -1,0 +1,22 @@
+diff --git a/agent_space/plans/plan-022.md b/agent_space/plans/plan-022.md
+index 30be230..f8561a4 100644
+--- a/agent_space/plans/plan-022.md
++++ b/agent_space/plans/plan-022.md
+@@ -164,3 +164,17 @@ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지
+ 아직 필요한 작업: FFPX document producer/reader의 구체 조립과 normalizeSlotContent 등 남은 domain 계산/codec 경계의 전개·연결, 전체 query/command/UI producer-consumer의 retry/취소/사후 throw/resource 의미 대조, 전체 충실도 review 후 활성 hierarchy 교체·lineage 갱신과 Actions cumulative checker다. 이번 constructor/FFSX 전개만으로 전체 완료를 선언하지 않는다.
+ 
+ 저장소 patch에는 이 진행 기록만 들어간다. `.work/plan022/` 임시 번역·메모는 포함/rollback하지 않는다. Source37 closed/활성 pseudocode11 stale/하위 stale와 fingerprint는 변경하지 않았다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
++
++## 13. 후속 진행 — versioned package 문서와 slot-local 정규화
++
++기준 HEAD `e982a1d7ec69dc1ee2e7fcc9dd4dd099a7f282e1`에서 Source r37과 기존 임시 작업본의 package 조립/복원을 이어 번역했다. Source의 의미·설정·활성 pseudocode metadata를 변경하지 않았다.
++
++1. FFPX writer의 미전개 document constructor를 실제 문서별 절차로 옮겼다. project metadata/appearance/export/fileSystem, placement-only layout, caption·labels, 각 slot의 content/caption/chart, CSV·image metadata와 owned binary entries를 동일 snapshot에서 조립한다. graph object 순서는 보존하며 object 배열은 graph settings와 분리된 기존 typed XML 요소로 보낸다. dataRef는 package subtree이고 원본 filesystem 재개방 참조가 아니다.
++2. FFPX reader는 필수 root/version, named typed value, placement별 slot document, chart/image reference, CSV/image metadata와 dataRef bytes 복원, 원본 bytes의 table parse를 연결했다. merged footprint의 hidden flag를 복원하되 잘못된 payload를 버리거나 chart를 clone/drop하지 않는다. export에서 제외한 trash contents와 구별해 고정 VFS directory instance를 복원한다. wire caption.beforeText는 Source captions.text로, appearance.slotStyle은 Source layout.slotStyle로 옮긴다. package schema/version은 import 검증용이며 최종 Project에 이중 schema authority로 남기지 않는다.
++3. FFSX도 slot/settings/caption/graph, graphObjects, assets/assets.xml의 producer/consumer를 명시했다. 두 형식의 graph XML은 같은 private encoder와 typed grammar를 쓴다. FFSX에는 Project chart id가 없으므로 검증을 위해 가짜 id를 만들지 않는다. 등록된 Project chart의 필수 positive/unique id 검증은 Project constructor/whole validator가 소유하며, shared chart 구조 검증에서 존재하는 id는 여전히 검증한다. 이 구분은 Source의 package-local 상태와 Project identity 경계를 표현한 것이며 public signature/새 runtime state를 추가하지 않는다.
++4. normalizeSlotContent의 가상 일괄 호출을 canonical content field, missing slot-local default imageSettings, legacy flat storage 제거, caption의 단일 slot.caption 경로로 전개했다. 현재 canonical field를 legacy fallback으로 덮어쓰지 않으며 image asset에서 display settings를 읽지 않는다. slotHasNonDefaultLocalState는 chart/image/type/imageSettings 전체/caption만 비교하고 geometry는 제외한다. normalizeProjectPath의 file mode에서는 root 자체를 해당 절차 안에서 거부하도록 Source의 명시 조건을 옮겼다.
++5. slot에 image asset이 없더라도 slot-local imageSettings를 잃지 않도록 기존 typed imageObject/settings 표현에 null imageRef를 사용한다. 이는 asset/CSV/id를 새로 만드는 것이 아니며 slot 설정과 asset reference를 분리한 Source 의미를 보존한다. 현재 compatibility reader의 null-reference 해석과 대조했고, 하위 코드 변경/실행으로 성공을 확인했다고 주장하지 않는다.
++
++텍스트 목록 대조에서 15개 작업본 6,164행, procedure 선언 242개에 explicit call의 미대응 이름·동일 procedure 이름 중복은 없었다. 이는 문자열 검색 결과일 뿐 parser/type/동작 검증이나 전체 충실도 증명이 아니다. helper를 이름만 연결해 둔 모든 domain 계산이 끝났다는 뜻도 아니다. 파일 본문을 도구 cache에 통째로 저장하려던 시도는 cache 크기 제한으로 실패했으며, 이 실패는 작업본/Source 실행과 무관하고 위 검색 결과를 runtime 통과로 바꾸지 않는다.
++
++잔여: 다른 owner의 미전개 domain 계산과 platform primitive 구분, query/command/UI/87 API 전체의 인자·반환·실패·재시도·resource producer-consumer 대조, Source 전체 충실도 기록, 활성 hierarchy 교체와 이전 파일/임시 작업본 정리, revision/fingerprint/lineage 및 허용된 Actions 검증이다. 아직 번역 완료/current가 아니다. 이번 branch patch는 이 기록만 포함하며 `.work/plan022/`의 작업본 자체나 rollback 자료는 포함하지 않는다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
