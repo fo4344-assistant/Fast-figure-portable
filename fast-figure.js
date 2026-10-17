@@ -421,6 +421,18 @@
             settings: Object.freeze(normalizeImageSettings(slot)),
           }) : null;
         }
+        if (kind === "export" && request.operation === "graphs.exportPlotlyJson") {
+          const source = activeProject._state,
+            slot = source.slots.find((item) => item.id === request.slotId && !item.hidden),
+            chart = slot && slot.contentType !== "image"
+              ? source.charts.find((item) => item.id === slot.chart) : null;
+          if (!chart) return null;
+          const bytes = new TextEncoder().encode(JSON.stringify(chartFigure(chart, source)));
+          return Object.freeze({
+            name: `plotly-figure-${slot.id}-${request.stamp}.json`, mime: "application/json",
+            bytes: Object.freeze(Array.from(bytes)),
+          });
+        }
         if (kind !== "slot-selection-context") throw Error(`알 수 없는 Backend query: ${kind}`);
         let slot = request.slotId == null ? null : slotAt(request.slotId);
         return slot && !slot.hidden ? Object.freeze({
@@ -3210,15 +3222,16 @@
           };
         });
       }
-      function traces(c) {
-        let settings = normalizeGlobalSettings(c),
+      function traces(c, project = activeProject._state) {
+        let settings = readGlobalSettings(c),
           editor = c.editor,
           axes = settings.axes,
           objectList =
             Array.isArray(editor.objects) ? editor.objects : [],
           result = [];
         objectList.forEach((object, index) => {
-          let xSide = object.xAxisSide || editor.xAxisSide || "bottom",
+          let csv = requireProjectCsv({ editor: { objects: [object] } }, `그래프 객체 ${index + 1}`, project.assets.csvFiles),
+            xSide = object.xAxisSide || editor.xAxisSide || "bottom",
             ySide = object.yAxisSide || editor.yAxisSide || "left",
             xAxis = axes[axisKey("x", xSide)],
             yAxis = axes[axisKey("y", ySide)],
@@ -3230,14 +3243,8 @@
             ...tracesSingle({
               ...editor,
               ...object,
-              rows: requireProjectCsv(
-                { editor: { objects: [object] } },
-                `그래프 객체 ${index + 1}`,
-              ).rows,
-              headerLines: requireProjectCsv(
-                { editor: { objects: [object] } },
-                `그래프 객체 ${index + 1}`,
-              ).headerLines,
+              rows: csv.rows,
+              headerLines: csv.headerLines,
               xDivide: Number(xAxis.divide) || 1,
               yDivide: Number(yAxis.divide) || 1,
               xScaleType: xAxis.scaleType,
@@ -3287,11 +3294,11 @@
         xRefs.forEach((xaxis) => yRefs.forEach((yaxis) => result.push(placeholder(xaxis, yaxis))));
         return result;
       }
-      function layout(c) {
-        let bg = activeProject.appearance.uiPalette.paperColor,
-          ink = activeProject.appearance.uiPalette.fontColor,
+      function layout(c, project = activeProject._state) {
+        let bg = project.appearance.uiPalette.paperColor,
+          ink = project.appearance.uiPalette.fontColor,
           editor = c.editor,
-          settings = normalizeGlobalSettings(c),
+          settings = readGlobalSettings(c),
           numberOrEmpty = (v) =>
             v === "" || v === undefined || v === null ? undefined : Number(v),
           axis = (title, key) => {
@@ -3888,7 +3895,7 @@
                   plot !== document.getElementById(`plot-${s.id}`)
                 ) return null;
                 let figure = chartFigure(
-                  c,
+                  c, activeProject._state,
                   dashboardGeometry(d.getBoundingClientRect().width).scale,
                 );
                 return Promise.resolve(Plotly.react(
@@ -4093,9 +4100,9 @@
           doubleClick: "reset",
         };
       }
-      function rebuildEditableGraph(chart) {
-        chart.graph.data = traces(chart);
-        chart.graph.layout = layout(chart);
+      function rebuildEditableGraph(chart, project = activeProject._state) {
+        chart.graph.data = traces(chart, project);
+        chart.graph.layout = layout(chart, project);
         return chart.graph;
       }
       function chartExportCopy(chart) {
@@ -4149,11 +4156,11 @@
         });
         return copy;
       }
-      function chartFigure(chart, scale = 1) {
+      function chartFigure(chart, project = activeProject._state, scale = 1) {
         let copy = chartExportCopy(chart);
         if (copy.editor.editable === false && copy.graph.imported)
           return scalePlotlyFigure(copy.graph.imported, scale);
-        rebuildEditableGraph(copy);
+        rebuildEditableGraph(copy, project);
         return scalePlotlyFigure(copy.graph, scale);
       }
       function setNestedAxisFromPlotly(target, axis = {}) {
@@ -6731,7 +6738,7 @@
       }
       async function exportChartImage(chart, width, height, layoutScale, rasterScale) {
         let host = document.createElement("div"),
-          figure = chartFigure(chart, layoutScale);
+          figure = chartFigure(chart, activeProject._state, layoutScale);
         host.style.cssText =
           "position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;";
         host.style.width = `${Math.max(2, width)}px`;
@@ -7118,16 +7125,6 @@
           throw error;
         }
       }
-      function downloadJsonFile(payload, name) {
-        let blob = new Blob([JSON.stringify(payload, null, 2)], {
-            type: "application/json;charset=utf-8",
-          }),
-          link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = name;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(link.href), 0);
-      }
       function ffsxBuildSlot(slot, chart) {
         let projectObject = projectObjects.read("project"),
           copy = chartExportCopy(chart),
@@ -7317,14 +7314,29 @@
           debugLog("slotFfsx:export-error", { message: error.message });
         }
       }
+      async function downloadExportPayload(payload) {
+        const blob = new Blob([Uint8Array.from(payload.bytes)], { type: payload.mime }),
+          url = URL.createObjectURL(blob), link = document.createElement("a");
+        try {
+          link.href = url;
+          link.download = payload.name;
+          link.click();
+          // Let the browser consume the handoff before releasing this job's URL.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+      async function exportSelectedGraph(slotId, operation) {
+        const payload = appFSM.query("export", {
+          operation, slotId, stamp: new Date().toISOString().replace(/[:.]/g, "-"),
+        });
+        if (payload === null) return;
+        await downloadExportPayload(payload);
+      }
       function downloadPlotlyJson() {
-        let slot = getSelectedSlot(),
-          chart = slot?.chart && getChart(slot.chart);
-        if (!slot || !chart) return status("Plotly JSON으로 내보낼 그래프 슬롯을 먼저 선택하세요.");
-        let stamp = new Date().toISOString().replace(/[:.]/g, "-"),
-          figure = chartFigure(chart);
-        downloadJsonFile(figure, `plotly-figure-${slot.id}-${stamp}.json`);
-        status("선택한 슬롯의 Plotly JSON을 내보냈습니다.");
+        return appFSM.run("exporting", "graphs.exportPlotlyJson", () =>
+          exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportPlotlyJson"));
       }
       async function importSlotFile(file, slot) {
         if (!slot) throw Error("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");

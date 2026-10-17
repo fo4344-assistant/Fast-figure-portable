@@ -1906,6 +1906,88 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+    await run(53, "Graph figures resolve only their supplied Project and export copied JSON bytes", async () => {
+      const target = activeProject.slots.find(slot => !slot.hidden);
+      api.slots.reset(target.id); select(slotAt(target.id)); api.slots.setContentType("graph");
+      const csv = createProjectCsv([["X", "Y"], ["11", "22"]], "figure-context.csv");
+      api.graphs.addObject(csv.id);
+      const source = projectClone(activeProject._state), chart = source.charts.find(item => item.id === slotAt(target.id).chart);
+      source.assets.csvFiles.find(item => item.id === csv.id).rows[1] = ["101", "202"];
+      source.appearance.uiPalette.paperColor = "#123456";
+      const before = JSON.stringify(source), authority = JSON.stringify(activeProject._state), normalize = normalizeGlobalSettings;
+      let figure;
+      try {
+        normalizeGlobalSettings = () => { throw Error("figure read attempted editor normalization/write"); };
+        figure = chartFigure(chart, source);
+      } finally { normalizeGlobalSettings = normalize; }
+      const trace = figure.data.find(item => !item.meta?.fastFigureAxisPlaceholder);
+      check(trace.x[0] === 101 && trace.y[0] === 202 && figure.layout.paper_bgcolor === "#123456",
+        "figure mixed live CSV/palette into supplied Project");
+      check(JSON.stringify(source) === before && JSON.stringify(activeProject._state) === authority,
+        "figure calculation wrote supplied or live Project");
+      const payload = appFSM.query("export", { operation: "graphs.exportPlotlyJson", slotId: target.id, stamp: "probe" });
+      const exported = JSON.parse(new TextDecoder().decode(Uint8Array.from(payload.bytes)));
+      check(Object.isFrozen(payload) && Object.isFrozen(payload.bytes) && payload.mime === "application/json" &&
+        payload.name === `plotly-figure-${target.id}-probe.json` && exported.data[0].y[0] === 22,
+        "export did not encode current same-project figure into immutable name/MIME/bytes");
+      check(appFSM.query("export", { operation: "graphs.exportPlotlyJson", slotId: -999, stamp: "probe" }) === null,
+        "missing graph did not return none");
+      const imported = { data: [{ x: [1], y: [2] }], layout: { title: "original" },
+        frames: [{ name: "frame", data: [{ y: [3] }] }], config: { scrollZoom: true } };
+      chart.editor.editable = false; chart.graph.imported = imported;
+      check(JSON.stringify(chartFigure(chart, source)) === JSON.stringify(imported),
+        "noneditable imported figure/frames were regenerated or lost");
+      source.assets.csvFiles.length = 0; chart.editor.editable = true;
+      let missing = false;
+      try { chartFigure(chart, source); } catch (_) { missing = true; }
+      check(missing && JSON.stringify(activeProject._state) === authority, "missing supplied CSV fell back to live authority");
+    });
+
+    await run(54, "Plotly export owns one lifecycle, consumes copied payload and releases handoff resources", async () => {
+      const create = URL.createObjectURL, revoke = URL.revokeObjectURL,
+        click = HTMLAnchorElement.prototype.click, query = readBackendProjection;
+      const before = JSON.stringify(activeProject._state);
+      let created = [], revoked = [], clicked = [], calls = 0, fail = false;
+      const failure = Error("expected JSON download handoff failure");
+      try {
+        URL.createObjectURL = blob => { const url = `blob:probe-${created.length}`; created.push({ url, blob }); return url; };
+        URL.revokeObjectURL = url => revoked.push(url);
+        HTMLAnchorElement.prototype.click = function () {
+          check(appFSM.state.lifecycle === "exporting", "public JSON handoff ran outside export lifecycle");
+          if (fail) throw failure;
+          clicked.push(this.download);
+          check(!revoked.includes(this.href), "resource revoked before browser handoff");
+        };
+        readBackendProjection = (kind, request) => {
+          check(kind === "export" && request.operation === "graphs.exportPlotlyJson" && appFSM.state.lifecycle === "exporting",
+            "JSON wrapper made an extra query or queried before lifecycle start");
+          calls++; return query(kind, request);
+        };
+        check(await api.graphs.exportPlotlyJson() === undefined && calls === 1 && clicked.length === 1 &&
+          revoked[0] === created[0].url && appFSM.state.lifecycle === "ready", "successful handoff leaked URL/result/lifecycle");
+        const figure = JSON.parse(await created[0].blob.text());
+        check(figure.data[0].y[0] === 22 && /^plotly-figure-\d+-.*\.json$/.test(clicked[0]), "copied figure/name changed in renderer");
+        fail = true; let caught;
+        try { await api.graphs.exportPlotlyJson(); } catch (error) { caught = error; }
+        check(caught === failure && revoked[1] === created[1].url && appFSM.state.lifecycle === "ready",
+          "handoff failure was swallowed, resource leaked or lifecycle stuck");
+        fail = false;
+        const pending = appFSM.run("exporting", "JSON_BUSY_PROBE", () => api.graphs.exportPlotlyJson());
+        check((await pending.then(() => null, error => error)) && calls === 2 && appFSM.state.lifecycle === "ready",
+          "busy public export queried/reentered lifecycle");
+        readBackendProjection = () => null;
+        check(await api.graphs.exportPlotlyJson() === undefined && created.length === 2,
+          "missing query payload allocated/downloaded a resource");
+        check(JSON.stringify(activeProject._state) === before, "export changed persistent Project");
+        check(!/activeProject|getSelectedSlot|getChart|chartFigure/.test(exportSelectedGraph.toString() + downloadPlotlyJson.toString()) &&
+          !/activeProject|appFSM|chartFigure|getProjectCsv/.test(downloadExportPayload.toString()),
+          "Application/renderer export directly reads Backend domain state");
+      } finally {
+        URL.createObjectURL = create; URL.revokeObjectURL = revoke;
+        HTMLAnchorElement.prototype.click = click; readBackendProjection = query;
+      }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

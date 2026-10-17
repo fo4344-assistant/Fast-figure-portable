@@ -1,0 +1,348 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 737ab7c..aa225d1 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -61,6 +61,10 @@ Baseline `ec548da11a60f8794b7ec5238703805fee978351`. Translate NormalizeExportEd
+ 
+ Code46 translates `exportCaptionLayout` using one supplied reference snapshot/font measurement, including prefix-only overflow/retry, unsplit words and blank paragraphs. Target painting consumes the same lines at uniform width/referenceWidth scale, keeps automatic rounding slack below the dashboard, clips caption text, uses copied configured raster limits and returns declared geometry rejections/rounded raster dimensions. Geometry no longer invents clamps/defaults. Cases51/52 cover these branches with explicit snapshot/encoding boundaries; existing tests remain. Source39/pseudocode13 are unchanged. Review `agent_space/reviews/review-20261018-009-code-reference-export-open.md` records mappings, exclusions and actual Actions. Implementation `97dc58efa60b6e8e73c17f33664c8dc1dc18eb2c` passed regression39056916573 (52 inline +52 split), versions39056916480 and build39056916610; generated dist-only bot `0946be422fd08d0380469b1f309c20fcc6dd1dbc` was fast-forwarded. Later result documentation is not the executed source HEAD. Patch20261018-017 and actual modified files commit together. Full export snapshot/graph/resource/current-capture ownership and broader graph/assets/renderer/API integration remain unfinished; code46 stays stale and the active goal open.
+ 
++## Eleventh implementation unit — same-Project figure and Plotly JSON handoff
++
++Baseline `db7da948255535d1e18928cbb3533e166bc0c639`. Code47 translates the official graphs.exportPlotlyJson query and Application exportSelectedGraph/copied-payload renderer path, with one public lifecycle task. Shared graph figure calculation now resolves CSV/palette from the supplied Project and does not normalize/write editor state during a query. Original imported frames and fresh immutable UTF-8 bytes/name/MIME are retained; missing targets return None, failures propagate with local resource cleanup. Cases53/54 exercise separate supplied/live contexts, actual bytes/Blob, no mutation, busy/success/failure lifecycle and handoff release. Review010 and patch20261018-019 accompany source/test/lineage changes in one atomic commit. Actions pending at preparation. Source39/pseudocode13 unchanged; code47 stale. Remaining graph/asset candidates, full graph calculations, other package/API exports, raster/current snapshot composition, supplied-projection dashboard rendering and whole integration still prevent completion.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-010-code-plotly-export-open.md b/agent_space/reviews/review-20261018-010-code-plotly-export-open.md
+new file mode 100644
+index 0000000..dc9190c
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-010-code-plotly-export-open.md
+@@ -0,0 +1,30 @@
++# Code r47 — same-Project figure reads and Plotly JSON export (OPEN)
++
++Baseline `db7da948255535d1e18928cbb3533e166bc0c639`. Source39 closed/current and pseudocode13 current remain unchanged. Physical module flattening is the only implementation exception; code47 remains stale.
++
++## Prompt-to-artifact audit
++
++| Requirement / actual authority inspected | Implemented artifact and verification surface |
++|---|---|
++| `pseudocode/backend/graphs.pcal` traces/layout/rebuildEditableGraph/chartFigure receive the same Project | JS counterparts pass an explicit Project through CSV resolution and palette layout calculation. Figure reads use pure readGlobalSettings, not the mutating normalizer. A copied chart is rebuilt; the supplied Project/chart are never modified by chartFigure |
++| `pseudocode/backend/project_state.pcal` export graphs.exportPlotlyJson, Source EXPORT_BACKEND_READ_CONTRACT | Official Backend query resolves the explicit visible graph slot and owning chart from one current Project, builds the figure in that context, returns copied frozen name/MIME/UTF-8 byte values; absent target returns null. Query allocates no URL/download resource |
++| `pseudocode/application/public_api/graphs.pcal` exportSelectedGraph | Application supplies slot identity, operation and per-call sanitized UTC timestamp, queries once and forwards only the payload. Missing target returns undefined without a download or status substitute |
++| Source PUBLIC_LIFECYCLE_RULE | Existing Application runLifecycleTask owns exactly one public graphs.exportPlotlyJson call. It starts exporting before the query/handoff, rejects busy reentry, completes None and recovers/propagates original failures |
++| `pseudocode/frontend/renderer.pcal` downloadExportPayload, copied-byte branch | Renderer consumes bytes/name/MIME only, creates one local URL, hands it to the browser once, yields for browser handoff, and releases it in finally. Original handoff/encoding errors propagate. Success means handoff, not disk-save confirmation |
++| Obsolete path | Removed unused downloadJsonFile and direct chart/selected-slot/figure download logic from downloadPlotlyJson; no compatibility bridge or second state |
++| Concrete cases | Case53 checks detached supplied CSV/palette context versus different live values, no normalizer write, immutable current query bytes/name/MIME, missing target, imported frames, no fallback for missing supplied CSV. Case54 checks public busy/lifecycle timing, single query, actual Blob content, handoff URL lifetime/failure recovery, None and no persistent changes |
++| Lineage and same-commit records | Revision47 with current upper fingerprints; actual four-path code fingerprint; this review, plan, tests and patch019 pair accompany the modified source in one atomic commit |
++
++The retained legacy graph/render call sites now explicitly preserve their old presentation scale argument while using the new Project argument position; remaining implicit current-Project defaults are not claimed as completed candidate ownership. Other graph algorithms (style/numeric normalization, optional extension removal), graph/asset command builders, FFSX/package export and raster/current-capture snapshot composition still need direct-translation work. downloadExportPayload implements the copied-byte path used here, not all package-entry producers. No Source ambiguity required a new meaning in this unit: existing Source and pseudocode already define these branches.
++
++## Decisions / rejected alternatives
++
++Rejected reading live CSV/palette again after copying a chart, calling the write-normalizer in a query, encoding/downloading in Backend, a UI-owned figure snapshot passed back as a command, catching errors as status, and reporting disk confirmation. All conflict with the existing owner/return contracts. Byte arrays are a concrete immutable JS representation; text encoding, Blob, anchor and one scheduler turn are platform primitives. The scheduler runs before successful URL release; handoff exceptions still release this operation's URL and propagate. Existing unrelated surface resources are not revoked.
++
++## Verification
++
++Pending GitHub Actions at preparation. No local application, Source, pseudocode/parser, checker, test, build or TLC execution. File diff/reverse-apply checks are not runtime evidence. Cases1–54 are requested in both packaged formats; version checker must verify actual fingerprint and stale status; build must verify both distributions. Actual runs/HEAD and any failures will be recorded after execution.
++
++## Whole-goal audit
++
++Deliverables remain all pseudocode owners directly translated with exact input/output/branches, current-authority candidates and single commits, rejection/failure/lifecycle/resource behavior, sole config authority, supplied-projection rendering and requirement-linked integration evidence. This unit covers only same-Project figure reads and one export API. Remaining graph/assets/canonical constructor normalization, positional selection maps, raster/current capture, renderer Backend direct reads, other lifecycle/API/package routes and whole integration are not proven by cases1–54 or a green lineage check. Goal is not complete; code stays stale.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 301cb66..7959f6b 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1906,6 +1906,88 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(53, "Graph figures resolve only their supplied Project and export copied JSON bytes", async () => {
++      const target = activeProject.slots.find(slot => !slot.hidden);
++      api.slots.reset(target.id); select(slotAt(target.id)); api.slots.setContentType("graph");
++      const csv = createProjectCsv([["X", "Y"], ["11", "22"]], "figure-context.csv");
++      api.graphs.addObject(csv.id);
++      const source = projectClone(activeProject._state), chart = source.charts.find(item => item.id === slotAt(target.id).chart);
++      source.assets.csvFiles.find(item => item.id === csv.id).rows[1] = ["101", "202"];
++      source.appearance.uiPalette.paperColor = "#123456";
++      const before = JSON.stringify(source), authority = JSON.stringify(activeProject._state), normalize = normalizeGlobalSettings;
++      let figure;
++      try {
++        normalizeGlobalSettings = () => { throw Error("figure read attempted editor normalization/write"); };
++        figure = chartFigure(chart, source);
++      } finally { normalizeGlobalSettings = normalize; }
++      const trace = figure.data.find(item => !item.meta?.fastFigureAxisPlaceholder);
++      check(trace.x[0] === 101 && trace.y[0] === 202 && figure.layout.paper_bgcolor === "#123456",
++        "figure mixed live CSV/palette into supplied Project");
++      check(JSON.stringify(source) === before && JSON.stringify(activeProject._state) === authority,
++        "figure calculation wrote supplied or live Project");
++      const payload = appFSM.query("export", { operation: "graphs.exportPlotlyJson", slotId: target.id, stamp: "probe" });
++      const exported = JSON.parse(new TextDecoder().decode(Uint8Array.from(payload.bytes)));
++      check(Object.isFrozen(payload) && Object.isFrozen(payload.bytes) && payload.mime === "application/json" &&
++        payload.name === `plotly-figure-${target.id}-probe.json` && exported.data[0].y[0] === 22,
++        "export did not encode current same-project figure into immutable name/MIME/bytes");
++      check(appFSM.query("export", { operation: "graphs.exportPlotlyJson", slotId: -999, stamp: "probe" }) === null,
++        "missing graph did not return none");
++      const imported = { data: [{ x: [1], y: [2] }], layout: { title: "original" },
++        frames: [{ name: "frame", data: [{ y: [3] }] }], config: { scrollZoom: true } };
++      chart.editor.editable = false; chart.graph.imported = imported;
++      check(JSON.stringify(chartFigure(chart, source)) === JSON.stringify(imported),
++        "noneditable imported figure/frames were regenerated or lost");
++      source.assets.csvFiles.length = 0; chart.editor.editable = true;
++      let missing = false;
++      try { chartFigure(chart, source); } catch (_) { missing = true; }
++      check(missing && JSON.stringify(activeProject._state) === authority, "missing supplied CSV fell back to live authority");
++    });
++
++    await run(54, "Plotly export owns one lifecycle, consumes copied payload and releases handoff resources", async () => {
++      const create = URL.createObjectURL, revoke = URL.revokeObjectURL,
++        click = HTMLAnchorElement.prototype.click, query = readBackendProjection;
++      const before = JSON.stringify(activeProject._state);
++      let created = [], revoked = [], clicked = [], calls = 0, fail = false;
++      const failure = Error("expected JSON download handoff failure");
++      try {
++        URL.createObjectURL = blob => { const url = `blob:probe-${created.length}`; created.push({ url, blob }); return url; };
++        URL.revokeObjectURL = url => revoked.push(url);
++        HTMLAnchorElement.prototype.click = function () {
++          check(appFSM.state.lifecycle === "exporting", "public JSON handoff ran outside export lifecycle");
++          if (fail) throw failure;
++          clicked.push(this.download);
++          check(!revoked.includes(this.href), "resource revoked before browser handoff");
++        };
++        readBackendProjection = (kind, request) => {
++          check(kind === "export" && request.operation === "graphs.exportPlotlyJson" && appFSM.state.lifecycle === "exporting",
++            "JSON wrapper made an extra query or queried before lifecycle start");
++          calls++; return query(kind, request);
++        };
++        check(await api.graphs.exportPlotlyJson() === undefined && calls === 1 && clicked.length === 1 &&
++          revoked[0] === created[0].url && appFSM.state.lifecycle === "ready", "successful handoff leaked URL/result/lifecycle");
++        const figure = JSON.parse(await created[0].blob.text());
++        check(figure.data[0].y[0] === 22 && /^plotly-figure-\d+-.*\.json$/.test(clicked[0]), "copied figure/name changed in renderer");
++        fail = true; let caught;
++        try { await api.graphs.exportPlotlyJson(); } catch (error) { caught = error; }
++        check(caught === failure && revoked[1] === created[1].url && appFSM.state.lifecycle === "ready",
++          "handoff failure was swallowed, resource leaked or lifecycle stuck");
++        fail = false;
++        const pending = appFSM.run("exporting", "JSON_BUSY_PROBE", () => api.graphs.exportPlotlyJson());
++        check((await pending.then(() => null, error => error)) && calls === 2 && appFSM.state.lifecycle === "ready",
++          "busy public export queried/reentered lifecycle");
++        readBackendProjection = () => null;
++        check(await api.graphs.exportPlotlyJson() === undefined && created.length === 2,
++          "missing query payload allocated/downloaded a resource");
++        check(JSON.stringify(activeProject._state) === before, "export changed persistent Project");
++        check(!/activeProject|getSelectedSlot|getChart|chartFigure/.test(exportSelectedGraph.toString() + downloadPlotlyJson.toString()) &&
++          !/activeProject|appFSM|chartFigure|getProjectCsv/.test(downloadExportPayload.toString()),
++          "Application/renderer export directly reads Backend domain state");
++      } finally {
++        URL.createObjectURL = create; URL.revokeObjectURL = revoke;
++        HTMLAnchorElement.prototype.click = click; readBackendProjection = query;
++      }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 7098b11..e0b566b 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 46,
++      "revision": 47,
+       "status": "stale", 
+       "paths": [
+         "Fast-figure.html", 
+@@ -38,13 +38,13 @@
+         "fast-figure.js", 
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:97f73a1966367ee435633d7c0309c207fe32f9b7cc0931a5e7a229b3a4e11f96",
++      "fingerprint": "sha256:7b27c5f6d2c7bbeb743e7e382598a5be0d3b24304a170a0151b04c5050119128",
+       "derived_from": {
+         "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+         "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-009-code-reference-export-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-010-code-plotly-export-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 13,
+diff --git a/fast-figure.js b/fast-figure.js
+index 15aa54c..a328ac0 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -421,6 +421,18 @@
+             settings: Object.freeze(normalizeImageSettings(slot)),
+           }) : null;
+         }
++        if (kind === "export" && request.operation === "graphs.exportPlotlyJson") {
++          const source = activeProject._state,
++            slot = source.slots.find((item) => item.id === request.slotId && !item.hidden),
++            chart = slot && slot.contentType !== "image"
++              ? source.charts.find((item) => item.id === slot.chart) : null;
++          if (!chart) return null;
++          const bytes = new TextEncoder().encode(JSON.stringify(chartFigure(chart, source)));
++          return Object.freeze({
++            name: `plotly-figure-${slot.id}-${request.stamp}.json`, mime: "application/json",
++            bytes: Object.freeze(Array.from(bytes)),
++          });
++        }
+         if (kind !== "slot-selection-context") throw Error(`알 수 없는 Backend query: ${kind}`);
+         let slot = request.slotId == null ? null : slotAt(request.slotId);
+         return slot && !slot.hidden ? Object.freeze({
+@@ -3210,15 +3222,16 @@
+           };
+         });
+       }
+-      function traces(c) {
+-        let settings = normalizeGlobalSettings(c),
++      function traces(c, project = activeProject._state) {
++        let settings = readGlobalSettings(c),
+           editor = c.editor,
+           axes = settings.axes,
+           objectList =
+             Array.isArray(editor.objects) ? editor.objects : [],
+           result = [];
+         objectList.forEach((object, index) => {
+-          let xSide = object.xAxisSide || editor.xAxisSide || "bottom",
++          let csv = requireProjectCsv({ editor: { objects: [object] } }, `그래프 객체 ${index + 1}`, project.assets.csvFiles),
++            xSide = object.xAxisSide || editor.xAxisSide || "bottom",
+             ySide = object.yAxisSide || editor.yAxisSide || "left",
+             xAxis = axes[axisKey("x", xSide)],
+             yAxis = axes[axisKey("y", ySide)],
+@@ -3230,14 +3243,8 @@
+             ...tracesSingle({
+               ...editor,
+               ...object,
+-              rows: requireProjectCsv(
+-                { editor: { objects: [object] } },
+-                `그래프 객체 ${index + 1}`,
+-              ).rows,
+-              headerLines: requireProjectCsv(
+-                { editor: { objects: [object] } },
+-                `그래프 객체 ${index + 1}`,
+-              ).headerLines,
++              rows: csv.rows,
++              headerLines: csv.headerLines,
+               xDivide: Number(xAxis.divide) || 1,
+               yDivide: Number(yAxis.divide) || 1,
+               xScaleType: xAxis.scaleType,
+@@ -3287,11 +3294,11 @@
+         xRefs.forEach((xaxis) => yRefs.forEach((yaxis) => result.push(placeholder(xaxis, yaxis))));
+         return result;
+       }
+-      function layout(c) {
+-        let bg = activeProject.appearance.uiPalette.paperColor,
+-          ink = activeProject.appearance.uiPalette.fontColor,
++      function layout(c, project = activeProject._state) {
++        let bg = project.appearance.uiPalette.paperColor,
++          ink = project.appearance.uiPalette.fontColor,
+           editor = c.editor,
+-          settings = normalizeGlobalSettings(c),
++          settings = readGlobalSettings(c),
+           numberOrEmpty = (v) =>
+             v === "" || v === undefined || v === null ? undefined : Number(v),
+           axis = (title, key) => {
+@@ -3888,7 +3895,7 @@
+                   plot !== document.getElementById(`plot-${s.id}`)
+                 ) return null;
+                 let figure = chartFigure(
+-                  c,
++                  c, activeProject._state,
+                   dashboardGeometry(d.getBoundingClientRect().width).scale,
+                 );
+                 return Promise.resolve(Plotly.react(
+@@ -4093,9 +4100,9 @@
+           doubleClick: "reset",
+         };
+       }
+-      function rebuildEditableGraph(chart) {
+-        chart.graph.data = traces(chart);
+-        chart.graph.layout = layout(chart);
++      function rebuildEditableGraph(chart, project = activeProject._state) {
++        chart.graph.data = traces(chart, project);
++        chart.graph.layout = layout(chart, project);
+         return chart.graph;
+       }
+       function chartExportCopy(chart) {
+@@ -4149,11 +4156,11 @@
+         });
+         return copy;
+       }
+-      function chartFigure(chart, scale = 1) {
++      function chartFigure(chart, project = activeProject._state, scale = 1) {
+         let copy = chartExportCopy(chart);
+         if (copy.editor.editable === false && copy.graph.imported)
+           return scalePlotlyFigure(copy.graph.imported, scale);
+-        rebuildEditableGraph(copy);
++        rebuildEditableGraph(copy, project);
+         return scalePlotlyFigure(copy.graph, scale);
+       }
+       function setNestedAxisFromPlotly(target, axis = {}) {
+@@ -6731,7 +6738,7 @@
+       }
+       async function exportChartImage(chart, width, height, layoutScale, rasterScale) {
+         let host = document.createElement("div"),
+-          figure = chartFigure(chart, layoutScale);
++          figure = chartFigure(chart, activeProject._state, layoutScale);
+         host.style.cssText =
+           "position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;";
+         host.style.width = `${Math.max(2, width)}px`;
+@@ -7118,16 +7125,6 @@
+           throw error;
+         }
+       }
+-      function downloadJsonFile(payload, name) {
+-        let blob = new Blob([JSON.stringify(payload, null, 2)], {
+-            type: "application/json;charset=utf-8",
+-          }),
+-          link = document.createElement("a");
+-        link.href = URL.createObjectURL(blob);
+-        link.download = name;
+-        link.click();
+-        setTimeout(() => URL.revokeObjectURL(link.href), 0);
+-      }
+       function ffsxBuildSlot(slot, chart) {
+         let projectObject = projectObjects.read("project"),
+           copy = chartExportCopy(chart),
+@@ -7317,14 +7314,29 @@
+           debugLog("slotFfsx:export-error", { message: error.message });
+         }
+       }
++      async function downloadExportPayload(payload) {
++        const blob = new Blob([Uint8Array.from(payload.bytes)], { type: payload.mime }),
++          url = URL.createObjectURL(blob), link = document.createElement("a");
++        try {
++          link.href = url;
++          link.download = payload.name;
++          link.click();
++          // Let the browser consume the handoff before releasing this job's URL.
++          await new Promise((resolve) => setTimeout(resolve, 0));
++        } finally {
++          URL.revokeObjectURL(url);
++        }
++      }
++      async function exportSelectedGraph(slotId, operation) {
++        const payload = appFSM.query("export", {
++          operation, slotId, stamp: new Date().toISOString().replace(/[:.]/g, "-"),
++        });
++        if (payload === null) return;
++        await downloadExportPayload(payload);
++      }
+       function downloadPlotlyJson() {
+-        let slot = getSelectedSlot(),
+-          chart = slot?.chart && getChart(slot.chart);
+-        if (!slot || !chart) return status("Plotly JSON으로 내보낼 그래프 슬롯을 먼저 선택하세요.");
+-        let stamp = new Date().toISOString().replace(/[:.]/g, "-"),
+-          figure = chartFigure(chart);
+-        downloadJsonFile(figure, `plotly-figure-${slot.id}-${stamp}.json`);
+-        status("선택한 슬롯의 Plotly JSON을 내보냈습니다.");
++        return appFSM.run("exporting", "graphs.exportPlotlyJson", () =>
++          exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportPlotlyJson"));
+       }
+       async function importSlotFile(file, slot) {
+         if (!slot) throw Error("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");
