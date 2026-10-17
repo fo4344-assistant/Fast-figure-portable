@@ -19,7 +19,7 @@ Baseline: `57b4731f1ede5a75b22846652e12f556ed826bec`. Source r38 closure evidenc
 | Actual source lineage/fingerprints and current status | `development-versions.json` r38/r12 and cumulative Actions version gate; unchanged application/model remain honestly stale |
 | Verification does not claim unsupported proof | Static checker + artifact scope explicit; no Source execution, application tests/build, PlusCal parser or TLC result is claimed |
 | Same-commit patch and modified files | Numeric patch is generated from the real staged semantic diff against baseline; pair is then staged with all modifications and committed atomically using Git, not sequential Contents writes |
-| No transient work product remains an alternate authority | Active hierarchy is authoritative; temporary `./.work/plan022/pseudocode` staging copies are removed after activation/verification, not published as parallel modules |
+| No transient work product remains an alternate authority | Active hierarchy alone is authoritative; temporary `./.work/plan022/pseudocode` staging copies are retained locally as obsolete drafts, not published as parallel modules |
 
 ## Actual semantic review, not just name coverage
 
@@ -50,4 +50,15 @@ Baseline: `57b4731f1ede5a75b22846652e12f556ed826bec`. Source r38 closure evidenc
 
 ## Verdict / execution record
 
-Semantic inspection supports complete direct translation of Source r38 and activation as pseudocode r12; no known remaining domain placeholder is intentionally deferred to implementation. This verdict covers translation, NOT application parity or formal proof. Required structural/cumulative Actions verification is pending at preparation time; actual run/commit/results must be appended after execution, without treating this review text or a complete manifest as a passing run.
+Semantic inspection supports complete direct translation of Source r38 and activation as pseudocode r12; no known remaining domain placeholder is intentionally deferred to implementation. This verdict covers translation, NOT application parity or formal proof. Preparation initially left structural/cumulative Actions verification pending. The actual execution and final audit follow; the review text/manifest is not itself a passing run.
+
+### Executed verification and completion audit
+
+- Atomic implementation/patch commit: `cf7b725fc3d5cdec51a47051db2964a858eb4499`, containing all 42 changed paths and `20261017-007.patch/.md` together. No sequential intermediate Source/metadata publication or history rewrite.
+- GitHub Actions `Pseudocode fidelity coverage`, run [39027162344](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39027162344), checked out that exact commit, with cumulative baseline `57b4731f1ede5a75b22846652e12f556ed826bec`: **SUCCESS**. Both cumulative development-layer audit and static coverage/binding steps passed.
+- Actual logs: Source r38 current/closed fingerprint `sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4`; pseudocode r12 current fingerprint `sha256:bbc26a0c283ea18b8790e70677017afd2322bc1e1b1b69880cf089036a58343c`. Model r26 stale/pending and code r36 stale remain unchanged; no unsupported downstream-current claim.
+- The uploaded `source-pseudocode-static-trace` artifact contains the actual Source/translation signatures and locations: 163 entries, 87 APIs, 60 explicit wrapper bindings, 15 active owner files. Artifact downloaded for inspection under the current workspace. The checker implementation was reviewed: AST/text/arity/routes/calls/event vocabulary and selected-placeholder checks only, **not** exhaustive branch semantics or runtime proof.
+- The prompt-to-artifact checklist above was rechecked against the active files, Source decisions/closure review, actual metadata, atomic commit and executed logs. Semantic evidence remains the per-owner generation/consumption, calculations, failure/commit and resource review above, not the green count check. No remaining domain decision or unfinished draft is required for this translation scope.
+- Obsolete staging copies under `./.work/plan022/pseudocode` and their pending-work notes/checklists remain locally: the deletion command was denied and did not run. They are not active, published or referenced by the version metadata/workflow. No deletion is retried without permission. The active hierarchy alone is authoritative; the downloaded audit artifact is evidence, not an alternate specification authority.
+
+**Final verdict: the requested Source → pseudocode translation is complete.** Application-code cutover and optional verification-model/TLC work are outside this goal and remain honestly incomplete/stale. This result-record update follows the executed commit and changes documentation only; it is not misrepresented as the commit checked out by run 39027162344.

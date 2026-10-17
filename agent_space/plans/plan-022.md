@@ -189,3 +189,11 @@ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 
 - Source r38 closed / pseudocode r12 current의 실제 fingerprint·lineage를 metadata에 연결한다. application/model은 stale 그대로이며 Source Code cutover·TLC 실행을 주장하지 않는다.
 - 이번부터 사용자의 명시 지시에 따라 수정 파일·실제 `.patch`·같은 basename 설명 `.md`를 같은 Git commit에 함께 넣는다. HEAD/기존 blob/new-path를 동일 remote snapshot에서 확인하고 normal push로 원자 반영하며 force push나 저수준 Git Data API는 사용하지 않는다. 기존 이력은 변경하지 않는다.
 - 검증은 새 `Pseudocode fidelity coverage` workflow에서 누적 version/patch gate와 static entry/input/API/call 대조를 수행한다. 실행 전에는 PASS라 적지 않는다. 실제 run/commit/결과는 실행 후 별도 기록하며 로컬 Source/application/PlusCal/parser/checker/test/build/TLC는 실행하지 않는다. 활성화 후 일회성 작업본은 정리한다.
+
+## 15. 번역 완료 및 실제 검증 결과
+
+- 변경 파일과 patch007 쌍을 함께 담은 원자 commit `cf7b725fc3d5cdec51a47051db2964a858eb4499`를 main에 반영했다.
+- Actions [39027162344](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39027162344)는 위 commit과 누적 baseline `57b4731f1ede5a75b22846652e12f556ed826bec`에서 version/patch gate 및 static coverage/binding을 모두 통과했다. 실제 artifact는 163 entries / 87 APIs / 60 wrapper bindings / 15 active owner files를 대조한다.
+- 개수나 green gate만으로 완료를 판정하지 않았다. Source r38의 실제 판단/closure와 owner별 의미 검토, prompt→artifact checklist를 대조한 최종 audit는 `agent_space/reviews/review-20261017-002-pseudocode-r12-translation.md`에 기록했다.
+- Source r38 closed / pseudocode r12 current의 로그 fingerprint가 실제 metadata와 일치한다. 이전 일회성 staging directory와 pending-work notes/checklists는 로컬에 남아 있다. 삭제 명령이 거부되어 실행되지 않았으며 허가 없이 재시도하지 않는다. 이들은 활성 metadata/workflow나 원격 저장소에서 사용하지 않는 과거 초안이고, active hierarchy만 정식 번역이다.
+- **이 계획의 Source→pseudocode 번역은 완료했다.** application r36과 verification model r26은 stale 그대로다. 애플리케이션 구현 완료나 PlusCal parser/TLC 성공을 주장하지 않으며, 실행 후 결과 문서 commit을 검사된 commit과 혼동하지 않는다.
