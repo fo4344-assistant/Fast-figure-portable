@@ -421,12 +421,21 @@
             settings: Object.freeze(normalizeImageSettings(slot)),
           }) : null;
         }
-        if (kind === "export" && request.operation === "graphs.exportPlotlyJson") {
+        if (kind === "export" && ["graphs.exportPlotlyJson", "graphs.exportFfsx"].includes(request.operation)) {
           const source = activeProject._state,
             slot = source.slots.find((item) => item.id === request.slotId && !item.hidden),
             chart = slot && slot.contentType !== "image"
               ? source.charts.find((item) => item.id === slot.chart) : null;
           if (!chart) return null;
+          if (request.operation === "graphs.exportFfsx") {
+            const bundle = ffsxBuildSlot(slot, chart, source);
+            return Object.freeze({
+              name: `fast-figure-slot-${slot.id}-${request.stamp}.ffsx`, mime: "application/vnd.fast-figure-slot",
+              entries: Object.freeze(bundle.assets.map((entry) => Object.freeze({
+                name: entry.name, data: Object.freeze(Array.from(entry.data)),
+              }))),
+            });
+          }
           const bytes = new TextEncoder().encode(JSON.stringify(chartFigure(chart, source)));
           return Object.freeze({
             name: `plotly-figure-${slot.id}-${request.stamp}.json`, mime: "application/json",
@@ -2650,7 +2659,11 @@
 
 
 
+      function chartUsesConversionView(chart) {
+        return chart?.editor?.editable === false && Object.hasOwn(chart.editor, "conversionRows");
+      }
       function chartCsvIds(chart) {
+        if (chartUsesConversionView(chart)) return [];
         return [
           ...new Set(
             (chart?.editor?.objects || [])
@@ -4084,7 +4097,7 @@
           throw Error(`${label} graph 구조가 올바르지 않습니다.`);
         chart.editor.objects.forEach((object, index) => {
           if (
-            chart.editor.editable !== false &&
+            !chartUsesConversionView(chart) &&
             (!Number.isInteger(object.csvId) || !getProjectCsv(object.csvId, csvCollection))
           )
             throw Error(`${label} 그래프 객체 ${index + 1}의 csvId가 올바르지 않습니다.`);
@@ -4938,7 +4951,8 @@
         return parseCSV(text);
       }
       function projectCsvDataRef(csv) {
-        return `data/${csv.id}/${projectCsvName(csv.name)}`;
+        const extension = /\.[^./]+$/.exec(csv.path || "")?.[0]?.toLowerCase();
+        return `data/csv-${csv.id}${[".json", ".tsv", ".csv"].includes(extension) ? extension : ".csv"}`;
       }
       function ffpxDataUrlBytes(url) {
         let match = /^data:([^,]*),(.*)$/s.exec(url || "");
@@ -7125,11 +7139,11 @@
           throw error;
         }
       }
-      function ffsxBuildSlot(slot, chart) {
-        let projectObject = projectObjects.read("project"),
-          copy = chartExportCopy(chart),
+      function ffsxBuildSlot(slot, chart, source = activeProject._state) {
+        validateChartModel(chart, "FFSX 차트", source.assets.csvFiles);
+        let copy = chartExportCopy(chart),
           referenced = chartCsvIds(chart).map((id) => {
-            let csv = getProjectCsv(id);
+            let csv = getProjectCsv(id, source.assets.csvFiles);
             if (!csv) throw Error(`FFSX가 참조하는 CSV ${id}가 없습니다.`);
             return csv;
           }),
@@ -7144,13 +7158,13 @@
             return csv;
           });
         delete copy.id;
-        copy.editor.objects.forEach((object) => {
-          if (Number.isInteger(object.csvId)) object.csvId = slotIds.get(object.csvId);
+        if (!chartUsesConversionView(copy)) copy.editor.objects.forEach((object) => {
+          object.csvId = slotIds.get(object.csvId);
         });
         let manifest = {
             schema: "fast-figure-slot",
             version: PACKAGE_FORMAT_VERSION,
-            appBuild: projectObject.appBuild,
+            appBuild: source.meta.appBuild,
             exportedAt: new Date().toISOString(),
             slot: {
               contentType: "graph",
@@ -7289,33 +7303,12 @@
         return payload;
       }
       function downloadSlotFfsx() {
-        let slot = getSelectedSlot(),
-          chart = slot?.chart && getChart(slot.chart);
-        if (!slot || !chart) return status("FFSX로 내보낼 그래프 슬롯을 먼저 선택하세요.");
-        try {
-          let bundle = ffsxBuildSlot(slot, chart),
-            blob = new Blob([ffpxZipStore(bundle.assets)], {
-              type: "application/vnd.fast-figure-slot",
-            }),
-            link = document.createElement("a"),
-            stamp = new Date().toISOString().replace(/[:.]/g, "-");
-          link.href = URL.createObjectURL(blob);
-          link.download = `fast-figure-slot-${slot.id}-${stamp}.ffsx`;
-          link.click();
-          setTimeout(() => URL.revokeObjectURL(link.href), 0);
-          status("선택한 슬롯을 FFSX 파일로 내보냈습니다.");
-          debugLog("slotFfsx:export", {
-            slotId: slot.id,
-            chartId: chart.id,
-            assets: bundle.assets.length,
-          });
-        } catch (error) {
-          status("FFSX 내보내기 오류: " + error.message);
-          debugLog("slotFfsx:export-error", { message: error.message });
-        }
+        return appFSM.run("exporting", "graphs.exportFfsx", () =>
+          exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportFfsx"));
       }
       async function downloadExportPayload(payload) {
-        const blob = new Blob([Uint8Array.from(payload.bytes)], { type: payload.mime }),
+        const bytes = payload.entries ? ffpxZipStore(payload.entries) : Uint8Array.from(payload.bytes),
+          blob = new Blob([bytes], { type: payload.mime }),
           url = URL.createObjectURL(blob), link = document.createElement("a");
         try {
           link.href = url;

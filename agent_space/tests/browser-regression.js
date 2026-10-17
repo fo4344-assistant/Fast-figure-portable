@@ -1989,6 +1989,81 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+    await run(55, "FFSX packages real references from one supplied Project and preserves conversion views", async () => {
+      const source = projectClone(activeProject._state), slot = source.slots.find(item => item.id === selectedSlotId),
+        chart = source.charts.find(item => item.id === slot.content.chart), csvId = chart.editor.objects[0].csvId,
+        csv = source.assets.csvFiles.find(item => item.id === csvId);
+      chart.editor.objects.push(projectClone(chart.editor.objects[0]));
+      csv.bytesBase64 = ffpxBytesToBase64(new TextEncoder().encode("X,Y\n303,404\n"));
+      const before = JSON.stringify(source), authority = JSON.stringify(activeProject._state);
+      const bundle = ffsxBuildSlot(slot, chart, source);
+      check(JSON.stringify(source) === before, "FFSX builder mutated the supplied Project");
+      check(bundle.manifest.csvFiles.length === 1 && bundle.manifest.chart.id === undefined &&
+        bundle.manifest.chart.editor.objects.every(object => object.csvId === 1),
+        "FFSX did not deduplicate/remap real references or leaked Project chart id");
+      check(bundle.manifest.csvFiles[0].dataRef === "assets/data/csv-1.csv", "FFSX dataRef differs from current-version pseudocode");
+      const read = await ffsxReadSlot(new File([ffpxZipStore(bundle.assets)], "context.ffsx"));
+      check(read.csvFiles.length === 1 && read.csvFiles[0].rows[1][1] === "404" &&
+        read.chart.editor.objects.every(object => object.csvId === 1), "package bytes came from live CSV or local references broke");
+      chart.editor.editable = false;
+      check(ffsxBuildSlot(slot, chart, source).manifest.csvFiles.length === 1,
+        "frozen real-CSV graph was treated as conversion data");
+      source.assets.csvFiles = []; let rejected = false;
+      try { ffsxBuildSlot(slot, chart, source); } catch (_) { rejected = true; }
+      check(rejected, "frozen dangling real CSV bypassed reference validation");
+      chart.editor.conversionRows = [["X", "Y"], ["1", "2"]];
+      chart.editor.objects.forEach(object => { object.csvId = 999999; });
+      chart.graph.imported = { data: [{ x: [1], y: [2] }], layout: {}, frames: [{ name: "kept", data: [] }] };
+      const converted = ffsxBuildSlot(slot, chart, source);
+      check(converted.manifest.csvFiles.length === 0 && converted.assets.length === 2 &&
+        converted.manifest.chart.editor.objects[0].csvId === 999999 &&
+        converted.manifest.chart.graph.imported.frames[0].name === "kept",
+        "conversion views were resolved/remapped as fake CSVs or imported frames lost");
+      chart.editor.objects = []; delete chart.editor.conversionRows; chart.editor.editable = true;
+      const blank = await ffsxReadSlot(new File([ffpxZipStore(ffsxBuildSlot(slot, chart, source).assets)], "blank-query.ffsx"));
+      check(blank.csvFiles.length === 0 && blank.chart.editor.objects.length === 0, "blank chart lacks required empty asset document");
+      const payload = appFSM.query("export", { operation: "graphs.exportFfsx", slotId: slot.id, stamp: "probe" });
+      check(Object.isFrozen(payload) && Object.isFrozen(payload.entries) && payload.entries.every(entry =>
+        Object.isFrozen(entry) && Object.isFrozen(entry.data)) && payload.name === `fast-figure-slot-${slot.id}-probe.ffsx` &&
+        payload.mime === "application/vnd.fast-figure-slot", "query did not detach/freeze copied package entries");
+      check(appFSM.query("export", { operation: "graphs.exportFfsx", slotId: -999 }) === null &&
+        JSON.stringify(activeProject._state) === authority && before !== JSON.stringify(source),
+        "package/export query changed authority or missing target semantics");
+    });
+
+    await run(56, "Public FFSX export queries once and hands off only copied ZIP entries", async () => {
+      const create = URL.createObjectURL, revoke = URL.revokeObjectURL, click = HTMLAnchorElement.prototype.click,
+        query = readBackendProjection, before = JSON.stringify(activeProject._state), failure = Error("FFSX handoff failed");
+      let calls = 0, blob, releases = [], fail = false, clicks = 0;
+      try {
+        URL.createObjectURL = value => { blob = value; return "blob:ffsx-owned"; };
+        URL.revokeObjectURL = url => releases.push(url);
+        HTMLAnchorElement.prototype.click = function () {
+          check(appFSM.state.lifecycle === "exporting" && /^fast-figure-slot-.*\.ffsx$/.test(this.download), "FFSX handoff/name outside lifecycle");
+          if (fail) throw failure;
+          clicks++;
+        };
+        readBackendProjection = (kind, request) => {
+          check(kind === "export" && request.operation === "graphs.exportFfsx" && appFSM.state.lifecycle === "exporting", "FFSX bypassed official query/lifecycle");
+          calls++; return query(kind, request);
+        };
+        check(await api.graphs.exportFfsx() === undefined && calls === 1 && clicks === 1 &&
+          releases.includes("blob:ffsx-owned") && appFSM.state.lifecycle === "ready", "FFSX leaked result/resource/lifecycle");
+        readBackendProjection = () => { throw Error("renderer reread Backend"); };
+        const read = await ffsxReadSlot(new File([blob], "download.ffsx"));
+        check(blob.type === "application/vnd.fast-figure-slot" && read.csvFiles.length === 1, "copied entry handoff did not encode readable FFSX");
+        readBackendProjection = query; fail = true; let caught;
+        try { await api.graphs.exportFfsx(); } catch (error) { caught = error; }
+        check(caught === failure && releases.filter(url => url === "blob:ffsx-owned").length === 2 &&
+          appFSM.state.lifecycle === "ready", "FFSX failure swallowed or resource/lifecycle leaked");
+        readBackendProjection = () => null; fail = false;
+        check(await api.graphs.exportFfsx() === undefined && clicks === 1, "missing target caused an FFSX handoff");
+        check(JSON.stringify(activeProject._state) === before && !/getSelectedSlot|getChart|activeProject|status\(/.test(downloadSlotFfsx.toString()),
+          "FFSX Application wrapper owns Backend/status state");
+      } finally { URL.createObjectURL = create; URL.revokeObjectURL = revoke;
+        HTMLAnchorElement.prototype.click = click; readBackendProjection = query; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

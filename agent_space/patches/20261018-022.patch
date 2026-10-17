@@ -1,0 +1,296 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 178e067..20fb4e5 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -65,6 +65,10 @@ Code46 translates `exportCaptionLayout` using one supplied reference snapshot/fo
+ 
+ Baseline `db7da948255535d1e18928cbb3533e166bc0c639`. Code47 translates the official graphs.exportPlotlyJson query and Application exportSelectedGraph/copied-payload renderer path, with one public lifecycle task. Shared graph figure calculation now resolves CSV/palette from the supplied Project and does not normalize/write editor state during a query. Original imported frames and fresh immutable UTF-8 bytes/name/MIME are retained; missing targets return None, failures propagate with local resource cleanup. Cases53/54 exercise separate supplied/live contexts, actual bytes/Blob, no mutation, busy/success/failure lifecycle and handoff release. Review010 and patch20261018-019 accompany source/test/lineage changes in one atomic commit. Implementation+patch019 `4d91c62d643e92113b6e62bbb3e6cfcf0724e2ae` passed versions39057561692/build39057561708 (dist-only bot `0ab35f6cb4208197fdc1b7cc53d414eee3b11e4c`); initial regression39057561684 passed1–53 but54 incorrectly assumed global URL-revoke ordering. Test-only patch020 `e1fcd6fb5befa0fb725f98357585c69d98ecdc22` checks its operation-owned URL, without production changes. Regression39057719398 passed54 inline+54 split and versions39057719402 passed at that exact HEAD. Review010 preserves both runs and scope limits; later result-only docs are not the executed source HEAD. Source39/pseudocode13 unchanged; code47 stale. Remaining graph/asset candidates, full graph calculations, other package/API exports, raster/current snapshot composition, supplied-projection dashboard rendering and whole integration still prevent completion.
+ 
++## Twelfth implementation unit — same-Project FFSX package handoff
++
++Baseline `d2d06a8e2aa30e25232f7e7ae8512500fca24e01`. Code48 moves graphs.exportFfsx through the official Backend export query, one public exporting lifecycle, and copied-entry renderer ZIP/handoff/finally release. FFSX construction resolves metadata/original bytes solely from its supplied Project, remaps unique real CSV references to local IDs, omits Project chart identity and retains required empty asset documents. Shared reference classification excludes only non-editable conversionRows views, not frozen real CSV graphs; the common dataRef helper implements the existing current-version filename rule. Cases55/56 cover supplied context, package bytes/remap/conversion/empty chart and actual query/download/lifecycle/error/resource boundaries. Review011 and patch20261018-022 accompany modified files in one commit. GitHub Actions results pending. Source39/pseudocode13 unchanged; code48 stale and the whole direct-implementation goal remains open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-011-code-ffsx-export-open.md b/agent_space/reviews/review-20261018-011-code-ffsx-export-open.md
+new file mode 100644
+index 0000000..6dd4e7c
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-011-code-ffsx-export-open.md
+@@ -0,0 +1,31 @@
++# Code r48 — same-Project FFSX export and copied-entry handoff (OPEN)
++
++Baseline `d2d06a8e2aa30e25232f7e7ae8512500fca24e01`. Source39 closed/current and pseudocode13 current are unchanged; physical module flattening is the sole implementation exception. Code48 remains stale.
++
++## Prompt-to-artifact audit
++
++| Existing authority / explicit requirement | Actual implementation and evidence surface |
++|---|---|
++| backend/assets_files.pcal BuildFfsxInRead(source,slot,chart), ReferencedProjectCsvIds, RemapRealProjectCsvIds | ffsxBuildSlot takes the supplied Project; all CSV/metadata/bytes resolve there, without registry/live fallback. Ordered unique real CSV references get package-local IDs; Project chart identity is omitted. Required slot/assets documents exist even with zero objects |
++| Source validateChartModel representation rule | Shared chartUsesConversionView requires non-editable AND conversionRows presence. chartCsvIds excludes only that representation. Frozen formerly-editable charts retain real references and missing references reject. Existing shape validator's CSV-resolution branch uses the same scope; remaining complete column/style validation is not claimed here |
++| CurrentVersionCsvDataRef / DataTableEncodingExtension | Existing shared projectCsvDataRef now emits data/csv-ID plus lower-case .json/.tsv/.csv from canonical path, with .csv fallback. Both FFPX and FFSX writer call sites use the same helper, without a second naming authority; readers still accept valid stored references. Existing package regressions cover compatibility, not all codec details |
++| project_state.pcal official export query graphs.exportFfsx | One captured Project resolves explicit visible graph slot/chart, builds package entries and returns detached frozen entry names/byte arrays plus name/MIME; missing target null. Backend does not allocate a Blob, URL or download resource |
++| Application exportSelectedGraph / PUBLIC_LIFECYCLE_RULE | downloadSlotFfsx runs exactly one exporting task and the existing identity-only official-query wrapper. Removed direct selected-slot/chart reads, local package assembly and catch-as-status behavior. Successful/None completion returns undefined; original errors propagate and lifecycle recovers |
++| renderer.pcal downloadExportPayload package-entry branch | Renderer encodes copied entries using STORE ZIP, then the existing operation-owned Blob/URL/anchor handoff/finally release. No Backend query or Project access. Success is browser handoff, not disk confirmation |
++| Case55 | Supplied-vs-live original CSV bytes, duplicate-reference remap/order, omitted chart ID, exact dataRef, no supplied-Project mutation, frozen-real-reference rejection, conversion view with fake CSV IDs and imported frames, empty assets document, immutable official query and missing target |
++| Case56 | Actual public FFSX Blob round-trip, exactly one export query, exporting lifecycle timing, failure propagation/recovery, own URL release, None no handoff, unchanged authority and wrapper ownership |
++| Records / lineage | Source, tests, revision48 fingerprint, review, plan and actual patch022 pair are in one atomic commit. No Source/pseudocode meaning changed or policy edited |
++
++## Decisions and exclusions
++
++Rejected resolving a copied chart against live CSV, filtering every non-editable chart as conversion, manufacturing a CSV/Project chart ID for serialization, remapping conversion-view CSV-looking integers, UI-owned package snapshots sent back into Backend, status substitutes and swallowing handoff errors. These contradict existing Source/pseudocode. Frozen JS scalar arrays are the concrete immutable copied-byte representation; ZIP/Blob/browser scheduling are platform primitives, not another owner.
++
++Shared package reference naming and representation scope affect retained FFPX/reference call sites too; this is explicitly included, not an isolated download-only claim. No full FFPX command/query cutover, package-reader rewrite, full chart style/column validation, canonical constructor completion or graph candidate migration is claimed. No invalidation mirror, new public API or persistent state was introduced.
++
++## Verification
++
++Pending GitHub Actions at this record's initial implementation commit. Cases1–56 must run in inline and split packages, version checker must confirm actual code48 fingerprint, and distribution build must verify both artifacts. No local application, Source, pseudocode/parser, checker, test, build or TLC execution. File diff/reverse-apply checks are integrity checks only. Executed commit/run IDs and any failures will be recorded after actual results, without treating later documentation as the tested source HEAD.
++
++## Whole-goal completion audit
++
++The deliverable is direct translation of all pseudocode owners, inputs/returns/branches, current-authority candidates and one commit, failure/lifecycle/resource rules, config authority and supplied-projection rendering with requirement-linked integration evidence. This unit covers FFSX export and shared reference naming/scope, not that whole deliverable. Graph and asset command candidates, positional reconciliation, complete graph normalization, canonical package import/FFPX export, raster capture composition, dashboard Backend reads and whole API integration remain unverified/incomplete. Counts or green lineage/regression runs alone do not establish them. Keep the goal open and code stale.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 1d3ed3c..0374efc 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1989,6 +1989,81 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(55, "FFSX packages real references from one supplied Project and preserves conversion views", async () => {
++      const source = projectClone(activeProject._state), slot = source.slots.find(item => item.id === selectedSlotId),
++        chart = source.charts.find(item => item.id === slot.content.chart), csvId = chart.editor.objects[0].csvId,
++        csv = source.assets.csvFiles.find(item => item.id === csvId);
++      chart.editor.objects.push(projectClone(chart.editor.objects[0]));
++      csv.bytesBase64 = ffpxBytesToBase64(new TextEncoder().encode("X,Y\n303,404\n"));
++      const before = JSON.stringify(source), authority = JSON.stringify(activeProject._state);
++      const bundle = ffsxBuildSlot(slot, chart, source);
++      check(JSON.stringify(source) === before, "FFSX builder mutated the supplied Project");
++      check(bundle.manifest.csvFiles.length === 1 && bundle.manifest.chart.id === undefined &&
++        bundle.manifest.chart.editor.objects.every(object => object.csvId === 1),
++        "FFSX did not deduplicate/remap real references or leaked Project chart id");
++      check(bundle.manifest.csvFiles[0].dataRef === "assets/data/csv-1.csv", "FFSX dataRef differs from current-version pseudocode");
++      const read = await ffsxReadSlot(new File([ffpxZipStore(bundle.assets)], "context.ffsx"));
++      check(read.csvFiles.length === 1 && read.csvFiles[0].rows[1][1] === "404" &&
++        read.chart.editor.objects.every(object => object.csvId === 1), "package bytes came from live CSV or local references broke");
++      chart.editor.editable = false;
++      check(ffsxBuildSlot(slot, chart, source).manifest.csvFiles.length === 1,
++        "frozen real-CSV graph was treated as conversion data");
++      source.assets.csvFiles = []; let rejected = false;
++      try { ffsxBuildSlot(slot, chart, source); } catch (_) { rejected = true; }
++      check(rejected, "frozen dangling real CSV bypassed reference validation");
++      chart.editor.conversionRows = [["X", "Y"], ["1", "2"]];
++      chart.editor.objects.forEach(object => { object.csvId = 999999; });
++      chart.graph.imported = { data: [{ x: [1], y: [2] }], layout: {}, frames: [{ name: "kept", data: [] }] };
++      const converted = ffsxBuildSlot(slot, chart, source);
++      check(converted.manifest.csvFiles.length === 0 && converted.assets.length === 2 &&
++        converted.manifest.chart.editor.objects[0].csvId === 999999 &&
++        converted.manifest.chart.graph.imported.frames[0].name === "kept",
++        "conversion views were resolved/remapped as fake CSVs or imported frames lost");
++      chart.editor.objects = []; delete chart.editor.conversionRows; chart.editor.editable = true;
++      const blank = await ffsxReadSlot(new File([ffpxZipStore(ffsxBuildSlot(slot, chart, source).assets)], "blank-query.ffsx"));
++      check(blank.csvFiles.length === 0 && blank.chart.editor.objects.length === 0, "blank chart lacks required empty asset document");
++      const payload = appFSM.query("export", { operation: "graphs.exportFfsx", slotId: slot.id, stamp: "probe" });
++      check(Object.isFrozen(payload) && Object.isFrozen(payload.entries) && payload.entries.every(entry =>
++        Object.isFrozen(entry) && Object.isFrozen(entry.data)) && payload.name === `fast-figure-slot-${slot.id}-probe.ffsx` &&
++        payload.mime === "application/vnd.fast-figure-slot", "query did not detach/freeze copied package entries");
++      check(appFSM.query("export", { operation: "graphs.exportFfsx", slotId: -999 }) === null &&
++        JSON.stringify(activeProject._state) === authority && before !== JSON.stringify(source),
++        "package/export query changed authority or missing target semantics");
++    });
++
++    await run(56, "Public FFSX export queries once and hands off only copied ZIP entries", async () => {
++      const create = URL.createObjectURL, revoke = URL.revokeObjectURL, click = HTMLAnchorElement.prototype.click,
++        query = readBackendProjection, before = JSON.stringify(activeProject._state), failure = Error("FFSX handoff failed");
++      let calls = 0, blob, releases = [], fail = false, clicks = 0;
++      try {
++        URL.createObjectURL = value => { blob = value; return "blob:ffsx-owned"; };
++        URL.revokeObjectURL = url => releases.push(url);
++        HTMLAnchorElement.prototype.click = function () {
++          check(appFSM.state.lifecycle === "exporting" && /^fast-figure-slot-.*\.ffsx$/.test(this.download), "FFSX handoff/name outside lifecycle");
++          if (fail) throw failure;
++          clicks++;
++        };
++        readBackendProjection = (kind, request) => {
++          check(kind === "export" && request.operation === "graphs.exportFfsx" && appFSM.state.lifecycle === "exporting", "FFSX bypassed official query/lifecycle");
++          calls++; return query(kind, request);
++        };
++        check(await api.graphs.exportFfsx() === undefined && calls === 1 && clicks === 1 &&
++          releases.includes("blob:ffsx-owned") && appFSM.state.lifecycle === "ready", "FFSX leaked result/resource/lifecycle");
++        readBackendProjection = () => { throw Error("renderer reread Backend"); };
++        const read = await ffsxReadSlot(new File([blob], "download.ffsx"));
++        check(blob.type === "application/vnd.fast-figure-slot" && read.csvFiles.length === 1, "copied entry handoff did not encode readable FFSX");
++        readBackendProjection = query; fail = true; let caught;
++        try { await api.graphs.exportFfsx(); } catch (error) { caught = error; }
++        check(caught === failure && releases.filter(url => url === "blob:ffsx-owned").length === 2 &&
++          appFSM.state.lifecycle === "ready", "FFSX failure swallowed or resource/lifecycle leaked");
++        readBackendProjection = () => null; fail = false;
++        check(await api.graphs.exportFfsx() === undefined && clicks === 1, "missing target caused an FFSX handoff");
++        check(JSON.stringify(activeProject._state) === before && !/getSelectedSlot|getChart|activeProject|status\(/.test(downloadSlotFfsx.toString()),
++          "FFSX Application wrapper owns Backend/status state");
++      } finally { URL.createObjectURL = create; URL.revokeObjectURL = revoke;
++        HTMLAnchorElement.prototype.click = click; readBackendProjection = query; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index e0b566b..8d381a1 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 47,
++      "revision": 48,
+       "status": "stale", 
+       "paths": [
+         "Fast-figure.html", 
+@@ -38,13 +38,13 @@
+         "fast-figure.js", 
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:7b27c5f6d2c7bbeb743e7e382598a5be0d3b24304a170a0151b04c5050119128",
++      "fingerprint": "sha256:ac03d2dca4d4bf9eca607cbb8bcd8fa8d607a079b0c7cd01b2478c5de5726c27",
+       "derived_from": {
+         "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+         "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-010-code-plotly-export-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-011-code-ffsx-export-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 13,
+diff --git a/fast-figure.js b/fast-figure.js
+index a328ac0..4a835e2 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -421,12 +421,21 @@
+             settings: Object.freeze(normalizeImageSettings(slot)),
+           }) : null;
+         }
+-        if (kind === "export" && request.operation === "graphs.exportPlotlyJson") {
++        if (kind === "export" && ["graphs.exportPlotlyJson", "graphs.exportFfsx"].includes(request.operation)) {
+           const source = activeProject._state,
+             slot = source.slots.find((item) => item.id === request.slotId && !item.hidden),
+             chart = slot && slot.contentType !== "image"
+               ? source.charts.find((item) => item.id === slot.chart) : null;
+           if (!chart) return null;
++          if (request.operation === "graphs.exportFfsx") {
++            const bundle = ffsxBuildSlot(slot, chart, source);
++            return Object.freeze({
++              name: `fast-figure-slot-${slot.id}-${request.stamp}.ffsx`, mime: "application/vnd.fast-figure-slot",
++              entries: Object.freeze(bundle.assets.map((entry) => Object.freeze({
++                name: entry.name, data: Object.freeze(Array.from(entry.data)),
++              }))),
++            });
++          }
+           const bytes = new TextEncoder().encode(JSON.stringify(chartFigure(chart, source)));
+           return Object.freeze({
+             name: `plotly-figure-${slot.id}-${request.stamp}.json`, mime: "application/json",
+@@ -2650,7 +2659,11 @@
+ 
+ 
+ 
++      function chartUsesConversionView(chart) {
++        return chart?.editor?.editable === false && Object.hasOwn(chart.editor, "conversionRows");
++      }
+       function chartCsvIds(chart) {
++        if (chartUsesConversionView(chart)) return [];
+         return [
+           ...new Set(
+             (chart?.editor?.objects || [])
+@@ -4084,7 +4097,7 @@
+           throw Error(`${label} graph 구조가 올바르지 않습니다.`);
+         chart.editor.objects.forEach((object, index) => {
+           if (
+-            chart.editor.editable !== false &&
++            !chartUsesConversionView(chart) &&
+             (!Number.isInteger(object.csvId) || !getProjectCsv(object.csvId, csvCollection))
+           )
+             throw Error(`${label} 그래프 객체 ${index + 1}의 csvId가 올바르지 않습니다.`);
+@@ -4938,7 +4951,8 @@
+         return parseCSV(text);
+       }
+       function projectCsvDataRef(csv) {
+-        return `data/${csv.id}/${projectCsvName(csv.name)}`;
++        const extension = /\.[^./]+$/.exec(csv.path || "")?.[0]?.toLowerCase();
++        return `data/csv-${csv.id}${[".json", ".tsv", ".csv"].includes(extension) ? extension : ".csv"}`;
+       }
+       function ffpxDataUrlBytes(url) {
+         let match = /^data:([^,]*),(.*)$/s.exec(url || "");
+@@ -7125,11 +7139,11 @@
+           throw error;
+         }
+       }
+-      function ffsxBuildSlot(slot, chart) {
+-        let projectObject = projectObjects.read("project"),
+-          copy = chartExportCopy(chart),
++      function ffsxBuildSlot(slot, chart, source = activeProject._state) {
++        validateChartModel(chart, "FFSX 차트", source.assets.csvFiles);
++        let copy = chartExportCopy(chart),
+           referenced = chartCsvIds(chart).map((id) => {
+-            let csv = getProjectCsv(id);
++            let csv = getProjectCsv(id, source.assets.csvFiles);
+             if (!csv) throw Error(`FFSX가 참조하는 CSV ${id}가 없습니다.`);
+             return csv;
+           }),
+@@ -7144,13 +7158,13 @@
+             return csv;
+           });
+         delete copy.id;
+-        copy.editor.objects.forEach((object) => {
+-          if (Number.isInteger(object.csvId)) object.csvId = slotIds.get(object.csvId);
++        if (!chartUsesConversionView(copy)) copy.editor.objects.forEach((object) => {
++          object.csvId = slotIds.get(object.csvId);
+         });
+         let manifest = {
+             schema: "fast-figure-slot",
+             version: PACKAGE_FORMAT_VERSION,
+-            appBuild: projectObject.appBuild,
++            appBuild: source.meta.appBuild,
+             exportedAt: new Date().toISOString(),
+             slot: {
+               contentType: "graph",
+@@ -7289,33 +7303,12 @@
+         return payload;
+       }
+       function downloadSlotFfsx() {
+-        let slot = getSelectedSlot(),
+-          chart = slot?.chart && getChart(slot.chart);
+-        if (!slot || !chart) return status("FFSX로 내보낼 그래프 슬롯을 먼저 선택하세요.");
+-        try {
+-          let bundle = ffsxBuildSlot(slot, chart),
+-            blob = new Blob([ffpxZipStore(bundle.assets)], {
+-              type: "application/vnd.fast-figure-slot",
+-            }),
+-            link = document.createElement("a"),
+-            stamp = new Date().toISOString().replace(/[:.]/g, "-");
+-          link.href = URL.createObjectURL(blob);
+-          link.download = `fast-figure-slot-${slot.id}-${stamp}.ffsx`;
+-          link.click();
+-          setTimeout(() => URL.revokeObjectURL(link.href), 0);
+-          status("선택한 슬롯을 FFSX 파일로 내보냈습니다.");
+-          debugLog("slotFfsx:export", {
+-            slotId: slot.id,
+-            chartId: chart.id,
+-            assets: bundle.assets.length,
+-          });
+-        } catch (error) {
+-          status("FFSX 내보내기 오류: " + error.message);
+-          debugLog("slotFfsx:export-error", { message: error.message });
+-        }
++        return appFSM.run("exporting", "graphs.exportFfsx", () =>
++          exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportFfsx"));
+       }
+       async function downloadExportPayload(payload) {
+-        const blob = new Blob([Uint8Array.from(payload.bytes)], { type: payload.mime }),
++        const bytes = payload.entries ? ffpxZipStore(payload.entries) : Uint8Array.from(payload.bytes),
++          blob = new Blob([bytes], { type: payload.mime }),
+           url = URL.createObjectURL(blob), link = document.createElement("a");
+         try {
+           link.href = url;
