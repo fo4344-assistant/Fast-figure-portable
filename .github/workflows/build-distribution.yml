@@ -11,6 +11,7 @@ on:
       - 'README.md'
       - 'LICENSE'
       - 'scripts/build-portable.py'
+      - 'sourcescript/backend/settings.json'
       - '.github/workflows/build-distribution.yml'
   workflow_dispatch:
 
@@ -39,12 +40,23 @@ jobs:
           test -s dist/inline/Fast-figure.html
           test -s dist/split/Fast-figure.zip
           python - <<'PY'
+          import json
+          import re
           from pathlib import Path
           from zipfile import ZipFile
 
+          expected = json.loads(Path("sourcescript/backend/settings.json").read_text())
+          def check_settings(document):
+              matches = re.findall(rb'<script id="ff-backend-settings" type="application/json">(.*?)</script>', document, re.S)
+              assert len(matches) == 1
+              assert json.loads(matches[0]) == expected
+              assert b"<!-- FAST_FIGURE_BACKEND_SETTINGS -->" not in document
+
+          check_settings(Path("dist/inline/Fast-figure.html").read_bytes())
           with ZipFile("dist/split/Fast-figure.zip") as archive:
               assert archive.read("Fast-figure/README.md") == Path("README.md").read_bytes()
               assert archive.read("Fast-figure/LICENSE") == Path("LICENSE").read_bytes()
+              check_settings(archive.read("Fast-figure/Fast-figure.html"))
           PY
 
       - name: Commit distribution artifacts

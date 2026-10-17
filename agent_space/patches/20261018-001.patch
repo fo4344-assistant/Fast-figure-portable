@@ -1,0 +1,537 @@
+diff --git a/.github/workflows/build-distribution.yml b/.github/workflows/build-distribution.yml
+index dd255f7..7944d6d 100644
+--- a/.github/workflows/build-distribution.yml
++++ b/.github/workflows/build-distribution.yml
+@@ -11,6 +11,7 @@ on:
+       - 'README.md'
+       - 'LICENSE'
+       - 'scripts/build-portable.py'
++      - 'sourcescript/backend/settings.json'
+       - '.github/workflows/build-distribution.yml'
+   workflow_dispatch:
+ 
+@@ -39,12 +40,23 @@ jobs:
+           test -s dist/inline/Fast-figure.html
+           test -s dist/split/Fast-figure.zip
+           python - <<'PY'
++          import json
++          import re
+           from pathlib import Path
+           from zipfile import ZipFile
+ 
++          expected = json.loads(Path("sourcescript/backend/settings.json").read_text())
++          def check_settings(document):
++              matches = re.findall(rb'<script id="ff-backend-settings" type="application/json">(.*?)</script>', document, re.S)
++              assert len(matches) == 1
++              assert json.loads(matches[0]) == expected
++              assert b"<!-- FAST_FIGURE_BACKEND_SETTINGS -->" not in document
++
++          check_settings(Path("dist/inline/Fast-figure.html").read_bytes())
+           with ZipFile("dist/split/Fast-figure.zip") as archive:
+               assert archive.read("Fast-figure/README.md") == Path("README.md").read_bytes()
+               assert archive.read("Fast-figure/LICENSE") == Path("LICENSE").read_bytes()
++              check_settings(archive.read("Fast-figure/Fast-figure.html"))
+           PY
+ 
+       - name: Commit distribution artifacts
+diff --git a/.github/workflows/fast-figure-regression.yml b/.github/workflows/fast-figure-regression.yml
+index b54340b..121c13c 100644
+--- a/.github/workflows/fast-figure-regression.yml
++++ b/.github/workflows/fast-figure-regression.yml
+@@ -11,6 +11,7 @@ on:
+       - 'fast-figure.js'
+       - 'fast-figure-ui.js'
+       - 'scripts/build-portable.py'
++      - 'sourcescript/backend/settings.json'
+       - 'README.md'
+   workflow_dispatch:
+ 
+diff --git a/Fast-figure.html b/Fast-figure.html
+index 0d1e7d7..43d0182 100644
+--- a/Fast-figure.html
++++ b/Fast-figure.html
+@@ -9656,6 +9656,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
+         </div>
+       </main>
+     </div>
++    <!-- FAST_FIGURE_BACKEND_SETTINGS -->
+     <script src="./fast-figure.js"></script>
+     <script src="./fast-figure-ui.js"></script>
+   </body>
+diff --git a/README.md b/README.md
+index d6d63d8..ae635e7 100644
+--- a/README.md
++++ b/README.md
+@@ -29,7 +29,10 @@ python scripts/build-portable.py
+ ```
+ 
+ The inline build contains the application and all JavaScript dependencies in one
+-HTML file.
++HTML file. Both builds embed the common `sourcescript/backend/settings.json` as
++read-only JSON data in their HTML; no runtime fetch or duplicate config file is
++required. The repository HTML is a build template, not the packaged entry point.
++Edit the common settings source rather than generated HTML defaults.
+ 
+ The split ZIP extracts to:
+ 
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 46567bc..3997a01 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -23,6 +23,12 @@ Actual changed files, numeric patch009 and explanation commit together. Update s
+ 
+ Source/test+patch009 commit `037bde373bc4daf71c8c099b5e9f73619ab228a2`: Actions regression39050782351 passed41 inline +41 split; version39050782459 passed; build39050782403 passed and produced dist-only bot commit `45b180379e116fe4e7493c6445698edf528a94fc`. Actual logs/fingerprint/limits are in the linked review. Full implementation remains open; code r37 stays stale. This post-execution documentation is not the executed source commit.
+ 
++## Second implementation unit — configuration and caption settings
++
++Continue from `f830d3f2ff69ce1a670ccc338e3676624214de77` under the user's direct-pseudocode implementation goal, with physical module flattening only. The existing common Backend JSON is embedded once into each packaged HTML, read/frozen without file-network access, and initial Project defaults clone that source. Caption settings candidates merge only new edits inside Backend; six public text/settings wrappers gate fresh official reads on commit. Slot caption reads move behind the registered query boundary.
++
++Browser case42 adds config/instance isolation, command-time authority, numeric limits/fallbacks, exception preservation and noncommit result checks; both distributions retain prior41 cases. Build verification compares embedded JSON to the actual source JSON in both artifacts. Workflow path filters now include the real config dependency. Review `agent_space/reviews/review-20261018-001-code-caption-settings-open.md` records the bounded prompt audit and uncovered whole-goal work. Code r38 remains stale; no Source/pseudocode revision or closure change. Patch20261018-001 and actual changed files commit together. Actions pending when this unit is prepared; no local application/test/build/checker execution.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-001-code-caption-settings-open.md b/agent_space/reviews/review-20261018-001-code-caption-settings-open.md
+new file mode 100644
+index 0000000..d022f39
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-001-code-caption-settings-open.md
+@@ -0,0 +1,36 @@
++# Source-code r38 — Backend configuration packaging and caption settings (OPEN)
++
++## Authority and scope
++
++Baseline `f830d3f2ff69ce1a670ccc338e3676624214de77`. Source r38 remains closed/current and pseudocode r12 current, unchanged. This is a bounded continuation of Plan023, not whole application conformance. Source-code r38 remains **stale**.
++
++The user's physical-module flattening exception is applied only to implementation placement: existing flat `fast-figure.js` / `fast-figure-ui.js` stay in place. Backend candidate/query, Application postcommit adaptation and Frontend rendering ownership are not flattened into a shared authority. No new runtime module tree or parallel defaults file is introduced.
++
++## Prompt-to-artifact audit
++
++| Requirement | Actual artifact/evidence | Status |
++| --- | --- | --- |
++| Direct pseudocode translation, not redesign | `pseudocode/application/public_api/layout_annotations.pcal` caption wrappers dispatch only new edits, check committed, then query; implemented six setting/text wrappers and existing insertion wrapper retains its gate | Bounded implementation; remaining application not complete |
++| Resolve ambiguous lower meaning against Source | `sourcescript/backend/project_efsm.py` caption settings ownership, `sourcescript/backend/layout_annotations.py` owner reads, and sole `sourcescript/backend/settings.json` checked | No new domain decision needed; no upper edit |
++| Shared config is the source, not duplicated constants | Builder embeds that JSON once in both artifact HTMLs, escapes HTML-significant characters; JS freezes the packaged Backend subtree. Initial annotation/layout/palette/image/export defaults copy/reference the corresponding config fields | Implemented; other old import/graph/default literals still require full cutover |
++| Current-authority mutation, not Application snapshot input | `setCaptionsApiSettings` passes only patch; `applyCaptionSettingsChangedAction` merges supplied fields into Backend candidate using config bounds/fallbacks before whole validation/commit | Implemented |
++| Failure must not expose successful read | Text/settings/enabled/name/nameBold wrappers return false for noncommit; throws propagate; slot read is an official immutable Backend query | Implemented |
++| Physical flattening only | No new application JS module/package; common JSON belongs to existing Source config path and is packaged as data | Preserved |
++| Policy/version/recording | AGENT and relevant direct-translation policy consulted; code revision/fingerprint/lineage recorded, remains stale; actual files and numeric patch pair in same commit | Prepared |
++| Tests cover actual artifacts | Browser case42 covers frozen config, independent instance copies, same-command current state, patch-only input, bounds/fallback, exception preservation and all six noncommit gates. Prior41 cases retained. Build verification checks embedded JSON equals the source in both artifacts | Execution pending at preparation |
++
++## Implementation decisions
++
++- Packaging Source's immutable BackendSettings into HTML is a target-platform data-transfer detail. It neither changes the JSON meaning nor creates persistent Project instance data in configuration. No Source/pseudocode revision or new configuration authority is necessary.
++- No `fetch` from `file://`, duplicated JS defaults, hidden DOM control, synchronization bridge, or Source Python import is used. The JSON script element is the one packaged read-only configuration input, not a mutable editor/model mirror.
++- Configuration default records are cloned for each Project. Empty text/name/asset/slot/sequence instance values remain runtime instance initialization, not config content.
++- Caption Backend settings normalize only explicitly supplied known fields; omitted current fields survive. Caption numeric bounds/fallback come from JSON. No generic public result envelope is invented.
++- Existing renderer calls after committed caption changes remain; full supplied-projection renderer conversion and unrelated wrappers are not claimed complete.
++
++## Verification limits and remaining work
++
++All application, builder and checker execution is reserved for authorized GitHub Actions. Local activity is text/file/hash/Git work only. No local Source/PlusCal execution, application test/build, parser or TLC run. No delegation.
++
++At preparation: Actions results pending. Static `git diff --check` passes. Static comparison and test additions are not execution proof. Build escaping is explicitly implemented, but adversarial configuration values are not yet covered by a dedicated executable test.
++
++Whole-goal blockers remain: label and layout ownership, graph/assets current-attempt commands, selection maps and lifecycle/API adaptation, renderer direct-read cutover, export geometry and full Source/pseudocode conformance audit. Green bounded tests cannot close those gaps. Do not mark the active implementation goal complete.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index d9a8fae..1913e20 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1315,6 +1315,58 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         "caption Application wrapper retains direct Backend read/calculation");
+     });
+ 
++    await run(42, "Backend config packaging and caption settings preserve current command ownership", async () => {
++      const configBefore = JSON.stringify(BackendSettings), fresh = createProjectState();
++      check(Object.isFrozen(BackendSettings) && Object.isFrozen(BackendSettings.defaults.limits.captions.fontSize) &&
++        JSON.stringify(fresh.annotations.labels) === JSON.stringify(BackendSettings.project_object.annotations.labels) &&
++        fresh.annotations.captions.settings.fontSize === BackendSettings.project_object.annotations.captions.settings.fontSize,
++        "packaged configuration is mutable or initial annotation defaults diverge");
++      fresh.annotations.labels.settings.fontSize = 91;
++      fresh.annotations.captions.settings.lineHeight = 3;
++      check(JSON.stringify(BackendSettings) === configBefore, "Project instance writes reached shared configuration");
++      const slot = activeProject.slots.find((item) => !item.hidden);
++      const slotRead = api.captions.setSlotText(slot.id, "settings-test");
++      check(Object.isFrozen(slotRead) && slotRead.text === "settings-test" &&
++        readSlotCaptionState(Number.MIN_SAFE_INTEGER) === null, "slot caption did not use detached Backend query");
++      const originalSend = projectEFSM.send;
++      try {
++        projectEFSM.send = function(event, payload) {
++          if (event === "CAPTION_SETTINGS_CHANGED") {
++            check(Object.keys(payload.settings).join() === "fontSize", "Application sent a copied current settings record");
++            const intervening = projectClone(activeProject._state);
++            intervening.annotations.captions.settings.fontFamily = "serif";
++            activeProject.initialize(intervening);
++          }
++          return originalSend.call(this, event, payload);
++        };
++        const updated = api.captions.setSettings({ fontSize: 0 });
++        check(updated.settings.fontSize === BackendSettings.defaults.limits.captions.fontSize[0] &&
++          updated.settings.fontFamily === "serif", "Backend did not merge new edits against command-time authority");
++      } finally { projectEFSM.send = originalSend; }
++      const bounded = api.captions.setSettings({ fontSize: Infinity, lineHeight: 100 });
++      check(bounded.settings.fontSize === BackendSettings.project_object.annotations.captions.settings.fontSize &&
++        bounded.settings.lineHeight === BackendSettings.defaults.limits.captions.lineHeight[1],
++        "caption fallback or upper bound diverged from configuration");
++      const before = JSON.stringify(activeProject._state), frontend = appFSM.state;
++      let failed = false;
++      try { api.captions.setSettings({ fontSize: Symbol("invalid-size") }); } catch { failed = true; }
++      check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
++        "throwing caption edit committed or reconciled success");
++      try {
++        projectEFSM.send = () => Object.freeze({ committed: false });
++        for (const action of [
++          () => api.captions.setEnabled(true), () => api.captions.setGlobalText("ignored"),
++          () => api.captions.setSlotText(slot.id, "ignored"), () => api.captions.setName("ignored"),
++          () => api.captions.setNameBold(true), () => api.captions.setSettings({ fontSize: 40 }),
++        ]) check(action() === false, "uncommitted caption command exposed a successful read");
++      } finally { projectEFSM.send = originalSend; }
++      check(JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
++        "uncommitted caption API changed authority");
++      check(!/activeProject|projectObjects|slotAt/.test(
++        setCaptionsApiSettings.toString() + readSlotCaptionState.toString()),
++        "caption Application wrapper retains direct Backend authority access");
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 49d816b..ce058c5 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 37,
++      "revision": 38,
+       "status": "stale", 
+       "paths": [
+         "Fast-figure.html", 
+@@ -38,13 +38,13 @@
+         "fast-figure.js", 
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:401bb47775c314b4dcc399c14b69df3da1e32053143677cab32ac832997d2c8c",
++      "fingerprint": "sha256:785a369300df83e4e499ec0f3c79eb3b7906d2f9c856020462f8b355d4048678",
+       "derived_from": {
+         "source-script": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4",
+         "pseudocode": "sha256:bbc26a0c283ea18b8790e70677017afd2322bc1e1b1b69880cf089036a58343c",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261017-003-code-caption-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-001-code-caption-settings-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 12,
+diff --git a/fast-figure.js b/fast-figure.js
+index 0a5da44..d0d2fff 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1,5 +1,19 @@
+ 
+-      const PACKAGE_FORMAT_VERSION = 3;
++      function readBackendSettings() {
++        const config = JSON.parse(document.getElementById("ff-backend-settings").textContent);
++        if (!config.backend?.project_object || !config.backend?.defaults)
++          throw Error("Backend 설정 원천이 올바르지 않습니다.");
++        const freeze = (value) => {
++          if (value && typeof value === "object") {
++            Object.values(value).forEach(freeze);
++            Object.freeze(value);
++          }
++          return value;
++        };
++        return freeze(config.backend);
++      }
++      const BackendSettings = readBackendSettings();
++      const PACKAGE_FORMAT_VERSION = BackendSettings.project_object.ffpx.formatVersion;
+       const APP_BUILD = "1.1.43-wip";
+       const PROJECT_OBJECT_PATHS = Object.freeze({
+         project: "meta",
+@@ -15,42 +29,10 @@
+         appearance: "appearance",
+         export: "export",
+       });
+-      const DEFAULT_SLOT_STYLE = Object.freeze({
+-        referenceWidth: 1200,
+-        gap: 0,
+-        outerMargin: 0,
+-        radius: 0,
+-        aspect: 1.618,
+-        showBorders: true,
+-      });
+-      const DEFAULT_UI_PALETTE = Object.freeze({
+-        uiColor: "#B0CFCE",
+-        uiBackgroundColor: "#FAFAFA",
+-        uiSurfaceColor: "#FFFFFF",
+-        uiMutedColor: "#4F525D",
+-        uiSubtleColor: "#94A3B8",
+-        uiDisabledBgColor: "#E5E7EB",
+-        uiDisabledTextColor: "#64748B",
+-        uiShadowColor: "#383A42",
+-        paperColor: "#FFFFFF",
+-        fontColor: "#383A42",
+-      });
+-      const DEFAULT_COLORS = [
+-        "#383A42",
+-        "#E45649",
+-        "#50A14F",
+-        "#B37901",
+-        "#0184BC",
+-        "#A626A4",
+-        "#0997B3",
+-        "#FAFAFA",
+-      ];
+-      const DEFAULT_IMAGE_SETTINGS = Object.freeze({
+-        fit: "contain",
+-        scale: 100,
+-        x: 50,
+-        y: 50,
+-      });
++      const DEFAULT_SLOT_STYLE = BackendSettings.project_object.layout.slotStyle;
++      const DEFAULT_UI_PALETTE = BackendSettings.project_object.appearance.uiPalette;
++      const DEFAULT_COLORS = BackendSettings.defaults.graphColors;
++      const DEFAULT_IMAGE_SETTINGS = BackendSettings.defaults.slotSettings.content.imageSettings;
+       const SLOT_LOCAL_DEFAULTS = Object.freeze({
+         chart: null,
+         imageId: null,
+@@ -63,39 +45,20 @@
+           kind: "fast-figure-project-object",
+           meta: { projectName: "", appBuild: APP_BUILD },
+           layout: {
+-            gridRows: 2,
+-            gridCols: 2,
++            gridRows: BackendSettings.project_object.layout.gridRows,
++            gridCols: BackendSettings.project_object.layout.gridCols,
+             slotStyle: { ...DEFAULT_SLOT_STYLE },
+           },
+           annotations: {
+-            labels: {
+-              enabled: false,
+-              settings: {
+-                format: "lower-alpha",
+-                parentheses: false,
+-                x: 0,
+-                y: 0,
+-                order: "row-major",
+-                fontFamily: "system-ui, sans-serif",
+-                fontSize: 14,
+-              },
+-            },
++            labels: projectClone(BackendSettings.project_object.annotations.labels),
+             captions: {
+-              enabled: false,
+-              text: "",
+-              afterText: "",
+-              name: "",
+-              nameBold: false,
+-              settings: {
+-                fontFamily: "system-ui, sans-serif",
+-                fontSize: 14,
+-                lineHeight: 1.45,
+-              },
++              ...projectClone(BackendSettings.project_object.annotations.captions),
++              text: "", afterText: "", name: "",
+             },
+           },
+           assets: { csvFiles: [], images: [] },
+           fileSystem: {
+-            directories: ["/assets", "/assets/csv", "/assets/images", "/assets/trash"],
++            directories: Object.values(BackendSettings.defaults.vfs),
+           },
+           charts: [],
+           slots: [],
+@@ -103,14 +66,13 @@
+           appearance: { uiPalette: { ...DEFAULT_UI_PALETTE } },
+           export: {
+             width: DEFAULT_SLOT_STYLE.referenceWidth,
+-            heightMode: "auto",
++            ...BackendSettings.project_object.export,
+             height: null,
+-            dpi: 300,
+-            format: "png",
+           },
+         };
+-        for (let index = 0; index < 4; index++)
+-          state.slots.push(newGridSlot(index, Math.floor(index / 2) + 1, (index % 2) + 1));
++        for (let index = 0; index < state.layout.gridRows * state.layout.gridCols; index++)
++          state.slots.push(newGridSlot(index, Math.floor(index / state.layout.gridCols) + 1,
++            (index % state.layout.gridCols) + 1));
+         return state;
+       }
+       function projectObjectPath(state, path) {
+@@ -412,6 +374,12 @@
+             settings: Object.freeze({ ...captions.settings }),
+           });
+         }
++        if (kind === "project-api" && request.operation === "captions.readSlot") {
++          const slot = activeProject._state.slots.find((item) => item.id === request.slotId);
++          return slot ? Object.freeze({
++            id: slot.id, row: slot.row, col: slot.col, text: slot.caption ?? "",
++          }) : null;
++        }
+         if (kind === "project-api" && request.operation === "print.readSettings")
+           return Object.freeze({ ...activeProject.exportSettings });
+         if ((kind === "project-api" && request.operation === "images.readEditor") ||
+@@ -1427,8 +1395,19 @@
+           captions.name = String(payload.name ?? "");
+         if (Object.prototype.hasOwnProperty.call(payload, "nameBold"))
+           captions.nameBold = payload.nameBold === true;
+-        if (payload.settings && typeof payload.settings === "object")
+-          captions.settings = projectClone(payload.settings);
++        if (payload.settings && typeof payload.settings === "object") {
++          const edits = payload.settings,
++            defaults = BackendSettings.project_object.annotations.captions.settings,
++            limits = BackendSettings.defaults.limits.captions;
++          if (Object.prototype.hasOwnProperty.call(edits, "fontFamily"))
++            captions.settings.fontFamily = String(edits.fontFamily ?? "");
++          for (const key of ["fontSize", "lineHeight"]) {
++            if (!Object.prototype.hasOwnProperty.call(edits, key)) continue;
++            const number = Number(edits[key]), [min, max] = limits[key];
++            captions.settings[key] = Number.isFinite(number)
++              ? Math.max(min, Math.min(max, number)) : defaults[key];
++          }
++        }
+         validateProjectObjectState(candidate, { requireSlots: true });
+         activeProject.initialize(candidate);
+       }
+@@ -7389,33 +7368,29 @@
+         return appFSM.query("project-api", { operation: "captions.readGlobal" });
+       }
+       function readSlotCaptionState(slotId) {
+-        let slot=slotAt(Number(slotId));
+-        return slot?Object.freeze({
+-          id:slot.id,row:slot.row,col:slot.col,text:slot.caption??"",
+-        }):null;
++        return appFSM.query("project-api", { operation: "captions.readSlot", slotId });
+       }
+       function setCaptionsApiEnabled(enabled) {
+-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
+-          enabled: enabled === true,
+-          direction: "ui-to-fsm",
+-        });
++        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { enabled });
++        if (!result.committed) return false;
+         renderDashboard();
+         debugLog("annotation:caption", { enabled: activeProject.captionsEnabled });
+         appFSM.notify("captions", "ANNOTATION_VISIBILITY_CHANGED");
+         return readGlobalCaptionState();
+       }
+       function setGlobalCaptionText(text) {
+-        appFSM.send("CAPTION_TEXT_INPUT",{
+-          target:{kind:"global"},text:String(text??""),direction:"fsm-to-model",
++        let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
++          target: { kind: "global" }, text,
+         });
++        if (!result.committed) return false;
+         syncDashboardCaption();
+         return readGlobalCaptionState();
+       }
+       function setSlotCaptionText(slotId,text) {
+-        appFSM.send("CAPTION_TEXT_INPUT",{
+-          target:{kind:"slot",id:Number(slotId)},text:String(text??""),direction:"fsm-to-model",
++        let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
++          target: { kind: "slot", id: slotId }, text,
+         });
+-        return readSlotCaptionState(slotId);
++        return result.committed ? readSlotCaptionState(slotId) : false;
+       }
+       function insertCaptionsApiSlotCaptions(slotIds = null) {
+         let result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", { slotIds });
+@@ -7426,44 +7401,22 @@
+       }
+ 
+       function setCaptionsApiName(name) {
+-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
+-          name: String(name ?? ""),
+-          direction: "ui-to-fsm",
+-        });
++        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { name });
++        if (!result.committed) return false;
+         syncDashboardCaption();
+         appFSM.notify("captions", "CAPTION_NAME_CHANGED");
+         return readGlobalCaptionState();
+       }
+       function setCaptionsApiNameBold(bold) {
+-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
+-          nameBold: bold === true,
+-          direction: "ui-to-fsm",
+-        });
++        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { nameBold: bold });
++        if (!result.committed) return false;
+         syncDashboardCaption();
+         appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
+         return readGlobalCaptionState();
+       }
+       function setCaptionsApiSettings(patch = {}) {
+-        let current = activeProject.captionSettings,
+-          next = { ...current };
+-        if (Object.prototype.hasOwnProperty.call(patch, "fontFamily"))
+-          next.fontFamily = String(patch.fontFamily ?? "");
+-        if (Object.prototype.hasOwnProperty.call(patch, "fontSize")) {
+-          let fontSize = Number(patch.fontSize);
+-          next.fontSize = Number.isFinite(fontSize)
+-            ? Math.max(6, Math.min(96, fontSize))
+-            : 14;
+-        }
+-        if (Object.prototype.hasOwnProperty.call(patch, "lineHeight")) {
+-          let lineHeight = Number(patch.lineHeight);
+-          next.lineHeight = Number.isFinite(lineHeight)
+-            ? Math.max(0.8, Math.min(4, lineHeight))
+-            : 1.45;
+-        }
+-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
+-          settings: next,
+-          direction: "ui-to-fsm",
+-        });
++        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { settings: patch });
++        if (!result.committed) return false;
+         applyCaptionSettings();
+         return readGlobalCaptionState();
+       }
+diff --git a/scripts/build-portable.py b/scripts/build-portable.py
+index afd451c..40c72d0 100644
+--- a/scripts/build-portable.py
++++ b/scripts/build-portable.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ 
+ import argparse
+ import html
++import json
+ import re
+ from pathlib import Path
+ import zipfile
+@@ -15,6 +16,8 @@ SPLIT_ARCHIVE_NAME = "Fast-figure.zip"
+ SPLIT_ROOT = Path("Fast-figure")
+ README_SOURCE = ROOT / "README.md"
+ README_MARKER = b"<!-- FAST_FIGURE_README -->"
++SETTINGS_SOURCE = ROOT / "sourcescript" / "backend" / "settings.json"
++SETTINGS_MARKER = b"<!-- FAST_FIGURE_BACKEND_SETTINGS -->"
+ 
+ SCRIPTS = (
+     (
+@@ -187,6 +190,22 @@ def build_source_html() -> bytes:
+         raise FileNotFoundError(README_SOURCE)
+ 
+     document = source.read_bytes()
++    if document.count(SETTINGS_MARKER) != 1:
++        raise RuntimeError("expected exactly one Backend settings build marker")
++    settings = json.loads(SETTINGS_SOURCE.read_text(encoding="utf-8"))
++    if not isinstance(settings.get("backend"), dict):
++        raise RuntimeError("Backend settings must contain the backend record")
++    # Package the sole configuration source, not a second defaults registry.
++    # Escape HTML-significant bytes so even a literal </script> is inert data.
++    encoded = json.dumps(settings, ensure_ascii=True, separators=(",", ":"))
++    for char, escaped in (("<", "\\u003c"), (">", "\\u003e"), ("&", "\\u0026")):
++        encoded = encoded.replace(char, escaped)
++    document = document.replace(
++        SETTINGS_MARKER,
++        b'<script id="ff-backend-settings" type="application/json">'
++        + encoded.encode("ascii") + b"</script>",
++        1,
++    )
+     if document.count(README_MARKER) != 1:
+         raise RuntimeError("expected exactly one README build marker in Fast-figure.html")
+ 

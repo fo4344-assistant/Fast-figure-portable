@@ -1315,6 +1315,58 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "caption Application wrapper retains direct Backend read/calculation");
     });
 
+    await run(42, "Backend config packaging and caption settings preserve current command ownership", async () => {
+      const configBefore = JSON.stringify(BackendSettings), fresh = createProjectState();
+      check(Object.isFrozen(BackendSettings) && Object.isFrozen(BackendSettings.defaults.limits.captions.fontSize) &&
+        JSON.stringify(fresh.annotations.labels) === JSON.stringify(BackendSettings.project_object.annotations.labels) &&
+        fresh.annotations.captions.settings.fontSize === BackendSettings.project_object.annotations.captions.settings.fontSize,
+        "packaged configuration is mutable or initial annotation defaults diverge");
+      fresh.annotations.labels.settings.fontSize = 91;
+      fresh.annotations.captions.settings.lineHeight = 3;
+      check(JSON.stringify(BackendSettings) === configBefore, "Project instance writes reached shared configuration");
+      const slot = activeProject.slots.find((item) => !item.hidden);
+      const slotRead = api.captions.setSlotText(slot.id, "settings-test");
+      check(Object.isFrozen(slotRead) && slotRead.text === "settings-test" &&
+        readSlotCaptionState(Number.MIN_SAFE_INTEGER) === null, "slot caption did not use detached Backend query");
+      const originalSend = projectEFSM.send;
+      try {
+        projectEFSM.send = function(event, payload) {
+          if (event === "CAPTION_SETTINGS_CHANGED") {
+            check(Object.keys(payload.settings).join() === "fontSize", "Application sent a copied current settings record");
+            const intervening = projectClone(activeProject._state);
+            intervening.annotations.captions.settings.fontFamily = "serif";
+            activeProject.initialize(intervening);
+          }
+          return originalSend.call(this, event, payload);
+        };
+        const updated = api.captions.setSettings({ fontSize: 0 });
+        check(updated.settings.fontSize === BackendSettings.defaults.limits.captions.fontSize[0] &&
+          updated.settings.fontFamily === "serif", "Backend did not merge new edits against command-time authority");
+      } finally { projectEFSM.send = originalSend; }
+      const bounded = api.captions.setSettings({ fontSize: Infinity, lineHeight: 100 });
+      check(bounded.settings.fontSize === BackendSettings.project_object.annotations.captions.settings.fontSize &&
+        bounded.settings.lineHeight === BackendSettings.defaults.limits.captions.lineHeight[1],
+        "caption fallback or upper bound diverged from configuration");
+      const before = JSON.stringify(activeProject._state), frontend = appFSM.state;
+      let failed = false;
+      try { api.captions.setSettings({ fontSize: Symbol("invalid-size") }); } catch { failed = true; }
+      check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+        "throwing caption edit committed or reconciled success");
+      try {
+        projectEFSM.send = () => Object.freeze({ committed: false });
+        for (const action of [
+          () => api.captions.setEnabled(true), () => api.captions.setGlobalText("ignored"),
+          () => api.captions.setSlotText(slot.id, "ignored"), () => api.captions.setName("ignored"),
+          () => api.captions.setNameBold(true), () => api.captions.setSettings({ fontSize: 40 }),
+        ]) check(action() === false, "uncommitted caption command exposed a successful read");
+      } finally { projectEFSM.send = originalSend; }
+      check(JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+        "uncommitted caption API changed authority");
+      check(!/activeProject|projectObjects|slotAt/.test(
+        setCaptionsApiSettings.toString() + readSlotCaptionState.toString()),
+        "caption Application wrapper retains direct Backend authority access");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

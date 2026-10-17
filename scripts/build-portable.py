@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import json
 import re
 from pathlib import Path
 import zipfile
@@ -15,6 +16,8 @@ SPLIT_ARCHIVE_NAME = "Fast-figure.zip"
 SPLIT_ROOT = Path("Fast-figure")
 README_SOURCE = ROOT / "README.md"
 README_MARKER = b"<!-- FAST_FIGURE_README -->"
+SETTINGS_SOURCE = ROOT / "sourcescript" / "backend" / "settings.json"
+SETTINGS_MARKER = b"<!-- FAST_FIGURE_BACKEND_SETTINGS -->"
 
 SCRIPTS = (
     (
@@ -187,6 +190,22 @@ def build_source_html() -> bytes:
         raise FileNotFoundError(README_SOURCE)
 
     document = source.read_bytes()
+    if document.count(SETTINGS_MARKER) != 1:
+        raise RuntimeError("expected exactly one Backend settings build marker")
+    settings = json.loads(SETTINGS_SOURCE.read_text(encoding="utf-8"))
+    if not isinstance(settings.get("backend"), dict):
+        raise RuntimeError("Backend settings must contain the backend record")
+    # Package the sole configuration source, not a second defaults registry.
+    # Escape HTML-significant bytes so even a literal </script> is inert data.
+    encoded = json.dumps(settings, ensure_ascii=True, separators=(",", ":"))
+    for char, escaped in (("<", "\\u003c"), (">", "\\u003e"), ("&", "\\u0026")):
+        encoded = encoded.replace(char, escaped)
+    document = document.replace(
+        SETTINGS_MARKER,
+        b'<script id="ff-backend-settings" type="application/json">'
+        + encoded.encode("ascii") + b"</script>",
+        1,
+    )
     if document.count(README_MARKER) != 1:
         raise RuntimeError("expected exactly one README build marker in Fast-figure.html")
 

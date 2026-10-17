@@ -29,7 +29,10 @@ python scripts/build-portable.py
 ```
 
 The inline build contains the application and all JavaScript dependencies in one
-HTML file.
+HTML file. Both builds embed the common `sourcescript/backend/settings.json` as
+read-only JSON data in their HTML; no runtime fetch or duplicate config file is
+required. The repository HTML is a build template, not the packaged entry point.
+Edit the common settings source rather than generated HTML defaults.
 
 The split ZIP extracts to:
 

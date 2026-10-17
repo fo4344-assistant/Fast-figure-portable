@@ -1,5 +1,19 @@
 
-      const PACKAGE_FORMAT_VERSION = 3;
+      function readBackendSettings() {
+        const config = JSON.parse(document.getElementById("ff-backend-settings").textContent);
+        if (!config.backend?.project_object || !config.backend?.defaults)
+          throw Error("Backend 설정 원천이 올바르지 않습니다.");
+        const freeze = (value) => {
+          if (value && typeof value === "object") {
+            Object.values(value).forEach(freeze);
+            Object.freeze(value);
+          }
+          return value;
+        };
+        return freeze(config.backend);
+      }
+      const BackendSettings = readBackendSettings();
+      const PACKAGE_FORMAT_VERSION = BackendSettings.project_object.ffpx.formatVersion;
       const APP_BUILD = "1.1.43-wip";
       const PROJECT_OBJECT_PATHS = Object.freeze({
         project: "meta",
@@ -15,42 +29,10 @@
         appearance: "appearance",
         export: "export",
       });
-      const DEFAULT_SLOT_STYLE = Object.freeze({
-        referenceWidth: 1200,
-        gap: 0,
-        outerMargin: 0,
-        radius: 0,
-        aspect: 1.618,
-        showBorders: true,
-      });
-      const DEFAULT_UI_PALETTE = Object.freeze({
-        uiColor: "#B0CFCE",
-        uiBackgroundColor: "#FAFAFA",
-        uiSurfaceColor: "#FFFFFF",
-        uiMutedColor: "#4F525D",
-        uiSubtleColor: "#94A3B8",
-        uiDisabledBgColor: "#E5E7EB",
-        uiDisabledTextColor: "#64748B",
-        uiShadowColor: "#383A42",
-        paperColor: "#FFFFFF",
-        fontColor: "#383A42",
-      });
-      const DEFAULT_COLORS = [
-        "#383A42",
-        "#E45649",
-        "#50A14F",
-        "#B37901",
-        "#0184BC",
-        "#A626A4",
-        "#0997B3",
-        "#FAFAFA",
-      ];
-      const DEFAULT_IMAGE_SETTINGS = Object.freeze({
-        fit: "contain",
-        scale: 100,
-        x: 50,
-        y: 50,
-      });
+      const DEFAULT_SLOT_STYLE = BackendSettings.project_object.layout.slotStyle;
+      const DEFAULT_UI_PALETTE = BackendSettings.project_object.appearance.uiPalette;
+      const DEFAULT_COLORS = BackendSettings.defaults.graphColors;
+      const DEFAULT_IMAGE_SETTINGS = BackendSettings.defaults.slotSettings.content.imageSettings;
       const SLOT_LOCAL_DEFAULTS = Object.freeze({
         chart: null,
         imageId: null,
@@ -63,39 +45,20 @@
           kind: "fast-figure-project-object",
           meta: { projectName: "", appBuild: APP_BUILD },
           layout: {
-            gridRows: 2,
-            gridCols: 2,
+            gridRows: BackendSettings.project_object.layout.gridRows,
+            gridCols: BackendSettings.project_object.layout.gridCols,
             slotStyle: { ...DEFAULT_SLOT_STYLE },
           },
           annotations: {
-            labels: {
-              enabled: false,
-              settings: {
-                format: "lower-alpha",
-                parentheses: false,
-                x: 0,
-                y: 0,
-                order: "row-major",
-                fontFamily: "system-ui, sans-serif",
-                fontSize: 14,
-              },
-            },
+            labels: projectClone(BackendSettings.project_object.annotations.labels),
             captions: {
-              enabled: false,
-              text: "",
-              afterText: "",
-              name: "",
-              nameBold: false,
-              settings: {
-                fontFamily: "system-ui, sans-serif",
-                fontSize: 14,
-                lineHeight: 1.45,
-              },
+              ...projectClone(BackendSettings.project_object.annotations.captions),
+              text: "", afterText: "", name: "",
             },
           },
           assets: { csvFiles: [], images: [] },
           fileSystem: {
-            directories: ["/assets", "/assets/csv", "/assets/images", "/assets/trash"],
+            directories: Object.values(BackendSettings.defaults.vfs),
           },
           charts: [],
           slots: [],
@@ -103,14 +66,13 @@
           appearance: { uiPalette: { ...DEFAULT_UI_PALETTE } },
           export: {
             width: DEFAULT_SLOT_STYLE.referenceWidth,
-            heightMode: "auto",
+            ...BackendSettings.project_object.export,
             height: null,
-            dpi: 300,
-            format: "png",
           },
         };
-        for (let index = 0; index < 4; index++)
-          state.slots.push(newGridSlot(index, Math.floor(index / 2) + 1, (index % 2) + 1));
+        for (let index = 0; index < state.layout.gridRows * state.layout.gridCols; index++)
+          state.slots.push(newGridSlot(index, Math.floor(index / state.layout.gridCols) + 1,
+            (index % state.layout.gridCols) + 1));
         return state;
       }
       function projectObjectPath(state, path) {
@@ -411,6 +373,12 @@
             name: captions.name, nameBold: captions.nameBold,
             settings: Object.freeze({ ...captions.settings }),
           });
+        }
+        if (kind === "project-api" && request.operation === "captions.readSlot") {
+          const slot = activeProject._state.slots.find((item) => item.id === request.slotId);
+          return slot ? Object.freeze({
+            id: slot.id, row: slot.row, col: slot.col, text: slot.caption ?? "",
+          }) : null;
         }
         if (kind === "project-api" && request.operation === "print.readSettings")
           return Object.freeze({ ...activeProject.exportSettings });
@@ -1427,8 +1395,19 @@
           captions.name = String(payload.name ?? "");
         if (Object.prototype.hasOwnProperty.call(payload, "nameBold"))
           captions.nameBold = payload.nameBold === true;
-        if (payload.settings && typeof payload.settings === "object")
-          captions.settings = projectClone(payload.settings);
+        if (payload.settings && typeof payload.settings === "object") {
+          const edits = payload.settings,
+            defaults = BackendSettings.project_object.annotations.captions.settings,
+            limits = BackendSettings.defaults.limits.captions;
+          if (Object.prototype.hasOwnProperty.call(edits, "fontFamily"))
+            captions.settings.fontFamily = String(edits.fontFamily ?? "");
+          for (const key of ["fontSize", "lineHeight"]) {
+            if (!Object.prototype.hasOwnProperty.call(edits, key)) continue;
+            const number = Number(edits[key]), [min, max] = limits[key];
+            captions.settings[key] = Number.isFinite(number)
+              ? Math.max(min, Math.min(max, number)) : defaults[key];
+          }
+        }
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
       }
@@ -7389,33 +7368,29 @@
         return appFSM.query("project-api", { operation: "captions.readGlobal" });
       }
       function readSlotCaptionState(slotId) {
-        let slot=slotAt(Number(slotId));
-        return slot?Object.freeze({
-          id:slot.id,row:slot.row,col:slot.col,text:slot.caption??"",
-        }):null;
+        return appFSM.query("project-api", { operation: "captions.readSlot", slotId });
       }
       function setCaptionsApiEnabled(enabled) {
-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
-          enabled: enabled === true,
-          direction: "ui-to-fsm",
-        });
+        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { enabled });
+        if (!result.committed) return false;
         renderDashboard();
         debugLog("annotation:caption", { enabled: activeProject.captionsEnabled });
         appFSM.notify("captions", "ANNOTATION_VISIBILITY_CHANGED");
         return readGlobalCaptionState();
       }
       function setGlobalCaptionText(text) {
-        appFSM.send("CAPTION_TEXT_INPUT",{
-          target:{kind:"global"},text:String(text??""),direction:"fsm-to-model",
+        let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
+          target: { kind: "global" }, text,
         });
+        if (!result.committed) return false;
         syncDashboardCaption();
         return readGlobalCaptionState();
       }
       function setSlotCaptionText(slotId,text) {
-        appFSM.send("CAPTION_TEXT_INPUT",{
-          target:{kind:"slot",id:Number(slotId)},text:String(text??""),direction:"fsm-to-model",
+        let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
+          target: { kind: "slot", id: slotId }, text,
         });
-        return readSlotCaptionState(slotId);
+        return result.committed ? readSlotCaptionState(slotId) : false;
       }
       function insertCaptionsApiSlotCaptions(slotIds = null) {
         let result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", { slotIds });
@@ -7426,44 +7401,22 @@
       }
 
       function setCaptionsApiName(name) {
-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
-          name: String(name ?? ""),
-          direction: "ui-to-fsm",
-        });
+        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { name });
+        if (!result.committed) return false;
         syncDashboardCaption();
         appFSM.notify("captions", "CAPTION_NAME_CHANGED");
         return readGlobalCaptionState();
       }
       function setCaptionsApiNameBold(bold) {
-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
-          nameBold: bold === true,
-          direction: "ui-to-fsm",
-        });
+        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { nameBold: bold });
+        if (!result.committed) return false;
         syncDashboardCaption();
         appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
         return readGlobalCaptionState();
       }
       function setCaptionsApiSettings(patch = {}) {
-        let current = activeProject.captionSettings,
-          next = { ...current };
-        if (Object.prototype.hasOwnProperty.call(patch, "fontFamily"))
-          next.fontFamily = String(patch.fontFamily ?? "");
-        if (Object.prototype.hasOwnProperty.call(patch, "fontSize")) {
-          let fontSize = Number(patch.fontSize);
-          next.fontSize = Number.isFinite(fontSize)
-            ? Math.max(6, Math.min(96, fontSize))
-            : 14;
-        }
-        if (Object.prototype.hasOwnProperty.call(patch, "lineHeight")) {
-          let lineHeight = Number(patch.lineHeight);
-          next.lineHeight = Number.isFinite(lineHeight)
-            ? Math.max(0.8, Math.min(4, lineHeight))
-            : 1.45;
-        }
-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
-          settings: next,
-          direction: "ui-to-fsm",
-        });
+        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { settings: patch });
+        if (!result.committed) return false;
         applyCaptionSettings();
         return readGlobalCaptionState();
       }

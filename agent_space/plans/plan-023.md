@@ -23,6 +23,12 @@ Actual changed files, numeric patch009 and explanation commit together. Update s
 
 Source/test+patch009 commit `037bde373bc4daf71c8c099b5e9f73619ab228a2`: Actions regression39050782351 passed41 inline +41 split; version39050782459 passed; build39050782403 passed and produced dist-only bot commit `45b180379e116fe4e7493c6445698edf528a94fc`. Actual logs/fingerprint/limits are in the linked review. Full implementation remains open; code r37 stays stale. This post-execution documentation is not the executed source commit.
 
+## Second implementation unit — configuration and caption settings
+
+Continue from `f830d3f2ff69ce1a670ccc338e3676624214de77` under the user's direct-pseudocode implementation goal, with physical module flattening only. The existing common Backend JSON is embedded once into each packaged HTML, read/frozen without file-network access, and initial Project defaults clone that source. Caption settings candidates merge only new edits inside Backend; six public text/settings wrappers gate fresh official reads on commit. Slot caption reads move behind the registered query boundary.
+
+Browser case42 adds config/instance isolation, command-time authority, numeric limits/fallbacks, exception preservation and noncommit result checks; both distributions retain prior41 cases. Build verification compares embedded JSON to the actual source JSON in both artifacts. Workflow path filters now include the real config dependency. Review `agent_space/reviews/review-20261018-001-code-caption-settings-open.md` records the bounded prompt audit and uncovered whole-goal work. Code r38 remains stale; no Source/pseudocode revision or closure change. Patch20261018-001 and actual changed files commit together. Actions pending when this unit is prepared; no local application/test/build/checker execution.
+
 ## Temporary-file rule
 
 The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
