@@ -1,0 +1,21 @@
+diff --git a/agent_space/plans/plan-022.md b/agent_space/plans/plan-022.md
+index aafa65a..911550a 100644
+--- a/agent_space/plans/plan-022.md
++++ b/agent_space/plans/plan-022.md
+@@ -110,3 +110,16 @@ Source/metadata/활성 pseudocode/Source Code는 이번 진행에서 변경하
+ 아직 필요한 것은 Source import별 current read/command-attempt/candidate context의 정확한 binding, asset import의 candidate 내부 replacement/connection 및 actual changed facts helper 세부 연결, 87 public operation의 전체 인자·출력·실패/취소/부분 완료 재대조다. scalar/copy/encoding 같은 notation primitive와 아직 전개가 필요한 domain 계산을 구별하는 전체 충실도 검토 후에만 활성 hierarchy 교체와 revision/fingerprint/lineage/Actions cumulative checker를 수행한다.
+ 
+ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 않았다. 이번 branch diff는 이 진행 기록뿐이며 임시 번역 파일/임시 연결 메모를 포함하거나 rollback한다고 주장하지 않는다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행 및 delegation은 하지 않았다. 문서 변경이므로 새 Actions를 dispatch하지 않는다.
++
++## 9. 후속 진행 — import candidate·완료 plan·실제 changed 소비 연결
++
++이어서 진행하라는 요청에 따라 기준 HEAD `563ec0536225f2a34c0c14c431812c47dea28b4a`에서 Source의 asset import/graph 연결/ProjectMutationResult와 UI chooser producer를 다시 읽고 아래 작업을 했다. 임시 목표 15파일은 총 **5,112행**이다.
++
++1. collision model과 plan query의 계산을 explicit project 인자를 받는 private 절차로 전개했다. public read는 `activeProject`를 작업당 한 번 읽고, command 내부의 모든 import 계산은 EFSM이 넘긴 같은 attempt source/candidate를 사용한다. `CurrentBackendReadProject`/`CurrentBackendCommandProject`라는 미정의 문맥 이름은 전체 작업본에서 제거했다. 이는 새 current-state registry/context authority가 아니다.
++2. `BuildAssetImportInAttempt`에서 directory/visible target, 원본 bytes/parsed rows, batch reservation, 새 id/next-id 또는 기존 id를 보존하는 replacement, target CSV/image 연결을 같은 candidate 안에서 계산한다. CSV 연결의 private 절차는 새로 만든 candidate CSV를 current live collection에서 다시 찾지 않는다. UI callback·부분 commit은 없으며 retry 때 이 attempt의 candidate/facts를 버리고 다시 계산한다.
++3. Source UI chooser의 출력은 최종 `path/replaceId` plan이다. 초안에서 생각한 proposal/decision field 요구는 이 producer와 맞지 않아 제거했다. command는 최종 plan의 canonical parent/path, 현재 동일 kind/id, reserved path를 재검증하고 stale replace나 이미 점유된 create path를 다른 asset/create/rename으로 돌리지 않는다. Application batch chooser 전개는 file마다 chooser를 한 번 기다려 final plan/reservation만 모으고 취소 시 command 전에 끝난다. chooser가 이미 공식 collision/resolve query를 소유하므로 새 UI 반환 계약이나 Backend→UI 호출을 만들지 않는다.
++4. `BuildActualChanged`는 이번 attempt에서 기록한 input-order asset facts를 committed Project의 실제 asset/path와 대조하고 실제 CSV chart-owner/image-slot을 연결한다. 생성 directory/move destination도 post-state에서 확인한다. 기존 wrapper들의 created/updated/imported/directory/moved path 소비 표기를 같은 changed delta에 연결했다. 이는 Source의 existing changed 값을 표현한 call-local 표기이며 새 public result framework가 아니다. Source helper 자체의 candidate-only 반환도 보존했다.
++
++아직 전체 번역 완료는 아니다. private metadata/header normalization·constructor 표현, 모든 import/FFSX/graph 경로의 await/retry/throw 문맥, 87개 API의 전체 producer/consumer·인자·반환·실패 연결과 Source 전체 충실도를 대조해야 한다. 해당 대조가 끝나기 전에는 작업본을 활성 .pcal로 섞거나 current라고 기록하지 않는다.
++
++이번 branch 변경은 이 진행 기록뿐이다. 작업 경로 안 `.work/plan022/`의 번역·연결 메모는 임시 작업본이며 이 diff에 포함하거나 복구 가능하다고 주장하지 않는다. Source r37 closed/활성 pseudocode r11 stale/하위 stale 및 fingerprint는 그대로다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
