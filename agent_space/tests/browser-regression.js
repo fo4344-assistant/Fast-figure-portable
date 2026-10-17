@@ -1431,6 +1431,52 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "label Application still reads Backend state directly");
     });
 
+    await run(44, "Palette command and renderer use detached one-way projections", async () => {
+      const defaults = BackendSettings.project_object.appearance.uiPalette,
+        oldRead = api.appearance.readPalette();
+      check(Object.isFrozen(oldRead), "public palette read is mutable");
+      const changed = api.appearance.setPalette({ uiColor: "#aBcDeF", paperColor: "#123456", unknown: "#123456" });
+      check(Object.isFrozen(changed) && changed.uiColor === "#aBcDeF" && changed.paperColor === "#123456" &&
+        changed.uiSurfaceColor === defaults.uiSurfaceColor && !("unknown" in changed) &&
+        Object.keys(changed).length === Object.keys(defaults).length,
+        "palette does not use known whole-set defaults/case preservation");
+      const fallback = api.appearance.setPalette({ uiColor: "rgb(1,2,3)", fontColor: "#abc" });
+      check(JSON.stringify(fallback) === JSON.stringify(defaults) && oldRead !== fallback,
+        "invalid/missing palette fields retained prior values instead of defaults");
+      const before = JSON.stringify(activeProject._state), frontend = appFSM.state,
+        rootStyle = document.documentElement.style;
+      const originalQuery = appFSM.query;
+      let rendered;
+      try {
+        appFSM.query = () => { throw Error("renderer queried authority"); };
+        rendered = applyUiPalette({ ...defaults, uiColor: "#112233" }, false);
+      } finally { appFSM.query = originalQuery; }
+      check(Object.isFrozen(rendered) && rootStyle.getPropertyValue("--ui-color") === "#112233" &&
+        JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+        "renderer did not consume only supplied palette or wrote authority");
+      applyUiPalette(fallback, false);
+      const broken = {};
+      Object.defineProperty(broken, "uiColor", { get() { throw Error("broken palette input"); } });
+      let failed = false;
+      try { api.appearance.setPalette(broken); } catch { failed = true; }
+      check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+        "throwing palette input committed or reconciled");
+      const originalSend = projectEFSM.send, originalRender = renderDashboard;
+      let renderCount = 0;
+      try {
+        projectEFSM.send = () => Object.freeze({ committed: false });
+        renderDashboard = () => { renderCount++; };
+        check(api.appearance.setPalette({ uiColor: "#abcdef" }) === false && api.appearance.resetPalette() === false,
+          "uncommitted palette API returned successful read");
+      } finally { projectEFSM.send = originalSend; renderDashboard = originalRender; }
+      check(renderCount === 0 && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+        "uncommitted palette input rendered or mutated state");
+      check(JSON.stringify(api.appearance.resetPalette()) === JSON.stringify(defaults), "palette reset differs from sole config");
+      check(!/activeProject|projectObjects/.test(readAppearanceApiPalette.toString() + applyUiPaletteValues.toString() +
+        applyCurrentUiPalette.toString() + applyUiPalette.toString()), "palette adapter/renderer directly reads Backend");
+      check(!/appFSM.query|renderDashboard/.test(applyUiPalette.toString()), "palette renderer performs queries or dashboard orchestration");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

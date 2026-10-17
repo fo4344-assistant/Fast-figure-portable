@@ -1,0 +1,242 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index dedb691..906b650 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -31,7 +31,11 @@ Browser case42 adds config/instance isolation, command-time authority, numeric l
+ 
+ ## Third implementation unit — labels and reference geometry
+ 
+-Baseline `767c4086dbb3057a1f41ca1ed002d201d8a665c6`. Translate the six label API procedures and Backend settings/position/query ownership directly from pseudocode r12, keeping the JS files physically flat. Application sends only new edits, gates postcommit work and reads `labels.readState`; Backend merges current settings, uses config defaults for reset and supplies immutable sample/selected-slot reference geometry. Shared geometry follows the explicit-project pseudocode calculation, without an invented minimum cell dimension. Browser case43 covers current-authority edits, config limits/reset, detached reads, merged/missing-slot geometry, invalid/noncommit preservation and completion without Project writes. Source-code r39 remains stale; upper layers unchanged. Review `agent_space/reviews/review-20261018-002-code-labels-open.md` tracks actual verification and whole-goal gaps. Actions pending at preparation. Actual source changes and patch20261018-003 pair commit together.
++Baseline `767c4086dbb3057a1f41ca1ed002d201d8a665c6`. Translate the six label API procedures and Backend settings/position/query ownership directly from pseudocode r12, keeping the JS files physically flat. Application sends only new edits, gates postcommit work and reads `labels.readState`; Backend merges current settings, uses config defaults for reset and supplies immutable sample/selected-slot reference geometry. Shared geometry follows the explicit-project pseudocode calculation, without an invented minimum cell dimension. Browser case43 covers current-authority edits, config limits/reset, detached reads, merged/missing-slot geometry, invalid/noncommit preservation and completion without Project writes. Source-code r39 remains stale; upper layers unchanged. Review `agent_space/reviews/review-20261018-002-code-labels-open.md` tracks actual verification and whole-goal gaps. Actual source changes and patch20261018-003 pair committed together as `bb4ddc4037ea45e1b9a185d3bca11a4c4c859d8b`. Actions regression39052637981 passed43 inline +43 split; version39052637844 and build39052637903 passed; bot dist commit `b9017660a7add509234d4e706529447d9830e364`. The later result record is not the executed implementation HEAD.
++
++## Fourth implementation unit — palette command/query and supplied CSS
++
++Baseline `b9017660a7add509234d4e706529447d9830e364`. Code r40 translates whole-palette normalization/default fallback, official immutable `appearance.readPalette`/renderer `ui-palette` reads, commit-gated public set/reset, and pure supplied-palette `applyUiPalette` CSS mapping. Application coordinates the query and existing dashboard render; renderer does neither. Browser case44 covers whole-set versus partial-merge semantics, case/known-key/default rules, no Backend query/write from CSS rendering, exception preservation and noncommit no-render/no-success gates. Upper layers unchanged; whole implementation remains stale/open. Review003 and patch20261018-004 record the actual unit. Actions pending at preparation.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261018-002-code-labels-open.md b/agent_space/reviews/review-20261018-002-code-labels-open.md
+index 185fa91..7b4792c 100644
+--- a/agent_space/reviews/review-20261018-002-code-labels-open.md
++++ b/agent_space/reviews/review-20261018-002-code-labels-open.md
+@@ -27,4 +27,8 @@ The geometry change removes lower clamps absent from the direct pseudocode: vali
+ 
+ Local work is file/text/hash/Git only; all application, builder and checker execution is GitHub Actions. No Source/PlusCal execution/parser/TLC or delegation. Static diff and isolated-index reverse-application checks are file checks, not runtime evidence. Actions are pending at preparation and must be inspected before claiming a pass.
+ 
++## Actual Actions evidence
++
++Implementation and patch003 commit `bb4ddc4037ea45e1b9a185d3bca11a4c4c859d8b` passed regression [39052637981](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39052637981): actual logs show cases1–43 passing in both inline and split browser artifacts (86 case executions), including the added command/query/geometry test. Versions [39052637844](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39052637844) passed and logged code r39 stale with fingerprint `sha256:c3844209087a01efaf5d7fdf00330f2d07bb2696e5bbc01ad53e64e4a94f731f`. Build/verification [39052637903](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39052637903) succeeded and generated dist-only bot commit `b9017660a7add509234d4e706529447d9830e364`. Local branch fast-forwarded that generated output. No local runtime execution. This later result record is not the executed implementation HEAD. Static endpoint diff and isolated-index reverse applicability passed before the atomic implementation commit.
++
+ Whole-goal gaps still include layout/zoom and export geometry ownership, graph/assets candidate and query adaptation, selection maps, lifecycle adaptation and renderer direct reads. Tests/manifests cannot establish full conformance by themselves; active goal remains incomplete.
+diff --git a/agent_space/reviews/review-20261018-003-code-palette-open.md b/agent_space/reviews/review-20261018-003-code-palette-open.md
+new file mode 100644
+index 0000000..7abcd41
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-003-code-palette-open.md
+@@ -0,0 +1,23 @@
++# Source-code r40 — palette command/query and supplied CSS (OPEN)
++
++Baseline `b9017660a7add509234d4e706529447d9830e364`. Source r38 closed/current and pseudocode r12 current are unchanged. Code r40 stays stale. This is the next bounded ownership unit, not whole application conformance.
++
++## Prompt-to-artifact audit
++
++| Requirement | Evidence | Scope/status |
++| --- | --- | --- |
++| Direct pseudocode translation | `pseudocode/backend/project_efsm.pcal` APPEARANCE_CHANGED, `application/public_api/layout_annotations.pcal` set/resetAppearanceApiPalette, `frontend/renderer.pcal` applyUiPalette | Implemented in existing flat JS |
++| Consult Source before inventing meaning | Source APPEARANCE_PALETTE_RULE and sole Backend JSON: ten known keys, whole replacement, missing/invalid config defaults, preserve valid six-digit color case | No new domain decision/upper edit |
++| Backend owns mutation/query | Backend builds whole palette candidate, validates and commits; project-api and renderer queries copy/freeze current palette | No mutable read or Application candidate |
++| Application success/failure | Sends only new palette; noncommit false with no query/render success; throws propagate; success returns fresh official palette read | Browser case44 |
++| Frontend supplied-only | applyUiPalette receives scalar palette and maps five CSS properties; no Backend query or dashboard render. Application query/orchestration is separate | Browser case44 query trap + mutation preservation |
++| Flatten physical structure only | No new runtime modules, state mirrors, default literals or bridge | Preserved |
++| Version/policy/patch | AGENT and target-code policy consulted; r40 lineage/fingerprint records actual app change, remains stale; actual modified files and patch004 pair commit together | Static file checks and Actions required |
++
++## Decisions, verification and exclusions
++
++Color normalization reads each supplied field once. Non-string or non-six-digit-hex values fall back to the corresponding sole config default; unknown keys are ignored. This is not patch merging with the previous palette. Reset copies the common immutable defaults into the same command path. Existing project-load entry now queries then supplies CSS rather than passing legacy Boolean pseudo-arguments. Application retains existing dashboard render after success; CSS renderer does not orchestrate it.
++
++Browser case44 exercises actual APIs, commands, fresh queries, CSS, error and noncommit paths; previous43 cases remain. Actions pending at preparation. Local work is text/file/hash/Git only, no application/Source/PlusCal/test/checker/build/TLC execution and no delegation. Static diff/reverse-application checks are file checks, not runtime proof.
++
++The prior label result record is updated using real Actions logs in this commit; that documentation is not itself an executed label HEAD. Whole layout/zoom/export ownership, graph/assets commands, selection maps, lifecycle and renderer/API cutover still require implementation/audit. Do not mark the active whole goal complete based on this bounded green subset.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 1626713..4973df5 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1431,6 +1431,52 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         "label Application still reads Backend state directly");
+     });
+ 
++    await run(44, "Palette command and renderer use detached one-way projections", async () => {
++      const defaults = BackendSettings.project_object.appearance.uiPalette,
++        oldRead = api.appearance.readPalette();
++      check(Object.isFrozen(oldRead), "public palette read is mutable");
++      const changed = api.appearance.setPalette({ uiColor: "#aBcDeF", paperColor: "#123456", unknown: "#123456" });
++      check(Object.isFrozen(changed) && changed.uiColor === "#aBcDeF" && changed.paperColor === "#123456" &&
++        changed.uiSurfaceColor === defaults.uiSurfaceColor && !("unknown" in changed) &&
++        Object.keys(changed).length === Object.keys(defaults).length,
++        "palette does not use known whole-set defaults/case preservation");
++      const fallback = api.appearance.setPalette({ uiColor: "rgb(1,2,3)", fontColor: "#abc" });
++      check(JSON.stringify(fallback) === JSON.stringify(defaults) && oldRead !== fallback,
++        "invalid/missing palette fields retained prior values instead of defaults");
++      const before = JSON.stringify(activeProject._state), frontend = appFSM.state,
++        rootStyle = document.documentElement.style;
++      const originalQuery = appFSM.query;
++      let rendered;
++      try {
++        appFSM.query = () => { throw Error("renderer queried authority"); };
++        rendered = applyUiPalette({ ...defaults, uiColor: "#112233" }, false);
++      } finally { appFSM.query = originalQuery; }
++      check(Object.isFrozen(rendered) && rootStyle.getPropertyValue("--ui-color") === "#112233" &&
++        JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
++        "renderer did not consume only supplied palette or wrote authority");
++      applyUiPalette(fallback, false);
++      const broken = {};
++      Object.defineProperty(broken, "uiColor", { get() { throw Error("broken palette input"); } });
++      let failed = false;
++      try { api.appearance.setPalette(broken); } catch { failed = true; }
++      check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
++        "throwing palette input committed or reconciled");
++      const originalSend = projectEFSM.send, originalRender = renderDashboard;
++      let renderCount = 0;
++      try {
++        projectEFSM.send = () => Object.freeze({ committed: false });
++        renderDashboard = () => { renderCount++; };
++        check(api.appearance.setPalette({ uiColor: "#abcdef" }) === false && api.appearance.resetPalette() === false,
++          "uncommitted palette API returned successful read");
++      } finally { projectEFSM.send = originalSend; renderDashboard = originalRender; }
++      check(renderCount === 0 && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
++        "uncommitted palette input rendered or mutated state");
++      check(JSON.stringify(api.appearance.resetPalette()) === JSON.stringify(defaults), "palette reset differs from sole config");
++      check(!/activeProject|projectObjects/.test(readAppearanceApiPalette.toString() + applyUiPaletteValues.toString() +
++        applyCurrentUiPalette.toString() + applyUiPalette.toString()), "palette adapter/renderer directly reads Backend");
++      check(!/appFSM.query|renderDashboard/.test(applyUiPalette.toString()), "palette renderer performs queries or dashboard orchestration");
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 592f7ed..9b467ba 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 39,
++      "revision": 40,
+       "status": "stale", 
+       "paths": [
+         "Fast-figure.html", 
+@@ -38,13 +38,13 @@
+         "fast-figure.js", 
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:c3844209087a01efaf5d7fdf00330f2d07bb2696e5bbc01ad53e64e4a94f731f",
++      "fingerprint": "sha256:628c7be52a868a56e4fc487abc8c049222e47ca0ad7b5d20183a1a555bae014d",
+       "derived_from": {
+         "source-script": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4",
+         "pseudocode": "sha256:bbc26a0c283ea18b8790e70677017afd2322bc1e1b1b69880cf089036a58343c",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-002-code-labels-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-003-code-palette-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 12,
+diff --git a/fast-figure.js b/fast-figure.js
+index 95bd2bd..13546e7 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -366,6 +366,9 @@
+       }
+       // Backend read providers: resolve references from current authority, never normalize live models.
+       function readBackendProjection(kind, request = {}) {
++        if ((kind === "project-api" && request.operation === "appearance.readPalette") ||
++            (kind === "renderer" && request.operation === "ui-palette"))
++          return Object.freeze({ ...activeProject._state.appearance.uiPalette });
+         if (kind === "project-api" && request.operation === "labels.readState") {
+           const source = activeProject._state, labels = source.annotations.labels,
+             slot = source.slots.find((item) => item.id === request.slotId && !item.hidden) ?? null,
+@@ -1373,10 +1376,10 @@
+         machine.assertWritable("appearance", "APPEARANCE_CHANGED");
+         let candidate = projectClone(activeProject._state);
+         candidate.appearance.uiPalette = Object.fromEntries(
+-          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
+-            key,
+-            projectColor(payload.palette?.[key], fallback),
+-          ]),
++          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => {
++            const value = payload.palette?.[key];
++            return [key, typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback];
++          }),
+         );
+         validateProjectObjectState(candidate, { requireSlots: true });
+         activeProject.initialize(candidate);
+@@ -4664,7 +4667,7 @@
+       }
+       function renderProjectObject(project = activeProject) {
+         applySlotStyle(false, false);
+-        applyUiPalette(false, false);
++        applyCurrentUiPalette(false);
+         syncDashboardCaption();
+         updateFileAvailability();
+       }
+@@ -7380,8 +7383,7 @@
+         else commitDashboardScale("unlock-reset-100");
+         debugLog("dashboard:zoom-lock", { locked, width: dashboardZoomLockedWidth });
+       }
+-      function applyUiPalette(_fromControls = false, notify = true) {
+-        let palette = activeProject.appearance.uiPalette;
++      function applyUiPalette(palette, notify = true) {
+         document.documentElement.style.setProperty("--ui-color", palette.uiColor);
+         document.documentElement.style.setProperty(
+           "--paper",
+@@ -7390,16 +7392,22 @@
+         document.documentElement.style.setProperty("--ui-subtle", palette.uiSubtleColor);
+         document.documentElement.style.setProperty("--ink", palette.fontColor);
+         document.documentElement.style.setProperty("--graph-bg", palette.paperColor);
+-        renderDashboard();
+         if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
++        return Object.freeze({
++          "--ui-color": palette.uiColor, "--paper": palette.uiBackgroundColor,
++          "--ui-subtle": palette.uiSubtleColor, "--ink": palette.fontColor,
++          "--graph-bg": palette.paperColor,
++        });
++      }
++      function applyCurrentUiPalette(notify = true) {
++        applyUiPalette(appFSM.query("renderer", { operation: "ui-palette" }), notify);
++        renderDashboard();
+       }
+       function applyUiPaletteValues(values, notify = true) {
+-        appFSM.send("APPEARANCE_CHANGED", {
+-          palette: values,
+-          direction: "ui-to-fsm",
+-        });
+-        applyUiPalette(false, notify);
+-        return activeProject.appearance.uiPalette;
++        let result = dispatchProjectCommand("APPEARANCE_CHANGED", { palette: values });
++        if (!result.committed) return false;
++        applyCurrentUiPalette(notify);
++        return readAppearanceApiPalette();
+       }
+       function readGlobalCaptionState() {
+         return appFSM.query("project-api", { operation: "captions.readGlobal" });
+@@ -7536,15 +7544,13 @@
+         return readLabelsApiState();
+       }
+       function readAppearanceApiPalette() {
+-        return Object.freeze({ ...activeProject.appearance.uiPalette });
++        return appFSM.query("project-api", { operation: "appearance.readPalette" });
+       }
+       function setAppearanceApiPalette(values) {
+-        applyUiPaletteValues(values);
+-        return readAppearanceApiPalette();
++        return applyUiPaletteValues(values);
+       }
+       function resetAppearanceApiPalette() {
+-        applyUiPaletteValues(DEFAULT_UI_PALETTE);
+-        return readAppearanceApiPalette();
++        return applyUiPaletteValues({ ...DEFAULT_UI_PALETTE });
+       }
+       function readLayoutApiState(previewWidth = 600) {
+         let width = readProjectNumber(previewWidth, 600, 1, 20000),

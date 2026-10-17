@@ -366,6 +366,9 @@
       }
       // Backend read providers: resolve references from current authority, never normalize live models.
       function readBackendProjection(kind, request = {}) {
+        if ((kind === "project-api" && request.operation === "appearance.readPalette") ||
+            (kind === "renderer" && request.operation === "ui-palette"))
+          return Object.freeze({ ...activeProject._state.appearance.uiPalette });
         if (kind === "project-api" && request.operation === "labels.readState") {
           const source = activeProject._state, labels = source.annotations.labels,
             slot = source.slots.find((item) => item.id === request.slotId && !item.hidden) ?? null,
@@ -1373,10 +1376,10 @@
         machine.assertWritable("appearance", "APPEARANCE_CHANGED");
         let candidate = projectClone(activeProject._state);
         candidate.appearance.uiPalette = Object.fromEntries(
-          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [
-            key,
-            projectColor(payload.palette?.[key], fallback),
-          ]),
+          Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => {
+            const value = payload.palette?.[key];
+            return [key, typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback];
+          }),
         );
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
@@ -4664,7 +4667,7 @@
       }
       function renderProjectObject(project = activeProject) {
         applySlotStyle(false, false);
-        applyUiPalette(false, false);
+        applyCurrentUiPalette(false);
         syncDashboardCaption();
         updateFileAvailability();
       }
@@ -7380,8 +7383,7 @@
         else commitDashboardScale("unlock-reset-100");
         debugLog("dashboard:zoom-lock", { locked, width: dashboardZoomLockedWidth });
       }
-      function applyUiPalette(_fromControls = false, notify = true) {
-        let palette = activeProject.appearance.uiPalette;
+      function applyUiPalette(palette, notify = true) {
         document.documentElement.style.setProperty("--ui-color", palette.uiColor);
         document.documentElement.style.setProperty(
           "--paper",
@@ -7390,16 +7392,22 @@
         document.documentElement.style.setProperty("--ui-subtle", palette.uiSubtleColor);
         document.documentElement.style.setProperty("--ink", palette.fontColor);
         document.documentElement.style.setProperty("--graph-bg", palette.paperColor);
-        renderDashboard();
         if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
+        return Object.freeze({
+          "--ui-color": palette.uiColor, "--paper": palette.uiBackgroundColor,
+          "--ui-subtle": palette.uiSubtleColor, "--ink": palette.fontColor,
+          "--graph-bg": palette.paperColor,
+        });
+      }
+      function applyCurrentUiPalette(notify = true) {
+        applyUiPalette(appFSM.query("renderer", { operation: "ui-palette" }), notify);
+        renderDashboard();
       }
       function applyUiPaletteValues(values, notify = true) {
-        appFSM.send("APPEARANCE_CHANGED", {
-          palette: values,
-          direction: "ui-to-fsm",
-        });
-        applyUiPalette(false, notify);
-        return activeProject.appearance.uiPalette;
+        let result = dispatchProjectCommand("APPEARANCE_CHANGED", { palette: values });
+        if (!result.committed) return false;
+        applyCurrentUiPalette(notify);
+        return readAppearanceApiPalette();
       }
       function readGlobalCaptionState() {
         return appFSM.query("project-api", { operation: "captions.readGlobal" });
@@ -7536,15 +7544,13 @@
         return readLabelsApiState();
       }
       function readAppearanceApiPalette() {
-        return Object.freeze({ ...activeProject.appearance.uiPalette });
+        return appFSM.query("project-api", { operation: "appearance.readPalette" });
       }
       function setAppearanceApiPalette(values) {
-        applyUiPaletteValues(values);
-        return readAppearanceApiPalette();
+        return applyUiPaletteValues(values);
       }
       function resetAppearanceApiPalette() {
-        applyUiPaletteValues(DEFAULT_UI_PALETTE);
-        return readAppearanceApiPalette();
+        return applyUiPaletteValues({ ...DEFAULT_UI_PALETTE });
       }
       function readLayoutApiState(previewWidth = 600) {
         let width = readProjectNumber(previewWidth, 600, 1, 20000),

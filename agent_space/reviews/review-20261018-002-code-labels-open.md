@@ -27,4 +27,8 @@ The geometry change removes lower clamps absent from the direct pseudocode: vali
 
 Local work is file/text/hash/Git only; all application, builder and checker execution is GitHub Actions. No Source/PlusCal execution/parser/TLC or delegation. Static diff and isolated-index reverse-application checks are file checks, not runtime evidence. Actions are pending at preparation and must be inspected before claiming a pass.
 
+## Actual Actions evidence
+
+Implementation and patch003 commit `bb4ddc4037ea45e1b9a185d3bca11a4c4c859d8b` passed regression [39052637981](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39052637981): actual logs show cases1–43 passing in both inline and split browser artifacts (86 case executions), including the added command/query/geometry test. Versions [39052637844](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39052637844) passed and logged code r39 stale with fingerprint `sha256:c3844209087a01efaf5d7fdf00330f2d07bb2696e5bbc01ad53e64e4a94f731f`. Build/verification [39052637903](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39052637903) succeeded and generated dist-only bot commit `b9017660a7add509234d4e706529447d9830e364`. Local branch fast-forwarded that generated output. No local runtime execution. This later result record is not the executed implementation HEAD. Static endpoint diff and isolated-index reverse applicability passed before the atomic implementation commit.
+
 Whole-goal gaps still include layout/zoom and export geometry ownership, graph/assets candidate and query adaptation, selection maps, lifecycle adaptation and renderer direct reads. Tests/manifests cannot establish full conformance by themselves; active goal remains incomplete.
