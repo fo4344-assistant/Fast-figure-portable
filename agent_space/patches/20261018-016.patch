@@ -1,0 +1,33 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 6e6d43f..e8664f0 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -55,7 +55,7 @@ Baseline `399822d02baad1ca8aa04616041ba02dd4f2c47c`. Translate NormalizeImageEdi
+ 
+ ## Ninth implementation unit — persistent print settings and conversion failures
+ 
+-Baseline `ec548da11a60f8794b7ec5238703805fee978351`. Translate NormalizeExportEditsInAttempt with current-field preservation, config-only bounds, declared own edits read once, auto/null versus explicit/current-height fallback, and commit-gated official public reads. Correct r44's lower image conversion catch after comparing the already-existing primitive contract: thrown conversions propagate; invalid/non-finite scalar results preserve current fields, and NoValue is not zero. Case49 corrects the mistaken Symbol success expectation; case50 supplements existing case40. Review008 documents this discovered lower-translation/test oversight, exact requirement mapping and whole-goal gaps. Source39/pseudocode13 unchanged, code45 stale. Patch20261018-015 pair and actual modified files commit together; Actions pending at initial record. Raster export/projection and broader graph/assets/lifecycle integration remain open.
++Baseline `ec548da11a60f8794b7ec5238703805fee978351`. Translate NormalizeExportEditsInAttempt with current-field preservation, config-only bounds, declared own edits read once, auto/null versus explicit/current-height fallback, and commit-gated official public reads. Correct r44's lower image conversion catch after comparing the already-existing primitive contract: thrown conversions propagate; invalid/non-finite scalar results preserve current fields, and NoValue is not zero. Case49 corrects the mistaken Symbol success expectation; case50 supplements existing case40. Review008 documents this discovered lower-translation/test oversight, exact requirement mapping and whole-goal gaps. Source39/pseudocode13 unchanged, code45 stale. Patch20261018-015 pair and actual modified files committed together as `b3c345e50990ea2fa69420feb66c1e11866927c3`. Actual Actions regression39056301075 passed50 inline +50 split, version39056301048 passed exact code45 stale fingerprint, build39056301152 verified distributions and generated dist-only `af4dbaf1e8ea0898597472d6574eb1a4f6caa455`, fast-forwarded locally. Review008 records exact evidence; later result-only docs are not the executed source HEAD. Raster export/projection and broader graph/assets/lifecycle integration remain open; the active goal is not complete.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261018-008-code-print-settings-open.md b/agent_space/reviews/review-20261018-008-code-print-settings-open.md
+index e17ee2c..42a0e51 100644
+--- a/agent_space/reviews/review-20261018-008-code-print-settings-open.md
++++ b/agent_space/reviews/review-20261018-008-code-print-settings-open.md
+@@ -24,7 +24,14 @@ Review007 records what actually ran at r44; its statement that all conversion fa
+ 
+ ## Verification
+ 
+-PENDING at initial record. Existing push workflows must execute inline/split cases1–50, version-chain/fingerprint and distribution packaging. No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Byte hashing, diff whitespace and isolated-index reverse apply are file checks only.
++Implementation and patch015 committed together as `b3c345e50990ea2fa69420feb66c1e11866927c3`.
++
++- Actions regression39056301075 SUCCESS at that HEAD: actual logs show cases1–50 passing in inline and split-zip; cases49/50 explicitly cover the corrected image and print conversion exception boundaries.
++- Version39056301048 SUCCESS at that HEAD: Source39 closed/current, pseudocode13 current, code45 stale with fingerprint `sha256:f7f94079e4caeb00f3dd5a53c9a7148d668bb25251cca5b8e99bdb914f71ae23`.
++- Build39056301152 SUCCESS at that HEAD: both distributions verified and dist-only bot `af4dbaf1e8ea0898597472d6574eb1a4f6caa455` fast-forwarded locally.
++- Actual logs retained under `.work/print-r45-evidence/`. Later result-only documentation is not the executed source HEAD.
++
++No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Byte hashing, diff whitespace and isolated-index reverse apply passed as file checks only, not runtime or whole-goal conformance proof.
+ 
+ ## Whole-goal completion audit
+ 

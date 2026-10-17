@@ -24,7 +24,14 @@ Review007 records what actually ran at r44; its statement that all conversion fa
 
 ## Verification
 
-PENDING at initial record. Existing push workflows must execute inline/split cases1–50, version-chain/fingerprint and distribution packaging. No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Byte hashing, diff whitespace and isolated-index reverse apply are file checks only.
+Implementation and patch015 committed together as `b3c345e50990ea2fa69420feb66c1e11866927c3`.
+
+- Actions regression39056301075 SUCCESS at that HEAD: actual logs show cases1–50 passing in inline and split-zip; cases49/50 explicitly cover the corrected image and print conversion exception boundaries.
+- Version39056301048 SUCCESS at that HEAD: Source39 closed/current, pseudocode13 current, code45 stale with fingerprint `sha256:f7f94079e4caeb00f3dd5a53c9a7148d668bb25251cca5b8e99bdb914f71ae23`.
+- Build39056301152 SUCCESS at that HEAD: both distributions verified and dist-only bot `af4dbaf1e8ea0898597472d6574eb1a4f6caa455` fast-forwarded locally.
+- Actual logs retained under `.work/print-r45-evidence/`. Later result-only documentation is not the executed source HEAD.
+
+No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Byte hashing, diff whitespace and isolated-index reverse apply passed as file checks only, not runtime or whole-goal conformance proof.
 
 ## Whole-goal completion audit
 
