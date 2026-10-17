@@ -23,7 +23,11 @@ Rejected reading live CSV/palette again after copying a chart, calling the write
 
 ## Verification
 
-Pending GitHub Actions at preparation. No local application, Source, pseudocode/parser, checker, test, build or TLC execution. File diff/reverse-apply checks are not runtime evidence. Cases1–54 are requested in both packaged formats; version checker must verify actual fingerprint and stale status; build must verify both distributions. Actual runs/HEAD and any failures will be recorded after execution.
+Implementation and patch019 committed together as `4d91c62d643e92113b6e62bbb3e6cfcf0724e2ae`. Version39057561692 SUCCESS with actual code47 stale fingerprint `sha256:7b27c5f6d2c7bbeb743e7e382598a5be0d3b24304a170a0151b04c5050119128`. Build39057561708 SUCCESS, verified both distributions and produced dist-only bot `0ab35f6cb4208197fdc1b7cc53d414eee3b11e4c`, fast-forwarded locally.
+
+Initial regression39057561684 passed cases1–53 in both formats but case54 failed `Error: successful handoff leaked URL/result/lifecycle`. Its assertion assumed this operation's revoke was the first global revoke entry, although prior raster tests schedule delayed revocations. Test-only patch020 checks membership of the operation-owned URL rather than unrelated global ordering, retains None/query/click/lifecycle assertions and adds diagnostic values. No production change or fingerprint/revision change. Follow-up Actions pending; the failure remains recorded rather than relabelled as a pass.
+
+Actual logs are retained under `.work/graph-r47-evidence/`. No local application, Source, pseudocode/parser, checker, test, build or TLC execution. File diff/reverse-apply checks are not runtime evidence. Any later result-only documentation is not the executed implementation HEAD.
 
 ## Whole-goal audit
 

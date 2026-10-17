@@ -1964,12 +1964,13 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           calls++; return query(kind, request);
         };
         check(await api.graphs.exportPlotlyJson() === undefined && calls === 1 && clicked.length === 1 &&
-          revoked[0] === created[0].url && appFSM.state.lifecycle === "ready", "successful handoff leaked URL/result/lifecycle");
+          revoked.includes(created[0]?.url) && appFSM.state.lifecycle === "ready",
+          `successful handoff leaked owned URL/result/lifecycle: calls=${calls},clicks=${clicked.length},created=${created.length},revoked=${JSON.stringify(revoked)},state=${appFSM.state.lifecycle}`);
         const figure = JSON.parse(await created[0].blob.text());
         check(figure.data[0].y[0] === 22 && /^plotly-figure-\d+-.*\.json$/.test(clicked[0]), "copied figure/name changed in renderer");
         fail = true; let caught;
         try { await api.graphs.exportPlotlyJson(); } catch (error) { caught = error; }
-        check(caught === failure && revoked[1] === created[1].url && appFSM.state.lifecycle === "ready",
+        check(caught === failure && revoked.includes(created[1]?.url) && appFSM.state.lifecycle === "ready",
           "handoff failure was swallowed, resource leaked or lifecycle stuck");
         fail = false;
         const pending = appFSM.run("exporting", "JSON_BUSY_PROBE", () => api.graphs.exportPlotlyJson());
