@@ -24,7 +24,7 @@ Shared package reference naming and representation scope affect retained FFPX/re
 
 ## Verification
 
-Pending GitHub Actions at this record's initial implementation commit. Cases1–56 must run in inline and split packages, version checker must confirm actual code48 fingerprint, and distribution build must verify both artifacts. No local application, Source, pseudocode/parser, checker, test, build or TLC execution. File diff/reverse-apply checks are integrity checks only. Executed commit/run IDs and any failures will be recorded after actual results, without treating later documentation as the tested source HEAD.
+Implementation and patch022 committed together as `3769e4bd2ba72fe2a22503fb293aabe4b2331eee`. Versions39058293091 SUCCESS with actual code48 stale fingerprint `sha256:ac03d2dca4d4bf9eca607cbb8bcd8fa8d607a079b0c7cd01b2478c5de5726c27`. Build39058293076 SUCCESS verified both artifacts and generated dist-only bot `aa24706`, fast-forwarded locally. Initial regression39058293111 passed1–54 and56 in both formats;55 failed `TypeError: Cannot read properties of undefined (reading 'chart')`. Its fixture uses projectClone, whose existing slot toJSON emits flat legacy fields, but the test incorrectly read slot.content.chart. Test-only patch023 reads the fixture's slot.chart, with no production or lineage change. Follow-up regression is pending; the initial failure remains recorded. No local application, Source, pseudocode/parser, checker, test, build or TLC execution. File diff/reverse-apply checks are integrity checks only. Executed commit/run IDs and any failures will be recorded after actual results, without treating later documentation as the tested source HEAD.
 
 ## Whole-goal completion audit
 

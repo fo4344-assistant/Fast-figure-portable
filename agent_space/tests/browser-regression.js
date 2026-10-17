@@ -1991,7 +1991,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
 
     await run(55, "FFSX packages real references from one supplied Project and preserves conversion views", async () => {
       const source = projectClone(activeProject._state), slot = source.slots.find(item => item.id === selectedSlotId),
-        chart = source.charts.find(item => item.id === slot.content.chart), csvId = chart.editor.objects[0].csvId,
+        chart = source.charts.find(item => item.id === slot.chart), csvId = chart.editor.objects[0].csvId,
         csv = source.assets.csvFiles.find(item => item.id === csvId);
       chart.editor.objects.push(projectClone(chart.editor.objects[0]));
       csv.bytesBase64 = ffpxBytesToBase64(new TextEncoder().encode("X,Y\n303,404\n"));
