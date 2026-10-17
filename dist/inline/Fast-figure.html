@@ -9772,7 +9772,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
 <p>GitHub Actions runs <code>scripts/build-portable.py</code> when distribution inputs change on <code>main</code> and commits changed artifacts back to the repository. Files under <code>dist/</code> are generated outputs and should not be edited directly.</p>
 <p>To reproduce the same artifacts locally, run:</p>
 <pre><code class="language-bash">python scripts/build-portable.py</code></pre>
-<p>The inline build contains the application and all JavaScript dependencies in one HTML file.</p>
+<p>The inline build contains the application and all JavaScript dependencies in one HTML file. Both builds embed the common <code>sourcescript/backend/settings.json</code> as read-only JSON data in their HTML; no runtime fetch or duplicate config file is required. The repository HTML is a build template, not the packaged entry point. Edit the common settings source rather than generated HTML defaults.</p>
 <p>The split ZIP extracts to:</p>
 <pre><code class="language-text">Fast-figure/
 ├─ Fast-figure.html
@@ -9891,8 +9891,23 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         </div>
       </main>
     </div>
+    <script id="ff-backend-settings" type="application/json">{"backend":{"project_object":{"ffpx":{"formatVersion":3},"layout":{"gridRows":2,"gridCols":2,"slotStyle":{"referenceWidth":1200,"gap":0,"outerMargin":0,"radius":0,"aspect":1.618,"showBorders":true}},"annotations":{"labels":{"enabled":false,"settings":{"format":"lower-alpha","parentheses":false,"x":0,"y":0,"order":"row-major","fontFamily":"system-ui, sans-serif","fontSize":14}},"captions":{"enabled":false,"nameBold":false,"settings":{"fontFamily":"system-ui, sans-serif","fontSize":14,"lineHeight":1.45}}},"appearance":{"uiPalette":{"uiColor":"#B0CFCE","uiBackgroundColor":"#FAFAFA","uiSurfaceColor":"#FFFFFF","uiMutedColor":"#4F525D","uiSubtleColor":"#94A3B8","uiDisabledBgColor":"#E5E7EB","uiDisabledTextColor":"#64748B","uiShadowColor":"#383A42","paperColor":"#FFFFFF","fontColor":"#383A42"}},"export":{"heightMode":"auto","dpi":300,"format":"png"}},"defaults":{"slotSettings":{"content":{"contentType":"graph","imageSettings":{"fit":"contain","scale":100,"x":50,"y":50}}},"chartSettings":{"editor":{"globalSettings":{"showLegend":true,"showTitle":true,"showZeroLine":false,"graphFontFamily":"","titleFontSize":"","legendFontSize":""},"axis":{"min":"","max":"","tick":"","tickMode":"plotly","minorTicks":false,"notation":"none","scaleType":"linear","divide":1,"title":"","titleSize":14,"lineWidth":1,"showGrid":true,"showValues":true,"fontSize":12},"axisVisibility":{"xBottom":true,"xTop":false,"yLeft":true,"yRight":false},"objectStyle":{"type":"scatter","xAxisSide":"bottom","yAxisSide":"left","lineWidth":2,"lineDash":"solid","markerSymbol":"circle","markerSize":6,"barOpacity":1,"barLineWidth":0}}},"graphColors":["#383A42","#E45649","#50A14F","#B37901","#0184BC","#A626A4","#0997B3","#FAFAFA"],"graphRendering":{"titleFontSize":17,"legendFontSize":12,"gridColor":"#E5E7EB","zeroLineColor":"#CBD5E1","margin":{"l":58,"r":58,"t":42,"b":50}},"captionReferenceStyle":{"padding":8,"dashboardGap":10,"borderHeight":2,"minimumTextWidth":10},"limits":{"layout":{"gridRows":[1,8],"gridCols":[1,8],"referenceWidth":[100,20000],"gap":[0,2000],"outerMargin":[0,5000],"radius":[0,2000],"aspect":[0.1,10]},"imageSettings":{"scale":[1,1000],"x":[-100,200],"y":[-100,200]},"labels":{"fontSizeMin":6},"captions":{"fontSize":[6,96],"lineHeight":[0.8,4]},"graphObject":{"lineWidth":[0.1,20],"markerSize":[1,40],"barOpacity":[0.05,1],"barLineWidth":[0,10]},"export":{"logicalWidth":[100,20000],"logicalHeight":[100,20000],"dpi":[36,1200],"rasterDimension":16384,"rasterArea":64000000}},"vfs":{"root":"/assets","csv":"/assets/csv","image":"/assets/images","trash":"/assets/trash"},"naming":{"projectNameMaxLength":120,"exportStemMaxLength":100},"preview":{"widthRange":[1,20000],"fallbackWidth":600}}}}</script>
     <script>
-      const PACKAGE_FORMAT_VERSION = 3;
+      function readBackendSettings() {
+        const config = JSON.parse(document.getElementById("ff-backend-settings").textContent);
+        if (!config.backend?.project_object || !config.backend?.defaults)
+          throw Error("Backend 설정 원천이 올바르지 않습니다.");
+        const freeze = (value) => {
+          if (value && typeof value === "object") {
+            Object.values(value).forEach(freeze);
+            Object.freeze(value);
+          }
+          return value;
+        };
+        return freeze(config.backend);
+      }
+      const BackendSettings = readBackendSettings();
+      const PACKAGE_FORMAT_VERSION = BackendSettings.project_object.ffpx.formatVersion;
       const APP_BUILD = "1.1.43-wip";
       const PROJECT_OBJECT_PATHS = Object.freeze({
         project: "meta",
@@ -9908,42 +9923,10 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         appearance: "appearance",
         export: "export",
       });
-      const DEFAULT_SLOT_STYLE = Object.freeze({
-        referenceWidth: 1200,
-        gap: 0,
-        outerMargin: 0,
-        radius: 0,
-        aspect: 1.618,
-        showBorders: true,
-      });
-      const DEFAULT_UI_PALETTE = Object.freeze({
-        uiColor: "#B0CFCE",
-        uiBackgroundColor: "#FAFAFA",
-        uiSurfaceColor: "#FFFFFF",
-        uiMutedColor: "#4F525D",
-        uiSubtleColor: "#94A3B8",
-        uiDisabledBgColor: "#E5E7EB",
-        uiDisabledTextColor: "#64748B",
-        uiShadowColor: "#383A42",
-        paperColor: "#FFFFFF",
-        fontColor: "#383A42",
-      });
-      const DEFAULT_COLORS = [
-        "#383A42",
-        "#E45649",
-        "#50A14F",
-        "#B37901",
-        "#0184BC",
-        "#A626A4",
-        "#0997B3",
-        "#FAFAFA",
-      ];
-      const DEFAULT_IMAGE_SETTINGS = Object.freeze({
-        fit: "contain",
-        scale: 100,
-        x: 50,
-        y: 50,
-      });
+      const DEFAULT_SLOT_STYLE = BackendSettings.project_object.layout.slotStyle;
+      const DEFAULT_UI_PALETTE = BackendSettings.project_object.appearance.uiPalette;
+      const DEFAULT_COLORS = BackendSettings.defaults.graphColors;
+      const DEFAULT_IMAGE_SETTINGS = BackendSettings.defaults.slotSettings.content.imageSettings;
       const SLOT_LOCAL_DEFAULTS = Object.freeze({
         chart: null,
         imageId: null,
@@ -9956,39 +9939,20 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           kind: "fast-figure-project-object",
           meta: { projectName: "", appBuild: APP_BUILD },
           layout: {
-            gridRows: 2,
-            gridCols: 2,
+            gridRows: BackendSettings.project_object.layout.gridRows,
+            gridCols: BackendSettings.project_object.layout.gridCols,
             slotStyle: { ...DEFAULT_SLOT_STYLE },
           },
           annotations: {
-            labels: {
-              enabled: false,
-              settings: {
-                format: "lower-alpha",
-                parentheses: false,
-                x: 0,
-                y: 0,
-                order: "row-major",
-                fontFamily: "system-ui, sans-serif",
-                fontSize: 14,
-              },
-            },
+            labels: projectClone(BackendSettings.project_object.annotations.labels),
             captions: {
-              enabled: false,
-              text: "",
-              afterText: "",
-              name: "",
-              nameBold: false,
-              settings: {
-                fontFamily: "system-ui, sans-serif",
-                fontSize: 14,
-                lineHeight: 1.45,
-              },
+              ...projectClone(BackendSettings.project_object.annotations.captions),
+              text: "", afterText: "", name: "",
             },
           },
           assets: { csvFiles: [], images: [] },
           fileSystem: {
-            directories: ["/assets", "/assets/csv", "/assets/images", "/assets/trash"],
+            directories: Object.values(BackendSettings.defaults.vfs),
           },
           charts: [],
           slots: [],
@@ -9996,14 +9960,13 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           appearance: { uiPalette: { ...DEFAULT_UI_PALETTE } },
           export: {
             width: DEFAULT_SLOT_STYLE.referenceWidth,
-            heightMode: "auto",
+            ...BackendSettings.project_object.export,
             height: null,
-            dpi: 300,
-            format: "png",
           },
         };
-        for (let index = 0; index < 4; index++)
-          state.slots.push(newGridSlot(index, Math.floor(index / 2) + 1, (index % 2) + 1));
+        for (let index = 0; index < state.layout.gridRows * state.layout.gridCols; index++)
+          state.slots.push(newGridSlot(index, Math.floor(index / state.layout.gridCols) + 1,
+            (index % state.layout.gridCols) + 1));
         return state;
       }
       function projectObjectPath(state, path) {
@@ -10304,6 +10267,12 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             name: captions.name, nameBold: captions.nameBold,
             settings: Object.freeze({ ...captions.settings }),
           });
+        }
+        if (kind === "project-api" && request.operation === "captions.readSlot") {
+          const slot = activeProject._state.slots.find((item) => item.id === request.slotId);
+          return slot ? Object.freeze({
+            id: slot.id, row: slot.row, col: slot.col, text: slot.caption ?? "",
+          }) : null;
         }
         if (kind === "project-api" && request.operation === "print.readSettings")
           return Object.freeze({ ...activeProject.exportSettings });
@@ -11320,8 +11289,19 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           captions.name = String(payload.name ?? "");
         if (Object.prototype.hasOwnProperty.call(payload, "nameBold"))
           captions.nameBold = payload.nameBold === true;
-        if (payload.settings && typeof payload.settings === "object")
-          captions.settings = projectClone(payload.settings);
+        if (payload.settings && typeof payload.settings === "object") {
+          const edits = payload.settings,
+            defaults = BackendSettings.project_object.annotations.captions.settings,
+            limits = BackendSettings.defaults.limits.captions;
+          if (Object.prototype.hasOwnProperty.call(edits, "fontFamily"))
+            captions.settings.fontFamily = String(edits.fontFamily ?? "");
+          for (const key of ["fontSize", "lineHeight"]) {
+            if (!Object.prototype.hasOwnProperty.call(edits, key)) continue;
+            const number = Number(edits[key]), [min, max] = limits[key];
+            captions.settings[key] = Number.isFinite(number)
+              ? Math.max(min, Math.min(max, number)) : defaults[key];
+          }
+        }
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
       }
@@ -17282,33 +17262,29 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return appFSM.query("project-api", { operation: "captions.readGlobal" });
       }
       function readSlotCaptionState(slotId) {
-        let slot=slotAt(Number(slotId));
-        return slot?Object.freeze({
-          id:slot.id,row:slot.row,col:slot.col,text:slot.caption??"",
-        }):null;
+        return appFSM.query("project-api", { operation: "captions.readSlot", slotId });
       }
       function setCaptionsApiEnabled(enabled) {
-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
-          enabled: enabled === true,
-          direction: "ui-to-fsm",
-        });
+        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { enabled });
+        if (!result.committed) return false;
         renderDashboard();
         debugLog("annotation:caption", { enabled: activeProject.captionsEnabled });
         appFSM.notify("captions", "ANNOTATION_VISIBILITY_CHANGED");
         return readGlobalCaptionState();
       }
       function setGlobalCaptionText(text) {
-        appFSM.send("CAPTION_TEXT_INPUT",{
-          target:{kind:"global"},text:String(text??""),direction:"fsm-to-model",
+        let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
+          target: { kind: "global" }, text,
         });
+        if (!result.committed) return false;
         syncDashboardCaption();
         return readGlobalCaptionState();
       }
       function setSlotCaptionText(slotId,text) {
-        appFSM.send("CAPTION_TEXT_INPUT",{
-          target:{kind:"slot",id:Number(slotId)},text:String(text??""),direction:"fsm-to-model",
+        let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
+          target: { kind: "slot", id: slotId }, text,
         });
-        return readSlotCaptionState(slotId);
+        return result.committed ? readSlotCaptionState(slotId) : false;
       }
       function insertCaptionsApiSlotCaptions(slotIds = null) {
         let result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", { slotIds });
@@ -17319,44 +17295,22 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
 
       function setCaptionsApiName(name) {
-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
-          name: String(name ?? ""),
-          direction: "ui-to-fsm",
-        });
+        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { name });
+        if (!result.committed) return false;
         syncDashboardCaption();
         appFSM.notify("captions", "CAPTION_NAME_CHANGED");
         return readGlobalCaptionState();
       }
       function setCaptionsApiNameBold(bold) {
-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
-          nameBold: bold === true,
-          direction: "ui-to-fsm",
-        });
+        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { nameBold: bold });
+        if (!result.committed) return false;
         syncDashboardCaption();
         appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
         return readGlobalCaptionState();
       }
       function setCaptionsApiSettings(patch = {}) {
-        let current = activeProject.captionSettings,
-          next = { ...current };
-        if (Object.prototype.hasOwnProperty.call(patch, "fontFamily"))
-          next.fontFamily = String(patch.fontFamily ?? "");
-        if (Object.prototype.hasOwnProperty.call(patch, "fontSize")) {
-          let fontSize = Number(patch.fontSize);
-          next.fontSize = Number.isFinite(fontSize)
-            ? Math.max(6, Math.min(96, fontSize))
-            : 14;
-        }
-        if (Object.prototype.hasOwnProperty.call(patch, "lineHeight")) {
-          let lineHeight = Number(patch.lineHeight);
-          next.lineHeight = Number.isFinite(lineHeight)
-            ? Math.max(0.8, Math.min(4, lineHeight))
-            : 1.45;
-        }
-        appFSM.send("CAPTION_SETTINGS_CHANGED", {
-          settings: next,
-          direction: "ui-to-fsm",
-        });
+        let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { settings: patch });
+        if (!result.committed) return false;
         applyCaptionSettings();
         return readGlobalCaptionState();
       }
