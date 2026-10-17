@@ -1705,6 +1705,72 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       } finally { activeProject.initialize(saved); renderDashboard(); }
     });
 
+    await run(49, "Image edits preserve valid zero, current fields and explicit target ownership", async () => {
+      const saved = projectClone(activeProject._state);
+      try {
+        const target = activeProject.slots.find(slot => !slot.hidden);
+        api.slots.reset(target.id);
+        select(slotAt(target.id));
+        api.slots.setContentType("image");
+        api.images.insertEmpty();
+        const id = target.id, other = activeProject.slots.find(slot => !slot.hidden && slot.id !== id);
+        const first = api.images.setSettings({ fit: "manual", scale: 0, x: 0, y: 0 });
+        check(first.settings.scale === 1 && first.settings.x === 0 && first.settings.y === 0 &&
+          Object.isFrozen(first.settings), "valid zero was replaced by a truthiness fallback");
+        let next = api.images.setSettings({ fit: "invalid", scale: "invalid", x: Infinity, y: Symbol("invalid") });
+        check(next.settings.fit === "manual" && next.settings.scale === 1 && next.settings.x === 0 && next.settings.y === 0,
+          "invalid supplied image fields replaced current settings");
+        next = api.images.setSettings({ fit: "contain", scale: 500, x: 180, y: -50, unknown: true });
+        check(next.settings.scale === 1 && next.settings.x === 0 && next.settings.y === 0 &&
+          !Object.prototype.hasOwnProperty.call(slotAt(id).content.imageSettings, "unknown"),
+          "non-manual or undeclared numeric edits changed the candidate");
+        api.images.setSettings({ fit: "manual" });
+        const send = projectEFSM.send;
+        try {
+          projectEFSM.send = function(event, payload) {
+            if (event === "SLOT_IMAGE_SETTINGS_CHANGED") slotAt(id).content.imageSettings.x = 88;
+            return send.call(this, event, payload);
+          };
+          next = api.images.setSettings({ scale: 125 });
+          check(next.settings.x === 88 && next.settings.scale === 125 && first.settings.x === 0,
+            "image edit used a stale read projection rather than command-time current settings");
+        } finally { projectEFSM.send = send; }
+        if (other) {
+          select(slotAt(other.id));
+          const result = applyImageSettingsFromValues(id, { x: 0, y: 0 });
+          check(result.slotId === id && result.settings.x === 0 && result.settings.y === 0 &&
+            interfaceFSM.readState().selectedSlotId === other.id,
+            "explicit image operation targeted or read back the unrelated current selection");
+        }
+        const before = JSON.stringify(activeProject._state), frontend = appFSM.state;
+        let failed = false;
+        try { applyImageSettingsFromValues(id, { get x() { throw Error("image getter failure"); } }); }
+        catch { failed = true; }
+        check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+          "throwing image edit partially committed or reconciled success");
+        for (const badId of [String(id), -999]) {
+          failed = false;
+          try { dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId: badId, settings: { x: 4 } }); }
+          catch { failed = true; }
+          check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+            "invalid image identity was coerced or changed authority");
+        }
+        const query = readBackendProjection, sync = syncSlotImageElement;
+        try {
+          projectEFSM.send = () => Object.freeze({ committed: false });
+          let reads = 0;
+          readBackendProjection = function(kind, request) {
+            if (kind === "project-api" && request.operation === "images.readEditor" && ++reads > 1)
+              throw Error("uncommitted success read");
+            return query(kind, request);
+          };
+          syncSlotImageElement = () => { throw Error("uncommitted image render"); };
+          check(applyImageSettingsFromValues(id, { x: 9 }) === false && reads === 1,
+            "uncommitted image operation exposed a success projection");
+        } finally { projectEFSM.send = send; readBackendProjection = query; syncSlotImageElement = sync; }
+      } finally { activeProject.initialize(saved); renderDashboard(); }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

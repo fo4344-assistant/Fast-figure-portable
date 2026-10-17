@@ -1441,20 +1441,30 @@
 
       function applySlotImageSettingsChangedAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOT_IMAGE_SETTINGS_CHANGED");
-        let slot = slotAt(Number(payload.slotId));
-        if (!slot || !getProjectImage(slot.imageId))
-          throw Error("이미지 설정을 변경할 슬롯이 없습니다.");
         let candidate = projectClone(activeProject._state);
         normalizeSlotContents(candidate.slots);
-        let target = candidate.slots.find((item) => item.id === slot.id);
-        let current = normalizeImageSettings(target), values = payload.settings || {},
-          next = { ...current, ...values, fit: ["contain", "cover", "manual"].includes(values.fit) ? values.fit : current.fit };
-        if (next.fit === "manual") {
-          next.scale = Math.max(1, Math.min(1000, Number(next.scale) || 100));
-          next.x = Math.max(-100, Math.min(200, Number(next.x) || 50));
-          next.y = Math.max(-100, Math.min(200, Number(next.y) || 50));
+        const target = candidate.slots.find((slot) => slot.id === payload.slotId);
+        if (!target || target.hidden || !candidate.assets.images.some((image) => image.id === target.imageId))
+          throw Error("이미지 설정을 변경할 슬롯이 없습니다.");
+        const next = { ...target.content.imageSettings }, values = payload.settings || {},
+          limits = BackendSettings.defaults.limits.imageSettings;
+        if (Object.prototype.hasOwnProperty.call(values, "fit")) {
+          const fit = values.fit;
+          if (["contain", "cover", "manual"].includes(fit)) next.fit = fit;
         }
-        target.content.imageSettings = readImageSettings(next);
+        if (next.fit === "manual") {
+          for (const key of ["scale", "x", "y"]) {
+            if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+            const value = values[key];
+            let number;
+            try { number = Number(value); } catch { number = NaN; }
+            if (Number.isFinite(number)) {
+              const [min, max] = limits[key];
+              next[key] = Math.max(min, Math.min(max, number));
+            }
+          }
+        }
+        target.content.imageSettings = next;
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
       }
@@ -5614,19 +5624,14 @@
         } else element.style.objectFit=settings.fit;
         return true;
       }
-      function applyImageSettingsFromValues(values={}) {
-        let slotId=appFSM.readState().selectedSlotId;
+      function applyImageSettingsFromValues(slotId, values={}) {
         if (!appFSM.query("project-api", { operation: "images.readEditor", slotId })) return false;
-        let result=dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", {
-          slotId,
-          settings: { ...values },
-          direction: "ui-to-fsm",
-        });
+        let result=dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId, settings: values });
         if (!result.committed) return false;
         // Reconciliation has finished; the renderer receives only a fresh read projection.
         syncSlotImageElement(appFSM.query("renderer", { operation: "slot-image", slotId }));
         appFSM.notify("images","IMAGE_SETTINGS_CHANGED");
-        return readImageEditorApi();
+        return appFSM.query("project-api", { operation: "images.readEditor", slotId });
       }
       function readSelectedSlotApi() {
         let slot = getSelectedSlot();
@@ -7615,7 +7620,7 @@
         }),
         images: Object.freeze({
           readEditor: readImageEditorApi,
-          setSettings: applyImageSettingsFromValues,
+          setSettings: (values) => applyImageSettingsFromValues(appFSM.readState().selectedSlotId, values),
           insertEmpty: insertEmptyImageIntoSelectedSlot,
         }),
         assets: Object.freeze({

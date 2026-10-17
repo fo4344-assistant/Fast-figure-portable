@@ -1,0 +1,237 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index bac5228..6c70459 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -49,6 +49,10 @@ Baseline `53e6df9efbde8fc57c6be9c0844e20386dff3591`. The slot schema and package
+ 
+ Baseline `75cc91eca6825c85f2dc2929ef0dbdaa21023984`. Translate current `CalculateMergeOrSplit` and public merge/split wrappers directly: resolve all current visible identities without coercion/filtering, validate rectangle/single non-default owner, transfer one complete local payload and retain chart identity, restore covered defaults on split, validate/commit once and reconcile afterward. Public wrappers gate on commit, propagate exceptions and return official immutable layout state rather than selection arrays. The Modal consumes visible IDs without inventing persistent selection state. Caption normalization/local copying now preserve exact existing null/empty/text owner values, as the already-current pseudocode requires. Browser case48 and review006 record bounded mapping and verification; Source39/pseudocode13 unchanged, code43 stale. Patch20261018-011 and actual modifications commit together. Implementation+patch011 commit `d79ecd8dfd0319eb0e26aadc1d951c01e4e73b0b` passed Actions regression39055292839 (48 inline +48 split), version39055292736 (exact r43 fingerprint/stale) and build39055292767 (verified distributions, dist-only bot `404622235d319caaf99c3bbcbcae5ae49607b71d`). Actual logs and bounded prompt audit are in review006; later result documentation is not the executed source HEAD. Remaining graph/assets, canonical normalization, renderer/export and whole integration still block completion.
+ 
++## Eighth implementation unit — image settings current-authority edits
++
++Baseline `399822d02baad1ca8aa04616041ba02dd4f2c47c`. Translate NormalizeImageEditsInAttempt and explicit-slot Application procedure directly: resolve visible slot/image in the current Backend candidate, use config limits, preserve valid zero and omitted/invalid fields, consume numeric edits only in manual mode, ignore unknown keys, validate/commit once. Public selected-slot binding captures its scalar once; postcommit official reads use that explicit target, with no snapshot as mutation source. Browser case49 supplements case39 with branch/current-authority/failure/noncommit coverage. Review007 maps actual requirements and remaining whole-goal gaps. Source39/pseudocode13 unchanged; code44 stale. Patch20261018-013 pair and actual modified files commit together. Actions results pending at initial record; no local runtime/checker/test/build execution.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-007-code-image-settings-open.md b/agent_space/reviews/review-20261018-007-code-image-settings-open.md
+new file mode 100644
+index 0000000..822a0d4
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-007-code-image-settings-open.md
+@@ -0,0 +1,33 @@
++# Code r44 — current-authority image settings translation
++
++Baseline `399822d02baad1ca8aa04616041ba02dd4f2c47c`. Source39 remains closed/current, pseudocode13 current. Physical JavaScript hierarchy is flattened only; logical ownership is unchanged. This is a bounded implementation unit, not whole-goal completion.
++
++## Prompt-to-artifact / semantic audit
++
++| Requirement | Inspected evidence |
++|---|---|
++| Direct pseudocode translation | `pseudocode/backend/project_efsm.pcal:NormalizeImageEditsInAttempt` and the SLOT_IMAGE_SETTINGS_CHANGED branch; `pseudocode/application/public_api/layout_annotations.pcal:applyImageSettingsFromValues`; corresponding Source procedure inspected before edits |
++| Current authority owns candidate | Backend clones current Project, resolves the explicit visible slot and its image in that candidate, merges only declared edits into current slot-local image settings, then whole-validates and initializes once |
++| Exact numeric branches | Fit accepts contain/cover/manual only. Only manual mode consumes supplied scale/x/y. Finite conversion results are clamped using Backend JSON limits, valid zero is not replaced by a truthiness default, missing/invalid/non-finite numbers preserve current fields |
++| Failure and unknown fields | Missing/hidden/string-coerced identities reject without commit. Unknown keys are not copied. Reading an edit getter can throw before commit; scalar conversion failure is the invalid-value branch, not a replacement default |
++| Application boundary | Internal procedure takes explicit slotId and values, performs eligibility query only, submits new values rather than a full settings snapshot, gates rendering/notification/fresh query on committed, and reads back the same explicit slot rather than a possibly different Frontend selection |
++| Public selected-slot binding | Existing images.setSettings(values) captures the selected scalar once and calls the explicit Application procedure; no new overload or public API is introduced |
++| Renderer boundary | Existing syncSlotImageElement still consumes only a supplied immutable projection; no Backend read or reverse mutation is introduced there |
++| Tests | Existing case39 retained. Case49 covers zero, invalid/omitted fields, non-manual ignored edits, unknown keys, command-time current changes, explicit target independent of selection, immutable old reads, throwing getter, identity rejection and uncommitted no-success-read/no-render |
++| Records / lineage | Code44 stale with current Source39/pseudocode13 fingerprints; implementation, metadata, this review, plan and patch013 pair commit together |
++
++Invalid edit conversion is explicitly a try-conversion with validity output in pseudocode. It must not reuse `Number(value) || fallback`, which both destroys valid zero and replaces invalid values instead of preserving current state. An edit property's own getter is read before conversion; its exception propagates, preserving the command failure boundary. No Source change is needed because these decisions already exist in the active upper layers.
++
++## Decisions / rejected alternatives
++
++Rejected carrying forward the old full-object spread: it accepts undeclared settings and changes manual numbers even in contain/cover mode. Rejected converting slot IDs with Number: requested identities must resolve as declared, not silently become another identity. Rejected deriving the successful read target from current selection: the explicit operation may legitimately target a different slot. Rejected adding a new config or selection authority; the existing Backend limits and Frontend selected scalar suffice.
++
++## Verification
++
++PENDING at initial implementation record. No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Actions must verify inline/split cases1–49, layer fingerprint and distribution packaging. Diff checks and isolated-index reverse patch checks are file integrity evidence only.
++
++## Whole-goal audit / remaining work
++
++Concrete goal: implement current pseudocode algorithms, inputs/results/failures/current-authority commits, preserve logical owners and sole config authority despite flattened files, and complete immutable supplied-projection rendering/export/resource lifetime and integration with real evidence.
++
++This unit covers image settings command/application only. It does not complete image import/export geometry, canonical Project loading/normalization, graph/asset candidates, positional cascade reconciliation, full lifecycle/public API parity, renderer/export projection cutover or legacy cleanup. The broader renderer and adapter still contain Backend-reading legacy paths. Passing case49 or structural coverage inventories cannot establish those requirements. Code44 remains stale and the active goal remains incomplete.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 3af8896..c324f84 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1705,6 +1705,72 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       } finally { activeProject.initialize(saved); renderDashboard(); }
+     });
+ 
++    await run(49, "Image edits preserve valid zero, current fields and explicit target ownership", async () => {
++      const saved = projectClone(activeProject._state);
++      try {
++        const target = activeProject.slots.find(slot => !slot.hidden);
++        api.slots.reset(target.id);
++        select(slotAt(target.id));
++        api.slots.setContentType("image");
++        api.images.insertEmpty();
++        const id = target.id, other = activeProject.slots.find(slot => !slot.hidden && slot.id !== id);
++        const first = api.images.setSettings({ fit: "manual", scale: 0, x: 0, y: 0 });
++        check(first.settings.scale === 1 && first.settings.x === 0 && first.settings.y === 0 &&
++          Object.isFrozen(first.settings), "valid zero was replaced by a truthiness fallback");
++        let next = api.images.setSettings({ fit: "invalid", scale: "invalid", x: Infinity, y: Symbol("invalid") });
++        check(next.settings.fit === "manual" && next.settings.scale === 1 && next.settings.x === 0 && next.settings.y === 0,
++          "invalid supplied image fields replaced current settings");
++        next = api.images.setSettings({ fit: "contain", scale: 500, x: 180, y: -50, unknown: true });
++        check(next.settings.scale === 1 && next.settings.x === 0 && next.settings.y === 0 &&
++          !Object.prototype.hasOwnProperty.call(slotAt(id).content.imageSettings, "unknown"),
++          "non-manual or undeclared numeric edits changed the candidate");
++        api.images.setSettings({ fit: "manual" });
++        const send = projectEFSM.send;
++        try {
++          projectEFSM.send = function(event, payload) {
++            if (event === "SLOT_IMAGE_SETTINGS_CHANGED") slotAt(id).content.imageSettings.x = 88;
++            return send.call(this, event, payload);
++          };
++          next = api.images.setSettings({ scale: 125 });
++          check(next.settings.x === 88 && next.settings.scale === 125 && first.settings.x === 0,
++            "image edit used a stale read projection rather than command-time current settings");
++        } finally { projectEFSM.send = send; }
++        if (other) {
++          select(slotAt(other.id));
++          const result = applyImageSettingsFromValues(id, { x: 0, y: 0 });
++          check(result.slotId === id && result.settings.x === 0 && result.settings.y === 0 &&
++            interfaceFSM.readState().selectedSlotId === other.id,
++            "explicit image operation targeted or read back the unrelated current selection");
++        }
++        const before = JSON.stringify(activeProject._state), frontend = appFSM.state;
++        let failed = false;
++        try { applyImageSettingsFromValues(id, { get x() { throw Error("image getter failure"); } }); }
++        catch { failed = true; }
++        check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
++          "throwing image edit partially committed or reconciled success");
++        for (const badId of [String(id), -999]) {
++          failed = false;
++          try { dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId: badId, settings: { x: 4 } }); }
++          catch { failed = true; }
++          check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
++            "invalid image identity was coerced or changed authority");
++        }
++        const query = readBackendProjection, sync = syncSlotImageElement;
++        try {
++          projectEFSM.send = () => Object.freeze({ committed: false });
++          let reads = 0;
++          readBackendProjection = function(kind, request) {
++            if (kind === "project-api" && request.operation === "images.readEditor" && ++reads > 1)
++              throw Error("uncommitted success read");
++            return query(kind, request);
++          };
++          syncSlotImageElement = () => { throw Error("uncommitted image render"); };
++          check(applyImageSettingsFromValues(id, { x: 9 }) === false && reads === 1,
++            "uncommitted image operation exposed a success projection");
++        } finally { projectEFSM.send = send; readBackendProjection = query; syncSlotImageElement = sync; }
++      } finally { activeProject.initialize(saved); renderDashboard(); }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 2481736..c2d40cd 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 43,
++      "revision": 44,
+       "status": "stale", 
+       "paths": [
+         "Fast-figure.html", 
+@@ -38,13 +38,13 @@
+         "fast-figure.js", 
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:5eca1380e7ac8c55945c0f4c4b796f02020a2305cc2c52fbf6c981fb6c7a9ca5",
++      "fingerprint": "sha256:4b8906251cbea84c8c9ca145bd68b2a64a9a4eeaf189360b614a80529d51a1a6",
+       "derived_from": {
+         "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+         "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-006-code-merge-split-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-007-code-image-settings-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 13,
+diff --git a/fast-figure.js b/fast-figure.js
+index ec85c6f..9a09bb9 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1441,20 +1441,30 @@
+ 
+       function applySlotImageSettingsChangedAction({ machine, payload }) {
+         machine.assertWritable("slots", "SLOT_IMAGE_SETTINGS_CHANGED");
+-        let slot = slotAt(Number(payload.slotId));
+-        if (!slot || !getProjectImage(slot.imageId))
+-          throw Error("이미지 설정을 변경할 슬롯이 없습니다.");
+         let candidate = projectClone(activeProject._state);
+         normalizeSlotContents(candidate.slots);
+-        let target = candidate.slots.find((item) => item.id === slot.id);
+-        let current = normalizeImageSettings(target), values = payload.settings || {},
+-          next = { ...current, ...values, fit: ["contain", "cover", "manual"].includes(values.fit) ? values.fit : current.fit };
++        const target = candidate.slots.find((slot) => slot.id === payload.slotId);
++        if (!target || target.hidden || !candidate.assets.images.some((image) => image.id === target.imageId))
++          throw Error("이미지 설정을 변경할 슬롯이 없습니다.");
++        const next = { ...target.content.imageSettings }, values = payload.settings || {},
++          limits = BackendSettings.defaults.limits.imageSettings;
++        if (Object.prototype.hasOwnProperty.call(values, "fit")) {
++          const fit = values.fit;
++          if (["contain", "cover", "manual"].includes(fit)) next.fit = fit;
++        }
+         if (next.fit === "manual") {
+-          next.scale = Math.max(1, Math.min(1000, Number(next.scale) || 100));
+-          next.x = Math.max(-100, Math.min(200, Number(next.x) || 50));
+-          next.y = Math.max(-100, Math.min(200, Number(next.y) || 50));
++          for (const key of ["scale", "x", "y"]) {
++            if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
++            const value = values[key];
++            let number;
++            try { number = Number(value); } catch { number = NaN; }
++            if (Number.isFinite(number)) {
++              const [min, max] = limits[key];
++              next[key] = Math.max(min, Math.min(max, number));
++            }
++          }
+         }
+-        target.content.imageSettings = readImageSettings(next);
++        target.content.imageSettings = next;
+         validateProjectObjectState(candidate, { requireSlots: true });
+         activeProject.initialize(candidate);
+       }
+@@ -5614,19 +5624,14 @@
+         } else element.style.objectFit=settings.fit;
+         return true;
+       }
+-      function applyImageSettingsFromValues(values={}) {
+-        let slotId=appFSM.readState().selectedSlotId;
++      function applyImageSettingsFromValues(slotId, values={}) {
+         if (!appFSM.query("project-api", { operation: "images.readEditor", slotId })) return false;
+-        let result=dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", {
+-          slotId,
+-          settings: { ...values },
+-          direction: "ui-to-fsm",
+-        });
++        let result=dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId, settings: values });
+         if (!result.committed) return false;
+         // Reconciliation has finished; the renderer receives only a fresh read projection.
+         syncSlotImageElement(appFSM.query("renderer", { operation: "slot-image", slotId }));
+         appFSM.notify("images","IMAGE_SETTINGS_CHANGED");
+-        return readImageEditorApi();
++        return appFSM.query("project-api", { operation: "images.readEditor", slotId });
+       }
+       function readSelectedSlotApi() {
+         let slot = getSelectedSlot();
+@@ -7615,7 +7620,7 @@
+         }),
+         images: Object.freeze({
+           readEditor: readImageEditorApi,
+-          setSettings: applyImageSettingsFromValues,
++          setSettings: (values) => applyImageSettingsFromValues(appFSM.readState().selectedSlotId, values),
+           insertEmpty: insertEmptyImageIntoSelectedSlot,
+         }),
+         assets: Object.freeze({
