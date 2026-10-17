@@ -149,3 +149,18 @@ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 
 잔여를 다음으로 좁혔다: constructor/asset·chart·slot normalization 및 package document 조립 등 남은 operator의 domain 계산/실제 low-level primitive 구분과 전개, query/command/Frontend 전체 producer-consumer의 retry·취소·사후 throw/resource 수명 대조, 그 뒤 활성 hierarchy cutover/과거 파일 제거/전체 충실도 review와 lineage 갱신 및 Actions cumulative checker. 명시적 entry와 API key가 모두 있다는 것만으로 이 잔여를 완료로 판정하지 않는다. 따라서 이번 턴에 전체 완료했다고 선언하지 않는다.
 
 이번 저장소 변경은 이 진행 기록만 포함한다. `.work/plan022/` 작업본·체크리스트는 현재 경로 안의 transient 작업물이며 patch/remote/rollback에 포함하지 않는다. Source37 closed/활성 pseudocode11 stale/하위 stale와 fingerprint를 유지했다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
+
+## 12. 후속 진행 — import constructor와 FFSX 참조·소유권 계산
+
+기준 HEAD `4d427acfc79ea1a22e3ebb1497bffed283679598`에서 Source r37의 import 순서/asset schema/FFSX package 규칙을 대조하며 임시 번역을 이어갔다. 이번 작업도 활성 번역의 완료·cutover가 아니다.
+
+1. Project import의 CSV/image 정규화를 collection 순서와 kind별 id 집합, 공통 canonical path 집합, 실제 parent directory, owned bytesBase64, CSV rows/header로 전개했다. image asset에 slot-local imageSettings를 두지 않으며 conflict를 자동 dedup/rename하거나 current Project를 조회하지 않는다. config에는 instance data를 넣지 않는다.
+2. chart import는 같은 global-settings normalizer, object-style 설정의 missing-only 보완과 finite/range 계산, 공통 representation-aware validator로 연결했다. zero-object chart에 base object/CSV를 만들지 않고 기존 CSV/x/y/type/axis를 임의 추론하지 않는다. slot import는 현재 candidate의 reference, slot-local image settings/caption과 chart별 owner count를 확인하며 orphan/shared chart를 clone/drop해 숨기지 않는다. next-id는 각 collection의 maximum+1을 명시했다. 원래 normalizeSlotContent 등 세부 호출까지 전부 닫혔다고 주장하지 않는다.
+3. FFSX import에서 실제 project CSV object의 unique source-id를 object 순서로 모으고, package-local id마다 새 project id와 configured CSV root의 현재 unique canonical path를 계산한다. copied bytesBase64를 보존하고 package dataRef를 Project asset의 live reference로 남기지 않는다. conversion view의 CSV id/imported/rows는 project CSV mapping으로 바꾸지 않는다.
+4. target slot은 같은 command attempt에서 다시 resolve한다. 교체되는 old chart만 제거하고 새 chart가 해당 slot 하나의 소유가 되도록 chart/image/type과 slot caption을 연결한다. 다른 chart/asset 및 target identity/geometry/local display 설정은 유지한다. whole validation 후 candidate만 반환하고 caller가 마지막에 한 번 commit한다.
+5. FFPX/FFSX export의 private 계산은 query가 이미 포착한 동일 source를 인자로 받는다. 원래 Source-signature entry는 보존하며 별도 authority/context registry를 만들지 않는다. FFSX builder는 object가 0개여도 빈 assets/assets.xml을 만들고, CSV metadata와 copied binary entries를 따로 모은다. reader는 원본 bytes를 bytesBase64로 복원하고 같은 bytes로 rows를 파싱한다. local-id 수집/remap은 공통 representation 판정 절차를 사용한다.
+6. 현재 version의 물리 XML 표기는 Source가 유지하도록 정한 compatibility format의 하위 코드 자료와 대조했다. 그 자료를 새로운 domain 의미/CSV 선택/Frontend 상태의 원천으로 쓰지 않는다. XML/byte encoding 표기와 metadata/Project model 조립을 구분하며, 미전개 package document 조립을 단순 primitive라는 이유로 완료 처리하지 않는다.
+
+아직 필요한 작업: FFPX document producer/reader의 구체 조립과 normalizeSlotContent 등 남은 domain 계산/codec 경계의 전개·연결, 전체 query/command/UI producer-consumer의 retry/취소/사후 throw/resource 의미 대조, 전체 충실도 review 후 활성 hierarchy 교체·lineage 갱신과 Actions cumulative checker다. 이번 constructor/FFSX 전개만으로 전체 완료를 선언하지 않는다.
+
+저장소 patch에는 이 진행 기록만 들어간다. `.work/plan022/` 임시 번역·메모는 포함/rollback하지 않는다. Source37 closed/활성 pseudocode11 stale/하위 stale와 fingerprint는 변경하지 않았다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
