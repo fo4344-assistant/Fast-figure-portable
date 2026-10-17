@@ -1,0 +1,33 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 6321308..737ab7c 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -59,7 +59,7 @@ Baseline `ec548da11a60f8794b7ec5238703805fee978351`. Translate NormalizeExportEd
+ 
+ ## Tenth implementation unit — reference caption measurement and target scale
+ 
+-Code46 translates `exportCaptionLayout` using one supplied reference snapshot/font measurement, including prefix-only overflow/retry, unsplit words and blank paragraphs. Target painting consumes the same lines at uniform width/referenceWidth scale, keeps automatic rounding slack below the dashboard, clips caption text, uses copied configured raster limits and returns declared geometry rejections/rounded raster dimensions. Geometry no longer invents clamps/defaults. Cases51/52 cover these branches with explicit snapshot/encoding boundaries; existing tests remain. Source39/pseudocode13 are unchanged. Review `agent_space/reviews/review-20261018-009-code-reference-export-open.md` records mappings, exclusions and pending Actions. Patch20261018-017 and actual modified files commit together. Full export snapshot/graph/resource/current-capture ownership and broader graph/assets/renderer/API integration remain unfinished; code46 stays stale and the active goal open.
++Code46 translates `exportCaptionLayout` using one supplied reference snapshot/font measurement, including prefix-only overflow/retry, unsplit words and blank paragraphs. Target painting consumes the same lines at uniform width/referenceWidth scale, keeps automatic rounding slack below the dashboard, clips caption text, uses copied configured raster limits and returns declared geometry rejections/rounded raster dimensions. Geometry no longer invents clamps/defaults. Cases51/52 cover these branches with explicit snapshot/encoding boundaries; existing tests remain. Source39/pseudocode13 are unchanged. Review `agent_space/reviews/review-20261018-009-code-reference-export-open.md` records mappings, exclusions and actual Actions. Implementation `97dc58efa60b6e8e73c17f33664c8dc1dc18eb2c` passed regression39056916573 (52 inline +52 split), versions39056916480 and build39056916610; generated dist-only bot `0946be422fd08d0380469b1f309c20fcc6dd1dbc` was fast-forwarded. Later result documentation is not the executed source HEAD. Patch20261018-017 and actual modified files commit together. Full export snapshot/graph/resource/current-capture ownership and broader graph/assets/renderer/API integration remain unfinished; code46 stays stale and the active goal open.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261018-009-code-reference-export-open.md b/agent_space/reviews/review-20261018-009-code-reference-export-open.md
+index 3125a58..5c3db7c 100644
+--- a/agent_space/reviews/review-20261018-009-code-reference-export-open.md
++++ b/agent_space/reviews/review-20261018-009-code-reference-export-open.md
+@@ -24,7 +24,14 @@ The existing target exporter is not yet the complete Source renderer: its Applic
+ 
+ ## Verification
+ 
+-Pending authorized push-triggered GitHub Actions. No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Byte fingerprinting, whitespace checks and isolated-index reverse apply are file operations only. Actual run IDs, executed commits and results must replace this pending statement after inspection.
++Implementation and patch017 committed together as `97dc58efa60b6e8e73c17f33664c8dc1dc18eb2c`.
++
++- Actions regression39056916573 SUCCESS at that HEAD: actual logs show cases1–52 passing in inline and split-zip; cases51/52 explicitly exercise reference measurement and target rejection/scaling.
++- Version39056916480 SUCCESS at that HEAD: Source39 closed/current, pseudocode13 current and code46 stale with fingerprint `sha256:97f73a1966367ee435633d7c0309c207fe32f9b7cc0931a5e7a229b3a4e11f96`.
++- Build39056916610 SUCCESS from that source: both distributions verified and dist-only bot `0946be422fd08d0380469b1f309c20fcc6dd1dbc` fast-forwarded locally.
++- Actual logs retained under `.work/reference-r46-evidence/`. No observed failed run in this unit. Later result-only documentation is not the executed implementation HEAD.
++
++No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Byte fingerprinting, semantic whitespace checks and isolated-index reverse apply passed as file operations only. Whole diff whitespace inspection additionally reports existing whitespace in patch context; the actual diff is not rewritten to hide it.
+ 
+ ## Whole-goal completion audit
+ 

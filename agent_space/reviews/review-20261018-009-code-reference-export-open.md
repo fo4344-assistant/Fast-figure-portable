@@ -24,7 +24,14 @@ The existing target exporter is not yet the complete Source renderer: its Applic
 
 ## Verification
 
-Pending authorized push-triggered GitHub Actions. No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Byte fingerprinting, whitespace checks and isolated-index reverse apply are file operations only. Actual run IDs, executed commits and results must replace this pending statement after inspection.
+Implementation and patch017 committed together as `97dc58efa60b6e8e73c17f33664c8dc1dc18eb2c`.
+
+- Actions regression39056916573 SUCCESS at that HEAD: actual logs show cases1–52 passing in inline and split-zip; cases51/52 explicitly exercise reference measurement and target rejection/scaling.
+- Version39056916480 SUCCESS at that HEAD: Source39 closed/current, pseudocode13 current and code46 stale with fingerprint `sha256:97f73a1966367ee435633d7c0309c207fe32f9b7cc0931a5e7a229b3a4e11f96`.
+- Build39056916610 SUCCESS from that source: both distributions verified and dist-only bot `0946be422fd08d0380469b1f309c20fcc6dd1dbc` fast-forwarded locally.
+- Actual logs retained under `.work/reference-r46-evidence/`. No observed failed run in this unit. Later result-only documentation is not the executed implementation HEAD.
+
+No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Byte fingerprinting, semantic whitespace checks and isolated-index reverse apply passed as file operations only. Whole diff whitespace inspection additionally reports existing whitespace in patch context; the actual diff is not rewritten to hide it.
 
 ## Whole-goal completion audit
 
