@@ -1587,9 +1587,13 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           "public resize did not commit the calculated candidate");
         const oldSlots = projectClone(activeProject.slots);
         api.layout.setGrid(3, 2);
-        check(oldSlots.every(old => JSON.stringify(slotAt(old.id)) === JSON.stringify(old)) &&
-          activeProject.slots.filter(slot => slot.col === 2).map(slot => slot.id).join() === "102,103,104",
-          "expansion changed retained geometry/local state or new-cell row-major ids");
+        check(oldSlots.every(old => {
+          const current = slotAt(old.id);
+          return ["id", "row", "col", "rowSpan", "colSpan", "hidden"].every(key => current[key] === old[key]) &&
+            JSON.stringify(slotLocalState(current)) === JSON.stringify(slotLocalState(old));
+        }), "expansion changed retained geometry/local state");
+        check(activeProject.slots.filter(slot => slot.col === 2).map(slot => slot.id).join() === "102,103,104",
+          "expansion did not assign new-cell row-major ids from pre-resize maximum");
         api.captions.setSlotText(104, "protected");
         const protectedState = JSON.stringify(activeProject._state), session = appFSM.state;
         let rejected = false;

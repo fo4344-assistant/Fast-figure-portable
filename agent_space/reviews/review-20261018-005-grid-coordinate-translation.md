@@ -34,4 +34,6 @@ Pseudocode r13 is current after this bounded retranslation. Unchanged owners ret
 
 ## Verification status
 
+Initial published implementation `9f3e62912971ee3148b1cb8c012c5d5e451c6f0f`: version39054296125 and build39054296332 passed; build generated dist-only `d9ad1ea8d14ac95ed9018ad2c4ead6a57cc7786c`. Cumulative static fidelity39054313298 passed at that dist HEAD, baseline53e6df9. Regression39054296186 passed prior46 cases in both formats but failed case47's combined retained-record/ID assertion. The test compared serialized legacy-accessor records by property order, which is not the slot contract. Replace that assertion with explicit geometry fields and ordered slot-local values, and split the ID assertion for diagnosis; this is not yet a passing re-run or a claim that implementation is proven correct.
+
 Before publication: Git diff whitespace and isolated-index reverse-patch checks are file-integrity checks only. No local application, Source, pseudocode, parser, checker, test, build, or TLC execution. GitHub Actions cumulative lineage/static fidelity, inline+split regression, and distribution build results are pending; record actual commits/run IDs after completion rather than infer success.
