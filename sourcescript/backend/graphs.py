@@ -123,6 +123,18 @@ chartModel = {
 }
 
 
+GRAPH_OBJECT_NORMALIZATION_RULE = (
+    "base object는 current CSV의 graphDataSelection x/y, csvId, config objectStyle의 type/axis/style, DEFAULT_COLORS 첫 색, 빈 legendName으로 만든다. "
+    "새 chart는 command candidate.nextId.chart와 sourceName title, config globalSettings/네 axis와 빈 objects/graph projection으로 만든다. "
+    "one-object edit는 새 값을 current object와 field별 합치며 누락/invalid enum은 current 값, current도 없으면 config default를 사용한다. "
+    "type enum은 scatter/markers/lines+markers/bar/hidden, x side는 bottom/top, y side는 left/right, dash는 solid/dot/dash/dashdot이다. "
+    "marker symbol은 circle/square/diamond/cross/x/triangle-up/triangle-down이다. 새 color는 non-empty text만 사용하며 그렇지 않으면 current color를 보존한다. "
+    "legendName은 명시된 text면 empty도 적용하고 아니면 current를 보존한다. numeric style은 finite 새 값이면 config limit으로 clamp하고 "
+    "아니면 current/default를 보존한다. csvId/x/y 선택은 graphEditorCommit의 별도 reference 규칙을 먼저 적용한다. "
+    "import/commit의 전체 objects 정규화는 missing style만 config에서 보완하고 기존 reference/order/extension을 바꾸지 않으며 "
+    "shared validator로 enum/finite range를 확인한다. 새 base object를 복구하거나 invalid CSV를 다른 CSV로 바꾸지 않는다."
+)
+
 AXIS_REFERENCE_RULE = (
     "graph object의 xAxisSide/yAxisSide를 globalSettings.axes의 실제 axis 설정에 연결한다. "
     "trace에는 Plotly x/x2 및 y/y2 reference를 계산해 사용한다."
@@ -181,8 +193,9 @@ def graphDataSelection(matrix, headerLines, editor):
 
     처리:
     기존 editor.x/editor.y가 현재 table에 유효하면 유지한다.
-    아니면 numeric data가 실제로 존재하는 첫 column을 x로 우선 선택하고,
-    x와 다른 numeric 또는 다른 유효 column을 y로 선택한다.
+    아니면 header 이후 body에 literal empty string/missing이 아닌 finite scalar numeric 값이 하나라도 있는 첫 column을 x로 우선 선택한다.
+    numeric column이 없으면 첫 유효 column을 x로 쓴다. y는 x와 다른 numeric, 다른 유효 column, 첫 유효 column 순서로 고른다.
+    단일 column이면 x=y가 허용되며 column 자체가 없으면 x/y 모두 empty string이다. 유효한 기존 editor.x/y를 이 fallback으로 덮어쓰지 않는다.
     """
     selection = {"x": "선택된 x column id", "y": "선택된 y column id"}
     return selection
@@ -199,7 +212,9 @@ def connectDataToSlotModel(slot, data, sourceName, projectCsv):
 
     처리:
     1. slot과 projectCsv reference를 current state에서 resolve한다.
-    2. existing owning chart가 있으면 그 chart copy에 새 graph object를 추가한다.
+    2. existing owning chart가 있으면 editable인지 검증한 뒤 그 chart copy에 새 graph object를 추가한다.
+       non-editable chart에는 실제 CSV object를 conversion view로 섞지 않으며 실패 시 project/selection을 보존한다.
+       편집 가능 전환은 기존 graphs.setEditable의 명시적 별도 command를 사용한다.
     3. chart가 없으면 next chart id를 사용하는 새 chart candidate와 slot.chart candidate를 만든다.
     4. graph object는 실제 projectCsv id와 유효한 column selection만 참조한다.
     5. candidate chart projection을 계산하고 project-level mutation action이 검증/commit하도록 반환한다.
@@ -485,7 +500,9 @@ def validateChartModel(chart, csvCollection):
     - 없음.
 
     검증:
-    - chart id와 editor/graph shape가 유효하다.
+    - editor/graph shape가 유효하다. id가 있으면 양의 정수다. Project collection에 등록하는 chart는 id가 필수이고
+      Project whole validation이 positive/unique id와 정확히 한 owner를 검사한다.
+      FFSX의 Project identity 없는 serialized chart는 id를 만들지 않고 같은 구조/reference 검증을 받는다.
     - editor.editable은 boolean이고 editor.objects는 배열이며 두 representation 모두 0개일 수 있다.
     - imported conversion representation(editor.editable=False이고 editor.conversionRows가 존재함)의 object/rows는
       project CSV/column 참조 검증 대상에 넣지 않는다. conversionRows가 table shape인지,
@@ -559,6 +576,8 @@ def convertImportedChartToEditable(chart):
        conversionRows가 있고 conversion object가 0개면 CSV 없이 editor.editable=true인 empty chart candidate를 만든다.
     3. conversionRows가 있고 conversion object가 있으면 그 rows를 하나의 project CSV candidate로 만들고
        모든 conversion object가 그 실제 CSV id를 참조하도록 연결한다. 연결 후 conversionRows를 제거한다.
+       새 CSV는 current nextId.csv, Backend csv root의 collision-free 'Plotly JSON.csv', MIME text/csv, headerLines=1을 사용한다.
+       bytes가 없는 이 새 table에는 Backend asset의 synthetic-data encoding 규칙을 적용하며 원본 imported graph bytes를 대체하지 않는다.
     4. global/axis settings를 유지한 채 같은 whole-project candidate의 chart/CSV로 editable Plotly projection을 다시 계산한다.
        traces/chartFigure/rebuildEditableGraph의 project 인자에 그 candidate를 사용한다. 아직 commit되지 않은 CSV를
        live activeProject에서 조회하거나 새 CSV reference를 맞추기 위해 부분 commit하지 않는다.

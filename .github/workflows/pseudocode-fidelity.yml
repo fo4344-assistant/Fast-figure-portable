@@ -1,0 +1,33 @@
+name: Pseudocode fidelity coverage
+on:
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: Cumulative semantic baseline including Source and pseudocode changes
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  static-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cumulative development-layer audit
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+        run: python scripts/check-development-layer-versions.py --base "$BASE_SHA"
+      - name: Source entry, input, API and explicit-call coverage
+        run: python scripts/check-pseudocode-fidelity.py --report .audit/source-pseudocode-trace.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-pseudocode-static-trace
+          path: .audit/source-pseudocode-trace.md
+          if-no-files-found: ignore

@@ -1,72 +1,56 @@
----- MODULE FastFigureSystemPseudocode ----
-EXTENDS Naturals
+---- MODULE FastFigureSystemR38 ----
+EXTENDS Sequences
 
-\* Direct translation of Source Script r25 sourcescript/system.py.
-\* Semantic children are Backend, Application boundary, Frontend, and Portable build.
-\* Runtime load order is physical and does not flatten that hierarchy.
-
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Hierarchy: Backend / Application boundary / Frontend / Portable build.
+\* No new system FSM. Qualified imported methods use '_' mechanically.
+\* activeProject below is an imported Backend binding, NOT a copied authority.
+\* projection/actions/interfaceState/result are startup-call-local values.
 CONSTANT NoValue
 
-(*
---algorithm FastFigureSystem
-variables
-  activeProject = NoValue,
-  coreRuntime = "uninitialized",
-  interfaceLifecycle = "booting",
-  apiExposed = FALSE,
-  projectProjection = NoValue,
-  finalInterfaceState = NoValue,
-  mantineMounted = FALSE,
-  result = NoValue,
-  effect = NoValue;
+(* --algorithm FastFigureSystem
+variables result = NoValue;
 
-procedure InitializeFastFigure()
-variables projectCandidate = NoValue;
+procedure initializeFastFigure()
+variables candidate = NoValue, projectProjection = NoValue,
+          interfaceState = NoValue, frontendActions = NoValue;
 begin
-InitializeProjectCandidate:
-  projectCandidate := CreateProjectState();
-InitializeProjectValidate:
-  assert ValidateWholeProject(projectCandidate);
-InitializeProjectCommit:
-  activeProject := projectCandidate;
-InitializeRendererHosts:
-  assert RequiredRendererHostsExist();
-InitializeDashboardProjection:
-  effect := ApplyDashboardZoomProjection();
-InitializeSlotController:
-  effect := InstallSlotInteractionController(ApplicationPublicActionSurface());
-InitializeRendererInputs:
-  finalInterfaceState := ReadFrontendStateProjection() ||
-  projectProjection := ApplicationDispatchProjectQuery("renderer", finalInterfaceState);
-InitializeRender:
-  effect := RenderDashboardFrom(projectProjection, finalInterfaceState);
-InitializeStyle:
-  effect := ApplySlotStyleFrom(projectProjection);
-InitializeReady:
-  effect := ApplicationDispatchInterfaceEvent("LIFECYCLE_COMPLETE", [accepted |-> TRUE]) ||
-  interfaceLifecycle := "ready";
-InitializeWorkspace:
-  effect := SynchronizeInitialWorkspaceAndOverlay();
-InitializeApi:
-  apiExposed := TRUE;
-InitializeMantine:
-  effect := MountMantineProviderAndShell();
-InitializeMantineState:
-  mantineMounted := TRUE;
-InitializeNoSyntheticData:
-  assert NoDefaultCsvOrFakeGraphObjectWasCreated(activeProject);
-InitializeAudit:
-  assert AuditProjectReferenceRuntimeInvariants();
-InitializeResult:
-  coreRuntime := "ready" ||
-  result := "initialized";
-InitializeReturn:
+CreateValidatedInitialProject:
+  call createProjectState();
+  candidate := result;
+  call validateProjectObjectState(candidate, TRUE);
+  \* The sole initial Backend binding is initialized to this valid candidate.
+  call ProjectObject_initialize(candidate);
+RequireCoreAndHosts:
+  assert CoreRuntimeAndRequiredRendererHostsExist();
+PrepareBoundaryInputs:
+  \* Application obtains the initial read input BEFORE its Frontend consumer.
+  \* This is the supplied input of renderer.startupCoreRuntime, not a system mirror.
+  call dispatchProjectQuery("renderer", []);
+  projectProjection := result;
+  call InterfaceStateMachine_readState();
+  interfaceState := result;
+  frontendActions := PublicActionSurface(FastFigureApi);
+PrepareAndRenderCore:
+  \* Directly reuse renderer.startupCoreRuntime's Source-defined order:
+  \* zoom -> controllers -> existing visible slots -> supplied slot style -> audit.
+  call startupCoreRuntime(projectProjection, interfaceState, frontendActions);
+ReadyThroughApplication:
+  call dispatchInterfaceEvent("LIFECYCLE_COMPLETE", []);
+ExposeExistingBoundary:
+  ExposeFastFigureApi(FastFigureApi);
+  \* Renderer receives only public actions/read input, not Backend helpers.
+MountExistingUi:
+  MountMantineProviderAndFastFigureShellAtExistingReactRoot();
+AuditStartup:
+  \* Startup does not create default CSV/fake objects or reconstruct grid data.
+  AuditProjectReferenceRuntimeInvariantsThroughTheirOwners();
+  result := "initialized_runtime";
   return;
 end procedure;
 
 begin
-Main:
-  call InitializeFastFigure();
-end algorithm;
-*)
+Startup:
+  call initializeFastFigure();
+end algorithm; *)
 ====

@@ -1,0 +1,57 @@
+---- MODULE FastFigurePortableBuildR38 ----
+EXTENDS Naturals, Sequences
+
+\* Direct translation: sourcescript/portable_build/portable_build.py r38.
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Byte read/write, exact-tag matching/replacement, directory creation are
+\* platform-neutral plumbing operations; no library/OS API is chosen here.
+ROOT == "repository root"
+DEFAULT_OUTPUT == "dist/Fast-figure.html"
+SCRIPTS == <<
+  [externalTag |-> "Fast-figure.html: vendor/plotly.min.js script tag",
+   source |-> "vendor/plotly.min.js", inlineTag |-> "ordinary inline script"],
+  [externalTag |-> "Fast-figure.html: ff-mantine-runtime script tag",
+   source |-> "vendor/fast-figure-ui-runtime.js", inlineTag |-> "inline script preserving ff-mantine-runtime id"],
+  [externalTag |-> "Fast-figure.html: fast-figure.js script tag",
+   source |-> "fast-figure.js", inlineTag |-> "ordinary inline script"],
+  [externalTag |-> "Fast-figure.html: fast-figure-ui.js script tag",
+   source |-> "fast-figure-ui.js", inlineTag |-> "ordinary inline script"] >>
+
+(* --algorithm PortableBuild
+variables result = "";
+
+procedure build(output)
+variables bytes = "", entry = <<>>, sourceBytes = "", i = 1;
+begin
+ReadSplitHostBytes:
+  bytes := ReadBytes(ROOT, "Fast-figure.html");
+ReplaceInSourceOrder:
+  while i <= Len(SCRIPTS) do
+    entry := SCRIPTS[i];
+    \* Require exactly one expected tag. No broad script-string replacement.
+    if CountExactExpectedTag(bytes, entry.externalTag) # 1 then
+      AbortBuild("missing or repeated expected external script tag");
+    end if;
+    if ~FileExists(ROOT, entry.source) then
+      AbortBuild("missing script source");
+    end if;
+    sourceBytes := ReadBytes(ROOT, entry.source);
+    bytes := ReplaceExactExpectedTagOnce(bytes, entry.externalTag,
+                   InlineScriptWithSameSourceBytes(entry.inlineTag, sourceBytes));
+    i := i + 1;
+  end while;
+VerifyNoExternalScriptDependency:
+  if ContainsExternalScriptTag(bytes) then AbortBuild("external script remains"); end if;
+WriteOnlyOutput:
+  CreateParentDirectories(output);
+  WriteBytes(output, bytes);
+  \* No split source rewrite. No runtime/project data mutation.
+  result := output;
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

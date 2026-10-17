@@ -9,13 +9,13 @@
   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
   "layers": {
     "source-script": {
-      "revision": 37,
+      "revision": 38,
       "status": "current", 
       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
-      "fingerprint": "sha256:c94c310a8611c1f8994e5fe38ab5d0f8cd74ed0ecf4d902cada885d92278de5b",
+      "fingerprint": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4",
       "derived_from": null,
       "closure": "closed",
-      "closure_review": "agent_space/reviews/review-20261016-020-source-r37-closure.md"
+      "closure_review": "agent_space/reviews/review-20261017-001-source-r38-closure.md"
     }, 
     "verification-model": {
       "revision": 26, 
@@ -47,14 +47,14 @@
       "validation_review": null
     }, 
     "pseudocode": {
-      "revision": 11, 
-      "status": "stale",
+      "revision": 12,
+      "status": "current",
       "path_rule": "pseudocode/**/*.pcal", 
-      "fingerprint": "sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5", 
+      "fingerprint": "sha256:bbc26a0c283ea18b8790e70677017afd2322bc1e1b1b69880cf089036a58343c",
       "derived_from": {
-        "source-script": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f"
-      }, 
-      "translation_review": "agent_space/reviews/review-20261015-022-pluscal-r25.md"
+        "source-script": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4"
+      },
+      "translation_review": "agent_space/reviews/review-20261017-002-pseudocode-r12-translation.md"
     }
   }
 }

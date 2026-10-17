@@ -103,6 +103,21 @@ TABULAR_PARSE_RULES = {
 }
 
 
+SYNTHETIC_DATA_BYTES_RULE = (
+    "raw file import는 원본 bytes를 그대로 보존한다. 원본 bytes가 없는 새 table asset만 target filename의 .json/.tsv/그 외에 따라 "
+    "각각 UTF-8 JSON table / tab-delimited / comma-delimited bytes를 만든다. "
+    "delimited 출력은 None을 empty cell, 나머지 scalar를 text로 쓰고 structured cell은 compact JSON text로 쓴다. "
+    "delimiter/quote/CR/LF를 포함한 field는 double quote로 감싸고 내부 quote를 두 번 쓴다. row 사이는 LF이며 trailing LF를 강제하지 않는다. "
+    "package dataRef 확장자는 지원되는 .json/.tsv/.csv만 유지하고 그 외는 .csv로 정하여 parser와 맞춘다. "
+    "기존 filename/path를 바꾸거나 MIME/원본 bytes를 다시 생성하지 않는다."
+)
+
+CSV_HEADER_RULE = (
+    "headerLines는 finite scalar numeric 변환 후 0 방향 정수화하여 0..row 수로 clamp한다. invalid는 0이다. "
+    "새 parsed CSV/TSV/JSON의 초기 headerLines는 1이고, 저장 metadata에 field 자체가 없을 때도 1을 사용한다. "
+    "명시된 0/empty/null을 missing으로 바꾸지 않는다. rows/bytes 해석 규칙이며 별도 config project data를 만들지 않는다."
+)
+
 TYPED_XML_RULES = {
     "null": "value type=null, child scalar 없음",
     "boolean": "value type=boolean, true 또는 false text",
@@ -129,6 +144,13 @@ EMPTY_CSV_RULE = (
     "같은 이름이 이미 존재하면 일반 project asset collision/unique-path 규칙을 사용하며 기존 CSV를 암묵적으로 교체하지 않는다."
 )
 
+
+PACKAGE_IDENTITY_AND_SLOT_SETTINGS_RULE = (
+    "FFPX slot-local imageSettings는 imageRef가 None이어도 typed imageObject/settings에 기록하고 복원한다. None은 image asset을 만들지 않는다. "
+    "FFSX graph settings에는 Project chart id를 기록/복원하지 않는다. shared chart validator는 없는 Project identity를 가짜 id로 채우지 않는다. "
+    "FFSX apply 시에만 current candidate.nextId.chart를 할당한다. Project whole validator의 필수 id/unique/owner 검증은 완화하지 않는다. "
+    "wire schema/version은 import 검증용 task data이고 candidate가 완성될 때 Project의 두 번째 schema property로 남기지 않는다."
+)
 
 FORMAT_EVOLUTION_RULE = (
     "PACKAGE_FORMAT_VERSION이 지정하는 현재 package format 구조를 유지하되 persistent export settings는 additive project setting으로 기록한다. "

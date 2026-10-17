@@ -48,7 +48,7 @@ PROJECT_OBJECT_PATHS = {
 }
 
 projectState = {
-    "kind": "Fast Figure project object schema 식별자",
+    "kind": "fast-figure-project-object라는 고정 schema 식별자",
     "meta": {
         "projectName": "사용자가 지정한 프로젝트 이름",
         "appBuild": "이 project state를 생성/저장한 application build 표식",
@@ -265,6 +265,15 @@ FrontendValidatedInput = {
     ),
 }
 
+PROJECTION_EFFECT_FACT_RULE = (
+    "projectionEffect는 기존 result 안의 referencesRemoved/pathOnly 두 사실만 담는다. visible slot/chart/image reference와 "
+    "visible ordinary chart object가 참조하는 CSV별 개수의 pre/post 차이에서 제거를 계산한다. index move는 제거가 아니다. "
+    "pathOnly는 metadata/VFS/asset command이며 실제 dashboard 입력이 같을 때만 true다. dashboard 입력은 layout/annotations/appearance, "
+    "visible slot geometry/content, 그 slot의 chart editor/graph, 실제 참조 CSV의 rows/headerLines 및 image bytes/mime다. "
+    "asset의 directory/name, VFS tree와 nextId 자체는 dashboard 입력이 아니다. referenced bytes/rows 변경은 pathOnly가 아니다. "
+    "이 call-local 비교 결과는 immutable commit delta이며 일반 read store나 mutation input으로 승격하지 않는다."
+)
+
 FrontendReconciliationInput = {
     "event": "commit된 project command",
     "selectedSlot": "현재 selected slot reference의 valid/invalid/moved 결과",
@@ -272,7 +281,7 @@ FrontendReconciliationInput = {
     "assetKind": "assetSelection이 resolve된 csv/image/directory kind; none이면 none",
     "graphObject": "현재 graph-object reference/index의 valid/invalid 결과",
     "workspaceHint": "reconciled selection에서 파생할 workspace hint",
-    "projectionEffect": "renderer가 사용할 commit effect",
+    "projectionEffect": "기존 commit effect: referencesRemoved/pathOnly 두 boolean의 immutable call-local 사실; Frontend state/DOM decision은 포함하지 않음",
 }
 
 
@@ -559,6 +568,9 @@ def normalizeSlotContent(slot):
     4. legacy representation에서 caption이 nested content 안에 있으면 같은 caption property로 이동한다.
     5. UI placeholder 문자열을 새 authoritative caption 값으로 생성하지 않는다.
     6. compatibility alias가 필요하더라도 같은 의미에 두 저장값을 두지 않는다.
+    canonical content.<field>가 있으면 그 값을 보존하고, 없을 때만 flat legacy field를 이동한 뒤 flat storage를 제거한다.
+    caption도 canonical slot.caption이 있으면 None/empty를 포함해 보존하며, 없을 때만 content.caption을 이동하고 nested storage를 제거한다.
+    이 precedence는 현재 owner path를 명시한 것이며 이미지 asset/DOM/다른 slot을 fallback source로 사용하지 않는다.
     """
     return slot
 
@@ -639,14 +651,17 @@ def createProjectState():
     - activeProject를 직접 변경하지 않는다.
 
     처리:
-    1. project meta는 instance data로 만들고 layout은 backend.project_object.layout 설정에서 만든다.
+    1. kind=fast-figure-project-object, meta.projectName=empty text, meta.appBuild=current application build marker를 instance data로 만들고
+       layout은 backend.project_object.layout 설정에서 만든다. build marker의 실제 공급 API는 platform primitive다.
     2. label/caption authoritative state를 기본값으로 만든다.
        slot caption placeholder는 저장하지 않는다.
     3. CSV/image/chart collection은 empty로 시작한다.
        빈 graph용 default CSV나 fake graph object를 만들지 않는다.
     4. 고정 VFS directory와 next-id sequence를 만든다.
     5. persistent appearance와 export settings를 만든다.
-    6. 설정된 grid의 각 cell에 empty 1 x 1 slot을 만든다. id/좌표/reference는 config가 아니라 생성 알고리즘이 만든다.
+    6. 설정된 grid의 각 cell에 empty 1 x 1 slot을 만든다. row/col은 0-based이고 id=row*gridCols+col인 row-major 정수다.
+       hidden=False, chart/imageId/caption=None이며 imageSettings/contentType만 config slot defaults에서 복사한다.
+       id/좌표/reference는 config가 아니라 생성 알고리즘이 만든다.
     7. validateProjectObjectState를 통과한 candidate를 반환한다.
     """
     state = "새 project invariant를 만족하는 candidate ProjectObject state"

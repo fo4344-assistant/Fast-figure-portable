@@ -95,7 +95,13 @@ DASHBOARD_PROJECTION_INVALIDATION_RULE = (
     "final interfaceState, mutationResult, 필요한 Backend renderer projection을 renderer에 전달한다. "
     "실제 rendered reference 제거가 있으면 FULL_DASHBOARD, path/tree 변화만 있으면 NONE, "
     "기존 narrow update가 충분하면 TARGETED_PROJECTION이다. "
-    "renderer는 supplied projection만 소비하고 Backend command/query 또는 Frontend FSM command를 재귀 호출하지 않는다."
+    "renderer는 supplied projection만 소비하고 Backend command/query 또는 Frontend FSM command를 재귀 호출하지 않는다. "
+    "rendered reference 제거는 result의 실제 제거 delta/현재 host identity와 supplied final slot/chart/image reference로 판정한다. "
+    "제거가 없고 actual 변경이 project name/VFS path/tree에만 한정되면 NONE이다. "
+    "CAPTION_TEXT_INPUT/SLOT_CAPTIONS_INSERTED/CAPTION_SETTINGS_CHANGED/LABEL_SETTINGS_CHANGED/LABEL_POSITION_CHANGED/"
+    "APPEARANCE_CHANGED/SLOT_IMAGE_SETTINGS_CHANGED는 기존 host identity가 모두 유지되고 supplied projection만으로 갱신 가능할 때 TARGETED_PROJECTION이다. "
+    "해당 narrow projection은 각각 caption/label, CSS palette와 graph presentation, 해당 image surface를 갱신한다. "
+    "host 교체/제거가 있거나 그 외 persistent visual 변경이면 FULL_DASHBOARD로 fallback한다. 추측한 event별 stale Backend snapshot을 사용하지 않는다."
 )
 
 
@@ -411,7 +417,9 @@ def renderDashboardTarget(snapshot, statusSink):
        ordinary FFPX whole-project snapshot을 raster용 precomputed figure input인 것처럼 대신 사용하지 않는다.
     8. label/caption을 같은 logical reference geometry에서 변환해 그린다.
     9. PNG/JPEG blob에 DPI metadata를 적용하고 downloadExportPayload로 한 번 전달한다.
-    10. 정상 handoff 뒤 기존 saved outcome을 반환한다. saved는 disk 저장 확인이 아니라 handoff 완료다.
+    10. 정상 handoff 뒤 {outcome: saved, width: rasterWidth, height: rasterHeight, automaticHeight: heightMode==auto}를 반환한다.
+        saved는 disk 저장 확인이 아니라 handoff 완료다. 거부는 {outcome: rejected, reason: raster-limit/caption-height/grid-geometry}다.
+        dimension/area는 raster-limit, dashboardHeight<=0은 caption-height, positive cell을 만들 수 없으면 grid-geometry이며 width/height를 몰래 보정하지 않는다.
         raster limit/invalid geometry는 download 전 rejected outcome이며 throw/rejection은 caller에 전파한다.
         statusSink는 진행 표시일 뿐 결과/취소 authority가 아니고 실패로 이미 전달한 파일을 rollback하지 않는다.
         작업에서 만든 임시 render host/Plotly/image/URL은 성공/거부/예외 모두 finally에서 작업 소유분만 정리한다.
@@ -435,6 +443,7 @@ def renderDashboardCurrent(snapshot, statusSink):
     persistent dpi/format은 output encoding default로 읽을 수 있다.
     current viewport는 Frontend surface가 이번 capture에 한 번 측정하며 Project target width/height로 저장하지 않는다.
     target export와 같은 limit/encoding/download completion/error/finally 규칙을 적용한다.
+    성공 반환은 {outcome: saved, width: rasterWidth, height: rasterHeight, automaticHeight: False}이고 거부는 같은 rejected shape다.
     이미 캡처한 snapshot/viewport는 이 작업에서만 소비하고 다음 export의 원천으로 보관하지 않는다.
     """
     result = "current-screen capture outcome"

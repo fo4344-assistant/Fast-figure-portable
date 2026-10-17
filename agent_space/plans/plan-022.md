@@ -178,3 +178,14 @@ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 
 텍스트 목록 대조에서 15개 작업본 6,164행, procedure 선언 242개에 explicit call의 미대응 이름·동일 procedure 이름 중복은 없었다. 이는 문자열 검색 결과일 뿐 parser/type/동작 검증이나 전체 충실도 증명이 아니다. helper를 이름만 연결해 둔 모든 domain 계산이 끝났다는 뜻도 아니다. 파일 본문을 도구 cache에 통째로 저장하려던 시도는 cache 크기 제한으로 실패했으며, 이 실패는 작업본/Source 실행과 무관하고 위 검색 결과를 runtime 통과로 바꾸지 않는다.
 
 잔여: 다른 owner의 미전개 domain 계산과 platform primitive 구분, query/command/UI/87 API 전체의 인자·반환·실패·재시도·resource producer-consumer 대조, Source 전체 충실도 기록, 활성 hierarchy 교체와 이전 파일/임시 작업본 정리, revision/fingerprint/lineage 및 허용된 Actions 검증이다. 아직 번역 완료/current가 아니다. 이번 branch patch는 이 기록만 포함하며 `.work/plan022/`의 작업본 자체나 rollback 자료는 포함하지 않는다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
+
+## 14. 전체 번역 활성화 — Source 판단을 실제 상위 단계에 반영
+
+기준 `57b4731f1ede5a75b22846652e12f556ed826bec`. 번역 중 필요한 결정을 Source로 돌아가 확정한 뒤 그 내용을 직접 번역했다. Source r38 closure와 pseudocode r12 translation review는 `agent_space/reviews/review-20261017-001-source-r38-closure.md`, `review-20261017-002-pseudocode-r12-translation.md`에 분리해 기록한다.
+
+- Source의 Project kind/config, grid 좌표와 slot ID, base graph object/단일 열 선택, CSV header/새 table bytes, package-local identity, null image settings, legacy constructor shape, chooser 완료 plan, mutation projection-effect, raster 반환 의미를 명확히 했다. §13의 FFSX Project id 미기록은 Source에서도 명시했으며 등록된 Project identity 검증을 생략하지 않는다.
+- 15개 owner의 전체 활성 `.pcal` 계층을 설치하고 이전 flat 10개 파일을 삭제했다. 163개 Source entry, 87개 API, 60개 wrapper binding의 구조 대조는 별도 Actions artifact로 생성한다. 단순 entry/API 개수는 의미 충실도 증명이 아니며 실제 분기·계산·문맥·실패·resource 대조는 translation review의 owner별 표에 있다.
+- 일반 numeric/text/XML/ZIP/DOM/encoding primitive만 하위에 남긴다. import constructor, format document assembly, graph/caption/grid 계산, same-attempt candidate, 실제 result/effect, UI chooser/lifecycle 등 domain 알고리즘을 이름만 둔 미완성 helper로 넘기지 않는다.
+- Source r38 closed / pseudocode r12 current의 실제 fingerprint·lineage를 metadata에 연결한다. application/model은 stale 그대로이며 Source Code cutover·TLC 실행을 주장하지 않는다.
+- 이번부터 사용자의 명시 지시에 따라 수정 파일·실제 `.patch`·같은 basename 설명 `.md`를 같은 Git commit에 함께 넣는다. HEAD/기존 blob/new-path를 동일 remote snapshot에서 확인하고 normal push로 원자 반영하며 force push나 저수준 Git Data API는 사용하지 않는다. 기존 이력은 변경하지 않는다.
+- 검증은 새 `Pseudocode fidelity coverage` workflow에서 누적 version/patch gate와 static entry/input/API/call 대조를 수행한다. 실행 전에는 PASS라 적지 않는다. 실제 run/commit/결과는 실행 후 별도 기록하며 로컬 Source/application/PlusCal/parser/checker/test/build/TLC는 실행하지 않는다. 활성화 후 일회성 작업본은 정리한다.

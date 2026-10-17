@@ -1,0 +1,306 @@
+---- MODULE FastFigurePublicApiR38 ----
+EXTENDS Sequences, FiniteSets
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* This is the translation of Source PUBLIC_API_METHODS, not a new runtime registry.
+\* Four physical files still ONE logical public-api module. Wrapper invocation below
+\* is mechanical procedure binding; arguments/returns are those of Source wrappers.
+\* Defaults: Source omitted None -> NoValue; trim=False; explicit task timestamp local.
+CONSTANT NoValue
+\* Mechanical readers of Source ProjectMutationResult.changed. These do not
+\* define another public result contract or read caller plans as committed facts.
+AssetPathsFor(changed, role, kind) ==
+  LET matches == SelectSeq(changed.assets, LAMBDA item : item.role = role /\ item.kind = kind)
+  IN [i \in 1..Len(matches) |-> matches[i].path]
+ActualCreatedCsvPath(changed) == AssetPathsFor(changed,"created","csv")[1]
+ActualCreatedImagePath(changed) == AssetPathsFor(changed,"created","image")[1]
+ActualUpdatedCsvPath(changed) == AssetPathsFor(changed,"updated","csv")[1]
+ActualImportedAssetPathsInInputOrder(changed) ==
+  LET matches == SelectSeq(changed.assets, LAMBDA item : item.role = "imported")
+  IN [i \in 1..Len(matches) |-> matches[i].path]
+ActualImportedAssetPath(changed) == ActualImportedAssetPathsInInputOrder(changed)[1]
+ActualCreatedDirectoryPath(changed) == changed.createdDirectoryPath
+ActualFinalCanonicalDestination(changed) == changed.movedPathTo
+PUBLIC_API_METHODS == [
+ "project.readName" |-> <<"query","project.readName">>,
+ "project.setName" |-> <<"wrapper","setProjectName">>,
+ "project.importFile" |-> <<"wrapper","importProjectFile">>,
+ "project.exportFile" |-> <<"wrapper","downloadProject">>,
+ "slots.readSelected" |-> <<"selected-query","slots.readSelected">>,
+ "slots.select" |-> <<"adapter","dispatchSlotSelection">>,
+ "slots.setContentType" |-> <<"wrapper","setSlotContentType">>,
+ "slots.reset" |-> <<"wrapper","resetSlotApi">>,
+ "slots.swap" |-> <<"wrapper","swapSlots">>,
+ "slots.prepareFileDrop" |-> <<"wrapper","ApplicationApi_prepareDashboardFileDrop">>,
+ "slots.finishFileDrop" |-> <<"wrapper","finishDashboardFileDrop">>,
+ "images.readEditor" |-> <<"selected-query","images.readEditor">>,
+ "images.setSettings" |-> <<"wrapper","applyImageSettingsFromValues">>,
+ "images.insertEmpty" |-> <<"wrapper","insertEmptyImageIntoSelectedSlot">>,
+ "assets.readDeletionTarget" |-> <<"query","assets.readDeletionTarget">>,
+ "assets.delete" |-> <<"wrapper","deleteProjectAsset">>,
+ "assets.readTree" |-> <<"query","assets.readTree">>,
+ "assets.isTrashed" |-> <<"query","assets.isTrashed">>,
+ "assets.movable" |-> <<"query","assets.movable">>,
+ "assets.readTrash" |-> <<"query","assets.readTrash">>,
+ "assets.moveOptions" |-> <<"query","assets.moveOptions">>,
+ "assets.planMove" |-> <<"query","assets.planMove">>,
+ "assets.move" |-> <<"wrapper","moveProjectNode">>,
+ "assets.createDirectory" |-> <<"wrapper","createProjectDirectory">>,
+ "assets.createEmptyCsv" |-> <<"wrapper","createEmptyProjectCsvAndSelect">>,
+ "assets.emptyTrash" |-> <<"wrapper","emptyProjectTrash">>,
+ "assets.draggableAsset" |-> <<"query","assets.draggableAsset">>,
+ "assets.connectToSlot" |-> <<"wrapper","connectProjectAssetToSlot">>,
+ "assets.importToDirectory" |-> <<"wrapper","importProjectFilesToDirectory">>,
+ "assets.importToSlot" |-> <<"wrapper","importProjectFileToSlot">>,
+ "assets.fileKind" |-> <<"wrapper","readAssetFileKind">>,
+ "assets.importFiles" |-> <<"wrapper","importProjectAssetFiles">>,
+ "assets.collisionModel" |-> <<"wrapper","readAssetCollisionModel">>,
+ "assets.resolveImportPlan" |-> <<"wrapper","readAssetImportPlan">>,
+ "assets.selectDirectory" |-> <<"select-asset","directory">>,
+ "assets.selectCsv" |-> <<"wrapper","selectProjectCsv">>,
+ "assets.selectImage" |-> <<"select-asset","image">>,
+ "assets.download" |-> <<"wrapper","downloadProjectAsset">>,
+ "graphs.readData" |-> <<"selected-query","graphs.readData">>,
+ "graphs.readLayout" |-> <<"selected-query","graphs.readLayout">>,
+ "graphs.readPalette" |-> <<"selected-query","graphs.readPalette">>,
+ "graphs.selectCsv" |-> <<"select-asset","csv">>,
+ "graphs.setHeaderLines" |-> <<"wrapper","graphEditorSetHeaderLines">>,
+ "graphs.setEditable" |-> <<"wrapper","graphEditorSetEditable">>,
+ "graphs.addObject" |-> <<"wrapper","graphEditorAdd">>,
+ "graphs.moveObject" |-> <<"wrapper","graphEditorMove">>,
+ "graphs.selectObject" |-> <<"select-object","SELECT_GRAPH_OBJECT">>,
+ "graphs.setObjectValues" |-> <<"wrapper","graphEditorObjectValues">>,
+ "graphs.deleteObject" |-> <<"wrapper","graphEditorDelete">>,
+ "graphs.updateLayout" |-> <<"wrapper","graphEditorUpdateLayout">>,
+ "graphs.applyPalette" |-> <<"wrapper","graphEditorApplyPalette">>,
+ "graphs.defaultColors" |-> <<"query","graphs.defaultColors">>,
+ "graphs.hasSelectedSlot" |-> <<"selected-query","graphs.hasSelectedSlot">>,
+ "graphs.importFile" |-> <<"wrapper","importSelectedGraphFile">>,
+ "graphs.exportFfsx" |-> <<"graph-export","graphs.exportFfsx">>,
+ "graphs.exportPlotlyJson" |-> <<"graph-export","graphs.exportPlotlyJson">>,
+ "print.readSettings" |-> <<"query","print.readSettings">>,
+ "print.setSettings" |-> <<"wrapper","setExportSettings">>,
+ "print.save" |-> <<"wrapper","exportDashboardTarget">>,
+ "print.capture" |-> <<"wrapper","captureDashboardCurrent">>,
+ "captions.readGlobal" |-> <<"query","captions.readGlobal">>,
+ "captions.readSlot" |-> <<"query","captions.readSlot">>,
+ "captions.setEnabled" |-> <<"wrapper","setCaptionsApiEnabled">>,
+ "captions.setGlobalText" |-> <<"wrapper","setGlobalCaptionText">>,
+ "captions.setSlotText" |-> <<"wrapper","setSlotCaptionText">>,
+ "captions.insertSlotCaptions" |-> <<"wrapper","insertSlotCaptionsIntoGlobalCaption">>,
+ "captions.setName" |-> <<"wrapper","setCaptionsApiName">>,
+ "captions.setNameBold" |-> <<"wrapper","setCaptionsApiNameBold">>,
+ "captions.setSettings" |-> <<"wrapper","setCaptionsApiSettings">>,
+ "labels.readState" |-> <<"wrapper","ApplicationApi_readLabelsApiState">>,
+ "labels.setEnabled" |-> <<"wrapper","setLabelsApiEnabled">>,
+ "labels.setSettings" |-> <<"wrapper","setLabelsApiSettings">>,
+ "labels.setPosition" |-> <<"wrapper","setLabelsApiPosition">>,
+ "labels.finishPositionInteraction" |-> <<"wrapper","finishLabelsApiPositionInteraction">>,
+ "labels.resetPosition" |-> <<"wrapper","resetLabelsApiPosition">>,
+ "appearance.readPalette" |-> <<"query","appearance.readPalette">>,
+ "appearance.setPalette" |-> <<"wrapper","setAppearanceApiPalette">>,
+ "appearance.resetPalette" |-> <<"wrapper","resetAppearanceApiPalette">>,
+ "layout.readState" |-> <<"wrapper","readLayoutApiState">>,
+ "layout.setStyle" |-> <<"wrapper","setLayoutApiStyle">>,
+ "layout.setGrid" |-> <<"wrapper","setLayoutApiGrid">>,
+ "layout.setZoom" |-> <<"wrapper","setLayoutApiZoom">>,
+ "layout.commitZoom" |-> <<"wrapper","commitLayoutApiZoom">>,
+ "layout.setZoomLocked" |-> <<"wrapper","setLayoutApiZoomLocked">>,
+ "layout.resetZoom" |-> <<"wrapper","resetLayoutApiZoom">>,
+ "layout.mergeSlots" |-> <<"wrapper","mergeSlots">>,
+ "layout.splitSlots" |-> <<"wrapper","splitSlots">>]
+IMPORTING_METHODS == {"project.importFile","assets.importToDirectory","assets.importToSlot","assets.importFiles","graphs.importFile"}
+EXPORTING_METHODS == {"project.exportFile","assets.download","graphs.exportFfsx","graphs.exportPlotlyJson","print.save","print.capture"}
+REMOVED_OR_REPLACED == {"print.readDefaults","captions.readState","captions.setSlotMode","captions.setText","labels.previewPosition","labels.commitPosition"}
+
+(* --algorithm PublicApiBoundary
+variables result = NoValue;
+
+procedure InvokePublicMethod(method,args)
+variables lifecycle = "";
+begin
+OnlyDeclaredBoundary:
+  Require(method \in DOMAIN PUBLIC_API_METHODS);
+  if method \in IMPORTING_METHODS then lifecycle := "importing";
+  elsif method \in EXPORTING_METHODS then lifecycle := "exporting"; end if;
+OneOuterTaskBinding:
+  if lifecycle # "" then
+    call ApplicationAdapter_runLifecycleTask(lifecycle,method,ProcedureReference("InvokePublicHelper",<<method,args>>));
+    \* Busy rejects before helper query/choice/file read. Returned cancel/failure is
+    \* COMPLETE, original throw becomes FAILED then ready and propagates.
+  else
+    call InvokePublicHelper(method,args);
+  end if;
+  return;
+end procedure;
+
+procedure InvokePublicHelper(method,args)
+variables route = PUBLIC_API_METHODS[method], state = NoValue, request = NoValue, slotId = NoValue;
+begin
+RouteWithoutReenteringLifecycle:
+  if route[1] = "wrapper" then
+    call InvokePublicWrapper(method,args);
+  elsif route[1] = "adapter" then
+    call dispatchSlotSelection(args.slotId,OptionalArg(args,"pendingContentType",NoValue),OptionalArg(args,"direction","ui-to-fsm"));
+  elsif route[1] = "query" then
+    request := ExplicitReadArgsWithOperation(args,route[2]);
+    call dispatchProjectQuery("project-api",request);
+  elsif route[1] = "selected-query" then
+    call InterfaceStateMachine_readState(); state := result;
+    request := ExplicitReadArgsWithOperation(args,route[2]);
+    if method \in {"slots.readSelected","graphs.readData"} then
+      request.frontendState := CopyOnlySelectedSlotAssetPathAssetKindAndObjectIndex(state);
+    else request.selectedSlotId := state.selectedSlotId; end if;
+    if method = "images.readEditor" then request.slotId := state.selectedSlotId; end if;
+    call dispatchProjectQuery("project-api",request);
+  elsif route[1] = "select-asset" then
+    call dispatchInterfaceEvent("SELECT_ASSET",[kind |-> route[2],path |-> args.path]);
+  elsif route[1] = "select-object" then
+    call InterfaceStateMachine_readState(); state := result;
+    call dispatchInterfaceEvent("SELECT_GRAPH_OBJECT",[selectedSlotId |-> state.selectedSlotId,index |-> args.index,selectAsset |-> TRUE]);
+    \* Only explicit selection changes current CSV. Graph commit index hints do not.
+  elsif route[1] = "graph-export" then
+    call InterfaceStateMachine_readState(); slotId := result.selectedSlotId;
+    call exportSelectedGraph(slotId,route[2]);
+  end if;
+  \* Helpers import to helpers, not InvokePublicMethod, so router children share task.
+  return;
+end procedure;
+
+\* args is notation for the Source function's named arguments, NOT a new public
+\* wire record/schema. No lookup of Project/editor objects and no input coercion
+\* is inserted here. Only Source-declared defaults are applied. The wrapper
+\* keeps its own committed gate, return value, throw and fresh-query behavior.
+procedure InvokePublicWrapper(method,args)
+begin
+BindExactSourceInputs:
+  if method = "project.setName" then
+    call setProjectName(args.value,OptionalArg(args,"trim",FALSE));
+  elsif method = "project.importFile" then
+    call importProjectFile(args.file);
+  elsif method = "project.exportFile" then
+    call downloadProject();
+  elsif method = "slots.setContentType" then
+    call setSlotContentType(args.slotId,args.contentType);
+  elsif method = "slots.reset" then
+    call resetSlotApi(args.slotId);
+  elsif method = "slots.swap" then
+    call swapSlots(args.sourceSlotId,args.targetSlotId);
+  elsif method = "slots.prepareFileDrop" then
+    call ApplicationApi_prepareDashboardFileDrop(args.slotId);
+  elsif method = "slots.finishFileDrop" then
+    call finishDashboardFileDrop();
+  elsif method = "images.setSettings" then
+    call applyImageSettingsFromValues(args.slotId,args.values);
+  elsif method = "images.insertEmpty" then
+    call insertEmptyImageIntoSelectedSlot();
+  elsif method = "assets.delete" then
+    call deleteProjectAsset(args.target);
+  elsif method = "assets.move" then
+    call moveProjectNode(args.plan,args.useUniqueName);
+  elsif method = "assets.createDirectory" then
+    call createProjectDirectory(args.parent,args.name);
+  elsif method = "assets.createEmptyCsv" then
+    call createEmptyProjectCsvAndSelect();
+  elsif method = "assets.emptyTrash" then
+    call emptyProjectTrash();
+  elsif method = "assets.connectToSlot" then
+    call connectProjectAssetToSlot(args.path,args.kind,args.slotId);
+  elsif method = "assets.importToDirectory" then
+    call importProjectFilesToDirectory(args.files,args.directory,args.planImport);
+  elsif method = "assets.importToSlot" then
+    call importProjectFileToSlot(args.file,args.slotId,args.planImport);
+  elsif method = "assets.fileKind" then
+    call readAssetFileKind(args.file);
+  elsif method = "assets.importFiles" then
+    call importProjectAssetFiles(args.files,args.planImport);
+  elsif method = "assets.collisionModel" then
+    call readAssetCollisionModel(args.file,args.directory,args.reservedPaths);
+  elsif method = "assets.resolveImportPlan" then
+    call readAssetImportPlan(args.model,args.choice,args.reservedPaths);
+  elsif method = "assets.selectCsv" then
+    call selectProjectCsv(args.path);
+  elsif method = "assets.download" then
+    call downloadProjectAsset(args.path);
+  elsif method = "graphs.setHeaderLines" then
+    call graphEditorSetHeaderLines(args.csvId,args.headerLines);
+  elsif method = "graphs.setEditable" then
+    call graphEditorSetEditable(args.slotId,args.chartId,args.editable);
+  elsif method = "graphs.addObject" then
+    call graphEditorAdd(args.slotId,args.csvId);
+  elsif method = "graphs.moveObject" then
+    call graphEditorMove(args.chartId,args.fromIndex,args.toIndex);
+  elsif method = "graphs.setObjectValues" then
+    call graphEditorObjectValues(args.chartId,args.index,args.values);
+  elsif method = "graphs.deleteObject" then
+    call graphEditorDelete(args.chartId,args.index);
+  elsif method = "graphs.updateLayout" then
+    call graphEditorUpdateLayout(args.slotId,args.chartId,args.values);
+  elsif method = "graphs.applyPalette" then
+    call graphEditorApplyPalette(args.chartId,args.colors);
+  elsif method = "graphs.importFile" then
+    call importSelectedGraphFile(args.slotId,args.file);
+  elsif method = "print.setSettings" then
+    call setExportSettings(args.values);
+  elsif method = "print.save" then
+    call exportDashboardTarget(args.statusSink);
+  elsif method = "print.capture" then
+    call captureDashboardCurrent(args.statusSink);
+  elsif method = "captions.setEnabled" then
+    call setCaptionsApiEnabled(args.enabled);
+  elsif method = "captions.setGlobalText" then
+    call setGlobalCaptionText(args.text);
+  elsif method = "captions.setSlotText" then
+    call setSlotCaptionText(args.slotId,args.text);
+  elsif method = "captions.insertSlotCaptions" then
+    call insertSlotCaptionsIntoGlobalCaption(OptionalArg(args,"slotIds",NoValue));
+  elsif method = "captions.setName" then
+    call setCaptionsApiName(args.name);
+  elsif method = "captions.setNameBold" then
+    call setCaptionsApiNameBold(args.nameBold);
+  elsif method = "captions.setSettings" then
+    call setCaptionsApiSettings(args.values);
+  elsif method = "labels.readState" then
+    call ApplicationApi_readLabelsApiState();
+  elsif method = "labels.setEnabled" then
+    call setLabelsApiEnabled(args.enabled);
+  elsif method = "labels.setSettings" then
+    call setLabelsApiSettings(args.values);
+  elsif method = "labels.setPosition" then
+    call setLabelsApiPosition(args.x,args.y);
+  elsif method = "labels.finishPositionInteraction" then
+    call finishLabelsApiPositionInteraction();
+  elsif method = "labels.resetPosition" then
+    call resetLabelsApiPosition();
+  elsif method = "appearance.setPalette" then
+    call setAppearanceApiPalette(args.values);
+  elsif method = "appearance.resetPalette" then
+    call resetAppearanceApiPalette();
+  elsif method = "layout.readState" then
+    call readLayoutApiState(OptionalArg(args,"previewWidth",NoValue));
+  elsif method = "layout.setStyle" then
+    call setLayoutApiStyle(args.values);
+  elsif method = "layout.setGrid" then
+    call setLayoutApiGrid(args.rows,args.cols);
+  elsif method = "layout.setZoom" then
+    call setLayoutApiZoom(args.value);
+  elsif method = "layout.commitZoom" then
+    call commitLayoutApiZoom();
+  elsif method = "layout.setZoomLocked" then
+    call setLayoutApiZoomLocked(args.locked);
+  elsif method = "layout.resetZoom" then
+    call resetLayoutApiZoom();
+  elsif method = "layout.mergeSlots" then
+    call mergeSlots(args.slotIds);
+  elsif method = "layout.splitSlots" then
+    call splitSlots(args.slotIds);
+  end if;
+  \* Return the callee result unchanged, including None/False/failed result;
+  \* no second query/commit/task transition at this public binding.
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

@@ -1,0 +1,297 @@
+---- MODULE FastFigurePublicAssetsR38 ----
+EXTENDS Naturals, Sequences
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Config directory/template values are imported Source constants, not Project snapshots.
+\* Exceptions propagate; postcommit reads/selection/download do not secretly rollback.
+\* Helpers below NEVER reenter the public lifecycle binding.
+CONSTANT NoValue, EMPTY_CSV_TEMPLATE, PROJECT_ASSET_DIRECTORIES
+(* --algorithm PublicAssets
+variables result = NoValue;
+
+procedure readAssetFileKind(file)
+begin
+NameAndTypeOnly:
+  call dispatchProjectQuery("project-api",[operation |-> "assets.fileKind",file |-> CopyNameType(file)]);
+  return;
+end procedure;
+
+procedure readAssetCollisionModel(file,directory,reservedPaths)
+begin
+ReadCollision:
+  call dispatchProjectQuery("project-api",[operation |-> "assets.collisionModel",file |-> file,directory |-> directory,reservedPaths |-> reservedPaths]);
+  return;
+end procedure;
+
+procedure readAssetImportPlan(model,choice,reservedPaths)
+begin
+RevalidateProposalNotReserve:
+  call dispatchProjectQuery("project-api",[operation |-> "assets.resolveImportPlan",model |-> model,choice |-> choice,reservedPaths |-> reservedPaths]);
+  return;
+end procedure;
+
+procedure selectProjectCsv(path)
+variables resolved = NoValue, target = NoValue, final = NoValue, canonical = "";
+begin
+CurrentIdentityBeforeAnyEvent:
+  call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> path]); resolved := result;
+  if ~ResolvedTargetIsCsv(resolved) then result := NoValue; return; end if;
+  target := resolved.target; canonical := CanonicalAssetPath(target);
+ValidatedSingleTransition:
+  call dispatchInterfaceEvent("SELECT_ASSET",[kind |-> "csv",path |-> canonical]); final := result;
+  if final.assetSelection = "csv" /\ final.assetPath = canonical then result := target;
+  else result := NoValue; end if;
+  \* SELECT_ASSET itself clears graph object; no preceding clear/persistent mutation.
+  return;
+end procedure;
+
+procedure createEmptyProjectCsvAndSelect()
+variables csv = NoValue;
+begin
+CreateExactlyOnce:
+  call createEmptyProjectCsv(); csv := result;
+  if IsUncommittedCommandResult(csv) then result := csv; return; end if;
+SelectAfterCommitNotInsideBackend:
+  call selectProjectCsv(CanonicalAssetPath(csv));
+  \* None/throw after commit does not remove the created CSV or pretend noncommit.
+  return;
+end procedure;
+
+procedure ReadImportedAssetsInInputOrder(changed)
+variables paths = ActualImportedAssetPathsInInputOrder(changed), output = <<>>, i = 1;
+begin
+OfficialSuccessReadsOnly:
+  while i <= Len(paths) do
+    call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> paths[i]]);
+    output := Append(output,result.target); i := i + 1;
+  end while;
+  result := output;
+  return;
+end procedure;
+
+procedure CollectCompletedImportPlans(files,directory,planImport)
+variables plans = <<>>, reservedPaths = {}, i = 1, plan = NoValue;
+begin
+CompleteUiBeforeBackendCommand:
+  while i <= Len(files) do
+    \* planImport is the Source UI-local chooser, not a Backend callback.
+    \* Its official collision/resolve queries include this batch's reserved paths.
+    \* Await invokes the chooser exactly once; original throw propagates.
+    plan := AwaitUiChooserOnce(planImport,files[i],directory,reservedPaths);
+    if plan = NoValue then result := NoValue; return; end if;
+    Require(ValidFinalImportPlanShape(plan));
+    plans := Append(plans,DeepCopy(plan));
+    reservedPaths := reservedPaths \cup {plan.path};
+    i := i + 1;
+  end while;
+ReturnPlansNotCandidates:
+  \* Final path/optional replaceId only, no invented proposal/decision fields.
+  \* All plans/reservations are call-local and become untrusted command inputs.
+  result := plans;
+  return;
+end procedure;
+
+procedure importProjectFilesToDirectory(files,directory,planImport)
+variables choices = NoValue, tuple = NoValue;
+begin
+EmptyHasNoQueryChoiceOrCommand:
+  if Len(files) = 0 then result := <<>>; return; end if;
+CompleteUiLocalChoiceBeforeCommand:
+  call CollectCompletedImportPlans(files,directory,planImport); choices := result;
+  if choices = NoValue then result := NoValue; return; end if;
+  \* No candidate/id/path authority and no resolver callback sent to Backend.
+AtomicBatchCandidate:
+  call dispatchProjectCommand("ASSETS_IMPORTED",[files |-> CopiedFileInputs(files),directory |-> directory,choices |-> choices]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call ReadImportedAssetsInInputOrder(tuple[1].changed);
+  return;
+end procedure;
+
+procedure createProjectCsv(data,name,id,bytesBase64,mime,headerLines,path)
+variables tuple = NoValue;
+begin
+RawCreationInputsOnly:
+  call dispatchProjectCommand("DATA_OBJECT_CREATED",[data |-> data,name |-> name,id |-> id,bytesBase64 |-> bytesBase64,mime |-> mime,headerLines |-> headerLines,path |-> path]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> ActualCreatedCsvPath(tuple[1].changed)]);
+  result := result.target;
+  return;
+end procedure;
+
+procedure createEmptyProjectCsv()
+variables bytes = NoValue;
+begin
+OrdinaryTemplateNotProtectedObject:
+  bytes := EncodeUtf8(SerializeCsv(EMPTY_CSV_TEMPLATE.rows));
+  call createProjectCsv(DeepCopy(EMPTY_CSV_TEMPLATE.rows),EMPTY_CSV_TEMPLATE.name,NoValue,
+     Base64(bytes),EMPTY_CSV_TEMPLATE.mime,EMPTY_CSV_TEMPLATE.headerLines,
+     JoinDirectoryAndName(PROJECT_ASSET_DIRECTORIES.csv,EMPTY_CSV_TEMPLATE.name));
+  \* Current Backend handles unique naming; no preflight replacement/chart/selection.
+  return;
+end procedure;
+
+procedure createProjectImage(bytes,name,mime,id,path)
+variables tuple = NoValue;
+begin
+NoSlotDisplaySettingsOnImageAsset:
+  call dispatchProjectCommand("IMAGE_OBJECT_CREATED",[bytes |-> CopyBytes(bytes),name |-> name,mime |-> mime,id |-> id,path |-> path]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> ActualCreatedImagePath(tuple[1].changed)]); result := result.target;
+  return;
+end procedure;
+
+procedure deleteProjectAsset(target)
+variables event = "";
+begin
+NoKindGuessing:
+  if target = NoValue then result := NoValue; return; end if;
+  if target.kind = "csv" then event := "DATA_OBJECT_DELETED";
+  elsif target.kind = "image" then event := "IMAGE_OBJECT_DELETED";
+  else result := NoValue; return; end if;
+  call dispatchProjectCommand(event,[target |-> CopyKindIdPathReferenceOnly(target)]);
+  result := NoValue;
+  \* Both success/noncommit return None, never expose adapter tuple or success bool.
+  return;
+end procedure;
+
+procedure moveProjectNode(plan,useUniqueName)
+variables tuple = NoValue, path = "", trashed = FALSE;
+begin
+NoPlanNoCommand:
+  if plan = NoValue then result := NoValue; return; end if;
+  call dispatchProjectCommand("PROJECT_NODE_MOVED",[path |-> plan.source,directory |-> plan.directory,useUniqueName |-> useUniqueName]); tuple := result;
+  if ~tuple[1].committed then result := NoValue; return; end if;
+ActualResultNotStalePlan:
+  path := ActualFinalCanonicalDestination(tuple[1].changed);
+  call dispatchProjectQuery("project-api",[operation |-> "assets.isTrashed",path |-> path]); trashed := result;
+  result := ImmutableCopy([path |-> path,trashed |-> trashed]);
+  return;
+end procedure;
+
+procedure emptyProjectTrash()
+begin
+OneWholeCandidateCommand:
+  call dispatchProjectCommand("PROJECT_TRASH_EMPTIED",[]);
+  result := NoValue;
+  return;
+end procedure;
+
+procedure createProjectDirectory(parent,name)
+variables tuple = NoValue, path = "";
+begin
+CreateBeforeValidatedSelection:
+  call dispatchProjectCommand("PROJECT_DIRECTORY_CREATED",[parent |-> parent,name |-> name]); tuple := result;
+  if ~tuple[1].committed then result := NoValue; return; end if;
+  path := ActualCreatedDirectoryPath(tuple[1].changed);
+  call dispatchInterfaceEvent("SELECT_ASSET",[kind |-> "directory",path |-> path]);
+  result := path;
+  \* Selection rejection does not change actual committed path; throw propagates.
+  return;
+end procedure;
+
+procedure connectProjectAssetToSlot(path,kind,slotId)
+variables event = "", tuple = NoValue;
+begin
+KindSpecificCommandThenModelSelection:
+  Require(kind \in {"csv","image"});
+  event := IF kind = "csv" THEN "SLOT_DATA_CONNECTED" ELSE "SLOT_IMAGE_LINKED";
+  call dispatchProjectCommand(event,[path |-> path,kind |-> kind,slotId |-> slotId]); tuple := result;
+  if ~tuple[1].committed then result := NoValue; return; end if;
+  call dispatchSlotSelection(slotId,NoValue,"model-to-fsm");
+  \* Backend validated hint clears graph only and preserves still-valid independent asset.
+  result := NoValue;
+  return;
+end procedure;
+
+procedure importProjectFileToSlot(file,slotId,planImport)
+variables target = NoValue, kind = "", choices = NoValue, tuple = NoValue, directory = "";
+begin
+ExplicitVisibleTargetBeforeChoice:
+  call dispatchProjectQuery("slot-selection-context",[slotId |-> slotId]); target := result;
+  Require(ValidVisibleTarget(target));
+  call readAssetFileKind(file); kind := result;
+  if kind = "slot" then call importSelectedGraphFile(slotId,file); return; end if;
+  Require(kind \in {"data","image"});
+  directory := IF kind = "data" THEN BackendSettings.defaults.vfs.csv ELSE BackendSettings.defaults.vfs.image;
+  call CollectCompletedImportPlans(<<file>>,directory,planImport); choices := result;
+  if choices = NoValue then result := NoValue; return; end if;
+AssetAndConnectionOneCandidate:
+  call dispatchProjectCommand("ASSETS_IMPORTED",[files |-> <<CopiedFileInput(file)>>,
+     directory |-> directory,choices |-> choices,targetSlotId |-> slotId]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> ActualImportedAssetPath(tuple[1].changed)]); result := result.target;
+  return;
+end procedure;
+
+procedure importProjectFile(file)
+variables tuple = NoValue;
+begin
+BackendOwnsFfpxParsingAndWholeReplacement:
+  call dispatchProjectCommand("PROJECT_LOADED",[file |-> file]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("export",[]);
+  \* Plain immutable snapshot, not mutable authority/encoded package recursion.
+  return;
+end procedure;
+
+procedure importProjectAssetFiles(files,planImport)
+variables inputs = OrderedFileList(files), target = NoValue, output = <<>>, i = 1,
+          kind = "", item = NoValue, directory = "", initialState = NoValue;
+begin
+EmptyNoEffects:
+  if Len(inputs) = 0 then result := <<>>; return; end if;
+CaptureTargetExactlyOnce:
+  call InterfaceStateMachine_readState(); initialState := result; target := initialState.selectedSlotId;
+EachInputOneHelper:
+  while i <= Len(inputs) do
+    call readAssetFileKind(inputs[i]); kind := result;
+    Require(kind \in {"data","image","slot"});
+    if kind = "slot" then
+      Require(target # NoValue);
+      call importSelectedGraphFile(target,inputs[i]); item := result;
+    elsif target # NoValue then
+      call importProjectFileToSlot(inputs[i],target,planImport); item := result;
+    else
+      directory := IF kind = "data" THEN PROJECT_ASSET_DIRECTORIES.csv ELSE PROJECT_ASSET_DIRECTORIES.image;
+      call importProjectFilesToDirectory(<<inputs[i]>>,directory,planImport); item := result;
+      if IsSequence(item) then item := item[1]; end if;
+    end if;
+StopWithoutRollingBackEarlierFiles:
+    if item = NoValue then result := NoValue; return; end if;
+    if IsUncommittedCommandResult(item) then result := item; return; end if;
+    output := Append(output,item);
+    i := i + 1;
+  end while;
+  result := output;
+  \* Exceptions stop/propagate. Router is NOT atomic; explicit directory batch IS.
+  return;
+end procedure;
+
+procedure downloadProjectAsset(path)
+variables payload = NoValue;
+begin
+ReadCopiedOriginalBytes:
+  call dispatchProjectQuery("export",[operation |-> "assets.download",path |-> path]); payload := result;
+  if payload = NoValue then result := FALSE; return; end if;
+  call downloadExportPayload(payload);
+  result := TRUE;
+  \* Browser handoff, not disk acknowledgement/selection mutation.
+  return;
+end procedure;
+
+procedure downloadProject()
+variables state = NoValue, payload = NoValue;
+begin
+SelectedSlotPreventsProjectDownload:
+  call InterfaceStateMachine_readState(); state := result;
+  if state.selectedSlotId # NoValue then result := NoValue; return; end if;
+  call dispatchProjectQuery("export",[operation |-> "project.exportFile",stamp |-> CurrentUtcIsoTimestamp()]); payload := result;
+  call downloadExportPayload(payload);
+  result := NoValue;
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

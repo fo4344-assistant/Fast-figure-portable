@@ -1,0 +1,433 @@
+---- MODULE FastFigureBackendLayoutAnnotationsR38 ----
+EXTENDS Naturals, Integers, Reals, Sequences
+
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Source: sourcescript/backend/layout_annotations.py r38.
+\* Translates every function in the Source module; imported graph/registry
+\* operations remain explicit dependencies, not opaque replacement algorithms.
+\* ANNOTATION_SETTINGS_RULE / LAYOUT_BOUNDARY_RULE apply to every procedure:
+\* create copies config settings only; instance text/name/ref fields are data;
+\* load fills missing settings, valid false/0/empty persist, no read mutation.
+\* config malformed/missing is an error, not a fallback-code-constant path.
+\* Source public procedure names/signatures are retained. formatLabel and
+\* renderCaptionGroup are call-local expansions of the Source's formatter/group
+\* steps, not new public operations or logical children.
+\* activeProject is the imported Backend binding; never a second state copy.
+\* project arguments bind to one current Backend read or command candidate.
+\* No procedure commits Project, reads Frontend state, or retains a projection.
+CONSTANT NoValue, BackendSettings
+\* BackendSettings = settings.json.backend, immutable validated configuration.
+\* External reads below use the same activeProject import/registry as Source.
+SequenceSet(seq) == {seq[i] : i \in 1..Len(seq)}
+VisibleAnchorSlots(project) == SelectSeq(project.slots, LAMBDA slot: ~slot.hidden)
+VisibleSlotById(project, slotId) ==
+  IF \E slot \in SequenceSet(project.slots): slot.id = slotId /\ ~slot.hidden
+  THEN CHOOSE slot \in SequenceSet(project.slots): slot.id = slotId /\ ~slot.hidden
+  ELSE NoValue
+EveryIdIsVisibleAnchor(ids, project) ==
+  ids \subseteq {slot.id : slot \in SequenceSet(VisibleAnchorSlots(project))}
+SlotCaptionById(project, slotId) ==
+  LET slot == VisibleSlotById(project, slotId)
+  IN IF slot.caption = NoValue THEN "" ELSE slot.caption
+\* SortByRowThenCol / SortByColThenRow use exactly the Source's coordinate keys.
+\* ImmutableCopy/DeepCopy/IntegerText/case/character operations are notation-level
+\* copy/format primitives, not another domain algorithm or external authority.
+RomanValues == <<1000,900,500,400,100,90,50,40,10,9,5,4,1>>
+RomanGlyphs == <<"M","CM","D","CD","C","XC","L","XL","X","IX","V","IV","I">>
+
+(* --algorithm BackendLayoutAnnotations
+variables result = NoValue;
+
+procedure formatLabel(ordinal, format)
+variables n = ordinal + 1, text = "", digit = 0, k = 1;
+begin
+ChooseFormat:
+  if format = "decimal" then
+    text := IntegerText(n);
+    goto FormatDone;
+  elsif format = "lower-alpha" \/ format = "upper-alpha" then
+    goto AlphaLoop;
+  else
+    goto RomanLoop;
+  end if;
+AlphaLoop:
+  while n > 0 do
+    digit := (n - 1) % 26;
+    text := AlphabetCharacter(digit) \o text;
+    n := (n - 1) \div 26;
+  end while;
+AlphaCase:
+  if format = "upper-alpha" then text := Uppercase(text); end if;
+  goto FormatDone;
+RomanLoop:
+  while k <= Len(RomanValues) do
+    while n >= RomanValues[k] do
+      text := text \o RomanGlyphs[k];
+      n := n - RomanValues[k];
+    end while;
+    k := k + 1;
+  end while;
+RomanCase:
+  if format = "lower-roman" then text := Lowercase(text); end if;
+FormatDone:
+  result := text;
+  return;
+end procedure;
+
+procedure orderedSlotLabels(project)
+variables settings = project.annotations.labels.settings,
+          anchors = <<>>, labels = <<>>, i = 1, identifier = "", display = "";
+begin
+VisibleAnchors:
+  anchors := VisibleAnchorSlots(project);
+ChooseOrder:
+  if settings.order = "column-major" then
+    anchors := SortByColThenRow(anchors);
+  else
+    anchors := SortByRowThenCol(anchors);
+  end if;
+LabelLoop:
+  while i <= Len(anchors) do
+    call formatLabel(i - 1, settings.format);
+    identifier := result;
+    if settings.parentheses then
+      display := "(" \o identifier \o ")";
+    else
+      display := identifier;
+    end if;
+    labels := Append(labels, [slotId |-> anchors[i].id,
+                             ordinal |-> i - 1,
+                             identifier |-> identifier,
+                             displayLabel |-> display]);
+    i := i + 1;
+  end while;
+LabelsDone:
+  \* labels.enabled affects drawing only. Empty slots were NOT filtered out.
+  result := labels;
+  return;
+end procedure;
+
+procedure renderCaptionGroup(firstId, lastId, firstOrdinal, lastOrdinal, text)
+variables rendered = "";
+begin
+GroupLabel:
+  if firstOrdinal = lastOrdinal then
+    rendered := "(" \o firstId \o ")";
+  else
+    rendered := "(" \o firstId \o "-" \o lastId \o ")";
+  end if;
+GroupBody:
+  if Len(text) > 0 then rendered := rendered \o " " \o text; end if;
+GroupReturn:
+  result := rendered;
+  return;
+end procedure;
+
+procedure insertSlotCaptions(project, slotIds)
+variables ordered = <<>>, chosen = <<>>, requested = {},
+          oldText = project.annotations.captions.text,
+          i = 1, j = 1, entry = NoValue, text = "", piece = "", inserted = "",
+          firstOrdinal = 0, lastOrdinal = 0, firstId = "", lastId = "";
+begin
+ReadOrderedLabels:
+  call orderedSlotLabels(project);
+  ordered := result;
+ValidateExplicitTargets:
+  if slotIds # NoValue then
+    requested := SequenceSet(slotIds);
+    if ~EveryIdIsVisibleAnchor(requested, project) then
+      RejectAndPropagateUnchanged("invalid caption target");
+    end if;
+  end if;
+FilterWithoutRenumbering:
+  while i <= Len(ordered) do
+    if slotIds = NoValue then
+      chosen := Append(chosen, ordered[i]);
+    elsif ordered[i].slotId \in requested then
+      chosen := Append(chosen, ordered[i]);
+    end if;
+    i := i + 1;
+  end while;
+NoTargets:
+  if Len(chosen) = 0 then
+    result := oldText;
+    return;
+  end if;
+StartScan:
+  i := 1;
+ScanGroups:
+  while i <= Len(chosen) do
+    entry := chosen[i];
+    firstOrdinal := entry.ordinal;
+    lastOrdinal := entry.ordinal;
+    firstId := entry.identifier;
+    lastId := entry.identifier;
+    text := SlotCaptionById(project, entry.slotId);
+    j := i + 1;
+ExtendGroup:
+    while j <= Len(chosen) do
+      entry := chosen[j];
+      if entry.ordinal # lastOrdinal + 1 then goto EmitGroup; end if;
+      if SlotCaptionById(project, entry.slotId) # "" then
+        if SlotCaptionById(project, entry.slotId) # text then goto EmitGroup; end if;
+      end if;
+      \* A trailing empty caption DOES NOT replace stored group text.
+      lastOrdinal := entry.ordinal;
+      lastId := entry.identifier;
+      j := j + 1;
+    end while;
+EmitGroup:
+    call renderCaptionGroup(firstId, lastId, firstOrdinal, lastOrdinal, text);
+    piece := result;
+    if Len(inserted) = 0 then
+      inserted := piece;
+    else
+      inserted := inserted \o " " \o piece;
+    end if;
+    i := j;
+  end while;
+AppendToExistingText:
+  if Len(oldText) = 0 then
+    result := inserted;
+  elsif SubSeq(oldText, Len(oldText), Len(oldText)) = " " then
+    result := oldText \o inserted;
+  else
+    result := oldText \o " " \o inserted;
+  end if;
+CaptionReturn:
+  \* Caller SLOT_CAPTIONS_INSERTED validates candidate and commits ONCE.
+  \* Return is precisely the Source's candidate text/unchanged text, no envelope.
+  \* afterText/name/settings/source slot.caption remain untouched.
+  return;
+end procedure;
+
+procedure dashboardGeometry(width, heightOverride)
+variables source = activeProject;
+begin
+SourceGeometryReadContext:
+  call DashboardGeometryInProject(source,width,heightOverride);
+  return;
+end procedure;
+
+procedure DashboardGeometryInProject(source, width, heightOverride)
+variables layout = source.layout,
+          referenceWidth = source.layout.slotStyle.referenceWidth,
+          scale = 0, height = 0, outerMargin = 0;
+begin
+ReferenceScale:
+  scale := width / referenceWidth;
+NaturalOrExplicitHeight:
+  if IsValidHeightOverride(heightOverride) then
+    height := heightOverride;
+  else
+    height := width / layout.slotStyle.aspect;
+  end if;
+MarginClamp:
+  outerMargin := Minimum(layout.slotStyle.outerMargin * scale,
+                         Minimum(width, height) * 0.49);
+GeometryReturn:
+  result := [referenceWidth |-> referenceWidth, width |-> width,
+                      height |-> height, scale |-> scale,
+                      aspect |-> layout.slotStyle.aspect,
+                      outerMargin |-> outerMargin,
+                      gap |-> layout.slotStyle.gap * scale,
+                      radius |-> layout.slotStyle.radius * scale];
+  return;
+end procedure;
+
+procedure gridSlotGeometry(layout, geometry, slot)
+variables colWidth = 0, rowHeight = 0;
+begin
+CellDimensions:
+  colWidth := (geometry.width - 2 * geometry.outerMargin -
+               geometry.gap * (layout.gridCols - 1)) / layout.gridCols;
+  rowHeight := (geometry.height - 2 * geometry.outerMargin -
+                geometry.gap * (layout.gridRows - 1)) / layout.gridRows;
+MissingSelectionReference:
+  if slot = NoValue then
+    result := [colWidth |-> colWidth, rowHeight |-> rowHeight,
+                        width |-> colWidth, height |-> rowHeight];
+  else
+    result := [colWidth |-> colWidth, rowHeight |-> rowHeight,
+                        width |-> colWidth * slot.colSpan + geometry.gap * (slot.colSpan - 1),
+                        height |-> rowHeight * slot.rowSpan + geometry.gap * (slot.rowSpan - 1)];
+  end if;
+SlotGeometryReturn:
+  \* No default slot is created. Export caller owns positive-geometry rejection.
+  return;
+end procedure;
+
+procedure buildGridResizeCandidate(rows, cols)
+variables source = activeProject;
+begin
+SourceGridContextBinding:
+  call BuildGridResizeInAttempt(source,rows,cols);
+  return;
+end procedure;
+
+procedure BuildGridResizeInAttempt(source, rows, cols)
+variables candidate = NoValue,
+          oldRows = source.layout.gridRows, oldCols = source.layout.gridCols,
+          i = 1, s = NoValue, row = 0, col = 0, retained = <<>>,
+          freshId = MaximumSlotIdOrMinusOne(source.slots) + 1, newSlot = NoValue;
+begin
+ValidateGridBounds:
+  assert IsInteger(rows) /\ IsInteger(cols);
+  assert rows >= 1 /\ rows <= 8 /\ cols >= 1 /\ cols <= 8;
+InspectEveryRemovedOrCrossingSlot:
+  \* Includes hidden cells. The read remains this one source/candidate operation.
+  while i <= Len(source.slots) do
+    s := source.slots[i];
+    if s.row + s.rowSpan > rows \/ s.col + s.colSpan > cols then
+      call slotHasNonDefaultLocalState(s);
+      if result then RejectAndPropagateUnchanged("nondefault grid removal"); end if;
+      if s.rowSpan > 1 \/ s.colSpan > 1 then
+        RejectAndPropagateUnchanged("merged slot crosses removed grid");
+      end if;
+    end if;
+    i := i + 1;
+  end while;
+CopyCandidateNotAuthority:
+  candidate := DeepCopy(source);
+  candidate.layout.gridRows := rows;
+  candidate.layout.gridCols := cols;
+RemoveOnlyPermittedCells:
+  i := 1;
+  while i <= Len(candidate.slots) do
+    s := candidate.slots[i];
+    if s.row < rows /\ s.col < cols then retained := Append(retained,s); end if;
+    i := i + 1;
+  end while;
+  candidate.slots := retained;
+KeepCoordinateAndCreateOnlyNewCells:
+  while row < rows do
+    col := 0;
+    while col < cols do
+      if row >= oldRows \/ col >= oldCols then
+        newSlot := [id |-> freshId,row |-> row,col |-> col,rowSpan |-> 1,colSpan |-> 1,hidden |-> FALSE,
+                    content |-> DeepCopy(BackendSettings.defaults.slotSettings.content),caption |-> NoValue];
+        newSlot.content.chart := NoValue; newSlot.content.imageId := NoValue;
+        candidate.slots := Append(candidate.slots,newSlot);
+        freshId := freshId + 1;
+        \* No chart/CSV/image asset or reference is synthesized.
+      end if;
+      col := col + 1;
+    end while;
+    row := row + 1;
+  end while;
+ValidateOwnershipAndGeometry:
+  call validateProjectObjectState(candidate, TRUE);
+ReturnUncommittedCandidate:
+  result := candidate;
+  \* No packing/reflow; caller EFSM owns commit.
+  return;
+end procedure;
+
+procedure readImageEditorApi(slotId)
+variables slot = NoValue, image = NoValue;
+begin
+ResolveExplicitImageSlot:
+  slot := VisibleSlotById(activeProject, slotId);
+  if slot = NoValue then result := NoValue; return; end if;
+  if slot.content.contentType # "image" then result := NoValue; return; end if;
+  call getProjectImage(slot.content.imageId);
+  image := result;
+  if image = NoValue then result := NoValue; return; end if;
+NormalizeOnlyReadCopy:
+  call normalizeSlotContent(DeepCopy(slot));
+  slot := result;
+ImageReadOnlyOutput:
+  \* Backend creates no revocable URL/handle; pure URL is derived from copied bytes.
+  result := ImmutableCopy([slotId |-> slot.id, name |-> image.name,
+    bytes |-> CopiedBytes(image), displayUrl |-> PureDisplayUrl(CopiedBytes(image), image.mime),
+    settings |-> slot.content.imageSettings]);
+  return;
+end procedure;
+
+procedure BackendAnnotations_readLabelsApiState(slotId)
+variables source = activeProject;
+begin
+SourceLabelReadContext:
+  call LabelsReadInProject(source,slotId);
+  return;
+end procedure;
+
+procedure LabelsReadInProject(source, slotId)
+variables layout = source.layout, slot = NoValue, geometry = NoValue,
+          reference = NoValue, labels = source.annotations.labels, sample = "";
+begin
+CurrentExplicitSlotReference:
+  slot := VisibleSlotById(source, slotId);
+  call DashboardGeometryInProject(source,layout.slotStyle.referenceWidth,NoValue);
+  geometry := result;
+  call gridSlotGeometry(layout, geometry, slot);
+  reference := result;
+SameFormatterForSample:
+  call formatLabel(0, labels.settings.format);
+  sample := result;
+  if labels.settings.parentheses then sample := "(" \o sample \o ")"; end if;
+LabelReadOutput:
+  result := ImmutableCopy([enabled |-> labels.enabled,
+       settings |-> labels.settings, reference |-> reference, sampleText |-> sample]);
+  \* No selection write or default slot creation; slot caption is not the sample.
+  return;
+end procedure;
+
+procedure readGlobalCaptionState()
+begin
+GlobalCaptionOnly:
+  result := ImmutableCopy(activeProject.annotations.captions);
+  \* Do not merge UI editor mode/selected slot into persistent caption state.
+  return;
+end procedure;
+
+procedure readSlotCaptionState(slotId)
+variables slot = NoValue;
+begin
+ResolveCaptionOwner:
+  slot := VisibleSlotById(activeProject, slotId);
+  if slot = NoValue then result := NoValue; return; end if;
+SlotCaptionReadOutput:
+  result := ImmutableCopy([id |-> slot.id, row |-> slot.row, col |-> slot.col,
+                                   caption |-> slot.caption]);
+  \* Empty remains empty; placeholder is not stored here.
+  return;
+end procedure;
+
+procedure readExportSettings()
+begin
+PersistentExportCopy:
+  result := ImmutableCopy(activeProject.export);
+  return;
+end procedure;
+
+procedure createTargetExportSnapshot()
+variables snapshot = NoValue;
+begin
+SnapshotOnce:
+  call ProjectObjectRegistry_snapshot(<<"layout","labels","captions","data","images","charts","slots","appearance","export">>);
+  snapshot := [layout |-> result.layout,
+               annotations |-> [labels |-> result.labels,captions |-> result.captions],
+               assets |-> [csvFiles |-> result.data,images |-> result.images],
+               charts |-> result.charts,slots |-> result.slots,
+               appearance |-> result.appearance,export |-> result.export];
+CopyWorkScopedRendererStyle:
+  snapshot.captionReferenceStyle := DeepCopy(BackendSettings.defaults.captionReferenceStyle);
+  snapshot.rasterLimits := DeepCopy(BackendSettings.defaults.limits.export);
+  \* Backend export read provider attaches figures/image inputs from this SAME
+  \* snapshot chart/CSV scope, using graphs.chartFigure(chart, project).
+  \* Never allocate UI resources or turn this into a persistent Project field.
+ReferenceWidthContract:
+  \* R=layout.slotStyle.referenceWidth, H0=R/aspect, s=export.width/R.
+  \* Frontend measures caption at R once and scales H0/caption/gap by same s.
+  \* Pixel width does not multiply DPI again; DOM width is not target authority.
+ReturnExportInput:
+  result := ImmutableCopy(snapshot);
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

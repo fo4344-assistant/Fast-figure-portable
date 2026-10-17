@@ -1,0 +1,462 @@
+---- MODULE FastFigureFrontendRendererR38 ----
+EXTENDS Naturals, Reals, Sequences
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* No Backend/Application imports; supplied immutable inputs/actions only.
+\* Local surface/instance/generation/telemetry variables are Source runtime lifetime
+\* bookkeeping, never mirrored Project/FSM data or mutation candidates.
+\* Await/captured original failure, measurement, DOM/Plotly/paint/bytes/resource
+\* primitives are platform-neutral; semantic branch/order/cleanup is explicit below.
+CONSTANT NoValue
+(* --algorithm FrontendRenderer
+variables result = NoValue,
+  uiTelemetryState = InitialUiTelemetryProjection(), debugEnabled = FALSE,
+  dashboardGeneration = 0, graphInstances = [], imageSurfaces = [],
+  dragSource = NoValue, suppressBookmarkClick = FALSE;
+
+procedure publishUiTelemetry(patch)
+begin
+ProjectionOnly:
+  uiTelemetryState := ImmutableMergeAndIncreaseRevision(uiTelemetryState,patch);
+  NotifyUiTelemetrySubscribers(uiTelemetryState);
+  result := uiTelemetryState;
+  return;
+end procedure;
+
+procedure setDebugEnabled(enabled)
+begin
+SessionAuthorityThenProjection:
+  debugEnabled := BooleanMeaning(enabled);
+  call publishUiTelemetry([debugEnabled |-> debugEnabled]);
+  result := debugEnabled;
+  return;
+end procedure;
+
+procedure status(message)
+variables text = NormalizeStatusText(message);
+begin
+StatusNotTaskOutcome:
+  call publishUiTelemetry([status |-> text]);
+  result := text;
+  return;
+end procedure;
+
+procedure applyDashboardProjectionInvalidation(event,mutationResult,interfaceState,projectProjection)
+variables effect = "NONE";
+begin
+ActualRemovedRenderedReferenceFirst:
+  if mutationResult.projectionEffect.referencesRemoved then effect := "FULL_DASHBOARD";
+  elsif mutationResult.projectionEffect.pathOnly then effect := "NONE";
+  elsif event \in {"CAPTION_TEXT_INPUT","SLOT_CAPTIONS_INSERTED","CAPTION_SETTINGS_CHANGED",
+                    "LABEL_SETTINGS_CHANGED","LABEL_POSITION_CHANGED","APPEARANCE_CHANGED","SLOT_IMAGE_SETTINGS_CHANGED"}
+        /\ ExistingHostIdentitiesMatchSuppliedSlots(projectProjection) then effect := "TARGETED_PROJECTION";
+  else effect := "FULL_DASHBOARD"; end if;
+  if effect = "FULL_DASHBOARD" then call renderDashboard(projectProjection,interfaceState);
+  elsif effect = "TARGETED_PROJECTION" then ApplySuppliedNarrowProjection(event,projectProjection,interfaceState); end if;
+  result := effect;
+  return;
+end procedure;
+
+procedure renderDashboard(projectProjection,interfaceState)
+variables width = 0, geometry = NoValue, slots = <<>>, i = 1, slot = NoValue,
+          host = NoValue, identity = NoValue, currentGeneration = 0, instance = NoValue;
+begin
+OneGeneration:
+  dashboardGeneration := dashboardGeneration + 1;
+  currentGeneration := dashboardGeneration;
+WidthFromSuppliedState:
+  width := IF interfaceState.dashboardZoomLocked THEN interfaceState.dashboardZoomLockedWidth
+           ELSE projectProjection.layout.slotStyle.referenceWidth * interfaceState.dashboardZoomIntent / 100;
+  geometry := SuppliedSlotStyleGeometryAtWidth(projectProjection.layout,width);
+  ApplyDashboardCssGeometry(geometry);
+VisibleHosts:
+  slots := projectProjection.visibleSlots;
+  PurgeGraphAssociationsForRemovedOrReplacedHosts(graphInstances,slots);
+  DetachAndReleaseObsoleteImageSurfaces(imageSurfaces,slots);
+  while i <= Len(slots) do
+    slot := slots[i]; host := EnsureSlotContainerLabelBookmarkSurface(slot,geometry);
+    if IsGraphSlotWithFigure(slot) then
+      identity := [host |-> host,slotId |-> slot.id,chartId |-> slot.content.chart];
+      instance := CurrentGraphInstanceForIdentity(graphInstances,identity);
+      if instance = NoValue then
+        PurgePreviousGraphInstanceOfHost(graphInstances,host);
+        DetachImageSurfaceThenReleaseOwnedResources(imageSurfaces,host);
+        instance := InstallGraphInstance(host,identity);
+      end if;
+      graphInstances[host] := [identity |-> identity,instance |-> instance,generation |-> currentGeneration];
+      StartGraphPresentationWithCompletion(slot.figure,instance,
+        [callback |-> "CompleteGraphRender",host |-> host,slotId |-> slot.id,
+         chartId |-> slot.content.chart,generation |-> currentGeneration]);
+      \* CSV/columns are editor reads, NEVER recomputed into a different figure here.
+    elsif IsImageSlotWithView(slot) then
+      PurgePreviousGraphInstanceOfHost(graphInstances,host);
+      DetachPreviousImageSurfaceBeforeReplacing(imageSurfaces,host);
+      StartImageDecodeWithSurfaceOwnedCopiedBytesOrPureUrl(host,slot.imageView,slot.content.imageSettings,
+        [callback |-> "CompleteImageRender",generation |-> currentGeneration,slotId |-> slot.id,input |-> slot.imageView]);
+    else
+      PurgePreviousGraphInstanceOfHost(graphInstances,host);
+      DetachImageSurfaceThenReleaseOwnedResources(imageSurfaces,host);
+      ApplyEmptySlotSurface(host,slot);
+    end if;
+    ApplySelectedInteractionClass(host,slot.id = interfaceState.selectedSlotId);
+    ApplySuppliedLabelAndCaption(host,slot,projectProjection.orderedSlotLabels);
+    i := i + 1;
+  end while;
+ResizeAfterContentStyleAndGeometry:
+  RequestResizeOnlyForCurrentLiveGraphHosts(graphInstances,currentGeneration);
+  SynchronizeDashboardCaptionFromSuppliedProjection(projectProjection);
+  result := CurrentDashboardPresentation();
+  return;
+end procedure;
+
+procedure CompleteGraphRender(host,slotId,chartId,generation,completion)
+begin
+DiscardStaleCompletionWithoutResurrection:
+  if generation # dashboardGeneration \/ ~SameLiveGraphHostSlotChart(graphInstances,host,slotId,chartId,generation) then
+    ReleaseOnlyCompletionTemporaryResources(completion);
+    result := NoValue; return;
+  end if;
+  if completion.threw then
+    ReleaseOnlyCompletionTemporaryResources(completion);
+    PropagateOriginalFailure(completion.failure);
+  end if;
+  ApplyCompletedPresentationToCurrentHostOnly(host,completion);
+  RequestGenerationCheckedResize(host,slotId,chartId,generation);
+  result := NoValue;
+  return;
+end procedure;
+
+procedure CompleteImageRender(host,slotId,imageInput,generation,completion)
+begin
+SurfaceOwnsHandleNotSharedImageAsset:
+  if generation # dashboardGeneration \/ ~SameCurrentImageSurfaceInput(host,slotId,imageInput,generation) then
+    ReleaseOnlyCompletionTemporaryResources(completion); result := NoValue; return;
+  end if;
+  if completion.threw then
+    ReleaseOnlyCompletionTemporaryResources(completion); PropagateOriginalFailure(completion.failure);
+  end if;
+  InstallCompletedImageOnCurrentSurface(host,completion);
+  \* Removing this surface cannot revoke another live surface's handles/URLs.
+  result := NoValue;
+  return;
+end procedure;
+
+procedure setSelectedSlot(slotId,direction,frontendActions)
+variables selection = NoValue;
+begin
+DoNotValidateOrRetoggleLocally:
+  selection := InvokeSuppliedAction(frontendActions.slots.select,[slotId |-> slotId,direction |-> direction]);
+  UpdateWorkspaceFromReturnedFinalStateAndProjection(selection);
+  RequestResizeOfCurrentWorkspaceHosts();
+  result := selection;
+  return;
+end procedure;
+
+procedure installSlotClickController(frontendActions)
+begin
+InstallExistingControllerHandlers:
+  InstallDashboardClickHandler("HandleSlotClick",frontendActions);
+  InstallBookmarkDragHandlers("StartBookmarkDrag","EndBookmarkDrag","ConsumePostDragClick",frontendActions);
+  \* OS DataTransfer files go to Mantine file drop, NOT this bookmark handler.
+  result := InstalledDashboardInteractionController();
+  return;
+end procedure;
+
+procedure HandleSlotClick(event,interactionView,frontendActions)
+variables slot = NoValue, selected = interactionView.selectedSlotId;
+begin
+ControllerBoundary:
+  if ~InsideDashboardInteractionController(event) then result := NoValue; return; end if;
+  if IsBookmarkClick(event) /\ suppressBookmarkClick then
+    ConsumeEvent(event); suppressBookmarkClick := FALSE; result := NoValue; return;
+  end if;
+  slot := VisibleSlotInInteractionProjection(event,interactionView);
+Background:
+  if slot = NoValue then
+    if selected # NoValue then call setSelectedSlot(NoValue,"fsm-to-model",frontendActions); end if;
+    result := NoValue; return;
+  end if;
+SelectionBeforeContent:
+  if slot.id # selected then call setSelectedSlot(slot.id,"ui-to-fsm",frontendActions);
+  elsif IsBookmarkClick(event) then call setSelectedSlot(slot.id,"ui-to-fsm",frontendActions);
+  elsif HasGraphContent(slot) then LeaveEventToPlotlyInteraction(event);
+  elsif HasImageContent(slot) then LeaveEventToImageInteraction(event);
+  else call setSelectedSlot(slot.id,"ui-to-fsm",frontendActions); end if;
+  result := NoValue;
+  return;
+end procedure;
+
+procedure StartBookmarkDrag(source)
+begin
+SuppressSameInteractionCycleClick:
+  dragSource := source;
+  suppressBookmarkClick := TRUE;
+  result := NoValue;
+  return;
+end procedure;
+
+procedure EndBookmarkDrag(target,frontendActions)
+variables source = dragSource;
+begin
+DragSourceCleanupNotClickSuppressionCleanup:
+  dragSource := NoValue;
+  if source # NoValue /\ target # NoValue then call swapSlotContents(source,target,frontendActions); end if;
+  ScheduleCleanupAfterPostDragClickDispatchOpportunity("ConsumePostDragClick");
+  result := NoValue;
+  return;
+end procedure;
+
+procedure ConsumePostDragClick(event)
+begin
+OneClickOrAfterItsOpportunity:
+  if event # NoValue /\ suppressBookmarkClick then ConsumeEvent(event); end if;
+  suppressBookmarkClick := FALSE;
+  result := NoValue;
+  return;
+end procedure;
+
+procedure swapSlotContents(source,target,frontendActions)
+variables returned = NoValue;
+begin
+OnlyIdsToPublicApi:
+  returned := InvokeSuppliedAction(frontendActions.slots.swap,[sourceSlotId |-> source.id,targetSlotId |-> target.id]);
+  \* Existing Application commit/reconcile/projection path renders success.
+  \* No second swap and no assumption public boolean is an adapter tuple.
+  ApplyAlreadyReturnedPostReconciliationProjectionIfPresent(returned);
+  result := returned;
+  return;
+end procedure;
+
+procedure finishDashboardFileDropInteraction()
+begin
+IdempotentCurrentDragOnly:
+  CleanupCurrentDragHoverAndBookkeeping();
+  dragSource := NoValue;
+  \* Do NOT clear suppressBookmarkClick before post-drag click opportunity.
+  result := NoValue;
+  return;
+end procedure;
+
+procedure Renderer_prepareDashboardFileDrop(slotId,frontendActions)
+begin
+UsePrepareNotToggleSelect:
+  result := InvokeSuppliedAction(frontendActions.slots.prepareFileDrop,[slotId |-> slotId]);
+  return;
+end procedure;
+
+procedure applyUiPalette(projectProjection,notify)
+variables palette = projectProjection;
+\* This argument is the supplied renderer ui-palette projection itself, not whole Project.
+begin
+FiveLegacyCssVariables:
+  SetCssVariables(["--ui-color" |-> palette.uiColor,"--paper" |-> palette.uiBackgroundColor,
+     "--ui-subtle" |-> palette.uiSubtleColor,"--ink" |-> palette.fontColor,"--graph-bg" |-> palette.paperColor]);
+  if notify then ExistingUiPaletteChangedNotification(); end if;
+  result := CurrentPaletteCssProjection();
+  return;
+end procedure;
+
+procedure applySlotStyle(projectProjection,notify)
+begin
+StyleProjectionNotAuthority:
+  ApplyDashboardCaptionCssFromSuppliedSlotStyle(projectProjection.layout.slotStyle);
+  if notify then ExistingLayoutModelToUiNotification(); end if;
+  result := CurrentDashboardStyleProjection();
+  return;
+end procedure;
+
+procedure resolveSelectedChart(projectProjection,interfaceState)
+begin
+OneCallSuppliedRelation:
+  result := SuppliedResolvedChartForSelectedSlotOrNone(projectProjection,interfaceState.selectedSlotId);
+  return;
+end procedure;
+
+procedure updateGraphView(projectProjection,interfaceState)
+begin
+NoDomOrBufferReadAsProjectSource:
+  result := RenderWorkspaceFromSuppliedSlotChartImageRelations(projectProjection,interfaceState);
+  return;
+end procedure;
+
+procedure startupCoreRuntime(projectProjection,interfaceState,frontendActions)
+begin
+InitialZoomAndControllers:
+  ApplyZoomProjectionFromSuppliedState(projectProjection,interfaceState);
+  call installSlotClickController(frontendActions);
+  InstallExistingPublicDropController(frontendActions);
+ExistingSlotsOnly:
+  call renderDashboard(projectProjection,interfaceState);
+  call applySlotStyle(projectProjection,FALSE);
+  AuditSuppliedProjectReferenceRuntimeProjectionContracts(projectProjection,interfaceState);
+  result := "ready core runtime";
+  \* Application, not renderer, sends lifecycle-ready. No default CSV/grid recreation.
+  return;
+end procedure;
+
+procedure readDashboardRenderedWidth()
+variables measured = MeasureCurrentDashboardBoundingWidthOrNone();
+begin
+OneShotLockScalar:
+  result := IF PositiveFinite(measured) THEN measured ELSE NoValue;
+  return;
+end procedure;
+
+procedure downloadExportPayload(payload)
+variables owned = NoValue, bytes = NoValue, completion = NoValue;
+begin
+CopiedDataOnly:
+  completion := CaptureOriginalFailureOfPayloadEncoding(payload,"ZIP STORE if entries; otherwise copied bytes");
+  if completion.threw then goto DownloadCleanup; end if;
+  bytes := completion.value;
+  completion := CaptureOriginalFailureOfCreatingDownloadResource(bytes,payload.name,payload.mime);
+  if completion.threw then goto DownloadCleanup; end if;
+  owned := completion.value;
+OneBrowserHandoff:
+  completion := CaptureOriginalFailureOfOneBrowserHandoff(owned);
+DownloadCleanup:
+  if owned # NoValue then ReleaseThisDownloadResourceAfterSafeByteConsumptionOpportunity(owned,completion); end if;
+  if completion.threw then PropagateOriginalFailure(completion.failure); end if;
+  result := NoValue;
+  \* No disk acknowledgement or imaginary observable-cancel outcome.
+  return;
+end procedure;
+
+procedure exportCaptionLayout(snapshot,measureText)
+variables caption = snapshot.annotations.captions, style = snapshot.captionReferenceStyle,
+          referenceWidth = snapshot.layout.slotStyle.referenceWidth, available = 0,
+          lineHeight = 0, prefix = "", prefixWidth = 0, paragraphs = <<>>, words = <<>>,
+          lines = <<>>, line = "", proposed = "", firstLine = TRUE,
+          pi = 1, wi = 1, budget = 0, completion = NoValue;
+begin
+DisabledIsZeroNotBlankLine:
+  if ~caption.enabled then result := [lines |-> <<>>,height |-> 0,gap |-> 0]; return; end if;
+SameFontForMeasurementAndPaint:
+  completion := AwaitRequiredResolvedFontOrOriginalFailure(caption.settings.fontFamily);
+  if completion.threw then PropagateOriginalFailure(completion.failure); end if;
+  available := Maximum(style.minimumTextWidth,referenceWidth - 2 * style.padding);
+  lineHeight := caption.settings.fontSize * caption.settings.lineHeight;
+  if caption.name # "" then
+    prefix := caption.name \o " ";
+    prefixWidth := InvokeMeasureText(measureText,prefix,caption.settings.fontFamily,caption.settings.fontSize,
+       IF caption.nameBold THEN 700 ELSE 400);
+  end if;
+  paragraphs := SplitNewlinesPreservingEmptyParagraphs(caption.text);
+  \* afterText is stored separately and never implicitly appended here.
+EachParagraph:
+  while pi <= Len(paragraphs) do
+    words := NonemptyWhitespaceSeparatedWords(paragraphs[pi]);
+    wi := 1; line := "";
+EachWord:
+    while wi <= Len(words) do
+      proposed := IF line = "" THEN words[wi] ELSE line \o " " \o words[wi];
+      budget := Maximum(style.minimumTextWidth,available - IF firstLine THEN prefixWidth ELSE 0);
+      if InvokeMeasureText(measureText,proposed,caption.settings.fontFamily,caption.settings.fontSize,400) > budget
+         /\ (line # "" \/ (firstLine /\ prefix # "")) then
+        lines := Append(lines,[text |-> line,prefix |-> IF firstLine THEN prefix ELSE "",prefixWidth |-> IF firstLine THEN prefixWidth ELSE 0]);
+        firstLine := FALSE;
+        line := "";
+        \* Retry SAME word, not drop it. Overlong word on empty line is retained/clipped.
+      else
+        line := proposed;
+        wi := wi + 1;
+      end if;
+    end while;
+ParagraphBreakEvenWhenBlank:
+    lines := Append(lines,[text |-> line,prefix |-> IF firstLine THEN prefix ELSE "",prefixWidth |-> IF firstLine THEN prefixWidth ELSE 0]);
+    firstLine := FALSE;
+    pi := pi + 1;
+  end while;
+SharedLinesForMeasureAndPaint:
+  result := [referenceWidth |-> referenceWidth,lines |-> lines,padding |-> style.padding,
+    lineHeight |-> lineHeight,fontFamily |-> caption.settings.fontFamily,fontSize |-> caption.settings.fontSize,
+    prefixWeight |-> IF caption.nameBold THEN 700 ELSE 400,bodyWeight |-> 400,
+    height |-> 2 * style.padding + Len(lines) * lineHeight + style.borderHeight,gap |-> style.dashboardGap];
+  return;
+end procedure;
+
+procedure renderDashboardTarget(snapshot,statusSink)
+variables owned = <<>>, completion = NoValue, caption = NoValue, geometry = NoValue,
+          referenceWidth = snapshot.layout.slotStyle.referenceWidth,
+          width = snapshot.export.width, scale = 0, referenceHeight = 0, totalHeight = 0,
+          dashboardHeight = 0, image = NoValue, payload = NoValue, output = NoValue;
+begin
+CaptionMeasuredOnceAtReferenceWidth:
+  completion := CaptureOriginalFailureOfCallingExportCaptionLayout(snapshot);
+  if completion.threw then goto TargetCleanup; end if;
+  caption := completion.value;
+UniformReferenceScaleNotDpiScale:
+  scale := width / referenceWidth;
+  referenceHeight := referenceWidth / snapshot.layout.slotStyle.aspect;
+  if snapshot.export.heightMode = "auto" then
+    totalHeight := Ceiling((referenceHeight + caption.height + caption.gap) * scale);
+    dashboardHeight := referenceHeight * scale;
+  else
+    totalHeight := snapshot.export.height;
+    dashboardHeight := totalHeight - (caption.height + caption.gap) * scale;
+  end if;
+RejectBeforeDownload:
+  if ~SuppliedRasterDimensionAndAreaLimitsAllow(snapshot.rasterLimits,Round(width),Round(totalHeight)) then
+    output := [outcome |-> "rejected",reason |-> "raster-limit"]; goto TargetCleanup;
+  end if;
+  if dashboardHeight <= 0 then output := [outcome |-> "rejected",reason |-> "caption-height"]; goto TargetCleanup; end if;
+  geometry := [width |-> width,height |-> dashboardHeight,scale |-> scale,
+    outerMargin |-> Minimum(snapshot.layout.slotStyle.outerMargin * scale,Minimum(width,dashboardHeight) * 0.49),
+    gap |-> snapshot.layout.slotStyle.gap * scale,radius |-> snapshot.layout.slotStyle.radius * scale];
+  geometry.colWidth := (width - 2 * geometry.outerMargin - geometry.gap * (snapshot.layout.gridCols - 1)) / snapshot.layout.gridCols;
+  geometry.rowHeight := (dashboardHeight - 2 * geometry.outerMargin - geometry.gap * (snapshot.layout.gridRows - 1)) / snapshot.layout.gridRows;
+  if geometry.colWidth <= 0 \/ geometry.rowHeight <= 0 then
+    output := [outcome |-> "rejected",reason |-> "grid-geometry"]; goto TargetCleanup;
+  end if;
+RenderSuppliedFiguresAndImagesAtTarget:
+  completion := CaptureOriginalFailureOfCreatingTaskRenderHosts(Round(width),Round(totalHeight));
+  if completion.threw then goto TargetCleanup; end if;
+  owned := Append(owned,completion.value);
+  completion := CaptureOriginalFailureOfRenderingVisibleSuppliedSlotFiguresAndImages(snapshot,geometry,scale,owned,statusSink);
+  if completion.threw then goto TargetCleanup; end if;
+  \* Figure-copy font/line/marker/image presentation scale; no Backend CSV transform.
+SameReferenceLabelsCaption:
+  completion := CaptureOriginalFailureOfPaintingSuppliedLabelsAndCaptionLines(snapshot,caption,geometry,scale,owned);
+  if completion.threw then goto TargetCleanup; end if;
+  completion := CaptureOriginalFailureOfEncodingPngOrJpegWithDpiMetadata(owned,snapshot.export.format,snapshot.export.dpi);
+  if completion.threw then goto TargetCleanup; end if;
+  payload := completion.value;
+  completion := CaptureOriginalFailureOfCallingDownloadExportPayload(payload);
+  if completion.threw then goto TargetCleanup; end if;
+  output := [outcome |-> "saved",width |-> Round(width),height |-> Round(totalHeight),automaticHeight |-> snapshot.export.heightMode = "auto"];
+TargetCleanup:
+  ReleaseOnlyTaskOwnedRenderHostsPlotsImagesAndUrls(owned);
+  if completion # NoValue then if completion.threw then PropagateOriginalFailure(completion.failure); end if; end if;
+  result := output;
+  \* saved = handoff, not disk confirmation; status failure cannot undo a handed-off file.
+  return;
+end procedure;
+
+procedure renderDashboardCurrent(snapshot,statusSink)
+variables viewport = NoValue, owned = <<>>, completion = NoValue, output = NoValue;
+begin
+OneShotCurrentSizeNotPersistentPreset:
+  viewport := MeasureCurrentRenderedViewportOnce();
+  if ~SuppliedRasterDimensionAndAreaLimitsAllow(snapshot.rasterLimits,viewport.width,viewport.height) then
+    result := [outcome |-> "rejected",reason |-> "raster-limit"]; return;
+  end if;
+  completion := CaptureOriginalFailureOfCurrentSurfaceCapture(snapshot,viewport,statusSink,owned);
+  if ~completion.threw then
+    completion := CaptureOriginalFailureOfEncodingPngOrJpegWithDpiMetadata(completion.value,snapshot.export.format,snapshot.export.dpi);
+    if ~completion.threw then
+      completion := CaptureOriginalFailureOfCallingDownloadExportPayload(completion.value);
+      if ~completion.threw then output := [outcome |-> "saved",width |-> Round(viewport.width),height |-> Round(viewport.height),automaticHeight |-> FALSE]; end if;
+    end if;
+  end if;
+CaptureFinally:
+  ReleaseOnlyTaskOwnedRenderHostsPlotsImagesAndUrls(owned);
+  if completion.threw then PropagateOriginalFailure(completion.failure); end if;
+  result := output;
+  \* Do not retain snapshot/viewport for another task or store geometry in Project.
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

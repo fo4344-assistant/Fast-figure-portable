@@ -181,7 +181,8 @@ RESOLVED_REVIEW_ITEMS = [
     ),
 ]
 
-UNRESOLVED_REVIEW_ITEMS = [
+# 당시 open 상태의 검토 이력이다. 현재의 미결 의미 목록과 혼동하지 않는다.
+HISTORICAL_REVIEW_NOTES = [
     (
         "Plan 021: Backend 분산 기본값은 계층형 backend/settings.json으로, label/order/group/append는 기존 annotation 계산으로 명시했다. "
         "target export는 layout referenceWidth의 dashboard/caption을 목표 pixel width 비율로 scaling한다. "
@@ -203,6 +204,9 @@ UNRESOLVED_REVIEW_ITEMS = [
         "정적 대조표 작성이나 개별 wrapper 수정만으로 전체 closure 근거를 삼지 않는다."
     ),
 ]
+
+
+UNRESOLVED_REVIEW_ITEMS = []
 
 
 def initializeFastFigure():

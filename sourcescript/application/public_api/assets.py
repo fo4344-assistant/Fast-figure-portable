@@ -280,6 +280,15 @@ def connectProjectAssetToSlot(path, kind, slotId):
     return None
 
 
+SINGLE_FILE_IMPORT_CHOICE_RULE = (
+    "target slot은 공식 query로 먼저 검증한다. data/image 파일의 chooser directory는 Backend PROJECT_ASSET_DIRECTORIES의 kind별 root다. "
+    "planImport(file,directory,reservedPaths=empty)를 한 번 기다리며 완료된 path/replaceId만 command로 보낸다. "
+    "slot package는 별도 FFSX 경로이므로 collision chooser를 호출하지 않는다. cancel은 command 전에 None을 반환한다. "
+    "chooser는 Application/UI에서 공식 collision/resolve query를 사용한다. 이후 command는 final plan을 current candidate에서 재검증하며 "
+    "slot의 directory나 current asset selection/파일의 local filesystem path를 새 authority로 만들지 않는다."
+)
+
+
 def importProjectFileToSlot(file, slotId, planImport):
     """
     변경:

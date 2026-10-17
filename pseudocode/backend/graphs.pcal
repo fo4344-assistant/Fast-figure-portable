@@ -1,0 +1,817 @@
+---- MODULE FastFigureBackendGraphsR38 ----
+EXTENDS Naturals, Integers, Reals, Sequences
+
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Source: sourcescript/backend/graphs.py. All 15 Source functions are represented (private calculation expansions are not additional Source functions).
+\* BackendSettings denotes settings.json.backend, immutable, not a settings service.
+\* project arguments bind to ONE current authority read or Backend candidate scope.
+\* Low-level primitives: scalar/text/record/sequence operations, numeric parsing,
+\* DOM-free Plotly interchange parsing. No Frontend/Application calls or commit.
+CONSTANT NoValue, Missing, BackendSettings
+DEFAULT_COLORS == BackendSettings.defaults.graphColors
+AXIS_DEFAULTS == BackendSettings.defaults.chartSettings.editor.axis
+GLOBAL_DEFAULTS == BackendSettings.defaults.chartSettings.editor.globalSettings
+STYLE_DEFAULTS == BackendSettings.defaults.chartSettings.editor.objectStyle
+RENDER_DEFAULTS == BackendSettings.defaults.graphRendering
+STYLE_LIMITS == BackendSettings.defaults.limits.graphObject
+AXIS_KEYS == <<"xBottom","xTop","yLeft","yRight">>
+Empty == ""
+ValidColumn(id, columns) == id \in {columns[i].id : i \in 1..Len(columns)}
+ConversionRepresentation(chart) ==
+  IF chart.editor.editable = FALSE THEN HasField(chart.editor,"conversionRows") ELSE FALSE
+IsValidIndex(index, seq) == IF IsInteger(index) THEN index >= 0 /\ index < Len(seq) ELSE FALSE
+
+NormalizeHeaderCount(value,table) ==
+  LET number == TryScalarNumber(value)
+  IN IF number.valid THEN
+       IF IsFinite(number.value) THEN Minimum(Len(table),Maximum(0,TruncateTowardZero(number.value))) ELSE 0
+     ELSE 0
+
+(* --algorithm BackendGraphs
+variables result = NoValue;
+
+procedure dataTable(data)
+variables matrix = <<>>, keys = <<>>, i = 1, row = <<>>, j = 1;
+begin
+RequireNonemptyArray:
+  Require(IsSequence(data) /\ Len(data) > 0);
+ChooseRowShape:
+  if EveryElementIsSequence(data) then
+    result := DeepCopy(data);
+    return;
+  end if;
+  Require(EveryElementIsRecord(data));
+ObjectArrayHeader:
+  keys := OrderedKeyUnion(data);
+  matrix := Append(matrix, DeepCopy(keys));
+ObjectRows:
+  while i <= Len(data) do
+    row := <<>>;
+    j := 1;
+    while j <= Len(keys) do
+      row := Append(row, ObjectTableCellOrMissing(data[i], keys[j]));
+      j := j + 1;
+    end while;
+    matrix := Append(matrix, row);
+    i := i + 1;
+  end while;
+TableReturn:
+  result := matrix;
+  return;
+end procedure;
+
+procedure columnDefinitions(table, headerLines)
+variables width = MaximumRowWidth(table), columns = <<>>, i = 0, name = NoValue;
+begin
+NormalizeHeaderForSameTable:
+  headerLines := NormalizeHeaderCount(headerLines,table);
+ColumnLoop:
+  while i < width do
+    name := NoValue;
+    if headerLines >= 1 then name := CellOrMissing(table, headerLines - 1, i); end if;
+    columns := Append(columns, [id |-> "C" \o IntegerText(i + 1), index |-> i,
+       name |-> name, label |-> ColumnDisplayLabel("C" \o IntegerText(i + 1), name)]);
+    i := i + 1;
+  end while;
+ColumnsReturn:
+  result := columns;
+  return;
+end procedure;
+
+procedure graphDataSelection(matrix, headerLines, editor)
+variables columns = <<>>, numericColumns = <<>>, x = "", y = "", i = 1, row = 0,
+          found = FALSE, raw = Missing, number = NoValue;
+begin
+DefinitionsFromSameTable:
+  headerLines := NormalizeHeaderCount(headerLines,matrix);
+  call columnDefinitions(matrix, headerLines); columns := result;
+NumericBodyColumnsInOriginalOrder:
+  while i <= Len(columns) do
+    row := headerLines; found := FALSE;
+    while row < Len(matrix) do
+      raw := CellOrMissing(matrix,row,columns[i].index);
+      if raw # Missing /\ raw # "" then
+        number := TryScalarNumber(raw);
+        if number.valid then if IsFinite(number.value) then found := TRUE; end if; end if;
+      end if;
+      row := row + 1;
+    end while;
+    if found then numericColumns := Append(numericColumns,columns[i]); end if;
+    i := i + 1;
+  end while;
+ChooseX:
+  if ValidColumn(FieldOrNoValue(editor,"x"), columns) then x := editor.x;
+  elsif Len(numericColumns) > 0 then x := numericColumns[1].id;
+  elsif Len(columns) > 0 then x := columns[1].id; end if;
+ChooseY:
+  if ValidColumn(FieldOrNoValue(editor,"y"), columns) then y := editor.y;
+  else
+    y := FirstColumnIdOtherThanOrNoValue(numericColumns, x);
+    if y = NoValue then y := FirstColumnIdOtherThanOrNoValue(columns, x); end if;
+    if y = NoValue then
+      if Len(columns) > 0 then y := columns[1].id; else y := ""; end if;
+    end if;
+  end if;
+SelectionReturn:
+  \* No invented column/default CSV. Candidate validator owns invalid references.
+  result := [x |-> x, y |-> y];
+  return;
+end procedure;
+
+procedure NewChartInCandidate(candidate,sourceName)
+variables chart = NoValue, settings = NoValue;
+begin
+ConfiguredEditorNotFakeData:
+  call normalizeGlobalSettings([]); settings := result;
+  chart := [id |-> candidate.nextId.chart,
+    editor |-> [editable |-> TRUE,title |-> TextOrEmpty(sourceName),objects |-> <<>>,
+                globalSettings |-> settings,plotlyExtensions |-> [layout |-> [],config |-> []]],
+    graph |-> [data |-> <<>>,layout |-> [],config |-> []]];
+  result := chart;
+  return;
+end procedure;
+
+procedure NormalizeCommandObjects(objects)
+variables normalized = DeepCopy(objects), fields = PropertyNames(STYLE_DEFAULTS), i = 1, j = 1, key = "";
+begin
+MissingStyleOnly:
+  while i <= Len(normalized) do
+    j := 1;
+    while j <= Len(fields) do
+      key := fields[j];
+      if ~HasField(normalized[i],key) then normalized[i][key] := DeepCopy(STYLE_DEFAULTS[key]); end if;
+      j := j + 1;
+    end while;
+    i := i + 1;
+  end while;
+  result := normalized;
+  return;
+end procedure;
+
+procedure NormalizeOneObjectEdit(current,values)
+variables copy = DeepCopy(current), allowed = [type |-> {"scatter","markers","lines+markers","bar","hidden"},
+  xAxisSide |-> {"bottom","top"},yAxisSide |-> {"left","right"},lineDash |-> {"solid","dot","dash","dashdot"},
+  markerSymbol |-> {"circle","square","diamond","cross","x","triangle-up","triangle-down"}],
+  keys = <<>>, i = 1, key = "", number = NoValue, bounds = NoValue;
+begin
+MissingCurrentStyle:
+  keys := PropertyNames(STYLE_DEFAULTS);
+  while i <= Len(keys) do
+    key := keys[i]; if ~HasField(copy,key) then copy[key] := DeepCopy(STYLE_DEFAULTS[key]); end if;
+    i := i + 1;
+  end while;
+EnumsPreserveCurrentOnInvalid:
+  keys := PropertyNames(allowed); i := 1;
+  while i <= Len(keys) do
+    key := keys[i];
+    if HasField(values,key) then if values[key] \in allowed[key] then copy[key] := values[key]; end if; end if;
+    i := i + 1;
+  end while;
+NumericNewEditsOnly:
+  keys := PropertyNames(STYLE_LIMITS); i := 1;
+  while i <= Len(keys) do
+    key := keys[i]; bounds := STYLE_LIMITS[key];
+    if HasField(values,key) then
+      number := TryScalarNumber(values[key]);
+      if number.valid then if IsFinite(number.value) then copy[key] := Maximum(bounds[1],Minimum(bounds[2],number.value)); end if; end if;
+    end if;
+    i := i + 1;
+  end while;
+ColorAndEmptyLegend:
+  if HasField(values,"color") then if IsNonemptyText(values.color) then copy.color := values.color; end if; end if;
+  if HasField(values,"legendName") then if IsText(values.legendName) then copy.legendName := values.legendName; end if; end if;
+  result := copy;
+  return;
+end procedure;
+
+procedure CreateBaseGraphObject(source,csvId)
+variables csv = ResolveCsv(source,csvId), selection = NoValue, object = DeepCopy(STYLE_DEFAULTS);
+begin
+ExistingRealCsvOnly:
+  Require(csv # NoValue);
+  call graphDataSelection(csv.rows,csv.headerLines,[]); selection := result;
+  Require(CurrentCsvContainsColumns(csv,selection.x,selection.y));
+  object.csvId := csv.id; object.x := selection.x; object.y := selection.y;
+  object.color := DEFAULT_COLORS[1]; object.legendName := "";
+  result := object;
+  return;
+end procedure;
+
+procedure ConnectDataInsideCandidate(candidate, slotId, csvId, sourceName)
+variables target = NoValue, csv = NoValue, chart = NoValue, object = NoValue;
+begin
+SameCandidateOwnerAndCsv:
+  target := VisibleSlot(candidate,slotId);
+  csv := CsvById(candidate,csvId);
+  Require(target # NoValue /\ csv # NoValue);
+  Require(target.content.contentType = "graph");
+  call CreateBaseGraphObject(candidate,csv.id); object := result;
+OwningChart:
+  chart := ResolveOwningChart(candidate, target.id);
+  if chart = NoValue then
+    call NewChartInCandidate(candidate,sourceName); chart := result;
+    candidate.charts := Append(candidate.charts, chart);
+    CandidateSlot(candidate, target.id).content.chart := chart.id;
+    candidate.nextId.chart := chart.id + 1;
+  else Require(chart.editor.editable); end if;
+AppendRealReference:
+  chart.editor.objects := Append(chart.editor.objects,object);
+  call rebuildEditableGraph(chart, candidate);
+  ReplaceCandidateChart(candidate, chart.id, result);
+CandidateReturn:
+  result := candidate;
+  return;
+end procedure;
+
+procedure connectDataToSlotModel(slot, data, sourceName, projectCsv)
+variables source = activeProject;
+begin
+SourceCommandHelperRead:
+  \* Source data argument is not a substitute authority for projectCsv.rows.
+  call ConnectDataInsideCandidate(DeepCopy(source),slot.id,projectCsv.id,sourceName);
+  return;
+end procedure;
+
+procedure graphEditorCommit(chartId, objects, index)
+variables source = activeProject;
+begin
+SourceContextBinding:
+  call GraphCommitInAttempt(source,chartId,objects,index);
+  return;
+end procedure;
+
+\* Private expansion passes the existing command-attempt reference explicitly.
+\* It adds no public parameter, mutation entry, authority or retry token.
+procedure GraphCommitInAttempt(source, chartId, objects, index)
+variables candidate = DeepCopy(source), chart = NoValue;
+begin
+CommandInternalArrayOnly:
+  \* objects are computed inside EFSM; never a public projection/Frontend array.
+  chart := ResolveCandidateChart(candidate, chartId);
+  Require(chart # NoValue /\ chart.editor.editable);
+  call NormalizeCommandObjects(objects); chart.editor.objects := result;
+ValidateZeroOrMoreObjects:
+  call validateChartModel(chart, candidate.assets.csvFiles);
+  ReplaceCandidateChart(candidate, chartId, chart);
+  \* No fake object when empty; no commit, selection event or current CSV write.
+  result := [candidate |-> candidate, indexHint |-> index];
+  return;
+end procedure;
+
+procedure CalculateOneObjectValues(chartId, index, values, project)
+variables chart = ResolveChart(project,chartId), csv = NoValue, columns = <<>>,
+          object = NoValue, selection = NoValue, objects = <<>>;
+begin
+ResolveExistingEditableObject:
+  Require(chart # NoValue /\ chart.editor.editable);
+  Require(IsValidIndex(index,chart.editor.objects));
+  object := DeepCopy(chart.editor.objects[index + 1]);
+ChooseRequestedOrExistingCsv:
+  csv := ResolveCsv(project,FieldOrNoValue(values,"csvId"));
+  if csv = NoValue then csv := ResolveCsv(project,object.csvId); end if;
+  Require(csv # NoValue);
+  call columnDefinitions(csv.rows,csv.headerLines);
+  columns := result;
+  call graphDataSelection(csv.rows,csv.headerLines,[]);
+  selection := result;
+ChooseXYAndStyle:
+  object.csvId := csv.id;
+  if ValidColumn(FieldOrNoValue(values,"x"),columns) then object.x := values.x;
+  elsif ~ValidColumn(object.x,columns) then object.x := selection.x; end if;
+  if ValidColumn(FieldOrNoValue(values,"y"),columns) then object.y := values.y;
+  elsif ~ValidColumn(object.y,columns) then object.y := selection.y; end if;
+  call NormalizeOneObjectEdit(object,values); object := result;
+ReplaceOnlyOneObject:
+  objects := DeepCopy(chart.editor.objects);
+  objects[index + 1] := object;
+  result := <<objects,index>>;
+  \* Private expansion of graphEditorCommit's one-object rule; no new public API.
+  return;
+end procedure;
+
+procedure NormalizeDivisor(input)
+begin
+FiniteNonZeroOrIdentity:
+  if IsFiniteNumericScalar(input) then
+    if ScalarNumber(input) # 0 then result := ScalarNumber(input); return; end if;
+  end if;
+  result := 1;
+  return;
+end procedure;
+
+procedure ScaleCoordinate(value, numeric, axis)
+begin
+LinearLogReciprocal:
+  if axis.scaleType = "linear" then
+    result := value;
+  elsif ~numeric then
+    result := Missing;
+  elsif axis.scaleType = "log" then
+    if IsFinite(value) /\ value > 0 then result := value; else result := Missing; end if;
+  else
+    if IsFinite(value) /\ value # 0 then
+      if IsFinite(1 / value) then result := 1 / value; else result := Missing; end if;
+    else result := Missing; end if;
+  end if;
+  return;
+end procedure;
+
+procedure tracesSingle(objectView)
+variables width = MaximumRowWidth(objectView.rows), xi = NoValue, yi = NoValue,
+          r = objectView.headerLines, rawX = Missing, rawY = Missing,
+          x = Missing, y = Missing, numericX = FALSE, dx = 1, dy = 1,
+          xs = <<>>, ys = <<>>, trace = [], lineWidth = 0;
+begin
+ColumnsNotPerRowWidth:
+  xi := ColumnIdentifierToIndexOrNoValue(objectView.x,width);
+  yi := ColumnIdentifierToIndexOrNoValue(objectView.y,width);
+  if xi = NoValue \/ yi = NoValue then result := <<>>; return; end if;
+Divisors:
+  call NormalizeDivisor(objectView.xSettings.divide); dx := result;
+  call NormalizeDivisor(objectView.ySettings.divide); dy := result;
+PairedRows:
+  while r < Len(objectView.rows) do
+    rawX := CellOrMissing(objectView.rows,r,xi);
+    rawY := CellOrMissing(objectView.rows,r,yi);
+    if rawX = Missing \/ rawX = "" \/ rawY = Missing then goto NextPair; end if;
+ConvertY:
+    \* ScalarNumber: null/empty/whitespace=0, false=0,true=1; bad/nonfinite rejected.
+    if ~IsFiniteNumericScalar(rawY) then goto NextPair; end if;
+    y := ScalarNumber(rawY);
+ConvertX:
+    numericX := FALSE;
+    if IsFiniteNumericScalar(rawX) then
+      x := ScalarNumber(rawX);
+      numericX := TRUE;
+    elsif IsText(rawX) then
+      x := rawX;
+    else
+      goto NextPair;
+    end if;
+DivideBeforeScale:
+    if numericX then x := x / dx; end if;
+    y := y / dy;
+    if ~IsFinite(y) then goto NextPair; end if;
+    if numericX then if ~IsFinite(x) then goto NextPair; end if; end if;
+ApplyEachAxisIndependently:
+    call ScaleCoordinate(x,numericX,objectView.xSettings); x := result;
+    call ScaleCoordinate(y,TRUE,objectView.ySettings); y := result;
+    if x = Missing \/ y = Missing then goto NextPair; end if;
+AppendBothOrNeither:
+    xs := Append(xs,x);
+    ys := Append(ys,y);
+NextPair:
+    r := r + 1;
+  end while;
+NoSurvivors:
+  if Len(xs) = 0 then result := <<>>; return; end if;
+TraceBase:
+  trace := [x |-> xs,y |-> ys,name |-> objectView.y,visible |-> TRUE,
+            line |-> [color |-> objectView.color],marker |-> [color |-> objectView.color]];
+StyleByType:
+  if objectView.type = "bar" then
+    trace.type := "bar";
+    lineWidth := FiniteClampOrDefault(FieldOrNoValue(objectView,"barLineWidth"),STYLE_LIMITS.barLineWidth,STYLE_DEFAULTS.barLineWidth);
+    trace.line.width := lineWidth;
+    trace.marker.line := [color |-> objectView.color,width |-> lineWidth];
+    trace.opacity := FiniteClampOrDefault(FieldOrNoValue(objectView,"barOpacity"),STYLE_LIMITS.barOpacity,STYLE_DEFAULTS.barOpacity);
+    \* No computed mode/line.dash for bar; valid width=0 is retained.
+  else
+    trace.type := "scatter";
+    if objectView.type \in {"markers","lines+markers"} then trace.mode := objectView.type;
+    else trace.mode := "lines"; end if;
+    if objectView.type = "hidden" then trace.visible := FALSE; end if;
+    trace.line.width := FiniteClampOrDefault(FieldOrNoValue(objectView,"lineWidth"),STYLE_LIMITS.lineWidth,STYLE_DEFAULTS.lineWidth);
+    trace.line.dash := DeclaredDashOrDefault(objectView,STYLE_DEFAULTS.lineDash);
+    trace.marker.symbol := DeclaredMarkerSymbolOrDefault(objectView,STYLE_DEFAULTS.markerSymbol);
+    trace.marker.size := FiniteClampOrDefault(FieldOrNoValue(objectView,"markerSize"),STYLE_LIMITS.markerSize,STYLE_DEFAULTS.markerSize);
+  end if;
+SingleTraceReturn:
+  result := <<trace>>;
+  return;
+end procedure;
+
+procedure traces(chart, project)
+variables object = NoValue, csv = NoValue, view = NoValue, calculated = <<>>,
+          extension = [], trace = [], output = <<>>, i = 0, j = 1,
+          xs = <<>>, ys = <<>>, a = 1, b = 1;
+begin
+SameProjectChartAndOwner:
+  Require(UniqueOwningSlot(chart.id,project));
+  Require(~ConversionRepresentation(chart));
+  chart := ResolveChart(project,chart.id);
+ObjectOrder:
+  while i < Len(chart.editor.objects) do
+    object := chart.editor.objects[i + 1];
+    csv := ResolveCsv(project,object.csvId);
+    Require(csv # NoValue);
+    \* NEVER current selected CSV, conversionRows, or a default live getter.
+    view := ExtendRecord(DeepCopy(object),[rows |-> csv.rows,headerLines |-> csv.headerLines,
+      xSettings |-> AxisForObjectX(chart,object),ySettings |-> AxisForObjectY(chart,object),
+      color |-> ExplicitColorOrSequenceFallback(object,DEFAULT_COLORS[(i % Len(DEFAULT_COLORS)) + 1])]);
+    call tracesSingle(view);
+    calculated := result;
+    j := 1;
+MergeEachCalculatedTrace:
+    while j <= Len(calculated) do
+      extension := RecordCopyOrEmpty(FieldOrNoValue(object,"plotlyTrace"));
+      trace := MergeRecords(extension,calculated[j]);
+      trace.line := MergeRecords(RecordOrEmpty(FieldOrNoValue(extension,"line")),calculated[j].line);
+      trace.marker := MergeRecords(RecordOrEmpty(FieldOrNoValue(extension,"marker")),calculated[j].marker);
+      if ~HasField(calculated[j],"mode") then RemoveField(trace,"mode"); end if;
+      trace.name := NonemptyLegendNameOr(object,object.y);
+      trace.xaxis := IF object.xAxisSide = "top" THEN "x2" ELSE "x";
+      trace.yaxis := IF object.yAxisSide = "right" THEN "y2" ELSE "y";
+      output := Append(output,trace);
+      j := j + 1;
+    end while;
+    i := i + 1;
+  end while;
+VisibleAxisCartesianOrder:
+  if chart.editor.globalSettings.axes.xBottom.visible then xs := Append(xs,"x"); end if;
+  if chart.editor.globalSettings.axes.xTop.visible then xs := Append(xs,"x2"); end if;
+  if chart.editor.globalSettings.axes.yLeft.visible then ys := Append(ys,"y"); end if;
+  if chart.editor.globalSettings.axes.yRight.visible then ys := Append(ys,"y2"); end if;
+  if Len(xs) = 0 then xs := <<"x">>; end if;
+  if Len(ys) = 0 then ys := <<"y">>; end if;
+AxisOnlyFigureTraces:
+  while a <= Len(xs) do
+    b := 1;
+    while b <= Len(ys) do
+      output := Append(output,[x |-> <<>>,y |-> <<>>,type |-> "scatter",mode |-> "markers",
+       xaxis |-> xs[a],yaxis |-> ys[b],showlegend |-> FALSE,hoverinfo |-> "skip",visible |-> TRUE,
+       marker |-> [size |-> 0,opacity |-> 0],line |-> [width |-> 0],name |-> "",
+       meta |-> [fastFigureAxisPlaceholder |-> TRUE]]);
+      b := b + 1;
+    end while;
+    a := a + 1;
+  end while;
+TracesReturn:
+  result := output;
+  \* Figure-only placeholder traces never enter editor.objects/assets/readPalette.
+  return;
+end procedure;
+
+procedure rebuildEditableGraph(chart, project)
+variables copy = DeepCopy(chart);
+begin
+SameCandidateCsvAndEditor:
+  call traces(copy,project); copy.graph.data := result;
+  call layout(copy,project); copy.graph.layout := result;
+  \* Existing config/frames retained; caller supplies candidate or query-local copy.
+  result := copy;
+  return;
+end procedure;
+
+procedure chartFigure(chart, project)
+variables copy = DeepCopy(chart);
+begin
+PreserveOriginalOrRebuildExactlyOnePath:
+  if ~copy.editor.editable /\ HasImportedFigure(copy) then
+    result := DeepCopy(copy.graph.imported);
+    return;
+  end if;
+  call rebuildEditableGraph(copy,project); copy := result;
+  result := DeepCopy([data |-> copy.graph.data,layout |-> copy.graph.layout,
+                       config |-> copy.graph.config,frames |-> copy.graph.frames]);
+  return;
+end procedure;
+
+procedure OptionalNumber(input)
+begin
+EmptyIsNotNumericZero:
+  if input = Missing \/ input = NoValue \/ input = "" then result := Empty;
+  elsif IsFiniteNumericScalar(input) then result := ScalarNumber(input);
+  else result := Empty; end if;
+  return;
+end procedure;
+
+procedure normalizeAxisSettings(axis, key)
+variables normalized = DeepCopy(AXIS_DEFAULTS), i = 1, fields = <<"min","max","tick">>, value = NoValue;
+begin
+CopyConfigAndAxisVisibility:
+  normalized.visible := BackendSettings.defaults.chartSettings.editor.axisVisibility[key];
+  axis := RecordOrEmpty(axis);
+OptionalNumericFields:
+  while i <= Len(fields) do
+    call OptionalNumber(FieldOrMissing(axis,fields[i])); normalized[fields[i]] := result;
+    i := i + 1;
+  end while;
+TextAndPositiveSizes:
+  normalized.title := TextOrDefault(FieldOrMissing(axis,"title"),AXIS_DEFAULTS.title);
+  normalized.titleSize := FinitePositiveOrDefault(FieldOrMissing(axis,"titleSize"),AXIS_DEFAULTS.titleSize);
+  normalized.fontSize := FinitePositiveOrDefault(FieldOrMissing(axis,"fontSize"),AXIS_DEFAULTS.fontSize);
+  normalized.lineWidth := FiniteNonnegativeOrDefault(FieldOrMissing(axis,"lineWidth"),AXIS_DEFAULTS.lineWidth);
+Booleans:
+  if HasField(axis,"showGrid") then normalized.showGrid := axis.showGrid # FALSE; end if;
+  if HasField(axis,"showValues") then normalized.showValues := axis.showValues # FALSE; end if;
+  if IsBoolean(FieldOrMissing(axis,"visible")) then normalized.visible := axis.visible; end if;
+  normalized.minorTicks := FieldOrMissing(axis,"minorTicks") = TRUE;
+EnumsAndDivisor:
+  normalized.notation := EnumOr(FieldOrMissing(axis,"notation"),{"none","e","power"},"none");
+  normalized.tickMode := EnumOr(FieldOrMissing(axis,"tickMode"),{"plotly","increment"},"plotly");
+  normalized.scaleType := EnumOr(FieldOrMissing(axis,"scaleType"),{"linear","log","reciprocal"},"linear");
+  call NormalizeDivisor(FieldOrMissing(axis,"divide")); normalized.divide := result;
+  if normalized.scaleType = "log" then normalized.tickMode := "plotly"; end if;
+AxisReturn:
+  result := normalized;
+  return;
+end procedure;
+
+procedure normalizeGlobalSettings(settings)
+variables normalized = DeepCopy(GLOBAL_DEFAULTS), i = 1, key = "";
+begin
+GlobalInput:
+  settings := RecordOrEmpty(settings);
+  if HasField(settings,"showLegend") then normalized.showLegend := settings.showLegend # FALSE; end if;
+  if HasField(settings,"showTitle") then normalized.showTitle := settings.showTitle # FALSE; end if;
+  normalized.showZeroLine := FieldOrMissing(settings,"showZeroLine") = TRUE;
+  normalized.graphFontFamily := TextOrDefault(FieldOrMissing(settings,"graphFontFamily"),"");
+  normalized.titleFontSize := FinitePositiveOrDefault(FieldOrMissing(settings,"titleFontSize"),Empty);
+  normalized.legendFontSize := FinitePositiveOrDefault(FieldOrMissing(settings,"legendFontSize"),Empty);
+  normalized.axes := [];
+AllFourAxes:
+  while i <= Len(AXIS_KEYS) do
+    key := AXIS_KEYS[i];
+    call normalizeAxisSettings(NestedFieldOrMissing(settings,<<"axes",key>>),key);
+    normalized.axes[key] := result;
+    i := i + 1;
+  end while;
+GlobalReturn:
+  result := normalized;
+  return;
+end procedure;
+
+procedure PlotlyAxis(axis, showZeroLine)
+variables output = [], range = NoValue;
+begin
+KnownAxisFields:
+  output := [type |-> IF axis.scaleType = "log" THEN "log" ELSE "linear",
+    title |-> [text |-> IF axis.visible THEN axis.title ELSE "",font |-> [size |-> axis.titleSize]],
+    visible |-> TRUE,showgrid |-> axis.visible /\ axis.showGrid,
+    showticklabels |-> axis.visible /\ axis.showValues,ticks |-> IF axis.visible THEN "outside" ELSE "",
+    showline |-> axis.visible,linewidth |-> axis.lineWidth,tickfont |-> [size |-> axis.fontSize],
+    automargin |-> TRUE,gridcolor |-> RENDER_DEFAULTS.gridColor,
+    zeroline |-> axis.visible /\ showZeroLine,zerolinecolor |-> RENDER_DEFAULTS.zeroLineColor,
+    exponentformat |-> axis.notation,showexponent |-> IF axis.notation = "none" THEN "none" ELSE "all"];
+FiniteBoundsPreserveReversal:
+  if IsFiniteNumber(axis.min) /\ IsFiniteNumber(axis.max) then
+    if axis.scaleType = "log" then
+      if axis.min > 0 /\ axis.max > 0 then output.range := <<Log10(axis.min),Log10(axis.max)>>; end if;
+    else output.range := <<axis.min,axis.max>>; end if;
+  end if;
+LogTickOrLinearInterval:
+  if axis.scaleType = "log" then
+    output.dtick := 1;
+    if axis.minorTicks then output.minor := [dtick |-> "D1",ticks |-> "outside",
+      showgrid |-> axis.visible /\ axis.showGrid,gridcolor |-> RENDER_DEFAULTS.gridColor];
+    else output.minor := [ticks |-> "",showgrid |-> FALSE]; end if;
+    output.minorloglabels := "none";
+  elsif IsFinitePositiveScalar(axis.tick) then output.dtick := axis.tick; end if;
+Notation:
+  if axis.notation = "e" then output.tickformat := ".3e"; end if;
+  result := output;
+  return;
+end procedure;
+
+procedure layout(chart, project)
+variables settings = NoValue, known = [], extension = [], merged = [], axis = [], i = 1,
+          key = "", plotlyKey = "", family = "", font = [], ownedOptional = <<"range","dtick","minor","minorloglabels","tickformat">>, j = 1;
+begin
+NormalizeLocalCopy:
+  call normalizeGlobalSettings(chart.editor.globalSettings); settings := result;
+  family := settings.graphFontFamily;
+  font := [color |-> project.appearance.uiPalette.fontColor];
+  known := [uirevision |-> Text(chart.id),showlegend |-> settings.showLegend,
+    title |-> [text |-> IF settings.showTitle THEN chart.editor.title ELSE "",automargin |-> TRUE,
+               font |-> [size |-> FinitePositiveOrDefault(settings.titleFontSize,RENDER_DEFAULTS.titleFontSize)]],
+    legend |-> [font |-> [size |-> FinitePositiveOrDefault(settings.legendFontSize,RENDER_DEFAULTS.legendFontSize)]],
+    paper_bgcolor |-> project.appearance.uiPalette.paperColor,plot_bgcolor |-> project.appearance.uiPalette.paperColor,
+    font |-> font,margin |-> DeepCopy(RENDER_DEFAULTS.margin)];
+  if Len(family) > 0 then
+    known.title.font.family := family; known.legend.font.family := family; known.font.family := family;
+  end if;
+Axes:
+  while i <= Len(AXIS_KEYS) do
+    key := AXIS_KEYS[i];
+    call PlotlyAxis(settings.axes[key],settings.showZeroLine); axis := result;
+    if key = "xBottom" then plotlyKey := "xaxis";
+    elsif key = "xTop" then plotlyKey := "xaxis2"; axis.overlaying := "x"; axis.side := "top";
+    elsif key = "yLeft" then plotlyKey := "yaxis";
+    else plotlyKey := "yaxis2"; axis.overlaying := "y"; axis.side := "right"; end if;
+    known[plotlyKey] := axis;
+    i := i + 1;
+  end while;
+ExtensionThenKnown:
+  extension := RecordCopyOrEmpty(NestedFieldOrMissing(chart.editor,<<"plotlyExtensions","layout">>));
+  merged := MergeRecords(extension,known);
+  merged.title := MergeRecords(RecordOrEmpty(FieldOrMissing(extension,"title")),known.title);
+  merged.legend := MergeRecords(RecordOrEmpty(FieldOrMissing(extension,"legend")),known.legend);
+  merged.font := MergeRecords(RecordOrEmpty(FieldOrMissing(extension,"font")),known.font);
+  merged.margin := MergeRecords(RecordOrEmpty(FieldOrMissing(extension,"margin")),known.margin);
+  merged.title.font := MergeRecords(RecordOrEmpty(NestedFieldOrMissing(extension,<<"title","font">>)),known.title.font);
+  merged.legend.font := MergeRecords(RecordOrEmpty(NestedFieldOrMissing(extension,<<"legend","font">>)),known.legend.font);
+RemoveOwnedOmissionsNotUnknownFields:
+  i := 1;
+  while i <= 4 do
+    plotlyKey := <<"xaxis","xaxis2","yaxis","yaxis2">>[i];
+    merged[plotlyKey] := MergeRecords(RecordOrEmpty(FieldOrMissing(extension,plotlyKey)),known[plotlyKey]);
+    j := 1;
+    while j <= Len(ownedOptional) do
+      if ~HasField(known[plotlyKey],ownedOptional[j]) then RemoveField(merged[plotlyKey],ownedOptional[j]); end if;
+      j := j + 1;
+    end while;
+    i := i + 1;
+  end while;
+LayoutReturn:
+  \* Missing optional family intentionally retains extension family. No config/frames overwrite.
+  result := merged;
+  return;
+end procedure;
+
+procedure validateChartModel(chart, csvCollection)
+variables i = 1, object = NoValue, table = <<>>, columns = <<>>, csv = NoValue;
+begin
+ChartAndRepresentationShape:
+  Require(EditorGraphRecordShape(chart));
+  if HasField(chart,"id") then Require(IsPositiveInteger(chart.id)); end if;
+  \* FFSX graph settings carry no Project identity. Do not fabricate an id just
+  \* to validate the serialized shape; whole Project validation separately
+  \* requires every registered chart id to exist, be positive and be unique.
+  Require(IsBoolean(chart.editor.editable) /\ IsSequence(chart.editor.objects));
+  if ConversionRepresentation(chart) then
+    table := chart.editor.conversionRows;
+    Require(IsTableIncludingEmpty(table));
+    call columnDefinitions(table,ConversionTableHeaderLines(chart)); columns := result;
+  end if;
+ObjectsMayBeZero:
+  while i <= Len(chart.editor.objects) do
+    object := chart.editor.objects[i];
+    if ConversionRepresentation(chart) then
+      Require(ValidColumn(object.x,columns) /\ ValidColumn(object.y,columns));
+    else
+      csv := ResolveCsvInCollection(csvCollection,object.csvId);
+      Require(csv # NoValue);
+      call columnDefinitions(csv.rows,csv.headerLines); columns := result;
+      Require(ValidColumn(object.x,columns) /\ ValidColumn(object.y,columns));
+    end if;
+    Require(object.type \in {"scatter","markers","lines+markers","bar","hidden"});
+    Require(object.xAxisSide \in {"bottom","top"} /\ object.yAxisSide \in {"left","right"});
+    Require(object.lineDash \in {"solid","dot","dash","dashdot"});
+    Require(object.markerSymbol \in {"circle","square","diamond","cross","x","triangle-up","triangle-down"});
+    Require(FiniteInRange(object.lineWidth,STYLE_LIMITS.lineWidth) /\ FiniteInRange(object.markerSize,STYLE_LIMITS.markerSize));
+    Require(FiniteInRange(object.barOpacity,STYLE_LIMITS.barOpacity) /\ FiniteInRange(object.barLineWidth,STYLE_LIMITS.barLineWidth));
+    i := i + 1;
+  end while;
+SharedStructuralValidation:
+  Require(NormalizableGlobalAndFourAxisShape(chart.editor.globalSettings));
+  Require(ValidDataLayoutConfigFramesAndImportedExtensionShape(chart.graph,chart.editor));
+  result := chart;
+  return;
+end procedure;
+
+procedure ImportAxis(plotlyAxis, key)
+variables axis = [], range = NoValue, tick = NoValue;
+begin
+AxisCorrespondence:
+  plotlyAxis := RecordOrEmpty(plotlyAxis);
+  axis := [scaleType |-> IF FieldOrMissing(plotlyAxis,"type") = "log" THEN "log" ELSE "linear",
+     divide |-> 1,min |-> Empty,max |-> Empty,tick |-> Empty,tickMode |-> "plotly",
+     title |-> TitleTextOrEmpty(FieldOrMissing(plotlyAxis,"title")),
+     titleSize |-> NestedFieldOrMissing(plotlyAxis,<<"title","font","size">>),
+     fontSize |-> NestedFieldOrMissing(plotlyAxis,<<"tickfont","size">>),
+     lineWidth |-> FieldOrMissing(plotlyAxis,"linewidth"),
+     showGrid |-> FieldOrMissing(plotlyAxis,"showgrid") # FALSE,
+     showValues |-> FieldOrMissing(plotlyAxis,"showticklabels") # FALSE,
+     visible |-> FieldOrMissing(plotlyAxis,"visible") # FALSE,
+     notation |-> EnumOr(FieldOrMissing(plotlyAxis,"exponentformat"),{"e","power"},"none"),minorTicks |-> FALSE];
+RangeInverseOfLogOnly:
+  range := FieldOrMissing(plotlyAxis,"range");
+  if IsTwoElementSequence(range) then
+    if IsFiniteNumber(range[1]) then axis.min := range[1]; end if;
+    if IsFiniteNumber(range[2]) then axis.max := range[2]; end if;
+    if axis.scaleType = "log" then
+      axis.min := FinitePower10OrEmpty(axis.min);
+      axis.max := FinitePower10OrEmpty(axis.max);
+    end if;
+  end if;
+TickAndMinor:
+  tick := FieldOrMissing(plotlyAxis,"dtick");
+  if axis.scaleType # "log" then
+    if IsLPrefixNumericTick(tick) then axis.tick := NumericTextAfterL(tick); axis.tickMode := "increment";
+    elsif IsFiniteNumber(tick) then axis.tick := tick; end if;
+  else
+    axis.minorTicks := tick = "D1" \/ NestedFieldOrMissing(plotlyAxis,<<"minor","dtick">>) = "D1"
+       \/ NestedFieldOrMissing(plotlyAxis,<<"minor","ticks">>) \in {"inside","outside"}
+       \/ NestedFieldOrMissing(plotlyAxis,<<"minor","showgrid">>) = TRUE;
+  end if;
+  call normalizeAxisSettings(axis,key);
+  return;
+end procedure;
+
+procedure parsePlotlyToEditor(figure, chartId)
+variables chart = NoValue, rows = <<>>, objects = <<>>, i = 1, trace = NoValue,
+          object = NoValue, conversion = NoValue, settings = [], axes = [], key = "", family = "";
+begin
+OriginalDetachedRepresentation:
+  Require(PlotlyFigureShape(figure));
+  chart := ChartCandidateWithoutFakeAssets(chartId);
+  chart.graph.imported := DeepCopy(FigureDataLayoutConfigFrames(figure));
+TraceColumnsInSourceOrder:
+  while i <= Len(figure.data) do
+    trace := figure.data[i];
+    \* Tabular transpose is structural: traceN_x/traceN_y -> C1..Cn, preserve point order.
+    conversion := AppendTraceXYConversionColumns(rows,trace,"trace" \o IntegerText(i));
+    rows := conversion.rows;
+    if TraceHasDataPoint(trace) then
+      object := ImportedObjectFromConfig(STYLE_DEFAULTS);
+      object.x := conversion.xColumn; object.y := conversion.yColumn;
+      object.xAxisSide := IF FieldOrMissing(trace,"xaxis") = "x2" THEN "top" ELSE "bottom";
+      object.yAxisSide := IF FieldOrMissing(trace,"yaxis") = "y2" THEN "right" ELSE "left";
+      if FieldOrMissing(trace,"visible") = FALSE then object.type := "hidden";
+      elsif FieldOrMissing(trace,"type") = "bar" then object.type := "bar";
+      else object.type := ImportedScatterModeMeaning(FieldOrMissing(trace,"mode")); end if;
+      object.color := FirstMappedLineOrMarkerColorOr(trace,DEFAULT_COLORS[((i - 1) % Len(DEFAULT_COLORS)) + 1]);
+      object := MapImportedLegendLineMarkerOpacityWithinLimits(object,trace,STYLE_LIMITS);
+      object.plotlyTrace := DeepCopy(WithoutFields(trace,{"x","y"}));
+      objects := Append(objects,object);
+    end if;
+    i := i + 1;
+  end while;
+NoDataDoesNotInventRows:
+  if Len(objects) = 0 then rows := <<>>; end if;
+ImportedGlobals:
+  chart.editor.title := TitleTextOrEmpty(FieldOrMissing(figure.layout,"title"));
+  family := FirstNonemptyTextOrEmpty(<<NestedFieldOrMissing(figure.layout,<<"title","font","family">>),
+     NestedFieldOrMissing(figure.layout,<<"font","family">>),NestedFieldOrMissing(figure.layout,<<"legend","font","family">>)>>);
+  settings := [showTitle |-> Len(chart.editor.title) > 0,showLegend |-> FieldOrMissing(figure.layout,"showlegend") # FALSE,
+    showZeroLine |-> FALSE,graphFontFamily |-> family,
+    titleFontSize |-> NestedFieldOrMissing(figure.layout,<<"title","font","size">>),
+    legendFontSize |-> NestedFieldOrMissing(figure.layout,<<"legend","font","size">>),axes |-> []];
+  i := 1;
+ImportedFourAxes:
+  while i <= 4 do
+    key := AXIS_KEYS[i];
+    call ImportAxis(FieldOrMissing(figure.layout,<<"xaxis","xaxis2","yaxis","yaxis2">>[i]),key);
+    settings.axes[key] := result;
+    i := i + 1;
+  end while;
+FinalizeConversionView:
+  call normalizeGlobalSettings(settings); chart.editor.globalSettings := result;
+  chart.editor.plotlyExtensions := DeepCopy([layout |-> figure.layout,config |-> FigureConfigOrEmpty(figure)]);
+  chart.editor.objects := objects;
+  chart.editor.conversionRows := rows;
+  chart.editor.editable := FALSE;
+  result := chart;
+  return;
+end procedure;
+
+procedure convertImportedChartToEditable(chart)
+variables source = activeProject;
+begin
+SourceConversionContextBinding:
+  call ConvertImportedChartInAttempt(source,chart);
+  return;
+end procedure;
+
+procedure ConvertImportedChartInAttempt(source, chart)
+variables candidate = DeepCopy(source), copy = DeepCopy(chart), csv = NoValue, i = 1, path = "", bytes = NoValue;
+begin
+AlreadyEditableNoDuplicateCsv:
+  if copy.editor.editable then result := candidate; return; end if;
+RepresentationBranches:
+  if HasField(copy.editor,"conversionRows") then
+    if Len(copy.editor.objects) > 0 then
+      Require(NonemptyConvertibleTable(copy.editor.conversionRows));
+      path := JoinProjectPath(BackendSettings.defaults.vfs.csv,"Plotly JSON.csv");
+      call projectVfsUniquePath(path,candidate,{}); path := result;
+      call SerializeNewDataTable(copy.editor.conversionRows,path); bytes := result;
+      call BuildAssetMetadata("csv",path,"text/csv",bytes); csv := result;
+      csv.id := candidate.nextId.csv; csv.rows := DeepCopy(copy.editor.conversionRows);
+      csv.headerLines := NormalizeHeaderCount(1,csv.rows);
+      candidate.assets.csvFiles := Append(candidate.assets.csvFiles,csv);
+      candidate.nextId.csv := csv.id + 1;
+      while i <= Len(copy.editor.objects) do
+        copy.editor.objects[i].csvId := csv.id;
+        i := i + 1;
+      end while;
+      RemoveField(copy.editor,"conversionRows");
+    end if;
+    \* Zero conversion objects -> editable empty chart WITHOUT CSV.
+  end if;
+MakeEditableUsingSameWholeCandidate:
+  copy.editor.editable := TRUE;
+  ReplaceCandidateChart(candidate,copy.id,copy);
+  call rebuildEditableGraph(copy,candidate);
+  ReplaceCandidateChart(candidate,copy.id,result);
+  \* imported original/global/axes retained; absent conversionRows preserves real CSV ids.
+  \* No precommit live-CSV lookup, partial commit or Application callback.
+  result := candidate;
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

@@ -1,0 +1,360 @@
+---- MODULE FastFigurePublicLayoutAnnotationsR38 ----
+EXTENDS Naturals, Reals, Sequences
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Every adapter tuple is unpacked internally. Public return shapes are NOT unified.
+\* read/commit/render throws propagate; success-side failure never rolls back committed Project.
+CONSTANT NoValue, DEFAULT_UI_PALETTE
+(* --algorithm PublicLayoutAnnotations
+variables result = NoValue;
+
+procedure setProjectName(value,trim)
+variables tuple = NoValue;
+begin
+BackendNamingOnly:
+  call dispatchProjectCommand("PROJECT_NAME_CHANGED",[value |-> value,trim |-> trim]); tuple := result;
+  if ~tuple[1].committed then result := NoValue; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "project.readName"]);
+  return;
+end procedure;
+
+procedure setSlotContentType(slotId,contentType)
+begin
+ExplicitIdNotSelectedSlotOrPendingMirror:
+  call dispatchProjectCommand("SLOT_TYPE_CHANGED",[slotId |-> slotId,contentType |-> contentType]);
+  result := NoValue;
+  return;
+end procedure;
+
+procedure resetSlotApi(slotId)
+begin
+OneExplicitLocalPayloadReset:
+  call dispatchProjectCommand("SLOTS_RESET",[slotIds |-> <<slotId>>]);
+  result := NoValue;
+  return;
+end procedure;
+
+procedure swapSlots(sourceSlotId,targetSlotId)
+begin
+PayloadOnlySwapAndCommonReconciliation:
+  call dispatchProjectCommand("SLOTS_SWAPPED",[sourceSlotId |-> sourceSlotId,targetSlotId |-> targetSlotId]);
+  result := result[1].committed;
+  return;
+end procedure;
+
+procedure insertEmptyImageIntoSelectedSlot()
+variables slotId = NoValue, context = NoValue, tuple = NoValue, svg = NoValue;
+begin
+CaptureSelectionScalarOnce:
+  call InterfaceStateMachine_readState(); slotId := result.selectedSlotId;
+  call dispatchProjectQuery("slot-selection-context",[slotId |-> slotId]); context := result;
+  if ~VisibleImageSlotContext(context) then result := NoValue; return; end if;
+RawTemplateIsDataNotConfig:
+  svg := [bytes |-> EncodeUtf8("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1600\" height=\"900\" viewBox=\"0 0 1600 900\"></svg>"),
+          name |-> "빈 이미지.svg",mime |-> "image/svg+xml"];
+  call dispatchProjectCommand("SLOT_IMAGE_IMPORTED",[slotId |-> slotId,operation |-> "images.insertEmpty",imageInput |-> svg]); tuple := result;
+  if ~tuple[1].committed then result := NoValue; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> ActualCreatedImagePath(tuple[1].changed)]);
+  result := result.target;
+  return;
+end procedure;
+
+procedure ApplicationApi_prepareDashboardFileDrop(slotId)
+variables context = NoValue, state = NoValue;
+begin
+ValidTargetBeforeSelection:
+  call dispatchProjectQuery("slot-selection-context",[slotId |-> slotId]); context := result;
+  if ~VisibleSlotContext(context) then result := FALSE; return; end if;
+  call InterfaceStateMachine_readState(); state := result;
+  if state.selectedSlotId = slotId then result := TRUE; return; end if;
+  call dispatchSlotSelection(slotId,NoValue,"model-to-fsm");
+  result := result[1].selectedSlotId = slotId;
+  \* No content-type command or duplicate stored target; same-id never toggles.
+  return;
+end procedure;
+
+procedure finishDashboardFileDrop()
+begin
+OnlyCurrentDragBookkeeping:
+  call finishDashboardFileDropInteraction();
+  result := NoValue;
+  return;
+end procedure;
+
+procedure readLayoutApiState(previewWidth)
+variables layout = NoValue, session = NoValue;
+begin
+BackendNormalizesPreviewOnly:
+  call dispatchProjectQuery("project-api",[operation |-> "layout.readState",renderedWidth |-> previewWidth]); layout := result;
+  call InterfaceStateMachine_readState(); session := result;
+  result := ImmutableRecordWith(layout,[zoom |-> session.dashboardZoomIntent,zoomLocked |-> session.dashboardZoomLocked]);
+  \* No saved preview or Application default copy.
+  return;
+end procedure;
+
+procedure setLayoutApiZoom(value)
+begin
+SessionOnly:
+  call dispatchInterfaceEvent("SET_DASHBOARD_ZOOM",[value |-> value]);
+  call readLayoutApiState(NoValue);
+  return;
+end procedure;
+
+procedure commitLayoutApiZoom()
+begin
+CompletionNotSecondCommit:
+  call InterfaceStateMachine_notify("layout","DASHBOARD_ZOOM_CHANGED",[]);
+  call readLayoutApiState(NoValue);
+  return;
+end procedure;
+
+procedure setLayoutApiZoomLocked(locked)
+variables session = NoValue, width = NoValue;
+begin
+ReadOnlyFirstLockMeasures:
+  call InterfaceStateMachine_readState(); session := result;
+  if locked = TRUE /\ ~session.dashboardZoomLocked then
+    call readDashboardRenderedWidth(); width := result;
+    if ~PositiveFinite(width) then result := FALSE; return; end if;
+  end if;
+  call dispatchInterfaceEvent("SET_DASHBOARD_ZOOM_LOCK",[locked |-> locked = TRUE,renderedWidth |-> width]);
+  call readLayoutApiState(NoValue);
+  return;
+end procedure;
+
+procedure resetLayoutApiZoom()
+begin
+OneResetTransition:
+  call dispatchInterfaceEvent("RESET_DASHBOARD_ZOOM",[]);
+  call readLayoutApiState(NoValue);
+  return;
+end procedure;
+
+procedure setLayoutApiStyle(values)
+variables tuple = NoValue;
+begin
+CurrentStyleCandidateOwnedByCommand:
+  call dispatchProjectCommand("LAYOUT_STYLE_CHANGED",values); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call readLayoutApiState(NoValue);
+  return;
+end procedure;
+
+procedure setLayoutApiGrid(rows,cols)
+variables tuple = NoValue;
+begin
+ResizeCandidateRejectsNonDefaultLoss:
+  call dispatchProjectCommand("GRID_LAYOUT_CHANGED",[rows |-> rows,cols |-> cols]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call readLayoutApiState(NoValue);
+  return;
+end procedure;
+
+procedure mergeSlots(slotIds)
+variables tuple = NoValue;
+begin
+BackendRectangleAndSingleNonDefaultPayloadValidation:
+  call dispatchProjectCommand("SLOTS_MERGED",[slotIds |-> slotIds]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call readLayoutApiState(NoValue);
+  return;
+end procedure;
+
+procedure splitSlots(slotIds)
+variables tuple = NoValue;
+begin
+PreserveAnchorPayloadRestoreCoveredDefaults:
+  call dispatchProjectCommand("SLOTS_SPLIT",[slotIds |-> slotIds]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call readLayoutApiState(NoValue);
+  return;
+end procedure;
+
+procedure applyImageSettingsFromValues(slotId,values)
+variables editor = NoValue, tuple = NoValue;
+begin
+ReadOnlyEligibilityNotCandidateSource:
+  call dispatchProjectQuery("project-api",[operation |-> "images.readEditor",slotId |-> slotId]); editor := result;
+  if editor = NoValue then result := FALSE; return; end if;
+  call dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED",[slotId |-> slotId,settings |-> values]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "images.readEditor",slotId |-> slotId]);
+  return;
+end procedure;
+
+procedure ApplicationApi_readLabelsApiState()
+variables slotId = NoValue;
+begin
+FreshSelectionScalarNotGeometryMirror:
+  call InterfaceStateMachine_readState(); slotId := result.selectedSlotId;
+  call dispatchProjectQuery("project-api",[operation |-> "labels.readState",slotId |-> slotId]);
+  return;
+end procedure;
+
+procedure setLabelsApiEnabled(enabled)
+variables tuple = NoValue;
+begin
+PartialEnabledEdit:
+  call dispatchProjectCommand("LABEL_SETTINGS_CHANGED",[enabled |-> enabled]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call ApplicationApi_readLabelsApiState();
+  return;
+end procedure;
+
+procedure setLabelsApiSettings(values)
+variables tuple = NoValue;
+begin
+PartialSettingsNotCurrentProjection:
+  call dispatchProjectCommand("LABEL_SETTINGS_CHANGED",[settings |-> values]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call ApplicationApi_readLabelsApiState();
+  return;
+end procedure;
+
+procedure setLabelsApiPosition(x,y)
+variables tuple = NoValue;
+begin
+DragUsesSamePersistentPositionCommand:
+  call dispatchProjectCommand("LABEL_POSITION_CHANGED",[x |-> x,y |-> y]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call ApplicationApi_readLabelsApiState();
+  return;
+end procedure;
+
+procedure resetLabelsApiPosition()
+variables tuple = NoValue;
+begin
+BackendReadsSoleConfigDefaults:
+  call dispatchProjectCommand("LABEL_POSITION_CHANGED",[reset |-> TRUE]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call ApplicationApi_readLabelsApiState();
+  return;
+end procedure;
+
+procedure finishLabelsApiPositionInteraction()
+begin
+CompletionNotPositionCommit:
+  DeliverExistingLabelPositionInteractionCompletion();
+  call ApplicationApi_readLabelsApiState();
+  return;
+end procedure;
+
+procedure setGlobalCaptionText(text)
+variables tuple = NoValue;
+begin
+ExplicitGlobalOwner:
+  call dispatchProjectCommand("CAPTION_TEXT_INPUT",[target |-> [kind |-> "global"],text |-> text]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]);
+  return;
+end procedure;
+
+procedure setSlotCaptionText(slotId,text)
+variables tuple = NoValue;
+begin
+ExplicitSlotOwner:
+  call dispatchProjectCommand("CAPTION_TEXT_INPUT",[target |-> [kind |-> "slot",id |-> slotId],text |-> text]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "captions.readSlot",slotId |-> slotId]);
+  return;
+end procedure;
+
+procedure insertSlotCaptionsIntoGlobalCaption(slotIds)
+variables tuple = NoValue;
+begin
+NoneAllEmptyListNoTargetsBackendCalculatesExactString:
+  call dispatchProjectCommand("SLOT_CAPTIONS_INSERTED",[slotIds |-> slotIds]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]);
+  return;
+end procedure;
+
+procedure setCaptionsApiEnabled(enabled)
+variables tuple = NoValue;
+begin
+OnlyEnabled:
+  call dispatchProjectCommand("CAPTION_SETTINGS_CHANGED",[enabled |-> enabled]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]);
+  return;
+end procedure;
+
+procedure setCaptionsApiName(name)
+variables tuple = NoValue;
+begin
+OnlyName:
+  call dispatchProjectCommand("CAPTION_SETTINGS_CHANGED",[name |-> name]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]);
+  return;
+end procedure;
+
+procedure setCaptionsApiNameBold(nameBold)
+variables tuple = NoValue;
+begin
+OnlyNameBold:
+  call dispatchProjectCommand("CAPTION_SETTINGS_CHANGED",[nameBold |-> nameBold]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]);
+  return;
+end procedure;
+
+procedure setCaptionsApiSettings(values)
+variables tuple = NoValue;
+begin
+OnlyNewFormattingSettings:
+  call dispatchProjectCommand("CAPTION_SETTINGS_CHANGED",[settings |-> values]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]);
+  return;
+end procedure;
+
+procedure setAppearanceApiPalette(values)
+variables tuple = NoValue;
+begin
+WholePaletteMissingDefaultsNotCurrentMerge:
+  call dispatchProjectCommand("APPEARANCE_CHANGED",[palette |-> values]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "appearance.readPalette"]);
+  return;
+end procedure;
+
+procedure resetAppearanceApiPalette()
+begin
+SameWholePaletteCommand:
+  call setAppearanceApiPalette(DeepCopy(DEFAULT_UI_PALETTE));
+  return;
+end procedure;
+
+procedure setExportSettings(values)
+variables tuple = NoValue;
+begin
+BackendCurrentPartialSettingsAndAutoHeight:
+  call dispatchProjectCommand("EXPORT_SETTINGS_CHANGED",[settings |-> values]); tuple := result;
+  if ~tuple[1].committed then result := FALSE; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "print.readSettings"]);
+  return;
+end procedure;
+
+procedure exportDashboardTarget(statusSink)
+variables snapshot = NoValue;
+begin
+OneTaskSnapshotToFrontend:
+  call dispatchProjectQuery("export",[operation |-> "print.save"]); snapshot := result;
+  call renderDashboardTarget(snapshot,statusSink);
+  return;
+end procedure;
+
+procedure captureDashboardCurrent(statusSink)
+variables snapshot = NoValue;
+begin
+CurrentSurfaceSnapshotNoPersistentTargetEdit:
+  call dispatchProjectQuery("export",[operation |-> "print.capture"]); snapshot := result;
+  call renderDashboardCurrent(snapshot,statusSink);
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

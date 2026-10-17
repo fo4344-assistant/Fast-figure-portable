@@ -1,0 +1,124 @@
+---- MODULE FastFigurePublicGraphsR38 ----
+EXTENDS Naturals, Sequences
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Calls adapter's existing procedures; result is a call-local return channel.
+\* Public lifecycle binding wraps import/export ONCE outside these nested helpers.
+CONSTANT NoValue
+(* --algorithm PublicGraphs
+variables result = NoValue;
+
+procedure graphEditorAdd(slotId,csvId)
+variables slot = NoValue, event = "", tuple = NoValue;
+begin
+ReadForRoutingNotCandidate:
+  call dispatchProjectQuery("project-api",[operation |-> "slots.readSelected",frontendState |-> [selectedSlotId |-> slotId]]); slot := result;
+  event := IF HasOwningChart(slot) THEN "GRAPH_OBJECTS_REPLACED" ELSE "SLOT_DATA_CONNECTED";
+  call dispatchProjectCommand(event,[slotId |-> slotId,csvId |-> csvId,operation |-> "graphs.addObject"]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",frontendState |-> [selectedSlotId |-> slotId]]);
+  result := result.chart;
+  return;
+end procedure;
+
+procedure graphEditorObjectValues(chartId,index,values)
+variables tuple = NoValue;
+begin
+NewValuesNotObjectsProjection:
+  call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.setObjectValues",index |-> index,values |-> values]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
+  return;
+end procedure;
+
+procedure graphEditorMove(chartId,fromIndex,toIndex)
+variables context = NoValue, tuple = NoValue;
+begin
+OnlyValidEqualIndexIsNoOp:
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); context := result;
+  if fromIndex = toIndex then
+    if EditableChartAndValidIntegerObjectIndex(context,fromIndex) then result := context.chart; return; end if;
+  end if;
+  call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.moveObject",from |-> fromIndex,to |-> toIndex]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
+  return;
+end procedure;
+
+procedure graphEditorDelete(chartId,index)
+variables tuple = NoValue;
+begin
+BackendCalculatesRemovalAndExplicitNoneHint:
+  call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.deleteObject",index |-> index]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
+  \* Last deletion returns empty chart, not a fabricated default object.
+  return;
+end procedure;
+
+procedure graphEditorSetEditable(slotId,chartId,editable)
+variables tuple = NoValue;
+begin
+CsvAndChartShareOneCommand:
+  call dispatchProjectCommand("CHART_MODEL_REPLACED",[slotId |-> slotId,chartId |-> chartId,editable |-> editable]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart.editor.editable;
+  return;
+end procedure;
+
+procedure graphEditorSetHeaderLines(csvId,headerLines)
+variables tuple = NoValue, mutation = NoValue;
+begin
+ScalarEditPreservesCsvIdentityBytesAndRows:
+  call dispatchProjectCommand("DATA_OBJECT_REPLACED",[csvId |-> csvId,headerLines |-> headerLines]); tuple := result; mutation := tuple[1];
+  if ~mutation.committed then result := mutation; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> ActualUpdatedCsvPath(mutation.changed)]);
+  result := result.target.headerLines;
+  return;
+end procedure;
+
+procedure graphEditorUpdateLayout(slotId,chartId,values)
+variables tuple = NoValue;
+begin
+OnlyNewSettings:
+  call dispatchProjectCommand("CHART_LAYOUT_CHANGED",[slotId |-> slotId,chartId |-> chartId,settings |-> values]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readLayout",selectedSlotId |-> slotId]);
+  return;
+end procedure;
+
+procedure graphEditorApplyPalette(chartId,colors)
+variables tuple = NoValue;
+begin
+ColorOnlyCandidateInBackend:
+  call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.applyPalette",colors |-> colors]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
+  return;
+end procedure;
+
+procedure importSelectedGraphFile(slotId,file)
+variables tuple = NoValue;
+begin
+NoApplicationParseOrCandidate:
+  call dispatchProjectCommand("SLOT_CHART_IMPORTED",[slotId |-> slotId,file |-> file]); tuple := result;
+  if ~tuple[1].committed then result := tuple[1]; return; end if;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",frontendState |-> [selectedSlotId |-> slotId]]); result := result.chart;
+  return;
+end procedure;
+
+procedure exportSelectedGraph(slotId,operation)
+variables payload = NoValue;
+begin
+SemanticFigureOrSlotPackageQuery:
+  call dispatchProjectQuery("export",[operation |-> operation,slotId |-> slotId,stamp |-> CurrentUtcIsoTimestamp()]); payload := result;
+  if payload = NoValue then result := NoValue; return; end if;
+  call downloadExportPayload(payload);
+  \* downloadExportPayload side-effect return remains None, not disk confirmation.
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

@@ -1,0 +1,212 @@
+---- MODULE FastFigureFrontendInterfaceFSMR38 ----
+EXTENDS Naturals, Reals, Sequences
+
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Only this module owns selectedSlotId/interfaceState. No Backend import/call.
+\* SourceInterfaceState/SourceSelectedSlotId denote the Source's existing runtime
+\* initialization, not nondeterministic domain states invented for verification.
+\* Explicit Source initial zoom=100, locked=FALSE, lockedWidth=NoValue.
+\* Qualified method names are mechanically flattened with '_' for call notation.
+\* Source singleton interfaceFSM_* calls bind to InterfaceStateMachine_* below.
+\* Local payload.overlay denotes the named overlay intent; it does not add a
+\* persistent field or prescribe a target-language transport object layout.
+\* result is a call return channel; publishRuntime is local subscriber plumbing.
+CONSTANT NoValue, SourceInterfaceState, SourceSelectedSlotId
+INTERFACE_REGION_ORDER == <<"lifecycle", "workspace", "overlay", "assetSelection", "graphObject">>
+INTERFACE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "CLEAR_ASSET_SELECTION",
+  "SELECT_GRAPH_OBJECT", "CLEAR_GRAPH_OBJECT", "TOGGLE_OVERLAY", "CLOSE_OVERLAY",
+  "OUTSIDE_CLICK", "ESCAPE", "SET_DASHBOARD_ZOOM", "SET_DASHBOARD_ZOOM_LOCK",
+  "RESET_DASHBOARD_ZOOM", "LIFECYCLE_START", "LIFECYCLE_COMPLETE", "LIFECYCLE_FAILED"}
+
+(* --algorithm FrontendInterfaceFSM
+variables selectedSlotId = SourceSelectedSlotId,
+          interfaceState = SourceInterfaceState,
+          result = NoValue;
+
+procedure InterfaceStateMachine_readState()
+begin
+ImmutableRuntimeProjection:
+  result := ImmutableCopy(ExtendRecord(interfaceState, [selectedSlotId |-> selectedSlotId]));
+  return;
+end procedure;
+
+procedure publishRuntime()
+begin
+PublishFrontendRevisionOnly:
+  interfaceState.revision := interfaceState.revision + 1;
+  call InterfaceStateMachine_readState();
+  PublishToFrontendSubscribers(result);
+  return;
+end procedure;
+
+procedure InterfaceStateMachine_send(event, validatedInput)
+variables payload = NoValue, value = 100, reference = NoValue;
+begin
+RejectWithoutPublishing:
+  if ~validatedInput.accepted then
+    call InterfaceStateMachine_readState();
+    return;
+  end if;
+DispatchFrontendRegionOnly:
+  \* Precondition of accepted dispatch: one of the Source-declared events.
+  assert event \in INTERFACE_EVENTS;
+  if event = "SELECT_SLOT" then goto SlotSelection;
+  elsif event = "SELECT_ASSET" then goto AssetSelection;
+  elsif event = "SELECT_GRAPH_OBJECT" then goto ObjectSelection;
+  elsif event = "CLEAR_ASSET_SELECTION" then
+    interfaceState.assetSelection := NoValue;
+    interfaceState.assetPath := NoValue;
+    goto PublishAndReturn;
+  elsif event = "CLEAR_GRAPH_OBJECT" then
+    interfaceState.graphObject := NoValue;
+    interfaceState.graphObjectIndex := NoValue;
+    goto PublishAndReturn;
+  else
+    payload := validatedInput.payload;
+    goto LocalRuntimeEvent;
+  end if;
+SlotSelection:
+  reference := validatedInput.reference;
+  if reference = NoValue then
+    selectedSlotId := NoValue;
+  elsif validatedInput.selectionHint = "toggle-clear" /\ reference = selectedSlotId then
+    selectedSlotId := NoValue;
+  else
+    selectedSlotId := reference;
+  end if;
+  if selectedSlotId = NoValue then
+    interfaceState.workspace := "project";
+  else
+    interfaceState.workspace := validatedInput.workspaceHint;
+  end if;
+  interfaceState.graphObject := NoValue;
+  interfaceState.graphObjectIndex := NoValue;
+  if selectedSlotId = NoValue \/ validatedInput.selectionHint = "toggle-clear" then
+    interfaceState.assetSelection := NoValue;
+    interfaceState.assetPath := NoValue;
+  end if;
+  \* Non-null model-to-fsm clear-graph-object retains independent asset selection.
+  if selectedSlotId # NoValue then interfaceState.overlay := NoValue; end if;
+  goto PublishAndReturn;
+AssetSelection:
+  interfaceState.assetSelection := validatedInput.selectionHint;
+  interfaceState.assetPath := validatedInput.reference;
+  interfaceState.graphObject := NoValue;
+  interfaceState.graphObjectIndex := NoValue;
+  \* selectedSlotId/workspace remain unchanged.
+  goto PublishAndReturn;
+ObjectSelection:
+  reference := validatedInput.reference;
+  if reference = NoValue then
+    interfaceState.graphObject := NoValue;
+    interfaceState.graphObjectIndex := NoValue;
+  else
+    interfaceState.graphObject := "selected";
+    interfaceState.graphObjectIndex := reference;
+    if validatedInput.selectionHint # NoValue then
+      interfaceState.assetSelection := "csv";
+      interfaceState.assetPath := validatedInput.selectionHint;
+    end if;
+  end if;
+  goto PublishAndReturn;
+LocalRuntimeEvent:
+  if event = "TOGGLE_OVERLAY" then
+    if interfaceState.overlay = payload.overlay then interfaceState.overlay := NoValue;
+    else interfaceState.overlay := payload.overlay; end if;
+    goto PublishAndReturn;
+  elsif event \in {"CLOSE_OVERLAY", "OUTSIDE_CLICK", "ESCAPE"} then
+    interfaceState.overlay := NoValue;
+    goto PublishAndReturn;
+  elsif event = "SET_DASHBOARD_ZOOM" then goto ZoomIntent;
+  elsif event = "SET_DASHBOARD_ZOOM_LOCK" then goto ZoomLock;
+  elsif event = "RESET_DASHBOARD_ZOOM" then goto ZoomReset;
+  elsif event = "LIFECYCLE_START" then
+    interfaceState.lifecycle := payload.lifecycle;
+    interfaceState.error := NoValue;
+    goto PublishAndReturn;
+  elsif event = "LIFECYCLE_COMPLETE" then
+    interfaceState.lifecycle := "ready";
+    interfaceState.error := NoValue;
+    \* outcome does not become a project commit result.
+    goto PublishAndReturn;
+  elsif event = "LIFECYCLE_FAILED" then
+    interfaceState.lifecycle := "error";
+    interfaceState.error := [event |-> payload.event, message |-> payload.message];
+    call publishRuntime();
+    interfaceState.lifecycle := "ready";
+    \* Retain error projection until next START/COMPLETE, publish recovery now.
+    goto PublishAndReturn;
+  end if;
+  \* All declared events are exhausted above. No unknown-event result is invented.
+  assert FALSE;
+ZoomIntent:
+  if interfaceState.dashboardZoomLocked then
+    call InterfaceStateMachine_readState();
+    return;
+  end if;
+  if IsFiniteNumericInput(payload.value) then value := Clamp(NumericValue(payload.value), 50, 200);
+  else value := 100; end if;
+  if value = interfaceState.dashboardZoomIntent then
+    call InterfaceStateMachine_readState();
+    return;
+  end if;
+  interfaceState.dashboardZoomIntent := value;
+  goto PublishAndReturn;
+ZoomLock:
+  if payload.locked = TRUE then
+    if interfaceState.dashboardZoomLocked then
+      call InterfaceStateMachine_readState();
+      return;
+    end if;
+    if ~IsFinitePositiveScalar(payload.renderedWidth) then
+      call InterfaceStateMachine_readState();
+      return;
+    end if;
+    interfaceState.dashboardZoomLocked := TRUE;
+    interfaceState.dashboardZoomLockedWidth := payload.renderedWidth;
+    goto PublishAndReturn;
+  end if;
+ZoomReset:
+  if ~interfaceState.dashboardZoomLocked /\ interfaceState.dashboardZoomLockedWidth = NoValue
+     /\ interfaceState.dashboardZoomIntent = 100 then
+    call InterfaceStateMachine_readState();
+    return;
+  end if;
+  interfaceState.dashboardZoomLocked := FALSE;
+  interfaceState.dashboardZoomLockedWidth := NoValue;
+  interfaceState.dashboardZoomIntent := 100;
+PublishAndReturn:
+  call publishRuntime();
+  return;
+end procedure;
+
+procedure InterfaceStateMachine_reconcileProjectResult(event, reconciliationInput)
+begin
+ApplyOnlyBackendValidatedScalars:
+  selectedSlotId := reconciliationInput.selectedSlot;
+  interfaceState.assetPath := reconciliationInput.assetSelection;
+  interfaceState.assetSelection := reconciliationInput.assetKind;
+  interfaceState.graphObjectIndex := reconciliationInput.graphObject;
+  if reconciliationInput.graphObject = NoValue then interfaceState.graphObject := NoValue;
+  else interfaceState.graphObject := "selected"; end if;
+  interfaceState.workspace := reconciliationInput.workspaceHint;
+PublishReconciledRuntime:
+  \* Backend already resolved reset/hint/map priorities. Do not store hints,
+  \* resend SELECT_GRAPH_OBJECT, re-query a chart or change Project here.
+  call publishRuntime();
+  return;
+end procedure;
+
+procedure InterfaceStateMachine_notify(objectName, event, payload)
+begin
+ProjectionRevisionOnly:
+  call publishRuntime();
+  \* No persistent write, secondary data authority or Backend callback.
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

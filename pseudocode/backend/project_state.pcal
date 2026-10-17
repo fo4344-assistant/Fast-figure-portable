@@ -1,0 +1,746 @@
+---- MODULE FastFigureBackendProjectStateR38 ----
+EXTENDS Naturals, Integers, Sequences
+
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Source: sourcescript/backend/project_state.py r38.
+\* Source entries include queries, registry, creation/validation, reference helpers.
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* activeProject is the Source Backend binding, not an additional state variable.
+\* Immutable/copy helpers and absent-field tests are notation-level primitives.
+\* 0-based Source indices become sequence subscripts index+1, including delta maps.
+CONSTANT NoValue, BackendSettings
+PROJECT_OBJECT_PATHS == [project |-> <<"meta">>,layout |-> <<"layout">>,
+  labels |-> <<"annotations","labels">>,captions |-> <<"annotations","captions">>,
+  data |-> <<"assets","csvFiles">>,images |-> <<"assets","images">>,
+  files |-> <<"fileSystem","directories">>,charts |-> <<"charts">>,slots |-> <<"slots">>,
+  sequences |-> <<"nextId">>,appearance |-> <<"appearance">>,export |-> <<"export">>]
+PUBLIC_BACKEND_READ_OPERATIONS == {"project.readName","slots.readSelected","images.readEditor",
+  "print.readSettings","appearance.readPalette","graphs.readData","graphs.readLayout",
+  "graphs.readPalette","graphs.hasSelectedSlot","graphs.defaultColors","captions.readGlobal",
+  "captions.readSlot","labels.readState","layout.readState","assets.readTree","assets.readTrash",
+  "assets.isTrashed","assets.movable","assets.draggableAsset","assets.readDeletionTarget",
+  "assets.moveOptions","assets.planMove","assets.resolveTreeSelection","assets.fileKind",
+  "assets.collisionModel","assets.resolveImportPlan"}
+SequenceSet(seq) == {seq[i] : i \in 1..Len(seq)}
+VisibleSlot(project, id) ==
+  IF \E s \in SequenceSet(project.slots): s.id = id /\ ~s.hidden
+  THEN CHOOSE s \in SequenceSet(project.slots): s.id = id /\ ~s.hidden
+  ELSE NoValue
+ChartById(project, id) ==
+  IF \E c \in SequenceSet(project.charts): c.id = id
+  THEN CHOOSE c \in SequenceSet(project.charts): c.id = id ELSE NoValue
+CsvById(project, id) ==
+  IF \E c \in SequenceSet(project.assets.csvFiles): c.id = id
+  THEN CHOOSE c \in SequenceSet(project.assets.csvFiles): c.id = id ELSE NoValue
+Workspace(slot) == IF slot = NoValue THEN "project"
+                   ELSE IF slot.content.contentType = "image" THEN "slot.image" ELSE "slot.graph"
+ValidIndex(index, objects) ==
+  IF IsInteger(index) THEN index >= 0 /\ index < Len(objects) ELSE FALSE
+\* No implicit normalization/ensureGraphObjects is permitted in these reads.
+
+(* --algorithm BackendReferenceQueries
+variables result = NoValue;
+
+procedure validateFrontendIntent(event, payload)
+variables reference = NoValue, workspaceHint = NoValue, selectionHint = NoValue,
+          slot = NoValue, chart = NoValue, csv = NoValue, object = NoValue,
+          target = NoValue, accepted = FALSE;
+begin
+DeclaredReferenceEventsOnly:
+  if event = "SELECT_SLOT" then goto ValidateSlot;
+  elsif event = "SELECT_ASSET" then goto ValidateAsset;
+  elsif event = "SELECT_GRAPH_OBJECT" then goto ValidateGraphObject;
+  else goto ReturnValidatedInput;
+  end if;
+ValidateSlot:
+  if ~HasField(payload, "slotId") then goto ReturnValidatedInput; end if;
+  if payload.slotId = NoValue then
+    accepted := TRUE;
+    workspaceHint := "project";
+    selectionHint := "toggle-clear";
+    goto ReturnValidatedInput;
+  end if;
+  slot := VisibleSlot(activeProject, payload.slotId);
+  if slot = NoValue then goto ReturnValidatedInput; end if;
+  reference := slot.id;
+  accepted := TRUE;
+  workspaceHint := Workspace(slot);
+  if FieldOrNoValue(payload, "direction") = "model-to-fsm" then
+    selectionHint := "clear-graph-object";
+  else
+    selectionHint := "toggle-clear";
+  end if;
+  goto ReturnValidatedInput;
+ValidateAsset:
+  if ~HasField(payload, "path") then goto ReturnValidatedInput; end if;
+  if payload.path = NoValue then accepted := TRUE; goto ReturnValidatedInput; end if;
+  call projectVfsResolve(payload.path, activeProject);
+  target := result;
+  if target = NoValue then goto ReturnValidatedInput; end if;
+  if target.kind \notin {"csv", "image", "directory"} then goto ReturnValidatedInput; end if;
+  if target.kind # FieldOrNoValue(payload, "kind") then goto ReturnValidatedInput; end if;
+  accepted := TRUE;
+  reference := target.canonicalPath;
+  selectionHint := target.kind;
+  goto ReturnValidatedInput;
+ValidateGraphObject:
+  if ~HasField(payload, "index") then goto ReturnValidatedInput; end if;
+  if payload.index = NoValue then accepted := TRUE; goto ReturnValidatedInput; end if;
+  slot := VisibleSlot(activeProject, FieldOrNoValue(payload, "selectedSlotId"));
+  if slot = NoValue then goto ReturnValidatedInput; end if;
+  if slot.content.contentType # "graph" then goto ReturnValidatedInput; end if;
+  chart := ChartById(activeProject, slot.content.chart);
+  if chart = NoValue then goto ReturnValidatedInput; end if;
+  if chart.editor.editable = FALSE then goto ReturnValidatedInput; end if;
+  if ~ValidIndex(payload.index, chart.editor.objects) then goto ReturnValidatedInput; end if;
+  object := chart.editor.objects[payload.index + 1];
+  csv := CsvById(activeProject, object.csvId);
+  if csv = NoValue then goto ReturnValidatedInput; end if;
+  accepted := TRUE;
+  reference := payload.index;
+  \* Missing/False selectAsset never changes independent current CSV selection.
+  if HasField(payload, "selectAsset") then
+    if payload.selectAsset = TRUE then
+      call projectAssetPath(csv);
+      selectionHint := result;
+    end if;
+  end if;
+ReturnValidatedInput:
+  result := ImmutableCopy([event |-> event, accepted |-> accepted,
+      reference |-> reference, workspaceHint |-> workspaceHint, selectionHint |-> selectionHint]);
+  \* Invalid identity is rejected, not silently rewritten to accepted none.
+  return;
+end procedure;
+
+procedure buildFrontendReconciliationInput(event, mutationResult, frontendReferences)
+variables hints = mutationResult.selectionHints,
+          slotId = frontendReferences.selectedSlotId,
+          assetPath = frontendReferences.assetPath,
+          oldIndex = frontendReferences.graphObjectIndex,
+          candidateIndex = NoValue, slot = NoValue, chart = NoValue,
+          target = NoValue, assetKind = NoValue,
+          matchedMap = NoValue, i = 1;
+begin
+SuccessfulCommitOnly:
+  assert mutationResult.committed;
+ResetOrTransformReferences:
+  if HintTrue(hints, "resetInterfaceSelection") then
+    slotId := NoValue;
+    assetPath := NoValue;
+    oldIndex := NoValue;
+  else
+    if HasField(hints, "swapSlotIds") then
+      if slotId = hints.swapSlotIds[1] then slotId := hints.swapSlotIds[2];
+      elsif slotId = hints.swapSlotIds[2] then slotId := hints.swapSlotIds[1]; end if;
+    end if;
+    if HasField(hints, "mergeSlotIds") then
+      if slotId \in SequenceSet(hints.mergeSlotIds) then slotId := hints.anchorId; end if;
+    end if;
+    if HasField(hints, "movedPathFrom") then
+      if assetPath # NoValue then
+        if IsSamePathOrDescendant(assetPath, hints.movedPathFrom) then
+          assetPath := hints.movedPathTo \o RelativeSubtreeSuffix(assetPath, hints.movedPathFrom);
+        end if;
+      end if;
+    end if;
+  end if;
+ResolveCurrentSlot:
+  slot := VisibleSlot(activeProject, slotId);
+  if slot = NoValue then slotId := NoValue; else slotId := slot.id; end if;
+ResolveCurrentAsset:
+  if assetPath # NoValue then
+    call projectVfsResolve(assetPath, activeProject);
+    target := result;
+  end if;
+  if HintTrue(hints, "clearAssetSelection") \/ target = NoValue then
+    assetPath := NoValue;
+  else
+    if HintTrue(hints, "enteringTrash") /\ IsInCurrentTrashSubtree(target, activeProject) then
+      assetPath := NoValue;
+    else
+      assetPath := target.canonicalPath;
+      assetKind := target.kind;
+    end if;
+  end if;
+HighestPriorityGraphClear:
+  if HintTrue(hints, "resetInterfaceSelection") \/ HintTrue(hints, "clearGraphSelection") then
+    goto ReturnReconciliation;
+  end if;
+ResolvePostCommitGraphContext:
+  if slot = NoValue then goto ReturnReconciliation; end if;
+  if slot.content.contentType # "graph" then goto ReturnReconciliation; end if;
+  chart := ChartById(activeProject, slot.content.chart);
+  if chart = NoValue then goto ReturnReconciliation; end if;
+  if chart.editor.editable = FALSE then goto ReturnReconciliation; end if;
+MatchingExplicitHintFirst:
+  if HasField(hints, "selectedIndexHint") /\ HasField(hints, "chartId") then
+    if hints.chartId = chart.id then
+      candidateIndex := hints.selectedIndexHint;
+      goto ValidatePostIndex;
+    end if;
+  end if;
+FindOnlyThisChartsCascadeMap:
+  if HasField(hints, "graphObjectIndexMaps") then
+    while i <= Len(hints.graphObjectIndexMaps) do
+      if hints.graphObjectIndexMaps[i].chartId = chart.id then
+        matchedMap := hints.graphObjectIndexMaps[i];
+      end if;
+      i := i + 1;
+    end while;
+  end if;
+ApplyMapOrPreserveOldIndex:
+  if matchedMap # NoValue then
+    if ValidIndex(oldIndex, matchedMap.indices) then
+      candidateIndex := matchedMap.indices[oldIndex + 1];
+    else
+      candidateIndex := NoValue;
+    end if;
+  else
+    candidateIndex := oldIndex;
+  end if;
+ValidatePostIndex:
+  if ~ValidIndex(candidateIndex, chart.editor.objects) then candidateIndex := NoValue; end if;
+ReturnReconciliation:
+  result := ImmutableCopy([event |-> event, selectedSlot |-> slotId,
+       assetSelection |-> assetPath, assetKind |-> assetKind,
+       graphObject |-> candidateIndex, workspaceHint |-> Workspace(slot),
+       projectionEffect |-> mutationResult.projectionEffect]);
+  \* No selected object -> CSV substitution, follow-up selection event, mutation,
+  \* live normalization, object snapshot, callback, or DOM/Frontend write.
+  return;
+end procedure;
+
+procedure normalizeSlotContent(slot)
+variables local = DeepCopy(slot), content = [],
+          fields = <<"chart","imageId","contentType","imageSettings">>,
+          names = <<>>, i = 1, key = "", caption = NoValue;
+begin
+CanonicalSourcePathsAndLegacyStorageOnly:
+  if HasField(slot,"content") then
+    Require(IsRecord(slot.content)); content := DeepCopy(slot.content);
+  end if;
+  while i <= Len(fields) do
+    key := fields[i];
+    if ~HasField(content,key) then
+      if HasField(slot,key) then
+        content[key] := DeepCopy(slot[key]);
+      elsif HasField(BackendSettings.defaults.slotSettings.content,key) then
+        content[key] := DeepCopy(BackendSettings.defaults.slotSettings.content[key]);
+      else
+        content[key] := NoValue;
+      end if;
+    end if;
+    \* Current Source content.<key> owns the value. Flat storage is legacy only;
+    \* remove it, never keep an independently mutable compatibility copy.
+    RemoveField(local,key);
+    i := i + 1;
+  end while;
+MissingLocalImageSettingsNotAssetSettings:
+  if content.imageSettings = NoValue then
+    content.imageSettings := DeepCopy(BackendSettings.defaults.slotSettings.content.imageSettings);
+  else
+    Require(IsRecord(content.imageSettings));
+    names := PropertyNames(BackendSettings.defaults.slotSettings.content.imageSettings); i := 1;
+    while i <= Len(names) do
+      key := names[i];
+      if ~HasField(content.imageSettings,key) then
+        content.imageSettings[key] := DeepCopy(BackendSettings.defaults.slotSettings.content.imageSettings[key]);
+      end if;
+      i := i + 1;
+    end while;
+  end if;
+SingleCaptionOwner:
+  if HasField(slot,"caption") then caption := DeepCopy(slot.caption);
+  elsif HasField(content,"caption") then caption := DeepCopy(content.caption); end if;
+  RemoveField(content,"caption");
+  local.content := content;
+  local.caption := caption;
+ReturnSameSlotMeaning:
+  \* Identity/geometry and present false/0/empty/null caption are preserved.
+  \* Only candidate representation changes; no image asset lookup, placeholder,
+  \* new public input, live authority normalization or second alias storage.
+  result := local;
+  return;
+end procedure;
+
+procedure slotHasNonDefaultLocalState(slot)
+variables normalized = NoValue, defaults = BackendSettings.defaults.slotSettings.content;
+begin
+WholeLocalPayloadNotGeometry:
+  call normalizeSlotContent(DeepCopy(slot)); normalized := result;
+  result := normalized.content.chart # NoValue
+         \/ normalized.content.imageId # NoValue
+         \/ normalized.content.contentType # defaults.contentType
+         \/ normalized.content.imageSettings # defaults.imageSettings
+         \/ normalized.caption # NoValue;
+  \* Image settings are compared as a whole. row/col/span/hidden are not payload.
+  return;
+end procedure;
+
+procedure resolveOwningSlot(chartId,state)
+variables owners = <<>>, i = 1;
+begin
+UniqueExistingChartOnly:
+  if ChartById(state,chartId) = NoValue then result := NoValue; return; end if;
+  while i <= Len(state.slots) do
+    if state.slots[i].content.chart = chartId then owners := Append(owners,state.slots[i]); end if;
+    i := i + 1;
+  end while;
+  result := IF Len(owners) = 1 THEN owners[1] ELSE NoValue;
+  return;
+end procedure;
+
+procedure getProjectCsv(csvId)
+begin
+CurrentCsvOnly:
+  result := CsvById(activeProject,csvId);
+  return;
+end procedure;
+
+procedure getProjectImage(imageId)
+begin
+CurrentImageOnly:
+  result := ImageById(activeProject,imageId);
+  return;
+end procedure;
+
+procedure getChart(chartId)
+begin
+CurrentChartOnly:
+  result := ChartById(activeProject,chartId);
+  return;
+end procedure;
+
+procedure validateProjectObjectState(state,requireSlots)
+variables i = 1, item = NoValue, ids = {}, paths = {}, chartIds = {}, slotIds = {}, owners = [],
+          expectedDirectories = {}, fields = <<>>, j = 1, labels = NoValue, exports = NoValue;
+begin
+TopLevelAndConfiguredGrid:
+  Require(ProjectSchemaRequiredNestedObjectsExist(state));
+  Require(IntegerInRange(state.layout.gridRows,BackendSettings.defaults.limits.layout.gridRows));
+  Require(IntegerInRange(state.layout.gridCols,BackendSettings.defaults.limits.layout.gridCols));
+  fields := <<"referenceWidth","gap","outerMargin","radius","aspect">>;
+  while j <= Len(fields) do
+    Require(FiniteInRange(state.layout.slotStyle[fields[j]],BackendSettings.defaults.limits.layout[fields[j]])); j := j + 1;
+  end while;
+  Require(IsBoolean(state.layout.slotStyle.showBorders));
+LabelAndExportRelationships:
+  labels := state.annotations.labels.settings;
+  Require(IsFinite(labels.x) /\ IsFinite(labels.y) /\ labels.fontSize >= BackendSettings.defaults.limits.labels.fontSizeMin);
+  exports := state.export;
+  Require(FiniteInRange(exports.width,BackendSettings.defaults.limits.export.logicalWidth));
+  Require(FiniteInRange(exports.dpi,BackendSettings.defaults.limits.export.dpi));
+  Require(exports.format \in {"png","jpeg"} /\ exports.heightMode \in {"auto","explicit"});
+  if exports.heightMode = "auto" then Require(exports.height = NoValue);
+  else Require(FiniteInRange(exports.height,BackendSettings.defaults.limits.export.logicalHeight)); end if;
+PaletteAndVfs:
+  fields := PropertyNames(BackendSettings.project_object.appearance.uiPalette); j := 1;
+  while j <= Len(fields) do Require(IsSixDigitHexColor(state.appearance.uiPalette[fields[j]])); j := j + 1; end while;
+  Require(CanonicalUniqueDirectoryPaths(state.fileSystem.directories));
+  Require(AllConfiguredFixedDirectoriesExist(state,BackendSettings.defaults.vfs));
+AssetIdsPathsAndDirectories:
+  while i <= Len(state.assets.csvFiles) do
+    item := state.assets.csvFiles[i];
+    Require(IsPositiveInteger(item.id) /\ item.id \notin ids); ids := ids \cup {item.id};
+    call projectAssetPath(item); Require(result \notin paths); paths := paths \cup {result};
+    Require(AssetDirectoryExists(state,item.directory));
+    i := i + 1;
+  end while;
+  ids := {}; i := 1;
+  while i <= Len(state.assets.images) do
+    item := state.assets.images[i];
+    Require(IsPositiveInteger(item.id) /\ item.id \notin ids); ids := ids \cup {item.id};
+    call projectAssetPath(item); Require(result \notin paths); paths := paths \cup {result};
+    Require(AssetDirectoryExists(state,item.directory));
+    i := i + 1;
+  end while;
+SingleSharedChartValidator:
+  i := 1;
+  while i <= Len(state.charts) do
+    item := state.charts[i]; Require(item.id \notin chartIds); chartIds := chartIds \cup {item.id};
+    call validateChartModel(item,state.assets.csvFiles);
+    owners[item.id] := 0;
+    i := i + 1;
+  end while;
+SlotsGeometryReferencesAndLocalDisplay:
+  i := 1;
+  while i <= Len(state.slots) do
+    item := state.slots[i]; Require(IsInteger(item.id) /\ item.id \notin slotIds); slotIds := slotIds \cup {item.id};
+    Require(ValidSlotGeometryInsideGrid(item,state.layout));
+    Require(~(item.content.chart # NoValue /\ item.content.imageId # NoValue));
+    if item.content.chart # NoValue then
+      Require(item.content.chart \in chartIds); owners[item.content.chart] := owners[item.content.chart] + 1;
+    end if;
+    if item.content.imageId # NoValue then Require(ImageById(state,item.content.imageId) # NoValue); end if;
+    Require(item.content.imageSettings.fit \in {"contain","cover","manual"});
+    Require(FiniteInRange(item.content.imageSettings.scale,BackendSettings.defaults.limits.imageSettings.scale));
+    Require(FiniteInRange(item.content.imageSettings.x,BackendSettings.defaults.limits.imageSettings.x));
+    Require(FiniteInRange(item.content.imageSettings.y,BackendSettings.defaults.limits.imageSettings.y));
+    Require(IsText(item.caption) \/ item.caption = NoValue);
+    i := i + 1;
+  end while;
+NoOrphanOrSharedChartAndMonotonicIds:
+  Require(EveryChartOwnerCountEqualsOne(owners));
+  Require(state.nextId.csv > MaximumIdOrZero(state.assets.csvFiles));
+  Require(state.nextId.image > MaximumIdOrZero(state.assets.images));
+  Require(state.nextId.chart > MaximumIdOrZero(state.charts));
+  if requireSlots then Require(Len(state.slots) > 0); end if;
+  result := state;
+  \* No repair, default insertion, fake CSV, placeholder, chart clone/drop or authority write.
+  return;
+end procedure;
+
+procedure createProjectState()
+variables candidate = NoValue, row = 0, col = 0, slot = NoValue;
+begin
+ConfigurationNotProjectData:
+  Require(BackendSettingsHasRequiredBackendOnlyShapeAndNoProjectData(BackendSettings));
+  candidate := [kind |-> "fast-figure-project-object",
+    meta |-> [projectName |-> "",appBuild |-> CurrentApplicationBuildMarker()],
+    layout |-> [],annotations |-> [labels |-> [],captions |-> []],
+    assets |-> [csvFiles |-> <<>>,images |-> <<>>],charts |-> <<>>,slots |-> <<>>,
+    fileSystem |-> [directories |-> <<>>],nextId |-> [],appearance |-> [uiPalette |-> []],export |-> []];
+  candidate.layout := DeepCopy(BackendSettings.project_object.layout);
+  candidate.annotations.labels := DeepCopy(BackendSettings.project_object.annotations.labels);
+  candidate.annotations.captions := DeepCopy(BackendSettings.project_object.annotations.captions);
+  candidate.annotations.captions.text := "";
+  candidate.annotations.captions.afterText := "";
+  candidate.annotations.captions.name := "";
+  candidate.assets := [csvFiles |-> <<>>,images |-> <<>>]; candidate.charts := <<>>; candidate.slots := <<>>;
+FixedDirectoryInstancesAndFirstIds:
+  candidate.fileSystem.directories := <<BackendSettings.defaults.vfs.root,BackendSettings.defaults.vfs.csv,
+                                      BackendSettings.defaults.vfs.image,BackendSettings.defaults.vfs.trash>>;
+  candidate.nextId := [csv |-> 1,image |-> 1,chart |-> 1];
+  candidate.appearance.uiPalette := DeepCopy(BackendSettings.project_object.appearance.uiPalette);
+  candidate.export := DeepCopy(BackendSettings.project_object.export);
+  candidate.export.width := candidate.layout.slotStyle.referenceWidth;
+  candidate.export.height := IF candidate.export.heightMode = "auto" THEN NoValue
+                             ELSE BackendSettings.defaults.limits.export.logicalHeight[1];
+EachCellEmptyNotProtectedCsv:
+  while row < candidate.layout.gridRows do
+    col := 0;
+    while col < candidate.layout.gridCols do
+      slot := [id |-> row * candidate.layout.gridCols + col,row |-> row,col |-> col];
+      slot.rowSpan := 1; slot.colSpan := 1; slot.hidden := FALSE;
+      slot.content := DeepCopy(BackendSettings.defaults.slotSettings.content);
+      slot.content.chart := NoValue; slot.content.imageId := NoValue; slot.caption := NoValue;
+      candidate.slots := Append(candidate.slots,slot);
+      col := col + 1;
+    end while;
+    row := row + 1;
+  end while;
+  call validateProjectObjectState(candidate,TRUE);
+  result := candidate;
+  \* Return candidate, never bind activeProject here.
+  return;
+end procedure;
+
+procedure ProjectObject_read(path)
+begin
+FormalPathFromCurrentInternalState:
+  Require(RegisteredProjectObjectPath(path));
+  result := ResolveProjectObjectPath(activeProject,path);
+  return;
+end procedure;
+
+procedure ProjectObject_initialize(source)
+variables candidate = DeepCopy(source), previous = NoValue, i = 1;
+begin
+NormalizeOutsideAuthority:
+  while i <= Len(candidate.slots) do
+    call normalizeSlotContent(candidate.slots[i]); candidate.slots[i] := result; i := i + 1;
+  end while;
+  call validateProjectObjectState(candidate,TRUE);
+OneValidatedBindingReplacement:
+  previous := activeProject;
+  activeProject := candidate;
+  result := previous;
+  \* Existing binding owned here and EFSM only; not a second global authority.
+  return;
+end procedure;
+
+procedure ProjectObjectRegistry_read(name)
+begin
+NoCachedReadSnapshot:
+  Require(name \in DOMAIN PROJECT_OBJECT_PATHS);
+  call ProjectObject_read(PROJECT_OBJECT_PATHS[name]);
+  return;
+end procedure;
+
+procedure SnapshotProjectPathsInRead(source,names)
+variables output = [], i = 1;
+begin
+OneExplicitReadSource:
+  while i <= Len(names) do
+    Require(names[i] \in DOMAIN PROJECT_OBJECT_PATHS);
+    output[names[i]] := DeepCopy(ResolveProjectObjectPath(source,PROJECT_OBJECT_PATHS[names[i]]));
+    i := i + 1;
+  end while;
+  result := ImmutableCopy(output);
+  return;
+end procedure;
+
+procedure ProjectObjectRegistry_snapshot(names)
+variables source = activeProject;
+begin
+OneCallConsistentRead:
+  call SnapshotProjectPathsInRead(source,names);
+  return;
+end procedure;
+
+procedure BuildPlainProjectRead(source)
+variables read = NoValue;
+begin
+SameOfficialPathsWithoutRecursivePackageExport:
+  call SnapshotProjectPathsInRead(source,<<"project","layout","labels","captions",
+    "data","images","files","charts","slots","sequences","appearance","export">>);
+  read := result;
+AssembleProjectShapeNotAnotherSchema:
+  result := ImmutableCopy([kind |-> source.kind,meta |-> read.project,layout |-> read.layout,
+    annotations |-> [labels |-> read.labels,captions |-> read.captions],
+    assets |-> [csvFiles |-> read.data,images |-> read.images],
+    fileSystem |-> [directories |-> read.files],charts |-> read.charts,slots |-> read.slots,
+    nextId |-> read.sequences,appearance |-> read.appearance,export |-> read.export]);
+  \* Call-local immutable snapshot. Never retained or supplied as command mutation input.
+  return;
+end procedure;
+
+procedure BuildGraphEditorRead(source,request)
+variables state = FieldOrEmptyRecord(request,"frontendState"), slot = NoValue,
+          chart = NoValue, csv = NoValue, objectCsv = NoValue, currentCsv = NoValue,
+          objects = <<>>, columns = <<>>, objectColumns = <<>>, selectedIndex = NoValue,
+          target = NoValue, index = NoValue;
+begin
+ExplicitPostCommitChartOrSelectedSlot:
+  if HasField(request,"chartId") then
+    call resolveOwningSlot(request.chartId,source); slot := result;
+  else slot := VisibleSlot(source,FieldOrNoValue(state,"selectedSlotId")); end if;
+  if slot # NoValue then chart := ChartById(source,slot.content.chart); end if;
+  if chart # NoValue then objects := DeepCopy(chart.editor.objects); end if;
+IndependentCurrentCsvOnlyFromAssetSelection:
+  if FieldOrNoValue(state,"assetSelection") = "csv" then
+    call projectVfsResolve(FieldOrNoValue(state,"assetPath"),source); target := result;
+    if target # NoValue then
+      if target.kind = "csv" then csv := CsvById(source,target.id); end if;
+    end if;
+  end if;
+  if csv # NoValue then
+    currentCsv := DeepCopy(csv);
+    call columnDefinitions(csv.rows,csv.headerLines); columns := result;
+  end if;
+ObjectColumnsNotCsvSelectionReplacement:
+  index := FieldOrNoValue(state,"graphObjectIndex");
+  if chart # NoValue then
+    if chart.editor.editable # FALSE /\ ValidIndex(index,objects) then
+      selectedIndex := index;
+      objectCsv := CsvById(source,objects[index + 1].csvId);
+      if objectCsv # NoValue then call columnDefinitions(objectCsv.rows,objectCsv.headerLines); objectColumns := result; end if;
+    end if;
+  end if;
+GraphEditorReadReturn:
+  result := [chart |-> DeepCopy(chart),objects |-> objects,selectedIndex |-> selectedIndex,
+             currentCsv |-> currentCsv,columns |-> columns,objectColumns |-> objectColumns];
+  return;
+end procedure;
+
+procedure BuildImageEditorRead(source,slotId)
+variables slot = VisibleSlot(source,slotId), image = NoValue, bytes = NoValue, settings = NoValue;
+begin
+CurrentVisibleSlotAndOwnedImage:
+  if slot = NoValue then result := NoValue; return; end if;
+  image := ImageById(source,slot.content.imageId);
+  if image = NoValue then result := NoValue; return; end if;
+CopyWithoutRevocableAllocation:
+  bytes := CopyOriginalAssetBytes(image);
+  settings := DeepCopy(slot.content.imageSettings);
+  \* Current source already passed normalization/whole validation. Read never repairs it.
+  result := [slotId |-> slot.id,name |-> image.name,bytes |-> bytes,
+             displayUrl |-> PureByteDataUrl(bytes,image.mime),settings |-> settings];
+  \* No create-object-URL, DOM dimensions, runtime handle or Project normalization.
+  return;
+end procedure;
+
+procedure BuildVfsRead(source,operation,request)
+variables path = "", node = NoValue, tree = <<>>, refs = <<>>, target = NoValue,
+          csvIds = {}, imageIds = {}, options = <<>>, i = 1, directory = "";
+begin
+TreeFromExistingDirectoriesAndAssetLocations:
+  if operation \in {"assets.readTree","assets.readTrash"} then
+    tree := DetachedDirectoryNodesInExistingOrder(source.fileSystem.directories);
+    while i <= Len(source.assets.csvFiles) do
+      AppendDetachedAssetTreeNode(tree,"csv",source.assets.csvFiles[i]); i := i + 1;
+    end while;
+    i := 1;
+    while i <= Len(source.assets.images) do
+      AppendDetachedAssetTreeNode(tree,"image",source.assets.images[i]); i := i + 1;
+    end while;
+    AttachNodesByCanonicalParentPath(tree);
+    if operation = "assets.readTrash" then result := TreeAtExactPath(tree,BackendSettings.defaults.vfs.trash);
+    else result := tree; end if;
+    return;
+  end if;
+CanonicalPathAndCurrentNode:
+  call normalizeProjectPath(request.path,TRUE); path := result;
+  call projectVfsResolve(path,source); node := result;
+  if operation = "assets.isTrashed" then result := SegmentDescendantOrSame(path,BackendSettings.defaults.vfs.trash); return;
+  elsif operation = "assets.movable" then result := node # NoValue /\ ~IsFixedDirectoryPath(path,BackendSettings.defaults.vfs); return;
+  elsif operation = "assets.resolveTreeSelection" then
+    if node = NoValue then result := [accepted |-> FALSE,kind |-> NoValue,path |-> NoValue];
+    else result := [accepted |-> TRUE,kind |-> node.kind,path |-> node.canonicalPath]; end if;
+    return;
+  elsif operation = "assets.draggableAsset" then
+    if node = NoValue then result := NoValue; return; end if;
+    if node.kind \notin {"csv","image"} \/ SegmentDescendantOrSame(path,BackendSettings.defaults.vfs.trash) then result := NoValue; return; end if;
+    result := [kind |-> node.kind,id |-> node.id,path |-> node.canonicalPath,name |-> node.name]; return;
+  elsif operation = "assets.readDeletionTarget" then
+    if node = NoValue then result := NoValue; return; end if;
+    if node.kind \notin {"csv","image"} then result := NoValue; return; end if;
+    if node.kind = "csv" then csvIds := {node.id}; target := CsvById(source,node.id);
+    else imageIds := {node.id}; target := ImageById(source,node.id); end if;
+    call collectAssetReferences(csvIds,imageIds,source); refs := result;
+    result := [target |-> DeepCopy(target),kind |-> node.kind,path |-> node.canonicalPath,
+               referenceCount |-> Len(refs),references |-> DeepCopy(refs)]; return;
+  elsif operation = "assets.moveOptions" then
+    if node = NoValue then result := options; return; end if;
+    if IsFixedDirectoryPath(path,BackendSettings.defaults.vfs) then result := options; return; end if;
+    while i <= Len(source.fileSystem.directories) do
+      directory := CanonicalDirectoryPath(source.fileSystem.directories[i]);
+      if node.kind # "directory" then options := Append(options,DeepCopy(source.fileSystem.directories[i]));
+      elsif ~SegmentDescendantOrSame(directory,path) then options := Append(options,DeepCopy(source.fileSystem.directories[i])); end if;
+      i := i + 1;
+    end while;
+    result := options; return;
+  else FailQuery("unregistered VFS query"); end if;
+end procedure;
+
+procedure BuildSurfaceRead(source)
+variables output = [layout |-> DeepCopy(source.layout),appearance |-> DeepCopy(source.appearance),
+                    annotations |-> DeepCopy(source.annotations),visibleSlots |-> <<>>],
+          slot = NoValue, chart = NoValue, csv = NoValue, i = 1, j = 1, columns = <<>>;
+begin
+CurrentVisibleSlotLocalCopies:
+  while i <= Len(source.slots) do
+    if ~source.slots[i].hidden then
+      slot := DeepCopy(source.slots[i]); chart := ChartById(source,slot.content.chart);
+      if chart # NoValue then
+        slot.chart := DeepCopy(chart);
+        call chartFigure(DeepCopy(chart),source); slot.figure := result;
+        slot.csvViews := <<>>;
+        if ~ConversionRepresentation(chart) then
+          j := 1;
+          while j <= Len(chart.editor.objects) do
+            csv := CsvById(source,chart.editor.objects[j].csvId);
+            if csv # NoValue then
+              call columnDefinitions(csv.rows,csv.headerLines); columns := result;
+              slot.csvViews := Append(slot.csvViews,[csv |-> DeepCopy(csv),columns |-> columns]);
+            end if;
+            j := j + 1;
+          end while;
+        end if;
+      end if;
+      if slot.content.imageId # NoValue then call BuildImageEditorRead(source,slot.id); slot.imageView := result; end if;
+      output.visibleSlots := Append(output.visibleSlots,slot);
+    end if;
+    i := i + 1;
+  end while;
+OneLabelOrderingForThisProjection:
+  call orderedSlotLabels(source); output.orderedSlotLabels := result;
+  output.captionReferenceStyle := DeepCopy(BackendSettings.defaults.captionReferenceStyle);
+  result := output;
+  \* All objects detached from SAME supplied source. No later live graph/CSV fallback.
+  return;
+end procedure;
+
+procedure NormalizePreviewReadWidth(value)
+variables number = NoValue, bounds = BackendSettings.defaults.preview.widthRange;
+begin
+ReadOnlyConfiguredWidth:
+  if value = NoValue then result := BackendSettings.defaults.preview.fallbackWidth; return; end if;
+  number := TryScalarNumber(value);
+  if number.valid then
+    if IsFinite(number.value) then result := Maximum(bounds[1],Minimum(bounds[2],number.value)); return; end if;
+  end if;
+  result := BackendSettings.defaults.preview.fallbackWidth;
+  return;
+end procedure;
+
+procedure readBackendProjection(kind,request)
+variables source = activeProject, operation = FieldOrNoValue(request,"operation"),
+          slot = NoValue, chart = NoValue, csv = NoValue, image = NoValue, target = NoValue,
+          output = NoValue, width = NoValue, geometry = NoValue, i = 1, slots = <<>>;
+begin
+RegisteredKindsOnly:
+  Require(kind \in {"project-api","slot-selection-context","interface-intent","interface-reconciliation","renderer","export"});
+  if kind = "interface-intent" then call validateFrontendIntent(request.event,request.payload); return;
+  elsif kind = "interface-reconciliation" then call buildFrontendReconciliationInput(request.event,request.mutationResult,request.frontendReferences); return;
+  elsif kind = "slot-selection-context" then
+    slot := VisibleSlot(source,request.slotId);
+    result := IF slot = NoValue THEN NoValue ELSE ImmutableCopy([id |-> slot.id,
+      empty |-> slot.content.chart = NoValue /\ slot.content.imageId = NoValue,contentType |-> slot.content.contentType]);
+    return;
+  elsif kind = "renderer" then goto RendererRead;
+  elsif kind = "export" then goto ExportRead; end if;
+PublicReadRegisteredOperation:
+  Require(operation \in PUBLIC_BACKEND_READ_OPERATIONS);
+  if operation = "project.readName" then output := source.meta.projectName;
+  elsif operation = "slots.readSelected" then output := SelectedSlotIdentityGeometryContentCopy(source,request.frontendState.selectedSlotId);
+  elsif operation = "images.readEditor" then call BuildImageEditorRead(source,request.slotId); output := result;
+  elsif operation = "print.readSettings" then output := DeepCopy(source.export);
+  elsif operation = "appearance.readPalette" then output := DeepCopy(source.appearance.uiPalette);
+  elsif operation = "graphs.defaultColors" then output := DeepCopy(BackendSettings.defaults.graphColors);
+  elsif operation = "graphs.hasSelectedSlot" then output := IsVisibleGraphSlot(source,request.selectedSlotId);
+  elsif operation = "graphs.readData" then
+    call BuildGraphEditorRead(source,request); output := result;
+    \* Selected object CSV supplies objectColumns only, NEVER replaces currentCsv.
+    \* Imported conversion chart has no editable selectedIndex/objectColumns.
+  elsif operation \in {"graphs.readLayout","graphs.readPalette"} then
+    slot := VisibleSlot(source,request.selectedSlotId); chart := ChartOfSlotOrNone(source,slot);
+    output := IF operation = "graphs.readLayout" THEN ChartTitleGlobalAxesCopyOrNone(chart) ELSE ObjectColorsCopyOrEmpty(chart);
+  elsif operation = "captions.readGlobal" then output := DeepCopy(source.annotations.captions);
+  elsif operation = "captions.readSlot" then output := SlotCaptionCopyOrNone(source,request.slotId);
+  elsif operation = "labels.readState" then call LabelsReadInProject(source,request.slotId); output := result;
+  elsif operation = "layout.readState" then
+    call NormalizePreviewReadWidth(FieldOrNoValue(request,"renderedWidth")); width := result;
+    call DashboardGeometryInProject(source,width,NoValue); geometry := result;
+    output := LayoutGridStyleVisibleSlotsAndPreviewCopy(source,geometry);
+  elsif operation = "assets.fileKind" then call slotFileKind(request.file); output := result;
+  elsif operation = "assets.collisionModel" then call projectAssetImportCollisionModel(request.file,request.directory,request.reservedPaths); output := result;
+  elsif operation = "assets.resolveImportPlan" then call resolveProjectAssetImportPlan(request.model,request.choice,request.reservedPaths); output := result;
+  elsif operation = "assets.planMove" then call planProjectNodeMove(request.path,request.directory); output := result;
+  else call BuildVfsRead(source,operation,request); output := result; end if;
+  goto ImmutableReturn;
+RendererRead:
+  if operation = "slot-image" then call BuildImageEditorRead(source,request.slotId); output := result; goto ImmutableReturn;
+  elsif operation = "ui-palette" then output := DeepCopy(source.appearance.uiPalette); goto ImmutableReturn; end if;
+  call BuildSurfaceRead(source); output := result;
+  goto ImmutableReturn;
+ExportRead:
+  if operation = NoValue then call BuildPlainProjectRead(source); output := result; goto ImmutableReturn;
+  elsif operation \in {"print.save","print.capture"} then
+    call BuildSurfaceRead(source); output := result;
+    output.export := DeepCopy(source.export);
+    output.rasterLimits := DeepCopy(BackendSettings.defaults.limits.export);
+    goto ImmutableReturn;
+  elsif operation = "project.exportFile" then
+    call validateProjectObjectState(source,TRUE);
+    call BuildFfpxInRead(source); output := FfpxEntriesNameMimeCopy(result,source.meta.projectName,request.stamp);
+  elsif operation = "assets.download" then output := AssetOriginalBytesNameMimeCopyOrNone(source,request.path);
+  elsif operation \in {"graphs.exportFfsx","graphs.exportPlotlyJson"} then
+    slot := VisibleSlot(source,request.slotId); chart := ChartOfSlotOrNone(source,slot);
+    if chart = NoValue then output := NoValue; goto ImmutableReturn; end if;
+    if operation = "graphs.exportFfsx" then call BuildFfsxInRead(source,slot,chart);
+    else call chartFigure(DeepCopy(chart),source); result := EncodeUtf8Json(result); end if;
+    output := GraphPackageOrJsonNameMimeCopy(result,operation,slot.id,request.stamp);
+  else FailQuery("unknown export operation"); end if;
+ImmutableReturn:
+  result := ImmutableCopy(output);
+  \* Recursively detached: no callbacks/DOM/mutable handles, allocation/revocable URLs,
+  \* query-time authority normalization, saved frontend state or cross-task read store.
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

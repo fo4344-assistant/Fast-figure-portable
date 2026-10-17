@@ -1,27 +1,29 @@
-# Fast Figure PlusCal pseudocode — r37 번역 착수
+# Source Script → PlusCal
 
-## 현재 상태
+## Active translation
 
-정확한 revision/fingerprint/lineage의 원천은 루트 `development-versions.json`이다.
+The active hierarchical `**/*.pcal` files translate Source Script r38. The previous flat r11 files are removed, not retained as fallback modules. `development-versions.json` records the authoritative revision, fingerprint, exact Source lineage and translation review; this README is not a second version registry.
 
-- Source r37: closed. 근거: `agent_space/reviews/review-20261016-020-source-r37-closure.md` 및 직전 논리 구조 검토.
-- 활성 pseudocode: r11 **stale**, 과거 Source r25 fingerprint에서 파생했다. 현재 평면 `.pcal` 파일은 Source r37의 완성 번역이 아니다.
-- 새 번역: `agent_space/plans/plan-022.md`에 따라 시작했다. Backend/Application/Frontend/Portable build hierarchy를 보존한다.
-- 전체 번역·충실도 대조 후에만 새 revision/fingerprint/derived_from/translation_review와 함께 current로 전환한다. 일부 작업본만으로 current를 선언하지 않는다.
+Hierarchy follows Source: `system`, `backend`, `application/adapter`, the single logical `application/public_api` boundary (four physical files), `frontend`, and `portable_build`. Backend settings are read from `sourcescript/backend/settings.json`, never copied into a Frontend configuration authority. No application-code, optional verification-model, or TLC completion is implied by this cutover.
 
-활성 의미 파일은 `pseudocode/**/*.pcal`이다. 이 README와 기존 `.md` 비교 문서는 의미 fingerprint에 포함되지 않는다. 과거 문서의 r17/current 표현은 당시 기록이며 현재 lineage가 아니다.
+## Notation and composition
 
-## 작업 방식
+These files are language-neutral PlusCal algorithm notation, not independently runnable TLA+ verification models. `procedure`, explicit branch/loop/assignment/call, and record/sequence operations preserve Source inputs, outputs, ordering and ownership. The root `system.pcal` enters `initializeFastFigure`; other owners declare procedures for that composition rather than independently initializing Project/session state.
 
-진행 중 PlusCal 작업본은 현재 작업 경로의 `.work/plan022/pseudocode/`에 일시 보관한다. 아직 branch의 활성 명세/구현 입력이 아니다. 기존 활성 파일과 섞어 최신 전체 번역인 것처럼 사용하지 않는다. 전체 cutover 시 계획의 목표 경로로 옮기고 기존 평면 활성 파일 및 임시 작업본을 정리한다.
+- Source `None` is `NoValue`; a missing record field is distinct and tested with `HasField`. `Missing` identifies a missing table cell. Source zero-based object/column indices use `sequence[index + 1]` explicitly; grid row/column are one-based while slot IDs start at zero.
+- `result` is the **call-local return channel**, not a persistent shared store. Returned internal adapter tuples do not become public API results. Locals, private expansion parameters and `args` at API bindings are notation for Source function arguments/call frames, not additional public schemas or authorities.
+- Class method names use `Class_method`. Identically named Source functions receive an owner qualifier (`ApplicationAdapter_`, `MantineUi_`, `BackendAnnotations_`, `ApplicationApi_`, `Renderer_`). Private `...InAttempt`/`...InRead` procedures expand the same Source operation with its already captured authority/candidate; they do not add a public parameter or reload live state.
+- `activeProject` is the existing Backend binding. A captured authority reference is not a new persistent transaction token. The freshness check, validation and replacement in the final commit section have no yield between them. An awaited import recalculates against current authority; completed UI plans are revalidated, never authoritative candidates.
+- `Require` rejects/throws before commit; uncommitted commands preserve Project and skip success reads/reconciliation. Original exceptions propagate. A later read/render/handoff failure does not secretly undo an already committed Project. Callback/await/try-finally notation preserves Source's exactly-once task and cleanup ordering.
 
-Source의 입력/출력, branch, 계산, 참조, current-authority resolve, candidate→validation→one commit, 실패·취소·부분 완료, runtime/persistent 분리와 자원 수명을 언어중립 절차로 번역한다. Source에 없는 domain state/모듈/branch를 추가하거나 platform 구현을 확정하지 않는다.
+## Deferred primitives, not deferred domain decisions
 
-```text
-Source Script (closed)
-→ PlusCal pseudocode 전체 번역 및 충실도 확인
-→ [선택적 verification-model/TLC]
-→ Source Code
-```
+Target-platform primitives remain abstract: scalar conversion with invalid/finite results (conversion exceptions propagate), integer/finite arithmetic, sequence/record lookup/copy/field operations, text/UTF-8/base64, XML tree construction/parsing/escaping, ZIP STORE directory/CRC and copied-byte access, time, DOM measurement/events/painting, Plotly host lifecycle, browser download handoff, and file output. Pure schema predicates and field selectors mean the **explicit fields/ranges/relations in the corresponding Source contract**, not permission to invent a candidate builder or fallback behavior.
 
-TLC는 선택적 파생 검증이며 pseudocode의 대체물 또는 번역 착수의 필수 gate가 아니다. 실행하지 않은 검증을 성공으로 기록하지 않는다.
+Domain algorithms are expanded in their owning files: VFS collision/replace planning, package document splitting/reassembly and ID remapping, missing-only normalization, current-candidate asset/chart construction, graph numeric transforms/selection/layout, original-position cascade maps, grid/merge/split, caption ranges/wrapping/geometry, projection-effect calculation, all public routes/results and lifecycle/resource cleanup. The spelling of current package documents and the zero-based identity rules are explicitly bound in Source r38; compatibility code is not an alternate authority.
+
+## Verification scope
+
+`Pseudocode fidelity coverage` runs only in GitHub Actions. It checks the cumulative development-layer metadata/patch gate and produces a Source-entry/input trace, owner/file correspondence, all public API keys, explicit wrapper branches, event vocabulary and bound explicit procedure calls. These are static structural checks, **not** behavioral tests, a PlusCal parser, or semantic/TLC proof.
+
+The separate translation review records the semantic assessment of state/branch/input-result/commit/failure/resource preservation and the Source corrections. A green structural check alone cannot establish translation completion. See `agent_space/reviews/review-20261017-002-pseudocode-r12-translation.md` and its linked Source closure review for that evidence and actual execution status.

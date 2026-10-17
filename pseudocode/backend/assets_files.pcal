@@ -1,0 +1,1385 @@
+---- MODULE FastFigureBackendAssetsR38 ----
+EXTENDS Naturals, Integers, Reals, Sequences
+
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* All 21 Source functions have procedure entries. No Frontend/Application calls.
+\* Config is read-only settings.json.backend; Project remains the only data authority.
+\* Platform-neutral primitives: bytes/UTF-8/ZIP STORE CRC32/XML trees, canonical
+\* segment/name operations, copied record construction. Neither ZIP nor XML is executed here.
+CONSTANT NoValue, Missing, BackendSettings
+PACKAGE_FORMAT_VERSION == BackendSettings.project_object.ffpx.formatVersion
+PROJECT_ASSET_DIRECTORIES == BackendSettings.defaults.vfs
+AssetSequenceKind(fileKind) == IF fileKind = "data" THEN "csv" ELSE "image"
+FIXED_DIRECTORIES == {BackendSettings.defaults.vfs.root,BackendSettings.defaults.vfs.csv,
+                     BackendSettings.defaults.vfs.image,BackendSettings.defaults.vfs.trash}
+IsDescendant(path, parent) == HasCanonicalSegmentPrefix(path,parent) /\ path # parent
+InTrash(path) == path = BackendSettings.defaults.vfs.trash \/ IsDescendant(path,BackendSettings.defaults.vfs.trash)
+ConversionRepresentation(chart) ==
+  IF chart.editor.editable = FALSE THEN HasField(chart.editor,"conversionRows") ELSE FALSE
+
+DataTableEncodingExtension(path) ==
+  LET ext == LowerCase(FileExtension(path))
+  IN IF ext \in {".json",".tsv",".csv"} THEN ext ELSE ".csv"
+CurrentVersionCsvDataRef(metadata) == "data/csv-" \o IntegerText(metadata.id) \o DataTableEncodingExtension(metadata.path)
+
+(* --algorithm BackendAssets
+variables result = NoValue;
+
+procedure normalizeProjectPath(value, directory)
+variables parts = <<>>, i = 1, normalized = <<>>;
+begin
+SlashNormalizedAbsoluteSegments:
+  parts := AbsoluteProjectSegmentsAfterSlashNormalization(value,directory);
+ValidateEverySegment:
+  while i <= Len(parts) do
+    Require(parts[i] # "." /\ parts[i] # "..");
+    normalized := Append(normalized,NormalizeProjectFileNameSegment(parts[i]));
+    i := i + 1;
+  end while;
+CanonicalReturn:
+  result := JoinAbsoluteProjectSegments(normalized);
+  if ~directory then Require(result # "/"); end if;
+  \* directory lookup may name root; a file path must fail here, not in a later caller.
+  return;
+end procedure;
+
+procedure projectAssetPath(asset)
+begin
+DeriveNotStore:
+  Require(ValidDirectoryAndName(asset.directory,asset.name));
+  call normalizeProjectPath(JoinDirectoryAndName(asset.directory,asset.name),TRUE);
+  Require(result # "/");
+  return;
+end procedure;
+
+procedure slotFileKind(file)
+variables name = Lowercase(TextOrEmpty(FieldOrMissing(file,"name"))),
+          mime = Lowercase(TextOrEmpty(FieldOrMissing(file,"type")));
+begin
+PriorityIsNotContentSniffing:
+  if HasExtension(name,".ffsx") then result := "slot";
+  elsif Extension(name) \in {".csv",".tsv",".json"} then result := "data";
+  elsif StartsWith(mime,"image/") \/ Extension(name) \in {".png",".jpg",".jpeg",".gif",".webp",".bmp",".svg"} then result := "image";
+  else result := ""; end if;
+  \* .json is DATA here. Explicit Plotly/project imports have their own parser.
+  return;
+end procedure;
+
+procedure projectVfsResolve(path, state)
+variables canonical = "", matches = <<>>, i = 1, nodes = <<>>, node = NoValue;
+begin
+CanonicalLookup:
+  call normalizeProjectPath(path,TRUE); canonical := result;
+  nodes := CurrentFixedDirectoriesProjectDirectoriesCsvAndImages(state,FIXED_DIRECTORIES);
+  while i <= Len(nodes) do
+    node := nodes[i];
+    if CanonicalNodePath(node) = canonical then matches := Append(matches,node); end if;
+    i := i + 1;
+  end while;
+RequireUniqueOwner:
+  Require(Len(matches) <= 1);
+  if Len(matches) = 0 then result := NoValue; else result := matches[1]; end if;
+  return;
+end procedure;
+
+procedure projectVfsUniquePath(path, state, reservedPaths)
+variables candidate = path, suffix = 0, owner = NoValue;
+begin
+FindCollisionFreeSibling:
+  while TRUE do
+    call projectVfsResolve(candidate,state); owner := result;
+    if owner = NoValue /\ candidate \notin reservedPaths then result := candidate; return; end if;
+    suffix := suffix + 1;
+    candidate := SiblingPathWithCollisionSuffix(path,suffix);
+    \* Preserve parent and original basename/extension meaning. No node mutation.
+  end while;
+end procedure;
+
+procedure projectVfsDescendants(directory, state)
+variables parent = "", nodes = <<>>, output = <<>>, i = 1;
+begin
+SegmentBoundaryNotStringPrefix:
+  call normalizeProjectPath(directory,TRUE); parent := result;
+  nodes := CurrentProjectDirectoriesCsvAndImages(state);
+  while i <= Len(nodes) do
+    if IsDescendant(CanonicalNodePath(nodes[i]),parent) then output := Append(output,nodes[i]); end if;
+    i := i + 1;
+  end while;
+  result := output;
+  return;
+end procedure;
+
+procedure SerializeNewDataTable(table,path)
+variables extension = DataTableEncodingExtension(path), delimiter = ",", lines = <<>>, fields = <<>>,
+          i = 1, j = 1, value = NoValue, text = "";
+begin
+OnlySyntheticDataNotImportedOriginalBytes:
+  if extension = ".json" then result := EncodeUtf8(CompactJson(table)); return; end if;
+  if extension = ".tsv" then delimiter := Tab; end if;
+RowsAndFieldsInOriginalOrder:
+  while i <= Len(table) do
+    fields := <<>>; j := 1;
+    while j <= Len(table[i]) do
+      value := table[i][j];
+      if value = NoValue then text := "";
+      elsif IsRecord(value) \/ IsArray(value) then text := CompactJson(value);
+      else text := ScalarText(value); end if;
+      if Contains(text,delimiter) \/ Contains(text,Quote) \/ Contains(text,CR) \/ Contains(text,LF) then
+        text := Quote \o ReplaceAll(text,Quote,Quote \o Quote) \o Quote;
+      end if;
+      fields := Append(fields,text); j := j + 1;
+    end while;
+    lines := Append(lines,JoinText(fields,delimiter)); i := i + 1;
+  end while;
+  result := EncodeUtf8(JoinText(lines,LF)); return;
+end procedure;
+
+procedure CalculateAssetCollisionInProject(state, kind, directory, name, reservedPaths)
+variables parent = NoValue, path = "", owner = NoValue, mode = "";
+begin
+OneExplicitReadOrCandidate:
+  Require(kind \in {"data","image"});
+  call projectVfsResolve(directory,state); parent := result;
+  Require(IsDirectory(parent));
+  name := NormalizeProjectFileNameSegment(name);
+  call normalizeProjectPath(JoinDirectoryAndName(CanonicalNodePath(parent),name),FALSE); path := result;
+CurrentAndReservedCollision:
+  call projectVfsResolve(path,state); owner := result;
+  if path \in reservedPaths then mode := "rename-only";
+  elsif owner = NoValue then mode := "available";
+  elsif AssetKindEqualsFileKind(owner,kind) then mode := "replace-or-rename";
+  else mode := "rename-only"; end if;
+DetachedProposal:
+  result := [assetKind |-> kind,parent |-> CanonicalNodePath(parent),name |-> name,path |-> path,
+    mode |-> mode,replaceId |-> IF mode = "replace-or-rename" THEN owner.id ELSE NoValue,
+    information |-> CollisionUiInformation(owner,mode)];
+  return;
+end procedure;
+
+procedure projectAssetImportCollisionModel(file, directory, reservedPaths)
+variables source = activeProject, kind = "";
+begin
+RawAssetsOnly:
+  call slotFileKind(file); kind := result;
+  call CalculateAssetCollisionInProject(source,kind,directory,file.name,reservedPaths);
+  return;
+end procedure;
+
+procedure ResolveAssetPlanInProject(state, model, choice, reservedPaths)
+variables fresh = NoValue, path = "";
+begin
+ProposalIsNotAuthority:
+  Require(ValidCollisionProposalShape(model));
+  call CalculateAssetCollisionInProject(state,model.assetKind,model.parent,model.name,reservedPaths);
+  fresh := result;
+StaleReplaceBeforeAvailable:
+  if choice = "replace" /\ model.replaceId # NoValue then
+    Require(fresh.mode = "replace-or-rename");
+    Require(fresh.assetKind = model.assetKind /\ fresh.replaceId = model.replaceId);
+  end if;
+CurrentAvailable:
+  if fresh.mode = "available" then
+    result := [path |-> fresh.path,replaceId |-> NoValue];
+    return;
+  end if;
+ValidatedReplaceOrCurrentRename:
+  if choice = "replace" /\ fresh.mode = "replace-or-rename" /\ model.replaceId = fresh.replaceId then
+    result := [path |-> fresh.path,replaceId |-> fresh.replaceId];
+  else
+    call projectVfsUniquePath(fresh.path,state,reservedPaths); path := result;
+    result := [path |-> path,replaceId |-> NoValue];
+  end if;
+  \* Query/candidate share the calculation, not a stored VFS copy or reservation.
+  return;
+end procedure;
+
+procedure resolveProjectAssetImportPlan(model, choice, reservedPaths)
+variables source = activeProject;
+begin
+ReadOnceNoPromptOrReservation:
+  call ResolveAssetPlanInProject(source,model,choice,reservedPaths);
+  return;
+end procedure;
+
+\* Private construction of Source csvAsset/imageAsset metadata. VFS identity is
+\* the final canonical directory/name, never the original file's colliding name.
+\* Caller supplies id and CSV rows/header only inside its own candidate.
+procedure BuildAssetMetadata(kind, path, mime, bytes)
+variables canonical = "";
+begin
+CanonicalStoredLocation:
+  Require(kind \in {"csv","image"});
+  call normalizeProjectPath(path,FALSE); canonical := result;
+OwnedBytesAndNoSlotSettings:
+  result := [directory |-> CanonicalParent(canonical),name |-> CanonicalLeaf(canonical),
+             mime |-> mime,bytesBase64 |-> Base64Encode(CopyBytes(bytes))];
+  \* No path alias/original-name field, imageSettings, slot id, or mutable handle.
+  return;
+end procedure;
+
+procedure BuildAssetImportInAttempt(source, files, directory, planImport, targetSlotId)
+variables candidate = NoValue, target = NoValue, parent = NoValue, canonicalPath = "",
+          i = 1, kind = "", parsed = NoValue, plan = NoValue, asset = NoValue, reserved = {},
+          current = NoValue, facts = <<>>, outcome = NoValue;
+begin
+CommandContextAndCurrentTarget:
+  Require(InsideAssetsImportedCommand());
+  Require(ValidDirectoryInProject(directory,source));
+  if targetSlotId # NoValue then
+    target := ResolveVisibleSlot(source,targetSlotId);
+    Require(target # NoValue);
+  end if;
+  candidate := DeepCopy(source);
+NoBackendUiCallback:
+  Require(CompletedCollisionChoicesNotCallback(planImport));
+FileOrderWithinOneCandidate:
+  while i <= Len(files) do
+    call slotFileKind(files[i]); kind := result;
+    Require(kind \in {"data","image"});
+    if kind = "data" then
+      call parseProjectDataAsset(files[i].name,CopyBytes(files[i])); parsed := result;
+    else parsed := CopyImageBytesAndMetadata(files[i]); end if;
+    \* Parse may await in implementation. EFSM rechecks authority and recalculates
+    \* whole candidate on revision change; stale completed choices cannot retarget.
+    \* UI choosePlan returns the Source core final {path,replaceId} plan.
+    \* Do not require invented proposal/decision fields from that producer.
+    plan := planImport[i];
+    Require(ValidFinalImportPlanShape(plan));
+    call normalizeProjectPath(plan.path,FALSE); canonicalPath := result;
+    Require(canonicalPath = plan.path /\ CanonicalParent(canonicalPath) = directory);
+    call projectVfsResolve(directory,candidate); parent := result;
+    Require(IsDirectory(parent) /\ canonicalPath \notin reserved);
+    call projectVfsResolve(canonicalPath,candidate); current := result;
+    \* Final plan is input, not authority: current same-kind/id/path must match.
+    \* A now-occupied create path rejects rather than silently changing the plan.
+    call BuildAssetMetadata(AssetSequenceKind(kind),plan.path,FileMime(files[i]),CopyBytes(files[i])); asset := result;
+    if kind = "data" then
+      asset.rows := parsed;
+      asset.headerLines := NormalizeHeaderCount(1,parsed);
+    end if;
+    if plan.replaceId # NoValue then
+      Require(current # NoValue /\ AssetKindEqualsFileKind(current,kind));
+      Require(current.id = plan.replaceId);
+      asset.id := current.id;
+      ReplaceSameKindAssetAtId(candidate,AssetSequenceKind(kind),current.id,asset);
+      \* Referencing graph objects/image slots retain this id; no detach/relink.
+    else
+      Require(current = NoValue /\ plan.path \notin reserved);
+      asset.id := candidate.nextId[AssetSequenceKind(kind)];
+      AppendAssetOfKind(candidate,AssetSequenceKind(kind),asset);
+      candidate.nextId[AssetSequenceKind(kind)] := asset.id + 1;
+    end if;
+    reserved := reserved \cup {plan.path};
+    if target # NoValue then
+      if kind = "data" then
+        call ConnectDataInsideCandidate(candidate,targetSlotId,asset.id,asset.name);
+        candidate := result;
+      else
+        target := ResolveVisibleSlot(candidate,targetSlotId);
+        Require(target # NoValue /\ target.content.contentType = "image");
+        CandidateSlot(candidate,targetSlotId).content.imageId := asset.id;
+      end if;
+    end if;
+    facts := Append(facts,[kind |-> AssetSequenceKind(kind),id |-> asset.id,path |-> plan.path]);
+    i := i + 1;
+  end while;
+WholeCandidateOrReject:
+  call validateProjectObjectState(candidate,TRUE);
+  result := [candidate |-> candidate,importedAssets |-> facts];
+  \* Call-local actual facts preserve file order, never another persistent registry.
+  \* Caller EFSM rechecks authority and commits ONCE; retry discards candidate+facts.
+  return;
+end procedure;
+
+procedure buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId)
+variables source = activeProject;
+begin
+SourceCandidateOnlyReturn:
+  call BuildAssetImportInAttempt(source,files,directory,planImport,targetSlotId);
+  result := result.candidate;
+  return;
+end procedure;
+
+procedure planProjectNodeMove(path, directory)
+variables readProject = activeProject, source = NoValue, target = NoValue, destination = "", references = NoValue;
+begin
+CurrentSourceIncludingTrash:
+  call projectVfsResolve(path,readProject); source := result;
+  Require(source # NoValue);
+  if CanonicalNodePath(source) \in FIXED_DIRECTORIES then
+    result := FixedDirectoryMoveRejected(source);
+    return;
+  end if;
+  \* Being inside trash is NOT a prohibition on source moves.
+  call projectVfsResolve(directory,readProject); target := result;
+  Require(IsDirectory(target));
+  destination := JoinDirectoryAndName(CanonicalNodePath(target),NodeName(source));
+  references := ReferencesForExactNodeOrSubtree(source,readProject);
+  result := [source |-> CanonicalNodePath(source),kind |-> NodeKind(source),
+     directory |-> CanonicalNodePath(target),destination |-> destination,
+     collision |-> CurrentCollisionAt(destination),uniqueName |-> CurrentUniqueSiblingName(destination),
+     enteringTrash |-> ~InTrash(CanonicalNodePath(source)) /\ InTrash(destination),
+     referenceCount |-> Len(references)];
+  return;
+end procedure;
+
+procedure projectFileStem(value)
+variables text = Trim(TextOrEmpty(value)), output = "", i = 1, char = "";
+begin
+ReplaceUnsafeCharacters:
+  while i <= Len(text) do
+    char := text[i];
+    if char \in {"\\","/",":","*","?","\"","<",">","|"} \/ IsControlU0000To001F(char) then char := "-"; end if;
+    output := output \o char;
+    i := i + 1;
+  end while;
+CollapseAndLimit:
+  output := CollapseWhitespaceRunsToOneSpace(output);
+  output := RemoveTrailingDotAndSpace(output);
+  output := FirstTextUnits(output,BackendSettings.defaults.naming.exportStemMaxLength);
+  if Len(output) = 0 then output := "fast-figure-project"; end if;
+  result := output;
+  return;
+end procedure;
+
+procedure ParseDelimitedText(text, delimiter)
+variables rows = <<>>, row = <<>>, field = "", i = 1, char = "", quoted = FALSE,
+          afterQuote = FALSE, explicitLine = FALSE, pendingBlankLines = 0;
+begin
+CharacterOrder:
+  while i <= Len(text) do
+    char := text[i];
+    if quoted then
+      if char = "\"" then
+        if i < Len(text) then
+          if text[i + 1] = "\"" then field := field \o "\""; i := i + 2; goto ContinueCharacter; end if;
+        end if;
+        quoted := FALSE;
+        afterQuote := TRUE;
+      else field := field \o char; end if;
+      i := i + 1;
+      goto ContinueCharacter;
+    end if;
+    if char = delimiter then
+      row := Append(row,field); field := ""; afterQuote := FALSE; explicitLine := TRUE;
+    elsif IsLineBreakCharacter(char) then
+      if explicitLine \/ Len(field) > 0 \/ Len(row) > 0 \/ afterQuote then
+        while pendingBlankLines > 0 do rows := Append(rows,<<"">>); pendingBlankLines := pendingBlankLines - 1; end while;
+        rows := Append(rows,Append(row,field));
+      else pendingBlankLines := pendingBlankLines + 1; end if;
+      row := <<>>; field := ""; afterQuote := FALSE; explicitLine := FALSE;
+      if char = CarriageReturn() /\ i < Len(text) then
+        if text[i + 1] = LineFeed() then i := i + 1; end if;
+      end if;
+    elsif char = "\"" then
+      Require(Len(field) = 0 /\ ~afterQuote);
+      quoted := TRUE; explicitLine := TRUE;
+    else
+      Require(~afterQuote);
+      field := field \o char; explicitLine := TRUE;
+    end if;
+    i := i + 1;
+ContinueCharacter:
+    skip;
+  end while;
+FinishFieldNotTrailingPhysicalBlank:
+  Require(~quoted);
+  if explicitLine \/ Len(field) > 0 \/ Len(row) > 0 \/ afterQuote then
+    while pendingBlankLines > 0 do rows := Append(rows,<<"">>); pendingBlankLines := pendingBlankLines - 1; end while;
+    rows := Append(rows,Append(row,field));
+  end if;
+  \* Unflushed pending blank physical lines are trailing, not synthetic data rows.
+  result := rows;
+  return;
+end procedure;
+
+procedure parseProjectDataAsset(name, bytes)
+variables text = DecodeUtf8(bytes), extension = Lowercase(Extension(name)), input = NoValue;
+begin
+ExtensionSpecificDecode:
+  if extension = ".json" then
+    input := ParseJson(text);
+    if IsRecord(input) then Require(IsSequence(FieldOrMissing(input,"data"))); input := input.data; end if;
+    call dataTable(input);
+  else
+    Require(extension \in {".csv",".tsv"});
+    call ParseDelimitedText(text,IF extension = ".tsv" THEN TabCharacter() ELSE ",");
+    input := result;
+    call dataTable(input);
+  end if;
+  \* Original bytes remain separate asset input; rows never replace owned bytes.
+  return;
+end procedure;
+
+procedure collectAssetReferences(csvIds, imageIds, state)
+variables refs = <<>>, ci = 1, oi = 1, si = 1, chart = NoValue, object = NoValue, slot = NoValue;
+begin
+ChartOriginalPositionsNotEqualityRematch:
+  while ci <= Len(state.charts) do
+    chart := state.charts[ci];
+    if ~ConversionRepresentation(chart) then
+      oi := 1;
+      while oi <= Len(chart.editor.objects) do
+        object := chart.editor.objects[oi];
+        if object.csvId \in csvIds then refs := Append(refs,[kind |-> "csv",assetId |-> object.csvId,
+           chartId |-> chart.id,originalObjectIndex |-> oi - 1,object |-> object]); end if;
+        oi := oi + 1;
+      end while;
+    end if;
+    ci := ci + 1;
+  end while;
+ImagePerSlot:
+  while si <= Len(state.slots) do
+    slot := state.slots[si];
+    if FieldOrMissing(slot.content,"imageId") \in imageIds then
+      refs := Append(refs,[kind |-> "image",assetId |-> slot.content.imageId,slotId |-> slot.id,slot |-> slot]);
+    end if;
+    si := si + 1;
+  end while;
+  \* Repeated same-CSV objects count separately. Confirmation and cascade share this set.
+  result := refs;
+  return;
+end procedure;
+
+procedure ffpxEncodeValue(value)
+variables element = NoValue, i = 1, names = <<>>, key = "", children = <<>>;
+begin
+TypedWriter:
+  if value = NoValue then element := TypedXmlScalar("null",NoText());
+  elsif IsBoolean(value) then element := TypedXmlScalar("boolean",IF value THEN "true" ELSE "false");
+  elsif IsNumber(value) then Require(IsFinite(value)); element := TypedXmlScalar("number",FiniteNumberText(value));
+  elsif IsText(value) then element := TypedXmlScalar("string",XmlEscapeText(value));
+  elsif IsSequence(value) then
+    while i <= Len(value) do
+      call ffpxEncodeValue(value[i]); children := Append(children,XmlItem(result)); i := i + 1;
+    end while;
+    element := TypedXmlContainer("array",children);
+  elsif IsRecord(value) then
+    names := PropertyNames(value);
+    while i <= Len(names) do
+      key := names[i]; call ffpxEncodeValue(value[key]);
+      children := Append(children,XmlProperty(XmlEscapeAttribute(key),result)); i := i + 1;
+    end while;
+    element := TypedXmlContainer("object",children);
+  else FailWriter("unsupported typed XML value"); end if;
+  result := element;
+  return;
+end procedure;
+
+procedure ffpxDecodeValue(element)
+variables value = NoValue, i = 1, children = <<>>, key = "", decoded = NoValue;
+begin
+StrictTypeAndShape:
+  Require(IsTypedValueElement(element));
+  if element.type = "null" then Require(NullHasNoScalarChildren(element)); value := NoValue;
+  elsif element.type = "boolean" then Require(ScalarOnly(element) /\ element.text \in {"true","false"}); value := element.text = "true";
+  elsif element.type = "number" then Require(ScalarOnly(element)); value := ParseNumber(element.text); Require(IsFinite(value));
+  elsif element.type = "string" then Require(ScalarOnly(element)); value := XmlUnescapeText(element.text);
+  elsif element.type = "array" then
+    Require(ArrayItemValueChildShape(element)); children := element.children; value := <<>>;
+    while i <= Len(children) do call ffpxDecodeValue(children[i].value); value := Append(value,result); i := i + 1; end while;
+  elsif element.type = "object" then
+    Require(ObjectPropertyValueChildShape(element)); children := element.children; value := [];
+    while i <= Len(children) do
+      key := XmlUnescapeAttribute(children[i].name); call ffpxDecodeValue(children[i].value); value[key] := result; i := i + 1;
+    end while;
+  else FailReader("unknown typed XML type"); end if;
+  result := value;
+  return;
+end procedure;
+
+procedure ReadStorePackage(file, packageKind)
+variables entries = <<>>, i = 1, entry = NoValue;
+begin
+ContainerValidation:
+  Require(IsZipContainer(file) /\ ~IsSplitZip(file));
+  entries := ReadZipDirectoryAndEntries(file);
+EachEntry:
+  while i <= Len(entries) do
+    entry := entries[i];
+    Require(entry.compression = "STORE");
+    Require(~IsAbsoluteEntryPath(entry.path) /\ ~HasDotDotSegment(entry.path));
+    Require(Crc32(entry.bytes) = entry.crc32);
+    i := i + 1;
+  end while;
+SchemaAndVersion:
+  Require(ManifestKind(entries) = packageKind /\ ManifestVersion(entries) = PACKAGE_FORMAT_VERSION);
+  result := entries;
+  return;
+end procedure;
+
+procedure ReferencedProjectCsvIds(chart)
+variables ids = <<>>, seen = {}, i = 1;
+begin
+SharedRepresentationScope:
+  if ~ConversionRepresentation(chart) then
+    while i <= Len(chart.editor.objects) do
+      if chart.editor.objects[i].csvId \notin seen then
+        ids := Append(ids,chart.editor.objects[i].csvId);
+        seen := seen \cup {chart.editor.objects[i].csvId};
+      end if;
+      i := i + 1;
+    end while;
+  end if;
+CsvIdsReturn:
+  result := ids;
+  return;
+end procedure;
+
+procedure RemapRealProjectCsvIds(chart,mapping)
+variables copy = DeepCopy(chart), i = 1;
+begin
+NoImportedConversionRewrite:
+  if ~ConversionRepresentation(copy) then
+    while i <= Len(copy.editor.objects) do
+      Require(HasField(mapping,copy.editor.objects[i].csvId));
+      copy.editor.objects[i].csvId := mapping[copy.editor.objects[i].csvId];
+      i := i + 1;
+    end while;
+  end if;
+RemappedChartReturn:
+  result := copy;
+  return;
+end procedure;
+
+\* XML tree/UTF-8 operations below are platform-neutral codec primitives.
+\* Literal document/tag spelling binds the Source's existing package version,
+\* not a new Project schema or second scalar grammar.
+procedure EncodeNamedXml(name,value)
+begin
+SingleTypedValueGrammar:
+  call ffpxEncodeValue(value);
+  result := XmlElement(name,[],<<result>>);
+  return;
+end procedure;
+
+procedure AddPackageXml(entries,path,root,children)
+begin
+VersionedCopiedEntry:
+  result := Append(entries,[path |-> path,
+            bytes |-> EncodeUtf8Xml(VersionedXmlDocument(root,PACKAGE_FORMAT_VERSION,children))]);
+  return;
+end procedure;
+
+procedure EncodeGraphXml(chart)
+variables settings = DeepCopy(chart), nodes = <<>>, i = 1, settingsNode = NoValue;
+begin
+SeparateObjectsFromTheOneGraphSettingsCopy:
+  settings.editor.objects := <<>>;
+  call EncodeNamedXml("settings",settings); settingsNode := result;
+OrderedObjectsThroughTheSameTypedGrammar:
+  while i <= Len(chart.editor.objects) do
+    call ffpxEncodeValue(chart.editor.objects[i]);
+    nodes := Append(nodes,XmlElement("graphObject",[index |-> i - 1],<<result>>));
+    i := i + 1;
+  end while;
+GraphXmlReturn:
+  result := XmlElement("graph",[],<<settingsNode,XmlElement("graphObjects",[],nodes)>>);
+  return;
+end procedure;
+
+procedure BuildFfpxDocumentEntries(snapshot)
+variables entries = <<>>, i = 1, k = 1,
+          asset = NoValue, metadata = NoValue, dataRef = "", typedAssets = <<>>,
+          typedImages = <<>>, projectDocument = [], layoutDocument = [],
+          captionDocument = [], labelDocument = [], placements = <<>>,
+          slot = NoValue, chart = NoValue, children = <<>>, node = NoValue,
+          kinds = <<"csv","image">>, collection = <<>>, documentRefs = <<>>;
+begin
+MetadataAndOwnedBytesInTheSameOrder:
+  while k <= Len(kinds) do
+    collection := IF kinds[k] = "csv" THEN snapshot.assets.csvFiles ELSE snapshot.assets.images;
+    i := 1;
+    while i <= Len(collection) do
+      asset := collection[i]; metadata := DeepCopy(asset);
+      RemoveField(metadata,"bytesBase64");
+      if kinds[k] = "csv" then
+        RemoveField(metadata,"rows");
+        dataRef := "assets/" \o CurrentVersionCsvDataRef(metadata);
+        Require(SafePackagePathInSubtree(dataRef,"assets/data"));
+      else
+        dataRef := CurrentVersionImageDataRef(metadata);
+        Require(SafePackagePathInSubtree(dataRef,"assets/media"));
+      end if;
+      metadata.dataRef := dataRef;
+      call ffpxEncodeValue(metadata);
+      if kinds[k] = "csv" then
+        typedAssets := Append(typedAssets,XmlElement("dataAsset",[id |-> metadata.id,src |-> dataRef],<<result>>));
+      else
+        typedImages := Append(typedImages,XmlElement("imageAsset",[id |-> metadata.id,src |-> dataRef],<<result>>));
+      end if;
+      entries := Append(entries,[path |-> dataRef,bytes |-> CopyBytes(Base64Decode(asset.bytesBase64))]);
+      i := i + 1;
+    end while;
+    k := k + 1;
+  end while;
+ProjectMetadataNotLiveObjects:
+  projectDocument := [schema |-> "fast-figure-project",version |-> PACKAGE_FORMAT_VERSION,
+    appBuild |-> snapshot.meta.appBuild,projectName |-> snapshot.meta.projectName,
+    exportedAt |-> ExportTimestampForThisCall(),fileSystem |-> DeepCopy(snapshot.fileSystem),
+    appearance |-> [slotStyle |-> DeepCopy(snapshot.layout.slotStyle),uiPalette |-> DeepCopy(snapshot.appearance.uiPalette)],
+    export |-> DeepCopy(snapshot.export)];
+  documentRefs := <<XmlElement("assets",[ref |-> "assets/assets.xml"],<<>>),
+    XmlElement("slots",[ref |-> "slots/"],<<>>),
+    XmlElement("layout",[ref |-> "layout/layout.xml"],<<>>),
+    XmlElement("caption",[ref |-> "caption/caption.xml"],<<>>),
+    XmlElement("labels",[ref |-> "labels/labels.xml"],<<>>)>>;
+  call EncodeNamedXml("settings",projectDocument); node := result;
+  call AddPackageXml(entries,"project.xml","fastFigureProject",Append(documentRefs,node)); entries := result;
+MandatoryAssetsDocumentIncludingEmptyCollections:
+  call AddPackageXml(entries,"assets/assets.xml","fastFigureAssets",
+       <<XmlElement("dataAssets",[],typedAssets),XmlElement("imageAssets",[],typedImages)>>); entries := result;
+PlacementDocumentOwnsGeometryOnly:
+  i := 1;
+  while i <= Len(snapshot.slots) do
+    slot := snapshot.slots[i];
+    placements := Append(placements,[slotId |-> slot.id,row |-> slot.row,col |-> slot.col,
+                           rowSpan |-> slot.rowSpan,colSpan |-> slot.colSpan]);
+    i := i + 1;
+  end while;
+  layoutDocument := [gridRows |-> snapshot.layout.gridRows,gridCols |-> snapshot.layout.gridCols,placements |-> placements];
+  call EncodeNamedXml("layout",layoutDocument); node := result;
+  call AddPackageXml(entries,"layout/layout.xml","fastFigureLayout",<<node>>); entries := result;
+AnnotationDocuments:
+  captionDocument := [enabled |-> snapshot.annotations.captions.enabled,
+      beforeText |-> snapshot.annotations.captions.text,afterText |-> snapshot.annotations.captions.afterText,
+      name |-> snapshot.annotations.captions.name,nameBold |-> snapshot.annotations.captions.nameBold,
+      settings |-> DeepCopy(snapshot.annotations.captions.settings)];
+  labelDocument := DeepCopy(snapshot.annotations.labels);
+  call EncodeNamedXml("caption",captionDocument); node := result;
+  call AddPackageXml(entries,"caption/caption.xml","fastFigureCaption",<<node>>); entries := result;
+  call EncodeNamedXml("labels",labelDocument); node := result;
+  call AddPackageXml(entries,"labels/labels.xml","fastFigureLabels",<<node>>); entries := result;
+EachSlotSplitsItsStateWithoutChangingOwnership:
+  i := 1;
+  while i <= Len(snapshot.slots) do
+    slot := snapshot.slots[i]; children := <<>>;
+    call EncodeNamedXml("settings",[id |-> slot.id,contentType |-> slot.content.contentType]); children := Append(children,result);
+    call EncodeNamedXml("caption",[text |-> slot.caption]); children := Append(children,result);
+    if slot.content.chart # NoValue then
+      chart := ChartById(snapshot,slot.content.chart); Require(chart # NoValue);
+      call EncodeGraphXml(chart); children := Append(children,result);
+    end if;
+    if slot.content.imageId # NoValue then Require(ImageById(snapshot,slot.content.imageId) # NoValue); end if;
+    \* Slot-local settings survive even with no image: null imageRef is not a fake asset.
+    \* The existing typed imageObject/settings representation can express this case.
+    call ffpxEncodeValue([imageRef |-> slot.content.imageId,settings |-> DeepCopy(slot.content.imageSettings)]);
+    if slot.content.imageId = NoValue then
+      children := Append(children,XmlElement("imageObject",[],<<result>>));
+    else
+      children := Append(children,XmlElement("imageObject",[imageRef |-> slot.content.imageId],<<result>>));
+    end if;
+    node := XmlElement("slot",[id |-> slot.id,contentType |-> slot.content.contentType],children);
+    call AddPackageXml(entries,"slots/slot-" \o IntegerText(slot.id) \o ".xml","fastFigureSlot",<<node>>); entries := result;
+    i := i + 1;
+  end while;
+DocumentsReturn:
+  \* Entry sequence order is not Project identity; references and object order are.
+  \* No bytes regenerated from rows, chart cloning, resource allocation or commit.
+  result := entries;
+  return;
+end procedure;
+
+procedure ffpxBuildProject()
+variables source = activeProject;
+begin
+OneOfficialReadContext:
+  call BuildFfpxInRead(source);
+  return;
+end procedure;
+
+procedure BuildFfpxInRead(source)
+variables snapshot = NoValue, entries = <<>>, i = 1,
+          asset = NoValue, retained = <<>>, path = "", slot = NoValue;
+begin
+ValidateThenOfficialExportSnapshot:
+  call validateProjectObjectState(source,TRUE);
+  call BuildPlainProjectRead(source); snapshot := DeepCopy(result);
+FilterCsvTrashWithoutTouchingAuthority:
+  i := 1; retained := <<>>;
+  while i <= Len(snapshot.assets.csvFiles) do
+    asset := snapshot.assets.csvFiles[i];
+    call projectAssetPath(asset); path := result;
+    if ~InTrash(path) then retained := Append(retained,asset); end if;
+    i := i + 1;
+  end while;
+  snapshot.assets.csvFiles := retained;
+FilterImageTrash:
+  i := 1; retained := <<>>;
+  while i <= Len(snapshot.assets.images) do
+    asset := snapshot.assets.images[i];
+    call projectAssetPath(asset); path := result;
+    if ~InTrash(path) then retained := Append(retained,asset); end if;
+    i := i + 1;
+  end while;
+  snapshot.assets.images := retained;
+FilterTrashDirectorySubtree:
+  i := 1; retained := <<>>;
+  while i <= Len(snapshot.fileSystem.directories) do
+    if ~InTrash(CanonicalNodePath(snapshot.fileSystem.directories[i])) then
+      retained := Append(retained,snapshot.fileSystem.directories[i]);
+    end if;
+    i := i + 1;
+  end while;
+  snapshot.fileSystem.directories := retained;
+RecheckExportReferencesAgainstRetainedAssets:
+  Require(UniqueChartSlotOwnership(snapshot));
+  i := 1;
+  while i <= Len(snapshot.charts) do
+    call validateChartModel(snapshot.charts[i],snapshot.assets.csvFiles);
+    i := i + 1;
+  end while;
+  i := 1;
+  while i <= Len(snapshot.slots) do
+    slot := snapshot.slots[i];
+    if slot.content.imageId # NoValue then
+      Require(ImageById(snapshot,slot.content.imageId) # NoValue);
+    end if;
+    i := i + 1;
+  end while;
+  \* Do not validate fixed roots on this trimmed export snapshot: trash is omitted.
+  \* Missing ordinary CSV/image now fails; conversion objects use the shared validator.
+ResponsibleDocumentsAndCopiedBytes:
+  call BuildFfpxDocumentEntries(snapshot); entries := result;
+  result := PackageEntriesWithVersion(entries,PACKAGE_FORMAT_VERSION);
+  \* STORE ZIP only; no reopen-required filesystem path; original Project untouched.
+  return;
+end procedure;
+
+procedure ReadPackageXml(entries,path,root)
+variables tree = NoValue;
+begin
+RequiredVersionedDocument:
+  Require(EntryExists(entries,path));
+  tree := ParseXmlTree(DecodeUtf8(EntryBytes(entries,path)));
+  Require(XmlRootName(tree) = root /\ XmlVersion(tree) = PACKAGE_FORMAT_VERSION);
+  result := tree;
+  return;
+end procedure;
+
+procedure DecodeNamedXml(parent,name)
+variables node = NoValue;
+begin
+OneNamedTypedValue:
+  node := RequiredSingleDirectChild(parent,name);
+  call ffpxDecodeValue(RequiredSingleValueChild(node));
+  return;
+end procedure;
+
+procedure RestorePlacementVisibility(slots)
+variables copy = DeepCopy(slots), i = 1, j = 1, anchor = NoValue,
+          row = 0, col = 0, matches = <<>>;
+begin
+FreshTaskLocalVisibility:
+  while i <= Len(copy) do copy[i].hidden := FALSE; i := i + 1; end while;
+MergedFootprints:
+  i := 1;
+  while i <= Len(copy) do
+    anchor := copy[i];
+    Require(IsPositiveInteger(anchor.rowSpan) /\ IsPositiveInteger(anchor.colSpan));
+    if anchor.rowSpan # 1 \/ anchor.colSpan # 1 then
+      row := anchor.row;
+      while row < anchor.row + anchor.rowSpan do
+        col := anchor.col;
+        while col < anchor.col + anchor.colSpan do
+          if row # anchor.row \/ col # anchor.col then
+            matches := SlotIndicesAtCell(copy,row,col);
+            Require(Len(matches) = 1);
+            j := matches[1];
+            Require(copy[j].content.chart = NoValue /\ copy[j].content.imageId = NoValue);
+            copy[j].hidden := TRUE;
+          end if;
+          col := col + 1;
+        end while;
+        row := row + 1;
+      end while;
+    end if;
+    i := i + 1;
+  end while;
+VisibilityReturn:
+  \* Do not discard caption/settings/payload to hide malformed topology.
+  result := copy;
+  return;
+end procedure;
+
+procedure ReadFfpxDocumentPayload(entries)
+variables project = NoValue, assetsRoot = NoValue, layout = NoValue,
+          caption = NoValue, labels = NoValue, payload = NoValue,
+          csvMetadata = <<>>, imageMetadata = <<>>, nodes = <<>>, i = 1, j = 1,
+          placement = NoValue, slotRoot = NoValue, slotNode = NoValue,
+          slotSettings = NoValue, slotCaption = NoValue, graphNode = NoValue,
+          imageNode = NoValue, image = NoValue, chart = NoValue, slot = NoValue,
+          objects = <<>>, charts = <<>>, slots = <<>>, appearance = [],
+          sourceNames = <<"enabled","beforeText","afterText","name","nameBold","settings">>,
+          targetNames = <<"enabled","text","afterText","name","nameBold","settings">>,
+          captionState = [], fixed = <<>>, paths = {}, path = "";
+begin
+MandatoryDocumentsThroughOneTypedGrammar:
+  call ReadPackageXml(entries,"project.xml","fastFigureProject");
+  call DecodeNamedXml(result,"settings"); project := result;
+  Require(project.schema = "fast-figure-project" /\ project.version = PACKAGE_FORMAT_VERSION);
+  call ReadPackageXml(entries,"assets/assets.xml","fastFigureAssets"); assetsRoot := result;
+  call ReadPackageXml(entries,"layout/layout.xml","fastFigureLayout");
+  call DecodeNamedXml(result,"layout"); layout := result;
+  call ReadPackageXml(entries,"caption/caption.xml","fastFigureCaption");
+  call DecodeNamedXml(result,"caption"); caption := result;
+  call ReadPackageXml(entries,"labels/labels.xml","fastFigureLabels");
+  call DecodeNamedXml(result,"labels"); labels := result;
+ReadBothAssetMetadataCollections:
+  nodes := DirectChildren(RequiredSingleDirectChild(assetsRoot,"dataAssets"),"dataAsset"); i := 1;
+  while i <= Len(nodes) do
+    call ffpxDecodeValue(RequiredSingleValueChild(nodes[i])); csvMetadata := Append(csvMetadata,result);
+    i := i + 1;
+  end while;
+  nodes := DirectChildren(RequiredSingleDirectChild(assetsRoot,"imageAssets"),"imageAsset"); i := 1;
+  while i <= Len(nodes) do
+    call ffpxDecodeValue(RequiredSingleValueChild(nodes[i])); imageMetadata := Append(imageMetadata,result);
+    i := i + 1;
+  end while;
+ReadPlacementDocumentsInTheirStoredOrder:
+  i := 1;
+  while i <= Len(layout.placements) do
+    placement := layout.placements[i];
+    call ReadPackageXml(entries,"slots/slot-" \o IntegerText(placement.slotId) \o ".xml","fastFigureSlot"); slotRoot := result;
+    slotNode := RequiredSingleDirectChild(slotRoot,"slot");
+    call DecodeNamedXml(slotNode,"settings"); slotSettings := result;
+    call DecodeNamedXml(slotNode,"caption"); slotCaption := result;
+    chart := NoValue; image := NoValue;
+    graphNode := OptionalSingleDirectChild(slotNode,"graph");
+    if graphNode # NoValue then
+      call DecodeNamedXml(graphNode,"settings"); chart := result;
+      nodes := DirectChildren(RequiredSingleDirectChild(graphNode,"graphObjects"),"graphObject");
+      objects := <<>>; j := 1;
+      while j <= Len(nodes) do
+        call ffpxDecodeValue(RequiredSingleValueChild(nodes[j])); objects := Append(objects,result);
+        j := j + 1;
+      end while;
+      chart.editor.objects := objects;
+      charts := Append(charts,chart);
+      \* Do not deduplicate/clone/drop chart ids to repair a shared/orphan import.
+    end if;
+    imageNode := OptionalSingleDirectChild(slotNode,"imageObject");
+    if imageNode # NoValue then call ffpxDecodeValue(RequiredSingleValueChild(imageNode)); image := result; end if;
+    slot := [id |-> placement.slotId,row |-> placement.row,col |-> placement.col,
+       rowSpan |-> placement.rowSpan,colSpan |-> placement.colSpan,hidden |-> FALSE,
+       caption |-> slotCaption.text,
+       content |-> [contentType |-> slotSettings.contentType,
+           chart |-> IF chart = NoValue THEN NoValue ELSE chart.id,
+           imageId |-> IF image = NoValue THEN NoValue ELSE image.imageRef]];
+    if image # NoValue then
+      if HasField(image,"settings") then slot.content.imageSettings := DeepCopy(image.settings); end if;
+    end if;
+    \* Missing imageSettings remain missing here; Backend slot normalization owns defaults.
+    slots := Append(slots,slot);
+    i := i + 1;
+  end while;
+VisibilityFromMergedGeometry:
+  call RestorePlacementVisibility(slots); slots := result;
+WireFieldsToTheSourceProjectImportShape:
+  if HasField(project,"appearance") then appearance := project.appearance; end if;
+  i := 1;
+  while i <= Len(sourceNames) do
+    if HasField(caption,sourceNames[i]) then captionState[targetNames[i]] := DeepCopy(caption[sourceNames[i]]); end if;
+    i := i + 1;
+  end while;
+  payload := [schema |-> project.schema,version |-> project.version,
+      kind |-> "fast-figure-project-object",
+      meta |-> [projectName |-> project.projectName,appBuild |-> project.appBuild],
+      layout |-> [gridRows |-> layout.gridRows,gridCols |-> layout.gridCols],
+      annotations |-> [labels |-> DeepCopy(labels),captions |-> captionState],
+      fileSystem |-> DeepCopy(project.fileSystem),
+      assets |-> [csvFiles |-> csvMetadata,images |-> imageMetadata],
+      charts |-> charts,slots |-> slots,appearance |-> []];
+  if HasField(appearance,"slotStyle") then payload.layout.slotStyle := DeepCopy(appearance.slotStyle); end if;
+  if HasField(appearance,"uiPalette") then payload.appearance.uiPalette := DeepCopy(appearance.uiPalette); end if;
+  if HasField(project,"export") then payload.export := DeepCopy(project.export); end if;
+RestoreFixedDirectoryInstancesNotExportedTrashContents:
+  fixed := <<BackendSettings.defaults.vfs.root,BackendSettings.defaults.vfs.csv,
+             BackendSettings.defaults.vfs.image,BackendSettings.defaults.vfs.trash>>;
+  paths := CanonicalDirectoryPathSet(payload.fileSystem.directories); i := 1;
+  while i <= Len(fixed) do
+    path := fixed[i];
+    if path \notin paths then
+      payload.fileSystem.directories := Append(payload.fileSystem.directories,NewDirectoryInstance(path));
+      paths := paths \cup {path};
+    end if;
+    i := i + 1;
+  end while;
+DecodedPayloadReturn:
+  \* schema/version are transport validation fields, stripped by buildProjectObject.
+  \* kind binds the existing Source schema identifier, not a new state.
+  \* nextId is computed from restored collections by the constructor, not from a package hint.
+  result := payload;
+  return;
+end procedure;
+
+procedure ffpxReadProject(file)
+variables entries = <<>>, payload = NoValue, i = 1, k = 1,
+          kinds = <<"csv","image">>, collection = <<>>, normalized = <<>>,
+          asset = NoValue, bytes = NoValue, referenceWidth = NoValue;
+begin
+StoreCrcPathAndVersion:
+  call ReadStorePackage(file,"project"); entries := result;
+RequiredTypedDocumentsAndPlacementReferences:
+  call ReadFfpxDocumentPayload(entries); payload := result;
+RestoreOwnedBytes:
+  while k <= Len(kinds) do
+    collection := IF kinds[k] = "csv" THEN payload.assets.csvFiles ELSE payload.assets.images;
+    normalized := <<>>; i := 1;
+    while i <= Len(collection) do
+      asset := DeepCopy(collection[i]);
+      Require(DataRefInAllowedSubtree(asset,IF kinds[k] = "csv" THEN "assets/data" ELSE "assets/media"));
+      Require(EntryExists(entries,asset.dataRef));
+      bytes := CopyBytes(EntryBytes(entries,asset.dataRef));
+      asset.bytesBase64 := Base64Encode(bytes);
+      if kinds[k] = "csv" then call parseProjectDataAsset(asset.name,bytes); asset.rows := result; end if;
+      RemoveField(asset,"dataRef");
+      normalized := Append(normalized,asset);
+      i := i + 1;
+    end while;
+    if kinds[k] = "csv" then payload.assets.csvFiles := normalized;
+    else payload.assets.images := normalized; end if;
+    k := k + 1;
+  end while;
+AdditiveMissingExportOnly:
+  if ~HasField(payload,"export") then
+    payload.export := DeepCopy(BackendSettings.project_object.export);
+    referenceWidth := FieldAtPathOrNoValue(payload,<<"layout","slotStyle","referenceWidth">>);
+    if referenceWidth = NoValue then referenceWidth := BackendSettings.project_object.layout.slotStyle.referenceWidth; end if;
+    payload.export.width := referenceWidth;
+    payload.export.height := IF payload.export.heightMode = "auto" THEN NoValue
+                             ELSE BackendSettings.defaults.limits.export.logicalHeight[1];
+  end if;
+  \* Do NOT clone/drop shared/orphan charts to repair topology. buildProjectObject validates it.
+  result := payload;
+  return;
+end procedure;
+
+procedure ffsxBuildSlot(slot, chart)
+variables source = activeProject;
+begin
+OneOfficialSlotReadContext:
+  call BuildFfsxInRead(source,slot,chart);
+  return;
+end procedure;
+
+procedure BuildFfsxInRead(source,slot,chart)
+variables copy = DeepCopy(chart), ids = <<>>, mapping = [],
+          entries = <<>>, i = 1, csv = NoValue, metadata = NoValue, dataRef = "",
+          typedAssets = <<>>, assetDocument = NoValue;
+begin
+SharedRepresentationValidation:
+  call validateChartModel(copy,source.assets.csvFiles);
+  call ReferencedProjectCsvIds(copy); ids := result;
+PackageLocalRemap:
+  while i <= Len(ids) do
+    csv := ResolveCsv(source,ids[i]); Require(csv # NoValue);
+    mapping[ids[i]] := i;
+    metadata := DeepCopy(csv); metadata.id := i;
+    RemoveField(metadata,"rows"); RemoveField(metadata,"bytesBase64"); RemoveField(metadata,"directory");
+    \* Current-format dataRef spelling is a package codec binding, not a local path.
+    dataRef := "assets/" \o CurrentVersionCsvDataRef(metadata);
+    Require(SafePackagePathInSubtree(dataRef,"assets/data"));
+    metadata.dataRef := dataRef;
+    call ffpxEncodeValue(metadata);
+    typedAssets := Append(typedAssets,XmlElement("dataAsset",[id |-> i,src |-> dataRef],<<result>>));
+    entries := Append(entries,[path |-> dataRef,bytes |-> CopyBytes(Base64Decode(csv.bytesBase64))]);
+    i := i + 1;
+  end while;
+  call RemapRealProjectCsvIds(copy,mapping); copy := result;
+RequiredAssetDocumentEvenForZeroObjects:
+  assetDocument := VersionedXmlDocument("fastFigureAssets",PACKAGE_FORMAT_VERSION,
+                   <<XmlElement("dataAssets",[],typedAssets)>>);
+  entries := Append(entries,[path |-> "assets/assets.xml",bytes |-> EncodeUtf8Xml(assetDocument)]);
+  call AddFfsxSlotDocument(entries,source,slot,copy); entries := result;
+  \* Conversion imported/view kept intact; zero-object chart needs no CSV entry.
+  result := PackageEntriesWithVersion(entries,PACKAGE_FORMAT_VERSION);
+  return;
+end procedure;
+
+procedure AddFfsxSlotDocument(entries,source,slot,chart)
+variables graph = DeepCopy(chart), settingsNode = NoValue, captionNode = NoValue,
+          graphNode = NoValue, children = <<>>;
+begin
+PackageGraphNotRegisteredProjectIdentity:
+  RemoveField(graph,"id");
+  call EncodeGraphXml(graph); graphNode := result;
+  call EncodeNamedXml("settings",[contentType |-> "graph",appBuild |-> source.meta.appBuild]); settingsNode := result;
+  call EncodeNamedXml("caption",[text |-> slot.caption]); captionNode := result;
+SlotAndFixedAssetDocumentReference:
+  children := <<XmlElement("assets",[ref |-> "assets/assets.xml"],<<>>),
+                XmlElement("slot",[],<<settingsNode,captionNode,graphNode>>)>>;
+  call AddPackageXml(entries,"slot.xml","fastFigureSlot",children);
+  return;
+end procedure;
+
+procedure ReadFfsxDocumentPayload(entries)
+variables root = NoValue, slotNode = NoValue, settings = NoValue, caption = NoValue,
+          graphNode = NoValue, chart = NoValue, nodes = <<>>, objects = <<>>,
+          csvFiles = <<>>, i = 1;
+begin
+FixedVersionSlotAndGraphDocuments:
+  call ReadPackageXml(entries,"slot.xml","fastFigureSlot"); root := result;
+  slotNode := RequiredSingleDirectChild(root,"slot");
+  call DecodeNamedXml(slotNode,"settings"); settings := result;
+  Require(settings.contentType = "graph");
+  call DecodeNamedXml(slotNode,"caption"); caption := result;
+  graphNode := RequiredSingleDirectChild(slotNode,"graph");
+  call DecodeNamedXml(graphNode,"settings"); chart := result;
+  RemoveField(chart,"id");
+OrderedGraphObjects:
+  nodes := DirectChildren(RequiredSingleDirectChild(graphNode,"graphObjects"),"graphObject");
+  while i <= Len(nodes) do
+    call ffpxDecodeValue(RequiredSingleValueChild(nodes[i])); objects := Append(objects,result);
+    i := i + 1;
+  end while;
+  chart.editor.objects := objects;
+PackageLocalCsvMetadata:
+  call ReadPackageXml(entries,"assets/assets.xml","fastFigureAssets"); root := result;
+  nodes := DirectChildren(RequiredSingleDirectChild(root,"dataAssets"),"dataAsset"); i := 1;
+  while i <= Len(nodes) do
+    call ffpxDecodeValue(RequiredSingleValueChild(nodes[i])); csvFiles := Append(csvFiles,result);
+    i := i + 1;
+  end while;
+ReadFfsxPayloadReturn:
+  \* No project slot/chart id, fake CSV, live Project lookup or hidden commit.
+  result := [schema |-> "fast-figure-slot",version |-> PACKAGE_FORMAT_VERSION,
+             slot |-> settings,caption |-> caption.text,chart |-> chart,csvFiles |-> csvFiles];
+  return;
+end procedure;
+
+procedure ffsxReadSlot(file)
+variables entries = <<>>, payload = NoValue, i = 1, asset = NoValue, localIds = {}, bytes = NoValue;
+begin
+StoreCrcPathVersion:
+  call ReadStorePackage(file,"slot"); entries := result;
+  call ReadFfsxDocumentPayload(entries); payload := result;
+CsvBytesAndRealReferences:
+  while i <= Len(payload.csvFiles) do
+    asset := payload.csvFiles[i];
+    Require(IsPositiveInteger(asset.id) /\ asset.id \notin localIds);
+    localIds := localIds \cup {asset.id};
+    Require(DataRefInAllowedSubtree(asset,"assets/data") /\ EntryExists(entries,asset.dataRef));
+    bytes := CopyBytes(EntryBytes(entries,asset.dataRef));
+    asset.bytesBase64 := Base64Encode(bytes);
+    call parseProjectDataAsset(asset.name,bytes); asset.rows := result;
+    RemoveField(asset,"dataRef");
+    payload.csvFiles[i] := asset;
+    i := i + 1;
+  end while;
+  call validateChartModel(payload.chart,payload.csvFiles);
+  \* Its ordinary-object branch resolves every csvId in THIS package collection.
+  \* Its conversion branch validates the table/columns without project/local CSV resolve.
+  \* No id=0/protected default CSV; conversion objects do not resolve package CSVs.
+  result := payload;
+  return;
+end procedure;
+
+\* Call-scoped missing-only merge used by the Source load rule. Never overlays
+\* present values using truthiness and never fills instance data from config.
+procedure FillMissingSettingRecord(current,defaults)
+variables copy = DeepCopy(current), names = PropertyNames(defaults), i = 1, key = "";
+begin
+SettingsFieldsOnly:
+  Require(IsRecord(current));
+  while i <= Len(names) do
+    key := names[i];
+    if ~HasField(copy,key) then
+      copy[key] := DeepCopy(defaults[key]);
+    elsif IsRecord(defaults[key]) then
+      if IsRecord(copy[key]) then
+        call FillMissingSettingRecord(copy[key],defaults[key]);
+        copy[key] := result;
+      end if;
+      \* A present malformed value is NOT missing. Owner/whole validation
+      \* rejects or normalizes it under that owner's existing rule.
+    end if;
+    i := i + 1;
+  end while;
+MissingMergeReturn:
+  result := copy;
+  return;
+end procedure;
+
+procedure CompleteProjectSettingsInCandidate(candidate)
+variables names = <<>>, i = 1, key = "", palette = [], supplied = [];
+begin
+LayoutSettingsNotPlacementData:
+  if ~HasField(candidate,"layout") then candidate.layout := []; end if;
+  call FillMissingSettingRecord(candidate.layout,BackendSettings.project_object.layout);
+  candidate.layout := result;
+AnnotationSettingsNotCaptionBodies:
+  if ~HasField(candidate,"annotations") then candidate.annotations := []; end if;
+  if ~HasField(candidate.annotations,"labels") then candidate.annotations.labels := []; end if;
+  if ~HasField(candidate.annotations,"captions") then candidate.annotations.captions := []; end if;
+  call FillMissingSettingRecord(candidate.annotations.labels,BackendSettings.project_object.annotations.labels);
+  candidate.annotations.labels := result;
+  call FillMissingSettingRecord(candidate.annotations.captions,BackendSettings.project_object.annotations.captions);
+  candidate.annotations.captions := result;
+InstanceCaptionDataOutsideConfig:
+  names := <<"text","afterText","name">>; i := 1;
+  while i <= Len(names) do
+    key := names[i];
+    if ~HasField(candidate.annotations.captions,key) then candidate.annotations.captions[key] := ""; end if;
+    i := i + 1;
+  end while;
+PaletteHasItsOwnWholePaletteRule:
+  if ~HasField(candidate,"appearance") then candidate.appearance := []; end if;
+  if HasField(candidate.appearance,"uiPalette") then supplied := candidate.appearance.uiPalette; end if;
+  Require(IsRecord(supplied));
+  names := PropertyNames(BackendSettings.project_object.appearance.uiPalette); i := 1;
+  while i <= Len(names) do
+    key := names[i];
+    if HasField(supplied,key) then
+      if IsSixDigitHexColor(supplied[key]) then palette[key] := supplied[key];
+      else palette[key] := BackendSettings.project_object.appearance.uiPalette[key]; end if;
+    else palette[key] := BackendSettings.project_object.appearance.uiPalette[key]; end if;
+    i := i + 1;
+  end while;
+  candidate.appearance.uiPalette := palette;
+ExportMissingOnly:
+  if ~HasField(candidate,"export") then candidate.export := []; end if;
+  call FillMissingSettingRecord(candidate.export,BackendSettings.project_object.export);
+  candidate.export := result;
+  if ~HasField(candidate.export,"width") then candidate.export.width := candidate.layout.slotStyle.referenceWidth; end if;
+  if ~HasField(candidate.export,"height") then
+    if candidate.export.heightMode = "auto" then candidate.export.height := NoValue;
+    else candidate.export.height := BackendSettings.defaults.limits.export.logicalHeight[1]; end if;
+  end if;
+NoSettingsAuthorityReplacement:
+  \* Current instance data (names/text/rows/bytes/id/collections/nextId) is not
+  \* populated by config. Later whole validation handles invalid present fields.
+  \* No commit, live Project reread, Frontend access or config synchronization.
+  result := candidate;
+  return;
+end procedure;
+
+procedure NormalizeImportedAssetCollections(candidate)
+variables kinds = <<"csv","image">>, k = 1, i = 1, collection = <<>>,
+          normalized = <<>>, raw = NoValue, asset = NoValue,
+          ids = {}, paths = {}, path = "", rows = <<>>, bytes = NoValue;
+begin
+KindsKeepIndependentIdSpacesAndOneVfs:
+  while k <= Len(kinds) do
+    collection := IF kinds[k] = "csv" THEN candidate.assets.csvFiles ELSE candidate.assets.images;
+    normalized := <<>>; ids := {}; i := 1;
+AssetInputOrder:
+    while i <= Len(collection) do
+      raw := collection[i];
+      Require(IsPositiveInteger(raw.id) /\ raw.id \notin ids);
+      ids := ids \cup {raw.id};
+      call projectAssetPath(raw); path := result;
+      call normalizeProjectPath(path,FALSE); path := result;
+      Require(path \notin paths); paths := paths \cup {path};
+      Require(CurrentParentDirectoryExists(candidate,path));
+OwnedByteRepresentationNotFileHandle:
+      bytes := CopyBytes(Base64Decode(raw.bytesBase64));
+      if kinds[k] = "image" then Require(~HasField(raw,"imageSettings")); end if;
+      call BuildAssetMetadata(kinds[k],path,raw.mime,bytes); asset := result;
+      asset.id := raw.id;
+CsvRowsAndHeaderOnly:
+      if kinds[k] = "csv" then
+        call dataTable(raw.rows); rows := result;
+        asset.rows := rows;
+        asset.headerLines := NormalizeHeaderCount(IF HasField(raw,"headerLines") THEN raw.headerLines ELSE 1,rows);
+      end if;
+      normalized := Append(normalized,asset);
+      i := i + 1;
+    end while;
+StoreOnlyCandidateCollections:
+    if kinds[k] = "csv" then candidate.assets.csvFiles := normalized;
+    else candidate.assets.images := normalized; end if;
+    k := k + 1;
+  end while;
+AssetNormalizationReturn:
+  \* No create/rename/replace conflict fallback, id allocation or silent dedup.
+  \* Current Project/config/Frontend are never queried or changed here.
+  result := candidate;
+  return;
+end procedure;
+
+procedure NormalizeImportedCharts(candidate)
+variables charts = <<>>, chart = NoValue, object = NoValue, i = 1, j = 1, k = 1,
+          fields = PropertyNames(BackendSettings.defaults.limits.graphObject), key = "", bounds = NoValue;
+begin
+ExistingZeroOrMoreObjectsNotBaseObjectCreation:
+  while i <= Len(candidate.charts) do
+    chart := DeepCopy(candidate.charts[i]);
+    Require(HasField(chart,"id")); Require(IsPositiveInteger(chart.id));
+    Require(IsRecord(chart.editor) /\ IsSequence(chart.editor.objects));
+    Require(IsBoolean(chart.editor.editable));
+GlobalSettingsUseTheSameOwnerNormalizer:
+    call normalizeGlobalSettings(FieldOrNoValue(chart.editor,"globalSettings"));
+    chart.editor.globalSettings := result;
+StyleSettingsOnlyNotDataReferences:
+    j := 1;
+    while j <= Len(chart.editor.objects) do
+      object := DeepCopy(chart.editor.objects[j]);
+      call FillMissingSettingRecord(object,BackendSettings.defaults.chartSettings.editor.objectStyle);
+      object := result;
+      k := 1;
+      while k <= Len(fields) do
+        key := fields[k]; bounds := BackendSettings.defaults.limits.graphObject[key];
+        Require(IsFiniteNumber(object[key]));
+        Require(object[key] >= bounds[1] /\ object[key] <= bounds[2]);
+        k := k + 1;
+      end while;
+      \* Do not invent CSV/x/y/type/axis references, color, or Plotly extensions.
+      \* The shared validator below checks the existing representation and enums.
+      chart.editor.objects[j] := object;
+      j := j + 1;
+    end while;
+RepresentationAndReferencesFromOneValidator:
+    call validateChartModel(chart,candidate.assets.csvFiles);
+    charts := Append(charts,chart);
+    i := i + 1;
+  end while;
+ChartsReturn:
+  candidate.charts := charts;
+  result := candidate;
+  return;
+end procedure;
+
+procedure NormalizeImportedSlots(candidate)
+variables normalized = <<>>, slot = NoValue, owners = [], ids = {}, i = 1,
+          key = "", fields = <<"scale","x","y">>, j = 1;
+begin
+ExistingChartOwnershipCounters:
+  while i <= Len(candidate.charts) do
+    owners[candidate.charts[i].id] := 0;
+    i := i + 1;
+  end while;
+SlotGeometryAndLocalOwner:
+  i := 1;
+  while i <= Len(candidate.slots) do
+    call normalizeSlotContent(candidate.slots[i]); slot := result;
+    Require(IsInteger(slot.id) /\ slot.id \notin ids); ids := ids \cup {slot.id};
+    Require(ValidSlotGeometryInsideGrid(slot,candidate.layout));
+    Require(IsBoolean(slot.hidden));
+    Require(slot.content.contentType \in {"graph","image"});
+OneChartOrImageReferencePerSlot:
+    Require(~(slot.content.chart # NoValue /\ slot.content.imageId # NoValue));
+    if slot.content.chart # NoValue then
+      Require(HasField(owners,slot.content.chart));
+      owners[slot.content.chart] := owners[slot.content.chart] + 1;
+    end if;
+    if slot.content.imageId # NoValue then Require(ImageById(candidate,slot.content.imageId) # NoValue); end if;
+SlotSettingsNotImageAssetSettings:
+    Require(slot.content.imageSettings.fit \in {"contain","cover","manual"});
+    j := 1;
+    while j <= Len(fields) do
+      key := fields[j];
+      Require(FiniteInRange(slot.content.imageSettings[key],BackendSettings.defaults.limits.imageSettings[key]));
+      j := j + 1;
+    end while;
+    Require(IsText(slot.caption) \/ slot.caption = NoValue);
+    \* Keep null/empty/exact text; never store UI placeholder or another slot's caption.
+    normalized := Append(normalized,slot);
+    i := i + 1;
+  end while;
+NoSilentChartCloneOrDrop:
+  Require(EveryChartOwnerCountEqualsOne(owners));
+  candidate.slots := normalized;
+  result := candidate;
+  return;
+end procedure;
+
+procedure buildProjectObject(payload, fileName)
+variables candidate = NoValue;
+begin
+SchemaNameAndGrid:
+  Require(CurrentProjectSchemaAndPackageVersion(payload,PACKAGE_FORMAT_VERSION));
+  Require(ValidProjectNameAndGrid(payload));
+  \* ffpxReadProject has assembled the declared Project-shaped payload.
+  \* Do not infer a new name from fileName or bind the parsed payload as authority.
+  candidate := DeepCopy(payload);
+  RemoveField(candidate,"schema"); RemoveField(candidate,"version");
+  \* Checked package transport fields are not persisted as a second Project schema.
+  if HasField(candidate.layout,"layoutMapWidth") then RemoveField(candidate.layout,"layoutMapWidth"); end if;
+AssetCollections:
+  call NormalizeImportedAssetCollections(candidate); candidate := result;
+  Require(ImageAssetsHaveNoSlotLocalDisplaySettings(candidate));
+ChartsBeforeSlotTopology:
+  call NormalizeImportedCharts(candidate); candidate := result;
+  \* Conversion objects do not create/require CSV; empty editable chart stays empty.
+SlotAndSettings:
+  call NormalizeImportedSlots(candidate); candidate := result;
+  call CompleteProjectSettingsInCandidate(candidate); candidate := result;
+  \* Present valid false/0/empty are data, not missing. Shared/orphan charts fail, not clone/drop.
+RecomputeIdsAndWholeValidate:
+  candidate.nextId := [csv |-> MaximumIdOrZero(candidate.assets.csvFiles) + 1,
+                       image |-> MaximumIdOrZero(candidate.assets.images) + 1,
+                       chart |-> MaximumIdOrZero(candidate.charts) + 1];
+  call validateProjectObjectState(candidate,TRUE);
+  result := candidate;
+  return;
+end procedure;
+
+procedure applyFfsxSlot(slotPayload, targetSlot)
+variables source = activeProject;
+begin
+SourceSlotImportContextBinding:
+  call ApplyFfsxInAttempt(source,slotPayload,targetSlot);
+  return;
+end procedure;
+
+procedure ApplyFfsxInAttempt(source, slotPayload, targetSlot)
+variables candidate = NoValue, target = NoValue,
+          copy = DeepCopy(slotPayload.chart), ids = <<>>, mapping = [],
+          i = 1, j = 1, csv = NoValue, path = "", oldChartId = NoValue, retainedCharts = <<>>;
+begin
+CurrentTargetNotCallerSnapshot:
+  target := ResolveVisibleSlot(source,targetSlot.id);
+  Require(target # NoValue);
+  candidate := DeepCopy(source);
+RepresentationAwareIds:
+  call ReferencedProjectCsvIds(copy); ids := result;
+EachPackageLocalIdGetsOneActualProjectId:
+  while i <= Len(ids) do
+    csv := DeepCopy(ResolvePackageCsv(slotPayload,ids[i])); Require(csv # NoValue);
+    csv.id := candidate.nextId.csv; candidate.nextId.csv := csv.id + 1;
+    Require(IsValidSingleProjectFileName(csv.name));
+    path := JoinProjectPath(BackendSettings.defaults.vfs.csv,csv.name);
+    call normalizeProjectPath(path,FALSE); path := result;
+    Require(CurrentParentDirectoryExists(candidate,path));
+    call projectVfsUniquePath(path,candidate,{}); path := result;
+    csv.directory := CanonicalParent(path); csv.name := CanonicalLeaf(path);
+    RemoveField(csv,"dataRef");
+    csv.bytesBase64 := Base64Encode(CopyBytes(Base64Decode(csv.bytesBase64)));
+    mapping[ids[i]] := csv.id;
+    candidate.assets.csvFiles := Append(candidate.assets.csvFiles,csv);
+    i := i + 1;
+  end while;
+RemapOnlyRealProjectReferences:
+  call RemapRealProjectCsvIds(copy,mapping); copy := result;
+  \* imported/conversionRows/Plotly original are not rewritten as project CSVs.
+NewUniqueChartOwner:
+  copy.id := candidate.nextId.chart; candidate.nextId.chart := copy.id + 1;
+  oldChartId := target.content.chart;
+  if oldChartId # NoValue then
+    Require(CountSlotsReferencingChart(candidate,oldChartId) = 1);
+    Require(ResolveChart(candidate,oldChartId) # NoValue);
+  end if;
+RemoveOnlyReplacedOwnedChart:
+  j := 1;
+  while j <= Len(candidate.charts) do
+    if candidate.charts[j].id # oldChartId then retainedCharts := Append(retainedCharts,candidate.charts[j]); end if;
+    j := j + 1;
+  end while;
+  candidate.charts := Append(retainedCharts,copy);
+  CandidateSlot(candidate,target.id).content.chart := copy.id;
+  CandidateSlot(candidate,target.id).content.imageId := NoValue;
+  CandidateSlot(candidate,target.id).content.contentType := "graph";
+  \* Keep target identity/geometry/local display settings and unrelated assets/charts.
+  CandidateSlot(candidate,target.id).caption := slotPayload.caption;
+  call validateProjectObjectState(candidate,TRUE);
+  result := candidate;
+  \* No partial commit/Frontend selection/reverse callback. SLOT_CHART_IMPORTED final-commits once.
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

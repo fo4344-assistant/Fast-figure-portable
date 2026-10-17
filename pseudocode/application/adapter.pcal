@@ -1,0 +1,168 @@
+---- MODULE FastFigureApplicationAdapterR38 ----
+EXTENDS Sequences
+
+\* Direct translation: sourcescript/application/adapter.py r38, all five functions.
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Backend imports: readBackendProjection, validateFrontendIntent,
+\* buildFrontendReconciliationInput, projectEFSM, PROJECT_COMMANDS.
+\* Frontend import: interfaceFSM. Qualified imported methods are written with
+\* '_' mechanically (InterfaceStateMachine_send = interfaceFSM.send, etc.).
+\* result is a procedure return channel only, not shared domain state/storage.
+\* Imported procedures use the same call-local result convention.
+CONSTANT NoValue, PROJECT_COMMANDS
+BACKEND_REFERENCE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"}
+
+(* --algorithm ApplicationAdapter
+variables result = NoValue;
+
+procedure dispatchProjectQuery(query, payload)
+begin
+ReadThroughBackend:
+  call readBackendProjection(query, payload);
+  \* Immutable output only; no mutable Backend helper escapes.
+  return;
+end procedure;
+
+procedure dispatchInterfaceEvent(event, payload)
+variables validatedInput = NoValue;
+begin
+ValidateOnlyBackendIdentities:
+  if event \in BACKEND_REFERENCE_EVENTS then
+    call validateFrontendIntent(event, payload);
+    validatedInput := result;
+  else
+    validatedInput := [event |-> event, accepted |-> TRUE, payload |-> payload];
+  end if;
+RejectedEvent:
+  if ~validatedInput.accepted then
+    call InterfaceStateMachine_readState();
+    return;
+  end if;
+SendValidatedOnly:
+  call InterfaceStateMachine_send(event, validatedInput);
+  \* SELECT_GRAPH_OBJECT selectAsset flag remains caller's explicit intent.
+  return;
+end procedure;
+
+procedure dispatchSlotSelection(slotId, pendingContentType, direction)
+variables validatedInput = NoValue, interfaceState = NoValue,
+          selectionContext = NoValue, projectResult = NoValue,
+          rendererProjection = NoValue, commandTuple = NoValue;
+begin
+ValidateSlotBeforeAnyChange:
+  call validateFrontendIntent("SELECT_SLOT", [slotId |-> slotId, direction |-> direction]);
+  validatedInput := result;
+RejectSlotUnchanged:
+  if ~validatedInput.accepted then
+    call InterfaceStateMachine_readState();
+    result := <<result, NoValue, NoValue>>;
+    return;
+  end if;
+ApplySlotRuntimeTransition:
+  \* Backend hint distinguishes user toggle/full clear from non-null
+  \* model-to-fsm graph-only clear; no new/second selection event here.
+  call InterfaceStateMachine_send("SELECT_SLOT", validatedInput);
+  interfaceState := result;
+OptionalPersistentIntent:
+  if interfaceState.selectedSlotId # NoValue /\ pendingContentType # NoValue then
+    call readBackendProjection("slot-selection-context", [slotId |-> interfaceState.selectedSlotId]);
+    selectionContext := result;
+    if selectionContext # NoValue then
+      if selectionContext.empty /\ selectionContext.contentType # pendingContentType then
+        call dispatchProjectCommand("SLOT_TYPE_CHANGED",
+             [slotId |-> interfaceState.selectedSlotId, contentType |-> pendingContentType]);
+        commandTuple := result;
+        projectResult := commandTuple[1];
+        interfaceState := commandTuple[2];
+      end if;
+    end if;
+  end if;
+ReadFinalSelectionProjection:
+  call readBackendProjection("renderer", [frontendState |-> interfaceState]);
+  rendererProjection := result;
+ReturnSlotOrchestration:
+  result := <<interfaceState, projectResult, rendererProjection>>;
+  return;
+end procedure;
+
+procedure dispatchProjectCommand(event, payload)
+variables mutationResult = NoValue, frontendBefore = NoValue,
+          reconciliationInput = NoValue, interfaceState = NoValue,
+          rendererProjection = NoValue;
+begin
+RequireExplicitCommand:
+  assert event \in PROJECT_COMMANDS;
+FinishBackendTransactionFirst:
+  \* Identity/new edits only. Never feed read projections as candidates.
+  call ProjectStateMachine_send(event, payload);
+  mutationResult := result;
+ReadRuntimeReferences:
+  call InterfaceStateMachine_readState();
+  frontendBefore := result;
+NoSuccessPathWithoutCommit:
+  if ~mutationResult.committed then
+    result := <<mutationResult, frontendBefore, NoValue>>;
+    return;
+  end if;
+ValidatePostCommitReferences:
+  \* This is the ONLY post-commit index/hint/map path. A map is command-local.
+  call buildFrontendReconciliationInput(event, mutationResult, frontendBefore);
+  reconciliationInput := result;
+ReconcileOnce:
+  call InterfaceStateMachine_reconcileProjectResult(event, reconciliationInput);
+  interfaceState := result;
+  \* Do not resend SELECT_GRAPH_OBJECT or overwrite independent CSV selection.
+ReadFinalRendererInput:
+  call readBackendProjection("renderer", [frontendState |-> interfaceState,
+                                         mutationResult |-> mutationResult]);
+  rendererProjection := result;
+ReturnInternalTuple:
+  \* Not a public chart/settings/bool result. Wrapper owns its declared return.
+  \* Post-commit read/render failures propagate; no hidden Project rollback.
+  result := <<mutationResult, interfaceState, rendererProjection>>;
+  return;
+end procedure;
+
+procedure ApplicationAdapter_runLifecycleTask(lifecycle, event, task)
+variables interfaceState = NoValue, taskCompletion = NoValue;
+begin
+ReadLifecycle:
+  call InterfaceStateMachine_readState();
+  interfaceState := result;
+BusyRejectWithoutTask:
+  if interfaceState.lifecycle # "ready" then
+    result := BusyRejection();
+    return;
+  end if;
+InvalidRequestBeforeTask:
+  if lifecycle \notin {"importing", "exporting"} then
+    result := InvalidLifecycleRejection();
+    return;
+  end if;
+PublishBusyBeforeCalling:
+  call dispatchInterfaceEvent("LIFECYCLE_START", [lifecycle |-> lifecycle, event |-> event]);
+ExecuteTaskExactlyOnce:
+  \* Invocation/completion capture is a language-neutral plumbing primitive.
+  \* Does not execute in interfaceFSM, retry, or infer command success.
+  taskCompletion := InvokeAndAwaitOnce(task);
+DistinguishThrowFromReturnedRejection:
+  if taskCompletion.threw then
+    call dispatchInterfaceEvent("LIFECYCLE_FAILED",
+         [event |-> event, message |-> FailureMessage(taskCompletion.failure)]);
+    \* interfaceFSM publishes error -> ready before original failure propagates.
+    PropagateOriginalFailure(taskCompletion.failure);
+  else
+    call dispatchInterfaceEvent("LIFECYCLE_COMPLETE",
+         [event |-> event, outcome |-> taskCompletion.value]);
+    \* Cancel/rejected result is still a completed task, not a commit claim.
+    result := taskCompletion.value;
+  end if;
+LifecycleReturn:
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

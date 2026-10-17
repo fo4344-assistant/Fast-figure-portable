@@ -1,0 +1,754 @@
+---- MODULE FastFigureBackendProjectEFSMR38 ----
+EXTENDS Naturals, Integers, Sequences
+
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* This part translates the common transaction, actual-result formation and
+\* the original-index cascade filter and explicit command-domain dispatch.
+\* Remaining candidate helper bindings / asset cascade integration need fidelity review.
+\* No Frontend imports/calls. activeProject is the sole Backend authority binding.
+\* CurrentAuthorityReference is the existing ProjectObject INTERNAL STATE reference,
+\* not a new persisted revision/token, snapshot store, or ProjectObject field.
+\* Qualified source method projectEFSM.send is ProjectStateMachine_send below.
+CONSTANT NoValue, BackendSettings
+PROJECT_COMMANDS == {
+ "PROJECT_LOADED", "PROJECT_NAME_CHANGED", "PROJECT_DIRECTORY_CREATED", "PROJECT_NODE_MOVED",
+ "PROJECT_TRASH_EMPTIED", "ASSETS_IMPORTED", "DATA_OBJECT_CREATED", "DATA_OBJECT_REPLACED",
+ "DATA_OBJECT_DELETED", "IMAGE_OBJECT_CREATED", "IMAGE_OBJECT_REPLACED", "IMAGE_OBJECT_DELETED",
+ "SLOT_TYPE_CHANGED", "SLOTS_RESET", "SLOTS_SWAPPED", "SLOT_IMAGE_LINKED", "SLOT_IMAGE_SETTINGS_CHANGED",
+ "SLOT_DATA_CONNECTED", "SLOT_IMAGE_IMPORTED", "SLOT_CHART_IMPORTED", "GRAPH_OBJECTS_REPLACED",
+ "CHART_LAYOUT_CHANGED", "CHART_MODEL_REPLACED", "GRID_LAYOUT_CHANGED", "LAYOUT_STYLE_CHANGED",
+ "SLOTS_MERGED", "SLOTS_SPLIT", "CAPTION_TEXT_INPUT", "SLOT_CAPTIONS_INSERTED",
+ "CAPTION_SETTINGS_CHANGED", "LABEL_SETTINGS_CHANGED", "LABEL_POSITION_CHANGED",
+ "APPEARANCE_CHANGED", "EXPORT_SETTINGS_CHANGED"}
+
+\* Source graph edit operations, not a generic replacement-array public API:
+GRAPH_OPERATIONS == {"graphs.addObject", "graphs.moveObject", "graphs.setObjectValues",
+                     "graphs.deleteObject", "graphs.applyPalette"}
+\* No successful hint/map may be present in a failed outcome.
+
+(* --algorithm BackendProjectEFSM
+variables result = NoValue;
+
+procedure cascadeFilterWithOriginalIndexMap(chartId, objects, removeOriginalIndexSet)
+variables retained = <<>>, indices = <<>>, oldIndex = 0, postIndex = 0;
+begin
+OneEntryForEveryOriginalPosition:
+  indices := SequenceOf(NoValue, Len(objects));
+FilterExactlyTheActualReferenceSet:
+  while oldIndex < Len(objects) do
+    if oldIndex \notin removeOriginalIndexSet then
+      retained := Append(retained, objects[oldIndex + 1]);
+      indices[oldIndex + 1] := postIndex;
+      postIndex := postIndex + 1;
+    end if;
+    oldIndex := oldIndex + 1;
+  end while;
+ReturnCallLocalFilterCalculation:
+  \* duplicates are distinct ORIGINAL POSITIONS, never reverse matched by equality.
+  \* Used only for actual CSV cascade removal in a retained chart. No chart
+  \* removal/path-only/image-only map. No persistent array or Frontend selection.
+  result := <<retained, [chartId |-> chartId, indices |-> indices]>>;
+  return;
+end procedure;
+
+procedure calculateGraphObjectEdit(chart, operation, payload, source)
+variables objects = DeepCopy(chart.editor.objects), selectedIndexHint = NoValue,
+          hasIndexHint = FALSE, moved = NoValue, i = 0, colors = <<>>, baseObject = NoValue;
+begin
+CurrentEditableOwnerOnly:
+  assert chart.editor.editable;
+  assert UniqueOwningVisibleGraphSlot(chart.id, source);
+  assert operation \in GRAPH_OPERATIONS;
+ChooseExistingOperation:
+  if operation = "graphs.addObject" then
+    \* Resolve csvId in THIS source. Base object calculation is graphs-domain.
+    assert CsvExists(payload.csvId, source);
+    call CreateBaseGraphObject(source,payload.csvId); baseObject := result;
+    objects := Append(objects,baseObject);
+    selectedIndexHint := Len(objects) - 1;
+    hasIndexHint := TRUE;
+  elsif operation = "graphs.moveObject" then
+    assert ValidZeroBasedIndex(payload.from, objects) /\ ValidZeroBasedIndex(payload.to, objects);
+    if payload.from = payload.to then
+      result := UncommittedUnchanged();
+      return;
+    end if;
+    moved := objects[payload.from + 1];
+    objects := RemoveSequencePosition(objects, payload.from + 1);
+    objects := InsertAtFinalPosition(objects, payload.to + 1, moved);
+    selectedIndexHint := payload.to;
+    hasIndexHint := TRUE;
+  elsif operation = "graphs.setObjectValues" then
+    assert ValidZeroBasedIndex(payload.index, objects);
+    \* graphs.graphEditorCommit owns one-object normalization/field rules.
+    call CalculateOneObjectValues(chart.id,payload.index,payload.values,source);
+    objects := result[1];
+    selectedIndexHint := payload.index;
+    hasIndexHint := TRUE;
+  elsif operation = "graphs.deleteObject" then
+    assert ValidZeroBasedIndex(payload.index, objects);
+    objects := RemoveSequencePosition(objects, payload.index + 1);
+    selectedIndexHint := NoValue;
+    hasIndexHint := TRUE;
+  else
+    \* graphs.GRAPH_PALETTE_RULE: nonempty validated input, cycling colors ONLY.
+    colors := ValidatedGraphPalette(payload.colors);
+    while i < Len(objects) do
+      objects[i + 1].color := colors[(i % Len(colors)) + 1];
+      i := i + 1;
+    end while;
+    \* Omit hint rather than writing explicit none for palette.
+  end if;
+BackendCandidateHelperOnly:
+  call GraphCommitInAttempt(source,chart.id,objects,selectedIndexHint);
+  \* Private graphEditorCommit expansion receives THIS attempt, not a reread of activeProject.
+  \* Distinguish absent index hint from explicit none at actual-result formation.
+  result := ExtendCallLocalCalculation(result,
+           [hasIndexHint |-> hasIndexHint, selectedIndexHint |-> selectedIndexHint]);
+  return;
+end procedure;
+
+procedure DetachAssetReferences(candidate,csvIds,imageIds)
+variables refs = <<>>, maps = <<>>, chart = NoValue, removed = {}, retained = <<>>,
+          i = 1, j = 1, graphCount = 0, imageCount = 0;
+begin
+UseExactlySharedRepresentationScope:
+  call collectAssetReferences(csvIds,imageIds,candidate); refs := result;
+ChartByChartOriginalPositions:
+  while i <= Len(candidate.charts) do
+    chart := candidate.charts[i]; removed := {}; j := 1;
+    while j <= Len(refs) do
+      if refs[j].kind = "csv" /\ refs[j].chartId = chart.id then removed := removed \cup {refs[j].originalObjectIndex}; end if;
+      j := j + 1;
+    end while;
+    if Cardinality(removed) > 0 then
+      call cascadeFilterWithOriginalIndexMap(chart.id,chart.editor.objects,removed);
+      chart.editor.objects := result[1]; maps := Append(maps,result[2]);
+      graphCount := graphCount + Cardinality(removed);
+      \* Empty chart is valid. Same shared validator scope excludes conversion views.
+      call rebuildEditableGraph(chart,candidate); candidate.charts[i] := result;
+    end if;
+    i := i + 1;
+  end while;
+OnlyImageReferenceNotSlotDisplaySettings:
+  i := 1;
+  while i <= Len(refs) do
+    if refs[i].kind = "image" then
+      CandidateSlot(candidate,refs[i].slotId).content.imageId := NoValue;
+      imageCount := imageCount + 1;
+    end if;
+    i := i + 1;
+  end while;
+DetachReturn:
+  result := [candidate |-> candidate,graphObjectIndexMaps |-> maps,
+             removedGraphReferenceCount |-> graphCount,resetImageSlotCount |-> imageCount];
+  return;
+end procedure;
+
+procedure CalculateNewAsset(candidate,kind,payload)
+variables asset = NoValue, path = "", requestedId = NoValue, table = NoValue, bytes = NoValue;
+begin
+OnlyNewFieldsNotApplicationModel:
+  requestedId := FieldOrNoValue(payload,"id");
+  if kind = "csv" then
+    call dataTable(payload.data); table := result;
+  else bytes := CopyImageInputBytes(payload.bytes); end if;
+CurrentLocationAndCollisionFreeName:
+  path := FieldOrNoValue(payload,"path");
+  if path = NoValue \/ path = "" then
+    path := JoinProjectPath(BackendSettings.defaults.vfs[kind],NormalizeSingleProjectFileName(payload.name));
+  end if;
+  call normalizeProjectPath(path,FALSE); path := result;
+  Require(CurrentParentDirectoryExists(candidate,path));
+  call projectVfsUniquePath(path,candidate,{}); path := result;
+CandidateAssetIdAndMetadata:
+  if kind = "csv" then call SerializeNewDataTable(table,path); bytes := result; end if;
+  call BuildAssetMetadata(kind,path,payload.mime,bytes); asset := result;
+  asset.id := IF requestedId = NoValue THEN candidate.nextId[kind] ELSE requestedId;
+  \* An explicitly invalid/duplicate id is rejected by whole validation, not silently renamed.
+  if kind = "csv" then asset.rows := table; asset.headerLines := NormalizeHeaderCount(payload.headerLines,table); end if;
+  AppendAssetOfKind(candidate,kind,asset);
+  AdvanceOnlyCorrespondingNextIdAboveAssignedId(candidate,kind,asset.id);
+  \* Asset bytes/data live in Project instance, never BackendSettings.
+  result := [candidate |-> candidate,createdAsset |-> [kind |-> kind,id |-> asset.id,path |-> path]];
+  return;
+end procedure;
+
+procedure CalculateMergeOrSplit(candidate,event,slotIds)
+variables selected = <<>>, anchor = NoValue, owners = <<>>, rect = NoValue, cells = <<>>,
+          payload = NoValue, i = 1, j = 1, slot = NoValue, hints = [];
+begin
+CurrentVisibleIdsOnly:
+  selected := ResolveDistinctVisibleSlots(candidate,slotIds);
+  if event = "SLOTS_MERGED" then
+    rect := RectangleExactlyCoveredBySelectedSlotUnion(selected);
+    Require(rect # NoValue);
+    while i <= Len(selected) do
+      call slotHasNonDefaultLocalState(selected[i]);
+      if result then owners := Append(owners,selected[i]); end if;
+      i := i + 1;
+    end while;
+    Require(Len(owners) <= 1);
+    anchor := SlotAtCell(candidate,rect.top,rect.left);
+    if Len(owners) = 1 then payload := DeepCopy(SlotLocalPayload(owners[1]));
+    else payload := EmptySlotLocalPayload(BackendSettings.defaults.slotSettings); end if;
+    cells := AllCellsInRectangle(rect); i := 1;
+    while i <= Len(cells) do
+      slot := SlotAtCell(candidate,cells[i].row,cells[i].col);
+      if slot.id # anchor.id then
+        ReplaceSlotLocalPayloadOnly(candidate,slot.id,EmptySlotLocalPayload(BackendSettings.defaults.slotSettings));
+        CandidateSlot(candidate,slot.id).hidden := TRUE;
+      end if;
+      i := i + 1;
+    end while;
+    ReplaceSlotLocalPayloadOnly(candidate,anchor.id,payload);
+    CandidateSlot(candidate,anchor.id).hidden := FALSE;
+    CandidateSlot(candidate,anchor.id).rowSpan := rect.height;
+    CandidateSlot(candidate,anchor.id).colSpan := rect.width;
+    hints := [mergeSlotIds |-> SlotIdSequence(selected),anchorId |-> anchor.id];
+  else
+    while i <= Len(selected) do
+      anchor := selected[i]; Require(IsMergedVisibleAnchor(anchor));
+      cells := CoveredCells(anchor); j := 1;
+      while j <= Len(cells) do
+        slot := SlotAtCell(candidate,cells[j].row,cells[j].col);
+        if slot.id # anchor.id then
+          ReplaceSlotLocalPayloadOnly(candidate,slot.id,EmptySlotLocalPayload(BackendSettings.defaults.slotSettings));
+        end if;
+        CandidateSlot(candidate,slot.id).hidden := FALSE;
+        CandidateSlot(candidate,slot.id).rowSpan := 1; CandidateSlot(candidate,slot.id).colSpan := 1;
+        j := j + 1;
+      end while;
+      \* Anchor retains its complete local payload and chart id; no clone/merge.
+      i := i + 1;
+    end while;
+  end if;
+  result := [candidate |-> candidate,selectionHints |-> hints];
+  return;
+end procedure;
+
+\* Private expansions of Source-declared settings calculations. They receive
+\* only the current command owner's settings plus NEW supplied fields, not a
+\* Frontend/read projection. Their result is candidate data, never a commit.
+procedure NormalizeImageEditsInAttempt(current,edits)
+variables copy = DeepCopy(current), fields = <<"scale","x","y">>, i = 1,
+          key = "", number = NoValue, bounds = NoValue;
+begin
+OnlyDeclaredFit:
+  if HasField(edits,"fit") then
+    if edits.fit \in {"contain","cover","manual"} then copy.fit := edits.fit; end if;
+  end if;
+ManualNumbersOnly:
+  if copy.fit = "manual" then
+    while i <= Len(fields) do
+      key := fields[i];
+      if HasField(edits,key) then
+        \* TryScalarNumber distinguishes invalid from valid zero. No truthiness.
+        number := TryScalarNumber(edits[key]);
+        if number.valid then
+          if IsFinite(number.value) then
+            bounds := BackendSettings.defaults.limits.imageSettings[key];
+            copy[key] := Maximum(bounds[1],Minimum(bounds[2],number.value));
+          end if;
+        end if;
+      end if;
+      i := i + 1;
+    end while;
+  end if;
+ImageEditReturn:
+  result := copy;
+  return;
+end procedure;
+
+procedure NormalizeExportEditsInAttempt(current,edits)
+variables copy = DeepCopy(current), fields = <<"width","height","dpi">>, i = 1,
+          key = "", limitKey = "", bounds = NoValue, number = NoValue;
+begin
+KeepInvalidOrMissingEnums:
+  if HasField(edits,"heightMode") then
+    if edits.heightMode \in {"auto","explicit"} then copy.heightMode := edits.heightMode; end if;
+  end if;
+  if HasField(edits,"format") then
+    if edits.format \in {"png","jpeg"} then copy.format := edits.format; end if;
+  end if;
+NumbersFromCurrentSettingsNotDefaults:
+  while i <= Len(fields) do
+    key := fields[i];
+    if HasField(edits,key) then
+      number := TryScalarNumber(edits[key]);
+      if number.valid then
+        if IsFinite(number.value) then
+          limitKey := IF key = "width" THEN "logicalWidth"
+                      ELSE IF key = "height" THEN "logicalHeight" ELSE "dpi";
+          bounds := BackendSettings.defaults.limits.export[limitKey];
+          copy[key] := Maximum(bounds[1],Minimum(bounds[2],number.value));
+        end if;
+      end if;
+    end if;
+    i := i + 1;
+  end while;
+AutoOrExplicitHeightRelation:
+  if copy.heightMode = "auto" then
+    copy.height := NoValue;
+  else
+    \* Source fallback is current explicit height, otherwise the logical lower
+    \* bound (currently 100). Missing/null is NOT a numeric zero conversion.
+    if copy.height = NoValue then
+      if current.height = NoValue then
+        copy.height := BackendSettings.defaults.limits.export.logicalHeight[1];
+      else copy.height := current.height; end if;
+    end if;
+  end if;
+ExportEditReturn:
+  result := copy;
+  return;
+end procedure;
+
+procedure ApplyChartLayoutEdits(chart,edits)
+variables copy = DeepCopy(chart), fields = <<>>, axes = <<"xBottom","xTop","yLeft","yRight">>,
+          i = 1, j = 1, key = "", axis = "", supplied = NoValue;
+begin
+TitleOnlyWhenProvided:
+  if HasField(edits,"title") then copy.editor.title := TextOrEmpty(edits.title); end if;
+CurrentGlobalFieldsNotWholeReplacement:
+  if HasField(edits,"globalSettings") then
+    supplied := edits.globalSettings; Require(IsRecord(supplied));
+    fields := <<"showLegend","showTitle","showZeroLine","graphFontFamily","titleFontSize","legendFontSize">>;
+    while i <= Len(fields) do
+      key := fields[i]; if HasField(supplied,key) then copy.editor.globalSettings[key] := supplied[key]; end if;
+      i := i + 1;
+    end while;
+NestedAxisFieldPatch:
+    if HasField(supplied,"axes") then
+      Require(IsRecord(supplied.axes)); i := 1;
+      while i <= Len(axes) do
+        axis := axes[i];
+        if HasField(supplied.axes,axis) then
+          Require(IsRecord(supplied.axes[axis]));
+          fields := PropertyNames(copy.editor.globalSettings.axes[axis]); j := 1;
+          while j <= Len(fields) do
+            key := fields[j];
+            if HasField(supplied.axes[axis],key) then copy.editor.globalSettings.axes[axis][key] := supplied.axes[axis][key]; end if;
+            j := j + 1;
+          end while;
+        end if;
+        i := i + 1;
+      end while;
+    end if;
+  end if;
+LayoutEditReturn:
+  result := copy;
+  return;
+end procedure;
+
+procedure CalculateSourceCommandCandidate(event,payload,source)
+variables candidate = DeepCopy(source), slot = NoValue, other = NoValue, chart = NoValue,
+          csv = NoValue, image = NoValue, calculation = NoValue, name = "", i = 1,
+          keys = <<>>, settings = NoValue, text = NoValue, hints = [], outcome = NoValue;
+begin
+DomainBranchNotAlternativeMutationEntry:
+  \* Call-local Source command calculation. No commit or Frontend access.
+  if event = "PROJECT_LOADED" then
+    call ffpxReadProject(payload.file); calculation := result;
+    call buildProjectObject(calculation,FileName(payload.file)); candidate := result;
+  elsif event = "PROJECT_NAME_CHANGED" then
+    name := ScalarText(payload.value);
+    if FieldOrNoValue(payload,"trim") = TRUE then name := Trim(name); end if;
+    candidate.meta.projectName := FirstTextUnits(name,BackendSettings.defaults.naming.projectNameMaxLength);
+  elsif event = "ASSETS_IMPORTED" then
+    \* Private expansion of buildProjectAssetImportCandidate retains this attempt's
+    \* call-local actual facts; the Source helper's public return remains candidate.
+    call BuildAssetImportInAttempt(source,payload.files,payload.directory,payload.choices,FieldOrNoValue(payload,"targetSlotId"));
+    calculation := result; candidate := result.candidate;
+  elsif event = "GRAPH_OBJECTS_REPLACED" then
+    chart := ResolveCurrentEditableChartAndUniqueOwner(source,payload);
+    call calculateGraphObjectEdit(chart,payload.operation,payload,source);
+    calculation := result;
+    if IsUncommitted(calculation) then result := calculation; return; end if;
+    candidate := calculation.candidate;
+    if calculation.hasIndexHint then hints := [chartId |-> chart.id,selectedIndexHint |-> calculation.selectedIndexHint]; end if;
+  elsif event = "SLOT_DATA_CONNECTED" then
+    slot := ResolveCurrentVisibleGraphSlot(source,payload.slotId);
+    csv := ResolveCurrentCsvFromExplicitIdOrPath(source,payload);
+    if FieldOrNoValue(payload,"operation") = "graphs.addObject" then Require(slot.content.chart = NoValue); end if;
+    call ConnectDataInsideCandidate(candidate,slot.id,csv.id,csv.name); candidate := result;
+    if FieldOrNoValue(payload,"operation") = "graphs.addObject" then
+      chart := CandidateChartOfSlot(candidate,slot.id);
+      hints := [chartId |-> chart.id,selectedIndexHint |-> Len(chart.editor.objects)-1];
+    end if;
+  elsif event = "CHART_MODEL_REPLACED" then
+    chart := ResolveCurrentChartAndUniqueOwningSlot(source,payload);
+    if payload.editable /\ ~chart.editor.editable then
+      call ConvertImportedChartInAttempt(source,chart); candidate := result;
+    else CandidateChart(candidate,chart.id).editor.editable := payload.editable; end if;
+  elsif event = "SLOT_CHART_IMPORTED" then
+    slot := ResolveCurrentVisibleGraphSlot(source,payload.slotId);
+    if IsFfsxPackage(payload.file) then
+      call ffsxReadSlot(payload.file); calculation := result;
+      call ApplyFfsxInAttempt(source,calculation,slot); candidate := result;
+    else
+      calculation := ParseUtf8JsonFromCopiedFileBytes(payload.file);
+      call parsePlotlyToEditor(calculation,CurrentNextChartId(candidate)); chart := result;
+      candidate := ReplaceSlotChartAndRemovePreviousOwnedChart(candidate,slot.id,chart);
+    end if;
+  elsif event = "GRID_LAYOUT_CHANGED" then
+    call BuildGridResizeInAttempt(source,payload.rows,payload.cols); candidate := result;
+  elsif event = "SLOT_TYPE_CHANGED" then
+    slot := ResolveCurrentVisibleSlot(source,payload.slotId);
+    CandidateSlot(candidate,slot.id).content.contentType := IF payload.contentType = "image" THEN "image" ELSE "graph";
+  elsif event = "SLOTS_RESET" then
+    keys := UniqueSequence(payload.slotIds);
+    while i <= Len(keys) do
+      slot := ResolveCurrentVisibleSlot(source,keys[i]);
+      RemoveOnlyChartOwnedBySlot(candidate,slot.id);
+      ReplaceSlotLocalPayloadOnly(candidate,slot.id,EmptySlotLocalPayload(BackendSettings.defaults.slotSettings));
+      i := i + 1;
+    end while;
+  elsif event = "SLOTS_SWAPPED" then
+    slot := ResolveCurrentVisibleSlot(source,payload.sourceSlotId);
+    other := ResolveCurrentVisibleSlot(source,payload.targetSlotId);
+    if slot.id = other.id then result := UncommittedUnchanged(); return; end if;
+    SwapCompleteSlotLocalPayloadWithoutChangingGeometryOrIdentity(candidate,slot.id,other.id);
+    hints := [swapSlotIds |-> <<slot.id,other.id>>];
+  elsif event = "SLOT_CAPTIONS_INSERTED" then
+    call insertSlotCaptions(candidate,FieldOrNoValue(payload,"slotIds")); text := result;
+    if text = candidate.annotations.captions.text then result := UncommittedUnchanged(); return; end if;
+    candidate.annotations.captions.text := text;
+  elsif event = "CAPTION_TEXT_INPUT" then
+    if payload.target.kind = "slot" then
+      slot := ResolveCurrentVisibleSlot(source,payload.target.id); CandidateSlot(candidate,slot.id).caption := payload.text;
+    else Require(payload.target.kind = "global"); candidate.annotations.captions.text := payload.text; end if;
+  elsif event = "CAPTION_SETTINGS_CHANGED" then
+    ApplyOnlyPresentCaptionFieldsWithConfigLimits(candidate.annotations.captions,payload,
+      BackendSettings.project_object.annotations.captions,BackendSettings.defaults.limits.captions);
+  elsif event = "LABEL_SETTINGS_CHANGED" then
+    ApplyOnlyPresentLabelFieldsWithConfigLimits(candidate.annotations.labels,payload,
+      BackendSettings.project_object.annotations.labels,BackendSettings.defaults.limits.labels);
+  elsif event = "LABEL_POSITION_CHANGED" then
+    if FieldOrNoValue(payload,"reset") = TRUE then
+      candidate.annotations.labels.settings.x := BackendSettings.project_object.annotations.labels.settings.x;
+      candidate.annotations.labels.settings.y := BackendSettings.project_object.annotations.labels.settings.y;
+    else
+      Require(IsFinite(payload.x) /\ IsFinite(payload.y));
+      candidate.annotations.labels.settings.x := payload.x; candidate.annotations.labels.settings.y := payload.y;
+    end if;
+  elsif event = "APPEARANCE_CHANGED" then
+    keys := PropertyNames(BackendSettings.project_object.appearance.uiPalette);
+    while i <= Len(keys) do
+      name := keys[i]; text := FieldOrNoValue(payload.palette,name);
+      candidate.appearance.uiPalette[name] := IF IsSixDigitHexColor(text) THEN text ELSE BackendSettings.project_object.appearance.uiPalette[name];
+      i := i + 1;
+    end while;
+  elsif event = "CHART_LAYOUT_CHANGED" then
+    chart := ResolveCurrentChartAndUniqueOwningSlot(source,payload);
+    call ApplyChartLayoutEdits(chart,payload.settings); chart := result;
+    call normalizeGlobalSettings(chart.editor.globalSettings); chart.editor.globalSettings := result;
+    keys := <<"xBottom","xTop","yLeft","yRight">>;
+    while i <= Len(keys) do
+      call normalizeAxisSettings(chart.editor.globalSettings.axes[keys[i]],keys[i]);
+      chart.editor.globalSettings.axes[keys[i]] := result; i := i + 1;
+    end while;
+    ReplaceCandidateChart(candidate,chart.id,chart);
+  elsif event = "SLOT_IMAGE_SETTINGS_CHANGED" then
+    slot := ResolveCurrentVisibleImageSlotWithImage(source,payload.slotId);
+    call NormalizeImageEditsInAttempt(slot.content.imageSettings,payload.settings);
+    CandidateSlot(candidate,slot.id).content.imageSettings := result;
+  elsif event = "EXPORT_SETTINGS_CHANGED" then
+    call NormalizeExportEditsInAttempt(source.export,payload.settings);
+    candidate.export := result;
+  elsif event \in {"DATA_OBJECT_CREATED","IMAGE_OBJECT_CREATED"} then
+    name := IF event = "DATA_OBJECT_CREATED" THEN "csv" ELSE "image";
+    call CalculateNewAsset(candidate,name,payload); calculation := result; candidate := result.candidate;
+  elsif event \in {"DATA_OBJECT_REPLACED","IMAGE_OBJECT_REPLACED"} then
+    name := IF event = "DATA_OBJECT_REPLACED" THEN "csv" ELSE "image";
+    image := ResolveCurrentSameKindAssetAndRequestedIdentity(source,name,payload);
+    if event = "DATA_OBJECT_REPLACED" /\ HasField(payload,"headerLines") then
+      CandidateCsv(candidate,image.id).headerLines := NormalizeHeaderCount(payload.headerLines,image.rows);
+      \* Current id/path/bytes/rows unchanged; no caller candidate or read projection.
+    else ReplaceOnlyNewAssetDataFieldsPreservingIdentityPathAndReferences(candidate,name,image,payload); end if;
+    calculation := [updatedAsset |-> [kind |-> name,id |-> image.id,path |-> CanonicalAssetPath(image)]];
+  elsif event \in {"DATA_OBJECT_DELETED","IMAGE_OBJECT_DELETED"} then
+    name := IF event = "DATA_OBJECT_DELETED" THEN "csv" ELSE "image";
+    image := ResolveExactCurrentAssetTarget(source,payload.target);
+    if image = NoValue then result := UncommittedUnchanged(); return; end if;
+    Require(AssetKind(image) = name /\ IdentityKindIdPathAllMatch(payload.target,image));
+    call DetachAssetReferences(candidate,IF name = "csv" THEN {image.id} ELSE {},IF name = "image" THEN {image.id} ELSE {});
+    calculation := result; candidate := result.candidate;
+    RemoveExactAsset(candidate,name,image.id);
+  elsif event = "PROJECT_TRASH_EMPTIED" then
+    keys := AllAssetIdsAndDirectoriesInSegmentSubtree(candidate,BackendSettings.defaults.vfs.trash);
+    call DetachAssetReferences(candidate,keys.csvIds,keys.imageIds); calculation := result; candidate := result.candidate;
+    RemoveAssetsByIds(candidate,keys.csvIds,keys.imageIds);
+    RemoveOnlyNonFixedDirectoryPaths(candidate,keys.directoryPaths);
+  elsif event = "PROJECT_NODE_MOVED" then
+    call planProjectNodeMove(payload.path,payload.directory); calculation := result;
+    Require(CurrentSameNodeAndDestinationStillMatch(source,calculation,payload));
+    Require(~IsFixedDirectory(calculation.source,BackendSettings.defaults.vfs));
+    Require(~CreatesDirectorySubtreeCycle(calculation.source,calculation.destination));
+    name := calculation.destination;
+    if CurrentVfsPathExists(candidate,name) then
+      Require(payload.useUniqueName);
+      call projectVfsUniquePath(name,candidate,{}); name := result;
+    end if;
+    calculation := [movedPathFrom |-> calculation.source,movedPathTo |-> name];
+    if ~InTrashSubtree(calculation.movedPathFrom,BackendSettings.defaults.vfs.trash) /\ InTrashSubtree(name,BackendSettings.defaults.vfs.trash) then
+      keys := AllAssetIdsForExactNodeOrSegmentSubtree(candidate,calculation.movedPathFrom);
+      call DetachAssetReferences(candidate,keys.csvIds,keys.imageIds);
+      outcome := result; candidate := result.candidate;
+      calculation := MergeCallLocalFacts(calculation,outcome);
+      hints.enteringTrash := TRUE;
+    end if;
+    MoveDirectoryAndDescendantPathsOrSingleAssetLocation(candidate,calculation.movedPathFrom,name);
+    hints.movedPathFrom := calculation.movedPathFrom; hints.movedPathTo := name;
+    \* Leaving trash never reattaches prior graph/image references.
+  elsif event = "PROJECT_DIRECTORY_CREATED" then
+    call normalizeProjectPath(payload.parent,TRUE); name := result;
+    Require(CurrentDirectoryExists(candidate,name));
+    text := NormalizeSingleProjectFileName(payload.name);
+    call normalizeProjectPath(JoinProjectPath(name,text),TRUE); name := result;
+    Require(~CurrentVfsPathExists(candidate,name));
+    AppendDirectoryInstance(candidate,name);
+    calculation := [createdDirectoryPath |-> name];
+  elsif event = "SLOT_IMAGE_LINKED" then
+    slot := ResolveCurrentVisibleImageSlot(source,payload.slotId);
+    image := ResolveNonTrashImageFromMatchingPathAndKind(source,payload.path,payload.kind);
+    CandidateSlot(candidate,slot.id).content.imageId := image.id;
+  elsif event = "SLOT_IMAGE_IMPORTED" then
+    slot := ResolveCurrentVisibleImageSlot(source,payload.slotId);
+    if FieldOrNoValue(payload,"operation") = "images.insertEmpty" then
+      image := CopyOnlyNewBytesNameMimeInput(payload.imageInput);
+    else image := CopyNewImageFileInput(payload); end if;
+    call CalculateNewAsset(candidate,"image",ImageCreateFieldsWithCurrentVfsLocation(image,BackendSettings.defaults.vfs.image));
+    calculation := result; candidate := result.candidate;
+    CandidateSlot(candidate,slot.id).content.imageId := calculation.createdAsset.id;
+  elsif event \in {"SLOTS_MERGED","SLOTS_SPLIT"} then
+    call CalculateMergeOrSplit(candidate,event,payload.slotIds); calculation := result;
+    candidate := result.candidate; hints := result.selectionHints;
+  elsif event = "LAYOUT_STYLE_CHANGED" then
+    keys := <<"referenceWidth","gap","outerMargin","radius","aspect">>;
+    while i <= Len(keys) do
+      name := keys[i];
+      if HasField(payload,name) then
+        candidate.layout.slotStyle[name] := NormalizeLayoutField(payload[name],candidate.layout.slotStyle[name],BackendSettings.defaults.limits.layout[name]);
+      end if;
+      i := i + 1;
+    end while;
+    if HasField(payload,"showBorders") then candidate.layout.slotStyle.showBorders := NormalizeBoolean(payload.showBorders); end if;
+  else FailUnknownDeclaredCommand(event); end if;
+CandidateAndOnlyActualHints:
+  result := [candidate |-> candidate,domainFacts |-> IF calculation = NoValue THEN [] ELSE calculation,selectionHints |-> hints];
+  return;
+end procedure;
+
+procedure BuildActualChanged(event,pre,post,facts)
+variables changed = [], inputs = <<>>, actual = NoValue, entry = NoValue,
+          i = 1, j = 1, chart = NoValue, slot = NoValue, owners = <<>>, role = "";
+begin
+ActualPrePostDifferences:
+  \* ChangedIdentitySet compares same-id records, includes removed ids, and never
+  \* takes requested ids alone as proof of mutation. No domain state is retained.
+  changed := [slotIds |-> ChangedIdentitySet(pre.slots,post.slots),
+              chartIds |-> ChangedIdentitySet(pre.charts,post.charts),
+              csvIds |-> ChangedIdentitySet(pre.assets.csvFiles,post.assets.csvFiles),
+              imageIds |-> ChangedIdentitySet(pre.assets.images,post.assets.images),
+              assets |-> <<>>];
+OnlySuccessfulAttemptFacts:
+  if HasField(facts,"importedAssets") then
+    inputs := facts.importedAssets; role := "imported";
+  elsif HasField(facts,"createdAsset") then
+    inputs := <<facts.createdAsset>>; role := "created";
+  elsif HasField(facts,"updatedAsset") then
+    inputs := <<facts.updatedAsset>>; role := "updated";
+  end if;
+ResolveAssetFactsAgainstCommittedAuthority:
+  while i <= Len(inputs) do
+    entry := inputs[i];
+    actual := AssetOfKindById(post,entry.kind,entry.id);
+    Require(actual # NoValue);
+    Require(CanonicalAssetPath(actual) = entry.path);
+    owners := <<>>;
+    j := 1;
+    if entry.kind = "csv" then
+      while j <= Len(post.charts) do
+        chart := post.charts[j];
+        if ChartReferencesRealCsvUsingSharedRepresentation(chart,actual.id) then
+          call resolveOwningSlot(chart.id,post); slot := result;
+          Require(slot # NoValue);
+          owners := Append(owners,[slotId |-> slot.id,chartId |-> chart.id]);
+        end if;
+        j := j + 1;
+      end while;
+    else
+      while j <= Len(post.slots) do
+        slot := post.slots[j];
+        if slot.content.imageId = actual.id then
+          owners := Append(owners,[slotId |-> slot.id,chartId |-> NoValue]);
+        end if;
+        j := j + 1;
+      end while;
+    end if;
+    changed.assets := Append(changed.assets,[role |-> role,kind |-> entry.kind,
+                            id |-> actual.id,path |-> CanonicalAssetPath(actual),owners |-> owners]);
+    i := i + 1;
+  end while;
+DirectoryActualPath:
+  if HasField(facts,"createdDirectoryPath") then
+    call projectVfsResolve(facts.createdDirectoryPath,post); actual := result;
+    Require(IsDirectory(actual));
+    changed.createdDirectoryPath := CanonicalNodePath(actual);
+  end if;
+MoveActualDestination:
+  if HasField(facts,"movedPathTo") then
+    call projectVfsResolve(facts.movedPathTo,post); actual := result;
+    Require(actual # NoValue);
+    changed.movedPathFrom := facts.movedPathFrom;
+    changed.movedPathTo := CanonicalNodePath(actual);
+  end if;
+ChangedReturn:
+  \* assets preserves input order, including reference-preserving replacement.
+  \* Representation of Source changed facts only, NOT another public API/envelope.
+  result := changed;
+  return;
+end procedure;
+
+procedure VisualCommitFacts(source)
+variables render = [layout |-> DeepCopy(source.layout),annotations |-> DeepCopy(source.annotations),appearance |-> DeepCopy(source.appearance),
+                    slots |-> <<>>,charts |-> <<>>,csv |-> <<>>,images |-> <<>>],
+          refs = <<>>, i = 1, j = 1, slot = NoValue, chart = NoValue, csv = NoValue, image = NoValue;
+begin
+VisiblePersistentInputsNotFrontendState:
+  while i <= Len(source.slots) do
+    slot := source.slots[i];
+    if ~slot.hidden then
+      refs := Append(refs,<<"slot",slot.id>>); render.slots := Append(render.slots,DeepCopy(slot));
+      if slot.content.contentType = "graph" /\ slot.content.chart # NoValue then
+        chart := ChartById(source,slot.content.chart); Require(chart # NoValue);
+        refs := Append(refs,<<"chart",slot.id,chart.id>>); render.charts := Append(render.charts,DeepCopy(chart));
+        if ~ConversionRepresentation(chart) then
+          j := 1;
+          while j <= Len(chart.editor.objects) do
+            csv := CsvById(source,chart.editor.objects[j].csvId); Require(csv # NoValue);
+            refs := Append(refs,<<"csv",chart.id,csv.id>>);
+            render.csv := Append(render.csv,[id |-> csv.id,rows |-> DeepCopy(csv.rows),headerLines |-> csv.headerLines]); j := j + 1;
+          end while;
+        end if;
+      elsif slot.content.contentType = "image" /\ slot.content.imageId # NoValue then
+        image := ImageById(source,slot.content.imageId); Require(image # NoValue);
+        refs := Append(refs,<<"image",slot.id,image.id>>);
+        render.images := Append(render.images,[id |-> image.id,bytesBase64 |-> image.bytesBase64,mime |-> image.mime]);
+      end if;
+    end if;
+    i := i + 1;
+  end while;
+  result := [render |-> render,references |-> refs]; return;
+end procedure;
+
+procedure CalculateProjectionEffect(event,pre,post)
+variables before = NoValue, after = NoValue, removed = FALSE, i = 1,
+          tree = {"PROJECT_NAME_CHANGED","PROJECT_DIRECTORY_CREATED","PROJECT_NODE_MOVED","PROJECT_TRASH_EMPTIED","ASSETS_IMPORTED",
+                  "DATA_OBJECT_CREATED","DATA_OBJECT_REPLACED","DATA_OBJECT_DELETED","IMAGE_OBJECT_CREATED","IMAGE_OBJECT_REPLACED","IMAGE_OBJECT_DELETED"};
+begin
+SameCommitPrePostOnly:
+  call VisualCommitFacts(pre); before := result;
+  call VisualCommitFacts(post); after := result;
+MultisetReferencesNotMoveIndices:
+  while i <= Len(before.references) do
+    if CountEqualItems(before.references,before.references[i]) > CountEqualItems(after.references,before.references[i]) then removed := TRUE; end if;
+    i := i + 1;
+  end while;
+  result := [referencesRemoved |-> removed,pathOnly |-> event \in tree /\ before.render = after.render];
+  return;
+end procedure;
+
+procedure FormActualMutationResult(event,pre,post,calculation)
+variables hints = calculation.selectionHints, facts = calculation.domainFacts,
+          maps = <<>>, i = 1, changed = [], graphCount = 0, imageCount = 0, projectionEffect = NoValue;
+begin
+FactsOfThisSuccessfulAttemptOnly:
+  call BuildActualChanged(event,pre,post,facts); changed := result;
+  \* Helper resolves recorded command calculations against post ids/paths, never
+  \* reads UI/old projection. Replacements preserve input order, not asset id order.
+  if HasField(facts,"removedGraphReferenceCount") then graphCount := facts.removedGraphReferenceCount; end if;
+  if HasField(facts,"resetImageSlotCount") then imageCount := facts.resetImageSlotCount; end if;
+  if HasField(facts,"graphObjectIndexMaps") then
+    while i <= Len(facts.graphObjectIndexMaps) do
+      if UniqueChartOwnerExists(post,facts.graphObjectIndexMaps[i].chartId) then
+        maps := Append(maps,facts.graphObjectIndexMaps[i]);
+      end if;
+      i := i + 1;
+    end while;
+    if Len(maps) > 0 then hints.graphObjectIndexMaps := maps; end if;
+  end if;
+ResetAndExplicitGraphHintSemantics:
+  if event = "PROJECT_LOADED" then hints.resetInterfaceSelection := TRUE; end if;
+  \* calculateGraphObjectEdit supplies chartId+explicit none for direct delete;
+  \* palette omits key. Never synthesize selected object's CSV asset selection.
+ProjectionFromActualMutation:
+  call CalculateProjectionEffect(event,pre,post); projectionEffect := result;
+  result := ImmutableCopy([event |-> event,committed |-> TRUE,changed |-> changed,
+    removedGraphReferenceCount |-> graphCount,resetImageSlotCount |-> imageCount,
+    selectionHints |-> hints,
+    projectionEffect |-> projectionEffect]);
+  return;
+end procedure;
+
+procedure ProjectStateMachine_send(event, payload)
+variables sourceReference = NoValue, resolved = NoValue, calculation = NoValue,
+          candidate = NoValue, transactionOutcome = NoValue, pre = NoValue, post = NoValue;
+begin
+DeclaredMutationEntry:
+  if event \notin PROJECT_COMMANDS then RejectDeclaredCommandUnchanged(event); end if;
+  \* No Application-provided full candidate/model/current objects; only identities,
+  \* new edit values/raw files and completed collision choices are admissible.
+  assert DeclaredPayloadAndWritableScope(event, payload);
+ReResolveCurrentAuthority:
+  sourceReference := CurrentAuthorityReference(activeProject);
+  resolved := ResolveCommandInputsAndPreconditions(event, payload, sourceReference);
+  if resolved.rejected then result := UncommittedUnchanged(); return; end if;
+CalculateWithoutAuthorityWrites:
+  \* Mechanical exception/await adapter invokes CalculateSourceCommandCandidate
+  \* exactly once for THIS attempt and observes returned noncommit versus throw.
+  \* It is not a command engine, public envelope, persisted task, or second owner.
+  transactionOutcome := AwaitSourceCalculationCapturingOnlyReturnOrThrow(
+    CalculateSourceCommandCandidate,event,payload,sourceReference);
+DistinguishFailureFromSuccessfulCandidate:
+  if transactionOutcome.threw then
+    PropagateOriginalFailure(transactionOutcome.failure);
+  elsif transactionOutcome.cancelled \/ ~transactionOutcome.hasCandidate then
+    result := UncommittedUnchanged();
+    return;
+  end if;
+  calculation := transactionOutcome.calculation;
+  candidate := calculation.candidate;
+RevalidateAfterFileWait:
+  \* Domain calculation re-resolves current VFS/target/references/collision/next-id
+  \* after its await and validates completed replace choices against same id/path.
+  \* No UI resolver callback, silent rename/replace selection, partial write or rollback.
+  if CurrentAuthorityReference(activeProject) # sourceReference then goto ReResolveCurrentAuthority; end if;
+ValidateWholeCandidate:
+  call validateProjectObjectState(candidate, TRUE);
+CommitExactlyOnce:
+  \* Final freshness comparison + synchronous validated state replacement is ONE
+  \* Source transaction boundary; implementation/optional verification must not
+  \* introduce a yield/interleaving inside it. It is not a new lock/FSM/state.
+  if CurrentAuthorityReference(activeProject) # sourceReference then goto ReResolveCurrentAuthority; end if;
+  pre := sourceReference;
+  call ProjectObject_initialize(candidate);
+  post := CurrentAuthorityReference(activeProject);
+FormActualImmutableResult:
+  call FormActualMutationResult(event,pre,post,calculation);
+  \* ActualSelectionHints uses same original-index filter/actual reference set:
+  \* append -> actual append index; move -> final to; edit -> same index;
+  \* direct delete -> explicit none; palette/no hint -> omitted key.
+  \* Cascade maps are recalculated on retry, include only affected retained charts,
+  \* and exclude noneditable imported conversion views using graph validator scope.
+  \* No Frontend state read/write, reconciliation, renderer invocation or extra commit.
+ReturnMutationResult:
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====

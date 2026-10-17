@@ -1,0 +1,251 @@
+---- MODULE FastFigureFrontendMantineUiR38 ----
+EXTENDS Naturals, Reals, Sequences, FiniteSets
+\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* FastFigureApi is the supplied public action surface; no Backend import.
+\* UI drafts/resolvers/selection/geometry below live only within component lifetime.
+CONSTANT NoValue
+SettingsOverlayNames == {"layout","label","caption","print"}
+ComponentOwners == [
+  FastFigureToolbar |-> "overlay toggle / selected target",
+  FastFigureDataActions |-> "asset import / slot reset/delete / ordinary empty CSV",
+  FastFigureImageEditor |-> "image preview/settings",
+  FastFigureProjectDataTree |-> "VFS projection / selection / move / drop / menu",
+  FastFigureProjectActions |-> "project name / FFPX",
+  FastFigureGraphDataEditor |-> "CSV/header/object",
+  FastFigureGraphLayoutEditor |-> "chart title/global/axis",
+  FastFigureGraphPaletteActions |-> "object colors",
+  FastFigureGraphFileActions |-> "FFSX/Plotly / editable flag",
+  FastFigurePaletteActions |-> "UI palette draft/apply/reset",
+  FastFigureStatusDebug |-> "status/debug telemetry/log",
+  FastFigureReadmeOverlay |-> "README modal",
+  FastFigureLabelOverlay |-> "label settings / position",
+  FastFigureCaptionOverlay |-> "global or selected-slot caption / explicit insert",
+  FastFigurePrintOverlay |-> "raster form / save/capture",
+  FastFigureLayoutOverlay |-> "grid/style/zoom / local merge/split selection",
+  FastFigureDashboardFileDrop |-> "one continuous external drop channel",
+  FastFigureShell |-> "AppShell / sidebar / composition"]
+
+(* --algorithm FrontendMantineUi
+variables result = NoValue,
+  collisionModel = NoValue, collisionResolver = NoValue,
+  layoutSelectedSlotIds = {}, settingsOverlayHeight = NoValue,
+  sidebarGeometry = InitialSessionSidebarGeometry(),
+  dropMounted = FALSE, dropAllowed = FALSE, dropReceiver = NoValue;
+
+procedure subscribeAppState(onStoreChange)
+begin
+DirectFsmExternalStore:
+  result := SubscribeToInterfaceFsmRevisionTransitions(onStoreChange);
+  \* Return unsubscribe. No React project store or subscription-driven Project write.
+  return;
+end procedure;
+
+procedure useProjectAssetImportCollision()
+begin
+ReturnLifetimeScopedPair:
+  result := [choosePlan |-> "ChooseImportCollision",modal |-> CurrentCollisionModal(collisionModel,collisionResolver)];
+  return;
+end procedure;
+
+procedure ChooseImportCollision(file,directory,reservedPaths)
+variables model = NoValue, completion = NoValue;
+begin
+ReadThroughPublicApi:
+  model := InvokePublicApi("assets.collisionModel",[file |-> file,directory |-> directory,reservedPaths |-> reservedPaths]);
+NoModalWhenAvailable:
+  if model.mode = "available" then
+    result := InvokePublicApi("assets.resolveImportPlan",[model |-> model,choice |-> "available",reservedPaths |-> reservedPaths]);
+    return;
+  end if;
+OneResolverForThisModalLifetime:
+  collisionModel := model;
+  collisionResolver := NewModalLifetimePromiseResolver();
+  ShowCollisionModal(model,collisionResolver);
+  completion := AwaitExplicitChoiceOrModalClose(collisionResolver);
+  collisionModel := NoValue;
+  collisionResolver := NoValue;
+CancelHasNoPlanOrMutation:
+  if ~completion.hasExplicitChoice then result := NoValue; return; end if;
+  \* Escape/outside/close/unmount all use this same no-choice completion.
+  result := InvokePublicApi("assets.resolveImportPlan",[model |-> model,choice |-> completion.choice,reservedPaths |-> reservedPaths]);
+  return;
+end procedure;
+
+procedure MantineUi_runLifecycleTask(lifecycle,eventName,task)
+begin
+ApplicationOwnsCallbackAndTransitions:
+  call ApplicationAdapter_runLifecycleTask(lifecycle,eventName,task);
+  \* Optional UI error telemetry does not create rollback/retry authority.
+  return;
+end procedure;
+
+procedure LinearSrgbChannel(c)
+begin
+DeclaredTransferFunction:
+  if c <= 0.04045 then result := c / 12.92;
+  else result := ((c + 0.055) / 1.055) ^ 2.4; end if;
+  return;
+end procedure;
+
+procedure FastFigureApp()
+variables palette = NoValue, shades = <<>>, i = 1, channels = <<>>, linear = <<>>,
+          luminance = 0, contrast = "", theme = NoValue, css = NoValue, tree = NoValue;
+begin
+CurrentReadNotDraftOrMirror:
+  palette := InvokePublicApi("appearance.readPalette",[]);
+  while i <= 10 do shades := Append(shades,palette.uiColor); i := i + 1; end while;
+ContrastFromCurrentUiColor:
+  channels := HexChannelsDividedBy255(palette.uiColor); i := 1;
+  while i <= 3 do call LinearSrgbChannel(channels[i]); linear := Append(linear,result); i := i + 1; end while;
+  luminance := 0.2126 * linear[1] + 0.7152 * linear[2] + 0.0722 * linear[3];
+  contrast := IF luminance > 0.179 THEN "#000000" ELSE "#FFFFFF";
+ThemeAndCssProjection:
+  theme := ExistingFastFigureCommonTheme();
+  theme.colors.ffui := shades; theme.primaryColor := "ffui"; theme.colorScheme := "light";
+  css := [body |-> palette.uiBackgroundColor,text |-> palette.fontColor,
+    defaultColor |-> palette.fontColor,primaryLightColor |-> palette.fontColor,
+    default |-> palette.uiSurfaceColor,defaultBorder |-> palette.uiColor,
+    primaryFilled |-> palette.uiColor,dimmed |-> palette.uiMutedColor,
+    placeholder |-> palette.uiSubtleColor,disabled |-> palette.uiDisabledBgColor,
+    disabledBorder |-> palette.uiDisabledBgColor,disabledColor |-> palette.uiDisabledTextColor,
+    defaultHover |-> SrgbMix(palette.uiColor,0.12,palette.uiSurfaceColor),
+    filledHover |-> SrgbMix(palette.uiColor,0.75,"#64748B"),
+    primaryLight |-> SrgbMix(palette.uiColor,0.18,"transparent"),
+    primaryLightHover |-> SrgbMix(palette.uiColor,0.24,"transparent"),primaryContrast |-> contrast];
+  AliasFfuiFilledFilledHoverLightLightHoverLightColorContrastToPrimaryVariables(css);
+  ReplaceOnlyBlackAlphaThemeShadowColorsWithSameAlphaUiShadowMix(theme,palette.uiShadowColor);
+  \* Preserve shadow geometry. Graph paperColor != UI surface/background.
+OneExistingRoot:
+  call FastFigureShell(); tree := result;
+  result := RenderMantineProviderToExistingReactRoot(theme,css,tree);
+  return;
+end procedure;
+
+procedure FastFigureShell()
+begin
+NoProjectStoreInShell:
+  ApplySessionSidebarGeometryCss(sidebarGeometry);
+  result := ComposeExistingAppShellHeaderNavbarMainAndOverlayComponents(ComponentOwners);
+  return;
+end procedure;
+
+procedure ResizeSidebar(newGeometry)
+begin
+SessionOnlyThenResizePlots:
+  sidebarGeometry := NormalizeSessionSidebarGeometry(newGeometry);
+  ApplySessionSidebarGeometryCss(sidebarGeometry);
+  RequestCurrentPlotResize();
+  result := NoValue;
+  return;
+end procedure;
+
+procedure ConfigureSettingsOverlay(overlay)
+begin
+OneSharedMaximumNotFourIndependentWidths:
+  if overlay \in SettingsOverlayNames then
+    SetOverlayMaximum(overlay,CommonFastFigureSettingsMaximumLargerThanMantineMaximumToken());
+    InstallCommonBottomVerticalResize(overlay,"ResizeSettingsOverlay");
+  end if;
+  \* Concrete CSS/token is lower-layer primitive. README does not auto-inherit.
+  result := NoValue;
+  return;
+end procedure;
+
+procedure ResizeSettingsOverlay(overlay,height)
+begin
+LocalHeightNotProjectOrPreviewWidthCommand:
+  Require(overlay \in SettingsOverlayNames);
+  settingsOverlayHeight := NormalizeComponentHeight(height);
+  ApplyLocalOverlayHeight(overlay,settingsOverlayHeight);
+  result := NoValue;
+  return;
+end procedure;
+
+procedure LayoutSelectionInteraction(event)
+begin
+ControlConsumesSelectionBeforeParentClear:
+  if IsLayoutSlotSurfaceClick(event) then
+    layoutSelectedSlotIds := ToggleSetMember(layoutSelectedSlotIds,event.slotId);
+    StopParentBackgroundClearForSameInteraction(event);
+  elsif IsMergeOrSplitControl(event) then
+    ConsumeCurrentSetForOfficialMergeOrSplit(layoutSelectedSlotIds,event);
+    StopParentBackgroundClearForSameInteraction(event);
+  elsif IsPreviewNonSlotBackgroundOrLayoutModalNonSlotContentBackground(event)
+     \/ IsGridShapeChange(event) \/ IsLayoutOverlayClose(event) then
+    layoutSelectedSlotIds := {};
+  end if;
+  result := layoutSelectedSlotIds;
+  return;
+end procedure;
+
+procedure RenderLayoutPreview(layoutRead,actualRenderedWidth)
+begin
+SingleWidthForAllDependentGeometry:
+  result := RenderSuppliedPreviewAtOneWidthAndSuppliedAspect(layoutRead,actualRenderedWidth);
+  \* Height/gap/margin/radius use SAME width; no separate preview-size drag.
+  \* Modal height change alone does not issue a width command.
+  return;
+end procedure;
+
+procedure MaintainDashboardDropReceiver(mounted,allowed,currentCallback)
+begin
+ContinuousExactlyOneLogicalReceiver:
+  dropMounted := mounted; dropAllowed := allowed;
+  if dropMounted /\ dropAllowed then
+    dropReceiver := InstallOrUpdateOneReceiverWithoutGapOrDuplicate(dropReceiver,currentCallback);
+  else
+    UninstallLogicalReceiver(dropReceiver); dropReceiver := NoValue;
+  end if;
+  \* Ordinary rerender/local update/callback replacement never creates a receive gap.
+  result := NoValue;
+  return;
+end procedure;
+
+procedure DashboardExternalFileDrop(file,slotId,choosePlan)
+variables accepted = FALSE, completion = NoValue;
+begin
+PrepareSelectionOnly:
+  accepted := InvokePublicApi("slots.prepareFileDrop",[slotId |-> slotId]);
+  if ~accepted then result := FALSE; return; end if;
+PublicImportLifecycleExactlyOnce:
+  \* Public binding of assets.importToSlot owns MantineUi_runLifecycleTask.
+  \* Do NOT wrap that binding in another MantineUi_runLifecycleTask.
+  completion := CaptureOriginalFailureOfPublicApi("assets.importToSlot",[file |-> file,slotId |-> slotId,planImport |-> choosePlan]);
+DropFinally:
+  InvokePublicApi("slots.finishFileDrop",[]);
+  if completion.threw then PropagateOriginalFailure(completion.failure); end if;
+  result := completion.value;
+  return;
+end procedure;
+
+procedure ProjectTreeAction(action,node,target)
+begin
+TrashTreeSelectionNotSlotConnection:
+  if action = "select" then
+    result := InvokePublicApi("assets.select",[kind |-> node.kind,path |-> node.path]);
+  elsif action = "move" then
+    Require(~node.fixed);
+    \* Trash descendants are valid move SOURCES if current VFS preconditions pass.
+    result := InvokePublicApi("assets.planMove",[path |-> node.path,directory |-> target.path]);
+    result := InvokePublicApi("assets.move",[plan |-> result,useUniqueName |-> ExplicitUserMoveChoice()]);
+  elsif action = "connect-to-slot" then
+    Require(node.kind \in {"csv","image"} /\ ~node.trashed);
+    result := InvokePublicApi("assets.connectToSlot",[path |-> node.path,kind |-> node.kind,slotId |-> target.id]);
+  end if;
+  \* Selecting/starting drag is not implicit connection or original-location restore.
+  return;
+end procedure;
+
+procedure InsertEmptyCsvFromGraphDataControl()
+begin
+OrdinaryCsvThenSelectNotCreateGraph:
+  result := InvokePublicApi("assets.createEmptyCsv",[]);
+  \* Graph creation only later via existing graphs.addObject command routes.
+  return;
+end procedure;
+
+begin
+ModuleDefinitions:
+  skip;
+end algorithm; *)
+====
