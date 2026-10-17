@@ -1367,6 +1367,70 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "caption Application wrapper retains direct Backend authority access");
     });
 
+    await run(43, "Labels use current Backend edits and immutable reference geometry", async () => {
+      activeProject.initialize(createProjectState());
+      const slot = activeProject.slots.find((item) => !item.hidden);
+      select(slot);
+      const initial = api.labels.readState(), source = activeProject._state,
+        style = source.layout.slotStyle, width = style.referenceWidth,
+        height = width / style.aspect,
+        margin = Math.min(style.outerMargin, Math.min(width, height) * 0.49),
+        cellWidth = (width - 2 * margin - style.gap * (source.layout.gridCols - 1)) / source.layout.gridCols;
+      check(Object.isFrozen(initial) && Object.isFrozen(initial.settings) && Object.isFrozen(initial.reference) &&
+        initial.reference.width === cellWidth && initial.sampleText === "a",
+        "label read is mutable or reference/sample projection differs from specification");
+      const originalSend = projectEFSM.send;
+      try {
+        projectEFSM.send = function(event, payload) {
+          if (event === "LABEL_SETTINGS_CHANGED" && payload.settings) {
+            check(Object.keys(payload.settings).join() === "fontSize", "Application copied current label settings");
+            const current = projectClone(activeProject._state);
+            current.annotations.labels.settings.fontFamily = "serif";
+            activeProject.initialize(current);
+          }
+          return originalSend.call(this, event, payload);
+        };
+        const edited = api.labels.setSettings({ fontSize: 0 });
+        check(edited.settings.fontSize === BackendSettings.defaults.limits.labels.fontSizeMin &&
+          edited.settings.fontFamily === "serif" && initial.settings.fontFamily !== "serif",
+          "label command did not preserve intervening current state or detached earlier read");
+      } finally { projectEFSM.send = originalSend; }
+      check(api.labels.setSettings({ fontSize: 501, format: "decimal", parentheses: false }).settings.fontSize === 501,
+        "label font size received an undeclared upper bound");
+      check(api.labels.readState().sampleText === "1", "sample label ignores current format/parentheses");
+      api.labels.setSettings({ fontSize: 14 });
+      const moved = api.labels.setPosition(0, -12);
+      check(moved.settings.x === 0 && moved.settings.y === -12, "zero/negative label positions lost");
+      const reset = api.labels.resetPosition(), defaults = BackendSettings.project_object.annotations.labels.settings;
+      check(reset.settings.x === defaults.x && reset.settings.y === defaults.y, "reset bypassed Backend config defaults");
+      mergeSlots([0, 1]);
+      select(activeProject.slots.find((item) => item.id === 0));
+      const merged = api.labels.readState();
+      check(merged.reference.width === 2 * cellWidth + style.gap &&
+        readBackendProjection("project-api", { operation: "labels.readState", slotId: -99 }).reference.width === cellWidth,
+        "merged or missing-slot reference geometry is not read-only current layout geometry");
+      const before = JSON.stringify(activeProject._state), frontend = appFSM.state;
+      let failed = false;
+      try { api.labels.setPosition(Infinity, 2); } catch { failed = true; }
+      check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+        "invalid label position changed Project/Frontend state");
+      try {
+        projectEFSM.send = () => Object.freeze({ committed: false });
+        for (const action of [() => api.labels.setEnabled(false), () => api.labels.setSettings({ fontSize: 20 }),
+          () => api.labels.setPosition(1, 2), () => api.labels.resetPosition()])
+          check(action() === false, "uncommitted label command exposed successful read");
+      } finally { projectEFSM.send = originalSend; }
+      check(JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+        "uncommitted label command mutated state");
+      const finished = api.labels.finishPositionInteraction();
+      check(Object.isFrozen(finished) && JSON.stringify(activeProject._state) === before,
+        "label interaction completion committed persistent state");
+      check(!/activeProject|projectObjects|getSelectedSlot/.test(
+        readLabelsApiState.toString() + setLabelsApiSettings.toString() + updateLabelsApiPosition.toString() +
+        finishLabelsApiPositionInteraction.toString() + resetLabelsApiPosition.toString()),
+        "label Application still reads Backend state directly");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

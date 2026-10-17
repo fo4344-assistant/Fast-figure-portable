@@ -366,6 +366,18 @@
       }
       // Backend read providers: resolve references from current authority, never normalize live models.
       function readBackendProjection(kind, request = {}) {
+        if (kind === "project-api" && request.operation === "labels.readState") {
+          const source = activeProject._state, labels = source.annotations.labels,
+            slot = source.slots.find((item) => item.id === request.slotId && !item.hidden) ?? null,
+            geometry = dashboardGeometryInProject(source, source.layout.slotStyle.referenceWidth),
+            reference = gridSlotGeometry(source.layout, geometry, slot),
+            identifier = slotIdentifier(0, source);
+          return Object.freeze({
+            enabled: labels.enabled, settings: Object.freeze({ ...labels.settings }),
+            reference: Object.freeze(reference),
+            sampleText: labels.settings.parentheses ? `(${identifier})` : identifier,
+          });
+        }
         if (kind === "project-api" && request.operation === "captions.readGlobal") {
           let captions = activeProject._state.annotations.captions;
           return Object.freeze({
@@ -1320,8 +1332,26 @@
         let candidate = projectClone(activeProject._state);
         if (Object.prototype.hasOwnProperty.call(payload, "enabled"))
           candidate.annotations.labels.enabled = payload.enabled === true;
-        if (payload.settings && typeof payload.settings === "object")
-          candidate.annotations.labels.settings = projectClone(payload.settings);
+        if (payload.settings && typeof payload.settings === "object") {
+          const edits = payload.settings, settings = candidate.annotations.labels.settings;
+          if (["lower-alpha", "upper-alpha", "decimal", "lower-roman", "upper-roman"].includes(edits.format))
+            settings.format = edits.format;
+          if (["row-major", "column-major"].includes(edits.order)) settings.order = edits.order;
+          if (Object.prototype.hasOwnProperty.call(edits, "parentheses"))
+            settings.parentheses = edits.parentheses === true;
+          if (Object.prototype.hasOwnProperty.call(edits, "fontFamily"))
+            settings.fontFamily = String(edits.fontFamily ?? "");
+          if (Object.prototype.hasOwnProperty.call(edits, "fontSize")) {
+            const number = Number(edits.fontSize);
+            if (Number.isFinite(number))
+              settings.fontSize = Math.max(BackendSettings.defaults.limits.labels.fontSizeMin, number);
+          }
+          for (const key of ["x", "y"]) {
+            if (!Object.prototype.hasOwnProperty.call(edits, key)) continue;
+            if (!Number.isFinite(edits[key])) throw Error("레이블 위치는 유한한 수여야 합니다.");
+            settings[key] = edits[key];
+          }
+        }
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
       }
@@ -1329,10 +1359,13 @@
         machine.assertWritable("labels", "LABEL_POSITION_CHANGED");
         let candidate = projectClone(activeProject._state),
           settings = candidate.annotations.labels.settings,
-          x = Number(payload.x),
-          y = Number(payload.y);
-        if (Number.isFinite(x)) settings.x = x;
-        if (Number.isFinite(y)) settings.y = y;
+          defaults = BackendSettings.project_object.annotations.labels.settings,
+          x = payload.reset === true ? defaults.x : payload.x,
+          y = payload.reset === true ? defaults.y : payload.y;
+        if (!Number.isFinite(x) || !Number.isFinite(y))
+          throw Error("레이블 위치는 유한한 수여야 합니다.");
+        settings.x = x;
+        settings.y = y;
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
       }
@@ -2226,18 +2259,22 @@
         return activeProject.layout.slotStyle.radius;
       }
       function dashboardGeometry(width = dashboardReferenceWidth(), heightOverride = null) {
-        let referenceWidth = dashboardReferenceWidth(),
-          scale = Math.max(0.001, Number(width) / referenceWidth),
-          configuredAspect = dashboardAspectValue(),
-          naturalHeight = (referenceWidth * scale) / configuredAspect,
+        return dashboardGeometryInProject(activeProject._state, width, heightOverride);
+      }
+      function dashboardGeometryInProject(project, width, heightOverride = null) {
+        let style = project.layout.slotStyle,
+          referenceWidth = style.referenceWidth,
+          scale = width / referenceWidth,
+          configuredAspect = style.aspect,
+          naturalHeight = width / configuredAspect,
           height =
             Number.isFinite(heightOverride) && heightOverride > 0
               ? Number(heightOverride)
               : naturalHeight,
-          aspect = (referenceWidth * scale) / height,
+          aspect = configuredAspect,
           outerMargin = Math.min(
-            dashboardOuterMarginPixels() * scale,
-            Math.min(referenceWidth * scale, height) * 0.49,
+            style.outerMargin * scale,
+            Math.min(width, height) * 0.49,
           );
         return {
           referenceWidth,
@@ -2246,8 +2283,8 @@
           scale,
           aspect,
           outerMargin,
-          gap: slotGapPixels() * scale,
-          radius: slotRadiusPixels() * scale,
+          gap: style.gap * scale,
+          radius: style.radius * scale,
         };
       }
       function gridSlotGeometry(layout, geometry, slot = null) {
@@ -2262,8 +2299,8 @@
         return {
           colWidth,
           rowHeight,
-          width: Math.max(1, colWidth * target.colSpan + gap * (target.colSpan - 1)),
-          height: Math.max(1, rowHeight * target.rowSpan + gap * (target.rowSpan - 1)),
+          width: colWidth * target.colSpan + gap * (target.colSpan - 1),
+          height: rowHeight * target.rowSpan + gap * (target.rowSpan - 1),
         };
       }
       function applyReferenceGeometry(element) {
@@ -7449,79 +7486,34 @@
         });
       }
       function readLabelsApiState() {
-        let reference = gridSlotGeometry(
-          activeProject.layout,
-          dashboardGeometry(dashboardReferenceWidth()),
-          getSelectedSlot(),
-        );
-        return Object.freeze({
-          enabled: activeProject.labelsEnabled,
-          settings: Object.freeze({ ...activeProject.labelSettings }),
-          reference: Object.freeze({
-            width: reference.width,
-            height: reference.height,
-          }),
-          sampleText: displayedSlotIdentifier(0),
+        return appFSM.query("project-api", {
+          operation: "labels.readState", slotId: interfaceFSM.readState().selectedSlotId,
         });
       }
       function setLabelsApiEnabled(enabled) {
-        appFSM.send("LABEL_SETTINGS_CHANGED", {
-          enabled: enabled === true,
-          direction: "ui-to-fsm",
-        });
+        let result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { enabled });
+        if (!result.committed) return false;
         renderDashboard();
-        debugLog("annotation:label", { enabled: activeProject.labelsEnabled });
+        debugLog("annotation:label", { enabled });
         appFSM.notify("labels", "ANNOTATION_VISIBILITY_CHANGED");
         return readLabelsApiState();
       }
       function setLabelsApiSettings(patch = {}) {
-        let current = activeProject.labelSettings,
-          next = { ...current };
-        if (Object.prototype.hasOwnProperty.call(patch, "format")) {
-          let format = String(patch.format || "");
-          if (
-            ["lower-alpha", "upper-alpha", "decimal", "lower-roman", "upper-roman"].includes(
-              format,
-            )
-          )
-            next.format = format;
-        }
-        if (Object.prototype.hasOwnProperty.call(patch, "order")) {
-          let order = String(patch.order || "");
-          if (["row-major", "column-major"].includes(order)) next.order = order;
-        }
-        if (Object.prototype.hasOwnProperty.call(patch, "parentheses"))
-          next.parentheses = patch.parentheses === true;
-        if (Object.prototype.hasOwnProperty.call(patch, "fontFamily"))
-          next.fontFamily = String(patch.fontFamily ?? "");
-        if (Object.prototype.hasOwnProperty.call(patch, "fontSize")) {
-          let fontSize = Number(patch.fontSize);
-          next.fontSize = Number.isFinite(fontSize) ? Math.max(6, fontSize) : current.fontSize;
-        }
-        appFSM.send("LABEL_SETTINGS_CHANGED", {
-          settings: next,
-          direction: "ui-to-fsm",
-        });
+        let result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { settings: patch });
+        if (!result.committed) return false;
         renderDashboard();
         schedulePlotResize();
-        debugLog("mantine:label-settings", { ...next });
+        debugLog("mantine:label-settings", { ...patch });
         appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
         return readLabelsApiState();
       }
       function updateLabelsApiPosition(x, y, eventName = null) {
-        let current = activeProject.labelSettings,
-          nextX = Number(x),
-          nextY = Number(y);
-        appFSM.send("LABEL_POSITION_CHANGED", {
-          x: Number.isFinite(nextX) ? nextX : current.x,
-          y: Number.isFinite(nextY) ? nextY : current.y,
-          direction: "ui-to-fsm",
-        });
-        current = activeProject.labelSettings;
+        let result = dispatchProjectCommand("LABEL_POSITION_CHANGED", { x, y });
+        if (!result.committed) return false;
         renderDashboard();
         schedulePlotResize();
         if (eventName) {
-          debugLog("mantine:label-settings", { ...current });
+          debugLog("mantine:label-settings", { x, y });
           appFSM.notify("labels", eventName);
         }
         return readLabelsApiState();
@@ -7531,14 +7523,17 @@
       }
 
       function finishLabelsApiPositionInteraction() {
-        debugLog("mantine:label-position",{
-          x:activeProject.labelSettings.x,y:activeProject.labelSettings.y,
-        });
+        debugLog("mantine:label-position", {});
         appFSM.notify("labels","LABEL_POSITION_DRAGGED");
         return readLabelsApiState();
       }
       function resetLabelsApiPosition() {
-        return updateLabelsApiPosition(0, 0, "LABEL_POSITION_RESET");
+        let result = dispatchProjectCommand("LABEL_POSITION_CHANGED", { reset: true });
+        if (!result.committed) return false;
+        renderDashboard();
+        schedulePlotResize();
+        appFSM.notify("labels", "LABEL_POSITION_RESET");
+        return readLabelsApiState();
       }
       function readAppearanceApiPalette() {
         return Object.freeze({ ...activeProject.appearance.uiPalette });
