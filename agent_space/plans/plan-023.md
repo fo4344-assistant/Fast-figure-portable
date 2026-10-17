@@ -19,6 +19,10 @@ Baseline `324e749494c5eaad97fbd71aa22401eb3a88e529`.
 
 Actual changed files, numeric patch009 and explanation commit together. Update source-code revision/fingerprint/current Source+PlusCal lineage but remain stale. Record results in `agent_space/reviews/review-20261017-003-code-caption-open.md`. Application/test/build/checker execution stays in authorized GitHub Actions, never local. Other annotation wrappers, whole config plumbing, export, graph/assets and renderer cutover remain explicitly outside this bounded unit.
 
+## First-unit results
+
+Source/test+patch009 commit `037bde373bc4daf71c8c099b5e9f73619ab228a2`: Actions regression39050782351 passed41 inline +41 split; version39050782459 passed; build39050782403 passed and produced dist-only bot commit `45b180379e116fe4e7493c6445698edf528a94fc`. Actual logs/fingerprint/limits are in the linked review. Full implementation remains open; code r37 stays stale. This post-execution documentation is not the executed source commit.
+
 ## Temporary-file rule
 
 The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.

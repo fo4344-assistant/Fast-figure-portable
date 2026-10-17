@@ -21,4 +21,11 @@ The user-authorized temporary draft cleanup succeeded before this unit; download
 
 ## Execution record
 
-Prepared for GitHub Actions; no passing regression/build/version result is claimed before actual execution. Append actual commit, run IDs and outcomes after execution.
+Implementation and actual patch009 committed together at `037bde373bc4daf71c8c099b5e9f73619ab228a2`.
+
+- Regression [39050782351](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39050782351): SUCCESS at that source/test commit; cases1–41 passed for both inline and split. Case41 appears as pass in both result tables. This verifies the bounded surface above, not whole Source conformance.
+- Version [39050782459](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39050782459): SUCCESS at the same commit; actual code r37 stale fingerprint `sha256:401bb47775c314b4dcc399c14b69df3da1e32053143677cab32ac832997d2c8c`, Source r38 closed / pseudocode r12 current.
+- Build [39050782403](https://github.com/fo4344-assistant/Fast-figure-portable/actions/runs/39050782403): SUCCESS, generated distribution bot commit `45b180379e116fe4e7493c6445698edf528a94fc` (only dist inline HTML/split ZIP). Bot-generated outputs are a separate actual commit, not falsely included in patch009's source commit.
+- Git diff/patch reverse-check passed as file operations, not local runtime execution. The subsequent result-record commit changes documents only and is not the commit executed by these runs.
+
+Caption insertion ownership unit is verified; full Plan016/023 implementation remains OPEN and source-code remains stale. Next: remaining annotation/default-config and export geometry ownership, then graph/assets/current-candidate, selection, renderer/API cutover and integration. No new Source meaning was invented in this unit.
