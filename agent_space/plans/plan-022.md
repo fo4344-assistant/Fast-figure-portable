@@ -136,3 +136,16 @@ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 
 잔여는 codec/normalization/constructor 등의 primitive와 domain 계산 구분, 모든 Source 함수·분기와 query/command producer-consumer·반환/실패·await 문맥의 전체 충실도 대조다. 특히 명시적 call이 존재한다는 것만으로 각 callee의 세부 번역이 닫혔다고 판정하지 않는다. 이후 전체 hierarchy cutover/과거 활성 파일 제거와 lineage 갱신을 수행한다.
 
 이번 branch patch는 이 진행 기록만 포함하며 `.work/plan022/` 번역·연결 메모를 포함/rollback하지 않는다. Source37 closed/활성 pseudocode11 stale/하위 stale 및 fingerprint는 유지한다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
+
+## 11. 후속 진행 — 전체 항목 대조와 settings/package 계산 전개
+
+기준 HEAD `1bf5425d8bd9afe981cadfbb0ebd1fc2bbfbdf30`에서 이어서 번역하고 이번 턴 완료 가능성을 대조했다. 임시 목표 15파일은 총 **5,539행**이다. 아직 전체 번역 완료는 아니며, 완료로 바꾸기 위해 잔여 domain 계산을 미정의 helper로 취급하지 않는다.
+
+1. 텍스트 대조상 Source 함수/메서드 163개에 대응하는 절차가 있고, 공개 API inventory는 Source87/작업본87이며 누락·추가·중복 key가 없다. 이는 entry 누락 확인일 뿐, 함수별 branch/반환/실패·동시성 의미의 전체 충실도 판정이 아니다.
+2. package 경로에서 별도의 가상 whole/chart predicate 대신 실제 번역한 공통 validator를 연결했다. FFPX export는 같은 read-source의 plain Project copy에서 trash를 제외하고 retained chart/image 참조를 검증하며, mandatory trash root가 없는 export snapshot에 일반 Project whole validation을 다시 강제하지 않는다. copied-byte loop의 index가 앞 metadata loop 뒤에 남아 bytes를 건너뛸 수 있던 작업본 오류도 `i=1` 재설정으로 바로잡았다.
+3. image/export 설정의 command 내부 계산을 별도 private 절차로 전개했다. current owner 설정에서 시작해 명시된 새 값만 처리하고 image manual fit·finite/clamp, export enum/current fallback·폭/높이/DPI limits·auto null height·explicit height fallback을 보존한다. read projection/config를 사용자 현재값으로 덮어쓰는 mutation input으로 쓰지 않는다.
+4. import의 missing-only settings 계산을 key별 재귀 절차로 전개했다. layout/annotation/export의 이미 존재하는 false/0/문자열을 기본값으로 덮지 않으며 config에는 없는 caption body 등의 instance 초기 데이터는 별도로 처리한다. UI palette는 전체 palette 정규화 규칙을 따로 적용한다. 없는 additive export settings의 폭은 loaded layout referenceWidth, 높이는 heightMode에서 산출한다. 이 계산은 candidate만 반환하며 commit·Frontend 접근·config 동기화는 없다.
+
+잔여를 다음으로 좁혔다: constructor/asset·chart·slot normalization 및 package document 조립 등 남은 operator의 domain 계산/실제 low-level primitive 구분과 전개, query/command/Frontend 전체 producer-consumer의 retry·취소·사후 throw/resource 수명 대조, 그 뒤 활성 hierarchy cutover/과거 파일 제거/전체 충실도 review와 lineage 갱신 및 Actions cumulative checker. 명시적 entry와 API key가 모두 있다는 것만으로 이 잔여를 완료로 판정하지 않는다. 따라서 이번 턴에 전체 완료했다고 선언하지 않는다.
+
+이번 저장소 변경은 이 진행 기록만 포함한다. `.work/plan022/` 작업본·체크리스트는 현재 경로 안의 transient 작업물이며 patch/remote/rollback에 포함하지 않는다. Source37 closed/활성 pseudocode11 stale/하위 stale와 fingerprint를 유지했다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
