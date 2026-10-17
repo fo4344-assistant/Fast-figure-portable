@@ -11077,7 +11077,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       function applyGridLayoutChangedAction({ machine, payload }) {
         machine.assertWritable("layout", "GRID_LAYOUT_CHANGED");
         machine.assertWritable("slots", "GRID_LAYOUT_CHANGED");
-        rebuildGridSlots(payload.rows, payload.cols);
+        const candidate = buildGridResizeCandidate(payload.rows, payload.cols);
+        activeProject.initialize(candidate);
         payload.clearGraphSelection = true;
         payload.selectionHints = { reResolveSlotSelection: true, clearAssetSelection: true };
       }
@@ -12305,12 +12306,13 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           caption: null,
         });
       }
-      function rebuildGridSlots(r, c) {
-        let rows=Number(r), cols=Number(c);
+      function buildGridResizeCandidate(rows, cols) {
         if(!Number.isInteger(rows)||!Number.isInteger(cols)||rows<1||rows>8||cols<1||cols>8)
           throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
         let candidate=projectClone(activeProject._state);
         normalizeSlotContents(candidate.slots);
+        const source = activeProject._state, oldRows = source.layout.gridRows, oldCols = source.layout.gridCols;
+        let nextId = Math.max(-1, ...source.slots.map(slot => slot.id)) + 1;
         let removed=candidate.slots.filter(slot=>slot.row>rows||slot.col>cols);
         if(removed.some(slot=>slot.hidden||slot.rowSpan!==1||slot.colSpan!==1||slotHasNonDefaultLocalState(slot)))
           throw Error("내용이나 병합 상태가 있는 영역은 그리드 축소로 제거할 수 없습니다.");
@@ -12319,18 +12321,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           slot.row+slot.rowSpan-1>rows||slot.col+slot.colSpan-1>cols))
           throw Error("병합된 슬롯을 가로지르도록 그리드를 축소할 수 없습니다.");
         candidate.layout.gridRows=rows; candidate.layout.gridCols=cols; candidate.slots=retained;
-        let occupied=new Set(candidate.slots.map(slot=>`${slot.row}:${slot.col}`)),
-          nextId=Math.max(-1,...candidate.slots.map(slot=>slot.id))+1;
         for(let row=1;row<=rows;row++) for(let col=1;col<=cols;col++){
-          let key=`${row}:${col}`; if(occupied.has(key))continue;
-          candidate.slots.push(newGridSlot(nextId++,row,col)); occupied.add(key);
+          if(row>oldRows||col>oldCols) candidate.slots.push(newGridSlot(nextId++,row,col));
         }
         validateProjectObjectState(candidate,{requireSlots:true});
-        activeProject.initialize(candidate);
-      }
-      function makeSlots(r = activeProject.gridRows, c = activeProject.gridCols) {
-        appFSM.send("GRID_LAYOUT_CHANGED", { rows: r, cols: c });
-        renderDashboard();
+        return candidate;
       }
       function parseCSV(text) {
         const d = (text.split(/\r?\n/)[0] || "").includes("\t") ? "\t" : ",";
@@ -17481,18 +17476,9 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return readLayoutApiState();
       }
       function setLayoutApiGrid(rows, cols) {
-        let nextRows = Number(rows),
-          nextCols = Number(cols);
-        if (
-          !Number.isInteger(nextRows) ||
-          !Number.isInteger(nextCols) ||
-          nextRows < 1 ||
-          nextRows > 8 ||
-          nextCols < 1 ||
-          nextCols > 8
-        )
-          throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
-        makeSlots(nextRows, nextCols);
+        const result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", { rows, cols });
+        if (!result.committed) return false;
+        renderDashboard();
         applySlotStyle(false);
         schedulePlotResize();
         return readLayoutApiState();
