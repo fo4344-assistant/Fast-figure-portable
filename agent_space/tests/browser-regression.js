@@ -1568,6 +1568,59 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         setLayoutApiZoomLocked.toString() + resetLayoutApiZoom.toString()), "zoom Application owns session mutation or Backend normalization");
     });
 
+    await run(47, "Grid resize uses one-based coordinates and preserves ownership before one commit", async () => {
+      const saved = projectClone(activeProject._state);
+      try {
+        const fresh = createProjectState();
+        check(fresh.slots.every((slot, i) => slot.row === Math.floor(i / fresh.layout.gridCols) + 1 &&
+          slot.col === i % fresh.layout.gridCols + 1 && slot.id === i), "initial grid coordinate/id contract differs");
+        fresh.slots.forEach((slot, i) => { slot.id = [1, 90, 2, 100][i]; });
+        fresh.slots[0].caption = "retained";
+        activeProject.initialize(validateProjectObjectState(fresh, { requireSlots: true }));
+        const before = JSON.stringify(activeProject._state), candidate = buildGridResizeCandidate(3, 1);
+        check(JSON.stringify(activeProject._state) === before, "candidate builder committed authority");
+        check(candidate.slots.length === 3 && candidate.slots[0].id === 1 && candidate.slots[1].id === 2 &&
+          candidate.slots[2].id === 101 && candidate.slots[2].row === 3 && candidate.slots[2].col === 1 &&
+          candidate.slots[0].caption === "retained", "mixed-axis resize reflowed or reused pre-resize ids");
+        const read = api.layout.setGrid(3, 1);
+        check(read.gridRows === 3 && read.gridCols === 1 && JSON.stringify(activeProject._state) === JSON.stringify(candidate),
+          "public resize did not commit the calculated candidate");
+        const oldSlots = projectClone(activeProject.slots);
+        api.layout.setGrid(3, 2);
+        check(oldSlots.every(old => JSON.stringify(slotAt(old.id)) === JSON.stringify(old)) &&
+          activeProject.slots.filter(slot => slot.col === 2).map(slot => slot.id).join() === "102,103,104",
+          "expansion changed retained geometry/local state or new-cell row-major ids");
+        api.captions.setSlotText(104, "protected");
+        const protectedState = JSON.stringify(activeProject._state), session = appFSM.state;
+        let rejected = false;
+        try { api.layout.setGrid(2, 2); } catch { rejected = true; }
+        check(rejected && JSON.stringify(activeProject._state) === protectedState && appFSM.state === session,
+          "non-default removed slot was committed or reconciled");
+        for (const invalid of [["2", 2], [0, 2], [2, 9], [2.5, 2]]) {
+          rejected = false;
+          try { api.layout.setGrid(...invalid); } catch { rejected = true; }
+          check(rejected && JSON.stringify(activeProject._state) === protectedState && appFSM.state === session,
+            "invalid grid input changed authority/session");
+        }
+        activeProject.initialize(createProjectState());
+        api.layout.mergeSlots([activeProject.slots[0].id, activeProject.slots[1].id]);
+        const merged = JSON.stringify(activeProject._state), mergedSession = appFSM.state;
+        rejected = false;
+        try { api.layout.setGrid(2, 1); } catch { rejected = true; }
+        check(rejected && JSON.stringify(activeProject._state) === merged && appFSM.state === mergedSession,
+          "crossing merged footprint was removed");
+        const send = projectEFSM.send, render = renderDashboard;
+        let renders = 0;
+        try {
+          projectEFSM.send = () => Object.freeze({ committed: false });
+          renderDashboard = () => { renders++; };
+          check(api.layout.setGrid(2, 2) === false && renders === 0, "uncommitted resize rendered or returned successful state");
+        } finally { projectEFSM.send = send; renderDashboard = render; }
+        check(!/activeProject|Number\(|makeSlots|buildGridResizeCandidate/.test(setLayoutApiGrid.toString()),
+          "Application still owns grid calculation/current Backend state");
+      } finally { activeProject.initialize(saved); renderDashboard(); }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

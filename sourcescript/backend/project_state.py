@@ -659,7 +659,7 @@ def createProjectState():
        빈 graph용 default CSV나 fake graph object를 만들지 않는다.
     4. 고정 VFS directory와 next-id sequence를 만든다.
     5. persistent appearance와 export settings를 만든다.
-    6. 설정된 grid의 각 cell에 empty 1 x 1 slot을 만든다. row/col은 0-based이고 id=row*gridCols+col인 row-major 정수다.
+    6. 설정된 grid의 각 cell에 empty 1 x 1 slot을 만든다. row/col은 SLOT_STRUCTURE와 같이 1-based이고 id=(row-1)*gridCols+(col-1)인 0-based row-major 정수다.
        hidden=False, chart/imageId/caption=None이며 imageSettings/contentType만 config slot defaults에서 복사한다.
        id/좌표/reference는 config가 아니라 생성 알고리즘이 만든다.
     7. validateProjectObjectState를 통과한 candidate를 반환한다.

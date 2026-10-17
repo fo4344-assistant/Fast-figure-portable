@@ -210,7 +210,7 @@ def buildGridResizeCandidate(rows, cols):
     처리:
     1. rows/cols가 1..8 정수인지 검증한다.
     2. 확대면 기존 모든 grid cell/slot id/geometry와 모든 slot-local properties를 같은 좌표에 보존하고
-       새 좌표에만 SLOT_LOCAL_DEFAULTS를 가진 empty 1x1 slot을 추가한다. 좌표는 0-based다.
+       새 좌표에만 SLOT_LOCAL_DEFAULTS를 가진 empty 1x1 slot을 추가한다. SLOT_STRUCTURE와 같이 row/col은 1-based다.
        새 id는 resize 시작 시 기존 모든 slot id의 최대값+1부터 새 좌표 row-major 순서로 할당한다.
        임시 local counter이며 새 persistent sequence/재배치/기존 id 변경을 만들지 않는다.
     3. 축소면 삭제될 row/column과 교차하는 slot을 검사한다.

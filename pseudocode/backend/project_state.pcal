@@ -391,7 +391,7 @@ NoOrphanOrSharedChartAndMonotonicIds:
 end procedure;
 
 procedure createProjectState()
-variables candidate = NoValue, row = 0, col = 0, slot = NoValue;
+variables candidate = NoValue, row = 1, col = 1, slot = NoValue;
 begin
 ConfigurationNotProjectData:
   Require(BackendSettingsHasRequiredBackendOnlyShapeAndNoProjectData(BackendSettings));
@@ -417,10 +417,10 @@ FixedDirectoryInstancesAndFirstIds:
   candidate.export.height := IF candidate.export.heightMode = "auto" THEN NoValue
                              ELSE BackendSettings.defaults.limits.export.logicalHeight[1];
 EachCellEmptyNotProtectedCsv:
-  while row < candidate.layout.gridRows do
-    col := 0;
-    while col < candidate.layout.gridCols do
-      slot := [id |-> row * candidate.layout.gridCols + col,row |-> row,col |-> col];
+  while row <= candidate.layout.gridRows do
+    col := 1;
+    while col <= candidate.layout.gridCols do
+      slot := [id |-> (row - 1) * candidate.layout.gridCols + (col - 1),row |-> row,col |-> col];
       slot.rowSpan := 1; slot.colSpan := 1; slot.hidden := FALSE;
       slot.content := DeepCopy(BackendSettings.defaults.slotSettings.content);
       slot.content.chart := NoValue; slot.content.imageId := NoValue; slot.caption := NoValue;

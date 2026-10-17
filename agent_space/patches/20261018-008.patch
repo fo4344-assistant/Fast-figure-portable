@@ -1,0 +1,354 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 8ce1d2f..3f64c69 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -41,6 +41,10 @@ Baseline `b9017660a7add509234d4e706529447d9830e364`. Code r40 translates whole-p
+ 
+ Baseline `47fcc75b370e9bdcfbed6fdc3232f173b80fdb2a`. Backend now owns immutable layout.readState with config-only preview normalization and same-project geometry, plus current-authority partial style candidates. Application sends only new edits and returns fresh reads with Frontend zoom scalars. Zoom/lock/reset mutation moves to existing FSM events; initial lock measures once, repeated lock/locked intent/no-op do not publish or replace the anchor, and unlock/reset clear the anchor and restore100. No duplicate session state or persistent zoom is introduced. Browser cases45/46 and review004 map actual boundaries; code r41 remains stale. Existing style/zoom DOM render orchestration is retained, but its Backend-reading geometry is explicitly not the completed supplied-projection renderer cutover. Grid/merge/split, export geometry, graph/assets and whole integration still remain. Patch20261018-006 and modified files committed together as `84761a44efbebcdc5652cbc24636420792bb5823`. Actual Actions regression39053607221 passed46 inline +46 split; versions39053607246 and build39053607372 passed; dist-only bot commit `2eafd93a6ac612d8f1ec6126fed6f116ebbd4b4c` was fast-forwarded locally. Review004 records exact evidence and whole-goal gaps. This later result documentation is not the executed source HEAD; code r41 remains stale and the goal open.
+ 
++## Sixth implementation unit — Source-first grid coordinate correction
++
++Baseline `53e6df9efbde8fc57c6be9c0844e20386dff3591`. The slot schema and package/renderer geometry use one-based coordinates, but Source creation/resize prose and their pseudocode loops still used zero-based coordinates. Correct Source first (r39), then translate inclusive creation/resize boundaries and zero-based ID formulas (pseudocode r13), then implement pure grid candidate calculation and commit-gated public adaptation (code r42, still stale). Resize takes new IDs from the complete pre-resize maximum, preserves retained cells without packing, and rejects destructive shrink. Browser case47 and review005 cover the bounded correction and prior closure-review oversight. Patch20261018-008 and all actual modified files must commit together; Actions verification is pending at preparation. Remaining merge/split, graph/assets, projection renderer/export and whole integration prevent goal completion.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-005-grid-coordinate-translation.md b/agent_space/reviews/review-20261018-005-grid-coordinate-translation.md
+new file mode 100644
+index 0000000..6e560d0
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-005-grid-coordinate-translation.md
+@@ -0,0 +1,37 @@
++# Grid coordinates: Source r39 → pseudocode r13 → code r42
++
++## Scope and discovery
++
++Baseline: `53e6df9efbde8fc57c6be9c0844e20386dff3591`.
++The active goal requires direct pseudocode implementation, physical module flattening only, and Source-first resolution of ambiguity. This unit follows that order; it does not close the whole implementation goal.
++
++While tracing `BuildGridResizeInAttempt`, the Source slot schema (`backend/project_state.py`, SLOT_STRUCTURE) and pseudocode README require one-based grid coordinates, but Source creation/resize prose and their translated loops still used zero-based coordinates. The earlier r38 closure and r12 translation review missed this contradiction: entry/arity coverage did not check coordinate formulas. Implementing those loops literally would generate invalid slots. This is an upper-layer defect, not permission to infer a different code-only convention.
++
++## Source closure evidence (r39)
++
++1. **Logical completeness:** retain the existing one-based slot schema; initial cells are row=1..rows, col=1..cols, id=(row-1)*cols+(col-1). Resize tests inclusive bottom/right (`row+span-1`), preserves all retained coordinates/IDs/local properties, rejects non-default removed cells and crossing/removed merges, and allocates only newly added coordinates in row-major order starting at the maximum ID of the complete pre-resize state plus one. Mixed-axis resize is covered: removed high IDs cannot be immediately reused. Candidate validation precedes commit; no packing/reflow occurs.
++2. **Purpose:** preserves user placements and prevents destructive resize. No format migration or altered stored coordinates is introduced: the schema, current validator, renderer, and package placements already use one-based grid cells. Zero-based object/column indices and slot IDs remain unchanged.
++3. **Duplicate/integration inspection:** creation and resize use the same slot schema/defaults; no second coordinate state, ID sequence, config, or translation bridge is added. Only two contradictory Source sentences change. Existing r38 ownership/resource/API decisions remain unchanged. Reject switching the schema to zero-based because that would change unrelated geometry, render, and package contracts rather than resolve the local contradiction.
++
++Source r39 is closed for this correction; it inherits the unchanged r38 review scope, not an assertion that all application code is conformant.
++
++## Direct translation and implementation trace
++
++| Requirement | Concrete artifact / inspection |
++|---|---|
++| Source-first decision | `sourcescript/backend/project_state.py:createProjectState`, `sourcescript/backend/layout_annotations.py:buildGridResizeCandidate` |
++| Creation uses schema coordinates and zero-based IDs | `pseudocode/backend/project_state.pcal:createProjectState` inclusive loops and `(row-1)*cols+(col-1)` |
++| Resize uses same coordinates | `pseudocode/backend/layout_annotations.pcal:BuildGridResizeInAttempt`, inclusive boundaries, new coordinates strictly beyond old extents |
++| Same-authority candidate, no premature commit | `fast-figure.js:buildGridResizeCandidate`; validation then returned candidate; command action commits once |
++| Pre-resize ID maximum, no reflow | maximum computed from complete source before filtering; retained records unchanged; new cells row-major |
++| Public wrapper is an adapter | `setLayoutApiGrid` sends identities/new values, committed gate, render and fresh official layout query; no numeric normalization or Backend read in wrapper |
++| No legacy bridge | unused `makeSlots` removed; no `rebuildGridSlots` mutation helper retained |
++| Failure semantics | exceptions before initialize preserve authority/Frontend; uncommitted result returns false without render/read |
++| Regression evidence | browser case 47: initial coordinate/ID formula, pure builder, mixed-axis removed-high-ID resize, retained local state, expansion order, protected shrink, invalid inputs, crossing merge, noncommit render gate, wrapper ownership |
++| Physical flattening only | Backend helper, command action, Application wrapper remain in existing JS file, with no logical responsibility transfer |
++
++Pseudocode r13 is current after this bounded retranslation. Unchanged owners retain the prior r12 semantic review, while this review corrects its coordinate oversight. Parser/TLC success is not claimed. Code r42 remains **stale**: many other graph/asset/selection/renderer/export paths are not yet translated and audited against the current full pseudocode.
++
++## Verification status
++
++Before publication: Git diff whitespace and isolated-index reverse-patch checks are file-integrity checks only. No local application, Source, pseudocode, parser, checker, test, build, or TLC execution. GitHub Actions cumulative lineage/static fidelity, inline+split regression, and distribution build results are pending; record actual commits/run IDs after completion rather than infer success.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index eef197b..4627f26 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1568,6 +1568,59 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         setLayoutApiZoomLocked.toString() + resetLayoutApiZoom.toString()), "zoom Application owns session mutation or Backend normalization");
+     });
+ 
++    await run(47, "Grid resize uses one-based coordinates and preserves ownership before one commit", async () => {
++      const saved = projectClone(activeProject._state);
++      try {
++        const fresh = createProjectState();
++        check(fresh.slots.every((slot, i) => slot.row === Math.floor(i / fresh.layout.gridCols) + 1 &&
++          slot.col === i % fresh.layout.gridCols + 1 && slot.id === i), "initial grid coordinate/id contract differs");
++        fresh.slots.forEach((slot, i) => { slot.id = [1, 90, 2, 100][i]; });
++        fresh.slots[0].caption = "retained";
++        activeProject.initialize(validateProjectObjectState(fresh, { requireSlots: true }));
++        const before = JSON.stringify(activeProject._state), candidate = buildGridResizeCandidate(3, 1);
++        check(JSON.stringify(activeProject._state) === before, "candidate builder committed authority");
++        check(candidate.slots.length === 3 && candidate.slots[0].id === 1 && candidate.slots[1].id === 2 &&
++          candidate.slots[2].id === 101 && candidate.slots[2].row === 3 && candidate.slots[2].col === 1 &&
++          candidate.slots[0].caption === "retained", "mixed-axis resize reflowed or reused pre-resize ids");
++        const read = api.layout.setGrid(3, 1);
++        check(read.gridRows === 3 && read.gridCols === 1 && JSON.stringify(activeProject._state) === JSON.stringify(candidate),
++          "public resize did not commit the calculated candidate");
++        const oldSlots = projectClone(activeProject.slots);
++        api.layout.setGrid(3, 2);
++        check(oldSlots.every(old => JSON.stringify(slotAt(old.id)) === JSON.stringify(old)) &&
++          activeProject.slots.filter(slot => slot.col === 2).map(slot => slot.id).join() === "102,103,104",
++          "expansion changed retained geometry/local state or new-cell row-major ids");
++        api.captions.setSlotText(104, "protected");
++        const protectedState = JSON.stringify(activeProject._state), session = appFSM.state;
++        let rejected = false;
++        try { api.layout.setGrid(2, 2); } catch { rejected = true; }
++        check(rejected && JSON.stringify(activeProject._state) === protectedState && appFSM.state === session,
++          "non-default removed slot was committed or reconciled");
++        for (const invalid of [["2", 2], [0, 2], [2, 9], [2.5, 2]]) {
++          rejected = false;
++          try { api.layout.setGrid(...invalid); } catch { rejected = true; }
++          check(rejected && JSON.stringify(activeProject._state) === protectedState && appFSM.state === session,
++            "invalid grid input changed authority/session");
++        }
++        activeProject.initialize(createProjectState());
++        api.layout.mergeSlots([activeProject.slots[0].id, activeProject.slots[1].id]);
++        const merged = JSON.stringify(activeProject._state), mergedSession = appFSM.state;
++        rejected = false;
++        try { api.layout.setGrid(2, 1); } catch { rejected = true; }
++        check(rejected && JSON.stringify(activeProject._state) === merged && appFSM.state === mergedSession,
++          "crossing merged footprint was removed");
++        const send = projectEFSM.send, render = renderDashboard;
++        let renders = 0;
++        try {
++          projectEFSM.send = () => Object.freeze({ committed: false });
++          renderDashboard = () => { renders++; };
++          check(api.layout.setGrid(2, 2) === false && renders === 0, "uncommitted resize rendered or returned successful state");
++        } finally { projectEFSM.send = send; renderDashboard = render; }
++        check(!/activeProject|Number\(|makeSlots|buildGridResizeCandidate/.test(setLayoutApiGrid.toString()),
++          "Application still owns grid calculation/current Backend state");
++      } finally { activeProject.initialize(saved); renderDashboard(); }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index ae1eaf8..3eb100b 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,13 +9,13 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 38,
++      "revision": 39,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+-      "fingerprint": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4",
++      "fingerprint": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+       "derived_from": null,
+       "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261017-001-source-r38-closure.md"
++      "closure_review": "agent_space/reviews/review-20261018-005-grid-coordinate-translation.md"
+     }, 
+     "verification-model": {
+       "revision": 26, 
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 41,
++      "revision": 42,
+       "status": "stale", 
+       "paths": [
+         "Fast-figure.html", 
+@@ -38,23 +38,23 @@
+         "fast-figure.js", 
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:c359f18d294241d81fd73c0a176f032f8b0f7de5333d1f86b5fb3ac729f82746",
++      "fingerprint": "sha256:a16b3d956ac2deb14e48af86fd9925314350f8519c6b9f372a8bca4f17b5f6e7",
+       "derived_from": {
+-        "source-script": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4",
+-        "pseudocode": "sha256:bbc26a0c283ea18b8790e70677017afd2322bc1e1b1b69880cf089036a58343c",
++        "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
++        "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-004-code-layout-zoom-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-005-grid-coordinate-translation.md"
+     }, 
+     "pseudocode": {
+-      "revision": 12,
++      "revision": 13,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+-      "fingerprint": "sha256:bbc26a0c283ea18b8790e70677017afd2322bc1e1b1b69880cf089036a58343c",
++      "fingerprint": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
+       "derived_from": {
+-        "source-script": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4"
++        "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f"
+       },
+-      "translation_review": "agent_space/reviews/review-20261017-002-pseudocode-r12-translation.md"
++      "translation_review": "agent_space/reviews/review-20261018-005-grid-coordinate-translation.md"
+     }
+   }
+ }
+diff --git a/fast-figure.js b/fast-figure.js
+index a52a005..e0dd7fc 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1183,7 +1183,8 @@
+       function applyGridLayoutChangedAction({ machine, payload }) {
+         machine.assertWritable("layout", "GRID_LAYOUT_CHANGED");
+         machine.assertWritable("slots", "GRID_LAYOUT_CHANGED");
+-        rebuildGridSlots(payload.rows, payload.cols);
++        const candidate = buildGridResizeCandidate(payload.rows, payload.cols);
++        activeProject.initialize(candidate);
+         payload.clearGraphSelection = true;
+         payload.selectionHints = { reResolveSlotSelection: true, clearAssetSelection: true };
+       }
+@@ -2411,12 +2412,13 @@
+           caption: null,
+         });
+       }
+-      function rebuildGridSlots(r, c) {
+-        let rows=Number(r), cols=Number(c);
++      function buildGridResizeCandidate(rows, cols) {
+         if(!Number.isInteger(rows)||!Number.isInteger(cols)||rows<1||rows>8||cols<1||cols>8)
+           throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
+         let candidate=projectClone(activeProject._state);
+         normalizeSlotContents(candidate.slots);
++        const source = activeProject._state, oldRows = source.layout.gridRows, oldCols = source.layout.gridCols;
++        let nextId = Math.max(-1, ...source.slots.map(slot => slot.id)) + 1;
+         let removed=candidate.slots.filter(slot=>slot.row>rows||slot.col>cols);
+         if(removed.some(slot=>slot.hidden||slot.rowSpan!==1||slot.colSpan!==1||slotHasNonDefaultLocalState(slot)))
+           throw Error("내용이나 병합 상태가 있는 영역은 그리드 축소로 제거할 수 없습니다.");
+@@ -2425,18 +2427,11 @@
+           slot.row+slot.rowSpan-1>rows||slot.col+slot.colSpan-1>cols))
+           throw Error("병합된 슬롯을 가로지르도록 그리드를 축소할 수 없습니다.");
+         candidate.layout.gridRows=rows; candidate.layout.gridCols=cols; candidate.slots=retained;
+-        let occupied=new Set(candidate.slots.map(slot=>`${slot.row}:${slot.col}`)),
+-          nextId=Math.max(-1,...candidate.slots.map(slot=>slot.id))+1;
+         for(let row=1;row<=rows;row++) for(let col=1;col<=cols;col++){
+-          let key=`${row}:${col}`; if(occupied.has(key))continue;
+-          candidate.slots.push(newGridSlot(nextId++,row,col)); occupied.add(key);
++          if(row>oldRows||col>oldCols) candidate.slots.push(newGridSlot(nextId++,row,col));
+         }
+         validateProjectObjectState(candidate,{requireSlots:true});
+-        activeProject.initialize(candidate);
+-      }
+-      function makeSlots(r = activeProject.gridRows, c = activeProject.gridCols) {
+-        appFSM.send("GRID_LAYOUT_CHANGED", { rows: r, cols: c });
+-        renderDashboard();
++        return candidate;
+       }
+       function parseCSV(text) {
+         const d = (text.split(/\r?\n/)[0] || "").includes("\t") ? "\t" : ",";
+@@ -7587,18 +7582,9 @@
+         return readLayoutApiState();
+       }
+       function setLayoutApiGrid(rows, cols) {
+-        let nextRows = Number(rows),
+-          nextCols = Number(cols);
+-        if (
+-          !Number.isInteger(nextRows) ||
+-          !Number.isInteger(nextCols) ||
+-          nextRows < 1 ||
+-          nextRows > 8 ||
+-          nextCols < 1 ||
+-          nextCols > 8
+-        )
+-          throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
+-        makeSlots(nextRows, nextCols);
++        const result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", { rows, cols });
++        if (!result.committed) return false;
++        renderDashboard();
+         applySlotStyle(false);
+         schedulePlotResize();
+         return readLayoutApiState();
+diff --git a/pseudocode/backend/layout_annotations.pcal b/pseudocode/backend/layout_annotations.pcal
+index f74a17d..8bc4e2e 100644
+--- a/pseudocode/backend/layout_annotations.pcal
++++ b/pseudocode/backend/layout_annotations.pcal
+@@ -268,7 +268,7 @@ end procedure;
+ procedure BuildGridResizeInAttempt(source, rows, cols)
+ variables candidate = NoValue,
+           oldRows = source.layout.gridRows, oldCols = source.layout.gridCols,
+-          i = 1, s = NoValue, row = 0, col = 0, retained = <<>>,
++          i = 1, s = NoValue, row = 1, col = 1, retained = <<>>,
+           freshId = MaximumSlotIdOrMinusOne(source.slots) + 1, newSlot = NoValue;
+ begin
+ ValidateGridBounds:
+@@ -278,7 +278,7 @@ InspectEveryRemovedOrCrossingSlot:
+   \* Includes hidden cells. The read remains this one source/candidate operation.
+   while i <= Len(source.slots) do
+     s := source.slots[i];
+-    if s.row + s.rowSpan > rows \/ s.col + s.colSpan > cols then
++    if s.row + s.rowSpan - 1 > rows \/ s.col + s.colSpan - 1 > cols then
+       call slotHasNonDefaultLocalState(s);
+       if result then RejectAndPropagateUnchanged("nondefault grid removal"); end if;
+       if s.rowSpan > 1 \/ s.colSpan > 1 then
+@@ -295,15 +295,15 @@ RemoveOnlyPermittedCells:
+   i := 1;
+   while i <= Len(candidate.slots) do
+     s := candidate.slots[i];
+-    if s.row < rows /\ s.col < cols then retained := Append(retained,s); end if;
++    if s.row <= rows /\ s.col <= cols then retained := Append(retained,s); end if;
+     i := i + 1;
+   end while;
+   candidate.slots := retained;
+ KeepCoordinateAndCreateOnlyNewCells:
+-  while row < rows do
+-    col := 0;
+-    while col < cols do
+-      if row >= oldRows \/ col >= oldCols then
++  while row <= rows do
++    col := 1;
++    while col <= cols do
++      if row > oldRows \/ col > oldCols then
+         newSlot := [id |-> freshId,row |-> row,col |-> col,rowSpan |-> 1,colSpan |-> 1,hidden |-> FALSE,
+                     content |-> DeepCopy(BackendSettings.defaults.slotSettings.content),caption |-> NoValue];
+         newSlot.content.chart := NoValue; newSlot.content.imageId := NoValue;
+diff --git a/pseudocode/backend/project_state.pcal b/pseudocode/backend/project_state.pcal
+index 012b9b0..cc095c0 100644
+--- a/pseudocode/backend/project_state.pcal
++++ b/pseudocode/backend/project_state.pcal
+@@ -391,7 +391,7 @@ NoOrphanOrSharedChartAndMonotonicIds:
+ end procedure;
+ 
+ procedure createProjectState()
+-variables candidate = NoValue, row = 0, col = 0, slot = NoValue;
++variables candidate = NoValue, row = 1, col = 1, slot = NoValue;
+ begin
+ ConfigurationNotProjectData:
+   Require(BackendSettingsHasRequiredBackendOnlyShapeAndNoProjectData(BackendSettings));
+@@ -417,10 +417,10 @@ FixedDirectoryInstancesAndFirstIds:
+   candidate.export.height := IF candidate.export.heightMode = "auto" THEN NoValue
+                              ELSE BackendSettings.defaults.limits.export.logicalHeight[1];
+ EachCellEmptyNotProtectedCsv:
+-  while row < candidate.layout.gridRows do
+-    col := 0;
+-    while col < candidate.layout.gridCols do
+-      slot := [id |-> row * candidate.layout.gridCols + col,row |-> row,col |-> col];
++  while row <= candidate.layout.gridRows do
++    col := 1;
++    while col <= candidate.layout.gridCols do
++      slot := [id |-> (row - 1) * candidate.layout.gridCols + (col - 1),row |-> row,col |-> col];
+       slot.rowSpan := 1; slot.colSpan := 1; slot.hidden := FALSE;
+       slot.content := DeepCopy(BackendSettings.defaults.slotSettings.content);
+       slot.content.chart := NoValue; slot.content.imageId := NoValue; slot.caption := NoValue;
+diff --git a/sourcescript/backend/layout_annotations.py b/sourcescript/backend/layout_annotations.py
+index 6adced0..3c2caa5 100644
+--- a/sourcescript/backend/layout_annotations.py
++++ b/sourcescript/backend/layout_annotations.py
+@@ -210,7 +210,7 @@ def buildGridResizeCandidate(rows, cols):
+     처리:
+     1. rows/cols가 1..8 정수인지 검증한다.
+     2. 확대면 기존 모든 grid cell/slot id/geometry와 모든 slot-local properties를 같은 좌표에 보존하고
+-       새 좌표에만 SLOT_LOCAL_DEFAULTS를 가진 empty 1x1 slot을 추가한다. 좌표는 0-based다.
++       새 좌표에만 SLOT_LOCAL_DEFAULTS를 가진 empty 1x1 slot을 추가한다. SLOT_STRUCTURE와 같이 row/col은 1-based다.
+        새 id는 resize 시작 시 기존 모든 slot id의 최대값+1부터 새 좌표 row-major 순서로 할당한다.
+        임시 local counter이며 새 persistent sequence/재배치/기존 id 변경을 만들지 않는다.
+     3. 축소면 삭제될 row/column과 교차하는 slot을 검사한다.
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index 6d96397..9720b02 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -659,7 +659,7 @@ def createProjectState():
+        빈 graph용 default CSV나 fake graph object를 만들지 않는다.
+     4. 고정 VFS directory와 next-id sequence를 만든다.
+     5. persistent appearance와 export settings를 만든다.
+-    6. 설정된 grid의 각 cell에 empty 1 x 1 slot을 만든다. row/col은 0-based이고 id=row*gridCols+col인 row-major 정수다.
++    6. 설정된 grid의 각 cell에 empty 1 x 1 slot을 만든다. row/col은 SLOT_STRUCTURE와 같이 1-based이고 id=(row-1)*gridCols+(col-1)인 0-based row-major 정수다.
+        hidden=False, chart/imageId/caption=None이며 imageSettings/contentType만 config slot defaults에서 복사한다.
+        id/좌표/reference는 config가 아니라 생성 알고리즘이 만든다.
+     7. validateProjectObjectState를 통과한 candidate를 반환한다.

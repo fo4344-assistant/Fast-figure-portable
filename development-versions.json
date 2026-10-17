@@ -9,13 +9,13 @@
   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
   "layers": {
     "source-script": {
-      "revision": 38,
+      "revision": 39,
       "status": "current", 
       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
-      "fingerprint": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4",
+      "fingerprint": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
       "derived_from": null,
       "closure": "closed",
-      "closure_review": "agent_space/reviews/review-20261017-001-source-r38-closure.md"
+      "closure_review": "agent_space/reviews/review-20261018-005-grid-coordinate-translation.md"
     }, 
     "verification-model": {
       "revision": 26, 
@@ -30,7 +30,7 @@
       "validation_review": null
     }, 
     "source-code": {
-      "revision": 41,
+      "revision": 42,
       "status": "stale", 
       "paths": [
         "Fast-figure.html", 
@@ -38,23 +38,23 @@
         "fast-figure.js", 
         "scripts/build-portable.py"
       ], 
-      "fingerprint": "sha256:c359f18d294241d81fd73c0a176f032f8b0f7de5333d1f86b5fb3ac729f82746",
+      "fingerprint": "sha256:a16b3d956ac2deb14e48af86fd9925314350f8519c6b9f372a8bca4f17b5f6e7",
       "derived_from": {
-        "source-script": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4",
-        "pseudocode": "sha256:bbc26a0c283ea18b8790e70677017afd2322bc1e1b1b69880cf089036a58343c",
+        "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+        "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
       }, 
-      "validation_review": "agent_space/reviews/review-20261018-004-code-layout-zoom-open.md"
+      "validation_review": "agent_space/reviews/review-20261018-005-grid-coordinate-translation.md"
     }, 
     "pseudocode": {
-      "revision": 12,
+      "revision": 13,
       "status": "current",
       "path_rule": "pseudocode/**/*.pcal", 
-      "fingerprint": "sha256:bbc26a0c283ea18b8790e70677017afd2322bc1e1b1b69880cf089036a58343c",
+      "fingerprint": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
       "derived_from": {
-        "source-script": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4"
+        "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f"
       },
-      "translation_review": "agent_space/reviews/review-20261017-002-pseudocode-r12-translation.md"
+      "translation_review": "agent_space/reviews/review-20261018-005-grid-coordinate-translation.md"
     }
   }
 }

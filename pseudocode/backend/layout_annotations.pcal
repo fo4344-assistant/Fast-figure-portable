@@ -268,7 +268,7 @@ end procedure;
 procedure BuildGridResizeInAttempt(source, rows, cols)
 variables candidate = NoValue,
           oldRows = source.layout.gridRows, oldCols = source.layout.gridCols,
-          i = 1, s = NoValue, row = 0, col = 0, retained = <<>>,
+          i = 1, s = NoValue, row = 1, col = 1, retained = <<>>,
           freshId = MaximumSlotIdOrMinusOne(source.slots) + 1, newSlot = NoValue;
 begin
 ValidateGridBounds:
@@ -278,7 +278,7 @@ InspectEveryRemovedOrCrossingSlot:
   \* Includes hidden cells. The read remains this one source/candidate operation.
   while i <= Len(source.slots) do
     s := source.slots[i];
-    if s.row + s.rowSpan > rows \/ s.col + s.colSpan > cols then
+    if s.row + s.rowSpan - 1 > rows \/ s.col + s.colSpan - 1 > cols then
       call slotHasNonDefaultLocalState(s);
       if result then RejectAndPropagateUnchanged("nondefault grid removal"); end if;
       if s.rowSpan > 1 \/ s.colSpan > 1 then
@@ -295,15 +295,15 @@ RemoveOnlyPermittedCells:
   i := 1;
   while i <= Len(candidate.slots) do
     s := candidate.slots[i];
-    if s.row < rows /\ s.col < cols then retained := Append(retained,s); end if;
+    if s.row <= rows /\ s.col <= cols then retained := Append(retained,s); end if;
     i := i + 1;
   end while;
   candidate.slots := retained;
 KeepCoordinateAndCreateOnlyNewCells:
-  while row < rows do
-    col := 0;
-    while col < cols do
-      if row >= oldRows \/ col >= oldCols then
+  while row <= rows do
+    col := 1;
+    while col <= cols do
+      if row > oldRows \/ col > oldCols then
         newSlot := [id |-> freshId,row |-> row,col |-> col,rowSpan |-> 1,colSpan |-> 1,hidden |-> FALSE,
                     content |-> DeepCopy(BackendSettings.defaults.slotSettings.content),caption |-> NoValue];
         newSlot.content.chart := NoValue; newSlot.content.imageId := NoValue;
