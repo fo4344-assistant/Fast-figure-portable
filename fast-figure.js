@@ -404,6 +404,14 @@
       }
       // Backend read providers: resolve references from current authority, never normalize live models.
       function readBackendProjection(kind, request = {}) {
+        if (kind === "project-api" && request.operation === "captions.readGlobal") {
+          let captions = activeProject._state.annotations.captions;
+          return Object.freeze({
+            enabled: captions.enabled, text: captions.text, afterText: captions.afterText,
+            name: captions.name, nameBold: captions.nameBold,
+            settings: Object.freeze({ ...captions.settings }),
+          });
+        }
         if (kind === "project-api" && request.operation === "print.readSettings")
           return Object.freeze({ ...activeProject.exportSettings });
         if ((kind === "project-api" && request.operation === "images.readEditor") ||
@@ -710,10 +718,10 @@
         send(event, payload = {}) {
           let action = this.actions[event];
           if (!action) throw Error(`${event}는 등록된 ProjectObject command가 아닙니다.`);
-          action({ machine: this, event, payload });
+          let committed = action({ machine: this, event, payload }) !== false;
           return Object.freeze({
             event,
-            committed: true,
+            committed,
             payload,
             removedGraphReferenceCount: payload.removedGraphReferenceCount || 0,
             resetImageSlotCount: payload.resetImageSlotCount || 0,
@@ -780,17 +788,13 @@
         } else throw Error("캡션 변경 대상이 올바르지 않습니다.");
         activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
       }
-      function applySlotCaptionsInsertedAction({ machine }) {
-        machine.assertWritable("captions","SLOT_CAPTIONS_INSERTED");
-        let inserted=slotCaptionSections()
-          .map((section)=>[section.label,section.text].filter(Boolean).join(" "))
-          .join(" ");
-        if(!inserted)return;
-        let candidate=projectClone(activeProject._state),
-          current=String(candidate.annotations.captions.text||"");
-        candidate.annotations.captions.text=
-          current+(current&&!/\s$/.test(current)?` ${inserted}`:inserted);
-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+      function applySlotCaptionsInsertedAction({ machine, payload }) {
+        machine.assertWritable("captions", "SLOT_CAPTIONS_INSERTED");
+        let candidate = projectClone(activeProject._state),
+          text = insertSlotCaptions(candidate, payload.slotIds ?? null);
+        if (text === candidate.annotations.captions.text) return false;
+        candidate.annotations.captions.text = text;
+        activeProject.initialize(validateProjectObjectState(candidate, { requireSlots: true }));
       }
       function applyDataObjectCreatedAction({ machine, payload }) {
         machine.assertWritable("data","DATA_OBJECT_CREATED");
@@ -3611,7 +3615,7 @@
         return result;
       }
       function slotIdentifier(index, project = activeProject) {
-        let settings = project.labelSettings;
+        let settings = project.annotations?.labels.settings ?? project.labelSettings;
         if (settings.format === "decimal") return String(index + 1);
         if (settings.format === "lower-roman") return romanIdentifier(index).toLowerCase();
         if (settings.format === "upper-roman") return romanIdentifier(index);
@@ -3622,10 +3626,11 @@
         return project.labelSettings.parentheses === true ? `(${identifier})` : identifier;
       }
       function orderedVisibleSlots(project = activeProject) {
+        let settings = project.annotations?.labels.settings ?? project.labelSettings;
         return project.slots
           .filter((slot) => !slot.hidden)
           .sort((a, b) =>
-            project.labelSettings.order === "column-major"
+            settings.order === "column-major"
               ? a.col - b.col || a.row - b.row
               : a.row - b.row || a.col - b.col,
           );
@@ -3643,32 +3648,43 @@
         });
       }
 
-      function slotCaptionSections() {
-        let groups = [],
-          current = null;
-        orderedVisibleSlots().forEach((slot, index) => {
-          let text = typeof slot.caption === "string" ? slot.caption : "";
-          if (text === "") {
-            current = null;
-            return;
-          }
-          if (current && current.end === index - 1 && current.text === text)
-            current.end = index;
-          else {
-            current = { start: index, end: index, text };
+      function orderedSlotLabels(project) {
+        let settings = project.annotations.labels.settings;
+        return Object.freeze(orderedVisibleSlots(project).map((slot, ordinal) => {
+          let identifier = slotIdentifier(ordinal, project);
+          return Object.freeze({ slotId: slot.id, ordinal, identifier,
+            displayLabel: settings.parentheses ? `(${identifier})` : identifier });
+        }));
+      }
+      function insertSlotCaptions(project, slotIds = null) {
+        let labels = orderedSlotLabels(project), selected = null;
+        if (slotIds !== null) {
+          if (!Array.isArray(slotIds)) throw Error("캡션 대상은 슬롯 ID 목록이어야 합니다.");
+          selected = new Set(slotIds);
+          let visible = new Set(labels.map((label) => label.slotId));
+          for (let id of selected)
+            if (!visible.has(id)) throw Error("캡션 대상 슬롯이 없거나 숨겨져 있습니다.");
+        }
+        let groups = [], current = null;
+        for (let label of labels) {
+          if (selected && !selected.has(label.slotId)) continue;
+          let text = project.slots.find((slot) => slot.id === label.slotId).caption ?? "";
+          if (current && label.ordinal === current.endOrdinal + 1 &&
+              (text === "" || text === current.text)) {
+            current.endOrdinal = label.ordinal;
+            current.last = label.identifier;
+          } else {
+            current = { first: label.identifier, last: label.identifier,
+              endOrdinal: label.ordinal, text };
             groups.push(current);
           }
-        });
-        return groups.map((group) => {
-          let first = slotIdentifier(group.start),
-            last = slotIdentifier(group.end);
-          return {
-            label: activeProject.labelsEnabled
-              ? `(${first}${group.end > group.start ? `-${last}` : ""})`
-              : "",
-            text: group.text,
-          };
-        });
+        }
+        let inserted = groups.map((group) =>
+          `(${group.first}${group.first === group.last ? "" : `-${group.last}`})` +
+          (group.text === "" ? "" : ` ${group.text}`)).join(" "),
+          before = project.annotations.captions.text;
+        if (!inserted) return before;
+        return before + (before && !before.endsWith(" ") ? " " : "") + inserted;
       }
       function activeCaptionView(caption=projectObjects.read("captions")) {
         return {
@@ -7370,14 +7386,7 @@
         return activeProject.appearance.uiPalette;
       }
       function readGlobalCaptionState() {
-        return Object.freeze({
-          enabled:activeProject.captionsEnabled,
-          text:activeProject.captionText,
-          afterText:activeProject.captionAfterText,
-          name:activeProject.captionName,
-          nameBold:activeProject.captionNameBold,
-          settings:Object.freeze({...activeProject.captionSettings}),
-        });
+        return appFSM.query("project-api", { operation: "captions.readGlobal" });
       }
       function readSlotCaptionState(slotId) {
         let slot=slotAt(Number(slotId));
@@ -7408,12 +7417,12 @@
         });
         return readSlotCaptionState(slotId);
       }
-      function insertCaptionsApiSlotCaptions(slotIds=null) {
-        appFSM.send("SLOT_CAPTIONS_INSERTED",{
-          slotIds:Array.isArray(slotIds)?slotIds:null,direction:"fsm-to-model",
-        });
-        syncDashboardCaption();
-        return readGlobalCaptionState();
+      function insertCaptionsApiSlotCaptions(slotIds = null) {
+        let result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", { slotIds });
+        if (!result.committed) return false;
+        let state = readGlobalCaptionState();
+        syncDashboardCaption(state);
+        return state;
       }
 
       function setCaptionsApiName(name) {

@@ -1263,6 +1263,58 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "failed print command changed Project or reconciled Frontend success");
     });
 
+    await run(41, "caption insertion follows exact Backend grouping and committed query boundaries", async () => {
+      const fixture = projectClone(activeProject._state);
+      fixture.annotations.labels.enabled = false;
+      fixture.annotations.labels.settings = { ...fixture.annotations.labels.settings,
+        format: "lower-alpha", order: "row-major", parentheses: false };
+      fixture.annotations.captions.text = "";
+      fixture.slots = ["A", "A", "", "B"].map((caption, id) =>
+        ({ id, row: 1, col: id + 1, hidden: false, caption }));
+      const frozenBefore = JSON.stringify(fixture);
+      check(insertSlotCaptions(fixture) === "(a-c) A (d) B", "equal/empty consecutive grouping failed");
+      check(insertSlotCaptions(fixture, [2, 0, 0]) === "(a) A (c)", "subset order/gaps/dedup changed numbering");
+      check(JSON.stringify(fixture) === frozenBefore, "caption calculation mutated its input");
+      fixture.slots[0].caption = "";
+      fixture.slots[1].caption = "";
+      check(insertSlotCaptions(fixture) === "(a-c) (d) B", "initial empty group lost labels");
+      fixture.slots[0].caption = " A";
+      fixture.slots[1].caption = "A";
+      fixture.annotations.captions.text = "prefix\n";
+      check(insertSlotCaptions(fixture) === "prefix\n (a)  A (b-c) A (d) B", "exact text/append separator changed");
+      fixture.annotations.captions.text = "prefix ";
+      check(insertSlotCaptions(fixture, [3]) === "prefix (d) B", "existing U+0020 boundary not reused");
+      fixture.annotations.labels.settings.format = "decimal";
+      fixture.annotations.labels.settings.order = "column-major";
+      fixture.slots[0].row = 2;
+      fixture.slots[1].row = 1;
+      fixture.slots[1].col = 1;
+      check(orderedSlotLabels(fixture)[0].slotId === 1 &&
+        insertSlotCaptions(fixture, [0]) === "prefix (2)  A", "label order/format not read from supplied Project");
+      const slot = activeProject.slots.find((item) => !item.hidden);
+      api.captions.setGlobalText("existing");
+      api.captions.setSlotText(slot.id, "body");
+      api.labels.setEnabled(false);
+      const beforeRead = JSON.stringify(activeProject._state), frontendBeforeRead = appFSM.state;
+      const snapshot = api.captions.readGlobal();
+      check(Object.isFrozen(snapshot) && Object.isFrozen(snapshot.settings) &&
+        JSON.stringify(activeProject._state) === beforeRead && appFSM.state === frontendBeforeRead,
+        "caption read is mutable or changes authority");
+      const expected = insertSlotCaptions(projectClone(activeProject._state), [slot.id]);
+      const actual = api.captions.insertSlotCaptions([slot.id]);
+      check(actual.text === expected && snapshot.text === "existing", "public insertion did not return fresh detached read");
+      const before = JSON.stringify(activeProject._state), frontend = appFSM.state;
+      check(api.captions.insertSlotCaptions([]) === false && JSON.stringify(activeProject._state) === before &&
+        appFSM.state === frontend, "empty target committed or reconciled success");
+      let failed = false;
+      try { api.captions.insertSlotCaptions([Number.MIN_SAFE_INTEGER]); } catch { failed = true; }
+      check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+        "invalid target partially changed Project/Frontend");
+      check(!/activeProject|projectObjects|slotAt|projectEFSM/.test(
+        insertCaptionsApiSlotCaptions.toString() + readGlobalCaptionState.toString()),
+        "caption Application wrapper retains direct Backend read/calculation");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

@@ -1,0 +1,336 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+new file mode 100644
+index 0000000..0fa8af6
+--- /dev/null
++++ b/agent_space/plans/plan-023.md
+@@ -0,0 +1,24 @@
++# Plan 023 — Implement the closed Source r38 / pseudocode r12 boundaries
++
++## Scope and order
++
++Resume Plan016 implementation after completed Plan022 translation. Source/pseudocode remain the semantic authority; optional model/TLC is not an implementation gate. Preserve the existing functional surface while converging Backend candidate/query, Application public adaptation and supplied-input Frontend rendering. This is not a new architecture or another Source design pass.
++
++Implement coherent ownership units: caption insertion and official reads first; then remaining annotation/config and export geometry, graph/asset command/current-candidate contracts, selection/result reconciliation, renderer/API direct-read cutover, and full integration. Reopen Source first only if an actual new meaning is necessary. Keep source-code stale until the whole alignment is complete. Do not substitute a green regression subset for whole conformance.
++
++## First implementation unit
++
++Baseline `324e749494c5eaad97fbd71aa22401eb3a88e529`.
++
++- Backend `orderedSlotLabels` / `insertSlotCaptions` implement the actual procedures in `pseudocode/backend/layout_annotations.pcal`: all visible anchors numbered before filtering, exact equality/empty consecutive runs, initial empty labels, ordinal gaps, single U+0020 separator, append existing global text without trimming.
++- `SLOT_CAPTIONS_INSERTED` constructs/validates/commits its candidate internally. Empty target is genuinely uncommitted and does not reconcile Frontend success. Invalid/hidden target rejects without mutation.
++- Application passes identities only, gates postcommit work, and returns a fresh immutable `captions.readGlobal` official query; the narrow renderer consumes that result. No UI-owned aggregation or snapshot-to-command input.
++- Browser regression case41 covers the algorithm and actual public command/query/no-op/failure boundaries, in both inline/split distributions via Actions. Existing40 cases remain required.
++
++## Verification and records
++
++Actual changed files, numeric patch009 and explanation commit together. Update source-code revision/fingerprint/current Source+PlusCal lineage but remain stale. Record results in `agent_space/reviews/review-20261017-003-code-caption-open.md`. Application/test/build/checker execution stays in authorized GitHub Actions, never local. Other annotation wrappers, whole config plumbing, export, graph/assets and renderer cutover remain explicitly outside this bounded unit.
++
++## Temporary-file rule
++
++The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261017-003-code-caption-open.md b/agent_space/reviews/review-20261017-003-code-caption-open.md
+new file mode 100644
+index 0000000..7fc803d
+--- /dev/null
++++ b/agent_space/reviews/review-20261017-003-code-caption-open.md
+@@ -0,0 +1,24 @@
++# Caption insertion implementation r37 — partial implementation, OPEN
++
++Baseline `324e749494c5eaad97fbd71aa22401eb3a88e529`. Source r38 closed and pseudocode r12 current remain unchanged. This unit implements their caption aggregation path, not full Plan016/023 or all Source contracts.
++
++## Mapping / actual ownership
++
++- `sourcescript/backend/layout_annotations.py` and `pseudocode/backend/layout_annotations.pcal` → `fast-figure.js` `orderedSlotLabels(project)` / `insertSlotCaptions(project, slotIds = null)`. Pure candidate-scoped reads, numbering every visible anchor before selection, exact strings, empty runs, no renumbering of filtered targets, U+0020 append boundary. Existing identifier formatters and sort logic support the canonical Project argument without reading Frontend state.
++- `SLOT_CAPTIONS_INSERTED` → `applySlotCaptionsInsertedAction`: clone current Backend state, calculate inside command, validate whole candidate, initialize once. No selected-slot authority or snapshot input. No targets returns false before replacement. `ProjectStateMachine.send` now respects an action's explicit false outcome; other existing actions' undefined success still commits as before. Application reconciles only committed results.
++- Public `captions.insertSlotCaptions` → `insertCaptionsApiSlotCaptions`: identity input only, committed gate, fresh official `captions.readGlobal` query, supplied-input renderer sync, returned immutable global/settings copies. No direct Backend registry/read or UI grouping in this wrapper.
++- `captions.readGlobal` → Backend query; read does not mutate or share writable settings. Other caption setters and renderer/default-argument paths still need their own coherent cutover; do not claim full annotation separation.
++
++## Verification surface
++
++Regression41 covers identical/empty trailing runs, initial all-empty labels, subset gaps/order/dedup, no input mutation, exact leading whitespace, newline versus single-space boundary, alternate numbering/order, labels-disabled insertion, actual public success/query snapshot, empty target no commit/no reconciliation, invalid target failure preservation, and narrow Application direct-access absence. Existing40 tests plus41 must pass in both inline/split Actions. No local application, Source, pseudocode, checker, test, build or TLC execution. Hash computation and Git diff checks are byte/file operations only.
++
++## Decisions / exclusions
++
++Implement the already specified group algorithm; do not invent deduplication history, a caption preview store, or an Application candidate. Use explicit false action result rather than caller-supplied commit flags. Preserve old text verbatim rather than trim/replace. Keep code stale with current upper lineage because config, other commands, public APIs and renderer/export integration are not complete. Optional model r26 is not updated or represented as checked against r38.
++
++The user-authorized temporary draft cleanup succeeded before this unit; downloaded verification evidence remains. Subsequent temporary-file cleanup will happen once at work end, not between steps. No unrelated cleanup.
++
++## Execution record
++
++Prepared for GitHub Actions; no passing regression/build/version result is claimed before actual execution. Append actual commit, run IDs and outcomes after execution.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 94c0d36..d9a8fae 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1263,6 +1263,58 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         "failed print command changed Project or reconciled Frontend success");
+     });
+ 
++    await run(41, "caption insertion follows exact Backend grouping and committed query boundaries", async () => {
++      const fixture = projectClone(activeProject._state);
++      fixture.annotations.labels.enabled = false;
++      fixture.annotations.labels.settings = { ...fixture.annotations.labels.settings,
++        format: "lower-alpha", order: "row-major", parentheses: false };
++      fixture.annotations.captions.text = "";
++      fixture.slots = ["A", "A", "", "B"].map((caption, id) =>
++        ({ id, row: 1, col: id + 1, hidden: false, caption }));
++      const frozenBefore = JSON.stringify(fixture);
++      check(insertSlotCaptions(fixture) === "(a-c) A (d) B", "equal/empty consecutive grouping failed");
++      check(insertSlotCaptions(fixture, [2, 0, 0]) === "(a) A (c)", "subset order/gaps/dedup changed numbering");
++      check(JSON.stringify(fixture) === frozenBefore, "caption calculation mutated its input");
++      fixture.slots[0].caption = "";
++      fixture.slots[1].caption = "";
++      check(insertSlotCaptions(fixture) === "(a-c) (d) B", "initial empty group lost labels");
++      fixture.slots[0].caption = " A";
++      fixture.slots[1].caption = "A";
++      fixture.annotations.captions.text = "prefix\n";
++      check(insertSlotCaptions(fixture) === "prefix\n (a)  A (b-c) A (d) B", "exact text/append separator changed");
++      fixture.annotations.captions.text = "prefix ";
++      check(insertSlotCaptions(fixture, [3]) === "prefix (d) B", "existing U+0020 boundary not reused");
++      fixture.annotations.labels.settings.format = "decimal";
++      fixture.annotations.labels.settings.order = "column-major";
++      fixture.slots[0].row = 2;
++      fixture.slots[1].row = 1;
++      fixture.slots[1].col = 1;
++      check(orderedSlotLabels(fixture)[0].slotId === 1 &&
++        insertSlotCaptions(fixture, [0]) === "prefix (2)  A", "label order/format not read from supplied Project");
++      const slot = activeProject.slots.find((item) => !item.hidden);
++      api.captions.setGlobalText("existing");
++      api.captions.setSlotText(slot.id, "body");
++      api.labels.setEnabled(false);
++      const beforeRead = JSON.stringify(activeProject._state), frontendBeforeRead = appFSM.state;
++      const snapshot = api.captions.readGlobal();
++      check(Object.isFrozen(snapshot) && Object.isFrozen(snapshot.settings) &&
++        JSON.stringify(activeProject._state) === beforeRead && appFSM.state === frontendBeforeRead,
++        "caption read is mutable or changes authority");
++      const expected = insertSlotCaptions(projectClone(activeProject._state), [slot.id]);
++      const actual = api.captions.insertSlotCaptions([slot.id]);
++      check(actual.text === expected && snapshot.text === "existing", "public insertion did not return fresh detached read");
++      const before = JSON.stringify(activeProject._state), frontend = appFSM.state;
++      check(api.captions.insertSlotCaptions([]) === false && JSON.stringify(activeProject._state) === before &&
++        appFSM.state === frontend, "empty target committed or reconciled success");
++      let failed = false;
++      try { api.captions.insertSlotCaptions([Number.MIN_SAFE_INTEGER]); } catch { failed = true; }
++      check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
++        "invalid target partially changed Project/Frontend");
++      check(!/activeProject|projectObjects|slotAt|projectEFSM/.test(
++        insertCaptionsApiSlotCaptions.toString() + readGlobalCaptionState.toString()),
++        "caption Application wrapper retains direct Backend read/calculation");
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 0de4fa9..49d816b 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 36,
++      "revision": 37,
+       "status": "stale", 
+       "paths": [
+         "Fast-figure.html", 
+@@ -38,13 +38,13 @@
+         "fast-figure.js", 
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:b4d6299c2dc97f7a4575e4cf42a3a1d682469e395ce77d02f3dc0e5a72f0964d",
++      "fingerprint": "sha256:401bb47775c314b4dcc399c14b69df3da1e32053143677cab32ac832997d2c8c",
+       "derived_from": {
+-        "source-script": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f", 
+-        "pseudocode": "sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5", 
++        "source-script": "sha256:3b38b06cb1ab576772c54e6b271fa20a1cfb6347bef9735e2b21137d2774edc4",
++        "pseudocode": "sha256:bbc26a0c283ea18b8790e70677017afd2322bc1e1b1b69880cf089036a58343c",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": null
++      "validation_review": "agent_space/reviews/review-20261017-003-code-caption-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 12,
+diff --git a/fast-figure.js b/fast-figure.js
+index b146f77..0a5da44 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -404,6 +404,14 @@
+       }
+       // Backend read providers: resolve references from current authority, never normalize live models.
+       function readBackendProjection(kind, request = {}) {
++        if (kind === "project-api" && request.operation === "captions.readGlobal") {
++          let captions = activeProject._state.annotations.captions;
++          return Object.freeze({
++            enabled: captions.enabled, text: captions.text, afterText: captions.afterText,
++            name: captions.name, nameBold: captions.nameBold,
++            settings: Object.freeze({ ...captions.settings }),
++          });
++        }
+         if (kind === "project-api" && request.operation === "print.readSettings")
+           return Object.freeze({ ...activeProject.exportSettings });
+         if ((kind === "project-api" && request.operation === "images.readEditor") ||
+@@ -710,10 +718,10 @@
+         send(event, payload = {}) {
+           let action = this.actions[event];
+           if (!action) throw Error(`${event}는 등록된 ProjectObject command가 아닙니다.`);
+-          action({ machine: this, event, payload });
++          let committed = action({ machine: this, event, payload }) !== false;
+           return Object.freeze({
+             event,
+-            committed: true,
++            committed,
+             payload,
+             removedGraphReferenceCount: payload.removedGraphReferenceCount || 0,
+             resetImageSlotCount: payload.resetImageSlotCount || 0,
+@@ -780,17 +788,13 @@
+         } else throw Error("캡션 변경 대상이 올바르지 않습니다.");
+         activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+       }
+-      function applySlotCaptionsInsertedAction({ machine }) {
+-        machine.assertWritable("captions","SLOT_CAPTIONS_INSERTED");
+-        let inserted=slotCaptionSections()
+-          .map((section)=>[section.label,section.text].filter(Boolean).join(" "))
+-          .join(" ");
+-        if(!inserted)return;
+-        let candidate=projectClone(activeProject._state),
+-          current=String(candidate.annotations.captions.text||"");
+-        candidate.annotations.captions.text=
+-          current+(current&&!/\s$/.test(current)?` ${inserted}`:inserted);
+-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
++      function applySlotCaptionsInsertedAction({ machine, payload }) {
++        machine.assertWritable("captions", "SLOT_CAPTIONS_INSERTED");
++        let candidate = projectClone(activeProject._state),
++          text = insertSlotCaptions(candidate, payload.slotIds ?? null);
++        if (text === candidate.annotations.captions.text) return false;
++        candidate.annotations.captions.text = text;
++        activeProject.initialize(validateProjectObjectState(candidate, { requireSlots: true }));
+       }
+       function applyDataObjectCreatedAction({ machine, payload }) {
+         machine.assertWritable("data","DATA_OBJECT_CREATED");
+@@ -3611,7 +3615,7 @@
+         return result;
+       }
+       function slotIdentifier(index, project = activeProject) {
+-        let settings = project.labelSettings;
++        let settings = project.annotations?.labels.settings ?? project.labelSettings;
+         if (settings.format === "decimal") return String(index + 1);
+         if (settings.format === "lower-roman") return romanIdentifier(index).toLowerCase();
+         if (settings.format === "upper-roman") return romanIdentifier(index);
+@@ -3622,10 +3626,11 @@
+         return project.labelSettings.parentheses === true ? `(${identifier})` : identifier;
+       }
+       function orderedVisibleSlots(project = activeProject) {
++        let settings = project.annotations?.labels.settings ?? project.labelSettings;
+         return project.slots
+           .filter((slot) => !slot.hidden)
+           .sort((a, b) =>
+-            project.labelSettings.order === "column-major"
++            settings.order === "column-major"
+               ? a.col - b.col || a.row - b.row
+               : a.row - b.row || a.col - b.col,
+           );
+@@ -3643,32 +3648,43 @@
+         });
+       }
+ 
+-      function slotCaptionSections() {
+-        let groups = [],
+-          current = null;
+-        orderedVisibleSlots().forEach((slot, index) => {
+-          let text = typeof slot.caption === "string" ? slot.caption : "";
+-          if (text === "") {
+-            current = null;
+-            return;
+-          }
+-          if (current && current.end === index - 1 && current.text === text)
+-            current.end = index;
+-          else {
+-            current = { start: index, end: index, text };
++      function orderedSlotLabels(project) {
++        let settings = project.annotations.labels.settings;
++        return Object.freeze(orderedVisibleSlots(project).map((slot, ordinal) => {
++          let identifier = slotIdentifier(ordinal, project);
++          return Object.freeze({ slotId: slot.id, ordinal, identifier,
++            displayLabel: settings.parentheses ? `(${identifier})` : identifier });
++        }));
++      }
++      function insertSlotCaptions(project, slotIds = null) {
++        let labels = orderedSlotLabels(project), selected = null;
++        if (slotIds !== null) {
++          if (!Array.isArray(slotIds)) throw Error("캡션 대상은 슬롯 ID 목록이어야 합니다.");
++          selected = new Set(slotIds);
++          let visible = new Set(labels.map((label) => label.slotId));
++          for (let id of selected)
++            if (!visible.has(id)) throw Error("캡션 대상 슬롯이 없거나 숨겨져 있습니다.");
++        }
++        let groups = [], current = null;
++        for (let label of labels) {
++          if (selected && !selected.has(label.slotId)) continue;
++          let text = project.slots.find((slot) => slot.id === label.slotId).caption ?? "";
++          if (current && label.ordinal === current.endOrdinal + 1 &&
++              (text === "" || text === current.text)) {
++            current.endOrdinal = label.ordinal;
++            current.last = label.identifier;
++          } else {
++            current = { first: label.identifier, last: label.identifier,
++              endOrdinal: label.ordinal, text };
+             groups.push(current);
+           }
+-        });
+-        return groups.map((group) => {
+-          let first = slotIdentifier(group.start),
+-            last = slotIdentifier(group.end);
+-          return {
+-            label: activeProject.labelsEnabled
+-              ? `(${first}${group.end > group.start ? `-${last}` : ""})`
+-              : "",
+-            text: group.text,
+-          };
+-        });
++        }
++        let inserted = groups.map((group) =>
++          `(${group.first}${group.first === group.last ? "" : `-${group.last}`})` +
++          (group.text === "" ? "" : ` ${group.text}`)).join(" "),
++          before = project.annotations.captions.text;
++        if (!inserted) return before;
++        return before + (before && !before.endsWith(" ") ? " " : "") + inserted;
+       }
+       function activeCaptionView(caption=projectObjects.read("captions")) {
+         return {
+@@ -7370,14 +7386,7 @@
+         return activeProject.appearance.uiPalette;
+       }
+       function readGlobalCaptionState() {
+-        return Object.freeze({
+-          enabled:activeProject.captionsEnabled,
+-          text:activeProject.captionText,
+-          afterText:activeProject.captionAfterText,
+-          name:activeProject.captionName,
+-          nameBold:activeProject.captionNameBold,
+-          settings:Object.freeze({...activeProject.captionSettings}),
+-        });
++        return appFSM.query("project-api", { operation: "captions.readGlobal" });
+       }
+       function readSlotCaptionState(slotId) {
+         let slot=slotAt(Number(slotId));
+@@ -7408,12 +7417,12 @@
+         });
+         return readSlotCaptionState(slotId);
+       }
+-      function insertCaptionsApiSlotCaptions(slotIds=null) {
+-        appFSM.send("SLOT_CAPTIONS_INSERTED",{
+-          slotIds:Array.isArray(slotIds)?slotIds:null,direction:"fsm-to-model",
+-        });
+-        syncDashboardCaption();
+-        return readGlobalCaptionState();
++      function insertCaptionsApiSlotCaptions(slotIds = null) {
++        let result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", { slotIds });
++        if (!result.committed) return false;
++        let state = readGlobalCaptionState();
++        syncDashboardCaption(state);
++        return state;
+       }
+ 
+       function setCaptionsApiName(name) {
