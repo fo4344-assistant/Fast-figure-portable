@@ -1,0 +1,424 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index e8664f0..6321308 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -57,6 +57,10 @@ Baseline `399822d02baad1ca8aa04616041ba02dd4f2c47c`. Translate NormalizeImageEdi
+ 
+ Baseline `ec548da11a60f8794b7ec5238703805fee978351`. Translate NormalizeExportEditsInAttempt with current-field preservation, config-only bounds, declared own edits read once, auto/null versus explicit/current-height fallback, and commit-gated official public reads. Correct r44's lower image conversion catch after comparing the already-existing primitive contract: thrown conversions propagate; invalid/non-finite scalar results preserve current fields, and NoValue is not zero. Case49 corrects the mistaken Symbol success expectation; case50 supplements existing case40. Review008 documents this discovered lower-translation/test oversight, exact requirement mapping and whole-goal gaps. Source39/pseudocode13 unchanged, code45 stale. Patch20261018-015 pair and actual modified files committed together as `b3c345e50990ea2fa69420feb66c1e11866927c3`. Actual Actions regression39056301075 passed50 inline +50 split, version39056301048 passed exact code45 stale fingerprint, build39056301152 verified distributions and generated dist-only `af4dbaf1e8ea0898597472d6574eb1a4f6caa455`, fast-forwarded locally. Review008 records exact evidence; later result-only docs are not the executed source HEAD. Raster export/projection and broader graph/assets/lifecycle integration remain open; the active goal is not complete.
+ 
++## Tenth implementation unit — reference caption measurement and target scale
++
++Code46 translates `exportCaptionLayout` using one supplied reference snapshot/font measurement, including prefix-only overflow/retry, unsplit words and blank paragraphs. Target painting consumes the same lines at uniform width/referenceWidth scale, keeps automatic rounding slack below the dashboard, clips caption text, uses copied configured raster limits and returns declared geometry rejections/rounded raster dimensions. Geometry no longer invents clamps/defaults. Cases51/52 cover these branches with explicit snapshot/encoding boundaries; existing tests remain. Source39/pseudocode13 are unchanged. Review `agent_space/reviews/review-20261018-009-code-reference-export-open.md` records mappings, exclusions and pending Actions. Patch20261018-017 and actual modified files commit together. Full export snapshot/graph/resource/current-capture ownership and broader graph/assets/renderer/API integration remain unfinished; code46 stays stale and the active goal open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-009-code-reference-export-open.md b/agent_space/reviews/review-20261018-009-code-reference-export-open.md
+new file mode 100644
+index 0000000..3125a58
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-009-code-reference-export-open.md
+@@ -0,0 +1,33 @@
++# Code r46 — reference caption layout and target scaling (OPEN)
++
++Baseline `71e462e1e15597ea99f1a161a1bf14d4439145e0`. Source39 closed/current and pseudocode13 current are unchanged. Code46 remains stale. The permitted exception is physical module flattening only.
++
++## Prompt-to-artifact checklist and inspected evidence
++
++| Requirement | Implementation / evidence |
++|---|---|
++| Translate existing algorithm, not redesign | `pseudocode/frontend/renderer.pcal:exportCaptionLayout` and `renderDashboardTarget`; corresponding Source frontend procedures and Backend `createTargetExportSnapshot` inspected. No upper semantics changed |
++| Supplied reference width/style | `exportCaptionLayout(snapshot, measureText)` uses `snapshot.layout.slotStyle.referenceWidth`, `annotations.captions` and copied `captionReferenceStyle`, never reads config/Project/DOM dimensions |
++| Font readiness / failures | Await browser font loading for body and required bold prefix before measurement; original font/measure exceptions propagate. Font loading is a concrete rendering primitive, not a new domain rule |
++| Exact line algorithm | Name plus one space appears only on first line; overflow emits prefix-only line if necessary and retries the same word; overlong single words remain unsplit; empty/newline paragraphs, including trailing empty paragraph, are retained; enabled empty body reserves one line; disabled returns zero without measurement; afterText is not appended |
++| One measured list, same paint | Lines retain reference prefix width; reference font metrics determine height. Target painting scales those metrics and prefix advance, never rewraps or remeasures a prefix at output width; overlong text is clipped to the caption block |
++| Uniform target geometry | Target geometry uses supplied width/referenceWidth, aspect, margin/gap/radius directly rather than lower-layer fallback/clamps. Automatic dashboard height is natural reference height times scale; final ceil remainder is bottom slack. DPI does not multiply pixels |
++| Rejection and raster output | Snapshot-copied configured raster limits are consumed; nonpositive dashboard returns caption-height, nonpositive cells return grid-geometry before encoding/download; saved width/height are actual rounded raster dimensions |
++| Concrete tests | Cases51/52 cover deterministic font/measure callbacks, prefix-only retry, unsplit word, blank paragraphs, no afterText, disabled/empty, original font failure, config-free geometry, DPI/width scaling, supplied limits, explicit height rejection, grid rejection and no Project writes. Case52 deliberately supplies an export snapshot and stubs encoding/download; it does not prove snapshot query ownership or graph rendering |
++| Version / records | Revision46, actual four-path fingerprint, unchanged current upper lineage, this review, plan and patch017 pair committed with modified files |
++
++## Choices and rejected alternatives
++
++Rejected wrapping again at target width, using DPI as pixel scale, silently shrinking geometry, dropping trailing blank paragraphs and consuming an overflowing word before retry. They contradict the existing pseudocode rather than provide alternative implementation freedom. Browser font loading and canvas measurement are low-level concretizations. The old renderer used configured literals directly; one-job style/limit copies now come from the existing Backend snapshot construction, not a second config file or a Frontend config lookup.
++
++The existing target exporter is not yet the complete Source renderer: its Application/Backend snapshot construction still mixes DOM style reads, options are still translated by the legacy entry, graph/image projection ownership and comprehensive finally/download handoff remain pending. This unit does not disguise that remainder as completed export conformance and does not introduce a compatibility bridge. Existing persisted data/schema, failure propagation and upper authority remain unchanged.
++
++## Verification
++
++Pending authorized push-triggered GitHub Actions. No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Byte fingerprinting, whitespace checks and isolated-index reverse apply are file operations only. Actual run IDs, executed commits and results must replace this pending statement after inspection.
++
++## Whole-goal completion audit
++
++Required deliverables are every current pseudocode owner directly implemented with original inputs/results/branches, candidate/validation/commit/failure/lifecycle/resource boundaries, sole configuration authority, immutable supplied-projection rendering/export, and requirement-linked verification despite physically flattened files.
++
++This checklist covers the reference caption/target math unit only. Full export query and resource ownership, current capture, graph/assets candidate construction and import normalization, cascade positional maps, renderer direct Backend reads, complete public API/lifecycle integration and legacy removal remain uncovered. Cases1–52 and a green lineage check alone cannot prove these requirements. Goal remains open and code46 stale.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 5505358..301cb66 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1820,6 +1820,92 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(51, "Reference caption lines, fonts and target geometry translate the supplied layout", async () => {
++      const before = JSON.stringify(activeProject._state), originalLoad = document.fonts.load;
++      const snapshot = {
++        layout: { gridRows: 2, gridCols: 2, slotStyle: { referenceWidth: 80, aspect: 2, gap: 33, outerMargin: 500, radius: 44 } },
++        annotations: { captions: { enabled: true, name: "HEAD", nameBold: true,
++          text: "one two\n\nthree\n", afterText: "NEVER APPEND", settings: { fontFamily: "sans-serif", fontSize: 10, lineHeight: 2 } } },
++        captionReferenceStyle: { padding: 8, dashboardGap: 7, borderHeight: 4, minimumTextWidth: 10 },
++      };
++      let loads = [], measures = [];
++      try {
++        document.fonts.load = async function(font) { loads.push(font); return []; };
++        const read = await exportCaptionLayout(snapshot, (text, family, size, weight) => {
++          check(loads.length === 2, "measurement ran before both required fonts resolved");
++          measures.push({ text, family, size, weight }); return text.length * 10;
++        });
++        check(JSON.stringify(read.lines.map(line => line.text)) === JSON.stringify(["", "one", "two", "", "three", ""])  &&
++          read.lines[0].prefix === "HEAD " && read.lines[0].prefixWidth === 50 &&
++          read.lines.slice(1).every(line => line.prefix === "" && line.prefixWidth === 0),
++          "prefix-only overflow retry, empty paragraphs or trailing newline changed");
++        check(read.height === 16 + 6 * 20 + 4 && read.gap === 7 && read.fontSize === 10 &&
++          measures.every(call => call.size === 10 && call.family === "sans-serif") &&
++          !measures.some(call => call.text.includes("NEVER")), "caption used output scale/config/afterText instead of supplied reference input");
++        snapshot.annotations.captions.name = "";
++        snapshot.annotations.captions.text = "aVeryLongUnbreakableWord";
++        const long = await exportCaptionLayout(snapshot, text => text.length * 10);
++        check(long.lines.length === 1 && long.lines[0].text === snapshot.annotations.captions.text,
++          "overlong word was dropped, split or retried indefinitely");
++        snapshot.annotations.captions.text = "";
++        check((await exportCaptionLayout(snapshot, () => 0)).lines.length === 1, "enabled empty caption lost its blank line");
++        snapshot.annotations.captions.enabled = false;
++        document.fonts.load = () => { throw Error("disabled caption requested fonts"); };
++        const disabled = await exportCaptionLayout(snapshot, () => { throw Error("disabled caption measured"); });
++        check(disabled.height === 0 && disabled.gap === 0 && disabled.lines.length === 0, "disabled caption reserved geometry");
++        snapshot.annotations.captions.enabled = true;
++        const failure = Error("font resolution failed"); let caught;
++        document.fonts.load = async () => { throw failure; };
++        try { await exportCaptionLayout(snapshot, () => 0); } catch (error) { caught = error; }
++        check(caught === failure, "font failure was swallowed or replaced");
++        const g = targetExportGeometry(snapshot.layout, 40), explicit = targetExportGeometry(snapshot.layout, 40, -1);
++        check(g.scale === 0.5 && g.height === 20 && g.gap === 16.5 && g.radius === 22 && g.outerMargin === 9.8 &&
++          explicit.height === -1, "target geometry silently clamped/defaulted supplied values or replaced invalid explicit height");
++        check(JSON.stringify(activeProject._state) === before, "reference measurement changed Project authority");
++      } finally { document.fonts.load = originalLoad; }
++    });
++
++    await run(52, "Target export uniformly scales one reference layout and rejects before download", async () => {
++      const source = createTargetExportSnapshot, encode = exportCanvasBlob, click = HTMLAnchorElement.prototype.click;
++      const before = JSON.stringify(activeProject._state);
++      const captions = { enabled: true, name: "Caption", nameBold: false, text: "one two three four five six seven eight",
++        afterText: "separate", settings: { fontFamily: "sans-serif", fontSize: 10, lineHeight: 2 } };
++      const snapshot = {
++        revision: 0, layout: { gridRows: 2, gridCols: 2, slotStyle: { referenceWidth: 200, aspect: 2, gap: 0, outerMargin: 0, radius: 0 } },
++        annotations: { captions }, captionView: captions,
++        captionReferenceStyle: { padding: 8, dashboardGap: 10, borderHeight: 2, minimumTextWidth: 10 },
++        rasterLimits: { rasterDimension: 16384, rasterArea: 64000000 },
++        slots: [], charts: [], images: [], labels: { enabled: false }, bordersVisible: false,
++        dashboardStyle: { background: "#fff" }, captionStyle: { background: "#fff", color: "#000" },
++      };
++      let downloads = 0, sizes = [];
++      try {
++        createTargetExportSnapshot = () => snapshot;
++        exportCanvasBlob = async canvas => { sizes.push([canvas.width, canvas.height]); return new Blob(["raster"]); };
++        HTMLAnchorElement.prototype.click = () => { downloads++; };
++        const one = await exportDashboardTarget({ width: 200, height: null, dpi: 96 });
++        const dpiOnly = await exportDashboardTarget({ width: 200, height: null, dpi: 600 });
++        const two = await exportDashboardTarget({ width: 400, height: null, dpi: 96 });
++        check(one.outcome === "saved" && one.height === dpiOnly.height && two.height === one.height * 2 &&
++          two.width === 400 && downloads === 3 && sizes[2][1] === two.height,
++          "caption rewrapped at output width, DPI changed pixel geometry, or handoff returned different raster dimensions");
++        snapshot.rasterLimits.rasterDimension = 300;
++        check((await exportDashboardTarget({ width: 400 })).reason === "raster-limit" && downloads === 3,
++          "supplied raster limits were ignored or rejected output downloaded");
++        snapshot.rasterLimits.rasterDimension = 16384;
++        captions.text = Array(30).fill("paragraph").join("\n");
++        check((await exportDashboardTarget({ width: 200, height: 100 })).reason === "caption-height" && downloads === 3,
++          "explicit total height was silently enlarged or auto-substituted");
++        captions.enabled = false;
++        snapshot.layout.slotStyle.gap = 1000;
++        check((await exportDashboardTarget({ width: 200 })).reason === "grid-geometry" && downloads === 3,
++          "nonpositive grid cell threw/downloaded instead of returning its declared rejection");
++        check(JSON.stringify(activeProject._state) === before, "target render changed persistent state");
++      } finally {
++        createTargetExportSnapshot = source; exportCanvasBlob = encode; HTMLAnchorElement.prototype.click = click;
++      }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 4bb4d0c..7098b11 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 45,
++      "revision": 46,
+       "status": "stale", 
+       "paths": [
+         "Fast-figure.html", 
+@@ -38,13 +38,13 @@
+         "fast-figure.js", 
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:f7f94079e4caeb00f3dd5a53c9a7148d668bb25251cca5b8e99bdb914f71ae23",
++      "fingerprint": "sha256:97f73a1966367ee435633d7c0309c207fe32f9b7cc0931a5e7a229b3a4e11f96",
+       "derived_from": {
+         "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+         "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-008-code-print-settings-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-009-code-reference-export-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 13,
+diff --git a/fast-figure.js b/fast-figure.js
+index 3d71350..15aa54c 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -6755,7 +6755,10 @@
+           host.remove();
+         }
+       }
+-      function exportCaptionLayout(ctx, view, width, scale) {
++      async function exportCaptionLayout(snapshot, measureText) {
++        const view = snapshot.annotations.captions,
++          style = snapshot.captionReferenceStyle,
++          referenceWidth = snapshot.layout.slotStyle.referenceWidth;
+         if (!view.enabled)
+           return {
+             height: 0,
+@@ -6765,77 +6768,73 @@
+             lineHeight: 0,
+             lines: [],
+           };
+-        let padding = 8 * scale,
+-          fontSize = view.settings.fontSize * scale,
++        const fontFamily = view.settings.fontFamily,
++          fontSize = view.settings.fontSize;
++        await document.fonts.load(`400 ${fontSize}px ${fontFamily}`);
++        if (view.name && view.nameBold)
++          await document.fonts.load(`700 ${fontSize}px ${fontFamily}`);
++        let padding = style.padding,
+           lineHeight = fontSize * view.settings.lineHeight,
+-          available = Math.max(10, width - padding * 2),
++          available = Math.max(style.minimumTextWidth, referenceWidth - padding * 2),
+           prefix = view.name || "",
+           body = view.text || "",
+           lines = [],
+           firstLine = true,
+           prefixWidth = 0;
+         if (prefix) {
+-          ctx.font = `${view.nameBold ? "700" : "400"} ${fontSize}px ${view.settings.fontFamily}`;
+-          prefixWidth = ctx.measureText(prefix + " ").width;
++          prefix += " ";
++          prefixWidth = measureText(prefix, fontFamily, fontSize, view.nameBold ? 700 : 400);
+         }
+-        ctx.font = `400 ${fontSize}px ${view.settings.fontFamily}`;
+         let paragraphs = String(body).split(/\n/);
+-        paragraphs.forEach((paragraph, paragraphIndex) => {
++        paragraphs.forEach((paragraph) => {
+           let words = paragraph.split(/\s+/).filter(Boolean),
+             line = "";
+-          for (let word of words) {
+-            let trial = line ? `${line} ${word}` : word,
+-              lineWidth = available - (firstLine ? prefixWidth : 0);
+-            if (line && ctx.measureText(trial).width > Math.max(10, lineWidth)) {
+-              lines.push({ text: line, prefix: firstLine ? prefix : "" });
+-              line = word;
++          let wi = 0;
++          while (wi < words.length) {
++            let word = words[wi],
++              trial = line ? `${line} ${word}` : word,
++              budget = Math.max(style.minimumTextWidth, available - (firstLine ? prefixWidth : 0));
++            if (measureText(trial, fontFamily, fontSize, 400) > budget &&
++                (line !== "" || (firstLine && prefix !== ""))) {
++              lines.push({ text: line, prefix: firstLine ? prefix : "", prefixWidth: firstLine ? prefixWidth : 0 });
++              line = "";
+               firstLine = false;
+-            } else line = trial;
+-          }
+-          if (line || paragraphIndex < paragraphs.length - 1 || (firstLine && prefix)) {
+-            lines.push({ text: line, prefix: firstLine ? prefix : "" });
+-            firstLine = false;
++            } else {
++              line = trial;
++              wi += 1;
++            }
+           }
++          lines.push({ text: line, prefix: firstLine ? prefix : "", prefixWidth: firstLine ? prefixWidth : 0 });
++          firstLine = false;
+         });
+-        if (!lines.length) lines.push({ text: "", prefix });
+         return {
+-          height: padding * 2 + lines.length * lineHeight + 2 * scale,
+-          gap: 10 * scale,
++          referenceWidth,
++          height: padding * 2 + lines.length * lineHeight + style.borderHeight,
++          gap: style.dashboardGap,
+           padding,
++          fontFamily,
+           fontSize,
++          prefixWeight: view.nameBold ? 700 : 400,
++          bodyWeight: 400,
+           lineHeight,
+           lines,
+         };
+       }
+       function targetExportGeometry(layout, width, heightOverride = null) {
+-        let slotStyle = layout.slotStyle || {},
+-          referenceWidth = Math.max(
+-            100,
+-            Math.min(20000, Number(slotStyle.referenceWidth) || 1200),
+-          ),
+-          scale = Math.max(0.001, Number(width) / referenceWidth),
+-          configuredAspect = Math.max(
+-            0.1,
+-            Math.min(10, Number(slotStyle.aspect) || 1.618),
+-          ),
+-          naturalHeight = Number(width) / configuredAspect,
+-          height =
+-            Number.isFinite(heightOverride) && heightOverride > 0
+-              ? Number(heightOverride)
+-              : naturalHeight,
+-          outerMargin = Math.min(
+-            Math.max(0, Math.min(5000, Number(slotStyle.outerMargin) || 0)) * scale,
+-            Math.min(Number(width), height) * 0.49,
+-          );
++        let slotStyle = layout.slotStyle,
++          referenceWidth = slotStyle.referenceWidth,
++          scale = width / referenceWidth,
++          height = heightOverride === null ? width / slotStyle.aspect : heightOverride,
++          outerMargin = Math.min(slotStyle.outerMargin * scale, Math.min(width, height) * 0.49);
+         return {
+           referenceWidth,
+-          width: Number(width),
++          width,
+           height,
+           scale,
+-          aspect: Number(width) / height,
++          aspect: width / height,
+           outerMargin,
+-          gap: Math.max(0, Math.min(2000, Number(slotStyle.gap) || 0)) * scale,
+-          radius: Math.max(0, Math.min(2000, Number(slotStyle.radius) || 0)) * scale,
++          gap: slotStyle.gap * scale,
++          radius: slotStyle.radius * scale,
+         };
+       }
+       function targetSlotIdentifier(index, settings) {
+@@ -6864,7 +6863,9 @@
+         return Object.freeze({
+           revision: appFSM.state.revision,
+           ...objects,
+-          captionView: projectClone(activeCaptionView(objects.captions)),
++          annotations: { captions: objects.captions },
++          captionReferenceStyle: projectClone(BackendSettings.defaults.captionReferenceStyle),
++          rasterLimits: projectClone(BackendSettings.defaults.limits.export),
+           bordersVisible: activeProject.layout.slotStyle.showBorders,
+           slotColors: Object.fromEntries(
+             visibleSlots.map((slot) => {
+@@ -6907,7 +6908,7 @@
+             },
+           },
+           snapshot = createTargetExportSnapshot(),
+-          captionView = snapshot.captionView,
++          captionView = snapshot.annotations.captions,
+           width = Math.max(
+             100,
+             Math.min(20000, Number(options?.width) || 1000),
+@@ -6923,15 +6924,26 @@
+           ctx = canvas.getContext("2d"),
+           baseReference = targetExportGeometry(snapshot.layout, width),
+           outputScale = width / baseReference.referenceWidth,
+-          captionLayout = exportCaptionLayout(ctx, captionView, width, outputScale),
++          captionReference = await exportCaptionLayout(snapshot, (text, family, size, weight) => {
++            ctx.font = `${weight} ${size}px ${family}`;
++            return ctx.measureText(text).width;
++          }),
++          captionLayout = {
++            ...captionReference,
++            padding: captionReference.padding * outputScale,
++            fontSize: captionReference.fontSize * outputScale,
++            lineHeight: captionReference.lineHeight * outputScale,
++            height: captionReference.height * outputScale,
++            gap: captionReference.gap * outputScale,
++          },
+           automaticHeight = !Number.isFinite(requestedHeight) || requestedHeight <= 0,
+           height = automaticHeight
+             ? Math.ceil(baseReference.height + captionLayout.height + captionLayout.gap)
+             : Math.max(100, Math.min(20000, requestedHeight)),
+           rasterWidth = Math.round(width),
+           rasterHeight = Math.round(height),
+-          maxRasterDimension = 16384,
+-          maxRasterArea = 64000000;
++          maxRasterDimension = snapshot.rasterLimits.rasterDimension,
++          maxRasterArea = snapshot.rasterLimits.rasterArea;
+         if (
+           rasterWidth > maxRasterDimension ||
+           rasterHeight > maxRasterDimension ||
+@@ -6946,13 +6958,13 @@
+         ctx.fillStyle = snapshot.dashboardStyle.background;
+         ctx.fillRect(0, 0, width, height);
+         let reference = targetExportGeometry(snapshot.layout, width),
+-          dashboardHeight = height - captionLayout.height - captionLayout.gap,
++          dashboardHeight = automaticHeight ? baseReference.height : height - captionLayout.height - captionLayout.gap,
+           minimumDashboardHeight = Math.ceil(
+             reference.outerMargin * 2 +
+               reference.gap * Math.max(0, snapshot.layout.gridRows - 1) +
+               snapshot.layout.gridRows,
+           );
+-        if (dashboardHeight < minimumDashboardHeight) {
++        if (dashboardHeight <= 0) {
+           let minimumHeight = Math.ceil(
+             captionLayout.height + captionLayout.gap + minimumDashboardHeight,
+           );
+@@ -6967,7 +6979,7 @@
+           colWidth = grid.colWidth,
+           rowHeight = grid.rowHeight;
+         if (colWidth <= 0 || rowHeight <= 0)
+-          throw Error("출력 크기에 비해 슬롯 간격이 너무 큽니다.");
++          return { outcome: "rejected", reason: "grid-geometry" };
+         let slotRect = (slot) => ({
+           left: dashboardLeft + geometry.outerMargin + (slot.col - 1) * (colWidth + gap),
+           top: dashboardTop + geometry.outerMargin + (slot.row - 1) * (rowHeight + gap),
+@@ -7050,6 +7062,10 @@
+                 captionLayout.height - 1,
+               );
+             }
++            ctx.save();
++            ctx.beginPath();
++            ctx.rect(0, top, width, captionLayout.height);
++            ctx.clip();
+             let y = top + captionLayout.padding + captionLayout.fontSize;
+             ctx.fillStyle = snapshot.captionStyle.color;
+             for (let line of captionLayout.lines) {
+@@ -7057,12 +7073,13 @@
+               if (line.prefix) {
+                 ctx.font = `${captionView.nameBold ? "700" : "400"} ${captionLayout.fontSize}px ${captionView.settings.fontFamily}`;
+                 ctx.fillText(line.prefix, x, y);
+-                x += ctx.measureText(line.prefix + " ").width;
++                x += line.prefixWidth * outputScale;
+               }
+               ctx.font = `400 ${captionLayout.fontSize}px ${captionView.settings.fontFamily}`;
+               ctx.fillText(line.text, x, y);
+               y += captionLayout.lineHeight;
+             }
++            ctx.restore();
+           }
+           let mime = format === "jpeg" ? "image/jpeg" : "image/png",
+             blob = await exportCanvasBlob(canvas, mime, dpi),
+@@ -7094,7 +7111,7 @@
+             automaticHeight,
+             revision: snapshot.revision,
+           });
+-          return { outcome: "saved", width, height, automaticHeight };
++          return { outcome: "saved", width: rasterWidth, height: rasterHeight, automaticHeight };
+         } catch (error) {
+           statusOut.textContent = "저장 실패: " + error.message;
+           debugLog("dashboard:export-error", { message: error.message });

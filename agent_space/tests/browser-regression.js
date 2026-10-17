@@ -1820,6 +1820,92 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+    await run(51, "Reference caption lines, fonts and target geometry translate the supplied layout", async () => {
+      const before = JSON.stringify(activeProject._state), originalLoad = document.fonts.load;
+      const snapshot = {
+        layout: { gridRows: 2, gridCols: 2, slotStyle: { referenceWidth: 80, aspect: 2, gap: 33, outerMargin: 500, radius: 44 } },
+        annotations: { captions: { enabled: true, name: "HEAD", nameBold: true,
+          text: "one two\n\nthree\n", afterText: "NEVER APPEND", settings: { fontFamily: "sans-serif", fontSize: 10, lineHeight: 2 } } },
+        captionReferenceStyle: { padding: 8, dashboardGap: 7, borderHeight: 4, minimumTextWidth: 10 },
+      };
+      let loads = [], measures = [];
+      try {
+        document.fonts.load = async function(font) { loads.push(font); return []; };
+        const read = await exportCaptionLayout(snapshot, (text, family, size, weight) => {
+          check(loads.length === 2, "measurement ran before both required fonts resolved");
+          measures.push({ text, family, size, weight }); return text.length * 10;
+        });
+        check(JSON.stringify(read.lines.map(line => line.text)) === JSON.stringify(["", "one", "two", "", "three", ""])  &&
+          read.lines[0].prefix === "HEAD " && read.lines[0].prefixWidth === 50 &&
+          read.lines.slice(1).every(line => line.prefix === "" && line.prefixWidth === 0),
+          "prefix-only overflow retry, empty paragraphs or trailing newline changed");
+        check(read.height === 16 + 6 * 20 + 4 && read.gap === 7 && read.fontSize === 10 &&
+          measures.every(call => call.size === 10 && call.family === "sans-serif") &&
+          !measures.some(call => call.text.includes("NEVER")), "caption used output scale/config/afterText instead of supplied reference input");
+        snapshot.annotations.captions.name = "";
+        snapshot.annotations.captions.text = "aVeryLongUnbreakableWord";
+        const long = await exportCaptionLayout(snapshot, text => text.length * 10);
+        check(long.lines.length === 1 && long.lines[0].text === snapshot.annotations.captions.text,
+          "overlong word was dropped, split or retried indefinitely");
+        snapshot.annotations.captions.text = "";
+        check((await exportCaptionLayout(snapshot, () => 0)).lines.length === 1, "enabled empty caption lost its blank line");
+        snapshot.annotations.captions.enabled = false;
+        document.fonts.load = () => { throw Error("disabled caption requested fonts"); };
+        const disabled = await exportCaptionLayout(snapshot, () => { throw Error("disabled caption measured"); });
+        check(disabled.height === 0 && disabled.gap === 0 && disabled.lines.length === 0, "disabled caption reserved geometry");
+        snapshot.annotations.captions.enabled = true;
+        const failure = Error("font resolution failed"); let caught;
+        document.fonts.load = async () => { throw failure; };
+        try { await exportCaptionLayout(snapshot, () => 0); } catch (error) { caught = error; }
+        check(caught === failure, "font failure was swallowed or replaced");
+        const g = targetExportGeometry(snapshot.layout, 40), explicit = targetExportGeometry(snapshot.layout, 40, -1);
+        check(g.scale === 0.5 && g.height === 20 && g.gap === 16.5 && g.radius === 22 && g.outerMargin === 9.8 &&
+          explicit.height === -1, "target geometry silently clamped/defaulted supplied values or replaced invalid explicit height");
+        check(JSON.stringify(activeProject._state) === before, "reference measurement changed Project authority");
+      } finally { document.fonts.load = originalLoad; }
+    });
+
+    await run(52, "Target export uniformly scales one reference layout and rejects before download", async () => {
+      const source = createTargetExportSnapshot, encode = exportCanvasBlob, click = HTMLAnchorElement.prototype.click;
+      const before = JSON.stringify(activeProject._state);
+      const captions = { enabled: true, name: "Caption", nameBold: false, text: "one two three four five six seven eight",
+        afterText: "separate", settings: { fontFamily: "sans-serif", fontSize: 10, lineHeight: 2 } };
+      const snapshot = {
+        revision: 0, layout: { gridRows: 2, gridCols: 2, slotStyle: { referenceWidth: 200, aspect: 2, gap: 0, outerMargin: 0, radius: 0 } },
+        annotations: { captions }, captionView: captions,
+        captionReferenceStyle: { padding: 8, dashboardGap: 10, borderHeight: 2, minimumTextWidth: 10 },
+        rasterLimits: { rasterDimension: 16384, rasterArea: 64000000 },
+        slots: [], charts: [], images: [], labels: { enabled: false }, bordersVisible: false,
+        dashboardStyle: { background: "#fff" }, captionStyle: { background: "#fff", color: "#000" },
+      };
+      let downloads = 0, sizes = [];
+      try {
+        createTargetExportSnapshot = () => snapshot;
+        exportCanvasBlob = async canvas => { sizes.push([canvas.width, canvas.height]); return new Blob(["raster"]); };
+        HTMLAnchorElement.prototype.click = () => { downloads++; };
+        const one = await exportDashboardTarget({ width: 200, height: null, dpi: 96 });
+        const dpiOnly = await exportDashboardTarget({ width: 200, height: null, dpi: 600 });
+        const two = await exportDashboardTarget({ width: 400, height: null, dpi: 96 });
+        check(one.outcome === "saved" && one.height === dpiOnly.height && two.height === one.height * 2 &&
+          two.width === 400 && downloads === 3 && sizes[2][1] === two.height,
+          "caption rewrapped at output width, DPI changed pixel geometry, or handoff returned different raster dimensions");
+        snapshot.rasterLimits.rasterDimension = 300;
+        check((await exportDashboardTarget({ width: 400 })).reason === "raster-limit" && downloads === 3,
+          "supplied raster limits were ignored or rejected output downloaded");
+        snapshot.rasterLimits.rasterDimension = 16384;
+        captions.text = Array(30).fill("paragraph").join("\n");
+        check((await exportDashboardTarget({ width: 200, height: 100 })).reason === "caption-height" && downloads === 3,
+          "explicit total height was silently enlarged or auto-substituted");
+        captions.enabled = false;
+        snapshot.layout.slotStyle.gap = 1000;
+        check((await exportDashboardTarget({ width: 200 })).reason === "grid-geometry" && downloads === 3,
+          "nonpositive grid cell threw/downloaded instead of returning its declared rejection");
+        check(JSON.stringify(activeProject._state) === before, "target render changed persistent state");
+      } finally {
+        createTargetExportSnapshot = source; exportCanvasBlob = encode; HTMLAnchorElement.prototype.click = click;
+      }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

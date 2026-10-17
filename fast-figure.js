@@ -6755,7 +6755,10 @@
           host.remove();
         }
       }
-      function exportCaptionLayout(ctx, view, width, scale) {
+      async function exportCaptionLayout(snapshot, measureText) {
+        const view = snapshot.annotations.captions,
+          style = snapshot.captionReferenceStyle,
+          referenceWidth = snapshot.layout.slotStyle.referenceWidth;
         if (!view.enabled)
           return {
             height: 0,
@@ -6765,77 +6768,73 @@
             lineHeight: 0,
             lines: [],
           };
-        let padding = 8 * scale,
-          fontSize = view.settings.fontSize * scale,
+        const fontFamily = view.settings.fontFamily,
+          fontSize = view.settings.fontSize;
+        await document.fonts.load(`400 ${fontSize}px ${fontFamily}`);
+        if (view.name && view.nameBold)
+          await document.fonts.load(`700 ${fontSize}px ${fontFamily}`);
+        let padding = style.padding,
           lineHeight = fontSize * view.settings.lineHeight,
-          available = Math.max(10, width - padding * 2),
+          available = Math.max(style.minimumTextWidth, referenceWidth - padding * 2),
           prefix = view.name || "",
           body = view.text || "",
           lines = [],
           firstLine = true,
           prefixWidth = 0;
         if (prefix) {
-          ctx.font = `${view.nameBold ? "700" : "400"} ${fontSize}px ${view.settings.fontFamily}`;
-          prefixWidth = ctx.measureText(prefix + " ").width;
+          prefix += " ";
+          prefixWidth = measureText(prefix, fontFamily, fontSize, view.nameBold ? 700 : 400);
         }
-        ctx.font = `400 ${fontSize}px ${view.settings.fontFamily}`;
         let paragraphs = String(body).split(/\n/);
-        paragraphs.forEach((paragraph, paragraphIndex) => {
+        paragraphs.forEach((paragraph) => {
           let words = paragraph.split(/\s+/).filter(Boolean),
             line = "";
-          for (let word of words) {
-            let trial = line ? `${line} ${word}` : word,
-              lineWidth = available - (firstLine ? prefixWidth : 0);
-            if (line && ctx.measureText(trial).width > Math.max(10, lineWidth)) {
-              lines.push({ text: line, prefix: firstLine ? prefix : "" });
-              line = word;
+          let wi = 0;
+          while (wi < words.length) {
+            let word = words[wi],
+              trial = line ? `${line} ${word}` : word,
+              budget = Math.max(style.minimumTextWidth, available - (firstLine ? prefixWidth : 0));
+            if (measureText(trial, fontFamily, fontSize, 400) > budget &&
+                (line !== "" || (firstLine && prefix !== ""))) {
+              lines.push({ text: line, prefix: firstLine ? prefix : "", prefixWidth: firstLine ? prefixWidth : 0 });
+              line = "";
               firstLine = false;
-            } else line = trial;
+            } else {
+              line = trial;
+              wi += 1;
+            }
           }
-          if (line || paragraphIndex < paragraphs.length - 1 || (firstLine && prefix)) {
-            lines.push({ text: line, prefix: firstLine ? prefix : "" });
-            firstLine = false;
-          }
+          lines.push({ text: line, prefix: firstLine ? prefix : "", prefixWidth: firstLine ? prefixWidth : 0 });
+          firstLine = false;
         });
-        if (!lines.length) lines.push({ text: "", prefix });
         return {
-          height: padding * 2 + lines.length * lineHeight + 2 * scale,
-          gap: 10 * scale,
+          referenceWidth,
+          height: padding * 2 + lines.length * lineHeight + style.borderHeight,
+          gap: style.dashboardGap,
           padding,
+          fontFamily,
           fontSize,
+          prefixWeight: view.nameBold ? 700 : 400,
+          bodyWeight: 400,
           lineHeight,
           lines,
         };
       }
       function targetExportGeometry(layout, width, heightOverride = null) {
-        let slotStyle = layout.slotStyle || {},
-          referenceWidth = Math.max(
-            100,
-            Math.min(20000, Number(slotStyle.referenceWidth) || 1200),
-          ),
-          scale = Math.max(0.001, Number(width) / referenceWidth),
-          configuredAspect = Math.max(
-            0.1,
-            Math.min(10, Number(slotStyle.aspect) || 1.618),
-          ),
-          naturalHeight = Number(width) / configuredAspect,
-          height =
-            Number.isFinite(heightOverride) && heightOverride > 0
-              ? Number(heightOverride)
-              : naturalHeight,
-          outerMargin = Math.min(
-            Math.max(0, Math.min(5000, Number(slotStyle.outerMargin) || 0)) * scale,
-            Math.min(Number(width), height) * 0.49,
-          );
+        let slotStyle = layout.slotStyle,
+          referenceWidth = slotStyle.referenceWidth,
+          scale = width / referenceWidth,
+          height = heightOverride === null ? width / slotStyle.aspect : heightOverride,
+          outerMargin = Math.min(slotStyle.outerMargin * scale, Math.min(width, height) * 0.49);
         return {
           referenceWidth,
-          width: Number(width),
+          width,
           height,
           scale,
-          aspect: Number(width) / height,
+          aspect: width / height,
           outerMargin,
-          gap: Math.max(0, Math.min(2000, Number(slotStyle.gap) || 0)) * scale,
-          radius: Math.max(0, Math.min(2000, Number(slotStyle.radius) || 0)) * scale,
+          gap: slotStyle.gap * scale,
+          radius: slotStyle.radius * scale,
         };
       }
       function targetSlotIdentifier(index, settings) {
@@ -6864,7 +6863,9 @@
         return Object.freeze({
           revision: appFSM.state.revision,
           ...objects,
-          captionView: projectClone(activeCaptionView(objects.captions)),
+          annotations: { captions: objects.captions },
+          captionReferenceStyle: projectClone(BackendSettings.defaults.captionReferenceStyle),
+          rasterLimits: projectClone(BackendSettings.defaults.limits.export),
           bordersVisible: activeProject.layout.slotStyle.showBorders,
           slotColors: Object.fromEntries(
             visibleSlots.map((slot) => {
@@ -6907,7 +6908,7 @@
             },
           },
           snapshot = createTargetExportSnapshot(),
-          captionView = snapshot.captionView,
+          captionView = snapshot.annotations.captions,
           width = Math.max(
             100,
             Math.min(20000, Number(options?.width) || 1000),
@@ -6923,15 +6924,26 @@
           ctx = canvas.getContext("2d"),
           baseReference = targetExportGeometry(snapshot.layout, width),
           outputScale = width / baseReference.referenceWidth,
-          captionLayout = exportCaptionLayout(ctx, captionView, width, outputScale),
+          captionReference = await exportCaptionLayout(snapshot, (text, family, size, weight) => {
+            ctx.font = `${weight} ${size}px ${family}`;
+            return ctx.measureText(text).width;
+          }),
+          captionLayout = {
+            ...captionReference,
+            padding: captionReference.padding * outputScale,
+            fontSize: captionReference.fontSize * outputScale,
+            lineHeight: captionReference.lineHeight * outputScale,
+            height: captionReference.height * outputScale,
+            gap: captionReference.gap * outputScale,
+          },
           automaticHeight = !Number.isFinite(requestedHeight) || requestedHeight <= 0,
           height = automaticHeight
             ? Math.ceil(baseReference.height + captionLayout.height + captionLayout.gap)
             : Math.max(100, Math.min(20000, requestedHeight)),
           rasterWidth = Math.round(width),
           rasterHeight = Math.round(height),
-          maxRasterDimension = 16384,
-          maxRasterArea = 64000000;
+          maxRasterDimension = snapshot.rasterLimits.rasterDimension,
+          maxRasterArea = snapshot.rasterLimits.rasterArea;
         if (
           rasterWidth > maxRasterDimension ||
           rasterHeight > maxRasterDimension ||
@@ -6946,13 +6958,13 @@
         ctx.fillStyle = snapshot.dashboardStyle.background;
         ctx.fillRect(0, 0, width, height);
         let reference = targetExportGeometry(snapshot.layout, width),
-          dashboardHeight = height - captionLayout.height - captionLayout.gap,
+          dashboardHeight = automaticHeight ? baseReference.height : height - captionLayout.height - captionLayout.gap,
           minimumDashboardHeight = Math.ceil(
             reference.outerMargin * 2 +
               reference.gap * Math.max(0, snapshot.layout.gridRows - 1) +
               snapshot.layout.gridRows,
           );
-        if (dashboardHeight < minimumDashboardHeight) {
+        if (dashboardHeight <= 0) {
           let minimumHeight = Math.ceil(
             captionLayout.height + captionLayout.gap + minimumDashboardHeight,
           );
@@ -6967,7 +6979,7 @@
           colWidth = grid.colWidth,
           rowHeight = grid.rowHeight;
         if (colWidth <= 0 || rowHeight <= 0)
-          throw Error("출력 크기에 비해 슬롯 간격이 너무 큽니다.");
+          return { outcome: "rejected", reason: "grid-geometry" };
         let slotRect = (slot) => ({
           left: dashboardLeft + geometry.outerMargin + (slot.col - 1) * (colWidth + gap),
           top: dashboardTop + geometry.outerMargin + (slot.row - 1) * (rowHeight + gap),
@@ -7050,6 +7062,10 @@
                 captionLayout.height - 1,
               );
             }
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, top, width, captionLayout.height);
+            ctx.clip();
             let y = top + captionLayout.padding + captionLayout.fontSize;
             ctx.fillStyle = snapshot.captionStyle.color;
             for (let line of captionLayout.lines) {
@@ -7057,12 +7073,13 @@
               if (line.prefix) {
                 ctx.font = `${captionView.nameBold ? "700" : "400"} ${captionLayout.fontSize}px ${captionView.settings.fontFamily}`;
                 ctx.fillText(line.prefix, x, y);
-                x += ctx.measureText(line.prefix + " ").width;
+                x += line.prefixWidth * outputScale;
               }
               ctx.font = `400 ${captionLayout.fontSize}px ${captionView.settings.fontFamily}`;
               ctx.fillText(line.text, x, y);
               y += captionLayout.lineHeight;
             }
+            ctx.restore();
           }
           let mime = format === "jpeg" ? "image/jpeg" : "image/png",
             blob = await exportCanvasBlob(canvas, mime, dpi),
@@ -7094,7 +7111,7 @@
             automaticHeight,
             revision: snapshot.revision,
           });
-          return { outcome: "saved", width, height, automaticHeight };
+          return { outcome: "saved", width: rasterWidth, height: rasterHeight, automaticHeight };
         } catch (error) {
           statusOut.textContent = "저장 실패: " + error.message;
           debugLog("dashboard:export-error", { message: error.message });
