@@ -1,0 +1,33 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 6c70459..e459738 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -51,7 +51,7 @@ Baseline `75cc91eca6825c85f2dc2929ef0dbdaa21023984`. Translate current `Calculat
+ 
+ ## Eighth implementation unit — image settings current-authority edits
+ 
+-Baseline `399822d02baad1ca8aa04616041ba02dd4f2c47c`. Translate NormalizeImageEditsInAttempt and explicit-slot Application procedure directly: resolve visible slot/image in the current Backend candidate, use config limits, preserve valid zero and omitted/invalid fields, consume numeric edits only in manual mode, ignore unknown keys, validate/commit once. Public selected-slot binding captures its scalar once; postcommit official reads use that explicit target, with no snapshot as mutation source. Browser case49 supplements case39 with branch/current-authority/failure/noncommit coverage. Review007 maps actual requirements and remaining whole-goal gaps. Source39/pseudocode13 unchanged; code44 stale. Patch20261018-013 pair and actual modified files commit together. Actions results pending at initial record; no local runtime/checker/test/build execution.
++Baseline `399822d02baad1ca8aa04616041ba02dd4f2c47c`. Translate NormalizeImageEditsInAttempt and explicit-slot Application procedure directly: resolve visible slot/image in the current Backend candidate, use config limits, preserve valid zero and omitted/invalid fields, consume numeric edits only in manual mode, ignore unknown keys, validate/commit once. Public selected-slot binding captures its scalar once; postcommit official reads use that explicit target, with no snapshot as mutation source. Browser case49 supplements case39 with branch/current-authority/failure/noncommit coverage. Review007 maps actual requirements and remaining whole-goal gaps. Source39/pseudocode13 unchanged; code44 stale. Patch20261018-013 pair and actual modified files commit together. Actual implementation+patch013 commit `ad3a5f468409397fc21abf8efb1e4ddaab23eac9` passed Actions regression39055861160 (49 inline +49 split), version39055861116 (exact code44 fingerprint, stale) and build39055861144 (verified distributions, dist-only bot `03ae2b623aaaf3855385e4ae51c72d603c5fcf35` fast-forwarded locally). Review007 records actual logs and whole-goal uncovered requirements. Later result documentation is not the executed source HEAD. No local runtime/checker/test/build execution; the active goal remains incomplete.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261018-007-code-image-settings-open.md b/agent_space/reviews/review-20261018-007-code-image-settings-open.md
+index 822a0d4..c7fcd2d 100644
+--- a/agent_space/reviews/review-20261018-007-code-image-settings-open.md
++++ b/agent_space/reviews/review-20261018-007-code-image-settings-open.md
+@@ -24,7 +24,14 @@ Rejected carrying forward the old full-object spread: it accepts undeclared sett
+ 
+ ## Verification
+ 
+-PENDING at initial implementation record. No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Actions must verify inline/split cases1–49, layer fingerprint and distribution packaging. Diff checks and isolated-index reverse patch checks are file integrity evidence only.
++Implementation and patch013 committed together as `ad3a5f468409397fc21abf8efb1e4ddaab23eac9`.
++
++- Actions regression39055861160 SUCCESS at that HEAD: actual logs show cases1–49 passing in both inline and split-zip, including image case39 and the new branch/failure/current-authority case49.
++- Version39055861116 SUCCESS at that HEAD: Source39 closed/current, pseudocode13 current, code44 stale with fingerprint `sha256:4b8906251cbea84c8c9ca145bd68b2a64a9a4eeaf189360b614a80529d51a1a6`.
++- Build39055861144 SUCCESS at that HEAD: both distributions verified, dist-only bot commit `03ae2b623aaaf3855385e4ae51c72d603c5fcf35` fast-forwarded locally.
++- Actual logs preserved under `.work/image-r44-evidence/`. This later results-only documentation is not the executed implementation HEAD.
++
++No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Diff checks and isolated-index reverse patch checks passed; they are file integrity evidence only, not runtime or whole-conformance verification.
+ 
+ ## Whole-goal audit / remaining work
+ 

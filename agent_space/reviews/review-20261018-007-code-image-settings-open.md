@@ -24,7 +24,14 @@ Rejected carrying forward the old full-object spread: it accepts undeclared sett
 
 ## Verification
 
-PENDING at initial implementation record. No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Actions must verify inline/split cases1–49, layer fingerprint and distribution packaging. Diff checks and isolated-index reverse patch checks are file integrity evidence only.
+Implementation and patch013 committed together as `ad3a5f468409397fc21abf8efb1e4ddaab23eac9`.
+
+- Actions regression39055861160 SUCCESS at that HEAD: actual logs show cases1–49 passing in both inline and split-zip, including image case39 and the new branch/failure/current-authority case49.
+- Version39055861116 SUCCESS at that HEAD: Source39 closed/current, pseudocode13 current, code44 stale with fingerprint `sha256:4b8906251cbea84c8c9ca145bd68b2a64a9a4eeaf189360b614a80529d51a1a6`.
+- Build39055861144 SUCCESS at that HEAD: both distributions verified, dist-only bot commit `03ae2b623aaaf3855385e4ae51c72d603c5fcf35` fast-forwarded locally.
+- Actual logs preserved under `.work/image-r44-evidence/`. This later results-only documentation is not the executed implementation HEAD.
+
+No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Diff checks and isolated-index reverse patch checks passed; they are file integrity evidence only, not runtime or whole-conformance verification.
 
 ## Whole-goal audit / remaining work
 
