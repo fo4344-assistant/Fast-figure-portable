@@ -97,3 +97,16 @@ Source/metadata/활성 pseudocode/Source Code는 이번 진행에서 변경하�
 5. 그 뒤에만 활성 hierarchy 전체 교체와 flat 파일 삭제, 새 pseudocode revision/fingerprint/lineage/review 및 Actions cumulative checker를 수행한다. 지금은 Source r37 closed, 활성 pseudocode r11 stale과 하위 stale을 그대로 유지한다.
 
 로컬 Source/application/PlusCal/parser/checker/test/build/TLC를 실행하지 않았고 delegation도 하지 않았다. 이번 branch 변경은 문서뿐이므로 새 Actions를 dispatch하지 않는다. 임시 작업본은 다른 계층의 authority가 아니며 후속 전체 활성화 시 이동·정리한다.
+
+## 8. 후속 진행 — 나머지 command 계산과 query 조립·모듈 연결
+
+사용자의 남은 부분 번역 요청에 따라 기준 HEAD `ac5439e04e33f2c61e6dd5d28eff19cf049f4341`에서 Source r37과 작업본을 대조했다. 2026-10-17 현재 임시 목표 15개 파일은 총 **4,933행**이다. §7의 4,582행에서 계속 확장·수정했으며, 여전히 `.work/plan022/pseudocode/`의 작업본이지 branch 활성 번역은 아니다.
+
+- **EFSM**: `PendingSourceDomainCandidate`를 없애고 asset create/replace/delete, trash empty, node move/directory create, image link/import, merge/split/style의 명시 branch를 전개했다. cascade는 공통 `collectAssetReferences`의 `originalObjectIndex`를 사용해 chart별 filter/map 및 image reference clear를 계산한다. merge의 최대 한 non-default payload/top-left anchor, split의 anchor payload 보존/해제 cell 초기화, 새 입력과 current next-id/VFS의 분리를 기록했다. actual result 형성은 이번 attempt의 실제 facts/count/map과 post-commit owner를 사용하도록 나누었다. **branch 존재만으로 내부 helper 계산·실제 changed field 연결까지 완료되었다고 판단하지 않는다.**
+- **Backend query**: graph read의 explicit chart/selected slot, 독립 current CSV와 selected-object columns, image bytes/pure URL/settings copy, VFS tree/trash/movable/draggable/deletion/move-option/tree-selection을 private 계산으로 전개했다. renderer/print export는 같은 read source의 visible slots에서 figure/image/CSV-column/ordered-label/style 입력을 구성하며, Frontend가 CSV domain 계산을 다시 하지 않는다.
+- **imported procedure 연결**: `interfaceFSM_*`/`projectEFSM_send`를 실제 class-qualified 절차에 연결했다. Application·Mantine lifecycle wrapper, Backend·Application label read, renderer·Application file-drop wrapper의 동명 식별자는 owner-qualified 이름으로 구별했다. JSON table 호출을 `dataTable`에, annotation export snapshot을 registry의 실제 이름 목록/Project-shaped 조립에 연결했다. annotation 반환 채널을 다른 작업본의 call-local `result` 표기와 맞췄다. 이 명명 변환/임시 반환 표기는 새 domain authority나 compatibility bridge가 아니다.
+- **producer/consumer 대조**: renderer graph identity는 supplied `slot.content.chart`, image settings는 `slot.content.imageSettings`를 소비하도록 맞췄다. 초기 Project binding도 기존 `ProjectObject_initialize` 절차에 연결했다. imported procedure 이름의 파일 텍스트 대조에서 남은 실제 `call` 미선언 이름은 없었으나, 이는 parser·인자/타입·동작·전체 충실도 검증이 아니다.
+
+아직 필요한 것은 Source import별 current read/command-attempt/candidate context의 정확한 binding, asset import의 candidate 내부 replacement/connection 및 actual changed facts helper 세부 연결, 87 public operation의 전체 인자·출력·실패/취소/부분 완료 재대조다. scalar/copy/encoding 같은 notation primitive와 아직 전개가 필요한 domain 계산을 구별하는 전체 충실도 검토 후에만 활성 hierarchy 교체와 revision/fingerprint/lineage/Actions cumulative checker를 수행한다.
+
+Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 않았다. 이번 branch diff는 이 진행 기록뿐이며 임시 번역 파일/임시 연결 메모를 포함하거나 rollback한다고 주장하지 않는다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행 및 delegation은 하지 않았다. 문서 변경이므로 새 Actions를 dispatch하지 않는다.
