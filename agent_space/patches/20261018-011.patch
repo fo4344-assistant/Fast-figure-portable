@@ -1,0 +1,358 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 30e7480..5b24c53 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -45,6 +45,10 @@ Baseline `47fcc75b370e9bdcfbed6fdc3232f173b80fdb2a`. Backend now owns immutable
+ 
+ Baseline `53e6df9efbde8fc57c6be9c0844e20386dff3591`. The slot schema and package/renderer geometry use one-based coordinates, but Source creation/resize prose and their pseudocode loops still used zero-based coordinates. Correct Source first (r39), then translate inclusive creation/resize boundaries and zero-based ID formulas (pseudocode r13), then implement pure grid candidate calculation and commit-gated public adaptation (code r42, still stale). Resize takes new IDs from the complete pre-resize maximum, preserves retained cells without packing, and rejects destructive shrink. Browser case47 and review005 cover the bounded correction and prior closure-review oversight. Patch20261018-008 and all actual modified files committed together as `9f3e62912971ee3148b1cb8c012c5d5e451c6f0f`; version39054296125/build39054296332 passed and bot dist commit d9ad1ea followed. Cumulative Source→pseudocode fidelity39054313298 passed at that bot HEAD against this unit's baseline. Initial regression39054296186 failed only case47's serialized-record-order assertion; test-only patch009 committed as `1d2e8fd58747498929aa5eb58b54a61cf64e25fe` compares contract fields and splits ID diagnosis. Regression39054455547 passed47 inline+47 split and version39054455494 passed. Review005 preserves failure and final evidence, without treating structural checks as semantic proof. Remaining merge/split, graph/assets, projection renderer/export and whole integration prevent goal completion; code r42 remains stale.
+ 
++## Seventh implementation unit — merge/split and exact payload preservation
++
++Baseline `75cc91eca6825c85f2dc2929ef0dbdaa21023984`. Translate current `CalculateMergeOrSplit` and public merge/split wrappers directly: resolve all current visible identities without coercion/filtering, validate rectangle/single non-default owner, transfer one complete local payload and retain chart identity, restore covered defaults on split, validate/commit once and reconcile afterward. Public wrappers gate on commit, propagate exceptions and return official immutable layout state rather than selection arrays. The Modal consumes visible IDs without inventing persistent selection state. Caption normalization/local copying now preserve exact existing null/empty/text owner values, as the already-current pseudocode requires. Browser case48 and review006 record bounded mapping and verification; Source39/pseudocode13 unchanged, code43 stale. Patch20261018-011 and actual modifications commit together. Regression/version/build pending at preparation; remaining graph/assets, canonical normalization, renderer/export and whole integration still block completion.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-006-code-merge-split-open.md b/agent_space/reviews/review-20261018-006-code-merge-split-open.md
+new file mode 100644
+index 0000000..e604357
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-006-code-merge-split-open.md
+@@ -0,0 +1,34 @@
++# Code r43 — merge/split command and public result translation
++
++Baseline `75cc91eca6825c85f2dc2929ef0dbdaa21023984`. Source r39 remains closed/current and pseudocode r13 current. Only physical JS module hierarchy is flattened. This bounded unit does not complete the active direct-implementation goal.
++
++## Prompt-to-artifact / semantic inspection
++
++| Requirement | Concrete evidence |
++|---|---|
++| Direct pseudocode translation | `pseudocode/backend/project_efsm.pcal:CalculateMergeOrSplit` and `pseudocode/application/public_api/layout_annotations.pcal:mergeSlots/splitSlots` compared to the two Backend actions and public wrappers in `fast-figure.js` |
++| Resolve identities inside command | `resolveLayoutCommandSlots` resolves distinct integer IDs against the command's cloned current Project, rejects missing/hidden/invalid IDs instead of coercing/filtering them; no Application candidate or read snapshot is submitted |
++| Rectangle / one local owner | Merge computes the exact selected footprint union and bounding rectangle, rejects holes, and counts non-default **visible selected** payloads. At most one complete local payload moves to the top-left anchor; chart identity/one-owner relationship remain intact |
++| Restore without data invention | Merge resets covered non-anchor payloads and hides them; split validates every selected merged anchor, retains its local payload, restores covered cells to visible 1x1 defaults; whole validation precedes one initialize |
++| Exact caption values | Pseudocode `normalizeSlotContent:SingleCaptionOwner` gives an existing top-level caption precedence, including null/empty. The code no longer erases empty text or the literal saved text `슬롯 캡션`, and `setSlotLocalState` preserves empty text when moving payloads. No new Source meaning/default is introduced |
++| Postcommit reconciliation | Existing `dispatchProjectCommand` consumes actual merge hints through Backend reconciliation; a selected source anchor maps to the top-left owner. Split uses ordinary current-reference resolution, not a second selection event |
++| Public result / rejection | Both wrappers return false only for an uncommitted result, otherwise coordinate the existing dashboard render and return a fresh official immutable layout query. Exceptions propagate; no legacy status catch or ID-array public result remains |
++| UI result consumer | `FastFigureLayoutOverlay.runLayoutCommand` consumes returned `visibleSlots` to retain valid existing Modal-local IDs, not a second persistent selection/model or a legacy public ID array |
++| Verification | Browser case48 covers payload/chart transfer, current-authority injection, hidden/missing/non-rectangular/invalid IDs, multiple payloads, nested merges and split restoration, exact caption strings, selection reconciliation and uncommitted no-query/no-render gate. Cases1–47 remain required in inline and split builds |
++| Record / lineage | Source-code r43 fingerprint and unchanged current Source/pseudocode lineage in `development-versions.json`; patch20261018-011 plus actual modified files commit together |
++
++### Decisions and rejected alternatives
++
++Reject retaining the old public arrays or swallowing errors: both conflict with the current wrapper procedures. Reject normalizing string IDs or silently dropping invalid split targets: that can turn a rejected requested operation into a different successful mutation. Reject duplicating charts/concatenating captions when two local owners exist: the contract explicitly rejects this. Reject introducing a new layout-selection authority or result envelope; the existing immutable query and Modal-local ID set suffice. An already merged single visible anchor is not rejected just because the old code required two IDs; Source/pseudocode specify footprint and owner validation, not that extra restriction.
++
++`normalizeSlotContent` caption precedence is a narrow direct translation needed to preserve full local payloads. Other canonical-content/legacy normalization fields have not thereby received a full conformance review.
++
++## Verification status
++
++At preparation: Actions regression/version/build pending; no local application, Source, PlusCal, parser, checker, test, build or TLC execution. Diff whitespace and isolated-index reverse patch checks are file-integrity checks, not runtime evidence. Actual run IDs/results must be appended after execution.
++
++## Whole-goal completion audit
++
++Concrete deliverables remain: implement all current pseudocode owners, inputs/results/branches/failure/current-authority transactions; preserve Source-first decisions, logical ownership and config authority despite physical flattening; complete supplied-projection rendering/export/resource handling and integration with actual policy-compliant evidence.
++
++This review maps only merge/split and the caption-owner preservation dependency. It does **not** prove remaining graph/asset candidates and queries, positional cascade maps, full API/lifecycle parity, full canonical import normalization, supplied-projection renderer/export geometry/resource lifetime or legacy removal. In particular the existing dashboard render still reads Backend state, and the command adapter is not yet the complete pseudocode renderer pipeline. Green case48 or the earlier structural163/87 inventory cannot close those gaps. Code r43 remains stale; the active goal is incomplete.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 10c6369..3af8896 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1625,6 +1625,86 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       } finally { activeProject.initialize(saved); renderDashboard(); }
+     });
+ 
++    await run(48, "Merge/split preserve one current payload and return official layout reads", async () => {
++      const saved = projectClone(activeProject._state);
++      try {
++        const fresh = createProjectState();
++        fresh.charts = [createChartModel({ id: 1, editor: { editable: true, objects: [] } })];
++        fresh.nextId.chart = 2;
++        fresh.slots[1].content.chart = 1;
++        fresh.slots[1].caption = " exact text ";
++        fresh.slots[1].content.imageSettings = { ...DEFAULT_IMAGE_SETTINGS, fit: "manual", x: 0 };
++        activeProject.initialize(validateProjectObjectState(fresh, { requireSlots: true }));
++        const original = slotLocalState(slotAt(1));
++        appFSM.send("SELECT_SLOT", { slotId: 1, direction: "model-to-fsm" });
++        const state = api.layout.mergeSlots([1, 0, 1]);
++        check(!Array.isArray(state) && Object.isFrozen(state) && Object.isFrozen(state.visibleSlots) &&
++          state.visibleSlots.length === 3, "merge did not return detached official layout state");
++        check(slotAt(0).rowSpan === 1 && slotAt(0).colSpan === 2 && !slotAt(0).hidden && slotAt(1).hidden &&
++          JSON.stringify(slotLocalState(slotAt(0))) === JSON.stringify(original) &&
++          !slotHasNonDefaultLocalState(slotAt(1)) && activeProject.charts.length === 1 &&
++          activeProject.charts[0].id === 1 && interfaceFSM.readState().selectedSlotId === 0,
++          "merge did not transfer exactly one full payload/chart owner and reconcile the selected anchor");
++        const unchanged = JSON.stringify(activeProject._state), stableSession = appFSM.state;
++        for (const ids of [[], [0, 1], [0, 99], ["0", 2], [0, 2]]) {
++          let rejected = false;
++          try { api.layout.mergeSlots(ids); } catch { rejected = true; }
++          check(rejected && JSON.stringify(activeProject._state) === unchanged && appFSM.state === stableSession,
++            "invalid/hidden/non-rectangular merge partially changed authority/session");
++        }
++        const split = api.layout.splitSlots([0, 0]);
++        check(split.visibleSlots.length === 4 && Object.isFrozen(split) &&
++          JSON.stringify(slotLocalState(slotAt(0))) === JSON.stringify(original) &&
++          slotAt(0).rowSpan === 1 && slotAt(0).colSpan === 1 && !slotAt(1).hidden &&
++          !slotHasNonDefaultLocalState(slotAt(1)) && slotAt(1).rowSpan === 1 && slotAt(1).colSpan === 1,
++          "split did not retain the full anchor payload and restore default visible cells");
++        const afterSplit = JSON.stringify(activeProject._state), session = appFSM.state;
++        let rejected = false;
++        try { api.layout.splitSlots([0, 2]); } catch { rejected = true; }
++        check(rejected && JSON.stringify(activeProject._state) === afterSplit && appFSM.state === session,
++          "split silently filtered non-merged input");
++        activeProject.initialize(createProjectState());
++        slotAt(0).caption = "first"; slotAt(1).caption = "second";
++        const twoOwners = JSON.stringify(activeProject._state);
++        rejected = false;
++        try { api.layout.mergeSlots([0, 1]); } catch { rejected = true; }
++        check(rejected && JSON.stringify(activeProject._state) === twoOwners, "merge concatenated two non-default payloads");
++        activeProject.initialize(createProjectState());
++        api.layout.mergeSlots([0, 1]);
++        api.layout.mergeSlots([2, 3]);
++        const whole = api.layout.mergeSlots([0, 2]);
++        check(whole.visibleSlots.length === 1 && slotAt(0).rowSpan === 2 && slotAt(0).colSpan === 2 &&
++          api.layout.splitSlots([0]).visibleSlots.length === 4 &&
++          activeProject.slots.every(slot => slot.rowSpan === 1 && slot.colSpan === 1 && !slot.hidden),
++          "nested merged footprints did not combine/split without lost cells");
++        for (const caption of ["", "슬롯 캡션"]) {
++          activeProject.initialize(createProjectState());
++          slotAt(1).caption = caption;
++          api.layout.mergeSlots([0, 1]);
++          check(slotAt(0).caption === caption, "merge normalized saved caption text instead of preserving it");
++          api.layout.splitSlots([0]);
++          check(slotAt(0).caption === caption, "split normalized saved caption text instead of preserving it");
++        }
++        activeProject.initialize(createProjectState());
++        const send = projectEFSM.send, read = readLayoutApiState, render = renderDashboard;
++        try {
++          projectEFSM.send = function(event, payload) {
++            if (event === "SLOTS_MERGED") slotAt(1).caption = "command-time";
++            return send.call(this, event, payload);
++          };
++          check(api.layout.mergeSlots([0, 1]).visibleSlots.length === 3 && slotAt(0).caption === "command-time",
++            "merge candidate came from an Application snapshot instead of command-time authority");
++          projectEFSM.send = () => Object.freeze({ committed: false });
++          readLayoutApiState = () => { throw Error("uncommitted success query"); };
++          renderDashboard = () => { throw Error("uncommitted render"); };
++          check(api.layout.mergeSlots([0]) === false && api.layout.splitSlots([0]) === false,
++            "uncommitted command exposed success state");
++        } finally { projectEFSM.send = send; readLayoutApiState = read; renderDashboard = render; }
++        check(!/activeProject|try\s*\{|status\(|anchorId|restoredSlotIds/.test(
++          mergeSlots.toString() + splitSlots.toString()), "Application still owns candidates/legacy returns or catches rejection");
++      } finally { activeProject.initialize(saved); renderDashboard(); }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 3eb100b..2481736 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 42,
++      "revision": 43,
+       "status": "stale", 
+       "paths": [
+         "Fast-figure.html", 
+@@ -38,13 +38,13 @@
+         "fast-figure.js", 
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:a16b3d956ac2deb14e48af86fd9925314350f8519c6b9f372a8bca4f17b5f6e7",
++      "fingerprint": "sha256:5eca1380e7ac8c55945c0f4c4b796f02020a2305cc2c52fbf6c981fb6c7a9ca5",
+       "derived_from": {
+         "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+         "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-005-grid-coordinate-translation.md"
++      "validation_review": "agent_space/reviews/review-20261018-006-code-merge-split-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 13,
+diff --git a/fast-figure-ui.js b/fast-figure-ui.js
+index 4b6ba90..966eaff 100644
+--- a/fast-figure-ui.js
++++ b/fast-figure-ui.js
+@@ -2736,9 +2736,11 @@
+       });
+     };
+     const runLayoutCommand = (command) => {
+-      const nextSelection = command([...layoutSelection]);
+-      if (Array.isArray(nextSelection))
+-        setLayoutSelection(new Set(nextSelection));
++      const layoutState = command([...layoutSelection]);
++      if (layoutState !== false) {
++        const visibleIds = new Set(layoutState.visibleSlots.map((slot) => slot.id));
++        setLayoutSelection((current) => new Set([...current].filter((id) => visibleIds.has(id))));
++      }
+     };
+     const changeZoom = (value) =>
+       layoutApi.setZoom(clamp(value, 100, 50, 200));
+diff --git a/fast-figure.js b/fast-figure.js
+index e0dd7fc..ec85c6f 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -1497,14 +1497,21 @@
+         validateProjectObjectState(candidate, { requireSlots: true });
+         activeProject.initialize(candidate);
+       }
++      function resolveLayoutCommandSlots(candidate, slotIds) {
++        if (!Array.isArray(slotIds) || !slotIds.length || !slotIds.every(Number.isInteger))
++          throw Error("현재 표시된 슬롯 ID를 선택하세요.");
++        return [...new Set(slotIds)].map((id) => {
++          const slot = candidate.slots.find((item) => item.id === id);
++          if (!slot || slot.hidden) throw Error("현재 표시된 슬롯을 확인할 수 없습니다.");
++          return slot;
++        });
++      }
+       function applySlotsMergedAction({ machine, payload }) {
+         machine.assertWritable("slots", "SLOTS_MERGED");
+         machine.assertWritable("charts", "SLOTS_MERGED");
+-        let slotIds = [...new Set((Array.isArray(payload.slotIds) ? payload.slotIds : [])
+-          .map(Number).filter(Number.isInteger))],
+-          selected = slotIds.map(slotAt).filter((slot) => slot && !slot.hidden);
+-        if (selected.length !== slotIds.length || selected.length < 2)
+-          throw Error("합칠 슬롯을 둘 이상 선택하세요.");
++        let candidate = projectClone(activeProject._state);
++        normalizeSlotContents(candidate.slots);
++        let selected = resolveLayoutCommandSlots(candidate, payload.slotIds);
+         let top = Math.min(...selected.map((slot) => slot.row)),
+           left = Math.min(...selected.map((slot) => slot.col)),
+           bottom = Math.max(...selected.map((slot) => slot.row + slot.rowSpan - 1)),
+@@ -1517,20 +1524,16 @@
+         });
+         if (selectedCells.size !== (bottom - top + 1) * (right - left + 1))
+           throw Error("선택한 슬롯의 전체 영역이 빈칸 없는 직사각형이어야 합니다.");
+-        let candidate = projectClone(activeProject._state);
+-        normalizeSlotContents(candidate.slots);
+         let cells = candidate.slots.filter((slot) =>
+           slot.row >= top && slot.row <= bottom && slot.col >= left && slot.col <= right);
+         if (cells.length !== selectedCells.size) throw Error("선택 영역을 확인할 수 없습니다.");
+-        let nonDefault = cells.filter(slotHasNonDefaultLocalState);
++        let nonDefault = selected.filter(slotHasNonDefaultLocalState);
+         if (nonDefault.length > 1)
+           throw Error("로컬 상태가 두 개 이상 있는 슬롯은 합칠 수 없습니다.");
+         let anchor = cells.find((slot) => slot.row === top && slot.col === left),
+           source = nonDefault[0] || anchor,
+           local = slotLocalState(source);
+         cells.forEach((cell) => {
+-          cell.rowSpan = 1;
+-          cell.colSpan = 1;
+           cell.hidden = cell !== anchor;
+           if (cell !== anchor) resetSlotLocalState(cell);
+         });
+@@ -1540,22 +1543,18 @@
+         anchor.hidden = false;
+         validateProjectObjectState(candidate, { requireSlots: true });
+         activeProject.initialize(candidate);
+-        payload.anchorId = anchor.id;
+         payload.selectionHints = {
+-          mergeSlotIds: cells.map((slot) => slot.id),
++          mergeSlotIds: selected.map((slot) => slot.id),
+           anchorId: anchor.id,
+         };
+       }
+       function applySlotsSplitAction({ machine, payload }) {
+         machine.assertWritable("slots", "SLOTS_SPLIT");
+-        let ids = [...new Set((Array.isArray(payload.slotIds) ? payload.slotIds : [])
+-          .map(Number).filter(Number.isInteger))],
+-          selected = ids.map(slotAt).filter((slot) =>
+-            slot && !slot.hidden && (slot.rowSpan > 1 || slot.colSpan > 1));
+-        if (!selected.length) throw Error("나눌 합쳐진 슬롯을 선택하세요.");
+         let candidate = projectClone(activeProject._state);
+         normalizeSlotContents(candidate.slots);
+-        let restored = new Set();
++        let selected = resolveLayoutCommandSlots(candidate, payload.slotIds);
++        if (selected.some((slot) => slot.rowSpan <= 1 && slot.colSpan <= 1))
++          throw Error("나눌 합쳐진 슬롯을 선택하세요.");
+         for (let source of selected) {
+           let anchor = candidate.slots.find((slot) => slot.id === source.id),
+             endRow = anchor.row + anchor.rowSpan,
+@@ -1571,14 +1570,11 @@
+               cell.colSpan = 1;
+               if (cell.id === anchor.id) setSlotLocalState(cell, local);
+               else resetSlotLocalState(cell);
+-              restored.add(cell.id);
+             }
+           });
+         }
+         validateProjectObjectState(candidate, { requireSlots: true });
+         activeProject.initialize(candidate);
+-        payload.restoredSlotIds = [...restored];
+-        payload.selectionHints = { reResolveSlotSelection: true };
+       }
+       function applyAssetsImportedAction({ machine, payload }) {
+         for (let scope of ["data", "images", "files", "charts", "slots"])
+@@ -3991,28 +3987,16 @@
+         return chart;
+       }
+       function mergeSlots(slotIds=[]) {
+-        let payload = { slotIds, direction: "ui-to-fsm" };
+-        try {
+-          appFSM.send("SLOTS_MERGED", payload);
+-        } catch (error) {
+-          status(error.message);
+-          return null;
+-        }
++        const result = dispatchProjectCommand("SLOTS_MERGED", { slotIds });
++        if (!result.committed) return false;
+         renderDashboard();
+-        appFSM.notify("layout","SLOTS_MERGED");
+-        return Number.isInteger(payload.anchorId) ? [payload.anchorId] : null;
++        return readLayoutApiState();
+       }
+       function splitSlots(slotIds=[]) {
+-        let payload = { slotIds, direction: "ui-to-fsm" };
+-        try {
+-          appFSM.send("SLOTS_SPLIT", payload);
+-        } catch (error) {
+-          status(error.message);
+-          return null;
+-        }
++        const result = dispatchProjectCommand("SLOTS_SPLIT", { slotIds });
++        if (!result.committed) return false;
+         renderDashboard();
+-        appFSM.notify("layout","SLOTS_SPLIT");
+-        return payload.restoredSlotIds || [];
++        return readLayoutApiState();
+       }
+       function createChartModel({ id = null, editor = {}, graph = {} } = {}) {
+         let model = {
+@@ -4312,7 +4296,7 @@
+         slot.content.imageId = Number.isInteger(next.imageId) ? next.imageId : null;
+         slot.content.contentType = next.contentType === "image" ? "image" : "graph";
+         slot.content.imageSettings = readImageSettings(next.imageSettings);
+-        slot.caption = typeof next.caption === "string" && next.caption ? next.caption : null;
++        slot.caption = typeof next.caption === "string" ? next.caption : null;
+         return slot;
+       }
+       function resetSlotLocalState(slot) {
+@@ -4349,12 +4333,9 @@
+             slot.content && typeof slot.content === "object" && !Array.isArray(slot.content)
+               ? slot.content
+               : {},
+-          legacyCaption =
+-            typeof slot.caption === "string"
+-              ? slot.caption
+-              : typeof sourceContent.caption === "string"
+-                ? sourceContent.caption
+-                : null,
++          legacyCaption = Object.prototype.hasOwnProperty.call(slot, "caption")
++            ? slot.caption
++            : Object.prototype.hasOwnProperty.call(sourceContent, "caption") ? sourceContent.caption : null,
+           legacySettings =
+             sourceContent.imageSettings && typeof sourceContent.imageSettings === "object"
+               ? sourceContent.imageSettings
+@@ -4374,7 +4355,7 @@
+           imageSettings: readImageSettings(legacySettings),
+         };
+         delete slot.content.caption;
+-        slot.caption = legacyCaption && legacyCaption !== "슬롯 캡션" ? legacyCaption : null;
++        slot.caption = legacyCaption;
+         Object.defineProperties(slot, {
+           chart: {
+             configurable: true,

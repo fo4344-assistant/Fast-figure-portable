@@ -1625,6 +1625,86 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       } finally { activeProject.initialize(saved); renderDashboard(); }
     });
 
+    await run(48, "Merge/split preserve one current payload and return official layout reads", async () => {
+      const saved = projectClone(activeProject._state);
+      try {
+        const fresh = createProjectState();
+        fresh.charts = [createChartModel({ id: 1, editor: { editable: true, objects: [] } })];
+        fresh.nextId.chart = 2;
+        fresh.slots[1].content.chart = 1;
+        fresh.slots[1].caption = " exact text ";
+        fresh.slots[1].content.imageSettings = { ...DEFAULT_IMAGE_SETTINGS, fit: "manual", x: 0 };
+        activeProject.initialize(validateProjectObjectState(fresh, { requireSlots: true }));
+        const original = slotLocalState(slotAt(1));
+        appFSM.send("SELECT_SLOT", { slotId: 1, direction: "model-to-fsm" });
+        const state = api.layout.mergeSlots([1, 0, 1]);
+        check(!Array.isArray(state) && Object.isFrozen(state) && Object.isFrozen(state.visibleSlots) &&
+          state.visibleSlots.length === 3, "merge did not return detached official layout state");
+        check(slotAt(0).rowSpan === 1 && slotAt(0).colSpan === 2 && !slotAt(0).hidden && slotAt(1).hidden &&
+          JSON.stringify(slotLocalState(slotAt(0))) === JSON.stringify(original) &&
+          !slotHasNonDefaultLocalState(slotAt(1)) && activeProject.charts.length === 1 &&
+          activeProject.charts[0].id === 1 && interfaceFSM.readState().selectedSlotId === 0,
+          "merge did not transfer exactly one full payload/chart owner and reconcile the selected anchor");
+        const unchanged = JSON.stringify(activeProject._state), stableSession = appFSM.state;
+        for (const ids of [[], [0, 1], [0, 99], ["0", 2], [0, 2]]) {
+          let rejected = false;
+          try { api.layout.mergeSlots(ids); } catch { rejected = true; }
+          check(rejected && JSON.stringify(activeProject._state) === unchanged && appFSM.state === stableSession,
+            "invalid/hidden/non-rectangular merge partially changed authority/session");
+        }
+        const split = api.layout.splitSlots([0, 0]);
+        check(split.visibleSlots.length === 4 && Object.isFrozen(split) &&
+          JSON.stringify(slotLocalState(slotAt(0))) === JSON.stringify(original) &&
+          slotAt(0).rowSpan === 1 && slotAt(0).colSpan === 1 && !slotAt(1).hidden &&
+          !slotHasNonDefaultLocalState(slotAt(1)) && slotAt(1).rowSpan === 1 && slotAt(1).colSpan === 1,
+          "split did not retain the full anchor payload and restore default visible cells");
+        const afterSplit = JSON.stringify(activeProject._state), session = appFSM.state;
+        let rejected = false;
+        try { api.layout.splitSlots([0, 2]); } catch { rejected = true; }
+        check(rejected && JSON.stringify(activeProject._state) === afterSplit && appFSM.state === session,
+          "split silently filtered non-merged input");
+        activeProject.initialize(createProjectState());
+        slotAt(0).caption = "first"; slotAt(1).caption = "second";
+        const twoOwners = JSON.stringify(activeProject._state);
+        rejected = false;
+        try { api.layout.mergeSlots([0, 1]); } catch { rejected = true; }
+        check(rejected && JSON.stringify(activeProject._state) === twoOwners, "merge concatenated two non-default payloads");
+        activeProject.initialize(createProjectState());
+        api.layout.mergeSlots([0, 1]);
+        api.layout.mergeSlots([2, 3]);
+        const whole = api.layout.mergeSlots([0, 2]);
+        check(whole.visibleSlots.length === 1 && slotAt(0).rowSpan === 2 && slotAt(0).colSpan === 2 &&
+          api.layout.splitSlots([0]).visibleSlots.length === 4 &&
+          activeProject.slots.every(slot => slot.rowSpan === 1 && slot.colSpan === 1 && !slot.hidden),
+          "nested merged footprints did not combine/split without lost cells");
+        for (const caption of ["", "슬롯 캡션"]) {
+          activeProject.initialize(createProjectState());
+          slotAt(1).caption = caption;
+          api.layout.mergeSlots([0, 1]);
+          check(slotAt(0).caption === caption, "merge normalized saved caption text instead of preserving it");
+          api.layout.splitSlots([0]);
+          check(slotAt(0).caption === caption, "split normalized saved caption text instead of preserving it");
+        }
+        activeProject.initialize(createProjectState());
+        const send = projectEFSM.send, read = readLayoutApiState, render = renderDashboard;
+        try {
+          projectEFSM.send = function(event, payload) {
+            if (event === "SLOTS_MERGED") slotAt(1).caption = "command-time";
+            return send.call(this, event, payload);
+          };
+          check(api.layout.mergeSlots([0, 1]).visibleSlots.length === 3 && slotAt(0).caption === "command-time",
+            "merge candidate came from an Application snapshot instead of command-time authority");
+          projectEFSM.send = () => Object.freeze({ committed: false });
+          readLayoutApiState = () => { throw Error("uncommitted success query"); };
+          renderDashboard = () => { throw Error("uncommitted render"); };
+          check(api.layout.mergeSlots([0]) === false && api.layout.splitSlots([0]) === false,
+            "uncommitted command exposed success state");
+        } finally { projectEFSM.send = send; readLayoutApiState = read; renderDashboard = render; }
+        check(!/activeProject|try\s*\{|status\(|anchorId|restoredSlotIds/.test(
+          mergeSlots.toString() + splitSlots.toString()), "Application still owns candidates/legacy returns or catches rejection");
+      } finally { activeProject.initialize(saved); renderDashboard(); }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

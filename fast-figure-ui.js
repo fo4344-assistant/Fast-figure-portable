@@ -2736,9 +2736,11 @@
       });
     };
     const runLayoutCommand = (command) => {
-      const nextSelection = command([...layoutSelection]);
-      if (Array.isArray(nextSelection))
-        setLayoutSelection(new Set(nextSelection));
+      const layoutState = command([...layoutSelection]);
+      if (layoutState !== false) {
+        const visibleIds = new Set(layoutState.visibleSlots.map((slot) => slot.id));
+        setLayoutSelection((current) => new Set([...current].filter((id) => visibleIds.has(id))));
+      }
     };
     const changeZoom = (value) =>
       layoutApi.setZoom(clamp(value, 100, 50, 200));
