@@ -1423,18 +1423,26 @@
       }
       function applyExportSettingsChangedAction({ machine, payload }) {
         machine.assertWritable("export", "EXPORT_SETTINGS_CHANGED");
-        let candidate = projectClone(activeProject._state),
-          current = candidate.export, values = payload.settings || {},
-          heightMode = values.heightMode === "explicit" ? "explicit" :
-            values.heightMode === "auto" ? "auto" : current.heightMode;
-        candidate.export = {
-          width: readProjectNumber(values.width, current.width, 100, 20000),
-          heightMode,
-          height: heightMode === "explicit"
-            ? readProjectNumber(values.height, current.height ?? 100, 100, 20000) : null,
-          dpi: readProjectNumber(values.dpi, current.dpi, 36, 1200),
-          format: values.format === "jpeg" ? "jpeg" : values.format === "png" ? "png" : current.format,
-        };
+        const candidate = projectClone(activeProject._state), current = candidate.export,
+          next = { ...current }, values = payload.settings || {}, limits = BackendSettings.defaults.limits.export;
+        for (const [key, allowed] of [["heightMode", ["auto", "explicit"]], ["format", ["png", "jpeg"]]]) {
+          if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+          const value = values[key];
+          if (allowed.includes(value)) next[key] = value;
+        }
+        for (const [key, limitKey] of [["width", "logicalWidth"], ["height", "logicalHeight"], ["dpi", "dpi"]]) {
+          if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+          const value = values[key];
+          // NoValue is not numeric zero; conversion exceptions otherwise propagate.
+          const number = value === null ? NaN : Number(value);
+          if (Number.isFinite(number)) {
+            const [min, max] = limits[limitKey];
+            next[key] = Math.max(min, Math.min(max, number));
+          }
+        }
+        next.height = next.heightMode === "auto" ? null
+          : next.height ?? current.height ?? limits.logicalHeight[0];
+        candidate.export = next;
         validateProjectObjectState(candidate, { requireSlots: true });
         activeProject.initialize(candidate);
       }
@@ -1456,8 +1464,7 @@
           for (const key of ["scale", "x", "y"]) {
             if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
             const value = values[key];
-            let number;
-            try { number = Number(value); } catch { number = NaN; }
+            const number = value === null ? NaN : Number(value);
             if (Number.isFinite(number)) {
               const [min, max] = limits[key];
               next[key] = Math.max(min, Math.min(max, number));
@@ -7471,10 +7478,7 @@
         return appFSM.query("project-api", { operation: "print.readSettings" });
       }
       function setPrintApiSettings(values={}) {
-        let result = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", {
-          settings: { ...values },
-          direction: "ui-to-fsm",
-        });
+        let result = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", { settings: values });
         return result.committed ? readPrintApiSettings() : false;
       }
       function savePrintApi(options={}) {

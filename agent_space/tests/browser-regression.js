@@ -1717,7 +1717,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         const first = api.images.setSettings({ fit: "manual", scale: 0, x: 0, y: 0 });
         check(first.settings.scale === 1 && first.settings.x === 0 && first.settings.y === 0 &&
           Object.isFrozen(first.settings), "valid zero was replaced by a truthiness fallback");
-        let next = api.images.setSettings({ fit: "invalid", scale: "invalid", x: Infinity, y: Symbol("invalid") });
+        let next = api.images.setSettings({ fit: "invalid", scale: "invalid", x: Infinity, y: null });
         check(next.settings.fit === "manual" && next.settings.scale === 1 && next.settings.x === 0 && next.settings.y === 0,
           "invalid supplied image fields replaced current settings");
         next = api.images.setSettings({ fit: "contain", scale: 500, x: 180, y: -50, unknown: true });
@@ -1748,6 +1748,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         catch { failed = true; }
         check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
           "throwing image edit partially committed or reconciled success");
+        for (const value of [Symbol("image conversion"), { valueOf() { throw Error("image conversion failure"); } }]) {
+          failed = false;
+          try { applyImageSettingsFromValues(id, { x: value }); } catch { failed = true; }
+          check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+            "image conversion exception was swallowed or partially committed");
+        }
         for (const badId of [String(id), -999]) {
           failed = false;
           try { dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId: badId, settings: { x: 4 } }); }
@@ -1769,6 +1775,49 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
             "uncommitted image operation exposed a success projection");
         } finally { projectEFSM.send = send; readBackendProjection = query; syncSlotImageElement = sync; }
       } finally { activeProject.initialize(saved); renderDashboard(); }
+    });
+
+    await run(50, "Print edits follow config limits, current fields and conversion failure boundaries", async () => {
+      const saved = projectClone(activeProject._state), send = projectEFSM.send, read = readPrintApiSettings;
+      try {
+        api.print.setSettings({ width: 1400, heightMode: "explicit", height: 800, dpi: 300, format: "png" });
+        const stale = api.print.readSettings();
+        const values = Object.create({ width: 9999, format: "jpeg" });
+        values.height = null; values.dpi = "invalid"; values.heightMode = "invalid"; values.unknown = true;
+        let result = api.print.setSettings(values);
+        check(result.width === 1400 && result.height === 800 && result.dpi === 300 && result.format === "png" &&
+          !Object.prototype.hasOwnProperty.call(activeProject._state.export, "unknown"),
+          "print edits consumed inherited/unknown fields or replaced invalid/NoValue fields");
+        let reads = 0;
+        result = api.print.setSettings({ get width() { reads++; return 0; }, dpi: Infinity });
+        check(reads === 1 && result.width === BackendSettings.defaults.limits.export.logicalWidth[0] &&
+          result.dpi === 300 && stale.width === 1400 && Object.isFrozen(result),
+          "print numeric edits were read more than once or used truthiness/stale defaults");
+        projectEFSM.send = function(event, payload) {
+          if (event === "EXPORT_SETTINGS_CHANGED") activeProject._state.export.width = 1750;
+          return send.call(this, event, payload);
+        };
+        check(api.print.setSettings({ dpi: 600 }).width === 1750, "print candidate came from an Application snapshot");
+        projectEFSM.send = send;
+        api.print.setSettings({ heightMode: "auto" });
+        result = api.print.setSettings({ heightMode: "explicit" });
+        check(result.height === BackendSettings.defaults.limits.export.logicalHeight[0],
+          "explicit height without current height did not use configured lower bound");
+        const before = JSON.stringify(activeProject._state), frontend = appFSM.state;
+        for (const values of [{ get width() { throw Error("print getter"); } },
+          { height: Symbol("conversion") }, { dpi: { valueOf() { throw Error("print conversion"); } } }]) {
+          let failed = false;
+          try { api.print.setSettings(values); } catch { failed = true; }
+          check(failed && JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+            "print getter/conversion failure partially committed or reconciled success");
+        }
+        projectEFSM.send = () => Object.freeze({ committed: false });
+        readPrintApiSettings = () => { throw Error("uncommitted print success read"); };
+        check(api.print.setSettings({ width: 1900 }) === false, "uncommitted print command exposed success settings");
+      } finally {
+        projectEFSM.send = send; readPrintApiSettings = read;
+        activeProject.initialize(saved); renderDashboard();
+      }
     });
 
   } catch (error) {
