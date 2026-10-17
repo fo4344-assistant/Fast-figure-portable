@@ -123,3 +123,16 @@ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 
 아직 전체 번역 완료는 아니다. private metadata/header normalization·constructor 표현, 모든 import/FFSX/graph 경로의 await/retry/throw 문맥, 87개 API의 전체 producer/consumer·인자·반환·실패 연결과 Source 전체 충실도를 대조해야 한다. 해당 대조가 끝나기 전에는 작업본을 활성 .pcal로 섞거나 current라고 기록하지 않는다.
 
 이번 branch 변경은 이 진행 기록뿐이다. 작업 경로 안 `.work/plan022/`의 번역·연결 메모는 임시 작업본이며 이 diff에 포함하거나 복구 가능하다고 주장하지 않는다. Source r37 closed/활성 pseudocode r11 stale/하위 stale 및 fingerprint는 그대로다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
+
+## 10. 후속 진행 — command 문맥과 공개 wrapper의 명시적 인자 연결
+
+계속 요청에 따라 기준 HEAD `10fa782ef7aeb1f0330d0813c883436da266fc84`의 Source r37과 기존 작업본을 대조했다. 임시 번역 15파일은 총 **5,377행**이다. 파일 수/행 수는 완료 증거가 아니다.
+
+1. graph commit/conversion, FFSX slot 적용, grid resize의 private 전개는 EFSM이 넘긴 동일 command-attempt source를 받도록 연결했다. Source의 원래 함수 이름·인자는 wrapper에 보존하고 그 내부 문맥 전달만 명시했다. 계산 도중 `activeProject`를 임의 재조회해 다른 attempt와 섞지 않으며, 결과는 여전히 candidate일 뿐이다. conversion 반환은 이미 plain candidate이므로 불필요한 `CalculatedCandidate` 가상 변환도 제거했다. 새 retry token/state/공개 mutation 경로는 없다.
+2. label reference와 layout preview geometry도 기존 read가 포착한 source에서 계산한다. Source read entry는 유지하고 private 수학 계산의 인자로 그 참조를 전달한다. config/default를 별도 authority로 복사하거나 Frontend가 Backend를 읽는 경로를 추가하지 않았다.
+3. 공개 API의 wrapper route **60개**를 각 Source 함수의 명시적 `call`과 순서대로 대응하는 named input에 연결했다. `InvokeTranslatedSourceProcedure`/`SourceArgumentsForWrapper`라는 미전개 일괄 호출을 제거했다. Source에서 명시한 trim=False, previewWidth=None, caption slotIds=None만 해당 binding에서 보완하며 나머지 입력·반환·exception/취소/commit gate는 기존 wrapper가 소유한다. query/selection/adapter/export route와 외곽 lifecycle-once 경로는 분리 유지했다. 텍스트 목록 비교상 60 wrapper route와 60 명시 branch에 누락·추가·중복이 없다. 이는 87 API 전체의 동작 검증이나 parser 통과가 아니다.
+4. asset metadata 생성은 Source csvAsset/imageAsset의 실제 `directory/name/mime/bytesBase64` field로 전개했다. 최종 canonical unique/replace path의 parent/leaf가 저장 위치이며 원본 colliding filename을 다시 저장하지 않는다. id와 CSV rows/header는 같은 candidate를 만드는 caller가 채우고 imageSettings/별도 path alias/원본명 authority는 추가하지 않는다.
+
+잔여는 codec/normalization/constructor 등의 primitive와 domain 계산 구분, 모든 Source 함수·분기와 query/command producer-consumer·반환/실패·await 문맥의 전체 충실도 대조다. 특히 명시적 call이 존재한다는 것만으로 각 callee의 세부 번역이 닫혔다고 판정하지 않는다. 이후 전체 hierarchy cutover/과거 활성 파일 제거와 lineage 갱신을 수행한다.
+
+이번 branch patch는 이 진행 기록만 포함하며 `.work/plan022/` 번역·연결 메모를 포함/rollback하지 않는다. Source37 closed/활성 pseudocode11 stale/하위 stale 및 fingerprint는 유지한다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
