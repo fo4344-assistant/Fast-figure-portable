@@ -5620,28 +5620,14 @@
         });
         status(`${match.path} 폴더를 선택했습니다.`);
       }
-      function selectCsvFromTree(path) {
-        let slot = getSelectedSlot(),
-          match = projectVfs.resolve(path),
-          csv = match?.kind === "csv" ? match.asset : null;
-        if (!csv) return status("프로젝트 CSV를 선택할 수 없습니다.");
-        appFSM.send("CLEAR_GRAPH_OBJECT", {
-          index: null,
-          direction: "ui-to-fsm",
+      function selectProjectCsv(path) {
+        const resolved = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path });
+        if (resolved?.kind !== "csv") return null;
+        const previous = appFSM.state, state = appFSM.send("SELECT_ASSET", {
+          kind: "csv", path: resolved.path, direction: "ui-to-fsm",
         });
-        appFSM.send("SELECT_ASSET", {
-          kind: "csv",
-          path: projectAssetPath(csv),
-          direction: "ui-to-fsm",
-        });
-        updateFileAvailability();
-        if (!slot) {
-          status(`${csv.name}을 선택했습니다.`);
-          return;
-        }
-        if (slot.contentType === "image")
-          return status(`${csv.name}을 선택했습니다. 그래프 슬롯에서만 새 그래프를 추가할 수 있습니다.`);
-        status(`${csv.name}을 선택했습니다. 기존 그래프 데이터는 변경하지 않았습니다.`);
+        return state !== previous && state.assetSelection === "csv" && state.assetPath === resolved.path
+          ? resolved.target : null;
       }
       function selectImageFromTree(path) {
         let slot = getSelectedSlot(),
@@ -7735,7 +7721,7 @@
           collisionModel: projectAssetImportCollisionModel,
           resolveImportPlan: resolveProjectAssetImportPlan,
           selectDirectory: selectDirectoryFromTree,
-          selectCsv: selectCsvFromTree,
+          selectCsv: selectProjectCsv,
           selectImage: selectImageFromTree,
           download: downloadProjectAsset,
         }),

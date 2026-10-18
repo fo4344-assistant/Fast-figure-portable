@@ -2331,6 +2331,71 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+    await run(63, "CSV selection queries copied authority then sends only one revalidated Frontend event", () => {
+      const query = readBackendProjection, send = interfaceFSM.send, validate = validateFrontendIntent,
+        saved = projectClone(activeProject._state), session = interfaceFSM.state,
+        csv = activeProject.csvFiles[0], path = projectAssetPath(csv), before = JSON.stringify(activeProject._state),
+        slot = selectedSlotId, workspace = appFSM.state.workspace;
+      let reads = 0, events = [], projection, reject = false, queryError = null, adapterError = null, stale = false;
+      const failure = Error("expected CSV selection error");
+      try {
+        readBackendProjection = (kind, request) => {
+          if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
+            reads++;
+            if (queryError) throw queryError;
+            const result = query(kind, request);
+            if (stale) {
+              const newer = projectClone(activeProject._state);
+              newer.assets.csvFiles.find((item) => item.id === csv.id).name = "renamed-after-selection-query.csv";
+              activeProject.initialize(newer);
+            }
+            projection = result;
+            return result;
+          }
+          return query(kind, request);
+        };
+        validateFrontendIntent = (event, payload) => reject && event === "SELECT_ASSET"
+          ? Object.freeze({ event, accepted: false }) : validate(event, payload);
+        interfaceFSM.send = function (event, payload) {
+          events.push(event);
+          if (adapterError) throw adapterError;
+          check(event === "SELECT_ASSET" && payload.kind === "csv" && payload.path === path &&
+            !Object.hasOwn(payload, "target") && !Object.hasOwn(payload, "candidate"), "selection supplied domain state or separate clear event");
+          return send.call(this, event, payload);
+        };
+        const selected = api.assets.selectCsv(path);
+        check(selected === projection.target && Object.isFrozen(selected) && selected !== getProjectCsv(csv.id) &&
+          selected.rows !== getProjectCsv(csv.id).rows && reads === 1 && events.join() === "SELECT_ASSET",
+          "CSV selection did not return detached query target via exactly one event");
+        check(appFSM.state.assetPath === path && appFSM.state.assetSelection === "csv" &&
+          appFSM.state.graphObjectIndex === null && appFSM.state.graphObject === "none" &&
+          selectedSlotId === slot && appFSM.state.workspace === workspace && JSON.stringify(activeProject._state) === before,
+          "selection changed Project/slot/workspace or failed to clear graph selection");
+        check(api.assets.selectCsv(path)?.id === csv.id, "accepted repeat selection returned rejection");
+        const stable = interfaceFSM.state, count = events.length;
+        check(api.assets.selectCsv("/missing.csv") === null && api.assets.selectCsv("/assets/csv") === null &&
+          events.length === count && interfaceFSM.state === stable, "invalid CSV selection changed Frontend");
+        reject = true;
+        check(api.assets.selectCsv(path) === null && interfaceFSM.state === stable && events.length === count,
+          "rejected repeat selection reported old selection as success");
+        reject = false;
+        queryError = failure; let caught;
+        try { api.assets.selectCsv(path); } catch (error) { caught = error; }
+        check(caught === failure && events.length === count && interfaceFSM.state === stable, "query failure was swallowed or selected");
+        queryError = null; adapterError = failure; caught = null;
+        try { api.assets.selectCsv(path); } catch (error) { caught = error; }
+        check(caught === failure && interfaceFSM.state === stable, "adapter failure was swallowed or changed Frontend");
+        adapterError = null; stale = true;
+        check(api.assets.selectCsv(path) === null && interfaceFSM.state === stable,
+          "stale query target bypassed Backend reference revalidation");
+        check(!/projectVfs|getProjectCsv|activeProject|CLEAR_GRAPH_OBJECT|notify\(/.test(selectProjectCsv.toString()),
+          "Application CSV selection owns Backend resolution or separate legacy effects");
+      } finally {
+        readBackendProjection = query; interfaceFSM.send = send; validateFrontendIntent = validate;
+        activeProject.initialize(saved); interfaceFSM.state = session;
+      }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

@@ -1,0 +1,207 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 82ea89b..76258fc 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -85,7 +85,11 @@ Relocation code49 cumulative versions39100969744 and push versions39100969916 pa
+ 
+ ## Fifteenth implementation unit — CSV header candidate and actual-path read
+ 
+-Baseline `cc4335c808b79c682b380243ecc4bc12d9285bfc`. Code52 translates graphs.setHeaderLines to DATA_OBJECT_REPLACED with only csvId/new headerLines. Backend re-resolves the current CSV, preserves its bytes/rows/id/path, rebuilds affected editable figures within the candidate, validates and commits once, retrying if scalar conversion replaced authority. Actual immutable changed asset/owner facts provide the postcommit query path. The official assets.readDeletionTarget query supplies a fresh immutable target and reference list with original indices, counting frozen real CSV graphs but excluding conversion views. The public header wrapper gates its read/render on commit and no longer calculates or writes persistent fields. Cases61/62 cover read isolation/scope, numeric boundaries, actual command/query, failures/no-commit and stale-authority recalculation. Source39/pseudocode13 already specify these meanings and remain unchanged. Code52 stays stale. Review015 and patch032 track runner evidence. At68368e08c7f3b20797f1f4c846e6cd3925d1ee44, regression39101795207 passed62 inline +62 split and build39101795302 passed; dist-only ef36428e560e02a6457e9915a6942d810ced4bf9 fast-forwarded. Diagnostic versions39101795231 supplied canonical digest3cf3203ee08c8f1bd0772a5f94f5caa9e245f85d38e2bb629c4a3cdc87501b8c; patch033 corrects metadata, cumulative gate pending. No local execution. Broader graph/asset candidates/cascade, normalization/import and supplied-renderer/capture integration remain open.
++Baseline `cc4335c808b79c682b380243ecc4bc12d9285bfc`. Code52 translates graphs.setHeaderLines to DATA_OBJECT_REPLACED with only csvId/new headerLines. Backend re-resolves the current CSV, preserves its bytes/rows/id/path, rebuilds affected editable figures within the candidate, validates and commits once, retrying if scalar conversion replaced authority. Actual immutable changed asset/owner facts provide the postcommit query path. The official assets.readDeletionTarget query supplies a fresh immutable target and reference list with original indices, counting frozen real CSV graphs but excluding conversion views. The public header wrapper gates its read/render on commit and no longer calculates or writes persistent fields. Cases61/62 cover read isolation/scope, numeric boundaries, actual command/query, failures/no-commit and stale-authority recalculation. Source39/pseudocode13 already specify these meanings and remain unchanged. Code52 stays stale. Review015 and patch032 track runner evidence. At68368e08c7f3b20797f1f4c846e6cd3925d1ee44, regression39101795207 passed62 inline +62 split and build39101795302 passed; dist-only ef36428e560e02a6457e9915a6942d810ced4bf9 fast-forwarded. Diagnostic versions39101795231 supplied canonical digest3cf3203ee08c8f1bd0772a5f94f5caa9e245f85d38e2bb629c4a3cdc87501b8c; patch033 corrects metadata. Cumulative versions39101863743 passed at a6d6d2c35e1dde59e13f3ec159a1ede594b3927e againstcc4335c808b79c682b380243ecc4bc12d9285bfc; push39101863300 passed. No local execution. Broader graph/asset candidates/cascade, normalization/import and supplied-renderer/capture integration remain open.
++
++## Sixteenth implementation unit — current CSV asset selection
++
++Baseline a6d6d2c35e1dde59e13f3ec159a1ede594b3927e. Code53 translates existing assets.selectProjectCsv: query current detached CSV via assets.readDeletionTarget, reject missing/wrong kind before any event, send canonical scalar kind/path through revalidated SELECT_ASSET, and return the query target only when the event actually changed Frontend state to that CSV. This distinguishes rejection of a repeat selection from already-selected state. No separate CLEAR_GRAPH_OBJECT, persistent write, domain resolution or extra notification remains in the public asset wrapper; accepted SELECT_ASSET owns graph-object clear and preserves slot/workspace/Project. Case63 checks one event, copied target, repeat acceptance/rejection, query/adapter errors, and a rename between query and reference validation. Graph-editor id-based selection and image/directory selection are explicitly not claimed translated by this unit. Source39/pseudocode13 unchanged, code53 stale; review016/patch034 and runner results track bounded evidence, initially pending.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261018-015-code-csv-header-open.md b/agent_space/reviews/review-20261018-015-code-csv-header-open.md
+index 62900ae..c9cbc9c 100644
+--- a/agent_space/reviews/review-20261018-015-code-csv-header-open.md
++++ b/agent_space/reviews/review-20261018-015-code-csv-header-open.md
+@@ -14,7 +14,7 @@ Source39 and pseudocode13 remain unchanged/current. This unit directly translate
+ 
+ ## Runner evidence
+ 
+-Implementation SHA `68368e08c7f3b20797f1f4c846e6cd3925d1ee44`: regression39101795207 **success**, cases1–62 passed in both inline and split; build39101795302 **success**, dist-only bot commit `ef36428e560e02a6457e9915a6942d810ced4bf9` fast-forwarded. Diagnostic versions39101795231 **failed** as disclosed: recorded previous digest `sha256:16c996c02e339c0a9cd118e65e881745623e0d6c546236623b275f8945e72cf1`, actual `sha256:3cf3203ee08c8f1bd0772a5f94f5caa9e245f85d38e2bb629c4a3cdc87501b8c`. Patch033 corrects metadata without changing code revision/semantics. Required cumulative version gate from baseline `cc4335c808b79c682b380243ecc4bc12d9285bfc` remains pending until the correction SHA is run. Preparation/checklists alone are not a pass.
++Implementation SHA `68368e08c7f3b20797f1f4c846e6cd3925d1ee44`: regression39101795207 **success**, cases1–62 passed in both inline and split; build39101795302 **success**, dist-only bot commit `ef36428e560e02a6457e9915a6942d810ced4bf9` fast-forwarded. Diagnostic versions39101795231 **failed** as disclosed: recorded previous digest `sha256:16c996c02e339c0a9cd118e65e881745623e0d6c546236623b275f8945e72cf1`, actual `sha256:3cf3203ee08c8f1bd0772a5f94f5caa9e245f85d38e2bb629c4a3cdc87501b8c`. Patch033 corrects metadata without changing code revision/semantics. Cumulative versions39101863743 **passed** at correction SHA `a6d6d2c35e1dde59e13f3ec159a1ede594b3927e` against baseline `cc4335c808b79c682b380243ecc4bc12d9285bfc`; push versions39101863300 also passed. Thus this bounded unit is verified; preparation-time pending entries above are superseded within this scope only. Preparation/checklists alone are not a pass.
+ 
+ ## Exclusions
+ 
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 21401f9..539e80c 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2331,6 +2331,71 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(63, "CSV selection queries copied authority then sends only one revalidated Frontend event", () => {
++      const query = readBackendProjection, send = interfaceFSM.send, validate = validateFrontendIntent,
++        saved = projectClone(activeProject._state), session = interfaceFSM.state,
++        csv = activeProject.csvFiles[0], path = projectAssetPath(csv), before = JSON.stringify(activeProject._state),
++        slot = selectedSlotId, workspace = appFSM.state.workspace;
++      let reads = 0, events = [], projection, reject = false, queryError = null, adapterError = null, stale = false;
++      const failure = Error("expected CSV selection error");
++      try {
++        readBackendProjection = (kind, request) => {
++          if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
++            reads++;
++            if (queryError) throw queryError;
++            const result = query(kind, request);
++            if (stale) {
++              const newer = projectClone(activeProject._state);
++              newer.assets.csvFiles.find((item) => item.id === csv.id).name = "renamed-after-selection-query.csv";
++              activeProject.initialize(newer);
++            }
++            projection = result;
++            return result;
++          }
++          return query(kind, request);
++        };
++        validateFrontendIntent = (event, payload) => reject && event === "SELECT_ASSET"
++          ? Object.freeze({ event, accepted: false }) : validate(event, payload);
++        interfaceFSM.send = function (event, payload) {
++          events.push(event);
++          if (adapterError) throw adapterError;
++          check(event === "SELECT_ASSET" && payload.kind === "csv" && payload.path === path &&
++            !Object.hasOwn(payload, "target") && !Object.hasOwn(payload, "candidate"), "selection supplied domain state or separate clear event");
++          return send.call(this, event, payload);
++        };
++        const selected = api.assets.selectCsv(path);
++        check(selected === projection.target && Object.isFrozen(selected) && selected !== getProjectCsv(csv.id) &&
++          selected.rows !== getProjectCsv(csv.id).rows && reads === 1 && events.join() === "SELECT_ASSET",
++          "CSV selection did not return detached query target via exactly one event");
++        check(appFSM.state.assetPath === path && appFSM.state.assetSelection === "csv" &&
++          appFSM.state.graphObjectIndex === null && appFSM.state.graphObject === "none" &&
++          selectedSlotId === slot && appFSM.state.workspace === workspace && JSON.stringify(activeProject._state) === before,
++          "selection changed Project/slot/workspace or failed to clear graph selection");
++        check(api.assets.selectCsv(path)?.id === csv.id, "accepted repeat selection returned rejection");
++        const stable = interfaceFSM.state, count = events.length;
++        check(api.assets.selectCsv("/missing.csv") === null && api.assets.selectCsv("/assets/csv") === null &&
++          events.length === count && interfaceFSM.state === stable, "invalid CSV selection changed Frontend");
++        reject = true;
++        check(api.assets.selectCsv(path) === null && interfaceFSM.state === stable && events.length === count,
++          "rejected repeat selection reported old selection as success");
++        reject = false;
++        queryError = failure; let caught;
++        try { api.assets.selectCsv(path); } catch (error) { caught = error; }
++        check(caught === failure && events.length === count && interfaceFSM.state === stable, "query failure was swallowed or selected");
++        queryError = null; adapterError = failure; caught = null;
++        try { api.assets.selectCsv(path); } catch (error) { caught = error; }
++        check(caught === failure && interfaceFSM.state === stable, "adapter failure was swallowed or changed Frontend");
++        adapterError = null; stale = true;
++        check(api.assets.selectCsv(path) === null && interfaceFSM.state === stable,
++          "stale query target bypassed Backend reference revalidation");
++        check(!/projectVfs|getProjectCsv|activeProject|CLEAR_GRAPH_OBJECT|notify\(/.test(selectProjectCsv.toString()),
++          "Application CSV selection owns Backend resolution or separate legacy effects");
++      } finally {
++        readBackendProjection = query; interfaceFSM.send = send; validateFrontendIntent = validate;
++        activeProject.initialize(saved); interfaceFSM.state = session;
++      }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index f45b32e..8a05ba7 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 52,
++      "revision": 53,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-015-code-csv-header-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-016-code-csv-selection-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 13,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index f9568ad..41276d6 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -5620,28 +5620,14 @@
+         });
+         status(`${match.path} 폴더를 선택했습니다.`);
+       }
+-      function selectCsvFromTree(path) {
+-        let slot = getSelectedSlot(),
+-          match = projectVfs.resolve(path),
+-          csv = match?.kind === "csv" ? match.asset : null;
+-        if (!csv) return status("프로젝트 CSV를 선택할 수 없습니다.");
+-        appFSM.send("CLEAR_GRAPH_OBJECT", {
+-          index: null,
+-          direction: "ui-to-fsm",
+-        });
+-        appFSM.send("SELECT_ASSET", {
+-          kind: "csv",
+-          path: projectAssetPath(csv),
+-          direction: "ui-to-fsm",
++      function selectProjectCsv(path) {
++        const resolved = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path });
++        if (resolved?.kind !== "csv") return null;
++        const previous = appFSM.state, state = appFSM.send("SELECT_ASSET", {
++          kind: "csv", path: resolved.path, direction: "ui-to-fsm",
+         });
+-        updateFileAvailability();
+-        if (!slot) {
+-          status(`${csv.name}을 선택했습니다.`);
+-          return;
+-        }
+-        if (slot.contentType === "image")
+-          return status(`${csv.name}을 선택했습니다. 그래프 슬롯에서만 새 그래프를 추가할 수 있습니다.`);
+-        status(`${csv.name}을 선택했습니다. 기존 그래프 데이터는 변경하지 않았습니다.`);
++        return state !== previous && state.assetSelection === "csv" && state.assetPath === resolved.path
++          ? resolved.target : null;
+       }
+       function selectImageFromTree(path) {
+         let slot = getSelectedSlot(),
+@@ -7735,7 +7721,7 @@
+           collisionModel: projectAssetImportCollisionModel,
+           resolveImportPlan: resolveProjectAssetImportPlan,
+           selectDirectory: selectDirectoryFromTree,
+-          selectCsv: selectCsvFromTree,
++          selectCsv: selectProjectCsv,
+           selectImage: selectImageFromTree,
+           download: downloadProjectAsset,
+         }),
+diff --git a/agent_space/reviews/review-20261018-016-code-csv-selection-open.md b/agent_space/reviews/review-20261018-016-code-csv-selection-open.md
+new file mode 100644
+index 0000000..5de1af3
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-016-code-csv-selection-open.md
+@@ -0,0 +1,24 @@
++# Code53 — public CSV asset selection (whole goal open)
++
++## Authority
++
++Source39 `sourcescript/application/public_api/assets.py:selectProjectCsv`, its public binding in `sourcescript/application/public_api/__init__.py`, and pseudocode13 `pseudocode/application/public_api/assets.pcal` already prescribe this operation. No upper meaning changes; Source Script stays highest authority. Code53 stays stale and TLC is optional/not run.
++
++## Prompt → artifact checklist
++
++- Current CSV identity/read-only copied output: `sourcecode/fast-figure.js:selectProjectCsv` queries official assets.readDeletionTarget and returns its detached target. Existing Backend immutable query from code52 is reused, not cached or made authority. Case63 checks reference/row detachment and freezing.
++- Missing/wrong kind: null before Frontend event, no status/notify/clear. Case63 tests missing and directory paths with state identity unchanged.
++- Valid CSV scalar intent: exactly one SELECT_ASSET with canonical path/kind, no projection/candidate; existing Backend reference validation re-resolves current authority before Frontend transition. Case63 checks one event and a rename between query and validation.
++- Accepted event clears graph-object selection while preserving Project/slot/workspace. Existing Frontend SELECT_ASSET owns that transition; no standalone CLEAR_GRAPH_OBJECT remains. Case63 verifies preserved state and graph clear.
++- Rejection returns null, including already-selected CSV: compare returned Frontend state with the pre-event state because a rejected adapter event returns the old state. Accepted repeat selection still produces new state. Case63 covers both.
++- Original query/adapter errors propagate without successful selection. Case63 checks exact exception identity and Frontend unchanged.
++- Public assets.selectCsv binds directly to the Source-named operation. No intermediate legacy bridge or domain mutation added.
++- Code53 metadata keeps Source39/pseudocode13 derivations and stale status. Canonical runner digest initially awaits Actions output (preceding digest intentionally retained until diagnostic correction).
++
++## Verification
++
++Pending: regression63 inline +63 split, build at identified implementation SHA, and cumulative canonical version check against a6d6d2c35e1dde59e13f3ec159a1ede594b3927e. All execution on GitHub Actions default runner, none locally. Preparation and checklists are not proof of pass.
++
++## Not covered
++
++Graph-editor id-based CSV selection and image/directory selection remain separate legacy paths, not declared current. Broader asset mutations, graph normalization, import, raster/supplied-renderer integration and whole Plan023 remain open. Code52's bounded evidence is in review015; it does not prove this new unit.
