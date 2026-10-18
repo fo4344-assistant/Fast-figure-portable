@@ -181,6 +181,10 @@ Baseline34ab3ca6b830be9c9ebb04753c376a40e8ca0919. Source41/pseudocode18 already 
 
 Unit28 bounded evidence: atfce2d07401d6441bf8baa3e5b8392c1ad35bb4e8 build39122086946 PASS; initial regression39122086987 prior84+86 PASS,85 expected-fixture flat/content TypeError fixed test-only in patch079. Atccf5a20e28f94fab35685965989993f4775ca594 regression39122153730 PASS86 inline+86 split/172 records and cumulative39122154111 PASS from34ab3ca6b830be9c9ebb04753c376a40e8ca0919. Canonical code72 sha256:b52f1f21a4d0344f0ed3c677701ad444c9e5c5fd2b3b46c21ab9abd10a67dd28; Source41/pseudocode18 unchanged, runtime/build inputs unchanged. Review030 prompt-to-artifact audit covers bounded contract, not whole completion; code remains stale/open.
 
+## Twenty-ninth bounded implementation unit — current-authority slot reset
+
+Baseline b5a08902523a1c069022f23421815ad2345ea056. Source41/pseudocode18 require explicit visible target IDs, configured slot-local defaults and owned-chart removal in one validated candidate. Code73 adds current-source capture/retry/single commit/actual changed facts and removes unconditional asset selection clearing/status from Application; committed-only render and None/error boundary. Cases87/88 cover actual defaults/isolated Project change/assets/other-slot preservation, explicit hidden/invalid references, validation/noncommit/current retry and postcommit render error. Review031/patch081 track pending Actions88+88/build/canonical gate. Whole code stale/open; no upstream semantic change.
+
 ## Temporary-file rule
 
 The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.

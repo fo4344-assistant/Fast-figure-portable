@@ -1072,21 +1072,32 @@
         machine.assertWritable("charts", "SLOTS_RESET");
         machine.assertWritable("workspace", "SLOTS_RESET");
         machine.assertWritable("editor", "SLOTS_RESET");
-        let slotIds=new Set((Array.isArray(payload.slotIds)?payload.slotIds:[payload.slotId])
-          .map(Number).filter(Number.isInteger)),
-          currentTargets=activeProject.slots.filter(slot=>slotIds.has(slot.id));
-        if(!currentTargets.length||currentTargets.length!==slotIds.size)
-          throw Error("초기화할 슬롯이 없습니다.");
-        let candidate=projectClone(activeProject._state);
-        normalizeSlotContents(candidate.slots);
-        let targets=candidate.slots.filter(slot=>slotIds.has(slot.id)),
-          chartIds=new Set(targets.map(slot=>slot.chart).filter(Number.isInteger));
-        candidate.charts=candidate.charts.filter(chart=>!chartIds.has(chart.id));
-        targets.forEach(resetSlotLocalState);
-        validateProjectObjectState(candidate,{requireSlots:true});
-        activeProject.initialize(candidate);
-        payload.resetCount=targets.length;
-        payload.removedChartIds=[...chartIds];
+        while (true) {
+          const source = activeProject._state;
+          if (!Array.isArray(payload.slotIds) || payload.slotIds.some(id => !Number.isInteger(id)))
+            throw Error("초기화할 explicit 슬롯 ID가 올바르지 않습니다.");
+          const ids = [...new Set(payload.slotIds)], targets = ids.map(id => source.slots.find(slot => slot.id === id && !slot.hidden));
+          if (targets.some(slot => !slot)) throw Error("초기화할 visible 슬롯이 없습니다.");
+          const candidate = projectClone(source);
+          normalizeSlotContents(candidate.slots);
+          const chartIds = new Set();
+          for (const id of ids) {
+            const slot = candidate.slots.find(slot => slot.id === id);
+            if (Number.isInteger(slot.chart)) chartIds.add(slot.chart);
+            slot.content = { ...projectClone(BackendSettings.defaults.slotSettings.content), chart: null, imageId: null };
+            slot.caption = null;
+          }
+          candidate.charts = candidate.charts.filter(chart => !chartIds.has(chart.id));
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const after = activeProject._state;
+          payload.changed = { slotIds: ids.filter(id => JSON.stringify(source.slots.find(slot => slot.id === id)) !==
+            JSON.stringify(after.slots.find(slot => slot.id === id))),
+            chartIds: source.charts.filter(chart => !after.charts.some(next => next.id === chart.id)).map(chart => chart.id),
+            csvIds: [], imageIds: [], assets: [] };
+          return;
+        }
       }
       function applySlotsSwappedAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOTS_SWAPPED");
@@ -5955,14 +5966,9 @@
         }) : null;
       }
       function resetSlotApi(slotId) {
-        let payload = { slotIds: [slotId], direction: "fsm-to-model" };
-        appFSM.send("SLOTS_RESET", payload);
-        appFSM.send("CLEAR_ASSET_SELECTION", { direction: "fsm-to-model" });
-        renderDashboard();
-        status("선택한 슬롯을 초기화했습니다.");
-        debugLog("slotReset:complete", {
-          slotId, removedChartIds: payload.removedChartIds,
-        });
+        const result = dispatchProjectCommand("SLOTS_RESET", { slotIds: [slotId] });
+        if (result.committed) renderDashboard();
+        return null;
       }
       function prepareDashboardFileDrop(slotId) {
         let slot = slotAt(slotId);

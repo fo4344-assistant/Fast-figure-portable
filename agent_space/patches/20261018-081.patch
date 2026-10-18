@@ -1,0 +1,239 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 0476256..b0e0936 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -181,6 +181,10 @@ Baseline34ab3ca6b830be9c9ebb04753c376a40e8ca0919. Source41/pseudocode18 already
+ 
+ Unit28 bounded evidence: atfce2d07401d6441bf8baa3e5b8392c1ad35bb4e8 build39122086946 PASS; initial regression39122086987 prior84+86 PASS,85 expected-fixture flat/content TypeError fixed test-only in patch079. Atccf5a20e28f94fab35685965989993f4775ca594 regression39122153730 PASS86 inline+86 split/172 records and cumulative39122154111 PASS from34ab3ca6b830be9c9ebb04753c376a40e8ca0919. Canonical code72 sha256:b52f1f21a4d0344f0ed3c677701ad444c9e5c5fd2b3b46c21ab9abd10a67dd28; Source41/pseudocode18 unchanged, runtime/build inputs unchanged. Review030 prompt-to-artifact audit covers bounded contract, not whole completion; code remains stale/open.
+ 
++## Twenty-ninth bounded implementation unit — current-authority slot reset
++
++Baseline b5a08902523a1c069022f23421815ad2345ea056. Source41/pseudocode18 require explicit visible target IDs, configured slot-local defaults and owned-chart removal in one validated candidate. Code73 adds current-source capture/retry/single commit/actual changed facts and removes unconditional asset selection clearing/status from Application; committed-only render and None/error boundary. Cases87/88 cover actual defaults/isolated Project change/assets/other-slot preservation, explicit hidden/invalid references, validation/noncommit/current retry and postcommit render error. Review031/patch081 track pending Actions88+88/build/canonical gate. Whole code stale/open; no upstream semantic change.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index e423a11..a844af6 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3611,6 +3611,102 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++
++    await run(87, "Slot reset restores config local defaults and removes only owned chart", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard;
++      try {
++        api.layout.setGrid(2, 2);
++        const [target, other] = activeProject.slots.filter(slot => !slot.hidden);
++        const csv = createProjectCsv([["X", "Y"], [1, 2]], "reset-contract.csv");
++        // Build this test's owned chart independently of earlier cases.
++        api.slots.reset(target.id); select(slotAt(target.id)); api.graphs.addObject(csv.id);
++        const chartId = slotAt(target.id).chart;
++        const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'), "reset.svg", "image/svg+xml");
++        const prepared = projectClone(activeProject._state); normalizeSlotContents(prepared.slots);
++        const first = prepared.slots.find(slot => slot.id === target.id), second = prepared.slots.find(slot => slot.id === other.id);
++        first.caption = "owned caption"; first.content.imageSettings = { fit: "manual", scale: 130, x: 2, y: 3 };
++        second.content.imageId = image.id; second.content.contentType = "image"; second.caption = "other caption";
++        second.content.imageSettings = { fit: "manual", scale: 150, x: 4, y: 5 };
++        initialize.call(activeProject, prepared);
++        select(slotAt(other.id)); api.assets.selectCsv(projectAssetPath(getProjectCsv(csv.id)));
++        const path = interfaceFSM.state.assetPath, before = projectClone(activeProject._state);
++        let commits = 0, paints = 0, result;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        projectEFSM.send = function (event, payload) {
++          if (event === "SLOTS_RESET") check(Object.keys(payload).join(",") === "slotIds" &&
++            payload.slotIds.length === 1 && payload.slotIds[0] === target.id, "reset wrapper passed model or selected target");
++          return result = send.call(this, event, payload);
++        };
++        renderDashboard = () => { paints++; };
++        check(api.slots.reset(target.id) === null, "reset exposed internal result");
++        const expected = before.slots.find(slot => slot.id === target.id);
++        Object.assign(expected.content || expected, projectClone(BackendSettings.defaults.slotSettings.content), { chart: null, imageId: null });
++        expected.caption = null; before.charts = before.charts.filter(chart => chart.id !== chartId);
++        check(JSON.stringify(before) === JSON.stringify(activeProject._state) && commits === 1 && paints === 1 &&
++          !getChart(chartId) && getProjectCsv(csv.id) && getProjectImage(image.id), "reset changed placement/assets/other slot or failed defaults");
++        check(interfaceFSM.state.assetPath === path && interfaceFSM.readState().selectedSlotId === other.id,
++          "reset unconditionally cleared asset or selected slot");
++        check(Object.isFrozen(result.changed) && result.changed.slotIds.join(",") === String(target.id) &&
++          result.changed.chartIds.join(",") === String(chartId) && result.changed.csvIds.length === 0 &&
++          result.changed.imageIds.length === 0 && result.changed.assets.length === 0, "reset actual changed facts wrong");
++        projectEFSM.send = send;
++        check(api.slots.reset(other.id) === null && slotAt(other.id).imageId === null && slotAt(other.id).caption === null &&
++          JSON.stringify(slotAt(other.id).imageSettings) === JSON.stringify(DEFAULT_IMAGE_SETTINGS) &&
++          getProjectImage(image.id) && interfaceFSM.state.assetPath === path, "image reset deleted asset/defaults/selection");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(88, "Slot reset rejects hidden references, retries latest payload and gates success", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
++        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult, failure = Error("reset boundary");
++      try {
++        api.layout.setGrid(2, 2);
++        const id = activeProject.slots.find(slot => !slot.hidden).id;
++        const prepared = projectClone(activeProject._state); normalizeSlotContents(prepared.slots);
++        prepared.slots.find(slot => slot.id === id).caption = "initial reset target"; initialize.call(activeProject, prepared);
++        let commits = 0, paints = 0, reconciliations = 0, caught;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = () => { paints++; };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        const source = activeProject._state, runtime = interfaceFSM.state;
++        for (const bad of [undefined, null, -1, String(id)]) {
++          caught = null; try { api.slots.reset(bad); } catch (error) { caught = error; }
++          check(caught && activeProject._state === source && interfaceFSM.state === runtime && commits === 0 && paints === 0 &&
++            reconciliations === 0, "invalid reset partially changed state");
++        }
++        validateProjectObjectState = () => { throw failure; };
++        caught = null; try { api.slots.reset(id); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && commits === 0 && paints === 0, "reset validation failure swallowed/partially committed");
++        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
++        check(api.slots.reset(id) === null && paints === 0 && reconciliations === 0, "reset noncommit ran success work"); projectEFSM.send = send;
++        let attempts = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const valid = validate(candidate, options);
++          if (options?.requireSlots && !attempts++) {
++            const newer = projectClone(activeProject._state); newer.meta.projectName = "latest reset authority";
++            newer.slots.find(slot => slot.id === id).caption = "new caption"; initialize.call(activeProject, newer);
++          }
++          return valid;
++        };
++        api.slots.reset(id); validateProjectObjectState = validate;
++        check(attempts === 2 && commits === 1 && paints === 1 && reconciliations === 1 &&
++          activeProject.projectName === "latest reset authority" && slotAt(id).caption === null, "reset committed stale candidate or multiple commits");
++        const hidden = projectClone(activeProject._state); hidden.slots.find(slot => slot.id === id).hidden = true;
++        initialize.call(activeProject, hidden); const hiddenSource = activeProject._state, count = commits;
++        caught = null; try { api.slots.reset(id); } catch (error) { caught = error; }
++        check(caught && activeProject._state === hiddenSource && commits === count, "reset accepted hidden target");
++        hidden.slots.find(slot => slot.id === id).hidden = false; hidden.slots.find(slot => slot.id === id).caption = "keep until commit";
++        initialize.call(activeProject, hidden); renderDashboard = () => { throw failure; };
++        caught = null; try { api.slots.reset(id); } catch (error) { caught = error; }
++        check(caught === failure && slotAt(id).caption === null, "postcommit reset renderer error swallowed/rolled back");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
++        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index f74ac7a..4b7c44d 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 72,
++      "revision": 73,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-030-code-slot-type-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-031-code-slot-reset-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 18,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 39ec3d1..917f8cd 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1072,21 +1072,32 @@
+         machine.assertWritable("charts", "SLOTS_RESET");
+         machine.assertWritable("workspace", "SLOTS_RESET");
+         machine.assertWritable("editor", "SLOTS_RESET");
+-        let slotIds=new Set((Array.isArray(payload.slotIds)?payload.slotIds:[payload.slotId])
+-          .map(Number).filter(Number.isInteger)),
+-          currentTargets=activeProject.slots.filter(slot=>slotIds.has(slot.id));
+-        if(!currentTargets.length||currentTargets.length!==slotIds.size)
+-          throw Error("초기화할 슬롯이 없습니다.");
+-        let candidate=projectClone(activeProject._state);
+-        normalizeSlotContents(candidate.slots);
+-        let targets=candidate.slots.filter(slot=>slotIds.has(slot.id)),
+-          chartIds=new Set(targets.map(slot=>slot.chart).filter(Number.isInteger));
+-        candidate.charts=candidate.charts.filter(chart=>!chartIds.has(chart.id));
+-        targets.forEach(resetSlotLocalState);
+-        validateProjectObjectState(candidate,{requireSlots:true});
+-        activeProject.initialize(candidate);
+-        payload.resetCount=targets.length;
+-        payload.removedChartIds=[...chartIds];
++        while (true) {
++          const source = activeProject._state;
++          if (!Array.isArray(payload.slotIds) || payload.slotIds.some(id => !Number.isInteger(id)))
++            throw Error("초기화할 explicit 슬롯 ID가 올바르지 않습니다.");
++          const ids = [...new Set(payload.slotIds)], targets = ids.map(id => source.slots.find(slot => slot.id === id && !slot.hidden));
++          if (targets.some(slot => !slot)) throw Error("초기화할 visible 슬롯이 없습니다.");
++          const candidate = projectClone(source);
++          normalizeSlotContents(candidate.slots);
++          const chartIds = new Set();
++          for (const id of ids) {
++            const slot = candidate.slots.find(slot => slot.id === id);
++            if (Number.isInteger(slot.chart)) chartIds.add(slot.chart);
++            slot.content = { ...projectClone(BackendSettings.defaults.slotSettings.content), chart: null, imageId: null };
++            slot.caption = null;
++          }
++          candidate.charts = candidate.charts.filter(chart => !chartIds.has(chart.id));
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const after = activeProject._state;
++          payload.changed = { slotIds: ids.filter(id => JSON.stringify(source.slots.find(slot => slot.id === id)) !==
++            JSON.stringify(after.slots.find(slot => slot.id === id))),
++            chartIds: source.charts.filter(chart => !after.charts.some(next => next.id === chart.id)).map(chart => chart.id),
++            csvIds: [], imageIds: [], assets: [] };
++          return;
++        }
+       }
+       function applySlotsSwappedAction({ machine, payload }) {
+         machine.assertWritable("slots", "SLOTS_SWAPPED");
+@@ -5955,14 +5966,9 @@
+         }) : null;
+       }
+       function resetSlotApi(slotId) {
+-        let payload = { slotIds: [slotId], direction: "fsm-to-model" };
+-        appFSM.send("SLOTS_RESET", payload);
+-        appFSM.send("CLEAR_ASSET_SELECTION", { direction: "fsm-to-model" });
+-        renderDashboard();
+-        status("선택한 슬롯을 초기화했습니다.");
+-        debugLog("slotReset:complete", {
+-          slotId, removedChartIds: payload.removedChartIds,
+-        });
++        const result = dispatchProjectCommand("SLOTS_RESET", { slotIds: [slotId] });
++        if (result.committed) renderDashboard();
++        return null;
+       }
+       function prepareDashboardFileDrop(slotId) {
+         let slot = slotAt(slotId);
+diff --git a/agent_space/reviews/review-20261018-031-code-slot-reset-open.md b/agent_space/reviews/review-20261018-031-code-slot-reset-open.md
+new file mode 100644
+index 0000000..ba0210c
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-031-code-slot-reset-open.md
+@@ -0,0 +1,19 @@
++# Slot reset current-authority translation (unit29)
++
++## Authority and scope
++
++Source41 backend/project_efsm.py SLOTS_RESET and application/public_api/layout.py resetSlot, followed by pseudocode18 backend/project_efsm.pcal SLOTS_RESET, already require explicit visible IDs, config SLOT_LOCAL_DEFAULTS payload reset plus owned chart removal in one candidate. Source remains highest; no new meaning or upstream edits. Code73 directly translates source capture, candidate-only changes/whole validation, authority-reference recheck/retry, single initialize and actual changed facts. Application sends slotIds only, renders only committed success, returns None and preserves original errors. Unconditional CLEAR_ASSET_SELECTION/status removed: normal reconciliation alone owns runtime selection.
++
++## Requirement-to-artifact checklist
++
++- Explicit target, no selected-slot substitution; missing/noninteger/hidden rejects: applySlotsResetAction, cases87/88.
++- Configured contentType/imageSettings, chart/image ref null, caption null, placements/other slots preserved: command, case87 exact Project comparison.
++- Owned chart removed; CSV/image assets/settings elsewhere preserved: command, case87 actual changed facts and separate image slot reset.
++- Candidate validates before commit, stale authority retries current source; original errors/noncommit have no success work: case88 validator/current-source instrumentation.
++- Application new fields only, None, committed-only render, normal reconciliation/no selection clearing: resetSlotApi, cases87/88.
++- Postcommit render error propagates without rollback: case88.
++- Source41/pseudocode18 unchanged; code73 stale. Whole integration/full graph schema/other commands/import/raster/dashboard remain open.
++
++## Execution evidence
++
++Pending actual GitHub Actions default-runner regression88+88/build/canonical digest and cumulative lineage gate. No local test/build/checker executed. Prior code72 digest provisional until runner diagnostics; no claim of passed version gate.

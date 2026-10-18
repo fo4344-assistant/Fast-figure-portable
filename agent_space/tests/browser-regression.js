@@ -3611,6 +3611,102 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+
+    await run(87, "Slot reset restores config local defaults and removes only owned chart", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard;
+      try {
+        api.layout.setGrid(2, 2);
+        const [target, other] = activeProject.slots.filter(slot => !slot.hidden);
+        const csv = createProjectCsv([["X", "Y"], [1, 2]], "reset-contract.csv");
+        // Build this test's owned chart independently of earlier cases.
+        api.slots.reset(target.id); select(slotAt(target.id)); api.graphs.addObject(csv.id);
+        const chartId = slotAt(target.id).chart;
+        const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'), "reset.svg", "image/svg+xml");
+        const prepared = projectClone(activeProject._state); normalizeSlotContents(prepared.slots);
+        const first = prepared.slots.find(slot => slot.id === target.id), second = prepared.slots.find(slot => slot.id === other.id);
+        first.caption = "owned caption"; first.content.imageSettings = { fit: "manual", scale: 130, x: 2, y: 3 };
+        second.content.imageId = image.id; second.content.contentType = "image"; second.caption = "other caption";
+        second.content.imageSettings = { fit: "manual", scale: 150, x: 4, y: 5 };
+        initialize.call(activeProject, prepared);
+        select(slotAt(other.id)); api.assets.selectCsv(projectAssetPath(getProjectCsv(csv.id)));
+        const path = interfaceFSM.state.assetPath, before = projectClone(activeProject._state);
+        let commits = 0, paints = 0, result;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        projectEFSM.send = function (event, payload) {
+          if (event === "SLOTS_RESET") check(Object.keys(payload).join(",") === "slotIds" &&
+            payload.slotIds.length === 1 && payload.slotIds[0] === target.id, "reset wrapper passed model or selected target");
+          return result = send.call(this, event, payload);
+        };
+        renderDashboard = () => { paints++; };
+        check(api.slots.reset(target.id) === null, "reset exposed internal result");
+        const expected = before.slots.find(slot => slot.id === target.id);
+        Object.assign(expected.content || expected, projectClone(BackendSettings.defaults.slotSettings.content), { chart: null, imageId: null });
+        expected.caption = null; before.charts = before.charts.filter(chart => chart.id !== chartId);
+        check(JSON.stringify(before) === JSON.stringify(activeProject._state) && commits === 1 && paints === 1 &&
+          !getChart(chartId) && getProjectCsv(csv.id) && getProjectImage(image.id), "reset changed placement/assets/other slot or failed defaults");
+        check(interfaceFSM.state.assetPath === path && interfaceFSM.readState().selectedSlotId === other.id,
+          "reset unconditionally cleared asset or selected slot");
+        check(Object.isFrozen(result.changed) && result.changed.slotIds.join(",") === String(target.id) &&
+          result.changed.chartIds.join(",") === String(chartId) && result.changed.csvIds.length === 0 &&
+          result.changed.imageIds.length === 0 && result.changed.assets.length === 0, "reset actual changed facts wrong");
+        projectEFSM.send = send;
+        check(api.slots.reset(other.id) === null && slotAt(other.id).imageId === null && slotAt(other.id).caption === null &&
+          JSON.stringify(slotAt(other.id).imageSettings) === JSON.stringify(DEFAULT_IMAGE_SETTINGS) &&
+          getProjectImage(image.id) && interfaceFSM.state.assetPath === path, "image reset deleted asset/defaults/selection");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(88, "Slot reset rejects hidden references, retries latest payload and gates success", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
+        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult, failure = Error("reset boundary");
+      try {
+        api.layout.setGrid(2, 2);
+        const id = activeProject.slots.find(slot => !slot.hidden).id;
+        const prepared = projectClone(activeProject._state); normalizeSlotContents(prepared.slots);
+        prepared.slots.find(slot => slot.id === id).caption = "initial reset target"; initialize.call(activeProject, prepared);
+        let commits = 0, paints = 0, reconciliations = 0, caught;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = () => { paints++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        const source = activeProject._state, runtime = interfaceFSM.state;
+        for (const bad of [undefined, null, -1, String(id)]) {
+          caught = null; try { api.slots.reset(bad); } catch (error) { caught = error; }
+          check(caught && activeProject._state === source && interfaceFSM.state === runtime && commits === 0 && paints === 0 &&
+            reconciliations === 0, "invalid reset partially changed state");
+        }
+        validateProjectObjectState = () => { throw failure; };
+        caught = null; try { api.slots.reset(id); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && commits === 0 && paints === 0, "reset validation failure swallowed/partially committed");
+        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.slots.reset(id) === null && paints === 0 && reconciliations === 0, "reset noncommit ran success work"); projectEFSM.send = send;
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) {
+            const newer = projectClone(activeProject._state); newer.meta.projectName = "latest reset authority";
+            newer.slots.find(slot => slot.id === id).caption = "new caption"; initialize.call(activeProject, newer);
+          }
+          return valid;
+        };
+        api.slots.reset(id); validateProjectObjectState = validate;
+        check(attempts === 2 && commits === 1 && paints === 1 && reconciliations === 1 &&
+          activeProject.projectName === "latest reset authority" && slotAt(id).caption === null, "reset committed stale candidate or multiple commits");
+        const hidden = projectClone(activeProject._state); hidden.slots.find(slot => slot.id === id).hidden = true;
+        initialize.call(activeProject, hidden); const hiddenSource = activeProject._state, count = commits;
+        caught = null; try { api.slots.reset(id); } catch (error) { caught = error; }
+        check(caught && activeProject._state === hiddenSource && commits === count, "reset accepted hidden target");
+        hidden.slots.find(slot => slot.id === id).hidden = false; hidden.slots.find(slot => slot.id === id).caption = "keep until commit";
+        initialize.call(activeProject, hidden); renderDashboard = () => { throw failure; };
+        caught = null; try { api.slots.reset(id); } catch (error) { caught = error; }
+        check(caught === failure && slotAt(id).caption === null, "postcommit reset renderer error swallowed/rolled back");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
