@@ -6388,7 +6388,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         await api.graphs.importFile(new File([JSON.stringify(imported)], "converted.json"), b.id);
         api.layout.mergeSlots([c.id, d.id]); api.slots.setContentType(c.id, "image");
         const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'), "surface.svg", "image/svg+xml");
-        api.assets.connectToSlot(image.path, "image", c.id);
+        api.assets.connectToSlot(projectAssetPath(image), "image", c.id);
         slotAt(c.id).content.imageSettings.extension = { preserved: true };
         const source = activeProject._state, frontend = interfaceFSM.state, before = JSON.stringify(source);
         let calculations = 0;
