@@ -1,0 +1,52 @@
+diff --git a/agent_space/reviews/review-20261018-027-code-image-create-open.md b/agent_space/reviews/review-20261018-027-code-image-create-open.md
+index f6e2151..5ae34a0 100644
+--- a/agent_space/reviews/review-20261018-027-code-image-create-open.md
++++ b/agent_space/reviews/review-20261018-027-code-image-create-open.md
+@@ -27,4 +27,4 @@ This is image asset create only, not slot image insertion/import/replacement or
+ 
+ ## Execution
+ 
+-Implementation f7c9be92e9b9763abf1c8dda861f0f36db1448dd: ubuntu-latest regression39120950810 PASS80 inline+80 split (160 passing case records, includes prior78); build39120950816 PASS. Artifacts inline6392195 bytes/split ZIP1734954 bytes; dist-only bot d96d5d8d625d154c9450bf92122bd949da9491ab inspected before fast-forward. Diagnostic39120950819 FAIL on provisional old code66 fingerprint ff5070966a9ba3998a3268c836837e0d2528e2e399d6299f889795fcd90fe832; actual code67 sha256:f09432917cb50732eea95b9a6b7794e98f370175a64622694b7941e53143fea3. Source41/pseudocode18 canonical unchanged. Patch067 records actual digest without runtime/test/upper edits. Corrected cumulative gate and repeat regression pending. Strict checker unchanged; no local application/test/checker/build executed.
++Implementation f7c9be92e9b9763abf1c8dda861f0f36db1448dd: ubuntu-latest regression39120950810 PASS80 inline+80 split (160 passing case records, includes prior78); build39120950816 PASS. Artifacts inline6392195 bytes/split ZIP1734954 bytes; dist-only bot d96d5d8d625d154c9450bf92122bd949da9491ab inspected before fast-forward. Diagnostic39120950819 FAIL on provisional old code66 fingerprint ff5070966a9ba3998a3268c836837e0d2528e2e399d6299f889795fcd90fe832; actual code67 sha256:f09432917cb50732eea95b9a6b7794e98f370175a64622694b7941e53143fea3. Source41/pseudocode18 canonical unchanged. Patch067 records actual digest without runtime/test/upper edits. At9a61401d3f19365deecbceb5c6e35448f768f101 cumulative versions39121012097 PASS fromc52bffa5828dcbd55e21dc2402855ea225034241 and repeat regression39121013641 PASS80+80. However bounded completion audit found a translation omission despite green tests: pseudocode/application/public_api/assets.pcal createProjectImage explicitly CopyBytes before dispatch, while code67 copied only inside Backend. Patch068/code68 copies binary bytes at Application boundary (base64 string already immutable); case79 mutates caller bytes in send spy before Backend execution and asserts command bytes remain detached/original. Source41 already requires copied byte ownership and pseudocode18 is direct: no upper meaning change. Thus prior green runs cover code67 only, not corrected68; actual updated build/regression/canonical/cumulative evidence pending. Strict checker unchanged; no local application/test/checker/build executed.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index a0f348c..3795505 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3230,6 +3230,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         projectEFSM.send = function (event, payload) {
+           check(event === "IMAGE_OBJECT_CREATED" && !Object.hasOwn(payload, "model") && !Object.hasOwn(payload, "candidate") &&
+             !Object.hasOwn(payload, "imageId"), "Application supplies authoritative image model");
++          if (commits === 0) {
++            bytes[0] = 99;
++            check(payload.bytes !== bytes && payload.bytes[0] === 0, "Application did not copy bytes before dispatch");
++          }
+           result = send.call(this, event, payload); return result;
+         };
+         readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") reads++;
+diff --git a/development-versions.json b/development-versions.json
+index 1d9c0b5..dcd6ac6 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 67,
++      "revision": 68,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 0cb2938..9bf274f 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -2879,7 +2879,8 @@
+         return model;
+       }
+       function createProjectImage(bytes, name, mime, id = null, path = null) {
+-        const result = dispatchProjectCommand("IMAGE_OBJECT_CREATED", { bytes, name, mime, id, path });
++        const copiedBytes = typeof bytes === "string" ? bytes : new Uint8Array(bytes || []),
++          result = dispatchProjectCommand("IMAGE_OBJECT_CREATED", { bytes: copiedBytes, name, mime, id, path });
+         if (!result.committed) return result;
+         const created = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image");
+         return appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: created.path }).target;

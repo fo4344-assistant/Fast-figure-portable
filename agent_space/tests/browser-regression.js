@@ -3230,6 +3230,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         projectEFSM.send = function (event, payload) {
           check(event === "IMAGE_OBJECT_CREATED" && !Object.hasOwn(payload, "model") && !Object.hasOwn(payload, "candidate") &&
             !Object.hasOwn(payload, "imageId"), "Application supplies authoritative image model");
+          if (commits === 0) {
+            bytes[0] = 99;
+            check(payload.bytes !== bytes && payload.bytes[0] === 0, "Application did not copy bytes before dispatch");
+          }
           result = send.call(this, event, payload); return result;
         };
         readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") reads++;

@@ -2879,7 +2879,8 @@
         return model;
       }
       function createProjectImage(bytes, name, mime, id = null, path = null) {
-        const result = dispatchProjectCommand("IMAGE_OBJECT_CREATED", { bytes, name, mime, id, path });
+        const copiedBytes = typeof bytes === "string" ? bytes : new Uint8Array(bytes || []),
+          result = dispatchProjectCommand("IMAGE_OBJECT_CREATED", { bytes: copiedBytes, name, mime, id, path });
         if (!result.committed) return result;
         const created = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image");
         return appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: created.path }).target;
