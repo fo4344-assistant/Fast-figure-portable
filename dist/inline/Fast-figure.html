@@ -14717,23 +14717,14 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
       function slotLocalState(slot) {
         const local = normalizeSlotContent(structuredClone(slot));
-        return {
-          chart: local.content.chart,
-          imageId: local.content.imageId,
-          contentType: local.content.contentType,
-          imageSettings: local.content.imageSettings,
-          caption: local.caption,
-        };
+        return { ...local.content, caption: local.caption };
       }
       function setSlotLocalState(slot, localState) {
-        normalizeSlotContent(slot);
-        let next = localState && typeof localState === "object" ? localState : SLOT_LOCAL_DEFAULTS;
-        slot.content.chart = Number.isInteger(next.chart) ? next.chart : null;
-        slot.content.imageId = Number.isInteger(next.imageId) ? next.imageId : null;
-        slot.content.contentType = next.contentType === "image" ? "image" : "graph";
-        slot.content.imageSettings = readImageSettings(next.imageSettings);
-        slot.caption = typeof next.caption === "string" ? next.caption : null;
-        return slot;
+        const next = structuredClone(localState || SLOT_LOCAL_DEFAULTS);
+        slot.content = { ...next };
+        delete slot.content.caption;
+        slot.caption = next.caption;
+        return normalizeSlotContent(slot);
       }
       function resetSlotLocalState(slot) {
         return setSlotLocalState(slot, SLOT_LOCAL_DEFAULTS);
