@@ -200,11 +200,14 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         [JSON.stringify({ data: [], layout: { title: "Blank graph" } })],
         "blank.json",
       ));
+      const originalCsvAssets = JSON.stringify(activeProject.csvFiles), originalNextCsv = activeProject._state.nextId.csv;
       api.graphs.setEditable(true);
       let currentSlot = slotAt(slot.id);
       const chart = getChart(currentSlot.chart);
       check(chart && chart.editor.objects.length === 0 && !Object.hasOwn(chart.editor, "conversionRows"),
         "blank chart is not zero-object or kept conversion-only rows");
+      check(JSON.stringify(activeProject.csvFiles) === originalCsvAssets && activeProject._state.nextId.csv === originalNextCsv,
+        "blank conversion allocated unreferenced synthetic CSV or consumed next-id");
       const file = ffsxFile(currentSlot);
       const payload = await ffsxReadSlot(file);
       check(payload.chart && payload.csvFiles.length === 0, "blank FFSX contains synthetic CSV");

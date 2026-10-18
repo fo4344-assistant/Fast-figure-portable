@@ -141,6 +141,8 @@ Twenty-second bounded unit: graphs.setEditable sends only slotId/chartId/editabl
 
 Unit22 initial evidence/fidelity: build39104652534 PASS at49c519c; regression39104652629 prior73+new75 PASS,74 failed because graph-selection test setup selected CSV. Setup corrected to selectAsset:false, no production weakening. Source41 conversionRows field explicitly requires removal after editable transition; PlusCal16 zero-object branch omission corrected in17 by moving RemoveField outside nonzero branch. Code64 records updated derivation with same runtime as63, actual runtime digest53a6e764f33db5b9c50bdb10106329a151f4a969611764e3caed0395767aa6ef from39104652606. New pseudo digest/cumulative gate/regression pending; whole remains open.
 
+Unit22 runner evidence: at6fee0c6248724c9e13a39bd5818d12fedaf0fae4 cumulative versions39104811673 PASS from86df1cf (automatic39104810958 PASS), repeat regression39104813416 PASS75 inline+75 split. Build39104652534 PASS at same runtime/build inputs49c519c. Bounded audit strengthens blank case4 to directly compare CSV assets/nextId, rather than infer no creation from FFSX's referenced-only package. Fresh test result pending; no runtime/lineage changes, whole code64 stale.
+
 ## Temporary-file rule
 
 The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
