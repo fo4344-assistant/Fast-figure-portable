@@ -1,0 +1,46 @@
+diff --git a/agent_space/reviews/review-20261018-047-code-package-import-open.md b/agent_space/reviews/review-20261018-047-code-package-import-open.md
+index 85e1410..0b2dc10 100644
+--- a/agent_space/reviews/review-20261018-047-code-package-import-open.md
++++ b/agent_space/reviews/review-20261018-047-code-package-import-open.md
+@@ -14,6 +14,10 @@ Code96 receives only explicit slot id plus detached raw file bytes; existing syn
+ - Case123: malformed input/invalid target/validation failure unchanged, exact original errors, noncommit skips success reads, replacement during validation recalculates new chart id and preserves newer metadata, late official read failure does not undo commit.
+ - Case124: actual Plotly bytes -> noneditable conversion chart -> real FFSX roundtrip to another slot; imported graph/rows preserved and no fake CSV created. Prior121 cases retain broader actual import/export/candidate checks.
+ 
++## First execution and fixture corrections
++
++At e4560664ed9a11e255df08561596ab1815226610, build39154524616/canonical39154524638/cumulative39154532882/fidelity39154534810 PASS; code96/pseudocode24 canonical digests match staged records. Build generated dist-only0ef09198270f65342359f6b77966bb3d62b1d0d5. Regression39154524628 prior121 plus124 PASS both forms;122 FAIL `TypeError: api.assets.createCsv is not a function`,123 FAIL `Error: package failed whole current-source retry`. Correct test122 to existing createProjectCsv and use the official Frontend readState selectedSlotId (the internal state uses a separate Frontend-owned scalar); no new public method invented. Correct test123's attempt counter to the explicit candidate validation options.requireSlots boundary: initialize also validates, including the fixture's own injected replacement and the final commit, so counting every validator invocation was not an attempt count. Preserve exact two candidate attempts/one commit/id/current metadata assertions, no runtime or upper change. Exact corrected-SHA124+124/repeat/build/gates pending. Do not call first regression passed.
++
+ ## Lineage, pending evidence and limits
+ 
+ Source45 unchanged e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7; pseudocode24 fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4; code96 52448be81eafaa1f6d06551fc8d7ca36cade75f6e25b29a3f6a597ca6157a18a remains stale. Digests calculated from staged Git path/blob identities, not local checker execution; canonical Actions confirmation pending. Exact-SHA124 inline+124 split/repeat/build/cumulative development-layer/fidelity PENDING. Static fidelity gate is not semantic proof. Whole common commit/other mutation owners, schema/serializer, raster/current-snapshot resources, supplied dashboard and timing/lifecycle requirements still open. No whole-goal closure from bounded tests or manifest. No explicit quota/auth/service blocker observed.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 27c7bfe..d27b2c5 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5477,7 +5477,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, createProjectState());
+         interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+         const [a, b] = activeProject.slots.filter(item => !item.hidden),
+-          csvItem = api.assets.createCsv([["X", "Y"], [1, 2]], "package-owned.csv");
++          csvItem = createProjectCsv([["X", "Y"], ["1", "2"]], "package-owned.csv");
+         select(a); api.graphs.addObject(csvItem.id); api.graphs.addObject(csvItem.id);
+         const packet = ffsxFile(slotAt(a.id)), local = await ffsxReadSlot(packet),
+           candidate = projectClone(activeProject._state);
+@@ -5504,7 +5504,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           chart.editor.objects.length === 2 && chart.editor.objects.every(item => item.csvId === expectedCsvId),
+           "package did not use one current candidate/new CSV mapping per real local reference");
+         check(JSON.stringify(actual.imageSettings) === settings && actual.content.packageExtension.preserve &&
+-          actual.caption === local.slot.caption && interfaceFSM.state.selectedSlotId === a.id &&
++          actual.caption === local.slot.caption && interfaceFSM.readState().selectedSlotId === a.id &&
+           interfaceFSM.state.graphObjectIndex === 1 && interfaceFSM.state.assetPath === projectAssetPath(csvItem),
+           "package reset local settings/extension or unrelated selection");
+         check(result.changed.csvIds.join() === String(expectedCsvId) && result.changed.slotIds.join() === String(b.id) &&
+@@ -5548,7 +5548,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0, expectedChartId;
+         validateProjectObjectState = function (candidate, options) {
+           const result = validate(candidate, options);
+-          if (++attempts === 1) {
++          if (options?.requireSlots && ++attempts === 1) {
+             const newer = projectClone(activeProject._state); newer.nextId.chart += 4;
+             newer.meta.projectName = "newer-package-source"; expectedChartId = newer.nextId.chart;
+             initialize.call(activeProject, newer);

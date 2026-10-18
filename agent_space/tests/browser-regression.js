@@ -5477,7 +5477,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, createProjectState());
         interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
         const [a, b] = activeProject.slots.filter(item => !item.hidden),
-          csvItem = api.assets.createCsv([["X", "Y"], [1, 2]], "package-owned.csv");
+          csvItem = createProjectCsv([["X", "Y"], ["1", "2"]], "package-owned.csv");
         select(a); api.graphs.addObject(csvItem.id); api.graphs.addObject(csvItem.id);
         const packet = ffsxFile(slotAt(a.id)), local = await ffsxReadSlot(packet),
           candidate = projectClone(activeProject._state);
@@ -5504,7 +5504,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           chart.editor.objects.length === 2 && chart.editor.objects.every(item => item.csvId === expectedCsvId),
           "package did not use one current candidate/new CSV mapping per real local reference");
         check(JSON.stringify(actual.imageSettings) === settings && actual.content.packageExtension.preserve &&
-          actual.caption === local.slot.caption && interfaceFSM.state.selectedSlotId === a.id &&
+          actual.caption === local.slot.caption && interfaceFSM.readState().selectedSlotId === a.id &&
           interfaceFSM.state.graphObjectIndex === 1 && interfaceFSM.state.assetPath === projectAssetPath(csvItem),
           "package reset local settings/extension or unrelated selection");
         check(result.changed.csvIds.join() === String(expectedCsvId) && result.changed.slotIds.join() === String(b.id) &&
@@ -5548,7 +5548,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         let attempts = 0, expectedChartId;
         validateProjectObjectState = function (candidate, options) {
           const result = validate(candidate, options);
-          if (++attempts === 1) {
+          if (options?.requireSlots && ++attempts === 1) {
             const newer = projectClone(activeProject._state); newer.nextId.chart += 4;
             newer.meta.projectName = "newer-package-source"; expectedChartId = newer.nextId.chart;
             initialize.call(activeProject, newer);
