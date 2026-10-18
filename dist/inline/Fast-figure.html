@@ -11099,22 +11099,45 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           return;
         }
       }
-      function applySlotImageLinkedAction({ machine, payload }) {
-        machine.assertWritable("slots","SLOT_IMAGE_LINKED");
-        machine.assertWritable("charts","SLOT_IMAGE_LINKED");
-        let slot=slotAt(payload.slotId),image=getProjectImage(payload.imageId);
-        if(!slot||!image)throw Error("이미지를 연결할 슬롯 또는 이미지가 없습니다.");
-        let candidate=projectClone(activeProject._state);
-        normalizeSlotContents(candidate.slots);
-        let target=candidate.slots.find(item=>item.id===slot.id),
-          oldChart=target.chart;
-        if(Number.isInteger(oldChart))
-          candidate.charts=candidate.charts.filter(chart=>chart.id!==oldChart);
-        target.chart=null;target.imageId=image.id;target.contentType="image";
-        target.content.imageSettings=readImageSettings(target.content.imageSettings);
-        validateProjectObjectState(candidate,{requireSlots:true});
-        activeProject.initialize(candidate);
-        payload.image=getProjectImage(image.id);
+      function applySlotImageLinkedAction(context) {
+        return applyProjectAssetConnectedAction(context, "image");
+      }
+      function applyProjectAssetConnectedAction({ machine, payload }, kind) {
+        const event = kind === "csv" ? "SLOT_DATA_CONNECTED" : "SLOT_IMAGE_LINKED";
+        machine.assertWritable("slots", event);
+        if (kind === "csv") machine.assertWritable("charts", event);
+        while (true) {
+          const source = activeProject._state,
+            slot = source.slots.find(item => item.id === payload.slotId && !item.hidden),
+            node = typeof payload.path === "string" ? projectVfs.resolve(payload.path, source) : null;
+          if (payload.kind !== kind || node?.kind !== kind || projectVfs.isTrashed(payload.path) ||
+              !slot || slot.contentType !== (kind === "csv" ? "graph" : "image"))
+            throw Error("연결할 현재 non-trash asset kind/path 또는 visible slot type이 올바르지 않습니다.");
+          const candidate = projectClone(source);
+          candidate.slots.forEach((item, index) => { item.content = projectClone(source.slots[index].content); });
+          normalizeSlotContents(candidate.slots);
+          const target = candidate.slots.find(item => item.id === slot.id);
+          let chart = null;
+          if (kind === "image") target.imageId = node.asset.id;
+          else {
+            chart = candidate.charts.find(item => item.id === target.chart);
+            if (chart?.editor?.editable === false) throw Error("편집 가능한 graph slot이 필요합니다.");
+            if (!chart) {
+              chart = createChartModel({ id: candidate.nextId.chart++, editor: { title: node.asset.name,
+                globalSettings: readGlobalSettings({ editor: {} }), plotlyExtensions: { layout: {}, config: {} }, objects: [] } });
+              candidate.charts.push(chart); target.chart = chart.id;
+            }
+            chart.editor.objects.push(createCandidateBaseGraphObject(candidate.assets.csvFiles.find(item => item.id === node.asset.id)));
+            rebuildEditableGraph(chart, candidate);
+          }
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          payload.changed = { slotIds: slot.chart !== target.chart || slot.imageId !== target.imageId ? [slot.id] : [],
+            chartIds: chart ? [chart.id] : [], csvIds: [], imageIds: [], assets: [] };
+          if (chart) payload.selectionHints = Object.freeze({ chartId: chart.id, selectedIndexHint: null });
+          return;
+        }
       }
       function createCandidateBaseGraphObject(csv) {
         const selection = graphDataSelection(csv.rows, csv.headerLines);
@@ -11150,55 +11173,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         }
       }
       function applySlotDataConnectedAction(context) {
-        const { machine, payload } = context;
-        if (payload.operation === "graphs.addObject") return applyGraphFirstObjectAction(context);
-        machine.assertWritable("slots","SLOT_DATA_CONNECTED");
-        machine.assertWritable("charts","SLOT_DATA_CONNECTED");
-        machine.assertWritable("editor","SLOT_DATA_CONNECTED");
-        let slot=slotAt(payload.slotId),csv=getProjectCsv(payload.csvId);
-        if(!slot||(!payload.replaceSlotContent&&slot.contentType==="image")||!csv)
-          throw Error("데이터를 연결할 슬롯 또는 CSV가 없습니다.");
-        if(slot.chart&&!payload.replaceSlotContent&&getChart(slot.chart)?.editor?.editable===false)
-          throw Error("편집 가능 토글을 켠 뒤 CSV를 추가하세요.");
-
-        let candidate=projectClone(activeProject._state);
-        normalizeSlotContents(candidate.slots);
-        let target=candidate.slots.find((item)=>item.id===slot.id),
-          candidateCsv=candidate.assets.csvFiles.find((item)=>item.id===csv.id);
-        if(payload.replaceSlotContent){
-          if(Number.isInteger(target.chart))
-            candidate.charts=candidate.charts.filter((chart)=>chart.id!==target.chart);
-          target.chart=null;
-          target.imageId=null;
-          target.contentType="graph";
-        }
-        let chart=Number.isInteger(target.chart)
-          ?candidate.charts.find((item)=>item.id===target.chart)
-          :null;
-        if(chart?.editor?.editable===false)
-          throw Error("편집 가능 토글을 켠 뒤 CSV를 추가하세요.");
-        if(chart){
-          let selection=graphDataSelection(candidateCsv.rows,candidateCsv.headerLines,chart.editor);
-          chart.editor.x=selection.x;
-          chart.editor.y=selection.y;
-          chart.editor.objects=[
-            ...(Array.isArray(chart.editor.objects)?chart.editor.objects:[]),
-            baseGraphObject(chart,candidateCsv),
-          ];
-        } else {
-          chart=createChartModel({
-            id:candidate.nextId.chart++,
-            editor:defaultChartEditor(target,candidateCsv.rows,candidateCsv.headerLines),
-          });
-          chart.editor.objects=[baseGraphObject(chart,candidateCsv)];
-          candidate.charts.push(chart);
-          target.chart=chart.id;
-        }
-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
-        let committed=getChart(chart.id);
-        if(committed?.editor?.editable!==false)rebuildEditableGraph(committed);
-        payload.chart=committed;
-        payload.clearGraphSelection=true;
+        if (context.payload.operation === "graphs.addObject") return applyGraphFirstObjectAction(context);
+        return applyProjectAssetConnectedAction(context, "csv");
       }
       function applyGraphObjectEditAction({ machine, payload }) {
         machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
@@ -13487,29 +13463,14 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           slots: projectObjects.read("slots"),
         };
       }
-      function connectProjectAssetToSlot(path, kind, slot) {
-        let match = projectVfs.resolve(path);
-        if (!match || match.kind !== kind || match.kind === "directory")
-          throw Error("드래그한 프로젝트 파일이 없습니다.");
-        if (projectVfs.isTrashed(projectAssetPath(match.asset)))
-          throw Error("휴지통의 파일은 슬롯에 연결할 수 없습니다.");
-        if (!slot || slot.hidden) throw Error("연결할 슬롯이 없습니다.");
-        if (match.kind === "csv")
-          appFSM.send("SLOT_DATA_CONNECTED", {
-            slotId: slot.id,
-            csvId: match.asset.id,
-            replaceSlotContent: slot.contentType === "image",
-            direction: "fsm-to-model",
-          });
-        else
-          appFSM.send("SLOT_IMAGE_IMPORTED", {
-            slotId: slot.id,
-            imageId: match.asset.id,
-            direction: "fsm-to-model",
-          });
-        setSelectedSlot(slot.id, "model-to-fsm");
+      function connectProjectAssetToSlot(path, kind, slotId) {
+        if (!["csv", "image"].includes(kind)) throw Error("연결할 asset kind가 올바르지 않습니다.");
+        const result = dispatchProjectCommand(kind === "csv" ? "SLOT_DATA_CONNECTED" : "SLOT_IMAGE_LINKED", { path, kind, slotId });
+        if (!result.committed) return null;
+        setSelectedSlot(slotId, "model-to-fsm");
         renderDashboard();
         status("프로젝트 파일을 슬롯에 연결했습니다.");
+        return null;
       }
       function headerLineCount(value, table = []) {
         const number = Number(value);
@@ -16380,7 +16341,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           ? { path, kind: match.kind } : null;
       }
       function connectProjectAssetPathToSlot(path, kind, slotId) {
-        return connectProjectAssetToSlot(path, kind, slotAt(slotId));
+        return connectProjectAssetToSlot(path, kind, slotId);
       }
       async function importProjectFileToSlot(file, slotId, choosePlan) {
         const target = readBackendProjection("slot-selection-context", { slotId }), kind = readAssetFileKind(file);
