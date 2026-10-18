@@ -10813,16 +10813,32 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       function applyDataObjectCreatedAction({ machine, payload }) {
         machine.assertWritable("data","DATA_OBJECT_CREATED");
         machine.assertWritable("files","DATA_OBJECT_CREATED");
-        let model=payload.model;
-        if(!model||activeProject.csvFiles.some((csv)=>csv.id===model.id))
-          throw Error(`CSV ID ${model?.id}가 중복되었습니다.`);
-        let candidate=projectClone(activeProject._state),
-          next=projectClone(model);
-        projectVfs.prepare(next,"csv",candidate);
-        candidate.assets.csvFiles.push(next);
-        candidate.nextId.csv=Math.max(candidate.nextId.csv,next.id+1);
-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
-        payload.csv=getProjectCsv(next.id);
+        while (true) {
+          const source = activeProject._state, candidate = projectClone(source),
+            rows = projectClone(dataTable(payload.data)),
+            requested = payload.path || `${PROJECT_ASSET_DIRECTORIES.csv}/${projectCsvName(payload.name)}`,
+            normalized = normalizeProjectPath(requested), directory = projectParentPath(normalized);
+          if (!source.fileSystem.directories.includes(directory)) throw Error("CSV 상위 directory가 없습니다.");
+          const path = projectVfs.uniquePath(directory, projectPathName(normalized), source),
+            id = payload.id == null ? source.nextId.csv : payload.id;
+          if (!Number.isInteger(id) || id <= 0 || source.assets.csvFiles.some(csv => csv.id === id))
+            throw Error(`CSV ID ${id}가 올바르지 않거나 중복되었습니다.`);
+          const original = payload.bytesBase64,
+            bytesBase64 = original != null && original !== "" ?
+              (ffpxBase64ToBytes(original), original) : ffpxBytesToBase64(serializeNewDataTable(rows, path)),
+            csv = { id, rows, bytesBase64, mime: payload.mime || "text/csv",
+              headerLines: headerLineCount(payload.headerLines, rows),
+              directory: projectParentPath(path), name: projectPathName(path) };
+          candidate.assets.csvFiles.push(csv);
+          candidate.nextId.csv = Math.max(candidate.nextId.csv, id + 1);
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const committed = activeProject._state.assets.csvFiles.find(item => item.id === id);
+          payload.changed = { slotIds: [], chartIds: [], csvIds: [id], imageIds: [],
+            assets: [{ role: "created", kind: "csv", id, path: projectAssetPath(committed), owners: [] }] };
+          return;
+        }
       }
       function applyAssetObjectReplacedAction({ machine, payload }, kind) {
         let image=kind==="image",
@@ -12813,21 +12829,12 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         headerLines = 1,
         path = null,
       ) {
-        let model = buildProjectCsvModel(
-          data,
-          name,
-          Number.isInteger(id) && id > 0 ? id : activeProject.csvId,
-          bytesBase64,
-          mime,
-          headerLines,
-        );
-        if (path) projectVfs.assignLocation(model, path);
-        appFSM.send("DATA_OBJECT_CREATED", {
-          model,
-          csvId: model.id,
-          direction: "fsm-to-model",
+        const result = dispatchProjectCommand("DATA_OBJECT_CREATED", {
+          data, name, id, bytesBase64, mime, headerLines, path,
         });
-        return model;
+        if (!result.committed) return result;
+        const created = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "csv");
+        return appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: created.path }).target;
       }
       function createEmptyProjectCsv() {
         return createProjectCsv(
@@ -15137,6 +15144,16 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         }
         return assets;
       }
+      function serializeNewDataTable(rows, path) {
+        const extension = String(path).toLowerCase();
+        if (extension.endsWith(".json")) return new TextEncoder().encode(JSON.stringify(rows));
+        const delimiter = extension.endsWith(".tsv") ? "\t" : ",",
+          cell = value => {
+            const text = value == null ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
+            return text.includes(delimiter) || /["\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+          };
+        return new TextEncoder().encode(rows.map(row => row.map(cell).join(delimiter)).join("\n"));
+      }
       function ffpxCsv(rows) {
         let quote = (value) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
         return (rows || [])
@@ -16075,10 +16092,9 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return csv;
       }
       function createEmptyProjectCsvAndSelect() {
-        let csv = createEmptyProjectCsv();
-        graphEditorSelectCsv(csv.id);
-        status(`${csv.name}을 만들고 선택했습니다.`);
-        return csv;
+        const csv = createEmptyProjectCsv();
+        if (csv?.committed === false) return csv;
+        return selectProjectCsv(projectAssetPath(csv));
       }
       function graphEditorSelectObject(index) {
         let input = validateFrontendIntent("SELECT_GRAPH_OBJECT", { index, selectedSlotId, selectAsset: true });
