@@ -1,0 +1,44 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index e56c6f2..82ea89b 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -85,7 +85,7 @@ Relocation code49 cumulative versions39100969744 and push versions39100969916 pa
+ 
+ ## Fifteenth implementation unit — CSV header candidate and actual-path read
+ 
+-Baseline `cc4335c808b79c682b380243ecc4bc12d9285bfc`. Code52 translates graphs.setHeaderLines to DATA_OBJECT_REPLACED with only csvId/new headerLines. Backend re-resolves the current CSV, preserves its bytes/rows/id/path, rebuilds affected editable figures within the candidate, validates and commits once, retrying if scalar conversion replaced authority. Actual immutable changed asset/owner facts provide the postcommit query path. The official assets.readDeletionTarget query supplies a fresh immutable target and reference list with original indices, counting frozen real CSV graphs but excluding conversion views. The public header wrapper gates its read/render on commit and no longer calculates or writes persistent fields. Cases61/62 cover read isolation/scope, numeric boundaries, actual command/query, failures/no-commit and stale-authority recalculation. Source39/pseudocode13 already specify these meanings and remain unchanged. Code52 stays stale. Review015 and patch032 track runner evidence, initially pending; no local execution. Broader graph/asset candidates/cascade, normalization/import and supplied-renderer/capture integration remain open.
++Baseline `cc4335c808b79c682b380243ecc4bc12d9285bfc`. Code52 translates graphs.setHeaderLines to DATA_OBJECT_REPLACED with only csvId/new headerLines. Backend re-resolves the current CSV, preserves its bytes/rows/id/path, rebuilds affected editable figures within the candidate, validates and commits once, retrying if scalar conversion replaced authority. Actual immutable changed asset/owner facts provide the postcommit query path. The official assets.readDeletionTarget query supplies a fresh immutable target and reference list with original indices, counting frozen real CSV graphs but excluding conversion views. The public header wrapper gates its read/render on commit and no longer calculates or writes persistent fields. Cases61/62 cover read isolation/scope, numeric boundaries, actual command/query, failures/no-commit and stale-authority recalculation. Source39/pseudocode13 already specify these meanings and remain unchanged. Code52 stays stale. Review015 and patch032 track runner evidence. At68368e08c7f3b20797f1f4c846e6cd3925d1ee44, regression39101795207 passed62 inline +62 split and build39101795302 passed; dist-only ef36428e560e02a6457e9915a6942d810ced4bf9 fast-forwarded. Diagnostic versions39101795231 supplied canonical digest3cf3203ee08c8f1bd0772a5f94f5caa9e245f85d38e2bb629c4a3cdc87501b8c; patch033 corrects metadata, cumulative gate pending. No local execution. Broader graph/asset candidates/cascade, normalization/import and supplied-renderer/capture integration remain open.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261018-015-code-csv-header-open.md b/agent_space/reviews/review-20261018-015-code-csv-header-open.md
+index 1301156..62900ae 100644
+--- a/agent_space/reviews/review-20261018-015-code-csv-header-open.md
++++ b/agent_space/reviews/review-20261018-015-code-csv-header-open.md
+@@ -10,11 +10,11 @@ Source39 and pseudocode13 remain unchanged/current. This unit directly translate
+ - `sourcescript/backend/project_efsm.py` / `pseudocode/backend/project_efsm.pcal` prescribe current-authority candidate calculation, complete validation and actual changed facts. `applyDataObjectReplacedAction` resolves current CSV, changes only its header field while preserving original bytes/rows/id/path, rebuilds affected editable figures, validates before commit, and retries if conversion replaced authority. Immutable changed fields include asset role/id/path/owners. Case62 covers finite/truncation/clamp boundaries, conversion/validation errors, missing CSV, one commit and stale-authority recalculation.
+ - `sourcescript/backend/project_state.py` assets.readDeletionTarget and `sourcescript/backend/assets_files.py:collectAssetReferences` / corresponding PlusCal helpers prescribe detached query results, original object positions, frozen real graph references and conversion-view exclusion. Backend query copies and recursively freezes its result; `collectAssetReferences` counts duplicate real references at original positions and image slot links. Case61 covers these scopes, repeated copy identity, missing/directory paths and no authority mutation.
+ - Shared `headerLineCount` finite fallback is now zero for nonfinite numbers, matching the upper normalization rule; existing callers retain truncation and row-bound clamping. Existing60 cases remain regression coverage, not proof of whole-goal closure.
+-- `development-versions.json`: code52 stale with unchanged upper derivations. Canonical runner fingerprint pending; previous digest deliberately retained until GitHub checkout reports the exact new digest. No local app/checker/build execution.
++- `development-versions.json`: code52 stale with unchanged upper derivations. Canonical runner fingerprint `sha256:3cf3203ee08c8f1bd0772a5f94f5caa9e245f85d38e2bb629c4a3cdc87501b8c` recorded by patch033 from actual Actions output; cumulative gate still pending at preparation time. No local app/checker/build execution.
+ 
+ ## Runner evidence
+ 
+-Pending for this unit. Required: regression62 inline +62 split, canonical version gate from baseline `cc4335c808b79c682b380243ecc4bc12d9285bfc`, and distribution build at an identified implementation SHA. Preparation/checklists alone are not a pass.
++Implementation SHA `68368e08c7f3b20797f1f4c846e6cd3925d1ee44`: regression39101795207 **success**, cases1–62 passed in both inline and split; build39101795302 **success**, dist-only bot commit `ef36428e560e02a6457e9915a6942d810ced4bf9` fast-forwarded. Diagnostic versions39101795231 **failed** as disclosed: recorded previous digest `sha256:16c996c02e339c0a9cd118e65e881745623e0d6c546236623b275f8945e72cf1`, actual `sha256:3cf3203ee08c8f1bd0772a5f94f5caa9e245f85d38e2bb629c4a3cdc87501b8c`. Patch033 corrects metadata without changing code revision/semantics. Required cumulative version gate from baseline `cc4335c808b79c682b380243ecc4bc12d9285bfc` remains pending until the correction SHA is run. Preparation/checklists alone are not a pass.
+ 
+ ## Exclusions
+ 
+diff --git a/development-versions.json b/development-versions.json
+index b220460..f45b32e 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,7 +38,7 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:16c996c02e339c0a9cd118e65e881745623e0d6c546236623b275f8945e72cf1",
++      "fingerprint": "sha256:3cf3203ee08c8f1bd0772a5f94f5caa9e245f85d38e2bb629c4a3cdc87501b8c",
+       "derived_from": {
+         "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+         "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
