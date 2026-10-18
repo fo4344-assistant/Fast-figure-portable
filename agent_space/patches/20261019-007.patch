@@ -1,0 +1,311 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 6960f37..751fcd1 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -295,6 +295,10 @@ Baseline8b3222667ee8fc24e90fb2ebb1fce6ff59888ef1. Source45 assets_files TYPED_XM
+ 
+ Unit49 bounded evidence: implementation795b3031075c2acced5db7c24d835b74c339c108 push39166197880/manual repeat39166197778 PASS130 inline+130 split each (260 actual pass log lines per run). Build39166197853 PASS generated dist-only7dc0253004f74b2b1db5812ea00170beef116c35. Canonical39166197859/cumulative39166200944(base8b3222667ee8fc24e90fb2ebb1fce6ff59888ef1)/fidelity39166203159 PASS at implementation SHA. Code100 stays stale; review003/patch006 retain actual evidence and residual audit. Next confirmed gap: PlusCal DecodeNamedXml requires one direct named wrapper/one value, runtime named/slot parser selectors use first-match. Close actual FFPX/FFSX consumers with adversarial packages, not helper-only proxy proof. Full package/schema/initializer/raster/dashboard/timing and exhaustive requirements audit remain open.
+ 
++### Fiftieth bounded unit — direct package XML wrapper translation
++
++Baseline5d7475c44f3c8de1a066972d0e7add5d580760f4. Source45/PlusCal24 unchanged: DecodeNamedXml and actual FFPX/FFSX document procedures require single direct wrappers/value children and direct metadata collection. Code101 replaces first-match/deep-descendant parsing with ffpxDirectChild/ffpxWrappedValue across actual readers. Cases131/132 exercise valid and adversarial ZIP-level wrapper duplication/removal/nesting/excess values and preserve authority identity. Review agent_space/reviews/review-20261019-004-code-package-wrappers-open.md and pair20261019-007 record mapping, rejected alternatives, untested scopes. Exact-SHA132 inline+split/repeat/build/canonical+cumulative/fidelity pending; code stays stale and comprehensive Plan023 audit remains open. Atomic gh delivery exception retained for immediate-parent code+lineage gates, ordinary documentation remains Contents API.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261019-004-code-package-wrappers-open.md b/agent_space/reviews/review-20261019-004-code-package-wrappers-open.md
+new file mode 100644
+index 0000000..c1937be
+--- /dev/null
++++ b/agent_space/reviews/review-20261019-004-code-package-wrappers-open.md
+@@ -0,0 +1,26 @@
++# Plan023 Unit50 — package XML wrappers (open)
++
++Baseline5d7475c44f3c8de1a066972d0e7add5d580760f4. Preflight clean; latest documentation lineage39166362214 PASS. Unit49 implementation795b3031075c2acced5db7c24d835b74c339c108 regression39166197880/repeat39166197778 PASS130 inline+130 split each; build39166197853/canonical39166197859/cumulative39166200944/fidelity39166203159 PASS. Do not repeat completed caption or codec work.
++
++## Authority / direct mapping
++
++Source45 sourcescript/backend/assets_files.py ffpxReadProject/ffsxReadSlot require same-version package documents and one typed XML grammar. PlusCal24 pseudocode/backend/assets_files.pcal:760-767 DecodeNamedXml explicitly calls RequiredSingleDirectChild and RequiredSingleValueChild. ReadFfpxDocumentPayload at813 onward and ReadFfsxDocumentPayload at1016 onward explicitly require single direct slot, settings/caption/graphObjects/dataAssets/imageAssets, optional single graph/imageObject for FFPX, required graph for FFSX, direct ordered metadata children each with one value. Source/PlusCal unchanged: these are existing semantics, not a new format or blanket unknown-element rejection.
++
++Runtime sourcecode/fast-figure.js now translates those operations through ffpxDirectChild(root,name,optional), ffpxWrappedValue(node), ffpxNamedValue(root,name). Actual FFPX/FFSX consumers use these for document/slot/chart settings, caption, graph/image optional singleton, graphObjects and asset collections. No deep descendant CSV/image collection; preserve direct-child input order. One shared typed codec; no state write introduced. Typed object duplicate property names still use last assignment; wrapper singleton requirements do not redefine that separate rule. Rejected first-match malformed compatibility, helper-only fix, a second package parser, and Source changes to excuse runtime behavior.
++
++## Verification / coverage limits
++
++Case131 builds a real CSV/chart FFPX ZIP, tests valid read, then corrupts document wrappers, direct slot/chart/collection wrappers by duplication/removal/nesting, and excess values in settings/graphObject/dataAsset. Case132 does the corresponding FFSX ZIP path including required graph. Fixtures acquire current slot after the graph commit; no stale slot object is treated as authority. Both assert Project/Frontend identity remains unchanged during parsing. FFPX optional graph absence is deliberately not rejected here; whole Backend reference/type validation owns it. Existing cumulative image/package tests exercise valid optional image nodes; additional malicious image metadata cases may still be needed. No claim these cases cover all schema/ZIP/dataRef/serializer/raster/initializer/dashboard/timing contracts.
++
++Code101 sha256:39c6904b4bf679c043a95cb68853731452f1a930ea122337c89c8b6e73949577 remains stale, derives unchanged Source45/PlusCal24. Exact-SHA132 inline+132 split/repeat/build/canonical+cumulative versions/fidelity pending. No local application/test/build/checker or optional TLC. Dist generator-only; default ubuntu-latest workflow unchanged.
++
++## Completion checklist status
++
++- Source hierarchy / policy / one authority: bounded mapping above; global audit OPEN.
++- Package wrapper direct translation: implementation and131/132 written; runner results PENDING.
++- Whole assets/import/schema/serializer coverage: OPEN, including global initializer and remaining package constraints.
++- Raster/resources/current snapshot/dashboard/timing: OPEN.
++- Exhaustive prompt-to-artifact requirements inventory and semantic coverage audit: OPEN; green regression/fidelity alone insufficient.
++- Exact-SHA cumulative/repeat/build/lineage/fidelity: PENDING.
++- Patch007/Plan023/this review/lineage101 recorded. Atomic gh Git Data publication is limited to this coherent code+lineage bundle because immediate-parent code/revision gates demonstrably reject sequential Contents writes; check actual parent/blob/new-path/ref, no force. This is the existing documented exception, not ordinary default file delivery.
++- No auth/service/quota blocker observed; full objective NOT complete. Never update_goal complete while any required item remains uncertain.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index d768b02..af84b44 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5857,6 +5857,97 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       check(activeProject._state === project && interfaceFSM.state === frontend, "typed writer mutated authority");
+     });
+ 
++    await run(131, "FFPX rejects ambiguous direct wrappers and metadata values through actual ZIP parsing", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        initialize.call(activeProject, createProjectState());
++        const target = activeProject.slots[0]; select(target);
++        const csv = createProjectCsv([["x", "y"], [1, 2]], "wrappers.csv"); api.graphs.addObject(csv.id);
++        const entries = ffpxBuildProject().assets, slotName = `slots/slot-${target.id}.xml`,
++          project = activeProject._state, frontend = interfaceFSM.state;
++        const read = (name, selector, mode) => {
++          const changed = entries.map(entry => {
++            if (entry.name !== name) return entry;
++            const doc = new DOMParser().parseFromString(new TextDecoder().decode(entry.data), "application/xml"),
++              node = doc.querySelector(selector);
++            check(node, `missing FFPX test mutation target ${name}/${selector}`);
++            if (mode === "duplicate") node.parentNode.append(node.cloneNode(true));
++            else if (mode === "remove") node.remove();
++            else if (mode === "nested") { const wrapper = doc.createElement("nested"); node.replaceWith(wrapper); wrapper.append(node); }
++            else node.append(node.firstElementChild.cloneNode(true));
++            return { ...entry, data: new TextEncoder().encode(new XMLSerializer().serializeToString(doc)) };
++          });
++          return ffpxReadProjectBytes(ffpxZipStore(changed));
++        };
++        check(ffpxReadProjectBytes(ffpxZipStore(entries)).charts.length === 1, "valid FFPX wrapper roundtrip failed");
++        const probes = [
++          ["project.xml", "fastFigureProject > settings"], ["layout/layout.xml", "fastFigureLayout > layout"],
++          ["caption/caption.xml", "fastFigureCaption > caption"], ["labels/labels.xml", "fastFigureLabels > labels"],
++          ["assets/assets.xml", "dataAssets"], ["assets/assets.xml", "imageAssets"],
++          [slotName, "fastFigureSlot > slot"], [slotName, "slot > settings"], [slotName, "slot > caption"],
++          [slotName, "slot > graph"], [slotName, "graph > settings"], [slotName, "graph > graphObjects"],
++        ];
++        for (const [name, selector] of probes) for (const mode of ["duplicate", "remove", "nested"]) {
++          // Graph is optional in FFPX; absence is a Backend reference/type validation concern.
++          if (selector === "slot > graph" && mode !== "duplicate") continue;
++          let failed = false; try { read(name, selector, mode); } catch (_) { failed = true; }
++          check(failed, `FFPX accepted ${name}/${selector}/${mode}`);
++        }
++        for (const [name, selector] of [["project.xml", "settings"], [slotName, "slot > settings"],
++          [slotName, "graph > settings"], [slotName, "graphObject"], ["assets/assets.xml", "dataAsset"]]) {
++          let failed = false; try { read(name, selector, "excessValue"); } catch (_) { failed = true; }
++          check(failed, `FFPX accepted excess value in ${selector}`);
++        }
++        check(activeProject._state === project && interfaceFSM.state === frontend, "FFPX parsing changed authority");
++      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++    await run(132, "FFSX rejects ambiguous slot graph and CSV wrappers through actual ZIP parsing", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        initialize.call(activeProject, createProjectState());
++        const target = activeProject.slots[0]; select(target);
++        const csv = createProjectCsv([["x", "y"], [3, 4]], "wrappers.csv"); api.graphs.addObject(csv.id);
++        const current = slotAt(target.id), entries = ffsxBuildSlot(current, getChart(current.chart)).assets,
++          project = activeProject._state, frontend = interfaceFSM.state;
++        check(ffsxReadSlotBytes(ffpxZipStore(entries)).csvFiles.length === 1, "valid FFSX wrapper roundtrip failed");
++        for (const [name, selector] of [["slot.xml", "fastFigureSlot > slot"], ["slot.xml", "slot > settings"],
++          ["slot.xml", "slot > caption"], ["slot.xml", "slot > graph"], ["slot.xml", "graph > settings"],
++          ["slot.xml", "graph > graphObjects"], ["assets/assets.xml", "dataAssets"]]) {
++          for (const mode of ["duplicate", "remove", "nested"]) {
++            const changed = entries.map(entry => {
++              if (entry.name !== name) return entry;
++              const doc = new DOMParser().parseFromString(new TextDecoder().decode(entry.data), "application/xml"), node = doc.querySelector(selector);
++              check(node, `missing FFSX test target ${selector}`);
++              if (mode === "duplicate") node.parentNode.append(node.cloneNode(true));
++              else if (mode === "remove") node.remove();
++              else { const wrapper = doc.createElement("nested"); node.replaceWith(wrapper); wrapper.append(node); }
++              return { ...entry, data: new TextEncoder().encode(new XMLSerializer().serializeToString(doc)) };
++            });
++            let failed = false; try { ffsxReadSlotBytes(ffpxZipStore(changed)); } catch (_) { failed = true; }
++            check(failed, `FFSX accepted ${selector}/${mode}`);
++          }
++        }
++        for (const [name, selector] of [["slot.xml", "slot > settings"], ["slot.xml", "slot > caption"],
++          ["slot.xml", "graph > settings"], ["slot.xml", "graphObject"], ["assets/assets.xml", "dataAsset"]]) {
++          const changed = entries.map(entry => {
++            if (entry.name !== name) return entry;
++            const doc = new DOMParser().parseFromString(new TextDecoder().decode(entry.data), "application/xml"), node = doc.querySelector(selector);
++            check(node, `missing FFSX value target ${selector}`); node.append(node.firstElementChild.cloneNode(true));
++            return { ...entry, data: new TextEncoder().encode(new XMLSerializer().serializeToString(doc)) };
++          });
++          let failed = false; try { ffsxReadSlotBytes(ffpxZipStore(changed)); } catch (_) { failed = true; }
++          check(failed, `FFSX accepted excess typed value in ${selector}`);
++        }
++        check(activeProject._state === project && interfaceFSM.state === frontend, "FFSX parsing changed authority");
++      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 4a8a3e4..4232fa7 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 100,
++      "revision": 101,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:abbc999fd35707697f917cac2c92b83b4c1dd9b24164b885bfa319f123c19b71",
++      "fingerprint": "sha256:39c6904b4bf679c043a95cb68853731452f1a930ea122337c89c8b6e73949577",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261019-003-code-typed-xml-open.md"
++      "validation_review": "agent_space/reviews/review-20261019-004-code-package-wrappers-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 24,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index ceebba3..b5fe00d 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -5544,11 +5544,21 @@
+           throw Error(`FFPX ${name} 형식이 올바르지 않습니다.`);
+         return rootNode;
+       }
++      function ffpxDirectChild(root, name, optional = false) {
++        const nodes = [...root.children].filter((child) => child.tagName === name);
++        if (nodes.length === 0 && optional) return null;
++        if (nodes.length !== 1) throw Error(`FFPX ${name} 단일 요소가 필요합니다.`);
++        return nodes[0];
++      }
++      function ffpxWrappedValue(node) {
++        const children = [...node.children];
++        if (children.length !== 1 || children[0].tagName !== "value" ||
++            [...node.childNodes].some((child) => (child.nodeType === 3 || child.nodeType === 4) && child.textContent.trim()))
++          throw Error("FFPX 단일 typed value가 필요합니다.");
++        return ffpxXmlReadValue(children[0]);
++      }
+       function ffpxNamedValue(root, name) {
+-        let node = [...root.children].find((child) => child.tagName === name);
+-        if (!node?.firstElementChild)
+-          throw Error(`FFPX ${name} 값이 없습니다.`);
+-        return ffpxXmlReadValue(node.firstElementChild);
++        return ffpxWrappedValue(ffpxDirectChild(root, name));
+       }
+       function ffpxDeriveHiddenSlots(slotList) {
+         let byCell = new Map(
+@@ -5863,12 +5873,10 @@
+             layout = ffpxNamedValue(layoutRoot, "layout"),
+             caption = ffpxNamedValue(captionRoot, "caption"),
+             labels = ffpxNamedValue(labelRoot, "labels"),
+-            csvFiles = [...assetRoot.querySelectorAll("dataAsset")].map((node) =>
+-              ffpxXmlReadValue(node.firstElementChild),
+-            ),
+-            images = [...assetRoot.querySelectorAll("imageAsset")].map((node) =>
+-              ffpxXmlReadValue(node.firstElementChild),
+-            ),
++            csvFiles = [...ffpxDirectChild(assetRoot, "dataAssets").children]
++              .filter((node) => node.tagName === "dataAsset").map(ffpxWrappedValue),
++            images = [...ffpxDirectChild(assetRoot, "imageAssets").children]
++              .filter((node) => node.tagName === "imageAsset").map(ffpxWrappedValue),
+             charts = [],
+             slots = [];
+           debugLog("project:read-version", {
+@@ -5881,29 +5889,18 @@
+                 `slots/slot-${placement.slotId}.xml`,
+                 "fastFigureSlot",
+               ),
+-              slotNode = slotRoot.querySelector(":scope > slot"),
+-              slotSettings = ffpxXmlReadValue(
+-                slotNode.querySelector(":scope > settings > value"),
+-              ),
+-              slotCaption = ffpxXmlReadValue(
+-                slotNode.querySelector(":scope > caption > value"),
+-              ),
+-              graphNode = slotNode.querySelector(":scope > graph"),
+-              imageNode = slotNode.querySelector(":scope > imageObject"),
+-              chart = graphNode
+-                ? ffpxXmlReadValue(
+-                    graphNode.querySelector(":scope > settings > value"),
+-                  )
+-                : null;
++              slotNode = ffpxDirectChild(slotRoot, "slot"),
++              slotSettings = ffpxNamedValue(slotNode, "settings"),
++              slotCaption = ffpxNamedValue(slotNode, "caption"),
++              graphNode = ffpxDirectChild(slotNode, "graph", true),
++              imageNode = ffpxDirectChild(slotNode, "imageObject", true),
++              chart = graphNode ? ffpxNamedValue(graphNode, "settings") : null;
+             if (chart) {
+-              chart.editor.objects = [
+-                ...graphNode.querySelectorAll(":scope > graphObjects > graphObject"),
+-              ].map((node) => ffpxXmlReadValue(node.firstElementChild));
++              chart.editor.objects = [...ffpxDirectChild(graphNode, "graphObjects").children]
++                .filter((node) => node.tagName === "graphObject").map(ffpxWrappedValue);
+               charts.push(chart);
+             }
+-            let imageObject = imageNode
+-              ? ffpxXmlReadValue(imageNode.firstElementChild)
+-              : null;
++            let imageObject = imageNode ? ffpxWrappedValue(imageNode) : null;
+             slots.push({
+               ...slotSettings,
+               ...placement,
+@@ -7322,17 +7319,11 @@
+           xmlBytes = assets.get("slot.xml");
+         if (!xmlBytes) throw Error("FFSX slot.xml이 없습니다.");
+         let slotRoot = ffpxReadXmlDocument(assets, "slot.xml", "fastFigureSlot"),
+-            slotNode = slotRoot.querySelector(":scope > slot"),
+-            slot = ffpxXmlReadValue(
+-              slotNode.querySelector(":scope > settings > value"),
+-            ),
+-            caption = ffpxXmlReadValue(
+-              slotNode.querySelector(":scope > caption > value"),
+-            ),
+-            graphNode = slotNode.querySelector(":scope > graph"),
+-            chart = ffpxXmlReadValue(
+-              graphNode.querySelector(":scope > settings > value"),
+-            ),
++            slotNode = ffpxDirectChild(slotRoot, "slot"),
++            slot = ffpxNamedValue(slotNode, "settings"),
++            caption = ffpxNamedValue(slotNode, "caption"),
++            graphNode = ffpxDirectChild(slotNode, "graph"),
++            chart = ffpxNamedValue(graphNode, "settings"),
+             assetRoot = ffpxReadXmlDocument(
+               assets,
+               "assets/assets.xml",
+@@ -7344,9 +7335,8 @@
+             appBuild: typeof slot?.appBuild === "string" ? slot.appBuild : null,
+           });
+           delete slot.appBuild;
+-          chart.editor.objects = [
+-            ...graphNode.querySelectorAll(":scope > graphObjects > graphObject"),
+-          ].map((node) => ffpxXmlReadValue(node.firstElementChild));
++          chart.editor.objects = [...ffpxDirectChild(graphNode, "graphObjects").children]
++            .filter((node) => node.tagName === "graphObject").map(ffpxWrappedValue);
+           let payload = {
+             schema: "fast-figure-slot",
+             version: PACKAGE_FORMAT_VERSION,
+@@ -7355,9 +7345,8 @@
+               caption: typeof caption?.text === "string" ? caption.text : null,
+             },
+             chart,
+-            csvFiles: [...assetRoot.querySelectorAll("dataAsset")].map((node) =>
+-              ffpxXmlReadValue(node.firstElementChild),
+-            ),
++            csvFiles: [...ffpxDirectChild(assetRoot, "dataAssets").children]
++              .filter((node) => node.tagName === "dataAsset").map(ffpxWrappedValue),
+           };
+         if (
+           payload?.schema !== "fast-figure-slot" ||

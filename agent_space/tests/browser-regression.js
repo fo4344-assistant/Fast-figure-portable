@@ -5857,6 +5857,97 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(activeProject._state === project && interfaceFSM.state === frontend, "typed writer mutated authority");
     });
 
+    await run(131, "FFPX rejects ambiguous direct wrappers and metadata values through actual ZIP parsing", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        initialize.call(activeProject, createProjectState());
+        const target = activeProject.slots[0]; select(target);
+        const csv = createProjectCsv([["x", "y"], [1, 2]], "wrappers.csv"); api.graphs.addObject(csv.id);
+        const entries = ffpxBuildProject().assets, slotName = `slots/slot-${target.id}.xml`,
+          project = activeProject._state, frontend = interfaceFSM.state;
+        const read = (name, selector, mode) => {
+          const changed = entries.map(entry => {
+            if (entry.name !== name) return entry;
+            const doc = new DOMParser().parseFromString(new TextDecoder().decode(entry.data), "application/xml"),
+              node = doc.querySelector(selector);
+            check(node, `missing FFPX test mutation target ${name}/${selector}`);
+            if (mode === "duplicate") node.parentNode.append(node.cloneNode(true));
+            else if (mode === "remove") node.remove();
+            else if (mode === "nested") { const wrapper = doc.createElement("nested"); node.replaceWith(wrapper); wrapper.append(node); }
+            else node.append(node.firstElementChild.cloneNode(true));
+            return { ...entry, data: new TextEncoder().encode(new XMLSerializer().serializeToString(doc)) };
+          });
+          return ffpxReadProjectBytes(ffpxZipStore(changed));
+        };
+        check(ffpxReadProjectBytes(ffpxZipStore(entries)).charts.length === 1, "valid FFPX wrapper roundtrip failed");
+        const probes = [
+          ["project.xml", "fastFigureProject > settings"], ["layout/layout.xml", "fastFigureLayout > layout"],
+          ["caption/caption.xml", "fastFigureCaption > caption"], ["labels/labels.xml", "fastFigureLabels > labels"],
+          ["assets/assets.xml", "dataAssets"], ["assets/assets.xml", "imageAssets"],
+          [slotName, "fastFigureSlot > slot"], [slotName, "slot > settings"], [slotName, "slot > caption"],
+          [slotName, "slot > graph"], [slotName, "graph > settings"], [slotName, "graph > graphObjects"],
+        ];
+        for (const [name, selector] of probes) for (const mode of ["duplicate", "remove", "nested"]) {
+          // Graph is optional in FFPX; absence is a Backend reference/type validation concern.
+          if (selector === "slot > graph" && mode !== "duplicate") continue;
+          let failed = false; try { read(name, selector, mode); } catch (_) { failed = true; }
+          check(failed, `FFPX accepted ${name}/${selector}/${mode}`);
+        }
+        for (const [name, selector] of [["project.xml", "settings"], [slotName, "slot > settings"],
+          [slotName, "graph > settings"], [slotName, "graphObject"], ["assets/assets.xml", "dataAsset"]]) {
+          let failed = false; try { read(name, selector, "excessValue"); } catch (_) { failed = true; }
+          check(failed, `FFPX accepted excess value in ${selector}`);
+        }
+        check(activeProject._state === project && interfaceFSM.state === frontend, "FFPX parsing changed authority");
+      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+    await run(132, "FFSX rejects ambiguous slot graph and CSV wrappers through actual ZIP parsing", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        initialize.call(activeProject, createProjectState());
+        const target = activeProject.slots[0]; select(target);
+        const csv = createProjectCsv([["x", "y"], [3, 4]], "wrappers.csv"); api.graphs.addObject(csv.id);
+        const current = slotAt(target.id), entries = ffsxBuildSlot(current, getChart(current.chart)).assets,
+          project = activeProject._state, frontend = interfaceFSM.state;
+        check(ffsxReadSlotBytes(ffpxZipStore(entries)).csvFiles.length === 1, "valid FFSX wrapper roundtrip failed");
+        for (const [name, selector] of [["slot.xml", "fastFigureSlot > slot"], ["slot.xml", "slot > settings"],
+          ["slot.xml", "slot > caption"], ["slot.xml", "slot > graph"], ["slot.xml", "graph > settings"],
+          ["slot.xml", "graph > graphObjects"], ["assets/assets.xml", "dataAssets"]]) {
+          for (const mode of ["duplicate", "remove", "nested"]) {
+            const changed = entries.map(entry => {
+              if (entry.name !== name) return entry;
+              const doc = new DOMParser().parseFromString(new TextDecoder().decode(entry.data), "application/xml"), node = doc.querySelector(selector);
+              check(node, `missing FFSX test target ${selector}`);
+              if (mode === "duplicate") node.parentNode.append(node.cloneNode(true));
+              else if (mode === "remove") node.remove();
+              else { const wrapper = doc.createElement("nested"); node.replaceWith(wrapper); wrapper.append(node); }
+              return { ...entry, data: new TextEncoder().encode(new XMLSerializer().serializeToString(doc)) };
+            });
+            let failed = false; try { ffsxReadSlotBytes(ffpxZipStore(changed)); } catch (_) { failed = true; }
+            check(failed, `FFSX accepted ${selector}/${mode}`);
+          }
+        }
+        for (const [name, selector] of [["slot.xml", "slot > settings"], ["slot.xml", "slot > caption"],
+          ["slot.xml", "graph > settings"], ["slot.xml", "graphObject"], ["assets/assets.xml", "dataAsset"]]) {
+          const changed = entries.map(entry => {
+            if (entry.name !== name) return entry;
+            const doc = new DOMParser().parseFromString(new TextDecoder().decode(entry.data), "application/xml"), node = doc.querySelector(selector);
+            check(node, `missing FFSX value target ${selector}`); node.append(node.firstElementChild.cloneNode(true));
+            return { ...entry, data: new TextEncoder().encode(new XMLSerializer().serializeToString(doc)) };
+          });
+          let failed = false; try { ffsxReadSlotBytes(ffpxZipStore(changed)); } catch (_) { failed = true; }
+          check(failed, `FFSX accepted excess typed value in ${selector}`);
+        }
+        check(activeProject._state === project && interfaceFSM.state === frontend, "FFSX parsing changed authority");
+      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
