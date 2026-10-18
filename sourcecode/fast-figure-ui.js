@@ -355,7 +355,7 @@
               {
                 variant: slotType === "graph" ? "filled" : "light",
                 disabled: busy,
-                onClick: () => slotApi.setContentType("graph"),
+                onClick: () => slotApi.setContentType(slot.id, "graph"),
               },
               "그래프",
             ),
@@ -364,7 +364,7 @@
               {
                 variant: slotType === "image" ? "filled" : "light",
                 disabled: busy,
-                onClick: () => slotApi.setContentType("image"),
+                onClick: () => slotApi.setContentType(slot.id, "image"),
               },
               "이미지",
             ),

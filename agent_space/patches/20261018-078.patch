@@ -1,0 +1,394 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 43ab40b..90b5f1c 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -175,6 +175,10 @@ Baseline fb6906b4eba899ae10bf600f3778123d204c01af. Existing Source41/pseudocode1
+ 
+ Unit27 bounded evidence: at18fd9af4582301d4a902f426ac3a90d65f5f06ce regression39121717231 PASS84+84/build39121717235 PASS. Canonical code71 sha256:fee34f7c54684d7ab8db73673bd22b35109baca0dde3e336d560bf5b60110e37 recorded patch076; Source41/pseudocode18 unchanged. At68ec74a71bbcfd1a54436aaaa453acd2416237fd cumulative39121792370 PASS fromfb6906b4eba899ae10bf600f3778123d204c01af, repeat39121794498 PASS84 inline+84 split/168 pass records; identical runtime/build/test inputs. Review029 actual requirement audit closes only bounded unit27, whole code71 stale/open.
+ 
++## Twenty-eighth bounded implementation unit — explicit slot content type
++
++Baseline34ab3ca6b830be9c9ebb04753c376a40e8ca0919. Source41/pseudocode18 already require explicit visible slotId and image/else graph normalization, no pending mirror, candidate validation/retry/one commit, None result and error propagation. Code72 translates that command; removes remembered global type and selection-triggered mutation, updates Mantine and regression callers to explicit ids. Cases85/86 cover other-slot payload retention, selection purity, invalid/missing/hidden/current-retry/failure/noncommit/postcommit render boundary and actual facts. Review030/patch078 track pending Actions86+86/build/canonical gate. Other command candidates/full schema/import/raster/supplied dashboard and explicit optional pending selection adapter remain open; whole code stale.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index d8966f2..84d9154 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -166,7 +166,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       select(slots[0]);
+       await api.assets.importToSlot(csv("regression.csv", "X,Y\n1,2\n3,4\n"), slots[0].id, choose("rename"));
+       select(slots[1]);
+-      api.slots.setContentType("image");
++      api.slots.setContentType(api.slots.readSelected()?.id, "image");
+       api.images.insertEmpty();
+       api.images.setSettings({ fit: "manual", scale: 135, x: 42, y: 61 });
+       api.layout.mergeSlots([slots[2].id, slots[3].id]);
+@@ -187,8 +187,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+     await run(3, "empty image and graph slots", async () => {
+       api.layout.setGrid(2, 3);
+       const slots = activeProject.slots;
+-      select(slots[4]); api.slots.setContentType("image");
+-      select(slots[5]); api.slots.setContentType("graph");
++      select(slots[4]); api.slots.setContentType(api.slots.readSelected()?.id, "image");
++      select(slots[5]); api.slots.setContentType(api.slots.readSelected()?.id, "graph");
+       await api.project.importFile(ffpxFile());
+       check(activeProject.slots[4].contentType === "image" && !activeProject.slots[4].imageId, "empty image lost");
+       check(activeProject.slots[5].contentType === "graph" && !activeProject.slots[5].chart, "empty graph lost");
+@@ -460,7 +460,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         check(!!source && !!target, "two visible slots are required");
+         api.slots.reset(target.id);
+         select(target);
+-        api.slots.setContentType("graph");
++        api.slots.setContentType(api.slots.readSelected()?.id, "graph");
+         const helperCsv = createProjectCsv(
+           [["DX", "DY"], ["1", "2"]],
+           "drag-target.csv",
+@@ -533,7 +533,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       check(!!target, "image test slot absent");
+       api.slots.reset(target.id);
+       select(slotAt(target.id));
+-      api.slots.setContentType("image");
++      api.slots.setContentType(api.slots.readSelected()?.id, "image");
+       api.images.insertEmpty();
+       const beforeImageId = slotAt(target.id).imageId;
+       check(Number.isInteger(beforeImageId), "baseline image was not inserted");
+@@ -569,7 +569,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       check(!!target, "graph projection slot absent");
+       api.slots.reset(target.id);
+       select(slotAt(target.id));
+-      api.slots.setContentType("graph");
++      api.slots.setContentType(api.slots.readSelected()?.id, "graph");
+ 
+       const currentCsv = createProjectCsv(
+         [["AX", "AY"], ["1", "2"]],
+@@ -871,7 +871,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       check(!!referenceSlot, "trash recovery reference slot absent");
+       api.slots.reset(referenceSlot.id);
+       select(slotAt(referenceSlot.id));
+-      api.slots.setContentType("graph");
++      api.slots.setContentType(api.slots.readSelected()?.id, "graph");
+       api.graphs.addObject(csvAsset.id);
+       check(
+         chartCsvIds(getChart(slotAt(referenceSlot.id).chart)).includes(csvAsset.id),
+@@ -1039,7 +1039,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       check(!!target, "trash invalidation slot absent");
+       api.slots.reset(target.id);
+       select(slotAt(target.id));
+-      api.slots.setContentType("image");
++      api.slots.setContentType(api.slots.readSelected()?.id, "image");
+       const image = createProjectImage(
+         new TextEncoder().encode(
+           '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>',
+@@ -1062,7 +1062,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       const target = activeProject.slots.find((slot) => !slot.hidden);
+       check(!!target, "image read regression slot absent");
+       select(target);
+-      if (slotAt(target.id).contentType !== "image") api.slots.setContentType("image");
++      if (slotAt(target.id).contentType !== "image") api.slots.setContentType(api.slots.readSelected()?.id, "image");
+       if (!slotAt(target.id).imageId) api.images.insertEmpty();
+       const slot = slotAt(target.id);
+       check(!!slot?.imageId, "image read regression asset absent");
+@@ -1128,7 +1128,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       const target = activeProject.slots.find((slot) => !slot.hidden);
+       api.slots.reset(target.id);
+       select(slotAt(target.id));
+-      api.slots.setContentType("graph");
++      api.slots.setContentType(api.slots.readSelected()?.id, "graph");
+       const resource = createProjectCsv([["X", "Y"], ["1", "2"]], "boundary-selection.csv");
+       api.graphs.addObject(resource.id);
+       const authority = JSON.stringify(activeProject._state);
+@@ -1203,7 +1203,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       const target = activeProject.slots.find((slot) => !slot.hidden);
+       api.slots.reset(target.id);
+       select(slotAt(target.id));
+-      api.slots.setContentType("image");
++      api.slots.setContentType(api.slots.readSelected()?.id, "image");
+       api.images.insertEmpty();
+       const imageId = slotAt(target.id).imageId;
+       const other = activeProject.slots.find((slot) => !slot.hidden && slot.id !== target.id);
+@@ -1725,7 +1725,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         const target = activeProject.slots.find(slot => !slot.hidden);
+         api.slots.reset(target.id);
+         select(slotAt(target.id));
+-        api.slots.setContentType("image");
++        api.slots.setContentType(api.slots.readSelected()?.id, "image");
+         api.images.insertEmpty();
+         const id = target.id, other = activeProject.slots.find(slot => !slot.hidden && slot.id !== id);
+         const first = api.images.setSettings({ fit: "manual", scale: 0, x: 0, y: 0 });
+@@ -1922,7 +1922,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+ 
+     await run(53, "Graph figures resolve only their supplied Project and export copied JSON bytes", async () => {
+       const target = activeProject.slots.find(slot => !slot.hidden);
+-      api.slots.reset(target.id); select(slotAt(target.id)); api.slots.setContentType("graph");
++      api.slots.reset(target.id); select(slotAt(target.id)); api.slots.setContentType(api.slots.readSelected()?.id, "graph");
+       const csv = createProjectCsv([["X", "Y"], ["11", "22"]], "figure-context.csv");
+       api.graphs.addObject(csv.id);
+       const source = projectClone(activeProject._state), chart = source.charts.find(item => item.id === slotAt(target.id).chart);
+@@ -3518,6 +3518,98 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++
++    await run(85, "Explicit slot type edits preserve payload and selection without pending state", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard;
++      try {
++        api.layout.setGrid(2, 2);
++        const prepared = projectClone(activeProject._state); normalizeSlotContents(prepared.slots);
++        const [first, target] = prepared.slots.filter(slot => !slot.hidden);
++        first.content.contentType = "image"; target.content.contentType = "graph";
++        initialize.call(activeProject, prepared);
++        select(slotAt(first.id));
++        let commits = 0, renders = 0, last;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        projectEFSM.send = function (event, payload) {
++          if (event === "SLOT_TYPE_CHANGED") check(Object.keys(payload).sort().join(",") === "contentType,slotId" &&
++            payload.slotId === target.id, "slot wrapper substituted selected id/model/pending type");
++          return last = send.call(this, event, payload);
++        };
++        renderDashboard = () => { renders++; };
++        const before = projectClone(activeProject._state), assetPath = interfaceFSM.state.assetPath;
++        check(api.slots.setContentType(target.id, "image") === null, "slot type leaked result/boolean");
++        before.slots.find(slot => slot.id === target.id).content.contentType = "image";
++        check(JSON.stringify(activeProject._state) === JSON.stringify(before) && commits === 1 && renders === 1,
++          "slot type mutated payload/geometry/assets or missed one candidate commit/render");
++        check(interfaceFSM.readState().selectedSlotId === first.id && interfaceFSM.state.assetPath === assetPath,
++          "explicit other-slot edit replaced current selection");
++        check(Object.isFrozen(last.changed) && last.changed.slotIds.join(",") === String(target.id) &&
++          last.changed.chartIds.length === 0 && last.changed.assets.length === 0, "slot changed facts wrong");
++        check(api.slots.setContentType(target.id, "other") === null && slotAt(target.id).contentType === "graph",
++          "non-image normalization differs from Source");
++        const source = activeProject._state, count = commits;
++        appFSM.send("SELECT_SLOT", { slotId: target.id, toggle: false, direction: "ui-to-fsm" });
++        check(activeProject._state === source && commits === count && slotAt(target.id).contentType === "graph",
++          "selection applied remembered image type or mutated Project");
++        check(!("pendingSlotContentType" in projectObjects.read("ui")), "pending type authority survived");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(86, "Slot type validates explicit current target and retries before one commit", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
++        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult, failure = Error("slot type boundary");
++      try {
++        api.layout.setGrid(2, 2);
++        const id = activeProject.slots.find(slot => !slot.hidden).id;
++        let commits = 0, renders = 0, reconciliations = 0, caught;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = () => { renders++; };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        const source = activeProject._state, runtime = interfaceFSM.state;
++        for (const bad of [undefined, null, -1, String(id)]) {
++          caught = null; try { api.slots.setContentType(bad, "image"); } catch (error) { caught = error; }
++          check(caught && activeProject._state === source && interfaceFSM.state === runtime &&
++            commits === 0 && renders === 0 && reconciliations === 0, "invalid slot id changed state or stored pending type");
++        }
++        validateProjectObjectState = () => { throw failure; };
++        caught = null; try { api.slots.setContentType(id, "image"); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && commits === 0 && renders === 0, "slot validation failed partially");
++        validateProjectObjectState = validate;
++        projectEFSM.send = () => Object.freeze({ committed: false });
++        check(api.slots.setContentType(id, "image") === null && renders === 0 && reconciliations === 0,
++          "slot noncommit executed success work"); projectEFSM.send = send;
++        let attempts = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const valid = validate(candidate, options);
++          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
++            newer.meta.projectName = "latest slot type"; initialize.call(activeProject, newer); }
++          return valid;
++        };
++        api.slots.setContentType(id, "image"); validateProjectObjectState = validate;
++        check(attempts === 2 && commits === 1 && renders === 1 && reconciliations === 1 &&
++          activeProject.projectName === "latest slot type" && slotAt(id).contentType === "image",
++          "slot type committed stale state or multiple attempts");
++        renderDashboard = () => { throw failure; };
++        caught = null; try { api.slots.setContentType(id, "graph"); } catch (error) { caught = error; }
++        check(caught === failure && slotAt(id).contentType === "graph", "postcommit slot render error swallowed/rolled back");
++        renderDashboard = () => { renders++; }; attempts = 0; const prior = commits;
++        validateProjectObjectState = function (candidate, options) {
++          const valid = validate(candidate, options);
++          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
++            newer.slots.find(slot => slot.id === id).hidden = true; initialize.call(activeProject, newer); }
++          return valid;
++        };
++        caught = null; try { api.slots.setContentType(id, "image"); } catch (error) { caught = error; }
++        check(caught && commits === prior && slotAt(id).hidden && slotAt(id).contentType === "graph",
++          "retry committed a now-hidden target");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
++        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 62afd95..35011f5 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 71,
++      "revision": 72,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-029-code-project-name-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-030-code-slot-type-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 18,
+diff --git a/sourcecode/fast-figure-ui.js b/sourcecode/fast-figure-ui.js
+index 966eaff..e5cbab8 100644
+--- a/sourcecode/fast-figure-ui.js
++++ b/sourcecode/fast-figure-ui.js
+@@ -355,7 +355,7 @@
+               {
+                 variant: slotType === "graph" ? "filled" : "light",
+                 disabled: busy,
+-                onClick: () => slotApi.setContentType("graph"),
++                onClick: () => slotApi.setContentType(slot.id, "graph"),
+               },
+               "그래프",
+             ),
+@@ -364,7 +364,7 @@
+               {
+                 variant: slotType === "image" ? "filled" : "light",
+                 disabled: busy,
+-                onClick: () => slotApi.setContentType("image"),
++                onClick: () => slotApi.setContentType(slot.id, "image"),
+               },
+               "이미지",
+             ),
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index ba7108e..39ec3d1 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -243,7 +243,6 @@
+       }
+       const activeProject = new ProjectObject();
+       let selectedSlotId = null,
+-        pendingSlotContentType = "graph",
+         dashboardObserver = null,
+         graphAreaObserver = null,
+         resizePending = false,
+@@ -862,10 +861,21 @@
+       }
+       function applySlotTypeAction({ machine, payload }) {
+         machine.assertWritable("slots", "SLOT_TYPE_CHANGED");
+-        let slot = Number.isInteger(payload.slotId) ? slotAt(payload.slotId) : null;
+-        if (!slot) throw Error("콘텐츠 종류를 변경할 슬롯이 없습니다.");
+-        slot.contentType = payload.type === "image" ? "image" : "graph";
+-        payload.clearGraphSelection = true;
++        while (true) {
++          const source = activeProject._state,
++            current = source.slots.find(slot => slot.id === payload.slotId && !slot.hidden);
++          if (!Number.isInteger(payload.slotId) || !current) throw Error("콘텐츠 종류를 변경할 visible 슬롯이 없습니다.");
++          const candidate = projectClone(source);
++          normalizeSlotContents(candidate.slots);
++          candidate.slots.find(slot => slot.id === current.id).content.contentType = payload.contentType === "image" ? "image" : "graph";
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const after = activeProject._state.slots.find(slot => slot.id === current.id);
++          payload.changed = { slotIds: JSON.stringify(current) === JSON.stringify(after) ? [] : [after.id],
++            chartIds: [], csvIds: [], imageIds: [], assets: [] };
++          return;
++        }
+       }
+       function applyGraphObjectSelectionAction({ machine, payload }) {
+         machine.assertWritable("editor", "SELECT_GRAPH_OBJECT");
+@@ -2190,7 +2200,6 @@
+         .register("ui", {
+           read: (project) => ({
+             selectedSlotId,
+-            pendingSlotContentType,
+             palette: project.appearance.uiPalette,
+           }),
+         });
+@@ -2286,16 +2295,6 @@
+             ? validateFrontendIntent(event, { ...payload, selectedSlotId }) : null;
+           if (validatedInput && !validatedInput.accepted) return interfaceFSM.state;
+           interfaceFSM.send(event, validatedInput ? { ...payload, validatedInput } : payload);
+-          if (event === "SELECT_SLOT") {
+-            let slot = readBackendProjection("slot-selection-context", { slotId: selectedSlotId });
+-            if (slot?.empty && slot.contentType !== pendingSlotContentType) {
+-              dispatchProjectCommand("SLOT_TYPE_CHANGED", {
+-                slotId: slot.id,
+-                type: pendingSlotContentType,
+-                direction: "model-to-fsm",
+-              });
+-            }
+-          }
+           return interfaceFSM.state;
+         },
+         notify: (...args) => interfaceFSM.notify(...args),
+@@ -5920,24 +5919,10 @@
+         status("선택 슬롯에 빈 이미지를 삽입했습니다.");
+         return image;
+       }
+-      function setSlotContentType(type) {
+-        let slot = getSelectedSlot();
+-        if (!slot) {
+-          pendingSlotContentType = type === "image" ? "image" : "graph";
+-          debugLog("slot:content-type-pending", { type: pendingSlotContentType });
+-          return;
+-        }
+-        appFSM.send("SLOT_TYPE_CHANGED", {
+-          slotId: slot.id,
+-          type,
+-          direction: "fsm-to-model",
+-        });
+-        renderDashboard();
+-        debugLog("slot:content-type", {
+-          slotId: slot.id,
+-          type,
+-          direction: "fsm-to-model",
+-        });
++      function setSlotContentType(slotId, contentType) {
++        const result = dispatchProjectCommand("SLOT_TYPE_CHANGED", { slotId, contentType });
++        if (result.committed) renderDashboard();
++        return null;
+       }
+       function syncSlotImageElement(projectProjection) {
+         if (!projectProjection) return false;
+diff --git a/agent_space/reviews/review-20261018-030-code-slot-type-open.md b/agent_space/reviews/review-20261018-030-code-slot-type-open.md
+new file mode 100644
+index 0000000..2e810ae
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-030-code-slot-type-open.md
+@@ -0,0 +1,24 @@
++# Explicit slot content type — bounded translation review
++
++Baseline 34ab3ca6b830be9c9ebb04753c376a40e8ca0919. Source41 remains highest; pseudocode18 unchanged; code72 stays stale pending whole Plan023 alignment.
++
++## Authority and scope
++
++Source `sourcescript/backend/project_efsm.py` ProjectStateMachine.send resolves explicit visible slotId; image iff contentType=image, otherwise graph; missing/hidden rejected, no pending mirror. Source `sourcescript/application/public_api/layout_annotations.py` setSlotContentType(slotId, contentType) and PROJECT_SLOT_RESULT_RULE require None both committed/noncommitted, original command/render errors, no rollback. Direct pseudocode backend SLOT_TYPE_CHANGED branch and public setSlotContentType express the same contract. No new meaning or Source edit needed. Explicit optional pendingContentType on slot selection remains a separate unaligned adapter scope: this patch removes implicit global remembered type, not that authorized explicit-intent design.
++
++## Prompt → artifact checklist
++
++- Explicit current target, not selection: applySlotTypeAction resolves source visible slot by integer payload.slotId; candidate clone, only content.contentType updated, validate then authority-reference retry and one initialize. Cases85/86 check explicit other slot, geometry/chart/image/assets/settings preservation, normalization, invalid id, disappearing hidden target.
++- Current-authority and failure boundaries: case86 validator failure no writes/effects, newer source retries and retains newer name, now-hidden target rejected. Actual changed slotIds computed before/after; no unrelated chart/csv/image/asset facts.
++- Application new fields only: setSlotContentType sends {slotId,contentType}, committed-only render, null public return including noncommit. Exact errors propagate and postcommit render error leaves committed state. Cases85/86 instrument scalar command, commits/reconciles/renders.
++- No duplicate pending authority: removed pendingSlotContentType global/UI read and SELECT_SLOT mutation side path. Case85 selects graph slot after explicit other image edit and asserts no Project commit/type mutation.
++- Public/UI call sites: Mantine buttons pass slot.id; all existing regression call sites now bind explicit selected id at caller. Deliberate WIP API correction, no legacy one-argument fallback that would substitute selection authority.
++- Prior84 cases plus85/86 must pass inline and split; version/build actual Actions pending. Local file/Git inspection only, no local runtime execution.
++
++## Exclusions and alternatives
++
++Rejected retaining global pending type/one-arg overload because explicit-target Source forbids selection substitution and pending mirror. Rejected Source edits to justify old code or dropping persistent chart/image on type switch. Existing Source-authorized payload retention preserved. Shared validator remains incomplete, other commands/imports/raster/supplied dashboard/explicit selection pending intent are open; this bounded unit cannot close whole goal. Optional TLC not run.
++
++## Execution evidence
++
++Pending GitHub Actions default runner diagnostics, regression86+86, build and corrected canonical lineage gate. Provisional prior code fingerprint intentionally retained until runner reports canonical checkout digest; failed diagnostic is not a pass.

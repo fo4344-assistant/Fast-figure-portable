@@ -243,7 +243,6 @@
       }
       const activeProject = new ProjectObject();
       let selectedSlotId = null,
-        pendingSlotContentType = "graph",
         dashboardObserver = null,
         graphAreaObserver = null,
         resizePending = false,
@@ -862,10 +861,21 @@
       }
       function applySlotTypeAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOT_TYPE_CHANGED");
-        let slot = Number.isInteger(payload.slotId) ? slotAt(payload.slotId) : null;
-        if (!slot) throw Error("콘텐츠 종류를 변경할 슬롯이 없습니다.");
-        slot.contentType = payload.type === "image" ? "image" : "graph";
-        payload.clearGraphSelection = true;
+        while (true) {
+          const source = activeProject._state,
+            current = source.slots.find(slot => slot.id === payload.slotId && !slot.hidden);
+          if (!Number.isInteger(payload.slotId) || !current) throw Error("콘텐츠 종류를 변경할 visible 슬롯이 없습니다.");
+          const candidate = projectClone(source);
+          normalizeSlotContents(candidate.slots);
+          candidate.slots.find(slot => slot.id === current.id).content.contentType = payload.contentType === "image" ? "image" : "graph";
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const after = activeProject._state.slots.find(slot => slot.id === current.id);
+          payload.changed = { slotIds: JSON.stringify(current) === JSON.stringify(after) ? [] : [after.id],
+            chartIds: [], csvIds: [], imageIds: [], assets: [] };
+          return;
+        }
       }
       function applyGraphObjectSelectionAction({ machine, payload }) {
         machine.assertWritable("editor", "SELECT_GRAPH_OBJECT");
@@ -2190,7 +2200,6 @@
         .register("ui", {
           read: (project) => ({
             selectedSlotId,
-            pendingSlotContentType,
             palette: project.appearance.uiPalette,
           }),
         });
@@ -2286,16 +2295,6 @@
             ? validateFrontendIntent(event, { ...payload, selectedSlotId }) : null;
           if (validatedInput && !validatedInput.accepted) return interfaceFSM.state;
           interfaceFSM.send(event, validatedInput ? { ...payload, validatedInput } : payload);
-          if (event === "SELECT_SLOT") {
-            let slot = readBackendProjection("slot-selection-context", { slotId: selectedSlotId });
-            if (slot?.empty && slot.contentType !== pendingSlotContentType) {
-              dispatchProjectCommand("SLOT_TYPE_CHANGED", {
-                slotId: slot.id,
-                type: pendingSlotContentType,
-                direction: "model-to-fsm",
-              });
-            }
-          }
           return interfaceFSM.state;
         },
         notify: (...args) => interfaceFSM.notify(...args),
@@ -5920,24 +5919,10 @@
         status("선택 슬롯에 빈 이미지를 삽입했습니다.");
         return image;
       }
-      function setSlotContentType(type) {
-        let slot = getSelectedSlot();
-        if (!slot) {
-          pendingSlotContentType = type === "image" ? "image" : "graph";
-          debugLog("slot:content-type-pending", { type: pendingSlotContentType });
-          return;
-        }
-        appFSM.send("SLOT_TYPE_CHANGED", {
-          slotId: slot.id,
-          type,
-          direction: "fsm-to-model",
-        });
-        renderDashboard();
-        debugLog("slot:content-type", {
-          slotId: slot.id,
-          type,
-          direction: "fsm-to-model",
-        });
+      function setSlotContentType(slotId, contentType) {
+        const result = dispatchProjectCommand("SLOT_TYPE_CHANGED", { slotId, contentType });
+        if (result.committed) renderDashboard();
+        return null;
       }
       function syncSlotImageElement(projectProjection) {
         if (!projectProjection) return false;

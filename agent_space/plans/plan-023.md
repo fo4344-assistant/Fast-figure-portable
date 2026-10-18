@@ -175,6 +175,10 @@ Baseline fb6906b4eba899ae10bf600f3778123d204c01af. Existing Source41/pseudocode1
 
 Unit27 bounded evidence: at18fd9af4582301d4a902f426ac3a90d65f5f06ce regression39121717231 PASS84+84/build39121717235 PASS. Canonical code71 sha256:fee34f7c54684d7ab8db73673bd22b35109baca0dde3e336d560bf5b60110e37 recorded patch076; Source41/pseudocode18 unchanged. At68ec74a71bbcfd1a54436aaaa453acd2416237fd cumulative39121792370 PASS fromfb6906b4eba899ae10bf600f3778123d204c01af, repeat39121794498 PASS84 inline+84 split/168 pass records; identical runtime/build/test inputs. Review029 actual requirement audit closes only bounded unit27, whole code71 stale/open.
 
+## Twenty-eighth bounded implementation unit — explicit slot content type
+
+Baseline34ab3ca6b830be9c9ebb04753c376a40e8ca0919. Source41/pseudocode18 already require explicit visible slotId and image/else graph normalization, no pending mirror, candidate validation/retry/one commit, None result and error propagation. Code72 translates that command; removes remembered global type and selection-triggered mutation, updates Mantine and regression callers to explicit ids. Cases85/86 cover other-slot payload retention, selection purity, invalid/missing/hidden/current-retry/failure/noncommit/postcommit render boundary and actual facts. Review030/patch078 track pending Actions86+86/build/canonical gate. Other command candidates/full schema/import/raster/supplied dashboard and explicit optional pending selection adapter remain open; whole code stale.
+
 ## Temporary-file rule
 
 The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.

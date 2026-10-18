@@ -166,7 +166,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       select(slots[0]);
       await api.assets.importToSlot(csv("regression.csv", "X,Y\n1,2\n3,4\n"), slots[0].id, choose("rename"));
       select(slots[1]);
-      api.slots.setContentType("image");
+      api.slots.setContentType(api.slots.readSelected()?.id, "image");
       api.images.insertEmpty();
       api.images.setSettings({ fit: "manual", scale: 135, x: 42, y: 61 });
       api.layout.mergeSlots([slots[2].id, slots[3].id]);
@@ -187,8 +187,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     await run(3, "empty image and graph slots", async () => {
       api.layout.setGrid(2, 3);
       const slots = activeProject.slots;
-      select(slots[4]); api.slots.setContentType("image");
-      select(slots[5]); api.slots.setContentType("graph");
+      select(slots[4]); api.slots.setContentType(api.slots.readSelected()?.id, "image");
+      select(slots[5]); api.slots.setContentType(api.slots.readSelected()?.id, "graph");
       await api.project.importFile(ffpxFile());
       check(activeProject.slots[4].contentType === "image" && !activeProject.slots[4].imageId, "empty image lost");
       check(activeProject.slots[5].contentType === "graph" && !activeProject.slots[5].chart, "empty graph lost");
@@ -460,7 +460,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(!!source && !!target, "two visible slots are required");
         api.slots.reset(target.id);
         select(target);
-        api.slots.setContentType("graph");
+        api.slots.setContentType(api.slots.readSelected()?.id, "graph");
         const helperCsv = createProjectCsv(
           [["DX", "DY"], ["1", "2"]],
           "drag-target.csv",
@@ -533,7 +533,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(!!target, "image test slot absent");
       api.slots.reset(target.id);
       select(slotAt(target.id));
-      api.slots.setContentType("image");
+      api.slots.setContentType(api.slots.readSelected()?.id, "image");
       api.images.insertEmpty();
       const beforeImageId = slotAt(target.id).imageId;
       check(Number.isInteger(beforeImageId), "baseline image was not inserted");
@@ -569,7 +569,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(!!target, "graph projection slot absent");
       api.slots.reset(target.id);
       select(slotAt(target.id));
-      api.slots.setContentType("graph");
+      api.slots.setContentType(api.slots.readSelected()?.id, "graph");
 
       const currentCsv = createProjectCsv(
         [["AX", "AY"], ["1", "2"]],
@@ -871,7 +871,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(!!referenceSlot, "trash recovery reference slot absent");
       api.slots.reset(referenceSlot.id);
       select(slotAt(referenceSlot.id));
-      api.slots.setContentType("graph");
+      api.slots.setContentType(api.slots.readSelected()?.id, "graph");
       api.graphs.addObject(csvAsset.id);
       check(
         chartCsvIds(getChart(slotAt(referenceSlot.id).chart)).includes(csvAsset.id),
@@ -1039,7 +1039,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(!!target, "trash invalidation slot absent");
       api.slots.reset(target.id);
       select(slotAt(target.id));
-      api.slots.setContentType("image");
+      api.slots.setContentType(api.slots.readSelected()?.id, "image");
       const image = createProjectImage(
         new TextEncoder().encode(
           '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>',
@@ -1062,7 +1062,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       const target = activeProject.slots.find((slot) => !slot.hidden);
       check(!!target, "image read regression slot absent");
       select(target);
-      if (slotAt(target.id).contentType !== "image") api.slots.setContentType("image");
+      if (slotAt(target.id).contentType !== "image") api.slots.setContentType(api.slots.readSelected()?.id, "image");
       if (!slotAt(target.id).imageId) api.images.insertEmpty();
       const slot = slotAt(target.id);
       check(!!slot?.imageId, "image read regression asset absent");
@@ -1128,7 +1128,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       const target = activeProject.slots.find((slot) => !slot.hidden);
       api.slots.reset(target.id);
       select(slotAt(target.id));
-      api.slots.setContentType("graph");
+      api.slots.setContentType(api.slots.readSelected()?.id, "graph");
       const resource = createProjectCsv([["X", "Y"], ["1", "2"]], "boundary-selection.csv");
       api.graphs.addObject(resource.id);
       const authority = JSON.stringify(activeProject._state);
@@ -1203,7 +1203,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       const target = activeProject.slots.find((slot) => !slot.hidden);
       api.slots.reset(target.id);
       select(slotAt(target.id));
-      api.slots.setContentType("image");
+      api.slots.setContentType(api.slots.readSelected()?.id, "image");
       api.images.insertEmpty();
       const imageId = slotAt(target.id).imageId;
       const other = activeProject.slots.find((slot) => !slot.hidden && slot.id !== target.id);
@@ -1725,7 +1725,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         const target = activeProject.slots.find(slot => !slot.hidden);
         api.slots.reset(target.id);
         select(slotAt(target.id));
-        api.slots.setContentType("image");
+        api.slots.setContentType(api.slots.readSelected()?.id, "image");
         api.images.insertEmpty();
         const id = target.id, other = activeProject.slots.find(slot => !slot.hidden && slot.id !== id);
         const first = api.images.setSettings({ fit: "manual", scale: 0, x: 0, y: 0 });
@@ -1922,7 +1922,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
 
     await run(53, "Graph figures resolve only their supplied Project and export copied JSON bytes", async () => {
       const target = activeProject.slots.find(slot => !slot.hidden);
-      api.slots.reset(target.id); select(slotAt(target.id)); api.slots.setContentType("graph");
+      api.slots.reset(target.id); select(slotAt(target.id)); api.slots.setContentType(api.slots.readSelected()?.id, "graph");
       const csv = createProjectCsv([["X", "Y"], ["11", "22"]], "figure-context.csv");
       api.graphs.addObject(csv.id);
       const source = projectClone(activeProject._state), chart = source.charts.find(item => item.id === slotAt(target.id).chart);
@@ -3514,6 +3514,98 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         caught = null; try { api.project.setName("committed before reconcile error"); } catch (error) { caught = error; }
         check(caught === failure && activeProject.projectName === "committed before reconcile error", "name reconcile error swallowed/rolled back");
       } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+
+    await run(85, "Explicit slot type edits preserve payload and selection without pending state", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard;
+      try {
+        api.layout.setGrid(2, 2);
+        const prepared = projectClone(activeProject._state); normalizeSlotContents(prepared.slots);
+        const [first, target] = prepared.slots.filter(slot => !slot.hidden);
+        first.content.contentType = "image"; target.content.contentType = "graph";
+        initialize.call(activeProject, prepared);
+        select(slotAt(first.id));
+        let commits = 0, renders = 0, last;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        projectEFSM.send = function (event, payload) {
+          if (event === "SLOT_TYPE_CHANGED") check(Object.keys(payload).sort().join(",") === "contentType,slotId" &&
+            payload.slotId === target.id, "slot wrapper substituted selected id/model/pending type");
+          return last = send.call(this, event, payload);
+        };
+        renderDashboard = () => { renders++; };
+        const before = projectClone(activeProject._state), assetPath = interfaceFSM.state.assetPath;
+        check(api.slots.setContentType(target.id, "image") === null, "slot type leaked result/boolean");
+        before.slots.find(slot => slot.id === target.id).content.contentType = "image";
+        check(JSON.stringify(activeProject._state) === JSON.stringify(before) && commits === 1 && renders === 1,
+          "slot type mutated payload/geometry/assets or missed one candidate commit/render");
+        check(interfaceFSM.readState().selectedSlotId === first.id && interfaceFSM.state.assetPath === assetPath,
+          "explicit other-slot edit replaced current selection");
+        check(Object.isFrozen(last.changed) && last.changed.slotIds.join(",") === String(target.id) &&
+          last.changed.chartIds.length === 0 && last.changed.assets.length === 0, "slot changed facts wrong");
+        check(api.slots.setContentType(target.id, "other") === null && slotAt(target.id).contentType === "graph",
+          "non-image normalization differs from Source");
+        const source = activeProject._state, count = commits;
+        appFSM.send("SELECT_SLOT", { slotId: target.id, toggle: false, direction: "ui-to-fsm" });
+        check(activeProject._state === source && commits === count && slotAt(target.id).contentType === "graph",
+          "selection applied remembered image type or mutated Project");
+        check(!("pendingSlotContentType" in projectObjects.read("ui")), "pending type authority survived");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(86, "Slot type validates explicit current target and retries before one commit", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
+        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult, failure = Error("slot type boundary");
+      try {
+        api.layout.setGrid(2, 2);
+        const id = activeProject.slots.find(slot => !slot.hidden).id;
+        let commits = 0, renders = 0, reconciliations = 0, caught;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = () => { renders++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        const source = activeProject._state, runtime = interfaceFSM.state;
+        for (const bad of [undefined, null, -1, String(id)]) {
+          caught = null; try { api.slots.setContentType(bad, "image"); } catch (error) { caught = error; }
+          check(caught && activeProject._state === source && interfaceFSM.state === runtime &&
+            commits === 0 && renders === 0 && reconciliations === 0, "invalid slot id changed state or stored pending type");
+        }
+        validateProjectObjectState = () => { throw failure; };
+        caught = null; try { api.slots.setContentType(id, "image"); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && commits === 0 && renders === 0, "slot validation failed partially");
+        validateProjectObjectState = validate;
+        projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.slots.setContentType(id, "image") === null && renders === 0 && reconciliations === 0,
+          "slot noncommit executed success work"); projectEFSM.send = send;
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
+            newer.meta.projectName = "latest slot type"; initialize.call(activeProject, newer); }
+          return valid;
+        };
+        api.slots.setContentType(id, "image"); validateProjectObjectState = validate;
+        check(attempts === 2 && commits === 1 && renders === 1 && reconciliations === 1 &&
+          activeProject.projectName === "latest slot type" && slotAt(id).contentType === "image",
+          "slot type committed stale state or multiple attempts");
+        renderDashboard = () => { throw failure; };
+        caught = null; try { api.slots.setContentType(id, "graph"); } catch (error) { caught = error; }
+        check(caught === failure && slotAt(id).contentType === "graph", "postcommit slot render error swallowed/rolled back");
+        renderDashboard = () => { renders++; }; attempts = 0; const prior = commits;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
+            newer.slots.find(slot => slot.id === id).hidden = true; initialize.call(activeProject, newer); }
+          return valid;
+        };
+        caught = null; try { api.slots.setContentType(id, "image"); } catch (error) { caught = error; }
+        check(caught && commits === prior && slotAt(id).hidden && slotAt(id).contentType === "graph",
+          "retry committed a now-hidden target");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
         validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
