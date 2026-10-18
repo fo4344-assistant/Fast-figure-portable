@@ -4756,6 +4756,99 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(107, "Trash transaction removes exact current references and preserves canonical display settings", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
+        notify = interfaceFSM.notify, release = releaseProjectImageDisplayUrl;
+      try {
+        api.layout.setGrid(2, 2); const base = projectClone(activeProject._state);
+        base.slots.forEach(slot => { slot.hidden = false; slot.rowSpan = 1; slot.colSpan = 1; }); initialize.call(activeProject, base);
+        const [a, b] = activeProject.slots;
+        api.slots.reset(a.id); select(slotAt(a.id)); api.slots.setContentType(a.id, "graph");
+        const csv = createProjectCsv([["X", "Y"], ["1", "2"]], "trash-owned.csv");
+        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
+        api.slots.reset(b.id); select(slotAt(b.id)); api.slots.setContentType(b.id, "image");
+        const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "trash-owned.svg", "image/svg+xml");
+        api.assets.connectToSlot(projectAssetPath(image), "image", b.id);
+        const fixture = projectClone(activeProject._state);
+        fixture.assets.csvFiles.find(item => item.id === csv.id).directory = PROJECT_TRASH_DIRECTORY;
+        fixture.assets.images.find(item => item.id === image.id).directory = PROJECT_TRASH_DIRECTORY;
+        fixture.fileSystem.directories.push(`${PROJECT_TRASH_DIRECTORY}/nested`);
+        initialize.call(activeProject, fixture);
+        const slot = slotAt(b.id); slot.content.trashExtension = { keep: true };
+        const settings = JSON.stringify(slot.content.imageSettings), chartId = slotAt(a.id).chart;
+        let commits = 0, paints = 0, releases = 0, last;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = () => { paints++; }; interfaceFSM.notify = () => {};
+        releaseProjectImageDisplayUrl = () => { releases++; };
+        projectEFSM.send = function (event, payload) {
+          check(event === "PROJECT_TRASH_EMPTIED" && Object.keys(payload).length === 0, "trash wrapper forwarded candidate/facts");
+          return last = send.call(this, event, payload);
+        };
+        check(api.assets.emptyTrash() === null && commits === 1 && paints === 1 && releases === 1,
+          "trash success work or single commit incorrect");
+        check(!getProjectCsv(csv.id) && !getProjectImage(image.id) && slotAt(b.id).imageId === null &&
+          JSON.stringify(slotAt(b.id).content.imageSettings) === settings && slotAt(b.id).content.trashExtension.keep &&
+          getChart(chartId).editor.objects.length === 0 && getChart(chartId).graph.data.length === 0,
+          "trash did not detach/rebuild or changed display-owned settings/extension");
+        check(last.changed.removedGraphReferenceCount === 2 && last.changed.resetImageSlotCount === 1 &&
+          last.changed.csvIds.includes(csv.id) && last.changed.imageIds.includes(image.id) &&
+          Object.isFrozen(last.changed.graphObjectIndexMaps) &&
+          last.changed.graphObjectIndexMaps.find(map => map.chartId === chartId).indices[0] === null &&
+          activeProject.fileSystem.directories.includes(PROJECT_TRASH_DIRECTORY) &&
+          !activeProject.fileSystem.directories.includes(`${PROJECT_TRASH_DIRECTORY}/nested`), "trash actual facts/root incorrect");
+        api.assets.emptyTrash();
+        check(commits === 2 && paints === 1 && releases === 1 && !last.changed.removedGraphReferenceCount &&
+          !last.changed.resetImageSlotCount, "empty trash caused content repaint or invented references");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+        interfaceFSM.notify = notify; releaseProjectImageDisplayUrl = release;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(108, "Trash retries latest authority and gates failure/noncommit work", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, validate = validateProjectObjectState,
+        render = renderDashboard, notify = interfaceFSM.notify, release = releaseProjectImageDisplayUrl,
+        availability = updateFileAvailability, report = status, reconcile = interfaceFSM.reconcileProjectResult,
+        failure = Error("trash boundary");
+      try {
+        let commits = 0, effects = 0, releases = 0, reconciliations = 0, caught;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = updateFileAvailability = status = () => { effects++; }; interfaceFSM.notify = () => {};
+        releaseProjectImageDisplayUrl = () => { releases++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        const source = activeProject._state, runtime = interfaceFSM.state;
+        validateProjectObjectState = () => { throw failure; };
+        try { api.assets.emptyTrash(); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && interfaceFSM.state === runtime &&
+          !commits && !effects && !releases && !reconciliations, "trash validation failure did work");
+        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.assets.emptyTrash() === null && !commits && !effects && !reconciliations, "trash noncommit did success work");
+        projectEFSM.send = send;
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const answer = validate(candidate, options);
+          if (options?.requireSlots && ++attempts === 1) {
+            const newer = projectClone(activeProject._state); newer.meta.projectName = "newest trash authority";
+            newer.fileSystem.directories.push(`${PROJECT_TRASH_DIRECTORY}/arrived-during-validation`);
+            initialize.call(activeProject, newer);
+          }
+          return answer;
+        };
+        api.assets.emptyTrash();
+        check(attempts === 2 && commits === 1 && reconciliations === 1 && activeProject.meta.projectName === "newest trash authority" &&
+          !activeProject.fileSystem.directories.includes(`${PROJECT_TRASH_DIRECTORY}/arrived-during-validation`), "trash committed stale candidate");
+        validateProjectObjectState = validate; const priorEffects = effects;
+        interfaceFSM.reconcileProjectResult = () => { throw failure; }; caught = null;
+        try { api.assets.emptyTrash(); } catch (error) { caught = error; }
+        check(caught === failure && commits === 2 && effects === priorEffects && activeProject._state !== source,
+          "trash late reconciliation failure rolled back or did success work");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; validateProjectObjectState = validate;
+        renderDashboard = render; interfaceFSM.notify = notify; releaseProjectImageDisplayUrl = release;
+        updateFileAvailability = availability; status = report; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

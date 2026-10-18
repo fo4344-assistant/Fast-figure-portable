@@ -1,0 +1,312 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 36e8c7e..c152674 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -227,6 +227,10 @@ Source43 explicitly closes nullish-to-empty/otherwise text conversion, global em
+ 
+ Baseline484fd48112486229090a33863bb451cfbbf7f28a. Source45 closes insertion success presentation: existing exact Backend grouping/append contract unchanged, one official copied global read→existing supplied renderer→same result; noncommit no success work/late errors no rollback. Pseudocode23 translates explicit ordering, code88 current-source candidate/wholevalidate/reference retry/onecommit, preserves canonical slot extensions and actual changed facts. Cases105/106 cover exact grouping/order/duplicate target/no-target, unrelated state/selection, errors/noncommit/newer source during calculation+validation/late query+render. Review040/patch117; actual Actions106+106/build/canonical gates pending, whole code stale/open.
+ 
++## Thirty-ninth bounded unit — current-authority trash transaction
++
++Baseline8835b561fa9aa33e15015b8e9fcd994e2eeda0fe. Prior unit38 cumulative/repeat/build/version runs succeeded at that SHA (review041 evidence). Existing Source45/pseudocode23 close current trash subtree/shared reference scope/whole validation/source replacement retry/one commit, reference-only detach and chart-specific original-index delta. Code89 directly implements these; canonical content preserved, existing graph rebuild reused, public wrapper no longer ignores noncommit, postcommit resource cleanup/facts and reconciliation map. Cases107/108 added; exact new-SHA Actions108+108/repeat/build/canonical+cumulative/fidelity pending, old code digest provisional. Review041/patch119. Whole assets/import/schema/serializer/raster/dashboard/timing gaps remain open; code stale, no local runtime or policy changes.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-041-code-trash-open.md b/agent_space/reviews/review-20261018-041-code-trash-open.md
+new file mode 100644
+index 0000000..89ecc65
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-041-code-trash-open.md
+@@ -0,0 +1,21 @@
++# Unit39 — current-authority trash transaction (open pending execution)
++
++## Policy and upper contract audit before completion
++
++Re-read development-policy.md v0.2.6 in full (1228 lines): §1 sequence, §2 calculation/mutation/reference/copy boundaries, §3 logical hierarchy preservation, §4.6 three closure criteria, §5 direct language-neutral translation, §6 optional bounded TLC, §7 no new high-level meaning in implementation. Policy unchanged. agent_space/AGENT.md patch-pair/lineage requirements apply; existing user authorization permits coherent atomic Git records. No local application/test/build/checker execution.
++
++Existing Source45 application/public_api/assets.py emptyProjectTrash and backend/project_efsm.py common current-source transaction plus assets_files.py collectAssetReferences already close current trash subtree, exact shared representation scope, references-only detach, whole validation, retry when source replaced, one commit, actual reference counts and no content effect without removed references. Source result contract explicitly defines chart-specific graphObjectIndexMaps=[{chartId,indices}], old-position array with retained post-index or none. Pseudocode23 backend/project_efsm.pcal DetachAssetReferences/PROJECT_TRASH_EMPTIED branch and backend/project_state.pcal matching explicit hint then chart map then validation translate these rules. No new Source meaning needed for this bounded implementation. Preserve hierarchy, no extra domain owner/cache.
++
++Code89 translates shared detach using collectAssetReferences, original-position map and existing candidate-aware rebuildEditableGraph. Reuses this helper rather than introducing trash-only cascade semantics. Trash candidate copies canonical content (not only flattened compatibility serialization), recomputes current subtree/refs each attempt, validates before source-reference comparison and commit. Publishes actual ids/counts/maps, releases removed image display resources after commit only. Application dispatches empty input and gates useful existing render/status work on committed result. Shared reconciliation consumes only matching chart map after explicit hint precedence. Existing aggregate dashboard renderer is NOT claimed fully supplied-state aligned by this unit.
++
++## Prompt-to-artifact checklist / pending Actions evidence
++
++- Current subtree, fixed trash root retained, duplicate CSV references counted separately, image ref only / settings and canonical extension retained, graph rebuilt, immutable actual facts: browser case107.
++- Empty trash does not invent removed references or repaint content:107.
++- Validation failure preserves source/Frontend, no success work; noncommit skips effects; latest authority during validation forces full subtree recalculation and one commit; late reconciliation error leaves commit and skips later success work:108.
++- Shared helper conversion scope follows collectAssetReferences (conversion representation excluded); source ownership map retains original index relation. More adversarial retained-index / conversion integration tests remain to add if execution finds coverage insufficient.
++- Regression prior106 plus107/108 both inline/split, repeat, generated build, canonical/cumulative development-layer gate and fidelity: PENDING. Code89 old digest is explicitly provisional until canonical runner output, not claimed passed/current.
++
++## Verified starting evidence and remaining scope
++
++Baseline8835b561fa9aa33e15015b8e9fcd994e2eeda0fe: unit38 regression39126440751 and repeat39126510687 success (106 per form), build39126444023 success, development-layer39126440829 and cumulative39126441515 success. These prove only bounded prior work, not new unit or whole alignment. Whole assets/move/import/schema/serializer/raster/dashboard/timing audit still open; code stale, optional verification/TLC not run. Do not infer full completion from manifest/green CI.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 8905e35..ed14eef 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4756,6 +4756,99 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(107, "Trash transaction removes exact current references and preserves canonical display settings", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
++        notify = interfaceFSM.notify, release = releaseProjectImageDisplayUrl;
++      try {
++        api.layout.setGrid(2, 2); const base = projectClone(activeProject._state);
++        base.slots.forEach(slot => { slot.hidden = false; slot.rowSpan = 1; slot.colSpan = 1; }); initialize.call(activeProject, base);
++        const [a, b] = activeProject.slots;
++        api.slots.reset(a.id); select(slotAt(a.id)); api.slots.setContentType(a.id, "graph");
++        const csv = createProjectCsv([["X", "Y"], ["1", "2"]], "trash-owned.csv");
++        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
++        api.slots.reset(b.id); select(slotAt(b.id)); api.slots.setContentType(b.id, "image");
++        const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "trash-owned.svg", "image/svg+xml");
++        api.assets.connectToSlot(projectAssetPath(image), "image", b.id);
++        const fixture = projectClone(activeProject._state);
++        fixture.assets.csvFiles.find(item => item.id === csv.id).directory = PROJECT_TRASH_DIRECTORY;
++        fixture.assets.images.find(item => item.id === image.id).directory = PROJECT_TRASH_DIRECTORY;
++        fixture.fileSystem.directories.push(`${PROJECT_TRASH_DIRECTORY}/nested`);
++        initialize.call(activeProject, fixture);
++        const slot = slotAt(b.id); slot.content.trashExtension = { keep: true };
++        const settings = JSON.stringify(slot.content.imageSettings), chartId = slotAt(a.id).chart;
++        let commits = 0, paints = 0, releases = 0, last;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = () => { paints++; }; interfaceFSM.notify = () => {};
++        releaseProjectImageDisplayUrl = () => { releases++; };
++        projectEFSM.send = function (event, payload) {
++          check(event === "PROJECT_TRASH_EMPTIED" && Object.keys(payload).length === 0, "trash wrapper forwarded candidate/facts");
++          return last = send.call(this, event, payload);
++        };
++        check(api.assets.emptyTrash() === null && commits === 1 && paints === 1 && releases === 1,
++          "trash success work or single commit incorrect");
++        check(!getProjectCsv(csv.id) && !getProjectImage(image.id) && slotAt(b.id).imageId === null &&
++          JSON.stringify(slotAt(b.id).content.imageSettings) === settings && slotAt(b.id).content.trashExtension.keep &&
++          getChart(chartId).editor.objects.length === 0 && getChart(chartId).graph.data.length === 0,
++          "trash did not detach/rebuild or changed display-owned settings/extension");
++        check(last.changed.removedGraphReferenceCount === 2 && last.changed.resetImageSlotCount === 1 &&
++          last.changed.csvIds.includes(csv.id) && last.changed.imageIds.includes(image.id) &&
++          Object.isFrozen(last.changed.graphObjectIndexMaps) &&
++          last.changed.graphObjectIndexMaps.find(map => map.chartId === chartId).indices[0] === null &&
++          activeProject.fileSystem.directories.includes(PROJECT_TRASH_DIRECTORY) &&
++          !activeProject.fileSystem.directories.includes(`${PROJECT_TRASH_DIRECTORY}/nested`), "trash actual facts/root incorrect");
++        api.assets.emptyTrash();
++        check(commits === 2 && paints === 1 && releases === 1 && !last.changed.removedGraphReferenceCount &&
++          !last.changed.resetImageSlotCount, "empty trash caused content repaint or invented references");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
++        interfaceFSM.notify = notify; releaseProjectImageDisplayUrl = release;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(108, "Trash retries latest authority and gates failure/noncommit work", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, validate = validateProjectObjectState,
++        render = renderDashboard, notify = interfaceFSM.notify, release = releaseProjectImageDisplayUrl,
++        availability = updateFileAvailability, report = status, reconcile = interfaceFSM.reconcileProjectResult,
++        failure = Error("trash boundary");
++      try {
++        let commits = 0, effects = 0, releases = 0, reconciliations = 0, caught;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = updateFileAvailability = status = () => { effects++; }; interfaceFSM.notify = () => {};
++        releaseProjectImageDisplayUrl = () => { releases++; };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        const source = activeProject._state, runtime = interfaceFSM.state;
++        validateProjectObjectState = () => { throw failure; };
++        try { api.assets.emptyTrash(); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && interfaceFSM.state === runtime &&
++          !commits && !effects && !releases && !reconciliations, "trash validation failure did work");
++        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
++        check(api.assets.emptyTrash() === null && !commits && !effects && !reconciliations, "trash noncommit did success work");
++        projectEFSM.send = send;
++        let attempts = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const answer = validate(candidate, options);
++          if (options?.requireSlots && ++attempts === 1) {
++            const newer = projectClone(activeProject._state); newer.meta.projectName = "newest trash authority";
++            newer.fileSystem.directories.push(`${PROJECT_TRASH_DIRECTORY}/arrived-during-validation`);
++            initialize.call(activeProject, newer);
++          }
++          return answer;
++        };
++        api.assets.emptyTrash();
++        check(attempts === 2 && commits === 1 && reconciliations === 1 && activeProject.meta.projectName === "newest trash authority" &&
++          !activeProject.fileSystem.directories.includes(`${PROJECT_TRASH_DIRECTORY}/arrived-during-validation`), "trash committed stale candidate");
++        validateProjectObjectState = validate; const priorEffects = effects;
++        interfaceFSM.reconcileProjectResult = () => { throw failure; }; caught = null;
++        try { api.assets.emptyTrash(); } catch (error) { caught = error; }
++        check(caught === failure && commits === 2 && effects === priorEffects && activeProject._state !== source,
++          "trash late reconciliation failure rolled back or did success work");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; validateProjectObjectState = validate;
++        renderDashboard = render; interfaceFSM.notify = notify; releaseProjectImageDisplayUrl = release;
++        updateFileAvailability = availability; status = report; interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 1e93270..11f0f43 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 88,
++      "revision": 89,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:de6575d91cc0bfae1bee9e70b4b00b1e72c76dd47a7e9bd1417141bf8c1fe795",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-040-caption-insertion-closure.md"
++      "validation_review": "agent_space/reviews/review-20261018-041-code-trash-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 23,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 32d1bca..ef9d929 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -579,6 +579,10 @@
+         if (chart?.editor?.editable === false) chart = null;
+         if (chart && hints.chartId === chart.id && Object.hasOwn(hints, "selectedIndexHint"))
+           graphObjectIndex = hints.selectedIndexHint;
++        else if (chart) {
++          const map = hints.graphObjectIndexMaps?.find(item => item.chartId === chart.id);
++          if (map) graphObjectIndex = Number.isInteger(graphObjectIndex) ? map.indices[graphObjectIndex] ?? null : null;
++        }
+         if (payload.clearGraphSelection || hints.clearGraphSelection ||
+             !Number.isInteger(graphObjectIndex) || graphObjectIndex < 0 ||
+             graphObjectIndex >= (chart?.editor?.objects?.length || 0))
+@@ -1671,56 +1675,70 @@
+         ) + activeProject.slots.filter((slot) => imageIds.has(slot.imageId)).length;
+       }
+       function removeProjectAssetReferences(csvIds, imageIds, state=activeProject._state) {
+-        let removedGraphReferenceCount=0, resetImageSlotCount=0;
+         normalizeSlotContents(state.slots);
+-        state.charts.forEach(chart=>{
+-          if(!Array.isArray(chart.editor?.objects))return;
+-          let objects=chart.editor.objects.filter(object=>!csvIds.has(object.csvId));
+-          removedGraphReferenceCount+=chart.editor.objects.length-objects.length;
+-          if(objects.length===chart.editor.objects.length)return;
+-          chart.editor.objects=objects;
+-          if(state===activeProject._state&&chart.editor.editable!==false){
+-            chart.graph.data=traces(chart);
+-            chart.graph.layout=layout(chart);
+-          }
++        const refs = collectAssetReferences(csvIds, imageIds, state), graphObjectIndexMaps = [];
++        let removedGraphReferenceCount = 0, resetImageSlotCount = 0;
++        state.charts.forEach(chart => {
++          const removed = new Set(refs.filter(ref => ref.kind === "csv" && ref.chartId === chart.id)
++            .map(ref => ref.originalObjectIndex));
++          if (!removed.size) return;
++          const indices = [], objects = [];
++          chart.editor.objects.forEach((object, index) => {
++            indices.push(removed.has(index) ? null : objects.length);
++            if (!removed.has(index)) objects.push(object);
++          });
++          chart.editor.objects = objects;
++          graphObjectIndexMaps.push({ chartId: chart.id, indices });
++          removedGraphReferenceCount += removed.size;
++          rebuildEditableGraph(chart, state);
+         });
+-        state.slots.forEach(slot=>{
+-          if(!imageIds.has(slot.imageId))return;
+-          resetImageSlotCount+=1;
+-          slot.imageId=null;
++        refs.filter(ref => ref.kind === "image").forEach(ref => {
++          ref.slot.content.imageId = null;
++          resetImageSlotCount++;
+         });
+-        return {removedGraphReferenceCount,resetImageSlotCount};
++        return { removedGraphReferenceCount, resetImageSlotCount, graphObjectIndexMaps };
+       }
+       function applyProjectTrashEmptiedAction({ machine, payload }) {
+         machine.assertWritable("files","PROJECT_TRASH_EMPTIED");
+         machine.assertWritable("data","PROJECT_TRASH_EMPTIED");
+         machine.assertWritable("images","PROJECT_TRASH_EMPTIED");
+-        let candidate=projectClone(activeProject._state),
+-          csvFiles=candidate.assets.csvFiles.filter((csv)=>projectVfs.isTrashed(projectAssetPath(csv))),
+-          images=candidate.assets.images.filter((image)=>projectVfs.isTrashed(projectAssetPath(image))),
+-          directories=candidate.fileSystem.directories.filter(
+-            (path)=>path!==PROJECT_TRASH_DIRECTORY&&projectVfs.isTrashed(path)),
+-          csvIds=new Set(csvFiles.map((csv)=>csv.id)),
+-          imageIds=new Set(images.map((image)=>image.id));
+-        if(projectAssetReferenceCount(csvIds,imageIds)>0){
+-          machine.assertWritable("charts","PROJECT_TRASH_EMPTIED");
+-          machine.assertWritable("slots","PROJECT_TRASH_EMPTIED");
+-          machine.assertWritable("editor","PROJECT_TRASH_EMPTIED");
+-        }
+-        let removedReferences=removeProjectAssetReferences(csvIds,imageIds,candidate);
+-        candidate.assets.csvFiles=candidate.assets.csvFiles.filter((csv)=>!csvIds.has(csv.id));
+-        candidate.assets.images=candidate.assets.images.filter((image)=>!imageIds.has(image.id));
+-        candidate.fileSystem.directories=candidate.fileSystem.directories.filter(
+-          (path)=>path===PROJECT_TRASH_DIRECTORY||!projectVfs.isTrashed(path));
+-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+-        images.forEach(releaseProjectImageDisplayUrl);
+-        payload.csvCount=csvFiles.length;
+-        payload.imageCount=images.length;
+-        payload.directoryCount=directories.length;
+-        payload.removedGraphReferenceCount=removedReferences.removedGraphReferenceCount;
+-        payload.resetImageSlotCount=removedReferences.resetImageSlotCount;
+-        payload.removedReferenceCount=
+-          payload.removedGraphReferenceCount+payload.resetImageSlotCount;
++        while (true) {
++          const source = activeProject._state, candidate = projectClone(source);
++          candidate.slots.forEach(slot => {
++            const original = source.slots.find(item => item.id === slot.id);
++            if (original?.content) slot.content = projectClone(original.content);
++          });
++          const csvFiles = candidate.assets.csvFiles.filter(csv => projectVfs.isTrashed(projectAssetPath(csv))),
++            images = candidate.assets.images.filter(image => projectVfs.isTrashed(projectAssetPath(image))),
++            directories = candidate.fileSystem.directories.filter(path =>
++              !projectVfs.isFixedDirectory(path) && projectVfs.isTrashed(path)),
++            csvIds = new Set(csvFiles.map(csv => csv.id)), imageIds = new Set(images.map(image => image.id));
++          if (collectAssetReferences(csvIds, imageIds, candidate).length) {
++            machine.assertWritable("charts", "PROJECT_TRASH_EMPTIED");
++            machine.assertWritable("slots", "PROJECT_TRASH_EMPTIED");
++            machine.assertWritable("editor", "PROJECT_TRASH_EMPTIED");
++          }
++          const removedReferences = removeProjectAssetReferences(csvIds, imageIds, candidate);
++          candidate.assets.csvFiles = candidate.assets.csvFiles.filter(csv => !csvIds.has(csv.id));
++          candidate.assets.images = candidate.assets.images.filter(image => !imageIds.has(image.id));
++          candidate.fileSystem.directories = candidate.fileSystem.directories.filter(path => !directories.includes(path));
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const post = activeProject._state,
++            changedIds = (before, after) => [...new Set([...before, ...after].map(item => item.id))]
++              .filter(id => JSON.stringify(before.find(item => item.id === id)) !==
++                JSON.stringify(after.find(item => item.id === id)));
++          Object.assign(payload, removedReferences, { csvCount: csvFiles.length, imageCount: images.length,
++            directoryCount: directories.length,
++            removedReferenceCount: removedReferences.removedGraphReferenceCount + removedReferences.resetImageSlotCount });
++          payload.changed = { slotIds: changedIds(source.slots, post.slots), chartIds: changedIds(source.charts, post.charts),
++            csvIds: [...csvIds], imageIds: [...imageIds], assets: [], ...removedReferences,
++            csvCount: csvFiles.length, imageCount: images.length, directoryCount: directories.length };
++          payload.selectionHints = immutableProjectCopy({ graphObjectIndexMaps: removedReferences.graphObjectIndexMaps });
++          images.forEach(releaseProjectImageDisplayUrl);
++          return;
++        }
+       }
+       function applyProjectNodeMovedAction({ machine, payload }) {
+         machine.assertWritable("files","PROJECT_NODE_MOVED");
+@@ -6652,10 +6670,12 @@
+         return path;
+       }
+       function emptyProjectTrash() {
+-        let payload = { direction: "ui-to-fsm" };
+-        dispatchDashboardAffectingEvent("PROJECT_TRASH_EMPTIED", payload);
++        const result = dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {});
++        if (!result.committed) return null;
++        if (dashboardProjectionEffect("PROJECT_TRASH_EMPTIED", result.changed) === "FULL_DASHBOARD") renderDashboard();
+         updateFileAvailability();
+-        status(`휴지통을 비웠습니다. 폴더 ${payload.directoryCount}개, CSV ${payload.csvCount}개, 이미지 ${payload.imageCount}개를 삭제했습니다.`);
++        status(`휴지통을 비웠습니다. 폴더 ${result.changed.directoryCount}개, CSV ${result.changed.csvCount}개, 이미지 ${result.changed.imageCount}개를 삭제했습니다.`);
++        return null;
+       }
+       function draggableProjectAsset(path) {
+         let match = path ? projectVfs.resolve(path) : null;

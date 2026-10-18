@@ -1,0 +1,21 @@
+# Unit39 — current-authority trash transaction (open pending execution)
+
+## Policy and upper contract audit before completion
+
+Re-read development-policy.md v0.2.6 in full (1228 lines): §1 sequence, §2 calculation/mutation/reference/copy boundaries, §3 logical hierarchy preservation, §4.6 three closure criteria, §5 direct language-neutral translation, §6 optional bounded TLC, §7 no new high-level meaning in implementation. Policy unchanged. agent_space/AGENT.md patch-pair/lineage requirements apply; existing user authorization permits coherent atomic Git records. No local application/test/build/checker execution.
+
+Existing Source45 application/public_api/assets.py emptyProjectTrash and backend/project_efsm.py common current-source transaction plus assets_files.py collectAssetReferences already close current trash subtree, exact shared representation scope, references-only detach, whole validation, retry when source replaced, one commit, actual reference counts and no content effect without removed references. Source result contract explicitly defines chart-specific graphObjectIndexMaps=[{chartId,indices}], old-position array with retained post-index or none. Pseudocode23 backend/project_efsm.pcal DetachAssetReferences/PROJECT_TRASH_EMPTIED branch and backend/project_state.pcal matching explicit hint then chart map then validation translate these rules. No new Source meaning needed for this bounded implementation. Preserve hierarchy, no extra domain owner/cache.
+
+Code89 translates shared detach using collectAssetReferences, original-position map and existing candidate-aware rebuildEditableGraph. Reuses this helper rather than introducing trash-only cascade semantics. Trash candidate copies canonical content (not only flattened compatibility serialization), recomputes current subtree/refs each attempt, validates before source-reference comparison and commit. Publishes actual ids/counts/maps, releases removed image display resources after commit only. Application dispatches empty input and gates useful existing render/status work on committed result. Shared reconciliation consumes only matching chart map after explicit hint precedence. Existing aggregate dashboard renderer is NOT claimed fully supplied-state aligned by this unit.
+
+## Prompt-to-artifact checklist / pending Actions evidence
+
+- Current subtree, fixed trash root retained, duplicate CSV references counted separately, image ref only / settings and canonical extension retained, graph rebuilt, immutable actual facts: browser case107.
+- Empty trash does not invent removed references or repaint content:107.
+- Validation failure preserves source/Frontend, no success work; noncommit skips effects; latest authority during validation forces full subtree recalculation and one commit; late reconciliation error leaves commit and skips later success work:108.
+- Shared helper conversion scope follows collectAssetReferences (conversion representation excluded); source ownership map retains original index relation. More adversarial retained-index / conversion integration tests remain to add if execution finds coverage insufficient.
+- Regression prior106 plus107/108 both inline/split, repeat, generated build, canonical/cumulative development-layer gate and fidelity: PENDING. Code89 old digest is explicitly provisional until canonical runner output, not claimed passed/current.
+
+## Verified starting evidence and remaining scope
+
+Baseline8835b561fa9aa33e15015b8e9fcd994e2eeda0fe: unit38 regression39126440751 and repeat39126510687 success (106 per form), build39126444023 success, development-layer39126440829 and cumulative39126441515 success. These prove only bounded prior work, not new unit or whole alignment. Whole assets/move/import/schema/serializer/raster/dashboard/timing audit still open; code stale, optional verification/TLC not run. Do not infer full completion from manifest/green CI.
