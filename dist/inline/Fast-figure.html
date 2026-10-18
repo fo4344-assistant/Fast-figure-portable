@@ -14709,7 +14709,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return chart;
       }
       function projectClone(value) {
-        return JSON.parse(JSON.stringify(value));
+        const projectState = value?.kind === "fast-figure-project-object" && Array.isArray(value.slots),
+          source = projectState ? { ...value, slots: value.slots.map(slot => ({ ...slot })) } : value,
+          copy = JSON.parse(JSON.stringify(source));
+        if (projectState) normalizeSlotContents(copy.slots);
+        return copy;
       }
       function slotLocalState(slot) {
         normalizeSlotContent(slot);
