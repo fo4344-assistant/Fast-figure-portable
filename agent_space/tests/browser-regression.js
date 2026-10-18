@@ -203,7 +203,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       api.graphs.setEditable(true);
       let currentSlot = slotAt(slot.id);
       const chart = getChart(currentSlot.chart);
-      check(chart && chart.editor.objects.length === 0, "blank chart is not zero-object");
+      check(chart && chart.editor.objects.length === 0 && !Object.hasOwn(chart.editor, "conversionRows"),
+        "blank chart is not zero-object or kept conversion-only rows");
       const file = ffsxFile(currentSlot);
       const payload = await ffsxReadSlot(file);
       check(payload.chart && payload.csvFiles.length === 0, "blank FFSX contains synthetic CSV");
@@ -3017,7 +3018,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           "conversion lost import/settings/reference, generated wrong CSV/facts or selected new CSV");
         const allocated = JSON.stringify(activeProject.csvFiles);
         projectEFSM.send = send;
-        api.graphs.selectObject(0);
+        appFSM.send("SELECT_GRAPH_OBJECT", { index: 0, selectAsset: false });
         check(graphEditorSetEditable(slot.id, chartId, false) === false && interfaceFSM.state.graphObjectIndex === null &&
           interfaceFSM.state.assetPath === path, "noneditable transition retained graph selection or changed CSV selection");
         check(graphEditorSetEditable(slot.id, chartId, true) === true && graphEditorSetEditable(slot.id, chartId, true) === true &&

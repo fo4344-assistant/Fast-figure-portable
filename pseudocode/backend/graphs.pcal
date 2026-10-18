@@ -799,9 +799,9 @@ RepresentationBranches:
         copy.editor.objects[i].csvId := csv.id;
         i := i + 1;
       end while;
-      RemoveField(copy.editor,"conversionRows");
     end if;
-    \* Zero conversion objects -> editable empty chart WITHOUT CSV.
+    RemoveField(copy.editor,"conversionRows");
+    \* Zero conversion objects -> editable empty chart WITHOUT CSV; remove conversion-only rows too.
   end if;
 MakeEditableUsingSameWholeCandidate:
   copy.editor.editable := TRUE;
