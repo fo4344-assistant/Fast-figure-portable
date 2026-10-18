@@ -1,0 +1,28 @@
+diff --git a/agent_space/reviews/review-20261018-048-code-project-import-open.md b/agent_space/reviews/review-20261018-048-code-project-import-open.md
+index 3f42d77..8216a43 100644
+--- a/agent_space/reviews/review-20261018-048-code-project-import-open.md
++++ b/agent_space/reviews/review-20261018-048-code-project-import-open.md
+@@ -14,6 +14,10 @@ Continue fully read development-policy.md v0.2.6 and AGENT.md ownership/direct-t
+ - Case126: validation/CRC/unsupported legacy JSON/I/O errors before commit; noncommit skips export; authority replacement during validation reparses entire package before one commit; late official-read/resource failures retain commit/original error; nested busy rejected.
+ - Prior124 and earlier roundtrip/export/package cases retained. This does not close all typed XML grammar/build normalization/serializer/raster/dashboard/timing requirements.
+ 
++## First execution / fixture correction
++
++At6943afeb470d9990377cb86ec8220b7e6eb74fa9, regression39156116506 PASS prior124 and126 in both forms;125 FAIL `TypeError: api.assets.createCsv is not a function` before reaching new project-load assertions. Fixture invented a public method; real existing setup helper is createProjectCsv, as already used by case122. Patch144 corrects fixture only, not public API/runtime/Source/PlusCal/lineage. Never broaden API or alter Source to excuse the erroneous test. Canonical39156116471 PASS confirms code97 sha256:0aab180b509b3df9c91a80464f68c78d5765ce6f14f6e78df9456939be1ab286; cumulative39156123445 and structural fidelity39156125931 PASS (base41247eff5171017bd3dd70656b55f2ed14ce8267), not proof of failed125. Build39156116486 PASS generated dist-only41192d5a0a0f8bf0b06f4fd6655f97305bb8eeef, fetched/fast-forwarded without local build. Corrected new-SHA126+126/repeat/build/version/fidelity still pending.
++
+ ## Lineage, execution evidence and remaining gaps
+ 
+ Source45/pseudocode24 unchanged. Code97 remains stale; staged Git blob digest is metadata calculation only, authorized GitHub-hosted canonical checker must confirm. Exact-SHA126 inline/split regression/repeat/build/canonical/cumulative/fidelity PENDING. No local application/test/build/checker, dist editing, policy change or optional TLC pass. Existing aggregate postcommit renderer still not supplied-projection aligned. Common initialize performs normalization/validation after many actions' source-reference check; broader common commit audit remains open, not masked by bounded retry tests. Full schema/typed serializer/import/export/raster/current-capture/dashboard/lifecycle timing audit remains open. No whole goal completion from this checklist or green structural coverage.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 7ce73ca..950d793 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5607,7 +5607,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+         renderDashboard = renderProjectObject = status = () => {}; interfaceFSM.notify = () => {};
+         const [a, b] = activeProject.slots.filter(item => !item.hidden),
+-          asset = api.assets.createCsv([["x", "y"], [1, 2]], "project-owned.csv");
++          asset = createProjectCsv([["x", "y"], ["1", "2"]], "project-owned.csv");
+         select(a); api.graphs.addObject(asset.id);
+         api.slots.setContentType(b.id, "image"); select(slotAt(b.id)); api.images.insertEmpty();
+         api.project.setName("owned whole project");

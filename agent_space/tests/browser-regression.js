@@ -5607,7 +5607,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
         renderDashboard = renderProjectObject = status = () => {}; interfaceFSM.notify = () => {};
         const [a, b] = activeProject.slots.filter(item => !item.hidden),
-          asset = api.assets.createCsv([["x", "y"], [1, 2]], "project-owned.csv");
+          asset = createProjectCsv([["x", "y"], ["1", "2"]], "project-owned.csv");
         select(a); api.graphs.addObject(asset.id);
         api.slots.setContentType(b.id, "image"); select(slotAt(b.id)); api.images.insertEmpty();
         api.project.setName("owned whole project");
