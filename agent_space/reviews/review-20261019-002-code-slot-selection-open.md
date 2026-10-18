@@ -17,4 +17,10 @@ Runtime ASSET_SELECTION_EVENTS.SELECT_SLOT incorrectly cleared path and targeted
 - [ ] Exact implementation SHA: generated distribution/build, development-layer and cumulative fidelity.
 - [ ] Full Plan023 requirement audit: initializer/schema/serializer/raster resources/current snapshot/dashboard/timing and logical hierarchy coverage. Structural green statuses alone are insufficient.
 
+## Actual implementation runner evidence and next fixture correction
+
+At `c41f1e18b3228953e0be82dc3c89834be5ff74e8`, cumulative39165622796/repeat39165626425 pass127 other cases per distribution, and case127 now passes the independent image-asset selection assertion before reaching `TypeError: Cannot read properties of undefined (reading 'some')`. Its trace assertion incorrectly uses chart.data; rebuildEditableGraph writes chart.graph.data. Patch20261019-004 corrects that owner path only, retaining the real-trace predicate. Corrected full/repeated128 results remain pending. Build39165622616 passed and produced dist-only f00f187 (full SHA available from remote); cumulative version39165622869 and fidelity39165624782 passed at the implementation SHA. Canonical code99 fingerprint matches4783927c81552991f16a875a5a9bc367d3e20372f090024ce0446271bdd5e002.
+
+Sequential Contents delivery caused intermediate metadata39165619041 failure (new fingerprint while source old) and final push-relative39165622624 failure `source-code changed without increasing its revision (99 -> 99)` because its immediate parent already contains code99 metadata. These failures are not hidden or called passed. The cumulative version run from0ba01c3 validates the coherent change and passes; no checker weakening/artificial revision bump is introduced. Future code+lineage changes require atomic delivery when immediate-parent gates must be green, an explicit Contents API limitation.
+
 No local application/test/build/checker or optional TLC execution. No policy changes. Patch20261019-003 pairs actual diff and rationale. Whole objective remains open; code99 is not current.
