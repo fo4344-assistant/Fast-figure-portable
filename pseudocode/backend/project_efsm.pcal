@@ -162,7 +162,14 @@ CurrentLocationAndCollisionFreeName:
   Require(CurrentParentDirectoryExists(candidate,path));
   call projectVfsUniquePath(path,candidate,{}); path := result;
 CandidateAssetIdAndMetadata:
-  if kind = "csv" then call SerializeNewDataTable(table,path); bytes := result; end if;
+  if kind = "csv" then
+    if HasField(payload,"bytesBase64") /\ payload.bytesBase64 # "" /\ payload.bytesBase64 # NoValue then
+      bytes := DecodeCopiedBase64Bytes(payload.bytesBase64);
+    else
+      \* Source SYNTHETIC_DATA_BYTES_RULE: filename-aware UTF-8 only without original bytes.
+      call SerializeNewDataTable(table,path); bytes := result;
+    end if;
+  end if;
   call BuildAssetMetadata(kind,path,payload.mime,bytes); asset := result;
   asset.id := IF requestedId = NoValue THEN candidate.nextId[kind] ELSE requestedId;
   \* An explicitly invalid/duplicate id is rejected by whole validation, not silently renamed.

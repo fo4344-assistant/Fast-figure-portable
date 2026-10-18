@@ -1,0 +1,311 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 23851de..00dbdb8 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -151,6 +151,10 @@ Baseline10e3d3d. Existing Source41 PACKAGE_IDENTITY_AND_SLOT_SETTINGS_RULE and p
+ 
+ Unit23 bounded evidence: at92dabc5f7c3bb3fb1512c799208b626adaf20edc regression39105099173 PASS76 inline+76 split (null/positive real ZIP and prior75), cumulative version39105099599 PASS from10e3d3d880a583045295d65c4ac2becdb000eac6, push39105099197 PASS. Code65 canonical c7c226fa184cb585746f4a958d8427bce69c9a5c3090005315376f31f50f2ef4; upper41/17 unchanged. Build39105022883 at836b3a1 PASS identical runtime/build inputs. Review025 retains initial fixture failure/no Source weakening and requirement-linked final evidence. Full canonical import/default ownership, other candidates/shared validation/raster/supplied dashboard remain open; code65 stale, no whole closure.
+ 
++## Twenty-fourth implementation unit — Current-authority CSV create and ordinary empty selection
++
++Baseline bbb602bd52b240ca875af2b871963edf83a4434b. Source41 new-input-only create, common candidate/validation/retry/result and SYNTHETIC_DATA_BYTES_RULE already close the contract. Pseudocode18 corrects CalculateNewAsset's unconditional CSV reserialization to preserve supplied bytes first; code66 translates current id/parent/collision, filename-aware bytes only without originals, one candidate commit, actual changed path and immutable official success read. Empty create-and-select uses the same command then selectProjectCsv; noncommit skips selection and late errors never rollback an asset. Cases77/78 cover exact bytes/JSON/TSV/CSV, collision/current retry, copies/result facts, invalid inputs/validator/noncommit and postcommit selection/query failures. Review026/patch063 track pending Actions78+78/build/canonical gate. Source unchanged, whole code stale; broader import/parser/image/asset cascade/full validation/raster/supplied dashboard still open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index e0a144f..411b3a6 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3128,6 +3128,97 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         JSON.stringify(activeProject._state) === live, "positive image package changed identity/bytes/settings or live authority");
+     });
+ 
++    await run(77, "CSV create owns current candidate, bytes, location and immutable success read", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection;
++      let commits = 0, command, queries = 0;
++      try {
++        const next = activeProject._state.nextId.csv, chartState = JSON.stringify(activeProject.charts),
++          bytes = ffpxBytesToBase64(new TextEncoder().encode('original\tbytes\r\n'));
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        projectEFSM.send = function (event, payload) { if (event === "DATA_OBJECT_CREATED") {
++          check(!Object.hasOwn(payload, "model") && !Object.hasOwn(payload, "candidate"), "Application supplied candidate");
++          command = send.call(this, event, payload); return command;
++        } return send.call(this, event, payload); };
++        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") queries++;
++          return query(kind, request); };
++        const csv = createProjectCsv([["X", "Y"], [1, 2]], "candidate.csv", null, bytes, "text/tab-separated-values", 0);
++        check(commits === 1 && queries === 1 && csv.id === next && csv.bytesBase64 === bytes && csv.headerLines === 0 &&
++          csv.mime === "text/tab-separated-values" && Object.isFrozen(csv) && Object.isFrozen(csv.rows[0]) &&
++          csv !== getProjectCsv(csv.id) && command.changed.assets[0].path === projectAssetPath(csv) &&
++          command.changed.csvIds[0] === csv.id && activeProject._state.nextId.csv === next + 1 &&
++          JSON.stringify(activeProject.charts) === chartState, "create lost bytes/identity/copies or partial commit");
++        const collision = createProjectCsv([[1]], "candidate.csv");
++        check(collision.name === "candidate (2).csv" && getProjectCsv(csv.id).bytesBase64 === bytes, "create replaced collision");
++        const rows = [[null, { a: 1 }, 'quote"', "a\tb", "a\nb"]];
++        for (const name of ["serialize.json", "serialize.tsv", "serialize.csv"]) {
++          const created = createProjectCsv(rows, name), text = new TextDecoder().decode(ffpxBase64ToBytes(created.bytesBase64));
++          const expected = name.endsWith(".json") ? JSON.stringify(dataTable(rows)) : name.endsWith(".tsv") ?
++            '\t"{""a"":1}"\t"quote"""\t"a\tb"\t"a\nb"' : ',"{""a"":1}","quote""",a\tb,"a\nb"';
++          check(text === expected, `Source filename-aware synthetic bytes failed: ${name}: ${JSON.stringify(text)}`);
++        }
++        check(interfaceFSM.readState().selectedSlotId === selected && interfaceFSM.state.assetPath === session.assetPath,
++          "CSV create changed selection");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
++        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
++    });
++
++    await run(78, "CSV create retries authority and preserves commit boundary on failures and selection rejection", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
++        query = readBackendProjection, selectCsv = selectProjectCsv;
++      let commits = 0, reads = 0;
++      try {
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") reads++;
++          return query(kind, request); };
++        const baseline = JSON.stringify(activeProject._state), failure = Error("expected CSV create failure");
++        for (const args of [[[], "invalid.csv"], [[[1]], "invalid.csv", 0], [[[1]], "invalid.csv", null, "@@@"],
++          [[[1]], "invalid.csv", null, "", "text/csv", 1, "/missing-parent/test.csv"]]) {
++          let caught; try { createProjectCsv(...args); } catch (error) { caught = error; }
++          check(caught && commits === 0 && reads === 0 && JSON.stringify(activeProject._state) === baseline,
++            "invalid create did success work/partial mutation");
++        }
++        validateProjectObjectState = () => { throw failure; };
++        let caught; try { createProjectCsv([[1]], "invalid.csv"); } catch (error) { caught = error; }
++        check(caught === failure && commits === 0 && reads === 0, "validation error changed or committed");
++        validateProjectObjectState = validate;
++        const noncommit = Object.freeze({ committed: false }); projectEFSM.send = () => noncommit;
++        check(createEmptyProjectCsvAndSelect() === noncommit && commits === 0 && reads === 0, "noncommit selected/read CSV");
++        projectEFSM.send = send;
++        let attempts = 0, assigned;
++        validateProjectObjectState = function (candidate, options) {
++          const result = validate(candidate, options);
++          if (options?.requireSlots && !attempts++) {
++            const newer = projectClone(activeProject._state), csv = buildProjectCsvModel([["new"]], "retry.csv",
++              newer.nextId.csv++, "", "text/csv", 1, newer);
++            newer.assets.csvFiles.push(csv); newer.meta.projectName = "new CSV authority"; assigned = newer.nextId.csv;
++            initialize.call(activeProject, newer);
++          }
++          return result;
++        };
++        const created = createProjectCsv([["old"]], "retry.csv"); validateProjectObjectState = validate;
++        check(attempts === 2 && commits === 1 && created.id === assigned && created.name === "retry (2).csv" &&
++          activeProject.projectName === "new CSV authority", "create used stale id/path/authority or multiple commits");
++        selectProjectCsv = () => null;
++        const count = activeProject.csvFiles.length;
++        check(createEmptyProjectCsvAndSelect() === null && activeProject.csvFiles.length === count + 1 && commits === 2,
++          "postcommit selection rejection rolled back asset or disguised noncommit");
++        selectProjectCsv = selectCsv;
++        const empty = createEmptyProjectCsvAndSelect();
++        check(empty && Object.isFrozen(empty) && JSON.stringify(empty.rows) === JSON.stringify([["X", "Y"], ["", ""]]) &&
++          interfaceFSM.state.assetPath === projectAssetPath(empty), "empty create did not use ordinary selected copied asset");
++        const beforeReadFailure = activeProject.csvFiles.length;
++        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") throw failure;
++          return query(kind, request); };
++        caught = null; try { createProjectCsv([[1]], "query-failure.csv"); } catch (error) { caught = error; }
++        check(caught === failure && activeProject.csvFiles.length === beforeReadFailure + 1,
++          "postcommit query error swallowed or rolled back committed CSV");
++      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
++        readBackendProjection = query; selectProjectCsv = selectCsv;
++        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index daf2838..f001c2d 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 65,
++      "revision": 66,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,17 +44,17 @@
+         "pseudocode": "sha256:c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-025-code-empty-image-settings-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-026-code-csv-create-open.md"
+     }, 
+     "pseudocode": {
+-      "revision": 17,
++      "revision": 18,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+       "fingerprint": "sha256:c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5"
+       },
+-      "translation_review": "agent_space/reviews/review-20261018-024-code-graph-editable-open.md"
++      "translation_review": "agent_space/reviews/review-20261018-026-code-csv-create-open.md"
+     }
+   }
+ }
+diff --git a/pseudocode/backend/project_efsm.pcal b/pseudocode/backend/project_efsm.pcal
+index 3fb6757..b712c2f 100644
+--- a/pseudocode/backend/project_efsm.pcal
++++ b/pseudocode/backend/project_efsm.pcal
+@@ -162,7 +162,14 @@ CurrentLocationAndCollisionFreeName:
+   Require(CurrentParentDirectoryExists(candidate,path));
+   call projectVfsUniquePath(path,candidate,{}); path := result;
+ CandidateAssetIdAndMetadata:
+-  if kind = "csv" then call SerializeNewDataTable(table,path); bytes := result; end if;
++  if kind = "csv" then
++    if HasField(payload,"bytesBase64") /\ payload.bytesBase64 # "" /\ payload.bytesBase64 # NoValue then
++      bytes := DecodeCopiedBase64Bytes(payload.bytesBase64);
++    else
++      \* Source SYNTHETIC_DATA_BYTES_RULE: filename-aware UTF-8 only without original bytes.
++      call SerializeNewDataTable(table,path); bytes := result;
++    end if;
++  end if;
+   call BuildAssetMetadata(kind,path,payload.mime,bytes); asset := result;
+   asset.id := IF requestedId = NoValue THEN candidate.nextId[kind] ELSE requestedId;
+   \* An explicitly invalid/duplicate id is rejected by whole validation, not silently renamed.
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 73934bb..f7ead3c 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -909,16 +909,32 @@
+       function applyDataObjectCreatedAction({ machine, payload }) {
+         machine.assertWritable("data","DATA_OBJECT_CREATED");
+         machine.assertWritable("files","DATA_OBJECT_CREATED");
+-        let model=payload.model;
+-        if(!model||activeProject.csvFiles.some((csv)=>csv.id===model.id))
+-          throw Error(`CSV ID ${model?.id}가 중복되었습니다.`);
+-        let candidate=projectClone(activeProject._state),
+-          next=projectClone(model);
+-        projectVfs.prepare(next,"csv",candidate);
+-        candidate.assets.csvFiles.push(next);
+-        candidate.nextId.csv=Math.max(candidate.nextId.csv,next.id+1);
+-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+-        payload.csv=getProjectCsv(next.id);
++        while (true) {
++          const source = activeProject._state, candidate = projectClone(source),
++            rows = projectClone(dataTable(payload.data)),
++            requested = payload.path || `${PROJECT_ASSET_DIRECTORIES.csv}/${projectCsvName(payload.name)}`,
++            normalized = normalizeProjectPath(requested), directory = projectParentPath(normalized);
++          if (!source.fileSystem.directories.includes(directory)) throw Error("CSV 상위 directory가 없습니다.");
++          const path = projectVfs.uniquePath(directory, projectPathName(normalized), source),
++            id = payload.id == null ? source.nextId.csv : payload.id;
++          if (!Number.isInteger(id) || id <= 0 || source.assets.csvFiles.some(csv => csv.id === id))
++            throw Error(`CSV ID ${id}가 올바르지 않거나 중복되었습니다.`);
++          const original = payload.bytesBase64,
++            bytesBase64 = original != null && original !== "" ?
++              (ffpxBase64ToBytes(original), original) : ffpxBytesToBase64(serializeNewDataTable(rows, path)),
++            csv = { id, rows, bytesBase64, mime: payload.mime || "text/csv",
++              headerLines: headerLineCount(payload.headerLines, rows),
++              directory: projectParentPath(path), name: projectPathName(path) };
++          candidate.assets.csvFiles.push(csv);
++          candidate.nextId.csv = Math.max(candidate.nextId.csv, id + 1);
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const committed = activeProject._state.assets.csvFiles.find(item => item.id === id);
++          payload.changed = { slotIds: [], chartIds: [], csvIds: [id], imageIds: [],
++            assets: [{ role: "created", kind: "csv", id, path: projectAssetPath(committed), owners: [] }] };
++          return;
++        }
+       }
+       function applyAssetObjectReplacedAction({ machine, payload }, kind) {
+         let image=kind==="image",
+@@ -2909,21 +2925,12 @@
+         headerLines = 1,
+         path = null,
+       ) {
+-        let model = buildProjectCsvModel(
+-          data,
+-          name,
+-          Number.isInteger(id) && id > 0 ? id : activeProject.csvId,
+-          bytesBase64,
+-          mime,
+-          headerLines,
+-        );
+-        if (path) projectVfs.assignLocation(model, path);
+-        appFSM.send("DATA_OBJECT_CREATED", {
+-          model,
+-          csvId: model.id,
+-          direction: "fsm-to-model",
++        const result = dispatchProjectCommand("DATA_OBJECT_CREATED", {
++          data, name, id, bytesBase64, mime, headerLines, path,
+         });
+-        return model;
++        if (!result.committed) return result;
++        const created = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "csv");
++        return appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: created.path }).target;
+       }
+       function createEmptyProjectCsv() {
+         return createProjectCsv(
+@@ -5233,6 +5240,16 @@
+         }
+         return assets;
+       }
++      function serializeNewDataTable(rows, path) {
++        const extension = String(path).toLowerCase();
++        if (extension.endsWith(".json")) return new TextEncoder().encode(JSON.stringify(rows));
++        const delimiter = extension.endsWith(".tsv") ? "\t" : ",",
++          cell = value => {
++            const text = value == null ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
++            return text.includes(delimiter) || /["\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
++          };
++        return new TextEncoder().encode(rows.map(row => row.map(cell).join(delimiter)).join("\n"));
++      }
+       function ffpxCsv(rows) {
+         let quote = (value) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
+         return (rows || [])
+@@ -6171,10 +6188,9 @@
+         return csv;
+       }
+       function createEmptyProjectCsvAndSelect() {
+-        let csv = createEmptyProjectCsv();
+-        graphEditorSelectCsv(csv.id);
+-        status(`${csv.name}을 만들고 선택했습니다.`);
+-        return csv;
++        const csv = createEmptyProjectCsv();
++        if (csv?.committed === false) return csv;
++        return selectProjectCsv(projectAssetPath(csv));
+       }
+       function graphEditorSelectObject(index) {
+         let input = validateFrontendIntent("SELECT_GRAPH_OBJECT", { index, selectedSlotId, selectAsset: true });
+diff --git a/agent_space/reviews/review-20261018-026-code-csv-create-open.md b/agent_space/reviews/review-20261018-026-code-csv-create-open.md
+new file mode 100644
+index 0000000..45b25ab
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-026-code-csv-create-open.md
+@@ -0,0 +1,29 @@
++# CSV creation — bounded Source41 → pseudocode18 → code66 review
++
++Baseline: bbb602bd52b240ca875af2b871963edf83a4434b. Whole Plan023 remains open; code remains stale.
++
++## Authority and translation
++
++Source41 application/public_api/assets.py createProjectCsv/createEmptyProjectCsv/createEmptyProjectCsvAndSelect and backend/project_efsm.py common candidate/send/result rules already require new inputs only, current next-id/location, candidate validation/retry, one commit, actual changed path and copied official success read. backend/assets_files.py SYNTHETIC_DATA_BYTES_RULE independently defines preservation of supplied original bytes versus filename-aware UTF-8 synthesis. No new upstream meaning is needed. Earlier pseudocode CalculateNewAsset unconditionally serialized CSV rows, losing supplied bytes. Pseudocode18 first corrects that branch; code66 then translates the contract. No policy or Source edits.
++
++## Prompt → artifact checklist
++
++| Requirement | Artifact / verification surface |
++|---|---|
++| Application does not own model/path/id candidate | createProjectCsv passes new fields only through dispatchProjectCommand; case77 payload assertions |
++| Backend current authority owns id/VFS/collision | applyDataObjectCreatedAction local source/candidate; case77 collision and78 retry/newer id/name |
++| Existing bytes retained, synthesis only without originals | corrected CalculateNewAsset; serializeNewDataTable filename-aware JSON/TSV/CSV; case77 exact bytes |
++| Whole validation before commit, source identity recheck | command loop; case78 exact validator error and authority replacement |
++| Actual changed immutable facts, fresh copied query | created asset role/id/path in result; official assets.readDeletionTarget; case77 frozen detached result |
++| No success query/selection on noncommit/failure | committed gate; case78 invalid inputs/validator/noncommit |
++| Create-and-select occurs after commit, no rollback on late error | selectProjectCsv ordinary frontend event; case78 rejection and query throw |
++| Empty CSV remains ordinary template asset; no chart/object | existing template, general command, official selection; cases77/78 and previous regression |
++| Runner-only execution and strict lineage | pending canonical diagnostics, regression78+78, build and cumulative version run |
++
++## Decisions, exclusions
++
++Preserve supplied bytes instead of normalizing them; synthesizing all files would violate Source's original-byte authority. Reject invalid explicit ids rather than silently substituting next-id. Do not call projectVfs.prepare to invent missing parent directories. Do not return a live caller-created model or manually clear/select graph state. Postcommit read/selection errors propagate without deleting the already committed asset. Keep legacy buildProjectCsvModel for separate import/conversion owners explicitly not closed by this unit. Full tabular parser, image create, batch import, cascade, complete graph validation, canonical project import, raster and supplied dashboard cutover remain open. No TLC execution claimed.
++
++## Execution evidence
++
++Pending. Prior digests deliberately provisional until canonical Actions checkout diagnostic; not a passed version gate.

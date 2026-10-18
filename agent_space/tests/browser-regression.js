@@ -3128,6 +3128,97 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         JSON.stringify(activeProject._state) === live, "positive image package changed identity/bytes/settings or live authority");
     });
 
+    await run(77, "CSV create owns current candidate, bytes, location and immutable success read", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection;
+      let commits = 0, command, queries = 0;
+      try {
+        const next = activeProject._state.nextId.csv, chartState = JSON.stringify(activeProject.charts),
+          bytes = ffpxBytesToBase64(new TextEncoder().encode('original\tbytes\r\n'));
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        projectEFSM.send = function (event, payload) { if (event === "DATA_OBJECT_CREATED") {
+          check(!Object.hasOwn(payload, "model") && !Object.hasOwn(payload, "candidate"), "Application supplied candidate");
+          command = send.call(this, event, payload); return command;
+        } return send.call(this, event, payload); };
+        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") queries++;
+          return query(kind, request); };
+        const csv = createProjectCsv([["X", "Y"], [1, 2]], "candidate.csv", null, bytes, "text/tab-separated-values", 0);
+        check(commits === 1 && queries === 1 && csv.id === next && csv.bytesBase64 === bytes && csv.headerLines === 0 &&
+          csv.mime === "text/tab-separated-values" && Object.isFrozen(csv) && Object.isFrozen(csv.rows[0]) &&
+          csv !== getProjectCsv(csv.id) && command.changed.assets[0].path === projectAssetPath(csv) &&
+          command.changed.csvIds[0] === csv.id && activeProject._state.nextId.csv === next + 1 &&
+          JSON.stringify(activeProject.charts) === chartState, "create lost bytes/identity/copies or partial commit");
+        const collision = createProjectCsv([[1]], "candidate.csv");
+        check(collision.name === "candidate (2).csv" && getProjectCsv(csv.id).bytesBase64 === bytes, "create replaced collision");
+        const rows = [[null, { a: 1 }, 'quote"', "a\tb", "a\nb"]];
+        for (const name of ["serialize.json", "serialize.tsv", "serialize.csv"]) {
+          const created = createProjectCsv(rows, name), text = new TextDecoder().decode(ffpxBase64ToBytes(created.bytesBase64));
+          const expected = name.endsWith(".json") ? JSON.stringify(dataTable(rows)) : name.endsWith(".tsv") ?
+            '\t"{""a"":1}"\t"quote"""\t"a\tb"\t"a\nb"' : ',"{""a"":1}","quote""",a\tb,"a\nb"';
+          check(text === expected, `Source filename-aware synthetic bytes failed: ${name}: ${JSON.stringify(text)}`);
+        }
+        check(interfaceFSM.readState().selectedSlotId === selected && interfaceFSM.state.assetPath === session.assetPath,
+          "CSV create changed selection");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
+    });
+
+    await run(78, "CSV create retries authority and preserves commit boundary on failures and selection rejection", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
+        query = readBackendProjection, selectCsv = selectProjectCsv;
+      let commits = 0, reads = 0;
+      try {
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") reads++;
+          return query(kind, request); };
+        const baseline = JSON.stringify(activeProject._state), failure = Error("expected CSV create failure");
+        for (const args of [[[], "invalid.csv"], [[[1]], "invalid.csv", 0], [[[1]], "invalid.csv", null, "@@@"],
+          [[[1]], "invalid.csv", null, "", "text/csv", 1, "/missing-parent/test.csv"]]) {
+          let caught; try { createProjectCsv(...args); } catch (error) { caught = error; }
+          check(caught && commits === 0 && reads === 0 && JSON.stringify(activeProject._state) === baseline,
+            "invalid create did success work/partial mutation");
+        }
+        validateProjectObjectState = () => { throw failure; };
+        let caught; try { createProjectCsv([[1]], "invalid.csv"); } catch (error) { caught = error; }
+        check(caught === failure && commits === 0 && reads === 0, "validation error changed or committed");
+        validateProjectObjectState = validate;
+        const noncommit = Object.freeze({ committed: false }); projectEFSM.send = () => noncommit;
+        check(createEmptyProjectCsvAndSelect() === noncommit && commits === 0 && reads === 0, "noncommit selected/read CSV");
+        projectEFSM.send = send;
+        let attempts = 0, assigned;
+        validateProjectObjectState = function (candidate, options) {
+          const result = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) {
+            const newer = projectClone(activeProject._state), csv = buildProjectCsvModel([["new"]], "retry.csv",
+              newer.nextId.csv++, "", "text/csv", 1, newer);
+            newer.assets.csvFiles.push(csv); newer.meta.projectName = "new CSV authority"; assigned = newer.nextId.csv;
+            initialize.call(activeProject, newer);
+          }
+          return result;
+        };
+        const created = createProjectCsv([["old"]], "retry.csv"); validateProjectObjectState = validate;
+        check(attempts === 2 && commits === 1 && created.id === assigned && created.name === "retry (2).csv" &&
+          activeProject.projectName === "new CSV authority", "create used stale id/path/authority or multiple commits");
+        selectProjectCsv = () => null;
+        const count = activeProject.csvFiles.length;
+        check(createEmptyProjectCsvAndSelect() === null && activeProject.csvFiles.length === count + 1 && commits === 2,
+          "postcommit selection rejection rolled back asset or disguised noncommit");
+        selectProjectCsv = selectCsv;
+        const empty = createEmptyProjectCsvAndSelect();
+        check(empty && Object.isFrozen(empty) && JSON.stringify(empty.rows) === JSON.stringify([["X", "Y"], ["", ""]]) &&
+          interfaceFSM.state.assetPath === projectAssetPath(empty), "empty create did not use ordinary selected copied asset");
+        const beforeReadFailure = activeProject.csvFiles.length;
+        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") throw failure;
+          return query(kind, request); };
+        caught = null; try { createProjectCsv([[1]], "query-failure.csv"); } catch (error) { caught = error; }
+        check(caught === failure && activeProject.csvFiles.length === beforeReadFailure + 1,
+          "postcommit query error swallowed or rolled back committed CSV");
+      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
+        readBackendProjection = query; selectProjectCsv = selectCsv;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
