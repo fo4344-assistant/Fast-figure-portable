@@ -1,0 +1,55 @@
+diff --git a/agent_space/reviews/review-20261018-032-code-slot-swap-open.md b/agent_space/reviews/review-20261018-032-code-slot-swap-open.md
+index c371c1d..a2be110 100644
+--- a/agent_space/reviews/review-20261018-032-code-slot-swap-open.md
++++ b/agent_space/reviews/review-20261018-032-code-slot-swap-open.md
+@@ -11,8 +11,8 @@ Source41 sourcescript/backend/project_efsm.py SLOTS_SWAPPED explicitly requires
+ - Candidate whole validates before identity check/retry and one commit:90 injected validator error/newer caption+projectName authority.
+ - Actual changed slot IDs only and immutable swapSlotIds hint, no forced asset/graph clear: command,89 facts and selected slot/chart-object follows payload while selected CSV unchanged.
+ - Application scalar IDs, committed Boolean/render only committed, original errors, late renderer error no rollback: swapSlots public binding and89/90. Legacy drag adapter now passes IDs to same wrapper rather than independent mutation path.
+-- Prior89 cases plus actual Actions canonical chain/build gate pending. Source41 unchanged, pseudocode19 current pending measured fingerprint; code74 stale/whole Plan023 open.
++- Prior88 cases plus actual Actions canonical chain/build gate pending. Source41 unchanged, pseudocode19 current pending measured fingerprint; code74 stale/whole Plan023 open.
+ 
+ ## Evidence and exclusions
+ 
+-Pending actual Actions default runner regression90+90/build/canonical digest/cumulative gate. No local runtime/checker/build. Full shared validators/imports/asset cascade/raster/supplied dashboard and earlier timing stability remain uncovered. Optional model26 stale/TLC not run; policy unchanged.
++At f3ea2df83fff8ce11b41cd1230bb811bfa335f51 build39122647836 PASS. Regression39122647755 prior88+90 PASS both distributions;89 `Error: swap cleared selections instead of following payload`. Its direct interfaceFSM.send bypassed Backend validation and was correctly ignored, so index0 was never established. Correct setup through existing appFSM.send validated boundary and explicitly assert fixture index0 before operation; no runtime/upper/test expectation weakening. Version39122647746 diagnostic FAIL printed canonical pseudocode19 sha256:833d5e1bb3a10b68d16d0a31048f67f34549a211c90c2600d7577787f178f777 and code74 sha256:7b9a5b6cbd0a25fe42af228dce57bbe2b0005a206742c101bdead2d1cb18a19a; Source41 unchanged. Record these actual runner digests, corrected cumulative gate/repeat pending; initial failures not claimed passed. No local runtime/checker/build. Full shared validators/imports/asset cascade/raster/supplied dashboard and earlier timing stability remain uncovered. Optional model26 stale/TLC not run; policy unchanged.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index d79f596..9afdb44 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3723,7 +3723,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         second.caption = "B"; second.content.contentType = "image"; second.content.imageSettings = { fit: "manual", scale: 140, x: 8, y: 9 };
+         second.content.extension = { preserved: [1, 2] };
+         initialize.call(activeProject, fixture); select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(getProjectCsv(csv.id)));
+-        interfaceFSM.send("SELECT_GRAPH_OBJECT", { index: 0, selectAsset: false });
++        appFSM.send("SELECT_GRAPH_OBJECT", { index: 0, selectAsset: false });
++        check(interfaceFSM.state.graphObjectIndex === 0, "swap fixture did not establish validated object selection");
+         const before = projectClone(activeProject._state), path = interfaceFSM.state.assetPath;
+         let commits = 0, paints = 0, result;
+         activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+diff --git a/development-versions.json b/development-versions.json
+index b30cc15..73b487a 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,10 +38,10 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:858aa0479d23d336d52d73e76f644ba483ff572b06a22b0b411544d270185ee0",
++      "fingerprint": "sha256:7b9a5b6cbd0a25fe42af228dce57bbe2b0005a206742c101bdead2d1cb18a19a",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5",
+-        "pseudocode": "sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a",
++        "pseudocode": "sha256:833d5e1bb3a10b68d16d0a31048f67f34549a211c90c2600d7577787f178f777",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+       "validation_review": "agent_space/reviews/review-20261018-032-code-slot-swap-open.md"
+@@ -50,7 +50,7 @@
+       "revision": 19,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+-      "fingerprint": "sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a",
++      "fingerprint": "sha256:833d5e1bb3a10b68d16d0a31048f67f34549a211c90c2600d7577787f178f777",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5"
+       },

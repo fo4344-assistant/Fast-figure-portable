@@ -3723,7 +3723,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         second.caption = "B"; second.content.contentType = "image"; second.content.imageSettings = { fit: "manual", scale: 140, x: 8, y: 9 };
         second.content.extension = { preserved: [1, 2] };
         initialize.call(activeProject, fixture); select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(getProjectCsv(csv.id)));
-        interfaceFSM.send("SELECT_GRAPH_OBJECT", { index: 0, selectAsset: false });
+        appFSM.send("SELECT_GRAPH_OBJECT", { index: 0, selectAsset: false });
+        check(interfaceFSM.state.graphObjectIndex === 0, "swap fixture did not establish validated object selection");
         const before = projectClone(activeProject._state), path = interfaceFSM.state.assetPath;
         let commits = 0, paints = 0, result;
         activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
