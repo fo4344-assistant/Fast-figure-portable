@@ -15371,7 +15371,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       function ffpxXmlValue(value) {
         if (value === null) return '<value type="null"/>';
         if (Array.isArray(value))
-          return `<value type="array">${value
+          return `<value type="array">${Array.from(value)
             .map((item) => `<item>${ffpxXmlValue(item)}</item>`)
             .join("")}</value>`;
         if (typeof value === "object")
@@ -15381,31 +15381,49 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
                 `<property name="${ffpxXmlEscape(name)}">${ffpxXmlValue(item)}</property>`,
             )
             .join("")}</value>`;
+        if (!["boolean", "number", "string"].includes(typeof value) ||
+            (typeof value === "number" && !Number.isFinite(value)))
+          throw Error("FFPX XML로 기록할 수 없는 값입니다.");
         return `<value type="${typeof value}">${ffpxXmlEscape(value)}</value>`;
       }
       function ffpxXmlReadValue(element) {
         if (!element || element.tagName !== "value")
           throw Error("FFPX XML 값 형식이 올바르지 않습니다.");
-        let type = element.getAttribute("type");
-        if (type === "null") return null;
-        if (type === "array")
-          return [...element.children]
-            .filter((child) => child.tagName === "item")
-            .map((item) => ffpxXmlReadValue(item.firstElementChild));
-        if (type === "object") {
-          let result = {};
-          for (let property of element.children) {
-            if (property.tagName !== "property") continue;
-            result[property.getAttribute("name") || ""] = ffpxXmlReadValue(
-              property.firstElementChild,
-            );
+        const type = element.getAttribute("type"),
+          children = [...element.children],
+          hasScalarText = (node) => [...node.childNodes].some(child =>
+            (child.nodeType === 3 || child.nodeType === 4) && child.textContent.trim() !== ""),
+          requireShape = (valid) => {
+            if (!valid) throw Error("FFPX XML 값 구조가 올바르지 않습니다.");
+          };
+        if (type === "null") {
+          requireShape(children.length === 0 && !hasScalarText(element));
+          return null;
+        }
+        if (type === "array" || type === "object") {
+          requireShape(!hasScalarText(element));
+          const result = type === "array" ? [] : {};
+          for (const child of children) {
+            requireShape(child.tagName === (type === "array" ? "item" : "property") &&
+              child.children.length === 1 && child.firstElementChild.tagName === "value" &&
+              !hasScalarText(child) && (type === "array" || child.hasAttribute("name")));
+            const decoded = ffpxXmlReadValue(child.firstElementChild);
+            if (type === "array") result.push(decoded);
+            else Object.defineProperty(result, child.getAttribute("name"), {
+              value: decoded, enumerable: true, configurable: true, writable: true,
+            });
           }
           return result;
         }
-        if (type === "boolean") return element.textContent === "true";
+        requireShape(children.length === 0);
+        if (type === "boolean") {
+          requireShape(element.textContent === "true" || element.textContent === "false");
+          return element.textContent === "true";
+        }
         if (type === "number") {
           let number = Number(element.textContent);
-          if (!Number.isFinite(number)) throw Error("FFPX XML 숫자 값이 올바르지 않습니다.");
+          if (!element.textContent.trim() || !Number.isFinite(number))
+            throw Error("FFPX XML 숫자 값이 올바르지 않습니다.");
           return number;
         }
         if (type === "string") return element.textContent;
