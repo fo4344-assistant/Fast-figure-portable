@@ -27,4 +27,4 @@ This is image asset create only, not slot image insertion/import/replacement or 
 
 ## Execution
 
-Pending. Prior code66 fingerprint intentionally provisional until runner prints canonical code67 digest; strict checker is not weakened. No local application/test/checker/build executed.
+Implementation f7c9be92e9b9763abf1c8dda861f0f36db1448dd: ubuntu-latest regression39120950810 PASS80 inline+80 split (160 passing case records, includes prior78); build39120950816 PASS. Artifacts inline6392195 bytes/split ZIP1734954 bytes; dist-only bot d96d5d8d625d154c9450bf92122bd949da9491ab inspected before fast-forward. Diagnostic39120950819 FAIL on provisional old code66 fingerprint ff5070966a9ba3998a3268c836837e0d2528e2e399d6299f889795fcd90fe832; actual code67 sha256:f09432917cb50732eea95b9a6b7794e98f370175a64622694b7941e53143fea3. Source41/pseudocode18 canonical unchanged. Patch067 records actual digest without runtime/test/upper edits. Corrected cumulative gate and repeat regression pending. Strict checker unchanged; no local application/test/checker/build executed.
