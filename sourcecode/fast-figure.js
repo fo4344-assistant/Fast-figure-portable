@@ -4812,13 +4812,13 @@
         return copy;
       }
       function slotLocalState(slot) {
-        normalizeSlotContent(slot);
+        const local = normalizeSlotContent(structuredClone(slot));
         return {
-          chart: slot.content.chart,
-          imageId: slot.content.imageId,
-          contentType: slot.content.contentType,
-          imageSettings: readImageSettings(slot.content.imageSettings),
-          caption: typeof slot.caption === "string" ? slot.caption : null,
+          chart: local.content.chart,
+          imageId: local.content.imageId,
+          contentType: local.content.contentType,
+          imageSettings: local.content.imageSettings,
+          caption: local.caption,
         };
       }
       function setSlotLocalState(slot, localState) {
@@ -4842,6 +4842,7 @@
           local.imageId !== defaults.imageId ||
           local.contentType !== defaults.contentType ||
           local.caption !== defaults.caption ||
+          Object.keys(local.imageSettings).length !== Object.keys(defaults.imageSettings).length ||
           local.imageSettings.fit !== defaults.imageSettings.fit ||
           local.imageSettings.scale !== defaults.imageSettings.scale ||
           local.imageSettings.x !== defaults.imageSettings.x ||
@@ -4861,33 +4862,30 @@
       }
       function normalizeSlotContent(slot) {
         if (!slot || typeof slot !== "object" || Array.isArray(slot)) return slot;
-        let sourceContent =
-            slot.content && typeof slot.content === "object" && !Array.isArray(slot.content)
-              ? slot.content
-              : {},
-          legacyCaption = Object.prototype.hasOwnProperty.call(slot, "caption")
-            ? slot.caption
-            : Object.prototype.hasOwnProperty.call(sourceContent, "caption") ? sourceContent.caption : null,
-          legacySettings =
-            sourceContent.imageSettings && typeof sourceContent.imageSettings === "object"
-              ? sourceContent.imageSettings
-              : slot.imageSettings && typeof slot.imageSettings === "object"
-                ? slot.imageSettings
-                : DEFAULT_IMAGE_SETTINGS;
-        slot.content = {
-          ...sourceContent,
-          chart: Number.isInteger(sourceContent.chart)
-            ? sourceContent.chart
-            : Number.isInteger(slot.chart) ? slot.chart : null,
-          imageId: Number.isInteger(sourceContent.imageId)
-            ? sourceContent.imageId
-            : Number.isInteger(slot.imageId) ? slot.imageId : null,
-          contentType:
-            (sourceContent.contentType ?? slot.contentType) === "image" ? "image" : "graph",
-          imageSettings: readImageSettings(legacySettings),
-        };
-        delete slot.content.caption;
-        slot.caption = legacyCaption;
+        if (Object.hasOwn(slot, "content") &&
+            (!slot.content || typeof slot.content !== "object" || Array.isArray(slot.content)))
+          throw Error("슬롯 content 구조가 올바르지 않습니다.");
+        const content = Object.hasOwn(slot, "content") ? structuredClone(slot.content) : {},
+          caption = Object.hasOwn(slot, "caption") ? structuredClone(slot.caption)
+            : Object.hasOwn(content, "caption") ? structuredClone(content.caption) : null;
+        for (const key of ["chart", "imageId", "contentType", "imageSettings"]) {
+          if (!Object.hasOwn(content, key)) {
+            const legacy = Object.getOwnPropertyDescriptor(slot, key);
+            content[key] = structuredClone(legacy?.enumerable && Object.hasOwn(legacy, "value")
+              ? legacy.value : SLOT_LOCAL_DEFAULTS[key]);
+          }
+        }
+        if (content.imageSettings === null) content.imageSettings = structuredClone(DEFAULT_IMAGE_SETTINGS);
+        else {
+          if (!content.imageSettings || typeof content.imageSettings !== "object" || Array.isArray(content.imageSettings))
+            throw Error("슬롯 imageSettings 구조가 올바르지 않습니다.");
+          for (const key of Object.keys(DEFAULT_IMAGE_SETTINGS))
+            if (!Object.hasOwn(content.imageSettings, key))
+              content.imageSettings[key] = structuredClone(DEFAULT_IMAGE_SETTINGS[key]);
+        }
+        delete content.caption;
+        slot.content = content;
+        slot.caption = caption;
         Object.defineProperties(slot, {
           chart: {
             configurable: true,

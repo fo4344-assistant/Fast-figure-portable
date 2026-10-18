@@ -6299,6 +6299,58 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       } finally { activeProject.initialize(saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(143, "Slot normalization preserves present canonical values and fills only missing fields", () => {
+      const project = activeProject._state, frontend = interfaceFSM.state,
+        geometry = { id: 1, row: 1, col: 1, rowSpan: 1, colSpan: 1, hidden: false },
+        defaults = structuredClone(DEFAULT_IMAGE_SETTINGS);
+      for (const caption of [null, "", false, 0]) {
+        const slot = { ...geometry, chart: 91, imageId: 92, contentType: "image", imageSettings: { fit: "cover" }, caption,
+          content: { chart: null, imageId: null, contentType: "graph", imageSettings: { fit: "manual", scale: 0,
+            x: "bad", extension: { kept: [false, 0, ""] } }, caption: "nested must not win", extension: { kept: true } } };
+        check(normalizeSlotContent(slot) === slot && slot.content.chart === null && slot.content.imageId === null &&
+          slot.content.contentType === "graph" && Object.is(slot.caption, caption) && !Object.hasOwn(slot.content, "caption") &&
+          slot.content.imageSettings.scale === 0 && slot.content.imageSettings.x === "bad" &&
+          slot.content.imageSettings.y === defaults.y && slot.content.imageSettings.extension.kept.length === 3 &&
+          slot.content.extension.kept && !Object.keys(slot).includes("chart"), "normalization overwrote present canonical payload or retained flat storage");
+        slot.chart = 17;
+        check(slot.content.chart === 17, "compatibility alias is independent storage");
+      }
+      const legacy = { ...geometry, chart: null, imageId: null, contentType: "image", imageSettings: { fit: "cover" },
+        content: { caption: "nested caption" } };
+      normalizeSlotContent(legacy);
+      check(legacy.content.contentType === "image" && legacy.caption === "nested caption" &&
+        legacy.imageSettings.fit === "cover" && legacy.imageSettings.scale === defaults.scale,
+        "missing canonical fields did not migrate actual flat legacy values/defaults");
+      for (const imageSettings of [null, {}]) {
+        const slot = normalizeSlotContent({ ...geometry, content: { imageSettings } });
+        check(JSON.stringify(slot.content.imageSettings) === JSON.stringify(defaults), "missing image defaults not filled");
+      }
+      for (const content of [null, false, [], { imageSettings: false }, { imageSettings: [] }]) {
+        let caught = null; try { normalizeSlotContent({ ...geometry, content }); } catch (error) { caught = error; }
+        check(caught, "malformed present canonical structure silently replaced");
+      }
+      const invalid = createProjectState(); invalid.slots[0].content.imageSettings.scale = "100";
+      const before = invalid.slots[0].content; let caught = null;
+      try { activeProject.initialize(invalid); } catch (error) { caught = error; }
+      check(caught && invalid.slots[0].content === before && activeProject._state === project && interfaceFSM.state === frontend,
+        "initializer sanitized present invalid canonical settings or changed authority");
+    });
+
+    await run(144, "Slot local reads and nondefault checks preserve frozen input and whole image settings", () => {
+      const source = createProjectState().slots[0], local = source.content,
+        freeze = value => { if (value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
+      source.row = 7; source.col = 8; source.hidden = true; freeze(source);
+      const read = slotLocalState(source);
+      check(read.imageSettings !== local.imageSettings && source.content === local && !slotHasNonDefaultLocalState(source),
+        "pure local read normalized live frozen input or counted geometry as payload");
+      const extended = structuredClone(source); extended.content.imageSettings.extension = { kept: true };
+      const captioned = structuredClone(source); captioned.caption = "";
+      check(slotHasNonDefaultLocalState(extended) && slotHasNonDefaultLocalState(captioned),
+        "nondefault query ignored whole image settings or explicit empty caption");
+      read.imageSettings.fit = "manual";
+      check(local.imageSettings.fit === DEFAULT_IMAGE_SETTINGS.fit, "local read aliases original settings");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

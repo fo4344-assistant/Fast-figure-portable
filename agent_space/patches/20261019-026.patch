@@ -1,0 +1,223 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 844af8c..87829de 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -343,6 +343,10 @@ Baseline0cccc54e550f2e2bf9a12f74128e3ac7afd21cd4 verified139 inline+split twice3
+ 
+ Baseline5525b4966965fa113e60d97b189db930fe9ce21a records verified Unit57. Source45 ProjectObject.initialize requires outside-authority candidate and PlusCal25 explicitly DeepCopy(source), normalize, validate(candidate,TRUE), then one binding/previous return. Code111 copies source (including ProjectObject input) through corrected Project-copy boundary before normalization/requireSlots:true validation and binding. New142 frozen input/extension/caption/previous-return/mutation independence and invalid geometry/empty slots preserves authority, wrapped source detached/no Frontend effects. Pair023/review012 document mapping/rejected shared authority and exclusions. Initial8c9959684dfa390465867009dd57201ed3c51ef8 regression39170600920/repeat39170602352 FAIL retry hooks69–123 while142 PASS; build39170600927/canonical39170600943/cumulative39170604393/fidelity39170606609 PASS. Historical fixtures used requireSlots to identify outer EFSM validation; initializer now correctly also passes true. Pair024 test-only initializer depth separates phases at27 guarded hook sites, retaining exact attempts/commits/state checks and all actual validator execution, with no product flag/runtime weakening. Corrected4869affd91dce1b632cde3e999765748e625dbaf PASS142 inline+142 split twice39170868836/39170871112 (actual142 logs inspected); build39170873464/cumulative versions39170875706(base5525b4966965fa113e60d97b189db930fe9ce21a)/fidelity39170878230 PASS matching SHA, immediate-parent canonical39170861379 PASS. Pair025 evidence; code111 stale; constructor/normalizer/revalidation/reentrancy and whole audit remain OPEN. No local execution/Source semantic change.
+ 
++## Fifty-ninth bounded unit — missing-only slot normalization and pure local reads
++
++Baseline62a57f9fd4398ba7dab02924b093d7f308f62974 clean; docs lineage39170993594 PASS; preceding142 gates already recorded. Source45 project_state.py:536-575/PlusCal25 project_state.pcal:213-281 require canonical presence precedence, missing-only fields/settings defaults, one alias storage, caption separation and pure whole-local comparison. Code112 normalizer preserves present values/extensions instead of sanitizer, moves only actual missing flat storage and fills missing defaults, rejects malformed records; slotLocalState works on detached clone and nondefault detects whole imageSettings extensions. New143/144 test canonical/legacy/null/empty/false/zero/extension/invalid/missing and frozen pure-query behavior plus actual initialize rejection. Pair026/review013 map requirements and rejected live normalization/sanitization. Exact144 hosted gates pending; code stale; full schema/constructor/initializer/reentrancy/resource/render/timing/whole audit OPEN. No new Source/PlusCal meaning or local execution.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261019-013-code-slot-normalization-open.md b/agent_space/reviews/review-20261019-013-code-slot-normalization-open.md
+new file mode 100644
+index 0000000..c164f34
+--- /dev/null
++++ b/agent_space/reviews/review-20261019-013-code-slot-normalization-open.md
+@@ -0,0 +1,20 @@
++# Plan023 Unit59 — missing-only slot normalization and pure local reads (open)
++
++Baseline62a57f9fd4398ba7dab02924b093d7f308f62974 clean; latest docs lineage39170993594 PASS. Preceding actual4869affd91dce1b632cde3e999765748e625dbaf142 inline/split twice39170868836/39170871112, build39170873464/cumulative39170875706/fidelity39170878230 PASS. No completed work repeated.
++
++## Requirement/artifact mapping
++
++Source45 sourcescript/backend/project_state.py:536-575 establishes pure whole-local nondefault comparison, candidate-only normalization, canonical present-value precedence, missing-only defaults/legacy migration, independent caption owner including null/empty, one alias storage. PlusCal25 pseudocode/backend/project_state.pcal:213-281 translates DeepCopy/HasField/Require record/missing image subfields, caption relocation and whole imageSettings comparison. Existing runtime instead preferred valid integer/known kind over present canonical values, used readImageSettings to coerce/clamp/drop extensions, normalized live input in slotLocalState, and compared only four image fields for nondefault. No new upper semantics needed.
++
++- normalizeSlotContent now requires present content record, copies canonical content, consults actual flat data storage only for missing fields, otherwise defaults. Nonenumerable compatibility accessors are not a second legacy owner. Present imageSettings must record (null denotes absent defaults per PlusCal); only missing image subfields default, extensions and invalid present values preserved for whole validation to reject. Caption canonical presence beats nested legacy even for null/empty/false/zero; nested storage removed; same-object candidate mutation/aliases retained.
++- slotLocalState normalizes detached structuredClone, returns independent settings and exact caption; never normalizes live authority. No query/cache/DOM/asset fallback.
++- slotHasNonDefaultLocalState detects additional imageSettings keys as whole-local payload, preserves scalar comparisons, ignores placement. Defaults have four required scalar fields so extra-key detection plus four-value comparison is complete for this defaults record, including arbitrary extension values; key order irrelevant.
++- New143 direct canonical-vs-legacy precedence, null/empty/false/zero caption, extensions, invalid present fields retained, missing subfields, aliases, malformed record rejection; real initialize rejects numeric-string image scale without input/live authority mutation. New144 frozen canonical input proves pure helper and nondefault comparison, geometry ignored, whole image extension and explicit empty caption recognized, detached settings.
++
++## Gates/lineage
++
++Source45/PlusCal25 unchanged. Code112 stale fingerprint sha256:4d7977e97b0e0676ef5c8598a9cad509b1c315d5fe00a3b26cb78edc61de6f12, review013/pair026/Plan023 updated. Exact144 inline+split/repeat/build/canonical+cumulative/fidelity PENDING. No local app/test/build/checker/TLC; default hosted only; generator-only dist.
++
++## Decisions and limits
++
++Rejected retaining sanitizer under representation normalization (silently changes defined canonical meaning), normalizing live input in read helpers (changes authority), alias fallback as independent mutable value, shallow-only copying (retains nested extensions), key-order-sensitive JSON equality. This is direct existing Source semantics, not format redesign or policy weakening. setSlotLocalState's broader whole-payload-copy semantics, constructor ownership, initialize validation/reentrancy, full ZIP/schema/dataRef/metadata/resources/supplied rendering/raster/dashboard/timing/exhaustive requirements audit remain OPEN; no current/full-completion claim. Atomic gh Git Data bounded coherent code+lineage immediate-parent gate exception: check expected HEAD/current blobs/new pair/review and nonforce ref. Independent docs use Contents API.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index fbb9257..7bc78fc 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -6299,6 +6299,58 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       } finally { activeProject.initialize(saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(143, "Slot normalization preserves present canonical values and fills only missing fields", () => {
++      const project = activeProject._state, frontend = interfaceFSM.state,
++        geometry = { id: 1, row: 1, col: 1, rowSpan: 1, colSpan: 1, hidden: false },
++        defaults = structuredClone(DEFAULT_IMAGE_SETTINGS);
++      for (const caption of [null, "", false, 0]) {
++        const slot = { ...geometry, chart: 91, imageId: 92, contentType: "image", imageSettings: { fit: "cover" }, caption,
++          content: { chart: null, imageId: null, contentType: "graph", imageSettings: { fit: "manual", scale: 0,
++            x: "bad", extension: { kept: [false, 0, ""] } }, caption: "nested must not win", extension: { kept: true } } };
++        check(normalizeSlotContent(slot) === slot && slot.content.chart === null && slot.content.imageId === null &&
++          slot.content.contentType === "graph" && Object.is(slot.caption, caption) && !Object.hasOwn(slot.content, "caption") &&
++          slot.content.imageSettings.scale === 0 && slot.content.imageSettings.x === "bad" &&
++          slot.content.imageSettings.y === defaults.y && slot.content.imageSettings.extension.kept.length === 3 &&
++          slot.content.extension.kept && !Object.keys(slot).includes("chart"), "normalization overwrote present canonical payload or retained flat storage");
++        slot.chart = 17;
++        check(slot.content.chart === 17, "compatibility alias is independent storage");
++      }
++      const legacy = { ...geometry, chart: null, imageId: null, contentType: "image", imageSettings: { fit: "cover" },
++        content: { caption: "nested caption" } };
++      normalizeSlotContent(legacy);
++      check(legacy.content.contentType === "image" && legacy.caption === "nested caption" &&
++        legacy.imageSettings.fit === "cover" && legacy.imageSettings.scale === defaults.scale,
++        "missing canonical fields did not migrate actual flat legacy values/defaults");
++      for (const imageSettings of [null, {}]) {
++        const slot = normalizeSlotContent({ ...geometry, content: { imageSettings } });
++        check(JSON.stringify(slot.content.imageSettings) === JSON.stringify(defaults), "missing image defaults not filled");
++      }
++      for (const content of [null, false, [], { imageSettings: false }, { imageSettings: [] }]) {
++        let caught = null; try { normalizeSlotContent({ ...geometry, content }); } catch (error) { caught = error; }
++        check(caught, "malformed present canonical structure silently replaced");
++      }
++      const invalid = createProjectState(); invalid.slots[0].content.imageSettings.scale = "100";
++      const before = invalid.slots[0].content; let caught = null;
++      try { activeProject.initialize(invalid); } catch (error) { caught = error; }
++      check(caught && invalid.slots[0].content === before && activeProject._state === project && interfaceFSM.state === frontend,
++        "initializer sanitized present invalid canonical settings or changed authority");
++    });
++
++    await run(144, "Slot local reads and nondefault checks preserve frozen input and whole image settings", () => {
++      const source = createProjectState().slots[0], local = source.content,
++        freeze = value => { if (value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
++      source.row = 7; source.col = 8; source.hidden = true; freeze(source);
++      const read = slotLocalState(source);
++      check(read.imageSettings !== local.imageSettings && source.content === local && !slotHasNonDefaultLocalState(source),
++        "pure local read normalized live frozen input or counted geometry as payload");
++      const extended = structuredClone(source); extended.content.imageSettings.extension = { kept: true };
++      const captioned = structuredClone(source); captioned.caption = "";
++      check(slotHasNonDefaultLocalState(extended) && slotHasNonDefaultLocalState(captioned),
++        "nondefault query ignored whole image settings or explicit empty caption");
++      read.imageSettings.fit = "manual";
++      check(local.imageSettings.fit === DEFAULT_IMAGE_SETTINGS.fit, "local read aliases original settings");
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 15f4ded..d0d8767 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 111,
++      "revision": 112,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:8c2f50537c228f71c2e3a2976552cda797599fe4d71c2cb7135f28307e1ab6f5",
++      "fingerprint": "sha256:4d7977e97b0e0676ef5c8598a9cad509b1c315d5fe00a3b26cb78edc61de6f12",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261019-012-code-initialize-copy-open.md"
++      "validation_review": "agent_space/reviews/review-20261019-013-code-slot-normalization-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 25,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 696a4d3..56e6920 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -4812,13 +4812,13 @@
+         return copy;
+       }
+       function slotLocalState(slot) {
+-        normalizeSlotContent(slot);
++        const local = normalizeSlotContent(structuredClone(slot));
+         return {
+-          chart: slot.content.chart,
+-          imageId: slot.content.imageId,
+-          contentType: slot.content.contentType,
+-          imageSettings: readImageSettings(slot.content.imageSettings),
+-          caption: typeof slot.caption === "string" ? slot.caption : null,
++          chart: local.content.chart,
++          imageId: local.content.imageId,
++          contentType: local.content.contentType,
++          imageSettings: local.content.imageSettings,
++          caption: local.caption,
+         };
+       }
+       function setSlotLocalState(slot, localState) {
+@@ -4842,6 +4842,7 @@
+           local.imageId !== defaults.imageId ||
+           local.contentType !== defaults.contentType ||
+           local.caption !== defaults.caption ||
++          Object.keys(local.imageSettings).length !== Object.keys(defaults.imageSettings).length ||
+           local.imageSettings.fit !== defaults.imageSettings.fit ||
+           local.imageSettings.scale !== defaults.imageSettings.scale ||
+           local.imageSettings.x !== defaults.imageSettings.x ||
+@@ -4861,33 +4862,30 @@
+       }
+       function normalizeSlotContent(slot) {
+         if (!slot || typeof slot !== "object" || Array.isArray(slot)) return slot;
+-        let sourceContent =
+-            slot.content && typeof slot.content === "object" && !Array.isArray(slot.content)
+-              ? slot.content
+-              : {},
+-          legacyCaption = Object.prototype.hasOwnProperty.call(slot, "caption")
+-            ? slot.caption
+-            : Object.prototype.hasOwnProperty.call(sourceContent, "caption") ? sourceContent.caption : null,
+-          legacySettings =
+-            sourceContent.imageSettings && typeof sourceContent.imageSettings === "object"
+-              ? sourceContent.imageSettings
+-              : slot.imageSettings && typeof slot.imageSettings === "object"
+-                ? slot.imageSettings
+-                : DEFAULT_IMAGE_SETTINGS;
+-        slot.content = {
+-          ...sourceContent,
+-          chart: Number.isInteger(sourceContent.chart)
+-            ? sourceContent.chart
+-            : Number.isInteger(slot.chart) ? slot.chart : null,
+-          imageId: Number.isInteger(sourceContent.imageId)
+-            ? sourceContent.imageId
+-            : Number.isInteger(slot.imageId) ? slot.imageId : null,
+-          contentType:
+-            (sourceContent.contentType ?? slot.contentType) === "image" ? "image" : "graph",
+-          imageSettings: readImageSettings(legacySettings),
+-        };
+-        delete slot.content.caption;
+-        slot.caption = legacyCaption;
++        if (Object.hasOwn(slot, "content") &&
++            (!slot.content || typeof slot.content !== "object" || Array.isArray(slot.content)))
++          throw Error("슬롯 content 구조가 올바르지 않습니다.");
++        const content = Object.hasOwn(slot, "content") ? structuredClone(slot.content) : {},
++          caption = Object.hasOwn(slot, "caption") ? structuredClone(slot.caption)
++            : Object.hasOwn(content, "caption") ? structuredClone(content.caption) : null;
++        for (const key of ["chart", "imageId", "contentType", "imageSettings"]) {
++          if (!Object.hasOwn(content, key)) {
++            const legacy = Object.getOwnPropertyDescriptor(slot, key);
++            content[key] = structuredClone(legacy?.enumerable && Object.hasOwn(legacy, "value")
++              ? legacy.value : SLOT_LOCAL_DEFAULTS[key]);
++          }
++        }
++        if (content.imageSettings === null) content.imageSettings = structuredClone(DEFAULT_IMAGE_SETTINGS);
++        else {
++          if (!content.imageSettings || typeof content.imageSettings !== "object" || Array.isArray(content.imageSettings))
++            throw Error("슬롯 imageSettings 구조가 올바르지 않습니다.");
++          for (const key of Object.keys(DEFAULT_IMAGE_SETTINGS))
++            if (!Object.hasOwn(content.imageSettings, key))
++              content.imageSettings[key] = structuredClone(DEFAULT_IMAGE_SETTINGS[key]);
++        }
++        delete content.caption;
++        slot.content = content;
++        slot.caption = caption;
+         Object.defineProperties(slot, {
+           chart: {
+             configurable: true,

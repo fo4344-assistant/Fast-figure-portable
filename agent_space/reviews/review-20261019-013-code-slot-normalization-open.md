@@ -1,0 +1,20 @@
+# Plan023 Unit59 — missing-only slot normalization and pure local reads (open)
+
+Baseline62a57f9fd4398ba7dab02924b093d7f308f62974 clean; latest docs lineage39170993594 PASS. Preceding actual4869affd91dce1b632cde3e999765748e625dbaf142 inline/split twice39170868836/39170871112, build39170873464/cumulative39170875706/fidelity39170878230 PASS. No completed work repeated.
+
+## Requirement/artifact mapping
+
+Source45 sourcescript/backend/project_state.py:536-575 establishes pure whole-local nondefault comparison, candidate-only normalization, canonical present-value precedence, missing-only defaults/legacy migration, independent caption owner including null/empty, one alias storage. PlusCal25 pseudocode/backend/project_state.pcal:213-281 translates DeepCopy/HasField/Require record/missing image subfields, caption relocation and whole imageSettings comparison. Existing runtime instead preferred valid integer/known kind over present canonical values, used readImageSettings to coerce/clamp/drop extensions, normalized live input in slotLocalState, and compared only four image fields for nondefault. No new upper semantics needed.
+
+- normalizeSlotContent now requires present content record, copies canonical content, consults actual flat data storage only for missing fields, otherwise defaults. Nonenumerable compatibility accessors are not a second legacy owner. Present imageSettings must record (null denotes absent defaults per PlusCal); only missing image subfields default, extensions and invalid present values preserved for whole validation to reject. Caption canonical presence beats nested legacy even for null/empty/false/zero; nested storage removed; same-object candidate mutation/aliases retained.
+- slotLocalState normalizes detached structuredClone, returns independent settings and exact caption; never normalizes live authority. No query/cache/DOM/asset fallback.
+- slotHasNonDefaultLocalState detects additional imageSettings keys as whole-local payload, preserves scalar comparisons, ignores placement. Defaults have four required scalar fields so extra-key detection plus four-value comparison is complete for this defaults record, including arbitrary extension values; key order irrelevant.
+- New143 direct canonical-vs-legacy precedence, null/empty/false/zero caption, extensions, invalid present fields retained, missing subfields, aliases, malformed record rejection; real initialize rejects numeric-string image scale without input/live authority mutation. New144 frozen canonical input proves pure helper and nondefault comparison, geometry ignored, whole image extension and explicit empty caption recognized, detached settings.
+
+## Gates/lineage
+
+Source45/PlusCal25 unchanged. Code112 stale fingerprint sha256:4d7977e97b0e0676ef5c8598a9cad509b1c315d5fe00a3b26cb78edc61de6f12, review013/pair026/Plan023 updated. Exact144 inline+split/repeat/build/canonical+cumulative/fidelity PENDING. No local app/test/build/checker/TLC; default hosted only; generator-only dist.
+
+## Decisions and limits
+
+Rejected retaining sanitizer under representation normalization (silently changes defined canonical meaning), normalizing live input in read helpers (changes authority), alias fallback as independent mutable value, shallow-only copying (retains nested extensions), key-order-sensitive JSON equality. This is direct existing Source semantics, not format redesign or policy weakening. setSlotLocalState's broader whole-payload-copy semantics, constructor ownership, initialize validation/reentrancy, full ZIP/schema/dataRef/metadata/resources/supplied rendering/raster/dashboard/timing/exhaustive requirements audit remain OPEN; no current/full-completion claim. Atomic gh Git Data bounded coherent code+lineage immediate-parent gate exception: check expected HEAD/current blobs/new pair/review and nonforce ref. Independent docs use Contents API.
