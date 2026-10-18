@@ -1126,7 +1126,7 @@
         payload.chart=committed;
         payload.clearGraphSelection=true;
       }
-      function applyGraphObjectValuesAction({ machine, payload }) {
+      function applyGraphObjectEditAction({ machine, payload }) {
         machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
         const defaults = BackendSettings.defaults.chartSettings.editor.objectStyle,
           limits = BackendSettings.defaults.limits.graphObject,
@@ -1138,43 +1138,58 @@
           const source = activeProject._state,
             current = source.charts.find((chart) => chart.id === payload.chartId),
             owners = source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === payload.chartId),
-            index = payload.index, values = payload.values || {};
-          if (!current || owners.length !== 1 || current.editor?.editable === false ||
-              !Number.isInteger(index) || index < 0 || index >= current.editor.objects.length)
-            throw Error("변경할 현재 편집 가능 차트/오브젝트 또는 유일한 owner가 없습니다.");
-          const candidate = projectClone(source), chart = candidate.charts.find((item) => item.id === current.id),
-            object = chart.editor.objects[index], requestedCsvId = Object.hasOwn(values, "csvId") ? values.csvId : null,
-            csv = candidate.assets.csvFiles.find((item) => item.id === requestedCsvId) ||
-              candidate.assets.csvFiles.find((item) => item.id === object.csvId);
-          if (!csv) throw Error("그래프 오브젝트에 연결할 현재 CSV가 없습니다.");
-          const columns = new Set(columnDefinitions(csv.rows, csv.headerLines).map((column) => column.id)),
-            selection = graphDataSelection(csv.rows, csv.headerLines);
-          object.csvId = csv.id;
-          for (const key of ["x", "y"]) {
-            const value = Object.hasOwn(values, key) ? values[key] : undefined;
-            object[key] = columns.has(value) ? value : columns.has(object[key]) ? object[key] : selection[key];
-          }
-          for (const [key, value] of Object.entries(defaults))
-            if (!Object.hasOwn(object, key)) object[key] = projectClone(value);
-          for (const [key, allowed] of Object.entries(enums)) {
-            if (Object.hasOwn(values, key)) {
-              const value = values[key];
-              if (allowed.includes(value)) object[key] = value;
+            index = payload.index, values = payload.values || {}, operation = payload.operation;
+          if (!current || owners.length !== 1 || owners[0].hidden || owners[0].contentType === "image" ||
+              current.editor?.editable === false)
+            throw Error("변경할 현재 편집 가능 차트 또는 유일한 visible graph owner가 없습니다.");
+          const validIndex = (value) => Number.isInteger(value) && value >= 0 && value < current.editor.objects.length;
+          if (operation === "graphs.moveObject") {
+            if (!validIndex(payload.from) || !validIndex(payload.to)) throw Error("이동할 현재 오브젝트 index가 없습니다.");
+            if (payload.from === payload.to) return false;
+          } else if (!validIndex(index)) throw Error("변경할 현재 오브젝트 index가 없습니다.");
+          const candidate = projectClone(source), chart = candidate.charts.find((item) => item.id === current.id);
+          let selectedIndexHint = index;
+          if (operation === "graphs.moveObject") {
+            const moved = chart.editor.objects.splice(payload.from, 1)[0];
+            chart.editor.objects.splice(payload.to, 0, moved);
+            selectedIndexHint = payload.to;
+          } else if (operation === "graphs.deleteObject") {
+            chart.editor.objects.splice(index, 1);
+            selectedIndexHint = null;
+          } else {
+            const object = chart.editor.objects[index], requestedCsvId = Object.hasOwn(values, "csvId") ? values.csvId : null,
+              csv = candidate.assets.csvFiles.find((item) => item.id === requestedCsvId) ||
+                candidate.assets.csvFiles.find((item) => item.id === object.csvId);
+            if (!csv) throw Error("그래프 오브젝트에 연결할 현재 CSV가 없습니다.");
+            const columns = new Set(columnDefinitions(csv.rows, csv.headerLines).map((column) => column.id)),
+              selection = graphDataSelection(csv.rows, csv.headerLines);
+            object.csvId = csv.id;
+            for (const key of ["x", "y"]) {
+              const value = Object.hasOwn(values, key) ? values[key] : undefined;
+              object[key] = columns.has(value) ? value : columns.has(object[key]) ? object[key] : selection[key];
             }
-          }
-          for (const [key, [min, max]] of Object.entries(limits)) {
-            if (Object.hasOwn(values, key)) {
-              const edit = values[key], value = edit === null ? NaN : Number(edit);
-              if (Number.isFinite(value)) object[key] = Math.max(min, Math.min(max, value));
+            for (const [key, value] of Object.entries(defaults))
+              if (!Object.hasOwn(object, key)) object[key] = projectClone(value);
+            for (const [key, allowed] of Object.entries(enums)) {
+              if (Object.hasOwn(values, key)) {
+                const value = values[key];
+                if (allowed.includes(value)) object[key] = value;
+              }
             }
-          }
-          if (Object.hasOwn(values, "color")) {
-            const color = values.color;
-            if (typeof color === "string" && color.length) object.color = color;
-          }
-          if (Object.hasOwn(values, "legendName")) {
-            const legend = values.legendName;
-            if (typeof legend === "string") object.legendName = legend;
+            for (const [key, [min, max]] of Object.entries(limits)) {
+              if (Object.hasOwn(values, key)) {
+                const edit = values[key], value = edit === null ? NaN : Number(edit);
+                if (Number.isFinite(value)) object[key] = Math.max(min, Math.min(max, value));
+              }
+            }
+            if (Object.hasOwn(values, "color")) {
+              const color = values.color;
+              if (typeof color === "string" && color.length) object.color = color;
+            }
+            if (Object.hasOwn(values, "legendName")) {
+              const legend = values.legendName;
+              if (typeof legend === "string") object.legendName = legend;
+            }
           }
           // NormalizeCommandObjects fills only missing style, never references/order/extensions.
           for (const item of chart.editor.objects) {
@@ -1198,13 +1213,14 @@
             chartIds: changedIds(source.charts, post.charts),
             csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
             imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
-          payload.selectionHints = Object.freeze({ chartId: current.id, selectedIndexHint: index });
+          payload.selectionHints = Object.freeze({ chartId: current.id, selectedIndexHint });
           return;
         }
       }
       function applyGraphObjectsReplacedAction(context) {
         const { machine, payload } = context;
-        if (payload.operation === "graphs.setObjectValues") return applyGraphObjectValuesAction(context);
+        if (["graphs.setObjectValues", "graphs.moveObject", "graphs.deleteObject"].includes(payload.operation))
+          return applyGraphObjectEditAction(context);
         machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
         let current=getChart(payload.chartId);
         if(!current||!current.editor||current.editor.editable===false)
@@ -6132,17 +6148,38 @@
         let objects = ensureGraphObjects(chart);
         return graphEditorCommit([...objects, baseGraphObject(chart, csv)], objects.length);
       }
-      function graphEditorMove(from, to) {
-        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
-        if (!chart || !objects[from] || !objects[to] || from === to) return chart;
-        let next = [...objects], moved = next.splice(from, 1)[0];
-        next.splice(to, 0, moved);
-        return graphEditorCommit(next, to);
+      function graphEditorMove(chartId, from, to) {
+        const context = appFSM.query("project-api", { operation: "graphs.readData", chartId });
+        if (from === to && context.chart?.editor.editable !== false && Number.isInteger(from) &&
+            from >= 0 && from < context.objects.length) return context.chart;
+        const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
+          chartId, operation: "graphs.moveObject", from, to,
+        });
+        if (!result.committed) return result;
+        const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+        renderDashboard();
+        return chart;
       }
-      function graphEditorDelete(index) {
-        let chart = graphEditorChart(), objects = ensureGraphObjects(chart);
-        if (!chart || !objects[index]) return null;
-        return graphEditorCommit(objects.filter((_, objectIndex) => objectIndex !== index), null);
+      function graphEditorDelete(chartId, index) {
+        const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
+          chartId, operation: "graphs.deleteObject", index,
+        });
+        if (!result.committed) return result;
+        const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+        renderDashboard();
+        return chart;
+      }
+      function moveGraphObjectApi(from, to) {
+        const context = appFSM.query("project-api", {
+          operation: "graphs.readData", frontendState: interfaceFSM.readState(),
+        });
+        return graphEditorMove(context.chart?.id ?? null, from, to);
+      }
+      function deleteGraphObjectApi(index) {
+        const context = appFSM.query("project-api", {
+          operation: "graphs.readData", frontendState: interfaceFSM.readState(),
+        });
+        return graphEditorDelete(context.chart?.id ?? null, index);
       }
       function graphEditorHeaderLines(csvId, value) {
         const result = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value });
@@ -7841,10 +7878,10 @@
           setHeaderLines: graphEditorHeaderLines,
           setEditable: graphEditorSetEditable,
           addObject: graphEditorAdd,
-          moveObject: graphEditorMove,
+          moveObject: moveGraphObjectApi,
           selectObject: graphEditorSelectObject,
           setObjectValues: setGraphObjectValuesApi,
-          deleteObject: graphEditorDelete,
+          deleteObject: deleteGraphObjectApi,
           updateLayout: updateGraphLayoutApi,
           applyPalette: applyGraphPaletteApi,
           defaultColors: () => [...DEFAULT_COLORS],

@@ -2608,6 +2608,139 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       } finally { renderDashboard = render; activeProject.initialize(saved); selectedSlotId = selected; interfaceFSM.state = session; }
     });
 
+    await run(68, "Graph move/delete calculate current order and explicit hints without public arrays", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, query = readBackendProjection, render = renderDashboard,
+        send = projectEFSM.send, reconcile = interfaceFSM.reconcileProjectResult;
+      let commits = 0, renders = 0, reconciliations = 0, result, reads = 0;
+      try {
+        const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+        api.slots.reset(slot.id); select(slotAt(slot.id));
+        const csv = createProjectCsv([["X", "Y"], [1, 2]], "graph-order.csv");
+        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
+        const chartId = slotAt(slot.id).chart, fixture = projectClone(activeProject._state),
+          chart = fixture.charts.find(item => item.id === chartId);
+        chart.editor.objects.forEach((object, index) => { object.legendName = `item${index}`;
+          object.plotlyTrace = { meta: { original: index } }; });
+        initialize.call(activeProject, fixture);
+        const objects = projectClone(getChart(chartId).editor.objects), assets = JSON.stringify(activeProject._state.assets),
+          assetPath = interfaceFSM.state.assetPath;
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        renderDashboard = () => { renders++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        readBackendProjection = (kind, request) => { if (kind === "project-api" && request.operation === "graphs.readData") reads++;
+          return query(kind, request); };
+        projectEFSM.send = function (event, payload) {
+          check(event === "GRAPH_OBJECTS_REPLACED" && ["graphs.moveObject", "graphs.deleteObject"].includes(payload.operation) &&
+            payload.chartId === chartId && !Object.hasOwn(payload, "objects") && !Object.hasOwn(payload, "candidate"),
+            "Application supplied graph candidate or incorrect operation");
+          return result = send.call(this, event, payload);
+        };
+        const moved = api.graphs.moveObject(0, 2);
+        check(JSON.stringify(getChart(chartId).editor.objects) === JSON.stringify([objects[1], objects[2], objects[0]]) &&
+          moved !== getChart(chartId) && Object.isFrozen(moved.editor.objects[0]) && commits === 1 && renders === 1 &&
+          reconciliations === 1 && result.selectionHints.chartId === chartId && result.selectionHints.selectedIndexHint === 2 &&
+          interfaceFSM.state.graphObjectIndex === 2 && result.changed.chartIds.includes(chartId),
+          "arbitrary move lost order/extensions, copied read, one commit or actual hint");
+        graphEditorMove(chartId, 2, 0);
+        check(JSON.stringify(getChart(chartId).editor.objects) === JSON.stringify(objects) &&
+          interfaceFSM.state.graphObjectIndex === 0 && commits === 2, "reverse move did not preserve original order");
+        const before = JSON.stringify(activeProject._state), stable = interfaceFSM.state, count = commits,
+          paints = renders, reconciled = reconciliations, readCount = reads;
+        const noop = graphEditorMove(chartId, 1, 1);
+        check(noop !== getChart(chartId) && Object.isFrozen(noop.editor.objects[0]) && commits === count &&
+          interfaceFSM.state === stable && renders === paints && reconciliations === reconciled && reads === readCount + 1 &&
+          JSON.stringify(activeProject._state) === before, "valid equal-index move mutated/reconciled/rendered instead of copied no-op");
+        const directNoop = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.moveObject", from: 0, to: 0 });
+        check(!directNoop.committed && directNoop.selectionHints === null && commits === count &&
+          reconciliations === reconciled && interfaceFSM.state === stable, "Backend equal move committed or published hint");
+        api.graphs.deleteObject(1);
+        check(JSON.stringify(getChart(chartId).editor.objects) === JSON.stringify([objects[0], objects[2]]) &&
+          result.selectionHints.selectedIndexHint === null && interfaceFSM.state.graphObjectIndex === null,
+          "delete lost retained order or invented neighboring selection");
+        graphEditorDelete(chartId, 1); const empty = graphEditorDelete(chartId, 0);
+        check(empty.editor.objects.length === 0 && getChart(chartId).editor.objects.length === 0 && commits === 5 &&
+          Object.isFrozen(empty.editor.objects) && JSON.stringify(activeProject._state.assets) === assets &&
+          interfaceFSM.state.assetPath === assetPath && interfaceFSM.readState().selectedSlotId === slot.id,
+          "last delete repaired fake object, changed assets/CSV selection or failed empty chart");
+        for (const wrapper of [graphEditorMove, graphEditorDelete]) check(!/ensureGraphObjects|graphEditorCommit|activeProject|baseGraphObject/.test(wrapper.toString()),
+          "Application still computes order/removal candidate from live objects");
+      } finally {
+        activeProject.initialize = initialize; readBackendProjection = query; renderDashboard = render;
+        projectEFSM.send = send; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
+      }
+    });
+
+    await run(69, "Graph order rejection, noncommit and stale-authority retry preserve boundaries", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, query = readBackendProjection, render = renderDashboard,
+        send = projectEFSM.send, validate = validateProjectObjectState, rebuild = rebuildEditableGraph,
+        reconcile = interfaceFSM.reconcileProjectResult;
+      let commits = 0, paints = 0, reconciliations = 0, reads = 0;
+      try {
+        const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+        api.slots.reset(slot.id); select(slotAt(slot.id));
+        const csv = createProjectCsv([["X", "Y"], [1, 2]], "graph-order-fail.csv");
+        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
+        const chartId = slotAt(slot.id).chart, fixture = projectClone(activeProject._state);
+        fixture.charts.find(item => item.id === chartId).editor.objects.forEach((object, index) => object.legendName = `${index}`);
+        initialize.call(activeProject, fixture);
+        const before = JSON.stringify(activeProject._state), stable = interfaceFSM.state, failure = Error("expected graph-order failure");
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        renderDashboard = () => { paints++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        readBackendProjection = (kind, request) => { if (kind === "project-api" && request.operation === "graphs.readData") reads++;
+          return query(kind, request); };
+        for (const action of [() => graphEditorMove(chartId, -1, -1), () => graphEditorMove(chartId, 0, 3),
+          () => graphEditorMove(chartId, "0", 0), () => graphEditorMove(-1, 0, 0),
+          () => graphEditorDelete(chartId, 3), () => graphEditorDelete(chartId, 0.5), () => graphEditorDelete(null, 0)]) {
+          let caught = false; try { action(); } catch { caught = true; }
+          check(caught && commits === 0 && paints === 0 && reconciliations === 0 &&
+            interfaceFSM.state === stable && JSON.stringify(activeProject._state) === before, "invalid identity/index performed success work or writes");
+        }
+        for (const mode of ["validator", "projection"]) {
+          if (mode === "validator") validateProjectObjectState = () => { throw failure; };
+          else rebuildEditableGraph = () => { throw failure; };
+          let caught; try { graphEditorDelete(chartId, 0); } catch (error) { caught = error; }
+          validateProjectObjectState = validate; rebuildEditableGraph = rebuild;
+          check(caught === failure && commits === 0 && paints === 0 && reconciliations === 0 &&
+            interfaceFSM.state === stable && JSON.stringify(activeProject._state) === before, "failed candidate changed authority or swallowed error");
+        }
+        const noCommit = Object.freeze({ committed: false }), count = reads;
+        projectEFSM.send = () => noCommit;
+        check(graphEditorDelete(chartId, 0) === noCommit && reads === count && paints === 0 && reconciliations === 0,
+          "noncommit deletion read/rendered/reconciled");
+        check(graphEditorMove(chartId, 0, 1) === noCommit && reads === count + 1 && paints === 0 && reconciliations === 0,
+          "noncommit move performed post-commit success work");
+        projectEFSM.send = send;
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state), chart = newer.charts.find(item => item.id === chartId);
+            chart.editor.objects.unshift({ ...projectClone(chart.editor.objects[0]), legendName: "new" });
+            newer.meta.projectName = "new order authority"; initialize.call(activeProject, newer); }
+          return valid;
+        };
+        const moved = graphEditorMove(chartId, 0, 2);
+        validateProjectObjectState = validate;
+        check(attempts === 2 && commits === 1 && reconciliations === 1 && paints === 1 &&
+          activeProject.projectName === "new order authority" && moved.editor.objects.map(object => object.legendName).join() === "0,1,new,2" &&
+          interfaceFSM.state.graphObjectIndex === 2, "stale order committed old snapshot instead of re-resolving current indices");
+        const final = JSON.stringify(activeProject._state), frozenSession = interfaceFSM.state;
+        getChart(chartId).editor.editable = false;
+        let rejected = false; try { graphEditorMove(chartId, 0, 0); } catch { rejected = true; }
+        check(rejected && commits === 1 && interfaceFSM.state === frozenSession && paints === 1 && reconciliations === 1,
+          "noneditable equal move bypassed command precondition");
+        getChart(chartId).editor.editable = true;
+        check(JSON.stringify(activeProject._state) === final, "noneditable rejection repaired current graph");
+      } finally {
+        activeProject.initialize = initialize; readBackendProjection = query; renderDashboard = render; projectEFSM.send = send;
+        validateProjectObjectState = validate; rebuildEditableGraph = rebuild; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
+      }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
