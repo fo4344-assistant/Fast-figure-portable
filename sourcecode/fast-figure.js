@@ -6535,7 +6535,7 @@
         return importSlotFile(file, getSelectedSlot());
       }
       function readAssetDeletionTarget() {
-        const resolved = dispatchProjectQuery("project-api", {
+        const resolved = appFSM.query("project-api", {
           operation: "assets.readDeletionTarget", path: interfaceFSM.readState().assetPath,
         });
         return resolved ? immutableProjectCopy({ kind: resolved.kind, id: resolved.target.id,
@@ -6543,7 +6543,7 @@
       }
       function deleteProjectAsset(target) {
         if (!target || !["csv", "image"].includes(target.kind)) return null;
-        const [result] = dispatchProjectCommand(target.kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED", {
+        const result = dispatchProjectCommand(target.kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED", {
           target: { kind: target.kind, id: target.id, path: target.path },
         });
         if (!result.committed) return null;

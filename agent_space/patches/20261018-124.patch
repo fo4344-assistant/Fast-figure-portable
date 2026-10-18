@@ -1,0 +1,78 @@
+diff --git a/agent_space/patches/20261018-124.md b/agent_space/patches/20261018-124.md
+new file mode 100644
+index 0000000..dd22662
+--- /dev/null
++++ b/agent_space/patches/20261018-124.md
+@@ -0,0 +1,13 @@
++# 20261018-124
++
++## Purpose and correction
++
++Correct unit40 lower-language adapter bindings after actual Actions failure: use existing appFSM.query instead of the Source/PlusCal symbolic dispatchProjectQuery name, and use dispatchProjectCommand's real direct result instead of destructuring the logical pseudocode tuple. Code91/actual canonical Git-blob digest, review042 failure evidence and this patch pair change atomically. All regression assertions retained.
++
++## Rationale and alternatives
++
++Actual JS adapter inspection proves the direct return/query binding. Reuse it; reject inventing an adapter alias or changing the adapter return type across the application. Source45/pseudocode23 already specify the correct semantic operation, so do not change them to justify a lower translation typo. Previously missed physical adapter mapping is recorded rather than mislabeling static gates as behavioral verification.
++
++## Scope and verification
++
++Code90 regression39150693529 and repeat39150723812 failed, although build/canonical/cumulative/fidelity passed as recorded in review042. New code91 regression111+111/repeat/build/cumulative/fidelity pending. No test/runtime/checker execution locally; Git diff and blob fingerprint calculation only. No policy/Source/PlusCal/model/dist/selection semantics changes; code remains stale and whole goal open. The nonexistent development-layer-versions.yml dispatch returned404 and ran nothing; the actual inspected workflow is development-layer-version.yml, used successfully afterward. Initial local commit lacked author config; retried with the existing authenticated repository identity using per-command options, no global config changes.
+diff --git a/agent_space/reviews/review-20261018-042-code-delete-open.md b/agent_space/reviews/review-20261018-042-code-delete-open.md
+index ed9bc06..333836e 100644
+--- a/agent_space/reviews/review-20261018-042-code-delete-open.md
++++ b/agent_space/reviews/review-20261018-042-code-delete-open.md
+@@ -13,6 +13,10 @@ Code90 removes the Application-owned whole candidate and the Backend caller-cand
+ - Case111: missing unchanged/noncommit, mismatched identity rejection, validation failure preserves authority/Frontend, noncommit skips useful effects, replacement during validation triggers complete retry, late reconciliation error leaves committed deletion and skips later success work.
+ - Prior109 tests retain shared conversion/frozen/duplicate reference scope. Unit40 does not newly claim all import/schema/export/render/timing requirements.
+ 
++## Execution iteration1 and lower-translation correction
++
++At877eed3938152484e26423106309e1105b7bd587 version39150693477 PASS canonical code90 e5f53517a8eac8681cf3f67cfdeec85dc9d9fa9790a37e5e538018392d374bdd; build39150693426 PASS generated dist-only04e0803b299be32cef825716ce38ebeee4ab096e. Regression39150693529 FAIL both forms:11/111 `TypeError: dispatchProjectCommand is not a function or its return value is not iterable`,110 `ReferenceError: dispatchProjectQuery is not defined`, with UI controls absent in several old cases. Repeat39150723812 at bot04e0803 also FAIL; cumulative version39150719251/fidelity39150721731 at that bot PASS only static checks. Inspection of actual adapter source shows `dispatchProjectCommand(event, payload = {})` returns the command result directly, not the pseudocode logical tuple; the existing query binding is `appFSM.query`. Patch124 corrects only these two lower-language bindings, rederives code91 and retains all tests. Source/PlusCal meaning unchanged; this was missed implementation-binding review, not a reason to change the upper contract. No regression pass inferred from green build/version/static coverage. New exact-SHA Actions pending.
++
+ ## Lineage and verification status
+ 
+ Source45 and pseudocode23 fingerprints/lineage unchanged. Code90 remains stale. Fingerprint was calculated from the canonical staged Git blob identities (not executing a version checker); the authorized default GitHub-hosted canonical development-layer checker must independently confirm it. Exact new-SHA regression111 inline/split, repeat, build, cumulative versions and fidelity PENDING. No TLC execution claimed. This review is not a full-goal closure, and green static coverage alone is not semantic proof.
+diff --git a/development-versions.json b/development-versions.json
+index 3480310..93c6b60 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 90,
++      "revision": 91,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,7 +38,7 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:e5f53517a8eac8681cf3f67cfdeec85dc9d9fa9790a37e5e538018392d374bdd",
++      "fingerprint": "sha256:ed89653993164e4c42ab9f68c19af21259e35acc49bd43b5db9d7ca6e0690f2e",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:de6575d91cc0bfae1bee9e70b4b00b1e72c76dd47a7e9bd1417141bf8c1fe795",
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index dc54ddd..19e3081 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -6535,7 +6535,7 @@
+         return importSlotFile(file, getSelectedSlot());
+       }
+       function readAssetDeletionTarget() {
+-        const resolved = dispatchProjectQuery("project-api", {
++        const resolved = appFSM.query("project-api", {
+           operation: "assets.readDeletionTarget", path: interfaceFSM.readState().assetPath,
+         });
+         return resolved ? immutableProjectCopy({ kind: resolved.kind, id: resolved.target.id,
+@@ -6543,7 +6543,7 @@
+       }
+       function deleteProjectAsset(target) {
+         if (!target || !["csv", "image"].includes(target.kind)) return null;
+-        const [result] = dispatchProjectCommand(target.kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED", {
++        const result = dispatchProjectCommand(target.kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED", {
+           target: { kind: target.kind, id: target.id, path: target.path },
+         });
+         if (!result.committed) return null;
