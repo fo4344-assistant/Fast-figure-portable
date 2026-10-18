@@ -12004,12 +12004,83 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         activeProject.initialize(candidate);
       }
       function applyAssetsImportedAction({ machine, payload }) {
-        for (let scope of ["data", "images", "files", "charts", "slots"])
+        for (const scope of ["data", "images", "files", "charts", "slots"])
           machine.assertWritable(scope, "ASSETS_IMPORTED");
-        let candidate = validateProjectObjectState(payload.candidate, { requireSlots: true }),
-          previousImages = activeProject.images;
-        activeProject.initialize(candidate);
-        releaseProjectImageDisplayUrls(previousImages);
+        while (true) {
+          const source = activeProject._state, calculation = buildProjectAssetImportCandidate(source, payload);
+          if (!calculation) return false;
+          const { candidate, imported } = calculation;
+          try { validateProjectObjectState(candidate, { requireSlots: true }); } catch { return false; }
+          if (activeProject._state !== source) continue;
+          const changedIds = (before, after) => after.filter(item =>
+            JSON.stringify(before.find(old => old.id === item.id)) !== JSON.stringify(item)).map(item => item.id);
+          const changed = { slotIds: changedIds(source.slots, candidate.slots),
+            chartIds: changedIds(source.charts, candidate.charts),
+            csvIds: changedIds(source.assets.csvFiles, candidate.assets.csvFiles),
+            imageIds: changedIds(source.assets.images, candidate.assets.images), assets: imported };
+          activeProject.initialize(candidate);
+          payload.changed = changed;
+          for (const fact of imported)
+            if (fact.kind === "image") releaseProjectImageDisplayUrl(source.assets.images.find(image => image.id === fact.id));
+          return;
+        }
+      }
+      function buildProjectAssetImportCandidate(source, payload) {
+        const { files, choices, targetSlotId } = payload;
+        if (!Array.isArray(files) || !files.length || !Array.isArray(choices) || files.length !== choices.length ||
+            typeof payload.directory !== "string" || projectVfs.resolve(payload.directory, source)?.kind !== "directory" || projectVfs.isTrashed(payload.directory))
+          return null;
+        const directory = normalizeProjectPath(payload.directory, { directory: true }),
+          candidate = projectClone(source), reserved = new Set(), imported = [];
+        candidate.slots.forEach(slot => {
+          const original = source.slots.find(item => item.id === slot.id);
+          if (original?.content) slot.content = projectClone(original.content);
+        });
+        normalizeSlotContents(candidate.slots);
+        const target = targetSlotId == null ? null : candidate.slots.find(slot => slot.id === targetSlotId && !slot.hidden);
+        if (targetSlotId != null && !target) return null;
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i], plan = choices[i], kind = slotFileKind(file);
+          if (!["data", "image"].includes(kind) || !plan || typeof plan.path !== "string" ||
+              !(plan.replaceId === null || (Number.isInteger(plan.replaceId) && plan.replaceId > 0))) return null;
+          const path = normalizeProjectPath(plan.path), current = projectVfs.resolve(path, candidate),
+            assetKind = kind === "data" ? "csv" : "image";
+          if (path !== plan.path || projectParentPath(path) !== directory || reserved.has(path) ||
+              (plan.replaceId === null ? !!current : current?.kind !== assetKind || current.asset.id !== plan.replaceId))
+            return null;
+          let staged;
+          try { staged = stageProjectAssetImport(candidate, { file, kind, path, replaceId: plan.replaceId }); }
+          catch { return null; }
+          reserved.add(path);
+          if (target) {
+            if (kind === "image") {
+              if (target.contentType !== "image") return null;
+              target.imageId = staged.id;
+            } else {
+              if (target.contentType !== "graph") return null;
+              let chart = candidate.charts.find(item => item.id === target.chart);
+              if (chart?.editor?.editable === false) return null;
+              const csv = candidate.assets.csvFiles.find(item => item.id === staged.id);
+              if (!chart) {
+                chart = createChartModel({ id: candidate.nextId.chart++, editor: { title: csv.name,
+                  globalSettings: readGlobalSettings({ editor: {} }), plotlyExtensions: { layout: {}, config: {} },
+                  objects: [] } });
+                candidate.charts.push(chart); target.chart = chart.id;
+              }
+              chart.editor.objects.push(createCandidateBaseGraphObject(csv));
+            }
+          }
+          imported.push({ role: "imported", kind: assetKind, id: staged.id, path });
+        }
+        const csvIds = new Set(imported.filter(item => item.kind === "csv").map(item => item.id));
+        candidate.charts.forEach(chart => {
+          if (chart.editor?.editable !== false && chartCsvIds(chart).some(id => csvIds.has(id)))
+            rebuildEditableGraph(chart, candidate);
+        });
+        for (const fact of imported)
+          fact.owners = collectAssetReferences(new Set(fact.kind === "csv" ? [fact.id] : []),
+            new Set(fact.kind === "image" ? [fact.id] : []), candidate);
+        return { candidate, imported };
       }
 
       function applyAssetSelectionAction({ machine, payload }) {
@@ -13284,8 +13355,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return readBackendProjection("project-api", { operation: "assets.resolveImportPlan",
           model: immutableProjectCopy(model), choice, reservedPaths: Array.from(reservedPaths || []) });
       }
-      async function stageProjectAssetImport(candidate, item) {
-        let bytes = new Uint8Array(await item.file.arrayBuffer());
+      function stageProjectAssetImport(candidate, item) {
+        let bytes = new Uint8Array(item.file.bytes);
         if (item.kind === "data") {
           let text = new TextDecoder().decode(bytes),
             data = item.file.name.toLowerCase().endsWith(".json") ? JSON.parse(text) : parseCSV(text);
@@ -13335,52 +13406,39 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return { kind: "image", id, name: model.name, model };
       }
 
-      async function importProjectFilesToDirectory(
-        files,
-        directory,
-        planImport,
-      ) {
-        if (typeof planImport !== "function")
-          throw Error("프로젝트 자산 가져오기 계획이 없습니다.");
-        let targetDirectory = normalizeProjectPath(directory, { directory: true }),
-          list = Array.from(files || []);
-        if (!activeProject.fileSystem.directories.includes(targetDirectory))
-          throw Error("대상 폴더가 없습니다.");
-        if (projectVfs.isTrashed(targetDirectory))
-          throw Error("외부 파일은 휴지통으로 직접 가져올 수 없습니다.");
-
-        let reserved = new Set(), staged = [];
-        for (let file of list) {
-          let kind = slotFileKind(file);
-          if (kind !== "data" && kind !== "image")
-            throw Error(`${file.name}: 폴더에는 CSV/TSV/JSON 또는 이미지만 가져올 수 있습니다.`);
-          let plan = await planImport(file, targetDirectory, reserved);
+      async function prepareCopiedImportFiles(files) {
+        const copied = [];
+        for (const file of files)
+          copied.push({ name: file.name, type: file.type, bytes: new Uint8Array(await file.arrayBuffer()).slice() });
+        return copied;
+      }
+      async function collectCompletedImportChoices(files, directory, choosePlan) {
+        if (typeof choosePlan !== "function") throw Error("프로젝트 자산 가져오기 계획이 없습니다.");
+        const reserved = new Set(), choices = [];
+        for (const file of files) {
+          const plan = await choosePlan(file, directory, reserved);
           if (!plan) return null;
-          reserved.add(plan.path);
-          staged.push({ file, kind, ...plan });
+          if (typeof plan.path !== "string" ||
+              !(plan.replaceId === null || (Number.isInteger(plan.replaceId) && plan.replaceId > 0)))
+            throw Error("프로젝트 자산 가져오기 계획이 올바르지 않습니다.");
+          choices.push({ path: plan.path, replaceId: plan.replaceId }); reserved.add(plan.path);
         }
-
-        let candidate = projectClone(activeProject._state),
-          imported = [];
-        for (let item of staged) {
-          let stagedAsset = await stageProjectAssetImport(candidate, item);
-          imported.push({
-            kind: stagedAsset.kind,
-            id: stagedAsset.id,
-            name: stagedAsset.name,
-          });
-        }
-        validateProjectObjectState(candidate, { requireSlots: true });
-        await appFSM.run("importing", "ASSET_TREE_DROP", async () => {
-          appFSM.send("ASSETS_IMPORTED", {
-            candidate,
-            imported,
-            direction: "ui-to-fsm",
-          });
-        });
-        updateFileAvailability();
-        renderDashboard();
-        status(`${imported.length}개 자산을 프로젝트에 추가했습니다.`);
+        return choices;
+      }
+      function readImportedAssets(result) {
+        return result.changed.assets.map(fact => readBackendProjection("project-api",
+          { operation: "assets.readDeletionTarget", path: fact.path }).target);
+      }
+      async function importProjectFilesToDirectory(files, directory, planImport) {
+        const list = Array.from(files || []);
+        if (!list.length) return [];
+        const choices = await collectCompletedImportChoices(list, directory, planImport);
+        if (!choices) return null;
+        const copied = await prepareCopiedImportFiles(list),
+          result = dispatchProjectCommand("ASSETS_IMPORTED", { files: copied, directory, choices });
+        if (!result.committed) return result;
+        const imported = readImportedAssets(result);
+        updateFileAvailability(); renderDashboard(); status(`${imported.length}개 자산을 프로젝트에 추가했습니다.`);
         return imported;
       }
 
@@ -16525,96 +16583,19 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return connectProjectAssetToSlot(path, kind, slotAt(slotId));
       }
       async function importProjectFileToSlot(file, slotId, choosePlan) {
-        let slot = slotAt(slotId),
-          kind = slotFileKind(file);
-        if (!slot || slot.hidden) throw Error("가져올 대상 슬롯이 없습니다.");
-        if (!kind) throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
-        if (kind === "slot") return importSlotFile(file, slot);
-        if (typeof choosePlan !== "function")
-          throw Error("프로젝트 자산 가져오기 계획이 없습니다.");
-
-        let assetKind = kind === "image" ? "image" : "data",
-          directory = PROJECT_ASSET_DIRECTORIES[kind === "image" ? "image" : "csv"],
-          plan = await choosePlan(file, directory);
-        if (!plan) return null;
-
-        let candidate = projectClone(activeProject._state);
-        normalizeSlotContents(candidate.slots);
-        let stagedAsset = await stageProjectAssetImport(candidate, {
-            file,
-            kind: assetKind,
-            path: plan.path,
-            replaceId: plan.replaceId,
-          }),
-          target = candidate.slots.find((item) => item.id === slot.id);
-        if (!target) throw Error("가져올 대상 슬롯을 candidate에서 찾을 수 없습니다.");
-
-        let affectedChartId = null;
-        if (stagedAsset.kind === "image") {
-          if (Number.isInteger(target.chart))
-            candidate.charts = candidate.charts.filter((chart) => chart.id !== target.chart);
-          target.chart = null;
-          target.imageId = stagedAsset.id;
-          target.contentType = "image";
-          target.content.imageSettings = { ...DEFAULT_IMAGE_SETTINGS };
-        } else {
-          let csv = candidate.assets.csvFiles.find((item) => item.id === stagedAsset.id);
-          if (!csv) throw Error("가져온 CSV candidate가 없습니다.");
-          if (target.contentType === "image") {
-            if (Number.isInteger(target.chart))
-              candidate.charts = candidate.charts.filter((chart) => chart.id !== target.chart);
-            target.chart = null;
-            target.imageId = null;
-            target.contentType = "graph";
-          }
-
-          let chart = Number.isInteger(target.chart)
-            ? candidate.charts.find((item) => item.id === target.chart)
-            : null;
-          if (chart?.editor?.editable === false)
-            throw Error("편집 가능 토글을 켠 뒤 CSV를 추가하세요.");
-          if (chart) {
-            let selection = graphDataSelection(csv.rows, csv.headerLines, chart.editor);
-            chart.editor.x = selection.x;
-            chart.editor.y = selection.y;
-            chart.editor.objects = [
-              ...(Array.isArray(chart.editor.objects) ? chart.editor.objects : []),
-              baseGraphObject(chart, csv),
-            ];
-          } else {
-            chart = createChartModel({
-              id: candidate.nextId.chart++,
-              editor: defaultChartEditor(target, csv.rows, csv.headerLines),
-            });
-            chart.editor.objects = [baseGraphObject(chart, csv)];
-            candidate.charts.push(chart);
-            target.chart = chart.id;
-          }
-          affectedChartId = chart.id;
-        }
-
-        validateProjectObjectState(candidate, { requireSlots: true });
-        appFSM.send("ASSETS_IMPORTED", {
-          candidate,
-          imported: [{
-            kind: stagedAsset.kind,
-            id: stagedAsset.id,
-            name: stagedAsset.name,
-          }],
-          targetSlotId: slot.id,
-          affectedChartId,
-          direction: "ui-to-fsm",
-        });
-        if (Number.isInteger(affectedChartId)) {
-          let chart = getChart(affectedChartId);
-          if (chart?.editor?.editable !== false) rebuildEditableGraph(chart);
-          activateChartModel(affectedChartId);
-        }
-        renderDashboard();
-        updateFileAvailability();
-        return stagedAsset.kind === "image"
-          ? getProjectImage(stagedAsset.id)
-          : getProjectCsv(stagedAsset.id);
+        const target = readBackendProjection("slot-selection-context", { slotId }), kind = readAssetFileKind(file);
+        if (!target) throw Error("가져올 대상 슬롯이 없습니다.");
+        if (kind === "slot") return importSlotFile(file, { id: target.id });
+        if (!["data", "image"].includes(kind)) throw Error("지원하지 않는 파일 형식입니다.");
+        const directory = PROJECT_ASSET_DIRECTORIES[kind === "data" ? "csv" : "image"],
+          choices = await collectCompletedImportChoices([file], directory, choosePlan);
+        if (!choices) return null;
+        const files = await prepareCopiedImportFiles([file]),
+          result = dispatchProjectCommand("ASSETS_IMPORTED", { files, directory, choices, targetSlotId: slotId });
+        if (!result.committed) return result;
+        const imported = readImportedAssets(result)[0];
+        renderDashboard(); updateFileAvailability();
+        return imported;
       }
       async function importProjectAssetFiles(files, choosePlan) {
         let selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
