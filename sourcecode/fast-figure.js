@@ -3696,49 +3696,6 @@
           title: selection.y,
         };
       }
-      function connectDataToSlotModel(slot, data, sourceName, projectCsv = null) {
-        let matrix = dataTable(data),
-          chart = slot.chart ? getChart(slot.chart) : null,
-          csv = projectCsv || createProjectCsv(matrix, sourceName),
-          headerLines = headerLineCount(csv.headerLines, matrix);
-        if (chart) {
-          let selection = graphDataSelection(matrix, headerLines, chart.editor);
-          chart.editor.x = selection.x;
-          chart.editor.y = selection.y;
-          chart.editor.objects = [...ensureGraphObjects(chart), baseGraphObject(chart, csv)];
-          if (chart.editor.editable !== false) rebuildEditableGraph(chart);
-        } else {
-          chart = createChartModel({
-            id: activeProject.chartId++,
-            editor: defaultChartEditor(slot, matrix, headerLines),
-          });
-          chart.editor.objects = [baseGraphObject(chart, csv)];
-          rebuildEditableGraph(chart);
-          activeProject.charts.push(chart);
-          slot.chart = chart.id;
-        }
-        return chart;
-      }
-      function connectDataToSlot(
-        slot,
-        data,
-        sourceName,
-        projectCsv = null,
-        { replaceSlotContent = false } = {},
-      ) {
-        let csv = projectCsv || createProjectCsv(data, sourceName),
-          payload = {
-            slotId: slot.id,
-            csvId: csv.id,
-            replaceSlotContent,
-            direction: "fsm-to-model",
-          };
-        appFSM.send("SLOT_DATA_CONNECTED", payload);
-        if (!payload.chart) throw Error("슬롯 그래프 오브젝트를 만들지 못했습니다.");
-        activateChartModel(payload.chart.id);
-        renderDashboard();
-        return payload.chart;
-      }
       function tracesSingle(c) {
         let b = {},
           colors = c.colors?.length ? c.colors : DEFAULT_COLORS,
@@ -6218,62 +6175,6 @@
         if (!result.committed) return null;
         return appFSM.query("project-api", { operation: "project.readName" });
       }
-      async function loadImageFile(
-        file,
-        slot,
-        { assetPath = null, replaceAssetId = null, planImport = null } = {},
-      ) {
-        try {
-          if (!assetPath && typeof planImport !== "function")
-            throw Error("프로젝트 이미지 가져오기 계획이 없습니다.");
-          let bytes = new Uint8Array(await file.arrayBuffer()),
-            plan = assetPath
-              ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
-              : await planImport(file, PROJECT_ASSET_DIRECTORIES.image),
-            image;
-          if (!plan) return null;
-          if (Number.isInteger(plan.replaceId)) {
-            image = buildProjectImageModel(
-              bytes,
-              file.name,
-              file.type,
-              plan.replaceId,
-            );
-            projectVfs.assignLocation(image, plan.path);
-            appFSM.send("IMAGE_OBJECT_REPLACED", {
-              model: image,
-              direction: "fsm-to-model",
-            });
-            if (slot)
-              appFSM.send("SLOT_IMAGE_LINKED", {
-                slotId: slot.id,
-                imageId: image.id,
-                direction: "fsm-to-model",
-              });
-          } else if (slot) {
-            image = buildProjectImageModel(bytes, file.name, file.type, activeProject.imageId);
-            projectVfs.assignLocation(image, plan.path);
-            appFSM.send("SLOT_IMAGE_IMPORTED", {
-              slotId: slot.id,
-              model: image,
-              direction: "fsm-to-model",
-            });
-          } else image = createProjectImage(bytes, file.name, file.type, null, plan.path);
-          updateFileAvailability();
-          renderDashboard();
-          status(
-            slot
-              ? `${file.name} 이미지를 선택 슬롯에 연결했습니다.`
-              : Number.isInteger(plan.replaceId)
-                ? `${file.name} 이미지를 기존 참조를 유지한 채 교체했습니다.`
-                : `${file.name} 이미지를 프로젝트에 추가했습니다.`,
-          );
-          debugLog("slot:image-load", { slotId: slot?.id ?? null, name: file.name });
-        } catch (error) {
-          status("이미지 불러오기 실패: " + error.message);
-          throw error;
-        }
-      }
       function slotFileKind(file) {
         let name = String(file?.name || "").toLowerCase(),
           type = String(file?.type || "").toLowerCase();
@@ -6285,86 +6186,6 @@
       }
       function dataTransferHasFiles(dataTransfer) {
         return Array.from(dataTransfer?.types || []).includes("Files");
-      }
-      async function loadDataFile(
-        file,
-        slot,
-        { replaceSlotContent = false, assetPath = null, replaceAssetId = null, planImport = null } = {},
-      ) {
-        debugLog("fileLoad:start", {
-          name: file.name,
-          size: file.size,
-          slotId: slot?.id ?? null,
-          source: "shared-loader",
-        });
-        let csv = null;
-        try {
-          let bytes = new Uint8Array(await file.arrayBuffer()),
-            text = new TextDecoder().decode(bytes),
-            data = file.name.toLowerCase().endsWith(".json") ? JSON.parse(text) : parseCSV(text);
-          if (!Array.isArray(data) && Array.isArray(data.data)) data = data.data;
-          if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
-          if (!assetPath && typeof planImport !== "function")
-            throw Error("프로젝트 데이터 가져오기 계획이 없습니다.");
-          let plan = assetPath
-            ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
-            : await planImport(file, PROJECT_ASSET_DIRECTORIES.csv);
-          if (!plan) return null;
-          if (Number.isInteger(plan.replaceId)) {
-            csv = buildProjectCsvModel(
-              data,
-              file.name,
-              plan.replaceId,
-              ffpxBytesToBase64(bytes),
-              file.type || "text/csv",
-              1,
-            );
-            projectVfs.assignLocation(csv, plan.path);
-            appFSM.send("DATA_OBJECT_REPLACED", {
-              model: csv,
-              direction: "fsm-to-model",
-            });
-          } else
-            csv = createProjectCsv(
-              data,
-              file.name,
-              null,
-              ffpxBytesToBase64(bytes),
-              file.type || "text/csv",
-              1,
-              plan.path,
-            );
-          if (slot) {
-            connectDataToSlot(slot, data, file.name, csv, { replaceSlotContent });
-          }
-          status(
-            Number.isInteger(plan.replaceId)
-              ? `${file.name}을 기존 참조를 유지한 채 교체했습니다.`
-              : `${file.name}을 프로젝트 CSV로 추가했습니다.`,
-          );
-          debugLog("fileLoad:complete", {
-            name: file.name,
-            rows: csv.rows.length,
-            slotId: slot?.id ?? null,
-            chartId: slot?.chart || null,
-            csvId: csv.id,
-          });
-        } catch (error) {
-          if (
-            csv &&
-            !activeProject.charts.some((chart) => chartCsvIds(chart).includes(csv.id))
-          )
-            appFSM.send("DATA_OBJECT_DELETED", {
-              target: { kind: "csv", id: csv.id, path: projectAssetPath(csv) },
-              direction: "fsm-to-model",
-            });
-          debugLog("fileLoad:error", {
-            name: file.name,
-            slotId: slot?.id ?? null,
-            message: error.message,
-          });
-          throw error;
-        }
       }
       function baseGraphObject(chart, csv = selectedProjectCsv()) {
         let editor = chart.editor || {};
@@ -6565,8 +6386,11 @@
           colors: normalizedGraphObjects(chart).map((object) => object.color),
         };
       }
-      function importSelectedGraphFile(file) {
-        return importSlotFile(file, getSelectedSlot());
+      async function importSelectedGraphFile(file, slotId = interfaceFSM.readState().selectedSlotId) {
+        await importSlotFile(file, slotId == null ? null : { id: slotId });
+        return appFSM.query("project-api", {
+          operation: "graphs.readData", frontendState: { selectedSlotId: slotId },
+        }).chart;
       }
       function readAssetDeletionTarget() {
         const resolved = appFSM.query("project-api", {
@@ -6681,7 +6505,7 @@
       async function importProjectFileToSlot(file, slotId, choosePlan) {
         const target = readBackendProjection("slot-selection-context", { slotId }), kind = readAssetFileKind(file);
         if (!target) throw Error("가져올 대상 슬롯이 없습니다.");
-        if (kind === "slot") return importSlotFile(file, { id: target.id });
+        if (kind === "slot") return importSelectedGraphFile(file, target.id);
         if (!["data", "image"].includes(kind)) throw Error("지원하지 않는 파일 형식입니다.");
         const directory = PROJECT_ASSET_DIRECTORIES[kind === "data" ? "csv" : "image"],
           choices = await collectCompletedImportChoices([file], directory, choosePlan);
@@ -6694,53 +6518,30 @@
         return imported;
       }
       async function importProjectAssetFiles(files, choosePlan) {
-        let selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
-        let target = getSelectedSlot();
-        if (target && (target.contentType || "graph") === "image") {
-          let file = selectedFiles[0], kind = slotFileKind(file);
-          if (kind === "slot") return importSlotFile(file, target);
-          if (kind === "image") {
-            let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.image);
-            if (!plan) return null;
-            return loadImageFile(file, target, {
-              assetPath: plan.path, replaceAssetId: plan.replaceId,
-            });
+        const inputs = Array.from(files && typeof files[Symbol.iterator] === "function" ? files : files ? [files] : []);
+        if (!inputs.length) return [];
+        const targetSlotId = interfaceFSM.readState().selectedSlotId;
+        return runLifecycleTask("importing", "ASSET_IMPORT", async () => {
+          const output = [];
+          for (const file of inputs) {
+            const kind = readAssetFileKind(file);
+            let item;
+            if (kind === "slot") {
+              if (targetSlotId == null) throw Error("FFSX를 불러올 슬롯을 먼저 선택하세요.");
+              item = await importSelectedGraphFile(file, targetSlotId);
+            } else if (kind === "data" || kind === "image") {
+              if (targetSlotId != null) item = await importProjectFileToSlot(file, targetSlotId, choosePlan);
+              else {
+                const directory = PROJECT_ASSET_DIRECTORIES[kind === "data" ? "csv" : "image"];
+                item = await importProjectFilesToDirectory([file], directory, choosePlan);
+                if (Array.isArray(item)) item = item[0];
+              }
+            } else throw Error(`${file?.name || "파일"}: 지원하지 않는 파일 형식입니다.`);
+            if (item == null || item.committed === false) return item;
+            output.push(item);
           }
-          if (kind === "data") {
-            let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.csv);
-            if (!plan) return null;
-            return loadDataFile(file, target, {
-              replaceSlotContent: true,
-              assetPath: plan.path, replaceAssetId: plan.replaceId,
-            });
-          }
-          throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
-        }
-        if (target) {
-          for (let file of selectedFiles) {
-            let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.csv);
-            if (!plan) return null;
-            await loadDataFile(file, target, {
-              assetPath: plan.path, replaceAssetId: plan.replaceId,
-            });
-          }
-          return;
-        }
-        for (let file of selectedFiles) {
-          let kind = slotFileKind(file);
-          if (kind !== "image" && kind !== "data")
-            throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
-          let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES[kind === "image" ? "image" : "csv"]);
-          if (!plan) return null;
-          if (kind === "image")
-            await loadImageFile(file, null, {
-              assetPath: plan.path, replaceAssetId: plan.replaceId,
-            });
-          else
-            await loadDataFile(file, null, {
-              assetPath: plan.path, replaceAssetId: plan.replaceId,
-            });
-        }
+          return output;
+        });
       }
       function graphEditorUpdateLayout(slotId, chartId, values) {
         const result = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId, settings: values });

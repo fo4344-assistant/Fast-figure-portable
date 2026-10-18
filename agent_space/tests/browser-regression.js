@@ -5373,6 +5373,102 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         status = report; interfaceFSM.notify = notify; initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+
+    await run(120, "Ordered import router captures one scalar target and owns one lifecycle", async () => {
+      const session = interfaceFSM.state, selected = selectedSlotId, classify = readAssetFileKind,
+        toSlot = importProjectFileToSlot, toDirectory = importProjectFilesToDirectory,
+        graph = importSelectedGraphFile, send = interfaceFSM.send, notify = interfaceFSM.notify;
+      try {
+        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+        selectedSlotId = 123;
+        const calls = [], events = [], files = [{ name: "a.csv", kind: "data" },
+          { name: "b.svg", kind: "image" }, { name: "c.ffsx", kind: "slot" }];
+        interfaceFSM.notify = () => {};
+        interfaceFSM.send = function (event, payload) { events.push(event); return send.call(this, event, payload); };
+        readAssetFileKind = file => { calls.push("kind:" + file.name); return file.kind; };
+        importProjectFileToSlot = async (file, id) => {
+          check(id === 123, "router reread target after waiting");
+          calls.push(file.name); selectedSlotId = 456;
+          return Object.freeze({ name: file.name });
+        };
+        importSelectedGraphFile = async (file, id) => {
+          check(id === 123, "package target was not captured");
+          calls.push(file.name); return Object.freeze({ name: file.name });
+        };
+        importProjectFilesToDirectory = async (items, directory) => {
+          calls.push(directory); return [Object.freeze({ name: items[0].name })];
+        };
+        const empty = await api.assets.importFiles([]);
+        check(empty.length === 0 && !events.length && !calls.length, "empty import entered lifecycle/read");
+        const output = await api.assets.importFiles(files, () => {});
+        check(output.map(item => item.name).join() === files.map(file => file.name).join() &&
+          output.every(Object.isFrozen) && calls.join() === "kind:a.csv,a.csv,kind:b.svg,b.svg,kind:c.ffsx,c.ffsx" &&
+          events.filter(event => event === "LIFECYCLE_START").length === 1 &&
+          events.filter(event => event === "LIFECYCLE_COMPLETE").length === 1, "router lost file order or nested lifecycle");
+        selectedSlotId = null; calls.length = 0;
+        await api.assets.importFiles(files.slice(0, 2), () => {});
+        check(calls.join() === ["kind:a.csv", PROJECT_ASSET_DIRECTORIES.csv, "kind:b.svg", PROJECT_ASSET_DIRECTORIES.image].join(),
+          "project import chose wrong per-kind directory");
+        selectedSlotId = 123; calls.length = 0;
+        importProjectFileToSlot = async file => { calls.push(file.name); return null; };
+        check(await api.assets.importFiles(files, () => {}) === null && calls.join() === "kind:a.csv,a.csv",
+          "cancel did not stop before later classification");
+        calls.length = 0; const rejected = Object.freeze({ committed: false });
+        importProjectFileToSlot = async file => { calls.push(file.name); return rejected; };
+        check(await api.assets.importFiles(files, () => {}) === rejected && calls.join() === "kind:a.csv,a.csv",
+          "noncommit did not preserve exact result/stop");
+        const count = calls.length, starts = events.filter(event => event === "LIFECYCLE_START").length;
+        interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, lifecycle: "importing" });
+        let busy;
+        try { await api.assets.importFiles(files, () => {}); } catch (error) { busy = error; }
+        check(busy && calls.length === count && events.filter(event => event === "LIFECYCLE_START").length === starts,
+          "busy router began a nested operation");
+        interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, lifecycle: "ready" });
+        const failure = Error("ordered-helper-original"); let caught;
+        importProjectFileToSlot = async () => { throw failure; };
+        try { await api.assets.importFiles(files, () => {}); } catch (error) { caught = error; }
+        check(caught === failure && events.filter(event => event === "LIFECYCLE_FAILED").length === 1,
+          "router swallowed helper error or lost lifecycle failure");
+      } finally { readAssetFileKind = classify; importProjectFileToSlot = toSlot;
+        importProjectFilesToDirectory = toDirectory; importSelectedGraphFile = graph;
+        interfaceFSM.send = send; interfaceFSM.notify = notify; interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(121, "Real ordered imports process all images and preserve earlier per-file commits", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+        const id = activeProject.slots.find(slot => !slot.hidden).id;
+        api.slots.reset(id); api.slots.setContentType(id, "image"); select(slotAt(id));
+        const settings = JSON.stringify(slotAt(id).content.imageSettings),
+          bytes = '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>';
+        let commits = 0;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        const images = [new File([bytes], "ordered-one.svg", { type: "image/svg+xml" }),
+          new File([bytes], "ordered-two.svg", { type: "image/svg+xml" })],
+          imported = await api.assets.importFiles(images, choose("rename"));
+        check(commits === 2 && imported.length === 2 && imported.every(Object.isFrozen) &&
+          imported[0].id !== imported[1].id && slotAt(id).imageId === imported[1].id &&
+          JSON.stringify(slotAt(id).content.imageSettings) === settings, "image target discarded later files or reset local settings");
+        const current = activeProject._state,
+          rejected = await api.assets.importFiles([csv("ordered-wrong-type.csv", "X,Y\n1,2\n"), images[0]], choose("rename"));
+        check(rejected.committed === false && commits === 2 && activeProject._state === current &&
+          slotAt(id).contentType === "image", "CSV router silently converted image target or continued after noncommit");
+        selectedSlotId = null;
+        const output = await api.assets.importFiles([csv("ordered-project.csv", "X,Y\n1,2\n"), images[0]], choose("rename"));
+        check(output.length === 2 && commits === 4 && output[0].directory === PROJECT_ASSET_DIRECTORIES.csv &&
+          output[1].directory === PROJECT_ASSET_DIRECTORIES.image, "mixed project import lost order/directory");
+        let caught;
+        try { await api.assets.importFiles([csv("ordered-retained.csv", "X,Y\n1,2\n"), new File(["bad"], "ordered.bad")], choose("rename")); }
+        catch (error) { caught = error; }
+        check(caught && commits === 5 && activeProject.csvFiles.some(item => item.name === "ordered-retained.csv"),
+          "later unsupported input rolled back earlier file or created extra commit");
+      } finally { activeProject.initialize = initialize; renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

@@ -1,0 +1,501 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 7a57044..e09b64e 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -257,6 +257,10 @@ Baseline a0a64d580a4f64ce9c6cda24ab9a62d98ed9b0be. Existing Source45/pseudocode2
+ 
+ Unit43 bounded final evidence: 7e2bb2f7501f26e2aa1545c1987ae15f3cc09407 regression39152968411/repeat39152968927 PASS119 inline+119 split (actual batch/slot/current-source retry/byte-await collisions/image resource cases116–119). Push canonical39152968418/cumulative39152973469 (basea0a64d580a4f64ce9c6cda24ab9a62d98ed9b0be), build39152971214 (already current) and fidelity39152976116 PASS; code94 canonical2a28ac11cb5eae343d60ff4787c443b7038a7ee947ce1d5e80913ddcd1b03c01, upper45/23 unchanged, code stale. Review045 preserves initial fixture failures/corrections and bounded limits. Next ownership unit: ordered importFiles router captures Frontend target scalar, classifies each file officially and calls corrected slot/directory helper exactly once; single public lifecycle with UI outer ASSET_IMPORT task removed coherently, early failure preserves earlier per-file commits, no image-first-file drop or implicit type switch, retire unused legacy loaders after caller audit. Package/common commit/schema/serializer/raster/dashboard/timing still open; no whole completion.
+ 
++## Forty-fourth bounded unit — captured-target ordered import router
++
++Baseline506dc0d8284c4d5ee2935a3bd77cd646a3ea4c39. Source45 assets.importProjectAssetFiles/pseudocode23 ordered router requires one captured Frontend scalar target, official classification, every input exactly one helper, original-order detached items, early cancel/noncommit/error preserving previous commits and one public lifecycle. Code95 directly routes all raw inputs through verified unit43 helpers; moves lifecycle ownership out of Mantine caller, removes unused loadDataFile/loadImageFile/connectDataToSlot legacy mutation/rollback paths. Package helper accepts explicit target and returns copied official chart read, but its legacy Application parse/caller-model Backend handler is NOT declared aligned; package internals remain next work. Cases120/121 separate stubbed routing/lifecycle proof from real multi-image/raw mixed/per-file partial-commit integration. Review046/patch135, exact new-SHA121+121/repeat/build/canonical/cumulative/fidelity pending. Upper45/23 unchanged, code stale, no local runtime or policy changes. Whole package/common commit/schema/serializer/raster/dashboard/timing audit open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-046-code-ordered-import-open.md b/agent_space/reviews/review-20261018-046-code-ordered-import-open.md
+new file mode 100644
+index 0000000..37bb099
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-046-code-ordered-import-open.md
+@@ -0,0 +1,19 @@
++# Unit44 — captured-target ordered import router (pending Actions)
++
++## Upper-contract and policy audit
++
++Continue fully read development-policy.md v0.2.6 and AGENT.md, unchanged. Source45 assets.py importProjectAssetFiles and pseudocode23 application/public_api/assets.pcal ordered router require empty input no effects; one captured Frontend scalar target; official filename/MIME classifier; each input uses exactly one slot/package/directory helper; preserve input order/copied results; stop at cancellation/noncommit/original exception without rolling back earlier files. One public importing lifecycle; UI must not nest another. No new Source meaning or ownership cache.
++
++## Direct translation / bounded prompt-to-artifact checklist
++
++- importProjectAssetFiles captures an ordered file array and selectedSlotId before waits, calls readAssetFileKind per file, passes captured target to importProjectFileToSlot or importSelectedGraphFile, otherwise uses the correct CSV/image directory. No mutable selected-slot snapshot, first-image-only branch, silent CSV-to-image type conversion, Application candidate/create/replace/connect or rollback.
++- Single runLifecycleTask lives in this public operation after empty guard. Mantine caller awaits it and reports error outside task, preserving original lifecycle failure. Empty returns[], cancellation returns None, noncommit returns the exact result, throw propagates, successful output is ordered per-helper detached items.
++- Remove now-unreferenced loadDataFile/loadImageFile/connectDataToSlotModel/connectDataToSlot after all real raw-router callers cut over. No compatibility bridge or duplicate persistent state. Package helper accepts scalar target and copies official chart read, but this does NOT close its older internal parser/caller-chart action.
++- Case120 uses stubbed helpers to isolate routing/captured target across waits, per-kind directories, original-order all-file outputs, empty no-effects, one lifecycle, busy rejection, cancel/noncommit early stop and original exception/lifecycle failure. Package routing in this case is delegation proof ONLY, not parser/Backend conformance.
++- Case121 uses actual corrected raw helpers: multiple images all commit and link in order while preserving settings; CSV into image target noncommits without changing type or processing next file; mixed project imports keep order/directories; later unsupported file leaves earlier actual commit intact. Prior116–119 retain command atomicity/current authority/resource evidence.
++
++## Remaining dependency gaps / no whole closure
++
++Package graph import still parses in Application importSlotFile and sends a chart/CSV model to applySlotChartImportedAction; this violates already-current Source graphs.importSelectedGraphFile raw-file-only/Backend ownership and remains OPEN. Do not infer package conformance from router stubs or prior roundtrip cases. The package wrapper's useful-work/noncommit boundary requires closing with that handler, not another caller-side rollback/temporary model. Inspect Source versus pseudocode target-kind guards before that cutover: Source describes target slot and ApplyFfsx preserves settings, while pseudocode main branch currently names ResolveCurrentVisibleGraphSlot; do not silently impose or remove an upper precondition from code convenience. Current package action also resets imageSettings and lacks current-source retry/canonical extension preservation. These are concrete next audit/implementation tasks, not fixed here.
++
++Common final-commit/initializer semantics, other mutation owners, schema/serializer/raster/current snapshot/resources, supplied dashboard and lifecycle/timing integration and full requirement audit remain open. Code95 stale; optional model/TLC not run. No local app/test/build/checker. All exact new-SHA121 inline+121 split/repeat/build/canonical/cumulative/fidelity PENDING; staged Git blob fingerprint is metadata calculation, not checker pass. No explicit quota/auth/service blocker.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 6a0a993..4914903 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5373,6 +5373,102 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         status = report; interfaceFSM.notify = notify; initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++
++    await run(120, "Ordered import router captures one scalar target and owns one lifecycle", async () => {
++      const session = interfaceFSM.state, selected = selectedSlotId, classify = readAssetFileKind,
++        toSlot = importProjectFileToSlot, toDirectory = importProjectFilesToDirectory,
++        graph = importSelectedGraphFile, send = interfaceFSM.send, notify = interfaceFSM.notify;
++      try {
++        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
++        selectedSlotId = 123;
++        const calls = [], events = [], files = [{ name: "a.csv", kind: "data" },
++          { name: "b.svg", kind: "image" }, { name: "c.ffsx", kind: "slot" }];
++        interfaceFSM.notify = () => {};
++        interfaceFSM.send = function (event, payload) { events.push(event); return send.call(this, event, payload); };
++        readAssetFileKind = file => { calls.push("kind:" + file.name); return file.kind; };
++        importProjectFileToSlot = async (file, id) => {
++          check(id === 123, "router reread target after waiting");
++          calls.push(file.name); selectedSlotId = 456;
++          return Object.freeze({ name: file.name });
++        };
++        importSelectedGraphFile = async (file, id) => {
++          check(id === 123, "package target was not captured");
++          calls.push(file.name); return Object.freeze({ name: file.name });
++        };
++        importProjectFilesToDirectory = async (items, directory) => {
++          calls.push(directory); return [Object.freeze({ name: items[0].name })];
++        };
++        const empty = await api.assets.importFiles([]);
++        check(empty.length === 0 && !events.length && !calls.length, "empty import entered lifecycle/read");
++        const output = await api.assets.importFiles(files, () => {});
++        check(output.map(item => item.name).join() === files.map(file => file.name).join() &&
++          output.every(Object.isFrozen) && calls.join() === "kind:a.csv,a.csv,kind:b.svg,b.svg,kind:c.ffsx,c.ffsx" &&
++          events.filter(event => event === "LIFECYCLE_START").length === 1 &&
++          events.filter(event => event === "LIFECYCLE_COMPLETE").length === 1, "router lost file order or nested lifecycle");
++        selectedSlotId = null; calls.length = 0;
++        await api.assets.importFiles(files.slice(0, 2), () => {});
++        check(calls.join() === ["kind:a.csv", PROJECT_ASSET_DIRECTORIES.csv, "kind:b.svg", PROJECT_ASSET_DIRECTORIES.image].join(),
++          "project import chose wrong per-kind directory");
++        selectedSlotId = 123; calls.length = 0;
++        importProjectFileToSlot = async file => { calls.push(file.name); return null; };
++        check(await api.assets.importFiles(files, () => {}) === null && calls.join() === "kind:a.csv,a.csv",
++          "cancel did not stop before later classification");
++        calls.length = 0; const rejected = Object.freeze({ committed: false });
++        importProjectFileToSlot = async file => { calls.push(file.name); return rejected; };
++        check(await api.assets.importFiles(files, () => {}) === rejected && calls.join() === "kind:a.csv,a.csv",
++          "noncommit did not preserve exact result/stop");
++        const count = calls.length, starts = events.filter(event => event === "LIFECYCLE_START").length;
++        interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, lifecycle: "importing" });
++        let busy;
++        try { await api.assets.importFiles(files, () => {}); } catch (error) { busy = error; }
++        check(busy && calls.length === count && events.filter(event => event === "LIFECYCLE_START").length === starts,
++          "busy router began a nested operation");
++        interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, lifecycle: "ready" });
++        const failure = Error("ordered-helper-original"); let caught;
++        importProjectFileToSlot = async () => { throw failure; };
++        try { await api.assets.importFiles(files, () => {}); } catch (error) { caught = error; }
++        check(caught === failure && events.filter(event => event === "LIFECYCLE_FAILED").length === 1,
++          "router swallowed helper error or lost lifecycle failure");
++      } finally { readAssetFileKind = classify; importProjectFileToSlot = toSlot;
++        importProjectFilesToDirectory = toDirectory; importSelectedGraphFile = graph;
++        interfaceFSM.send = send; interfaceFSM.notify = notify; interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(121, "Real ordered imports process all images and preserve earlier per-file commits", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
++        const id = activeProject.slots.find(slot => !slot.hidden).id;
++        api.slots.reset(id); api.slots.setContentType(id, "image"); select(slotAt(id));
++        const settings = JSON.stringify(slotAt(id).content.imageSettings),
++          bytes = '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>';
++        let commits = 0;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        const images = [new File([bytes], "ordered-one.svg", { type: "image/svg+xml" }),
++          new File([bytes], "ordered-two.svg", { type: "image/svg+xml" })],
++          imported = await api.assets.importFiles(images, choose("rename"));
++        check(commits === 2 && imported.length === 2 && imported.every(Object.isFrozen) &&
++          imported[0].id !== imported[1].id && slotAt(id).imageId === imported[1].id &&
++          JSON.stringify(slotAt(id).content.imageSettings) === settings, "image target discarded later files or reset local settings");
++        const current = activeProject._state,
++          rejected = await api.assets.importFiles([csv("ordered-wrong-type.csv", "X,Y\n1,2\n"), images[0]], choose("rename"));
++        check(rejected.committed === false && commits === 2 && activeProject._state === current &&
++          slotAt(id).contentType === "image", "CSV router silently converted image target or continued after noncommit");
++        selectedSlotId = null;
++        const output = await api.assets.importFiles([csv("ordered-project.csv", "X,Y\n1,2\n"), images[0]], choose("rename"));
++        check(output.length === 2 && commits === 4 && output[0].directory === PROJECT_ASSET_DIRECTORIES.csv &&
++          output[1].directory === PROJECT_ASSET_DIRECTORIES.image, "mixed project import lost order/directory");
++        let caught;
++        try { await api.assets.importFiles([csv("ordered-retained.csv", "X,Y\n1,2\n"), new File(["bad"], "ordered.bad")], choose("rename")); }
++        catch (error) { caught = error; }
++        check(caught && commits === 5 && activeProject.csvFiles.some(item => item.name === "ordered-retained.csv"),
++          "later unsupported input rolled back earlier file or created extra commit");
++      } finally { activeProject.initialize = initialize; renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 2aa8057..7893628 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 94,
++      "revision": 95,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:2a28ac11cb5eae343d60ff4787c443b7038a7ee947ce1d5e80913ddcd1b03c01",
++      "fingerprint": "sha256:9ffb7bbd0869689f27fd54162068b3b6d8c40969b39375362540e5df909adba9",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:de6575d91cc0bfae1bee9e70b4b00b1e72c76dd47a7e9bd1417141bf8c1fe795",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-045-code-atomic-import-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-046-code-ordered-import-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 23,
+diff --git a/sourcecode/fast-figure-ui.js b/sourcecode/fast-figure-ui.js
+index e5cbab8..9df2cc2 100644
+--- a/sourcecode/fast-figure-ui.js
++++ b/sourcecode/fast-figure-ui.js
+@@ -306,13 +306,9 @@
+       const selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
+       if (!selectedFiles.length) return;
+       try {
+-        await runLifecycleTask("importing", "ASSET_IMPORT", async () => {
+-          try {
+-            await assetApi.importFiles(selectedFiles, chooseProjectAssetImportPlan);
+-          } catch (error) {
+-            status("불러오기 실패: " + error.message);
+-          }
+-        });
++        await assetApi.importFiles(selectedFiles, chooseProjectAssetImportPlan);
++      } catch (error) {
++        status("불러오기 실패: " + error.message);
+       } finally {
+         fileResetRef.current?.();
+       }
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 48162fa..0d6cab5 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -3696,49 +3696,6 @@
+           title: selection.y,
+         };
+       }
+-      function connectDataToSlotModel(slot, data, sourceName, projectCsv = null) {
+-        let matrix = dataTable(data),
+-          chart = slot.chart ? getChart(slot.chart) : null,
+-          csv = projectCsv || createProjectCsv(matrix, sourceName),
+-          headerLines = headerLineCount(csv.headerLines, matrix);
+-        if (chart) {
+-          let selection = graphDataSelection(matrix, headerLines, chart.editor);
+-          chart.editor.x = selection.x;
+-          chart.editor.y = selection.y;
+-          chart.editor.objects = [...ensureGraphObjects(chart), baseGraphObject(chart, csv)];
+-          if (chart.editor.editable !== false) rebuildEditableGraph(chart);
+-        } else {
+-          chart = createChartModel({
+-            id: activeProject.chartId++,
+-            editor: defaultChartEditor(slot, matrix, headerLines),
+-          });
+-          chart.editor.objects = [baseGraphObject(chart, csv)];
+-          rebuildEditableGraph(chart);
+-          activeProject.charts.push(chart);
+-          slot.chart = chart.id;
+-        }
+-        return chart;
+-      }
+-      function connectDataToSlot(
+-        slot,
+-        data,
+-        sourceName,
+-        projectCsv = null,
+-        { replaceSlotContent = false } = {},
+-      ) {
+-        let csv = projectCsv || createProjectCsv(data, sourceName),
+-          payload = {
+-            slotId: slot.id,
+-            csvId: csv.id,
+-            replaceSlotContent,
+-            direction: "fsm-to-model",
+-          };
+-        appFSM.send("SLOT_DATA_CONNECTED", payload);
+-        if (!payload.chart) throw Error("슬롯 그래프 오브젝트를 만들지 못했습니다.");
+-        activateChartModel(payload.chart.id);
+-        renderDashboard();
+-        return payload.chart;
+-      }
+       function tracesSingle(c) {
+         let b = {},
+           colors = c.colors?.length ? c.colors : DEFAULT_COLORS,
+@@ -6218,62 +6175,6 @@
+         if (!result.committed) return null;
+         return appFSM.query("project-api", { operation: "project.readName" });
+       }
+-      async function loadImageFile(
+-        file,
+-        slot,
+-        { assetPath = null, replaceAssetId = null, planImport = null } = {},
+-      ) {
+-        try {
+-          if (!assetPath && typeof planImport !== "function")
+-            throw Error("프로젝트 이미지 가져오기 계획이 없습니다.");
+-          let bytes = new Uint8Array(await file.arrayBuffer()),
+-            plan = assetPath
+-              ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
+-              : await planImport(file, PROJECT_ASSET_DIRECTORIES.image),
+-            image;
+-          if (!plan) return null;
+-          if (Number.isInteger(plan.replaceId)) {
+-            image = buildProjectImageModel(
+-              bytes,
+-              file.name,
+-              file.type,
+-              plan.replaceId,
+-            );
+-            projectVfs.assignLocation(image, plan.path);
+-            appFSM.send("IMAGE_OBJECT_REPLACED", {
+-              model: image,
+-              direction: "fsm-to-model",
+-            });
+-            if (slot)
+-              appFSM.send("SLOT_IMAGE_LINKED", {
+-                slotId: slot.id,
+-                imageId: image.id,
+-                direction: "fsm-to-model",
+-              });
+-          } else if (slot) {
+-            image = buildProjectImageModel(bytes, file.name, file.type, activeProject.imageId);
+-            projectVfs.assignLocation(image, plan.path);
+-            appFSM.send("SLOT_IMAGE_IMPORTED", {
+-              slotId: slot.id,
+-              model: image,
+-              direction: "fsm-to-model",
+-            });
+-          } else image = createProjectImage(bytes, file.name, file.type, null, plan.path);
+-          updateFileAvailability();
+-          renderDashboard();
+-          status(
+-            slot
+-              ? `${file.name} 이미지를 선택 슬롯에 연결했습니다.`
+-              : Number.isInteger(plan.replaceId)
+-                ? `${file.name} 이미지를 기존 참조를 유지한 채 교체했습니다.`
+-                : `${file.name} 이미지를 프로젝트에 추가했습니다.`,
+-          );
+-          debugLog("slot:image-load", { slotId: slot?.id ?? null, name: file.name });
+-        } catch (error) {
+-          status("이미지 불러오기 실패: " + error.message);
+-          throw error;
+-        }
+-      }
+       function slotFileKind(file) {
+         let name = String(file?.name || "").toLowerCase(),
+           type = String(file?.type || "").toLowerCase();
+@@ -6286,86 +6187,6 @@
+       function dataTransferHasFiles(dataTransfer) {
+         return Array.from(dataTransfer?.types || []).includes("Files");
+       }
+-      async function loadDataFile(
+-        file,
+-        slot,
+-        { replaceSlotContent = false, assetPath = null, replaceAssetId = null, planImport = null } = {},
+-      ) {
+-        debugLog("fileLoad:start", {
+-          name: file.name,
+-          size: file.size,
+-          slotId: slot?.id ?? null,
+-          source: "shared-loader",
+-        });
+-        let csv = null;
+-        try {
+-          let bytes = new Uint8Array(await file.arrayBuffer()),
+-            text = new TextDecoder().decode(bytes),
+-            data = file.name.toLowerCase().endsWith(".json") ? JSON.parse(text) : parseCSV(text);
+-          if (!Array.isArray(data) && Array.isArray(data.data)) data = data.data;
+-          if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
+-          if (!assetPath && typeof planImport !== "function")
+-            throw Error("프로젝트 데이터 가져오기 계획이 없습니다.");
+-          let plan = assetPath
+-            ? { path: normalizeProjectPath(assetPath), replaceId: replaceAssetId }
+-            : await planImport(file, PROJECT_ASSET_DIRECTORIES.csv);
+-          if (!plan) return null;
+-          if (Number.isInteger(plan.replaceId)) {
+-            csv = buildProjectCsvModel(
+-              data,
+-              file.name,
+-              plan.replaceId,
+-              ffpxBytesToBase64(bytes),
+-              file.type || "text/csv",
+-              1,
+-            );
+-            projectVfs.assignLocation(csv, plan.path);
+-            appFSM.send("DATA_OBJECT_REPLACED", {
+-              model: csv,
+-              direction: "fsm-to-model",
+-            });
+-          } else
+-            csv = createProjectCsv(
+-              data,
+-              file.name,
+-              null,
+-              ffpxBytesToBase64(bytes),
+-              file.type || "text/csv",
+-              1,
+-              plan.path,
+-            );
+-          if (slot) {
+-            connectDataToSlot(slot, data, file.name, csv, { replaceSlotContent });
+-          }
+-          status(
+-            Number.isInteger(plan.replaceId)
+-              ? `${file.name}을 기존 참조를 유지한 채 교체했습니다.`
+-              : `${file.name}을 프로젝트 CSV로 추가했습니다.`,
+-          );
+-          debugLog("fileLoad:complete", {
+-            name: file.name,
+-            rows: csv.rows.length,
+-            slotId: slot?.id ?? null,
+-            chartId: slot?.chart || null,
+-            csvId: csv.id,
+-          });
+-        } catch (error) {
+-          if (
+-            csv &&
+-            !activeProject.charts.some((chart) => chartCsvIds(chart).includes(csv.id))
+-          )
+-            appFSM.send("DATA_OBJECT_DELETED", {
+-              target: { kind: "csv", id: csv.id, path: projectAssetPath(csv) },
+-              direction: "fsm-to-model",
+-            });
+-          debugLog("fileLoad:error", {
+-            name: file.name,
+-            slotId: slot?.id ?? null,
+-            message: error.message,
+-          });
+-          throw error;
+-        }
+-      }
+       function baseGraphObject(chart, csv = selectedProjectCsv()) {
+         let editor = chart.editor || {};
+         if (!csv) throw Error("그래프 오브젝트에 연결할 프로젝트 CSV가 없습니다.");
+@@ -6565,8 +6386,11 @@
+           colors: normalizedGraphObjects(chart).map((object) => object.color),
+         };
+       }
+-      function importSelectedGraphFile(file) {
+-        return importSlotFile(file, getSelectedSlot());
++      async function importSelectedGraphFile(file, slotId = interfaceFSM.readState().selectedSlotId) {
++        await importSlotFile(file, slotId == null ? null : { id: slotId });
++        return appFSM.query("project-api", {
++          operation: "graphs.readData", frontendState: { selectedSlotId: slotId },
++        }).chart;
+       }
+       function readAssetDeletionTarget() {
+         const resolved = appFSM.query("project-api", {
+@@ -6681,7 +6505,7 @@
+       async function importProjectFileToSlot(file, slotId, choosePlan) {
+         const target = readBackendProjection("slot-selection-context", { slotId }), kind = readAssetFileKind(file);
+         if (!target) throw Error("가져올 대상 슬롯이 없습니다.");
+-        if (kind === "slot") return importSlotFile(file, { id: target.id });
++        if (kind === "slot") return importSelectedGraphFile(file, target.id);
+         if (!["data", "image"].includes(kind)) throw Error("지원하지 않는 파일 형식입니다.");
+         const directory = PROJECT_ASSET_DIRECTORIES[kind === "data" ? "csv" : "image"],
+           choices = await collectCompletedImportChoices([file], directory, choosePlan);
+@@ -6694,53 +6518,30 @@
+         return imported;
+       }
+       async function importProjectAssetFiles(files, choosePlan) {
+-        let selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
+-        let target = getSelectedSlot();
+-        if (target && (target.contentType || "graph") === "image") {
+-          let file = selectedFiles[0], kind = slotFileKind(file);
+-          if (kind === "slot") return importSlotFile(file, target);
+-          if (kind === "image") {
+-            let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.image);
+-            if (!plan) return null;
+-            return loadImageFile(file, target, {
+-              assetPath: plan.path, replaceAssetId: plan.replaceId,
+-            });
+-          }
+-          if (kind === "data") {
+-            let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.csv);
+-            if (!plan) return null;
+-            return loadDataFile(file, target, {
+-              replaceSlotContent: true,
+-              assetPath: plan.path, replaceAssetId: plan.replaceId,
+-            });
+-          }
+-          throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
+-        }
+-        if (target) {
+-          for (let file of selectedFiles) {
+-            let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES.csv);
+-            if (!plan) return null;
+-            await loadDataFile(file, target, {
+-              assetPath: plan.path, replaceAssetId: plan.replaceId,
+-            });
++        const inputs = Array.from(files && typeof files[Symbol.iterator] === "function" ? files : files ? [files] : []);
++        if (!inputs.length) return [];
++        const targetSlotId = interfaceFSM.readState().selectedSlotId;
++        return runLifecycleTask("importing", "ASSET_IMPORT", async () => {
++          const output = [];
++          for (const file of inputs) {
++            const kind = readAssetFileKind(file);
++            let item;
++            if (kind === "slot") {
++              if (targetSlotId == null) throw Error("FFSX를 불러올 슬롯을 먼저 선택하세요.");
++              item = await importSelectedGraphFile(file, targetSlotId);
++            } else if (kind === "data" || kind === "image") {
++              if (targetSlotId != null) item = await importProjectFileToSlot(file, targetSlotId, choosePlan);
++              else {
++                const directory = PROJECT_ASSET_DIRECTORIES[kind === "data" ? "csv" : "image"];
++                item = await importProjectFilesToDirectory([file], directory, choosePlan);
++                if (Array.isArray(item)) item = item[0];
++              }
++            } else throw Error(`${file?.name || "파일"}: 지원하지 않는 파일 형식입니다.`);
++            if (item == null || item.committed === false) return item;
++            output.push(item);
+           }
+-          return;
+-        }
+-        for (let file of selectedFiles) {
+-          let kind = slotFileKind(file);
+-          if (kind !== "image" && kind !== "data")
+-            throw Error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
+-          let plan = await choosePlan(file, PROJECT_ASSET_DIRECTORIES[kind === "image" ? "image" : "csv"]);
+-          if (!plan) return null;
+-          if (kind === "image")
+-            await loadImageFile(file, null, {
+-              assetPath: plan.path, replaceAssetId: plan.replaceId,
+-            });
+-          else
+-            await loadDataFile(file, null, {
+-              assetPath: plan.path, replaceAssetId: plan.replaceId,
+-            });
+-        }
++          return output;
++        });
+       }
+       function graphEditorUpdateLayout(slotId, chartId, values) {
+         const result = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId, settings: values });

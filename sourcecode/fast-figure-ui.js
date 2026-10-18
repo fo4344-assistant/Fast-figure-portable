@@ -306,13 +306,9 @@
       const selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
       if (!selectedFiles.length) return;
       try {
-        await runLifecycleTask("importing", "ASSET_IMPORT", async () => {
-          try {
-            await assetApi.importFiles(selectedFiles, chooseProjectAssetImportPlan);
-          } catch (error) {
-            status("불러오기 실패: " + error.message);
-          }
-        });
+        await assetApi.importFiles(selectedFiles, chooseProjectAssetImportPlan);
+      } catch (error) {
+        status("불러오기 실패: " + error.message);
       } finally {
         fileResetRef.current?.();
       }
