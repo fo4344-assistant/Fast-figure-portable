@@ -199,7 +199,9 @@ class ProjectStateMachine:
            SLOTS_SWAPPED는 서로 다른 visible 두 slot만 허용한다. missing/hidden/same-id는 미commit이며
            slot-local payload 전체를 교환하고 위치/geometry identity는 유지한다. result hint로 공통 selection reconciliation을 수행한다.
            SLOT_IMAGE_IMPORTED의 images.insertEmpty는 new SVG bytes/name/MIME만 받아 current next-id/VFS로 model을 만들고
-           current target이 visible image slot인지 재검증한다. asset 생성과 slot reference를 한 번에 commit한다.
+           current target이 visible image slot인지 재검증한다. image 삽입은 renderable reference 교체이므로 current slot이 소유한 chart만
+           같은 candidate에서 제거하고 chart reference를 none으로 만든 뒤 새 image reference를 설정한다. 기존 image asset과 CSV asset은
+           삭제하지 않으며 geometry/caption/current slot-local imageSettings는 보존한다. asset 생성과 reference 교체를 한 번에 commit한다.
            ASSET delete의 없는 target은 미commit이며 kind/id/path가 다른 asset으로 바뀌었으면 자동 재선택하지 않는다.
            PROJECT_NODE_MOVED/PROJECT_DIRECTORY_CREATED는 actual final canonical path를 changed에 기록한다.
            APPEARANCE_CHANGED는 project_state.APPEARANCE_PALETTE_RULE에 따라 10개 field의 전체 palette candidate를 만든다.

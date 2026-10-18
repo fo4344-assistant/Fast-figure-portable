@@ -3850,8 +3850,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           new TextDecoder().decode(ffpxBase64ToBytes(image.bytesBase64)) === expectedSvg &&
           activeProject._state.nextId.image === image.id + 1 && slotAt(id).imageId === image.id, "empty image wrong copied bytes/identity or multi-commit");
         check(JSON.stringify(activeProject._state.assets.csvFiles) === JSON.stringify(before.assets.csvFiles) &&
-          activeProject.images.length === before.assets.images.length + 1 && JSON.stringify(activeProject.charts) === JSON.stringify(before.charts) &&
-          slotAt(id).caption === "retained" && slotAt(id).content.imageSettings.scale === 140 &&
+          activeProject.images.length === before.assets.images.length + 1 && JSON.stringify(activeProject.charts) === JSON.stringify(before.charts.filter(chart => chart.id !== before.slots.find(slot => slot.id === id).chart)) &&
+          slotAt(id).chart === null && slotAt(id).caption === "retained" && slotAt(id).content.imageSettings.scale === 140 &&
           interfaceFSM.readState().selectedSlotId === runtime.selectedSlotId && interfaceFSM.state.assetPath === runtime.assetPath,
           "empty image changed unrelated assets/chart/settings/caption/selection");
         check(Object.isFrozen(result.changed.assets) && result.changed.slotIds.join(",") === String(id) &&

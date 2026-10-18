@@ -1444,12 +1444,15 @@
           candidate.assets.images.push({ id, name: projectPathName(path), directory: projectParentPath(path),
             mime: typeof input.mime === "string" && input.mime ? input.mime : "application/octet-stream", bytesBase64: ffpxBytesToBase64(bytes) });
           candidate.nextId.image = id + 1;
-          candidate.slots.find(slot => slot.id === current.id).content.imageId = id;
+          const target = candidate.slots.find(slot => slot.id === current.id), removedChartId = target.content.chart;
+          candidate.charts = candidate.charts.filter(chart => chart.id !== removedChartId);
+          target.content.chart = null;
+          target.content.imageId = id;
           validateProjectObjectState(candidate, { requireSlots: true });
           if (activeProject._state !== source) continue;
           activeProject.initialize(candidate);
           const image = activeProject._state.assets.images.find(item => item.id === id);
-          payload.changed = { slotIds: [current.id], chartIds: [], csvIds: [], imageIds: [id],
+          payload.changed = { slotIds: [current.id], chartIds: Number.isInteger(removedChartId) ? [removedChartId] : [], csvIds: [], imageIds: [id],
             assets: [{ role: "created", kind: "image", id, path: projectAssetPath(image), owners: [{ slotId: current.id, chartId: null }] }] };
           return;
         }

@@ -72,7 +72,9 @@ def insertEmptyImageIntoSelectedSlot():
     UTF-8 SVG: <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>
     name="빈 이미지.svg", MIME="image/svg+xml". Backend가 current next-id/path와 image model을 계산하고
     여전히 visible image slot인지 재검증하여 asset 생성+reference를 한 candidate로 commit한다.
-    이미지 표시 설정은 slot-local 규칙을 따른다. asset/model/project snapshot을 command 입력으로 만들지 않는다.
+    삽입은 renderable reference 교체다. Backend는 current slot의 owned chart를 같은 candidate에서 제거하고 chart reference를 none으로 한다.
+    이전 image asset/CSV asset과 geometry/caption/current slot-local imageSettings는 보존한다.
+    asset/model/project snapshot을 command 입력으로 만들지 않는다.
     """
     slotId = interfaceFSM.readState().selectedSlotId
     context = dispatchProjectQuery("slot-selection-context", {"slotId": slotId})

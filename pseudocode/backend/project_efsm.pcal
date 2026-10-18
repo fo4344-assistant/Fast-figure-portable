@@ -533,6 +533,9 @@ DomainBranchNotAlternativeMutationEntry:
     else image := CopyNewImageFileInput(payload); end if;
     call CalculateNewAsset(candidate,"image",ImageCreateFieldsWithCurrentVfsLocation(image,BackendSettings.defaults.vfs.image));
     calculation := result; candidate := result.candidate;
+    \* Source42: insertion replaces renderable reference, not unrelated local settings/assets.
+    RemoveOnlyChartOwnedBySlot(candidate,slot.id);
+    CandidateSlot(candidate,slot.id).content.chart := None;
     CandidateSlot(candidate,slot.id).content.imageId := calculation.createdAsset.id;
   elsif event \in {"SLOTS_MERGED","SLOTS_SPLIT"} then
     call CalculateMergeOrSplit(candidate,event,payload.slotIds); calculation := result;

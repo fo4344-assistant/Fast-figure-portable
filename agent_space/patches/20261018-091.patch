@@ -1,0 +1,144 @@
+diff --git a/agent_space/reviews/review-20261018-033-code-empty-image-open.md b/agent_space/reviews/review-20261018-033-code-empty-image-open.md
+index 5df00de..7ab7da0 100644
+--- a/agent_space/reviews/review-20261018-033-code-empty-image-open.md
++++ b/agent_space/reviews/review-20261018-033-code-empty-image-open.md
+@@ -2,6 +2,12 @@
+ 
+ Existing Source41 sourcescript/application/public_api/layout_annotations.py insertEmptyImageIntoSelectedSlot defines exact SVG data, one captured selected-slot scalar and visible image context gate, new bytes/name/MIME-only command, committed-only actual created-path read. Source backend/project_efsm.py and pseudocode19 SLOT_IMAGE_IMPORTED calculate current VFS/id and asset+reference in one candidate; display settings remain slot-local. Upper meaning unchanged, no reverse-authority rewrite. Code77 adds bounded images.insertEmpty candidate path; other legacy image imports remain explicitly unaligned.
+ 
++## Source42 closure decision before lower propagation
++
++Initial code77 regression39123076936 failed91/92 `Error: 프로젝트 슬롯 오브젝트가 올바르지 않습니다.` at candidate whole validation; prior90 pass. Source41 slot type permits a hidden-by-contentType chart reference to persist, while Source project_state.validateProjectObjectState forbids simultaneous chart+image references; empty image import only specified setting imageId. Prior closure missed interaction of these independent valid contracts, not an argument to weaken validation. At Source level choose intentional image insertion as replacement of renderable reference: remove only this slot's owned chart and clear chart reference in the same candidate before assigning new image, preserve CSV/image assets and settings/caption/geometry. Replacing existing image changes only reference, old asset retained. Rejected disallowing ordinary image-slot insertion when chart retained, two commits/rollback, keeping invalid dual references, or resetting unrelated slot settings. This is domain intent/coherent state transition, not a description of old implementation.
++
++Closure: (1) complete paths for no context/current changed slot/current chart or image reference/new asset/failed whole validation/retry/late failure; (2) independent purpose preserves slot renderable-reference exclusivity under intentional insertion; (3) no duplicate owner/state, reuse existing owned-chart deletion/current candidate, settings stay slot-local and assets remain ordinary originals. Source42 changes backend command and Application contract first; pseudocode20 and code78 follow. Other Source41 contracts inherited unchanged, whole implementation remains stale.
++
+ ## Requirement-to-artifact checklist
+ 
+ - No selected visible image context -> None/no command; capture once, no Application model/id/path calculation: wrapper,91/92.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 5d43967..0593fab 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3850,8 +3850,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           new TextDecoder().decode(ffpxBase64ToBytes(image.bytesBase64)) === expectedSvg &&
+           activeProject._state.nextId.image === image.id + 1 && slotAt(id).imageId === image.id, "empty image wrong copied bytes/identity or multi-commit");
+         check(JSON.stringify(activeProject._state.assets.csvFiles) === JSON.stringify(before.assets.csvFiles) &&
+-          activeProject.images.length === before.assets.images.length + 1 && JSON.stringify(activeProject.charts) === JSON.stringify(before.charts) &&
+-          slotAt(id).caption === "retained" && slotAt(id).content.imageSettings.scale === 140 &&
++          activeProject.images.length === before.assets.images.length + 1 && JSON.stringify(activeProject.charts) === JSON.stringify(before.charts.filter(chart => chart.id !== before.slots.find(slot => slot.id === id).chart)) &&
++          slotAt(id).chart === null && slotAt(id).caption === "retained" && slotAt(id).content.imageSettings.scale === 140 &&
+           interfaceFSM.readState().selectedSlotId === runtime.selectedSlotId && interfaceFSM.state.assetPath === runtime.assetPath,
+           "empty image changed unrelated assets/chart/settings/caption/selection");
+         check(Object.isFrozen(result.changed.assets) && result.changed.slotIds.join(",") === String(id) &&
+diff --git a/development-versions.json b/development-versions.json
+index b80ce0a..502bbac 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,13 +9,13 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 41,
++      "revision": 42,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+       "fingerprint": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5",
+       "derived_from": null,
+       "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261018-020-empty-columns-closure.md"
++      "closure_review": "agent_space/reviews/review-20261018-033-code-empty-image-open.md"
+     }, 
+     "verification-model": {
+       "revision": 26, 
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 77,
++      "revision": 78,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -47,14 +47,14 @@
+       "validation_review": "agent_space/reviews/review-20261018-033-code-empty-image-open.md"
+     }, 
+     "pseudocode": {
+-      "revision": 19,
++      "revision": 20,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+       "fingerprint": "sha256:833d5e1bb3a10b68d16d0a31048f67f34549a211c90c2600d7577787f178f777",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5"
+       },
+-      "translation_review": "agent_space/reviews/review-20261018-032-code-slot-swap-open.md"
++      "translation_review": "agent_space/reviews/review-20261018-033-code-empty-image-open.md"
+     }
+   }
+ }
+diff --git a/pseudocode/backend/project_efsm.pcal b/pseudocode/backend/project_efsm.pcal
+index 8255b45..7120a93 100644
+--- a/pseudocode/backend/project_efsm.pcal
++++ b/pseudocode/backend/project_efsm.pcal
+@@ -533,6 +533,9 @@ DomainBranchNotAlternativeMutationEntry:
+     else image := CopyNewImageFileInput(payload); end if;
+     call CalculateNewAsset(candidate,"image",ImageCreateFieldsWithCurrentVfsLocation(image,BackendSettings.defaults.vfs.image));
+     calculation := result; candidate := result.candidate;
++    \* Source42: insertion replaces renderable reference, not unrelated local settings/assets.
++    RemoveOnlyChartOwnedBySlot(candidate,slot.id);
++    CandidateSlot(candidate,slot.id).content.chart := None;
+     CandidateSlot(candidate,slot.id).content.imageId := calculation.createdAsset.id;
+   elsif event \in {"SLOTS_MERGED","SLOTS_SPLIT"} then
+     call CalculateMergeOrSplit(candidate,event,payload.slotIds); calculation := result;
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 74befa7..3a5f525 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1444,12 +1444,15 @@
+           candidate.assets.images.push({ id, name: projectPathName(path), directory: projectParentPath(path),
+             mime: typeof input.mime === "string" && input.mime ? input.mime : "application/octet-stream", bytesBase64: ffpxBytesToBase64(bytes) });
+           candidate.nextId.image = id + 1;
+-          candidate.slots.find(slot => slot.id === current.id).content.imageId = id;
++          const target = candidate.slots.find(slot => slot.id === current.id), removedChartId = target.content.chart;
++          candidate.charts = candidate.charts.filter(chart => chart.id !== removedChartId);
++          target.content.chart = null;
++          target.content.imageId = id;
+           validateProjectObjectState(candidate, { requireSlots: true });
+           if (activeProject._state !== source) continue;
+           activeProject.initialize(candidate);
+           const image = activeProject._state.assets.images.find(item => item.id === id);
+-          payload.changed = { slotIds: [current.id], chartIds: [], csvIds: [], imageIds: [id],
++          payload.changed = { slotIds: [current.id], chartIds: Number.isInteger(removedChartId) ? [removedChartId] : [], csvIds: [], imageIds: [id],
+             assets: [{ role: "created", kind: "image", id, path: projectAssetPath(image), owners: [{ slotId: current.id, chartId: null }] }] };
+           return;
+         }
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index 842b93d..9739427 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -72,7 +72,9 @@ def insertEmptyImageIntoSelectedSlot():
+     UTF-8 SVG: <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>
+     name="빈 이미지.svg", MIME="image/svg+xml". Backend가 current next-id/path와 image model을 계산하고
+     여전히 visible image slot인지 재검증하여 asset 생성+reference를 한 candidate로 commit한다.
+-    이미지 표시 설정은 slot-local 규칙을 따른다. asset/model/project snapshot을 command 입력으로 만들지 않는다.
++    삽입은 renderable reference 교체다. Backend는 current slot의 owned chart를 같은 candidate에서 제거하고 chart reference를 none으로 한다.
++    이전 image asset/CSV asset과 geometry/caption/current slot-local imageSettings는 보존한다.
++    asset/model/project snapshot을 command 입력으로 만들지 않는다.
+     """
+     slotId = interfaceFSM.readState().selectedSlotId
+     context = dispatchProjectQuery("slot-selection-context", {"slotId": slotId})
+diff --git a/sourcescript/backend/project_efsm.py b/sourcescript/backend/project_efsm.py
+index 7edb302..daf56db 100644
+--- a/sourcescript/backend/project_efsm.py
++++ b/sourcescript/backend/project_efsm.py
+@@ -199,7 +199,9 @@ class ProjectStateMachine:
+            SLOTS_SWAPPED는 서로 다른 visible 두 slot만 허용한다. missing/hidden/same-id는 미commit이며
+            slot-local payload 전체를 교환하고 위치/geometry identity는 유지한다. result hint로 공통 selection reconciliation을 수행한다.
+            SLOT_IMAGE_IMPORTED의 images.insertEmpty는 new SVG bytes/name/MIME만 받아 current next-id/VFS로 model을 만들고
+-           current target이 visible image slot인지 재검증한다. asset 생성과 slot reference를 한 번에 commit한다.
++           current target이 visible image slot인지 재검증한다. image 삽입은 renderable reference 교체이므로 current slot이 소유한 chart만
++           같은 candidate에서 제거하고 chart reference를 none으로 만든 뒤 새 image reference를 설정한다. 기존 image asset과 CSV asset은
++           삭제하지 않으며 geometry/caption/current slot-local imageSettings는 보존한다. asset 생성과 reference 교체를 한 번에 commit한다.
+            ASSET delete의 없는 target은 미commit이며 kind/id/path가 다른 asset으로 바뀌었으면 자동 재선택하지 않는다.
+            PROJECT_NODE_MOVED/PROJECT_DIRECTORY_CREATED는 actual final canonical path를 changed에 기록한다.
+            APPEARANCE_CHANGED는 project_state.APPEARANCE_PALETTE_RULE에 따라 10개 field의 전체 palette candidate를 만든다.
