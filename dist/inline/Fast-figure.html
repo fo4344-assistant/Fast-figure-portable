@@ -10368,14 +10368,16 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           return immutableProjectCopy(activeProject._state.export);
         if ((kind === "project-api" && request.operation === "images.readEditor") ||
             (kind === "renderer" && request.operation === "slot-image")) {
-          const source = activeProject._state,
-            slot = source.slots.find(item => item.id === request.slotId && !item.hidden),
-            image = slot ? source.assets.images.find(item => item.id === (slot.content?.imageId ?? slot.imageId)) : null;
-          return image ? immutableProjectCopy({
-            slotId: slot.id, name: image.name,
-            bytes: Array.from(ffpxBase64ToBytes(image.bytesBase64 || "")),
-            src: projectImageDataUrl(image), settings: normalizeImageSettings(slot),
-          }) : null;
+          return immutableProjectCopy(buildBackendImageRead(activeProject._state, request.slotId));
+        }
+        if ((kind === "renderer" && request.operation == null) ||
+            (kind === "export" && ["print.save", "print.capture"].includes(request.operation))) {
+          const source = activeProject._state, output = buildBackendSurfaceRead(source);
+          if (kind === "export") {
+            output.export = structuredClone(source.export);
+            output.rasterLimits = structuredClone(BackendSettings.defaults.limits.export);
+          }
+          return immutableProjectCopy(output);
         }
         if (kind === "export" && request.operation == null) {
           const source = activeProject._state;
@@ -10431,6 +10433,40 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           empty: !slot.chart && !slot.imageId,
           contentType: slot.contentType,
         }) : null;
+      }
+      function buildBackendImageRead(source, slotId) {
+        const slot = source.slots.find(item => item.id === slotId && !item.hidden),
+          image = slot ? source.assets.images.find(item => item.id === slot.content.imageId) : null;
+        return image ? { slotId: slot.id, name: image.name,
+          bytes: Array.from(ffpxBase64ToBytes(image.bytesBase64 || "")),
+          src: projectImageDataUrl(image), settings: structuredClone(slot.content.imageSettings),
+        } : null;
+      }
+      function buildBackendSurfaceRead(source) {
+        const output = {
+          layout: structuredClone(source.layout), appearance: structuredClone(source.appearance),
+          annotations: structuredClone(source.annotations), visibleSlots: [],
+          orderedSlotLabels: orderedSlotLabels(source),
+          captionReferenceStyle: structuredClone(BackendSettings.defaults.captionReferenceStyle),
+        };
+        for (const original of source.slots) {
+          if (original.hidden) continue;
+          const slot = structuredClone(original), chart = source.charts.find(item => item.id === original.content.chart);
+          if (chart) {
+            slot.chart = structuredClone(chart);
+            slot.figure = chartFigure(structuredClone(chart), source);
+            slot.csvViews = [];
+            if (!chartUsesConversionView(chart)) {
+              for (const object of chart.editor.objects) {
+                const csv = source.assets.csvFiles.find(item => item.id === object.csvId);
+                if (csv) slot.csvViews.push({ csv: structuredClone(csv), columns: columnDefinitions(csv.rows, csv.headerLines) });
+              }
+            }
+          }
+          if (original.content.imageId !== null) slot.imageView = buildBackendImageRead(source, original.id);
+          output.visibleSlots.push(slot);
+        }
+        return output;
       }
       function validateFrontendIntent(event, payload = {}) {
         let input = { event, accepted: true, reference: null, workspaceHint: "project", selectionHint: null };
