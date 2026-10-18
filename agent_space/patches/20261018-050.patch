@@ -1,0 +1,62 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 6970f60..b0ad2f5 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -127,7 +127,7 @@ Unit19 bounded evidence: implementation1edbc2cd14131baeef3bf80f082f358fec07c932
+ 
+ ## Twentieth implementation unit — Current-authority color-only graph palette
+ 
+-Baseline5dc81c618461f4513c8a7aa06dae03da26ca524f. Existing Source41 GRAPH_PALETTE_RULE/public graphEditorApplyPalette and pseudocode16 calculateGraphObjectEdit already specify nonempty array of trimmed nonempty color text, current editable owner, color-only cycling, omitted index hint, valid zero-object chart and candidate/retry/commit. Code60 translates this operation through the shared Backend candidate path; Application passes chartId/new colors only, public selection binding uses official copied read, committed alone permits fresh read/render. No hex restriction/Plotly parser authority, fake object/CSV, manual selection or UI-palette mutation. Tests70/71 add immutable copies, exact non-color/order/extension/asset/other-chart/appearance retention, omitted hint/selection, zero chart, invalid/sparse/getter inputs and noneditable/validator/projection/noncommit/stale retry. Review022 and patch049 track pending Actions71+71/build/digest/cumulative gate. Source41/pseudocode16 unchanged, code60 stale; add/other commands, full validator, imports/assets/raster/supplied dashboard and whole Plan023 remain open.
++Baseline5dc81c618461f4513c8a7aa06dae03da26ca524f. Existing Source41 GRAPH_PALETTE_RULE/public graphEditorApplyPalette and pseudocode16 calculateGraphObjectEdit already specify nonempty array of trimmed nonempty color text, current editable owner, color-only cycling, omitted index hint, valid zero-object chart and candidate/retry/commit. Code60 translates this operation through the shared Backend candidate path; Application passes chartId/new colors only, public selection binding uses official copied read, committed alone permits fresh read/render. No hex restriction/Plotly parser authority, fake object/CSV, manual selection or UI-palette mutation. Tests70/71 add immutable copies, exact non-color/order/extension/asset/other-chart/appearance retention, omitted hint/selection, zero chart, invalid/sparse/getter inputs and noneditable/validator/projection/noncommit/stale retry. Review022 and patch049 track Actions71+71/build/digest/cumulative gate. Initial regression39103881567 at94beb6e86c44e013435459039c8e9c240c980aa0 passed1–69 but70/71 exposed an actual wrapper bug: destructured `{result}` although local dispatchProjectCommand returns result directly. Patch050 corrects this code-only translation without changing Source/pseudocode or weakening tests; runtime advances code60→61, fingerprint remains provisional until new canonical diagnostic. Initial build39103881617 PASS is packaging-only, corrected execution pending. Source41/pseudocode16 unchanged, code60 stale; add/other commands, full validator, imports/assets/raster/supplied dashboard and whole Plan023 remain open.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261018-022-code-graph-palette-open.md b/agent_space/reviews/review-20261018-022-code-graph-palette-open.md
+index f6de70d..6bf7f3b 100644
+--- a/agent_space/reviews/review-20261018-022-code-graph-palette-open.md
++++ b/agent_space/reviews/review-20261018-022-code-graph-palette-open.md
+@@ -1,6 +1,6 @@
+-# Code60 — Graph palette candidate (whole alignment open)
++# Code60→61 — Graph palette candidate (whole alignment open)
+ 
+-Baseline5dc81c618461f4513c8a7aa06dae03da26ca524f. Source41 closed/current → pseudocode16 current → code60 stale. No upper meaning change: sourcescript/backend/graphs.py GRAPH_PALETTE_RULE independently requires current editable objects, trimmed nonempty text sequence, cycling color only, no parser authority/UI palette synchronization/new object or CSV, zero-object chart valid and index hint omitted. sourcescript/application/public_api/graphs.py graphEditorApplyPalette requires command-only inputs then committed-only detached official read. Pseudocode/backend/project_efsm.pcal calculateGraphObjectEdit and GraphCommitInAttempt/pseudocode/application/public_api/graphs.pcal matching wrapper directly translate this. Existing JS live object mapping and manual selected-index bridge were lower ownership violations, not reasons to change Source.
++Baseline5dc81c618461f4513c8a7aa06dae03da26ca524f. Source41 closed/current → pseudocode16 current → code61 stale (initial code60 wrapper bug corrected below). No upper meaning change: sourcescript/backend/graphs.py GRAPH_PALETTE_RULE independently requires current editable objects, trimmed nonempty text sequence, cycling color only, no parser authority/UI palette synchronization/new object or CSV, zero-object chart valid and index hint omitted. sourcescript/application/public_api/graphs.py graphEditorApplyPalette requires command-only inputs then committed-only detached official read. Pseudocode/backend/project_efsm.pcal calculateGraphObjectEdit and GraphCommitInAttempt/pseudocode/application/public_api/graphs.pcal matching wrapper directly translate this. Existing JS live object mapping and manual selected-index bridge were lower ownership violations, not reasons to change Source.
+ 
+ ## Bounded prompt-to-artifact checklist
+ 
+@@ -24,3 +24,9 @@ Retaining missing-style normalization follows existing graphEditorCommit contrac
+ ## Scope and exclusions
+ 
+ This review is not a completion audit for whole Plan023. Legacy add, connect/import/editability/layout/header/full shared graph validation, asset rename/move/delete/cascade current-authority candidates, canonical package import and imageSettings identity, raster snapshots/composition and supplied dashboard/API integration remain uncovered unless earlier bounded reviews explicitly verify them. A shared validator call is NOT evidence it implements every Source rule. Code remains stale; model26 stale/TLC optional pending. No policy edits, delegation or local test/build/checker execution.
++
++## Failed execution and runtime correction
++
++At94beb6e86c44e013435459039c8e9c240c980aa0 regression39103881567 passed1–69 but70/71 failed both distributions: `TypeError: Cannot read properties of undefined (reading 'committed')`, stack at graphEditorApplyPalette. This is an actual JS wrapper translation bug, not a faulty test: this repository's dispatchProjectCommand returns the result directly, whereas the abstract Application tuple was incorrectly destructured as `{result}`. Source/pseudocode committed gate is correct and independent; code61 uses the direct result exactly like existing translated wrappers. No tests weakened, Backend meaning/selection contract untouched. Runtime change advances code60→61 rather than reusing a revision. Build39103881617 PASS at original code60 is only packaging evidence, NOT proof of the palette contract; dist-only bot361fe5b87ed0f2eacef811425de982eeb00d3021 inspected/fast-forwarded.
++
++Version39103881600 diagnostic printed code60 sha256:6bed2459938a2e7ba28a711a345c7eeb22967b2bad361e1c263d90b55e98bf3c, now historical since the code61 correction changes runtime again. Metadata fingerprint remains explicitly provisional old code59 until canonical code61 diagnostic, not a claimed passing gate. Corrected71+71, actual build and cumulative version from5dc81c618461f4513c8a7aa06dae03da26ca524f pending Actions.
+diff --git a/development-versions.json b/development-versions.json
+index c963840..56dc0c2 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 60,
++      "revision": 61,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 3f8b4f4..1dd1bbc 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -6630,7 +6630,7 @@
+         return readGraphLayoutApi();
+       }
+       function graphEditorApplyPalette(chartId, colors) {
+-        const { result } = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
++        const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
+         if (!result.committed) return result;
+         const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+         renderDashboard();

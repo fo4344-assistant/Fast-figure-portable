@@ -6630,7 +6630,7 @@
         return readGraphLayoutApi();
       }
       function graphEditorApplyPalette(chartId, colors) {
-        const { result } = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
+        const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
         if (!result.committed) return result;
         const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
         renderDashboard();
