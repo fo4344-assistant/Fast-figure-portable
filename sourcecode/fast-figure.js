@@ -5005,7 +5005,6 @@
             throw Error("프로젝트 차트 ID가 올바르지 않습니다.");
           chartIds.add(chart.id);validateChartModel(chart,`프로젝트 차트 ${index+1}`,state.assets.csvFiles);
         });
-        normalizeSlotContents(state.slots);
         let slotIds=new Set(),owners=new Map([...chartIds].map(id=>[id,0]));
         state.slots.forEach(slot=>{
           if(!record(slot)||!Number.isInteger(slot.id)||slotIds.has(slot.id)||
@@ -5014,14 +5013,19 @@
             slot.row<1||slot.col<1||slot.rowSpan<1||slot.colSpan<1||
             slot.row+slot.rowSpan-1>state.layout.gridRows||
             slot.col+slot.colSpan-1>state.layout.gridCols||
-            !["graph","image"].includes(slot.contentType)||
-            (slot.chart!=null&&slot.imageId!=null)||
-            (slot.chart!=null&&!chartIds.has(slot.chart))||
-            (slot.imageId!=null&&!imageIds.has(slot.imageId))||
+            !record(slot.content)||!["graph","image"].includes(slot.content.contentType)||
+            (slot.content.chart!==null&&slot.content.imageId!==null)||
+            (slot.content.chart!==null&&!chartIds.has(slot.content.chart))||
+            (slot.content.imageId!==null&&!imageIds.has(slot.content.imageId))||
             !(slot.caption===null||typeof slot.caption==="string"))
             throw Error("프로젝트 슬롯 오브젝트가 올바르지 않습니다.");
-          slot.content.imageSettings=readImageSettings(slot.content.imageSettings);
-          if(slot.chart!=null)owners.set(slot.chart,owners.get(slot.chart)+1);
+          const settings=slot.content.imageSettings;
+          if(!record(settings)||!["contain","cover","manual"].includes(settings.fit)||
+            !Number.isFinite(settings.scale)||settings.scale<1||settings.scale>1000||
+            !Number.isFinite(settings.x)||settings.x< -100||settings.x>200||
+            !Number.isFinite(settings.y)||settings.y< -100||settings.y>200)
+            throw Error("프로젝트 슬롯 이미지 설정이 올바르지 않습니다.");
+          if(slot.content.chart!==null)owners.set(slot.content.chart,owners.get(slot.content.chart)+1);
           slotIds.add(slot.id);
         });
         for(let [chartId,count] of owners)

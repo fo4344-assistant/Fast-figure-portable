@@ -6217,6 +6217,37 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(140, "Whole Project validation reads canonical slots without normalization or settings repair", () => {
+      const state = structuredClone(createProjectState()), project = activeProject._state, frontend = interfaceFSM.state,
+        freeze = value => { if (value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
+      state.slots[0].content.extension = { kept: true };
+      const slot = state.slots[0], content = slot.content, settings = content.imageSettings;
+      freeze(state);
+      check(validateProjectObjectState(state, { requireSlots: true }) === state &&
+        slot.content === content && content.imageSettings === settings && !Object.hasOwn(slot, "chart"),
+        "valid frozen canonical Project was changed or required compatibility aliases");
+      const invalid = [
+        value => { value.slots[0].content.contentType = "unknown"; },
+        value => { value.slots[0].content.chart = "1"; },
+        value => { delete value.slots[0].content.imageId; },
+        value => { delete value.slots[0].content; },
+        ...[{ fit: "invalid" }, { scale: 0 }, { scale: 1001 }, { scale: "100" }, { scale: Infinity },
+          { x: -101 }, { x: 201 }, { y: -101 }, { y: 201 }, { y: NaN }].map(patch => value => {
+            Object.assign(value.slots[0].content.imageSettings, patch);
+          }),
+        value => { delete value.slots[0].content.imageSettings.scale; },
+      ];
+      for (const mutate of invalid) {
+        const candidate = structuredClone(state); mutate(candidate);
+        const before = structuredClone(candidate), target = candidate.slots[0], local = target.content;
+        let caught = null;
+        try { validateProjectObjectState(candidate, { requireSlots: true }); } catch (error) { caught = error; }
+        check(caught && target.content === local && JSON.stringify(candidate) === JSON.stringify(before) &&
+          !Object.hasOwn(target, "chart"), "invalid canonical Project was normalized instead of rejected without mutation");
+      }
+      check(activeProject._state === project && interfaceFSM.state === frontend, "pure validator touched live authority");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
