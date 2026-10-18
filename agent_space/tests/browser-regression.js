@@ -2064,6 +2064,93 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         HTMLAnchorElement.prototype.click = click; readBackendProjection = query; }
     });
 
+    await run(57, "Original asset export returns detached immutable bytes/name/MIME without mutation", async () => {
+      const source = activeProject._state, asset = source.assets.csvFiles.find(item => item.bytesBase64),
+        path = projectAssetPath(asset), original = asset.bytesBase64, mime = asset.mime,
+        before = JSON.stringify(source), frontend = JSON.stringify(interfaceFSM.readState()),
+        create = URL.createObjectURL;
+      try {
+        URL.createObjectURL = () => { throw Error("Backend query allocated a resource"); };
+        const payload = appFSM.query("export", { operation: "assets.download", path });
+        check(Object.isFrozen(payload) && Object.isFrozen(payload.bytes) && payload.name === asset.name &&
+          payload.mime === (mime || "application/octet-stream") &&
+          ffpxBytesToBase64(Uint8Array.from(payload.bytes)) === original, "CSV original bytes/name/MIME changed");
+        asset.bytesBase64 = ffpxBytesToBase64(new Uint8Array([0, 255, 17])); asset.mime = "";
+        const fallback = appFSM.query("export", { operation: "assets.download", path });
+        check(fallback !== payload && fallback.bytes !== payload.bytes && fallback.mime === "application/octet-stream" &&
+          JSON.stringify(fallback.bytes) === "[0,255,17]" &&
+          ffpxBytesToBase64(Uint8Array.from(payload.bytes)) === original, "query reused a read store or lost original bytes");
+        asset.bytesBase64 = "";
+        for (const target of [path, "/", "/missing-original-asset.csv", null])
+          check(appFSM.query("export", { operation: "assets.download", path: target }) === null,
+            "absent/directory/no-byte target did not return none");
+        asset.bytesBase64 = "invalid base64 %"; let caught;
+        try { appFSM.query("export", { operation: "assets.download", path }); } catch (error) { caught = error; }
+        check(caught, "invalid byte encoding was silently repaired or swallowed");
+        const image = source.assets.images.find(item => item.bytesBase64);
+        check(image, "image export fixture missing");
+        const imagePayload = appFSM.query("export", { operation: "assets.download", path: projectAssetPath(image) });
+        check(imagePayload.name === image.name && imagePayload.mime === image.mime &&
+          ffpxBytesToBase64(Uint8Array.from(imagePayload.bytes)) === image.bytesBase64, "image export regenerated original bytes");
+      } finally { asset.bytesBase64 = original; asset.mime = mime; URL.createObjectURL = create; }
+      check(JSON.stringify(source) === before && JSON.stringify(interfaceFSM.readState()) === frontend,
+        "export query changed Project or selection");
+    });
+
+    await run(58, "Public original download owns lifecycle, copied handoff and failure cleanup", async () => {
+      const asset = activeProject._state.assets.csvFiles.find(item => item.bytesBase64), path = projectAssetPath(asset);
+      api.assets.selectCsv(path);
+      const before = JSON.stringify(activeProject._state), frontend = JSON.stringify(interfaceFSM.readState()),
+        create = URL.createObjectURL, revoke = URL.revokeObjectURL, click = HTMLAnchorElement.prototype.click,
+        element = document.createElement, query = readBackendProjection, failure = Error("original download failure");
+      let calls = 0, created = [], released = [], clicked = [], fail = false, failElement = false;
+      try {
+        URL.createObjectURL = blob => { const url = `blob:original-${created.length}`; created.push({ url, blob }); return url; };
+        URL.revokeObjectURL = url => released.push(url);
+        HTMLAnchorElement.prototype.click = function () {
+          check(appFSM.state.lifecycle === "exporting" && !released.includes(this.href), "asset handoff outside lifecycle or early release");
+          if (fail) throw failure;
+          clicked.push(this.download);
+        };
+        document.createElement = function (tag, ...args) {
+          if (failElement && tag === "a") throw failure;
+          return element.call(this, tag, ...args);
+        };
+        readBackendProjection = (kind, request) => {
+          check(kind === "export" && request.operation === "assets.download" && request.path === path &&
+            appFSM.state.lifecycle === "exporting", "asset wrapper bypassed official query/current selection binding/lifecycle");
+          calls++; return query(kind, request);
+        };
+        check(await api.assets.download() === true && calls === 1 && clicked[0] === asset.name &&
+          released.includes(created[0]?.url) && appFSM.state.lifecycle === "ready", "successful original handoff result/resource/lifecycle wrong");
+        check(created[0].blob.type === (asset.mime || "application/octet-stream") &&
+          ffpxBytesToBase64(new Uint8Array(await created[0].blob.arrayBuffer())) === asset.bytesBase64,
+          "renderer did not consume copied original bytes/MIME");
+        fail = true; let caught;
+        try { await api.assets.download(path); } catch (error) { caught = error; }
+        check(caught === failure && released.includes(created[1]?.url) && appFSM.state.lifecycle === "ready",
+          "asset handoff failure swallowed or URL/lifecycle leaked");
+        fail = false; failElement = true; caught = null;
+        try { await api.assets.download(path); } catch (error) { caught = error; }
+        check(caught === failure && released.includes(created[2]?.url) && appFSM.state.lifecycle === "ready",
+          "resource leaked when anchor creation failed");
+        failElement = false;
+        const busy = await appFSM.run("exporting", "ORIGINAL_BUSY_PROBE", () => api.assets.download(path)).then(() => null, error => error);
+        check(busy && calls === 3 && appFSM.state.lifecycle === "ready", "busy download queried/reentered lifecycle");
+        readBackendProjection = () => null;
+        check(await api.assets.download(null) === false && created.length === 3, "missing original allocated a resource or wrong result");
+        readBackendProjection = () => { throw failure; }; caught = null;
+        try { await api.assets.download(path); } catch (error) { caught = error; }
+        check(caught === failure && created.length === 3 && appFSM.state.lifecycle === "ready", "query failure swallowed or allocated resources");
+        check(JSON.stringify(activeProject._state) === before && JSON.stringify(interfaceFSM.readState()) === frontend &&
+          !/activeProject|projectVfs|ffpxBase64ToBytes|status\(/.test(downloadProjectAsset.toString()),
+          "original download changed selection/Project or Application owns Backend/status semantics");
+      } finally {
+        URL.createObjectURL = create; URL.revokeObjectURL = revoke; HTMLAnchorElement.prototype.click = click;
+        document.createElement = element; readBackendProjection = query;
+      }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

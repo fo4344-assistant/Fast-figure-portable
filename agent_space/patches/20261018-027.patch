@@ -1,0 +1,227 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index b56d207..3c2f289 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -73,6 +73,12 @@ Baseline `d2d06a8e2aa30e25232f7e7ae8512500fca24e01`. Code48 moves graphs.exportF
+ 
+ After result-record commit `25fa8c6a3f92054152b133465dd753f073a6c4cc`, the user requested placing implementation files under `sourcecode/`, alongside `sourcescript/` and `pseudocode/`. Move the HTML template and both application JavaScript files, preserving logical ownership and distribution layout. Update build inputs, active workflow filters, patch staging and version paths/fingerprint. Source39/pseudocode13 remain unchanged; code49 stays stale. Review `agent_space/reviews/review-20261018-012-sourcecode-location-open.md` records scope and pending Actions verification. No local application/test/build/checker execution; the whole translation goal remains incomplete.
+ 
++## Thirteenth implementation unit — original asset bytes handoff
++
++Baseline `4052ee361c4a4825e906e67cfdbd88a2a265f581`. Code50 translates the existing original-asset Backend query, public exporting lifecycle/current Frontend path binding and copied-payload renderer handoff. Missing/wrong-kind/no-byte targets return false; errors propagate; no Project/selection/status mutation. Shared renderer cleanup now also encloses anchor creation. Cases57/58 cover original CSV/image bytes, MIME, immutable copies, lifecycle, missing/busy/error paths and resource release. Review013 and patch20261018-027 record this unit. Source39/pseudocode13 unchanged; code50 stays stale. Runner fingerprint correction and Actions version/build/regression evidence remain pending; whole Plan023 remains open.
++
++Relocation code49 cumulative versions39100969744 and push versions39100969916 passed at4052ee361c4a4825e906e67cfdbd88a2a265f581, after the canonical fingerprint correction. These metadata checks do not extend earlier source regression coverage.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-013-code-original-asset-export-open.md b/agent_space/reviews/review-20261018-013-code-original-asset-export-open.md
+new file mode 100644
+index 0000000..1872abe
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-013-code-original-asset-export-open.md
+@@ -0,0 +1,18 @@
++# Code r50 — original asset download (OPEN)
++
++Baseline `4052ee361c4a4825e906e67cfdbd88a2a265f581`. Source39 and pseudocode13 remain unchanged and authoritative. This bounded unit directly translates their existing original-asset export contract; it does not close whole Plan023 alignment.
++
++## Prompt-to-artifact / contract checklist
++
++| Requirement | Authority → translation → implementation | Evidence / limit |
++| --- | --- | --- |
++| Current Project query, explicit path, detached original bytes/name/MIME; missing/wrong-kind/no bytes returns none | sourcescript/backend/project_state.py EXPORT_BACKEND_READ_CONTRACT and dispatchProjectQuery → pseudocode/backend/project_state.pcal export branch → readBackendProjection assets.download | Case57 compares CSV/image originals, fallback MIME, fresh frozen arrays, wrong/missing paths and decoding failure; pending Actions |
++| Application consumes query only; omitted path binds current Frontend scalar; true handoff/false absent; errors propagate | sourcescript/application/public_api/assets.py downloadProjectAsset and public_api/__init__.py lifecycle → pseudocode/application/public_api/assets.pcal downloadProjectAsset and contract.pcal → downloadProjectAsset | Case58 public API/current selection/query/lifecycle/busy/error checks; pending Actions |
++| Renderer consumes copied payload; operation-local URL released on success/failure | sourcescript/frontend/renderer.py downloadExportPayload → pseudocode/frontend/renderer.pcal → downloadExportPayload | Case58 checks actual Blob bytes and release after click/anchor-creation failure. Anchor creation moved inside existing try/finally |
++| No Project/selection writes, backend resource allocation or Application status side effect | Same contracts | Cases57/58 snapshots and resource trap; pending Actions. No browser disk-save guarantee |
++| Source Script highest; do not discard advanced behavior | Existing original bytes/MIME/name retained; no higher-level semantic addition needed | No authority files modified; no speculative source/pseudocode rewrite |
++| Runner-only verification and lineage | development-versions.json code50 stale, same upper lineage | Fingerprint still previous code49 pending canonical runner diagnostic; version gate NOT passed and unit NOT complete |
++
++## Scope boundaries and next checks
++
++Only static file/diff inspection locally; no application/build/parser/test/checker/TLC execution. Push triggers default ubuntu-latest version/build/regression workflows. Record exact HEAD/run/results; correct code50 fingerprint using canonical Actions output, then require cumulative version validation from baseline. Cases1–56 remain regression obligations, not evidence of full Source Script coverage. Other candidate/import/graph-calculation/raster/dashboard/API integration gaps remain open. This review is not a current-status declaration.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 694623d..614b8f3 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2064,6 +2064,93 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         HTMLAnchorElement.prototype.click = click; readBackendProjection = query; }
+     });
+ 
++    await run(57, "Original asset export returns detached immutable bytes/name/MIME without mutation", async () => {
++      const source = activeProject._state, asset = source.assets.csvFiles.find(item => item.bytesBase64),
++        path = projectAssetPath(asset), original = asset.bytesBase64, mime = asset.mime,
++        before = JSON.stringify(source), frontend = JSON.stringify(interfaceFSM.readState()),
++        create = URL.createObjectURL;
++      try {
++        URL.createObjectURL = () => { throw Error("Backend query allocated a resource"); };
++        const payload = appFSM.query("export", { operation: "assets.download", path });
++        check(Object.isFrozen(payload) && Object.isFrozen(payload.bytes) && payload.name === asset.name &&
++          payload.mime === (mime || "application/octet-stream") &&
++          ffpxBytesToBase64(Uint8Array.from(payload.bytes)) === original, "CSV original bytes/name/MIME changed");
++        asset.bytesBase64 = ffpxBytesToBase64(new Uint8Array([0, 255, 17])); asset.mime = "";
++        const fallback = appFSM.query("export", { operation: "assets.download", path });
++        check(fallback !== payload && fallback.bytes !== payload.bytes && fallback.mime === "application/octet-stream" &&
++          JSON.stringify(fallback.bytes) === "[0,255,17]" &&
++          ffpxBytesToBase64(Uint8Array.from(payload.bytes)) === original, "query reused a read store or lost original bytes");
++        asset.bytesBase64 = "";
++        for (const target of [path, "/", "/missing-original-asset.csv", null])
++          check(appFSM.query("export", { operation: "assets.download", path: target }) === null,
++            "absent/directory/no-byte target did not return none");
++        asset.bytesBase64 = "invalid base64 %"; let caught;
++        try { appFSM.query("export", { operation: "assets.download", path }); } catch (error) { caught = error; }
++        check(caught, "invalid byte encoding was silently repaired or swallowed");
++        const image = source.assets.images.find(item => item.bytesBase64);
++        check(image, "image export fixture missing");
++        const imagePayload = appFSM.query("export", { operation: "assets.download", path: projectAssetPath(image) });
++        check(imagePayload.name === image.name && imagePayload.mime === image.mime &&
++          ffpxBytesToBase64(Uint8Array.from(imagePayload.bytes)) === image.bytesBase64, "image export regenerated original bytes");
++      } finally { asset.bytesBase64 = original; asset.mime = mime; URL.createObjectURL = create; }
++      check(JSON.stringify(source) === before && JSON.stringify(interfaceFSM.readState()) === frontend,
++        "export query changed Project or selection");
++    });
++
++    await run(58, "Public original download owns lifecycle, copied handoff and failure cleanup", async () => {
++      const asset = activeProject._state.assets.csvFiles.find(item => item.bytesBase64), path = projectAssetPath(asset);
++      api.assets.selectCsv(path);
++      const before = JSON.stringify(activeProject._state), frontend = JSON.stringify(interfaceFSM.readState()),
++        create = URL.createObjectURL, revoke = URL.revokeObjectURL, click = HTMLAnchorElement.prototype.click,
++        element = document.createElement, query = readBackendProjection, failure = Error("original download failure");
++      let calls = 0, created = [], released = [], clicked = [], fail = false, failElement = false;
++      try {
++        URL.createObjectURL = blob => { const url = `blob:original-${created.length}`; created.push({ url, blob }); return url; };
++        URL.revokeObjectURL = url => released.push(url);
++        HTMLAnchorElement.prototype.click = function () {
++          check(appFSM.state.lifecycle === "exporting" && !released.includes(this.href), "asset handoff outside lifecycle or early release");
++          if (fail) throw failure;
++          clicked.push(this.download);
++        };
++        document.createElement = function (tag, ...args) {
++          if (failElement && tag === "a") throw failure;
++          return element.call(this, tag, ...args);
++        };
++        readBackendProjection = (kind, request) => {
++          check(kind === "export" && request.operation === "assets.download" && request.path === path &&
++            appFSM.state.lifecycle === "exporting", "asset wrapper bypassed official query/current selection binding/lifecycle");
++          calls++; return query(kind, request);
++        };
++        check(await api.assets.download() === true && calls === 1 && clicked[0] === asset.name &&
++          released.includes(created[0]?.url) && appFSM.state.lifecycle === "ready", "successful original handoff result/resource/lifecycle wrong");
++        check(created[0].blob.type === (asset.mime || "application/octet-stream") &&
++          ffpxBytesToBase64(new Uint8Array(await created[0].blob.arrayBuffer())) === asset.bytesBase64,
++          "renderer did not consume copied original bytes/MIME");
++        fail = true; let caught;
++        try { await api.assets.download(path); } catch (error) { caught = error; }
++        check(caught === failure && released.includes(created[1]?.url) && appFSM.state.lifecycle === "ready",
++          "asset handoff failure swallowed or URL/lifecycle leaked");
++        fail = false; failElement = true; caught = null;
++        try { await api.assets.download(path); } catch (error) { caught = error; }
++        check(caught === failure && released.includes(created[2]?.url) && appFSM.state.lifecycle === "ready",
++          "resource leaked when anchor creation failed");
++        failElement = false;
++        const busy = await appFSM.run("exporting", "ORIGINAL_BUSY_PROBE", () => api.assets.download(path)).then(() => null, error => error);
++        check(busy && calls === 3 && appFSM.state.lifecycle === "ready", "busy download queried/reentered lifecycle");
++        readBackendProjection = () => null;
++        check(await api.assets.download(null) === false && created.length === 3, "missing original allocated a resource or wrong result");
++        readBackendProjection = () => { throw failure; }; caught = null;
++        try { await api.assets.download(path); } catch (error) { caught = error; }
++        check(caught === failure && created.length === 3 && appFSM.state.lifecycle === "ready", "query failure swallowed or allocated resources");
++        check(JSON.stringify(activeProject._state) === before && JSON.stringify(interfaceFSM.readState()) === frontend &&
++          !/activeProject|projectVfs|ffpxBase64ToBytes|status\(/.test(downloadProjectAsset.toString()),
++          "original download changed selection/Project or Application owns Backend/status semantics");
++      } finally {
++        URL.createObjectURL = create; URL.revokeObjectURL = revoke; HTMLAnchorElement.prototype.click = click;
++        document.createElement = element; readBackendProjection = query;
++      }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 91d86ac..52a827c 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 49,
++      "revision": 50,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-012-sourcecode-location-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-013-code-original-asset-export-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 13,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 4a835e2..654fe1a 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -421,6 +421,16 @@
+             settings: Object.freeze(normalizeImageSettings(slot)),
+           }) : null;
+         }
++        if (kind === "export" && request.operation === "assets.download") {
++          const source = activeProject._state,
++            selected = request.path ? projectVfs.resolve(request.path, source) : null,
++            asset = ["csv", "image"].includes(selected?.kind) ? selected.asset : null;
++          if (!asset?.bytesBase64) return null;
++          return Object.freeze({
++            name: asset.name, mime: asset.mime || "application/octet-stream",
++            bytes: Object.freeze(Array.from(ffpxBase64ToBytes(asset.bytesBase64))),
++          });
++        }
+         if (kind === "export" && ["graphs.exportPlotlyJson", "graphs.exportFfsx"].includes(request.operation)) {
+           const source = activeProject._state,
+             slot = source.slots.find((item) => item.id === request.slotId && !item.hidden),
+@@ -5523,25 +5533,14 @@
+           debugLog("project:export-error", { message: error.message });
+         }
+       }
+-      function downloadProjectAsset(path = appFSM.state.assetPath) {
+-        let selected = path ? projectVfs.resolve(path) : null,
+-          asset = ["csv", "image"].includes(selected?.kind) ? selected.asset : null;
+-        if (!asset?.bytesBase64) {
+-          status("다운로드할 CSV 또는 이미지 에셋을 선택하세요.");
+-          return false;
+-        }
+-        let url = URL.createObjectURL(
+-            new Blob([ffpxBase64ToBytes(asset.bytesBase64)], {
+-              type: asset.mime || "application/octet-stream",
+-            }),
+-          ),
+-          link = document.createElement("a");
+-        link.href = url;
+-        link.download = asset.name;
+-        link.click();
+-        setTimeout(() => URL.revokeObjectURL(url), 0);
+-        status(`${asset.name} 원본 에셋을 다운로드했습니다.`);
+-        return true;
++      function downloadProjectAsset(path) {
++        return appFSM.run("exporting", "assets.download", async () => {
++          const target = path === undefined ? interfaceFSM.readState().assetPath : path,
++            payload = appFSM.query("export", { operation: "assets.download", path: target });
++          if (payload === null) return false;
++          await downloadExportPayload(payload);
++          return true;
++        });
+       }
+       function selectDirectoryFromTree(path) {
+         let match = projectVfs.resolve(path);
+@@ -7309,8 +7308,9 @@
+       async function downloadExportPayload(payload) {
+         const bytes = payload.entries ? ffpxZipStore(payload.entries) : Uint8Array.from(payload.bytes),
+           blob = new Blob([bytes], { type: payload.mime }),
+-          url = URL.createObjectURL(blob), link = document.createElement("a");
++          url = URL.createObjectURL(blob);
+         try {
++          const link = document.createElement("a");
+           link.href = url;
+           link.download = payload.name;
+           link.click();

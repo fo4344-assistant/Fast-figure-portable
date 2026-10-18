@@ -73,6 +73,12 @@ Baseline `d2d06a8e2aa30e25232f7e7ae8512500fca24e01`. Code48 moves graphs.exportF
 
 After result-record commit `25fa8c6a3f92054152b133465dd753f073a6c4cc`, the user requested placing implementation files under `sourcecode/`, alongside `sourcescript/` and `pseudocode/`. Move the HTML template and both application JavaScript files, preserving logical ownership and distribution layout. Update build inputs, active workflow filters, patch staging and version paths/fingerprint. Source39/pseudocode13 remain unchanged; code49 stays stale. Review `agent_space/reviews/review-20261018-012-sourcecode-location-open.md` records scope and pending Actions verification. No local application/test/build/checker execution; the whole translation goal remains incomplete.
 
+## Thirteenth implementation unit — original asset bytes handoff
+
+Baseline `4052ee361c4a4825e906e67cfdbd88a2a265f581`. Code50 translates the existing original-asset Backend query, public exporting lifecycle/current Frontend path binding and copied-payload renderer handoff. Missing/wrong-kind/no-byte targets return false; errors propagate; no Project/selection/status mutation. Shared renderer cleanup now also encloses anchor creation. Cases57/58 cover original CSV/image bytes, MIME, immutable copies, lifecycle, missing/busy/error paths and resource release. Review013 and patch20261018-027 record this unit. Source39/pseudocode13 unchanged; code50 stays stale. Runner fingerprint correction and Actions version/build/regression evidence remain pending; whole Plan023 remains open.
+
+Relocation code49 cumulative versions39100969744 and push versions39100969916 passed at4052ee361c4a4825e906e67cfdbd88a2a265f581, after the canonical fingerprint correction. These metadata checks do not extend earlier source regression coverage.
+
 ## Temporary-file rule
 
 The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
