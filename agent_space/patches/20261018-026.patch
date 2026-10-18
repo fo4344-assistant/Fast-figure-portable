@@ -1,0 +1,25 @@
+diff --git a/agent_space/reviews/review-20261018-012-sourcecode-location-open.md b/agent_space/reviews/review-20261018-012-sourcecode-location-open.md
+index f4d9c7d..bcdee0d 100644
+--- a/agent_space/reviews/review-20261018-012-sourcecode-location-open.md
++++ b/agent_space/reviews/review-20261018-012-sourcecode-location-open.md
+@@ -14,6 +14,6 @@ Only file/diff inspection and metadata fingerprint calculation locally. No appli
+ 
+ ## Authorized Actions results
+ 
+-At implementation094e322e00e00e6403792d373fa06437d6a03171, ubuntu-latest build39100862300 passed and generated dist-only bot6a042f38ac66b5944dc9aa13546d1e5838420ea1. Regression39100860733 passed. Version39100859164 with base25fa8c6 failed: `development-layer-version: FAIL: source-code fingerprint changed without updating development-versions.json`. Therefore this relocation is NOT fully validated. Patch025 adds actual-versus-recorded fingerprint diagnostics so the correction can use the canonical runner digest without local checker execution. No upper semantic change is inferred from this metadata failure.
++At implementation094e322e00e00e6403792d373fa06437d6a03171, ubuntu-latest build39100862300 passed and generated dist-only bot6a042f38ac66b5944dc9aa13546d1e5838420ea1. Regression39100860733 passed. Version39100859164 with base25fa8c6 failed: `development-layer-version: FAIL: source-code fingerprint changed without updating development-versions.json`. Therefore this relocation is NOT fully validated. Patch025 adds actual-versus-recorded fingerprint diagnostics so the correction can use the canonical runner digest without local checker execution. No upper semantic change is inferred from this metadata failure. Diagnostic commitc6f3acbf6cbcbf2dd8813d21f04d8fd1f95cbfde version39100920487 failed with recorded sha256:78d66f604c28be250f286961600401d5b27d7930d08cfa9ed77e91246006bfe4 and actual sha256:0a086709f071428100e4e45586afb9944303a5b56645c2887671b2fa3bdd9557. Patch026 records that actual ubuntu-latest digest. This corrects metadata, not application contents: code revision remains49, stale. Cumulative version dispatch against pre-relocation25fa8c6 is still required; do not claim the failed gate passed.
+ 
+ The wider Plan023 translation/integration deliverable remains open; relocation does not establish semantic conformance or close earlier exclusions.
+diff --git a/development-versions.json b/development-versions.json
+index b5613a8..91d86ac 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,7 +38,7 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:78d66f604c28be250f286961600401d5b27d7930d08cfa9ed77e91246006bfe4",
++      "fingerprint": "sha256:0a086709f071428100e4e45586afb9944303a5b56645c2887671b2fa3bdd9557",
+       "derived_from": {
+         "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+         "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
