@@ -5291,8 +5291,8 @@
               !entry ||
               typeof entry.name !== "string" ||
               !entry.name ||
-              entry.name.includes("..") ||
-              entry.name.startsWith("/")
+              entry.name.split(/[\\/]/).includes("..") ||
+              /^[\\/]|^[A-Za-z]:[\\/]/.test(entry.name)
             )
               throw Error("FFPX 자산 경로가 올바르지 않습니다.");
             let name = encoder.encode(entry.name),

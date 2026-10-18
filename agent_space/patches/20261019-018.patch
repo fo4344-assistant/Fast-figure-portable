@@ -1,0 +1,110 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index e7e6a42..651482a 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -333,7 +333,7 @@ Baselinefeb37518a1b91504e4be7043280fe0b1bba84cb3. Source45 CSV_HEADER_RULE appli
+ 
+ ### Fifty-sixth bounded unit — STORE package entry paths
+ 
+-Baseline6cae6e250c815c5eb6a67b78e2b76364de04a31a. Source45 PACKAGE_CONTAINER_RULES/PlusCal25 ReadStorePackage already require no absolute entry path or exact parent segment; runtime substring rejected harmless report..csv while overlooking Windows roots. Code107 translates exact slash/backslash segment and absolute-root checks without rewriting stored names/bytes. Test139 actual FFPX/FFSX containers exercises four harmless and eight invalid names and invalid public imports with exact authority identity preservation. Pair017/review010/lineage record bounded meaning and pending139 inline+split/repeat/build/current+cumulative/fidelity. Full ZIP structural consistency, schema/dataRef/settings/initializer/resources/raster/dashboard/timing and exhaustive audit remain open; code stays stale.
++Baseline6cae6e250c815c5eb6a67b78e2b76364de04a31a. Source45 PACKAGE_CONTAINER_RULES/PlusCal25 ReadStorePackage already require no absolute entry path or exact parent segment; runtime substring rejected harmless report..csv while overlooking Windows roots. Code107 translates exact slash/backslash segment and absolute-root checks without rewriting stored names/bytes. Test139 actual FFPX/FFSX containers exercises four harmless and eight invalid names and invalid public imports with exact authority identity preservation. Pair017/review010 initialf480cb725f0dd5b305b4a10d162975533b5aecff regression39169290543/repeat39169292072 FAIL139 after1–138 PASS because writer retained same substring gap; build39169290558/version39169290619/cumulative39169294157/fidelity39169295954 PASS, generatorfa5a18917d522daab039fed4252ab96d638b2fd5 dist-only. Pair018/code108 closes writer consumer and tests safe writer rejection plus independently forged equal-length local/central unsafe entry names, no removed assertions. Corrected139 inline+split/repeat/build/current+cumulative/fidelity pending. Full ZIP structural consistency, schema/dataRef/settings/initializer/resources/raster/dashboard/timing and exhaustive audit remain open; code stays stale.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261019-010-code-package-paths-open.md b/agent_space/reviews/review-20261019-010-code-package-paths-open.md
+index 49820c3..6a09953 100644
+--- a/agent_space/reviews/review-20261019-010-code-package-paths-open.md
++++ b/agent_space/reviews/review-20261019-010-code-package-paths-open.md
+@@ -9,8 +9,12 @@ Baseline6cae6e250c815c5eb6a67b78e2b76364de04a31a. Prior Unit55 regression3916908
+ - Existing STORE/split/CRC/version handling unchanged, not claimed globally exhaustive. Full local/central ZIP structural consistency remains OPEN for separate audit; do not infer closure from this path unit.
+ - Test139 actual STORE containers consumed by BOTH FFPX and FFSX readers: four harmless dotted names retain exact bytes/read-only identity, eight parent/absolute names reject. Invalid bytes additionally enter actual public project/slot import and must preserve exact Project/Frontend identities. Existing valid format documents, graph/CSV references and bytes used, not a helper-only model.
+ 
++## Initial actual failure and writer closure
++
++Executionf480cb725f0dd5b305b4a10d162975533b5aecff regression39169290543/repeat39169292072 FAIL139 in both forms after1–138 PASS: `Error: FFPX 자산 경로가 올바르지 않습니다.` at ffpxZipStore:5297. Writer still used the same old substring prohibition; this was an omitted second contract consumer, not reason to weaken the path rule or remove dotted-name coverage. Build39169290558/current39169290619/cumulative39169294157/fidelity39169295954 PASS; generatorfa5a18917d522daab039fed4252ab96d638b2fd5 changes only dist. Pair018 applies existing Source/PlusCal container rule to writer too. Revised139 requires writer accept four harmless paths and reject unsafe paths; reader attacks cannot be produced by safe writer, so replace equal-length safe local+central entry names in known generated STORE bytes without altering CRC/data. Both package readers/public imports must still reject independently. No assertions dropped.
++
+ ## Lineage/delivery/evidence
+ 
+-Code107 fingerprintsha256:ff59c53b1cd9b62ba787659953b843ae3ae1ff436fc9abcbd48298bc56c015d5 derives Source45 and canonical PlusCal25 sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6; stays stale. Pair017/Plan023 includes actual runtime/test/lineage/review diff, excludes own pair. Exact-SHA139 inline+split/repeat/build/current+cumulative/fidelity pending. No local application/test/build/checker or optional TLC; dist generator-only. Coherent code+lineage uses bounded atomic gh Git Data exception because sequential Contents code/revision creates immediate-parent gate mismatch; expected HEAD/current old blobs/new paths/nonforce required.
++Initial code107 fingerprintsha256:ff59c53b1cd9b62ba787659953b843ae3ae1ff436fc9abcbd48298bc56c015d5; corrected writer code108 fingerprintsha256:f62604d79f6868010eadfd28cdc2a44ada917f175433a620f193f62f8089d5bc derives Source45 and canonical PlusCal25 sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6; stays stale. Pairs017/018 and Plan023 include actual runtime/test/lineage/review diff, each excludes own pair. Exact-SHA139 inline+split/repeat/build/current+cumulative/fidelity pending. No local application/test/build/checker or optional TLC; dist generator-only. Coherent code+lineage uses bounded atomic gh Git Data exception because sequential Contents code/revision creates immediate-parent gate mismatch; expected HEAD/current old blobs/new paths/nonforce required.
+ 
+ Rejected blanket double-dot substring prohibition, stripping/rewriting archive paths or bytes, treating directory strings as filesystem reopen references, unrelated parser/format redesign, test assertion weakening or Source edits to justify old behavior. Global schema/dataRef/settings/initializer/resources/current capture/raster/dashboard/timing and exhaustive cross-module requirement-to-artifact audit remain OPEN. No full completion/code-current claim.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 19d6e36..d8a43d1 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -6161,7 +6161,24 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         const current = slotAt(targetId), projectEntries = ffpxBuildProject().assets,
+           slotEntries = ffsxBuildSlot(current, getChart(current.chart)).assets,
+           data = new TextEncoder().encode("path inspection only"),
+-          project = activeProject._state, frontend = interfaceFSM.state;
++          project = activeProject._state, frontend = interfaceFSM.state,
++          unsafePackage = (entries, name) => {
++            const encoded = new TextEncoder().encode(name), safeName = "z".repeat(encoded.length),
++              bytes = ffpxZipStore([...entries, { name: safeName, data }]),
++              view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength),
++              end = bytes.length - 22, count = view.getUint16(end + 10, true);
++            let cursor = view.getUint32(end + 16, true), changed = false;
++            for (let index = 0; index < count; index++) {
++              const length = view.getUint16(cursor + 28, true), local = view.getUint32(cursor + 42, true),
++                entryName = new TextDecoder().decode(bytes.subarray(cursor + 46, cursor + 46 + length));
++              if (entryName === safeName) {
++                bytes.set(encoded, cursor + 46); bytes.set(encoded, local + 30); changed = true;
++              }
++              cursor += 46 + length + view.getUint16(cursor + 30, true) + view.getUint16(cursor + 32, true);
++            }
++            check(changed, "unsafe ZIP fixture did not replace both equal-length entry names");
++            return bytes;
++          };
+         for (const [entries, reader, suffix] of [[projectEntries, ffpxReadProjectBytes, "ffpx"],
+           [slotEntries, ffsxReadSlotBytes, "ffsx"]]) {
+           for (const name of ["assets/report..csv", "assets/.../note", "assets/.hidden", "assets/a..b/data"]) {
+@@ -6173,7 +6190,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           }
+           for (const name of ["../escape", "assets/../escape", "assets/..", "/absolute", "\\absolute",
+             "C:/absolute", "C:\\absolute", "assets\\..\\escape"]) {
+-            const bytes = ffpxZipStore([...entries, { name, data }]);
++            let writerError = null;
++            try { ffpxZipStore([...entries, { name, data }]); } catch (error) { writerError = error; }
++            check(writerError, `unsafe writer path accepted: ${name}`);
++            const bytes = unsafePackage(entries, name);
+             let caught = null;
+             try { reader(bytes); } catch (error) { caught = error; }
+             check(caught && activeProject._state === project && interfaceFSM.state === frontend,
+diff --git a/development-versions.json b/development-versions.json
+index 683884f..5ec5c73 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 107,
++      "revision": 108,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,7 +38,7 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:ff59c53b1cd9b62ba787659953b843ae3ae1ff436fc9abcbd48298bc56c015d5",
++      "fingerprint": "sha256:f62604d79f6868010eadfd28cdc2a44ada917f175433a620f193f62f8089d5bc",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 2b8372d..6e4f597 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -5291,8 +5291,8 @@
+               !entry ||
+               typeof entry.name !== "string" ||
+               !entry.name ||
+-              entry.name.includes("..") ||
+-              entry.name.startsWith("/")
++              entry.name.split(/[\\/]/).includes("..") ||
++              /^[\\/]|^[A-Za-z]:[\\/]/.test(entry.name)
+             )
+               throw Error("FFPX 자산 경로가 올바르지 않습니다.");
+             let name = encoder.encode(entry.name),

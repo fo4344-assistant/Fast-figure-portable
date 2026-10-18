@@ -6161,7 +6161,24 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         const current = slotAt(targetId), projectEntries = ffpxBuildProject().assets,
           slotEntries = ffsxBuildSlot(current, getChart(current.chart)).assets,
           data = new TextEncoder().encode("path inspection only"),
-          project = activeProject._state, frontend = interfaceFSM.state;
+          project = activeProject._state, frontend = interfaceFSM.state,
+          unsafePackage = (entries, name) => {
+            const encoded = new TextEncoder().encode(name), safeName = "z".repeat(encoded.length),
+              bytes = ffpxZipStore([...entries, { name: safeName, data }]),
+              view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+              end = bytes.length - 22, count = view.getUint16(end + 10, true);
+            let cursor = view.getUint32(end + 16, true), changed = false;
+            for (let index = 0; index < count; index++) {
+              const length = view.getUint16(cursor + 28, true), local = view.getUint32(cursor + 42, true),
+                entryName = new TextDecoder().decode(bytes.subarray(cursor + 46, cursor + 46 + length));
+              if (entryName === safeName) {
+                bytes.set(encoded, cursor + 46); bytes.set(encoded, local + 30); changed = true;
+              }
+              cursor += 46 + length + view.getUint16(cursor + 30, true) + view.getUint16(cursor + 32, true);
+            }
+            check(changed, "unsafe ZIP fixture did not replace both equal-length entry names");
+            return bytes;
+          };
         for (const [entries, reader, suffix] of [[projectEntries, ffpxReadProjectBytes, "ffpx"],
           [slotEntries, ffsxReadSlotBytes, "ffsx"]]) {
           for (const name of ["assets/report..csv", "assets/.../note", "assets/.hidden", "assets/a..b/data"]) {
@@ -6173,7 +6190,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           }
           for (const name of ["../escape", "assets/../escape", "assets/..", "/absolute", "\\absolute",
             "C:/absolute", "C:\\absolute", "assets\\..\\escape"]) {
-            const bytes = ffpxZipStore([...entries, { name, data }]);
+            let writerError = null;
+            try { ffpxZipStore([...entries, { name, data }]); } catch (error) { writerError = error; }
+            check(writerError, `unsafe writer path accepted: ${name}`);
+            const bytes = unsafePackage(entries, name);
             let caught = null;
             try { reader(bytes); } catch (error) { caught = error; }
             check(caught && activeProject._state === project && interfaceFSM.state === frontend,
