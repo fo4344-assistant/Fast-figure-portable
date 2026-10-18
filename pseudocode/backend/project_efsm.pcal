@@ -393,7 +393,8 @@ DomainBranchNotAlternativeMutationEntry:
       call ConvertImportedChartInAttempt(source,chart); candidate := result;
     else CandidateChart(candidate,chart.id).editor.editable := payload.editable; end if;
   elsif event = "SLOT_CHART_IMPORTED" then
-    slot := ResolveCurrentVisibleGraphSlot(source,payload.slotId);
+    \* Source graphs.importSelectedGraphFile/applyFfsxSlot accepts a visible target, including image content.
+    slot := ResolveCurrentVisibleSlot(source,payload.slotId);
     if IsFfsxPackage(payload.file) then
       call ffsxReadSlot(payload.file); calculation := result;
       call ApplyFfsxInAttempt(source,calculation,slot); candidate := result;

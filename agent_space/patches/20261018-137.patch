@@ -1,0 +1,474 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index ca262a8..91befb2 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -263,6 +263,10 @@ Baseline506dc0d8284c4d5ee2935a3bd77cd646a3ea4c39. Source45 assets.importProjectA
+ 
+ Unit44 final bounded evidence:43616eef6b9628c0d049b60f0efd21241e48d346 regression39153890656/repeat39153892990 PASS121 inline+121 split each; build39153895363 PASS artifacts already current; cumulative39153801394 (base506dc0d8284c4d5ee2935a3bd77cd646a3ea4c39)/fidelity39153804651 PASS. Implementation717bbd4c4f1c9e31fa1ae5ef60eda10650b68dff regression39153784646/repeat39153798977 also PASS121+121, canonical39153784657/build39153784643 PASS generated that dist-only bot SHA. Code95 canonical9ffb7bbd0869689f27fd54162068b3b6d8c40969b39375362540e5df909adba9 stale, upper45/23 unchanged. Review046 explicitly separates package delegation stub from package parsing/transaction proof. Next coherent unit is SLOT_CHART_IMPORTED raw-file/copied-bytes Backend parse/current candidate/validation/retry/onecommit plus public import success-read gating; first audit target-kind Source/PlusCal discrepancy and FFSX settings/real-reference preservation. No new async EFSM, caller-chart/candidate bridge or package rollback should be invented. Whole common commit/other owners/schema/serializer/raster/dashboard/timing audit still open.
+ 
++## Forty-fifth bounded unit — Backend-owned FFSX/Plotly package import
++
++Baseline47a10598dce0c8356ab74a878642a65857073573. Source45 graphs.importSelectedGraphFile/assets.applyFfsxSlot already require raw file/id only, Backend parse/real-CSV mapping/candidate/whole validation/current-source retry/onecommit and official gated chart read; Source permits a visible image-content target. Correct pseudocode23's extra graph-only guard first (24), no Source rewrite/new meaning. Code96 private copied-byte parser+current candidate preserves slot settings/extensions, maps only real references, keeps conversion views, uses actual changed facts and chart-specific hints, removes Application importSlotFile parser/transaction. Cases122/123/124 cover actual raw command/FFSX/Plotly, image target/settings, duplicate real refs/actual ids/path, failure/noncommit/source replacement/late read and conversion roundtrip/no fake CSV. Review047/patch137. Exact new-SHA124+124/repeat/build/canonical/cumulative/fidelity pending. Whole code stale, schema/serializer/raster/dashboard/timing/common commit audit still open. No policy edits or local execution.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-047-code-package-import-open.md b/agent_space/reviews/review-20261018-047-code-package-import-open.md
+new file mode 100644
+index 0000000..85e1410
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-047-code-package-import-open.md
+@@ -0,0 +1,19 @@
++# Unit45 — Backend-owned FFSX/Plotly import (pending Actions)
++
++## Policy, Source audit and missed translation guard
++
++Continue development-policy.md v0.2.6 read fully (1228 lines) and AGENT.md numeric paired patch/lineage/single authority rules. Source remains highest authority; no policy changes, local application/test/build/checker or optional TLC execution. Source45 application/public_api/graphs.py importSelectedGraphFile forwards explicit slot/file only, requires Backend parsing/candidate/one commit, gates official graphs.readData success read. Source45 backend/assets_files.py applyFfsxSlot resolves the current target, maps only actual real CSV references into new project ids/paths, preserves noneditable conversion views and package caption, and validates the whole candidate before caller commit. Existing common transaction requires source replacement retry. The Source does not restrict target to preexisting graph content; the public raw/slot router also delegates package files for a captured visible slot.
++
++Pseudocode23 backend/project_efsm.pcal had ResolveCurrentVisibleGraphSlot in SLOT_CHART_IMPORTED despite these Source/public contracts. Prior whole translation review missed this extra precondition by not checking image-content target delegation against the branch. Correct pseudocode first to ResolveCurrentVisibleSlot, preserving Source45 meaning rather than altering Source to justify a lower restriction. Pseudocode24 directly derives the unchanged Source45 fingerprint. No new higher-level requirement, no rewritten ownership hierarchy or optional model gate.
++
++## Direct implementation and bounded checklist
++
++Code96 receives only explicit slot id plus detached raw file bytes; existing synchronous Project EFSM remains synchronous. Application may await pure copied byte preparation, not parse/compute persistent charts/candidates. The command parses/validates bytes using existing package parser/private copied-byte entry or Plotly parser, resolves current visible target, and creates one private candidate preserving canonical content. Real package CSV ids are unique/remapped once per referenced local id with current project id and current VFS unique path; conversion rows/imported figures are not rewritten as fake CSV. Replaces only the target's owned chart/reference/content type and package caption, keeps image settings/extensions and unrelated selection/assets, validates then compares source reference/retries whole calculation before one commit. Actual chart/slot/CSV/path/owners and matching chart-specific selectedIndexHint drive common reconciliation. Public wrapper returns official copied chart on commit, propagates original errors and never rolls back a late failure. Existing aggregate renderer remains not a claimed supplied-dashboard closure. Removed obsolete importSlotFile Application parser/transaction; ffsxReadSlot retains a pure file-byte convenience wrapper around the same private parser for read-only callers/tests.
++
++- Case122: actual exported FFSX, repeated objects share one new real CSV, raw minimal command payload, one commit/current ids/actual facts, image target becomes graph while custom settings/canonical extension survive, unrelated graph/CSV selection stays.
++- Case123: malformed input/invalid target/validation failure unchanged, exact original errors, noncommit skips success reads, replacement during validation recalculates new chart id and preserves newer metadata, late official read failure does not undo commit.
++- Case124: actual Plotly bytes -> noneditable conversion chart -> real FFSX roundtrip to another slot; imported graph/rows preserved and no fake CSV created. Prior121 cases retain broader actual import/export/candidate checks.
++
++## Lineage, pending evidence and limits
++
++Source45 unchanged e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7; pseudocode24 fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4; code96 52448be81eafaa1f6d06551fc8d7ca36cade75f6e25b29a3f6a597ca6157a18a remains stale. Digests calculated from staged Git path/blob identities, not local checker execution; canonical Actions confirmation pending. Exact-SHA124 inline+124 split/repeat/build/cumulative development-layer/fidelity PENDING. Static fidelity gate is not semantic proof. Whole common commit/other mutation owners, schema/serializer, raster/current-snapshot resources, supplied dashboard and timing/lifecycle requirements still open. No whole-goal closure from bounded tests or manifest. No explicit quota/auth/service blocker observed.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 4914903..27c7bfe 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5469,6 +5469,131 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(122, "FFSX command owns real-reference mapping and preserves image-slot local settings", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
++        report = status, notify = interfaceFSM.notify;
++      try {
++        initialize.call(activeProject, createProjectState());
++        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
++        const [a, b] = activeProject.slots.filter(item => !item.hidden),
++          csvItem = api.assets.createCsv([["X", "Y"], [1, 2]], "package-owned.csv");
++        select(a); api.graphs.addObject(csvItem.id); api.graphs.addObject(csvItem.id);
++        const packet = ffsxFile(slotAt(a.id)), local = await ffsxReadSlot(packet),
++          candidate = projectClone(activeProject._state);
++        normalizeSlotContents(candidate.slots);
++        const target = candidate.slots.find(item => item.id === b.id);
++        target.contentType = "image"; target.imageSettings = { fit: "cover", scale: 175, x: 37, y: 62 };
++        target.content.packageExtension = { preserve: true };
++        initialize.call(activeProject, candidate);
++        select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(csvItem)); api.graphs.selectObject(1);
++        const settings = JSON.stringify(slotAt(b.id).imageSettings), oldCount = activeProject.csvFiles.length,
++          expectedCsvId = activeProject._state.nextId.csv, expectedChartId = activeProject._state.nextId.chart;
++        let commits = 0, result;
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        projectEFSM.send = function (event, payload) {
++          if (event === "SLOT_CHART_IMPORTED") check(Object.keys(payload).sort().join() === "file,slotId" &&
++            payload.file.bytes instanceof Uint8Array && !payload.chart && !payload.candidate,
++            "public package import supplied parsed authority instead of copied bytes");
++          const value = send.call(this, event, payload); if (event === "SLOT_CHART_IMPORTED") result = value; return value;
++        };
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        const chart = await api.graphs.importFile(packet, b.id), actual = slotAt(b.id);
++        check(commits === 1 && Object.isFrozen(chart) && chart.id === expectedChartId && actual.chart === chart.id &&
++          actual.contentType === "graph" && actual.imageId === null && activeProject.csvFiles.length === oldCount + 1 &&
++          chart.editor.objects.length === 2 && chart.editor.objects.every(item => item.csvId === expectedCsvId),
++          "package did not use one current candidate/new CSV mapping per real local reference");
++        check(JSON.stringify(actual.imageSettings) === settings && actual.content.packageExtension.preserve &&
++          actual.caption === local.slot.caption && interfaceFSM.state.selectedSlotId === a.id &&
++          interfaceFSM.state.graphObjectIndex === 1 && interfaceFSM.state.assetPath === projectAssetPath(csvItem),
++          "package reset local settings/extension or unrelated selection");
++        check(result.changed.csvIds.join() === String(expectedCsvId) && result.changed.slotIds.join() === String(b.id) &&
++          result.changed.assets[0].path === projectAssetPath(getProjectCsv(expectedCsvId)), "package result facts not actual");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
++        status = report; interfaceFSM.notify = notify; initialize.call(activeProject, saved);
++        interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(123, "Package validation, authority retry, noncommit and late read preserve transaction boundaries", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
++        query = appFSM.query, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        initialize.call(activeProject, createProjectState());
++        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
++        const target = activeProject.slots.find(item => !item.hidden), file = new File([
++          JSON.stringify({ data: [{ x: [1, 2], y: [4, 8] }], layout: { title: { text: "copied" } }, frames: [{ name: "f" }] })
++        ], "owned.json"), copied = (await prepareCopiedImportFiles([file]))[0];
++        select(target); renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        let commits = 0, caught;
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        const initial = activeProject._state, beforeSession = interfaceFSM.state, failure = Error("package-validation-owned");
++        validateProjectObjectState = () => { throw failure; };
++        try { await api.graphs.importFile(file, target.id); } catch (error) { caught = error; }
++        check(caught === failure && commits === 0 && activeProject._state === initial && interfaceFSM.state === beforeSession,
++          "package validation failure changed authority/session or replaced error");
++        validateProjectObjectState = validate;
++        caught = null;
++        try { await api.graphs.importFile(new File(["broken"], "bad.ffsx"), target.id); } catch (error) { caught = error; }
++        check(caught && commits === 0 && activeProject._state === initial, "bad package committed");
++        caught = null;
++        try { dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId: -1, file: copied }); } catch (error) { caught = error; }
++        check(caught && commits === 0 && activeProject._state === initial, "missing slot was not rejected without mutation");
++        let queries = 0;
++        appFSM.query = function (kind, request) { queries++; return query.call(this, kind, request); };
++        projectEFSM.send = event => ({ committed: false, changed: {}, selectionHints: {}, event });
++        const rejected = await api.graphs.importFile(file, target.id);
++        check(!rejected.committed && commits === 0 && queries === 0, "noncommit performed success query");
++        projectEFSM.send = send; appFSM.query = query;
++        let attempts = 0, expectedChartId;
++        validateProjectObjectState = function (candidate, options) {
++          const result = validate(candidate, options);
++          if (++attempts === 1) {
++            const newer = projectClone(activeProject._state); newer.nextId.chart += 4;
++            newer.meta.projectName = "newer-package-source"; expectedChartId = newer.nextId.chart;
++            initialize.call(activeProject, newer);
++          }
++          return result;
++        };
++        const chart = await api.graphs.importFile(file, target.id);
++        check(attempts === 2 && commits === 1 && chart.id === expectedChartId &&
++          activeProject.meta.projectName === "newer-package-source", "package failed whole current-source retry");
++        validateProjectObjectState = validate;
++        const late = Error("package-late-read"); caught = null;
++        appFSM.query = function (kind, request) {
++          if (kind === "project-api" && request.operation === "graphs.readData") throw late;
++          return query.call(this, kind, request);
++        };
++        try { await api.graphs.importFile(file, target.id); } catch (error) { caught = error; }
++        check(caught === late && commits === 2 && slotAt(target.id).chart !== chart.id,
++          "late package success-read error rolled back commit");
++      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
++        appFSM.query = query; renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(124, "FFSX conversion views and imported Plotly bytes preserve semantic data without fake CSV assets", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        initialize.call(activeProject, createProjectState());
++        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
++        const [a, b] = activeProject.slots.filter(item => !item.hidden), figure = {
++          data: [{ x: [1, 2], y: [2, 5], name: "original" }], layout: { title: { text: "import" } },
++          frames: [{ name: "frame" }], config: { responsive: false }
++        };
++        select(a); renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        const plot = await api.graphs.importFile(new File([JSON.stringify(figure)], "copied.json"), a.id),
++          imported = JSON.stringify(plot.graph.imported), rows = JSON.stringify(plot.editor.conversionRows),
++          packet = ffsxFile(slotAt(a.id)), csvCount = activeProject.csvFiles.length,
++          chart = await api.graphs.importFile(packet, b.id);
++        check(chart.editor.editable === false && JSON.stringify(chart.graph.imported) === imported &&
++          JSON.stringify(chart.editor.conversionRows) === rows && activeProject.csvFiles.length === csvCount &&
++          chart.editor.objects.length === plot.editor.objects.length, "conversion FFSX remapped views or created fake CSV");
++      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 7893628..089e769 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 95,
++      "revision": 96,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,23 +38,23 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:9ffb7bbd0869689f27fd54162068b3b6d8c40969b39375362540e5df909adba9",
++      "fingerprint": "sha256:52448be81eafaa1f6d06551fc8d7ca36cade75f6e25b29a3f6a597ca6157a18a",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+-        "pseudocode": "sha256:de6575d91cc0bfae1bee9e70b4b00b1e72c76dd47a7e9bd1417141bf8c1fe795",
++        "pseudocode": "sha256:fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-046-code-ordered-import-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-047-code-package-import-open.md"
+     }, 
+     "pseudocode": {
+-      "revision": 23,
++      "revision": 24,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+-      "fingerprint": "sha256:de6575d91cc0bfae1bee9e70b4b00b1e72c76dd47a7e9bd1417141bf8c1fe795",
++      "fingerprint": "sha256:fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7"
+       },
+-      "translation_review": "agent_space/reviews/review-20261018-040-caption-insertion-closure.md"
++      "translation_review": "agent_space/reviews/review-20261018-047-code-package-import-open.md"
+     }
+   }
+ }
+diff --git a/pseudocode/backend/project_efsm.pcal b/pseudocode/backend/project_efsm.pcal
+index f553e65..0b7ec17 100644
+--- a/pseudocode/backend/project_efsm.pcal
++++ b/pseudocode/backend/project_efsm.pcal
+@@ -393,7 +393,8 @@ DomainBranchNotAlternativeMutationEntry:
+       call ConvertImportedChartInAttempt(source,chart); candidate := result;
+     else CandidateChart(candidate,chart.id).editor.editable := payload.editable; end if;
+   elsif event = "SLOT_CHART_IMPORTED" then
+-    slot := ResolveCurrentVisibleGraphSlot(source,payload.slotId);
++    \* Source graphs.importSelectedGraphFile/applyFfsxSlot accepts a visible target, including image content.
++    slot := ResolveCurrentVisibleSlot(source,payload.slotId);
+     if IsFfsxPackage(payload.file) then
+       call ffsxReadSlot(payload.file); calculation := result;
+       call ApplyFfsxInAttempt(source,calculation,slot); candidate := result;
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 0d6cab5..70d64fc 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1567,76 +1567,67 @@
+         payload.clearGraphSelection = true;
+       }
+       function applySlotChartImportedAction({ machine, payload }) {
+-        machine.assertWritable("slots","SLOT_CHART_IMPORTED");
+-        machine.assertWritable("data","SLOT_CHART_IMPORTED");
+-        machine.assertWritable("charts","SLOT_CHART_IMPORTED");
+-        machine.assertWritable("workspace","SLOT_CHART_IMPORTED");
+-        machine.assertWritable("editor","SLOT_CHART_IMPORTED");
+-        machine.assertWritable("files","SLOT_CHART_IMPORTED");
+-        let slot=slotAt(payload.slotId),
+-          sourceChart=payload.chart,
+-          importKind=payload.importKind==="plotly"?"plotly":"ffsx",
+-          packaged=Array.isArray(payload.csvFiles)?payload.csvFiles:[];
+-        if(!slot||!sourceChart)
+-          throw Error("불러온 차트를 적용할 슬롯 또는 차트가 없습니다.");
+-
+-        let candidate=projectClone(activeProject._state);
+-        normalizeSlotContents(candidate.slots);
+-        let chart=projectClone(sourceChart),
+-          createdCsvIds=[];
+-
+-        if(importKind==="ffsx"){
+-          let packagedIds=new Set(),csvMap=new Map(),nextCsvId=candidate.nextId.csv;
+-          for(let source of packaged){
+-            if(!source||!Number.isInteger(source.id)||source.id<1||
+-              packagedIds.has(source.id)||!Array.isArray(source.rows))
+-              throw Error("FFSX CSV 데이터가 올바르지 않습니다.");
+-            packagedIds.add(source.id);
+-            let model=buildProjectCsvModel(
+-              source.rows,
+-              source.name||source.sourceName,
+-              nextCsvId++,
+-              source.bytesBase64,
+-              source.mime,
+-              source.headerLines,
+-              candidate,
+-            );
+-            projectVfs.prepare(model,"csv",candidate);
+-            candidate.assets.csvFiles.push(model);
+-            csvMap.set(source.id,model.id);
+-            createdCsvIds.push(model.id);
++        for (const scope of ["slots", "data", "charts", "files"])
++          machine.assertWritable(scope, "SLOT_CHART_IMPORTED");
++        while (true) {
++          const source = activeProject._state,
++            slot = source.slots.find(item => item.id === payload.slotId && !item.hidden),
++            file = payload.file;
++          if (!Number.isInteger(payload.slotId) || !slot) throw Error("불러올 visible 슬롯이 없습니다.");
++          if (!file || !(file.bytes instanceof Uint8Array)) throw Error("불러올 copied file bytes가 없습니다.");
++          const bytes = new Uint8Array(file.bytes),
++            packaged = bytes[0] === 0x50 && bytes[1] === 0x4b,
++            input = packaged ? ffsxReadSlotBytes(bytes) : JSON.parse(new TextDecoder().decode(bytes)),
++            candidate = projectClone(source);
++          normalizeSlotContents(candidate.slots);
++          for (const target of candidate.slots) {
++            const original = source.slots.find(item => item.id === target.id);
++            if (original?.content) target.content = projectClone(original.content);
+           }
+-          candidate.nextId.csv=nextCsvId;
+-          for(let object of chart.editor?.objects||[]){
+-            if(!csvMap.has(object.csvId))
+-              throw Error("FFSX 차트가 포함되지 않은 CSV를 참조합니다.");
+-            object.csvId=csvMap.get(object.csvId);
++          if (!packaged && (!input || typeof input !== "object" || (!Array.isArray(input.data) && !input.layout)))
++            throw Error("유효한 Plotly JSON이 아닙니다.");
++          let chart = packaged ? projectClone(input.chart) : parsePlotlyToEditor(input, null);
++          normalizeGlobalSettings(chart);
++          const csvIds = [], assets = [];
++          if (packaged) {
++            const mapping = new Map();
++            for (const localId of chartCsvIds(chart)) {
++              const local = input.csvFiles.find(item => item.id === localId);
++              if (!local || typeof local.name !== "string" || !local.name ||
++                  projectCsvName(local.name, "") !== local.name)
++                throw Error("FFSX CSV 이름 또는 reference가 올바르지 않습니다.");
++              const model = projectClone(local);
++              model.id = candidate.nextId.csv++;
++              model.bytesBase64 = ffpxBytesToBase64(ffpxBase64ToBytes(local.bytesBase64));
++              projectVfs.assignLocation(model,
++                projectVfs.uniquePath(PROJECT_ASSET_DIRECTORIES.csv, local.name, candidate));
++              candidate.assets.csvFiles.push(model);
++              mapping.set(localId, model.id); csvIds.push(model.id);
++              assets.push({ role: "created", kind: "csv", id: model.id, path: projectAssetPath(model),
++                owners: [{ slotId: slot.id, chartId: candidate.nextId.chart }] });
++            }
++            if (!chartUsesConversionView(chart))
++              for (const object of chart.editor.objects) object.csvId = mapping.get(object.csvId);
+           }
+-        } else {
+-          chart.editor.editable=false;
+-          if(!Array.isArray(chart.editor.conversionRows))
+-            chart.editor.conversionRows=[];
++          chart.id = candidate.nextId.chart++;
++          validateChartModel(chart, "불러온 슬롯 차트", candidate.assets.csvFiles);
++          const target = candidate.slots.find(item => item.id === slot.id),
++            oldChartId = target.content.chart;
++          candidate.charts = candidate.charts.filter(item => item.id !== oldChartId);
++          candidate.charts.push(chart);
++          target.content.chart = chart.id;
++          target.content.imageId = null;
++          target.content.contentType = "graph";
++          if (packaged) target.caption = input.slot.caption;
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          payload.changed = { slotIds: [slot.id],
++            chartIds: [...new Set([oldChartId, chart.id].filter(Number.isInteger))],
++            csvIds, imageIds: [], assets };
++          payload.selectionHints = immutableProjectCopy({ chartId: chart.id, selectedIndexHint: null });
++          return;
+         }
+-
+-        chart.id=candidate.nextId.chart++;
+-        validateChartModel(chart,"불러온 슬롯 차트",candidate.assets.csvFiles);
+-        let target=candidate.slots.find(item=>item.id===slot.id);
+-        if(Number.isInteger(target.chart))
+-          candidate.charts=candidate.charts.filter(item=>item.id!==target.chart);
+-        candidate.charts.push(chart);
+-        target.chart=chart.id;
+-        target.imageId=null;
+-        target.contentType="graph";
+-        target.content.imageSettings={...DEFAULT_IMAGE_SETTINGS};
+-        if(payload.slotCaption!==undefined)
+-          target.caption=typeof payload.slotCaption==="string"&&payload.slotCaption
+-            ?payload.slotCaption:null;
+-
+-        validateProjectObjectState(candidate,{requireSlots:true});
+-        activeProject.initialize(candidate);
+-        payload.clearGraphSelection = true;
+-        payload.chart=getChart(chart.id);
+-        payload.createdCsvIds=createdCsvIds;
+       }
+       function applyGridLayoutChangedAction({ machine, payload }) {
+         machine.assertWritable("layout", "GRID_LAYOUT_CHANGED");
+@@ -6387,10 +6378,15 @@
+         };
+       }
+       async function importSelectedGraphFile(file, slotId = interfaceFSM.readState().selectedSlotId) {
+-        await importSlotFile(file, slotId == null ? null : { id: slotId });
+-        return appFSM.query("project-api", {
++        const [copied] = await prepareCopiedImportFiles([file]),
++          result = dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId, file: copied });
++        if (!result.committed) return result;
++        const chart = appFSM.query("project-api", {
+           operation: "graphs.readData", frontendState: { selectedSlotId: slotId },
+         }).chart;
++        renderDashboard(); updateFileAvailability();
++        status(`${file.name}을 슬롯에 불러왔습니다.`);
++        return chart;
+       }
+       function readAssetDeletionTarget() {
+         const resolved = appFSM.query("project-api", {
+@@ -7356,7 +7352,10 @@
+         };
+       }
+       async function ffsxReadSlot(file) {
+-        let assets = ffpxZipRead(new Uint8Array(await file.arrayBuffer())),
++        return ffsxReadSlotBytes(new Uint8Array(await file.arrayBuffer()));
++      }
++      function ffsxReadSlotBytes(bytes) {
++        let assets = ffpxZipRead(new Uint8Array(bytes)),
+           xmlBytes = assets.get("slot.xml");
+         if (!xmlBytes) throw Error("FFSX slot.xml이 없습니다.");
+         let slotRoot = ffpxReadXmlDocument(assets, "slot.xml", "fastFigureSlot"),
+@@ -7459,71 +7458,6 @@
+         return appFSM.run("exporting", "graphs.exportPlotlyJson", () =>
+           exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportPlotlyJson"));
+       }
+-      async function importSlotFile(file, slot) {
+-        if (!slot) throw Error("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");
+-        let header = new Uint8Array(await file.slice(0, 4).arrayBuffer()),
+-          payload =
+-            header.length === 4 && header[0] === 0x50 && header[1] === 0x4b
+-              ? await ffsxReadSlot(file)
+-              : JSON.parse(await file.text());
+-        let chart,
+-          slotCaption,
+-          importKind,
+-          packagedCsvFiles = [];
+-        if (
+-          payload?.schema === "fast-figure-slot" &&
+-          payload.version === PACKAGE_FORMAT_VERSION &&
+-          payload.chart &&
+-          typeof payload.chart === "object"
+-        ) {
+-          importKind = "ffsx";
+-          packagedCsvFiles = payload.csvFiles;
+-          if (
+-            !Array.isArray(packagedCsvFiles) ||
+-            packagedCsvFiles.some((csv) => !Array.isArray(csv.rows))
+-          )
+-            throw Error("FFSX CSV 데이터가 없습니다.");
+-          chart = projectClone(payload.chart);
+-          packagedCsvFiles = projectClone(packagedCsvFiles);
+-          chart = validateChartModel(chart, "FFSX 차트", packagedCsvFiles);
+-          slotCaption =
+-            typeof payload.slot?.caption === "string" ? payload.slot.caption : undefined;
+-        } else if (
+-          Array.isArray(payload?.data) ||
+-          payload?.layout ||
+-          payload?.config ||
+-          payload?.frames
+-        ) {
+-          importKind = "plotly";
+-          chart = parsePlotlyToEditor(payload, null);
+-          chart.editor.editable = false;
+-        } else throw Error("지원하지 않는 FFSX 슬롯 또는 Plotly JSON 형식입니다.");
+-        normalizeGlobalSettings(chart);
+-        let importPayload = {
+-          slotId: slot.id,
+-          chart,
+-          csvFiles: packagedCsvFiles || [],
+-          importKind,
+-          slotCaption,
+-          direction: "fsm-to-model",
+-        };
+-        appFSM.send("SLOT_CHART_IMPORTED", importPayload);
+-        chart = importPayload.chart;
+-        selectedSlotId = null;
+-        setSelectedSlot(slot.id, "model-to-fsm");
+-        status(`${file.name}을 현재 슬롯에 불러왔습니다.`);
+-        debugLog("slot:import", {
+-          slotId: slot.id,
+-          chartId: chart.id,
+-          editable: chart.editor.editable,
+-          objects: chart.editor.objects.length,
+-          rows:
+-            chart.editor.editable === false
+-              ? 0
+-              : getProjectCsv(chart.editor.objects[0]?.csvId)?.rows.length || 0,
+-          schema: payload?.schema || "plotly",
+-        });
+-      }
+       function applyDashboardZoom(resize = true) {
+         let dashboard = $("dashboard"),
+           width;

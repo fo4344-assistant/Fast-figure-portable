@@ -5469,6 +5469,131 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(122, "FFSX command owns real-reference mapping and preserves image-slot local settings", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
+        report = status, notify = interfaceFSM.notify;
+      try {
+        initialize.call(activeProject, createProjectState());
+        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+        const [a, b] = activeProject.slots.filter(item => !item.hidden),
+          csvItem = api.assets.createCsv([["X", "Y"], [1, 2]], "package-owned.csv");
+        select(a); api.graphs.addObject(csvItem.id); api.graphs.addObject(csvItem.id);
+        const packet = ffsxFile(slotAt(a.id)), local = await ffsxReadSlot(packet),
+          candidate = projectClone(activeProject._state);
+        normalizeSlotContents(candidate.slots);
+        const target = candidate.slots.find(item => item.id === b.id);
+        target.contentType = "image"; target.imageSettings = { fit: "cover", scale: 175, x: 37, y: 62 };
+        target.content.packageExtension = { preserve: true };
+        initialize.call(activeProject, candidate);
+        select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(csvItem)); api.graphs.selectObject(1);
+        const settings = JSON.stringify(slotAt(b.id).imageSettings), oldCount = activeProject.csvFiles.length,
+          expectedCsvId = activeProject._state.nextId.csv, expectedChartId = activeProject._state.nextId.chart;
+        let commits = 0, result;
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        projectEFSM.send = function (event, payload) {
+          if (event === "SLOT_CHART_IMPORTED") check(Object.keys(payload).sort().join() === "file,slotId" &&
+            payload.file.bytes instanceof Uint8Array && !payload.chart && !payload.candidate,
+            "public package import supplied parsed authority instead of copied bytes");
+          const value = send.call(this, event, payload); if (event === "SLOT_CHART_IMPORTED") result = value; return value;
+        };
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        const chart = await api.graphs.importFile(packet, b.id), actual = slotAt(b.id);
+        check(commits === 1 && Object.isFrozen(chart) && chart.id === expectedChartId && actual.chart === chart.id &&
+          actual.contentType === "graph" && actual.imageId === null && activeProject.csvFiles.length === oldCount + 1 &&
+          chart.editor.objects.length === 2 && chart.editor.objects.every(item => item.csvId === expectedCsvId),
+          "package did not use one current candidate/new CSV mapping per real local reference");
+        check(JSON.stringify(actual.imageSettings) === settings && actual.content.packageExtension.preserve &&
+          actual.caption === local.slot.caption && interfaceFSM.state.selectedSlotId === a.id &&
+          interfaceFSM.state.graphObjectIndex === 1 && interfaceFSM.state.assetPath === projectAssetPath(csvItem),
+          "package reset local settings/extension or unrelated selection");
+        check(result.changed.csvIds.join() === String(expectedCsvId) && result.changed.slotIds.join() === String(b.id) &&
+          result.changed.assets[0].path === projectAssetPath(getProjectCsv(expectedCsvId)), "package result facts not actual");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+        status = report; interfaceFSM.notify = notify; initialize.call(activeProject, saved);
+        interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(123, "Package validation, authority retry, noncommit and late read preserve transaction boundaries", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
+        query = appFSM.query, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        initialize.call(activeProject, createProjectState());
+        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+        const target = activeProject.slots.find(item => !item.hidden), file = new File([
+          JSON.stringify({ data: [{ x: [1, 2], y: [4, 8] }], layout: { title: { text: "copied" } }, frames: [{ name: "f" }] })
+        ], "owned.json"), copied = (await prepareCopiedImportFiles([file]))[0];
+        select(target); renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        let commits = 0, caught;
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        const initial = activeProject._state, beforeSession = interfaceFSM.state, failure = Error("package-validation-owned");
+        validateProjectObjectState = () => { throw failure; };
+        try { await api.graphs.importFile(file, target.id); } catch (error) { caught = error; }
+        check(caught === failure && commits === 0 && activeProject._state === initial && interfaceFSM.state === beforeSession,
+          "package validation failure changed authority/session or replaced error");
+        validateProjectObjectState = validate;
+        caught = null;
+        try { await api.graphs.importFile(new File(["broken"], "bad.ffsx"), target.id); } catch (error) { caught = error; }
+        check(caught && commits === 0 && activeProject._state === initial, "bad package committed");
+        caught = null;
+        try { dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId: -1, file: copied }); } catch (error) { caught = error; }
+        check(caught && commits === 0 && activeProject._state === initial, "missing slot was not rejected without mutation");
+        let queries = 0;
+        appFSM.query = function (kind, request) { queries++; return query.call(this, kind, request); };
+        projectEFSM.send = event => ({ committed: false, changed: {}, selectionHints: {}, event });
+        const rejected = await api.graphs.importFile(file, target.id);
+        check(!rejected.committed && commits === 0 && queries === 0, "noncommit performed success query");
+        projectEFSM.send = send; appFSM.query = query;
+        let attempts = 0, expectedChartId;
+        validateProjectObjectState = function (candidate, options) {
+          const result = validate(candidate, options);
+          if (++attempts === 1) {
+            const newer = projectClone(activeProject._state); newer.nextId.chart += 4;
+            newer.meta.projectName = "newer-package-source"; expectedChartId = newer.nextId.chart;
+            initialize.call(activeProject, newer);
+          }
+          return result;
+        };
+        const chart = await api.graphs.importFile(file, target.id);
+        check(attempts === 2 && commits === 1 && chart.id === expectedChartId &&
+          activeProject.meta.projectName === "newer-package-source", "package failed whole current-source retry");
+        validateProjectObjectState = validate;
+        const late = Error("package-late-read"); caught = null;
+        appFSM.query = function (kind, request) {
+          if (kind === "project-api" && request.operation === "graphs.readData") throw late;
+          return query.call(this, kind, request);
+        };
+        try { await api.graphs.importFile(file, target.id); } catch (error) { caught = error; }
+        check(caught === late && commits === 2 && slotAt(target.id).chart !== chart.id,
+          "late package success-read error rolled back commit");
+      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
+        appFSM.query = query; renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(124, "FFSX conversion views and imported Plotly bytes preserve semantic data without fake CSV assets", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        initialize.call(activeProject, createProjectState());
+        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+        const [a, b] = activeProject.slots.filter(item => !item.hidden), figure = {
+          data: [{ x: [1, 2], y: [2, 5], name: "original" }], layout: { title: { text: "import" } },
+          frames: [{ name: "frame" }], config: { responsive: false }
+        };
+        select(a); renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        const plot = await api.graphs.importFile(new File([JSON.stringify(figure)], "copied.json"), a.id),
+          imported = JSON.stringify(plot.graph.imported), rows = JSON.stringify(plot.editor.conversionRows),
+          packet = ffsxFile(slotAt(a.id)), csvCount = activeProject.csvFiles.length,
+          chart = await api.graphs.importFile(packet, b.id);
+        check(chart.editor.editable === false && JSON.stringify(chart.graph.imported) === imported &&
+          JSON.stringify(chart.editor.conversionRows) === rows && activeProject.csvFiles.length === csvCount &&
+          chart.editor.objects.length === plot.editor.objects.length, "conversion FFSX remapped views or created fake CSV");
+      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
