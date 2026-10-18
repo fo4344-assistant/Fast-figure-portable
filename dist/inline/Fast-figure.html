@@ -11471,76 +11471,67 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         payload.clearGraphSelection = true;
       }
       function applySlotChartImportedAction({ machine, payload }) {
-        machine.assertWritable("slots","SLOT_CHART_IMPORTED");
-        machine.assertWritable("data","SLOT_CHART_IMPORTED");
-        machine.assertWritable("charts","SLOT_CHART_IMPORTED");
-        machine.assertWritable("workspace","SLOT_CHART_IMPORTED");
-        machine.assertWritable("editor","SLOT_CHART_IMPORTED");
-        machine.assertWritable("files","SLOT_CHART_IMPORTED");
-        let slot=slotAt(payload.slotId),
-          sourceChart=payload.chart,
-          importKind=payload.importKind==="plotly"?"plotly":"ffsx",
-          packaged=Array.isArray(payload.csvFiles)?payload.csvFiles:[];
-        if(!slot||!sourceChart)
-          throw Error("불러온 차트를 적용할 슬롯 또는 차트가 없습니다.");
-
-        let candidate=projectClone(activeProject._state);
-        normalizeSlotContents(candidate.slots);
-        let chart=projectClone(sourceChart),
-          createdCsvIds=[];
-
-        if(importKind==="ffsx"){
-          let packagedIds=new Set(),csvMap=new Map(),nextCsvId=candidate.nextId.csv;
-          for(let source of packaged){
-            if(!source||!Number.isInteger(source.id)||source.id<1||
-              packagedIds.has(source.id)||!Array.isArray(source.rows))
-              throw Error("FFSX CSV 데이터가 올바르지 않습니다.");
-            packagedIds.add(source.id);
-            let model=buildProjectCsvModel(
-              source.rows,
-              source.name||source.sourceName,
-              nextCsvId++,
-              source.bytesBase64,
-              source.mime,
-              source.headerLines,
-              candidate,
-            );
-            projectVfs.prepare(model,"csv",candidate);
-            candidate.assets.csvFiles.push(model);
-            csvMap.set(source.id,model.id);
-            createdCsvIds.push(model.id);
+        for (const scope of ["slots", "data", "charts", "files"])
+          machine.assertWritable(scope, "SLOT_CHART_IMPORTED");
+        while (true) {
+          const source = activeProject._state,
+            slot = source.slots.find(item => item.id === payload.slotId && !item.hidden),
+            file = payload.file;
+          if (!Number.isInteger(payload.slotId) || !slot) throw Error("불러올 visible 슬롯이 없습니다.");
+          if (!file || !(file.bytes instanceof Uint8Array)) throw Error("불러올 copied file bytes가 없습니다.");
+          const bytes = new Uint8Array(file.bytes),
+            packaged = bytes[0] === 0x50 && bytes[1] === 0x4b,
+            input = packaged ? ffsxReadSlotBytes(bytes) : JSON.parse(new TextDecoder().decode(bytes)),
+            candidate = projectClone(source);
+          normalizeSlotContents(candidate.slots);
+          for (const target of candidate.slots) {
+            const original = source.slots.find(item => item.id === target.id);
+            if (original?.content) target.content = projectClone(original.content);
           }
-          candidate.nextId.csv=nextCsvId;
-          for(let object of chart.editor?.objects||[]){
-            if(!csvMap.has(object.csvId))
-              throw Error("FFSX 차트가 포함되지 않은 CSV를 참조합니다.");
-            object.csvId=csvMap.get(object.csvId);
+          if (!packaged && (!input || typeof input !== "object" || (!Array.isArray(input.data) && !input.layout)))
+            throw Error("유효한 Plotly JSON이 아닙니다.");
+          let chart = packaged ? projectClone(input.chart) : parsePlotlyToEditor(input, null);
+          normalizeGlobalSettings(chart);
+          const csvIds = [], assets = [];
+          if (packaged) {
+            const mapping = new Map();
+            for (const localId of chartCsvIds(chart)) {
+              const local = input.csvFiles.find(item => item.id === localId);
+              if (!local || typeof local.name !== "string" || !local.name ||
+                  projectCsvName(local.name, "") !== local.name)
+                throw Error("FFSX CSV 이름 또는 reference가 올바르지 않습니다.");
+              const model = projectClone(local);
+              model.id = candidate.nextId.csv++;
+              model.bytesBase64 = ffpxBytesToBase64(ffpxBase64ToBytes(local.bytesBase64));
+              projectVfs.assignLocation(model,
+                projectVfs.uniquePath(PROJECT_ASSET_DIRECTORIES.csv, local.name, candidate));
+              candidate.assets.csvFiles.push(model);
+              mapping.set(localId, model.id); csvIds.push(model.id);
+              assets.push({ role: "created", kind: "csv", id: model.id, path: projectAssetPath(model),
+                owners: [{ slotId: slot.id, chartId: candidate.nextId.chart }] });
+            }
+            if (!chartUsesConversionView(chart))
+              for (const object of chart.editor.objects) object.csvId = mapping.get(object.csvId);
           }
-        } else {
-          chart.editor.editable=false;
-          if(!Array.isArray(chart.editor.conversionRows))
-            chart.editor.conversionRows=[];
+          chart.id = candidate.nextId.chart++;
+          validateChartModel(chart, "불러온 슬롯 차트", candidate.assets.csvFiles);
+          const target = candidate.slots.find(item => item.id === slot.id),
+            oldChartId = target.content.chart;
+          candidate.charts = candidate.charts.filter(item => item.id !== oldChartId);
+          candidate.charts.push(chart);
+          target.content.chart = chart.id;
+          target.content.imageId = null;
+          target.content.contentType = "graph";
+          if (packaged) target.caption = input.slot.caption;
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          payload.changed = { slotIds: [slot.id],
+            chartIds: [...new Set([oldChartId, chart.id].filter(Number.isInteger))],
+            csvIds, imageIds: [], assets };
+          payload.selectionHints = immutableProjectCopy({ chartId: chart.id, selectedIndexHint: null });
+          return;
         }
-
-        chart.id=candidate.nextId.chart++;
-        validateChartModel(chart,"불러온 슬롯 차트",candidate.assets.csvFiles);
-        let target=candidate.slots.find(item=>item.id===slot.id);
-        if(Number.isInteger(target.chart))
-          candidate.charts=candidate.charts.filter(item=>item.id!==target.chart);
-        candidate.charts.push(chart);
-        target.chart=chart.id;
-        target.imageId=null;
-        target.contentType="graph";
-        target.content.imageSettings={...DEFAULT_IMAGE_SETTINGS};
-        if(payload.slotCaption!==undefined)
-          target.caption=typeof payload.slotCaption==="string"&&payload.slotCaption
-            ?payload.slotCaption:null;
-
-        validateProjectObjectState(candidate,{requireSlots:true});
-        activeProject.initialize(candidate);
-        payload.clearGraphSelection = true;
-        payload.chart=getChart(chart.id);
-        payload.createdCsvIds=createdCsvIds;
       }
       function applyGridLayoutChangedAction({ machine, payload }) {
         machine.assertWritable("layout", "GRID_LAYOUT_CHANGED");
@@ -16291,10 +16282,15 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         };
       }
       async function importSelectedGraphFile(file, slotId = interfaceFSM.readState().selectedSlotId) {
-        await importSlotFile(file, slotId == null ? null : { id: slotId });
-        return appFSM.query("project-api", {
+        const [copied] = await prepareCopiedImportFiles([file]),
+          result = dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId, file: copied });
+        if (!result.committed) return result;
+        const chart = appFSM.query("project-api", {
           operation: "graphs.readData", frontendState: { selectedSlotId: slotId },
         }).chart;
+        renderDashboard(); updateFileAvailability();
+        status(`${file.name}을 슬롯에 불러왔습니다.`);
+        return chart;
       }
       function readAssetDeletionTarget() {
         const resolved = appFSM.query("project-api", {
@@ -17260,7 +17256,10 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         };
       }
       async function ffsxReadSlot(file) {
-        let assets = ffpxZipRead(new Uint8Array(await file.arrayBuffer())),
+        return ffsxReadSlotBytes(new Uint8Array(await file.arrayBuffer()));
+      }
+      function ffsxReadSlotBytes(bytes) {
+        let assets = ffpxZipRead(new Uint8Array(bytes)),
           xmlBytes = assets.get("slot.xml");
         if (!xmlBytes) throw Error("FFSX slot.xml이 없습니다.");
         let slotRoot = ffpxReadXmlDocument(assets, "slot.xml", "fastFigureSlot"),
@@ -17362,71 +17361,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       function downloadPlotlyJson() {
         return appFSM.run("exporting", "graphs.exportPlotlyJson", () =>
           exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportPlotlyJson"));
-      }
-      async function importSlotFile(file, slot) {
-        if (!slot) throw Error("FFSX 또는 Plotly JSON을 불러올 슬롯을 먼저 선택하세요.");
-        let header = new Uint8Array(await file.slice(0, 4).arrayBuffer()),
-          payload =
-            header.length === 4 && header[0] === 0x50 && header[1] === 0x4b
-              ? await ffsxReadSlot(file)
-              : JSON.parse(await file.text());
-        let chart,
-          slotCaption,
-          importKind,
-          packagedCsvFiles = [];
-        if (
-          payload?.schema === "fast-figure-slot" &&
-          payload.version === PACKAGE_FORMAT_VERSION &&
-          payload.chart &&
-          typeof payload.chart === "object"
-        ) {
-          importKind = "ffsx";
-          packagedCsvFiles = payload.csvFiles;
-          if (
-            !Array.isArray(packagedCsvFiles) ||
-            packagedCsvFiles.some((csv) => !Array.isArray(csv.rows))
-          )
-            throw Error("FFSX CSV 데이터가 없습니다.");
-          chart = projectClone(payload.chart);
-          packagedCsvFiles = projectClone(packagedCsvFiles);
-          chart = validateChartModel(chart, "FFSX 차트", packagedCsvFiles);
-          slotCaption =
-            typeof payload.slot?.caption === "string" ? payload.slot.caption : undefined;
-        } else if (
-          Array.isArray(payload?.data) ||
-          payload?.layout ||
-          payload?.config ||
-          payload?.frames
-        ) {
-          importKind = "plotly";
-          chart = parsePlotlyToEditor(payload, null);
-          chart.editor.editable = false;
-        } else throw Error("지원하지 않는 FFSX 슬롯 또는 Plotly JSON 형식입니다.");
-        normalizeGlobalSettings(chart);
-        let importPayload = {
-          slotId: slot.id,
-          chart,
-          csvFiles: packagedCsvFiles || [],
-          importKind,
-          slotCaption,
-          direction: "fsm-to-model",
-        };
-        appFSM.send("SLOT_CHART_IMPORTED", importPayload);
-        chart = importPayload.chart;
-        selectedSlotId = null;
-        setSelectedSlot(slot.id, "model-to-fsm");
-        status(`${file.name}을 현재 슬롯에 불러왔습니다.`);
-        debugLog("slot:import", {
-          slotId: slot.id,
-          chartId: chart.id,
-          editable: chart.editor.editable,
-          objects: chart.editor.objects.length,
-          rows:
-            chart.editor.editable === false
-              ? 0
-              : getProjectCsv(chart.editor.objects[0]?.csvId)?.rows.length || 0,
-          schema: payload?.schema || "plotly",
-        });
       }
       function applyDashboardZoom(resize = true) {
         let dashboard = $("dashboard"),
