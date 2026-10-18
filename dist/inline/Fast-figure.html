@@ -9788,6 +9788,16 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
 <h3><code>agent_space</code></h3>
 <p>The <code>agent_space</code> directory is reserved for AI agent development work.</p>
 <p>It is not required to run or use Fast Figure, and end users should not download this directory.</p>
+<h2>Repository source layout</h2>
+<ul>
+<li><code>sourcescript/</code>: high-level specifications and shared Backend settings.</li>
+<li><code>pseudocode/</code>: language-neutral implementation procedures.</li>
+<li><code>sourcecode/</code>: HTML template and JavaScript implementation files.</li>
+<li><code>vendor/</code>: bundled third-party runtimes.</li>
+<li><code>scripts/</code>: build and verification tooling.</li>
+<li><code>dist/</code>: generated offline distributions (their layout is unchanged).</li>
+</ul>
+<p>Build from the repository root using <code>python scripts/build-portable.py</code>. The template at <code>sourcecode/Fast-figure.html</code> is not the packaged entry point.</p>
 <h2>Project structure</h2>
 <p>A Fast Figure project contains the complete persistent state of one figure, including:</p>
 <ul>
