@@ -6086,7 +6086,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       try {
         renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
         initialize.call(activeProject, createProjectState());
-        const csv = createProjectCsv([["x", "y"], [1, 2], [3, 4]], "header-metadata.csv"),
+        const csv = createProjectCsv([["x", "y"], ["1", "2"], ["3", "4"]], "header-metadata.csv"),
           entries = ffpxBuildProject().assets, bytes = csv.bytesBase64, rows = JSON.stringify(csv.rows);
         for (const [present, value, expected] of [[false, undefined, 1], [true, null, 0], [true, "", 0], [true, 0, 0],
           [true, 2.9, 2], [true, -3, 0], [true, 99, 3], [true, "invalid", 0]]) {
