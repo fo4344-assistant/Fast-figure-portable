@@ -1,0 +1,50 @@
+diff --git a/agent_space/reviews/review-20261018-035-code-graph-layout-open.md b/agent_space/reviews/review-20261018-035-code-graph-layout-open.md
+index 3ef329a..b8cf405 100644
+--- a/agent_space/reviews/review-20261018-035-code-graph-layout-open.md
++++ b/agent_space/reviews/review-20261018-035-code-graph-layout-open.md
+@@ -11,6 +11,6 @@ Source42 sourcescript/backend/graphs.py normalizeAxisSettings/normalizeGlobalSet
+ - immutable official reads/no live repair and independent copies:95 before/after state equality and frozen nested copies.
+ - candidate-only projection/whole validation/retry/oneinitialize and actual chart change facts:95 counters/facts,96 supplied projection/validator original errors, newer source during validation retains newer font/name.
+ - noncommit no success query/render/reconcile; success official read, no CSV/selection/slot mutation; postcommit query failure no rollback:95/96.
+-- imported layout extension survives according to existing layout merge rules:95 uirevision.
++- imported unknown layout extension survives while owned uirevision follows chart id and lineWidth0 survives projection:95 customLayoutFlag/uirevision/linewidth.
+ 
+-Actual Actions96+96/build/canonical fingerprint/cumulative gate pending. Source42/pseudocode20 unchanged; code80 stale. Existing legacy normalization owners outside command/query, whole shared graph validator, other assets/move/imports/raster/dashboard/serializer/timing remain open. Optional model/TLC not run, no policy edits or local app/test/build/checker.
++At edd7687d3b6f43e42786a225b069dbecff705154 build39123841119 PASS, regression39123841127 prior94+new96 pass both forms but95 fails `Error: layout edit discarded imported extension`. Fixture used uirevision, explicitly owned chart-id text in Source42 layout step3, not an unknown extension. Correct95 to unknown customLayoutFlag and assert owned uirevision/zero linewidth; no runtime or upper weakening. Version39123841118 diagnostic FAIL reports actual code80 sha256:c892537bac4f71eceabf7a9525f785deffd1cb655953aa5291c26c420a931227, upper unchanged. Record actual canonical digest; corrected regression/cumulative gate pending. Source42/pseudocode20 unchanged; code80 stale. Existing legacy normalization owners outside command/query, whole shared graph validator, other assets/move/imports/raster/dashboard/serializer/timing remain open. Optional model/TLC not run, no policy edits or local app/test/build/checker.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 1544735..b804efb 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4011,7 +4011,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         const seeded = projectClone(activeProject._state), c = seeded.charts.find(item => item.id === chart.id);
+         c.editor.globalSettings.axes.xBottom.lineWidth = -9;
+         c.editor.globalSettings.axes.yRight.title = "retained axis";
+-        c.editor.plotlyExtensions = { ...c.editor.plotlyExtensions, layout: { uirevision: "retained layout extension" } };
++        c.editor.plotlyExtensions = { ...c.editor.plotlyExtensions, layout: { customLayoutFlag: "retained layout extension" } };
+         initialize.call(activeProject, seeded);
+         const beforeRead = JSON.stringify(activeProject._state), read = api.graphs.readLayout(), again = api.graphs.readLayout();
+         check(Object.isFrozen(read) && Object.isFrozen(read.settings.axes.xBottom) && read !== again &&
+@@ -4045,7 +4045,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           JSON.stringify(activeProject._state.slots) === slots && interfaceFSM.state.assetPath === csvPath &&
+           interfaceFSM.state.graphObjectIndex === index, "layout normalization/candidate facts lost fields, assets or selection");
+         const committed = getChart(chart.id);
+-        check(committed.graph.layout.uirevision === "retained layout extension", "layout edit discarded imported extension");
++        check(committed.graph.layout.customLayoutFlag === "retained layout extension" &&
++          committed.graph.layout.uirevision === String(chart.id) && committed.graph.layout.xaxis.linewidth === 0,
++          "layout edit lost extension or failed owned uirevision/zero linewidth");
+         const next = api.graphs.updateLayout({ axisKey: "xBottom", axisValues: { scaleType: "log", tickMode: "increment",
+           divide: 0, notation: "invalid", title: 123, visible: "no", showValues: false } });
+         check(next.title === "owned title" && next.settings.axes.xBottom.scaleType === "log" &&
+diff --git a/development-versions.json b/development-versions.json
+index 76ffaa6..4eb5c6f 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,7 +38,7 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:290e675197264aa347c76073cf0b969ecb874ea54e66848b03f249904032dd14",
++      "fingerprint": "sha256:c892537bac4f71eceabf7a9525f785deffd1cb655953aa5291c26c420a931227",
+       "derived_from": {
+         "source-script": "sha256:5b26424594c12918fd8ca51453483922bfbfcf29216e67bcd61cf959297ba9d2",
+         "pseudocode": "sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51",

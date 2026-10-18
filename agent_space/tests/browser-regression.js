@@ -4011,7 +4011,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         const seeded = projectClone(activeProject._state), c = seeded.charts.find(item => item.id === chart.id);
         c.editor.globalSettings.axes.xBottom.lineWidth = -9;
         c.editor.globalSettings.axes.yRight.title = "retained axis";
-        c.editor.plotlyExtensions = { ...c.editor.plotlyExtensions, layout: { uirevision: "retained layout extension" } };
+        c.editor.plotlyExtensions = { ...c.editor.plotlyExtensions, layout: { customLayoutFlag: "retained layout extension" } };
         initialize.call(activeProject, seeded);
         const beforeRead = JSON.stringify(activeProject._state), read = api.graphs.readLayout(), again = api.graphs.readLayout();
         check(Object.isFrozen(read) && Object.isFrozen(read.settings.axes.xBottom) && read !== again &&
@@ -4045,7 +4045,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           JSON.stringify(activeProject._state.slots) === slots && interfaceFSM.state.assetPath === csvPath &&
           interfaceFSM.state.graphObjectIndex === index, "layout normalization/candidate facts lost fields, assets or selection");
         const committed = getChart(chart.id);
-        check(committed.graph.layout.uirevision === "retained layout extension", "layout edit discarded imported extension");
+        check(committed.graph.layout.customLayoutFlag === "retained layout extension" &&
+          committed.graph.layout.uirevision === String(chart.id) && committed.graph.layout.xaxis.linewidth === 0,
+          "layout edit lost extension or failed owned uirevision/zero linewidth");
         const next = api.graphs.updateLayout({ axisKey: "xBottom", axisValues: { scaleType: "log", tickMode: "increment",
           divide: 0, notation: "invalid", title: 123, visible: "no", showValues: false } });
         check(next.title === "owned title" && next.settings.axes.xBottom.scaleType === "log" &&
