@@ -1,0 +1,345 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 131d1d1..8d82570 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -275,6 +275,10 @@ Baseline41247eff5171017bd3dd70656b55f2ed14ce8267. Source45/pseudocode24 already
+ 
+ Unit46 final bounded evidence: a187cfa2bbcfefcd4a1d4027028db81ec4ba913b regression39156375718/repeat39156375929 PASS126 inline+126 split each; canonical39156375791/cumulative39156380388 (base41247eff5171017bd3dd70656b55f2ed14ce8267), build39156378238 (artifacts already current), fidelity39156382451 PASS. Review048 retains failed fixture names/raw-state assertion and corrections144/145, not rewritten history. Code97 canonical sha256:0aab180b509b3df9c91a80464f68c78d5765ce6f14f6e78df9456939be1ab286 remains stale, Source45/pseudocode24 unchanged. Next observed gap: public project-asset-to-slot connection still Application-resolves VFS/sends legacy id/type-conversion/ignores noncommit, and image/data connection handlers lack full current-source ownership; translate that complete owner under existing Source/pseudocode before broader common initializer/schema/serializer/raster/dashboard/timing audit. Initializer validation itself is required by Source; investigate no-interleaving/final-freshness boundary with actual evidence, not a blind bypass. No local execution or whole completion.
+ 
++## Forty-seventh bounded unit — existing asset connection
++
++Baseline0ba01c3fb12bb7545c2e45c7e1fbef3f006560cf. Source45 assets.connectProjectAssetToSlot/pseudocode24 existing kind-specific connection require scalar path/kind/slotId, current non-trash matching asset/visible typed target, reference-only image link or candidate CSV/chart connection, common whole validation/source retry and committed-only model-to-fsm target selection preserving independent asset. Code98 translates shared current-source Backend connection and correct public image LINKED event, without caller slot/candidate, chart reset or new asset. Cases127/128 plus39 explicit image-type fixture. Review20261019-001/patch20261019-001; exact-SHA128+128/repeat/build/cumulative/fidelity pending. Upper unchanged, code stale; full initializer/schema/serializer/raster/dashboard/timing audit still open. No policy changes or local runtime execution.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261019-001-code-asset-connect-open.md b/agent_space/reviews/review-20261019-001-code-asset-connect-open.md
+new file mode 100644
+index 0000000..d129519
+--- /dev/null
++++ b/agent_space/reviews/review-20261019-001-code-asset-connect-open.md
+@@ -0,0 +1,17 @@
++# Unit47 — existing asset connection (pending Actions)
++
++## Authority and policy
++
++Continue fully read development-policy.md v0.2.6 and AGENT.md: Source highest authority, direct PlusCal translation, no caller-owned persistent candidate, whole validation/source retry/one commit, paired numeric patch and actual runner evidence. Source45 application/public_api/assets.py connectProjectAssetToSlot passes path/kind/slotId only, commands re-resolve current non-trash matching asset and visible target, then committed-only model-to-fsm selection preserves valid independent asset selection. Pseudocode24 backend/project_efsm.pcal SLOT_DATA_CONNECTED and SLOT_IMAGE_LINKED require graph/image targets respectively; image linking assigns the reference only, not local type/settings/chart reset. ConnectDataInsideCandidate calculates graph objects/traces entirely before commit. No new Source meaning or policy change.
++
++## Direct mapping / bounded checklist
++
++- Public connect forwards only path/kind/slotId to kind-specific command (image LINKED, not IMPORTED); invalid kind errors, noncommit None with no target selection/render/status, committed target selection once and None return. No live slot/asset resolution/candidate in Application.
++- Backend shared applyProjectAssetConnectedAction captures current state each attempt, resolves matching non-trash asset/visible same-type slot, copies canonical contents, changes only image reference or candidate graph/chart, rebuilds before whole validation, compares authority and retries before one commit. Actual changed slot/chart facts; graph add retains separate existing first-object route and no import/new asset is fabricated.
++- Image link preserves canonical extensions, local settings and retained chart identity (type conversion is a separate explicit operation). Case39 previously connected to an arbitrary other slot through legacy implicit conversion; fixture now explicitly sets the required image type instead of weakening the already-current typed command contract.
++- Case127: scalar payload, existing image/no new asset, image reference-only preservation with retained chart/settings/extension, independent asset selection, CSV candidate graph and one commit per command, final target/cleared graph selection.
++- Case128: mismatched kind/path/target/type, unsupported kind, original validation failure, noncommit no selection, authority replacement during validation recalculates current next chart id, late selection failure keeps committed graph.
++
++## Lineage, execution and limits
++
++Source45/pseudocode24 unchanged. Code98 stale; canonical staged Git blob fingerprint calculated without executing local checker, runner confirmation pending. Exact-SHA128 inline+128 split/repeat/build/cumulative version/fidelity pending. No local application/test/build/checker or optional TLC. Existing aggregate rendering not claimed fully supplied-state cutover. This bounded unit does not close global initializer revalidation/reentrancy, strict XML/schema/serializer, raster resources/current snapshot, dashboard or timing integration. Whole Plan023 remains open.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 515fe1a..d65d4b0 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1211,6 +1211,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       const imageId = slotAt(target.id).imageId;
+       const other = activeProject.slots.find((slot) => !slot.hidden && slot.id !== target.id);
+       if (other) {
++        api.slots.setContentType(other.id, "image");
+         api.assets.connectToSlot(projectAssetPath(getProjectImage(imageId)), "image", other.id);
+         select(slotAt(target.id));
+       }
+@@ -5721,6 +5722,96 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(127, "Existing assets connect by current scalar references without slot resets or new assets", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        initialize.call(activeProject, createProjectState()); api.layout.resizeGrid(2, 2);
++        const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
++        select(slotAt(a.id));
++        const csv = createProjectCsv([["x","y"],[1,2]], "linked.csv");
++        api.graphs.addObject(csv.id);
++        const oldChart = slotAt(a.id).chart;
++        api.slots.setContentType(a.id, "image");
++        const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'), "linked.svg", "image/svg+xml");
++        slotAt(a.id).content.linkExtension = { kept: true };
++        const local = JSON.stringify(slotAt(a.id).imageSettings), imageCount = activeProject.images.length;
++        api.assets.selectCsv(projectAssetPath(csv));
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        let commits = 0, linked = 0;
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        projectEFSM.send = function (event, payload) {
++          if (["SLOT_DATA_CONNECTED", "SLOT_IMAGE_LINKED"].includes(event)) {
++            linked++;
++            check(Object.keys(payload).sort().join() === "kind,path,slotId", "connect leaked candidate/asset object or guessed id");
++          }
++          return send.call(this, event, payload);
++        };
++        check(api.assets.connectToSlot(projectAssetPath(image), "image", a.id) === null, "image connect exposed internal result");
++        check(commits === 1 && slotAt(a.id).imageId === image.id && slotAt(a.id).chart === oldChart &&
++          getChart(oldChart) && JSON.stringify(slotAt(a.id).imageSettings) === local && slotAt(a.id).content.linkExtension.kept &&
++          activeProject.images.length === imageCount, "image link reset local payload/chart or created an asset");
++        check(interfaceFSM.readState().assetPath === projectAssetPath(csv) && interfaceFSM.readState().selectedSlotId === a.id,
++          "image connect cleared independent asset selection or missed target selection");
++        api.assets.connectToSlot(projectAssetPath(csv), "csv", b.id);
++        const chart = getChart(slotAt(b.id).chart);
++        check(commits === 2 && linked === 2 && chart.editor.objects.length === 1 && chart.editor.objects[0].csvId === csv.id &&
++          chart.data.some(trace => trace.meta?.fastFigureAxisPlaceholder !== true) &&
++          interfaceFSM.readState().assetPath === projectAssetPath(csv) && interfaceFSM.readState().selectedSlotId === b.id &&
++          interfaceFSM.readState().graphObjectIndex == null, "CSV link missed candidate graph/reconciliation");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render; status = report;
++        interfaceFSM.notify = notify; initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++    await run(128, "Asset connection rejects stale routing and retries before commit with gated late effects", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
++        render = renderDashboard, report = status, notify = interfaceFSM.notify, selectTarget = setSelectedSlot;
++      try {
++        initialize.call(activeProject, createProjectState());
++        const target = activeProject.slots.find(slot => !slot.hidden), csv = createProjectCsv([["x","y"],[1,2]], "retry-link.csv"),
++          image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'), "wrong-target.svg", "image/svg+xml");
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        let commits = 0, caught, selections = 0;
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        const before = activeProject._state, frontend = interfaceFSM.state, path = projectAssetPath(csv);
++        for (const args of [[path, "image", target.id], [projectAssetPath(image), "image", target.id], [path, "csv", -1], [path, "directory", target.id]]) {
++          caught = null; try { api.assets.connectToSlot(...args); } catch (error) { caught = error; }
++          check(caught && commits === 0 && activeProject._state === before && interfaceFSM.state === frontend,
++            "invalid connect changed persistent/Frontend state");
++        }
++        const failure = Error("connect-validation-owned");
++        validateProjectObjectState = () => { throw failure; };
++        caught = null; try { api.assets.connectToSlot(path, "csv", target.id); } catch (error) { caught = error; }
++        check(caught === failure && commits === 0 && activeProject._state === before, "connect validation failure committed");
++        validateProjectObjectState = validate;
++        projectEFSM.send = event => ({ event, committed: false, changed: {}, selectionHints: {} });
++        setSelectedSlot = () => { selections++; };
++        check(api.assets.connectToSlot(path, "csv", target.id) === null && selections === 0 && commits === 0,
++          "noncommit connect selected target");
++        projectEFSM.send = send; setSelectedSlot = selectTarget;
++        let replaced = false;
++        const expectedId = before.nextId.chart + 10;
++        validateProjectObjectState = function (candidate, options) {
++          const checked = validate(candidate, options);
++          if (options?.requireSlots && !replaced) {
++            replaced = true; const newer = projectClone(activeProject._state); newer.nextId.chart = expectedId;
++            initialize.call(activeProject, newer);
++          }
++          return checked;
++        };
++        api.assets.connectToSlot(path, "csv", target.id);
++        check(commits === 1 && slotAt(target.id).chart === expectedId &&
++          getChart(expectedId).editor.objects.length === 1, "connect reused pre-replacement chart id/candidate");
++        validateProjectObjectState = validate;
++        const late = Error("connect-selection-owned"); setSelectedSlot = () => { throw late; };
++        caught = null; try { api.assets.connectToSlot(path, "csv", target.id); } catch (error) { caught = error; }
++        check(caught === late && commits === 2 && getChart(expectedId).editor.objects.length === 2,
++          "late selection error rolled back connected graph or was swallowed");
++      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
++        renderDashboard = render; status = report; interfaceFSM.notify = notify; setSelectedSlot = selectTarget;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 6ce359a..eb47ba1 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 97,
++      "revision": 98,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:0aab180b509b3df9c91a80464f68c78d5765ce6f14f6e78df9456939be1ab286",
++      "fingerprint": "sha256:ba38fd91ebaa9beaaf86730adb5464864fc40a8890d38c52f1bc3bbbc5e49127",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-048-code-project-import-open.md"
++      "validation_review": "agent_space/reviews/review-20261019-001-code-asset-connect-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 24,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 7584ed7..11bf0ee 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1195,22 +1195,45 @@
+           return;
+         }
+       }
+-      function applySlotImageLinkedAction({ machine, payload }) {
+-        machine.assertWritable("slots","SLOT_IMAGE_LINKED");
+-        machine.assertWritable("charts","SLOT_IMAGE_LINKED");
+-        let slot=slotAt(payload.slotId),image=getProjectImage(payload.imageId);
+-        if(!slot||!image)throw Error("이미지를 연결할 슬롯 또는 이미지가 없습니다.");
+-        let candidate=projectClone(activeProject._state);
+-        normalizeSlotContents(candidate.slots);
+-        let target=candidate.slots.find(item=>item.id===slot.id),
+-          oldChart=target.chart;
+-        if(Number.isInteger(oldChart))
+-          candidate.charts=candidate.charts.filter(chart=>chart.id!==oldChart);
+-        target.chart=null;target.imageId=image.id;target.contentType="image";
+-        target.content.imageSettings=readImageSettings(target.content.imageSettings);
+-        validateProjectObjectState(candidate,{requireSlots:true});
+-        activeProject.initialize(candidate);
+-        payload.image=getProjectImage(image.id);
++      function applySlotImageLinkedAction(context) {
++        return applyProjectAssetConnectedAction(context, "image");
++      }
++      function applyProjectAssetConnectedAction({ machine, payload }, kind) {
++        const event = kind === "csv" ? "SLOT_DATA_CONNECTED" : "SLOT_IMAGE_LINKED";
++        machine.assertWritable("slots", event);
++        if (kind === "csv") machine.assertWritable("charts", event);
++        while (true) {
++          const source = activeProject._state,
++            slot = source.slots.find(item => item.id === payload.slotId && !item.hidden),
++            node = typeof payload.path === "string" ? projectVfs.resolve(payload.path, source) : null;
++          if (payload.kind !== kind || node?.kind !== kind || projectVfs.isTrashed(payload.path) ||
++              !slot || slot.contentType !== (kind === "csv" ? "graph" : "image"))
++            throw Error("연결할 현재 non-trash asset kind/path 또는 visible slot type이 올바르지 않습니다.");
++          const candidate = projectClone(source);
++          candidate.slots.forEach((item, index) => { item.content = projectClone(source.slots[index].content); });
++          normalizeSlotContents(candidate.slots);
++          const target = candidate.slots.find(item => item.id === slot.id);
++          let chart = null;
++          if (kind === "image") target.imageId = node.asset.id;
++          else {
++            chart = candidate.charts.find(item => item.id === target.chart);
++            if (chart?.editor?.editable === false) throw Error("편집 가능한 graph slot이 필요합니다.");
++            if (!chart) {
++              chart = createChartModel({ id: candidate.nextId.chart++, editor: { title: node.asset.name,
++                globalSettings: readGlobalSettings({ editor: {} }), plotlyExtensions: { layout: {}, config: {} }, objects: [] } });
++              candidate.charts.push(chart); target.chart = chart.id;
++            }
++            chart.editor.objects.push(createCandidateBaseGraphObject(candidate.assets.csvFiles.find(item => item.id === node.asset.id)));
++            rebuildEditableGraph(chart, candidate);
++          }
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          payload.changed = { slotIds: slot.chart !== target.chart || slot.imageId !== target.imageId ? [slot.id] : [],
++            chartIds: chart ? [chart.id] : [], csvIds: [], imageIds: [], assets: [] };
++          if (chart) payload.selectionHints = Object.freeze({ chartId: chart.id, selectedIndexHint: null });
++          return;
++        }
+       }
+       function createCandidateBaseGraphObject(csv) {
+         const selection = graphDataSelection(csv.rows, csv.headerLines);
+@@ -1246,55 +1269,8 @@
+         }
+       }
+       function applySlotDataConnectedAction(context) {
+-        const { machine, payload } = context;
+-        if (payload.operation === "graphs.addObject") return applyGraphFirstObjectAction(context);
+-        machine.assertWritable("slots","SLOT_DATA_CONNECTED");
+-        machine.assertWritable("charts","SLOT_DATA_CONNECTED");
+-        machine.assertWritable("editor","SLOT_DATA_CONNECTED");
+-        let slot=slotAt(payload.slotId),csv=getProjectCsv(payload.csvId);
+-        if(!slot||(!payload.replaceSlotContent&&slot.contentType==="image")||!csv)
+-          throw Error("데이터를 연결할 슬롯 또는 CSV가 없습니다.");
+-        if(slot.chart&&!payload.replaceSlotContent&&getChart(slot.chart)?.editor?.editable===false)
+-          throw Error("편집 가능 토글을 켠 뒤 CSV를 추가하세요.");
+-
+-        let candidate=projectClone(activeProject._state);
+-        normalizeSlotContents(candidate.slots);
+-        let target=candidate.slots.find((item)=>item.id===slot.id),
+-          candidateCsv=candidate.assets.csvFiles.find((item)=>item.id===csv.id);
+-        if(payload.replaceSlotContent){
+-          if(Number.isInteger(target.chart))
+-            candidate.charts=candidate.charts.filter((chart)=>chart.id!==target.chart);
+-          target.chart=null;
+-          target.imageId=null;
+-          target.contentType="graph";
+-        }
+-        let chart=Number.isInteger(target.chart)
+-          ?candidate.charts.find((item)=>item.id===target.chart)
+-          :null;
+-        if(chart?.editor?.editable===false)
+-          throw Error("편집 가능 토글을 켠 뒤 CSV를 추가하세요.");
+-        if(chart){
+-          let selection=graphDataSelection(candidateCsv.rows,candidateCsv.headerLines,chart.editor);
+-          chart.editor.x=selection.x;
+-          chart.editor.y=selection.y;
+-          chart.editor.objects=[
+-            ...(Array.isArray(chart.editor.objects)?chart.editor.objects:[]),
+-            baseGraphObject(chart,candidateCsv),
+-          ];
+-        } else {
+-          chart=createChartModel({
+-            id:candidate.nextId.chart++,
+-            editor:defaultChartEditor(target,candidateCsv.rows,candidateCsv.headerLines),
+-          });
+-          chart.editor.objects=[baseGraphObject(chart,candidateCsv)];
+-          candidate.charts.push(chart);
+-          target.chart=chart.id;
+-        }
+-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+-        let committed=getChart(chart.id);
+-        if(committed?.editor?.editable!==false)rebuildEditableGraph(committed);
+-        payload.chart=committed;
+-        payload.clearGraphSelection=true;
++        if (context.payload.operation === "graphs.addObject") return applyGraphFirstObjectAction(context);
++        return applyProjectAssetConnectedAction(context, "csv");
+       }
+       function applyGraphObjectEditAction({ machine, payload }) {
+         machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
+@@ -3583,29 +3559,14 @@
+           slots: projectObjects.read("slots"),
+         };
+       }
+-      function connectProjectAssetToSlot(path, kind, slot) {
+-        let match = projectVfs.resolve(path);
+-        if (!match || match.kind !== kind || match.kind === "directory")
+-          throw Error("드래그한 프로젝트 파일이 없습니다.");
+-        if (projectVfs.isTrashed(projectAssetPath(match.asset)))
+-          throw Error("휴지통의 파일은 슬롯에 연결할 수 없습니다.");
+-        if (!slot || slot.hidden) throw Error("연결할 슬롯이 없습니다.");
+-        if (match.kind === "csv")
+-          appFSM.send("SLOT_DATA_CONNECTED", {
+-            slotId: slot.id,
+-            csvId: match.asset.id,
+-            replaceSlotContent: slot.contentType === "image",
+-            direction: "fsm-to-model",
+-          });
+-        else
+-          appFSM.send("SLOT_IMAGE_IMPORTED", {
+-            slotId: slot.id,
+-            imageId: match.asset.id,
+-            direction: "fsm-to-model",
+-          });
+-        setSelectedSlot(slot.id, "model-to-fsm");
++      function connectProjectAssetToSlot(path, kind, slotId) {
++        if (!["csv", "image"].includes(kind)) throw Error("연결할 asset kind가 올바르지 않습니다.");
++        const result = dispatchProjectCommand(kind === "csv" ? "SLOT_DATA_CONNECTED" : "SLOT_IMAGE_LINKED", { path, kind, slotId });
++        if (!result.committed) return null;
++        setSelectedSlot(slotId, "model-to-fsm");
+         renderDashboard();
+         status("프로젝트 파일을 슬롯에 연결했습니다.");
++        return null;
+       }
+       function headerLineCount(value, table = []) {
+         const number = Number(value);
+@@ -6476,7 +6437,7 @@
+           ? { path, kind: match.kind } : null;
+       }
+       function connectProjectAssetPathToSlot(path, kind, slotId) {
+-        return connectProjectAssetToSlot(path, kind, slotAt(slotId));
++        return connectProjectAssetToSlot(path, kind, slotId);
+       }
+       async function importProjectFileToSlot(file, slotId, choosePlan) {
+         const target = readBackendProjection("slot-selection-context", { slotId }), kind = readAssetFileKind(file);

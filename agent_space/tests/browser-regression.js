@@ -1211,6 +1211,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       const imageId = slotAt(target.id).imageId;
       const other = activeProject.slots.find((slot) => !slot.hidden && slot.id !== target.id);
       if (other) {
+        api.slots.setContentType(other.id, "image");
         api.assets.connectToSlot(projectAssetPath(getProjectImage(imageId)), "image", other.id);
         select(slotAt(target.id));
       }
@@ -5718,6 +5719,96 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
         readBackendProjection = query; ffpxReadProjectBytes = parse; releaseProjectImageDisplayUrls = release;
         renderDashboard = render; renderProjectObject = projectRender; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(127, "Existing assets connect by current scalar references without slot resets or new assets", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        initialize.call(activeProject, createProjectState()); api.layout.resizeGrid(2, 2);
+        const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+        select(slotAt(a.id));
+        const csv = createProjectCsv([["x","y"],[1,2]], "linked.csv");
+        api.graphs.addObject(csv.id);
+        const oldChart = slotAt(a.id).chart;
+        api.slots.setContentType(a.id, "image");
+        const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'), "linked.svg", "image/svg+xml");
+        slotAt(a.id).content.linkExtension = { kept: true };
+        const local = JSON.stringify(slotAt(a.id).imageSettings), imageCount = activeProject.images.length;
+        api.assets.selectCsv(projectAssetPath(csv));
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        let commits = 0, linked = 0;
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        projectEFSM.send = function (event, payload) {
+          if (["SLOT_DATA_CONNECTED", "SLOT_IMAGE_LINKED"].includes(event)) {
+            linked++;
+            check(Object.keys(payload).sort().join() === "kind,path,slotId", "connect leaked candidate/asset object or guessed id");
+          }
+          return send.call(this, event, payload);
+        };
+        check(api.assets.connectToSlot(projectAssetPath(image), "image", a.id) === null, "image connect exposed internal result");
+        check(commits === 1 && slotAt(a.id).imageId === image.id && slotAt(a.id).chart === oldChart &&
+          getChart(oldChart) && JSON.stringify(slotAt(a.id).imageSettings) === local && slotAt(a.id).content.linkExtension.kept &&
+          activeProject.images.length === imageCount, "image link reset local payload/chart or created an asset");
+        check(interfaceFSM.readState().assetPath === projectAssetPath(csv) && interfaceFSM.readState().selectedSlotId === a.id,
+          "image connect cleared independent asset selection or missed target selection");
+        api.assets.connectToSlot(projectAssetPath(csv), "csv", b.id);
+        const chart = getChart(slotAt(b.id).chart);
+        check(commits === 2 && linked === 2 && chart.editor.objects.length === 1 && chart.editor.objects[0].csvId === csv.id &&
+          chart.data.some(trace => trace.meta?.fastFigureAxisPlaceholder !== true) &&
+          interfaceFSM.readState().assetPath === projectAssetPath(csv) && interfaceFSM.readState().selectedSlotId === b.id &&
+          interfaceFSM.readState().graphObjectIndex == null, "CSV link missed candidate graph/reconciliation");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render; status = report;
+        interfaceFSM.notify = notify; initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+    await run(128, "Asset connection rejects stale routing and retries before commit with gated late effects", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
+        render = renderDashboard, report = status, notify = interfaceFSM.notify, selectTarget = setSelectedSlot;
+      try {
+        initialize.call(activeProject, createProjectState());
+        const target = activeProject.slots.find(slot => !slot.hidden), csv = createProjectCsv([["x","y"],[1,2]], "retry-link.csv"),
+          image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'), "wrong-target.svg", "image/svg+xml");
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        let commits = 0, caught, selections = 0;
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        const before = activeProject._state, frontend = interfaceFSM.state, path = projectAssetPath(csv);
+        for (const args of [[path, "image", target.id], [projectAssetPath(image), "image", target.id], [path, "csv", -1], [path, "directory", target.id]]) {
+          caught = null; try { api.assets.connectToSlot(...args); } catch (error) { caught = error; }
+          check(caught && commits === 0 && activeProject._state === before && interfaceFSM.state === frontend,
+            "invalid connect changed persistent/Frontend state");
+        }
+        const failure = Error("connect-validation-owned");
+        validateProjectObjectState = () => { throw failure; };
+        caught = null; try { api.assets.connectToSlot(path, "csv", target.id); } catch (error) { caught = error; }
+        check(caught === failure && commits === 0 && activeProject._state === before, "connect validation failure committed");
+        validateProjectObjectState = validate;
+        projectEFSM.send = event => ({ event, committed: false, changed: {}, selectionHints: {} });
+        setSelectedSlot = () => { selections++; };
+        check(api.assets.connectToSlot(path, "csv", target.id) === null && selections === 0 && commits === 0,
+          "noncommit connect selected target");
+        projectEFSM.send = send; setSelectedSlot = selectTarget;
+        let replaced = false;
+        const expectedId = before.nextId.chart + 10;
+        validateProjectObjectState = function (candidate, options) {
+          const checked = validate(candidate, options);
+          if (options?.requireSlots && !replaced) {
+            replaced = true; const newer = projectClone(activeProject._state); newer.nextId.chart = expectedId;
+            initialize.call(activeProject, newer);
+          }
+          return checked;
+        };
+        api.assets.connectToSlot(path, "csv", target.id);
+        check(commits === 1 && slotAt(target.id).chart === expectedId &&
+          getChart(expectedId).editor.objects.length === 1, "connect reused pre-replacement chart id/candidate");
+        validateProjectObjectState = validate;
+        const late = Error("connect-selection-owned"); setSelectedSlot = () => { throw late; };
+        caught = null; try { api.assets.connectToSlot(path, "csv", target.id); } catch (error) { caught = error; }
+        check(caught === late && commits === 2 && getChart(expectedId).editor.objects.length === 2,
+          "late selection error rolled back connected graph or was swallowed");
+      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
+        renderDashboard = render; status = report; interfaceFSM.notify = notify; setSelectedSlot = selectTarget;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
