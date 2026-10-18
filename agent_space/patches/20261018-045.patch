@@ -1,0 +1,83 @@
+diff --git a/agent_space/reviews/review-20261018-020-empty-columns-closure.md b/agent_space/reviews/review-20261018-020-empty-columns-closure.md
+index 817577a..d1f6455 100644
+--- a/agent_space/reviews/review-20261018-020-empty-columns-closure.md
++++ b/agent_space/reviews/review-20261018-020-empty-columns-closure.md
+@@ -27,3 +27,9 @@ Closure criteria:
+ ## Limits
+ 
+ Only coordinate/reference validation is tightened. Shared full enum/style/global/four-axis/graph imported shape validation and all legacy add/move/delete/palette command ownership are not claimed aligned. The existing one-object branch's current-authority retry/commit remains tested separately, not proof of all commands. Canonical import, asset candidates/cascade, raster composition and supplied dashboard/API cutover remain open. Code58 remains stale; no whole-goal completion from these tests or metadata.
++
++## Initial execution / diagnostic followup
++
++At implementation5b4cf5b1a26aff7dc2e62d06380076ec2b7b957a: build39103232225 PASS, dist-only bot9f06319794129c68519aa51c5b567c46ce1b722a inspected/fast-forwarded. Regression39103232254 passed1–65 both distributions but66 failed `zero-column real object rejected, changed or projected synthetic trace` and67 failed `empty CSV switch lost reference, mutated assets/selection or created fake data`. These broad assertions do not yet distinguish cause; patch045 splits/adds actual diagnostics without dropping any assertion or changing runtime/Source. No assumption of test-only defect or production success.
++
++Version39103232238 expected diagnostic FAIL on provisional Source40 fingerprint, prints canonical Source41 `sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5`, pseudocode16 `sha256:e25d2057a10e358127598141d3d94de2f5700108da14809a0ef5e92e11be71e9`, code58 `sha256:c4392333de189f86ff307adf8a5ff1e0d2227cddd79b9c2bc0a96e8926e1b97e`. Patch045 records exact runner values and derivations; no revision bump or weakened checks. Actual regression repair and cumulative version gate from f4690dfd53bf4cf8999db4e4d26d964913042354 still required. All actual execution default runner.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 2a0420b..fc24a4b 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2539,9 +2539,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       for (const rows of [[], [[]], [[], []]]) {
+         csv.rows = rows;
+         const snapshot = JSON.stringify(chart), selection = graphDataSelection(rows, 0);
+-        check(selection.x === "" && selection.y === "" && validateChartModel(chart, "empty", [csv]) === chart &&
+-          JSON.stringify(chart) === snapshot && traces(chart, { assets: { csvFiles: [csv] } }).length === 0,
+-          "zero-column real object rejected, changed or projected synthetic trace");
++        check(selection.x === "" && selection.y === "", `zero-column selection: ${JSON.stringify({ rows, selection })}`);
++        check(validateChartModel(chart, "empty", [csv]) === chart && JSON.stringify(chart) === snapshot,
++          "zero-column validator rejected or repaired candidate");
++        const projected = traces(chart, { assets: { csvFiles: [csv] } });
++        check(projected.length === 0, `zero-column projection: ${JSON.stringify({ rows, object: chart.editor.objects[0], projected })}`);
+         for (const pair of [["C1", ""], ["", "C1"], ["C1", "C1"], [undefined, ""], [null, ""]]) {
+           const invalid = projectClone(chart); invalid.editor.objects[0].x = pair[0]; invalid.editor.objects[0].y = pair[1];
+           rejects(invalid);
+@@ -2585,7 +2587,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         check(object.csvId === empty.id && object.x === "" && object.y === "" &&
+           result !== getChart(chartId) && Object.isFrozen(result.editor.objects[0]) &&
+           getChart(chartId).graph.data.length === 0 && JSON.stringify(activeProject._state.assets) === assets &&
+-          interfaceFSM.state.assetPath === path, "empty CSV switch lost reference, mutated assets/selection or created fake data");
++          interfaceFSM.state.assetPath === path, `empty CSV switch: ${JSON.stringify({ object, emptyId: empty.id,
++            copy: result !== getChart(chartId), frozen: Object.isFrozen(result?.editor?.objects?.[0]), data: getChart(chartId).graph.data,
++            sameAssets: JSON.stringify(activeProject._state.assets) === assets, path, actualPath: interfaceFSM.state.assetPath })}`);
+         const base = baseGraphObject(getChart(chartId), getProjectCsv(empty.id));
+         check(base.csvId === empty.id && base.x === "" && base.y === "", "ordinary base object invented columns");
+         graphEditorObjectValues(chartId, 0, { csvId: populated.id });
+diff --git a/development-versions.json b/development-versions.json
+index c4dea6e..1cd7a39 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -12,7 +12,7 @@
+       "revision": 41,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+-      "fingerprint": "sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2",
++      "fingerprint": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5",
+       "derived_from": null,
+       "closure": "closed",
+       "closure_review": "agent_space/reviews/review-20261018-020-empty-columns-closure.md"
+@@ -38,10 +38,10 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:95c99ef36aba09751f3e0bbc67a702bbfaf7743d8e82782f9779923fcf2b403b",
++      "fingerprint": "sha256:c4392333de189f86ff307adf8a5ff1e0d2227cddd79b9c2bc0a96e8926e1b97e",
+       "derived_from": {
+-        "source-script": "sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2",
+-        "pseudocode": "sha256:b881c18a38ab94e99e12c3e49389ae168a30aca6f17e3f7b07948c5799638d18",
++        "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5",
++        "pseudocode": "sha256:e25d2057a10e358127598141d3d94de2f5700108da14809a0ef5e92e11be71e9",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+       "validation_review": "agent_space/reviews/review-20261018-020-empty-columns-closure.md"
+@@ -50,9 +50,9 @@
+       "revision": 16,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+-      "fingerprint": "sha256:b881c18a38ab94e99e12c3e49389ae168a30aca6f17e3f7b07948c5799638d18",
++      "fingerprint": "sha256:e25d2057a10e358127598141d3d94de2f5700108da14809a0ef5e92e11be71e9",
+       "derived_from": {
+-        "source-script": "sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2"
++        "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5"
+       },
+       "translation_review": "agent_space/reviews/review-20261018-020-empty-columns-closure.md"
+     }

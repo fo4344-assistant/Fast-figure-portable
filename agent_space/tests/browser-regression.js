@@ -2539,9 +2539,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       for (const rows of [[], [[]], [[], []]]) {
         csv.rows = rows;
         const snapshot = JSON.stringify(chart), selection = graphDataSelection(rows, 0);
-        check(selection.x === "" && selection.y === "" && validateChartModel(chart, "empty", [csv]) === chart &&
-          JSON.stringify(chart) === snapshot && traces(chart, { assets: { csvFiles: [csv] } }).length === 0,
-          "zero-column real object rejected, changed or projected synthetic trace");
+        check(selection.x === "" && selection.y === "", `zero-column selection: ${JSON.stringify({ rows, selection })}`);
+        check(validateChartModel(chart, "empty", [csv]) === chart && JSON.stringify(chart) === snapshot,
+          "zero-column validator rejected or repaired candidate");
+        const projected = traces(chart, { assets: { csvFiles: [csv] } });
+        check(projected.length === 0, `zero-column projection: ${JSON.stringify({ rows, object: chart.editor.objects[0], projected })}`);
         for (const pair of [["C1", ""], ["", "C1"], ["C1", "C1"], [undefined, ""], [null, ""]]) {
           const invalid = projectClone(chart); invalid.editor.objects[0].x = pair[0]; invalid.editor.objects[0].y = pair[1];
           rejects(invalid);
@@ -2585,7 +2587,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(object.csvId === empty.id && object.x === "" && object.y === "" &&
           result !== getChart(chartId) && Object.isFrozen(result.editor.objects[0]) &&
           getChart(chartId).graph.data.length === 0 && JSON.stringify(activeProject._state.assets) === assets &&
-          interfaceFSM.state.assetPath === path, "empty CSV switch lost reference, mutated assets/selection or created fake data");
+          interfaceFSM.state.assetPath === path, `empty CSV switch: ${JSON.stringify({ object, emptyId: empty.id,
+            copy: result !== getChart(chartId), frozen: Object.isFrozen(result?.editor?.objects?.[0]), data: getChart(chartId).graph.data,
+            sameAssets: JSON.stringify(activeProject._state.assets) === assets, path, actualPath: interfaceFSM.state.assetPath })}`);
         const base = baseGraphObject(getChart(chartId), getProjectCsv(empty.id));
         check(base.csvId === empty.id && base.x === "" && base.y === "", "ordinary base object invented columns");
         graphEditorObjectValues(chartId, 0, { csvId: populated.id });

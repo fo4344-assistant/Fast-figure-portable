@@ -27,3 +27,9 @@ Closure criteria:
 ## Limits
 
 Only coordinate/reference validation is tightened. Shared full enum/style/global/four-axis/graph imported shape validation and all legacy add/move/delete/palette command ownership are not claimed aligned. The existing one-object branch's current-authority retry/commit remains tested separately, not proof of all commands. Canonical import, asset candidates/cascade, raster composition and supplied dashboard/API cutover remain open. Code58 remains stale; no whole-goal completion from these tests or metadata.
+
+## Initial execution / diagnostic followup
+
+At implementation5b4cf5b1a26aff7dc2e62d06380076ec2b7b957a: build39103232225 PASS, dist-only bot9f06319794129c68519aa51c5b567c46ce1b722a inspected/fast-forwarded. Regression39103232254 passed1–65 both distributions but66 failed `zero-column real object rejected, changed or projected synthetic trace` and67 failed `empty CSV switch lost reference, mutated assets/selection or created fake data`. These broad assertions do not yet distinguish cause; patch045 splits/adds actual diagnostics without dropping any assertion or changing runtime/Source. No assumption of test-only defect or production success.
+
+Version39103232238 expected diagnostic FAIL on provisional Source40 fingerprint, prints canonical Source41 `sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5`, pseudocode16 `sha256:e25d2057a10e358127598141d3d94de2f5700108da14809a0ef5e92e11be71e9`, code58 `sha256:c4392333de189f86ff307adf8a5ff1e0d2227cddd79b9c2bc0a96e8926e1b97e`. Patch045 records exact runner values and derivations; no revision bump or weakened checks. Actual regression repair and cumulative version gate from f4690dfd53bf4cf8999db4e4d26d964913042354 still required. All actual execution default runner.
