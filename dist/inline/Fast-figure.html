@@ -10325,6 +10325,16 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             settings: Object.freeze(normalizeImageSettings(slot)),
           }) : null;
         }
+        if (kind === "export" && request.operation === "project.exportFile") {
+          const source = activeProject._state, bundle = ffpxBuildProject(source);
+          return Object.freeze({
+            name: `${projectFileStem(source.meta.projectName)}-${request.stamp}.ffpx`,
+            mime: "application/vnd.fast-figure-project",
+            entries: Object.freeze(bundle.assets.map((entry) => Object.freeze({
+              name: entry.name, data: Object.freeze(Array.from(entry.data)),
+            }))),
+          });
+        }
         if (kind === "export" && request.operation === "assets.download") {
           const source = activeProject._state,
             selected = request.path ? projectVfs.resolve(request.path, source) : null,
@@ -14992,18 +15002,20 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         }
         return slotList;
       }
-      function ffpxBuildProject() {
-        validateProjectObject(activeProject, { requireSlots: true });
-        let projectObject = projectObjects.read("project"),
-          layoutObject = projectObjects.read("layout"),
-          labelObject = projectObjects.read("labels"),
-          captionObject = projectObjects.read("captions"),
-          dataObjects = projectObjects.read("data").filter((csv) => !projectVfs.isTrashed(projectAssetPath(csv))),
-          imageObjects = projectObjects.read("images").filter((image) => !projectVfs.isTrashed(projectAssetPath(image))),
-          chartObjects = projectObjects.read("charts"),
-          slotObjects = projectObjects.read("slots"),
-          appearanceObject = projectObjects.read("appearance"),
-          exportObject = projectObjects.read("export"),
+      function ffpxBuildProject(source = activeProject._state) {
+        // Legacy validation installs slot accessors: confine that work to the detached read.
+        const snapshot = projectClone(source);
+        validateProjectObjectState(snapshot, { requireSlots: true });
+        let projectObject = snapshot.meta,
+          layoutObject = snapshot.layout,
+          labelObject = snapshot.annotations.labels,
+          captionObject = snapshot.annotations.captions,
+          dataObjects = snapshot.assets.csvFiles.filter((csv) => !projectVfs.isTrashed(projectAssetPath(csv))),
+          imageObjects = snapshot.assets.images.filter((image) => !projectVfs.isTrashed(projectAssetPath(image))),
+          chartObjects = snapshot.charts,
+          slotObjects = snapshot.slots,
+          appearanceObject = snapshot.appearance,
+          exportObject = snapshot.export,
           manifest = {
             schema: "fast-figure-project",
             version: PACKAGE_FORMAT_VERSION,
@@ -15054,8 +15066,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         }
         for (let chart of chartObjects) {
           chartCsvIds(chart).forEach((id) => {
-            let csv = getProjectCsv(id);
-            if (!csv || projectVfs.isTrashed(projectAssetPath(csv)))
+            let csv = dataObjects.find((item) => item.id === id);
+            if (!csv)
               throw Error(`FFPX 차트가 내보낼 수 없는 CSV ${id}를 참조합니다.`);
           });
           manifest.charts.push(chartExportCopy(chart));
@@ -15063,8 +15075,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         for (let slot of slotObjects) {
           let copy = projectClone(slot);
           if (copy.imageId != null) {
-            let image = getProjectImage(copy.imageId);
-            if (!image || projectVfs.isTrashed(projectAssetPath(image)))
+            let image = imageObjects.find((item) => item.id === copy.imageId);
+            if (!image)
               throw Error(`FFPX 슬롯이 내보낼 수 없는 이미지 ${copy.imageId}를 참조합니다.`);
           }
           manifest.slots.push(copy);
@@ -15076,9 +15088,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             projectName: manifest.projectName,
             exportedAt: manifest.exportedAt,
             fileSystem: {
-              directories: projectObjects
-                .read("files")
-                .directories.filter((path) => !projectVfs.isTrashed(path)),
+              directories: snapshot.fileSystem.directories.filter((path) => !projectVfs.isTrashed(path)),
             },
             appearance: {
               slotStyle: manifest.slotStyle,
@@ -15411,31 +15421,16 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return stem || "fast-figure-project";
       }
       function downloadProject() {
-        if (getSelectedSlot())
-          return status("프로젝트 내보내기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
-        try {
-          let exportProjectName = String(activeProject.projectName || "").trim().slice(0, 120),
-            project = ffpxBuildProject(),
-            blob = new Blob([ffpxZipStore(project.assets)], {
-              type: "application/vnd.fast-figure-project",
-            }),
-            link = document.createElement("a"),
-            stamp = new Date().toISOString().replace(/[:.]/g, "-");
-          link.href = URL.createObjectURL(blob);
-          link.download = `${projectFileStem(exportProjectName)}-${stamp}.ffpx`;
-          link.click();
-          setTimeout(() => URL.revokeObjectURL(link.href), 0);
-          status(`${exportProjectName || "프로젝트"}를 FFPX 파일로 내보냈습니다.`);
-          debugLog("project:export-ffpx", {
-            projectName: activeProject.projectName,
-            charts: activeProject.charts.length,
-            slots: activeProject.slots.length,
-            assets: project.assets.length,
+        return appFSM.run("exporting", "project.exportFile", async () => {
+          if (interfaceFSM.readState().selectedSlotId !== null) {
+            status("프로젝트 내보내기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
+            return;
+          }
+          const payload = appFSM.query("export", {
+            operation: "project.exportFile", stamp: new Date().toISOString().replace(/[:.]/g, "-"),
           });
-        } catch (error) {
-          status("FFPX 내보내기 오류: " + error.message);
-          debugLog("project:export-error", { message: error.message });
-        }
+          await downloadExportPayload(payload);
+        });
       }
       function downloadProjectAsset(path) {
         return appFSM.run("exporting", "assets.download", async () => {
