@@ -8,16 +8,16 @@ Baseline f050d9209aaab2ea2787d32834c8cfa8e6fd883e. Source41 is authoritative: `s
 
 | Requirement | Artifact/evidence | Status |
 | --- | --- | --- |
-| Scalar inputs, read only for event routing | sourcecode/fast-figure.js graphEditorAdd; official slots.readSelected; addGraphObjectApi binds session slot/current CSV | implemented; runner pending |
-| Current authority re-resolution, no public objects | applyGraphFirstObjectAction and applyGraphObjectEditAction add branch | implemented; cases72/73 pending |
-| No stale route repair | first route rejects occupied slot; append route rejects missing/noneditable chart/owner | case73 and existing25 pending |
-| Configured base object, real CSV incl empty | createCandidateBaseGraphObject; first chart candidate nextId/title/global settings | cases72/73 pending |
-| Candidate figure/validation before commit, retry source replacement | both branches rebuild supplied candidate, validate, compare source and initialize once | case73 pending |
-| Actual changed facts and appended index through common reconciliation | chart/slot changed IDs, selectionHints; no manual Frontend/CSV change | case72 pending |
-| Success-only detached fresh return/render | graphEditorAdd postcommit graphs.readData; noncommit unchanged | cases72/73 pending |
+| Scalar inputs, read only for event routing | sourcecode/fast-figure.js graphEditorAdd; official slots.readSelected; addGraphObjectApi binds session slot/current CSV | verified case72 |
+| Current authority re-resolution, no public objects | applyGraphFirstObjectAction and applyGraphObjectEditAction add branch | verified cases72/73 |
+| No stale route repair | first route rejects occupied slot; append route rejects missing/noneditable chart/owner | verified case73 and existing25 |
+| Configured base object, real CSV incl empty | createCandidateBaseGraphObject; first chart candidate nextId/title/global settings | verified cases72/73 |
+| Candidate figure/validation before commit, retry source replacement | both branches rebuild supplied candidate, validate, compare source and initialize once | verified case73 |
+| Actual changed facts and appended index through common reconciliation | chart/slot changed IDs, selectionHints; no manual Frontend/CSV change | verified case72 |
+| Success-only detached fresh return/render | graphEditorAdd postcommit graphs.readData; noncommit unchanged | verified cases72/73 |
 | Preserve advanced order/extensions and existing selection | append normalizes missing styles only, selected CSV untouched | case72 pending |
-| Execution on Actions default runner | regression/build/version workflows use ubuntu-latest | pending actual SHA/run evidence |
-| Lineage and paired atomic record | development-versions.json code62 stale, Source41/pseudocode16 unchanged; patch053 pair/Plan023 unit21 | canonical digest pending |
+| Execution on Actions default runner | regression/build/version workflows use ubuntu-latest | verified runs39104304535/39104382839/39104380585 |
+| Lineage and paired atomic record | development-versions.json code62 stale, Source41/pseudocode16 unchanged; patch053 pair/Plan023 unit21 | canonical digest and cumulative gate verified |
 
 Legacy regression24 previously depended on add's incidental CSV-selection mutation; it now explicitly selects its fixture before add, preserving its separate current-CSV/object-columns assertion. Case25 now explicitly requires command rejection on noneditable add, not a swallowed status-only failure.
 
@@ -27,4 +27,8 @@ Rejected wrapper-calculated arrays/live ensureGraphObjects, double commit for fi
 
 ## Initial runner evidence
 
-At implementation074cfdc9d9690872b708a9d906175b9088da5657, default ubuntu-latest regression39104304561 PASS73 inline+73 split, including legacy24/25 and new72/73; build39104304535 PASS. Distribution-only bot88510ce7184a996951b06b12011f6aa5dda6bba2 inspected and fast-forwarded. Artifacts inline6361348 bytes/split ZIP1734444 bytes. Version39104304592 intentionally failed the provisional recorded code61 digest; canonical Source41 and pseudocode16 unchanged, actual code62 `sha256:1ca96148d1f4cb2a61807728b6bedd783428a96282947be7de84c3527fe6f62f`. Patch054 records only this digest and evidence, no runtime/revision/status changes. Cumulative version gate from f050d9209aaab2ea2787d32834c8cfa8e6fd883e and repeat exact-SHA regression pending. Table above is preparation status, superseded for runtime tests by these actual results; lineage still pending. No local app/test/build/checker execution.
+At implementation074cfdc9d9690872b708a9d906175b9088da5657, default ubuntu-latest regression39104304561 PASS73 inline+73 split, including legacy24/25 and new72/73; build39104304535 PASS. Distribution-only bot88510ce7184a996951b06b12011f6aa5dda6bba2 inspected and fast-forwarded. Artifacts inline6361348 bytes/split ZIP1734444 bytes. Version39104304592 intentionally failed the provisional recorded code61 digest; canonical Source41 and pseudocode16 unchanged, actual code62 `sha256:1ca96148d1f4cb2a61807728b6bedd783428a96282947be7de84c3527fe6f62f`. Patch054 records only this digest and evidence, no runtime/revision/status changes. At corrected lineage SHA a60b863e56e30ea13636e496f1f98e9be0894dfb, cumulative versions39104380585 PASS with base f050d9209aaab2ea2787d32834c8cfa8e6fd883e; automatic39104379550 also PASS. Repeat regression39104382839 PASS73 inline+73 split with identical artifact sizes. Source/pseudocode/code/test/build-input blobs unchanged from implementation074cfdc; build39104304535 remains the actual same-input packaging evidence. Table now reflects these bounded results. No local app/test/build/checker execution.
+
+## Bounded completion audit
+
+Delivered scalar routing/application boundary, current candidate/one commit/retry, defaults/empty real CSV, actual IDs/index hints, copied return, session-selection preservation, paired records and actual runner evidence. Cases72/73 directly test the claimed new paths, older71 stay passing; version gate validates fingerprints/lineage only, build validates packaging only. No test or metadata status is accepted as proof of the uncovered full shared validator, other connection/import/asset paths or renderer/raster integration. Whole Plan023 and code62 stale remain open; optional model26/TLC not run. No goal-complete claim.
