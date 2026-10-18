@@ -1,0 +1,51 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 709e75f..f2ef0ad 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3748,6 +3748,17 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         check(result.selectionHints.swapSlotIds.join(",") === [a.id, b.id].join(",") &&
+           Object.keys(result.selectionHints).length === 1 && Object.isFrozen(result.selectionHints.swapSlotIds) &&
+           result.changed.slotIds.length === 2 && !result.changed.chartIds.length && !result.changed.assets.length, "swap facts/hints invented changes");
++        // Equal ordinary fields but different canonical extension must still be actual changed slots.
++        projectEFSM.send = send;
++        const onlyExtensions = projectClone(activeProject._state); normalizeSlotContents(onlyExtensions.slots);
++        const x = onlyExtensions.slots.find(slot => slot.id === a.id), y = onlyExtensions.slots.find(slot => slot.id === b.id);
++        x.content = { ...projectClone(BackendSettings.defaults.slotSettings.content), chart: null, imageId: null, extension: "left" };
++        y.content = { ...projectClone(x.content), extension: "right" }; x.caption = y.caption = null;
++        onlyExtensions.charts = onlyExtensions.charts.filter(chart => chart.id !== chartId);
++        initialize.call(activeProject, onlyExtensions);
++        const canonicalResult = dispatchProjectCommand("SLOTS_SWAPPED", { sourceSlotId: a.id, targetSlotId: b.id });
++        check(canonicalResult.changed.slotIds.length === 2 && slotAt(a.id).content.extension === "right" &&
++          slotAt(b.id).content.extension === "left", "extension-only swap omitted actual changed slot facts");
+       } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+diff --git a/development-versions.json b/development-versions.json
+index 31781c5..7026062 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 75,
++      "revision": 76,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 3702ad1..69e2536 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1123,8 +1123,9 @@
+           if (activeProject._state !== source) continue;
+           activeProject.initialize(candidate);
+           const after = activeProject._state;
+-          payload.changed = { slotIds: [first.id, second.id].filter(id => JSON.stringify(source.slots.find(slot => slot.id === id)) !==
+-            JSON.stringify(after.slots.find(slot => slot.id === id))), chartIds: [], csvIds: [], imageIds: [], assets: [] };
++          const localKey = slot => JSON.stringify([slot.content, slot.caption]);
++          payload.changed = { slotIds: [first.id, second.id].filter(id => localKey(source.slots.find(slot => slot.id === id)) !==
++            localKey(after.slots.find(slot => slot.id === id))), chartIds: [], csvIds: [], imageIds: [], assets: [] };
+           payload.selectionHints = immutableProjectCopy({ swapSlotIds: [first.id, second.id] });
+           return;
+         }

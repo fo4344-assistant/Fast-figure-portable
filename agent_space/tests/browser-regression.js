@@ -3748,6 +3748,17 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(result.selectionHints.swapSlotIds.join(",") === [a.id, b.id].join(",") &&
           Object.keys(result.selectionHints).length === 1 && Object.isFrozen(result.selectionHints.swapSlotIds) &&
           result.changed.slotIds.length === 2 && !result.changed.chartIds.length && !result.changed.assets.length, "swap facts/hints invented changes");
+        // Equal ordinary fields but different canonical extension must still be actual changed slots.
+        projectEFSM.send = send;
+        const onlyExtensions = projectClone(activeProject._state); normalizeSlotContents(onlyExtensions.slots);
+        const x = onlyExtensions.slots.find(slot => slot.id === a.id), y = onlyExtensions.slots.find(slot => slot.id === b.id);
+        x.content = { ...projectClone(BackendSettings.defaults.slotSettings.content), chart: null, imageId: null, extension: "left" };
+        y.content = { ...projectClone(x.content), extension: "right" }; x.caption = y.caption = null;
+        onlyExtensions.charts = onlyExtensions.charts.filter(chart => chart.id !== chartId);
+        initialize.call(activeProject, onlyExtensions);
+        const canonicalResult = dispatchProjectCommand("SLOTS_SWAPPED", { sourceSlotId: a.id, targetSlotId: b.id });
+        check(canonicalResult.changed.slotIds.length === 2 && slotAt(a.id).content.extension === "right" &&
+          slotAt(b.id).content.extension === "left", "extension-only swap omitted actual changed slot facts");
       } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });

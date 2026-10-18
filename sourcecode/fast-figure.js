@@ -1123,8 +1123,9 @@
           if (activeProject._state !== source) continue;
           activeProject.initialize(candidate);
           const after = activeProject._state;
-          payload.changed = { slotIds: [first.id, second.id].filter(id => JSON.stringify(source.slots.find(slot => slot.id === id)) !==
-            JSON.stringify(after.slots.find(slot => slot.id === id))), chartIds: [], csvIds: [], imageIds: [], assets: [] };
+          const localKey = slot => JSON.stringify([slot.content, slot.caption]);
+          payload.changed = { slotIds: [first.id, second.id].filter(id => localKey(source.slots.find(slot => slot.id === id)) !==
+            localKey(after.slots.find(slot => slot.id === id))), chartIds: [], csvIds: [], imageIds: [], assets: [] };
           payload.selectionHints = immutableProjectCopy({ swapSlotIds: [first.id, second.id] });
           return;
         }
