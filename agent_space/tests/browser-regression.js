@@ -6032,7 +6032,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           ["wrapped.json", '{"data":[["x","v"],[null,2],[3,4]]}']],
           files = fixtures.map(([name, text]) => new File([text], name));
         const imported = await api.assets.importToDirectory(files, PROJECT_ASSET_DIRECTORIES.csv, choose("rename"));
-        check(imported.committed, "raw parser fixture batch failed");
+        check(Array.isArray(imported) && imported.length === fixtures.length, "raw parser fixture batch failed");
         const id = activeProject.slots[0].id; select(slotAt(id));
         for (const [name, text] of fixtures) {
           const asset = activeProject.csvFiles.find(item => item.name === name), bytes = new TextEncoder().encode(text);

@@ -1,0 +1,41 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index a84d006..ad3a96d 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -309,7 +309,7 @@ Unit51 actual evidence: implementation2fc8f65712032130ffa4fe12f2a52002c71e24da p
+ 
+ ### Fifty-second bounded unit — one explicit-extension byte parser
+ 
+-Baselineb2c59aeb142670e9de72684a5e16f4740879cc12. Source45/PlusCal24 unchanged: parseProjectDataAsset explicit comma/tab/JSON normalization, preserved blank rows, unsupported/invalid failure, and dataTable uniform row shapes/value preservation. Code103 routes raw import and package restoration through parseProjectCsvAsset, explicit parseCSV delimiter/blank-row retention and strict uniform deep-copied dataTable. Cases134/135 test parser contracts and public raw→actual FFPX/FFSX ZIP parity/exact bytes/atomic good+empty batch rejection. Pair20261019-010/review-20261019-006-code-data-parser-open.md record mapping/rejected alternatives/exclusions. Exact-SHA135 inline+split/repeat/build/canonical+cumulative/fidelity pending; code stale and full requirement audit open. No local runtime or manual dist change.
++Baselineb2c59aeb142670e9de72684a5e16f4740879cc12. Source45/PlusCal24 unchanged: parseProjectDataAsset explicit comma/tab/JSON normalization, preserved blank rows, unsupported/invalid failure, and dataTable uniform row shapes/value preservation. Code103 routes raw import and package restoration through parseProjectCsvAsset, explicit parseCSV delimiter/blank-row retention and strict uniform deep-copied dataTable. Cases134/135 test parser contracts and public raw→actual FFPX/FFSX ZIP parity/exact bytes/atomic good+empty batch rejection. Pair20261019-010/review-20261019-006-code-data-parser-open.md record mapping/rejected alternatives/exclusions. Initial462e0b7 regression39167439009/repeat39167440889 pass1–134 but fail135 because success is an asset array, not {committed}; structural/build gates pass. Pair011 corrects only fixture135 success predicate against existing case116 and actual Application contract. Corrected exact-SHA135 inline+split/repeat/build/canonical+cumulative/fidelity pending; code stale and full requirement audit open. No local runtime or manual dist change.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261019-006-code-data-parser-open.md b/agent_space/reviews/review-20261019-006-code-data-parser-open.md
+index d394ccf..8295f89 100644
+--- a/agent_space/reviews/review-20261019-006-code-data-parser-open.md
++++ b/agent_space/reviews/review-20261019-006-code-data-parser-open.md
+@@ -16,6 +16,10 @@ Case134 directly tests explicit comma/tab despite opposite delimiter in header,
+ 
+ Code103 sha256:85bfdd4db7623556b1645f315ac6457866760def1a0d7ac6b34932d6a6c95a6a remains stale, current Source45/PlusCal24 lineage preserved. Patch010/Plan023/this review/lineage accompany implementation. Atomic gh code+lineage exception remains required by demonstrated immediate-parent revision gate; parent/current blobs/new paths checked before non-force publication. Ordinary docs use Contents API. No local application/test/build/checker or optional TLC; default hosted ubuntu-latest only; dist generator-only.
+ 
++## Initial runner evidence and fixture-only correction
++
++Execution462e0b7b0e8d1a6b9c2852faa71a6e43a3828163: canonical39167439208/cumulative39167443044/fidelity39167445156/build39167439031 PASS. Regression39167439009 and repeat39167440889 FAIL135 identically in both distributions, exact error `Error: raw parser fixture batch failed`; cases1–134 PASS. Actual log inspected. Existing case116 and Application success return contract expose a frozen asset array, not mutation result. Correct case135 success predicate to Array.isArray/imported.length; retain failed-command result predicate and every byte/parser/authority assertion. No runtime/Source/PlusCal/lineage change; code103 stays stale. Pair011 records fixture correction; corrected exact-SHA cumulative/repeat/build/versions/fidelity still PENDING. Prior green structural gates did not detect this fixture defect and are not semantic completion proof.
++
+ ## Completion audit remains OPEN
+ 
+ Concrete whole-goal success: every Source/PlusCal contract directly implemented preserving features/hierarchy, every explicit Plan023/prompt requirement mapped to inspected artifacts and semantic coverage, all exact-SHA hosted gates, no uncertain gap. This review covers ONLY the byte-parser unit, not full conformance. Remaining package ZIP/dataRef/metadata/settings/initializer ownership, raster/resource/current snapshot, dashboard/timing and exhaustive cross-module requirement inventory remain OPEN. Passing135/fidelity would not close these. No auth/service/quota blocker observed; no update_goal complete while any required item is unverified.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 4f4d73d..57b885b 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -6032,7 +6032,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           ["wrapped.json", '{"data":[["x","v"],[null,2],[3,4]]}']],
+           files = fixtures.map(([name, text]) => new File([text], name));
+         const imported = await api.assets.importToDirectory(files, PROJECT_ASSET_DIRECTORIES.csv, choose("rename"));
+-        check(imported.committed, "raw parser fixture batch failed");
++        check(Array.isArray(imported) && imported.length === fixtures.length, "raw parser fixture batch failed");
+         const id = activeProject.slots[0].id; select(slotAt(id));
+         for (const [name, text] of fixtures) {
+           const asset = activeProject.csvFiles.find(item => item.name === name), bytes = new TextEncoder().encode(text);
