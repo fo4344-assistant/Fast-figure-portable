@@ -2543,7 +2543,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(validateChartModel(chart, "empty", [csv]) === chart && JSON.stringify(chart) === snapshot,
           "zero-column validator rejected or repaired candidate");
         const projected = traces(chart, { assets: { csvFiles: [csv] } });
-        check(projected.length === 0, `zero-column projection: ${JSON.stringify({ rows, object: chart.editor.objects[0], projected })}`);
+        check(tracesSingle({ ...chart.editor.objects[0], rows, headerLines: 0 }).length === 0,
+          "zero-column object manufactured a data trace");
+        check(projected.length > 0 && projected.every(trace => trace.meta?.fastFigureAxisPlaceholder === true &&
+          trace.x.length === 0 && trace.y.length === 0 && trace.showlegend === false && trace.hoverinfo === "skip" &&
+          trace.marker.size === 0 && trace.marker.opacity === 0 && trace.line.width === 0),
+          `zero-column axis-only projection: ${JSON.stringify({ rows, projected })}`);
         for (const pair of [["C1", ""], ["", "C1"], ["C1", "C1"], [undefined, ""], [null, ""]]) {
           const invalid = projectClone(chart); invalid.editor.objects[0].x = pair[0]; invalid.editor.objects[0].y = pair[1];
           rejects(invalid);
@@ -2586,7 +2591,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           object = getChart(chartId).editor.objects[0];
         check(object.csvId === empty.id && object.x === "" && object.y === "" &&
           result !== getChart(chartId) && Object.isFrozen(result.editor.objects[0]) &&
-          getChart(chartId).graph.data.length === 0 && JSON.stringify(activeProject._state.assets) === assets &&
+          getChart(chartId).graph.data.length > 0 && getChart(chartId).graph.data.every(trace =>
+            trace.meta?.fastFigureAxisPlaceholder === true && trace.x.length === 0 && trace.y.length === 0) &&
+          JSON.stringify(activeProject._state.assets) === assets &&
           interfaceFSM.state.assetPath === path, `empty CSV switch: ${JSON.stringify({ object, emptyId: empty.id,
             copy: result !== getChart(chartId), frozen: Object.isFrozen(result?.editor?.objects?.[0]), data: getChart(chartId).graph.data,
             sameAssets: JSON.stringify(activeProject._state.assets) === assets, path, actualPath: interfaceFSM.state.assetPath })}`);
@@ -2595,7 +2602,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         graphEditorObjectValues(chartId, 0, { csvId: populated.id });
         const restored = getChart(chartId).editor.objects[0];
         check(restored.csvId === populated.id && restored.x === "C1" && restored.y === "C2" &&
-          getChart(chartId).graph.data.length > 0 && JSON.stringify(activeProject._state.assets) === assets,
+          getChart(chartId).graph.data.some(trace => trace.meta?.fastFigureAxisPlaceholder !== true && trace.x.length > 0) &&
+          JSON.stringify(activeProject._state.assets) === assets,
           "populated CSV did not recover current valid column fallback/projection");
       } finally { renderDashboard = render; activeProject.initialize(saved); selectedSlotId = selected; interfaceFSM.state = session; }
     });
