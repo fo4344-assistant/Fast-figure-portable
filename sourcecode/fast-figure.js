@@ -3157,7 +3157,7 @@
             typeof bytesBase64 === "string" && bytesBase64
               ? bytesBase64
               : ffpxBytesToBase64(
-                  new TextEncoder().encode(ffpxCsv(dataTable(data))),
+                  serializeNewDataTable(dataTable(data), projectCsvName(name)),
                 ),
           mime: typeof mime === "string" && mime ? mime : "text/csv",
           headerLines: headerLineCount(headerLines, data),
@@ -5062,7 +5062,7 @@
                 typeof source.bytesBase64 === "string" && source.bytesBase64
                   ? source.bytesBase64
                   : ffpxBytesToBase64(
-                      new TextEncoder().encode(ffpxCsv(source.rows)),
+                      serializeNewDataTable(source.rows, projectCsvName(source.name, `data-${index + 1}.csv`)),
                     ),
               mime: typeof source.mime === "string" ? source.mime : "text/csv",
               headerLines: headerLineCount(source.headerLines ?? 1, source.rows),
@@ -5412,12 +5412,6 @@
             return text.includes(delimiter) || /["\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
           };
         return new TextEncoder().encode(rows.map(row => row.map(cell).join(delimiter)).join("\n"));
-      }
-      function ffpxCsv(rows) {
-        let quote = (value) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
-        return (rows || [])
-          .map((row) => (Array.isArray(row) ? row : []).map(quote).join(","))
-          .join("\r\n");
       }
       function parseProjectCsvAsset(name, bytes) {
         let text = new TextDecoder().decode(bytes);

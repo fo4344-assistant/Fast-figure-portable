@@ -3024,6 +3024,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           fact.path === projectAssetPath(csv) && fact.owners[0].slotId === slot.id && fact.owners[0].chartId === chartId &&
           result.changed.csvIds.includes(next) && result.changed.chartIds.includes(chartId) && Object.isFrozen(fact.owners),
           "conversion lost import/settings/reference, generated wrong CSV/facts or selected new CSV");
+        check(csv.bytesBase64 === ffpxBytesToBase64(serializeNewDataTable(csv.rows, csv.name)),
+          "editable conversion bypassed filename-aware LF synthetic serializer");
         const allocated = JSON.stringify(activeProject.csvFiles);
         projectEFSM.send = send;
         appFSM.send("SELECT_GRAPH_OBJECT", { index: 0, selectAsset: false });
@@ -6056,6 +6058,26 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           "empty data parse partially committed batch or changed Frontend");
       } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(136, "Synthetic conversion and candidate restoration bytes use the same filename-aware serializer", () => {
+      const project = activeProject._state, frontend = interfaceFSM.state,
+        rows = [[null, { a: 1 }, 'quote"', "a\tb", "a\nb"], [false, 0, "plain", "", "last"]],
+        original = ffpxBytesToBase64(new TextEncoder().encode("original bytes\r\n"));
+      for (const name of ["candidate.json", "candidate.tsv", "candidate.csv", "candidate.other"]) {
+        const expected = name.endsWith(".json") ? JSON.stringify(rows) : name.endsWith(".tsv") ?
+          '\t"{""a"":1}"\t"quote"""\t"a\tb"\t"a\nb"\nfalse\t0\tplain\t\tlast' :
+          ',"{""a"":1}","quote""",a\tb,"a\nb"\nfalse,0,plain,,last',
+          model = buildProjectCsvModel(rows, name, project.nextId.csv, "", "custom/type", 0, project),
+          restored = importedProjectCsvState({ csvFiles: [{ id: 1, name, rows, mime: "custom/type", headerLines: 0 }] }).csvFiles[0];
+        for (const csv of [model, restored]) check(new TextDecoder().decode(ffpxBase64ToBytes(csv.bytesBase64)) === expected &&
+          csv.name === name && csv.mime === "custom/type" && csv.headerLines === 0 && JSON.stringify(csv.rows) === JSON.stringify(rows),
+          `synthetic candidate changed bytes/name/MIME/rows/header: ${name}`);
+        check(buildProjectCsvModel(rows, name, project.nextId.csv, original, "custom/type", 0, project).bytesBase64 === original &&
+          importedProjectCsvState({ csvFiles: [{ id: 1, name, rows, bytesBase64: original }] }).csvFiles[0].bytesBase64 === original,
+          `original ${name} bytes were regenerated`);
+      }
+      check(activeProject._state === project && interfaceFSM.state === frontend, "synthetic candidate calculation mutated authority");
     });
 
   } catch (error) {

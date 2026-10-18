@@ -1,0 +1,163 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index ad3a96d..7cfd832 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -311,6 +311,12 @@ Unit51 actual evidence: implementation2fc8f65712032130ffa4fe12f2a52002c71e24da p
+ 
+ Baselineb2c59aeb142670e9de72684a5e16f4740879cc12. Source45/PlusCal24 unchanged: parseProjectDataAsset explicit comma/tab/JSON normalization, preserved blank rows, unsupported/invalid failure, and dataTable uniform row shapes/value preservation. Code103 routes raw import and package restoration through parseProjectCsvAsset, explicit parseCSV delimiter/blank-row retention and strict uniform deep-copied dataTable. Cases134/135 test parser contracts and public raw→actual FFPX/FFSX ZIP parity/exact bytes/atomic good+empty batch rejection. Pair20261019-010/review-20261019-006-code-data-parser-open.md record mapping/rejected alternatives/exclusions. Initial462e0b7 regression39167439009/repeat39167440889 pass1–134 but fail135 because success is an asset array, not {committed}; structural/build gates pass. Pair011 corrects only fixture135 success predicate against existing case116 and actual Application contract. Corrected exact-SHA135 inline+split/repeat/build/canonical+cumulative/fidelity pending; code stale and full requirement audit open. No local runtime or manual dist change.
+ 
++Unit52 corrected execution223a64d230b8e8c73e7725266a2da07f0d8e512c: regression39167674112/repeat39167675221 PASS135 inline+135 split each; build39167723028/canonical39167674113/cumulative39167677703(baseb2c59aeb142670e9de72684a5e16f4740879cc12)/fidelity39167680247 PASS. Actual logs inspected, superseding pending above. No full conformance claim.
++
++### Fifty-third bounded unit — remaining synthetic-byte serializer bypasses
++
++Baseline223a64d230b8e8c73e7725266a2da07f0d8e512c. Source45/PlusCal24 unchanged: synthetic filename-aware bytes apply to conversion-created CSV and restored absent-byte data. Code104 routes buildProjectCsvModel/importedProjectCsvState through existing serializeNewDataTable and removes legacy ffpxCsv. Preserve supplied bytes/name/MIME/header/rows. Case74 verifies public conversion integration;136 independently checks literal JSON/TSV/CSV/fallback outputs for both candidate paths and supplied-byte passthrough/read-only identity. Pair20261019-012/review-20261019-007-code-synthetic-bytes-open.md record authority/mapping/rejected alternatives/exclusions and atomic gh delivery exception. Exact-SHA136 inline+split/repeat/build/canonical+cumulative/fidelity pending; source-code stays stale, complete Plan023 audit remains OPEN. No local runtime, dist generator-only.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261019-006-code-data-parser-open.md b/agent_space/reviews/review-20261019-006-code-data-parser-open.md
+index 8295f89..ea8b074 100644
+--- a/agent_space/reviews/review-20261019-006-code-data-parser-open.md
++++ b/agent_space/reviews/review-20261019-006-code-data-parser-open.md
+@@ -20,6 +20,10 @@ Code103 sha256:85bfdd4db7623556b1645f315ac6457866760def1a0d7ac6b34932d6a6c95a6a
+ 
+ Execution462e0b7b0e8d1a6b9c2852faa71a6e43a3828163: canonical39167439208/cumulative39167443044/fidelity39167445156/build39167439031 PASS. Regression39167439009 and repeat39167440889 FAIL135 identically in both distributions, exact error `Error: raw parser fixture batch failed`; cases1–134 PASS. Actual log inspected. Existing case116 and Application success return contract expose a frozen asset array, not mutation result. Correct case135 success predicate to Array.isArray/imported.length; retain failed-command result predicate and every byte/parser/authority assertion. No runtime/Source/PlusCal/lineage change; code103 stays stale. Pair011 records fixture correction; corrected exact-SHA cumulative/repeat/build/versions/fidelity still PENDING. Prior green structural gates did not detect this fixture defect and are not semantic completion proof.
+ 
++## Corrected exact-SHA evidence
++
++Execution223a64d230b8e8c73e7725266a2da07f0d8e512c: regression39167674112 and repeat39167675221 PASS135 inline+135 split each; actual logs include134/135 PASS in both modes. Build39167723028, canonical versions39167674113, cumulative versions39167677703 (baseb2c59aeb142670e9de72684a5e16f4740879cc12), fidelity39167680247 PASS. Default ubuntu-latest workflow definitions inspected; no local runtime. Source-code103 was still stale. Only this bounded parser contract is verified, not full package/schema/render conformance. Next audit found legacy synthetic fallback still used by conversion/restoration: Unit53 review007 tracks its correction rather than pretending parser green covered it.
++
+ ## Completion audit remains OPEN
+ 
+ Concrete whole-goal success: every Source/PlusCal contract directly implemented preserving features/hierarchy, every explicit Plan023/prompt requirement mapped to inspected artifacts and semantic coverage, all exact-SHA hosted gates, no uncertain gap. This review covers ONLY the byte-parser unit, not full conformance. Remaining package ZIP/dataRef/metadata/settings/initializer ownership, raster/resource/current snapshot, dashboard/timing and exhaustive cross-module requirement inventory remain OPEN. Passing135/fidelity would not close these. No auth/service/quota blocker observed; no update_goal complete while any required item is unverified.
+diff --git a/agent_space/reviews/review-20261019-007-code-synthetic-bytes-open.md b/agent_space/reviews/review-20261019-007-code-synthetic-bytes-open.md
+new file mode 100644
+index 0000000..b43f6a0
+--- /dev/null
++++ b/agent_space/reviews/review-20261019-007-code-synthetic-bytes-open.md
+@@ -0,0 +1,21 @@
++# Plan023 Unit53 — close remaining synthetic serializer bypasses (open)
++
++Baseline223a64d230b8e8c73e7725266a2da07f0d8e512c. Unit52 regression39167674112/repeat39167675221 PASS135 inline+135 split; build39167723028/canonical39167674113/cumulative39167677703/fidelity39167680247 PASS. Actual logs inspected. No prior completed parser/caption/package work repeated.
++
++## Requirement-to-artifact mapping
++
++- sourcescript/backend/assets_files.py SYNTHETIC_DATA_BYTES_RULE: bytes absent only, filename extension JSON/tab/comma, null empty/scalar text/structured compact JSON, delimiter/quote/CR/LF quoting, LF joins with no forced trailing LF, original bytes/name/MIME unchanged. pseudocode/backend/assets_files.pcal SerializeNewDataTable at112-136 explicitly translates every branch.
++- sourcescript/backend/graphs.py:588 explicitly applies that asset rule to conversion-created table bytes without replacing imported graph bytes. Existing create command already used serializeNewDataTable and case77 literal expectations; package fallback used it too.
++- Remaining actual bypasses found by source inspection: buildProjectCsvModel (used by CHART_MODEL_REPLACED conversion and byte-backed raw import) and importedProjectCsvState (whole-project candidate normalization) still used legacy ffpxCsv: unconditional comma, every field quoted, structured cells String(object), CRLF. Existing passing133/135 did NOT prove absent-byte conversion/restoration correctness.
++- Runtime now uses existing serializeNewDataTable at both absent-byte sites, with actual normalized filename and original bytes branch untouched. Remove unused ffpxCsv so the synthetic-byte rule has one implementation. No new shared state, snapshot authority, hierarchy, feature or encoding meaning.
++- Case74 adds real public editable conversion CSV exact-byte comparison to the same serializer whose literal branch outputs case77 verifies. New136 independently checks literal JSON/TSV/CSV/fallback outputs including null/object/quote/tab/newline/false/zero across both candidate helpers, metadata/name/rows preservation, original supplied bytes passthrough and read-only authority identity. No local execution.
++
++## Delivery and verification surface
++
++Source45/pseudocode24 unchanged; code104 fingerprintsha256:d768496d639130cf864aadb7fb8e90751f107fa0167f165308e37206a57eef74 stays stale. Plan023/review006 corrected evidence/this review/patch012 accompany change. Atomic gh tree publication only for coherent code+lineage immediate-parent gate; verify expected HEAD/old blobs/new paths and non-force ref. No local app/test/build/checker; default GitHub-hosted ubuntu-latest gates only; dist generator-only; optional TLC not run/not gate.
++
++Corrected execution SHA136 inline+136 split, related full repeat, build, canonical+cumulative versions and fidelity are PENDING. Green version/fidelity is structural and cannot certify all Source branches.
++
++## Rejected alternatives and exclusions
++
++Do not retain a conversion-only legacy serializer, alter Source to match CRLF/auto-comma, normalize supplied bytes, or add a new representation. Reuse existing helper, preserving original MIME/header/name. No policy/Source/pseudocode modification or unrelated redesign. Remaining package ZIP/dataRef/metadata/settings/global initializer topology/ownership, raster/resource/current snapshot/dashboard/timing and full cross-module requirement inventory remain OPEN; this unit is not entire conformance. Full completion requires actual requirement coverage and exact-SHA hosted gates for every remaining contract. No actual auth/quota/service blocker observed; no completion claim.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 57b885b..7c0838a 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3024,6 +3024,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           fact.path === projectAssetPath(csv) && fact.owners[0].slotId === slot.id && fact.owners[0].chartId === chartId &&
+           result.changed.csvIds.includes(next) && result.changed.chartIds.includes(chartId) && Object.isFrozen(fact.owners),
+           "conversion lost import/settings/reference, generated wrong CSV/facts or selected new CSV");
++        check(csv.bytesBase64 === ffpxBytesToBase64(serializeNewDataTable(csv.rows, csv.name)),
++          "editable conversion bypassed filename-aware LF synthetic serializer");
+         const allocated = JSON.stringify(activeProject.csvFiles);
+         projectEFSM.send = send;
+         appFSM.send("SELECT_GRAPH_OBJECT", { index: 0, selectAsset: false });
+@@ -6058,6 +6060,26 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(136, "Synthetic conversion and candidate restoration bytes use the same filename-aware serializer", () => {
++      const project = activeProject._state, frontend = interfaceFSM.state,
++        rows = [[null, { a: 1 }, 'quote"', "a\tb", "a\nb"], [false, 0, "plain", "", "last"]],
++        original = ffpxBytesToBase64(new TextEncoder().encode("original bytes\r\n"));
++      for (const name of ["candidate.json", "candidate.tsv", "candidate.csv", "candidate.other"]) {
++        const expected = name.endsWith(".json") ? JSON.stringify(rows) : name.endsWith(".tsv") ?
++          '\t"{""a"":1}"\t"quote"""\t"a\tb"\t"a\nb"\nfalse\t0\tplain\t\tlast' :
++          ',"{""a"":1}","quote""",a\tb,"a\nb"\nfalse,0,plain,,last',
++          model = buildProjectCsvModel(rows, name, project.nextId.csv, "", "custom/type", 0, project),
++          restored = importedProjectCsvState({ csvFiles: [{ id: 1, name, rows, mime: "custom/type", headerLines: 0 }] }).csvFiles[0];
++        for (const csv of [model, restored]) check(new TextDecoder().decode(ffpxBase64ToBytes(csv.bytesBase64)) === expected &&
++          csv.name === name && csv.mime === "custom/type" && csv.headerLines === 0 && JSON.stringify(csv.rows) === JSON.stringify(rows),
++          `synthetic candidate changed bytes/name/MIME/rows/header: ${name}`);
++        check(buildProjectCsvModel(rows, name, project.nextId.csv, original, "custom/type", 0, project).bytesBase64 === original &&
++          importedProjectCsvState({ csvFiles: [{ id: 1, name, rows, bytesBase64: original }] }).csvFiles[0].bytesBase64 === original,
++          `original ${name} bytes were regenerated`);
++      }
++      check(activeProject._state === project && interfaceFSM.state === frontend, "synthetic candidate calculation mutated authority");
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index f40e439..29089bb 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 103,
++      "revision": 104,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:85bfdd4db7623556b1645f315ac6457866760def1a0d7ac6b34932d6a6c95a6a",
++      "fingerprint": "sha256:d768496d639130cf864aadb7fb8e90751f107fa0167f165308e37206a57eef74",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261019-006-code-data-parser-open.md"
++      "validation_review": "agent_space/reviews/review-20261019-007-code-synthetic-bytes-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 24,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index c4656ce..3b54754 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -3157,7 +3157,7 @@
+             typeof bytesBase64 === "string" && bytesBase64
+               ? bytesBase64
+               : ffpxBytesToBase64(
+-                  new TextEncoder().encode(ffpxCsv(dataTable(data))),
++                  serializeNewDataTable(dataTable(data), projectCsvName(name)),
+                 ),
+           mime: typeof mime === "string" && mime ? mime : "text/csv",
+           headerLines: headerLineCount(headerLines, data),
+@@ -5062,7 +5062,7 @@
+                 typeof source.bytesBase64 === "string" && source.bytesBase64
+                   ? source.bytesBase64
+                   : ffpxBytesToBase64(
+-                      new TextEncoder().encode(ffpxCsv(source.rows)),
++                      serializeNewDataTable(source.rows, projectCsvName(source.name, `data-${index + 1}.csv`)),
+                     ),
+               mime: typeof source.mime === "string" ? source.mime : "text/csv",
+               headerLines: headerLineCount(source.headerLines ?? 1, source.rows),
+@@ -5413,12 +5413,6 @@
+           };
+         return new TextEncoder().encode(rows.map(row => row.map(cell).join(delimiter)).join("\n"));
+       }
+-      function ffpxCsv(rows) {
+-        let quote = (value) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
+-        return (rows || [])
+-          .map((row) => (Array.isArray(row) ? row : []).map(quote).join(","))
+-          .join("\r\n");
+-      }
+       function parseProjectCsvAsset(name, bytes) {
+         let text = new TextDecoder().decode(bytes);
+         if (String(name).toLowerCase().endsWith(".json")) {
