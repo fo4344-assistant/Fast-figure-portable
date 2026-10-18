@@ -15448,11 +15448,21 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           throw Error(`FFPX ${name} 형식이 올바르지 않습니다.`);
         return rootNode;
       }
+      function ffpxDirectChild(root, name, optional = false) {
+        const nodes = [...root.children].filter((child) => child.tagName === name);
+        if (nodes.length === 0 && optional) return null;
+        if (nodes.length !== 1) throw Error(`FFPX ${name} 단일 요소가 필요합니다.`);
+        return nodes[0];
+      }
+      function ffpxWrappedValue(node) {
+        const children = [...node.children];
+        if (children.length !== 1 || children[0].tagName !== "value" ||
+            [...node.childNodes].some((child) => (child.nodeType === 3 || child.nodeType === 4) && child.textContent.trim()))
+          throw Error("FFPX 단일 typed value가 필요합니다.");
+        return ffpxXmlReadValue(children[0]);
+      }
       function ffpxNamedValue(root, name) {
-        let node = [...root.children].find((child) => child.tagName === name);
-        if (!node?.firstElementChild)
-          throw Error(`FFPX ${name} 값이 없습니다.`);
-        return ffpxXmlReadValue(node.firstElementChild);
+        return ffpxWrappedValue(ffpxDirectChild(root, name));
       }
       function ffpxDeriveHiddenSlots(slotList) {
         let byCell = new Map(
@@ -15767,12 +15777,10 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             layout = ffpxNamedValue(layoutRoot, "layout"),
             caption = ffpxNamedValue(captionRoot, "caption"),
             labels = ffpxNamedValue(labelRoot, "labels"),
-            csvFiles = [...assetRoot.querySelectorAll("dataAsset")].map((node) =>
-              ffpxXmlReadValue(node.firstElementChild),
-            ),
-            images = [...assetRoot.querySelectorAll("imageAsset")].map((node) =>
-              ffpxXmlReadValue(node.firstElementChild),
-            ),
+            csvFiles = [...ffpxDirectChild(assetRoot, "dataAssets").children]
+              .filter((node) => node.tagName === "dataAsset").map(ffpxWrappedValue),
+            images = [...ffpxDirectChild(assetRoot, "imageAssets").children]
+              .filter((node) => node.tagName === "imageAsset").map(ffpxWrappedValue),
             charts = [],
             slots = [];
           debugLog("project:read-version", {
@@ -15785,29 +15793,18 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
                 `slots/slot-${placement.slotId}.xml`,
                 "fastFigureSlot",
               ),
-              slotNode = slotRoot.querySelector(":scope > slot"),
-              slotSettings = ffpxXmlReadValue(
-                slotNode.querySelector(":scope > settings > value"),
-              ),
-              slotCaption = ffpxXmlReadValue(
-                slotNode.querySelector(":scope > caption > value"),
-              ),
-              graphNode = slotNode.querySelector(":scope > graph"),
-              imageNode = slotNode.querySelector(":scope > imageObject"),
-              chart = graphNode
-                ? ffpxXmlReadValue(
-                    graphNode.querySelector(":scope > settings > value"),
-                  )
-                : null;
+              slotNode = ffpxDirectChild(slotRoot, "slot"),
+              slotSettings = ffpxNamedValue(slotNode, "settings"),
+              slotCaption = ffpxNamedValue(slotNode, "caption"),
+              graphNode = ffpxDirectChild(slotNode, "graph", true),
+              imageNode = ffpxDirectChild(slotNode, "imageObject", true),
+              chart = graphNode ? ffpxNamedValue(graphNode, "settings") : null;
             if (chart) {
-              chart.editor.objects = [
-                ...graphNode.querySelectorAll(":scope > graphObjects > graphObject"),
-              ].map((node) => ffpxXmlReadValue(node.firstElementChild));
+              chart.editor.objects = [...ffpxDirectChild(graphNode, "graphObjects").children]
+                .filter((node) => node.tagName === "graphObject").map(ffpxWrappedValue);
               charts.push(chart);
             }
-            let imageObject = imageNode
-              ? ffpxXmlReadValue(imageNode.firstElementChild)
-              : null;
+            let imageObject = imageNode ? ffpxWrappedValue(imageNode) : null;
             slots.push({
               ...slotSettings,
               ...placement,
@@ -17226,17 +17223,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           xmlBytes = assets.get("slot.xml");
         if (!xmlBytes) throw Error("FFSX slot.xml이 없습니다.");
         let slotRoot = ffpxReadXmlDocument(assets, "slot.xml", "fastFigureSlot"),
-            slotNode = slotRoot.querySelector(":scope > slot"),
-            slot = ffpxXmlReadValue(
-              slotNode.querySelector(":scope > settings > value"),
-            ),
-            caption = ffpxXmlReadValue(
-              slotNode.querySelector(":scope > caption > value"),
-            ),
-            graphNode = slotNode.querySelector(":scope > graph"),
-            chart = ffpxXmlReadValue(
-              graphNode.querySelector(":scope > settings > value"),
-            ),
+            slotNode = ffpxDirectChild(slotRoot, "slot"),
+            slot = ffpxNamedValue(slotNode, "settings"),
+            caption = ffpxNamedValue(slotNode, "caption"),
+            graphNode = ffpxDirectChild(slotNode, "graph"),
+            chart = ffpxNamedValue(graphNode, "settings"),
             assetRoot = ffpxReadXmlDocument(
               assets,
               "assets/assets.xml",
@@ -17248,9 +17239,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             appBuild: typeof slot?.appBuild === "string" ? slot.appBuild : null,
           });
           delete slot.appBuild;
-          chart.editor.objects = [
-            ...graphNode.querySelectorAll(":scope > graphObjects > graphObject"),
-          ].map((node) => ffpxXmlReadValue(node.firstElementChild));
+          chart.editor.objects = [...ffpxDirectChild(graphNode, "graphObjects").children]
+            .filter((node) => node.tagName === "graphObject").map(ffpxWrappedValue);
           let payload = {
             schema: "fast-figure-slot",
             version: PACKAGE_FORMAT_VERSION,
@@ -17259,9 +17249,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
               caption: typeof caption?.text === "string" ? caption.text : null,
             },
             chart,
-            csvFiles: [...assetRoot.querySelectorAll("dataAsset")].map((node) =>
-              ffpxXmlReadValue(node.firstElementChild),
-            ),
+            csvFiles: [...ffpxDirectChild(assetRoot, "dataAssets").children]
+              .filter((node) => node.tagName === "dataAsset").map(ffpxWrappedValue),
           };
         if (
           payload?.schema !== "fast-figure-slot" ||
