@@ -5813,6 +5813,50 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(129, "Typed XML reader enforces scalar and recursive child shape without authority writes", () => {
+      const project = activeProject._state, frontend = interfaceFSM.state,
+        decode = xml => ffpxXmlReadValue(new DOMParser().parseFromString(xml, "application/xml").documentElement);
+      const invalid = [
+        '<value type="null">false</value>', '<value type="null"><value type="null"/></value>',
+        '<value type="boolean">TRUE</value>', '<value type="boolean">0</value>',
+        '<value type="boolean"><x/>true</value>', '<value type="number"/>',
+        '<value type="number">NaN</value>', '<value type="number">Infinity</value>',
+        '<value type="number"><x/>2</value>', '<value type="string"><x/>text</value>',
+        '<value type="array">text</value>', '<value type="array"><wrong/></value>',
+        '<value type="array"><item/></value>',
+        '<value type="array"><item><value type="null"/><value type="null"/></item></value>',
+        '<value type="array"><item>text<value type="null"/></item></value>',
+        '<value type="object"><item><value type="null"/></item></value>',
+        '<value type="object"><property><value type="null"/></property></value>',
+        '<value type="object"><property name="x"><value type="boolean">oops</value></property></value>',
+        '<value type="unknown"/>', '<wrong type="null"/>',
+      ];
+      for (const xml of invalid) {
+        let failed = false; try { decode(xml); } catch (_) { failed = true; }
+        check(failed, `malformed typed XML accepted: ${xml}`);
+      }
+      check(decode('<value type="boolean">false</value>') === false &&
+        decode('<value type="number">0</value>') === 0 && decode('<value type="string"/>') === "" &&
+        decode('<value type="null"/>') === null, "valid scalar values changed");
+      const special = decode('<value type="object"><property name="__proto__"><value type="string">own</value></property><property name=""><value type="null"/></property><property name="x"><value type="number">1</value></property><property name="x"><value type="number">2</value></property></value>');
+      check(Object.hasOwn(special, "__proto__") && special.__proto__ === "own" && special[""] === null &&
+        special.x === 2 && Object.getPrototypeOf(special) === Object.prototype, "property names/order lost");
+      check(activeProject._state === project && interfaceFSM.state === frontend, "typed read mutated authority");
+    });
+    await run(130, "Typed XML writer rejects unsupported values and preserves nested escaped roundtrips", () => {
+      const project = activeProject._state, frontend = interfaceFSM.state;
+      for (const value of [undefined, NaN, Infinity, -Infinity, 1n, Symbol("bad"), () => {},
+        [undefined], Array(1), { nested: NaN }]) {
+        let failed = false; try { ffpxXmlValue(value); } catch (_) { failed = true; }
+        check(failed, "unsupported typed XML value was written");
+      }
+      const value = { 'name<&"': [null, true, false, 0, -1.25, "<&>\"'", [], {}] },
+        xml = ffpxXmlValue(value),
+        decoded = ffpxXmlReadValue(new DOMParser().parseFromString(xml, "application/xml").documentElement);
+      check(JSON.stringify(decoded) === JSON.stringify(value), "typed XML escaped nested roundtrip changed");
+      check(activeProject._state === project && interfaceFSM.state === frontend, "typed writer mutated authority");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

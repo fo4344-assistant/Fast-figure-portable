@@ -1,0 +1,221 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 42d065d..2d2593d 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -287,6 +287,12 @@ At implementation `0aa44cc27ac9edeff662307b0945c0d5b1ed3302`, regression39157035
+ 
+ Baseline d33b53ae9b47c6a6a88a48031c3dbf8abdb5678b. Corrected Unit47 fixture passes39 but cumulative39165382849/repeat39165426470 both fail127 on independent asset selection. Source frontend/interface_fsm.py SELECT_SLOT and PlusCal SlotSelection already require non-null clear-graph-object hints to retain current asset kind/path. Runtime asset region/action instead cleared both unconditionally. Code99 directly translates the existing conditional, preserving null/toggle clear and graph selection clearing; no snapshot restoration/raw-direction inference. Case127 remains unchanged. Review20261019-002/patch20261019-003; exact-SHA cumulative/repeat/build/version/fidelity pending. Source45/pseudocode24 unchanged; code stale/full objective open. Baseline build39165424314/versions39165401508/fidelity39165403530 succeeded but are not verification of this change.
+ 
++Unit47/48 corrected final evidence: execution8b3222667ee8fc24e90fb2ebb1fce6ff59888ef1 regression39165754672/manual repeat39165754718 PASS128 inline+128 split each; build39165759776, cumulative versions39165756443 (base0ba01c3fb12bb7545c2e45c7e1fbef3f006560cf), fidelity39165758144 PASS. Fixture004 corrects actual chart.graph.data owner only; code99 stays stale. Reviews001/002 preserve prior failures. No whole completion inference.
++
++## Forty-ninth bounded unit — strict common typed XML codec
++
++Baseline8b3222667ee8fc24e90fb2ebb1fce6ff59888ef1. Source45 assets_files TYPED_XML_RULES/ffpxEncodeValue/ffpxDecodeValue and PlusCal24 StrictTypeAndShape already reject unsupported writer values, nonfinite numbers, invalid booleans and malformed recursive child structure. Code100 directly translates those missing branches, preserving exact scalar values, ordered properties including special names and established last-property behavior. Cases129/130 test actual codec rejects/roundtrips/authority purity; review20261019-003/patch20261019-005. Exact-SHA130 inline+130 split twice, generator build, canonical+cumulative version and fidelity pending. Atomic gh Git Data delivery avoids sequential Contents code/lineage intermediate-parent failures; no policy/checker weakening. Source45/pseudocode24 unchanged; code stale. Whole-package/schema/other serializer, global initializer, resource/raster, dashboard/timing and full requirement inventory remain open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261019-003-code-typed-xml-open.md b/agent_space/reviews/review-20261019-003-code-typed-xml-open.md
+new file mode 100644
+index 0000000..54d8e70
+--- /dev/null
++++ b/agent_space/reviews/review-20261019-003-code-typed-xml-open.md
+@@ -0,0 +1,36 @@
++# Plan023 Unit49 — strict typed XML direct translation (open)
++
++## Authority and bounded mapping
++
++Source45 `sourcescript/backend/assets_files.py` TYPED_XML_RULES, ffpxEncodeValue and ffpxDecodeValue define recursive typed values, finite numbers, boolean true/false, array item/value and object property-name/value shape; unsupported runtime values and malformed shape fail. PlusCal24 `pseudocode/backend/assets_files.pcal:444-497` already specifies finite writer checks, StrictTypeAndShape, ScalarOnly, ArrayItemValueChildShape and ObjectPropertyValueChildShape. No new format/version/domain meaning or hierarchy is introduced. Source and PlusCal are unchanged.
++
++Runtime `sourcecode/fast-figure.js` ffpxXmlValue previously wrote undefined/function/bigint/symbol/NaN/Infinity as unsupported wire types, and skipped sparse array holes. ffpxXmlReadValue previously discarded non-item/property children, ignored excess value children, coerced arbitrary booleans to false and accepted empty number text as zero. Code100 translates the established typed shape and writer failure branches. Container indentation/comment nodes remain harmless; scalar strings preserve exact text. Object property insertion uses defineProperty to preserve every explicit name (including __proto__ and empty names) without changing the object's prototype; repeated properties still use last assignment in input order as the PlusCal loop specifies. We do not invent duplicate-name rejection or unknown-attribute policy.
++
++Case129 checks 20 malformed scalar/container/nested inputs, exact false/zero/empty/null, property-name preservation and unchanged Project/Frontend identity. Case130 checks ten unsupported scalar/nested/hole inputs, recursively escaped supported roundtrip and unchanged authority. These direct helper tests exercise the actual common codec, but do NOT by themselves prove whole-package schema, every package entry, resource lifetime or all export consumers. Existing package import/roundtrip cases remain cumulative coverage; additional adversarial whole-package coverage remains an audit task.
++
++Rejected: filtering malformed children, coercing booleans, retaining invalid writer types for compatibility, adding a second codec, changing Source to excuse current behavior. No local application/test/build/checker or optional TLC execution; static diff inspection only. Dist remains generator-only. Source-code100 stays stale; exact new execution-SHA gates pending.
++
++## Confirmed preceding Unit47/48 evidence
++
++At `8b3222667ee8fc24e90fb2ebb1fce6ff59888ef1`, actual regression39165754672 and manual repeat39165754718 succeed with128 inline +128 split each, including127 actual candidate graph trace and asset preservation and128 validation/retry/noncommit/late-error. Logs show standard ubuntu-24.04 runner image. Build39165759776, cumulative development versions39165756443 (base0ba01c3fb12bb7545c2e45c7e1fbef3f006560cf) and fidelity39165758144 succeed. Fixture-only correction20261019-004 uses chart.graph.data, not chart.data. Earlier127 fixture/selection failures remain recorded in reviews001/002, not erased by these passes.
++
++## Prompt-to-artifact completion audit (still open)
++
++Success means every Plan023 contract directly translated without invented semantics, preserving existing features and Source hierarchy, with requirement-level coverage plus exact-SHA cumulative/repeat inline+split/build/lineage/fidelity. Current evidence is bounded, not completion.
++
++| Requirement / artifact | Inspected evidence | Remaining obligation |
++| --- | --- | --- |
++| Source semantic supremacy / hierarchy / development-policy.md | Source45 and PlusCal24 typed codec, policy v0.2.6 §§1/2/3/7; changes inside existing Backend assets codec | Full cross-module hierarchy audit remains open |
++| assets/import command ownership | Units43–48 reviews, preceding128+128 runs above | Global initializer validation/reentrancy and remaining owners still require audit |
++| schema/serializer | Unit49 actual shared typed reader/writer branches and proposed129/130 | Exact-SHA execution plus whole-package malformed entry/schema coverage and serializers beyond typed values remain open |
++| raster resources/current snapshot | Prior bounded changes are not blanket proof | Full lifetime/failure/supplied-state audit open |
++| dashboard/timing | No claim from codec tests | Full consumer boundary/order/cancellation audit open |
++| every Plan023 numbered item/file/command/gate | This is a partial audit, not an exhaustive manifest | Produce complete requirement inventory and individually inspect remaining implementation/evidence |
++| default GitHub-hosted only / gh delivery | Preceding logs and workflow ubuntu-latest; no local runtime | New exact-SHA run logs pending; no self-hosted/paid runner |
++| inline/split cumulative and repetition | Preceding128 each twice | New130 each twice pending |
++| build / dist generator-only | Preceding39165759776 | New implementation build pending; never hand-edit dist |
++| development-layer/fidelity | Preceding39165756443/39165758144 | New canonical+cumulative/fidelity pending; green coverage checker does not prove semantic completeness |
++| numeric patch/plan/review/lineage | Pair20261019-005, Plan023 Unit49, this review, code100 fingerprint | Delivery and exact-SHA evidence pending |
++| stop conditions / final completion | No explicit auth/service/quota blocker observed | Do not mark complete while any item remains uncertain; preserve run IDs/resumption point at a real blocker |
++
++Delivery uses one atomic gh Git Data tree/commit/ref update rather than sequential Contents writes because the observed immediate-parent code/revision gates fail when matching code and lineage land in different commits. No force ref update, no policy/checker weakening. All local changes must be reviewed before publication; remote parent checked before ref update. No optional TLC requirement is introduced.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 5b46f33..d768b02 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5813,6 +5813,50 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(129, "Typed XML reader enforces scalar and recursive child shape without authority writes", () => {
++      const project = activeProject._state, frontend = interfaceFSM.state,
++        decode = xml => ffpxXmlReadValue(new DOMParser().parseFromString(xml, "application/xml").documentElement);
++      const invalid = [
++        '<value type="null">false</value>', '<value type="null"><value type="null"/></value>',
++        '<value type="boolean">TRUE</value>', '<value type="boolean">0</value>',
++        '<value type="boolean"><x/>true</value>', '<value type="number"/>',
++        '<value type="number">NaN</value>', '<value type="number">Infinity</value>',
++        '<value type="number"><x/>2</value>', '<value type="string"><x/>text</value>',
++        '<value type="array">text</value>', '<value type="array"><wrong/></value>',
++        '<value type="array"><item/></value>',
++        '<value type="array"><item><value type="null"/><value type="null"/></item></value>',
++        '<value type="array"><item>text<value type="null"/></item></value>',
++        '<value type="object"><item><value type="null"/></item></value>',
++        '<value type="object"><property><value type="null"/></property></value>',
++        '<value type="object"><property name="x"><value type="boolean">oops</value></property></value>',
++        '<value type="unknown"/>', '<wrong type="null"/>',
++      ];
++      for (const xml of invalid) {
++        let failed = false; try { decode(xml); } catch (_) { failed = true; }
++        check(failed, `malformed typed XML accepted: ${xml}`);
++      }
++      check(decode('<value type="boolean">false</value>') === false &&
++        decode('<value type="number">0</value>') === 0 && decode('<value type="string"/>') === "" &&
++        decode('<value type="null"/>') === null, "valid scalar values changed");
++      const special = decode('<value type="object"><property name="__proto__"><value type="string">own</value></property><property name=""><value type="null"/></property><property name="x"><value type="number">1</value></property><property name="x"><value type="number">2</value></property></value>');
++      check(Object.hasOwn(special, "__proto__") && special.__proto__ === "own" && special[""] === null &&
++        special.x === 2 && Object.getPrototypeOf(special) === Object.prototype, "property names/order lost");
++      check(activeProject._state === project && interfaceFSM.state === frontend, "typed read mutated authority");
++    });
++    await run(130, "Typed XML writer rejects unsupported values and preserves nested escaped roundtrips", () => {
++      const project = activeProject._state, frontend = interfaceFSM.state;
++      for (const value of [undefined, NaN, Infinity, -Infinity, 1n, Symbol("bad"), () => {},
++        [undefined], Array(1), { nested: NaN }]) {
++        let failed = false; try { ffpxXmlValue(value); } catch (_) { failed = true; }
++        check(failed, "unsupported typed XML value was written");
++      }
++      const value = { 'name<&"': [null, true, false, 0, -1.25, "<&>\"'", [], {}] },
++        xml = ffpxXmlValue(value),
++        decoded = ffpxXmlReadValue(new DOMParser().parseFromString(xml, "application/xml").documentElement);
++      check(JSON.stringify(decoded) === JSON.stringify(value), "typed XML escaped nested roundtrip changed");
++      check(activeProject._state === project && interfaceFSM.state === frontend, "typed writer mutated authority");
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index a3de38c..4a8a3e4 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 99,
++      "revision": 100,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:4783927c81552991f16a875a5a9bc367d3e20372f090024ce0446271bdd5e002",
++      "fingerprint": "sha256:abbc999fd35707697f917cac2c92b83b4c1dd9b24164b885bfa319f123c19b71",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261019-002-code-slot-selection-open.md"
++      "validation_review": "agent_space/reviews/review-20261019-003-code-typed-xml-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 24,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 083fbb2..ceebba3 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -5467,7 +5467,7 @@
+       function ffpxXmlValue(value) {
+         if (value === null) return '<value type="null"/>';
+         if (Array.isArray(value))
+-          return `<value type="array">${value
++          return `<value type="array">${Array.from(value)
+             .map((item) => `<item>${ffpxXmlValue(item)}</item>`)
+             .join("")}</value>`;
+         if (typeof value === "object")
+@@ -5477,31 +5477,49 @@
+                 `<property name="${ffpxXmlEscape(name)}">${ffpxXmlValue(item)}</property>`,
+             )
+             .join("")}</value>`;
++        if (!["boolean", "number", "string"].includes(typeof value) ||
++            (typeof value === "number" && !Number.isFinite(value)))
++          throw Error("FFPX XML로 기록할 수 없는 값입니다.");
+         return `<value type="${typeof value}">${ffpxXmlEscape(value)}</value>`;
+       }
+       function ffpxXmlReadValue(element) {
+         if (!element || element.tagName !== "value")
+           throw Error("FFPX XML 값 형식이 올바르지 않습니다.");
+-        let type = element.getAttribute("type");
+-        if (type === "null") return null;
+-        if (type === "array")
+-          return [...element.children]
+-            .filter((child) => child.tagName === "item")
+-            .map((item) => ffpxXmlReadValue(item.firstElementChild));
+-        if (type === "object") {
+-          let result = {};
+-          for (let property of element.children) {
+-            if (property.tagName !== "property") continue;
+-            result[property.getAttribute("name") || ""] = ffpxXmlReadValue(
+-              property.firstElementChild,
+-            );
++        const type = element.getAttribute("type"),
++          children = [...element.children],
++          hasScalarText = (node) => [...node.childNodes].some(child =>
++            (child.nodeType === 3 || child.nodeType === 4) && child.textContent.trim() !== ""),
++          requireShape = (valid) => {
++            if (!valid) throw Error("FFPX XML 값 구조가 올바르지 않습니다.");
++          };
++        if (type === "null") {
++          requireShape(children.length === 0 && !hasScalarText(element));
++          return null;
++        }
++        if (type === "array" || type === "object") {
++          requireShape(!hasScalarText(element));
++          const result = type === "array" ? [] : {};
++          for (const child of children) {
++            requireShape(child.tagName === (type === "array" ? "item" : "property") &&
++              child.children.length === 1 && child.firstElementChild.tagName === "value" &&
++              !hasScalarText(child) && (type === "array" || child.hasAttribute("name")));
++            const decoded = ffpxXmlReadValue(child.firstElementChild);
++            if (type === "array") result.push(decoded);
++            else Object.defineProperty(result, child.getAttribute("name"), {
++              value: decoded, enumerable: true, configurable: true, writable: true,
++            });
+           }
+           return result;
+         }
+-        if (type === "boolean") return element.textContent === "true";
++        requireShape(children.length === 0);
++        if (type === "boolean") {
++          requireShape(element.textContent === "true" || element.textContent === "false");
++          return element.textContent === "true";
++        }
+         if (type === "number") {
+           let number = Number(element.textContent);
+-          if (!Number.isFinite(number)) throw Error("FFPX XML 숫자 값이 올바르지 않습니다.");
++          if (!element.textContent.trim() || !Number.isFinite(number))
++            throw Error("FFPX XML 숫자 값이 올바르지 않습니다.");
+           return number;
+         }
+         if (type === "string") return element.textContent;
