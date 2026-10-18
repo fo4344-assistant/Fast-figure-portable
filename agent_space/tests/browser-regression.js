@@ -6161,7 +6161,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         const current = slotAt(targetId), projectEntries = ffpxBuildProject().assets,
           slotEntries = ffsxBuildSlot(current, getChart(current.chart)).assets,
           data = new TextEncoder().encode("path inspection only"),
-          project = activeProject._state, frontend = interfaceFSM.state,
+          project = activeProject._state,
           unsafePackage = (entries, name) => {
             const encoded = new TextEncoder().encode(name), safeName = "z".repeat(encoded.length),
               bytes = ffpxZipStore([...entries, { name: safeName, data }]),
@@ -6179,6 +6179,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
             check(changed, "unsafe ZIP fixture did not replace both equal-length entry names");
             return bytes;
           };
+        let frontend = interfaceFSM.state;
         for (const [entries, reader, suffix] of [[projectEntries, ffpxReadProjectBytes, "ffpx"],
           [slotEntries, ffsxReadSlotBytes, "ffsx"]]) {
           for (const name of ["assets/report..csv", "assets/.../note", "assets/.hidden", "assets/a..b/data"]) {
@@ -6199,13 +6200,17 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
             check(caught && activeProject._state === project && interfaceFSM.state === frontend,
               `${suffix} unsafe path accepted or read changed authority: ${name}`);
             caught = null;
+            const before = interfaceFSM.readState();
             try {
               const file = new File([bytes], `unsafe.${suffix}`);
               if (suffix === "ffpx") await api.project.importFile(file);
               else await api.graphs.importFile(file, targetId);
             } catch (error) { caught = error; }
-            check(caught && activeProject._state === project && interfaceFSM.state === frontend,
-              `${suffix} public unsafe package import committed: ${name}`);
+            const after = interfaceFSM.readState();
+            check(caught?.message === "FFPX 자산 경로가 올바르지 않습니다." && activeProject._state === project &&
+              after.lifecycle === "ready" && ["selectedSlotId", "assetSelection", "assetPath", "graphObjectIndex"].every(key =>
+                Object.is(after[key], before[key])), `${suffix} public unsafe package import changed authority/selection or error: ${name}`);
+            frontend = interfaceFSM.state;
           }
         }
       } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
