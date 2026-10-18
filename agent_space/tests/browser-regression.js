@@ -4990,6 +4990,122 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(112, "Directory movement detaches current subtree once and preserves local ownership", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
+        notify = interfaceFSM.notify, report = status;
+      try {
+        api.layout.setGrid(2, 2); const base = projectClone(activeProject._state);
+        base.slots.forEach(slot => { slot.hidden = false; slot.rowSpan = 1; slot.colSpan = 1; }); initialize.call(activeProject, base);
+        const [a, b] = activeProject.slots;
+        api.slots.reset(a.id); select(slotAt(a.id)); api.slots.setContentType(a.id, "graph");
+        const keep = createProjectCsv([["X", "Y"], ["1", "2"]], "move-keep.csv"),
+          csv = createProjectCsv([["X", "Y"], ["3", "4"]], "move-owned.csv");
+        [keep.id, csv.id, keep.id].forEach(id => api.graphs.addObject(id));
+        const chartId = slotAt(a.id).chart;
+        api.slots.reset(b.id); select(slotAt(b.id)); api.slots.setContentType(b.id, "image");
+        const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "move-owned.svg", "image/svg+xml");
+        api.assets.connectToSlot(projectAssetPath(image), "image", b.id);
+        const folder = api.assets.createDirectory("/assets", "move-subtree"), fixture = projectClone(activeProject._state);
+        fixture.fileSystem.directories.push(`${folder}/nested`);
+        fixture.assets.csvFiles.find(item => item.id === csv.id).directory = folder;
+        fixture.assets.images.find(item => item.id === image.id).directory = `${folder}/nested`;
+        initialize.call(activeProject, fixture);
+        slotAt(b.id).content.moveExtension = { keep: true };
+        const settings = JSON.stringify(slotAt(b.id).content.imageSettings);
+        select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(keep)); api.graphs.selectObject(2);
+        let commits = 0, paints = 0, result;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        projectEFSM.send = function (event, payload) {
+          check(Object.keys(payload).sort().join() === "directory,path,useUniqueName", "move leaked stale plan/candidate fields");
+          return result = send.call(this, event, payload);
+        };
+        renderDashboard = () => { paints++; }; interfaceFSM.notify = status = () => {};
+        const moved = api.assets.move(api.assets.planMove(folder, PROJECT_TRASH_DIRECTORY));
+        check(Object.isFrozen(moved) && moved.trashed && commits === 1 && paints === 1 &&
+          moved.path === `${PROJECT_TRASH_DIRECTORY}/move-subtree`, "move did not return immutable actual destination");
+        check(activeProject.fileSystem.directories.includes(`${moved.path}/nested`) &&
+          projectAssetPath(getProjectCsv(csv.id)) === `${moved.path}/move-owned.csv` &&
+          projectAssetPath(getProjectImage(image.id)) === `${moved.path}/nested/move-owned.svg`,
+          "directory descendants did not move together");
+        check(result.changed.removedGraphReferenceCount === 1 && result.changed.resetImageSlotCount === 1 &&
+          result.selectionHints.graphObjectIndexMaps[0].indices.join() === "0,,1" &&
+          getChart(chartId).editor.objects.length === 2 && interfaceFSM.readState().graphObjectIndex === 1 &&
+          interfaceFSM.readState().assetPath === projectAssetPath(keep), "move cascade or retained selection map incorrect");
+        check(slotAt(b.id).imageId === null && JSON.stringify(slotAt(b.id).content.imageSettings) === settings &&
+          slotAt(b.id).content.moveExtension.keep, "move reset image-owned local settings/extension");
+        const restored = api.assets.move(api.assets.planMove(moved.path, "/assets"));
+        check(!restored.trashed && restored.path === folder && commits === 2 && paints === 1 &&
+          result.changed.removedGraphReferenceCount === 0 && result.changed.resetImageSlotCount === 0 &&
+          result.selectionHints.graphObjectIndexMaps.length === 0 && slotAt(b.id).imageId === null &&
+          getChart(chartId).editor.objects.length === 2, "leaving trash restored references or repainted content");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+        interfaceFSM.notify = notify; status = report; initialize.call(activeProject, saved);
+        interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(113, "Movement recalculates unique destination and gates rejected and late operations", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, validate = validateProjectObjectState,
+        query = readBackendProjection, render = renderDashboard, notify = interfaceFSM.notify, report = status,
+        failure = Error("move boundary");
+      try {
+        const parent = api.assets.createDirectory("/assets", "move-current-target"),
+          csv = createProjectCsv([["X", "Y"], ["1", "2"]], "move-current.csv"),
+          path = projectAssetPath(csv), plan = api.assets.planMove(path, parent);
+        const occupied = projectClone(activeProject._state);
+        occupied.fileSystem.directories.push(plan.destination); initialize.call(activeProject, occupied);
+        const source = activeProject._state, frontend = interfaceFSM.state;
+        let commits = 0, effects = 0, reads = 0, caught;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = status = () => { effects++; }; interfaceFSM.notify = () => {};
+        readBackendProjection = function (kind, request) {
+          if (request?.operation === "assets.isTrashed") reads++;
+          return query(kind, request);
+        };
+        try { api.assets.move(plan); } catch (error) { caught = error; }
+        check(caught && !commits && !effects && !reads && activeProject._state === source, "new collision was ignored");
+        projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.assets.move(plan, true) === null && !effects && !reads, "noncommit move did useful success work"); projectEFSM.send = send;
+        validateProjectObjectState = () => { throw failure; }; caught = null;
+        try { api.assets.move(plan, true); } catch (error) { caught = error; }
+        check(caught === failure && !commits && !effects && activeProject._state === source &&
+          interfaceFSM.state === frontend, "move validation failure changed authority");
+        validateProjectObjectState = validate;
+        check(api.assets.move({ path, directory: projectParentPath(path) }) === null && !commits && !effects && !reads,
+          "same-location move committed or read success");
+        for (const input of [{ path: "/assets", directory: parent }, { path: parent, directory: parent }]) {
+          caught = null; try { api.assets.move(input); } catch (error) { caught = error; }
+          check(caught && !commits && activeProject._state === source, "fixed directory/cycle move accepted");
+        }
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const answer = validate(candidate, options);
+          if (options?.requireSlots && ++attempts === 1) {
+            const newer = projectClone(activeProject._state);
+            newer.fileSystem.directories.push(`${parent}/move-current (2).csv`);
+            initialize.call(activeProject, newer);
+          }
+          return answer;
+        };
+        const moved = api.assets.move({ ...plan, uniqueName: "stale-name.csv", destination: "/stale" }, true);
+        check(attempts === 2 && commits === 1 && moved.path === `${parent}/move-current (3).csv` &&
+          !moved.trashed && reads === 1 && Object.isFrozen(moved), "move reused stale candidate/unique plan");
+        validateProjectObjectState = validate;
+        const beforeEffects = effects, beforeCommits = commits;
+        readBackendProjection = function (kind, request) {
+          if (request?.operation === "assets.isTrashed") throw failure;
+          return query(kind, request);
+        };
+        caught = null;
+        try { api.assets.move({ path: moved.path, directory: PROJECT_TRASH_DIRECTORY }); } catch (error) { caught = error; }
+        check(caught === failure && commits === beforeCommits + 1 && effects === beforeEffects &&
+          projectVfs.isTrashed(projectAssetPath(getProjectCsv(csv.id))), "late move query failure rolled back or did success work");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; validateProjectObjectState = validate;
+        readBackendProjection = query; renderDashboard = render; interfaceFSM.notify = notify; status = report;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

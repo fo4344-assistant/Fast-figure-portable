@@ -1,0 +1,19 @@
+# Unit41 — current-authority asset/directory movement (pending Actions)
+
+## Policy and upper-contract audit
+
+Continue development-policy.md v0.2.6 read completely and AGENT.md paired patch/lineage/ownership rules. Source45 is highest authority; pseudocode23 directly translates it. No policy, upper meaning, hierarchy or optional model/TLC changes. Source application/public_api/assets.py moveProjectNode specifies stale plan cannot own persistence; resolve current source/target, calculate final destination, subtree update and shared entering-trash reference-only detach in one validated candidate, source-replacement retry and one commit; leaving trash moves paths only. Result carries actual counts/index deltas. The public wrapper forwards only source/target/useUniqueName, gates useful work on committed, reads assets.isTrashed for the actual final destination and returns an immutable path/trashed copy. Pseudocode backend/project_efsm.pcal PROJECT_NODE_MOVED/DetachAssetReferences/current-attempt loop and application/public_api/assets.pcal moveProjectNode express these same boundaries. Existing JS plan.path is the concrete representation of the logical source field; stale destination/uniqueName are never command authority.
+
+## Prompt-to-artifact bounded checklist
+
+- Current explicit-state move calculation with fixed-directory/target/cycle checks and shared reference count: planProjectNodeMove, movableProjectNode, projectNodeReferenceCount/projectAssetReferenceCount; one supplied Project per calculation, no state write.
+- Current-source candidate preserves canonical slot contents, recalculates collisions and unique path each attempt, enters trash with shared detach/index map, moves entire subtree paths, validates then compares source identity before one commit: applyProjectNodeMovedAction.
+- Actual movedPathFrom/To, removedGraphReferenceCount/resetImageSlotCount and chart-specific original-index map drive existing reconciliation/content effect. Path-only/exit counts are zero; no blanket selection clear or reference restoration.
+- Public move copies only path/directory/useUniqueName, ignores stale calculated destination/uniqueName, commit-gates success, official assets.isTrashed query uses actual final path, returns fresh frozen result; errors propagate and late failure cannot roll back.
+- Case112: moving directory with nested CSV/image into trash, one commit, entire descendant path rewrite, exact counts/index map and retained graph/asset selection, image settings/canonical extension preservation, one content render; exit only moves paths without reference restoration/repaint.
+- Case113: collision introduced after plan, rejection without unique flag, validation error preservation, invalid fixed/cycle and no-op/noncommit useful-work gates, new collision during validation causes full retry and actual third unique filename, ignores stale plan fields; late official query error retains commit and skips subsequent success work.
+- Prior109/110/111 retain duplicate/frozen/conversion scope, detach/resource and common reconciliation failure coverage. These are not whole import/schema/export/render/timing proof.
+
+## Lineage and verification
+
+Code92 remains stale derived from unchanged Source45/pseudocode23. Fingerprint sha256:45e524e84694bab3686ed7acea650a64b9361b401eca3625b0aaeb2e6a9a1e89 calculated from staged Git path/blob records only, NOT local checker execution. Exact new-SHA GitHub-hosted default-runner cumulative113 inline+113 split, repeat, generated build, canonical/cumulative development-layer and fidelity Actions PENDING. No local application/test/build/checker execution or TLC pass claimed. Aggregate dashboard renderer remains explicitly not full supplied-projection alignment. Whole assets/import/schema/serializer/raster/dashboard/timing requirement audit open; green structural gate is not semantic closure.

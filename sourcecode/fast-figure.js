@@ -408,6 +408,8 @@
             id: slot.id, row: slot.row, col: slot.col, text: slot.caption ?? "",
           }) : null;
         }
+        if (kind === "project-api" && request.operation === "assets.isTrashed")
+          return projectVfs.isTrashed(request.path);
         if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
           const source = activeProject._state,
             node = request.path ? projectVfs.resolve(request.path, source) : null;
@@ -1685,11 +1687,8 @@
         });
         return refs;
       }
-      function projectAssetReferenceCount(csvIds, imageIds) {
-        return activeProject.charts.reduce(
-          (count, chart) => count + chartCsvIds(chart).filter((id) => csvIds.has(id)).length,
-          0,
-        ) + activeProject.slots.filter((slot) => imageIds.has(slot.imageId)).length;
+      function projectAssetReferenceCount(csvIds, imageIds, state = activeProject._state) {
+        return collectAssetReferences(csvIds, imageIds, state).length;
       }
       function removeProjectAssetReferences(csvIds, imageIds, state=activeProject._state) {
         normalizeSlotContents(state.slots);
@@ -1758,99 +1757,57 @@
         }
       }
       function applyProjectNodeMovedAction({ machine, payload }) {
-        machine.assertWritable("files","PROJECT_NODE_MOVED");
-        let liveMatch=projectVfs.resolve(payload.path),
-          directory=normalizeProjectPath(payload.directory,{directory:true});
-        if(!liveMatch) throw Error("이동할 프로젝트 파일 또는 폴더가 없습니다.");
-        if(!activeProject.fileSystem.directories.includes(directory))
-          throw Error("대상 폴더가 없습니다.");
-
-        let source=liveMatch.kind==="directory"?liveMatch.path:projectAssetPath(liveMatch.asset);
-        if(liveMatch.kind==="directory"){
-          if(projectVfs.isFixedDirectory(source))
-            throw Error("기본 프로젝트 폴더는 이동할 수 없습니다.");
-          if(projectPathInDirectory(directory,source))
-            throw Error("폴더를 자기 자신 또는 하위 폴더로 이동할 수 없습니다.");
-        }
-
-        let movingLive=liveMatch.kind==="directory"
-            ?projectVfs.descendants(source)
-            :[{kind:liveMatch.kind,asset:liveMatch.asset}],
-          csvIds=new Set(movingLive.filter(({kind})=>kind==="csv").map(({asset})=>asset.id)),
-          imageIds=new Set(movingLive.filter(({kind})=>kind==="image").map(({asset})=>asset.id));
-
-        if(csvIds.size) machine.assertWritable("data","PROJECT_NODE_MOVED");
-        if(imageIds.size) machine.assertWritable("images","PROJECT_NODE_MOVED");
-
-        let requestedName=payload.name===undefined
-            ?projectPathName(source)
-            :String(payload.name||"").trim(),
-          safeName=projectCsvName(requestedName,"");
-        if(!safeName||safeName!==requestedName||/[\\/]/.test(requestedName))
-          throw Error("이동할 항목의 새 이름이 올바르지 않습니다.");
-
-        let destination=normalizeProjectPath(`${directory}/${safeName}`,{
-          directory:liveMatch.kind==="directory",
-        });
-        if(destination===source){
-          payload.path=source;
-          payload.trashed=false;
-          payload.removedGraphReferenceCount=0;
-          payload.resetImageSlotCount=0;
+        machine.assertWritable("files", "PROJECT_NODE_MOVED");
+        while (true) {
+          const source = activeProject._state,
+            plan = planProjectNodeMove(payload.path, payload.directory, source);
+          if (!plan) return false;
+          const candidate = projectClone(source);
+          candidate.slots.forEach(slot => {
+            const original = source.slots.find(item => item.id === slot.id);
+            if (original?.content) slot.content = projectClone(original.content);
+          });
+          const match = projectVfs.resolve(plan.path, candidate),
+            moving = match.kind === "directory" ? projectVfs.descendants(plan.path, candidate) : [match],
+            csvIds = new Set(moving.filter(node => node.kind === "csv").map(node => node.asset.id)),
+            imageIds = new Set(moving.filter(node => node.kind === "image").map(node => node.asset.id));
+          if (csvIds.size) machine.assertWritable("data", "PROJECT_NODE_MOVED");
+          if (imageIds.size) machine.assertWritable("images", "PROJECT_NODE_MOVED");
+          let destination = plan.destination;
+          if (projectVfs.exists(destination, candidate)) {
+            if (!payload.useUniqueName) throw Error(`${destination}가 이미 존재합니다.`);
+            destination = projectVfs.uniquePath(plan.directory, projectPathName(plan.path), candidate);
+          }
+          const enteringTrash = !projectVfs.isTrashed(plan.path) && projectVfs.isTrashed(destination);
+          let removed = { removedGraphReferenceCount: 0, resetImageSlotCount: 0, graphObjectIndexMaps: [] };
+          if (enteringTrash) {
+            for (const domain of ["charts", "slots", "editor"]) machine.assertWritable(domain, "PROJECT_NODE_MOVED");
+            removed = removeProjectAssetReferences(csvIds, imageIds, candidate);
+          }
+          const rewrite = path => `${destination}${path.slice(plan.path.length)}`;
+          if (match.kind === "directory") {
+            candidate.fileSystem.directories = candidate.fileSystem.directories.map(path =>
+              projectPathInDirectory(path, plan.path) ? rewrite(path) : path).sort();
+            moving.forEach(({ asset }) => { asset.directory = projectParentPath(rewrite(projectAssetPath(asset))); });
+          } else {
+            match.asset.directory = projectParentPath(destination);
+            match.asset.name = projectPathName(destination);
+          }
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const post = activeProject._state,
+            changedIds = (before, after) => [...new Set([...before, ...after].map(item => item.id))]
+              .filter(id => JSON.stringify(before.find(item => item.id === id)) !==
+                JSON.stringify(after.find(item => item.id === id)));
+          payload.changed = { slotIds: changedIds(source.slots, post.slots), chartIds: changedIds(source.charts, post.charts),
+            csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
+            imageIds: changedIds(source.assets.images, post.assets.images),
+            movedPathFrom: plan.path, movedPathTo: destination, ...removed };
+          payload.selectionHints = immutableProjectCopy({ movedPathFrom: plan.path, movedPathTo: destination,
+            enteringTrash, graphObjectIndexMaps: removed.graphObjectIndexMaps });
           return;
         }
-
-        let candidate=projectClone(activeProject._state);
-        normalizeSlotContents(candidate.slots);
-        let match=projectVfs.resolve(source,candidate);
-        if(!match) throw Error("이동할 프로젝트 항목을 candidate에서 찾을 수 없습니다.");
-        if(projectVfs.exists(destination,candidate))
-          throw Error(`${destination}가 이미 존재합니다.`);
-
-        let enteringTrash=projectVfs.isTrashed(destination)&&!projectVfs.isTrashed(source);
-        if(enteringTrash){
-          machine.assertWritable("charts","PROJECT_NODE_MOVED");
-          machine.assertWritable("slots","PROJECT_NODE_MOVED");
-          machine.assertWritable("editor","PROJECT_NODE_MOVED");
-        }
-
-        let rewritePath=(path)=>
-          match.kind==="directory"&&projectPathInDirectory(path,source)
-            ?`${destination}${path.slice(source.length)}`
-            :destination;
-
-        if(match.kind==="directory"){
-          candidate.fileSystem.directories=candidate.fileSystem.directories
-            .map(path=>projectPathInDirectory(path,source)?rewritePath(path):path)
-            .sort();
-          projectVfs.descendants(source,candidate).forEach(({asset})=>{
-            let oldPath=projectAssetPath(asset);
-            asset.directory=projectParentPath(rewritePath(oldPath));
-          });
-        } else {
-          match.asset.directory=directory;
-          match.asset.name=safeName;
-        }
-
-        let removedReferences={removedGraphReferenceCount:0,resetImageSlotCount:0};
-        if(enteringTrash)
-          removedReferences=removeProjectAssetReferences(csvIds,imageIds,candidate);
-
-        validateProjectObjectState(candidate,{requireSlots:true});
-        activeProject.initialize(candidate);
-
-        payload.selectionHints = {
-          movedPathFrom: source,
-          movedPathTo: destination,
-          enteringTrash,
-        };
-        payload.removedGraphReferenceCount=removedReferences.removedGraphReferenceCount;
-        payload.resetImageSlotCount=removedReferences.resetImageSlotCount;
-        payload.clearGraphSelection=
-          payload.removedGraphReferenceCount>0||
-          payload.resetImageSlotCount>0;
-        payload.path=destination;
-        payload.trashed=enteringTrash;
       }
       function applyProjectNameChangedAction({ machine, payload }) {
         machine.assertWritable("project", "PROJECT_NAME_CHANGED");
@@ -6552,21 +6509,21 @@
         status(`${removed.name}을 프로젝트에서 삭제했습니다.`);
         return null;
       }
-      function movableProjectNode(path) {
-        let match = path ? projectVfs.resolve(path) : null;
+      function movableProjectNode(path, state = activeProject._state) {
+        let match = path ? projectVfs.resolve(path, state) : null;
         if (!match) return false;
         if (match.kind === "directory") return !projectVfs.isFixedDirectory(path);
         return true;
       }
-      function projectNodeReferenceCount(path) {
-        let match = projectVfs.resolve(path);
+      function projectNodeReferenceCount(path, state = activeProject._state) {
+        let match = projectVfs.resolve(path, state);
         if (!match) return 0;
         let movingAssets = match.kind === "directory"
-          ? projectVfs.descendants(path)
+          ? projectVfs.descendants(path, state)
           : [{ kind: match.kind, asset: match.asset }];
         return projectAssetReferenceCount(
           new Set(movingAssets.filter(({ kind }) => kind === "csv").map(({ asset }) => asset.id)),
-          new Set(movingAssets.filter(({ kind }) => kind === "image").map(({ asset }) => asset.id)),
+          new Set(movingAssets.filter(({ kind }) => kind === "image").map(({ asset }) => asset.id)), state,
         );
       }
       function readProjectTrash() {
@@ -6589,45 +6546,37 @@
           !projectVfs.isTrashed(directory) &&
           !(match?.kind === "directory" && projectPathInDirectory(directory, path)));
       }
-      function planProjectNodeMove(path, directory) {
-        let match = projectVfs.resolve(path);
-        if (!match || !movableProjectNode(path))
-          throw Error("이동할 수 없는 프로젝트 항목입니다.");
-        let source = match.kind === "directory" ? match.path : projectAssetPath(match.asset);
-        let targetDirectory = normalizeProjectPath(directory, { directory: true });
-        if (!activeProject.fileSystem.directories.includes(targetDirectory))
-          throw Error("대상 폴더가 없습니다.");
+      function planProjectNodeMove(path, directory, state = activeProject._state) {
+        const match = projectVfs.resolve(path, state);
+        if (!match || !movableProjectNode(path, state)) throw Error("이동할 수 없는 프로젝트 항목입니다.");
+        const source = match.kind === "directory" ? match.path : projectAssetPath(match.asset),
+          targetDirectory = normalizeProjectPath(directory, { directory: true });
+        if (!state.fileSystem.directories.includes(targetDirectory)) throw Error("대상 폴더가 없습니다.");
         if (match.kind === "directory" && projectPathInDirectory(targetDirectory, source))
           throw Error("폴더를 자기 자신 또는 하위 폴더로 이동할 수 없습니다.");
-        let destination = normalizeProjectPath(
-          `${targetDirectory}/${projectPathName(source)}`,
-          { directory: match.kind === "directory" },
-        );
+        const destination = normalizeProjectPath(`${targetDirectory}/${projectPathName(source)}`,
+          { directory: match.kind === "directory" });
         if (destination === source) return null;
-        let collision = projectVfs.exists(destination);
-        let uniquePath = collision
-          ? projectVfs.uniquePath(targetDirectory, projectPathName(source))
-          : destination;
-        let enteringTrash =
-          projectVfs.isTrashed(destination) && !projectVfs.isTrashed(source);
-        return {
-          path: source, kind: match.kind, directory: targetDirectory,
-          destination, collision, uniqueName: projectPathName(uniquePath),
-          enteringTrash,
-          referenceCount: enteringTrash ? projectNodeReferenceCount(source) : 0,
-        };
+        const collision = projectVfs.exists(destination, state),
+          uniquePath = collision ? projectVfs.uniquePath(targetDirectory, projectPathName(source), state) : destination,
+          enteringTrash = projectVfs.isTrashed(destination) && !projectVfs.isTrashed(source);
+        return immutableProjectCopy({ path: source, kind: match.kind, directory: targetDirectory,
+          destination, collision, uniqueName: projectPathName(uniquePath), enteringTrash,
+          referenceCount: enteringTrash ? projectNodeReferenceCount(source, state) : 0 });
       }
       function moveProjectNode(plan, useUniqueName = false) {
         if (!plan) return null;
-        let payload = {
-          path: plan.path, directory: plan.directory, direction: "ui-to-fsm",
-        };
-        if (useUniqueName) payload.name = plan.uniqueName;
-        dispatchDashboardAffectingEvent("PROJECT_NODE_MOVED", payload);
-        status(payload.trashed
-          ? `${projectPathName(plan.path)}을 휴지통으로 이동했습니다.`
-          : `${projectPathName(plan.path)}을 ${projectParentPath(payload.path)}로 이동했습니다.`);
-        return { path: payload.path, trashed: payload.trashed };
+        const result = dispatchProjectCommand("PROJECT_NODE_MOVED", {
+          path: plan.path, directory: plan.directory, useUniqueName,
+        });
+        if (!result.committed) return null;
+        const path = result.changed.movedPathTo,
+          trashed = appFSM.query("project-api", { operation: "assets.isTrashed", path });
+        if (dashboardProjectionEffect("PROJECT_NODE_MOVED", result.changed) === "FULL_DASHBOARD") renderDashboard();
+        status(trashed
+          ? `${projectPathName(result.changed.movedPathFrom)}을 휴지통으로 이동했습니다.`
+          : `${projectPathName(result.changed.movedPathFrom)}을 ${projectParentPath(path)}로 이동했습니다.`);
+        return immutableProjectCopy({ path, trashed });
       }
       function createProjectDirectory(parent, name) {
         const result = dispatchProjectCommand("PROJECT_DIRECTORY_CREATED", { parent, name });
