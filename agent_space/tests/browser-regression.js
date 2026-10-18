@@ -4371,7 +4371,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     await run(101, "Caption settings own only global fields and return immutable supplied copies", async () => {
       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
         initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
-        render = renderDashboard, sync = syncDashboardCaption, notify = appFSM.notify;
+        render = renderDashboard, sync = syncDashboardCaption, notify = interfaceFSM.notify;
       try {
         const fixture = projectClone(saved); normalizeSlotContents(fixture.slots);
         const id = fixture.slots[0].id; fixture.slots[0].content.captionUnowned = { marker: [17] };
@@ -4398,7 +4398,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         renderDashboard = () => { paints++; };
         syncDashboardCaption = state => { check(Object.isFrozen(state) && state !== activeProject._state.annotations.captions,
           "caption renderer not given copied read"); syncs++; };
-        appFSM.notify = () => { notices++; };
+        interfaceFSM.notify = () => { notices++; };
         check(api.captions.setEnabled(true).enabled === true, "caption enabled result incorrect");
         check(api.captions.setName({ toString: () => "caption name" }).name === "caption name", "caption name not converted");
         check(api.captions.setNameBold(true).nameBold === true, "caption bold result incorrect");
@@ -4413,7 +4413,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           interfaceFSM.state.assetPath === runtime.assetPath && interfaceFSM.state.graphObjectIndex === runtime.graphObjectIndex &&
           activeProject.slots.find(slot => slot.id === id).content.captionUnowned.marker[0] === 17 &&
           result.settings.extra.nested[0] === 3 && read.name === before.annotations.captions.name,
-          "caption settings changed unowned state/facts or success work count/copy incorrect");
+          "caption settings changed unowned state/facts or success work count/copy incorrect " + JSON.stringify({ commits, reads, paints, syncs, notices, equalProject: JSON.stringify(activeProject._state) === JSON.stringify(expected), selection: interfaceFSM.readState().selectedSlotId === selected, asset: interfaceFSM.state.assetPath === runtime.assetPath, index: interfaceFSM.state.graphObjectIndex === runtime.graphObjectIndex }));
         const fallback = api.captions.setSettings({ fontSize: Infinity, lineHeight: NaN });
         check(fallback.settings.fontSize === defaults.fontSize && fallback.settings.lineHeight === defaults.lineHeight,
           "caption nonfinite numbers not config default");
@@ -4423,7 +4423,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         for (const wrapper of [setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings])
           check(!/activeProject|projectObjects|applyCaptionSettings\(/.test(wrapper.toString()), "caption Application reads/calculates domain");
       } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
-        renderDashboard = render; syncDashboardCaption = sync; appFSM.notify = notify;
+        renderDashboard = render; syncDashboardCaption = sync; interfaceFSM.notify = notify;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
@@ -4431,7 +4431,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
         initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
         validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult,
-        render = renderDashboard, sync = syncDashboardCaption, notify = appFSM.notify, failure = Error("caption settings boundary");
+        render = renderDashboard, sync = syncDashboardCaption, notify = interfaceFSM.notify, failure = Error("caption settings boundary");
       try {
         let commits = 0, reads = 0, effects = 0, reconciliations = 0, caught;
         activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
@@ -4440,7 +4440,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           return query(kind, request);
         };
         interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
-        renderDashboard = syncDashboardCaption = () => { effects++; }; appFSM.notify = () => { effects++; };
+        renderDashboard = syncDashboardCaption = () => { effects++; }; interfaceFSM.notify = () => { effects++; };
         const source = activeProject._state, runtime = interfaceFSM.state;
         try { api.captions.setName({ toString() { throw failure; } }); } catch (error) { caught = error; }
         check(caught === failure && activeProject._state === source && interfaceFSM.state === runtime &&
@@ -4497,7 +4497,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           "caption renderer error swallowed/rolled back");
       } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
         validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
-        renderDashboard = render; syncDashboardCaption = sync; appFSM.notify = notify;
+        renderDashboard = render; syncDashboardCaption = sync; interfaceFSM.notify = notify;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
