@@ -1,0 +1,281 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 8e5b5dc..acc3468 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -207,6 +207,10 @@ Baseline719584378eae1871064c00b809ec7329de70e734. Existing Source42/pseudocode20
+ 
+ Source42/pseudocode20 already close current owner/new edits/normalization/commit/query meaning. Code80 removes Application-built full settings and live postcommit layout rewrite; Backend merges edits into current candidate, normalizes global/four axes by config, rebuilds supplied projection, validates/retries source replacement/commits once. Official graphs.readLayout returns detached immutable normalized copy without repair; public session binding only query/command/result. Cases95/96 cover normalized boundaries/extension/current ownership/no selected CSV writes, failures/noncommit/retry/postcommit error. Review035/patch097–099 record initial Source-owned uirevision fixture failure and test-only correction, code80 canonicalc892537bac4f71eceabf7a9525f785deffd1cb655953aa5291c26c420a931227. At fde3fb84b02e5f80c93734b828125a1ba9fef06d cumulative39123911820 PASS baseline7df168e5264eb0e1892523f14f1f6ebfb709cad4; regression39123911698 and repeat39123971210 each PASS96 inline+96 split/192 pass records; corrected-SHA build39123968688 PASS/artifacts current. Upper42/20 unchanged. Unit33 bounded audit only; full schema/other owner/import/raster/dashboard work remains open, code stale.
+ 
++## Thirty-fourth bounded implementation unit — image settings command and official reads
++
++Source42/pseudocode20 already specify current slot-local settings/new patch, config limits/zero/invalid preservation, common candidate validation/source retry/one commit and pure copied image read. Code81 captures current source before edits, rebuilds settings in private candidate, validates/retries and emits actual changed ids; official image/slot-image reads return detached frozen bytes/settings and pure data URL without revocable resources. Cases97/98 cover same-image two-slot isolation, query resources/copies, scalar inputs/actual facts, errors/noncommit/current-source replacement and late errors. Review036/patch100 track pending actual98+98/build/canonical gates; broader owners/schema/import/raster/dashboard remain open, whole code stale.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index b804efb..7519140 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4126,6 +4126,131 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++
++    await run(97, "Image editor queries own copied bytes without resources and settings change only explicit slot", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
++        sync = syncSlotImageElement, notify = appFSM.notify, create = URL.createObjectURL, revoke = URL.revokeObjectURL;
++      try {
++        api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
++        select(slotAt(a.id)); api.slots.setContentType(a.id, "image"); api.images.insertEmpty();
++        const fixture = projectClone(activeProject._state); normalizeSlotContents(fixture.slots);
++        const first = fixture.slots.find(slot => slot.id === a.id), other = fixture.slots.find(slot => slot.id === b.id);
++        first.content.imageSettings = { fit: "manual", scale: 100, x: 10, y: 20 };
++        other.content.imageId = first.imageId; other.content.imageSettings = { fit: "cover", scale: 250, x: 30, y: 40 };
++        initialize.call(activeProject, fixture); select(slotAt(b.id));
++        const before = JSON.stringify(activeProject._state), runtime = interfaceFSM.state;
++        let allocations = 0, releases = 0;
++        URL.createObjectURL = () => { allocations++; throw Error("official image read allocated resource"); };
++        URL.revokeObjectURL = () => { releases++; };
++        const read = appFSM.query("project-api", { operation: "images.readEditor", slotId: a.id }),
++          again = appFSM.query("project-api", { operation: "images.readEditor", slotId: a.id }),
++          supplied = appFSM.query("renderer", { operation: "slot-image", slotId: a.id }),
++          image = getProjectImage(slotAt(a.id).imageId), original = Array.from(ffpxBase64ToBytes(image.bytesBase64));
++        check(read !== again && read.settings !== again.settings && read.bytes !== again.bytes &&
++          Object.isFrozen(read) && Object.isFrozen(read.bytes) && Object.isFrozen(read.settings) &&
++          JSON.stringify(read.bytes) === JSON.stringify(original) && JSON.stringify(supplied) === JSON.stringify(read) &&
++          read.src === projectImageDataUrl(image) && !allocations && !releases &&
++          JSON.stringify(activeProject._state) === before && interfaceFSM.state === runtime,
++          "image read repaired state, allocated resource or leaked mutable bytes/settings");
++        const originalBytes = image.bytesBase64; image.bytesBase64 = ffpxBytesToBase64(new Uint8Array([0,255,17]));
++        const fresh = appFSM.query("project-api", { operation: "images.readEditor", slotId: a.id });
++        check(JSON.stringify(read.bytes) === JSON.stringify(original) && fresh.bytes.join(",") === "0,255,17", "image byte read aliased authority/cached prior read");
++        image.bytesBase64 = originalBytes;
++        check(appFSM.query("project-api", { operation: "images.readEditor", slotId: -1 }) === null,
++          "missing image editor query produced synthetic image");
++        URL.createObjectURL = create; URL.revokeObjectURL = revoke;
++        let commits = 0, effects = 0, notices = 0, last;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        projectEFSM.send = function (event, payload) {
++          check(event === "SLOT_IMAGE_SETTINGS_CHANGED" && Object.keys(payload).sort().join(",") === "settings,slotId" &&
++            payload.slotId === a.id && !Object.hasOwn(payload.settings, "candidate"), "image wrapper passed read/model as authority");
++          return last = send.call(this, event, payload);
++        };
++        syncSlotImageElement = projection => { effects++; check(projection.slotId === a.id && Object.isFrozen(projection.bytes), "image renderer did not receive fresh target copy"); };
++        appFSM.notify = (...args) => { if (args[0] === "images") notices++; };
++        const result = applyImageSettingsFromValues(a.id, { fit: "manual", scale: 5000, x: -500, y: 500 });
++        const expected = JSON.parse(before), target = expected.slots.find(slot => slot.id === a.id);
++        (target.content || target).imageSettings = { fit: "manual", scale: 1000, x: -100, y: 200 };
++        check(result.slotId === a.id && Object.isFrozen(result.settings) && commits === 1 && effects === 1 && notices === 1 &&
++          JSON.stringify(activeProject._state) === JSON.stringify(expected) && interfaceFSM.readState().selectedSlotId === b.id &&
++          Object.isFrozen(last.changed) && last.changed.slotIds.join(",") === String(a.id) &&
++          !last.changed.chartIds.length && !last.changed.csvIds.length && !last.changed.imageIds.length && !last.changed.assets.length,
++          "image settings changed shared asset/other slot/selection or wrong actual facts/effects");
++      } finally { URL.createObjectURL = create; URL.revokeObjectURL = revoke; activeProject.initialize = initialize;
++        projectEFSM.send = send; readBackendProjection = query; syncSlotImageElement = sync; appFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(98, "Image settings retry replaced authority and gate failures, noncommit and postcommit effects", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
++        validate = validateProjectObjectState, sync = syncSlotImageElement, notify = appFSM.notify,
++        reconcile = interfaceFSM.reconcileProjectResult, failure = Error("image settings boundary");
++      try {
++        api.layout.setGrid(2, 2); const id = activeProject.slots.find(slot => !slot.hidden).id;
++        select(slotAt(id)); api.slots.setContentType(id, "image"); api.images.insertEmpty();
++        applyImageSettingsFromValues(id, { fit: "manual", scale: 100, x: 10, y: 20 });
++        let commits = 0, effects = 0, notices = 0, reconciliations = 0, reads = 0;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        syncSlotImageElement = () => { effects++; }; appFSM.notify = (...args) => { if (args[0] === "images") notices++; };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        readBackendProjection = function (kind, request) { if (kind === "project-api" && request.operation === "images.readEditor") reads++; return query(kind, request); };
++        const source = activeProject._state, runtime = interfaceFSM.state;
++        let caught;
++        try { applyImageSettingsFromValues(id, { get x() { throw failure; } }); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && interfaceFSM.state === runtime &&
++          !commits && !effects && !notices && !reconciliations && reads === 1, "image getter failure committed/success work or changed error");
++        reads = 0; validateProjectObjectState = () => { throw failure; }; caught = null;
++        try { applyImageSettingsFromValues(id, { x: 0 }); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && !commits && !effects && !reconciliations && reads === 1,
++          "image validator failure did success work"); validateProjectObjectState = validate;
++        reads = 0; projectEFSM.send = () => Object.freeze({ committed: false });
++        check(applyImageSettingsFromValues(id, { x: 0 }) === false && reads === 1 && !commits && !effects && !reconciliations,
++          "image noncommit read/render/reconciled success"); projectEFSM.send = send;
++        reads = 0; check(applyImageSettingsFromValues(-1, { fit: "manual" }) === false && reads === 1 && !commits && !effects,
++          "missing editor dispatched command");
++        let attempts = 0;
++        const values = { get x() {
++          if (!attempts++) { const newer = projectClone(activeProject._state); normalizeSlotContents(newer.slots);
++            newer.meta.projectName = "image-newer-getter"; newer.slots.find(slot => slot.id === id).content.imageSettings.y = 77;
++            initialize.call(activeProject, newer); }
++          return 0;
++        } };
++        const result = applyImageSettingsFromValues(id, values);
++        check(attempts === 2 && commits === 1 && effects === 1 && notices === 1 && reconciliations === 1 &&
++          result.settings.x === 0 && result.settings.y === 77 && activeProject.projectName === "image-newer-getter",
++          "image stale getter attempt committed or replaced newer current settings");
++        let validations = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const valid = validate(candidate, options);
++          if (options?.requireSlots && !validations++) { const newer = projectClone(activeProject._state); normalizeSlotContents(newer.slots);
++            newer.meta.projectName = "image-newer-validation"; newer.slots.find(slot => slot.id === id).content.imageSettings.x = 123;
++            initialize.call(activeProject, newer); }
++          return valid;
++        };
++        const next = applyImageSettingsFromValues(id, { scale: 321 });
++        check(validations === 2 && commits === 2 && next.settings.x === 123 && next.settings.scale === 321 &&
++          activeProject.projectName === "image-newer-validation", "image validation source replacement not retried");
++        validateProjectObjectState = validate;
++        let imageReads = 0;
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "images.readEditor" && ++imageReads === 2) throw failure;
++          return query(kind, request);
++        };
++        caught = null; try { applyImageSettingsFromValues(id, { x: 42 }); } catch (error) { caught = error; }
++        check(caught === failure && slotAt(id).imageSettings.x === 42 && commits === 3,
++          "image postcommit query failure swallowed/rolled back");
++        readBackendProjection = query; syncSlotImageElement = () => { throw failure; }; caught = null;
++        try { applyImageSettingsFromValues(id, { x: 43 }); } catch (error) { caught = error; }
++        check(caught === failure && slotAt(id).imageSettings.x === 43 && commits === 4,
++          "image postcommit renderer failure swallowed/rolled back");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
++        validateProjectObjectState = validate; syncSlotImageElement = sync; appFSM.notify = notify;
++        interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 4eb5c6f..7fff777 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 80,
++      "revision": 81,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-035-code-graph-layout-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-036-code-image-settings-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 20,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 47f2e12..67a8d60 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -455,13 +455,13 @@
+           return Object.freeze({ ...activeProject.exportSettings });
+         if ((kind === "project-api" && request.operation === "images.readEditor") ||
+             (kind === "renderer" && request.operation === "slot-image")) {
+-          let slot = request.slotId == null ? null : slotAt(request.slotId),
+-            image = slot && !slot.hidden ? slotImage(slot) : null;
+-          return image ? Object.freeze({
+-            slotId: slot.id,
+-            name: image.name,
+-            src: projectImageDisplayUrl(image),
+-            settings: Object.freeze(normalizeImageSettings(slot)),
++          const source = activeProject._state,
++            slot = source.slots.find(item => item.id === request.slotId && !item.hidden),
++            image = slot ? source.assets.images.find(item => item.id === (slot.content?.imageId ?? slot.imageId)) : null;
++          return image ? immutableProjectCopy({
++            slotId: slot.id, name: image.name,
++            bytes: Array.from(ffpxBase64ToBytes(image.bytesBase64 || "")),
++            src: projectImageDataUrl(image), settings: normalizeImageSettings(slot),
+           }) : null;
+         }
+         if (kind === "export" && request.operation === "project.exportFile") {
+@@ -1900,31 +1900,40 @@
+ 
+       function applySlotImageSettingsChangedAction({ machine, payload }) {
+         machine.assertWritable("slots", "SLOT_IMAGE_SETTINGS_CHANGED");
+-        let candidate = projectClone(activeProject._state);
+-        normalizeSlotContents(candidate.slots);
+-        const target = candidate.slots.find((slot) => slot.id === payload.slotId);
+-        if (!target || target.hidden || !candidate.assets.images.some((image) => image.id === target.imageId))
+-          throw Error("이미지 설정을 변경할 슬롯이 없습니다.");
+-        const next = { ...target.content.imageSettings }, values = payload.settings || {},
+-          limits = BackendSettings.defaults.limits.imageSettings;
+-        if (Object.prototype.hasOwnProperty.call(values, "fit")) {
+-          const fit = values.fit;
+-          if (["contain", "cover", "manual"].includes(fit)) next.fit = fit;
+-        }
+-        if (next.fit === "manual") {
+-          for (const key of ["scale", "x", "y"]) {
+-            if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+-            const value = values[key];
+-            const number = value === null ? NaN : Number(value);
+-            if (Number.isFinite(number)) {
+-              const [min, max] = limits[key];
+-              next[key] = Math.max(min, Math.min(max, number));
++        while (true) {
++          const source = activeProject._state, candidate = projectClone(source);
++          normalizeSlotContents(candidate.slots);
++          const target = candidate.slots.find((slot) => slot.id === payload.slotId);
++          if (!target || target.hidden || !candidate.assets.images.some((image) => image.id === target.imageId))
++            throw Error("이미지 설정을 변경할 슬롯이 없습니다.");
++          const next = { ...target.content.imageSettings }, values = payload.settings || {},
++            limits = BackendSettings.defaults.limits.imageSettings;
++          if (Object.prototype.hasOwnProperty.call(values, "fit")) {
++            const fit = values.fit;
++            if (["contain", "cover", "manual"].includes(fit)) next.fit = fit;
++          }
++          if (next.fit === "manual") {
++            for (const key of ["scale", "x", "y"]) {
++              if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
++              const value = values[key];
++              const number = value === null ? NaN : Number(value);
++              if (Number.isFinite(number)) {
++                const [min, max] = limits[key];
++                next[key] = Math.max(min, Math.min(max, number));
++              }
+             }
+           }
++          target.content.imageSettings = next;
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const post = activeProject._state, changedIds = (before, after) => after.filter(item =>
++            JSON.stringify(before.find(old => old.id === item.id)) !== JSON.stringify(item)).map(item => item.id);
++          payload.changed = { slotIds: changedIds(source.slots, post.slots),
++            chartIds: changedIds(source.charts, post.charts), csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
++            imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
++          return;
+         }
+-        target.content.imageSettings = next;
+-        validateProjectObjectState(candidate, { requireSlots: true });
+-        activeProject.initialize(candidate);
+       }
+       function applyCaptionSettingsChangedAction({ machine, payload }) {
+         machine.assertWritable("captions", "CAPTION_SETTINGS_CHANGED");
+diff --git a/agent_space/reviews/review-20261018-036-code-image-settings-open.md b/agent_space/reviews/review-20261018-036-code-image-settings-open.md
+new file mode 100644
+index 0000000..8b60616
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-036-code-image-settings-open.md
+@@ -0,0 +1,14 @@
++# Unit34 image settings current-authority candidate and official reads
++
++## Authority
++
++Source42 application/public_api/layout_annotations.py applyImageSettingsFromValues requires explicit slot/new fields only, prequery-none False/no command, current settings patch in Backend, valid fit, manual finite configured ranges, zero preserved, other slot with same image unchanged, commit then supplied renderer/notification/official result query. Source42 backend/project_efsm.py common command rule validates candidate, retries replaced source, commits once and returns immutable actual changes. Source42 backend/project_state.py images.readEditor requires copied bytes/name/pure display URL/settings, no revocable resource allocation. Pseudocode20 NormalizeImageEditsInAttempt, SLOT_IMAGE_SETTINGS_CHANGED common commit and public wrapper directly express this. No upstream semantic edit required; no advanced behavior discarded. Code81 supplies frozen bytes/settings/data URL without allocating URL handles; settings command captures source before getters, retries replaced authority and emits actual changed ids.
++
++## Prompt-to-artifact checklist
++
++- official read copies original bytes/settings/name, pure display URL/fresh per call/missing None, renderer same explicit target meaning:97 direct read, allocation/release spies and source/session equality, original bytes update detachment.
++- only explicit slot/new edits enter command; current candidate not read projection, other same-image slot/assets unchanged, selected slot retained; clamp/actual frozen changed ids and single commit/effect/notification:97 and prior49.
++- getter/conversion/whole validator errors propagate no commit/reconcile/render/success read; missing editor False/no command; noncommit False/no successwork:98 and prior49.
++- replaced authority during getter and whole validation recalculates latest current settings/name, one final commit, no rollback; late query/renderer errors propagate and retain committed values:98.
++
++Actions98+98/build/canonical fingerprint/cumulative gate pending. Source42/pseudocode20 unchanged, code81 stale; full image schema/legacy display-resource owners/import/move/cascade/raster/supplied dashboard and prior serializer/timing remain open. No policy changes/local runtime/optional TLC.

@@ -1,0 +1,14 @@
+# Unit34 image settings current-authority candidate and official reads
+
+## Authority
+
+Source42 application/public_api/layout_annotations.py applyImageSettingsFromValues requires explicit slot/new fields only, prequery-none False/no command, current settings patch in Backend, valid fit, manual finite configured ranges, zero preserved, other slot with same image unchanged, commit then supplied renderer/notification/official result query. Source42 backend/project_efsm.py common command rule validates candidate, retries replaced source, commits once and returns immutable actual changes. Source42 backend/project_state.py images.readEditor requires copied bytes/name/pure display URL/settings, no revocable resource allocation. Pseudocode20 NormalizeImageEditsInAttempt, SLOT_IMAGE_SETTINGS_CHANGED common commit and public wrapper directly express this. No upstream semantic edit required; no advanced behavior discarded. Code81 supplies frozen bytes/settings/data URL without allocating URL handles; settings command captures source before getters, retries replaced authority and emits actual changed ids.
+
+## Prompt-to-artifact checklist
+
+- official read copies original bytes/settings/name, pure display URL/fresh per call/missing None, renderer same explicit target meaning:97 direct read, allocation/release spies and source/session equality, original bytes update detachment.
+- only explicit slot/new edits enter command; current candidate not read projection, other same-image slot/assets unchanged, selected slot retained; clamp/actual frozen changed ids and single commit/effect/notification:97 and prior49.
+- getter/conversion/whole validator errors propagate no commit/reconcile/render/success read; missing editor False/no command; noncommit False/no successwork:98 and prior49.
+- replaced authority during getter and whole validation recalculates latest current settings/name, one final commit, no rollback; late query/renderer errors propagate and retain committed values:98.
+
+Actions98+98/build/canonical fingerprint/cumulative gate pending. Source42/pseudocode20 unchanged, code81 stale; full image schema/legacy display-resource owners/import/move/cascade/raster/supplied dashboard and prior serializer/timing remain open. No policy changes/local runtime/optional TLC.

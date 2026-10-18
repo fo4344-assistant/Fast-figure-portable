@@ -4126,6 +4126,131 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+
+    await run(97, "Image editor queries own copied bytes without resources and settings change only explicit slot", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        sync = syncSlotImageElement, notify = appFSM.notify, create = URL.createObjectURL, revoke = URL.revokeObjectURL;
+      try {
+        api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+        select(slotAt(a.id)); api.slots.setContentType(a.id, "image"); api.images.insertEmpty();
+        const fixture = projectClone(activeProject._state); normalizeSlotContents(fixture.slots);
+        const first = fixture.slots.find(slot => slot.id === a.id), other = fixture.slots.find(slot => slot.id === b.id);
+        first.content.imageSettings = { fit: "manual", scale: 100, x: 10, y: 20 };
+        other.content.imageId = first.imageId; other.content.imageSettings = { fit: "cover", scale: 250, x: 30, y: 40 };
+        initialize.call(activeProject, fixture); select(slotAt(b.id));
+        const before = JSON.stringify(activeProject._state), runtime = interfaceFSM.state;
+        let allocations = 0, releases = 0;
+        URL.createObjectURL = () => { allocations++; throw Error("official image read allocated resource"); };
+        URL.revokeObjectURL = () => { releases++; };
+        const read = appFSM.query("project-api", { operation: "images.readEditor", slotId: a.id }),
+          again = appFSM.query("project-api", { operation: "images.readEditor", slotId: a.id }),
+          supplied = appFSM.query("renderer", { operation: "slot-image", slotId: a.id }),
+          image = getProjectImage(slotAt(a.id).imageId), original = Array.from(ffpxBase64ToBytes(image.bytesBase64));
+        check(read !== again && read.settings !== again.settings && read.bytes !== again.bytes &&
+          Object.isFrozen(read) && Object.isFrozen(read.bytes) && Object.isFrozen(read.settings) &&
+          JSON.stringify(read.bytes) === JSON.stringify(original) && JSON.stringify(supplied) === JSON.stringify(read) &&
+          read.src === projectImageDataUrl(image) && !allocations && !releases &&
+          JSON.stringify(activeProject._state) === before && interfaceFSM.state === runtime,
+          "image read repaired state, allocated resource or leaked mutable bytes/settings");
+        const originalBytes = image.bytesBase64; image.bytesBase64 = ffpxBytesToBase64(new Uint8Array([0,255,17]));
+        const fresh = appFSM.query("project-api", { operation: "images.readEditor", slotId: a.id });
+        check(JSON.stringify(read.bytes) === JSON.stringify(original) && fresh.bytes.join(",") === "0,255,17", "image byte read aliased authority/cached prior read");
+        image.bytesBase64 = originalBytes;
+        check(appFSM.query("project-api", { operation: "images.readEditor", slotId: -1 }) === null,
+          "missing image editor query produced synthetic image");
+        URL.createObjectURL = create; URL.revokeObjectURL = revoke;
+        let commits = 0, effects = 0, notices = 0, last;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        projectEFSM.send = function (event, payload) {
+          check(event === "SLOT_IMAGE_SETTINGS_CHANGED" && Object.keys(payload).sort().join(",") === "settings,slotId" &&
+            payload.slotId === a.id && !Object.hasOwn(payload.settings, "candidate"), "image wrapper passed read/model as authority");
+          return last = send.call(this, event, payload);
+        };
+        syncSlotImageElement = projection => { effects++; check(projection.slotId === a.id && Object.isFrozen(projection.bytes), "image renderer did not receive fresh target copy"); };
+        appFSM.notify = (...args) => { if (args[0] === "images") notices++; };
+        const result = applyImageSettingsFromValues(a.id, { fit: "manual", scale: 5000, x: -500, y: 500 });
+        const expected = JSON.parse(before), target = expected.slots.find(slot => slot.id === a.id);
+        (target.content || target).imageSettings = { fit: "manual", scale: 1000, x: -100, y: 200 };
+        check(result.slotId === a.id && Object.isFrozen(result.settings) && commits === 1 && effects === 1 && notices === 1 &&
+          JSON.stringify(activeProject._state) === JSON.stringify(expected) && interfaceFSM.readState().selectedSlotId === b.id &&
+          Object.isFrozen(last.changed) && last.changed.slotIds.join(",") === String(a.id) &&
+          !last.changed.chartIds.length && !last.changed.csvIds.length && !last.changed.imageIds.length && !last.changed.assets.length,
+          "image settings changed shared asset/other slot/selection or wrong actual facts/effects");
+      } finally { URL.createObjectURL = create; URL.revokeObjectURL = revoke; activeProject.initialize = initialize;
+        projectEFSM.send = send; readBackendProjection = query; syncSlotImageElement = sync; appFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(98, "Image settings retry replaced authority and gate failures, noncommit and postcommit effects", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        validate = validateProjectObjectState, sync = syncSlotImageElement, notify = appFSM.notify,
+        reconcile = interfaceFSM.reconcileProjectResult, failure = Error("image settings boundary");
+      try {
+        api.layout.setGrid(2, 2); const id = activeProject.slots.find(slot => !slot.hidden).id;
+        select(slotAt(id)); api.slots.setContentType(id, "image"); api.images.insertEmpty();
+        applyImageSettingsFromValues(id, { fit: "manual", scale: 100, x: 10, y: 20 });
+        let commits = 0, effects = 0, notices = 0, reconciliations = 0, reads = 0;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        syncSlotImageElement = () => { effects++; }; appFSM.notify = (...args) => { if (args[0] === "images") notices++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        readBackendProjection = function (kind, request) { if (kind === "project-api" && request.operation === "images.readEditor") reads++; return query(kind, request); };
+        const source = activeProject._state, runtime = interfaceFSM.state;
+        let caught;
+        try { applyImageSettingsFromValues(id, { get x() { throw failure; } }); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && interfaceFSM.state === runtime &&
+          !commits && !effects && !notices && !reconciliations && reads === 1, "image getter failure committed/success work or changed error");
+        reads = 0; validateProjectObjectState = () => { throw failure; }; caught = null;
+        try { applyImageSettingsFromValues(id, { x: 0 }); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && !commits && !effects && !reconciliations && reads === 1,
+          "image validator failure did success work"); validateProjectObjectState = validate;
+        reads = 0; projectEFSM.send = () => Object.freeze({ committed: false });
+        check(applyImageSettingsFromValues(id, { x: 0 }) === false && reads === 1 && !commits && !effects && !reconciliations,
+          "image noncommit read/render/reconciled success"); projectEFSM.send = send;
+        reads = 0; check(applyImageSettingsFromValues(-1, { fit: "manual" }) === false && reads === 1 && !commits && !effects,
+          "missing editor dispatched command");
+        let attempts = 0;
+        const values = { get x() {
+          if (!attempts++) { const newer = projectClone(activeProject._state); normalizeSlotContents(newer.slots);
+            newer.meta.projectName = "image-newer-getter"; newer.slots.find(slot => slot.id === id).content.imageSettings.y = 77;
+            initialize.call(activeProject, newer); }
+          return 0;
+        } };
+        const result = applyImageSettingsFromValues(id, values);
+        check(attempts === 2 && commits === 1 && effects === 1 && notices === 1 && reconciliations === 1 &&
+          result.settings.x === 0 && result.settings.y === 77 && activeProject.projectName === "image-newer-getter",
+          "image stale getter attempt committed or replaced newer current settings");
+        let validations = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !validations++) { const newer = projectClone(activeProject._state); normalizeSlotContents(newer.slots);
+            newer.meta.projectName = "image-newer-validation"; newer.slots.find(slot => slot.id === id).content.imageSettings.x = 123;
+            initialize.call(activeProject, newer); }
+          return valid;
+        };
+        const next = applyImageSettingsFromValues(id, { scale: 321 });
+        check(validations === 2 && commits === 2 && next.settings.x === 123 && next.settings.scale === 321 &&
+          activeProject.projectName === "image-newer-validation", "image validation source replacement not retried");
+        validateProjectObjectState = validate;
+        let imageReads = 0;
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "images.readEditor" && ++imageReads === 2) throw failure;
+          return query(kind, request);
+        };
+        caught = null; try { applyImageSettingsFromValues(id, { x: 42 }); } catch (error) { caught = error; }
+        check(caught === failure && slotAt(id).imageSettings.x === 42 && commits === 3,
+          "image postcommit query failure swallowed/rolled back");
+        readBackendProjection = query; syncSlotImageElement = () => { throw failure; }; caught = null;
+        try { applyImageSettingsFromValues(id, { x: 43 }); } catch (error) { caught = error; }
+        check(caught === failure && slotAt(id).imageSettings.x === 43 && commits === 4,
+          "image postcommit renderer failure swallowed/rolled back");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        validateProjectObjectState = validate; syncSlotImageElement = sync; appFSM.notify = notify;
+        interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
