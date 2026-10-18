@@ -5757,7 +5757,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         api.assets.connectToSlot(projectAssetPath(csv), "csv", b.id);
         const chart = getChart(slotAt(b.id).chart);
         check(commits === 2 && linked === 2 && chart.editor.objects.length === 1 && chart.editor.objects[0].csvId === csv.id &&
-          chart.data.some(trace => trace.meta?.fastFigureAxisPlaceholder !== true) &&
+          chart.graph.data.some(trace => trace.meta?.fastFigureAxisPlaceholder !== true) &&
           interfaceFSM.readState().assetPath === projectAssetPath(csv) && interfaceFSM.readState().selectedSlotId === b.id &&
           interfaceFSM.readState().graphObjectIndex == null, "CSV link missed candidate graph/reconciliation");
       } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render; status = report;
