@@ -6372,6 +6372,58 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "covered-cell reset did not replace complete local content or changed authority");
     });
 
+    await run(146, "Renderer and print queries own immutable same-source figures CSV views and image bytes", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify,
+        figure = chartFigure, objectUrl = URL.createObjectURL;
+      try {
+        initialize.call(activeProject, createProjectState());
+        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        const [a, b, c, d] = activeProject.slots;
+        select(a);
+        const csv = createProjectCsv([["x","y"],["1","3"],["2","5"]], "surface.csv");
+        api.graphs.addObject(csv.id);
+        const imported = { data: [{ x: [7], y: [9] }], layout: {}, frames: [{ name: "retained" }], config: {} };
+        await api.graphs.importFile(new File([JSON.stringify(imported)], "converted.json"), b.id);
+        api.layout.mergeSlots([c.id, d.id]); api.slots.setContentType(c.id, "image");
+        const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'), "surface.svg", "image/svg+xml");
+        api.assets.connectToSlot(image.path, "image", c.id);
+        slotAt(c.id).content.imageSettings.extension = { preserved: true };
+        const source = activeProject._state, frontend = interfaceFSM.state, before = JSON.stringify(source);
+        let calculations = 0;
+        chartFigure = (chart, project, scale) => {
+          check(project === source && chart !== source.charts.find(item => item.id === chart.id),
+            "figure calculation did not receive copied chart and same current project");
+          calculations++; return figure(chart, project, scale);
+        };
+        URL.createObjectURL = () => { throw Error("read allocated a revocable resource"); };
+        for (const [kind, operation] of [["renderer", undefined], ["export", "print.save"], ["export", "print.capture"]]) {
+          const snapshot = appFSM.query(kind, { operation }), graph = snapshot.visibleSlots.find(item => item.id === a.id),
+            conversion = snapshot.visibleSlots.find(item => item.id === b.id), picture = snapshot.visibleSlots.find(item => item.id === c.id);
+          check(Object.isFrozen(snapshot) && Object.isFrozen(graph.figure.data) && snapshot.visibleSlots.length === 3 &&
+            snapshot.orderedSlotLabels.length === 3 && !snapshot.visibleSlots.some(item => item.id === d.id) &&
+            graph.content.chart === graph.chart.id && graph.csvViews[0].csv.id === csv.id &&
+            graph.csvViews[0].columns.length === 2 && graph.figure.data.some(trace => trace.y?.includes(5)) &&
+            conversion.csvViews.length === 0 && conversion.figure.frames[0].name === "retained" &&
+            picture.imageView.src.startsWith("data:image/svg+xml;base64,") &&
+            ffpxBytesToBase64(new Uint8Array(picture.imageView.bytes)) === image.bytesBase64 &&
+            picture.imageView.settings.extension.preserved && Object.isFrozen(picture.imageView.settings.extension),
+            "surface projection missed copied graph/CSV/columns/conversion/image/settings/visible ordering");
+          check(kind === "renderer" ? !Object.hasOwn(snapshot, "export") :
+            JSON.stringify(snapshot.export) === JSON.stringify(source.export) && Object.isFrozen(snapshot.rasterLimits),
+            "print snapshot omitted persistent settings/limits or renderer gained export settings");
+        }
+        const editor = appFSM.query("project-api", { operation: "images.readEditor", slotId: c.id });
+        check(editor.settings.extension.preserved && calculations === 6 && JSON.stringify(source) === before &&
+          activeProject._state === source && interfaceFSM.state === frontend, "query normalized/mutated authority or repeated/missed figure work");
+      } finally {
+        chartFigure = figure; URL.createObjectURL = objectUrl;
+        renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected;
+      }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
