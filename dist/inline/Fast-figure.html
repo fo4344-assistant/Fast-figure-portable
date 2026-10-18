@@ -10322,6 +10322,24 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           return immutableProjectCopy({ target: node.asset, kind: node.kind,
             path: projectAssetPath(node.asset), referenceCount: references.length, references });
         }
+        if (kind === "project-api" && request.operation === "graphs.readData") {
+          const source = activeProject._state, state = request.frontendState || {},
+            owners = Object.hasOwn(request, "chartId")
+              ? source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === request.chartId) : [],
+            slot = Object.hasOwn(request, "chartId") ? (owners.length === 1 ? owners[0] : null)
+              : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden),
+            chartId = slot?.content?.chart ?? slot?.chart,
+            chart = source.charts.find((item) => item.id === chartId) || null,
+            objects = chart?.editor?.objects || [], index = state.graphObjectIndex,
+            selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length
+              ? index : null,
+            node = state.assetSelection === "csv" && state.assetPath ? projectVfs.resolve(state.assetPath, source) : null,
+            csv = node?.kind === "csv" ? node.asset : null,
+            objectCsv = selectedIndex === null ? null : source.assets.csvFiles.find((item) => item.id === objects[selectedIndex].csvId);
+          return immutableProjectCopy({ chart, objects, selectedIndex, currentCsv: csv,
+            columns: csv ? columnDefinitions(csv.rows, csv.headerLines) : [],
+            objectColumns: objectCsv ? columnDefinitions(objectCsv.rows, objectCsv.headerLines) : [] });
+        }
         if (kind === "project-api" && request.operation === "print.readSettings")
           return Object.freeze({ ...activeProject.exportSettings });
         if ((kind === "project-api" && request.operation === "images.readEditor") ||
@@ -10448,6 +10466,8 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           assetPath = null;
         }
         let chart = slotId !== null && slot.contentType !== "image" ? getChart(slot.chart) : null;
+        if (chart && hints.chartId === chart.id && Object.hasOwn(hints, "selectedIndexHint"))
+          graphObjectIndex = hints.selectedIndexHint;
         if (payload.clearGraphSelection || hints.clearGraphSelection ||
             !Number.isInteger(graphObjectIndex) || graphObjectIndex < 0 ||
             graphObjectIndex >= (chart?.editor?.objects?.length || 0))
@@ -11010,7 +11030,85 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         payload.chart=committed;
         payload.clearGraphSelection=true;
       }
-      function applyGraphObjectsReplacedAction({ machine, payload }) {
+      function applyGraphObjectValuesAction({ machine, payload }) {
+        machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
+        const defaults = BackendSettings.defaults.chartSettings.editor.objectStyle,
+          limits = BackendSettings.defaults.limits.graphObject,
+          enums = { type: ["scatter", "markers", "lines+markers", "bar", "hidden"],
+            xAxisSide: ["bottom", "top"], yAxisSide: ["left", "right"],
+            lineDash: ["solid", "dot", "dash", "dashdot"],
+            markerSymbol: ["circle", "square", "diamond", "cross", "x", "triangle-up", "triangle-down"] };
+        while (true) {
+          const source = activeProject._state,
+            current = source.charts.find((chart) => chart.id === payload.chartId),
+            owners = source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === payload.chartId),
+            index = payload.index, values = payload.values || {};
+          if (!current || owners.length !== 1 || current.editor?.editable === false ||
+              !Number.isInteger(index) || index < 0 || index >= current.editor.objects.length)
+            throw Error("변경할 현재 편집 가능 차트/오브젝트 또는 유일한 owner가 없습니다.");
+          const candidate = projectClone(source), chart = candidate.charts.find((item) => item.id === current.id),
+            object = chart.editor.objects[index], requestedCsvId = Object.hasOwn(values, "csvId") ? values.csvId : null,
+            csv = candidate.assets.csvFiles.find((item) => item.id === requestedCsvId) ||
+              candidate.assets.csvFiles.find((item) => item.id === object.csvId);
+          if (!csv) throw Error("그래프 오브젝트에 연결할 현재 CSV가 없습니다.");
+          const columns = new Set(columnDefinitions(csv.rows, csv.headerLines).map((column) => column.id)),
+            selection = graphDataSelection(csv.rows, csv.headerLines);
+          object.csvId = csv.id;
+          for (const key of ["x", "y"]) {
+            const value = Object.hasOwn(values, key) ? values[key] : undefined;
+            object[key] = columns.has(value) ? value : columns.has(object[key]) ? object[key] : selection[key];
+          }
+          for (const [key, value] of Object.entries(defaults))
+            if (!Object.hasOwn(object, key)) object[key] = projectClone(value);
+          for (const [key, allowed] of Object.entries(enums)) {
+            if (Object.hasOwn(values, key)) {
+              const value = values[key];
+              if (allowed.includes(value)) object[key] = value;
+            }
+          }
+          for (const [key, [min, max]] of Object.entries(limits)) {
+            if (Object.hasOwn(values, key)) {
+              const edit = values[key], value = edit === null ? NaN : Number(edit);
+              if (Number.isFinite(value)) object[key] = Math.max(min, Math.min(max, value));
+            }
+          }
+          if (Object.hasOwn(values, "color")) {
+            const color = values.color;
+            if (typeof color === "string" && color.length) object.color = color;
+          }
+          if (Object.hasOwn(values, "legendName")) {
+            const legend = values.legendName;
+            if (typeof legend === "string") object.legendName = legend;
+          }
+          // NormalizeCommandObjects fills only missing style, never references/order/extensions.
+          for (const item of chart.editor.objects) {
+            for (const [key, value] of Object.entries(defaults))
+              if (!Object.hasOwn(item, key)) item[key] = projectClone(value);
+            for (const [key, allowed] of Object.entries(enums))
+              if (!allowed.includes(item[key])) throw Error(`그래프 오브젝트 ${key} enum이 올바르지 않습니다.`);
+            for (const [key, [min, max]] of Object.entries(limits))
+              if (!Number.isFinite(item[key]) || item[key] < min || item[key] > max)
+                throw Error(`그래프 오브젝트 ${key} 범위가 올바르지 않습니다.`);
+          }
+          validateChartModel(chart, "변경할 차트", candidate.assets.csvFiles);
+          rebuildEditableGraph(chart, candidate);
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const post = activeProject._state,
+            changedIds = (before, after) => after.filter((item) =>
+              JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id);
+          payload.changed = { slotIds: changedIds(source.slots, post.slots),
+            chartIds: changedIds(source.charts, post.charts),
+            csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
+            imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
+          payload.selectionHints = Object.freeze({ chartId: current.id, selectedIndexHint: index });
+          return;
+        }
+      }
+      function applyGraphObjectsReplacedAction(context) {
+        const { machine, payload } = context;
+        if (payload.operation === "graphs.setObjectValues") return applyGraphObjectValuesAction(context);
         machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
         let current=getChart(payload.chartId);
         if(!current||!current.editor||current.editor.editable===false)
@@ -15895,30 +15993,20 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
         return input.reference;
       }
-      function graphEditorObjectValues(index, values = {}) {
-        let chart = graphEditorChart(), objects = ensureGraphObjects(chart), current = objects[index];
-        if (!chart || !current) return null;
-        let csv = getProjectCsv(Number(values.csvId)) || getProjectCsv(current.csvId);
-        if (!csv) return null;
-        let defaults = baseGraphObject(chart, csv), columns = new Set(columnDefinitions(csv.rows, csv.headerLines).map((column) => column.id));
-        let clamp = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(max, Number(value))) : fallback;
-        let next = { ...defaults, ...current, csvId: csv.id };
-        next.x = columns.has(values.x) ? values.x : columns.has(next.x) ? next.x : defaults.x;
-        next.y = columns.has(values.y) ? values.y : columns.has(next.y) ? next.y : defaults.y;
-        if (["bottom", "top"].includes(values.xAxisSide)) next.xAxisSide = values.xAxisSide;
-        if (["left", "right"].includes(values.yAxisSide)) next.yAxisSide = values.yAxisSide;
-        if (["scatter", "markers", "lines+markers", "bar", "hidden"].includes(values.type)) next.type = values.type;
-        if (values.legendName !== undefined) next.legendName = String(values.legendName);
-        if (values.lineDash !== undefined) next.lineDash = String(values.lineDash || "solid");
-        if (values.markerSymbol !== undefined) next.markerSymbol = String(values.markerSymbol || "circle");
-        if (/^#[0-9a-f]{6}$/i.test(values.color || "")) next.color = values.color;
-        next.lineWidth = clamp(values.lineWidth, next.lineWidth, 0.1, 20);
-        next.markerSize = clamp(values.markerSize, next.markerSize, 1, 40);
-        next.barOpacity = clamp(values.barOpacity, next.barOpacity, 0.05, 1);
-        next.barLineWidth = clamp(values.barLineWidth, next.barLineWidth, 0, 10);
-        let updated = [...objects];
-        updated[index] = next;
-        return graphEditorCommit(updated, index);
+      function graphEditorObjectValues(chartId, index, values = {}) {
+        const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
+          chartId, operation: "graphs.setObjectValues", index, values,
+        });
+        if (!result.committed) return result;
+        const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+        renderDashboard();
+        return chart;
+      }
+      function setGraphObjectValuesApi(index, values = {}) {
+        const context = appFSM.query("project-api", {
+          operation: "graphs.readData", frontendState: interfaceFSM.readState(),
+        });
+        return graphEditorObjectValues(context.chart?.id ?? null, index, values);
       }
       function graphEditorAdd(csvId = selectedProjectCsv()?.id) {
         let slot = getSelectedSlot(), csv = getProjectCsv(Number(csvId));
@@ -17650,7 +17738,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           addObject: graphEditorAdd,
           moveObject: graphEditorMove,
           selectObject: graphEditorSelectObject,
-          setObjectValues: graphEditorObjectValues,
+          setObjectValues: setGraphObjectValuesApi,
           deleteObject: graphEditorDelete,
           updateLayout: updateGraphLayoutApi,
           applyPalette: applyGraphPaletteApi,
