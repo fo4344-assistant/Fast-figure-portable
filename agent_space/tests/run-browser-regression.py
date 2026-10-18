@@ -15,10 +15,13 @@ import zipfile
 
 class ResultParser(HTMLParser):
     encoded = None
+    progress = None
 
     def handle_starttag(self, tag, attrs):
         if tag == "html":
-            self.encoded = dict(attrs).get("data-fast-figure-regression")
+            attributes = dict(attrs)
+            self.encoded = attributes.get("data-fast-figure-regression")
+            self.progress = attributes.get("data-fast-figure-regression-progress")
 
 
 def run(browser, source, probe):
@@ -47,7 +50,8 @@ def run(browser, source, probe):
     parser.feed(completed.stdout)
     if not parser.encoded:
         raise RuntimeError(
-            f"Regression did not finish on {source}: " + completed.stderr[-2500:]
+            f"Regression did not finish on {source}: returncode={completed.returncode}; "
+            f"last-progress={parser.progress!r}; stderr=" + completed.stderr[-2500:]
         )
     return json.loads(
         base64.b64decode(html.unescape(parser.encoded)).decode("utf-8")

@@ -1,24 +1,27 @@
 /* Runs after the application scripts in a headless file:// browser. */
 const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
-  sourceScript: "r19",
-  plusCal: "r5",
-  verificationModel: "r16",
-  sourceCode: "r23",
-  appBuild: "1.1.43-wip",
+  lineageManifest: "development-versions.json (canonical checkout validated by Actions)",
+  appBuild: APP_BUILD,
 });
 (async () => {
   const api = window.FastFigureApi;
-  const results = [];
+  const results = [], startedAt = performance.now();
+  const progress = (state) => document.documentElement.setAttribute("data-fast-figure-regression-progress",
+    JSON.stringify({ ...state, completed: results.length, virtualElapsedMs: Math.round(performance.now() - startedAt) }));
+  progress({ phase: "bootstrap" });
   const check = (condition, message) => {
     if (!condition) throw Error(message);
   };
   const run = async (number, name, action) => {
+    progress({ phase: "running", number, name });
     try {
       const outcome = await action();
       results.push({ number, name, result: outcome?.blocked ? "blocked" : "pass", detail: outcome?.blocked });
   
   } catch (error) {
       results.push({ number, name, result: "fail", detail: String(error?.stack || error) });
+    } finally {
+      progress({ phase: "between", number, name, result: results.at(-1)?.result });
     }
   };
   const ffpxFile = () => new File([ffpxZipStore(ffpxBuildProject().assets)], "roundtrip.ffpx");

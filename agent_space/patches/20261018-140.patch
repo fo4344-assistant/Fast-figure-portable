@@ -1,0 +1,84 @@
+diff --git a/agent_space/reviews/review-20261018-047-code-package-import-open.md b/agent_space/reviews/review-20261018-047-code-package-import-open.md
+index c227a15..1489761 100644
+--- a/agent_space/reviews/review-20261018-047-code-package-import-open.md
++++ b/agent_space/reviews/review-20261018-047-code-package-import-open.md
+@@ -24,6 +24,12 @@ At9fd43753a9a79221ae3d567ef598a3ca9c7aaf78 regression39154691872 inline122/124 P
+ 
+ Inspection found appFSM is Object.freeze and its query property is an arrow delegating to readBackendProjection. Assigning to appFSM.query was silently ineffective, so the late failure was never injected; that composite message did not prove rollback. Correct123 to hook the actual readBackendProjection function, preserving zero-success-read on noncommit and exact original late error/committed-state assertions. The same audit found old palette case44 used this ineffective frozen-facade spy; correct its no-query renderer assertion to the actual Backend projection boundary too. Earlier green44 did not prove that spy assertion, although its other supplied-palette/state assertions ran; do not treat prior green as stronger proof. No runtime/Source/pseudocode/digest changes. Corrected exact-SHA124+124/repeat/build/gates pending.
+ 
++## Third execution and incomplete-browser diagnostics
++
++At75663b582318f97cad89410c2fa4163774e04adc, repeat39154898587 PASS124 inline+124 split including corrected44/123 real projection hooks. Push39154871030 inline124 PASS but split completion missing: `RuntimeError: Regression did not finish on /tmp/fast-figure-regression-9mq7txlg/split-package/Fast-figure/Fast-figure.html`; do NOT call it a passed run. Canonical39154871029/cumulative39154900953/build39154903014/fidelity39154904873 PASS. The intermittent incomplete split still lacks a proven cause; DBus stderr alone is insufficient.
++
++Patch140 adds per-case progress (phase/number/name/completed count/virtual elapsed) and Chrome return code to missing-completion diagnostics. Complete result attribute remains mandatory, failures remain failures, no retries or virtual/wall timeout changes. This allows the next incomplete run to identify its active case rather than silently increasing a budget. Also remove browser probe's obsolete hardcoded Source19/pseudo5/code23 lineage claims: point to the single development-versions.json canonical checker and actual APP_BUILD instead of maintaining a duplicate stale version table. No new app/runtime/Source/pseudocode meaning. New exact-SHA124+124/repeat/build/gates pending, and incomplete-run root cause still open until evidence establishes it.
++
+ ## Lineage, pending evidence and limits
+ 
+ Source45 unchanged e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7; pseudocode24 fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4; code96 52448be81eafaa1f6d06551fc8d7ca36cade75f6e25b29a3f6a597ca6157a18a remains stale. Digests calculated from staged Git path/blob identities, not local checker execution; canonical Actions confirmation pending. Exact-SHA124 inline+124 split/repeat/build/cumulative development-layer/fidelity PENDING. Static fidelity gate is not semantic proof. Whole common commit/other mutation owners, schema/serializer, raster/current-snapshot resources, supplied dashboard and timing/lifecycle requirements still open. No whole-goal closure from bounded tests or manifest. No explicit quota/auth/service blocker observed.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index dc29c21..8ce586b 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1,24 +1,27 @@
+ /* Runs after the application scripts in a headless file:// browser. */
+ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+-  sourceScript: "r19",
+-  plusCal: "r5",
+-  verificationModel: "r16",
+-  sourceCode: "r23",
+-  appBuild: "1.1.43-wip",
++  lineageManifest: "development-versions.json (canonical checkout validated by Actions)",
++  appBuild: APP_BUILD,
+ });
+ (async () => {
+   const api = window.FastFigureApi;
+-  const results = [];
++  const results = [], startedAt = performance.now();
++  const progress = (state) => document.documentElement.setAttribute("data-fast-figure-regression-progress",
++    JSON.stringify({ ...state, completed: results.length, virtualElapsedMs: Math.round(performance.now() - startedAt) }));
++  progress({ phase: "bootstrap" });
+   const check = (condition, message) => {
+     if (!condition) throw Error(message);
+   };
+   const run = async (number, name, action) => {
++    progress({ phase: "running", number, name });
+     try {
+       const outcome = await action();
+       results.push({ number, name, result: outcome?.blocked ? "blocked" : "pass", detail: outcome?.blocked });
+   
+   } catch (error) {
+       results.push({ number, name, result: "fail", detail: String(error?.stack || error) });
++    } finally {
++      progress({ phase: "between", number, name, result: results.at(-1)?.result });
+     }
+   };
+   const ffpxFile = () => new File([ffpxZipStore(ffpxBuildProject().assets)], "roundtrip.ffpx");
+diff --git a/agent_space/tests/run-browser-regression.py b/agent_space/tests/run-browser-regression.py
+index 9bd1cb0..e09d33d 100644
+--- a/agent_space/tests/run-browser-regression.py
++++ b/agent_space/tests/run-browser-regression.py
+@@ -15,10 +15,13 @@ import zipfile
+ 
+ class ResultParser(HTMLParser):
+     encoded = None
++    progress = None
+ 
+     def handle_starttag(self, tag, attrs):
+         if tag == "html":
+-            self.encoded = dict(attrs).get("data-fast-figure-regression")
++            attributes = dict(attrs)
++            self.encoded = attributes.get("data-fast-figure-regression")
++            self.progress = attributes.get("data-fast-figure-regression-progress")
+ 
+ 
+ def run(browser, source, probe):
+@@ -47,7 +50,8 @@ def run(browser, source, probe):
+     parser.feed(completed.stdout)
+     if not parser.encoded:
+         raise RuntimeError(
+-            f"Regression did not finish on {source}: " + completed.stderr[-2500:]
++            f"Regression did not finish on {source}: returncode={completed.returncode}; "
++            f"last-progress={parser.progress!r}; stderr=" + completed.stderr[-2500:]
+         )
+     return json.loads(
+         base64.b64decode(html.unescape(parser.encoded)).decode("utf-8")
