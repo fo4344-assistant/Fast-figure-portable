@@ -3091,9 +3091,13 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     await run(76, "FFPX retains slot image settings with null reference without creating assets", async () => {
       const live = JSON.stringify(activeProject._state), source = projectClone(activeProject._state),
         settings = { ...DEFAULT_IMAGE_SETTINGS, fit: "manual", scale: 125, x: 17, y: 23 };
+      // Normalize only this private fixture before observation; legacy tests may leave flat slots.
+      normalizeSlotContents(source.slots);
       source.assets.images = [];
       source.slots.forEach(slot => { slot.content.imageId = null; });
       const slot = source.slots[0];
+      source.charts = source.charts.filter(chart => chart.id !== slot.content.chart);
+      slot.content.chart = null; slot.content.contentType = "image";
       slot.content.imageSettings = projectClone(settings);
       const before = JSON.stringify(source), bundle = ffpxBuildProject(source),
         entries = new Map(bundle.assets.map(entry => [entry.name, entry.data])),

@@ -1,0 +1,45 @@
+diff --git a/agent_space/reviews/review-20261018-025-code-empty-image-settings-open.md b/agent_space/reviews/review-20261018-025-code-empty-image-settings-open.md
+index 46b96d7..ae03173 100644
+--- a/agent_space/reviews/review-20261018-025-code-empty-image-settings-open.md
++++ b/agent_space/reviews/review-20261018-025-code-empty-image-settings-open.md
+@@ -18,3 +18,9 @@ Existing Source41 sourcescript/backend/assets_files.py:148 PACKAGE_IDENTITY_AND_
+ ## Exclusions and gate boundary
+ 
+ Not full canonical import/validation: reader's broader schema/structural checks, missing-settings/default normalization ownership, remaining graph/asset candidates, raster snapshots and supplied dashboard/API integration remain open. No policy/Source/pseudo edits, optional TLC not run. Previous runtime digest transparently provisional until canonical runner and strict cumulative gate. All app/test/build/checker execution only Actions default runner; no local execution. Test numbers are coverage only, not whole-goal proof.
++
++## Initial actual Actions and correction
++
++At836b3a179e7c97670675e88fd1237cc0d1ccb51a build39105022883 PASS; regression39105022900 prior75 PASS in both distributions but76 failed `TypeError: Cannot set properties of undefined (setting 'imageId')` in fixture setup: earlier tests leave a mixture of flat/canonical slots. Correct only private fixture normalization before observation, explicitly make chosen slot image-only (remove its owned fixture chart) for the positive-image branch, no live or production repair. Strict reference/asset/settings/no-mutation assertions retained. Dist-only botaa84795234fdb28a61397043c021d46de826ecb3 inspected/fast-forwarded.
++
++Diagnostic39105022854 canonical code65 sha256:c7c226fa184cb585746f4a958d8427bce69c9a5c3090005315376f31f50f2ef4, upper41/17 unchanged. Patch061 records digest; no runtime edits/revision bump. Corrected regression and cumulative versions from10e3d3d pending, no completion claim.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index cfd4567..e0a144f 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3091,9 +3091,13 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+     await run(76, "FFPX retains slot image settings with null reference without creating assets", async () => {
+       const live = JSON.stringify(activeProject._state), source = projectClone(activeProject._state),
+         settings = { ...DEFAULT_IMAGE_SETTINGS, fit: "manual", scale: 125, x: 17, y: 23 };
++      // Normalize only this private fixture before observation; legacy tests may leave flat slots.
++      normalizeSlotContents(source.slots);
+       source.assets.images = [];
+       source.slots.forEach(slot => { slot.content.imageId = null; });
+       const slot = source.slots[0];
++      source.charts = source.charts.filter(chart => chart.id !== slot.content.chart);
++      slot.content.chart = null; slot.content.contentType = "image";
+       slot.content.imageSettings = projectClone(settings);
+       const before = JSON.stringify(source), bundle = ffpxBuildProject(source),
+         entries = new Map(bundle.assets.map(entry => [entry.name, entry.data])),
+diff --git a/development-versions.json b/development-versions.json
+index 67394e0..daf2838 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,7 +38,7 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:53a6e764f33db5b9c50bdb10106329a151f4a969611764e3caed0395767aa6ef",
++      "fingerprint": "sha256:c7c226fa184cb585746f4a958d8427bce69c9a5c3090005315376f31f50f2ef4",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5",
+         "pseudocode": "sha256:c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619",
