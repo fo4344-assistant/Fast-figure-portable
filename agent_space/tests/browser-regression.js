@@ -3997,6 +3997,133 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         activeProject.initialize(saved); interfaceFSM.state = session; selectedSlotId = selected; slotDragSourceId = drag; }
     });
 
+
+    await run(95, "Graph layout applies new edits in Backend and reads immutable normalized settings", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard;
+      try {
+        const source = projectClone(saved); normalizeSlotContents(source.slots);
+        const target = source.slots.find(item => !item.hidden), old = target.content.chart;
+        source.charts = source.charts.filter(item => item.id !== old); target.content.chart = null; target.content.contentType = "graph";
+        initialize.call(activeProject, source); select(slotAt(target.id));
+        const csv = createProjectCsv([["x", "y"], [2, 4], [4, 8]], "layout-owned.csv");
+        const chart = api.graphs.addObject(csv.id), slotId = target.id;
+        const seeded = projectClone(activeProject._state), c = seeded.charts.find(item => item.id === chart.id);
+        c.editor.globalSettings.axes.xBottom.lineWidth = -9;
+        c.editor.globalSettings.axes.yRight.title = "retained axis";
+        c.editor.plotlyExtensions = { ...c.editor.plotlyExtensions, layout: { uirevision: "retained layout extension" } };
+        initialize.call(activeProject, seeded);
+        const beforeRead = JSON.stringify(activeProject._state), read = api.graphs.readLayout(), again = api.graphs.readLayout();
+        check(Object.isFrozen(read) && Object.isFrozen(read.settings.axes.xBottom) && read !== again &&
+          read.settings.axes.xBottom.lineWidth === BackendSettings.defaults.chartSettings.editor.axis.lineWidth &&
+          JSON.stringify(activeProject._state) === beforeRead, "layout query repaired live settings or returned mutable/cached copy");
+        const assets = JSON.stringify(activeProject._state.assets), slots = JSON.stringify(activeProject._state.slots),
+          csvPath = interfaceFSM.state.assetPath, index = interfaceFSM.state.graphObjectIndex;
+        let commits = 0, paints = 0, result;
+        activeProject.initialize = function (...args) { commits++; return initialize.apply(this, args); };
+        renderDashboard = () => { paints++; };
+        projectEFSM.send = function (event, payload) {
+          check(event === "CHART_LAYOUT_CHANGED" && payload.slotId === slotId && payload.chartId === chart.id &&
+            Object.keys(payload).sort().join(",") === "chartId,settings,slotId" &&
+            !Object.hasOwn(payload, "globalSettings"), "Application supplied calculated layout authority");
+          return result = send.call(this, event, payload);
+        };
+        const edits = { title: "owned title", globalSettings: { showLegend: false, showTitle: false, showZeroLine: true,
+          graphFontFamily: "", titleFontSize: "19", legendFontSize: -3, ignored: "not schema" },
+          axisKey: "xBottom", axisValues: { min: "1.5", max: null, tick: "bad", title: "reciprocal",
+            titleSize: 0, fontSize: "16", lineWidth: 0, scaleType: "reciprocal", tickMode: "increment",
+            divide: -2, notation: "power", visible: false, showGrid: false, minorTicks: true } };
+        const returned = api.graphs.updateLayout(edits), axis = returned.settings.axes.xBottom;
+        check(commits === 1 && paints === 1 && result.committed && result.changed.chartIds.includes(chart.id) &&
+          !result.changed.slotIds.length && Object.isFrozen(returned) && returned.title === "owned title" &&
+          returned.settings.titleFontSize === 19 && returned.settings.legendFontSize === "" && !("ignored" in returned.settings) &&
+          returned.settings.showLegend === false && axis.min === 1.5 && axis.max === "" && axis.tick === "" &&
+          axis.lineWidth === 0 && axis.divide === -2 && axis.scaleType === "reciprocal" && axis.tickMode === "increment" &&
+          axis.fontSize === 16 && axis.titleSize === BackendSettings.defaults.chartSettings.editor.axis.titleSize &&
+          axis.visible === false && axis.showGrid === false && axis.minorTicks === true &&
+          returned.settings.axes.yRight.title === "retained axis" && JSON.stringify(activeProject._state.assets) === assets &&
+          JSON.stringify(activeProject._state.slots) === slots && interfaceFSM.state.assetPath === csvPath &&
+          interfaceFSM.state.graphObjectIndex === index, "layout normalization/candidate facts lost fields, assets or selection");
+        const committed = getChart(chart.id);
+        check(committed.graph.layout.uirevision === "retained layout extension", "layout edit discarded imported extension");
+        const next = api.graphs.updateLayout({ axisKey: "xBottom", axisValues: { scaleType: "log", tickMode: "increment",
+          divide: 0, notation: "invalid", title: 123, visible: "no", showValues: false } });
+        check(next.title === "owned title" && next.settings.axes.xBottom.scaleType === "log" &&
+          next.settings.axes.xBottom.tickMode === "plotly" && next.settings.axes.xBottom.divide === 1 &&
+          next.settings.axes.xBottom.notation === "none" && next.settings.axes.xBottom.title === "" &&
+          next.settings.axes.xBottom.visible === BackendSettings.defaults.chartSettings.editor.axisVisibility.xBottom &&
+          next.settings.axes.xBottom.showValues === false && read.title !== "owned title", "layout fallback or detached earlier read changed");
+      } finally {
+        activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
+      }
+    });
+
+    await run(96, "Graph layout validates current ownership, retries and gates all success work", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        validate = validateProjectObjectState, rebuild = rebuildEditableGraph, render = renderDashboard,
+        failure = Error("layout candidate failure");
+      try {
+        const source = projectClone(saved); normalizeSlotContents(source.slots);
+        const target = source.slots.find(item => !item.hidden), old = target.content.chart;
+        source.charts = source.charts.filter(item => item.id !== old); target.content.chart = null; target.content.contentType = "graph";
+        initialize.call(activeProject, source); select(slotAt(target.id));
+        const csv = createProjectCsv([["x", "y"], [1, 2]], "layout-errors.csv"), chart = api.graphs.addObject(csv.id);
+        let commits = 0, reads = 0, paints = 0;
+        activeProject.initialize = function (...args) { commits++; return initialize.apply(this, args); };
+        readBackendProjection = (kind, request) => { reads++; return query(kind, request); };
+        renderDashboard = () => { paints++; };
+        const before = activeProject._state, runtime = interfaceFSM.state;
+        const noSuccess = () => check(!commits && !reads && !paints && activeProject._state === before &&
+          interfaceFSM.state === runtime, "failed layout did success work or changed authority");
+        const attempt = values => { let caught; try { graphEditorUpdateLayout(target.id, chart.id, values); } catch (error) { caught = error; } return caught; };
+        check(attempt({ get title() { throw failure; } }) === failure, "layout edit getter error swallowed"); noSuccess();
+        validateProjectObjectState = () => { throw failure; };
+        check(attempt({ title: "bad" }) === failure, "layout validation failure swallowed"); noSuccess(); validateProjectObjectState = validate;
+        rebuildEditableGraph = () => { throw failure; };
+        check(attempt({ title: "bad" }) === failure, "layout projection failure swallowed"); noSuccess(); rebuildEditableGraph = rebuild;
+        const uncommitted = Object.freeze({ committed: false }); projectEFSM.send = () => uncommitted;
+        check(graphEditorUpdateLayout(target.id, chart.id, { title: "skip" }) === uncommitted, "layout noncommit not retained");
+        noSuccess(); projectEFSM.send = send;
+        let caught; try { graphEditorUpdateLayout(target.id, -1, {}); } catch (error) { caught = error; }
+        check(caught, "wrong chart identity accepted"); noSuccess();
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) {
+            const newer = projectClone(activeProject._state), current = newer.charts.find(item => item.id === chart.id);
+            current.editor.globalSettings.graphFontFamily = "newer authority font"; newer.meta.projectName = "newer layout authority";
+            initialize.call(activeProject, newer);
+          }
+          return valid;
+        };
+        const output = graphEditorUpdateLayout(target.id, chart.id, { title: "retry title" });
+        validateProjectObjectState = validate;
+        check(attempts === 2 && commits === 1 && reads === 1 && paints === 1 && output.title === "retry title" &&
+          output.settings.graphFontFamily === "newer authority font" && activeProject.projectName === "newer layout authority",
+          "layout committed stale candidate or applied edits twice");
+        readBackendProjection = () => { throw failure; }; caught = null;
+        try { graphEditorUpdateLayout(target.id, chart.id, { title: "committed before query failure" }); } catch (error) { caught = error; }
+        check(caught === failure && commits === 2 && paints === 1 && getChart(chart.id).editor.title === "committed before query failure",
+          "postcommit layout query error swallowed/rolled back");
+        readBackendProjection = query;
+        for (const kind of ["hidden", "frozen"]) {
+          const invalid = projectClone(activeProject._state);
+          if (kind === "hidden") invalid.slots.find(item => item.id === target.id).hidden = true;
+          else { invalid.slots.find(item => item.id === target.id).hidden = false;
+            invalid.charts.find(item => item.id === chart.id).editor.editable = false; }
+          initialize.call(activeProject, invalid); caught = null;
+          try { graphEditorUpdateLayout(target.id, chart.id, {}); } catch (error) { caught = error; }
+          check(caught && commits === 2 && paints === 1, "hidden/noneditable layout target committed");
+        }
+      } finally {
+        activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        validateProjectObjectState = validate; rebuildEditableGraph = rebuild; renderDashboard = render;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
+      }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

@@ -426,6 +426,13 @@
             contentType: slot.contentType, chart: slot.content?.chart ?? slot.chart,
             imageId: slot.content?.imageId ?? slot.imageId }) : null;
         }
+        if (kind === "project-api" && request.operation === "graphs.readLayout") {
+          const source = activeProject._state, slot = source.slots.find(item => item.id === request.selectedSlotId && !item.hidden),
+            chartId = slot?.content?.chart ?? slot?.chart,
+            chart = slot?.contentType !== "image" ? source.charts.find(item => item.id === chartId) : null;
+          return chart ? immutableProjectCopy({ chartId: chart.id, editable: chart.editor?.editable !== false,
+            title: chart.editor?.title ?? "", settings: normalizeGraphLayoutSettings(chart.editor?.globalSettings) }) : null;
+        }
         if (kind === "project-api" && request.operation === "graphs.readData") {
           const source = activeProject._state, state = request.frontendState || {},
             owners = Object.hasOwn(request, "chartId")
@@ -1358,24 +1365,41 @@
         payload.chart=chart;
       }
       function applyChartLayoutChangedAction({ machine, payload }) {
-        machine.assertWritable("charts","CHART_LAYOUT_CHANGED");
-        machine.assertWritable("editor","CHART_LAYOUT_CHANGED");
-        let slot=slotAt(payload.slotId),current=slot?.chart?getChart(slot.chart):null;
-        if(!slot||slot.contentType==="image"||!current||current.id!==payload.chartId)
-          throw Error("전역 설정을 변경할 그래프 슬롯 또는 차트가 없습니다.");
-        if(current.editor?.editable===false)
-          throw Error("편집 가능 토글을 켠 뒤 설정을 변경하세요.");
-        if(!payload.globalSettings||typeof payload.globalSettings!=="object")
-          throw Error("적용할 그래프 전역 설정이 없습니다.");
-        let candidate=projectClone(activeProject._state),
-          chart=candidate.charts.find((item)=>item.id===current.id);
-        chart.editor.title=String(payload.title||"");
-        chart.editor.globalSettings=projectClone(payload.globalSettings);
-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
-        let committed=getChart(current.id);
-        committed.graph.layout=layout(committed);
-        payload.chart=committed;
-        payload.layout=committed.graph.layout;
+        machine.assertWritable("charts", "CHART_LAYOUT_CHANGED");
+        machine.assertWritable("editor", "CHART_LAYOUT_CHANGED");
+        while (true) {
+          const source = activeProject._state, slot = source.slots.find(item => item.id === payload.slotId && !item.hidden),
+            chartId = slot?.content?.chart ?? slot?.chart, current = source.charts.find(item => item.id === chartId),
+            owners = source.slots.filter(item => (item.content?.chart ?? item.chart) === chartId), values = payload.settings;
+          if (!slot || slot.contentType === "image" || !current || current.id !== payload.chartId ||
+              owners.length !== 1 || current.editor?.editable === false)
+            throw Error("전역 설정을 변경할 현재 편집 가능 owning chart가 없습니다.");
+          if (!values || typeof values !== "object" || Array.isArray(values)) throw Error("적용할 그래프 설정이 없습니다.");
+          const candidate = projectClone(source), chart = candidate.charts.find(item => item.id === chartId),
+            settings = projectClone(chart.editor.globalSettings || {}), edits = values.globalSettings;
+          if (Object.hasOwn(values, "title")) chart.editor.title = String(values.title ?? "");
+          if (edits && typeof edits === "object") {
+            for (const key of Object.keys(edits)) if (key !== "axes") settings[key] = edits[key];
+            if (edits.axes && typeof edits.axes === "object") {
+              settings.axes = { ...settings.axes };
+              for (const key of ["xBottom", "xTop", "yLeft", "yRight"])
+                if (Object.hasOwn(edits.axes, key)) settings.axes[key] = { ...settings.axes[key], ...edits.axes[key] };
+            }
+          }
+          const key = values.axisKey;
+          if (["xBottom", "xTop", "yLeft", "yRight"].includes(key))
+            settings.axes = { ...settings.axes, [key]: { ...settings.axes?.[key], ...values.axisValues } };
+          chart.editor.globalSettings = normalizeGraphLayoutSettings(settings);
+          rebuildEditableGraph(chart, candidate);
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const after = activeProject._state;
+          payload.changed = { slotIds: [], chartIds: after.charts.filter(item =>
+            JSON.stringify(item) !== JSON.stringify(source.charts.find(before => before.id === item.id))).map(item => item.id),
+            csvIds: [], imageIds: [], assets: [] };
+          return;
+        }
       }
       function applyChartModelReplacedAction({ machine, payload }) {
         for (const target of ["charts", "editor", "data", "files"])
@@ -2702,6 +2726,40 @@
             legendFontSize: previous.legendFontSize ?? "",
             axes: currentAxes(previous),
           };
+        return settings;
+      }
+      function normalizeGraphLayoutSettings(input) {
+        const defaults = BackendSettings.defaults.chartSettings.editor,
+          source = input && typeof input === "object" && !Array.isArray(input) ? input : {},
+          scalar = value => (typeof value === "number" || typeof value === "string") && value !== "" ? Number(value) : NaN,
+          positive = (value, fallback) => { const number = scalar(value); return Number.isFinite(number) && number > 0 ? number : fallback; },
+          settings = { ...projectClone(defaults.globalSettings),
+            showLegend: Object.hasOwn(source, "showLegend") ? source.showLegend !== false : defaults.globalSettings.showLegend,
+            showTitle: Object.hasOwn(source, "showTitle") ? source.showTitle !== false : defaults.globalSettings.showTitle,
+            showZeroLine: source.showZeroLine === true,
+            graphFontFamily: typeof source.graphFontFamily === "string" ? source.graphFontFamily : "",
+            titleFontSize: positive(source.titleFontSize, ""), legendFontSize: positive(source.legendFontSize, ""), axes: {} };
+        for (const key of ["xBottom", "xTop", "yLeft", "yRight"]) {
+          const raw = source.axes?.[key], axis = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {},
+            result = { ...projectClone(defaults.axis), visible: defaults.axisVisibility[key] };
+          for (const field of ["min", "max", "tick"]) {
+            const number = scalar(axis[field]); result[field] = Number.isFinite(number) ? number : "";
+          }
+          result.title = typeof axis.title === "string" ? axis.title : defaults.axis.title;
+          result.titleSize = positive(axis.titleSize, defaults.axis.titleSize);
+          result.fontSize = positive(axis.fontSize, defaults.axis.fontSize);
+          const width = scalar(axis.lineWidth), divide = scalar(axis.divide);
+          result.lineWidth = Number.isFinite(width) && width >= 0 ? width : defaults.axis.lineWidth;
+          result.divide = Number.isFinite(divide) && divide !== 0 ? divide : 1;
+          if (Object.hasOwn(axis, "showGrid")) result.showGrid = axis.showGrid !== false;
+          if (Object.hasOwn(axis, "showValues")) result.showValues = axis.showValues !== false;
+          if (typeof axis.visible === "boolean") result.visible = axis.visible;
+          result.minorTicks = axis.minorTicks === true;
+          result.notation = ["none", "e", "power"].includes(axis.notation) ? axis.notation : "none";
+          result.scaleType = ["linear", "log", "reciprocal"].includes(axis.scaleType) ? axis.scaleType : "linear";
+          result.tickMode = result.scaleType !== "log" && axis.tickMode === "increment" ? "increment" : "plotly";
+          settings.axes[key] = result;
+        }
         return settings;
       }
       function normalizeGlobalSettings(chart, force = false) {
@@ -6366,13 +6424,7 @@
         };
       }
       function readGraphLayoutApi() {
-        let chart = graphEditorChart();
-        return chart ? {
-          chartId: chart.id,
-          editable: chart.editor?.editable !== false,
-          title: chart.editor?.title ?? "",
-          settings: projectClone(readGlobalSettings(chart)),
-        } : null;
+        return appFSM.query("project-api", { operation: "graphs.readLayout", selectedSlotId: interfaceFSM.readState().selectedSlotId });
       }
       function readGraphPaletteApi() {
         let chart = graphEditorChart();
@@ -6693,26 +6745,17 @@
             });
         }
       }
-      function updateGraphLayoutApi({ title, globalSettings, axisKey, axisValues } = {}) {
-        let slot = getSelectedSlot(), chart = graphEditorChart();
-        if (!slot || !chart) return null;
-        if (chart.editor?.editable === false)
-          return status("편집 가능 토글을 켠 뒤 설정을 변경하세요.");
-        let settings = readGlobalSettings(chart);
-        if (globalSettings) settings = { ...settings, ...globalSettings };
-        if (axisKey && settings.axes[axisKey])
-          settings = { ...settings, axes: {
-            ...settings.axes,
-            [axisKey]: { ...settings.axes[axisKey], ...axisValues },
-          } };
-        appFSM.send("CHART_LAYOUT_CHANGED", {
-          slotId: slot.id, chartId: chart.id,
-          title: title === undefined ? chart.editor.title : title,
-          globalSettings: settings, direction: "fsm-to-model",
-        });
+      function graphEditorUpdateLayout(slotId, chartId, values) {
+        const result = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId, settings: values });
+        if (!result.committed) return result;
+        const output = appFSM.query("project-api", { operation: "graphs.readLayout", selectedSlotId: slotId });
         renderDashboard();
-        debugLog("mantine:graph-layout", { slotId: slot.id, chartId: chart.id });
-        return readGraphLayoutApi();
+        return output;
+      }
+      function updateGraphLayoutApi(values = {}) {
+        const slotId = interfaceFSM.readState().selectedSlotId,
+          context = appFSM.query("project-api", { operation: "graphs.readLayout", selectedSlotId: slotId });
+        return graphEditorUpdateLayout(slotId, context?.chartId ?? null, values);
       }
       function graphEditorApplyPalette(chartId, colors) {
         const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
