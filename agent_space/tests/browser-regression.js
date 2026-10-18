@@ -4852,6 +4852,54 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(109, "Trash cascade maps original duplicate positions and excludes only conversion views", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard, notify = interfaceFSM.notify;
+      try {
+        api.layout.setGrid(2, 2); const base = projectClone(activeProject._state);
+        base.slots.forEach(slot => { slot.hidden = false; slot.rowSpan = 1; slot.colSpan = 1; });
+        initialize.call(activeProject, base);
+        const [a, b, c] = activeProject.slots;
+        const keep = createProjectCsv([["X", "Y"], ["1", "2"]], "cascade-keep.csv"),
+          trash = createProjectCsv([["X", "Y"], ["3", "4"]], "cascade-remove.csv");
+        for (const [slot, ids] of [[a, [keep.id, trash.id, trash.id, keep.id]], [b, [trash.id, trash.id]], [c, [trash.id]]]) {
+          api.slots.reset(slot.id); select(slotAt(slot.id)); api.slots.setContentType(slot.id, "graph");
+          ids.forEach(id => api.graphs.addObject(id));
+        }
+        const chartId = slotAt(a.id).chart, frozenId = slotAt(b.id).chart, conversionId = slotAt(c.id).chart,
+          fixture = projectClone(activeProject._state);
+        const frozen = fixture.charts.find(chart => chart.id === frozenId),
+          conversion = fixture.charts.find(chart => chart.id === conversionId);
+        frozen.editor.editable = false;
+        conversion.editor.editable = false; conversion.editor.conversionRows = projectClone(trash.rows);
+        conversion.editor.headerLines = trash.headerLines;
+        fixture.assets.csvFiles.find(csv => csv.id === trash.id).directory = PROJECT_TRASH_DIRECTORY;
+        validateProjectObjectState(fixture, { requireSlots: true }); initialize.call(activeProject, fixture);
+        select(slotAt(a.id)); api.graphs.selectObject(3);
+        const conversionBefore = JSON.stringify(getChart(conversionId)), retained = projectClone(getChart(chartId).editor.objects[0]);
+        let result;
+        projectEFSM.send = function (...args) { return result = send.apply(this, args); };
+        renderDashboard = () => {}; interfaceFSM.notify = () => {};
+        api.assets.emptyTrash();
+        const maps = result.selectionHints.graphObjectIndexMaps;
+        check(result.changed.removedGraphReferenceCount === 4 && maps.length === 2 &&
+          JSON.stringify(maps.find(map => map.chartId === chartId)?.indices) === "[0,null,null,1]" &&
+          JSON.stringify(maps.find(map => map.chartId === frozenId)?.indices) === "[null,null]",
+          "cascade mapping/count was not chart-specific original-position filtering");
+        check(getChart(chartId).editor.objects.length === 2 &&
+          getChart(chartId).editor.objects.every(object => JSON.stringify(object) === JSON.stringify(retained)) &&
+          interfaceFSM.readState().graphObjectIndex === 1 && getChart(frozenId).editor.objects.length === 0 &&
+          getChart(frozenId).editor.editable === false && JSON.stringify(getChart(conversionId)) === conversionBefore &&
+          !result.changed.chartIds.includes(conversionId), "cascade lost retained identity or mutated conversion/frozen scope");
+        const refs = interfaceFSM.readState(), hints = { graphObjectIndexMaps: maps, chartId, selectedIndexHint: null };
+        check(buildFrontendReconciliationInput("PROBE", { selectionHints: hints }, refs).graphObject === null,
+          "cascade map overrode explicit none hint");
+        check(buildFrontendReconciliationInput("PROBE", { selectionHints: { graphObjectIndexMaps: maps } },
+          { ...refs, graphObjectIndex: 2 }).graphObject === null, "removed original object selection was retained");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

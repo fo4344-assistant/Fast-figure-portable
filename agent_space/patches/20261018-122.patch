@@ -1,0 +1,78 @@
+diff --git a/agent_space/reviews/review-20261018-041-code-trash-open.md b/agent_space/reviews/review-20261018-041-code-trash-open.md
+index e36b6c7..00c7e0d 100644
+--- a/agent_space/reviews/review-20261018-041-code-trash-open.md
++++ b/agent_space/reviews/review-20261018-041-code-trash-open.md
+@@ -13,12 +13,12 @@ Code89 translates shared detach using collectAssetReferences, original-position
+ - Current subtree, fixed trash root retained, duplicate CSV references counted separately, image ref only / settings and canonical extension retained, graph rebuilt, immutable actual facts: browser case107.
+ - Empty trash does not invent removed references or repaint content:107.
+ - Validation failure preserves source/Frontend, no success work; noncommit skips effects; latest authority during validation forces full subtree recalculation and one commit; late reconciliation error leaves commit and skips later success work:108.
+-- Shared helper conversion scope follows collectAssetReferences (conversion representation excluded); source ownership map retains original index relation. More adversarial retained-index / conversion integration tests remain to add if execution finds coverage insufficient.
++- Shared helper conversion scope follows collectAssetReferences (conversion representation excluded); source ownership map retains original index relation. Case109 additionally exercises duplicate-valued retained objects with original map [0,null,null,1], multiple charts, frozen ordinary chart removal, conversion view preservation, actual Frontend index remap and explicit-none hint precedence. No new Source/PlusCal/runtime meaning.
+ - Regression prior106 plus107/108 both inline/split, repeat, generated build, canonical/cumulative development-layer gate and fidelity: PENDING. Code89 old digest is explicitly provisional until canonical runner output, not claimed passed/current.
+ 
+ ## Execution iteration1
+ 
+-At49d2f25a1948c03546b326fcb019fdedb62d7801 build39149654863 PASS, generated dist758c0c3. Regression39149654840 prior106+108 PASS each form;107 FAIL `Error: trash did not detach/rebuild or changed display-owned settings/extension`. Split the composite assertion to identify the actual failed contract, retain all assertions; no production behavior change yet. Canonical version39149654801 printed code89 sha256:d939e8f9a00f9954e872fec7c407ade0c8b87f37b2535b4b0f4bbdb781a1f45e, recorded patch120. Source/pseudo digests unchanged. Gate initially failed intentionally provisional metadata, not passed. At1f1ea970ce4741a41da5de6ce58b2b3180c85223 cumulative versions39149773246 (base8835b56) and push39149772635 PASS. Regression39149772742 prior106+108 PASS each form,107 FAIL `Error: trash graph not empty/rebuilt: objects=0, traces=1`. Inspection fast-figure.js traces() shows intentional empty axis placeholders, independent of CSV objects; test's zero total trace expectation was wrong. Patch121 checks zero editor objects and every trace has axis-placeholder marker and empty x/y, preserving the actual rebuild/no-CSV-data contract. Runtime/Source/PlusCal/digests unchanged. Corrected exact-SHA repeat/fidelity pending.
++At49d2f25a1948c03546b326fcb019fdedb62d7801 build39149654863 PASS, generated dist758c0c3. Regression39149654840 prior106+108 PASS each form;107 FAIL `Error: trash did not detach/rebuild or changed display-owned settings/extension`. Split the composite assertion to identify the actual failed contract, retain all assertions; no production behavior change yet. Canonical version39149654801 printed code89 sha256:d939e8f9a00f9954e872fec7c407ade0c8b87f37b2535b4b0f4bbdb781a1f45e, recorded patch120. Source/pseudo digests unchanged. Gate initially failed intentionally provisional metadata, not passed. At1f1ea970ce4741a41da5de6ce58b2b3180c85223 cumulative versions39149773246 (base8835b56) and push39149772635 PASS. Regression39149772742 prior106+108 PASS each form,107 FAIL `Error: trash graph not empty/rebuilt: objects=0, traces=1`. Inspection fast-figure.js traces() shows intentional empty axis placeholders, independent of CSV objects; test's zero total trace expectation was wrong. Patch121 checks zero editor objects and every trace has axis-placeholder marker and empty x/y, preserving the actual rebuild/no-CSV-data contract. Runtime/Source/PlusCal/digests unchanged. At064f7ac789911096c3e9c8dd4b8dd21e8598ecdd regression39149906997 PASS108 inline+108 split; cumulative versions39149907192 PASS(base8835b56), push39149906974 PASS; fidelity39149909784 PASS. Repeat39149990734 pending. Static checklist identified unexercised retained-index/conversion integration, so patch122 adds109 without runtime changes; its exact-SHA regression/repeat pending. These are bounded unit results, not whole completion.
+ 
+ ## Verified starting evidence and remaining scope
+ 
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 4eea0a6..b14c999 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4852,6 +4852,54 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(109, "Trash cascade maps original duplicate positions and excludes only conversion views", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard, notify = interfaceFSM.notify;
++      try {
++        api.layout.setGrid(2, 2); const base = projectClone(activeProject._state);
++        base.slots.forEach(slot => { slot.hidden = false; slot.rowSpan = 1; slot.colSpan = 1; });
++        initialize.call(activeProject, base);
++        const [a, b, c] = activeProject.slots;
++        const keep = createProjectCsv([["X", "Y"], ["1", "2"]], "cascade-keep.csv"),
++          trash = createProjectCsv([["X", "Y"], ["3", "4"]], "cascade-remove.csv");
++        for (const [slot, ids] of [[a, [keep.id, trash.id, trash.id, keep.id]], [b, [trash.id, trash.id]], [c, [trash.id]]]) {
++          api.slots.reset(slot.id); select(slotAt(slot.id)); api.slots.setContentType(slot.id, "graph");
++          ids.forEach(id => api.graphs.addObject(id));
++        }
++        const chartId = slotAt(a.id).chart, frozenId = slotAt(b.id).chart, conversionId = slotAt(c.id).chart,
++          fixture = projectClone(activeProject._state);
++        const frozen = fixture.charts.find(chart => chart.id === frozenId),
++          conversion = fixture.charts.find(chart => chart.id === conversionId);
++        frozen.editor.editable = false;
++        conversion.editor.editable = false; conversion.editor.conversionRows = projectClone(trash.rows);
++        conversion.editor.headerLines = trash.headerLines;
++        fixture.assets.csvFiles.find(csv => csv.id === trash.id).directory = PROJECT_TRASH_DIRECTORY;
++        validateProjectObjectState(fixture, { requireSlots: true }); initialize.call(activeProject, fixture);
++        select(slotAt(a.id)); api.graphs.selectObject(3);
++        const conversionBefore = JSON.stringify(getChart(conversionId)), retained = projectClone(getChart(chartId).editor.objects[0]);
++        let result;
++        projectEFSM.send = function (...args) { return result = send.apply(this, args); };
++        renderDashboard = () => {}; interfaceFSM.notify = () => {};
++        api.assets.emptyTrash();
++        const maps = result.selectionHints.graphObjectIndexMaps;
++        check(result.changed.removedGraphReferenceCount === 4 && maps.length === 2 &&
++          JSON.stringify(maps.find(map => map.chartId === chartId)?.indices) === "[0,null,null,1]" &&
++          JSON.stringify(maps.find(map => map.chartId === frozenId)?.indices) === "[null,null]",
++          "cascade mapping/count was not chart-specific original-position filtering");
++        check(getChart(chartId).editor.objects.length === 2 &&
++          getChart(chartId).editor.objects.every(object => JSON.stringify(object) === JSON.stringify(retained)) &&
++          interfaceFSM.readState().graphObjectIndex === 1 && getChart(frozenId).editor.objects.length === 0 &&
++          getChart(frozenId).editor.editable === false && JSON.stringify(getChart(conversionId)) === conversionBefore &&
++          !result.changed.chartIds.includes(conversionId), "cascade lost retained identity or mutated conversion/frozen scope");
++        const refs = interfaceFSM.readState(), hints = { graphObjectIndexMaps: maps, chartId, selectedIndexHint: null };
++        check(buildFrontendReconciliationInput("PROBE", { selectionHints: hints }, refs).graphObject === null,
++          "cascade map overrode explicit none hint");
++        check(buildFrontendReconciliationInput("PROBE", { selectionHints: { graphObjectIndexMaps: maps } },
++          { ...refs, graphObjectIndex: 2 }).graphObject === null, "removed original object selection was retained");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
