@@ -1,0 +1,39 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 072d7a9..a7c4a02 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -197,6 +197,8 @@ Unit30 final bounded evidence: code76 at2d24f6a6407627ad320dfd1683279c0f7f062f30
+ 
+ Baselinece3deed0f0ae1667715f61fdcd835b4de8ef0067. Source41/pseudocode19 already close selected image-context/one captured slotId, raw SVG/name/MIME, current candidate image identity/path creation+reference, preserved slot settings and committed-only actual target query. Code77 directly translates this bounded operation, leaves legacy file imports open. Cases91/92 cover bytes/copies/new fields, one commit/facts/settings/assets/selection preservation, current-id/path retry, validation/noncommit/no effects, stale slot and postcommit read errors. Review033/patch090 record pending Actions92+92/build/canonical gate. Whole code stale/open, no upstream meaning change.
+ 
++Unit31 Source-first return loop: initial39123076936 91/92 candidate validation exposed Source41 missing chart-reference replacement despite exclusivity invariant. Source42 closes intentional insertion removing only owned chart/clearing chart reference in same candidate, preserves old image/CSV assets/settings/caption/geometry; rejected dual references/validator weakening/two commits. Pseudocode20 then code78 translate directly (patch091/review033 closure). At02ecbdbedf69bf4bbc16d4c3639e273f7c344e43 regression39123172664 PASS92+92/build39123172745 PASS. At corrected686cfd957fc148275ebd84a5fe6fdd6c6d16a361 cumulative39123246206 PASS fromce3deed0f0ae1667715f61fdcd835b4de8ef0067, repeat39123248409 PASS92 inline+92 split/184 records. Canonical Source42 sha256:5b26424594c12918fd8ca51453483922bfbfcf29216e67bcd61cf959297ba9d2, pseudocode20 sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51, code78 sha256:7847c2bbb89e413e1c3ffb1225c429986ce170f9250df82768b19ddc48784b65; identical runtime/build/test inputs. Review033 bounded actual checklist; whole code stale/open, other imports/assets/schema/raster/dashboard still uncovered.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-033-code-empty-image-open.md b/agent_space/reviews/review-20261018-033-code-empty-image-open.md
+index 5ac5406..7efd375 100644
+--- a/agent_space/reviews/review-20261018-033-code-empty-image-open.md
++++ b/agent_space/reviews/review-20261018-033-code-empty-image-open.md
+@@ -8,13 +8,19 @@ Initial code77 regression39123076936 failed91/92 `Error: 프로젝트 슬롯 오
+ 
+ Closure: (1) complete paths for no context/current changed slot/current chart or image reference/new asset/failed whole validation/retry/late failure; (2) independent purpose preserves slot renderable-reference exclusivity under intentional insertion; (3) no duplicate owner/state, reuse existing owned-chart deletion/current candidate, settings stay slot-local and assets remain ordinary originals. Source42 changes backend command and Application contract first; pseudocode20 and code78 follow. Other Source41 contracts inherited unchanged, whole implementation remains stale.
+ 
++## Final bounded completion audit
++
++At corrected lineage686cfd957fc148275ebd84a5fe6fdd6c6d16a361 cumulative39123246206 PASS with BASE_SHA ce3deed0f0ae1667715f61fdcd835b4de8ef0067; repeat39123248409 PASS92 inline+92 split/184 explicit pass records/no failures, inline6447651 bytes/split ZIP1735507 bytes. Scoped diff02ecbdb..686cfd9 sourcecode/scripts/sourcescript/pseudocode/tests empty; build39123172745 covers identical build inputs. Canonical42/20/78 fingerprints match metadata; initial failures retained, not retroactively passed.
++
++Inspected Source42 closure and direct lower translation, actual command/wrapper and91/92: context gate/captured scalar/new bytes only; current identity/path/visible-image guard; whole candidate with owned-chart removal and asset+reference creation; source replacement recalculates latest ID/path then one commit; current settings/caption/assets/other charts preserved; official immutable actual target read only committed; noncommit/validation no effects; stale slot rejects; late query failure no rollback. Passing suite is evidence of these assertions, not whole goal coverage. Broader legacy image imports/shared validators/asset cascade/raster/supplied dashboard and earlier serializer/timing risk remain open. Code78 stale, no optional TLC pass or whole-goal completion claimed.
++
+ ## Requirement-to-artifact checklist
+ 
+ - No selected visible image context -> None/no command; capture once, no Application model/id/path calculation: wrapper,91/92.
+ - Exact UTF8 SVG/name/MIME/new input; immutable detached success target at actual created path:91 spies/byte checks.
+ - Current image next-id/unique VFS path, whole candidate validates/rechecks authority/retries/single commit:92 collision/newer-id/name authority hook.
+-- Asset creation+slot imageId only; caption/current image settings/chart/CSV/selection unchanged:91 comparisons, Backend changes only image reference and new asset/id.
++- Source42 asset creation+renderable reference replacement: target owned chart removed/chart reference none; other charts, CSV/old images, caption/current image settings/selection preserved:91 comparisons, Backend candidate only removes owned chart and adds image/id.
+ - Frozen actual created image id/path/slot owner with chartId none:91.
+ - Validator/noncommit no partial writes or success reads/render; current slot changed to graph rejects after query; original postcommit query failure no rollback:92.
+ 
+-At02ecbdbedf69bf4bbc16d4c3639e273f7c344e43 Source42→pseudocode20→code78 regression39123172664 PASS92 inline+92 split, build39123172745 PASS. Diagnostic39123172702 expected provisional Source fingerprint failure prints canonical Source42 sha256:5b26424594c12918fd8ca51453483922bfbfcf29216e67bcd61cf959297ba9d2, pseudocode20 sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51, code78 sha256:7847c2bbb89e413e1c3ffb1225c429986ce170f9250df82768b19ddc48784b65. Record actual runner digests, not local computation. Corrected cumulative gate/repeat pending; code77 failed runs retained as above, not falsely passed. No local runtime/checker/build. Source41/pseudocode19 unchanged, code77 stale and whole Plan023 open; full import/other assets/shared schema/raster/dashboard and serializer/timing gaps remain. Optional model/TLC not run, policy unchanged.
++At02ecbdbedf69bf4bbc16d4c3639e273f7c344e43 Source42→pseudocode20→code78 regression39123172664 PASS92 inline+92 split, build39123172745 PASS. Diagnostic39123172702 expected provisional Source fingerprint failure prints canonical Source42 sha256:5b26424594c12918fd8ca51453483922bfbfcf29216e67bcd61cf959297ba9d2, pseudocode20 sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51, code78 sha256:7847c2bbb89e413e1c3ffb1225c429986ce170f9250df82768b19ddc48784b65. Record actual runner digests, not local computation. Corrected cumulative gate/repeat pending; code77 failed runs retained as above, not falsely passed. No local runtime/checker/build. Final Source42/pseudocode20 aligned, code78 stale and whole Plan023 open; full import/other assets/shared schema/raster/dashboard and serializer/timing gaps remain. Optional model/TLC not run, policy unchanged.
