@@ -1,0 +1,35 @@
+diff --git a/agent_space/reviews/review-20261018-024-code-graph-editable-open.md b/agent_space/reviews/review-20261018-024-code-graph-editable-open.md
+index 9fefb14..3ee45b7 100644
+--- a/agent_space/reviews/review-20261018-024-code-graph-editable-open.md
++++ b/agent_space/reviews/review-20261018-024-code-graph-editable-open.md
+@@ -27,6 +27,6 @@ Source41/pseudocode16 current unchanged; code63 stale remains whole-plan open. F
+ 
+ At49c519c65161026ee3f1cbe9ea80070b9fa9ba7b, build39104652534 PASS, regression39104652629 passed prior73 and new75 in both distributions, but74 failed `Error: noneditable transition retained graph selection or changed CSV selection`. Static inspection identifies test setup graphEditorSelectObject explicitly sends selectAsset:true, changing CSV before the tested transition. Replace only setup with SELECT_GRAPH_OBJECT selectAsset:false; production rejection/selection assertions remain. Dist-only bote64cfe4087367d7050a0e52ca8e408cb1b648940 inspected/fast-forwarded.
+ 
+-Additional fidelity audit: Source41 graphs.py GRAPH_EDITOR_FIELDS conversionRows states editable transition removes conversion-only rows; convertImportedChartToEditable step2 explicitly permits zero objects/no CSV. Prior PlusCal16 removed field only when object count>0, leaving conversion-only data on zero-object editable charts. Prior closure missed this branch; no new Source meaning required or reverse-authority explanation. Pseudocode17 moves RemoveField outside nonzero branch but inside HasField. Both paths now remove transient imported-conversion rows, retain zero-asset rule and imported graph/settings, directly translating Source41. Source logical completeness/purpose/no duplicate authority unchanged; previous other translations inherited, no independent lower design authority. Code64 records derivation update (same runtime as63).
++Additional fidelity audit: Source41 graphs.py chartModel.editor.conversionRows states editable transition removes conversion-only rows; convertImportedChartToEditable step2 explicitly permits zero objects/no CSV. Prior PlusCal16 removed field only when object count>0, leaving conversion-only data on zero-object editable charts. Prior closure missed this branch; no new Source meaning required or reverse-authority explanation. Pseudocode17 moves RemoveField outside nonzero branch but inside HasField. Both paths now remove transient imported-conversion rows, retain zero-asset rule and imported graph/settings, directly translating Source41. Source logical completeness/purpose/no duplicate authority unchanged; previous other translations inherited, no independent lower design authority. Code64 records derivation update (same runtime as63).
+ 
+-Version39104652606 diagnostic reports canonical code63/64 sha256:53a6e764f33db5b9c50bdb10106329a151f4a969611764e3caed0395767aa6ef, recorded now; Source41 unchanged. Pseudocode17 digest/derived metadata still provisional until new canonical runner; strict gate pending, not a pass. Corrected regression pending. No local app/test/build/checker execution; optional TLC not run. Whole goal/code64 remain open/stale.
++Version39104652606 diagnostic reports canonical code63/64 sha256:53a6e764f33db5b9c50bdb10106329a151f4a969611764e3caed0395767aa6ef, recorded now; Source41 unchanged. Pseudocode17 digest/derived metadata still provisional until new canonical runner; At d3161e87f3e4bfce7d05c33896805ab77ea6c3a7 corrected regression39104752488 PASS75 inline+75 split including strengthened4 (no retained conversionRows) and74/75. Version39104752485 intentionally failed provisional pseudo digest, actual canonical17 sha256:c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619; patch058 corrects both fingerprint and code derivation, unchanged41 and runtime64. Cumulative strict gate from86df1cfddbd34b7f6f6fe0ff44267c4f574ad232 pending, not yet a pass. No local app/test/build/checker execution; optional TLC not run. Whole goal/code64 remain open/stale.
+diff --git a/development-versions.json b/development-versions.json
+index 9ea32c3..d4aa19b 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -41,7 +41,7 @@
+       "fingerprint": "sha256:53a6e764f33db5b9c50bdb10106329a151f4a969611764e3caed0395767aa6ef",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5",
+-        "pseudocode": "sha256:e25d2057a10e358127598141d3d94de2f5700108da14809a0ef5e92e11be71e9",
++        "pseudocode": "sha256:c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+       "validation_review": "agent_space/reviews/review-20261018-024-code-graph-editable-open.md"
+@@ -50,7 +50,7 @@
+       "revision": 17,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+-      "fingerprint": "sha256:e25d2057a10e358127598141d3d94de2f5700108da14809a0ef5e92e11be71e9",
++      "fingerprint": "sha256:c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5"
+       },
