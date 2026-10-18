@@ -335,7 +335,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       const item = createProjectCsv([["X", "Y"], ["1", "2"]], "delete.csv");
       api.graphs.addObject(item.id);
       check(chartCsvIds(getChart(slot.chart)).includes(item.id), "CSV reference absent");
-      api.assets.delete({ kind: "csv", id: item.id, name: item.name });
+      api.assets.delete({ kind: "csv", id: item.id, path: projectAssetPath(item) });
       check(!activeProject.csvFiles.some((c) => c.id === item.id), "CSV not deleted");
       check(activeProject.charts.every((c) => !chartCsvIds(c).includes(item.id)), "dangling reference");
     });
@@ -4897,6 +4897,96 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(buildFrontendReconciliationInput("PROBE", { selectionHints: { graphObjectIndexMaps: maps } },
           { ...refs, graphObjectIndex: 2 }).graphObject === null, "removed original object selection was retained");
       } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(110, "Asset deletion detaches current references only and preserves independent selection", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
+        notify = interfaceFSM.notify, release = releaseProjectImageDisplayUrl;
+      try {
+        api.layout.setGrid(2, 2); const base = projectClone(activeProject._state);
+        base.slots.forEach(slot => { slot.hidden = false; slot.rowSpan = 1; slot.colSpan = 1; }); initialize.call(activeProject, base);
+        const [a, b] = activeProject.slots;
+        api.slots.reset(a.id); select(slotAt(a.id)); api.slots.setContentType(a.id, "graph");
+        const keep = createProjectCsv([["X", "Y"], ["1", "2"]], "delete-keep.csv"),
+          removed = createProjectCsv([["X", "Y"], ["3", "4"]], "delete-owned.csv");
+        [keep.id, removed.id, keep.id].forEach(id => api.graphs.addObject(id));
+        const chartId = slotAt(a.id).chart;
+        api.slots.reset(b.id); select(slotAt(b.id)); api.slots.setContentType(b.id, "image");
+        const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "delete-owned.svg", "image/svg+xml");
+        api.assets.connectToSlot(projectAssetPath(image), "image", b.id);
+        slotAt(b.id).content.deleteExtension = { keep: true };
+        const settings = JSON.stringify(slotAt(b.id).content.imageSettings);
+        select(slotAt(a.id)); api.graphs.selectObject(2); api.assets.selectCsv(projectAssetPath(keep)); api.graphs.selectObject(2);
+        const deletionTarget = api.assets.readDeletionTarget();
+        check(Object.isFrozen(deletionTarget) && deletionTarget.path === projectAssetPath(keep) &&
+          deletionTarget.referenceCount === 2, "deletion read did not copy the official shared reference query");
+        let commits = 0, releases = 0, result;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        projectEFSM.send = function (event, payload) {
+          check(!payload.candidate && Object.keys(payload.target).sort().join() === "id,kind,path", "delete wrapper sent persistent candidate");
+          return result = send.call(this, event, payload);
+        };
+        renderDashboard = () => {}; interfaceFSM.notify = () => {}; releaseProjectImageDisplayUrl = () => { releases++; };
+        check(api.assets.delete({ kind: "csv", id: removed.id, path: projectAssetPath(removed) }) === null && commits === 1,
+          "delete public result or commit count incorrect");
+        check(!getProjectCsv(removed.id) && getChart(chartId).editor.objects.length === 2 &&
+          result.selectionHints.graphObjectIndexMaps[0].indices.join() === "0,,1" &&
+          interfaceFSM.readState().graphObjectIndex === 1 && interfaceFSM.readState().assetPath === projectAssetPath(keep),
+          "CSV delete lost original map, retained objects or independent selection");
+        check(api.assets.delete({ kind: "image", id: image.id, path: projectAssetPath(image) }) === null && commits === 2 && releases === 1,
+          "image deletion did not commit/release exactly once");
+        check(!getProjectImage(image.id) && slotAt(b.id).imageId === null &&
+          JSON.stringify(slotAt(b.id).content.imageSettings) === settings && slotAt(b.id).content.deleteExtension.keep &&
+          getChart(chartId).editor.objects.length === 2 && interfaceFSM.readState().assetPath === projectAssetPath(keep),
+          "image delete reset local state, unrelated chart or selection");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+        interfaceFSM.notify = notify; releaseProjectImageDisplayUrl = release;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(111, "Asset deletion gates missing, mismatched, failed and stale-authority operations", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, validate = validateProjectObjectState,
+        render = renderDashboard, notify = interfaceFSM.notify, report = status,
+        reconcile = interfaceFSM.reconcileProjectResult, failure = Error("asset delete boundary");
+      try {
+        const csv = createProjectCsv([["X", "Y"], ["1", "2"]], "delete-boundary.csv"),
+          target = { kind: "csv", id: csv.id, path: projectAssetPath(csv) };
+        let commits = 0, effects = 0, caught;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = status = () => { effects++; }; interfaceFSM.notify = () => {};
+        const source = activeProject._state, frontend = interfaceFSM.state;
+        check(api.assets.delete({ ...target, path: `${target.path}.missing` }) === null && !commits && !effects &&
+          activeProject._state === source && interfaceFSM.state === frontend, "missing delete changed state");
+        try { api.assets.delete({ ...target, id: target.id + 100000 }); } catch (error) { caught = error; }
+        check(caught && !commits && !effects && activeProject._state === source, "mismatched identity accepted");
+        validateProjectObjectState = () => { throw failure; }; caught = null;
+        try { api.assets.delete(target); } catch (error) { caught = error; }
+        check(caught === failure && !commits && !effects && activeProject._state === source && interfaceFSM.state === frontend,
+          "delete validation failure mutated authority");
+        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.assets.delete(target) === null && !commits && !effects, "delete noncommit did success work"); projectEFSM.send = send;
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const answer = validate(candidate, options);
+          if (options?.requireSlots && ++attempts === 1) {
+            const newer = projectClone(activeProject._state); newer.meta.projectName = "newest delete authority";
+            initialize.call(activeProject, newer);
+          }
+          return answer;
+        };
+        api.assets.delete(target);
+        check(attempts === 2 && commits === 1 && !getProjectCsv(csv.id) && activeProject.meta.projectName === "newest delete authority",
+          "delete committed stale candidate");
+        validateProjectObjectState = validate; activeProject.initialize = initialize;
+        const next = createProjectCsv([["X", "Y"], ["1", "2"]], "delete-late.csv"), priorEffects = effects;
+        interfaceFSM.reconcileProjectResult = () => { throw failure; }; caught = null;
+        try { api.assets.delete({ kind: "csv", id: next.id, path: projectAssetPath(next) }); } catch (error) { caught = error; }
+        check(caught === failure && !getProjectCsv(next.id) && effects === priorEffects, "late delete error rolled back or did success work");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; validateProjectObjectState = validate;
+        renderDashboard = render; interfaceFSM.notify = notify; status = report; interfaceFSM.reconcileProjectResult = reconcile;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 

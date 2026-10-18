@@ -1,0 +1,402 @@
+diff --git a/agent_space/patches/20261018-123.md b/agent_space/patches/20261018-123.md
+new file mode 100644
+index 0000000..3ab2ac5
+--- /dev/null
++++ b/agent_space/patches/20261018-123.md
+@@ -0,0 +1,13 @@
++# 20261018-123
++
++## Purpose and changes
++
++Directly translate the already-closed current-authority CSV/image deletion ownership unit: explicit kind/id/path command, Backend current-target calculation and shared reference-only detach, full validation/retry/one commit, actual reconciliation maps and commit-gated public work. Route selected deletion read through the official Backend query; adapt its existing legacy-import cleanup caller to the explicit reference shape. Cases110/111 plus case11 canonical path cover the bounded contracts. Code90 lineage/fingerprint and review042/Plan023 record pending exact-SHA Actions. Also record unit39 final exact-SHA109+109/repeat/build/cumulative/fidelity and the earlier incomplete split repeat honestly in review041.
++
++## Rationale and rejected alternatives
++
++Keep Source45/pseudocode23 authoritative; do not rewrite Source to permit the legacy caller candidate or reset an entire image slot. Reuse unit39 cascade/index mapping rather than invent a second delete-specific reference classifier. Reject blanket graph/asset selection clearing because reconciliation must preserve unrelated references. Do not accept id-only targets or reinterpret a mismatched kind. Retain existing aggregate rendering without falsely claiming supplied-state completion. Fingerprint from staged Git blobs is metadata calculation only, not an executed checker pass.
++
++## Scope, evidence and follow-up
++
++No policy, Source, pseudocode, optional model/TLC, generated dist or ownership hierarchy changes. Legacy import cleanup payload is compatible with the new Backend boundary; its larger rollback/import lifecycle remains unaligned and explicitly outside this unit. Unit39 source proof is ecce1fb4d8a45fda442984c1acd97196e403ecaa, not this later result document. Unit40 Actions111+111/repeat/build/version/fidelity pending; code stale and whole assets/move/import/schema/serializer/raster/dashboard/timing work remains. No local runtime/test/build/checker. Patch records actual modified files together with this explanation; no preparatory runtime bridge or duplicate state added.
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index c152674..ff1e530 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -231,6 +231,12 @@ Baseline484fd48112486229090a33863bb451cfbbf7f28a. Source45 closes insertion succ
+ 
+ Baseline8835b561fa9aa33e15015b8e9fcd994e2eeda0fe. Prior unit38 cumulative/repeat/build/version runs succeeded at that SHA (review041 evidence). Existing Source45/pseudocode23 close current trash subtree/shared reference scope/whole validation/source replacement retry/one commit, reference-only detach and chart-specific original-index delta. Code89 directly implements these; canonical content preserved, existing graph rebuild reused, public wrapper no longer ignores noncommit, postcommit resource cleanup/facts and reconciliation map. Cases107/108 added; exact new-SHA Actions108+108/repeat/build/canonical+cumulative/fidelity pending, old code digest provisional. Review041/patch119. Whole assets/import/schema/serializer/raster/dashboard/timing gaps remain open; code stale, no local runtime or policy changes.
+ 
++Unit39 final evidence: ecce1fb4d8a45fda442984c1acd97196e403ecaa regression39150057559/repeat39150104917 PASS109+109; cumulative versions39150107034 (base8835b56), push39150057536, build39150201274 and fidelity39150203435 PASS. Review041 retains failed assertions and incomplete older repeat39149990734 without claiming it passed. This bounded verification does not close whole code.
++
++## Fortieth bounded unit — current-authority asset deletion
++
++Baseline ecce1fb4d8a45fda442984c1acd97196e403ecaa. Existing Source45 assets.deleteProjectAsset and pseudocode23 exact-current-target/delete branch own kind/id/path resolution, shared reference-only detach, complete validation/source retry and one commit. Code90 translates CSV/image deletion through that existing common cascade and chart-specific index maps; preserves canonical slot-local settings/extensions and unrelated selection, performs no public persistent calculation and gates success work. Official selected deletion-target read now uses the Backend copied query/shared count. Existing pending legacy-import cleanup caller now passes the same explicit reference shape, without claiming import translation complete. Cases110/111 plus corrected explicit-reference case11; review042/patch123. Actions111+111/repeat/build/version/fidelity pending. Source/pseudocode unchanged, code stale and whole assets/move/import/schema/serializer/raster/dashboard/timing alignment remains open. No local runtime or policy changes.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-041-code-trash-open.md b/agent_space/reviews/review-20261018-041-code-trash-open.md
+index 00c7e0d..19c2de7 100644
+--- a/agent_space/reviews/review-20261018-041-code-trash-open.md
++++ b/agent_space/reviews/review-20261018-041-code-trash-open.md
+@@ -1,4 +1,4 @@
+-# Unit39 — current-authority trash transaction (open pending execution)
++# Unit39 — current-authority trash transaction (bounded verified; whole goal open)
+ 
+ ## Policy and upper contract audit before completion
+ 
+@@ -20,6 +20,10 @@ Code89 translates shared detach using collectAssetReferences, original-position
+ 
+ At49d2f25a1948c03546b326fcb019fdedb62d7801 build39149654863 PASS, generated dist758c0c3. Regression39149654840 prior106+108 PASS each form;107 FAIL `Error: trash did not detach/rebuild or changed display-owned settings/extension`. Split the composite assertion to identify the actual failed contract, retain all assertions; no production behavior change yet. Canonical version39149654801 printed code89 sha256:d939e8f9a00f9954e872fec7c407ade0c8b87f37b2535b4b0f4bbdb781a1f45e, recorded patch120. Source/pseudo digests unchanged. Gate initially failed intentionally provisional metadata, not passed. At1f1ea970ce4741a41da5de6ce58b2b3180c85223 cumulative versions39149773246 (base8835b56) and push39149772635 PASS. Regression39149772742 prior106+108 PASS each form,107 FAIL `Error: trash graph not empty/rebuilt: objects=0, traces=1`. Inspection fast-figure.js traces() shows intentional empty axis placeholders, independent of CSV objects; test's zero total trace expectation was wrong. Patch121 checks zero editor objects and every trace has axis-placeholder marker and empty x/y, preserving the actual rebuild/no-CSV-data contract. Runtime/Source/PlusCal/digests unchanged. At064f7ac789911096c3e9c8dd4b8dd21e8598ecdd regression39149906997 PASS108 inline+108 split; cumulative versions39149907192 PASS(base8835b56), push39149906974 PASS; fidelity39149909784 PASS. Repeat39149990734 pending. Static checklist identified unexercised retained-index/conversion integration, so patch122 adds109 without runtime changes; its exact-SHA regression/repeat pending. These are bounded unit results, not whole completion.
+ 
++## Final bounded execution evidence
++
++At ecce1fb4d8a45fda442984c1acd97196e403ecaa, regression39150057559 and repeat39150104917 PASS109 inline +109 split, including original-index/conversion case109. Push versions39150057536 and cumulative versions39150107034 PASS (base8835b561fa9aa33e15015b8e9fcd994e2eeda0fe). Build39150201274 PASS at the same exact SHA; fidelity39150203435 PASS cumulative version and static coverage/binding, not a substitute for this semantic checklist. Canonical runner confirms code89 sha256:d939e8f9a00f9954e872fec7c407ade0c8b87f37b2535b4b0f4bbdb781a1f45e with unchanged Source45/pseudocode23. Earlier repeat39149990734 at064f7ac passed108 inline but did not finish split: `RuntimeError: Regression did not finish on /tmp/fast-figure-regression-txgcqqn3/split-package/Fast-figure/Fast-figure.html`; stderr includes DBus/GCM messages but does not establish root cause. Do not count that run as passed. Final exact-SHA successful repeat above supersedes its incomplete evidence, not its historical failure. This later result record is not the executed source SHA. Unit39 bounded requirements verified; code remains stale and whole goal open.
++
+ ## Verified starting evidence and remaining scope
+ 
+ Baseline8835b561fa9aa33e15015b8e9fcd994e2eeda0fe: unit38 regression39126440751 and repeat39126510687 success (106 per form), build39126444023 success, development-layer39126440829 and cumulative39126441515 success. These prove only bounded prior work, not new unit or whole alignment. Whole assets/move/import/schema/serializer/raster/dashboard/timing audit still open; code stale, optional verification/TLC not run. Do not infer full completion from manifest/green CI.
+diff --git a/agent_space/reviews/review-20261018-042-code-delete-open.md b/agent_space/reviews/review-20261018-042-code-delete-open.md
+new file mode 100644
+index 0000000..ed9bc06
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-042-code-delete-open.md
+@@ -0,0 +1,18 @@
++# Unit40 — current-authority asset deletion (pending Actions)
++
++## Policy and upper-layer requirement audit
++
++Continue the fully read development-policy.md v0.2.6 and AGENT.md requirements: Source highest authority, direct PlusCal translation, one owner for persistence, no shared authoritative draft/cache, whole candidate validation before commit, exact execution evidence and paired numeric patch. Policy/hierarchy unchanged; no local application/test/build/checker. Existing Source45 application/public_api/assets.py deleteProjectAsset specifies explicit kind/id/path only, shared collectAssetReferences, CSV object detach without removing empty charts, image reference only (not slot reset), complete validation and kind-specific one commit. Pseudocode23 backend/project_efsm.pcal deletion branch requires ResolveExactCurrentAssetTarget/IdentityKindIdPathAllMatch and DetachAssetReferences, and the common attempt loop retries after authority replacement. These meanings are already closed; no new upper meaning is needed.
++
++## Direct mapping and regression scope
++
++Code90 removes the Application-owned whole candidate and the Backend caller-candidate shortcut. Common Backend delete handler re-resolves identity/path, detaches via the same helper as verified unit39, keeps canonical slot contents, validates and compares authority before one commit; missing target is noncommit, mismatch throws. Actual changed facts/index maps own reconciliation; resource release follows commit. Public wrapper copies only kind/id/path, skips success work on noncommit, returns None and propagates errors; existing dashboard render remains aggregate and is not claimed renderer cutover. Selected deletion read now calls the official immutable Backend query instead of independently counting a different reference scope. Existing legacy-import cleanup caller passes the explicit reference shape; import rollback/lifecycle semantics are still pending and NOT claimed aligned by that adaptation.
++
++- Case11 now supplies canonical path as the already-current Source requires, not a guessed id-only delete.
++- Case110: exact minimal command payload; one commit per deletion; CSV original-position index map and retained object/selection; image reference-only detach preserves settings/canonical extension/unrelated graph; release once after commit.
++- Case111: missing unchanged/noncommit, mismatched identity rejection, validation failure preserves authority/Frontend, noncommit skips useful effects, replacement during validation triggers complete retry, late reconciliation error leaves committed deletion and skips later success work.
++- Prior109 tests retain shared conversion/frozen/duplicate reference scope. Unit40 does not newly claim all import/schema/export/render/timing requirements.
++
++## Lineage and verification status
++
++Source45 and pseudocode23 fingerprints/lineage unchanged. Code90 remains stale. Fingerprint was calculated from the canonical staged Git blob identities (not executing a version checker); the authorized default GitHub-hosted canonical development-layer checker must independently confirm it. Exact new-SHA regression111 inline/split, repeat, build, cumulative versions and fidelity PENDING. No TLC execution claimed. This review is not a full-goal closure, and green static coverage alone is not semantic proof.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index b14c999..1291787 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -335,7 +335,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       const item = createProjectCsv([["X", "Y"], ["1", "2"]], "delete.csv");
+       api.graphs.addObject(item.id);
+       check(chartCsvIds(getChart(slot.chart)).includes(item.id), "CSV reference absent");
+-      api.assets.delete({ kind: "csv", id: item.id, name: item.name });
++      api.assets.delete({ kind: "csv", id: item.id, path: projectAssetPath(item) });
+       check(!activeProject.csvFiles.some((c) => c.id === item.id), "CSV not deleted");
+       check(activeProject.charts.every((c) => !chartCsvIds(c).includes(item.id)), "dangling reference");
+     });
+@@ -4900,6 +4900,96 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(110, "Asset deletion detaches current references only and preserves independent selection", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
++        notify = interfaceFSM.notify, release = releaseProjectImageDisplayUrl;
++      try {
++        api.layout.setGrid(2, 2); const base = projectClone(activeProject._state);
++        base.slots.forEach(slot => { slot.hidden = false; slot.rowSpan = 1; slot.colSpan = 1; }); initialize.call(activeProject, base);
++        const [a, b] = activeProject.slots;
++        api.slots.reset(a.id); select(slotAt(a.id)); api.slots.setContentType(a.id, "graph");
++        const keep = createProjectCsv([["X", "Y"], ["1", "2"]], "delete-keep.csv"),
++          removed = createProjectCsv([["X", "Y"], ["3", "4"]], "delete-owned.csv");
++        [keep.id, removed.id, keep.id].forEach(id => api.graphs.addObject(id));
++        const chartId = slotAt(a.id).chart;
++        api.slots.reset(b.id); select(slotAt(b.id)); api.slots.setContentType(b.id, "image");
++        const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "delete-owned.svg", "image/svg+xml");
++        api.assets.connectToSlot(projectAssetPath(image), "image", b.id);
++        slotAt(b.id).content.deleteExtension = { keep: true };
++        const settings = JSON.stringify(slotAt(b.id).content.imageSettings);
++        select(slotAt(a.id)); api.graphs.selectObject(2); api.assets.selectCsv(projectAssetPath(keep)); api.graphs.selectObject(2);
++        const deletionTarget = api.assets.readDeletionTarget();
++        check(Object.isFrozen(deletionTarget) && deletionTarget.path === projectAssetPath(keep) &&
++          deletionTarget.referenceCount === 2, "deletion read did not copy the official shared reference query");
++        let commits = 0, releases = 0, result;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        projectEFSM.send = function (event, payload) {
++          check(!payload.candidate && Object.keys(payload.target).sort().join() === "id,kind,path", "delete wrapper sent persistent candidate");
++          return result = send.call(this, event, payload);
++        };
++        renderDashboard = () => {}; interfaceFSM.notify = () => {}; releaseProjectImageDisplayUrl = () => { releases++; };
++        check(api.assets.delete({ kind: "csv", id: removed.id, path: projectAssetPath(removed) }) === null && commits === 1,
++          "delete public result or commit count incorrect");
++        check(!getProjectCsv(removed.id) && getChart(chartId).editor.objects.length === 2 &&
++          result.selectionHints.graphObjectIndexMaps[0].indices.join() === "0,,1" &&
++          interfaceFSM.readState().graphObjectIndex === 1 && interfaceFSM.readState().assetPath === projectAssetPath(keep),
++          "CSV delete lost original map, retained objects or independent selection");
++        check(api.assets.delete({ kind: "image", id: image.id, path: projectAssetPath(image) }) === null && commits === 2 && releases === 1,
++          "image deletion did not commit/release exactly once");
++        check(!getProjectImage(image.id) && slotAt(b.id).imageId === null &&
++          JSON.stringify(slotAt(b.id).content.imageSettings) === settings && slotAt(b.id).content.deleteExtension.keep &&
++          getChart(chartId).editor.objects.length === 2 && interfaceFSM.readState().assetPath === projectAssetPath(keep),
++          "image delete reset local state, unrelated chart or selection");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
++        interfaceFSM.notify = notify; releaseProjectImageDisplayUrl = release;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(111, "Asset deletion gates missing, mismatched, failed and stale-authority operations", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, validate = validateProjectObjectState,
++        render = renderDashboard, notify = interfaceFSM.notify, report = status,
++        reconcile = interfaceFSM.reconcileProjectResult, failure = Error("asset delete boundary");
++      try {
++        const csv = createProjectCsv([["X", "Y"], ["1", "2"]], "delete-boundary.csv"),
++          target = { kind: "csv", id: csv.id, path: projectAssetPath(csv) };
++        let commits = 0, effects = 0, caught;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = status = () => { effects++; }; interfaceFSM.notify = () => {};
++        const source = activeProject._state, frontend = interfaceFSM.state;
++        check(api.assets.delete({ ...target, path: `${target.path}.missing` }) === null && !commits && !effects &&
++          activeProject._state === source && interfaceFSM.state === frontend, "missing delete changed state");
++        try { api.assets.delete({ ...target, id: target.id + 100000 }); } catch (error) { caught = error; }
++        check(caught && !commits && !effects && activeProject._state === source, "mismatched identity accepted");
++        validateProjectObjectState = () => { throw failure; }; caught = null;
++        try { api.assets.delete(target); } catch (error) { caught = error; }
++        check(caught === failure && !commits && !effects && activeProject._state === source && interfaceFSM.state === frontend,
++          "delete validation failure mutated authority");
++        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
++        check(api.assets.delete(target) === null && !commits && !effects, "delete noncommit did success work"); projectEFSM.send = send;
++        let attempts = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const answer = validate(candidate, options);
++          if (options?.requireSlots && ++attempts === 1) {
++            const newer = projectClone(activeProject._state); newer.meta.projectName = "newest delete authority";
++            initialize.call(activeProject, newer);
++          }
++          return answer;
++        };
++        api.assets.delete(target);
++        check(attempts === 2 && commits === 1 && !getProjectCsv(csv.id) && activeProject.meta.projectName === "newest delete authority",
++          "delete committed stale candidate");
++        validateProjectObjectState = validate; activeProject.initialize = initialize;
++        const next = createProjectCsv([["X", "Y"], ["1", "2"]], "delete-late.csv"), priorEffects = effects;
++        interfaceFSM.reconcileProjectResult = () => { throw failure; }; caught = null;
++        try { api.assets.delete({ kind: "csv", id: next.id, path: projectAssetPath(next) }); } catch (error) { caught = error; }
++        check(caught === failure && !getProjectCsv(next.id) && effects === priorEffects, "late delete error rolled back or did success work");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; validateProjectObjectState = validate;
++        renderDashboard = render; interfaceFSM.notify = notify; status = report; interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 1b4ebc0..3480310 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 89,
++      "revision": 90,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:d939e8f9a00f9954e872fec7c407ade0c8b87f37b2535b4b0f4bbdb781a1f45e",
++      "fingerprint": "sha256:e5f53517a8eac8681cf3f67cfdeec85dc9d9fa9790a37e5e538018392d374bdd",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:de6575d91cc0bfae1bee9e70b4b00b1e72c76dd47a7e9bd1417141bf8c1fe795",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-041-code-trash-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-042-code-delete-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 23,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index ef9d929..dc54ddd 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1039,18 +1039,48 @@
+           return;
+         }
+       }
+-      function applyDataObjectDeletedAction({ machine, payload }) {
+-        machine.assertWritable("data","DATA_OBJECT_DELETED");
+-        machine.assertWritable("charts","DATA_OBJECT_DELETED");
+-        let candidate=payload.candidate
+-          ?projectClone(payload.candidate)
+-          :projectClone(activeProject._state),
+-          csvId=Number(payload.csvId);
+-        if(!payload.candidate){
+-          removeProjectAssetReferences(new Set([csvId]),new Set(),candidate);
+-          candidate.assets.csvFiles=candidate.assets.csvFiles.filter((item)=>item.id!==csvId);
++      function applyDataObjectDeletedAction(context) {
++        return applyAssetObjectDeletedAction(context, "csv");
++      }
++      function applyAssetObjectDeletedAction({ machine, payload }, kind) {
++        const event = kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED",
++          target = payload.target;
++        machine.assertWritable(kind === "csv" ? "data" : "images", event);
++        machine.assertWritable("files", event);
++        if (!target || target.kind !== kind || !Number.isInteger(target.id) || typeof target.path !== "string")
++          throw Error("삭제할 asset의 kind/id/path reference가 올바르지 않습니다.");
++        while (true) {
++          const source = activeProject._state, node = projectVfs.resolve(target.path, source);
++          if (!node) return false;
++          if (node.kind !== kind || node.asset.id !== target.id || projectAssetPath(node.asset) !== target.path)
++            throw Error("삭제할 asset의 현재 kind/id/path가 요청과 다릅니다.");
++          const candidate = projectClone(source);
++          candidate.slots.forEach(slot => {
++            const original = source.slots.find(item => item.id === slot.id);
++            if (original?.content) slot.content = projectClone(original.content);
++          });
++          const csvIds = new Set(kind === "csv" ? [target.id] : []),
++            imageIds = new Set(kind === "image" ? [target.id] : []);
++          if (collectAssetReferences(csvIds, imageIds, candidate).length) {
++            for (const domain of ["charts", "slots", "editor"]) machine.assertWritable(domain, event);
++          }
++          const removedReferences = removeProjectAssetReferences(csvIds, imageIds, candidate),
++            collection = kind === "csv" ? "csvFiles" : "images";
++          candidate.assets[collection] = candidate.assets[collection].filter(item => item.id !== target.id);
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const post = activeProject._state,
++            changedIds = (before, after) => [...new Set([...before, ...after].map(item => item.id))]
++              .filter(id => JSON.stringify(before.find(item => item.id === id)) !==
++                JSON.stringify(after.find(item => item.id === id)));
++          payload.changed = { slotIds: changedIds(source.slots, post.slots), chartIds: changedIds(source.charts, post.charts),
++            csvIds: [...csvIds], imageIds: [...imageIds], ...removedReferences,
++            assets: [{ role: "deleted", kind, id: target.id, path: target.path, name: node.asset.name }] };
++          payload.selectionHints = immutableProjectCopy({ graphObjectIndexMaps: removedReferences.graphObjectIndexMaps });
++          if (kind === "image") releaseProjectImageDisplayUrl(node.asset);
++          return;
+         }
+-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+       }
+       function applyImageObjectCreatedAction({ machine, payload }) {
+         machine.assertWritable("images","IMAGE_OBJECT_CREATED");
+@@ -1083,21 +1113,8 @@
+       function applyImageObjectReplacedAction(context) {
+         applyAssetObjectReplacedAction(context, "image");
+       }
+-      function applyImageObjectDeletedAction({ machine, payload }) {
+-        machine.assertWritable("images","IMAGE_OBJECT_DELETED");
+-        machine.assertWritable("slots","IMAGE_OBJECT_DELETED");
+-        machine.assertWritable("charts","IMAGE_OBJECT_DELETED");
+-        let imageId=Number(payload.imageId),
+-          previous=getProjectImage(imageId),
+-          candidate=payload.candidate
+-            ?projectClone(payload.candidate)
+-            :projectClone(activeProject._state);
+-        if(!payload.candidate){
+-          removeProjectAssetReferences(new Set(),new Set([imageId]),candidate);
+-          candidate.assets.images=candidate.assets.images.filter((item)=>item.id!==imageId);
+-        }
+-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+-        releaseProjectImageDisplayUrl(previous);
++      function applyImageObjectDeletedAction(context) {
++        return applyAssetObjectDeletedAction(context, "image");
+       }
+       function applySlotsResetAction({ machine, payload }) {
+         machine.assertWritable("slots", "SLOTS_RESET");
+@@ -6304,7 +6321,7 @@
+             !activeProject.charts.some((chart) => chartCsvIds(chart).includes(csv.id))
+           )
+             appFSM.send("DATA_OBJECT_DELETED", {
+-              csvId: csv.id,
++              target: { kind: "csv", id: csv.id, path: projectAssetPath(csv) },
+               direction: "fsm-to-model",
+             });
+           debugLog("fileLoad:error", {
+@@ -6518,71 +6535,21 @@
+         return importSlotFile(file, getSelectedSlot());
+       }
+       function readAssetDeletionTarget() {
+-        let selected = appFSM.state.assetPath
+-          ? projectVfs.resolve(appFSM.state.assetPath) : null;
+-        if (!["csv", "image"].includes(selected?.kind))
+-          return null;
+-        let id = selected.asset.id;
+-        return {
+-          kind: selected.kind, id, name: selected.asset.name,
+-          referenceCount: selected.kind === "csv"
+-            ? activeProject.charts.reduce((count, chart) =>
+-                count + (chart.editor?.objects || []).filter((object) => object.csvId === id).length, 0)
+-            : activeProject.slots.filter((slot) => slot.imageId === id).length,
+-        };
++        const resolved = dispatchProjectQuery("project-api", {
++          operation: "assets.readDeletionTarget", path: interfaceFSM.readState().assetPath,
++        });
++        return resolved ? immutableProjectCopy({ kind: resolved.kind, id: resolved.target.id,
++          path: resolved.path, name: resolved.target.name, referenceCount: resolved.referenceCount }) : null;
+       }
+       function deleteProjectAsset(target) {
+-        if (!target) return null;
+-        let candidate = projectClone(activeProject._state);
+-        normalizeSlotContents(candidate.slots);
+-
+-        if (target.kind === "csv") {
+-          let csv = candidate.assets.csvFiles.find((item) => item.id === target.id);
+-          if (!csv) return null;
+-          let removedReferenceCount = 0;
+-          candidate.charts.forEach((chart) => {
+-            if (!Array.isArray(chart.editor?.objects)) return;
+-            let before = chart.editor.objects.length;
+-            chart.editor.objects = chart.editor.objects.filter((object) => object.csvId !== csv.id);
+-            removedReferenceCount += before - chart.editor.objects.length;
+-          });
+-          candidate.assets.csvFiles = candidate.assets.csvFiles.filter((item) => item.id !== csv.id);
+-          validateProjectObjectState(candidate, { requireSlots: true });
+-          appFSM.send("DATA_OBJECT_DELETED", {
+-            csvId: csv.id, candidate, direction: "ui-to-fsm",
+-          });
+-          appFSM.send("CLEAR_GRAPH_OBJECT", { index: null, direction: "ui-to-fsm" });
+-          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "ui-to-fsm" });
+-          renderDashboard();
+-          status(removedReferenceCount
+-            ? `${csv.name}과 이를 참조하던 그래프 오브젝트 ${removedReferenceCount}개를 삭제했습니다.`
+-            : `${csv.name}을 프로젝트에서 삭제했습니다.`);
+-          return null;
+-        }
+-
+-        if (target.kind === "image") {
+-          let image = candidate.assets.images.find((item) => item.id === target.id);
+-          if (!image) return null;
+-          let resetCount = 0, removedChartIds = new Set();
+-          candidate.slots.forEach((slot) => {
+-            if (slot.imageId !== image.id) return;
+-            if (Number.isInteger(slot.chart)) removedChartIds.add(slot.chart);
+-            resetSlotLocalState(slot);
+-            resetCount++;
+-          });
+-          if (removedChartIds.size)
+-            candidate.charts = candidate.charts.filter((chart) => !removedChartIds.has(chart.id));
+-          candidate.assets.images = candidate.assets.images.filter((item) => item.id !== image.id);
+-          validateProjectObjectState(candidate, { requireSlots: true });
+-          appFSM.send("IMAGE_OBJECT_DELETED", {
+-            imageId: image.id, candidate, direction: "ui-to-fsm",
+-          });
+-          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "ui-to-fsm" });
+-          renderDashboard();
+-          status(resetCount
+-            ? `${image.name}을 삭제하고 참조 슬롯 ${resetCount}개를 초기화했습니다.`
+-            : `${image.name}을 프로젝트에서 삭제했습니다.`);
+-        }
++        if (!target || !["csv", "image"].includes(target.kind)) return null;
++        const [result] = dispatchProjectCommand(target.kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED", {
++          target: { kind: target.kind, id: target.id, path: target.path },
++        });
++        if (!result.committed) return null;
++        const removed = result.changed.assets[0], count = result.changed.removedGraphReferenceCount + result.changed.resetImageSlotCount;
++        if (count) renderDashboard();
++        status(`${removed.name}을 프로젝트에서 삭제했습니다.`);
+         return null;
+       }
+       function movableProjectNode(path) {

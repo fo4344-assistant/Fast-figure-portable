@@ -1039,18 +1039,48 @@
           return;
         }
       }
-      function applyDataObjectDeletedAction({ machine, payload }) {
-        machine.assertWritable("data","DATA_OBJECT_DELETED");
-        machine.assertWritable("charts","DATA_OBJECT_DELETED");
-        let candidate=payload.candidate
-          ?projectClone(payload.candidate)
-          :projectClone(activeProject._state),
-          csvId=Number(payload.csvId);
-        if(!payload.candidate){
-          removeProjectAssetReferences(new Set([csvId]),new Set(),candidate);
-          candidate.assets.csvFiles=candidate.assets.csvFiles.filter((item)=>item.id!==csvId);
+      function applyDataObjectDeletedAction(context) {
+        return applyAssetObjectDeletedAction(context, "csv");
+      }
+      function applyAssetObjectDeletedAction({ machine, payload }, kind) {
+        const event = kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED",
+          target = payload.target;
+        machine.assertWritable(kind === "csv" ? "data" : "images", event);
+        machine.assertWritable("files", event);
+        if (!target || target.kind !== kind || !Number.isInteger(target.id) || typeof target.path !== "string")
+          throw Error("삭제할 asset의 kind/id/path reference가 올바르지 않습니다.");
+        while (true) {
+          const source = activeProject._state, node = projectVfs.resolve(target.path, source);
+          if (!node) return false;
+          if (node.kind !== kind || node.asset.id !== target.id || projectAssetPath(node.asset) !== target.path)
+            throw Error("삭제할 asset의 현재 kind/id/path가 요청과 다릅니다.");
+          const candidate = projectClone(source);
+          candidate.slots.forEach(slot => {
+            const original = source.slots.find(item => item.id === slot.id);
+            if (original?.content) slot.content = projectClone(original.content);
+          });
+          const csvIds = new Set(kind === "csv" ? [target.id] : []),
+            imageIds = new Set(kind === "image" ? [target.id] : []);
+          if (collectAssetReferences(csvIds, imageIds, candidate).length) {
+            for (const domain of ["charts", "slots", "editor"]) machine.assertWritable(domain, event);
+          }
+          const removedReferences = removeProjectAssetReferences(csvIds, imageIds, candidate),
+            collection = kind === "csv" ? "csvFiles" : "images";
+          candidate.assets[collection] = candidate.assets[collection].filter(item => item.id !== target.id);
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const post = activeProject._state,
+            changedIds = (before, after) => [...new Set([...before, ...after].map(item => item.id))]
+              .filter(id => JSON.stringify(before.find(item => item.id === id)) !==
+                JSON.stringify(after.find(item => item.id === id)));
+          payload.changed = { slotIds: changedIds(source.slots, post.slots), chartIds: changedIds(source.charts, post.charts),
+            csvIds: [...csvIds], imageIds: [...imageIds], ...removedReferences,
+            assets: [{ role: "deleted", kind, id: target.id, path: target.path, name: node.asset.name }] };
+          payload.selectionHints = immutableProjectCopy({ graphObjectIndexMaps: removedReferences.graphObjectIndexMaps });
+          if (kind === "image") releaseProjectImageDisplayUrl(node.asset);
+          return;
         }
-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
       }
       function applyImageObjectCreatedAction({ machine, payload }) {
         machine.assertWritable("images","IMAGE_OBJECT_CREATED");
@@ -1083,21 +1113,8 @@
       function applyImageObjectReplacedAction(context) {
         applyAssetObjectReplacedAction(context, "image");
       }
-      function applyImageObjectDeletedAction({ machine, payload }) {
-        machine.assertWritable("images","IMAGE_OBJECT_DELETED");
-        machine.assertWritable("slots","IMAGE_OBJECT_DELETED");
-        machine.assertWritable("charts","IMAGE_OBJECT_DELETED");
-        let imageId=Number(payload.imageId),
-          previous=getProjectImage(imageId),
-          candidate=payload.candidate
-            ?projectClone(payload.candidate)
-            :projectClone(activeProject._state);
-        if(!payload.candidate){
-          removeProjectAssetReferences(new Set(),new Set([imageId]),candidate);
-          candidate.assets.images=candidate.assets.images.filter((item)=>item.id!==imageId);
-        }
-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
-        releaseProjectImageDisplayUrl(previous);
+      function applyImageObjectDeletedAction(context) {
+        return applyAssetObjectDeletedAction(context, "image");
       }
       function applySlotsResetAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOTS_RESET");
@@ -6304,7 +6321,7 @@
             !activeProject.charts.some((chart) => chartCsvIds(chart).includes(csv.id))
           )
             appFSM.send("DATA_OBJECT_DELETED", {
-              csvId: csv.id,
+              target: { kind: "csv", id: csv.id, path: projectAssetPath(csv) },
               direction: "fsm-to-model",
             });
           debugLog("fileLoad:error", {
@@ -6518,71 +6535,21 @@
         return importSlotFile(file, getSelectedSlot());
       }
       function readAssetDeletionTarget() {
-        let selected = appFSM.state.assetPath
-          ? projectVfs.resolve(appFSM.state.assetPath) : null;
-        if (!["csv", "image"].includes(selected?.kind))
-          return null;
-        let id = selected.asset.id;
-        return {
-          kind: selected.kind, id, name: selected.asset.name,
-          referenceCount: selected.kind === "csv"
-            ? activeProject.charts.reduce((count, chart) =>
-                count + (chart.editor?.objects || []).filter((object) => object.csvId === id).length, 0)
-            : activeProject.slots.filter((slot) => slot.imageId === id).length,
-        };
+        const resolved = dispatchProjectQuery("project-api", {
+          operation: "assets.readDeletionTarget", path: interfaceFSM.readState().assetPath,
+        });
+        return resolved ? immutableProjectCopy({ kind: resolved.kind, id: resolved.target.id,
+          path: resolved.path, name: resolved.target.name, referenceCount: resolved.referenceCount }) : null;
       }
       function deleteProjectAsset(target) {
-        if (!target) return null;
-        let candidate = projectClone(activeProject._state);
-        normalizeSlotContents(candidate.slots);
-
-        if (target.kind === "csv") {
-          let csv = candidate.assets.csvFiles.find((item) => item.id === target.id);
-          if (!csv) return null;
-          let removedReferenceCount = 0;
-          candidate.charts.forEach((chart) => {
-            if (!Array.isArray(chart.editor?.objects)) return;
-            let before = chart.editor.objects.length;
-            chart.editor.objects = chart.editor.objects.filter((object) => object.csvId !== csv.id);
-            removedReferenceCount += before - chart.editor.objects.length;
-          });
-          candidate.assets.csvFiles = candidate.assets.csvFiles.filter((item) => item.id !== csv.id);
-          validateProjectObjectState(candidate, { requireSlots: true });
-          appFSM.send("DATA_OBJECT_DELETED", {
-            csvId: csv.id, candidate, direction: "ui-to-fsm",
-          });
-          appFSM.send("CLEAR_GRAPH_OBJECT", { index: null, direction: "ui-to-fsm" });
-          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "ui-to-fsm" });
-          renderDashboard();
-          status(removedReferenceCount
-            ? `${csv.name}과 이를 참조하던 그래프 오브젝트 ${removedReferenceCount}개를 삭제했습니다.`
-            : `${csv.name}을 프로젝트에서 삭제했습니다.`);
-          return null;
-        }
-
-        if (target.kind === "image") {
-          let image = candidate.assets.images.find((item) => item.id === target.id);
-          if (!image) return null;
-          let resetCount = 0, removedChartIds = new Set();
-          candidate.slots.forEach((slot) => {
-            if (slot.imageId !== image.id) return;
-            if (Number.isInteger(slot.chart)) removedChartIds.add(slot.chart);
-            resetSlotLocalState(slot);
-            resetCount++;
-          });
-          if (removedChartIds.size)
-            candidate.charts = candidate.charts.filter((chart) => !removedChartIds.has(chart.id));
-          candidate.assets.images = candidate.assets.images.filter((item) => item.id !== image.id);
-          validateProjectObjectState(candidate, { requireSlots: true });
-          appFSM.send("IMAGE_OBJECT_DELETED", {
-            imageId: image.id, candidate, direction: "ui-to-fsm",
-          });
-          appFSM.send("CLEAR_ASSET_SELECTION", { direction: "ui-to-fsm" });
-          renderDashboard();
-          status(resetCount
-            ? `${image.name}을 삭제하고 참조 슬롯 ${resetCount}개를 초기화했습니다.`
-            : `${image.name}을 프로젝트에서 삭제했습니다.`);
-        }
+        if (!target || !["csv", "image"].includes(target.kind)) return null;
+        const [result] = dispatchProjectCommand(target.kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED", {
+          target: { kind: target.kind, id: target.id, path: target.path },
+        });
+        if (!result.committed) return null;
+        const removed = result.changed.assets[0], count = result.changed.removedGraphReferenceCount + result.changed.resetImageSlotCount;
+        if (count) renderDashboard();
+        status(`${removed.name}을 프로젝트에서 삭제했습니다.`);
         return null;
       }
       function movableProjectNode(path) {

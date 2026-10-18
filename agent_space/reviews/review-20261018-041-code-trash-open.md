@@ -1,4 +1,4 @@
-# Unit39 — current-authority trash transaction (open pending execution)
+# Unit39 — current-authority trash transaction (bounded verified; whole goal open)
 
 ## Policy and upper contract audit before completion
 
@@ -19,6 +19,10 @@ Code89 translates shared detach using collectAssetReferences, original-position 
 ## Execution iteration1
 
 At49d2f25a1948c03546b326fcb019fdedb62d7801 build39149654863 PASS, generated dist758c0c3. Regression39149654840 prior106+108 PASS each form;107 FAIL `Error: trash did not detach/rebuild or changed display-owned settings/extension`. Split the composite assertion to identify the actual failed contract, retain all assertions; no production behavior change yet. Canonical version39149654801 printed code89 sha256:d939e8f9a00f9954e872fec7c407ade0c8b87f37b2535b4b0f4bbdb781a1f45e, recorded patch120. Source/pseudo digests unchanged. Gate initially failed intentionally provisional metadata, not passed. At1f1ea970ce4741a41da5de6ce58b2b3180c85223 cumulative versions39149773246 (base8835b56) and push39149772635 PASS. Regression39149772742 prior106+108 PASS each form,107 FAIL `Error: trash graph not empty/rebuilt: objects=0, traces=1`. Inspection fast-figure.js traces() shows intentional empty axis placeholders, independent of CSV objects; test's zero total trace expectation was wrong. Patch121 checks zero editor objects and every trace has axis-placeholder marker and empty x/y, preserving the actual rebuild/no-CSV-data contract. Runtime/Source/PlusCal/digests unchanged. At064f7ac789911096c3e9c8dd4b8dd21e8598ecdd regression39149906997 PASS108 inline+108 split; cumulative versions39149907192 PASS(base8835b56), push39149906974 PASS; fidelity39149909784 PASS. Repeat39149990734 pending. Static checklist identified unexercised retained-index/conversion integration, so patch122 adds109 without runtime changes; its exact-SHA regression/repeat pending. These are bounded unit results, not whole completion.
+
+## Final bounded execution evidence
+
+At ecce1fb4d8a45fda442984c1acd97196e403ecaa, regression39150057559 and repeat39150104917 PASS109 inline +109 split, including original-index/conversion case109. Push versions39150057536 and cumulative versions39150107034 PASS (base8835b561fa9aa33e15015b8e9fcd994e2eeda0fe). Build39150201274 PASS at the same exact SHA; fidelity39150203435 PASS cumulative version and static coverage/binding, not a substitute for this semantic checklist. Canonical runner confirms code89 sha256:d939e8f9a00f9954e872fec7c407ade0c8b87f37b2535b4b0f4bbdb781a1f45e with unchanged Source45/pseudocode23. Earlier repeat39149990734 at064f7ac passed108 inline but did not finish split: `RuntimeError: Regression did not finish on /tmp/fast-figure-regression-txgcqqn3/split-package/Fast-figure/Fast-figure.html`; stderr includes DBus/GCM messages but does not establish root cause. Do not count that run as passed. Final exact-SHA successful repeat above supersedes its incomplete evidence, not its historical failure. This later result record is not the executed source SHA. Unit39 bounded requirements verified; code remains stale and whole goal open.
 
 ## Verified starting evidence and remaining scope
 
