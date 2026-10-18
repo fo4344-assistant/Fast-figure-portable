@@ -1,0 +1,332 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index c60dd2a..e56c6f2 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -79,10 +79,14 @@ Baseline `4052ee361c4a4825e906e67cfdbd88a2a265f581`. Code50 translates the exist
+ 
+ ## Fourteenth implementation unit — current whole-Project FFPX export
+ 
+-Baseline `4b5b663adeb37c232c082fd700dd494a3639933d`. Code51 translates project.exportFile through the official Backend export query, a single public exporting lifecycle, selected-slot precondition and copied-entry renderer handoff. FFPX builder accepts one supplied Project; all metadata/assets/charts/slots/directories come from its detached read, and referenced trash is rejected after filtering. Legacy validation's accessor installation is confined to that detached copy, not authority. Existing XML documents/original byte payloads and empty document structure are preserved. Cases59/60 cover source isolation, roundtrip, immutable query entries, validation/reference failures, selection/busy/no-query preconditions, actual ZIP handoff, lifecycle and URL cleanup. Review014 and patch030 track evidence. Source39/pseudocode13 unchanged; code51 stale; runner fingerprint and verification pending, whole goal open.
++Baseline `4b5b663adeb37c232c082fd700dd494a3639933d`. Code51 translates project.exportFile through the official Backend export query, a single public exporting lifecycle, selected-slot precondition and copied-entry renderer handoff. FFPX builder accepts one supplied Project; all metadata/assets/charts/slots/directories come from its detached read, and referenced trash is rejected after filtering. Legacy validation's accessor installation is confined to that detached copy, not authority. Existing XML documents/original byte payloads and empty document structure are preserved. Cases59/60 cover source isolation, roundtrip, immutable query entries, validation/reference failures, selection/busy/no-query preconditions, actual ZIP handoff, lifecycle and URL cleanup. Review014 and patch030 track evidence. Source39/pseudocode13 unchanged; code51 stale. Followup patch031 atcc4335c808b79c682b380243ecc4bc12d9285bfc recorded the canonical runner digest and narrowed a test spy that intercepted selection-validation queries. Regression39101512106 passed60 inline +60 split; cumulative versions39101512176 passed from4b5b663adeb37c232c082fd700dd494a3639933d; push versions39101512065 passed. Implementation build39101438147 passed. Review014 retains initial failures and final evidence; whole goal open.
+ 
+ Relocation code49 cumulative versions39100969744 and push versions39100969916 passed at4052ee361c4a4825e906e67cfdbd88a2a265f581, after the canonical fingerprint correction. These metadata checks do not extend earlier source regression coverage.
+ 
++## Fifteenth implementation unit — CSV header candidate and actual-path read
++
++Baseline `cc4335c808b79c682b380243ecc4bc12d9285bfc`. Code52 translates graphs.setHeaderLines to DATA_OBJECT_REPLACED with only csvId/new headerLines. Backend re-resolves the current CSV, preserves its bytes/rows/id/path, rebuilds affected editable figures within the candidate, validates and commits once, retrying if scalar conversion replaced authority. Actual immutable changed asset/owner facts provide the postcommit query path. The official assets.readDeletionTarget query supplies a fresh immutable target and reference list with original indices, counting frozen real CSV graphs but excluding conversion views. The public header wrapper gates its read/render on commit and no longer calculates or writes persistent fields. Cases61/62 cover read isolation/scope, numeric boundaries, actual command/query, failures/no-commit and stale-authority recalculation. Source39/pseudocode13 already specify these meanings and remain unchanged. Code52 stays stale. Review015 and patch032 track runner evidence, initially pending; no local execution. Broader graph/asset candidates/cascade, normalization/import and supplied-renderer/capture integration remain open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-014-code-project-export-open.md b/agent_space/reviews/review-20261018-014-code-project-export-open.md
+index 6db9113..b90d953 100644
+--- a/agent_space/reviews/review-20261018-014-code-project-export-open.md
++++ b/agent_space/reviews/review-20261018-014-code-project-export-open.md
+@@ -11,11 +11,11 @@ Baseline `4b5b663adeb37c232c082fd700dd494a3639933d`. Source39 and pseudocode13 r
+ | Selected slot warns, returns None without query/download; otherwise one current query/handoff, None, original failure propagation | sourcescript/application/public_api/assets.py downloadProject and public_api/__init__.py lifecycle → pseudocode/application/public_api/assets.pcal downloadProject and contract.pcal → downloadProject | Case60 selected/busy/query/success/error paths, pending Actions |
+ | One exporting lifecycle, copied renderer payload and owned URL cleanup | sourcescript/frontend/renderer.py downloadExportPayload → pseudocode/frontend/renderer.pcal → existing downloadExportPayload | Case60 actual ZIP Blob/readback, failure cleanup and ready state. Earlier54/56/58 cover shared renderer failure boundaries |
+ | Preserve authority, hierarchy, advanced functionality | Existing Source/pseudocode contracts cover XML package and original-byte surface | No upper-stage semantic addition necessary. Application no longer serializes/reads persistent objects or swallows errors. No policy edits |
+-| Evidence/lineage and whole limits | development-versions.json code51 stale with same upper lineage | Runner digest pending; initial previous digest intentionally retained until actual canonical runner report. Tests/build/checker only on ubuntu-latest |
++| Evidence/lineage and whole limits | development-versions.json code51 stale with same upper lineage | Canonical runner digest recorded by patch031; cumulative gate passed as recorded below. Tests/build/checker only on ubuntu-latest |
+ 
+ ## Verification status
+ 
+-Only file/diff/Git operations locally. Implementation8d3d95cc530b3cf1004da2c1bd616372cc685f35 passed build39101438147; dist-only bot1bb6288 was fast-forwarded. Initial versions39101438005 failed as expected with prior digest, reporting actual code51 sha256:16c996c02e339c0a9cd118e65e881745623e0d6c546236623b275f8945e72cf1; patch031 records it without local execution. Initial regression39101438230 passed1–59 in both artifacts; case60 failed `project query outside lifecycle or wrong request` because its broad export spy also intercepted legitimate slot-selection validation queries while arranging the precondition. Patch031 forwards non-export queries, retaining all export/lifecycle/no-query assertions and changing no production code. Corrected regression and cumulative versions from4b5b663adeb37c232c082fd700dd494a3639933d remain pending; bounded completion is not claimed. Cases1–58 remain required, not whole Source coverage. Optional TLC not executed; no browser disk-save acknowledgement promised.
++Only file/diff/Git operations locally. Implementation8d3d95cc530b3cf1004da2c1bd616372cc685f35 passed build39101438147; dist-only bot1bb6288 was fast-forwarded. Initial versions39101438005 failed as expected with prior digest, reporting actual code51 sha256:16c996c02e339c0a9cd118e65e881745623e0d6c546236623b275f8945e72cf1; patch031 records it without local execution. Initial regression39101438230 passed1–59 in both artifacts; case60 failed `project query outside lifecycle or wrong request` because its broad export spy also intercepted legitimate slot-selection validation queries while arranging the precondition. Patch031 forwards non-export queries, retaining all export/lifecycle/no-query assertions and changing no production code. Corrected regression39101512106 passed60 inline +60 split atcc4335c808b79c682b380243ecc4bc12d9285bfc. Cumulative versions39101512176 passed at that same SHA against4b5b663adeb37c232c082fd700dd494a3639933d, and push versions39101512065 passed. Thus the bounded code51 unit is verified, not the whole goal. Table entries marked pending describe preparation-time status and are superseded only within this60-case scope by these actual results. Cases1–58 remain required, not whole Source coverage. Optional TLC not executed; no browser disk-save acknowledgement promised.
+ 
+ ## Open whole-goal work
+ 
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 077559f..21401f9 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2237,6 +2237,100 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(61, "Asset target query copies original positions and excludes only conversion views", () => {
++      const before = JSON.stringify(activeProject._state), csv = activeProject.csvFiles[0], path = projectAssetPath(csv),
++        first = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path }),
++        second = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path });
++      check(first.target.id === csv.id && first.path === path && first.kind === "csv" &&
++        Object.isFrozen(first.target) && Object.isFrozen(first.references) &&
++        Object.isFrozen(first.target.rows) && first.target !== second.target && first.target.rows !== second.target.rows,
++        "target query is not a fresh immutable copy");
++      check(appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: null }) === null &&
++        appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: "/assets/csv" }) === null,
++        "missing/directory query produced an asset");
++      const state = projectClone(activeProject._state), object = { csvId: csv.id },
++        real = { id: 801, editor: { editable: false, objects: [object, { csvId: -1 }, { ...object }] } },
++        conversion = { id: 802, editor: { editable: false, conversionRows: [], objects: [object] } };
++      state.charts = [real, conversion]; state.slots = [{ id: 803, content: { imageId: 804 } }];
++      const refs = collectAssetReferences(new Set([csv.id]), new Set([804]), state);
++      check(refs.length === 3 && refs[0].chartId === 801 && refs[0].originalObjectIndex === 0 &&
++        refs[1].originalObjectIndex === 2 && refs[2].kind === "image" && refs[2].slotId === 803,
++        "real frozen/duplicate references or conversion/image scope is wrong");
++      check(JSON.stringify(activeProject._state) === before, "asset query/reference collection mutated authority");
++    });
++
++    await run(62, "Header edit uses current candidate, actual changed path and commit-gated read", () => {
++      const saved = projectClone(activeProject._state), query = readBackendProjection,
++        render = renderDashboard, send = projectEFSM.send, initialize = activeProject.initialize,
++        validate = validateProjectObjectState;
++      const csv = activeProject.csvFiles.find((item) => item.rows.length >= 2);
++      check(csv, "header fixture requires a nonempty CSV");
++      const id = csv.id, stable = (item) => JSON.stringify({ id: item.id, path: projectAssetPath(item),
++        rows: item.rows, bytes: item.bytesBase64, mime: item.mime });
++      let queries = [], renders = 0, commits = 0, last, reject = false;
++      try {
++        const prepared = projectClone(saved);
++        prepared.assets.csvFiles.find((item) => item.id === id).headerLines = 0;
++        initialize.call(activeProject, prepared);
++        renderDashboard = () => { renders++; };
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        projectEFSM.send = function (event, payload) {
++          check(event === "DATA_OBJECT_REPLACED" && Number.isInteger(payload.csvId) &&
++            !Object.hasOwn(payload, "model") && !Object.hasOwn(payload, "candidate"), "Application supplied asset state");
++          if (reject) return { committed: false };
++          last = send.call(this, event, payload); return last;
++        };
++        readBackendProjection = (kind, request) => {
++          if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
++            queries.push(request.path);
++            check(commits > 0 && request.path === last.changed.assets[0].path, "query did not use actual committed path");
++          }
++          return query(kind, request);
++        };
++        const identity = stable(csv);
++        check(api.graphs.setHeaderLines(id, 2.9) === 2 && commits === 1 && queries.length === 1 && renders === 1,
++          "header edit did not commit once then read/render");
++        check(stable(getProjectCsv(id)) === identity && Object.isFrozen(last.changed.assets[0].owners) &&
++          last.changed.assets[0].id === id && last.changed.csvIds.includes(id), "header changed identity/bytes/rows or wrong facts");
++        for (const [value, expected] of [[Infinity, 0], [-4, 0], ["bad", 0], [99999, csv.rows.length]])
++          check(api.graphs.setHeaderLines(id, value) === expected, "header clamp/finite fallback mismatch");
++        const failure = Error("expected header conversion failure"), before = JSON.stringify(activeProject._state),
++          count = commits, reads = queries.length, painted = renders;
++        let caught;
++        try { api.graphs.setHeaderLines(id, { valueOf() { throw failure; } }); } catch (error) { caught = error; }
++        check(caught === failure && commits === count && queries.length === reads && renders === painted &&
++          JSON.stringify(activeProject._state) === before, "conversion failure committed or ran success work");
++        validateProjectObjectState = () => { throw failure; }; caught = null;
++        try { api.graphs.setHeaderLines(id, 1); } catch (error) { caught = error; }
++        validateProjectObjectState = validate;
++        check(caught === failure && commits === count && queries.length === reads &&
++          JSON.stringify(activeProject._state) === before, "validation failure partially changed authority");
++        reject = true;
++        check(api.graphs.setHeaderLines(id, 1).committed === false && queries.length === reads && renders === painted,
++          "noncommit performed a success read/render");
++        reject = false; caught = null;
++        try { api.graphs.setHeaderLines(-1, 1); } catch (error) { caught = error; }
++        check(caught && commits === count && queries.length === reads && JSON.stringify(activeProject._state) === before,
++          "missing current CSV committed or queried success");
++        let attempts = 0;
++        const result = api.graphs.setHeaderLines(id, { valueOf() {
++          if (!attempts++) {
++            const newer = projectClone(activeProject._state); newer.meta.projectName = "new authority during header conversion";
++            initialize.call(activeProject, newer);
++          }
++          return 1;
++        } });
++        check(result === 1 && attempts === 2 && activeProject.projectName === "new authority during header conversion",
++          "stale header candidate overwrote a newer authority instead of recalculating");
++        check(!/getProjectCsv|activeProject|headerLineCount|rebuildEditableGraph/.test(graphEditorHeaderLines.toString()),
++          "Application still owns header calculation or persistent mutation");
++      } finally {
++        readBackendProjection = query; renderDashboard = render; projectEFSM.send = send;
++        activeProject.initialize = initialize; validateProjectObjectState = validate;
++        activeProject.initialize(saved);
++      }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index dea178d..b220460 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 51,
++      "revision": 52,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-014-code-project-export-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-015-code-csv-header-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 13,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 5a80d6b..f9568ad 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -408,6 +408,16 @@
+             id: slot.id, row: slot.row, col: slot.col, text: slot.caption ?? "",
+           }) : null;
+         }
++        if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
++          const source = activeProject._state,
++            node = request.path ? projectVfs.resolve(request.path, source) : null;
++          if (!["csv", "image"].includes(node?.kind)) return null;
++          const references = collectAssetReferences(
++            new Set(node.kind === "csv" ? [node.asset.id] : []),
++            new Set(node.kind === "image" ? [node.asset.id] : []), source);
++          return immutableProjectCopy({ target: node.asset, kind: node.kind,
++            path: projectAssetPath(node.asset), referenceCount: references.length, references });
++        }
+         if (kind === "project-api" && request.operation === "print.readSettings")
+           return Object.freeze({ ...activeProject.exportSettings });
+         if ((kind === "project-api" && request.operation === "images.readEditor") ||
+@@ -782,6 +792,7 @@
+           return Object.freeze({
+             event,
+             committed,
++            changed: immutableProjectCopy(committed ? payload.changed || {} : {}),
+             payload,
+             removedGraphReferenceCount: payload.removedGraphReferenceCount || 0,
+             resetImageSlotCount: payload.resetImageSlotCount || 0,
+@@ -892,7 +903,42 @@
+         payload[image?"image":"csv"]=image?getProjectImage(next.id):getProjectCsv(next.id);
+       }
+       function applyDataObjectReplacedAction(context) {
+-        applyAssetObjectReplacedAction(context, "csv");
++        const { machine, payload } = context;
++        if (!Object.hasOwn(payload, "headerLines")) {
++          applyAssetObjectReplacedAction(context, "csv");
++          return;
++        }
++        machine.assertWritable("data", "DATA_OBJECT_REPLACED");
++        machine.assertWritable("files", "DATA_OBJECT_REPLACED");
++        machine.assertWritable("charts", "DATA_OBJECT_REPLACED");
++        while (true) {
++          const source = activeProject._state,
++            current = source.assets.csvFiles.find((csv) => csv.id === payload.csvId);
++          if (!current) throw Error("헤더를 변경할 프로젝트 CSV가 없습니다.");
++          const candidate = projectClone(source),
++            csv = candidate.assets.csvFiles.find((item) => item.id === current.id);
++          csv.headerLines = headerLineCount(payload.headerLines, csv.rows);
++          candidate.charts.forEach((chart) => {
++            if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id))
++              rebuildEditableGraph(chart, candidate);
++          });
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const post = activeProject._state,
++            committed = post.assets.csvFiles.find((item) => item.id === current.id),
++            changedIds = (before, after) => after.filter((item) =>
++              JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id),
++            owners = post.charts.filter((chart) => chartCsvIds(chart).includes(committed.id)).map((chart) => ({
++              chartId: chart.id, slotId: post.slots.find((slot) => (slot.content?.chart ?? slot.chart) === chart.id).id,
++            }));
++          payload.changed = { slotIds: changedIds(source.slots, post.slots),
++            chartIds: changedIds(source.charts, post.charts),
++            csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
++            imageIds: changedIds(source.assets.images, post.assets.images),
++            assets: [{ role: "updated", kind: "csv", id: committed.id, path: projectAssetPath(committed), owners }] };
++          return;
++        }
+       }
+       function applyDataObjectDeletedAction({ machine, payload }) {
+         machine.assertWritable("data","DATA_OBJECT_DELETED");
+@@ -1247,6 +1293,31 @@
+         activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+         payload.path=path;
+       }
++      function immutableProjectCopy(value) {
++        const freeze = (copy) => {
++          if (copy && typeof copy === "object") {
++            Object.values(copy).forEach(freeze);
++            Object.freeze(copy);
++          }
++          return copy;
++        };
++        return freeze(projectClone(value));
++      }
++      function collectAssetReferences(csvIds, imageIds, state) {
++        const refs = [];
++        state.charts.forEach((chart) => {
++          if (chartUsesConversionView(chart)) return;
++          chart.editor.objects.forEach((object, originalObjectIndex) => {
++            if (csvIds.has(object.csvId)) refs.push({ kind: "csv", assetId: object.csvId,
++              chartId: chart.id, originalObjectIndex, object });
++          });
++        });
++        state.slots.forEach((slot) => {
++          const imageId = slot.content?.imageId ?? slot.imageId;
++          if (imageIds.has(imageId)) refs.push({ kind: "image", assetId: imageId, slotId: slot.id, slot });
++        });
++        return refs;
++      }
+       function projectAssetReferenceCount(csvIds, imageIds) {
+         return activeProject.charts.reduce(
+           (count, chart) => count + chartCsvIds(chart).filter((id) => csvIds.has(id)).length,
+@@ -3071,8 +3142,10 @@
+         status("프로젝트 파일을 슬롯에 연결했습니다.");
+       }
+       function headerLineCount(value, table = []) {
+-        let count = Math.max(0, Math.trunc(Number(value) || 0));
+-        return Math.min(count, Array.isArray(table) ? table.length : 0);
++        const number = Number(value);
++        return Number.isFinite(number)
++          ? Math.min(Math.max(0, Math.trunc(number)), Array.isArray(table) ? table.length : 0)
++          : 0;
+       }
+       function columnIndex(column) {
+         let match = /^C([1-9]\d*)$/.exec(String(column || ""));
+@@ -5978,16 +6051,12 @@
+         return graphEditorCommit(objects.filter((_, objectIndex) => objectIndex !== index), null);
+       }
+       function graphEditorHeaderLines(csvId, value) {
+-        let csv = getProjectCsv(Number(csvId));
+-        if (!csv) return null;
+-        csv.headerLines = headerLineCount(value, csv.rows);
+-        activeProject.charts.forEach((chart) => {
+-          if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id)) rebuildEditableGraph(chart);
+-        });
++        const result = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value });
++        if (!result.committed) return result;
++        const updated = result.changed.assets.find((asset) => asset.kind === "csv" && asset.role === "updated"),
++          read = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: updated.path });
+         renderDashboard();
+-        debugLog("csv:header-lines", { csvId: csv.id, headerLines: csv.headerLines });
+-        appFSM.notify("data", "CSV_HEADER_LINES_CHANGED");
+-        return csv.headerLines;
++        return read.target.headerLines;
+       }
+       function graphEditorSetEditable(editable=null) {
+         let current=graphEditorChart();
+diff --git a/agent_space/reviews/review-20261018-015-code-csv-header-open.md b/agent_space/reviews/review-20261018-015-code-csv-header-open.md
+new file mode 100644
+index 0000000..1301156
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-015-code-csv-header-open.md
+@@ -0,0 +1,21 @@
++# Code52 — current CSV header candidate (whole goal open)
++
++## Authority and closure
++
++Source39 and pseudocode13 remain unchanged/current. This unit directly translates existing meaning, not a new design inferred from code. Source Script remains highest authority. Code52 remains stale because Plan023 whole alignment is incomplete. Optional TLC is not run or claimed.
++
++## Requirement → artifact → evidence checklist
++
++- `sourcescript/application/public_api/graphs.py:graphEditorSetHeaderLines` and `pseudocode/application/public_api/graphs.pcal` prescribe a scalar DATA_OBJECT_REPLACED command, noncommit gate, then actual changed asset path read. `sourcecode/fast-figure.js:graphEditorHeaderLines` implements that flow; case62 checks no Application calculation/direct write/model payload and no success read/render on rejection.
++- `sourcescript/backend/project_efsm.py` / `pseudocode/backend/project_efsm.pcal` prescribe current-authority candidate calculation, complete validation and actual changed facts. `applyDataObjectReplacedAction` resolves current CSV, changes only its header field while preserving original bytes/rows/id/path, rebuilds affected editable figures, validates before commit, and retries if conversion replaced authority. Immutable changed fields include asset role/id/path/owners. Case62 covers finite/truncation/clamp boundaries, conversion/validation errors, missing CSV, one commit and stale-authority recalculation.
++- `sourcescript/backend/project_state.py` assets.readDeletionTarget and `sourcescript/backend/assets_files.py:collectAssetReferences` / corresponding PlusCal helpers prescribe detached query results, original object positions, frozen real graph references and conversion-view exclusion. Backend query copies and recursively freezes its result; `collectAssetReferences` counts duplicate real references at original positions and image slot links. Case61 covers these scopes, repeated copy identity, missing/directory paths and no authority mutation.
++- Shared `headerLineCount` finite fallback is now zero for nonfinite numbers, matching the upper normalization rule; existing callers retain truncation and row-bound clamping. Existing60 cases remain regression coverage, not proof of whole-goal closure.
++- `development-versions.json`: code52 stale with unchanged upper derivations. Canonical runner fingerprint pending; previous digest deliberately retained until GitHub checkout reports the exact new digest. No local app/checker/build execution.
++
++## Runner evidence
++
++Pending for this unit. Required: regression62 inline +62 split, canonical version gate from baseline `cc4335c808b79c682b380243ecc4bc12d9285bfc`, and distribution build at an identified implementation SHA. Preparation/checklists alone are not a pass.
++
++## Exclusions
++
++Other asset replacement/create/delete/cascade paths still have legacy command payloads and are not claimed current by this unit. Full graph normalization, canonical import, supplied-renderer/raster capture and whole integration remain open. Existing richer editable-figure recalculation is retained within the candidate, not discarded or elevated to independent authority. Public rendering remains the existing postcommit UI refresh; no new Frontend persistent state is introduced.

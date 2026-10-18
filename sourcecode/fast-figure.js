@@ -408,6 +408,16 @@
             id: slot.id, row: slot.row, col: slot.col, text: slot.caption ?? "",
           }) : null;
         }
+        if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
+          const source = activeProject._state,
+            node = request.path ? projectVfs.resolve(request.path, source) : null;
+          if (!["csv", "image"].includes(node?.kind)) return null;
+          const references = collectAssetReferences(
+            new Set(node.kind === "csv" ? [node.asset.id] : []),
+            new Set(node.kind === "image" ? [node.asset.id] : []), source);
+          return immutableProjectCopy({ target: node.asset, kind: node.kind,
+            path: projectAssetPath(node.asset), referenceCount: references.length, references });
+        }
         if (kind === "project-api" && request.operation === "print.readSettings")
           return Object.freeze({ ...activeProject.exportSettings });
         if ((kind === "project-api" && request.operation === "images.readEditor") ||
@@ -782,6 +792,7 @@
           return Object.freeze({
             event,
             committed,
+            changed: immutableProjectCopy(committed ? payload.changed || {} : {}),
             payload,
             removedGraphReferenceCount: payload.removedGraphReferenceCount || 0,
             resetImageSlotCount: payload.resetImageSlotCount || 0,
@@ -892,7 +903,42 @@
         payload[image?"image":"csv"]=image?getProjectImage(next.id):getProjectCsv(next.id);
       }
       function applyDataObjectReplacedAction(context) {
-        applyAssetObjectReplacedAction(context, "csv");
+        const { machine, payload } = context;
+        if (!Object.hasOwn(payload, "headerLines")) {
+          applyAssetObjectReplacedAction(context, "csv");
+          return;
+        }
+        machine.assertWritable("data", "DATA_OBJECT_REPLACED");
+        machine.assertWritable("files", "DATA_OBJECT_REPLACED");
+        machine.assertWritable("charts", "DATA_OBJECT_REPLACED");
+        while (true) {
+          const source = activeProject._state,
+            current = source.assets.csvFiles.find((csv) => csv.id === payload.csvId);
+          if (!current) throw Error("헤더를 변경할 프로젝트 CSV가 없습니다.");
+          const candidate = projectClone(source),
+            csv = candidate.assets.csvFiles.find((item) => item.id === current.id);
+          csv.headerLines = headerLineCount(payload.headerLines, csv.rows);
+          candidate.charts.forEach((chart) => {
+            if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id))
+              rebuildEditableGraph(chart, candidate);
+          });
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const post = activeProject._state,
+            committed = post.assets.csvFiles.find((item) => item.id === current.id),
+            changedIds = (before, after) => after.filter((item) =>
+              JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id),
+            owners = post.charts.filter((chart) => chartCsvIds(chart).includes(committed.id)).map((chart) => ({
+              chartId: chart.id, slotId: post.slots.find((slot) => (slot.content?.chart ?? slot.chart) === chart.id).id,
+            }));
+          payload.changed = { slotIds: changedIds(source.slots, post.slots),
+            chartIds: changedIds(source.charts, post.charts),
+            csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
+            imageIds: changedIds(source.assets.images, post.assets.images),
+            assets: [{ role: "updated", kind: "csv", id: committed.id, path: projectAssetPath(committed), owners }] };
+          return;
+        }
       }
       function applyDataObjectDeletedAction({ machine, payload }) {
         machine.assertWritable("data","DATA_OBJECT_DELETED");
@@ -1246,6 +1292,31 @@
         candidate.fileSystem.directories.sort();
         activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
         payload.path=path;
+      }
+      function immutableProjectCopy(value) {
+        const freeze = (copy) => {
+          if (copy && typeof copy === "object") {
+            Object.values(copy).forEach(freeze);
+            Object.freeze(copy);
+          }
+          return copy;
+        };
+        return freeze(projectClone(value));
+      }
+      function collectAssetReferences(csvIds, imageIds, state) {
+        const refs = [];
+        state.charts.forEach((chart) => {
+          if (chartUsesConversionView(chart)) return;
+          chart.editor.objects.forEach((object, originalObjectIndex) => {
+            if (csvIds.has(object.csvId)) refs.push({ kind: "csv", assetId: object.csvId,
+              chartId: chart.id, originalObjectIndex, object });
+          });
+        });
+        state.slots.forEach((slot) => {
+          const imageId = slot.content?.imageId ?? slot.imageId;
+          if (imageIds.has(imageId)) refs.push({ kind: "image", assetId: imageId, slotId: slot.id, slot });
+        });
+        return refs;
       }
       function projectAssetReferenceCount(csvIds, imageIds) {
         return activeProject.charts.reduce(
@@ -3071,8 +3142,10 @@
         status("프로젝트 파일을 슬롯에 연결했습니다.");
       }
       function headerLineCount(value, table = []) {
-        let count = Math.max(0, Math.trunc(Number(value) || 0));
-        return Math.min(count, Array.isArray(table) ? table.length : 0);
+        const number = Number(value);
+        return Number.isFinite(number)
+          ? Math.min(Math.max(0, Math.trunc(number)), Array.isArray(table) ? table.length : 0)
+          : 0;
       }
       function columnIndex(column) {
         let match = /^C([1-9]\d*)$/.exec(String(column || ""));
@@ -5978,16 +6051,12 @@
         return graphEditorCommit(objects.filter((_, objectIndex) => objectIndex !== index), null);
       }
       function graphEditorHeaderLines(csvId, value) {
-        let csv = getProjectCsv(Number(csvId));
-        if (!csv) return null;
-        csv.headerLines = headerLineCount(value, csv.rows);
-        activeProject.charts.forEach((chart) => {
-          if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id)) rebuildEditableGraph(chart);
-        });
+        const result = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value });
+        if (!result.committed) return result;
+        const updated = result.changed.assets.find((asset) => asset.kind === "csv" && asset.role === "updated"),
+          read = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: updated.path });
         renderDashboard();
-        debugLog("csv:header-lines", { csvId: csv.id, headerLines: csv.headerLines });
-        appFSM.notify("data", "CSV_HEADER_LINES_CHANGED");
-        return csv.headerLines;
+        return read.target.headerLines;
       }
       function graphEditorSetEditable(editable=null) {
         let current=graphEditorChart();

@@ -2237,6 +2237,100 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+    await run(61, "Asset target query copies original positions and excludes only conversion views", () => {
+      const before = JSON.stringify(activeProject._state), csv = activeProject.csvFiles[0], path = projectAssetPath(csv),
+        first = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path }),
+        second = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path });
+      check(first.target.id === csv.id && first.path === path && first.kind === "csv" &&
+        Object.isFrozen(first.target) && Object.isFrozen(first.references) &&
+        Object.isFrozen(first.target.rows) && first.target !== second.target && first.target.rows !== second.target.rows,
+        "target query is not a fresh immutable copy");
+      check(appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: null }) === null &&
+        appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: "/assets/csv" }) === null,
+        "missing/directory query produced an asset");
+      const state = projectClone(activeProject._state), object = { csvId: csv.id },
+        real = { id: 801, editor: { editable: false, objects: [object, { csvId: -1 }, { ...object }] } },
+        conversion = { id: 802, editor: { editable: false, conversionRows: [], objects: [object] } };
+      state.charts = [real, conversion]; state.slots = [{ id: 803, content: { imageId: 804 } }];
+      const refs = collectAssetReferences(new Set([csv.id]), new Set([804]), state);
+      check(refs.length === 3 && refs[0].chartId === 801 && refs[0].originalObjectIndex === 0 &&
+        refs[1].originalObjectIndex === 2 && refs[2].kind === "image" && refs[2].slotId === 803,
+        "real frozen/duplicate references or conversion/image scope is wrong");
+      check(JSON.stringify(activeProject._state) === before, "asset query/reference collection mutated authority");
+    });
+
+    await run(62, "Header edit uses current candidate, actual changed path and commit-gated read", () => {
+      const saved = projectClone(activeProject._state), query = readBackendProjection,
+        render = renderDashboard, send = projectEFSM.send, initialize = activeProject.initialize,
+        validate = validateProjectObjectState;
+      const csv = activeProject.csvFiles.find((item) => item.rows.length >= 2);
+      check(csv, "header fixture requires a nonempty CSV");
+      const id = csv.id, stable = (item) => JSON.stringify({ id: item.id, path: projectAssetPath(item),
+        rows: item.rows, bytes: item.bytesBase64, mime: item.mime });
+      let queries = [], renders = 0, commits = 0, last, reject = false;
+      try {
+        const prepared = projectClone(saved);
+        prepared.assets.csvFiles.find((item) => item.id === id).headerLines = 0;
+        initialize.call(activeProject, prepared);
+        renderDashboard = () => { renders++; };
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        projectEFSM.send = function (event, payload) {
+          check(event === "DATA_OBJECT_REPLACED" && Number.isInteger(payload.csvId) &&
+            !Object.hasOwn(payload, "model") && !Object.hasOwn(payload, "candidate"), "Application supplied asset state");
+          if (reject) return { committed: false };
+          last = send.call(this, event, payload); return last;
+        };
+        readBackendProjection = (kind, request) => {
+          if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
+            queries.push(request.path);
+            check(commits > 0 && request.path === last.changed.assets[0].path, "query did not use actual committed path");
+          }
+          return query(kind, request);
+        };
+        const identity = stable(csv);
+        check(api.graphs.setHeaderLines(id, 2.9) === 2 && commits === 1 && queries.length === 1 && renders === 1,
+          "header edit did not commit once then read/render");
+        check(stable(getProjectCsv(id)) === identity && Object.isFrozen(last.changed.assets[0].owners) &&
+          last.changed.assets[0].id === id && last.changed.csvIds.includes(id), "header changed identity/bytes/rows or wrong facts");
+        for (const [value, expected] of [[Infinity, 0], [-4, 0], ["bad", 0], [99999, csv.rows.length]])
+          check(api.graphs.setHeaderLines(id, value) === expected, "header clamp/finite fallback mismatch");
+        const failure = Error("expected header conversion failure"), before = JSON.stringify(activeProject._state),
+          count = commits, reads = queries.length, painted = renders;
+        let caught;
+        try { api.graphs.setHeaderLines(id, { valueOf() { throw failure; } }); } catch (error) { caught = error; }
+        check(caught === failure && commits === count && queries.length === reads && renders === painted &&
+          JSON.stringify(activeProject._state) === before, "conversion failure committed or ran success work");
+        validateProjectObjectState = () => { throw failure; }; caught = null;
+        try { api.graphs.setHeaderLines(id, 1); } catch (error) { caught = error; }
+        validateProjectObjectState = validate;
+        check(caught === failure && commits === count && queries.length === reads &&
+          JSON.stringify(activeProject._state) === before, "validation failure partially changed authority");
+        reject = true;
+        check(api.graphs.setHeaderLines(id, 1).committed === false && queries.length === reads && renders === painted,
+          "noncommit performed a success read/render");
+        reject = false; caught = null;
+        try { api.graphs.setHeaderLines(-1, 1); } catch (error) { caught = error; }
+        check(caught && commits === count && queries.length === reads && JSON.stringify(activeProject._state) === before,
+          "missing current CSV committed or queried success");
+        let attempts = 0;
+        const result = api.graphs.setHeaderLines(id, { valueOf() {
+          if (!attempts++) {
+            const newer = projectClone(activeProject._state); newer.meta.projectName = "new authority during header conversion";
+            initialize.call(activeProject, newer);
+          }
+          return 1;
+        } });
+        check(result === 1 && attempts === 2 && activeProject.projectName === "new authority during header conversion",
+          "stale header candidate overwrote a newer authority instead of recalculating");
+        check(!/getProjectCsv|activeProject|headerLineCount|rebuildEditableGraph/.test(graphEditorHeaderLines.toString()),
+          "Application still owns header calculation or persistent mutation");
+      } finally {
+        readBackendProjection = query; renderDashboard = render; projectEFSM.send = send;
+        activeProject.initialize = initialize; validateProjectObjectState = validate;
+        activeProject.initialize(saved);
+      }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
