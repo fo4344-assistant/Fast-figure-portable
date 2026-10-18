@@ -1,0 +1,19 @@
+# Plan023 Unit55 — FFSX stored-header direct translation (open)
+
+Baselinefeb37518a1b91504e4be7043280fe0b1bba84cb3. Unit54 actual corrected regression39168589596/repeat39168589638 PASS137 inline+137 split each, cumulative39168591753/fidelity39168593720/build39168617704 PASS exact SHA; review008 records inspected logs and initial fixture failure. No previous work repeated.
+
+## Source closure and translation fidelity
+
+Source sourcescript/backend/assets_files.py:115 CSV_HEADER_RULE already states stored field missing defaults1, finite numeric conversion truncated/clamped0..row count and invalid0, explicit0/empty/null not missing. It is an assets-files module rule, not FFPX-only. sourcescript/backend/assets_files.py:370 ffsxReadSlot returns validated package-local CSV payload, no authority mutation. Existing pseudocode/backend/assets_files.pcal:1051 ffsxReadSlot copied raw metadata and parsed original bytes but omitted shared header rule. No new decision/Source change needed; Source45 closure preserved. The earlier translation review missed this common-rule application by checking Project normalization alone. Correct PlusCal first: after parsed rows, set asset.headerLines using existing NormalizeHeaderCount(IF HasField... ELSE1,rows), before validateChartModel. No new procedure/decomposition, format exception or config source. PlusCal25 current derives Source45; only this semantic line/comment changes.
+
+## Direct runtime and coverage
+
+sourcecode/fast-figure.js ffsxReadSlotBytes uses existing headerLineCount and own-field test on detached parsed csv immediately after rows parse; bytes and references unchanged. Public SLOT_CHART_IMPORTED remains Backend-owned candidate/retry/whole validation/one commit, copied inputs and late effects. New agent_space/tests/browser-regression.js138 mutates actual FFSX ZIP typed assets metadata for absent/null/empty/zero/2.9/-3/99/invalid; requires1/0/0/0/2/0/3/0, exact original bytes/string rows, no Project/Frontend identity change during read, and same header/bytes/rows through public api.graphs.importFile with fresh project IDs. Existing137 covers Project candidate path. No local application/test/build/checker.
+
+## Lineage, publication and pending evidence
+
+PlusCal25 fingerprintsha256:1efae790fbe2825d6d84ef10abfa5fe1789a219d6d525d07c5f05a15ac3f73bd derives unchanged Source45 e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7. Code106 fingerprintsha256:d5d5235fa7622a6258ac859b83d52bce310871321e19e50b941124ff4363f1c5 derives both, remains stale. Optional verification-model26 remains stale/TLC pending and not gate. Pair015 includes actual pseudocode/runtime/tests/lineage/review/Plan023 diff, excludes own pair. Coherent upper+lower+lineage change uses bounded gh atomic tree/commit because immediate-parent version gates previously reject sequential Contents code/revision writes; check current expected HEAD/old blobs/new paths and nonforce only. Exact-SHA138 inline+split/repeat/build/canonical+cumulative/fidelity pending; inspect actual logs, no proxy completion.
+
+## Exclusions and audit state
+
+Rejected preserving unnormalized FFSX metadata, weakening the existing Source rule or changing original bytes, helper-only tests and unrelated graph/header editing redesign. No manual dist/policy changes. Full ZIP/dataRef/schema/settings, global initializer revalidation/reentrancy/ownership, resources/current capture/raster/dashboard/timing and exhaustive requirement-to-artifact audit remain OPEN. No code-current/full-completion or optional TLC claim; no actual quota/auth/service blocker observed.

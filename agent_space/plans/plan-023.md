@@ -325,6 +325,12 @@ Baselineb3b4ff3acb11dbf7a833b1c6de7d37e71a74f542. Source45 CSV_HEADER_RULE and P
 
 Unit54 first executiona60f18df8acf91aec9fdc8156a2f614ab16a5d7f: regression39168342014/repeat39168342543 failed137 in both modes (1–136 PASS): fixture compared numeric source cells against CSV-parsed strings. Pair014 corrects input cells only; unchanged exact byte/row/header assertions and runtime105. Build39168342068/canonical39168342029/cumulative39168346313/fidelity39168348571 PASS; generator45ee4e6 dist-only inspected/synced. Corrected137 full hosted gates pending, no aggregate completion.
 
+Unit54 corrected fixturefeb37518a1b91504e4be7043280fe0b1bba84cb3: push39168589596/repeat39168589638 PASS137 inline+137 split each, actual logs inspected; cumulative39168591753/fidelity39168593720/build39168617704 PASS at same SHA, dist already current. Code105 remains stale.
+
+### Fifty-fifth bounded unit — FFSX stored-header translation omission
+
+Baselinefeb37518a1b91504e4be7043280fe0b1bba84cb3. Source45 CSV_HEADER_RULE applies stored missing-only default and finite/truncated/clamped numeric normalization without format exception. PlusCal24 ffsxReadSlot restored rows/bytes but omitted it, unlike Project normalization: correct translation first (PlusCal25) in detached parsed local asset before chart validation, then direct runtime106 translation. New138 real ZIP/read-only/public-slot import covers eight absent/null/empty/zero/fraction/negative/high/invalid cases with identical bytes/rows. Pair015/review009 retain defect rationale, Source closure unchanged and optional model stale. Exact-SHA138 inline+split/repeat/build/version/fidelity pending. Full schema/resource/initializer/raster/dashboard/timing and exhaustive audit remain open; code106 stale.
+
 ## Temporary-file rule
 
 The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.

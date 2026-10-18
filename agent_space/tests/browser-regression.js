@@ -6111,6 +6111,42 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(138, "FFSX stored header metadata normalizes before chart validation and survives public slot import", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        initialize.call(activeProject, createProjectState());
+        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+        const targetId = activeProject.slots.find(item => !item.hidden).id;
+        select(slotAt(targetId));
+        const csv = createProjectCsv([["x", "y"], ["1", "2"], ["3", "4"]], "slot-headers.csv");
+        api.graphs.addObject(csv.id);
+        const current = slotAt(targetId), entries = ffsxBuildSlot(current, getChart(current.chart)).assets,
+          bytes = csv.bytesBase64, rows = JSON.stringify(csv.rows);
+        for (const [present, value, expected] of [[false, undefined, 1], [true, null, 0], [true, "", 0], [true, 0, 0],
+          [true, 2.9, 2], [true, -3, 0], [true, 99, 3], [true, "invalid", 0]]) {
+          const packageBytes = ffpxZipStore(entries.map(entry => {
+            if (entry.name !== "assets/assets.xml") return entry;
+            const doc = new DOMParser().parseFromString(new TextDecoder().decode(entry.data), "application/xml"),
+              node = doc.querySelector("dataAsset"), metadata = ffpxWrappedValue(node);
+            if (present) metadata.headerLines = value; else delete metadata.headerLines;
+            node.innerHTML = ffpxXmlValue(metadata);
+            return { ...entry, data: new TextEncoder().encode(new XMLSerializer().serializeToString(doc)) };
+          })), project = activeProject._state, frontend = interfaceFSM.state,
+            payload = ffsxReadSlotBytes(packageBytes), local = payload.csvFiles[0];
+          check(local.headerLines === expected && local.bytesBase64 === bytes && JSON.stringify(local.rows) === rows &&
+            activeProject._state === project && interfaceFSM.state === frontend,
+            `FFSX stored header read changed authority or metadata: ${present}/${value}`);
+          const chart = await api.graphs.importFile(new File([packageBytes], "slot-headers.ffsx"), targetId),
+            imported = getProjectCsv(chart.editor.objects[0].csvId);
+          check(imported.headerLines === expected && imported.bytesBase64 === bytes && JSON.stringify(imported.rows) === rows,
+            `FFSX public import lost normalized header/bytes/rows: ${present}/${value}`);
+        }
+      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

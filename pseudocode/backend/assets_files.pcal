@@ -1063,6 +1063,8 @@ CsvBytesAndRealReferences:
     bytes := CopyBytes(EntryBytes(entries,asset.dataRef));
     asset.bytesBase64 := Base64Encode(bytes);
     call parseProjectDataAsset(asset.name,bytes); asset.rows := result;
+    \* Source CSV_HEADER_RULE applies to stored FFSX metadata as well as Project imports.
+    asset.headerLines := NormalizeHeaderCount(IF HasField(asset,"headerLines") THEN asset.headerLines ELSE 1,asset.rows);
     RemoveField(asset,"dataRef");
     payload.csvFiles[i] := asset;
     i := i + 1;

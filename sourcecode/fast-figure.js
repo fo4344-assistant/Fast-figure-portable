@@ -7374,6 +7374,7 @@
             throw Error("FFSX 슬롯 내부 CSV ID가 올바르지 않습니다.");
           slotCsvIds.add(csv.id);
           csv.rows = parseProjectCsvAsset(csv.name, data);
+          csv.headerLines = headerLineCount(Object.hasOwn(csv, "headerLines") ? csv.headerLines : 1, csv.rows);
           csv.bytesBase64 = ffpxBytesToBase64(data);
           delete csv.dataRef;
         }
