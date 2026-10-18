@@ -1,0 +1,247 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 05ec23d..150a43a 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -211,6 +211,10 @@ Source42/pseudocode20 already close current owner/new edits/normalization/commit
+ 
+ Source42/pseudocode20 already specify current slot-local settings/new patch, config limits/zero/invalid preservation, common candidate validation/source retry/one commit and pure copied image read. Code81 captures current source before edits, rebuilds settings in private candidate, validates/retries and emits actual changed ids; official image/slot-image reads return detached frozen bytes/settings and pure data URL without revocable resources. Cases97/98 cover same-image two-slot isolation, query resources/copies, scalar inputs/actual facts, errors/noncommit/current-source replacement and late errors. Review036/patch100–105 preserve initial notification-spy issue, unisolated final-read hypothesis, and actual flat/nested settings divergence diagnostic. Code82 adds imageSettings getter/setter alias to sole canonical slot-local settings, retains compatibility shape and flat-read assertions. Runtime3d5ca557cbf915069b8f061c7874868aa4ff1e21 regression39124563438 PASS98+98/build39124563440 PASS; canonical82 ea1dac5f3d25f8ebb54cccd24863fecebc53a603454ab612861a535e000b8ee6. Corrected76c65c60a16583c7184152477a0c09c5e91881ae cumulative39124619261 PASS baselinecf5bed9751b5f9e5d46978dba0bd3618efd91f30, repeat39124621461 PASS98 inline+98 split/196 actual passes, corrected-SHA build39124623410 PASS. Upper42/20 unchanged, unit34 bounded audit only; broader owners/schema/import/raster/dashboard remain open, whole code82 stale.
+ 
++## Thirty-fifth bounded implementation unit — persistent print settings current authority
++
++Baseline f2f13c5f44d700a181c33c7c1fa2a3ebe00e3b26. Existing Source42/pseudocode20 already specify new-edits-only/current settings fallback/config limits/auto height/whole validation/retry/one commit and committed-only official read. Code83 closes missing source-reference retry/actual id facts and makes print.readSettings recursively detached immutable. Cases99/100 cover export-only mutation/normalization/immutability/original failures/noncommit/no success work/newer-authority conversion+validation retries/late query+reconciliation failures. Review037/patch106 track pending default-runner100+100/build/canonical/cumulative; upper unchanged, code stale and whole goal open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 4b4dbc3..5fc1199 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4257,6 +4257,111 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++
++    await run(99, "Print settings normalize only new fields and return fresh immutable Backend reads", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection;
++      try {
++        const fixture = projectClone(activeProject._state);
++        fixture.export = { width: 800, heightMode: "explicit", height: 600, dpi: 300, format: "png" };
++        initialize.call(activeProject, fixture);
++        const before = JSON.stringify(activeProject._state), runtime = interfaceFSM.state,
++          read = api.print.readSettings(), again = api.print.readSettings();
++        check(read !== again && Object.isFrozen(read) && JSON.stringify(read) === JSON.stringify(fixture.export) &&
++          JSON.stringify(activeProject._state) === before && interfaceFSM.state === runtime, "print read aliases/repairs state");
++        let commits = 0, reads = 0, last;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        projectEFSM.send = function (event, payload) {
++          check(event === "EXPORT_SETTINGS_CHANGED" && Object.keys(payload).join(",") === "settings" &&
++            !Object.hasOwn(payload.settings, "candidate"), "print wrapper passed model/derived settings");
++          return last = send.call(this, event, payload);
++        };
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "print.readSettings") reads++;
++          return query(kind, request);
++        };
++        const result = api.print.setSettings({ width: 999999, height: -1, dpi: 1, format: "jpeg", heightMode: "explicit" });
++        const expected = JSON.parse(before); expected.export = { width: 20000, heightMode: "explicit", height: 100, dpi: 36, format: "jpeg" };
++        check(Object.isFrozen(result) && commits === 1 && reads === 1 &&
++          JSON.stringify(activeProject._state) === JSON.stringify(expected) && read.width === 800 &&
++          Object.isFrozen(last.changed) && ["slotIds","chartIds","csvIds","imageIds","assets"].every(key => !last.changed[key].length),
++          "print settings changed unrelated domain or wrong limits/read/facts");
++        const inherited = Object.create({ width: 500, dpi: 900 }); inherited.heightMode = "auto"; inherited.height = 999;
++        const auto = api.print.setSettings(inherited);
++        check(auto.width === 20000 && auto.dpi === 36 && auto.height === null && auto.heightMode === "auto", "inherited edit/auto height mismatch");
++        const explicit = api.print.setSettings({ heightMode: "explicit", width: null, height: NaN, dpi: Infinity, format: "invalid" });
++        check(explicit.height === 100 && explicit.width === 20000 && explicit.dpi === 36 && explicit.format === "jpeg",
++          "invalid/missing field replaced current or wrong explicit height fallback");
++        const retained = api.print.setSettings({ heightMode: "invalid", width: "bad", height: undefined });
++        check(JSON.stringify(retained) === JSON.stringify(explicit) && commits === 4 && reads === 4 &&
++          interfaceFSM.readState().selectedSlotId === selected && interfaceFSM.state.assetPath === session.assetPath,
++          "invalid settings changed current values or selection");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(100, "Print settings retry current authority and gate errors/noncommit/postcommit effects", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
++        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult, failure = Error("print settings boundary");
++      try {
++        let commits = 0, reads = 0, reconciliations = 0, caught;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "print.readSettings") reads++;
++          return query(kind, request);
++        };
++        const source = activeProject._state, runtime = interfaceFSM.state;
++        try { api.print.setSettings({ get width() { throw failure; } }); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && interfaceFSM.state === runtime &&
++          !commits && !reads && !reconciliations, "print getter error committed or did success work");
++        validateProjectObjectState = () => { throw failure; }; caught = null;
++        try { api.print.setSettings({ width: 1200 }); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && !commits && !reads && !reconciliations, "print validator error changed authority");
++        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
++        check(api.print.setSettings({ dpi: 150 }) === false && !commits && !reads && !reconciliations, "print noncommit queried/reconciled");
++        projectEFSM.send = send;
++        let conversions = 0;
++        const retry = api.print.setSettings({ width: { valueOf() {
++          conversions++;
++          if (conversions === 1) {
++            const newer = projectClone(activeProject._state); newer.meta.projectName = "newer print authority";
++            newer.export = { width: 900, heightMode: "explicit", height: 700, dpi: 600, format: "jpeg" };
++            initialize.call(activeProject, newer);
++          }
++          return 1200;
++        } } });
++        check(conversions === 2 && commits === 1 && reads === 1 && reconciliations === 1 &&
++          retry.width === 1200 && retry.height === 700 && retry.dpi === 600 && retry.format === "jpeg" &&
++          activeProject.meta.projectName === "newer print authority", "print conversion used stale current fields");
++        let attempts = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const answer = validate(candidate, options);
++          if (options?.requireSlots && ++attempts === 1) {
++            const newer = projectClone(activeProject._state); newer.export.width = 1300;
++            initialize.call(activeProject, newer);
++          }
++          return answer;
++        };
++        const latest = api.print.setSettings({ dpi: 450 });
++        check(attempts === 2 && commits === 2 && reads === 2 && reconciliations === 2 &&
++          latest.width === 1300 && latest.dpi === 450, "print validation failed current-state retry");
++        validateProjectObjectState = validate;
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "print.readSettings") throw failure;
++          return query(kind, request);
++        }; caught = null;
++        try { api.print.setSettings({ dpi: 500 }); } catch (error) { caught = error; }
++        check(caught === failure && commits === 3 && activeProject._state.export.dpi === 500, "late print query swallowed/rolled back commit");
++        readBackendProjection = query; interfaceFSM.reconcileProjectResult = () => { throw failure; }; caught = null;
++        try { api.print.setSettings({ dpi: 550 }); } catch (error) { caught = error; }
++        check(caught === failure && commits === 4 && activeProject._state.export.dpi === 550, "late reconciliation error rolled back print settings");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
++        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 3c4a053..edc6a38 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 82,
++      "revision": 83,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-036-code-image-settings-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-037-code-export-settings-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 20,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 9e8ce3b..f3e4ffa 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -452,7 +452,7 @@
+             objectColumns: objectCsv ? columnDefinitions(objectCsv.rows, objectCsv.headerLines) : [] });
+         }
+         if (kind === "project-api" && request.operation === "print.readSettings")
+-          return Object.freeze({ ...activeProject.exportSettings });
++          return immutableProjectCopy(activeProject._state.export);
+         if ((kind === "project-api" && request.operation === "images.readEditor") ||
+             (kind === "renderer" && request.operation === "slot-image")) {
+           const source = activeProject._state,
+@@ -1874,30 +1874,37 @@
+       }
+       function applyExportSettingsChangedAction({ machine, payload }) {
+         machine.assertWritable("export", "EXPORT_SETTINGS_CHANGED");
+-        const candidate = projectClone(activeProject._state), current = candidate.export,
+-          next = { ...current }, values = payload.settings || {}, limits = BackendSettings.defaults.limits.export;
+-        for (const [key, allowed] of [["heightMode", ["auto", "explicit"]], ["format", ["png", "jpeg"]]]) {
+-          if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+-          const value = values[key];
+-          if (allowed.includes(value)) next[key] = value;
+-        }
+-        for (const [key, limitKey] of [["width", "logicalWidth"], ["height", "logicalHeight"], ["dpi", "dpi"]]) {
+-          if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+-          const value = values[key];
+-          // NoValue is not numeric zero; conversion exceptions otherwise propagate.
+-          const number = value === null ? NaN : Number(value);
+-          if (Number.isFinite(number)) {
+-            const [min, max] = limits[limitKey];
+-            next[key] = Math.max(min, Math.min(max, number));
++        while (true) {
++          const source = activeProject._state, candidate = projectClone(source), current = source.export,
++            next = { ...current }, values = payload.settings || {}, limits = BackendSettings.defaults.limits.export;
++          for (const [key, allowed] of [["heightMode", ["auto", "explicit"]], ["format", ["png", "jpeg"]]]) {
++            if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
++            const value = values[key];
++            if (allowed.includes(value)) next[key] = value;
++          }
++          for (const [key, limitKey] of [["width", "logicalWidth"], ["height", "logicalHeight"], ["dpi", "dpi"]]) {
++            if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
++            const value = values[key];
++            // NoValue is not numeric zero; conversion exceptions otherwise propagate.
++            const number = value === null ? NaN : Number(value);
++            if (Number.isFinite(number)) {
++              const [min, max] = limits[limitKey];
++              next[key] = Math.max(min, Math.min(max, number));
++            }
+           }
++          next.height = next.heightMode === "auto" ? null
++            : next.height ?? current.height ?? limits.logicalHeight[0];
++          candidate.export = next;
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const post = activeProject._state, changedIds = (before, after) => after.filter(item =>
++            JSON.stringify(before.find(old => old.id === item.id)) !== JSON.stringify(item)).map(item => item.id);
++          payload.changed = { slotIds: changedIds(source.slots, post.slots), chartIds: changedIds(source.charts, post.charts),
++            csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles), imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
++          return;
+         }
+-        next.height = next.heightMode === "auto" ? null
+-          : next.height ?? current.height ?? limits.logicalHeight[0];
+-        candidate.export = next;
+-        validateProjectObjectState(candidate, { requireSlots: true });
+-        activeProject.initialize(candidate);
+       }
+-
+       function applySlotImageSettingsChangedAction({ machine, payload }) {
+         machine.assertWritable("slots", "SLOT_IMAGE_SETTINGS_CHANGED");
+         while (true) {
+diff --git a/agent_space/reviews/review-20261018-037-code-export-settings-open.md b/agent_space/reviews/review-20261018-037-code-export-settings-open.md
+new file mode 100644
+index 0000000..36c3579
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-037-code-export-settings-open.md
+@@ -0,0 +1,16 @@
++# Unit35 persistent print settings current authority
++
++Source42 application/public_api/layout_annotations.py setExportSettings and backend/layout_annotations.py readExportSettings, common backend/project_efsm.py current-source candidate/whole validation/reference retry/one commit govern this unit. Pseudocode20 backend/project_efsm.pcal NormalizeExportEditsInAttempt and application/public_api/layout_annotations.pcal setExportSettings directly cover current-field fallback/config numeric bounds/auto None/explicit current-or100; no upper meaning change needed.
++
++Code83 applyExportSettingsChangedAction retains edit normalization but captures current authority each attempt, retries after validation if replaced, commits once and records actual changed id facts. Official print.readSettings recursively detaches/freezes current export rather than shallow compatibility copy. Existing Application setPrintApiSettings already sends only new settings and gates fresh official query on committed; retain that implementation, no unnecessary rewrite.
++
++## Prompt-to-artifact checklist
++
++- new values only/current settings not Application model:99 send spy; wrapper inspection.
++- config limits/own fields/invalid current fallback/auto null/explicit fallback:99 numeric/enums/inherited/NaN/null/Infinity cases.
++- exact Project export-only mutation/immutable changed facts/fresh immutable query/no selection changes:99 full-state comparison and identity checks.
++- original getter/validator error, noncommit no query/reconciliation:100.
++- authority replaced during conversion or validation recalculates current fields, one final commit:100 two retries.
++- late success-query/reconciliation errors propagate without rollback:100.
++
++Actual default-runner100+100/build/canonical/cumulative pending; Source42/pseudocode20 unchanged, code83 stale. Optional model/TLC not run. Larger resource owners/schema/assets/import/raster/supplied dashboard/serializer/timing remain open, no whole-goal claim. No policy or local runtime changes.

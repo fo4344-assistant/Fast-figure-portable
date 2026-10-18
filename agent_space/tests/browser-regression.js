@@ -4257,6 +4257,111 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+
+    await run(99, "Print settings normalize only new fields and return fresh immutable Backend reads", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection;
+      try {
+        const fixture = projectClone(activeProject._state);
+        fixture.export = { width: 800, heightMode: "explicit", height: 600, dpi: 300, format: "png" };
+        initialize.call(activeProject, fixture);
+        const before = JSON.stringify(activeProject._state), runtime = interfaceFSM.state,
+          read = api.print.readSettings(), again = api.print.readSettings();
+        check(read !== again && Object.isFrozen(read) && JSON.stringify(read) === JSON.stringify(fixture.export) &&
+          JSON.stringify(activeProject._state) === before && interfaceFSM.state === runtime, "print read aliases/repairs state");
+        let commits = 0, reads = 0, last;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        projectEFSM.send = function (event, payload) {
+          check(event === "EXPORT_SETTINGS_CHANGED" && Object.keys(payload).join(",") === "settings" &&
+            !Object.hasOwn(payload.settings, "candidate"), "print wrapper passed model/derived settings");
+          return last = send.call(this, event, payload);
+        };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "print.readSettings") reads++;
+          return query(kind, request);
+        };
+        const result = api.print.setSettings({ width: 999999, height: -1, dpi: 1, format: "jpeg", heightMode: "explicit" });
+        const expected = JSON.parse(before); expected.export = { width: 20000, heightMode: "explicit", height: 100, dpi: 36, format: "jpeg" };
+        check(Object.isFrozen(result) && commits === 1 && reads === 1 &&
+          JSON.stringify(activeProject._state) === JSON.stringify(expected) && read.width === 800 &&
+          Object.isFrozen(last.changed) && ["slotIds","chartIds","csvIds","imageIds","assets"].every(key => !last.changed[key].length),
+          "print settings changed unrelated domain or wrong limits/read/facts");
+        const inherited = Object.create({ width: 500, dpi: 900 }); inherited.heightMode = "auto"; inherited.height = 999;
+        const auto = api.print.setSettings(inherited);
+        check(auto.width === 20000 && auto.dpi === 36 && auto.height === null && auto.heightMode === "auto", "inherited edit/auto height mismatch");
+        const explicit = api.print.setSettings({ heightMode: "explicit", width: null, height: NaN, dpi: Infinity, format: "invalid" });
+        check(explicit.height === 100 && explicit.width === 20000 && explicit.dpi === 36 && explicit.format === "jpeg",
+          "invalid/missing field replaced current or wrong explicit height fallback");
+        const retained = api.print.setSettings({ heightMode: "invalid", width: "bad", height: undefined });
+        check(JSON.stringify(retained) === JSON.stringify(explicit) && commits === 4 && reads === 4 &&
+          interfaceFSM.readState().selectedSlotId === selected && interfaceFSM.state.assetPath === session.assetPath,
+          "invalid settings changed current values or selection");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(100, "Print settings retry current authority and gate errors/noncommit/postcommit effects", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult, failure = Error("print settings boundary");
+      try {
+        let commits = 0, reads = 0, reconciliations = 0, caught;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "print.readSettings") reads++;
+          return query(kind, request);
+        };
+        const source = activeProject._state, runtime = interfaceFSM.state;
+        try { api.print.setSettings({ get width() { throw failure; } }); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && interfaceFSM.state === runtime &&
+          !commits && !reads && !reconciliations, "print getter error committed or did success work");
+        validateProjectObjectState = () => { throw failure; }; caught = null;
+        try { api.print.setSettings({ width: 1200 }); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && !commits && !reads && !reconciliations, "print validator error changed authority");
+        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.print.setSettings({ dpi: 150 }) === false && !commits && !reads && !reconciliations, "print noncommit queried/reconciled");
+        projectEFSM.send = send;
+        let conversions = 0;
+        const retry = api.print.setSettings({ width: { valueOf() {
+          conversions++;
+          if (conversions === 1) {
+            const newer = projectClone(activeProject._state); newer.meta.projectName = "newer print authority";
+            newer.export = { width: 900, heightMode: "explicit", height: 700, dpi: 600, format: "jpeg" };
+            initialize.call(activeProject, newer);
+          }
+          return 1200;
+        } } });
+        check(conversions === 2 && commits === 1 && reads === 1 && reconciliations === 1 &&
+          retry.width === 1200 && retry.height === 700 && retry.dpi === 600 && retry.format === "jpeg" &&
+          activeProject.meta.projectName === "newer print authority", "print conversion used stale current fields");
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const answer = validate(candidate, options);
+          if (options?.requireSlots && ++attempts === 1) {
+            const newer = projectClone(activeProject._state); newer.export.width = 1300;
+            initialize.call(activeProject, newer);
+          }
+          return answer;
+        };
+        const latest = api.print.setSettings({ dpi: 450 });
+        check(attempts === 2 && commits === 2 && reads === 2 && reconciliations === 2 &&
+          latest.width === 1300 && latest.dpi === 450, "print validation failed current-state retry");
+        validateProjectObjectState = validate;
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "print.readSettings") throw failure;
+          return query(kind, request);
+        }; caught = null;
+        try { api.print.setSettings({ dpi: 500 }); } catch (error) { caught = error; }
+        check(caught === failure && commits === 3 && activeProject._state.export.dpi === 500, "late print query swallowed/rolled back commit");
+        readBackendProjection = query; interfaceFSM.reconcileProjectResult = () => { throw failure; }; caught = null;
+        try { api.print.setSettings({ dpi: 550 }); } catch (error) { caught = error; }
+        check(caught === failure && commits === 4 && activeProject._state.export.dpi === 550, "late reconciliation error rolled back print settings");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
