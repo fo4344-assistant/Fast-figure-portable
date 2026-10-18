@@ -5634,11 +5634,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         };
         const snapshot = await api.project.importFile(file);
         check(commits === 1 && reads === 1 && parses === 1 && snapshots === 1 && releases === 1 &&
-          appFSM.state.lifecycle === "ready" && snapshot.meta.projectName === "owned whole project" &&
-          snapshot.assets.csvFiles.length === 1 && snapshot.assets.images.length === 1 && snapshot.charts.length === 1 &&
-          snapshot.slots.find(item => item.id === b.id).content.contentType === "image" &&
-          interfaceFSM.state.selectedSlotId === null && interfaceFSM.state.assetPath === null,
-          "whole-project import did not commit/read/reset once or returned wrong project");
+          appFSM.state.lifecycle === "ready", `whole-project operation counts: ${JSON.stringify({ commits, reads, parses, snapshots, releases, lifecycle: appFSM.state.lifecycle })}`);
+        check(snapshot.meta.projectName === "owned whole project" && snapshot.assets.csvFiles.length === 1 &&
+          snapshot.assets.images.length === 1 && snapshot.charts.length === 1 &&
+          snapshot.slots.find(item => item.id === b.id).content.contentType === "image", "whole-project snapshot has wrong imported fields");
+        check(interfaceFSM.readState().selectedSlotId === null && interfaceFSM.readState().assetPath === null,
+          "whole-project import failed official Frontend selection reset");
         check(snapshot !== activeProject && !(snapshot instanceof ProjectObject) && Object.isFrozen(snapshot) &&
           Object.isFrozen(snapshot.slots[0].content) && snapshot.slots[0].content !== activeProject.slots[0].content,
           "project import exposed mutable authority instead of canonical plain copied snapshot");

@@ -1,0 +1,35 @@
+diff --git a/agent_space/reviews/review-20261018-048-code-project-import-open.md b/agent_space/reviews/review-20261018-048-code-project-import-open.md
+index 8216a43..a84f20b 100644
+--- a/agent_space/reviews/review-20261018-048-code-project-import-open.md
++++ b/agent_space/reviews/review-20261018-048-code-project-import-open.md
+@@ -18,6 +18,8 @@ Continue fully read development-policy.md v0.2.6 and AGENT.md ownership/direct-t
+ 
+ At6943afeb470d9990377cb86ec8220b7e6eb74fa9, regression39156116506 PASS prior124 and126 in both forms;125 FAIL `TypeError: api.assets.createCsv is not a function` before reaching new project-load assertions. Fixture invented a public method; real existing setup helper is createProjectCsv, as already used by case122. Patch144 corrects fixture only, not public API/runtime/Source/PlusCal/lineage. Never broaden API or alter Source to excuse the erroneous test. Canonical39156116471 PASS confirms code97 sha256:0aab180b509b3df9c91a80464f68c78d5765ce6f14f6e78df9456939be1ab286; cumulative39156123445 and structural fidelity39156125931 PASS (base41247eff5171017bd3dd70656b55f2ed14ce8267), not proof of failed125. Build39156116486 PASS generated dist-only41192d5a0a0f8bf0b06f4fd6655f97305bb8eeef, fetched/fast-forwarded without local build. Corrected new-SHA126+126/repeat/build/version/fidelity still pending.
+ 
++At4ee4a453213572e867a291ff35e313f02cad3607 push regression39156251221 and repeat39156251328 again FAIL125 (prior124+126 pass both forms), now composite `Error: whole-project import did not commit/read/reset once or returned wrong project`. Static inspection finds the test reads interfaceFSM.state.selectedSlotId, but that raw region record does not contain the property: the actual official readState() adds the owned selection scalar. Patch145 corrects the assertion to the official Frontend read, splitting operation counts/imported fields/reset into separate checks without weakening any predicate. Version39156251280/cumulative39156254849/build39156253049/fidelity39156256684 PASS, not semantic proof of failed125. Runtime/upper/lineage unchanged; corrected new-SHA execution pending.
++
+ ## Lineage, execution evidence and remaining gaps
+ 
+ Source45/pseudocode24 unchanged. Code97 remains stale; staged Git blob digest is metadata calculation only, authorized GitHub-hosted canonical checker must confirm. Exact-SHA126 inline/split regression/repeat/build/canonical/cumulative/fidelity PENDING. No local application/test/build/checker, dist editing, policy change or optional TLC pass. Existing aggregate postcommit renderer still not supplied-projection aligned. Common initialize performs normalization/validation after many actions' source-reference check; broader common commit audit remains open, not masked by bounded retry tests. Full schema/typed serializer/import/export/raster/current-capture/dashboard/lifecycle timing audit remains open. No whole goal completion from this checklist or green structural coverage.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 950d793..515fe1a 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5634,11 +5634,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         };
+         const snapshot = await api.project.importFile(file);
+         check(commits === 1 && reads === 1 && parses === 1 && snapshots === 1 && releases === 1 &&
+-          appFSM.state.lifecycle === "ready" && snapshot.meta.projectName === "owned whole project" &&
+-          snapshot.assets.csvFiles.length === 1 && snapshot.assets.images.length === 1 && snapshot.charts.length === 1 &&
+-          snapshot.slots.find(item => item.id === b.id).content.contentType === "image" &&
+-          interfaceFSM.state.selectedSlotId === null && interfaceFSM.state.assetPath === null,
+-          "whole-project import did not commit/read/reset once or returned wrong project");
++          appFSM.state.lifecycle === "ready", `whole-project operation counts: ${JSON.stringify({ commits, reads, parses, snapshots, releases, lifecycle: appFSM.state.lifecycle })}`);
++        check(snapshot.meta.projectName === "owned whole project" && snapshot.assets.csvFiles.length === 1 &&
++          snapshot.assets.images.length === 1 && snapshot.charts.length === 1 &&
++          snapshot.slots.find(item => item.id === b.id).content.contentType === "image", "whole-project snapshot has wrong imported fields");
++        check(interfaceFSM.readState().selectedSlotId === null && interfaceFSM.readState().assetPath === null,
++          "whole-project import failed official Frontend selection reset");
+         check(snapshot !== activeProject && !(snapshot instanceof ProjectObject) && Object.isFrozen(snapshot) &&
+           Object.isFrozen(snapshot.slots[0].content) && snapshot.slots[0].content !== activeProject.slots[0].content,
+           "project import exposed mutable authority instead of canonical plain copied snapshot");
