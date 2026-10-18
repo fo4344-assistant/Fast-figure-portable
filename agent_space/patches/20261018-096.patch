@@ -1,0 +1,26 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 28075dc..fc4cc75 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -201,7 +201,7 @@ Unit31 Source-first return loop: initial39123076936 91/92 candidate validation e
+ 
+ ## Thirty-second bounded implementation unit — file-drop selection preparation and finish
+ 
+-Baseline719584378eae1871064c00b809ec7329de70e734. Existing Source42/pseudocode20 specify official visible context, same-target no transition, rejected/stale reference False, no pending type/Project mutation, Frontend-only finish cleanup/None. Code79 directly translates query and validated final selection, removes early cleanup/live read and unconditional success, keeps finish selection/lifecycle/Project unchanged. Cases93/94 cover official scalar input/accepted once/same no-op, missing/hidden/rejected/stale, exact query/adapter/late render errors and interaction-only cleanup. Review034/patch094 track pending Actions94+94/build/canonical gate; upper unchanged, whole code stale/open.
++Baseline719584378eae1871064c00b809ec7329de70e734. Existing Source42/pseudocode20 specify official visible context, same-target no transition, rejected/stale reference False, no pending type/Project mutation, Frontend-only finish cleanup/None. Code79 directly translates query and validated final selection, removes early cleanup/live read and unconditional success, keeps finish selection/lifecycle/Project unchanged. Cases93/94 cover official scalar input/accepted once/same no-op, missing/hidden/rejected/stale, exact query/adapter/late render errors and interaction-only cleanup. Review034/patch094–096 record implementation e3a454f regression39123386784 PASS94+94/build39123386626 PASS, code79 canonical290e675197264aa347c76073cf0b969ecb874ea54e66848b03f249904032dd14. Corrected ec3bb702693aa296b99c01a9e0b6150c628e071b cumulative39123444878 PASS baseline719584378eae1871064c00b809ec7329de70e734, repeat39123447017 PASS94 inline+94 split/188 cases. Same runtime/build/test inputs; bounded unit32 only, upper unchanged, whole code stale/open.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261018-034-code-file-drop-open.md b/agent_space/reviews/review-20261018-034-code-file-drop-open.md
+index f1cb593..3d1cab6 100644
+--- a/agent_space/reviews/review-20261018-034-code-file-drop-open.md
++++ b/agent_space/reviews/review-20261018-034-code-file-drop-open.md
+@@ -10,4 +10,7 @@ Source42 sourcescript/application/public_api/layout_annotations.py prepareDashbo
+ - query/adapter errors original, accepted-render failure propagated without rollback:94.
+ - finish only clears Frontend drag state/CSS then None, preserves lifecycle/selection/Project:93.
+ 
+-At e3a454f05b95d95150b732a830ed595b6b989865 regression39123386784 PASS94 inline+94 split (including new93/94), build39123386626 PASS. Diagnostic39123386688 expected provisional mismatch prints canonical code79 sha256:290e675197264aa347c76073cf0b969ecb874ea54e66848b03f249904032dd14; Source42/pseudocode20 unchanged. Record actual runner digest only, corrected-lineage cumulative gate/repeat pending. Initial failing diagnostic remains failed. Source42/pseudocode20 unchanged, code79 stale; full asset/import/schema/raster/supplied dashboard/earlier serializer+timing remain open. No local runtime/checker/build, no policy or optional TLC changes.
++At e3a454f05b95d95150b732a830ed595b6b989865 regression39123386784 PASS94 inline+94 split (including new93/94), build39123386626 PASS. Diagnostic39123386688 expected provisional mismatch prints canonical code79 sha256:290e675197264aa347c76073cf0b969ecb874ea54e66848b03f249904032dd14; Source42/pseudocode20 unchanged. At corrected-lineage ec3bb702693aa296b99c01a9e0b6150c628e071b cumulative39123444878 PASS from719584378eae1871064c00b809ec7329de70e734, repeat39123447017 PASS94 inline+94 split/188 actual pass lines. Inline6454018 bytes/split ZIP1735566 bytes; git diff e3a454f..ec3bb70 sourcecode/scripts/sourcescript/pseudocode/tests empty, build39123386626 covers identical inputs. Initial failing diagnostic remains failed.
++## Bounded completion audit
++
++Checklist above maps inspected wrapper branches to cases93/94 and actual corrected-SHA results, not just green status. Preparation reads official context, avoids selected-slot toggling or Project/content-type mutation, validates current reference and checks accepted final selection, preserves interaction until finish, propagates exact boundary/render errors. Tests directly observe scalar query/event, state identity, no domain command and late-selection persistence. Finish clears drag state/CSS and returns null without changing Project/selection/runtime. New2 and prior92 pass both distributions. This closes unit32 only; Source42/pseudocode20 unchanged, code79 stale; full asset/import/schema/raster/supplied dashboard/earlier serializer+timing remain open. No local runtime/checker/build, no policy or optional TLC changes.
