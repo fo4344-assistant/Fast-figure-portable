@@ -291,7 +291,8 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
     code_fp = layer_fingerprint(source_code_paths(code))
     if code.get("fingerprint") != code_fp:
         raise VersionError(
-            "source-code fingerprint changed without updating development-versions.json"
+            "source-code fingerprint changed without updating development-versions.json: "
+            f"recorded={code.get('fingerprint')!r}, actual={code_fp!r}"
         )
     if code_status == "current":
         if pseudocode_status != "current":
