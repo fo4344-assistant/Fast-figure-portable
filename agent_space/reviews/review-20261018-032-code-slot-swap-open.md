@@ -15,7 +15,11 @@ Source41 sourcescript/backend/project_efsm.py SLOTS_SWAPPED explicitly requires 
 
 ## Additional direct-coverage audit
 
-Before declaring bounded success, inspection found JSON-backed projectClone invokes legacy slot.toJSON, which flattens known fields and loses content extension fields; exact JSON comparison loses the same extension and is insufficient evidence. Code75 preserves each canonical slot.content explicitly inside the private candidate before swapping; case89 now directly asserts final content.extension at moved payload rather than relying on flattening JSON. This is existing Source complete-local-payload fidelity, not new higher meaning. Wider legacy serializer/query extension handling remains separate/open.
+Before declaring bounded success, inspection found JSON-backed projectClone invokes legacy slot.toJSON, which flattens known fields and loses content extension fields; exact JSON comparison loses the same extension and is insufficient evidence. Code75 preserves each canonical slot.content explicitly inside the private candidate before swapping; case89 now directly asserts final content.extension at moved payload rather than relying on flattening JSON. This is existing Source complete-local-payload fidelity, not new higher meaning. Code76 additionally compares canonical [content,caption] for actual changed IDs;89 now directly covers extension-only swapping with equal ordinary fields and requires both IDs. Wider legacy serializer/query extension handling remains separate/open.
+
+## Final runtime evidence pending corrected-lineage repeat
+
+Code74 at38e3897 cumulative39122736914 PASS/regr39122736347 PASS90+90, but subsequent direct coverage audit found extension gap; those greens are not code76 completion evidence. Code75 regression39122784042 PASS/build39122784004 PASS are historical only. Final code76 at2d24f6a6407627ad320dfd1683279c0f7f062f30 regression39122819377 PASS90 inline+90 split including strengthened89/90, build39122819380 PASS. Diagnostic39122819349 prints actual code76 sha256:80e62260dd83d5223adfd16a650fb0fb7e27a2ad05917af31f8ab3d9f78aa259; correct metadata from runner only. Source41/pseudocode19 canonical unchanged. Dist-only bot737a731 inspected/fast-forwarded; push had earlier rejected safely on another dist-only botcb59fb4, unpublished commit replayed over it without force. Corrected-lineage cumulative gate/repeat pending; whole code stale.
 
 ## Evidence and exclusions
 
