@@ -1,0 +1,37 @@
+diff --git a/agent_space/reviews/review-20261018-030-code-slot-type-open.md b/agent_space/reviews/review-20261018-030-code-slot-type-open.md
+index 2e810ae..c92de97 100644
+--- a/agent_space/reviews/review-20261018-030-code-slot-type-open.md
++++ b/agent_space/reviews/review-20261018-030-code-slot-type-open.md
+@@ -21,4 +21,4 @@ Rejected retaining global pending type/one-arg overload because explicit-target
+ 
+ ## Execution evidence
+ 
+-Pending GitHub Actions default runner diagnostics, regression86+86, build and corrected canonical lineage gate. Provisional prior code fingerprint intentionally retained until runner reports canonical checkout digest; failed diagnostic is not a pass.
++At implementation fce2d07401d6441bf8baa3e5b8392c1ad35bb4e8, build39122086946 PASS. Regression39122086987 prior84 and86 PASS both forms;85 failed `TypeError: Cannot set properties of undefined (setting 'contentType')` in expected-state fixture: observed slots use legacy flat representation after initialize, while expectation directly assumed content. Followup accepts existing flat/canonical representation only for the test expectation, retaining exact full-Project comparison; no production change or weakened contract. Dist-only bot161bdbf inspected/fast-forwarded. Diagnostic39122086893 expected old code fingerprint FAIL, canonical actual code72 sha256:b52f1f21a4d0344f0ed3c677701ad444c9e5c5fd2b3b46c21ab9abd10a67dd28; Source41/pseudocode18 unchanged. Corrected metadata records runner digest, not local hashing. Corrected regression86+86 and cumulative gate pending; failed diagnostics not claimed passed.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 84d9154..e423a11 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3539,7 +3539,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         renderDashboard = () => { renders++; };
+         const before = projectClone(activeProject._state), assetPath = interfaceFSM.state.assetPath;
+         check(api.slots.setContentType(target.id, "image") === null, "slot type leaked result/boolean");
+-        before.slots.find(slot => slot.id === target.id).content.contentType = "image";
++        const expectedTarget = before.slots.find(slot => slot.id === target.id);
++        (expectedTarget.content || expectedTarget).contentType = "image";
+         check(JSON.stringify(activeProject._state) === JSON.stringify(before) && commits === 1 && renders === 1,
+           "slot type mutated payload/geometry/assets or missed one candidate commit/render");
+         check(interfaceFSM.readState().selectedSlotId === first.id && interfaceFSM.state.assetPath === assetPath,
+diff --git a/development-versions.json b/development-versions.json
+index 35011f5..f74ac7a 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,7 +38,7 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:fee34f7c54684d7ab8db73673bd22b35109baca0dde3e336d560bf5b60110e37",
++      "fingerprint": "sha256:b52f1f21a4d0344f0ed3c677701ad444c9e5c5fd2b3b46c21ab9abd10a67dd28",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5",
+         "pseudocode": "sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a",

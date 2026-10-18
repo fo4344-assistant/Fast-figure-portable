@@ -3539,7 +3539,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         renderDashboard = () => { renders++; };
         const before = projectClone(activeProject._state), assetPath = interfaceFSM.state.assetPath;
         check(api.slots.setContentType(target.id, "image") === null, "slot type leaked result/boolean");
-        before.slots.find(slot => slot.id === target.id).content.contentType = "image";
+        const expectedTarget = before.slots.find(slot => slot.id === target.id);
+        (expectedTarget.content || expectedTarget).contentType = "image";
         check(JSON.stringify(activeProject._state) === JSON.stringify(before) && commits === 1 && renders === 1,
           "slot type mutated payload/geometry/assets or missed one candidate commit/render");
         check(interfaceFSM.readState().selectedSlotId === first.id && interfaceFSM.state.assetPath === assetPath,
