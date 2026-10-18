@@ -10586,6 +10586,17 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           if (event === "LIFECYCLE_START" || event === "LIFECYCLE_COMPLETE" ||
               event === "LIFECYCLE_FAILED")
             return this.transitionLifecycle(event, payload);
+          if (event === "SELECT_ASSET") {
+            // Source40: publish the final selection and receipt, not intermediate regions.
+            const input = payload.validatedInput;
+            this.assertWritable("editor", event);
+            this.state = Object.freeze({ ...this.state,
+              assetSelection: input.selectionHint || "none", assetPath: input.reference ?? null,
+              graphObject: "none", graphObjectIndex: null,
+              direction: payload.direction || this.state.direction, revision: this.state.revision + 1,
+            });
+            return this.publish(event);
+          }
           if (event === "SET_DASHBOARD_ZOOM") {
             if (dashboardZoomLocked) return this.state;
             let numeric;
@@ -11624,7 +11635,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         machine.state = Object.freeze({
           ...machine.state,
           assetPath: path ?? null,
-          revision: machine.state.revision + (payload.validatedInput?.event === "SELECT_ASSET" ? 1 : 0),
         });
       }
       function assetSelectionTarget({ payload }) {
