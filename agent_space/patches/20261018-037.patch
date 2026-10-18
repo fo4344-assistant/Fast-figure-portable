@@ -1,0 +1,74 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index c9dbc42..6c6a782 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -99,6 +99,8 @@ At683867d85b10f0de78aed6dd238b1882b3f6ff13 regression39102004808 passed63 inline
+ 
+ Review018 corrects review017's overstatement: Source39 explicitly preserved rejected revision but did not explicitly require accepted same-value SELECT_ASSET publication/revision advancement. Inferring that positive rule from lower publishRuntime would invert authority. Source40 independently defines the Frontend acceptance receipt (accepted event publishes revision+1 exactly once even if same-value; rejected event unchanged) and public pre/final scalar consumption. Three closure criteria in review018. Then pseudocode15 propagates it and code55 replaces state-identity inference with revision comparison, preserving validated scalar intent/no Project writes. Case63 strengthens accepted-repeat assertion to exact +1. Other event semantics unchanged. Canonical runner diagnostics now expose all three digests before unchanged strict validation; fingerprints provisionally retained until actual outputs, then cumulative gate/regression/build required. Whole code55 stale, optional model26 stale, Source40 closed/current. Patch036 records both Source diffs and paired rationale. No whole-goal completion.
+ 
++Source40 implementation a5c9078114d08c929e21ebe7a1495d75352e4dca: regression39102259199 passed63 inline +63 split including accepted-repeat exact revision+1/rejected-repeat unchanged; build39102259195 passed (dist-only447e66d fast-forwarded). Diagnostic39102259182 exposed canonical Source40 `sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2`, pseudocode15 `sha256:b881c18a38ab94e99e12c3e49389ae168a30aca6f17e3f7b07948c5799638d18`, code55 `sha256:0dec2a921658a5425b9d58bcee77dc5837248c1c4d85fe6b7046454c0f9012b8`. Patch037 corrects metadata/derivations only; final cumulative versions/repeat regression pending in review018. Whole code stays stale.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-018-selection-receipt-closure.md b/agent_space/reviews/review-20261018-018-selection-receipt-closure.md
+index 044eacd..c45c0eb 100644
+--- a/agent_space/reviews/review-20261018-018-selection-receipt-closure.md
++++ b/agent_space/reviews/review-20261018-018-selection-receipt-closure.md
+@@ -21,6 +21,16 @@ Source scope: `sourcescript/frontend/interface_fsm.py:FRONTEND_TRANSITION_RULES[
+ - Resource/lifecycle: synchronous selection has no new URL/file resources and introduces no exporting lifecycle.
+ - Provenance/tooling: revision40→15→55; whole code stale and optional model26 stale/TLC not run. Canonical checkout diagnostics print all three actual digests before normal checker validation to avoid serial local hashing or gate weakening. Source patch036 includes both Source diffs, paired rationale, metadata, plan and reviews.
+ 
+-## Verification pending / boundaries
++## Actions implementation evidence / canonical correction
++
++At a5c9078114d08c929e21ebe7a1495d75352e4dca: regression39102259199 succeeded (case63 receipt and all1–62 preserved, inline63 +split63); build39102259195 succeeded, dist-only447e66d inspected/fast-forwarded. Version39102259182 failed on deliberately provisional Source digest but printed all actual canonical checkout values before unchanged validation:
++
++- Source40 sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2
++- Pseudocode15 sha256:b881c18a38ab94e99e12c3e49389ae168a30aca6f17e3f7b07948c5799638d18
++- Code55 sha256:0dec2a921658a5425b9d58bcee77dc5837248c1c4d85fe6b7046454c0f9012b8
++
++Patch037 replaces provisional fingerprints and both code/pseudocode Source derivations from those outputs, leaving revisions/statuses unchanged. Source40 remains closed/current, pseudocode15 current, code55 stale; optional model26 remains stale with its historical derivations intentionally untouched. Final cumulative versions and repeat regression at corrected metadata SHA pending. The Source40 closure reasoning is reviewed above, not inferred merely from green runtime tests.
++
++## Historical preparation / boundaries (superseded digest status above)
+ 
+ Prior implementation683867d85b10f0de78aed6dd238b1882b3f6ff13 regression39102004808 passed63+63/build39102004806 passed, but predates Source40. Diagnostic39102118697 atab90771b6b15634c4ca5c51bf7afd78f0bb3a78b reported pseudocode14 sha256:945792e6825ca41944d55dbb5f8a477187db149f0913bdbd43d0541acadcc037; pseudocode15 comment differs and needs new digest. Source40/code55 digests pending Actions and retained prior digests are explicitly provisional until runner outputs. Require corrected canonical metadata, cumulative version gate against a6d6d2c35e1dde59e13f3ec159a1ede594b3927e, exact-SHA63+63 regression and build. All executions Actions default runner; no local test/build/checker. Wider assets/graph/import/renderer integration remains open. No goal-completion claim.
+diff --git a/development-versions.json b/development-versions.json
+index 286d77c..e597e22 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -12,7 +12,7 @@
+       "revision": 40,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+-      "fingerprint": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
++      "fingerprint": "sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2",
+       "derived_from": null,
+       "closure": "closed",
+       "closure_review": "agent_space/reviews/review-20261018-018-selection-receipt-closure.md"
+@@ -38,10 +38,10 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:c6b15fbe1ee149ea99c33d320b56a93daeb399a25cead083a99924e134d9cf49",
++      "fingerprint": "sha256:0dec2a921658a5425b9d58bcee77dc5837248c1c4d85fe6b7046454c0f9012b8",
+       "derived_from": {
+-        "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+-        "pseudocode": "sha256:945792e6825ca41944d55dbb5f8a477187db149f0913bdbd43d0541acadcc037",
++        "source-script": "sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2",
++        "pseudocode": "sha256:b881c18a38ab94e99e12c3e49389ae168a30aca6f17e3f7b07948c5799638d18",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+       "validation_review": "agent_space/reviews/review-20261018-018-selection-receipt-closure.md"
+@@ -50,9 +50,9 @@
+       "revision": 15,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+-      "fingerprint": "sha256:945792e6825ca41944d55dbb5f8a477187db149f0913bdbd43d0541acadcc037",
++      "fingerprint": "sha256:b881c18a38ab94e99e12c3e49389ae168a30aca6f17e3f7b07948c5799638d18",
+       "derived_from": {
+-        "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f"
++        "source-script": "sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2"
+       },
+       "translation_review": "agent_space/reviews/review-20261018-018-selection-receipt-closure.md"
+     }

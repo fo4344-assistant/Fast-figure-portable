@@ -21,6 +21,16 @@ Source scope: `sourcescript/frontend/interface_fsm.py:FRONTEND_TRANSITION_RULES[
 - Resource/lifecycle: synchronous selection has no new URL/file resources and introduces no exporting lifecycle.
 - Provenance/tooling: revision40→15→55; whole code stale and optional model26 stale/TLC not run. Canonical checkout diagnostics print all three actual digests before normal checker validation to avoid serial local hashing or gate weakening. Source patch036 includes both Source diffs, paired rationale, metadata, plan and reviews.
 
-## Verification pending / boundaries
+## Actions implementation evidence / canonical correction
+
+At a5c9078114d08c929e21ebe7a1495d75352e4dca: regression39102259199 succeeded (case63 receipt and all1–62 preserved, inline63 +split63); build39102259195 succeeded, dist-only447e66d inspected/fast-forwarded. Version39102259182 failed on deliberately provisional Source digest but printed all actual canonical checkout values before unchanged validation:
+
+- Source40 sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2
+- Pseudocode15 sha256:b881c18a38ab94e99e12c3e49389ae168a30aca6f17e3f7b07948c5799638d18
+- Code55 sha256:0dec2a921658a5425b9d58bcee77dc5837248c1c4d85fe6b7046454c0f9012b8
+
+Patch037 replaces provisional fingerprints and both code/pseudocode Source derivations from those outputs, leaving revisions/statuses unchanged. Source40 remains closed/current, pseudocode15 current, code55 stale; optional model26 remains stale with its historical derivations intentionally untouched. Final cumulative versions and repeat regression at corrected metadata SHA pending. The Source40 closure reasoning is reviewed above, not inferred merely from green runtime tests.
+
+## Historical preparation / boundaries (superseded digest status above)
 
 Prior implementation683867d85b10f0de78aed6dd238b1882b3f6ff13 regression39102004808 passed63+63/build39102004806 passed, but predates Source40. Diagnostic39102118697 atab90771b6b15634c4ca5c51bf7afd78f0bb3a78b reported pseudocode14 sha256:945792e6825ca41944d55dbb5f8a477187db149f0913bdbd43d0541acadcc037; pseudocode15 comment differs and needs new digest. Source40/code55 digests pending Actions and retained prior digests are explicitly provisional until runner outputs. Require corrected canonical metadata, cumulative version gate against a6d6d2c35e1dde59e13f3ec159a1ede594b3927e, exact-SHA63+63 regression and build. All executions Actions default runner; no local test/build/checker. Wider assets/graph/import/renderer integration remains open. No goal-completion claim.
