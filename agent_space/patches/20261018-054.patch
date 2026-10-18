@@ -1,0 +1,25 @@
+diff --git a/agent_space/reviews/review-20261018-023-code-graph-add-open.md b/agent_space/reviews/review-20261018-023-code-graph-add-open.md
+index a8ff635..1bffdf2 100644
+--- a/agent_space/reviews/review-20261018-023-code-graph-add-open.md
++++ b/agent_space/reviews/review-20261018-023-code-graph-add-open.md
+@@ -25,4 +25,6 @@ Legacy regression24 previously depended on add's incidental CSV-selection mutati
+ 
+ Rejected wrapper-calculated arrays/live ensureGraphObjects, double commit for first object, hidden CSV-selection side effects and changing Source to authorize them. A dedicated first-object expansion keeps the unrelated legacy CSV-connect/import branch unchanged rather than altering its broader replacement semantics without translating that ownership unit. Existing shared validator remains incomplete for full style/global/axis/imported shapes; invoking it is not whole-contract proof. Legacy import/connect/setEditable/layout reads and candidates, asset commands, canonical packages/settings, raster snapshots and supplied dashboard/API integration remain open. Whole code stale; suite does not prove completion.
+ 
+-No local app/test/build/checker execution. Fingerprint intentionally remains previous code61 digest until canonical runner diagnostic; an initial strict gate failure is not a pass and must be corrected and rerun cumulatively.
++## Initial runner evidence
++
++At implementation074cfdc9d9690872b708a9d906175b9088da5657, default ubuntu-latest regression39104304561 PASS73 inline+73 split, including legacy24/25 and new72/73; build39104304535 PASS. Distribution-only bot88510ce7184a996951b06b12011f6aa5dda6bba2 inspected and fast-forwarded. Artifacts inline6361348 bytes/split ZIP1734444 bytes. Version39104304592 intentionally failed the provisional recorded code61 digest; canonical Source41 and pseudocode16 unchanged, actual code62 `sha256:1ca96148d1f4cb2a61807728b6bedd783428a96282947be7de84c3527fe6f62f`. Patch054 records only this digest and evidence, no runtime/revision/status changes. Cumulative version gate from f050d9209aaab2ea2787d32834c8cfa8e6fd883e and repeat exact-SHA regression pending. Table above is preparation status, superseded for runtime tests by these actual results; lineage still pending. No local app/test/build/checker execution.
+diff --git a/development-versions.json b/development-versions.json
+index 3df616a..0710f20 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,7 +38,7 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:0dcd94e53c72794377a9bf62d709a3304d6d4535490483ceb484427b2fd7491d",
++      "fingerprint": "sha256:1ca96148d1f4cb2a61807728b6bedd783428a96282947be7de84c3527fe6f62f",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5",
+         "pseudocode": "sha256:e25d2057a10e358127598141d3d94de2f5700108da14809a0ef5e92e11be71e9",
