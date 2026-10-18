@@ -1,0 +1,48 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index cdefb79..378e9aa 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -329,7 +329,7 @@ Unit54 corrected fixturefeb37518a1b91504e4be7043280fe0b1bba84cb3: push3916858959
+ 
+ ### Fifty-fifth bounded unit — FFSX stored-header translation omission
+ 
+-Baselinefeb37518a1b91504e4be7043280fe0b1bba84cb3. Source45 CSV_HEADER_RULE applies stored missing-only default and finite/truncated/clamped numeric normalization without format exception. PlusCal24 ffsxReadSlot restored rows/bytes but omitted it, unlike Project normalization: correct translation first (PlusCal25) in detached parsed local asset before chart validation, then direct runtime106 translation. New138 real ZIP/read-only/public-slot import covers eight absent/null/empty/zero/fraction/negative/high/invalid cases with identical bytes/rows. Pair015/review009 retain defect rationale, Source closure unchanged and optional model stale. Exact-SHA138 inline+split/repeat/build/version/fidelity pending. Full schema/resource/initializer/raster/dashboard/timing and exhaustive audit remain open; code106 stale.
++Baselinefeb37518a1b91504e4be7043280fe0b1bba84cb3. Source45 CSV_HEADER_RULE applies stored missing-only default and finite/truncated/clamped numeric normalization without format exception. PlusCal24 ffsxReadSlot restored rows/bytes but omitted it, unlike Project normalization: correct translation first (PlusCal25) in detached parsed local asset before chart validation, then direct runtime106 translation. New138 real ZIP/read-only/public-slot import covers eight absent/null/empty/zero/fraction/negative/high/invalid cases with identical bytes/rows. Pair015/review009 retain defect rationale, Source closure unchanged and optional model stale. Initial a36b81debc9dea8611cb9b1d1d5b976aa78537b3 regression39168836927/repeat39168837470 PASS138 inline+138 split, build39168836929 PASS/dist-only45029e3c32fd64d92bae5e8992c520853ee4ff68. Version39168836926/cumulative39168839537/fidelity39168841256 FAILED on incorrectly recorded PlusCal hash (glob omitted top-level system.pcal); pair016 records runner canonical44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6 without semantic/revision/checker changes. Corrected-SHA all gates pending. Full schema/resource/initializer/raster/dashboard/timing and exhaustive audit remain open; code106 stale.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261019-009-ffsx-header-translation-open.md b/agent_space/reviews/review-20261019-009-ffsx-header-translation-open.md
+index 1b43581..bb2d5e7 100644
+--- a/agent_space/reviews/review-20261019-009-ffsx-header-translation-open.md
++++ b/agent_space/reviews/review-20261019-009-ffsx-header-translation-open.md
+@@ -12,7 +12,7 @@ sourcecode/fast-figure.js ffsxReadSlotBytes uses existing headerLineCount and ow
+ 
+ ## Lineage, publication and pending evidence
+ 
+-PlusCal25 fingerprintsha256:1efae790fbe2825d6d84ef10abfa5fe1789a219d6d525d07c5f05a15ac3f73bd derives unchanged Source45 e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7. Code106 fingerprintsha256:d5d5235fa7622a6258ac859b83d52bce310871321e19e50b941124ff4363f1c5 derives both, remains stale. Optional verification-model26 remains stale/TLC pending and not gate. Pair015 includes actual pseudocode/runtime/tests/lineage/review/Plan023 diff, excludes own pair. Coherent upper+lower+lineage change uses bounded gh atomic tree/commit because immediate-parent version gates previously reject sequential Contents code/revision writes; check current expected HEAD/old blobs/new paths and nonforce only. Exact-SHA138 inline+split/repeat/build/canonical+cumulative/fidelity pending; inspect actual logs, no proxy completion.
++PlusCal25 canonical fingerprintsha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6 derives unchanged Source45 e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7. Code106 fingerprintsha256:d5d5235fa7622a6258ac859b83d52bce310871321e19e50b941124ff4363f1c5 derives both, remains stale. Optional verification-model26 remains stale/TLC pending and not gate. Pair015 includes actual pseudocode/runtime/tests/lineage/review/Plan023 diff, excludes own pair. Coherent upper+lower+lineage change uses bounded gh atomic tree/commit because immediate-parent version gates previously reject sequential Contents code/revision writes; check current expected HEAD/old blobs/new paths and nonforce only. Initial execution a36b81debc9dea8611cb9b1d1d5b976aa78537b3: regression39168836927 and repeat39168837470 PASS138 inline+138 split each (actual137/138 PASS lines inspected); build39168836929 PASS generated dist-only45029e3c32fd64d92bae5e8992c520853ee4ff68. Canonical39168836926/cumulative39168839537/fidelity39168841256 FAIL with exact `recorded='sha256:1efae790fbe2825d6d84ef10abfa5fe1789a219d6d525d07c5f05a15ac3f73bd', actual='sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6'`. Local glob-based record omitted top-level pseudocode/system.pcal; canonical runner includes every recursive .pcal. Pair016 corrects manifest fingerprint and code derived_from to runner value without changing revision/semantics/tests or weakening checker. Exact corrected-SHA full gates pending; no proxy completion.
+ 
+ ## Exclusions and audit state
+ 
+diff --git a/development-versions.json b/development-versions.json
+index 5870f40..a19a0c2 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -41,7 +41,7 @@
+       "fingerprint": "sha256:d5d5235fa7622a6258ac859b83d52bce310871321e19e50b941124ff4363f1c5",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+-        "pseudocode": "sha256:1efae790fbe2825d6d84ef10abfa5fe1789a219d6d525d07c5f05a15ac3f73bd",
++        "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+       "validation_review": "agent_space/reviews/review-20261019-009-ffsx-header-translation-open.md"
+@@ -50,7 +50,7 @@
+       "revision": 25,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+-      "fingerprint": "sha256:1efae790fbe2825d6d84ef10abfa5fe1789a219d6d525d07c5f05a15ac3f73bd",
++      "fingerprint": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7"
+       },
