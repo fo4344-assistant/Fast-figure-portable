@@ -1,0 +1,79 @@
+diff --git a/agent_space/reviews/review-20261018-047-code-package-import-open.md b/agent_space/reviews/review-20261018-047-code-package-import-open.md
+index 0b2dc10..c227a15 100644
+--- a/agent_space/reviews/review-20261018-047-code-package-import-open.md
++++ b/agent_space/reviews/review-20261018-047-code-package-import-open.md
+@@ -18,6 +18,12 @@ Code96 receives only explicit slot id plus detached raw file bytes; existing syn
+ 
+ At e4560664ed9a11e255df08561596ab1815226610, build39154524616/canonical39154524638/cumulative39154532882/fidelity39154534810 PASS; code96/pseudocode24 canonical digests match staged records. Build generated dist-only0ef09198270f65342359f6b77966bb3d62b1d0d5. Regression39154524628 prior121 plus124 PASS both forms;122 FAIL `TypeError: api.assets.createCsv is not a function`,123 FAIL `Error: package failed whole current-source retry`. Correct test122 to existing createProjectCsv and use the official Frontend readState selectedSlotId (the internal state uses a separate Frontend-owned scalar); no new public method invented. Correct test123's attempt counter to the explicit candidate validation options.requireSlots boundary: initialize also validates, including the fixture's own injected replacement and the final commit, so counting every validator invocation was not an attempt count. Preserve exact two candidate attempts/one commit/id/current metadata assertions, no runtime or upper change. Exact corrected-SHA124+124/repeat/build/gates pending. Do not call first regression passed.
+ 
++## Second execution and real query-hook correction
++
++At9fd43753a9a79221ae3d567ef598a3ca9c7aaf78 regression39154691872 inline122/124 PASS,123 FAIL `Error: late package success-read error rolled back commit`, split harness incomplete `RuntimeError: Regression did not finish on /tmp/fast-figure-regression-onkao7d1/split-package/Fast-figure/Fast-figure.html`; DBus stderr does not establish root cause and that run is not passed. Independent39154703619 completed both forms: prior122+124 PASS,123 same late assertion failure. Version39154691742/cumulative39154705523/build39154707434/fidelity39154709290 PASS, not semantic completion.
++
++Inspection found appFSM is Object.freeze and its query property is an arrow delegating to readBackendProjection. Assigning to appFSM.query was silently ineffective, so the late failure was never injected; that composite message did not prove rollback. Correct123 to hook the actual readBackendProjection function, preserving zero-success-read on noncommit and exact original late error/committed-state assertions. The same audit found old palette case44 used this ineffective frozen-facade spy; correct its no-query renderer assertion to the actual Backend projection boundary too. Earlier green44 did not prove that spy assertion, although its other supplied-palette/state assertions ran; do not treat prior green as stronger proof. No runtime/Source/pseudocode/digest changes. Corrected exact-SHA124+124/repeat/build/gates pending.
++
+ ## Lineage, pending evidence and limits
+ 
+ Source45 unchanged e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7; pseudocode24 fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4; code96 52448be81eafaa1f6d06551fc8d7ca36cade75f6e25b29a3f6a597ca6157a18a remains stale. Digests calculated from staged Git path/blob identities, not local checker execution; canonical Actions confirmation pending. Exact-SHA124 inline+124 split/repeat/build/cumulative development-layer/fidelity PENDING. Static fidelity gate is not semantic proof. Whole common commit/other mutation owners, schema/serializer, raster/current-snapshot resources, supplied dashboard and timing/lifecycle requirements still open. No whole-goal closure from bounded tests or manifest. No explicit quota/auth/service blocker observed.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index d27b2c5..dc29c21 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1459,12 +1459,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         "invalid/missing palette fields retained prior values instead of defaults");
+       const before = JSON.stringify(activeProject._state), frontend = appFSM.state,
+         rootStyle = document.documentElement.style;
+-      const originalQuery = appFSM.query;
++      const originalQuery = readBackendProjection;
+       let rendered;
+       try {
+-        appFSM.query = () => { throw Error("renderer queried authority"); };
++        readBackendProjection = () => { throw Error("renderer queried authority"); };
+         rendered = applyUiPalette({ ...defaults, uiColor: "#112233" }, false);
+-      } finally { appFSM.query = originalQuery; }
++      } finally { readBackendProjection = originalQuery; }
+       check(Object.isFrozen(rendered) && rootStyle.getPropertyValue("--ui-color") === "#112233" &&
+         JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
+         "renderer did not consume only supplied palette or wrote authority");
+@@ -5517,7 +5517,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+     await run(123, "Package validation, authority retry, noncommit and late read preserve transaction boundaries", async () => {
+       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+         initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
+-        query = appFSM.query, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++        query = readBackendProjection, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+       try {
+         initialize.call(activeProject, createProjectState());
+         interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+@@ -5540,11 +5540,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         try { dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId: -1, file: copied }); } catch (error) { caught = error; }
+         check(caught && commits === 0 && activeProject._state === initial, "missing slot was not rejected without mutation");
+         let queries = 0;
+-        appFSM.query = function (kind, request) { queries++; return query.call(this, kind, request); };
++        readBackendProjection = function (kind, request) { queries++; return query(kind, request); };
+         projectEFSM.send = event => ({ committed: false, changed: {}, selectionHints: {}, event });
+         const rejected = await api.graphs.importFile(file, target.id);
+         check(!rejected.committed && commits === 0 && queries === 0, "noncommit performed success query");
+-        projectEFSM.send = send; appFSM.query = query;
++        projectEFSM.send = send; readBackendProjection = query;
+         let attempts = 0, expectedChartId;
+         validateProjectObjectState = function (candidate, options) {
+           const result = validate(candidate, options);
+@@ -5560,15 +5560,15 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           activeProject.meta.projectName === "newer-package-source", "package failed whole current-source retry");
+         validateProjectObjectState = validate;
+         const late = Error("package-late-read"); caught = null;
+-        appFSM.query = function (kind, request) {
++        readBackendProjection = function (kind, request) {
+           if (kind === "project-api" && request.operation === "graphs.readData") throw late;
+-          return query.call(this, kind, request);
++          return query(kind, request);
+         };
+         try { await api.graphs.importFile(file, target.id); } catch (error) { caught = error; }
+         check(caught === late && commits === 2 && slotAt(target.id).chart !== chart.id,
+           "late package success-read error rolled back commit");
+       } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
+-        appFSM.query = query; renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        readBackendProjection = query; renderDashboard = render; status = report; interfaceFSM.notify = notify;
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 

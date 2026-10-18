@@ -1459,12 +1459,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "invalid/missing palette fields retained prior values instead of defaults");
       const before = JSON.stringify(activeProject._state), frontend = appFSM.state,
         rootStyle = document.documentElement.style;
-      const originalQuery = appFSM.query;
+      const originalQuery = readBackendProjection;
       let rendered;
       try {
-        appFSM.query = () => { throw Error("renderer queried authority"); };
+        readBackendProjection = () => { throw Error("renderer queried authority"); };
         rendered = applyUiPalette({ ...defaults, uiColor: "#112233" }, false);
-      } finally { appFSM.query = originalQuery; }
+      } finally { readBackendProjection = originalQuery; }
       check(Object.isFrozen(rendered) && rootStyle.getPropertyValue("--ui-color") === "#112233" &&
         JSON.stringify(activeProject._state) === before && appFSM.state === frontend,
         "renderer did not consume only supplied palette or wrote authority");
@@ -5517,7 +5517,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     await run(123, "Package validation, authority retry, noncommit and late read preserve transaction boundaries", async () => {
       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
         initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
-        query = appFSM.query, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+        query = readBackendProjection, render = renderDashboard, report = status, notify = interfaceFSM.notify;
       try {
         initialize.call(activeProject, createProjectState());
         interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
@@ -5540,11 +5540,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         try { dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId: -1, file: copied }); } catch (error) { caught = error; }
         check(caught && commits === 0 && activeProject._state === initial, "missing slot was not rejected without mutation");
         let queries = 0;
-        appFSM.query = function (kind, request) { queries++; return query.call(this, kind, request); };
+        readBackendProjection = function (kind, request) { queries++; return query(kind, request); };
         projectEFSM.send = event => ({ committed: false, changed: {}, selectionHints: {}, event });
         const rejected = await api.graphs.importFile(file, target.id);
         check(!rejected.committed && commits === 0 && queries === 0, "noncommit performed success query");
-        projectEFSM.send = send; appFSM.query = query;
+        projectEFSM.send = send; readBackendProjection = query;
         let attempts = 0, expectedChartId;
         validateProjectObjectState = function (candidate, options) {
           const result = validate(candidate, options);
@@ -5560,15 +5560,15 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           activeProject.meta.projectName === "newer-package-source", "package failed whole current-source retry");
         validateProjectObjectState = validate;
         const late = Error("package-late-read"); caught = null;
-        appFSM.query = function (kind, request) {
+        readBackendProjection = function (kind, request) {
           if (kind === "project-api" && request.operation === "graphs.readData") throw late;
-          return query.call(this, kind, request);
+          return query(kind, request);
         };
         try { await api.graphs.importFile(file, target.id); } catch (error) { caught = error; }
         check(caught === late && commits === 2 && slotAt(target.id).chart !== chart.id,
           "late package success-read error rolled back commit");
       } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
-        appFSM.query = query; renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        readBackendProjection = query; renderDashboard = render; status = report; interfaceFSM.notify = notify;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
