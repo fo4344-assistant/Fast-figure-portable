@@ -4130,7 +4130,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     await run(97, "Image editor queries own copied bytes without resources and settings change only explicit slot", async () => {
       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
         initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
-        sync = syncSlotImageElement, notify = appFSM.notify, create = URL.createObjectURL, revoke = URL.revokeObjectURL;
+        sync = syncSlotImageElement, notify = interfaceFSM.notify, create = URL.createObjectURL, revoke = URL.revokeObjectURL;
       try {
         api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
         select(slotAt(a.id)); api.slots.setContentType(a.id, "image"); api.images.insertEmpty();
@@ -4168,7 +4168,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           return last = send.call(this, event, payload);
         };
         syncSlotImageElement = projection => { effects++; check(projection.slotId === a.id && Object.isFrozen(projection.bytes), "image renderer did not receive fresh target copy"); };
-        appFSM.notify = (...args) => { if (args[0] === "images") notices++; };
+        interfaceFSM.notify = function (...args) { if (args[0] === "images") notices++; return notify.apply(this, args); };
         const result = applyImageSettingsFromValues(a.id, { fit: "manual", scale: 5000, x: -500, y: 500 });
         const expected = JSON.parse(before), target = expected.slots.find(slot => slot.id === a.id);
         (target.content || target).imageSettings = { fit: "manual", scale: 1000, x: -100, y: 200 };
@@ -4176,16 +4176,16 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           JSON.stringify(activeProject._state) === JSON.stringify(expected) && interfaceFSM.readState().selectedSlotId === b.id &&
           Object.isFrozen(last.changed) && last.changed.slotIds.join(",") === String(a.id) &&
           !last.changed.chartIds.length && !last.changed.csvIds.length && !last.changed.imageIds.length && !last.changed.assets.length,
-          "image settings changed shared asset/other slot/selection or wrong actual facts/effects");
+          `image settings changed shared asset/other slot/selection or wrong actual facts/effects: ${JSON.stringify({commits,effects,notices,changed:last.changed,domainEqual:JSON.stringify(activeProject._state) === JSON.stringify(expected)})}`);
       } finally { URL.createObjectURL = create; URL.revokeObjectURL = revoke; activeProject.initialize = initialize;
-        projectEFSM.send = send; readBackendProjection = query; syncSlotImageElement = sync; appFSM.notify = notify;
+        projectEFSM.send = send; readBackendProjection = query; syncSlotImageElement = sync; interfaceFSM.notify = notify;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
     await run(98, "Image settings retry replaced authority and gate failures, noncommit and postcommit effects", async () => {
       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
         initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
-        validate = validateProjectObjectState, sync = syncSlotImageElement, notify = appFSM.notify,
+        validate = validateProjectObjectState, sync = syncSlotImageElement, notify = interfaceFSM.notify,
         reconcile = interfaceFSM.reconcileProjectResult, failure = Error("image settings boundary");
       try {
         api.layout.setGrid(2, 2); const id = activeProject.slots.find(slot => !slot.hidden).id;
@@ -4193,7 +4193,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         applyImageSettingsFromValues(id, { fit: "manual", scale: 100, x: 10, y: 20 });
         let commits = 0, effects = 0, notices = 0, reconciliations = 0, reads = 0;
         activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
-        syncSlotImageElement = () => { effects++; }; appFSM.notify = (...args) => { if (args[0] === "images") notices++; };
+        syncSlotImageElement = () => { effects++; };
+        interfaceFSM.notify = function (...args) { if (args[0] === "images") notices++; return notify.apply(this, args); };
         interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
         readBackendProjection = function (kind, request) { if (kind === "project-api" && request.operation === "images.readEditor") reads++; return query(kind, request); };
         const source = activeProject._state, runtime = interfaceFSM.state;
@@ -4220,7 +4221,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         const result = applyImageSettingsFromValues(id, values);
         check(attempts === 2 && commits === 1 && effects === 1 && notices === 1 && reconciliations === 1 &&
           result.settings.x === 0 && result.settings.y === 77 && activeProject.projectName === "image-newer-getter",
-          "image stale getter attempt committed or replaced newer current settings");
+          `image stale getter attempt committed or replaced newer current settings: ${JSON.stringify({attempts,commits,effects,notices,reconciliations,settings:result.settings})}`);
         let validations = 0;
         validateProjectObjectState = function (candidate, options) {
           const valid = validate(candidate, options);
@@ -4246,7 +4247,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(caught === failure && slotAt(id).imageSettings.x === 43 && commits === 4,
           "image postcommit renderer failure swallowed/rolled back");
       } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
-        validateProjectObjectState = validate; syncSlotImageElement = sync; appFSM.notify = notify;
+        validateProjectObjectState = validate; syncSlotImageElement = sync; interfaceFSM.notify = notify;
         interfaceFSM.reconcileProjectResult = reconcile;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
