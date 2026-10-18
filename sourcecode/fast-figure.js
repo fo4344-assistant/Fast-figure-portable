@@ -929,11 +929,22 @@
       }
       function applySlotCaptionsInsertedAction({ machine, payload }) {
         machine.assertWritable("captions", "SLOT_CAPTIONS_INSERTED");
-        let candidate = projectClone(activeProject._state),
-          text = insertSlotCaptions(candidate, payload.slotIds ?? null);
-        if (text === candidate.annotations.captions.text) return false;
-        candidate.annotations.captions.text = text;
-        activeProject.initialize(validateProjectObjectState(candidate, { requireSlots: true }));
+        while (true) {
+          const source = activeProject._state, candidate = projectClone(source);
+          normalizeSlotContents(candidate.slots);
+          for (const item of candidate.slots) {
+            const original = source.slots.find(before => before.id === item.id);
+            if (original?.content) item.content = projectClone(original.content);
+          }
+          const text = insertSlotCaptions(candidate, payload.slotIds ?? null);
+          if (text === candidate.annotations.captions.text) return false;
+          candidate.annotations.captions.text = text;
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          payload.changed = { slotIds: [], chartIds: [], csvIds: [], imageIds: [], assets: [] };
+          return;
+        }
       }
       function applyDataObjectCreatedAction({ machine, payload }) {
         machine.assertWritable("data","DATA_OBJECT_CREATED");

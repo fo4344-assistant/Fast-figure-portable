@@ -1,0 +1,301 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 78616b1..36e8c7e 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -223,6 +223,10 @@ Baselinecd989f8a9ce43b41244f6e7cd98f237968bb65c0. Existing Source42/pseudocode20
+ 
+ Source43 explicitly closes nullish-to-empty/otherwise text conversion, global empty text versus slot none, strict visible slot owner, whitespace/Unicode preservation, original errors/current-source retry in CAPTION_TEXT_RULE; previous closure omitted input/empty distinction. Source44 additionally preserves immediate caption display via one official copied read then supplied-state renderer; no implicit Backend renderer reads. Pseudocode22 applies conversion/none and application query→render ordering; code87 current candidate/validate/retry/onecommit retains canonical content and actual changed slots. Cases103/104 cover owners/copies/extensions/empty/errors/retry/noncommit/postcommit failures. At corrected bb5ddb1a3c399be915a07aa38799186a96fc3dce cumulative39126007499 PASS baselinee69f0f95efe745cffea1eb4ec558abe985b3b1cd, repeat39126009724 PASS104 inline+104 split/208 records, corrected-SHA build39126011914 PASS. Canonical44 b4bfe2f180d3de14648ba30ad1578c39b54c0d32f0b0c45d3c8014b9e4c03ece/22 12d894511732795e640d6ffc68e0a5615ff27e87c4eda1a533add2aa09ffa6be/87 f6ff773c9c448534b15ae7105b000b0501e1e3885c48cf96716cfbe7eaa771a5; review039/patches113–116 preserve initial failure, Source-led correction and bounded audit. Whole code stale/open, legacy aggregate presentation/full supplied dashboard parity explicitly not closed.
+ 
++## Thirty-eighth bounded unit — slot captions appended into global caption
++
++Baseline484fd48112486229090a33863bb451cfbbf7f28a. Source45 closes insertion success presentation: existing exact Backend grouping/append contract unchanged, one official copied global read→existing supplied renderer→same result; noncommit no success work/late errors no rollback. Pseudocode23 translates explicit ordering, code88 current-source candidate/wholevalidate/reference retry/onecommit, preserves canonical slot extensions and actual changed facts. Cases105/106 cover exact grouping/order/duplicate target/no-target, unrelated state/selection, errors/noncommit/newer source during calculation+validation/late query+render. Review040/patch117; actual Actions106+106/build/canonical gates pending, whole code stale/open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index ad0a3dc..47ce6a7 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4630,6 +4630,130 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(105, "Caption insertion retains exact grouping and every nonowned field with supplied success view", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
++        sync = syncDashboardCaption, render = renderDashboard, notify = interfaceFSM.notify;
++      try {
++        api.layout.setGrid(2, 2); const fixture = projectClone(activeProject._state);
++        fixture.annotations.labels.settings.format = "lower-alpha";
++        const ids = orderedSlotLabels(fixture).map(item => item.slotId);
++        fixture.annotations.captions.text = "prefix\n "; fixture.annotations.captions.afterText = "unchanged tail";
++        [" A", "A", "", "B"].forEach((text, i) => { fixture.slots.find(slot => slot.id === ids[i]).caption = text || null; });
++        initialize.call(activeProject, fixture);
++        activeProject.slots.forEach(slot => { slot.content.insertionExtension = { owner: slot.id }; });
++        const before = projectClone(activeProject._state), selection = () => JSON.stringify({ slotId: selectedSlotId,
++          path: interfaceFSM.state.assetPath, kind: interfaceFSM.state.assetSelection, index: interfaceFSM.state.graphObjectIndex }), priorSelection = selection();
++        let commits = 0, reads = 0, paints = 0, last, projected;
++        renderDashboard = () => {}; interfaceFSM.notify = () => {};
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        projectEFSM.send = function (event, payload) {
++          check(event === "SLOT_CAPTIONS_INSERTED" && Object.keys(payload).join(",") === "slotIds", "insertion Application calculated caption/model");
++          return last = send.call(this, event, payload);
++        };
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "captions.readGlobal") reads++;
++          return query(kind, request);
++        };
++        syncDashboardCaption = state => { projected = state; paints++; check(Object.isFrozen(state.settings), "insertion renderer received mutable read"); };
++        const result = api.captions.insertSlotCaptions([ids[2], ids[1], ids[1]]), expected = projectClone(before);
++        expected.annotations.captions.text = "prefix\n (b-c) A";
++        check(JSON.stringify(activeProject._state) === JSON.stringify(expected) && Object.isFrozen(result) &&
++          result === projected && result.text === expected.annotations.captions.text && commits === 1 && reads === 1 && paints === 1 &&
++          Object.isFrozen(last.changed) && ["slotIds","chartIds","csvIds","imageIds","assets"].every(key => !last.changed[key].length) &&
++          activeProject.slots.every(slot => slot.content.insertionExtension?.owner === slot.id) && selection() === priorSelection,
++          "insertion changed grouping/other owner/extension/selection or wrong work/facts");
++        const again = api.captions.insertSlotCaptions([ids[1], ids[2]]);
++        check(again !== result && again.text === "prefix\n (b-c) A (b-c) A" && result.text === "prefix\n (b-c) A" &&
++          commits === 2 && reads === 2 && paints === 2 && projected === again, "insertion deduplicated history or aliased old read");
++        const allBefore = projectClone(activeProject._state), all = api.captions.insertSlotCaptions();
++        check(all.text === insertSlotCaptions(allBefore) && commits === 3 && reads === 3 && paints === 3,
++          "None insertion did not calculate all labels in Backend order");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
++        syncDashboardCaption = sync; renderDashboard = render; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(106, "Caption insertion recalculates newer authority and gates all failure/noncommit effects", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
++        validate = validateProjectObjectState, calculate = insertSlotCaptions, sync = syncDashboardCaption,
++        render = renderDashboard, notify = interfaceFSM.notify, reconcile = interfaceFSM.reconcileProjectResult,
++        failure = Error("insertion boundary");
++      try {
++        api.layout.setGrid(2, 2); const ids = orderedSlotLabels(activeProject._state).map(item => item.slotId), id = ids[0];
++        const fixture = projectClone(activeProject._state); fixture.annotations.labels.settings.format = "lower-alpha"; fixture.annotations.captions.text = "old global";
++        fixture.slots.find(slot => slot.id === id).caption = "old local"; fixture.slots.find(slot => slot.id === ids[1]).hidden = true;
++        initialize.call(activeProject, fixture);
++        const source = activeProject._state, runtime = interfaceFSM.state;
++        let commits = 0, reads = 0, effects = 0, reconciliations = 0, caught;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = syncDashboardCaption = () => { effects++; }; interfaceFSM.notify = () => {};
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "captions.readGlobal") reads++;
++          return query(kind, request);
++        };
++        check(api.captions.insertSlotCaptions([]) === false && activeProject._state === source && interfaceFSM.state === runtime &&
++          !commits && !reads && !effects && !reconciliations, "empty insertion committed or did success work");
++        for (const target of [[-1], [String(id)], [ids[1]], "not ids"]) {
++          caught = null; try { api.captions.insertSlotCaptions(target); } catch (error) { caught = error; }
++          check(caught && activeProject._state === source && !commits && !reads && !effects && !reconciliations,
++            "invalid/hidden insertion target changed state");
++        }
++        insertSlotCaptions = () => { throw failure; }; caught = null;
++        try { api.captions.insertSlotCaptions([id]); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && !commits && !reads && !effects, "insertion calculation error swallowed/committed");
++        insertSlotCaptions = calculate; validateProjectObjectState = () => { throw failure; }; caught = null;
++        try { api.captions.insertSlotCaptions([id]); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && !commits && !reads && !effects && !reconciliations,
++          "insertion validation error committed or did success work");
++        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
++        check(api.captions.insertSlotCaptions([id]) === false && !commits && !reads && !effects && !reconciliations,
++          "insertion noncommit queried/rendered/reconciled"); projectEFSM.send = send;
++        let attempts = 0;
++        insertSlotCaptions = function (candidate, targets) {
++          if (++attempts === 1) {
++            const newer = projectClone(activeProject._state); newer.annotations.captions.text = "new global";
++            newer.slots.find(slot => slot.id === id).caption = "new local"; newer.meta.projectName = "newer insertion";
++            initialize.call(activeProject, newer);
++          }
++          return calculate(candidate, targets);
++        };
++        const latest = api.captions.insertSlotCaptions([id]);
++        check(attempts === 2 && commits === 1 && reads === 1 && effects === 1 && reconciliations === 1 &&
++          latest.text === "new global (a) new local" && activeProject.meta.projectName === "newer insertion",
++          "insertion committed stale grouping/global prefix instead of retrying"); insertSlotCaptions = calculate;
++        let validations = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const answer = validate(candidate, options);
++          if (options?.requireSlots && ++validations === 1) {
++            const newer = projectClone(activeProject._state); newer.annotations.captions.text = "validation prefix";
++            newer.slots.find(slot => slot.id === id).caption = "validation local"; initialize.call(activeProject, newer);
++          }
++          return answer;
++        };
++        check(api.captions.insertSlotCaptions([id]).text === "validation prefix (a) validation local" && validations === 2 &&
++          commits === 2 && reads === 2 && effects === 2 && reconciliations === 2, "insertion validation retry lost newer captions");
++        validateProjectObjectState = validate;
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "captions.readGlobal") throw failure;
++          return query(kind, request);
++        }; caught = null;
++        const beforeLate = activeProject.annotations.captions.text;
++        try { api.captions.insertSlotCaptions([id]); } catch (error) { caught = error; }
++        check(caught === failure && commits === 3 && effects === 2 && activeProject.annotations.captions.text === beforeLate + " (a) validation local",
++          "insertion late query swallowed/rolled back"); readBackendProjection = query;
++        syncDashboardCaption = () => { throw failure; }; caught = null;
++        try { api.captions.insertSlotCaptions([id]); } catch (error) { caught = error; }
++        check(caught === failure && commits === 4 && activeProject.annotations.captions.text.endsWith(" (a) validation local (a) validation local"),
++          "insertion late renderer swallowed/rolled back");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
++        validateProjectObjectState = validate; insertSlotCaptions = calculate; syncDashboardCaption = sync;
++        renderDashboard = render; interfaceFSM.notify = notify; interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 459ba5f..f3166ba 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,13 +9,13 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 44,
++      "revision": 45,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+       "fingerprint": "sha256:b4bfe2f180d3de14648ba30ad1578c39b54c0d32f0b0c45d3c8014b9e4c03ece",
+       "derived_from": null,
+       "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261018-039-caption-text-closure.md"
++      "closure_review": "agent_space/reviews/review-20261018-040-caption-insertion-closure.md"
+     }, 
+     "verification-model": {
+       "revision": 26, 
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 87,
++      "revision": 88,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,17 +44,17 @@
+         "pseudocode": "sha256:12d894511732795e640d6ffc68e0a5615ff27e87c4eda1a533add2aa09ffa6be",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-039-caption-text-closure.md"
++      "validation_review": "agent_space/reviews/review-20261018-040-caption-insertion-closure.md"
+     }, 
+     "pseudocode": {
+-      "revision": 22,
++      "revision": 23,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+       "fingerprint": "sha256:12d894511732795e640d6ffc68e0a5615ff27e87c4eda1a533add2aa09ffa6be",
+       "derived_from": {
+         "source-script": "sha256:b4bfe2f180d3de14648ba30ad1578c39b54c0d32f0b0c45d3c8014b9e4c03ece"
+       },
+-      "translation_review": "agent_space/reviews/review-20261018-039-caption-text-closure.md"
++      "translation_review": "agent_space/reviews/review-20261018-040-caption-insertion-closure.md"
+     }
+   }
+ }
+diff --git a/pseudocode/application/public_api/layout_annotations.pcal b/pseudocode/application/public_api/layout_annotations.pcal
+index 09a4cb5..02377db 100644
+--- a/pseudocode/application/public_api/layout_annotations.pcal
++++ b/pseudocode/application/public_api/layout_annotations.pcal
+@@ -260,12 +260,14 @@ ExplicitSlotOwner:
+ end procedure;
+ 
+ procedure insertSlotCaptionsIntoGlobalCaption(slotIds)
+-variables tuple = NoValue;
++variables tuple = NoValue, state = NoValue;
+ begin
+ NoneAllEmptyListNoTargetsBackendCalculatesExactString:
+   call dispatchProjectCommand("SLOT_CAPTIONS_INSERTED",[slotIds |-> slotIds]); tuple := result;
+   if ~tuple[1].committed then result := FALSE; return; end if;
+-  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]);
++  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]); state := result;
++  call syncDashboardCaption(state);
++  result := state;
+   return;
+ end procedure;
+ 
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index fa349b0..32d1bca 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -929,11 +929,22 @@
+       }
+       function applySlotCaptionsInsertedAction({ machine, payload }) {
+         machine.assertWritable("captions", "SLOT_CAPTIONS_INSERTED");
+-        let candidate = projectClone(activeProject._state),
+-          text = insertSlotCaptions(candidate, payload.slotIds ?? null);
+-        if (text === candidate.annotations.captions.text) return false;
+-        candidate.annotations.captions.text = text;
+-        activeProject.initialize(validateProjectObjectState(candidate, { requireSlots: true }));
++        while (true) {
++          const source = activeProject._state, candidate = projectClone(source);
++          normalizeSlotContents(candidate.slots);
++          for (const item of candidate.slots) {
++            const original = source.slots.find(before => before.id === item.id);
++            if (original?.content) item.content = projectClone(original.content);
++          }
++          const text = insertSlotCaptions(candidate, payload.slotIds ?? null);
++          if (text === candidate.annotations.captions.text) return false;
++          candidate.annotations.captions.text = text;
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          payload.changed = { slotIds: [], chartIds: [], csvIds: [], imageIds: [], assets: [] };
++          return;
++        }
+       }
+       function applyDataObjectCreatedAction({ machine, payload }) {
+         machine.assertWritable("data","DATA_OBJECT_CREATED");
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index 4998e05..cdf7b86 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -388,12 +388,16 @@ def insertSlotCaptionsIntoGlobalCaption(slotIds=None):
+     2. Backend layout_annotations.insertSlotCaptions가 current visible anchor의 전체 label 순서와 정확한 caption 문자열로 계산한다.
+     3. 연속 동일/뒤따르는 empty를 label range로 묶고, 시작 empty는 label만 두며 기존 global text의 맨 뒤에 공백 구분으로 append한다.
+     4. source slot.caption/ownership/afterText/name/settings는 변경하지 않는다. no target은 unchanged False다.
+-    5. SLOT_CAPTIONS_INSERTED 내부의 candidate 계산/전체 검증/one commit 이후에만 공식 read를 반환한다.
++    5. SLOT_CAPTIONS_INSERTED 내부의 candidate 계산/전체 검증/current-source 재확인·재시도/one commit 이후에만
++       공식 global caption copy를 읽고 그 동일한 supplied state로 syncDashboardCaption을 한 번 호출한 뒤 반환한다.
++       no target/noncommit은 read/render 없이 False; query/renderer 원래 오류는 전파하며 완료 commit은 rollback하지 않는다.
+     """
+     result, interfaceState, rendererInput = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
+     if not result.committed:
+         return False
+-    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
++    state = dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
++    syncDashboardCaption(state)
++    return state
+ 
+ 
+ def setCaptionsApiEnabled(enabled):
+diff --git a/agent_space/reviews/review-20261018-040-caption-insertion-closure.md b/agent_space/reviews/review-20261018-040-caption-insertion-closure.md
+new file mode 100644
+index 0000000..c217a25
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-040-caption-insertion-closure.md
+@@ -0,0 +1,19 @@
++# Unit38 caption insertion closure and translation
++
++## Source45 decision before lower translation
++
++Source44 backend/layout_annotations.py insertSlotCaptions independently closes exact grouping, ordinal order, explicit targets, append boundary and no-target noncommit. Common command contract already requires current source/candidate/validate/reference retry/one commit; legacy lower insertion action lacks retry and loses canonical content extensions during flattened clone. Keep upper domain meaning unchanged.
++
++Public insertion contract must also decide success presentation, not leave useful display refresh as lower-stage independent meaning. Source45 chooses one official copied global read after commit, passes exactly it to existing supplied-state syncDashboardCaption, returns the same read; noncommit skips both, original read/renderer errors propagate without rollback. This is independently needed so successful visible caption changes display without implicit Backend reads; matches shared Source44 renderer contract. Prior closure omitted presentation ordering for insertion specifically. Reject dropping useful display, duplicate caption cache/aggregate authority, renderer implicit query or changing grouping to fit legacy code.
++
++Closure criteria: logical completeness covers no-target/error/current-source/retry/success/read/render and late failure; independent purpose is visible current persistent caption after insertion, not description of implementation; no duplicate state/helper authority introduced (reuse Source layout calculation, common command and supplied caption renderer). Inherit other Source44 closures, preserve unresolved whole alignment. THEN pseudocode23 insertion wrapper query→save→renderer→return, THEN code88 candidate retry/preserve canonical slots/actual facts.
++
++## Requirement-to-artifact checklist (pending execution)
++
++- exact grouping/whitespace/labels/explicit targets remain existing pure helper and cases40/41 plus105;
++- new-fields-only wrapper, actual changed facts, immutable fresh read passed once to renderer, afterText/name/settings/slot/assets/selection unchanged:105;
++- no targets, invalid targets, calculation/validation failures, noncommit no success work:106;
++- replaced authority during calculation/validation retries full calculation against newest caption/global text; late query/renderer failure leaves committed text:106;
++- canonical slot content extension survives, verified directly not only flattened JSON:105.
++
++Actual Actions106+106/build/canonical/cumulative pending. Source45/pseudocode23 fingerprints provisional pending actual runner, code88 stale; whole assets/import/schema/raster/dashboard/serializer/timing gaps remain open, optional model/TLC not run. No policy edits/local runtime execution.

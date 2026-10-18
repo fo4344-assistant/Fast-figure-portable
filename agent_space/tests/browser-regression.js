@@ -4630,6 +4630,130 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(105, "Caption insertion retains exact grouping and every nonowned field with supplied success view", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        sync = syncDashboardCaption, render = renderDashboard, notify = interfaceFSM.notify;
+      try {
+        api.layout.setGrid(2, 2); const fixture = projectClone(activeProject._state);
+        fixture.annotations.labels.settings.format = "lower-alpha";
+        const ids = orderedSlotLabels(fixture).map(item => item.slotId);
+        fixture.annotations.captions.text = "prefix\n "; fixture.annotations.captions.afterText = "unchanged tail";
+        [" A", "A", "", "B"].forEach((text, i) => { fixture.slots.find(slot => slot.id === ids[i]).caption = text || null; });
+        initialize.call(activeProject, fixture);
+        activeProject.slots.forEach(slot => { slot.content.insertionExtension = { owner: slot.id }; });
+        const before = projectClone(activeProject._state), selection = () => JSON.stringify({ slotId: selectedSlotId,
+          path: interfaceFSM.state.assetPath, kind: interfaceFSM.state.assetSelection, index: interfaceFSM.state.graphObjectIndex }), priorSelection = selection();
+        let commits = 0, reads = 0, paints = 0, last, projected;
+        renderDashboard = () => {}; interfaceFSM.notify = () => {};
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        projectEFSM.send = function (event, payload) {
+          check(event === "SLOT_CAPTIONS_INSERTED" && Object.keys(payload).join(",") === "slotIds", "insertion Application calculated caption/model");
+          return last = send.call(this, event, payload);
+        };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "captions.readGlobal") reads++;
+          return query(kind, request);
+        };
+        syncDashboardCaption = state => { projected = state; paints++; check(Object.isFrozen(state.settings), "insertion renderer received mutable read"); };
+        const result = api.captions.insertSlotCaptions([ids[2], ids[1], ids[1]]), expected = projectClone(before);
+        expected.annotations.captions.text = "prefix\n (b-c) A";
+        check(JSON.stringify(activeProject._state) === JSON.stringify(expected) && Object.isFrozen(result) &&
+          result === projected && result.text === expected.annotations.captions.text && commits === 1 && reads === 1 && paints === 1 &&
+          Object.isFrozen(last.changed) && ["slotIds","chartIds","csvIds","imageIds","assets"].every(key => !last.changed[key].length) &&
+          activeProject.slots.every(slot => slot.content.insertionExtension?.owner === slot.id) && selection() === priorSelection,
+          "insertion changed grouping/other owner/extension/selection or wrong work/facts");
+        const again = api.captions.insertSlotCaptions([ids[1], ids[2]]);
+        check(again !== result && again.text === "prefix\n (b-c) A (b-c) A" && result.text === "prefix\n (b-c) A" &&
+          commits === 2 && reads === 2 && paints === 2 && projected === again, "insertion deduplicated history or aliased old read");
+        const allBefore = projectClone(activeProject._state), all = api.captions.insertSlotCaptions();
+        check(all.text === insertSlotCaptions(allBefore) && commits === 3 && reads === 3 && paints === 3,
+          "None insertion did not calculate all labels in Backend order");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        syncDashboardCaption = sync; renderDashboard = render; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(106, "Caption insertion recalculates newer authority and gates all failure/noncommit effects", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        validate = validateProjectObjectState, calculate = insertSlotCaptions, sync = syncDashboardCaption,
+        render = renderDashboard, notify = interfaceFSM.notify, reconcile = interfaceFSM.reconcileProjectResult,
+        failure = Error("insertion boundary");
+      try {
+        api.layout.setGrid(2, 2); const ids = orderedSlotLabels(activeProject._state).map(item => item.slotId), id = ids[0];
+        const fixture = projectClone(activeProject._state); fixture.annotations.labels.settings.format = "lower-alpha"; fixture.annotations.captions.text = "old global";
+        fixture.slots.find(slot => slot.id === id).caption = "old local"; fixture.slots.find(slot => slot.id === ids[1]).hidden = true;
+        initialize.call(activeProject, fixture);
+        const source = activeProject._state, runtime = interfaceFSM.state;
+        let commits = 0, reads = 0, effects = 0, reconciliations = 0, caught;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = syncDashboardCaption = () => { effects++; }; interfaceFSM.notify = () => {};
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "captions.readGlobal") reads++;
+          return query(kind, request);
+        };
+        check(api.captions.insertSlotCaptions([]) === false && activeProject._state === source && interfaceFSM.state === runtime &&
+          !commits && !reads && !effects && !reconciliations, "empty insertion committed or did success work");
+        for (const target of [[-1], [String(id)], [ids[1]], "not ids"]) {
+          caught = null; try { api.captions.insertSlotCaptions(target); } catch (error) { caught = error; }
+          check(caught && activeProject._state === source && !commits && !reads && !effects && !reconciliations,
+            "invalid/hidden insertion target changed state");
+        }
+        insertSlotCaptions = () => { throw failure; }; caught = null;
+        try { api.captions.insertSlotCaptions([id]); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && !commits && !reads && !effects, "insertion calculation error swallowed/committed");
+        insertSlotCaptions = calculate; validateProjectObjectState = () => { throw failure; }; caught = null;
+        try { api.captions.insertSlotCaptions([id]); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && !commits && !reads && !effects && !reconciliations,
+          "insertion validation error committed or did success work");
+        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.captions.insertSlotCaptions([id]) === false && !commits && !reads && !effects && !reconciliations,
+          "insertion noncommit queried/rendered/reconciled"); projectEFSM.send = send;
+        let attempts = 0;
+        insertSlotCaptions = function (candidate, targets) {
+          if (++attempts === 1) {
+            const newer = projectClone(activeProject._state); newer.annotations.captions.text = "new global";
+            newer.slots.find(slot => slot.id === id).caption = "new local"; newer.meta.projectName = "newer insertion";
+            initialize.call(activeProject, newer);
+          }
+          return calculate(candidate, targets);
+        };
+        const latest = api.captions.insertSlotCaptions([id]);
+        check(attempts === 2 && commits === 1 && reads === 1 && effects === 1 && reconciliations === 1 &&
+          latest.text === "new global (a) new local" && activeProject.meta.projectName === "newer insertion",
+          "insertion committed stale grouping/global prefix instead of retrying"); insertSlotCaptions = calculate;
+        let validations = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const answer = validate(candidate, options);
+          if (options?.requireSlots && ++validations === 1) {
+            const newer = projectClone(activeProject._state); newer.annotations.captions.text = "validation prefix";
+            newer.slots.find(slot => slot.id === id).caption = "validation local"; initialize.call(activeProject, newer);
+          }
+          return answer;
+        };
+        check(api.captions.insertSlotCaptions([id]).text === "validation prefix (a) validation local" && validations === 2 &&
+          commits === 2 && reads === 2 && effects === 2 && reconciliations === 2, "insertion validation retry lost newer captions");
+        validateProjectObjectState = validate;
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "captions.readGlobal") throw failure;
+          return query(kind, request);
+        }; caught = null;
+        const beforeLate = activeProject.annotations.captions.text;
+        try { api.captions.insertSlotCaptions([id]); } catch (error) { caught = error; }
+        check(caught === failure && commits === 3 && effects === 2 && activeProject.annotations.captions.text === beforeLate + " (a) validation local",
+          "insertion late query swallowed/rolled back"); readBackendProjection = query;
+        syncDashboardCaption = () => { throw failure; }; caught = null;
+        try { api.captions.insertSlotCaptions([id]); } catch (error) { caught = error; }
+        check(caught === failure && commits === 4 && activeProject.annotations.captions.text.endsWith(" (a) validation local (a) validation local"),
+          "insertion late renderer swallowed/rolled back");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        validateProjectObjectState = validate; insertSlotCaptions = calculate; syncDashboardCaption = sync;
+        renderDashboard = render; interfaceFSM.notify = notify; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

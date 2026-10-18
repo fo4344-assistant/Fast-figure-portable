@@ -388,12 +388,16 @@ def insertSlotCaptionsIntoGlobalCaption(slotIds=None):
     2. Backend layout_annotations.insertSlotCaptions가 current visible anchor의 전체 label 순서와 정확한 caption 문자열로 계산한다.
     3. 연속 동일/뒤따르는 empty를 label range로 묶고, 시작 empty는 label만 두며 기존 global text의 맨 뒤에 공백 구분으로 append한다.
     4. source slot.caption/ownership/afterText/name/settings는 변경하지 않는다. no target은 unchanged False다.
-    5. SLOT_CAPTIONS_INSERTED 내부의 candidate 계산/전체 검증/one commit 이후에만 공식 read를 반환한다.
+    5. SLOT_CAPTIONS_INSERTED 내부의 candidate 계산/전체 검증/current-source 재확인·재시도/one commit 이후에만
+       공식 global caption copy를 읽고 그 동일한 supplied state로 syncDashboardCaption을 한 번 호출한 뒤 반환한다.
+       no target/noncommit은 read/render 없이 False; query/renderer 원래 오류는 전파하며 완료 commit은 rollback하지 않는다.
     """
     result, interfaceState, rendererInput = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", {"slotIds": slotIds})
     if not result.committed:
         return False
-    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
+    state = dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
+    syncDashboardCaption(state)
+    return state
 
 
 def setCaptionsApiEnabled(enabled):
