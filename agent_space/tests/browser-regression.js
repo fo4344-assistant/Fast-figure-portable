@@ -1658,7 +1658,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         fresh.nextId.chart = 2;
         fresh.slots[1].content.chart = 1;
         fresh.slots[1].caption = " exact text ";
-        fresh.slots[1].content.imageSettings = { ...DEFAULT_IMAGE_SETTINGS, fit: "manual", x: 0 };
+        fresh.slots[1].content.imageSettings = { ...DEFAULT_IMAGE_SETTINGS, fit: "manual", x: 0, extension: { exact: [0, false, ""] } };
+        fresh.slots[1].content.extension = { retained: true };
         activeProject.initialize(validateProjectObjectState(fresh, { requireSlots: true }));
         const original = slotLocalState(slotAt(1));
         appFSM.send("SELECT_SLOT", { slotId: 1, direction: "model-to-fsm" });
@@ -6349,6 +6350,26 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "nondefault query ignored whole image settings or explicit empty caption");
       read.imageSettings.fit = "manual";
       check(local.imageSettings.fit === DEFAULT_IMAGE_SETTINGS.fit, "local read aliases original settings");
+    });
+
+    await run(145, "Local payload transfer replaces whole content without sanitizing or aliasing", () => {
+      const project = activeProject._state, frontend = interfaceFSM.state,
+        source = createProjectState().slots[0], target = createProjectState().slots[1];
+      source.content.imageSettings.extension = { exact: [0, false, ""] };
+      source.content.extension = { owned: true }; source.caption = "";
+      target.content.oldExtension = { removed: true };
+      const payload = slotLocalState(source), geometry = [target.id, target.row, target.col, target.hidden];
+      check(setSlotLocalState(target, payload) === target &&
+        JSON.stringify(slotLocalState(target)) === JSON.stringify(payload) && !Object.hasOwn(target.content, "oldExtension") &&
+        JSON.stringify(geometry) === JSON.stringify([target.id, target.row, target.col, target.hidden]),
+        "local transfer sanitized settings, retained old content or changed target geometry");
+      payload.imageSettings.extension.exact.push("later"); payload.extension.owned = false;
+      check(target.content.imageSettings.extension.exact.length === 3 && target.content.extension.owned,
+        "payload transfer aliases source nested values");
+      resetSlotLocalState(target);
+      check(!slotHasNonDefaultLocalState(target) && !Object.hasOwn(target.content, "extension") &&
+        activeProject._state === project && interfaceFSM.state === frontend,
+        "covered-cell reset did not replace complete local content or changed authority");
     });
 
   } catch (error) {

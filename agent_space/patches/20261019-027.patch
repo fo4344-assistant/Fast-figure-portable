@@ -1,0 +1,152 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 87829de..af9fa0b 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -347,6 +347,10 @@ Baseline5525b4966965fa113e60d97b189db930fe9ce21a records verified Unit57. Source
+ 
+ Baseline62a57f9fd4398ba7dab02924b093d7f308f62974 clean; docs lineage39170993594 PASS; preceding142 gates already recorded. Source45 project_state.py:536-575/PlusCal25 project_state.pcal:213-281 require canonical presence precedence, missing-only fields/settings defaults, one alias storage, caption separation and pure whole-local comparison. Code112 normalizer preserves present values/extensions instead of sanitizer, moves only actual missing flat storage and fills missing defaults, rejects malformed records; slotLocalState works on detached clone and nondefault detects whole imageSettings extensions. New143/144 test canonical/legacy/null/empty/false/zero/extension/invalid/missing and frozen pure-query behavior plus actual initialize rejection. Pair026/review013 map requirements and rejected live normalization/sanitization. Exact144 hosted gates pending; code stale; full schema/constructor/initializer/reentrancy/resource/render/timing/whole audit OPEN. No new Source/PlusCal meaning or local execution.
+ 
++## Sixtieth bounded unit — complete slot-local transfer/default reset
++
++Baseline262438ef06c639ed8d7884a6a0bbd3f8865dbcf5 dist-only generated successor of Unit59. Exact e50f3f6cd0439dab31e28ced122669dc9bee8df4 regression39171206024/repeat39171207094 PASS144 inline/split each; build39171206013/canonical39171206032/cumulative39171209054/fidelity39171210899 PASS, actual143/144 inspected and review013 recorded. Source45 layout_annotations.py:77-83 and PlusCal25 project_efsm.pcal:188-238 require whole payload transfer; old setter sanitized settings/drop owner extension/retain old target extension. Code113 complete detached content+caption read and deep-copy content replacement/default reset; strengthen public merge/split48 and add145 isolation/geometry/reset. Pair027/review014; exact145 gates pending. Source/PlusCal unchanged; stale/full reentrancy/schema/resource/render/timing/audit OPEN; no local execution/manual dist.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261019-013-code-slot-normalization-open.md b/agent_space/reviews/review-20261019-013-code-slot-normalization-open.md
+index c164f34..0af679b 100644
+--- a/agent_space/reviews/review-20261019-013-code-slot-normalization-open.md
++++ b/agent_space/reviews/review-20261019-013-code-slot-normalization-open.md
+@@ -13,7 +13,7 @@ Source45 sourcescript/backend/project_state.py:536-575 establishes pure whole-lo
+ 
+ ## Gates/lineage
+ 
+-Source45/PlusCal25 unchanged. Code112 stale fingerprint sha256:4d7977e97b0e0676ef5c8598a9cad509b1c315d5fe00a3b26cb78edc61de6f12, review013/pair026/Plan023 updated. Exact144 inline+split/repeat/build/canonical+cumulative/fidelity PENDING. No local app/test/build/checker/TLC; default hosted only; generator-only dist.
++Source45/PlusCal25 unchanged. Code112 stale fingerprint sha256:4d7977e97b0e0676ef5c8598a9cad509b1c315d5fe00a3b26cb78edc61de6f12, review013/pair026/Plan023 updated. Exact e50f3f6cd0439dab31e28ced122669dc9bee8df4: regression39171206024/repeat39171207094 PASS144 inline+144 split each (actual143/144 pass lines inspected both runs/modes), build39171206013/canonical39171206032/cumulative39171209054(base62a57f9fd4398ba7dab02924b093d7f308f62974)/fidelity39171210899 PASS. Generator262438ef06c639ed8d7884a6a0bbd3f8865dbcf5 diff inspected: only two dist artifacts, ff-only merged. Whole conformance still open. No local app/test/build/checker/TLC; default hosted only; generator-only dist.
+ 
+ ## Decisions and limits
+ 
+diff --git a/agent_space/reviews/review-20261019-014-code-local-payload-open.md b/agent_space/reviews/review-20261019-014-code-local-payload-open.md
+new file mode 100644
+index 0000000..7136c28
+--- /dev/null
++++ b/agent_space/reviews/review-20261019-014-code-local-payload-open.md
+@@ -0,0 +1,14 @@
++# Plan023 Unit60 — whole slot-local payload transfer (open)
++
++Baseline262438ef06c639ed8d7884a6a0bbd3f8865dbcf5 generated dist-only successor of Unit59 e50f3f6cd0439dab31e28ced122669dc9bee8df4. Unit59 exact144 regression39171206024/repeat39171207094/build39171206013/canonical39171206032/cumulative39171209054/fidelity39171210899 PASS; actual143/144 logs inspected. No repeated implementation.
++
++## Requirement → artifact
++
++Source45 sourcescript/backend/layout_annotations.py:77-83 merge moves the sole owner's renderable content/caption to top-left, covered slots become defaults; split retains complete anchor payload and empties exposed covered cells. PlusCal25 pseudocode/backend/project_efsm.pcal:188-238 CalculateMergeOrSplit explicitly DeepCopy(SlotLocalPayload(owner))/ReplaceSlotLocalPayloadOnly/EmptySlotLocalPayload. Previous setSlotLocalState sanitized imageSettings via readImageSettings (drops extension properties); retained unrelated target canonical fields, omitted owner extension fields and copied caption only if string. Thus even after Unit59 whole-settings nondefault detection, merge recognized extension but discarded it on transfer, and reset left old local extension data. Existing contracts require whole payload, no new semantics.
++
++- slotLocalState returns detached normalized complete content plus canonical caption (same known flat helper fields; unknown content retained). Geometry remains excluded. setSlotLocalState deep-copies complete supplied payload, replaces content, removes nested caption, assigns separate caption, normalizes candidate representation only. No sanitizer/asset/DOM/cache fallback, no nested source aliases. resetSlotLocalState reuses defaults to replace complete local payload.
++- Existing real public merge/split case48 strengthened with nested imageSettings extension and canonical content extension; its exact whole payload equality and hidden reset checks retained. New145 verifies replacement removes old target extension, retains exact empty caption/settings/content extension, unchanged geometry, nested-copy isolation, complete reset and read-only authority identity.
++
++## Gates/lineage/boundaries
++
++Source45/PlusCal25 unchanged. Code113 stale fingerprint sha256:e01a53466e2ee9a99a1cdcc3afa889a30fc9315f20d1077d6e84fd869a3b9c9a. Review014/Plan023/pair027 plus prior review013 evidence. Exact145 inline+split/repeat/build/canonical+cumulative/fidelity PENDING. No local app/test/build/checker/TLC; standard hosted only, dist generator-only. Atomic gh Git Data bounded code+lineage immediate-parent gate exception with expected HEAD/current blob/new path/nonforce checks; ordinary docs Contents API. Rejected known-field-only copying, reuse of settings sanitizer, retention of old target extension or nested source references, format/Source rewrite. Current-source reentrancy for remaining merge/split and other generic commands, constructor/initialization ownership, full schema/dataRef/metadata/resource/raster/supplied-render/dashboard/timing and exhaustive requirements inventory remain open. No full current/completion claim.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 7bc78fc..9a799cf 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1658,7 +1658,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         fresh.nextId.chart = 2;
+         fresh.slots[1].content.chart = 1;
+         fresh.slots[1].caption = " exact text ";
+-        fresh.slots[1].content.imageSettings = { ...DEFAULT_IMAGE_SETTINGS, fit: "manual", x: 0 };
++        fresh.slots[1].content.imageSettings = { ...DEFAULT_IMAGE_SETTINGS, fit: "manual", x: 0, extension: { exact: [0, false, ""] } };
++        fresh.slots[1].content.extension = { retained: true };
+         activeProject.initialize(validateProjectObjectState(fresh, { requireSlots: true }));
+         const original = slotLocalState(slotAt(1));
+         appFSM.send("SELECT_SLOT", { slotId: 1, direction: "model-to-fsm" });
+@@ -6351,6 +6352,26 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       check(local.imageSettings.fit === DEFAULT_IMAGE_SETTINGS.fit, "local read aliases original settings");
+     });
+ 
++    await run(145, "Local payload transfer replaces whole content without sanitizing or aliasing", () => {
++      const project = activeProject._state, frontend = interfaceFSM.state,
++        source = createProjectState().slots[0], target = createProjectState().slots[1];
++      source.content.imageSettings.extension = { exact: [0, false, ""] };
++      source.content.extension = { owned: true }; source.caption = "";
++      target.content.oldExtension = { removed: true };
++      const payload = slotLocalState(source), geometry = [target.id, target.row, target.col, target.hidden];
++      check(setSlotLocalState(target, payload) === target &&
++        JSON.stringify(slotLocalState(target)) === JSON.stringify(payload) && !Object.hasOwn(target.content, "oldExtension") &&
++        JSON.stringify(geometry) === JSON.stringify([target.id, target.row, target.col, target.hidden]),
++        "local transfer sanitized settings, retained old content or changed target geometry");
++      payload.imageSettings.extension.exact.push("later"); payload.extension.owned = false;
++      check(target.content.imageSettings.extension.exact.length === 3 && target.content.extension.owned,
++        "payload transfer aliases source nested values");
++      resetSlotLocalState(target);
++      check(!slotHasNonDefaultLocalState(target) && !Object.hasOwn(target.content, "extension") &&
++        activeProject._state === project && interfaceFSM.state === frontend,
++        "covered-cell reset did not replace complete local content or changed authority");
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index d0d8767..f38e3e0 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 112,
++      "revision": 113,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:4d7977e97b0e0676ef5c8598a9cad509b1c315d5fe00a3b26cb78edc61de6f12",
++      "fingerprint": "sha256:e01a53466e2ee9a99a1cdcc3afa889a30fc9315f20d1077d6e84fd869a3b9c9a",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261019-013-code-slot-normalization-open.md"
++      "validation_review": "agent_space/reviews/review-20261019-014-code-local-payload-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 25,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 56e6920..cdabb16 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -4813,23 +4813,14 @@
+       }
+       function slotLocalState(slot) {
+         const local = normalizeSlotContent(structuredClone(slot));
+-        return {
+-          chart: local.content.chart,
+-          imageId: local.content.imageId,
+-          contentType: local.content.contentType,
+-          imageSettings: local.content.imageSettings,
+-          caption: local.caption,
+-        };
++        return { ...local.content, caption: local.caption };
+       }
+       function setSlotLocalState(slot, localState) {
+-        normalizeSlotContent(slot);
+-        let next = localState && typeof localState === "object" ? localState : SLOT_LOCAL_DEFAULTS;
+-        slot.content.chart = Number.isInteger(next.chart) ? next.chart : null;
+-        slot.content.imageId = Number.isInteger(next.imageId) ? next.imageId : null;
+-        slot.content.contentType = next.contentType === "image" ? "image" : "graph";
+-        slot.content.imageSettings = readImageSettings(next.imageSettings);
+-        slot.caption = typeof next.caption === "string" ? next.caption : null;
+-        return slot;
++        const next = structuredClone(localState || SLOT_LOCAL_DEFAULTS);
++        slot.content = { ...next };
++        delete slot.content.caption;
++        slot.caption = next.caption;
++        return normalizeSlotContent(slot);
+       }
+       function resetSlotLocalState(slot) {
+         return setSlotLocalState(slot, SLOT_LOCAL_DEFAULTS);

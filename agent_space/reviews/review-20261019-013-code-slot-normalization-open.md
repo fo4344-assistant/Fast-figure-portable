@@ -13,7 +13,7 @@ Source45 sourcescript/backend/project_state.py:536-575 establishes pure whole-lo
 
 ## Gates/lineage
 
-Source45/PlusCal25 unchanged. Code112 stale fingerprint sha256:4d7977e97b0e0676ef5c8598a9cad509b1c315d5fe00a3b26cb78edc61de6f12, review013/pair026/Plan023 updated. Exact144 inline+split/repeat/build/canonical+cumulative/fidelity PENDING. No local app/test/build/checker/TLC; default hosted only; generator-only dist.
+Source45/PlusCal25 unchanged. Code112 stale fingerprint sha256:4d7977e97b0e0676ef5c8598a9cad509b1c315d5fe00a3b26cb78edc61de6f12, review013/pair026/Plan023 updated. Exact e50f3f6cd0439dab31e28ced122669dc9bee8df4: regression39171206024/repeat39171207094 PASS144 inline+144 split each (actual143/144 pass lines inspected both runs/modes), build39171206013/canonical39171206032/cumulative39171209054(base62a57f9fd4398ba7dab02924b093d7f308f62974)/fidelity39171210899 PASS. Generator262438ef06c639ed8d7884a6a0bbd3f8865dbcf5 diff inspected: only two dist artifacts, ff-only merged. Whole conformance still open. No local app/test/build/checker/TLC; default hosted only; generator-only dist.
 
 ## Decisions and limits
 
