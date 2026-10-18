@@ -11014,6 +11014,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           if (!first || !second || first.id === second.id) return false;
           const candidate = projectClone(source);
           normalizeSlotContents(candidate.slots);
+          // Legacy slot.toJSON flattens known fields; preserve the complete canonical content instead.
+          for (const slot of candidate.slots) {
+            const current = source.slots.find(item => item.id === slot.id);
+            if (current?.content) slot.content = projectClone(current.content);
+          }
           const a = candidate.slots.find(slot => slot.id === first.id), b = candidate.slots.find(slot => slot.id === second.id),
             content = a.content, caption = a.caption;
           a.content = b.content; a.caption = b.caption;
