@@ -30,8 +30,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     if (api.slots.readSelected()?.id !== slot.id) api.slots.select(slot.id);
   };
   const csv = (name, body) => new File([body], name, { type: "text/csv" });
-  const choose = (choice) => async (file, directory) =>
-    api.assets.resolveImportPlan(api.assets.collisionModel(file, directory), choice);
+  const choose = (choice) => async (file, directory, reserved = null) =>
+    api.assets.resolveImportPlan(api.assets.collisionModel(file, directory, reserved), choice, reserved);
   const tick = (delay = 0) => new Promise((resolve) => setTimeout(resolve, delay));
   const waitFor = async (reader, message, timeout = 1500) => {
     const started = performance.now();
@@ -5264,7 +5264,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         commits = 0; let attempts = 0, expected;
         activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
         validateProjectObjectState = function (candidate, options) {
-          const answer = validate(candidate, options); attempts++;
+          const answer = validate(candidate, options);
+          if (!options?.requireSlots) return answer;
+          attempts++;
           if (attempts === 1) {
             const newer = projectClone(activeProject._state), nextId = newer.nextId.csv++;
             newer.assets.csvFiles.push({ id: nextId, name: "concurrent-import.csv", directory: PROJECT_ASSET_DIRECTORIES.csv,
