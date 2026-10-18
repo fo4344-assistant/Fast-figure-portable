@@ -10483,6 +10483,10 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         if (chart?.editor?.editable === false) chart = null;
         if (chart && hints.chartId === chart.id && Object.hasOwn(hints, "selectedIndexHint"))
           graphObjectIndex = hints.selectedIndexHint;
+        else if (chart) {
+          const map = hints.graphObjectIndexMaps?.find(item => item.chartId === chart.id);
+          if (map) graphObjectIndex = Number.isInteger(graphObjectIndex) ? map.indices[graphObjectIndex] ?? null : null;
+        }
         if (payload.clearGraphSelection || hints.clearGraphSelection ||
             !Number.isInteger(graphObjectIndex) || graphObjectIndex < 0 ||
             graphObjectIndex >= (chart?.editor?.objects?.length || 0))
@@ -11575,56 +11579,70 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         ) + activeProject.slots.filter((slot) => imageIds.has(slot.imageId)).length;
       }
       function removeProjectAssetReferences(csvIds, imageIds, state=activeProject._state) {
-        let removedGraphReferenceCount=0, resetImageSlotCount=0;
         normalizeSlotContents(state.slots);
-        state.charts.forEach(chart=>{
-          if(!Array.isArray(chart.editor?.objects))return;
-          let objects=chart.editor.objects.filter(object=>!csvIds.has(object.csvId));
-          removedGraphReferenceCount+=chart.editor.objects.length-objects.length;
-          if(objects.length===chart.editor.objects.length)return;
-          chart.editor.objects=objects;
-          if(state===activeProject._state&&chart.editor.editable!==false){
-            chart.graph.data=traces(chart);
-            chart.graph.layout=layout(chart);
-          }
+        const refs = collectAssetReferences(csvIds, imageIds, state), graphObjectIndexMaps = [];
+        let removedGraphReferenceCount = 0, resetImageSlotCount = 0;
+        state.charts.forEach(chart => {
+          const removed = new Set(refs.filter(ref => ref.kind === "csv" && ref.chartId === chart.id)
+            .map(ref => ref.originalObjectIndex));
+          if (!removed.size) return;
+          const indices = [], objects = [];
+          chart.editor.objects.forEach((object, index) => {
+            indices.push(removed.has(index) ? null : objects.length);
+            if (!removed.has(index)) objects.push(object);
+          });
+          chart.editor.objects = objects;
+          graphObjectIndexMaps.push({ chartId: chart.id, indices });
+          removedGraphReferenceCount += removed.size;
+          rebuildEditableGraph(chart, state);
         });
-        state.slots.forEach(slot=>{
-          if(!imageIds.has(slot.imageId))return;
-          resetImageSlotCount+=1;
-          slot.imageId=null;
+        refs.filter(ref => ref.kind === "image").forEach(ref => {
+          ref.slot.content.imageId = null;
+          resetImageSlotCount++;
         });
-        return {removedGraphReferenceCount,resetImageSlotCount};
+        return { removedGraphReferenceCount, resetImageSlotCount, graphObjectIndexMaps };
       }
       function applyProjectTrashEmptiedAction({ machine, payload }) {
         machine.assertWritable("files","PROJECT_TRASH_EMPTIED");
         machine.assertWritable("data","PROJECT_TRASH_EMPTIED");
         machine.assertWritable("images","PROJECT_TRASH_EMPTIED");
-        let candidate=projectClone(activeProject._state),
-          csvFiles=candidate.assets.csvFiles.filter((csv)=>projectVfs.isTrashed(projectAssetPath(csv))),
-          images=candidate.assets.images.filter((image)=>projectVfs.isTrashed(projectAssetPath(image))),
-          directories=candidate.fileSystem.directories.filter(
-            (path)=>path!==PROJECT_TRASH_DIRECTORY&&projectVfs.isTrashed(path)),
-          csvIds=new Set(csvFiles.map((csv)=>csv.id)),
-          imageIds=new Set(images.map((image)=>image.id));
-        if(projectAssetReferenceCount(csvIds,imageIds)>0){
-          machine.assertWritable("charts","PROJECT_TRASH_EMPTIED");
-          machine.assertWritable("slots","PROJECT_TRASH_EMPTIED");
-          machine.assertWritable("editor","PROJECT_TRASH_EMPTIED");
+        while (true) {
+          const source = activeProject._state, candidate = projectClone(source);
+          candidate.slots.forEach(slot => {
+            const original = source.slots.find(item => item.id === slot.id);
+            if (original?.content) slot.content = projectClone(original.content);
+          });
+          const csvFiles = candidate.assets.csvFiles.filter(csv => projectVfs.isTrashed(projectAssetPath(csv))),
+            images = candidate.assets.images.filter(image => projectVfs.isTrashed(projectAssetPath(image))),
+            directories = candidate.fileSystem.directories.filter(path =>
+              !projectVfs.isFixedDirectory(path) && projectVfs.isTrashed(path)),
+            csvIds = new Set(csvFiles.map(csv => csv.id)), imageIds = new Set(images.map(image => image.id));
+          if (collectAssetReferences(csvIds, imageIds, candidate).length) {
+            machine.assertWritable("charts", "PROJECT_TRASH_EMPTIED");
+            machine.assertWritable("slots", "PROJECT_TRASH_EMPTIED");
+            machine.assertWritable("editor", "PROJECT_TRASH_EMPTIED");
+          }
+          const removedReferences = removeProjectAssetReferences(csvIds, imageIds, candidate);
+          candidate.assets.csvFiles = candidate.assets.csvFiles.filter(csv => !csvIds.has(csv.id));
+          candidate.assets.images = candidate.assets.images.filter(image => !imageIds.has(image.id));
+          candidate.fileSystem.directories = candidate.fileSystem.directories.filter(path => !directories.includes(path));
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const post = activeProject._state,
+            changedIds = (before, after) => [...new Set([...before, ...after].map(item => item.id))]
+              .filter(id => JSON.stringify(before.find(item => item.id === id)) !==
+                JSON.stringify(after.find(item => item.id === id)));
+          Object.assign(payload, removedReferences, { csvCount: csvFiles.length, imageCount: images.length,
+            directoryCount: directories.length,
+            removedReferenceCount: removedReferences.removedGraphReferenceCount + removedReferences.resetImageSlotCount });
+          payload.changed = { slotIds: changedIds(source.slots, post.slots), chartIds: changedIds(source.charts, post.charts),
+            csvIds: [...csvIds], imageIds: [...imageIds], assets: [], ...removedReferences,
+            csvCount: csvFiles.length, imageCount: images.length, directoryCount: directories.length };
+          payload.selectionHints = immutableProjectCopy({ graphObjectIndexMaps: removedReferences.graphObjectIndexMaps });
+          images.forEach(releaseProjectImageDisplayUrl);
+          return;
         }
-        let removedReferences=removeProjectAssetReferences(csvIds,imageIds,candidate);
-        candidate.assets.csvFiles=candidate.assets.csvFiles.filter((csv)=>!csvIds.has(csv.id));
-        candidate.assets.images=candidate.assets.images.filter((image)=>!imageIds.has(image.id));
-        candidate.fileSystem.directories=candidate.fileSystem.directories.filter(
-          (path)=>path===PROJECT_TRASH_DIRECTORY||!projectVfs.isTrashed(path));
-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
-        images.forEach(releaseProjectImageDisplayUrl);
-        payload.csvCount=csvFiles.length;
-        payload.imageCount=images.length;
-        payload.directoryCount=directories.length;
-        payload.removedGraphReferenceCount=removedReferences.removedGraphReferenceCount;
-        payload.resetImageSlotCount=removedReferences.resetImageSlotCount;
-        payload.removedReferenceCount=
-          payload.removedGraphReferenceCount+payload.resetImageSlotCount;
       }
       function applyProjectNodeMovedAction({ machine, payload }) {
         machine.assertWritable("files","PROJECT_NODE_MOVED");
@@ -16556,10 +16574,12 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return path;
       }
       function emptyProjectTrash() {
-        let payload = { direction: "ui-to-fsm" };
-        dispatchDashboardAffectingEvent("PROJECT_TRASH_EMPTIED", payload);
+        const result = dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {});
+        if (!result.committed) return null;
+        if (dashboardProjectionEffect("PROJECT_TRASH_EMPTIED", result.changed) === "FULL_DASHBOARD") renderDashboard();
         updateFileAvailability();
-        status(`휴지통을 비웠습니다. 폴더 ${payload.directoryCount}개, CSV ${payload.csvCount}개, 이미지 ${payload.imageCount}개를 삭제했습니다.`);
+        status(`휴지통을 비웠습니다. 폴더 ${result.changed.directoryCount}개, CSV ${result.changed.csvCount}개, 이미지 ${result.changed.imageCount}개를 삭제했습니다.`);
+        return null;
       }
       function draggableProjectAsset(path) {
         let match = path ? projectVfs.resolve(path) : null;
