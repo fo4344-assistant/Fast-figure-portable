@@ -1,0 +1,152 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 378e9aa..e7e6a42 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -329,7 +329,11 @@ Unit54 corrected fixturefeb37518a1b91504e4be7043280fe0b1bba84cb3: push3916858959
+ 
+ ### Fifty-fifth bounded unit — FFSX stored-header translation omission
+ 
+-Baselinefeb37518a1b91504e4be7043280fe0b1bba84cb3. Source45 CSV_HEADER_RULE applies stored missing-only default and finite/truncated/clamped numeric normalization without format exception. PlusCal24 ffsxReadSlot restored rows/bytes but omitted it, unlike Project normalization: correct translation first (PlusCal25) in detached parsed local asset before chart validation, then direct runtime106 translation. New138 real ZIP/read-only/public-slot import covers eight absent/null/empty/zero/fraction/negative/high/invalid cases with identical bytes/rows. Pair015/review009 retain defect rationale, Source closure unchanged and optional model stale. Initial a36b81debc9dea8611cb9b1d1d5b976aa78537b3 regression39168836927/repeat39168837470 PASS138 inline+138 split, build39168836929 PASS/dist-only45029e3c32fd64d92bae5e8992c520853ee4ff68. Version39168836926/cumulative39168839537/fidelity39168841256 FAILED on incorrectly recorded PlusCal hash (glob omitted top-level system.pcal); pair016 records runner canonical44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6 without semantic/revision/checker changes. Corrected-SHA all gates pending. Full schema/resource/initializer/raster/dashboard/timing and exhaustive audit remain open; code106 stale.
++Baselinefeb37518a1b91504e4be7043280fe0b1bba84cb3. Source45 CSV_HEADER_RULE applies stored missing-only default and finite/truncated/clamped numeric normalization without format exception. PlusCal24 ffsxReadSlot restored rows/bytes but omitted it, unlike Project normalization: correct translation first (PlusCal25) in detached parsed local asset before chart validation, then direct runtime106 translation. New138 real ZIP/read-only/public-slot import covers eight absent/null/empty/zero/fraction/negative/high/invalid cases with identical bytes/rows. Pair015/review009 retain defect rationale, Source closure unchanged and optional model stale. Initial a36b81debc9dea8611cb9b1d1d5b976aa78537b3 regression39168836927/repeat39168837470 PASS138 inline+138 split, build39168836929 PASS/dist-only45029e3c32fd64d92bae5e8992c520853ee4ff68. Version39168836926/cumulative39168839537/fidelity39168841256 FAILED on incorrectly recorded PlusCal hash (glob omitted top-level system.pcal); pair016 records runner canonical44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6 without semantic/revision/checker changes. Corrected6cae6e250c815c5eb6a67b78e2b76364de04a31a regression39169083122/repeat39169100231 PASS138 inline+138 split each; build39169085372/current+cumulative39169088049/fidelity39169090217 PASS. Full schema/resource/initializer/raster/dashboard/timing and exhaustive audit remain open; code106 stale.
++
++### Fifty-sixth bounded unit — STORE package entry paths
++
++Baseline6cae6e250c815c5eb6a67b78e2b76364de04a31a. Source45 PACKAGE_CONTAINER_RULES/PlusCal25 ReadStorePackage already require no absolute entry path or exact parent segment; runtime substring rejected harmless report..csv while overlooking Windows roots. Code107 translates exact slash/backslash segment and absolute-root checks without rewriting stored names/bytes. Test139 actual FFPX/FFSX containers exercises four harmless and eight invalid names and invalid public imports with exact authority identity preservation. Pair017/review010/lineage record bounded meaning and pending139 inline+split/repeat/build/current+cumulative/fidelity. Full ZIP structural consistency, schema/dataRef/settings/initializer/resources/raster/dashboard/timing and exhaustive audit remain open; code stays stale.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261019-009-ffsx-header-translation-open.md b/agent_space/reviews/review-20261019-009-ffsx-header-translation-open.md
+index bb2d5e7..68e40b0 100644
+--- a/agent_space/reviews/review-20261019-009-ffsx-header-translation-open.md
++++ b/agent_space/reviews/review-20261019-009-ffsx-header-translation-open.md
+@@ -12,7 +12,7 @@ sourcecode/fast-figure.js ffsxReadSlotBytes uses existing headerLineCount and ow
+ 
+ ## Lineage, publication and pending evidence
+ 
+-PlusCal25 canonical fingerprintsha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6 derives unchanged Source45 e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7. Code106 fingerprintsha256:d5d5235fa7622a6258ac859b83d52bce310871321e19e50b941124ff4363f1c5 derives both, remains stale. Optional verification-model26 remains stale/TLC pending and not gate. Pair015 includes actual pseudocode/runtime/tests/lineage/review/Plan023 diff, excludes own pair. Coherent upper+lower+lineage change uses bounded gh atomic tree/commit because immediate-parent version gates previously reject sequential Contents code/revision writes; check current expected HEAD/old blobs/new paths and nonforce only. Initial execution a36b81debc9dea8611cb9b1d1d5b976aa78537b3: regression39168836927 and repeat39168837470 PASS138 inline+138 split each (actual137/138 PASS lines inspected); build39168836929 PASS generated dist-only45029e3c32fd64d92bae5e8992c520853ee4ff68. Canonical39168836926/cumulative39168839537/fidelity39168841256 FAIL with exact `recorded='sha256:1efae790fbe2825d6d84ef10abfa5fe1789a219d6d525d07c5f05a15ac3f73bd', actual='sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6'`. Local glob-based record omitted top-level pseudocode/system.pcal; canonical runner includes every recursive .pcal. Pair016 corrects manifest fingerprint and code derived_from to runner value without changing revision/semantics/tests or weakening checker. Exact corrected-SHA full gates pending; no proxy completion.
++PlusCal25 canonical fingerprintsha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6 derives unchanged Source45 e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7. Code106 fingerprintsha256:d5d5235fa7622a6258ac859b83d52bce310871321e19e50b941124ff4363f1c5 derives both, remains stale. Optional verification-model26 remains stale/TLC pending and not gate. Pair015 includes actual pseudocode/runtime/tests/lineage/review/Plan023 diff, excludes own pair. Coherent upper+lower+lineage change uses bounded gh atomic tree/commit because immediate-parent version gates previously reject sequential Contents code/revision writes; check current expected HEAD/old blobs/new paths and nonforce only. Initial execution a36b81debc9dea8611cb9b1d1d5b976aa78537b3: regression39168836927 and repeat39168837470 PASS138 inline+138 split each (actual137/138 PASS lines inspected); build39168836929 PASS generated dist-only45029e3c32fd64d92bae5e8992c520853ee4ff68. Canonical39168836926/cumulative39168839537/fidelity39168841256 FAIL with exact `recorded='sha256:1efae790fbe2825d6d84ef10abfa5fe1789a219d6d525d07c5f05a15ac3f73bd', actual='sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6'`. Local glob-based record omitted top-level pseudocode/system.pcal; canonical runner includes every recursive .pcal. Pair016 corrects manifest fingerprint and code derived_from to runner value without changing revision/semantics/tests or weakening checker. Corrected execution6cae6e250c815c5eb6a67b78e2b76364de04a31a regression39169083122/repeat39169100231 PASS138 inline+138 split each, actual138 lines inspected in both. Build39169085372/current+cumulative39169088049(basefeb37518a1b91504e4be7043280fe0b1bba84cb3)/fidelity39169090217 PASS. All run headSha confirmed; no semantic/test weakening and full goal remains open.
+ 
+ ## Exclusions and audit state
+ 
+diff --git a/agent_space/reviews/review-20261019-010-code-package-paths-open.md b/agent_space/reviews/review-20261019-010-code-package-paths-open.md
+new file mode 100644
+index 0000000..49820c3
+--- /dev/null
++++ b/agent_space/reviews/review-20261019-010-code-package-paths-open.md
+@@ -0,0 +1,16 @@
++# Plan023 Unit56 — STORE entry path contract (open)
++
++Baseline6cae6e250c815c5eb6a67b78e2b76364de04a31a. Prior Unit55 regression39169083122/repeat39169100231 PASS138 inline+138 split each; build39169085372/current+cumulative39169088049/fidelity39169090217 PASS exact SHA. Review009 preserves initial lineage failure and correction, not erased.
++
++## Requirement-to-artifact bounded audit
++
++- Source sourcescript/backend/assets_files.py PACKAGE_CONTAINER_RULES: STORE only, unsplit ZIP, no absolute path or `..` segment, CRC validation, current package version. PlusCal backend/assets_files.pcal ReadStorePackage:491-509 directly states `Require(~IsAbsoluteEntryPath(entry.path) /\ ~HasDotDotSegment(entry.path));`. Source45/PlusCal25 already agree; no new meaning.
++- Runtime sourcecode/fast-figure.js ffpxZipRead used substring `name.includes("..")`, incorrectly rejecting harmless names such as report..csv but accepting rooted backslash/drive absolute paths. Direct segment test now checks slash/backslash-delimited exact `..`, and absolute path test recognizes slash/backslash roots and drive-root prefixes. Stored entry names and bytes stay unchanged; no filesystem reopen or normalization writes.
++- Existing STORE/split/CRC/version handling unchanged, not claimed globally exhaustive. Full local/central ZIP structural consistency remains OPEN for separate audit; do not infer closure from this path unit.
++- Test139 actual STORE containers consumed by BOTH FFPX and FFSX readers: four harmless dotted names retain exact bytes/read-only identity, eight parent/absolute names reject. Invalid bytes additionally enter actual public project/slot import and must preserve exact Project/Frontend identities. Existing valid format documents, graph/CSV references and bytes used, not a helper-only model.
++
++## Lineage/delivery/evidence
++
++Code107 fingerprintsha256:ff59c53b1cd9b62ba787659953b843ae3ae1ff436fc9abcbd48298bc56c015d5 derives Source45 and canonical PlusCal25 sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6; stays stale. Pair017/Plan023 includes actual runtime/test/lineage/review diff, excludes own pair. Exact-SHA139 inline+split/repeat/build/current+cumulative/fidelity pending. No local application/test/build/checker or optional TLC; dist generator-only. Coherent code+lineage uses bounded atomic gh Git Data exception because sequential Contents code/revision creates immediate-parent gate mismatch; expected HEAD/current old blobs/new paths/nonforce required.
++
++Rejected blanket double-dot substring prohibition, stripping/rewriting archive paths or bytes, treating directory strings as filesystem reopen references, unrelated parser/format redesign, test assertion weakening or Source edits to justify old behavior. Global schema/dataRef/settings/initializer/resources/current capture/raster/dashboard/timing and exhaustive cross-module requirement-to-artifact audit remain OPEN. No full completion/code-current claim.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 3042a4c..19d6e36 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -6147,6 +6147,51 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(139, "STORE package paths distinguish parent segments and absolute roots from harmless dotted names", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        initialize.call(activeProject, createProjectState());
++        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
++        const targetId = activeProject.slots.find(item => !item.hidden).id;
++        select(slotAt(targetId));
++        const csv = createProjectCsv([["x", "y"], ["1", "2"]], "path-probe.csv");
++        api.graphs.addObject(csv.id);
++        const current = slotAt(targetId), projectEntries = ffpxBuildProject().assets,
++          slotEntries = ffsxBuildSlot(current, getChart(current.chart)).assets,
++          data = new TextEncoder().encode("path inspection only"),
++          project = activeProject._state, frontend = interfaceFSM.state;
++        for (const [entries, reader, suffix] of [[projectEntries, ffpxReadProjectBytes, "ffpx"],
++          [slotEntries, ffsxReadSlotBytes, "ffsx"]]) {
++          for (const name of ["assets/report..csv", "assets/.../note", "assets/.hidden", "assets/a..b/data"]) {
++            const bytes = ffpxZipStore([...entries, { name, data }]);
++            check(new TextDecoder().decode(ffpxZipRead(bytes).get(name)) === "path inspection only",
++              `harmless dotted path rejected: ${name}`);
++            check(reader(bytes) && activeProject._state === project && interfaceFSM.state === frontend,
++              `${suffix} valid dotted package mutated authority`);
++          }
++          for (const name of ["../escape", "assets/../escape", "assets/..", "/absolute", "\\absolute",
++            "C:/absolute", "C:\\absolute", "assets\\..\\escape"]) {
++            const bytes = ffpxZipStore([...entries, { name, data }]);
++            let caught = null;
++            try { reader(bytes); } catch (error) { caught = error; }
++            check(caught && activeProject._state === project && interfaceFSM.state === frontend,
++              `${suffix} unsafe path accepted or read changed authority: ${name}`);
++            caught = null;
++            try {
++              const file = new File([bytes], `unsafe.${suffix}`);
++              if (suffix === "ffpx") await api.project.importFile(file);
++              else await api.graphs.importFile(file, targetId);
++            } catch (error) { caught = error; }
++            check(caught && activeProject._state === project && interfaceFSM.state === frontend,
++              `${suffix} public unsafe package import committed: ${name}`);
++          }
++        }
++      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index a19a0c2..683884f 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 106,
++      "revision": 107,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:d5d5235fa7622a6258ac859b83d52bce310871321e19e50b941124ff4363f1c5",
++      "fingerprint": "sha256:ff59c53b1cd9b62ba787659953b843ae3ae1ff436fc9abcbd48298bc56c015d5",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261019-009-ffsx-header-translation-open.md"
++      "validation_review": "agent_space/reviews/review-20261019-010-code-package-paths-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 25,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index d263e42..2b8372d 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -5385,8 +5385,8 @@
+           let name = decoder.decode(bytes.subarray(cursor + 46, cursor + 46 + nameLength));
+           if (
+             !name ||
+-            name.includes("..") ||
+-            name.startsWith("/") ||
++            name.split(/[\\/]/).includes("..") ||
++            /^[\\/]|^[A-Za-z]:[\\/]/.test(name) ||
+             assets.has(name) ||
+             localOffset + 30 > bytes.length ||
+             view.getUint32(localOffset, true) !== 0x04034b50

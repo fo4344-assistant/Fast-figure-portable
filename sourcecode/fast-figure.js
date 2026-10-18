@@ -5385,8 +5385,8 @@
           let name = decoder.decode(bytes.subarray(cursor + 46, cursor + 46 + nameLength));
           if (
             !name ||
-            name.includes("..") ||
-            name.startsWith("/") ||
+            name.split(/[\\/]/).includes("..") ||
+            /^[\\/]|^[A-Za-z]:[\\/]/.test(name) ||
             assets.has(name) ||
             localOffset + 30 > bytes.length ||
             view.getUint32(localOffset, true) !== 0x04034b50

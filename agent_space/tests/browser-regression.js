@@ -6147,6 +6147,51 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(139, "STORE package paths distinguish parent segments and absolute roots from harmless dotted names", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        initialize.call(activeProject, createProjectState());
+        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+        const targetId = activeProject.slots.find(item => !item.hidden).id;
+        select(slotAt(targetId));
+        const csv = createProjectCsv([["x", "y"], ["1", "2"]], "path-probe.csv");
+        api.graphs.addObject(csv.id);
+        const current = slotAt(targetId), projectEntries = ffpxBuildProject().assets,
+          slotEntries = ffsxBuildSlot(current, getChart(current.chart)).assets,
+          data = new TextEncoder().encode("path inspection only"),
+          project = activeProject._state, frontend = interfaceFSM.state;
+        for (const [entries, reader, suffix] of [[projectEntries, ffpxReadProjectBytes, "ffpx"],
+          [slotEntries, ffsxReadSlotBytes, "ffsx"]]) {
+          for (const name of ["assets/report..csv", "assets/.../note", "assets/.hidden", "assets/a..b/data"]) {
+            const bytes = ffpxZipStore([...entries, { name, data }]);
+            check(new TextDecoder().decode(ffpxZipRead(bytes).get(name)) === "path inspection only",
+              `harmless dotted path rejected: ${name}`);
+            check(reader(bytes) && activeProject._state === project && interfaceFSM.state === frontend,
+              `${suffix} valid dotted package mutated authority`);
+          }
+          for (const name of ["../escape", "assets/../escape", "assets/..", "/absolute", "\\absolute",
+            "C:/absolute", "C:\\absolute", "assets\\..\\escape"]) {
+            const bytes = ffpxZipStore([...entries, { name, data }]);
+            let caught = null;
+            try { reader(bytes); } catch (error) { caught = error; }
+            check(caught && activeProject._state === project && interfaceFSM.state === frontend,
+              `${suffix} unsafe path accepted or read changed authority: ${name}`);
+            caught = null;
+            try {
+              const file = new File([bytes], `unsafe.${suffix}`);
+              if (suffix === "ffpx") await api.project.importFile(file);
+              else await api.graphs.importFile(file, targetId);
+            } catch (error) { caught = error; }
+            check(caught && activeProject._state === project && interfaceFSM.state === frontend,
+              `${suffix} public unsafe package import committed: ${name}`);
+          }
+        }
+      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
