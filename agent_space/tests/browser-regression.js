@@ -2155,6 +2155,87 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+    await run(59, "FFPX query packages one supplied Project without normalizing authority", async () => {
+      const source = projectClone(activeProject._state), live = JSON.stringify(activeProject._state);
+      source.meta.projectName = "supplied FFPX";
+      const before = JSON.stringify(source), bundle = ffpxBuildProject(source),
+        roundtrip = await ffpxReadProject(new File([ffpxZipStore(bundle.assets)], "supplied.ffpx"));
+      check(roundtrip.projectName === "supplied FFPX" && bundle.manifest.projectName === "supplied FFPX" &&
+        JSON.stringify(source) === before && JSON.stringify(activeProject._state) === live,
+        "FFPX used live metadata or mutated its read source");
+      const stamp = "2030-01-02T03-04-05-000Z", payload = appFSM.query("export", { operation: "project.exportFile", stamp }),
+        again = appFSM.query("export", { operation: "project.exportFile", stamp });
+      check(payload.mime === "application/vnd.fast-figure-project" && payload.name.endsWith(`-${stamp}.ffpx`) &&
+        Object.isFrozen(payload) && Object.isFrozen(payload.entries) && payload.entries !== again.entries &&
+        payload.entries.every((entry, i) => Object.isFrozen(entry) && Object.isFrozen(entry.data) && entry.data !== again.entries[i].data),
+        "FFPX query did not return detached immutable entries/name/MIME");
+      const invalid = projectClone(source); invalid.layout.gridRows = 0;
+      let failed = false;
+      try { ffpxBuildProject(invalid); } catch (_) { failed = true; }
+      check(failed, "invalid whole Project was packaged");
+      const trimmed = projectClone(source), chart = trimmed.charts.find(item => chartCsvIds(item).length),
+        referenced = chart && trimmed.assets.csvFiles.find(item => item.id === chartCsvIds(chart)[0]);
+      check(referenced, "FFPX reference fixture missing");
+      referenced.directory = "/assets/trash";
+      failed = false; const trashBefore = JSON.stringify(trimmed);
+      try { ffpxBuildProject(trimmed); } catch (_) { failed = true; }
+      check(failed && JSON.stringify(trimmed) === trashBefore, "FFPX retained a reference to excluded trash or mutated failure source");
+      check(!/projectObjects|getProjectCsv|getProjectImage/.test(ffpxBuildProject.toString()) &&
+        JSON.stringify(activeProject._state) === live, "FFPX builder consulted global registry or query changed authority");
+    });
+
+    await run(60, "Public project export gates selection and owns copied ZIP handoff lifecycle", async () => {
+      const create = URL.createObjectURL, revoke = URL.revokeObjectURL,
+        click = HTMLAnchorElement.prototype.click, query = readBackendProjection,
+        initial = interfaceFSM.readState().selectedSlotId;
+      let created = [], revoked = [], downloads = [], calls = 0, fail = false;
+      const failure = Error("expected FFPX handoff failure");
+      try {
+        URL.createObjectURL = blob => { const url = `blob:ffpx-${created.length}`; created.push({ url, blob }); return url; };
+        URL.revokeObjectURL = url => revoked.push(url);
+        HTMLAnchorElement.prototype.click = function () {
+          check(appFSM.state.lifecycle === "exporting", "project handoff outside lifecycle");
+          if (fail) throw failure;
+          downloads.push(this.download);
+          check(!revoked.includes(this.href), "FFPX URL released before handoff");
+        };
+        readBackendProjection = (kind, request) => {
+          check(kind === "export" && request.operation === "project.exportFile" && appFSM.state.lifecycle === "exporting" &&
+            /^\d{4}-.*Z$/.test(request.stamp) && !/[:.]/.test(request.stamp), "project query outside lifecycle or wrong request");
+          calls++; return query(kind, request);
+        };
+        const slot = activeProject.slots.find(item => !item.hidden);
+        select(slot);
+        check(await api.project.exportFile() === undefined && calls === 0 && created.length === 0 &&
+          interfaceFSM.readState().selectedSlotId === slot.id && appFSM.state.lifecycle === "ready",
+          "selected-slot precondition queried/downloaded or changed selection/result");
+        api.slots.select(null);
+        const before = JSON.stringify(activeProject._state);
+        check(await api.project.exportFile() === undefined && calls === 1 && created.length === 1 &&
+          revoked.includes(created[0].url) && downloads[0].endsWith(".ffpx") && appFSM.state.lifecycle === "ready",
+          "project export result/resource/lifecycle mismatch");
+        const payload = await ffpxReadProject(new File([created[0].blob], "download.ffpx"));
+        check(payload.projectName === activeProject.projectName, "handoff ZIP changed Project metadata");
+        fail = true; let caught;
+        try { await api.project.exportFile(); } catch (error) { caught = error; }
+        check(caught === failure && revoked.includes(created[1]?.url) && appFSM.state.lifecycle === "ready",
+          "project handoff swallowed failure or leaked resource/lifecycle");
+        const busy = await appFSM.run("exporting", "FFPX_BUSY_PROBE", () => api.project.exportFile()).then(() => null, error => error);
+        check(busy && calls === 2 && appFSM.state.lifecycle === "ready", "busy project export queried/reentered lifecycle");
+        readBackendProjection = () => { throw failure; }; caught = null;
+        try { await api.project.exportFile(); } catch (error) { caught = error; }
+        check(caught === failure && created.length === 2 && JSON.stringify(activeProject._state) === before &&
+          interfaceFSM.readState().selectedSlotId === null && appFSM.state.lifecycle === "ready",
+          "query failure swallowed, allocated resources or changed Project/selection");
+        check(!/activeProject|ffpxBuildProject|ffpxZipStore|new Blob|createObjectURL/.test(downloadProject.toString()),
+          "Application owns Backend/renderer project export work");
+      } finally {
+        URL.createObjectURL = create; URL.revokeObjectURL = revoke;
+        HTMLAnchorElement.prototype.click = click; readBackendProjection = query;
+        api.slots.select(initial);
+      }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

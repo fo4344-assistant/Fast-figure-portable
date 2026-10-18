@@ -1,0 +1,300 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 3c2f289..c60dd2a 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -75,7 +75,11 @@ After result-record commit `25fa8c6a3f92054152b133465dd753f073a6c4cc`, the user
+ 
+ ## Thirteenth implementation unit — original asset bytes handoff
+ 
+-Baseline `4052ee361c4a4825e906e67cfdbd88a2a265f581`. Code50 translates the existing original-asset Backend query, public exporting lifecycle/current Frontend path binding and copied-payload renderer handoff. Missing/wrong-kind/no-byte targets return false; errors propagate; no Project/selection/status mutation. Shared renderer cleanup now also encloses anchor creation. Cases57/58 cover original CSV/image bytes, MIME, immutable copies, lifecycle, missing/busy/error paths and resource release. Review013 and patch20261018-027 record this unit. Source39/pseudocode13 unchanged; code50 stays stale. Runner fingerprint correction and Actions version/build/regression evidence remain pending; whole Plan023 remains open.
++Baseline `4052ee361c4a4825e906e67cfdbd88a2a265f581`. Code50 translates the existing original-asset Backend query, public exporting lifecycle/current Frontend path binding and copied-payload renderer handoff. Missing/wrong-kind/no-byte targets return false; errors propagate; no Project/selection/status mutation. Shared renderer cleanup now also encloses anchor creation. Cases57/58 cover original CSV/image bytes, MIME, immutable copies, lifecycle, missing/busy/error paths and resource release. Review013 and patch20261018-027 record this unit. Source39/pseudocode13 unchanged; code50 stays stale. Canonical code50 fingerprint recorded from Actions; cumulative versions39101207023 passed at feba7d2 from baseline4052ee3. Initial regression39101164429 exposed two test-fixture/runtime-revision assertions; patch029 corrected tests without production changes. Regression39101292726 passed58 inline +58 split and versions39101292588 passed at4b5b663adeb37c232c082fd700dd494a3639933d. Implementation build39101164483 passed. Review013 preserves failures and limits; whole Plan023 remains open.
++
++## Fourteenth implementation unit — current whole-Project FFPX export
++
++Baseline `4b5b663adeb37c232c082fd700dd494a3639933d`. Code51 translates project.exportFile through the official Backend export query, a single public exporting lifecycle, selected-slot precondition and copied-entry renderer handoff. FFPX builder accepts one supplied Project; all metadata/assets/charts/slots/directories come from its detached read, and referenced trash is rejected after filtering. Legacy validation's accessor installation is confined to that detached copy, not authority. Existing XML documents/original byte payloads and empty document structure are preserved. Cases59/60 cover source isolation, roundtrip, immutable query entries, validation/reference failures, selection/busy/no-query preconditions, actual ZIP handoff, lifecycle and URL cleanup. Review014 and patch030 track evidence. Source39/pseudocode13 unchanged; code51 stale; runner fingerprint and verification pending, whole goal open.
+ 
+ Relocation code49 cumulative versions39100969744 and push versions39100969916 passed at4052ee361c4a4825e906e67cfdbd88a2a265f581, after the canonical fingerprint correction. These metadata checks do not extend earlier source regression coverage.
+ 
+diff --git a/agent_space/reviews/review-20261018-013-code-original-asset-export-open.md b/agent_space/reviews/review-20261018-013-code-original-asset-export-open.md
+index 8241145..bfc19c9 100644
+--- a/agent_space/reviews/review-20261018-013-code-original-asset-export-open.md
++++ b/agent_space/reviews/review-20261018-013-code-original-asset-export-open.md
+@@ -15,7 +15,7 @@ Baseline `4052ee361c4a4825e906e67cfdbd88a2a265f581`. Source39 and pseudocode13 r
+ 
+ ## Actions evidence
+ 
+-Implementation `6fdd71d28b31c9a52ff7e553d4a396ce87dd52a5`: ubuntu-latest build39101164483 passed; bot6e4565d updated only generated distributions and was fast-forwarded locally. Initial version39101164447 failed with `source-code fingerprint changed without updating development-versions.json`, reporting actual code50 sha256:400a291052b5fbd65e1a010a2f78a674b12b828b60d70ed8f860e90d02fddd57. Patch028 uses that output without local checker execution or semantic revision increase. Regression39101164429 failed: cases1–56 passed, case57 reported `image export fixture missing`; case58 compared all Frontend runtime fields although lifecycle transitions legitimately increment revision. Patch029 supplies an explicit image fixture and compares the five selection fields separately from lifecycle checks, retaining Project immutability and resource/error assertions. No production changes or weakened selection contract. Version39101206486 and cumulative dispatch39101207023 passed at feba7d20cbc70d629dfb58ba1b3faaa7819808e4 (base4052ee361c4a4825e906e67cfdbd88a2a265f581). Corrected regression remains pending; unit completion is not claimed.
++Implementation `6fdd71d28b31c9a52ff7e553d4a396ce87dd52a5`: ubuntu-latest build39101164483 passed; bot6e4565d updated only generated distributions and was fast-forwarded locally. Initial version39101164447 failed with `source-code fingerprint changed without updating development-versions.json`, reporting actual code50 sha256:400a291052b5fbd65e1a010a2f78a674b12b828b60d70ed8f860e90d02fddd57. Patch028 uses that output without local checker execution or semantic revision increase. Regression39101164429 failed: cases1–56 passed, case57 reported `image export fixture missing`; case58 compared all Frontend runtime fields although lifecycle transitions legitimately increment revision. Patch029 supplies an explicit image fixture and compares the five selection fields separately from lifecycle checks, retaining Project immutability and resource/error assertions. No production changes or weakened selection contract. Version39101206486 and cumulative dispatch39101207023 passed at feba7d20cbc70d629dfb58ba1b3faaa7819808e4 (base4052ee361c4a4825e906e67cfdbd88a2a265f581). Corrected regression39101292726 passed58 inline +58 split at4b5b663adeb37c232c082fd700dd494a3639933d; versions39101292588 passed at the same HEAD. This verifies the bounded original-asset contract and retained earlier regressions, not whole Plan023. No Source/pseudocode or production change was needed for the fixture correction.
+ 
+ ## Scope boundaries and next checks
+ 
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 48c8e5a..fda3a81 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2155,6 +2155,87 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(59, "FFPX query packages one supplied Project without normalizing authority", async () => {
++      const source = projectClone(activeProject._state), live = JSON.stringify(activeProject._state);
++      source.meta.projectName = "supplied FFPX";
++      const before = JSON.stringify(source), bundle = ffpxBuildProject(source),
++        roundtrip = await ffpxReadProject(new File([ffpxZipStore(bundle.assets)], "supplied.ffpx"));
++      check(roundtrip.projectName === "supplied FFPX" && bundle.manifest.projectName === "supplied FFPX" &&
++        JSON.stringify(source) === before && JSON.stringify(activeProject._state) === live,
++        "FFPX used live metadata or mutated its read source");
++      const stamp = "2030-01-02T03-04-05-000Z", payload = appFSM.query("export", { operation: "project.exportFile", stamp }),
++        again = appFSM.query("export", { operation: "project.exportFile", stamp });
++      check(payload.mime === "application/vnd.fast-figure-project" && payload.name.endsWith(`-${stamp}.ffpx`) &&
++        Object.isFrozen(payload) && Object.isFrozen(payload.entries) && payload.entries !== again.entries &&
++        payload.entries.every((entry, i) => Object.isFrozen(entry) && Object.isFrozen(entry.data) && entry.data !== again.entries[i].data),
++        "FFPX query did not return detached immutable entries/name/MIME");
++      const invalid = projectClone(source); invalid.layout.gridRows = 0;
++      let failed = false;
++      try { ffpxBuildProject(invalid); } catch (_) { failed = true; }
++      check(failed, "invalid whole Project was packaged");
++      const trimmed = projectClone(source), chart = trimmed.charts.find(item => chartCsvIds(item).length),
++        referenced = chart && trimmed.assets.csvFiles.find(item => item.id === chartCsvIds(chart)[0]);
++      check(referenced, "FFPX reference fixture missing");
++      referenced.directory = "/assets/trash";
++      failed = false; const trashBefore = JSON.stringify(trimmed);
++      try { ffpxBuildProject(trimmed); } catch (_) { failed = true; }
++      check(failed && JSON.stringify(trimmed) === trashBefore, "FFPX retained a reference to excluded trash or mutated failure source");
++      check(!/projectObjects|getProjectCsv|getProjectImage/.test(ffpxBuildProject.toString()) &&
++        JSON.stringify(activeProject._state) === live, "FFPX builder consulted global registry or query changed authority");
++    });
++
++    await run(60, "Public project export gates selection and owns copied ZIP handoff lifecycle", async () => {
++      const create = URL.createObjectURL, revoke = URL.revokeObjectURL,
++        click = HTMLAnchorElement.prototype.click, query = readBackendProjection,
++        initial = interfaceFSM.readState().selectedSlotId;
++      let created = [], revoked = [], downloads = [], calls = 0, fail = false;
++      const failure = Error("expected FFPX handoff failure");
++      try {
++        URL.createObjectURL = blob => { const url = `blob:ffpx-${created.length}`; created.push({ url, blob }); return url; };
++        URL.revokeObjectURL = url => revoked.push(url);
++        HTMLAnchorElement.prototype.click = function () {
++          check(appFSM.state.lifecycle === "exporting", "project handoff outside lifecycle");
++          if (fail) throw failure;
++          downloads.push(this.download);
++          check(!revoked.includes(this.href), "FFPX URL released before handoff");
++        };
++        readBackendProjection = (kind, request) => {
++          check(kind === "export" && request.operation === "project.exportFile" && appFSM.state.lifecycle === "exporting" &&
++            /^\d{4}-.*Z$/.test(request.stamp) && !/[:.]/.test(request.stamp), "project query outside lifecycle or wrong request");
++          calls++; return query(kind, request);
++        };
++        const slot = activeProject.slots.find(item => !item.hidden);
++        select(slot);
++        check(await api.project.exportFile() === undefined && calls === 0 && created.length === 0 &&
++          interfaceFSM.readState().selectedSlotId === slot.id && appFSM.state.lifecycle === "ready",
++          "selected-slot precondition queried/downloaded or changed selection/result");
++        api.slots.select(null);
++        const before = JSON.stringify(activeProject._state);
++        check(await api.project.exportFile() === undefined && calls === 1 && created.length === 1 &&
++          revoked.includes(created[0].url) && downloads[0].endsWith(".ffpx") && appFSM.state.lifecycle === "ready",
++          "project export result/resource/lifecycle mismatch");
++        const payload = await ffpxReadProject(new File([created[0].blob], "download.ffpx"));
++        check(payload.projectName === activeProject.projectName, "handoff ZIP changed Project metadata");
++        fail = true; let caught;
++        try { await api.project.exportFile(); } catch (error) { caught = error; }
++        check(caught === failure && revoked.includes(created[1]?.url) && appFSM.state.lifecycle === "ready",
++          "project handoff swallowed failure or leaked resource/lifecycle");
++        const busy = await appFSM.run("exporting", "FFPX_BUSY_PROBE", () => api.project.exportFile()).then(() => null, error => error);
++        check(busy && calls === 2 && appFSM.state.lifecycle === "ready", "busy project export queried/reentered lifecycle");
++        readBackendProjection = () => { throw failure; }; caught = null;
++        try { await api.project.exportFile(); } catch (error) { caught = error; }
++        check(caught === failure && created.length === 2 && JSON.stringify(activeProject._state) === before &&
++          interfaceFSM.readState().selectedSlotId === null && appFSM.state.lifecycle === "ready",
++          "query failure swallowed, allocated resources or changed Project/selection");
++        check(!/activeProject|ffpxBuildProject|ffpxZipStore|new Blob|createObjectURL/.test(downloadProject.toString()),
++          "Application owns Backend/renderer project export work");
++      } finally {
++        URL.createObjectURL = create; URL.revokeObjectURL = revoke;
++        HTMLAnchorElement.prototype.click = click; readBackendProjection = query;
++        api.slots.select(initial);
++      }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index ca7d53a..4977512 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 50,
++      "revision": 51,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-013-code-original-asset-export-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-014-code-project-export-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 13,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 654fe1a..5a80d6b 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -421,6 +421,16 @@
+             settings: Object.freeze(normalizeImageSettings(slot)),
+           }) : null;
+         }
++        if (kind === "export" && request.operation === "project.exportFile") {
++          const source = activeProject._state, bundle = ffpxBuildProject(source);
++          return Object.freeze({
++            name: `${projectFileStem(source.meta.projectName)}-${request.stamp}.ffpx`,
++            mime: "application/vnd.fast-figure-project",
++            entries: Object.freeze(bundle.assets.map((entry) => Object.freeze({
++              name: entry.name, data: Object.freeze(Array.from(entry.data)),
++            }))),
++          });
++        }
+         if (kind === "export" && request.operation === "assets.download") {
+           const source = activeProject._state,
+             selected = request.path ? projectVfs.resolve(request.path, source) : null,
+@@ -5088,18 +5098,20 @@
+         }
+         return slotList;
+       }
+-      function ffpxBuildProject() {
+-        validateProjectObject(activeProject, { requireSlots: true });
+-        let projectObject = projectObjects.read("project"),
+-          layoutObject = projectObjects.read("layout"),
+-          labelObject = projectObjects.read("labels"),
+-          captionObject = projectObjects.read("captions"),
+-          dataObjects = projectObjects.read("data").filter((csv) => !projectVfs.isTrashed(projectAssetPath(csv))),
+-          imageObjects = projectObjects.read("images").filter((image) => !projectVfs.isTrashed(projectAssetPath(image))),
+-          chartObjects = projectObjects.read("charts"),
+-          slotObjects = projectObjects.read("slots"),
+-          appearanceObject = projectObjects.read("appearance"),
+-          exportObject = projectObjects.read("export"),
++      function ffpxBuildProject(source = activeProject._state) {
++        // Legacy validation installs slot accessors: confine that work to the detached read.
++        const snapshot = projectClone(source);
++        validateProjectObjectState(snapshot, { requireSlots: true });
++        let projectObject = snapshot.meta,
++          layoutObject = snapshot.layout,
++          labelObject = snapshot.annotations.labels,
++          captionObject = snapshot.annotations.captions,
++          dataObjects = snapshot.assets.csvFiles.filter((csv) => !projectVfs.isTrashed(projectAssetPath(csv))),
++          imageObjects = snapshot.assets.images.filter((image) => !projectVfs.isTrashed(projectAssetPath(image))),
++          chartObjects = snapshot.charts,
++          slotObjects = snapshot.slots,
++          appearanceObject = snapshot.appearance,
++          exportObject = snapshot.export,
+           manifest = {
+             schema: "fast-figure-project",
+             version: PACKAGE_FORMAT_VERSION,
+@@ -5150,8 +5162,8 @@
+         }
+         for (let chart of chartObjects) {
+           chartCsvIds(chart).forEach((id) => {
+-            let csv = getProjectCsv(id);
+-            if (!csv || projectVfs.isTrashed(projectAssetPath(csv)))
++            let csv = dataObjects.find((item) => item.id === id);
++            if (!csv)
+               throw Error(`FFPX 차트가 내보낼 수 없는 CSV ${id}를 참조합니다.`);
+           });
+           manifest.charts.push(chartExportCopy(chart));
+@@ -5159,8 +5171,8 @@
+         for (let slot of slotObjects) {
+           let copy = projectClone(slot);
+           if (copy.imageId != null) {
+-            let image = getProjectImage(copy.imageId);
+-            if (!image || projectVfs.isTrashed(projectAssetPath(image)))
++            let image = imageObjects.find((item) => item.id === copy.imageId);
++            if (!image)
+               throw Error(`FFPX 슬롯이 내보낼 수 없는 이미지 ${copy.imageId}를 참조합니다.`);
+           }
+           manifest.slots.push(copy);
+@@ -5172,9 +5184,7 @@
+             projectName: manifest.projectName,
+             exportedAt: manifest.exportedAt,
+             fileSystem: {
+-              directories: projectObjects
+-                .read("files")
+-                .directories.filter((path) => !projectVfs.isTrashed(path)),
++              directories: snapshot.fileSystem.directories.filter((path) => !projectVfs.isTrashed(path)),
+             },
+             appearance: {
+               slotStyle: manifest.slotStyle,
+@@ -5507,31 +5517,16 @@
+         return stem || "fast-figure-project";
+       }
+       function downloadProject() {
+-        if (getSelectedSlot())
+-          return status("프로젝트 내보내기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
+-        try {
+-          let exportProjectName = String(activeProject.projectName || "").trim().slice(0, 120),
+-            project = ffpxBuildProject(),
+-            blob = new Blob([ffpxZipStore(project.assets)], {
+-              type: "application/vnd.fast-figure-project",
+-            }),
+-            link = document.createElement("a"),
+-            stamp = new Date().toISOString().replace(/[:.]/g, "-");
+-          link.href = URL.createObjectURL(blob);
+-          link.download = `${projectFileStem(exportProjectName)}-${stamp}.ffpx`;
+-          link.click();
+-          setTimeout(() => URL.revokeObjectURL(link.href), 0);
+-          status(`${exportProjectName || "프로젝트"}를 FFPX 파일로 내보냈습니다.`);
+-          debugLog("project:export-ffpx", {
+-            projectName: activeProject.projectName,
+-            charts: activeProject.charts.length,
+-            slots: activeProject.slots.length,
+-            assets: project.assets.length,
++        return appFSM.run("exporting", "project.exportFile", async () => {
++          if (interfaceFSM.readState().selectedSlotId !== null) {
++            status("프로젝트 내보내기는 슬롯 선택을 해제한 뒤 사용할 수 있습니다.");
++            return;
++          }
++          const payload = appFSM.query("export", {
++            operation: "project.exportFile", stamp: new Date().toISOString().replace(/[:.]/g, "-"),
+           });
+-        } catch (error) {
+-          status("FFPX 내보내기 오류: " + error.message);
+-          debugLog("project:export-error", { message: error.message });
+-        }
++          await downloadExportPayload(payload);
++        });
+       }
+       function downloadProjectAsset(path) {
+         return appFSM.run("exporting", "assets.download", async () => {
+diff --git a/agent_space/reviews/review-20261018-014-code-project-export-open.md b/agent_space/reviews/review-20261018-014-code-project-export-open.md
+new file mode 100644
+index 0000000..2960413
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-014-code-project-export-open.md
+@@ -0,0 +1,22 @@
++# Code r51 — whole-Project FFPX export (OPEN)
++
++Baseline `4b5b663adeb37c232c082fd700dd494a3639933d`. Source39 and pseudocode13 remain semantic authority. This is a direct translation of their existing project export contract, not a new package format or whole-goal closure.
++
++## Contract-to-artifact checklist
++
++| Requirement | Authority → translation → code | Evidence / limit |
++| --- | --- | --- |
++| Validate current whole Project; build one supplied read; filter trash; recheck export references; preserve original bytes/documents | sourcescript/backend/assets_files.py ffpxBuildProject and project_state.py EXPORT_BACKEND_READ_CONTRACT → pseudocode/backend/assets_files.pcal BuildFfpxInRead/BuildFfpxDocumentEntries and project_state.pcal ExportRead → ffpxBuildProject(source), readBackendProjection | Case59 supplied/live isolation, real ZIP readback, bad grid and referenced-trash rejection; pending Actions. Shared legacy validator installs accessors only on detached read |
++| Backend copies immutable entries/name/MIME, no resource/Frontend access | Same export query contract | Case59 fresh frozen nested arrays; no global registry/asset lookups in builder; pending Actions |
++| Selected slot warns, returns None without query/download; otherwise one current query/handoff, None, original failure propagation | sourcescript/application/public_api/assets.py downloadProject and public_api/__init__.py lifecycle → pseudocode/application/public_api/assets.pcal downloadProject and contract.pcal → downloadProject | Case60 selected/busy/query/success/error paths, pending Actions |
++| One exporting lifecycle, copied renderer payload and owned URL cleanup | sourcescript/frontend/renderer.py downloadExportPayload → pseudocode/frontend/renderer.pcal → existing downloadExportPayload | Case60 actual ZIP Blob/readback, failure cleanup and ready state. Earlier54/56/58 cover shared renderer failure boundaries |
++| Preserve authority, hierarchy, advanced functionality | Existing Source/pseudocode contracts cover XML package and original-byte surface | No upper-stage semantic addition necessary. Application no longer serializes/reads persistent objects or swallows errors. No policy edits |
++| Evidence/lineage and whole limits | development-versions.json code51 stale with same upper lineage | Runner digest pending; initial previous digest intentionally retained until actual canonical runner report. Tests/build/checker only on ubuntu-latest |
++
++## Verification status
++
++Only file/diff/Git operations locally. Push will run default runner syntax/regression, distribution and lineage workflows. Record actual SHA/run IDs and runner fingerprint before claiming bounded verification. Cases1–58 remain required, not whole Source coverage. Optional TLC not executed; no browser disk-save acknowledgement promised.
++
++## Open whole-goal work
++
++Graph/asset current-authority candidates, complete graph calculations and canonical import, raster snapshot/current-capture composition, supplied-projection dashboard/API integration and full requirement audit remain. Passing this bounded suite cannot close Plan023 or make code current.
