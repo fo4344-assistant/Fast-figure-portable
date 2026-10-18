@@ -14,6 +14,10 @@ Case131 builds a real CSV/chart FFPX ZIP, tests valid read, then corrupts docume
 
 Code101 sha256:39c6904b4bf679c043a95cb68853731452f1a930ea122337c89c8b6e73949577 remains stale, derives unchanged Source45/PlusCal24. Exact-SHA132 inline+132 split/repeat/build/canonical+cumulative versions/fidelity pending. No local application/test/build/checker or optional TLC. Dist generator-only; default ubuntu-latest workflow unchanged.
 
+## Actual Unit50 evidence
+
+Execution8a06cc2852910374f407427a38850146339192ab: push regression39166674029 and independent manual repeat39166675390 each PASS132 inline+132 split (264 actual pass log lines each, inspected131/132). ubuntu-24.04 standard runner image. Build39166674026 PASS generated34756553c3e02b081e96f26bb26433f1056d9967 with only dist/inline/Fast-figure.html and dist/split/Fast-figure.zip changed. Canonical versions39166674025/cumulative39166677256(base795b3031075c2acced5db7c24d835b74c339c108)/fidelity39166678975 PASS at implementation SHA. This supersedes the bounded pending execution entries above; remaining global checklist stays OPEN. No local application execution. Next inspected discrepancy: FFPX typed settings schema/version were overwritten before checking; FFSX typed slot contentType was not required graph, contrary to ReadFfpxDocumentPayload/ReadFfsxDocumentPayload. Unit51 review005 handles this separate boundary.
+
 ## Completion checklist status
 
 - Source hierarchy / policy / one authority: bounded mapping above; global audit OPEN.

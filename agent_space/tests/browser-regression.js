@@ -5948,6 +5948,57 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(133, "Package readers reject incompatible typed schema slot kind and every document version", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        initialize.call(activeProject, createProjectState());
+        const target = activeProject.slots[0]; select(target);
+        const csv = createProjectCsv([["x", "y"], [5, 6]], "schema.csv"); api.graphs.addObject(csv.id);
+        const current = slotAt(target.id), packages = [
+          { entries: ffpxBuildProject().assets, read: ffpxReadProjectBytes, name: "project.xml", selector: "fastFigureProject > settings" },
+          { entries: ffsxBuildSlot(current, getChart(current.chart)).assets, read: ffsxReadSlotBytes, name: "slot.xml", selector: "slot > settings" },
+        ], project = activeProject._state, frontend = interfaceFSM.state;
+        for (const pack of packages) {
+          const rewrite = (name, mutate) => ffpxZipStore(pack.entries.map(entry => {
+            if (entry.name !== name) return entry;
+            const doc = new DOMParser().parseFromString(new TextDecoder().decode(entry.data), "application/xml"); mutate(doc);
+            return { ...entry, data: new TextEncoder().encode(new XMLSerializer().serializeToString(doc)) };
+          }));
+          pack.read(ffpxZipStore(pack.entries));
+          const typed = pack.name === "project.xml" ? [
+            ["schema", "foreign-project"], ["schema", null], ["schema", undefined],
+            ["version", "wrong-version"], ["version", null], ["version", undefined],
+          ] : [["contentType", "image"], ["contentType", null], ["contentType", undefined]];
+          for (const [key, replacement] of typed) {
+            const bytes = rewrite(pack.name, doc => {
+              const wrapper = doc.querySelector(pack.selector), value = ffpxXmlReadValue(wrapper.firstElementChild);
+              if (replacement === undefined) delete value[key]; else value[key] = replacement;
+              wrapper.innerHTML = ffpxXmlValue(value);
+            });
+            let failed = false; try { pack.read(bytes); } catch (_) { failed = true; }
+            check(failed, `${pack.name} accepted typed ${key}=${replacement}`);
+          }
+          for (const entry of pack.entries.filter(item => item.name.endsWith(".xml"))) {
+            for (const mode of ["missing-version", "wrong-version", "wrong-root"]) {
+              const bytes = rewrite(entry.name, doc => {
+                if (mode === "missing-version") doc.documentElement.removeAttribute("version");
+                else if (mode === "wrong-version") doc.documentElement.setAttribute("version", "incompatible");
+                else { const wrong = doc.createElement("foreignRoot"); wrong.setAttribute("version", String(PACKAGE_FORMAT_VERSION));
+                  while (doc.documentElement.firstChild) wrong.append(doc.documentElement.firstChild);
+                  doc.replaceChild(wrong, doc.documentElement); }
+              });
+              let failed = false; try { pack.read(bytes); } catch (_) { failed = true; }
+              check(failed, `${entry.name} accepted ${mode}`);
+            }
+          }
+        }
+        check(activeProject._state === project && interfaceFSM.state === frontend, "schema/version parsing mutated authority");
+      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

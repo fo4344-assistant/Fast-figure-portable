@@ -5849,8 +5849,10 @@
               "project.xml",
               "fastFigureProject",
             ),
-            project = ffpxNamedValue(projectRoot, "settings"),
-            assetRoot = ffpxReadXmlDocument(
+            project = ffpxNamedValue(projectRoot, "settings");
+        if (project?.schema !== "fast-figure-project" || project.version !== PACKAGE_FORMAT_VERSION)
+          throw Error("지원하지 않는 FFPX 프로젝트 형식입니다.");
+        let assetRoot = ffpxReadXmlDocument(
               assets,
               "assets/assets.xml",
               "fastFigureAssets",
@@ -7329,6 +7331,7 @@
               "assets/assets.xml",
               "fastFigureAssets",
             );
+          if (slot?.contentType !== "graph") throw Error("FFSX graph 슬롯이 필요합니다.");
           delete chart.id;
           debugLog("slotFfsx:read-version", {
             format: "FFSX",

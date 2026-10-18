@@ -299,6 +299,12 @@ Unit49 bounded evidence: implementation795b3031075c2acced5db7c24d835b74c339c108 
 
 Baseline5d7475c44f3c8de1a066972d0e7add5d580760f4. Source45/PlusCal24 unchanged: DecodeNamedXml and actual FFPX/FFSX document procedures require single direct wrappers/value children and direct metadata collection. Code101 replaces first-match/deep-descendant parsing with ffpxDirectChild/ffpxWrappedValue across actual readers. Cases131/132 exercise valid and adversarial ZIP-level wrapper duplication/removal/nesting/excess values and preserve authority identity. Review agent_space/reviews/review-20261019-004-code-package-wrappers-open.md and pair20261019-007 record mapping, rejected alternatives, untested scopes. Exact-SHA132 inline+split/repeat/build/canonical+cumulative/fidelity pending; code stays stale and comprehensive Plan023 audit remains open. Atomic gh delivery exception retained for immediate-parent code+lineage gates, ordinary documentation remains Contents API.
 
+Unit50 verified at8a06cc2852910374f407427a38850146339192ab: regression39166674029/repeat39166675390 PASS132 inline+132 split each; build39166674026 generated dist-only34756553c3e02b081e96f26bb26433f1056d9967; canonical39166674025/cumulative39166677256/fidelity39166678975 PASS. Actual evidence supersedes pending entries, no whole-conformance claim.
+
+### Fifty-first bounded unit — package semantic discriminants
+
+Baseline34756553c3e02b081e96f26bb26433f1056d9967. Source45/PlusCal24 unchanged: ReadFfpxDocumentPayload requires decoded schema/version before payload construction, ReadFfsxDocumentPayload requires graph contentType. Code102 checks these actual values instead of trusting overwritten transport fields. Case133 corrupts typed discriminants and every real FFPX/FFSX XML entry root/version, checks valid reads and read-only authority. Pair20261019-008/review-20261019-005-code-package-discriminants-open.md record mapping/exclusions. New exact-SHA133 inline+split/repeat/build/canonical+cumulative/fidelity pending; code stale/full audit open, no local runtime or manual dist change.
+
 ## Temporary-file rule
 
 The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.

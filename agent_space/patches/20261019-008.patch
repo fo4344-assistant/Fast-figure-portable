@@ -1,0 +1,182 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 751fcd1..8f08fbd 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -299,6 +299,12 @@ Unit49 bounded evidence: implementation795b3031075c2acced5db7c24d835b74c339c108
+ 
+ Baseline5d7475c44f3c8de1a066972d0e7add5d580760f4. Source45/PlusCal24 unchanged: DecodeNamedXml and actual FFPX/FFSX document procedures require single direct wrappers/value children and direct metadata collection. Code101 replaces first-match/deep-descendant parsing with ffpxDirectChild/ffpxWrappedValue across actual readers. Cases131/132 exercise valid and adversarial ZIP-level wrapper duplication/removal/nesting/excess values and preserve authority identity. Review agent_space/reviews/review-20261019-004-code-package-wrappers-open.md and pair20261019-007 record mapping, rejected alternatives, untested scopes. Exact-SHA132 inline+split/repeat/build/canonical+cumulative/fidelity pending; code stays stale and comprehensive Plan023 audit remains open. Atomic gh delivery exception retained for immediate-parent code+lineage gates, ordinary documentation remains Contents API.
+ 
++Unit50 verified at8a06cc2852910374f407427a38850146339192ab: regression39166674029/repeat39166675390 PASS132 inline+132 split each; build39166674026 generated dist-only34756553c3e02b081e96f26bb26433f1056d9967; canonical39166674025/cumulative39166677256/fidelity39166678975 PASS. Actual evidence supersedes pending entries, no whole-conformance claim.
++
++### Fifty-first bounded unit — package semantic discriminants
++
++Baseline34756553c3e02b081e96f26bb26433f1056d9967. Source45/PlusCal24 unchanged: ReadFfpxDocumentPayload requires decoded schema/version before payload construction, ReadFfsxDocumentPayload requires graph contentType. Code102 checks these actual values instead of trusting overwritten transport fields. Case133 corrupts typed discriminants and every real FFPX/FFSX XML entry root/version, checks valid reads and read-only authority. Pair20261019-008/review-20261019-005-code-package-discriminants-open.md record mapping/exclusions. New exact-SHA133 inline+split/repeat/build/canonical+cumulative/fidelity pending; code stale/full audit open, no local runtime or manual dist change.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261019-004-code-package-wrappers-open.md b/agent_space/reviews/review-20261019-004-code-package-wrappers-open.md
+index c1937be..3cffbc3 100644
+--- a/agent_space/reviews/review-20261019-004-code-package-wrappers-open.md
++++ b/agent_space/reviews/review-20261019-004-code-package-wrappers-open.md
+@@ -14,6 +14,10 @@ Case131 builds a real CSV/chart FFPX ZIP, tests valid read, then corrupts docume
+ 
+ Code101 sha256:39c6904b4bf679c043a95cb68853731452f1a930ea122337c89c8b6e73949577 remains stale, derives unchanged Source45/PlusCal24. Exact-SHA132 inline+132 split/repeat/build/canonical+cumulative versions/fidelity pending. No local application/test/build/checker or optional TLC. Dist generator-only; default ubuntu-latest workflow unchanged.
+ 
++## Actual Unit50 evidence
++
++Execution8a06cc2852910374f407427a38850146339192ab: push regression39166674029 and independent manual repeat39166675390 each PASS132 inline+132 split (264 actual pass log lines each, inspected131/132). ubuntu-24.04 standard runner image. Build39166674026 PASS generated34756553c3e02b081e96f26bb26433f1056d9967 with only dist/inline/Fast-figure.html and dist/split/Fast-figure.zip changed. Canonical versions39166674025/cumulative39166677256(base795b3031075c2acced5db7c24d835b74c339c108)/fidelity39166678975 PASS at implementation SHA. This supersedes the bounded pending execution entries above; remaining global checklist stays OPEN. No local application execution. Next inspected discrepancy: FFPX typed settings schema/version were overwritten before checking; FFSX typed slot contentType was not required graph, contrary to ReadFfpxDocumentPayload/ReadFfsxDocumentPayload. Unit51 review005 handles this separate boundary.
++
+ ## Completion checklist status
+ 
+ - Source hierarchy / policy / one authority: bounded mapping above; global audit OPEN.
+diff --git a/agent_space/reviews/review-20261019-005-code-package-discriminants-open.md b/agent_space/reviews/review-20261019-005-code-package-discriminants-open.md
+new file mode 100644
+index 0000000..a07be39
+--- /dev/null
++++ b/agent_space/reviews/review-20261019-005-code-package-discriminants-open.md
+@@ -0,0 +1,28 @@
++# Plan023 Unit51 — package semantic discriminants (open)
++
++Baseline34756553c3e02b081e96f26bb26433f1056d9967 is generated dist-only successor to8a06cc2852910374f407427a38850146339192ab. Unit50 actual evidence in review004:132 inline+132 split each twice, build/canonical/cumulative/fidelity PASS. No repeat of completed caption/typed codec/wrapper fixes.
++
++## Exact bounded mapping
++
++Source45 sourcescript/backend/assets_files.py ffpxReadProject step8 and ffsxReadSlot require package schema/version and single graph slot semantics. PlusCal24 pseudocode/backend/assets_files.pcal ReadFfpxDocumentPayload explicitly Require(project.schema = "fast-figure-project" /\ project.version = PACKAGE_FORMAT_VERSION) before constructing payload; ReadFfsxDocumentPayload explicitly Require(settings.contentType = "graph"). Source/PlusCal unchanged. Runtime sourcecode/fast-figure.js now checks decoded project settings before replacing schema/version in transport payload, and requires decoded FFSX slot.contentType graph. Previously tautological post-construction schema check could not reject a foreign typed project schema/version. Root XML version already checked by ffpxReadXmlDocument and remains independent of typed settings. No format upgrade or new schema rule introduced.
++
++Case133 builds actual CSV/chart FFPX/FFSX ZIPs, verifies valid reads, corrupts typed schema/version/contentType (foreign/null/missing) and independently corrupts every XML entry root/version (wrong root/wrong version/missing version). The same parser used in commands is invoked; Project/Frontend identity unchanged throughout reads. Earlier131/132 remain cumulative. Rejected trusting rewritten transport fields or root-only version checks, Source weakening, redundant parser, unrelated ZIP redesign. Scope excludes deeper ZIP structural agreement, asset dataRef/metadata validation, missing-setting normalization/initializer, raster/current-snapshot lifetime and dashboard/timing.
++
++## Evidence and completion audit
++
++Code102 sha256:d960dbc3ebaf51f04bb6fbc8ae5795747fe90c6b1aeb50684113a26bccf775f2 stays stale; unchanged Source45/PlusCal24 lineage. Exact new execution SHA and133 inline+133 split/repeat/build/canonical+cumulative versions/fidelity PENDING. No local application/test/build/checker or optional TLC. Existing workflows use default ubuntu-latest; no workflow/policy/dist edit.
++
++| Requirement / artifact | Actual evidence / remaining obligation |
++| --- | --- |
++| Source supremacy, logical hierarchy, preserve features | Bounded existing backend reader translation above; full cross-module audit OPEN |
++| assets/import/schema/serializer | Units47–50 recorded exact runs, new discriminants implementation+133 pending; all remaining package/initializer contracts OPEN |
++| raster/resources/current snapshot/dashboard/timing | No coverage inferred from these tests; full audit OPEN |
++| every prompt/Plan023 requirement/file/command/gate | Partial mapping only, exhaustive inventory and semantic completeness OPEN |
++| exact-SHA inline/split cumulative and repeat | Prior132 twice PASS, new133 twice PENDING |
++| build/dist | Prior39166674026 generator-only PASS, new execution PENDING |
++| lineage/fidelity | Prior39166674025/39166677256/39166678975 PASS; new canonical+cumulative/fidelity PENDING; checker structural coverage not semantic completion |
++| patch/plan/review/lineage | Pair008, Plan023, review004 actual evidence and this review, code102 |
++| authorized gh/default hosted only | gh delivery/dispatch/logs; no local app/checker; no self-hosted/paid runner |
++| completion/stop | No blocker observed; full objective remains OPEN, no update_goal complete |
++
++Atomic gh Git Data delivery exception remains limited to coherent code+lineage immediate-parent gate requirements; parent and file SHA/new-path checks, non-force ref update. Ordinary evidence-only followups prefer sequential Contents API. Pending does not mean passed, and generated/documentation successor SHA must not be substituted for execution SHA.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index af84b44..e7b90b5 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5948,6 +5948,57 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(133, "Package readers reject incompatible typed schema slot kind and every document version", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        initialize.call(activeProject, createProjectState());
++        const target = activeProject.slots[0]; select(target);
++        const csv = createProjectCsv([["x", "y"], [5, 6]], "schema.csv"); api.graphs.addObject(csv.id);
++        const current = slotAt(target.id), packages = [
++          { entries: ffpxBuildProject().assets, read: ffpxReadProjectBytes, name: "project.xml", selector: "fastFigureProject > settings" },
++          { entries: ffsxBuildSlot(current, getChart(current.chart)).assets, read: ffsxReadSlotBytes, name: "slot.xml", selector: "slot > settings" },
++        ], project = activeProject._state, frontend = interfaceFSM.state;
++        for (const pack of packages) {
++          const rewrite = (name, mutate) => ffpxZipStore(pack.entries.map(entry => {
++            if (entry.name !== name) return entry;
++            const doc = new DOMParser().parseFromString(new TextDecoder().decode(entry.data), "application/xml"); mutate(doc);
++            return { ...entry, data: new TextEncoder().encode(new XMLSerializer().serializeToString(doc)) };
++          }));
++          pack.read(ffpxZipStore(pack.entries));
++          const typed = pack.name === "project.xml" ? [
++            ["schema", "foreign-project"], ["schema", null], ["schema", undefined],
++            ["version", "wrong-version"], ["version", null], ["version", undefined],
++          ] : [["contentType", "image"], ["contentType", null], ["contentType", undefined]];
++          for (const [key, replacement] of typed) {
++            const bytes = rewrite(pack.name, doc => {
++              const wrapper = doc.querySelector(pack.selector), value = ffpxXmlReadValue(wrapper.firstElementChild);
++              if (replacement === undefined) delete value[key]; else value[key] = replacement;
++              wrapper.innerHTML = ffpxXmlValue(value);
++            });
++            let failed = false; try { pack.read(bytes); } catch (_) { failed = true; }
++            check(failed, `${pack.name} accepted typed ${key}=${replacement}`);
++          }
++          for (const entry of pack.entries.filter(item => item.name.endsWith(".xml"))) {
++            for (const mode of ["missing-version", "wrong-version", "wrong-root"]) {
++              const bytes = rewrite(entry.name, doc => {
++                if (mode === "missing-version") doc.documentElement.removeAttribute("version");
++                else if (mode === "wrong-version") doc.documentElement.setAttribute("version", "incompatible");
++                else { const wrong = doc.createElement("foreignRoot"); wrong.setAttribute("version", String(PACKAGE_FORMAT_VERSION));
++                  while (doc.documentElement.firstChild) wrong.append(doc.documentElement.firstChild);
++                  doc.replaceChild(wrong, doc.documentElement); }
++              });
++              let failed = false; try { pack.read(bytes); } catch (_) { failed = true; }
++              check(failed, `${entry.name} accepted ${mode}`);
++            }
++          }
++        }
++        check(activeProject._state === project && interfaceFSM.state === frontend, "schema/version parsing mutated authority");
++      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 4232fa7..8d10fa1 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 101,
++      "revision": 102,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:39c6904b4bf679c043a95cb68853731452f1a930ea122337c89c8b6e73949577",
++      "fingerprint": "sha256:d960dbc3ebaf51f04bb6fbc8ae5795747fe90c6b1aeb50684113a26bccf775f2",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261019-004-code-package-wrappers-open.md"
++      "validation_review": "agent_space/reviews/review-20261019-005-code-package-discriminants-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 24,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index b5fe00d..e46fec0 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -5849,8 +5849,10 @@
+               "project.xml",
+               "fastFigureProject",
+             ),
+-            project = ffpxNamedValue(projectRoot, "settings"),
+-            assetRoot = ffpxReadXmlDocument(
++            project = ffpxNamedValue(projectRoot, "settings");
++        if (project?.schema !== "fast-figure-project" || project.version !== PACKAGE_FORMAT_VERSION)
++          throw Error("지원하지 않는 FFPX 프로젝트 형식입니다.");
++        let assetRoot = ffpxReadXmlDocument(
+               assets,
+               "assets/assets.xml",
+               "fastFigureAssets",
+@@ -7329,6 +7331,7 @@
+               "assets/assets.xml",
+               "fastFigureAssets",
+             );
++          if (slot?.contentType !== "graph") throw Error("FFSX graph 슬롯이 필요합니다.");
+           delete chart.id;
+           debugLog("slotFfsx:read-version", {
+             format: "FFSX",
