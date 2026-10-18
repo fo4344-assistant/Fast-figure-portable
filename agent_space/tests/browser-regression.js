@@ -5001,7 +5001,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         api.slots.reset(a.id); select(slotAt(a.id)); api.slots.setContentType(a.id, "graph");
         const keep = createProjectCsv([["X", "Y"], ["1", "2"]], "move-keep.csv"),
           csv = createProjectCsv([["X", "Y"], ["3", "4"]], "move-owned.csv");
-        [keep.id, csv.id, keep.id].forEach(id => api.graphs.addObject(id));
+        [keep.id, csv.id, csv.id, keep.id].forEach(id => api.graphs.addObject(id));
         const chartId = slotAt(a.id).chart;
         api.slots.reset(b.id); select(slotAt(b.id)); api.slots.setContentType(b.id, "image");
         const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "move-owned.svg", "image/svg+xml");
@@ -5013,7 +5013,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, fixture);
         slotAt(b.id).content.moveExtension = { keep: true };
         const settings = JSON.stringify(slotAt(b.id).content.imageSettings);
-        select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(keep)); api.graphs.selectObject(2);
+        select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(keep)); api.graphs.selectObject(3);
+        const source = activeProject._state, plan = api.assets.planMove(folder, PROJECT_TRASH_DIRECTORY);
+        check(Object.isFrozen(plan) && plan.referenceCount === 3 && activeProject._state === source,
+          "move plan did not count repeated real references plus image without mutation");
         let commits = 0, paints = 0, result;
         activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
         projectEFSM.send = function (event, payload) {
@@ -5021,15 +5024,15 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           return result = send.call(this, event, payload);
         };
         renderDashboard = () => { paints++; }; interfaceFSM.notify = status = () => {};
-        const moved = api.assets.move(api.assets.planMove(folder, PROJECT_TRASH_DIRECTORY));
+        const moved = api.assets.move(plan);
         check(Object.isFrozen(moved) && moved.trashed && commits === 1 && paints === 1 &&
           moved.path === `${PROJECT_TRASH_DIRECTORY}/move-subtree`, "move did not return immutable actual destination");
         check(activeProject.fileSystem.directories.includes(`${moved.path}/nested`) &&
           projectAssetPath(getProjectCsv(csv.id)) === `${moved.path}/move-owned.csv` &&
           projectAssetPath(getProjectImage(image.id)) === `${moved.path}/nested/move-owned.svg`,
           "directory descendants did not move together");
-        check(result.changed.removedGraphReferenceCount === 1 && result.changed.resetImageSlotCount === 1 &&
-          result.selectionHints.graphObjectIndexMaps[0].indices.join() === "0,,1" &&
+        check(result.changed.removedGraphReferenceCount === 2 && result.changed.resetImageSlotCount === 1 &&
+          result.selectionHints.graphObjectIndexMaps[0].indices.join() === "0,,,1" &&
           getChart(chartId).editor.objects.length === 2 && interfaceFSM.readState().graphObjectIndex === 1 &&
           interfaceFSM.readState().assetPath === projectAssetPath(keep), "move cascade or retained selection map incorrect");
         check(slotAt(b.id).imageId === null && JSON.stringify(slotAt(b.id).content.imageSettings) === settings &&

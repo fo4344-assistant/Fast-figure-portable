@@ -1,0 +1,61 @@
+diff --git a/agent_space/reviews/review-20261018-043-code-move-open.md b/agent_space/reviews/review-20261018-043-code-move-open.md
+index b0f0b7c..d266090 100644
+--- a/agent_space/reviews/review-20261018-043-code-move-open.md
++++ b/agent_space/reviews/review-20261018-043-code-move-open.md
+@@ -14,6 +14,12 @@ Continue development-policy.md v0.2.6 read completely and AGENT.md paired patch/
+ - Case113: collision introduced after plan, rejection without unique flag, validation error preservation, invalid fixed/cycle and no-op/noncommit useful-work gates, new collision during validation causes full retry and actual third unique filename, ignores stale plan fields; late official query error retains commit and skips subsequent success work.
+ - Prior109/110/111 retain duplicate/frozen/conversion scope, detach/resource and common reconciliation failure coverage. These are not whole import/schema/export/render/timing proof.
+ 
++## First execution and coverage strengthening
++
++At5e2067e71249554723b9e0ced5aa4ef7e38d63ff regression39151349136 PASS113 inline+113 split; canonical versions39151349052 and build39151349085 PASS, generated dist-only a0d18a75965598d81d6d049b25c168992de135a0. At that bot SHA regression39151443793/repeat39151463287 PASS113+113, build39151448590/cumulative versions39151460834(base f1fd3e52d87289b0f9e6f218d9b359b2ca578df9)/fidelity39151446200 PASS. Source/test/metadata unchanged between those two SHAs, only generated dist. Attempts to dispatch by raw commit SHA returned HTTP422 No ref found; use branch-based dispatch with recorded head SHA, not invented exact-SHA evidence. One misspelled version workflow name returned404; actual workflow is development-layer-version.yml, then successfully dispatched. No quota blocker.
++
++Coverage review found case112 exercised entering-trash detach counts but did not assert the pure UI plan's repeated-reference count. Patch127 strengthens the existing case with two repeated real CSV refs plus image: immutable plan referenceCount3 without authority replacement, actual removedGraphReferenceCount2 and exact map [0,null,null,1]. Same113 cases, no runtime/Source/PlusCal/revision/fingerprint change. Its new exact-SHA Actions/repeat/build/version/fidelity pending; prior green runs are evidence only of their actual test version.
++
+ ## Lineage and verification
+ 
+ Code92 remains stale derived from unchanged Source45/pseudocode23. Fingerprint sha256:45e524e84694bab3686ed7acea650a64b9361b401eca3625b0aaeb2e6a9a1e89 calculated from staged Git path/blob records only, NOT local checker execution. Exact new-SHA GitHub-hosted default-runner cumulative113 inline+113 split, repeat, generated build, canonical/cumulative development-layer and fidelity Actions PENDING. No local application/test/build/checker execution or TLC pass claimed. Aggregate dashboard renderer remains explicitly not full supplied-projection alignment. Whole assets/import/schema/serializer/raster/dashboard/timing requirement audit open; green structural gate is not semantic closure.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 0a49d06..ff4e27b 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5001,7 +5001,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         api.slots.reset(a.id); select(slotAt(a.id)); api.slots.setContentType(a.id, "graph");
+         const keep = createProjectCsv([["X", "Y"], ["1", "2"]], "move-keep.csv"),
+           csv = createProjectCsv([["X", "Y"], ["3", "4"]], "move-owned.csv");
+-        [keep.id, csv.id, keep.id].forEach(id => api.graphs.addObject(id));
++        [keep.id, csv.id, csv.id, keep.id].forEach(id => api.graphs.addObject(id));
+         const chartId = slotAt(a.id).chart;
+         api.slots.reset(b.id); select(slotAt(b.id)); api.slots.setContentType(b.id, "image");
+         const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "move-owned.svg", "image/svg+xml");
+@@ -5013,7 +5013,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, fixture);
+         slotAt(b.id).content.moveExtension = { keep: true };
+         const settings = JSON.stringify(slotAt(b.id).content.imageSettings);
+-        select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(keep)); api.graphs.selectObject(2);
++        select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(keep)); api.graphs.selectObject(3);
++        const source = activeProject._state, plan = api.assets.planMove(folder, PROJECT_TRASH_DIRECTORY);
++        check(Object.isFrozen(plan) && plan.referenceCount === 3 && activeProject._state === source,
++          "move plan did not count repeated real references plus image without mutation");
+         let commits = 0, paints = 0, result;
+         activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+         projectEFSM.send = function (event, payload) {
+@@ -5021,15 +5024,15 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           return result = send.call(this, event, payload);
+         };
+         renderDashboard = () => { paints++; }; interfaceFSM.notify = status = () => {};
+-        const moved = api.assets.move(api.assets.planMove(folder, PROJECT_TRASH_DIRECTORY));
++        const moved = api.assets.move(plan);
+         check(Object.isFrozen(moved) && moved.trashed && commits === 1 && paints === 1 &&
+           moved.path === `${PROJECT_TRASH_DIRECTORY}/move-subtree`, "move did not return immutable actual destination");
+         check(activeProject.fileSystem.directories.includes(`${moved.path}/nested`) &&
+           projectAssetPath(getProjectCsv(csv.id)) === `${moved.path}/move-owned.csv` &&
+           projectAssetPath(getProjectImage(image.id)) === `${moved.path}/nested/move-owned.svg`,
+           "directory descendants did not move together");
+-        check(result.changed.removedGraphReferenceCount === 1 && result.changed.resetImageSlotCount === 1 &&
+-          result.selectionHints.graphObjectIndexMaps[0].indices.join() === "0,,1" &&
++        check(result.changed.removedGraphReferenceCount === 2 && result.changed.resetImageSlotCount === 1 &&
++          result.selectionHints.graphObjectIndexMaps[0].indices.join() === "0,,,1" &&
+           getChart(chartId).editor.objects.length === 2 && interfaceFSM.readState().graphObjectIndex === 1 &&
+           interfaceFSM.readState().assetPath === projectAssetPath(keep), "move cascade or retained selection map incorrect");
+         check(slotAt(b.id).imageId === null && JSON.stringify(slotAt(b.id).content.imageSettings) === settings &&
