@@ -4791,8 +4791,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(slotAt(b.id).imageId === null, "trash image reference retained");
         check(JSON.stringify(slotAt(b.id).content.imageSettings) === settings && slotAt(b.id).content.trashExtension.keep,
           "trash changed display-owned settings/extension");
-        check(getChart(chartId).editor.objects.length === 0 && getChart(chartId).graph.data.length === 0,
-          `trash graph not empty/rebuilt: objects=${getChart(chartId).editor.objects.length}, traces=${getChart(chartId).graph.data.length}`);
+        check(getChart(chartId).editor.objects.length === 0 && getChart(chartId).graph.data.every((trace) =>
+          trace.meta?.fastFigureAxisPlaceholder === true && trace.x.length === 0 && trace.y.length === 0),
+          "trash graph retained CSV data instead of rebuilding only empty axis placeholders");
         check(last.changed.removedGraphReferenceCount === 2 && last.changed.resetImageSlotCount === 1 &&
           last.changed.csvIds.includes(csv.id) && last.changed.imageIds.includes(image.id) &&
           Object.isFrozen(last.changed.graphObjectIndexMaps) &&
