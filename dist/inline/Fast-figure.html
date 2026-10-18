@@ -10809,16 +10809,27 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       function applyCaptionTextAction({ machine, payload }) {
         machine.assertWritable("captions","CAPTION_TEXT_INPUT");
         machine.assertWritable("slots","CAPTION_TEXT_INPUT");
-        let candidate=projectClone(activeProject._state),
-          target=payload.target;
-        if(target?.kind==="slot"){
-          let slot=candidate.slots.find((item)=>item.id===Number(target.id));
-          if(!slot)throw Error("캡션을 변경할 슬롯이 없습니다.");
-          slot.caption=String(payload.text??"")||null;
-        } else if(target?.kind==="global") {
-          candidate.annotations.captions.text=String(payload.text??"");
-        } else throw Error("캡션 변경 대상이 올바르지 않습니다.");
-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+        while (true) {
+          const source = activeProject._state, target = payload.target;
+          if (target?.kind !== "global" && target?.kind !== "slot") throw Error("캡션 변경 대상이 올바르지 않습니다.");
+          const slot = target.kind === "slot" ? source.slots.find(item => item.id === target.id && !item.hidden) : null;
+          if (target.kind === "slot" && (!Number.isInteger(target.id) || !slot)) throw Error("캡션을 변경할 visible 슬롯이 없습니다.");
+          const text = String(payload.text ?? ""), candidate = projectClone(source);
+          normalizeSlotContents(candidate.slots);
+          for (const item of candidate.slots) {
+            const original = source.slots.find(before => before.id === item.id);
+            if (original?.content) item.content = projectClone(original.content);
+          }
+          if (slot) candidate.slots.find(item => item.id === slot.id).caption = text || null;
+          else candidate.annotations.captions.text = text;
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          payload.changed = { slotIds: candidate.slots.filter(after =>
+            JSON.stringify(source.slots.find(before => before.id === after.id)) !== JSON.stringify(after)).map(item => item.id),
+            chartIds: [], csvIds: [], imageIds: [], assets: [] };
+          return;
+        }
       }
       function applySlotCaptionsInsertedAction({ machine, payload }) {
         machine.assertWritable("captions", "SLOT_CAPTIONS_INSERTED");
@@ -17733,7 +17744,6 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           target: { kind: "global" }, text,
         });
         if (!result.committed) return false;
-        syncDashboardCaption();
         return readGlobalCaptionState();
       }
       function setSlotCaptionText(slotId,text) {
