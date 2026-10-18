@@ -1,0 +1,55 @@
+diff --git a/agent_space/reviews/review-20261018-036-code-image-settings-open.md b/agent_space/reviews/review-20261018-036-code-image-settings-open.md
+index 428324b..349736e 100644
+--- a/agent_space/reviews/review-20261018-036-code-image-settings-open.md
++++ b/agent_space/reviews/review-20261018-036-code-image-settings-open.md
+@@ -11,4 +11,4 @@ Source42 application/public_api/layout_annotations.py applyImageSettingsFromValu
+ - getter/conversion/whole validator errors propagate no commit/reconcile/render/success read; missing editor False/no command; noncommit False/no successwork:98 and prior49.
+ - replaced authority during getter and whole validation recalculates latest current settings/name, one final commit, no rollback; late query/renderer errors propagate and retain committed values:98.
+ 
+-At fc754907b10d7dc0c264c0a1d2b2cd9eabce416e build39124256540 PASS; regression39124256531 prior96 pass both forms but97/98 fail compound effect assertions. Static audit shows notification spy attempted replacing frozen appFSM.notify, so it never observed notifications. Correct fixture to intercept writable interfaceFSM.notify and forward original (same production adapter route), retain every assertion and add diagnostic counts. No runtime or upper weakening. Diagnostic39124256572 FAIL reports actual code81 sha256:f6cab45ebfac9a951e0634dd2d5d413088650d57d5e5d742e54640c10a19ff70; record actual canonical digest. At afbcc52310fafe0137f9dc944f45bd6023faff65 cumulative39124377032 PASS fromcf5bed9751b5f9e5d46978dba0bd3618efd91f30, corrected-SHA build39124383889 PASS. Regression39124376388 prior96+97 PASS both forms;98 reaches postcommit test but fails `image postcommit query failure swallowed/rolled back`. Global second-read spy did not isolate wrapper return query from subscriber reads (UI image editor also calls images.readEditor). Correct spy to arm after wrapper renderer stage and suppress unrelated notification subscriber reads for that subcase, preserving state/error/commit assertions and positive notification tests. Original compound failure does not alone identify which condition failed; add exact diagnostics. Runtime unchanged; corrected regression pending. Source42/pseudocode20 unchanged, code81 stale; full image schema/legacy display-resource owners/import/move/cascade/raster/supplied dashboard and prior serializer/timing remain open. No policy changes/local runtime/optional TLC.
++At fc754907b10d7dc0c264c0a1d2b2cd9eabce416e build39124256540 PASS; regression39124256531 prior96 pass both forms but97/98 fail compound effect assertions. Static audit shows notification spy attempted replacing frozen appFSM.notify, so it never observed notifications. Correct fixture to intercept writable interfaceFSM.notify and forward original (same production adapter route), retain every assertion and add diagnostic counts. No runtime or upper weakening. Diagnostic39124256572 FAIL reports actual code81 sha256:f6cab45ebfac9a951e0634dd2d5d413088650d57d5e5d742e54640c10a19ff70; record actual canonical digest. At afbcc52310fafe0137f9dc944f45bd6023faff65 cumulative39124377032 PASS fromcf5bed9751b5f9e5d46978dba0bd3618efd91f30, corrected-SHA build39124383889 PASS. Regression39124376388 prior96+97 PASS both forms;98 reaches postcommit test but fails `image postcommit query failure swallowed/rolled back`. Global second-read spy did not isolate wrapper return query from subscriber reads (UI image editor also calls images.readEditor). Correct spy to arm after wrapper renderer stage and suppress unrelated notification subscriber reads for that subcase, preserving state/error/commit assertions and positive notification tests. Original compound failure does not alone identify which condition failed; add exact diagnostics. At 6a984285fffe9cc328383388f5f0b2b3c46edc39 regression39124467332 still fails98 but diagnostics establish original error propagated, afterRenderer true, commits3, flat x123 (prior value). Earlier ordinal-read hypothesis did not explain stale flat value. Static inspection proves normalizeSlotContent aliases chart/imageId/contentType but leaves an independent flat imageSettings while command updates content.imageSettings. Source42 SLOT_REPRESENTATION_RULE and sole-owner policy permit compatibility representations, not independent meanings. Code82 adds nonenumerable getter/setter alias from flat imageSettings to content.imageSettings; serializer still emits same flat package shape. Keep flat-read postcommit assertion and strengthen97 alias identity, do not mask production gap by reading nested only. No Source/pseudocode meaning change needed. Code82 runner digest and corrected regression pending. Source42/pseudocode20 unchanged, code81 stale; full image schema/legacy display-resource owners/import/move/cascade/raster/supplied dashboard and prior serializer/timing remain open. No policy changes/local runtime/optional TLC.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index e4dc892..4b4dbc3 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4175,7 +4175,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         check(result.slotId === a.id && Object.isFrozen(result.settings) && commits === 1 && effects === 1 && notices === 1 &&
+           JSON.stringify(activeProject._state) === JSON.stringify(expected) && interfaceFSM.readState().selectedSlotId === b.id &&
+           Object.isFrozen(last.changed) && last.changed.slotIds.join(",") === String(a.id) &&
+-          !last.changed.chartIds.length && !last.changed.csvIds.length && !last.changed.imageIds.length && !last.changed.assets.length,
++          !last.changed.chartIds.length && !last.changed.csvIds.length && !last.changed.imageIds.length && !last.changed.assets.length &&
++          slotAt(a.id).imageSettings === slotAt(a.id).content.imageSettings &&
++          slotAt(b.id).imageSettings === slotAt(b.id).content.imageSettings,
+           `image settings changed shared asset/other slot/selection or wrong actual facts/effects: ${JSON.stringify({commits,effects,notices,changed:last.changed,domainEqual:JSON.stringify(activeProject._state) === JSON.stringify(expected)})}`);
+       } finally { URL.createObjectURL = create; URL.revokeObjectURL = revoke; activeProject.initialize = initialize;
+         projectEFSM.send = send; readBackendProjection = query; syncSlotImageElement = sync; interfaceFSM.notify = notify;
+diff --git a/development-versions.json b/development-versions.json
+index a61f85d..d114520 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 81,
++      "revision": 82,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 67a8d60..9e8ce3b 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -4868,6 +4868,12 @@
+             get() { return this.content.contentType; },
+             set(value) { this.content.contentType = value; },
+           },
++          imageSettings: {
++            configurable: true,
++            enumerable: false,
++            get() { return this.content.imageSettings; },
++            set(value) { this.content.imageSettings = value; },
++          },
+           toJSON: {
+             configurable: true,
+             enumerable: false,

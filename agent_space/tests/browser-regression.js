@@ -4175,7 +4175,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(result.slotId === a.id && Object.isFrozen(result.settings) && commits === 1 && effects === 1 && notices === 1 &&
           JSON.stringify(activeProject._state) === JSON.stringify(expected) && interfaceFSM.readState().selectedSlotId === b.id &&
           Object.isFrozen(last.changed) && last.changed.slotIds.join(",") === String(a.id) &&
-          !last.changed.chartIds.length && !last.changed.csvIds.length && !last.changed.imageIds.length && !last.changed.assets.length,
+          !last.changed.chartIds.length && !last.changed.csvIds.length && !last.changed.imageIds.length && !last.changed.assets.length &&
+          slotAt(a.id).imageSettings === slotAt(a.id).content.imageSettings &&
+          slotAt(b.id).imageSettings === slotAt(b.id).content.imageSettings,
           `image settings changed shared asset/other slot/selection or wrong actual facts/effects: ${JSON.stringify({commits,effects,notices,changed:last.changed,domainEqual:JSON.stringify(activeProject._state) === JSON.stringify(expected)})}`);
       } finally { URL.createObjectURL = create; URL.revokeObjectURL = revoke; activeProject.initialize = initialize;
         projectEFSM.send = send; readBackendProjection = query; syncSlotImageElement = sync; interfaceFSM.notify = notify;

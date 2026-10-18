@@ -4868,6 +4868,12 @@
             get() { return this.content.contentType; },
             set(value) { this.content.contentType = value; },
           },
+          imageSettings: {
+            configurable: true,
+            enumerable: false,
+            get() { return this.content.imageSettings; },
+            set(value) { this.content.imageSettings = value; },
+          },
           toJSON: {
             configurable: true,
             enumerable: false,
