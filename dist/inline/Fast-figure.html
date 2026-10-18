@@ -10359,13 +10359,13 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           return Object.freeze({ ...activeProject.exportSettings });
         if ((kind === "project-api" && request.operation === "images.readEditor") ||
             (kind === "renderer" && request.operation === "slot-image")) {
-          let slot = request.slotId == null ? null : slotAt(request.slotId),
-            image = slot && !slot.hidden ? slotImage(slot) : null;
-          return image ? Object.freeze({
-            slotId: slot.id,
-            name: image.name,
-            src: projectImageDisplayUrl(image),
-            settings: Object.freeze(normalizeImageSettings(slot)),
+          const source = activeProject._state,
+            slot = source.slots.find(item => item.id === request.slotId && !item.hidden),
+            image = slot ? source.assets.images.find(item => item.id === (slot.content?.imageId ?? slot.imageId)) : null;
+          return image ? immutableProjectCopy({
+            slotId: slot.id, name: image.name,
+            bytes: Array.from(ffpxBase64ToBytes(image.bytesBase64 || "")),
+            src: projectImageDataUrl(image), settings: normalizeImageSettings(slot),
           }) : null;
         }
         if (kind === "export" && request.operation === "project.exportFile") {
@@ -11804,31 +11804,40 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
 
       function applySlotImageSettingsChangedAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOT_IMAGE_SETTINGS_CHANGED");
-        let candidate = projectClone(activeProject._state);
-        normalizeSlotContents(candidate.slots);
-        const target = candidate.slots.find((slot) => slot.id === payload.slotId);
-        if (!target || target.hidden || !candidate.assets.images.some((image) => image.id === target.imageId))
-          throw Error("이미지 설정을 변경할 슬롯이 없습니다.");
-        const next = { ...target.content.imageSettings }, values = payload.settings || {},
-          limits = BackendSettings.defaults.limits.imageSettings;
-        if (Object.prototype.hasOwnProperty.call(values, "fit")) {
-          const fit = values.fit;
-          if (["contain", "cover", "manual"].includes(fit)) next.fit = fit;
-        }
-        if (next.fit === "manual") {
-          for (const key of ["scale", "x", "y"]) {
-            if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
-            const value = values[key];
-            const number = value === null ? NaN : Number(value);
-            if (Number.isFinite(number)) {
-              const [min, max] = limits[key];
-              next[key] = Math.max(min, Math.min(max, number));
+        while (true) {
+          const source = activeProject._state, candidate = projectClone(source);
+          normalizeSlotContents(candidate.slots);
+          const target = candidate.slots.find((slot) => slot.id === payload.slotId);
+          if (!target || target.hidden || !candidate.assets.images.some((image) => image.id === target.imageId))
+            throw Error("이미지 설정을 변경할 슬롯이 없습니다.");
+          const next = { ...target.content.imageSettings }, values = payload.settings || {},
+            limits = BackendSettings.defaults.limits.imageSettings;
+          if (Object.prototype.hasOwnProperty.call(values, "fit")) {
+            const fit = values.fit;
+            if (["contain", "cover", "manual"].includes(fit)) next.fit = fit;
+          }
+          if (next.fit === "manual") {
+            for (const key of ["scale", "x", "y"]) {
+              if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+              const value = values[key];
+              const number = value === null ? NaN : Number(value);
+              if (Number.isFinite(number)) {
+                const [min, max] = limits[key];
+                next[key] = Math.max(min, Math.min(max, number));
+              }
             }
           }
+          target.content.imageSettings = next;
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const post = activeProject._state, changedIds = (before, after) => after.filter(item =>
+            JSON.stringify(before.find(old => old.id === item.id)) !== JSON.stringify(item)).map(item => item.id);
+          payload.changed = { slotIds: changedIds(source.slots, post.slots),
+            chartIds: changedIds(source.charts, post.charts), csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
+            imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
+          return;
         }
-        target.content.imageSettings = next;
-        validateProjectObjectState(candidate, { requireSlots: true });
-        activeProject.initialize(candidate);
       }
       function applyCaptionSettingsChangedAction({ machine, payload }) {
         machine.assertWritable("captions", "CAPTION_SETTINGS_CHANGED");
