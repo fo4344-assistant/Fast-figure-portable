@@ -1,0 +1,300 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 89a250f..abbaa8e 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -341,7 +341,7 @@ Baseline0cccc54e550f2e2bf9a12f74128e3ac7afd21cd4 verified139 inline+split twice3
+ 
+ ## Fifty-eighth bounded unit — initializer input ownership
+ 
+-Baseline5525b4966965fa113e60d97b189db930fe9ce21a records verified Unit57. Source45 ProjectObject.initialize requires outside-authority candidate and PlusCal25 explicitly DeepCopy(source), normalize, validate(candidate,TRUE), then one binding/previous return. Code111 copies source (including ProjectObject input) through corrected Project-copy boundary before normalization/requireSlots:true validation and binding. New142 frozen input/extension/caption/previous-return/mutation independence and invalid geometry/empty slots preserves authority, wrapped source detached/no Frontend effects. Pair023/review012 document mapping/rejected shared authority and exclusions. Exact142 hosted gates pending; code stale; constructor/normalizer/revalidation/reentrancy and whole audit remain OPEN. No local execution/Source semantic change.
++Baseline5525b4966965fa113e60d97b189db930fe9ce21a records verified Unit57. Source45 ProjectObject.initialize requires outside-authority candidate and PlusCal25 explicitly DeepCopy(source), normalize, validate(candidate,TRUE), then one binding/previous return. Code111 copies source (including ProjectObject input) through corrected Project-copy boundary before normalization/requireSlots:true validation and binding. New142 frozen input/extension/caption/previous-return/mutation independence and invalid geometry/empty slots preserves authority, wrapped source detached/no Frontend effects. Pair023/review012 document mapping/rejected shared authority and exclusions. Initial8c9959684dfa390465867009dd57201ed3c51ef8 regression39170600920/repeat39170602352 FAIL retry hooks69–123 while142 PASS; build39170600927/canonical39170600943/cumulative39170604393/fidelity39170606609 PASS. Historical fixtures used requireSlots to identify outer EFSM validation; initializer now correctly also passes true. Pair024 test-only initializer depth separates phases at27 guarded hook sites, retaining exact attempts/commits/state checks and all actual validator execution, with no product flag/runtime weakening. Corrected142 hosted gates pending; code stale; constructor/normalizer/revalidation/reentrancy and whole audit remain OPEN. No local execution/Source semantic change.
+ 
+ ## Temporary-file rule
+ 
+diff --git a/agent_space/reviews/review-20261019-012-code-initialize-copy-open.md b/agent_space/reviews/review-20261019-012-code-initialize-copy-open.md
+index 8df44fe..b08a3b3 100644
+--- a/agent_space/reviews/review-20261019-012-code-initialize-copy-open.md
++++ b/agent_space/reviews/review-20261019-012-code-initialize-copy-open.md
+@@ -12,6 +12,12 @@ sourcecode/fast-figure.js initialize now uses the corrected shared Project-copy
+ 
+ Source45/PlusCal25 unchanged; direct existing semantics, no new meaning. Code111 stale fingerprint sha256:8c2f50537c228f71c2e3a2976552cda797599fe4d71c2cb7135f28307e1ab6f5. Pair023/Plan023 record rationale. Exact142 inline/split/repeat/build/canonical+cumulative/fidelity PENDING. No local application/test/build/checker/TLC. Default GitHub-hosted only; dist generator-only.
+ 
++## First execution and fixture validation-phase correction
++
++Execution8c9959684dfa390465867009dd57201ed3c51ef8 regression39170600920/repeat39170602352 FAIL retry-hook cases69–123 (e.g. `Error: stale order committed old snapshot instead of re-resolving current indices`); new142 PASS both modes/both runs. Build39170600927/canonical39170600943/cumulative39170604393/fidelity39170606609 PASS. Generator ebe747777fc15f7429ffce08264402f80682b100 inspected dist-only/ff merged.
++
++The fixtures historically used options.requireSlots to distinguish EFSM candidate validation from initialize's separate whole validation, which previously omitted this required flag. Initializer now correctly validates requireSlots:true; counters/reentrant hooks count its inner validation too, so old exact-two EFSM-attempt assertions fail. Pair024 adds test-only initializer depth tracking and isCandidateValidation(options), updates27 guarded injection/count sites to target the intended outer EFSM candidate phase. Shared validator still executes inside initializer; existing exceptions, exact commit/attempt/state checks retained. No product flag, checker bypass, runtime/Source/PlusCal/lineage change; no duplicate private validator. Harness restores initializer in outer finally. Corrected142 exact-SHA gates pending; full objective remains open.
++
+ ## Explicit exclusions/decisions
+ 
+ Rejected direct source binding (caller retains mutable authority), validation-only shallow copy (nested aliases remain), retaining empty-slot initialize contrary to PlusCal TRUE, and broad initializer reentrancy/normalizer redesign. This unit closes input detachment, NOT global revalidation/reentrancy or constructor ownership. Canonical missing-only normalization currently still coerces values/settings and needs separate audit. Full ZIP/schema/dataRef/metadata/resources/supplied-render/raster/dashboard/timing and comprehensive requirement mapping remain open; no current/full completion claim. Atomic gh Git Data bounded code+lineage immediate-parent gate exception, expected parent/old blobs/new paths/nonforce ref checked; ordinary independent docs use Contents API, no policy change.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 4477e2d..fbb9257 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5,7 +5,13 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+ });
+ (async () => {
+   const api = window.FastFigureApi;
+-  const results = [], startedAt = performance.now();
++  const results = [], startedAt = performance.now(), initializeOperation = activeProject.initialize;
++  let initializeDepth = 0;
++  activeProject.initialize = function (...args) {
++    initializeDepth++;
++    try { return initializeOperation.apply(this, args); } finally { initializeDepth--; }
++  };
++  const isCandidateValidation = options => options?.requireSlots && initializeDepth === 0;
+   const progress = (state) => document.documentElement.setAttribute("data-fast-figure-regression-progress",
+     JSON.stringify({ ...state, completed: results.length, virtualElapsedMs: Math.round(performance.now() - startedAt) }));
+   progress({ phase: "bootstrap" });
+@@ -2734,7 +2740,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state), chart = newer.charts.find(item => item.id === chartId);
++          if (isCandidateValidation(options) && !attempts++) { const newer = projectClone(activeProject._state), chart = newer.charts.find(item => item.id === chartId);
+             chart.editor.objects.unshift({ ...projectClone(chart.editor.objects[0]), legendName: "new" });
+             newer.meta.projectName = "new order authority"; initialize.call(activeProject, newer); }
+           return valid;
+@@ -2860,7 +2866,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state), chart = newer.charts.find(item => item.id === chartId);
++          if (isCandidateValidation(options) && !attempts++) { const newer = projectClone(activeProject._state), chart = newer.charts.find(item => item.id === chartId);
+             chart.editor.objects.unshift({ ...projectClone(chart.editor.objects[0]), legendName: "new first" });
+             newer.meta.projectName = "new palette authority"; initialize.call(activeProject, newer); }
+           return valid;
+@@ -2957,7 +2963,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
++          if (isCandidateValidation(options) && !attempts++) { const newer = projectClone(activeProject._state);
+             newer.assets.csvFiles.find(item => item.id === csv.id).rows = [];
+             newer.meta.projectName = "new graph-add authority"; initialize.call(activeProject, newer); }
+           return valid;
+@@ -3073,7 +3079,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0, finalNext;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) {
++          if (isCandidateValidation(options) && !attempts++) {
+             const newer = projectClone(activeProject._state), csv = buildProjectCsvModel([["A"], [7]], "Plotly JSON.csv",
+               newer.nextId.csv++, "", "text/csv", 1, newer);
+             newer.assets.csvFiles.push(csv); newer.meta.projectName = "new editable authority";
+@@ -3196,7 +3202,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0, assigned;
+         validateProjectObjectState = function (candidate, options) {
+           const result = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) {
++          if (isCandidateValidation(options) && !attempts++) {
+             const newer = projectClone(activeProject._state), csv = buildProjectCsvModel([["new"]], "retry.csv",
+               newer.nextId.csv++, "", "text/csv", 1, newer);
+             newer.assets.csvFiles.push(csv); newer.meta.projectName = "new CSV authority"; assigned = newer.nextId.csv;
+@@ -3293,7 +3299,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0, assigned;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) {
++          if (isCandidateValidation(options) && !attempts++) {
+             const newer = projectClone(activeProject._state), asset = buildProjectImageModel(new Uint8Array([8]), "retry-image.bin",
+               "image/test", newer.nextId.image++, newer);
+             newer.assets.images.push(asset); newer.meta.projectName = "new image authority"; assigned = newer.nextId.image;
+@@ -3381,7 +3387,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) {
++          if (isCandidateValidation(options) && !attempts++) {
+             const newer = projectClone(activeProject._state); newer.meta.projectName = "latest directory authority";
+             newer.fileSystem.directories.push(`${parent}/concurrent`); initialize.call(activeProject, newer);
+           }
+@@ -3407,7 +3413,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         const priorCommits = commits, priorSelections = selections;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
++          if (isCandidateValidation(options) && !attempts++) { const newer = projectClone(activeProject._state);
+             newer.fileSystem.directories = newer.fileSystem.directories.filter(path => path !== disappearing);
+             initialize.call(activeProject, newer); }
+           return valid;
+@@ -3502,7 +3508,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
++          if (isCandidateValidation(options) && !attempts++) { const newer = projectClone(activeProject._state);
+             newer.meta.appBuild = "name-newer-validation"; initialize.call(activeProject, newer); }
+           return valid;
+         };
+@@ -3592,7 +3598,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
++          if (isCandidateValidation(options) && !attempts++) { const newer = projectClone(activeProject._state);
+             newer.meta.projectName = "latest slot type"; initialize.call(activeProject, newer); }
+           return valid;
+         };
+@@ -3606,7 +3612,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         renderDashboard = () => { renders++; }; attempts = 0; const prior = commits;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
++          if (isCandidateValidation(options) && !attempts++) { const newer = projectClone(activeProject._state);
+             newer.slots.find(slot => slot.id === id).hidden = true; initialize.call(activeProject, newer); }
+           return valid;
+         };
+@@ -3692,7 +3698,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) {
++          if (isCandidateValidation(options) && !attempts++) {
+             const newer = projectClone(activeProject._state); newer.meta.projectName = "latest reset authority";
+             newer.slots.find(slot => slot.id === id).caption = "new caption"; initialize.call(activeProject, newer);
+           }
+@@ -3794,7 +3800,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) {
++          if (isCandidateValidation(options) && !attempts++) {
+             const newer = projectClone(activeProject._state); newer.meta.projectName = "latest swap authority";
+             newer.slots.find(slot => slot.id === a.id).caption = "newest A"; newer.slots.find(slot => slot.id === b.id).caption = "newest B";
+             initialize.call(activeProject, newer);
+@@ -3890,7 +3896,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0, expectedId, expectedPath;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) {
++          if (isCandidateValidation(options) && !attempts++) {
+             const newer = projectClone(activeProject._state), extra = buildProjectImageModel(new Uint8Array([1]), "빈 이미지.svg", "image/svg+xml", newer.nextId.image++, newer);
+             // Assign an explicit existing image in this newer authority to force fresh id/path resolution.
+             extra.name = "빈 이미지.svg"; extra.directory = PROJECT_ASSET_DIRECTORIES.image;
+@@ -4100,7 +4106,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !attempts++) {
++          if (isCandidateValidation(options) && !attempts++) {
+             const newer = projectClone(activeProject._state), current = newer.charts.find(item => item.id === chart.id);
+             current.editor.globalSettings.graphFontFamily = "newer authority font"; newer.meta.projectName = "newer layout authority";
+             initialize.call(activeProject, newer);
+@@ -4234,7 +4240,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let validations = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const valid = validate(candidate, options);
+-          if (options?.requireSlots && !validations++) { const newer = projectClone(activeProject._state); normalizeSlotContents(newer.slots);
++          if (isCandidateValidation(options) && !validations++) { const newer = projectClone(activeProject._state); normalizeSlotContents(newer.slots);
+             newer.meta.projectName = "image-newer-validation"; newer.slots.find(slot => slot.id === id).content.imageSettings.x = 123;
+             initialize.call(activeProject, newer); }
+           return valid;
+@@ -4350,7 +4356,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const answer = validate(candidate, options);
+-          if (options?.requireSlots && ++attempts === 1) {
++          if (isCandidateValidation(options) && ++attempts === 1) {
+             const newer = projectClone(activeProject._state); newer.export.width = 1300;
+             initialize.call(activeProject, newer);
+           }
+@@ -4476,7 +4482,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const result = validate(candidate, options);
+-          if (options?.requireSlots && ++attempts === 1) {
++          if (isCandidateValidation(options) && ++attempts === 1) {
+             const newer = projectClone(activeProject._state); newer.annotations.captions.name = "newest name";
+             initialize.call(activeProject, newer);
+           }
+@@ -4607,7 +4613,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const validated = validate(candidate, options);
+-          if (options?.requireSlots && ++attempts === 1) {
++          if (isCandidateValidation(options) && ++attempts === 1) {
+             const newer = projectClone(activeProject._state); newer.annotations.captions.name = "latest caption name";
+             initialize.call(activeProject, newer);
+           }
+@@ -4736,7 +4742,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let validations = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const answer = validate(candidate, options);
+-          if (options?.requireSlots && ++validations === 1) {
++          if (isCandidateValidation(options) && ++validations === 1) {
+             const newer = projectClone(activeProject._state); newer.annotations.captions.text = "validation prefix";
+             newer.slots.find(slot => slot.id === id).caption = "validation local"; initialize.call(activeProject, newer);
+           }
+@@ -4838,7 +4844,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const answer = validate(candidate, options);
+-          if (options?.requireSlots && ++attempts === 1) {
++          if (isCandidateValidation(options) && ++attempts === 1) {
+             const newer = projectClone(activeProject._state); newer.meta.projectName = "newest trash authority";
+             newer.fileSystem.directories.push(`${PROJECT_TRASH_DIRECTORY}/arrived-during-validation`);
+             initialize.call(activeProject, newer);
+@@ -4978,7 +4984,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const answer = validate(candidate, options);
+-          if (options?.requireSlots && ++attempts === 1) {
++          if (isCandidateValidation(options) && ++attempts === 1) {
+             const newer = projectClone(activeProject._state); newer.meta.projectName = "newest delete authority";
+             initialize.call(activeProject, newer);
+           }
+@@ -5091,7 +5097,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0;
+         validateProjectObjectState = function (candidate, options) {
+           const answer = validate(candidate, options);
+-          if (options?.requireSlots && ++attempts === 1) {
++          if (isCandidateValidation(options) && ++attempts === 1) {
+             const newer = projectClone(activeProject._state);
+             newer.fileSystem.directories.push(`${parent}/move-current (2).csv`);
+             initialize.call(activeProject, newer);
+@@ -5272,7 +5278,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+         validateProjectObjectState = function (candidate, options) {
+           const answer = validate(candidate, options);
+-          if (!options?.requireSlots) return answer;
++          if (!isCandidateValidation(options)) return answer;
+           attempts++;
+           if (attempts === 1) {
+             const newer = projectClone(activeProject._state), nextId = newer.nextId.csv++;
+@@ -5555,7 +5561,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let attempts = 0, expectedChartId;
+         validateProjectObjectState = function (candidate, options) {
+           const result = validate(candidate, options);
+-          if (options?.requireSlots && ++attempts === 1) {
++          if (isCandidateValidation(options) && ++attempts === 1) {
+             const newer = projectClone(activeProject._state); newer.nextId.chart += 4;
+             newer.meta.projectName = "newer-package-source"; expectedChartId = newer.nextId.chart;
+             initialize.call(activeProject, newer);
+@@ -5696,7 +5702,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         ffpxReadProjectBytes = bytes => { parses++; return parse(bytes); };
+         validateProjectObjectState = function (candidate, options) {
+           const checked = validate(candidate, options);
+-          if (options?.requireSlots && !replaced) {
++          if (isCandidateValidation(options) && !replaced) {
+             replaced = true; const newer = projectClone(activeProject._state); newer.meta.projectName = "newer during FFPX";
+             initialize.call(activeProject, newer);
+           }
+@@ -5796,7 +5802,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         const expectedId = before.nextId.chart + 10;
+         validateProjectObjectState = function (candidate, options) {
+           const checked = validate(candidate, options);
+-          if (options?.requireSlots && !replaced) {
++          if (isCandidateValidation(options) && !replaced) {
+             replaced = true; const newer = projectClone(activeProject._state); newer.nextId.chart = expectedId;
+             initialize.call(activeProject, newer);
+           }
+@@ -6296,6 +6302,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
++    activeProject.initialize = initializeOperation;
+     document.documentElement.setAttribute(
+       "data-fast-figure-regression-target",
+       btoa(unescape(encodeURIComponent(JSON.stringify(FAST_FIGURE_REGRESSION_TARGET)))),
