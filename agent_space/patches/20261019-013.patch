@@ -1,0 +1,140 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 7cfd832..b3fa4a2 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -317,6 +317,12 @@ Unit52 corrected execution223a64d230b8e8c73e7725266a2da07f0d8e512c: regression39
+ 
+ Baseline223a64d230b8e8c73e7725266a2da07f0d8e512c. Source45/PlusCal24 unchanged: synthetic filename-aware bytes apply to conversion-created CSV and restored absent-byte data. Code104 routes buildProjectCsvModel/importedProjectCsvState through existing serializeNewDataTable and removes legacy ffpxCsv. Preserve supplied bytes/name/MIME/header/rows. Case74 verifies public conversion integration;136 independently checks literal JSON/TSV/CSV/fallback outputs for both candidate paths and supplied-byte passthrough/read-only identity. Pair20261019-012/review-20261019-007-code-synthetic-bytes-open.md record authority/mapping/rejected alternatives/exclusions and atomic gh delivery exception. Exact-SHA136 inline+split/repeat/build/canonical+cumulative/fidelity pending; source-code stays stale, complete Plan023 audit remains OPEN. No local runtime, dist generator-only.
+ 
++Unit53 verified atde03dea2b2fbefc55c832ef20e727748c4860674: push39168028818/repeat39168030239 PASS136 inline+136 split each; build39168028790 PASS generated only dist b3b4ff3acb11dbf7a833b1c6de7d37e71a74f542; canonical39168028808/cumulative39168032210(base223a64d230b8e8c73e7725266a2da07f0d8e512c)/fidelity39168034262 PASS. Actual logs inspected; code104 stays stale.
++
++### Fifty-fourth bounded unit — explicit-null imported header metadata
++
++Baselineb3b4ff3acb11dbf7a833b1c6de7d37e71a74f542. Source45 CSV_HEADER_RULE and PlusCal24 NormalizeImportedAssetCollections already distinguish absent field from present null/empty/zero. Code105 uses Object.hasOwn instead of nullish defaulting in importedProjectCsvState. Case137 exercises actual FFPX ZIP metadata mutation/read/candidate calculation/read-only authority plus public import for absent/null/empty/zero/fraction/negative/high/invalid inputs, preserving original bytes/rows. Pair20261019-013/review-20261019-008-code-header-metadata-open.md record mapping and exclusions. Exact-SHA137 inline+split/repeat/build/canonical+cumulative/fidelity pending. No new upper semantics or local runtime; whole Plan023 audit and code current status remain open/stale, including separate FFSX header path inventory.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261019-007-code-synthetic-bytes-open.md b/agent_space/reviews/review-20261019-007-code-synthetic-bytes-open.md
+index b43f6a0..625340f 100644
+--- a/agent_space/reviews/review-20261019-007-code-synthetic-bytes-open.md
++++ b/agent_space/reviews/review-20261019-007-code-synthetic-bytes-open.md
+@@ -16,6 +16,10 @@ Source45/pseudocode24 unchanged; code104 fingerprintsha256:d768496d639130cf864aa
+ 
+ Corrected execution SHA136 inline+136 split, related full repeat, build, canonical+cumulative versions and fidelity are PENDING. Green version/fidelity is structural and cannot certify all Source branches.
+ 
++## Exact-SHA evidence
++
++Implementationde03dea2b2fbefc55c832ef20e727748c4860674: push39168028818 and independent repeat39168030239 PASS136 inline+136 split each. Actual136 pass lines inspected in both modes for both runs. Build39168028790 PASS generated dist-only b3b4ff3acb11dbf7a833b1c6de7d37e71a74f542 (two dist files only; diff inspected, local ff-only sync). Canonical39168028808, cumulative39168032210(base223a64d230b8e8c73e7725266a2da07f0d8e512c), fidelity39168034262 PASS. All default ubuntu-latest. This supersedes pending above but does not close full Plan023. Next inspected defect: Project imported CSV null header metadata is conflated with absent by `?? 1`, contradicting explicit Source CSV_HEADER_RULE/PlusCal NormalizeImportedAssetCollections HasField branch; Unit54 corrects this narrow branch.
++
+ ## Rejected alternatives and exclusions
+ 
+ Do not retain a conversion-only legacy serializer, alter Source to match CRLF/auto-comma, normalize supplied bytes, or add a new representation. Reuse existing helper, preserving original MIME/header/name. No policy/Source/pseudocode modification or unrelated redesign. Remaining package ZIP/dataRef/metadata/settings/global initializer topology/ownership, raster/resource/current snapshot/dashboard/timing and full cross-module requirement inventory remain OPEN; this unit is not entire conformance. Full completion requires actual requirement coverage and exact-SHA hosted gates for every remaining contract. No actual auth/quota/service blocker observed; no completion claim.
+diff --git a/agent_space/reviews/review-20261019-008-code-header-metadata-open.md b/agent_space/reviews/review-20261019-008-code-header-metadata-open.md
+new file mode 100644
+index 0000000..f8574e5
+--- /dev/null
++++ b/agent_space/reviews/review-20261019-008-code-header-metadata-open.md
+@@ -0,0 +1,18 @@
++# Plan023 Unit54 — explicit imported CSV header metadata (open)
++
++Baselineb3b4ff3acb11dbf7a833b1c6de7d37e71a74f542 (Unit53 generated dist only). Preceding implementationde03dea2b2fbefc55c832ef20e727748c4860674 push39168028818/repeat39168030239 PASS136 inline+136 split each; build39168028790/canonical39168028808/cumulative39168032210/fidelity39168034262 PASS. Review007 retains inspected exact-SHA logs. No completed work repeated.
++
++## Requirement-to-artifact mapping
++
++- sourcescript/backend/assets_files.py CSV_HEADER_RULE: finite numeric conversion, truncate/clamp0..row count; invalid0, only missing stored field defaults1, explicitly null/empty/0 is not missing.
++- pseudocode/backend/assets_files.pcal NormalizeImportedAssetCollections:1184 `asset.headerLines := NormalizeHeaderCount(IF HasField(raw,"headerLines") THEN raw.headerLines ELSE 1,rows);` already directly translates this branch.
++- Runtime sourcecode/fast-figure.js importedProjectCsvState incorrectly used `source.headerLines ?? 1`, changing explicit null to1. Replace only default predicate with Object.hasOwn; preserve shared headerLineCount numerical conversion and all existing mutation retry/error semantics (including numeric conversion exceptions). No Source/pseudocode change.
++- New137 changes actual FFPX assets XML typed metadata, reparses CRC-valid ZIP, builds candidate and checks no current authority change, then uses public api.project.importFile. Eight cases absent/null/empty/0/2.9/-3/99/invalid require1/0/0/0/2/0/3/0. Every case verifies original byte and row preservation, helper/candidate and public imported state. Existing tests preserve broader header edit/retry/errors. No local execution.
++
++## Delivery and evidence
++
++Source45/pseudocode24 unchanged. Code105 fingerprintsha256:bf974ecbe6ddd06de208c856d1e33e867711875b28a00ef33ac3630dc103e42b stays stale. Plan023/review007 evidence/this review/pair013 accompany coherent change. Single gh atomic tree/commit justified only for immediate-parent code+lineage gate (sequential Contents previously failed); verify current HEAD/old blobs/new paths and non-force ref. Default GitHub-hosted exact-SHA137 inline+split/repeat/build/canonical+cumulative/fidelity PENDING. No local application/test/build/checker, no manual dist, optional TLC not executed/not gate.
++
++## Rejected alternatives, exclusions and open audit
++
++Do not change null numeric conversion or weaken Source to call null missing; do not rebuild original data bytes or alter unrelated header-edit behavior. Reuse official shared header calculator, no new model/state authority or redesign. This unit is only Project candidate normalization. FFSX header normalization path is independently unclosed (reader copies metadata and import copies model); must compare Source/PlusCal/apply contracts before extending this fix. ZIP safety/dataRef/metadata/settings/global initializer topology/ownership, resource/raster/current snapshot/dashboard/timing and exhaustive requirement-to-artifact inventory remain OPEN. Structural green or137 coverage cannot prove full conformance. No completion claim or actual quota/auth/service blocker.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 7c0838a..3825c61 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -6080,6 +6080,37 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       check(activeProject._state === project && interfaceFSM.state === frontend, "synthetic candidate calculation mutated authority");
+     });
+ 
++    await run(137, "FFPX candidate normalization distinguishes absent header metadata from explicit null empty and zero", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        initialize.call(activeProject, createProjectState());
++        const csv = createProjectCsv([["x", "y"], [1, 2], [3, 4]], "header-metadata.csv"),
++          entries = ffpxBuildProject().assets, bytes = csv.bytesBase64, rows = JSON.stringify(csv.rows);
++        for (const [present, value, expected] of [[false, undefined, 1], [true, null, 0], [true, "", 0], [true, 0, 0],
++          [true, 2.9, 2], [true, -3, 0], [true, 99, 3], [true, "invalid", 0]]) {
++          const packageBytes = ffpxZipStore(entries.map(entry => {
++            if (entry.name !== "assets/assets.xml") return entry;
++            const doc = new DOMParser().parseFromString(new TextDecoder().decode(entry.data), "application/xml"),
++              node = doc.querySelector("dataAsset"), metadata = ffpxWrappedValue(node);
++            if (present) metadata.headerLines = value; else delete metadata.headerLines;
++            node.innerHTML = ffpxXmlValue(metadata);
++            return { ...entry, data: new TextEncoder().encode(new XMLSerializer().serializeToString(doc)) };
++          })), project = activeProject._state, frontend = interfaceFSM.state,
++            payload = ffpxReadProjectBytes(packageBytes), candidate = buildProjectObject(payload, "headers.ffpx");
++          check(candidate.csvFiles[0].headerLines === expected && candidate.csvFiles[0].bytesBase64 === bytes &&
++            JSON.stringify(candidate.csvFiles[0].rows) === rows && activeProject._state === project && interfaceFSM.state === frontend,
++            `header metadata read/candidate mismatch: ${present}/${value}`);
++          await api.project.importFile(new File([packageBytes], "headers.ffpx"));
++          const loaded = getProjectCsv(csv.id);
++          check(loaded.headerLines === expected && loaded.bytesBase64 === bytes && JSON.stringify(loaded.rows) === rows,
++            `public FFPX import lost header metadata/bytes/rows: ${present}/${value}`);
++        }
++      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 29089bb..aa43068 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 104,
++      "revision": 105,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:d768496d639130cf864aadb7fb8e90751f107fa0167f165308e37206a57eef74",
++      "fingerprint": "sha256:bf974ecbe6ddd06de208c856d1e33e867711875b28a00ef33ac3630dc103e42b",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261019-007-code-synthetic-bytes-open.md"
++      "validation_review": "agent_space/reviews/review-20261019-008-code-header-metadata-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 24,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 3b54754..1d48341 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -5065,7 +5065,7 @@
+                       serializeNewDataTable(source.rows, projectCsvName(source.name, `data-${index + 1}.csv`)),
+                     ),
+               mime: typeof source.mime === "string" ? source.mime : "text/csv",
+-              headerLines: headerLineCount(source.headerLines ?? 1, source.rows),
++              headerLines: headerLineCount(Object.hasOwn(source, "headerLines") ? source.headerLines : 1, source.rows),
+             };
+           });
+         return {

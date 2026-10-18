@@ -6080,6 +6080,37 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(activeProject._state === project && interfaceFSM.state === frontend, "synthetic candidate calculation mutated authority");
     });
 
+    await run(137, "FFPX candidate normalization distinguishes absent header metadata from explicit null empty and zero", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        initialize.call(activeProject, createProjectState());
+        const csv = createProjectCsv([["x", "y"], [1, 2], [3, 4]], "header-metadata.csv"),
+          entries = ffpxBuildProject().assets, bytes = csv.bytesBase64, rows = JSON.stringify(csv.rows);
+        for (const [present, value, expected] of [[false, undefined, 1], [true, null, 0], [true, "", 0], [true, 0, 0],
+          [true, 2.9, 2], [true, -3, 0], [true, 99, 3], [true, "invalid", 0]]) {
+          const packageBytes = ffpxZipStore(entries.map(entry => {
+            if (entry.name !== "assets/assets.xml") return entry;
+            const doc = new DOMParser().parseFromString(new TextDecoder().decode(entry.data), "application/xml"),
+              node = doc.querySelector("dataAsset"), metadata = ffpxWrappedValue(node);
+            if (present) metadata.headerLines = value; else delete metadata.headerLines;
+            node.innerHTML = ffpxXmlValue(metadata);
+            return { ...entry, data: new TextEncoder().encode(new XMLSerializer().serializeToString(doc)) };
+          })), project = activeProject._state, frontend = interfaceFSM.state,
+            payload = ffpxReadProjectBytes(packageBytes), candidate = buildProjectObject(payload, "headers.ffpx");
+          check(candidate.csvFiles[0].headerLines === expected && candidate.csvFiles[0].bytesBase64 === bytes &&
+            JSON.stringify(candidate.csvFiles[0].rows) === rows && activeProject._state === project && interfaceFSM.state === frontend,
+            `header metadata read/candidate mismatch: ${present}/${value}`);
+          await api.project.importFile(new File([packageBytes], "headers.ffpx"));
+          const loaded = getProjectCsv(csv.id);
+          check(loaded.headerLines === expected && loaded.bytesBase64 === bytes && JSON.stringify(loaded.rows) === rows,
+            `public FFPX import lost header metadata/bytes/rows: ${present}/${value}`);
+        }
+      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

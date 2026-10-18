@@ -16,6 +16,10 @@ Source45/pseudocode24 unchanged; code104 fingerprintsha256:d768496d639130cf864aa
 
 Corrected execution SHA136 inline+136 split, related full repeat, build, canonical+cumulative versions and fidelity are PENDING. Green version/fidelity is structural and cannot certify all Source branches.
 
+## Exact-SHA evidence
+
+Implementationde03dea2b2fbefc55c832ef20e727748c4860674: push39168028818 and independent repeat39168030239 PASS136 inline+136 split each. Actual136 pass lines inspected in both modes for both runs. Build39168028790 PASS generated dist-only b3b4ff3acb11dbf7a833b1c6de7d37e71a74f542 (two dist files only; diff inspected, local ff-only sync). Canonical39168028808, cumulative39168032210(base223a64d230b8e8c73e7725266a2da07f0d8e512c), fidelity39168034262 PASS. All default ubuntu-latest. This supersedes pending above but does not close full Plan023. Next inspected defect: Project imported CSV null header metadata is conflated with absent by `?? 1`, contradicting explicit Source CSV_HEADER_RULE/PlusCal NormalizeImportedAssetCollections HasField branch; Unit54 corrects this narrow branch.
+
 ## Rejected alternatives and exclusions
 
 Do not retain a conversion-only legacy serializer, alter Source to match CRLF/auto-comma, normalize supplied bytes, or add a new representation. Reuse existing helper, preserving original MIME/header/name. No policy/Source/pseudocode modification or unrelated redesign. Remaining package ZIP/dataRef/metadata/settings/global initializer topology/ownership, raster/resource/current snapshot/dashboard/timing and full cross-module requirement inventory remain OPEN; this unit is not entire conformance. Full completion requires actual requirement coverage and exact-SHA hosted gates for every remaining contract. No actual auth/quota/service blocker observed; no completion claim.

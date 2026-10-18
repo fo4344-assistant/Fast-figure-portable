@@ -5065,7 +5065,7 @@
                       serializeNewDataTable(source.rows, projectCsvName(source.name, `data-${index + 1}.csv`)),
                     ),
               mime: typeof source.mime === "string" ? source.mime : "text/csv",
-              headerLines: headerLineCount(source.headerLines ?? 1, source.rows),
+              headerLines: headerLineCount(Object.hasOwn(source, "headerLines") ? source.headerLines : 1, source.rows),
             };
           });
         return {
