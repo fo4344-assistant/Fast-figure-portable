@@ -3238,7 +3238,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         };
         readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") reads++;
           return query(kind, request); };
-        const image = createProjectImage(bytes, "candidate-image.bin", "image/custom"), fact = result.changed.assets[0];
+        const image = createProjectImage(bytes.buffer, "candidate-image.bin", "image/custom"), fact = result.changed.assets[0];
         bytes[0] = 99;
         check(commits === 1 && reads === 1 && image.id === next && image.mime === "image/custom" &&
           JSON.stringify(Array.from(ffpxBase64ToBytes(image.bytesBase64))) === "[0,255,17,128]" && Object.isFrozen(image) &&

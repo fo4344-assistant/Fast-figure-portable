@@ -2879,7 +2879,7 @@
         return model;
       }
       function createProjectImage(bytes, name, mime, id = null, path = null) {
-        const copiedBytes = typeof bytes === "string" ? bytes : new Uint8Array(bytes || []),
+        const copiedBytes = typeof bytes === "string" ? bytes : new Uint8Array(bytes || []).slice(),
           result = dispatchProjectCommand("IMAGE_OBJECT_CREATED", { bytes: copiedBytes, name, mime, id, path });
         if (!result.committed) return result;
         const created = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image");
