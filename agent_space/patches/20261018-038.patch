@@ -1,0 +1,127 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 6c6a782..ba1ec19 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -101,6 +101,8 @@ Review018 corrects review017's overstatement: Source39 explicitly preserved reje
+ 
+ Source40 implementation a5c9078114d08c929e21ebe7a1495d75352e4dca: regression39102259199 passed63 inline +63 split including accepted-repeat exact revision+1/rejected-repeat unchanged; build39102259195 passed (dist-only447e66d fast-forwarded). Diagnostic39102259182 exposed canonical Source40 `sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2`, pseudocode15 `sha256:b881c18a38ab94e99e12c3e49389ae168a30aca6f17e3f7b07948c5799638d18`, code55 `sha256:0dec2a921658a5425b9d58bcee77dc5837248c1c4d85fe6b7046454c0f9012b8`. Patch037 corrects metadata/derivations only; final cumulative versions/repeat regression pending in review018. Whole code stays stale.
+ 
++At96ea8183752f673ff2d126f75c2152d5cfd373e4 cumulative versions39102328152 passed against a6d6d2c35e1dde59e13f3ec159a1ede594b3927e and regression39102329752 passed63+63. Actual publication audit then found code55's legacy region loop published an intermediate selection receipt before graph selection cleared, which its previous assertions did not cover. Existing Source40 final-state publication and pseudocode15 AssetSelection → PublishAndReturn already require clearing before publish. Patch038/code56 directly applies this accepted Frontend transition once, checks editor lock first, and publishes the final frozen state only; rejected input unchanged/no publish. Case63 now tests subscriber observations (one final-only publication per accepted event incl repeat; none on rejection), not just final revision. Source40/pseudocode15 unchanged; code56 stale. Review018 records uncovered requirement, evidence limits and pending final Actions.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-018-selection-receipt-closure.md b/agent_space/reviews/review-20261018-018-selection-receipt-closure.md
+index c45c0eb..22565ab 100644
+--- a/agent_space/reviews/review-20261018-018-selection-receipt-closure.md
++++ b/agent_space/reviews/review-20261018-018-selection-receipt-closure.md
+@@ -31,6 +31,14 @@ At a5c9078114d08c929e21ebe7a1495d75352e4dca: regression39102259199 succeeded (ca
+ 
+ Patch037 replaces provisional fingerprints and both code/pseudocode Source derivations from those outputs, leaving revisions/statuses unchanged. Source40 remains closed/current, pseudocode15 current, code55 stale; optional model26 remains stale with its historical derivations intentionally untouched. Final cumulative versions and repeat regression at corrected metadata SHA pending. The Source40 closure reasoning is reviewed above, not inferred merely from green runtime tests.
+ 
++## Code55 evidence audit → code56 final-publication correction
++
++At96ea8183752f673ff2d126f75c2152d5cfd373e4 cumulative versions39102328152 passed against a6d6d2c35e1dde59e13f3ec159a1ede594b3927e, printing Source40/pseudocode15/code55 expected digests and statuses. Repeat regression39102329752 passed63 inline +63 split. This proves that metadata lineage, runtime assertions and build of unchanged implementation passed; it does NOT prove every Source publication requirement.
++
++Further inspection of InterfaceStateMachine.send/transition found legacy per-region SELECT_ASSET publication exposes the new receipt after asset selection but before clearing graph selection. Case63 previously asserted revision/final state, not subscriber observations, so the green result did not cover that requirement. Source40 explicitly requires final state publication; pseudocode15 AssetSelection → PublishAndReturn already clears graph selection before one publish. Therefore code56 directly applies that existing accepted Frontend transition as one frozen state and publishes once; editor lock is checked before assignment. Rejection still returns before state change/publication. No Backend read/callback, Source meaning, pseudocode design, other-event transition path or persistent state changes.
++
++Case63 now subscribes, seeds an existing graph selection as a local runtime fixture, and requires one final-only publication per accepted event (including same-value repeat), with cleared graph selection and exact revision+1. Rejection must preserve publication count and state. Unsubscribe/fixture restoration occurs in finally. Code56 fingerprint initially provisional pending runner diagnostics; final versions/regression/build required. Source40/pseudocode15 unchanged and code56 stale.
++
+ ## Historical preparation / boundaries (superseded digest status above)
+ 
+ Prior implementation683867d85b10f0de78aed6dd238b1882b3f6ff13 regression39102004808 passed63+63/build39102004806 passed, but predates Source40. Diagnostic39102118697 atab90771b6b15634c4ca5c51bf7afd78f0bb3a78b reported pseudocode14 sha256:945792e6825ca41944d55dbb5f8a477187db149f0913bdbd43d0541acadcc037; pseudocode15 comment differs and needs new digest. Source40/code55 digests pending Actions and retained prior digests are explicitly provisional until runner outputs. Require corrected canonical metadata, cumulative version gate against a6d6d2c35e1dde59e13f3ec159a1ede594b3927e, exact-SHA63+63 regression and build. All executions Actions default runner; no local test/build/checker. Wider assets/graph/import/renderer integration remains open. No goal-completion claim.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index a80e1ea..51826b7 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2337,8 +2337,13 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         csv = activeProject.csvFiles[0], path = projectAssetPath(csv), before = JSON.stringify(activeProject._state),
+         slot = selectedSlotId, workspace = appFSM.state.workspace;
+       let reads = 0, events = [], projection, reject = false, queryError = null, adapterError = null, stale = false;
+-      const failure = Error("expected CSV selection error");
++      const failure = Error("expected CSV selection error"), publications = [],
++        unsubscribe = interfaceFSM.subscribe((state, event) => {
++          if (event.startsWith("SELECT_ASSET")) publications.push(state);
++        });
+       try {
++        // The final receipt must not expose the graph selection that this intent clears.
++        interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, graphObject: "selected", graphObjectIndex: 0 });
+         readBackendProjection = (kind, request) => {
+           if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
+             reads++;
+@@ -2371,15 +2376,19 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           appFSM.state.graphObjectIndex === null && appFSM.state.graphObject === "none" &&
+           selectedSlotId === slot && appFSM.state.workspace === workspace && JSON.stringify(activeProject._state) === before,
+           "selection changed Project/slot/workspace or failed to clear graph selection");
++        check(publications.length === 1 && publications[0] === interfaceFSM.state &&
++          publications[0].graphObject === "none" && publications[0].graphObjectIndex === null,
++          "selection published an intermediate state instead of one final receipt");
+         const priorRevision = interfaceFSM.state.revision;
+-        check(api.assets.selectCsv(path)?.id === csv.id && interfaceFSM.state.revision === priorRevision + 1,
+-          "accepted repeat selection did not publish exactly one revision receipt");
++        check(api.assets.selectCsv(path)?.id === csv.id && interfaceFSM.state.revision === priorRevision + 1 &&
++          publications.length === 2 && publications[1] === interfaceFSM.state,
++          "accepted repeat selection did not publish exactly one final revision receipt");
+         const stable = interfaceFSM.state, count = events.length;
+         check(api.assets.selectCsv("/missing.csv") === null && api.assets.selectCsv("/assets/csv") === null &&
+           events.length === count && interfaceFSM.state === stable, "invalid CSV selection changed Frontend");
+         reject = true;
+-        check(api.assets.selectCsv(path) === null && interfaceFSM.state === stable && events.length === count,
+-          "rejected repeat selection reported old selection as success");
++        check(api.assets.selectCsv(path) === null && interfaceFSM.state === stable && events.length === count && publications.length === 2,
++          "rejected repeat selection reported success or published old selection");
+         reject = false;
+         queryError = failure; let caught;
+         try { api.assets.selectCsv(path); } catch (error) { caught = error; }
+@@ -2393,7 +2402,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         check(!/projectVfs|getProjectCsv|activeProject|CLEAR_GRAPH_OBJECT|notify\(/.test(selectProjectCsv.toString()),
+           "Application CSV selection owns Backend resolution or separate legacy effects");
+       } finally {
+-        readBackendProjection = query; interfaceFSM.send = send; validateFrontendIntent = validate;
++        unsubscribe(); readBackendProjection = query; interfaceFSM.send = send; validateFrontendIntent = validate;
+         activeProject.initialize(saved); interfaceFSM.state = session;
+       }
+     });
+diff --git a/development-versions.json b/development-versions.json
+index e597e22..2fa6ba0 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 55,
++      "revision": 56,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index dbaae91..2aa5b8d 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -682,6 +682,17 @@
+           if (event === "LIFECYCLE_START" || event === "LIFECYCLE_COMPLETE" ||
+               event === "LIFECYCLE_FAILED")
+             return this.transitionLifecycle(event, payload);
++          if (event === "SELECT_ASSET") {
++            // Source40: publish the final selection and receipt, not intermediate regions.
++            const input = payload.validatedInput;
++            this.assertWritable("editor", event);
++            this.state = Object.freeze({ ...this.state,
++              assetSelection: input.selectionHint || "none", assetPath: input.reference ?? null,
++              graphObject: "none", graphObjectIndex: null,
++              direction: payload.direction || this.state.direction, revision: this.state.revision + 1,
++            });
++            return this.publish(event);
++          }
+           if (event === "SET_DASHBOARD_ZOOM") {
+             if (dashboardZoomLocked) return this.state;
+             let numeric;
+@@ -1720,7 +1731,6 @@
+         machine.state = Object.freeze({
+           ...machine.state,
+           assetPath: path ?? null,
+-          revision: machine.state.revision + (payload.validatedInput?.event === "SELECT_ASSET" ? 1 : 0),
+         });
+       }
+       function assetSelectionTarget({ payload }) {

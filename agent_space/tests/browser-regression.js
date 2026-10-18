@@ -2337,8 +2337,13 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         csv = activeProject.csvFiles[0], path = projectAssetPath(csv), before = JSON.stringify(activeProject._state),
         slot = selectedSlotId, workspace = appFSM.state.workspace;
       let reads = 0, events = [], projection, reject = false, queryError = null, adapterError = null, stale = false;
-      const failure = Error("expected CSV selection error");
+      const failure = Error("expected CSV selection error"), publications = [],
+        unsubscribe = interfaceFSM.subscribe((state, event) => {
+          if (event.startsWith("SELECT_ASSET")) publications.push(state);
+        });
       try {
+        // The final receipt must not expose the graph selection that this intent clears.
+        interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, graphObject: "selected", graphObjectIndex: 0 });
         readBackendProjection = (kind, request) => {
           if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
             reads++;
@@ -2371,15 +2376,19 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           appFSM.state.graphObjectIndex === null && appFSM.state.graphObject === "none" &&
           selectedSlotId === slot && appFSM.state.workspace === workspace && JSON.stringify(activeProject._state) === before,
           "selection changed Project/slot/workspace or failed to clear graph selection");
+        check(publications.length === 1 && publications[0] === interfaceFSM.state &&
+          publications[0].graphObject === "none" && publications[0].graphObjectIndex === null,
+          "selection published an intermediate state instead of one final receipt");
         const priorRevision = interfaceFSM.state.revision;
-        check(api.assets.selectCsv(path)?.id === csv.id && interfaceFSM.state.revision === priorRevision + 1,
-          "accepted repeat selection did not publish exactly one revision receipt");
+        check(api.assets.selectCsv(path)?.id === csv.id && interfaceFSM.state.revision === priorRevision + 1 &&
+          publications.length === 2 && publications[1] === interfaceFSM.state,
+          "accepted repeat selection did not publish exactly one final revision receipt");
         const stable = interfaceFSM.state, count = events.length;
         check(api.assets.selectCsv("/missing.csv") === null && api.assets.selectCsv("/assets/csv") === null &&
           events.length === count && interfaceFSM.state === stable, "invalid CSV selection changed Frontend");
         reject = true;
-        check(api.assets.selectCsv(path) === null && interfaceFSM.state === stable && events.length === count,
-          "rejected repeat selection reported old selection as success");
+        check(api.assets.selectCsv(path) === null && interfaceFSM.state === stable && events.length === count && publications.length === 2,
+          "rejected repeat selection reported success or published old selection");
         reject = false;
         queryError = failure; let caught;
         try { api.assets.selectCsv(path); } catch (error) { caught = error; }
@@ -2393,7 +2402,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(!/projectVfs|getProjectCsv|activeProject|CLEAR_GRAPH_OBJECT|notify\(/.test(selectProjectCsv.toString()),
           "Application CSV selection owns Backend resolution or separate legacy effects");
       } finally {
-        readBackendProjection = query; interfaceFSM.send = send; validateFrontendIntent = validate;
+        unsubscribe(); readBackendProjection = query; interfaceFSM.send = send; validateFrontendIntent = validate;
         activeProject.initialize(saved); interfaceFSM.state = session;
       }
     });
