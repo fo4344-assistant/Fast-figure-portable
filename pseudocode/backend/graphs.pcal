@@ -17,6 +17,9 @@ STYLE_LIMITS == BackendSettings.defaults.limits.graphObject
 AXIS_KEYS == <<"xBottom","xTop","yLeft","yRight">>
 Empty == ""
 ValidColumn(id, columns) == id \in {columns[i].id : i \in 1..Len(columns)}
+ValidColumnPair(x, y, columns) ==
+  IF Len(columns) = 0 THEN x = Empty /\ y = Empty
+  ELSE ValidColumn(x,columns) /\ ValidColumn(y,columns)
 ConversionRepresentation(chart) ==
   IF chart.editor.editable = FALSE THEN HasField(chart.editor,"conversionRows") ELSE FALSE
 IsValidIndex(index, seq) == IF IsInteger(index) THEN index >= 0 /\ index < Len(seq) ELSE FALSE
@@ -185,12 +188,13 @@ ColorAndEmptyLegend:
 end procedure;
 
 procedure CreateBaseGraphObject(source,csvId)
-variables csv = ResolveCsv(source,csvId), selection = NoValue, object = DeepCopy(STYLE_DEFAULTS);
+variables csv = ResolveCsv(source,csvId), selection = NoValue, columns = <<>>, object = DeepCopy(STYLE_DEFAULTS);
 begin
 ExistingRealCsvOnly:
   Require(csv # NoValue);
   call graphDataSelection(csv.rows,csv.headerLines,[]); selection := result;
-  Require(CurrentCsvContainsColumns(csv,selection.x,selection.y));
+  call columnDefinitions(csv.rows,csv.headerLines); columns := result;
+  Require(ValidColumnPair(selection.x,selection.y,columns));
   object.csvId := csv.id; object.x := selection.x; object.y := selection.y;
   object.color := DEFAULT_COLORS[1]; object.legendName := "";
   result := object;
@@ -648,12 +652,12 @@ ObjectsMayBeZero:
   while i <= Len(chart.editor.objects) do
     object := chart.editor.objects[i];
     if ConversionRepresentation(chart) then
-      Require(ValidColumn(object.x,columns) /\ ValidColumn(object.y,columns));
+      Require(ValidColumnPair(object.x,object.y,columns));
     else
       csv := ResolveCsvInCollection(csvCollection,object.csvId);
       Require(csv # NoValue);
       call columnDefinitions(csv.rows,csv.headerLines); columns := result;
-      Require(ValidColumn(object.x,columns) /\ ValidColumn(object.y,columns));
+      Require(ValidColumnPair(object.x,object.y,columns));
     end if;
     Require(object.type \in {"scatter","markers","lines+markers","bar","hidden"});
     Require(object.xAxisSide \in {"bottom","top"} /\ object.yAxisSide \in {"left","right"});

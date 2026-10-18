@@ -216,7 +216,8 @@ def connectDataToSlotModel(slot, data, sourceName, projectCsv):
        non-editable chart에는 실제 CSV object를 conversion view로 섞지 않으며 실패 시 project/selection을 보존한다.
        편집 가능 전환은 기존 graphs.setEditable의 명시적 별도 command를 사용한다.
     3. chart가 없으면 next chart id를 사용하는 새 chart candidate와 slot.chart candidate를 만든다.
-    4. graph object는 실제 projectCsv id와 유효한 column selection만 참조한다.
+    4. graph object는 실제 projectCsv id를 참조한다. column이 있으면 유효한 column selection만 사용하고,
+       최대 row 폭이 0인 CSV는 x=y=empty string으로 연결한다. 가짜 column을 생성하지 않는다.
     5. candidate chart projection을 계산하고 project-level mutation action이 검증/commit하도록 반환한다.
     """
     candidate = "CSV가 연결된 slot/chart candidate"
@@ -238,7 +239,10 @@ EMPTY_CSV_GRAPH_RULE = (
     "public Application createEmptyProjectCsvAndSelect가 commit 성공 뒤 실제 CSV path로 검증된 SELECT_ASSET을 보낸다. "
     "사후 선택 거부/오류는 이미 생성된 CSV를 rollback하거나 Backend 선택으로 대체하지 않는다. "
     "사용자가 오브젝트 추가를 실행하면 graphEditorAdd는 그 현재 선택 CSV id를 resolve하여 기존 SLOT_DATA_CONNECTED 또는 "
-    "GRAPH_OBJECTS_REPLACED 경로로 graph object를 생성한다. 빈 CSV 전용 chart type, protected object, fake default object를 만들지 않는다."
+    "GRAPH_OBJECTS_REPLACED 경로로 graph object를 생성한다. 빈 CSV 전용 chart type, protected object, fake default object를 만들지 않는다. "
+    "rows가 [] 또는 모든 row 폭이 0이면 columnDefinitions는 empty이고 일반 object의 x/y는 모두 empty string이어야 한다. "
+    "한쪽만 empty거나 존재하지 않는 column id는 거부한다. column이 하나라도 있으면 x/y 모두 실제 column id여야 한다. "
+    "해당 CSV의 참조/id는 유지하며 zero-column object의 trace는 []이다. CSV가 바뀌는 one-object edit는 같은 선택 fallback을 쓴다."
 )
 
 
@@ -509,6 +513,10 @@ def validateChartModel(chart, csvCollection):
       conversion object의 x/y가 그 table column인지와 style shape는 검증한다.
     - 그 밖의 실제 project CSV object는 editable flag와 무관하게 각 csvId를 csvCollection에서 resolve하고
       해당 CSV의 x/y column identifier를 검증한다. 편집 가능했던 일반 chart를 잠시 non-editable로 바꿔도 이 reference는 보존한다.
+    - 위 두 representation 모두 columnDefinitions 결과가 empty면 x/y 모두 정확히 empty string인 경우만 허용한다.
+      table은 [] 또는 0폭 row들일 수 있다. column이 있으면 x/y 모두 그 실제 column id여야 하며 한 column일 때 x=y가 허용된다.
+      이는 참조 검사 예외가 아니다. 일반 object의 csvId는 zero-column이어도 실제 CSV로 resolve되어야 한다.
+      zero-column object는 tracesSingle의 기존 invalid-coordinate/no-trace 규칙으로 []를 투영한다.
     - fake CSV/id를 생성하지 않으며 dangling project reference를 conversion view로 간주해 검증을 우회하지 않는다.
     - 두 경우 모두 enum/numeric style field와 아래 chart/imported 구조를 검증한다.
     - globalSettings와 네 axis가 정규화 가능한 shape다.

@@ -1,0 +1,296 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 717737f..4662012 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -111,6 +111,12 @@ Unit16 bounded verification atcee4833cfb8ae32a1c82a4d3461afd943fa5cc39: cumulati
+ 
+ Baseline e66e1decf0c1a44ee592ad3e3cbe7a57a1643bcf. Existing Source40/pseudocode15 already define CalculateOneObjectValues/NormalizeOneObjectEdit/GraphCommitInAttempt and copied graphs.readData; no new meaning or upstream change. Code57 routes public setObjectValues via an official chart-ID binding and scalar/new-value command, calculates CSV/columns/style inside a current-state candidate, builds its figure before validation/one commit, retries replaced authority and returns actual changed facts/index hints. Matching chart hints reconcile without replacing current CSV selection; success alone performs a fresh copied chart read/render. Cases64/65 cover graph-read isolation, invalid/finite/text/column branches, other-object/extension retention, noncommit/failures and retry. Review019 and patch041 pair track pending Actions regression65+65/build/canonical metadata and cumulative gate. Full shared graph validation is still incomplete (explicitly not proved by calling its existing implementation), as are other graph mutations/public reads, remaining asset candidates, canonical import, raster snapshots and supplied renderer/API integration. Code57 remains stale and active goal open.
+ 
++Unit17 bounded evidence: at3dba3721ccaaf65e078743055be3ee91f139f9c9 regression39102929007 PASS65 inline+65 split and build39102929019 PASS. Corrected metadata47530593099ff2656aa51092b449d0d1db6e428a passed cumulative versions39103002796 from e66e1decf0c1a44ee592ad3e3cbe7a57a1643bcf and repeated regression39103004875 PASS65+65. Review019 retains diagnostic failure, canonical digest and uncovered shared-validator/other-path work. Patch043 records final evidence; no whole-goal completion.
++
++## Eighteenth implementation unit — Source-led zero-column reference boundary
++
++Baseline f4690dfd53bf4cf8999db4e4d26d964913042354. Static lower validation audit exposed a conflict with Source's promised ordinary empty CSV and no-columns selection. Source41 first closes the exact pair rule: zero width requires x=y=empty string; positive width requires actual column IDs; real csvId always resolves; conversion table uses same coordinate rule without fake Project CSV. Pseudocode16 then replaces unconditional membership preconditions with the explicit pair predicate in construction and shared validation. Code58 tightens shared coordinate/reference validation using supplied rows/CSV collection and never repairs input; existing one-object command can transition between empty and populated CSV. Cases66/67 cover both representations, zero-width row variants, invalid pairs/dangling CSV/no live changes/no fake traces and actual command read/projection. Review020/patch044 contain Source closure, rationale, fidelity and pending Actions67+67/build/canonical lineage. Shared full style/global/axis/imported shape and remaining command ownership/integration still open; whole code58 stale. No local test/build/checker.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 4d97fe6..2a0420b 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2525,6 +2525,77 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(66, "Shared coordinate validation preserves zero-column real references without fake columns", () => {
++      const before = JSON.stringify(activeProject._state),
++        csv = { id: 99101, rows: [], headerLines: 0 },
++        style = BackendSettings.defaults.chartSettings.editor.objectStyle,
++        chart = createChartModel({ id: 99102, editor: { editable: true,
++          objects: [{ ...style, csvId: csv.id, x: "", y: "" }] } });
++      const rejects = (model, collection = [csv]) => {
++        const snapshot = JSON.stringify(model); let rejected = false;
++        try { validateChartModel(model, "coordinate fixture", collection); } catch { rejected = true; }
++        check(rejected && JSON.stringify(model) === snapshot, "invalid coordinates accepted or validator repaired input");
++      };
++      for (const rows of [[], [[]], [[], []]]) {
++        csv.rows = rows;
++        const snapshot = JSON.stringify(chart), selection = graphDataSelection(rows, 0);
++        check(selection.x === "" && selection.y === "" && validateChartModel(chart, "empty", [csv]) === chart &&
++          JSON.stringify(chart) === snapshot && traces(chart, { assets: { csvFiles: [csv] } }).length === 0,
++          "zero-column real object rejected, changed or projected synthetic trace");
++        for (const pair of [["C1", ""], ["", "C1"], ["C1", "C1"], [undefined, ""], [null, ""]]) {
++          const invalid = projectClone(chart); invalid.editor.objects[0].x = pair[0]; invalid.editor.objects[0].y = pair[1];
++          rejects(invalid);
++        }
++      }
++      rejects(chart, []);
++      csv.rows = [[""]];
++      rejects(chart);
++      chart.editor.objects[0].x = "C1"; chart.editor.objects[0].y = "C1";
++      check(validateChartModel(chart, "single", [csv]) === chart, "single actual column could not supply both coordinates");
++      const outside = projectClone(chart); outside.editor.objects[0].y = "C2"; rejects(outside);
++      chart.editor.editable = false;
++      rejects(chart, []);
++      chart.editor.conversionRows = [];
++      chart.editor.objects[0].x = ""; chart.editor.objects[0].y = "";
++      check(validateChartModel(chart, "conversion", []) === chart, "zero-column conversion required a fake CSV");
++      chart.editor.conversionRows = [["x", "y"]];
++      rejects(chart, []);
++      chart.editor.objects[0].x = "C1"; chart.editor.objects[0].y = "C2";
++      check(validateChartModel(chart, "conversion", []) === chart, "real conversion columns rejected");
++      chart.editor.conversionRows = [null]; rejects(chart, []);
++      check(JSON.stringify(activeProject._state) === before, "supplied reference validation changed Project");
++    });
++
++    await run(67, "Current one-object command can move between empty and populated CSV references", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        render = renderDashboard;
++      try {
++        const slot = activeProject.slots.find((item) => !item.hidden && item.contentType !== "image");
++        api.slots.reset(slot.id); select(slotAt(slot.id));
++        const populated = createProjectCsv([["X", "Y"], [1, 2]], "column-switch-populated.csv"),
++          empty = createProjectCsv([["temporary"]], "column-switch-empty.csv");
++        api.graphs.addObject(populated.id);
++        const chartId = slotAt(slot.id).chart, fixture = projectClone(activeProject._state);
++        fixture.assets.csvFiles.find((item) => item.id === empty.id).rows = [];
++        activeProject.initialize(fixture);
++        const assets = JSON.stringify(activeProject._state.assets), path = interfaceFSM.state.assetPath;
++        renderDashboard = () => {};
++        const result = graphEditorObjectValues(chartId, 0, { csvId: empty.id, x: "C99", y: "C1" }),
++          object = getChart(chartId).editor.objects[0];
++        check(object.csvId === empty.id && object.x === "" && object.y === "" &&
++          result !== getChart(chartId) && Object.isFrozen(result.editor.objects[0]) &&
++          getChart(chartId).graph.data.length === 0 && JSON.stringify(activeProject._state.assets) === assets &&
++          interfaceFSM.state.assetPath === path, "empty CSV switch lost reference, mutated assets/selection or created fake data");
++        const base = baseGraphObject(getChart(chartId), getProjectCsv(empty.id));
++        check(base.csvId === empty.id && base.x === "" && base.y === "", "ordinary base object invented columns");
++        graphEditorObjectValues(chartId, 0, { csvId: populated.id });
++        const restored = getChart(chartId).editor.objects[0];
++        check(restored.csvId === populated.id && restored.x === "C1" && restored.y === "C2" &&
++          getChart(chartId).graph.data.length > 0 && JSON.stringify(activeProject._state.assets) === assets,
++          "populated CSV did not recover current valid column fallback/projection");
++      } finally { renderDashboard = render; activeProject.initialize(saved); selectedSlotId = selected; interfaceFSM.state = session; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index b6d3e64..c4dea6e 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,13 +9,13 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 40,
++      "revision": 41,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+       "fingerprint": "sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2",
+       "derived_from": null,
+       "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261018-018-selection-receipt-closure.md"
++      "closure_review": "agent_space/reviews/review-20261018-020-empty-columns-closure.md"
+     }, 
+     "verification-model": {
+       "revision": 26, 
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 57,
++      "revision": 58,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,17 +44,17 @@
+         "pseudocode": "sha256:b881c18a38ab94e99e12c3e49389ae168a30aca6f17e3f7b07948c5799638d18",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-019-code-graph-object-values-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-020-empty-columns-closure.md"
+     }, 
+     "pseudocode": {
+-      "revision": 15,
++      "revision": 16,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+       "fingerprint": "sha256:b881c18a38ab94e99e12c3e49389ae168a30aca6f17e3f7b07948c5799638d18",
+       "derived_from": {
+         "source-script": "sha256:39bcd687e923b1488066ed3cb915b6008016cb6511fe8d5af460fe93f37484d2"
+       },
+-      "translation_review": "agent_space/reviews/review-20261018-018-selection-receipt-closure.md"
++      "translation_review": "agent_space/reviews/review-20261018-020-empty-columns-closure.md"
+     }
+   }
+ }
+diff --git a/pseudocode/backend/graphs.pcal b/pseudocode/backend/graphs.pcal
+index d4d24c4..07e2484 100644
+--- a/pseudocode/backend/graphs.pcal
++++ b/pseudocode/backend/graphs.pcal
+@@ -17,6 +17,9 @@ STYLE_LIMITS == BackendSettings.defaults.limits.graphObject
+ AXIS_KEYS == <<"xBottom","xTop","yLeft","yRight">>
+ Empty == ""
+ ValidColumn(id, columns) == id \in {columns[i].id : i \in 1..Len(columns)}
++ValidColumnPair(x, y, columns) ==
++  IF Len(columns) = 0 THEN x = Empty /\ y = Empty
++  ELSE ValidColumn(x,columns) /\ ValidColumn(y,columns)
+ ConversionRepresentation(chart) ==
+   IF chart.editor.editable = FALSE THEN HasField(chart.editor,"conversionRows") ELSE FALSE
+ IsValidIndex(index, seq) == IF IsInteger(index) THEN index >= 0 /\ index < Len(seq) ELSE FALSE
+@@ -185,12 +188,13 @@ ColorAndEmptyLegend:
+ end procedure;
+ 
+ procedure CreateBaseGraphObject(source,csvId)
+-variables csv = ResolveCsv(source,csvId), selection = NoValue, object = DeepCopy(STYLE_DEFAULTS);
++variables csv = ResolveCsv(source,csvId), selection = NoValue, columns = <<>>, object = DeepCopy(STYLE_DEFAULTS);
+ begin
+ ExistingRealCsvOnly:
+   Require(csv # NoValue);
+   call graphDataSelection(csv.rows,csv.headerLines,[]); selection := result;
+-  Require(CurrentCsvContainsColumns(csv,selection.x,selection.y));
++  call columnDefinitions(csv.rows,csv.headerLines); columns := result;
++  Require(ValidColumnPair(selection.x,selection.y,columns));
+   object.csvId := csv.id; object.x := selection.x; object.y := selection.y;
+   object.color := DEFAULT_COLORS[1]; object.legendName := "";
+   result := object;
+@@ -648,12 +652,12 @@ ObjectsMayBeZero:
+   while i <= Len(chart.editor.objects) do
+     object := chart.editor.objects[i];
+     if ConversionRepresentation(chart) then
+-      Require(ValidColumn(object.x,columns) /\ ValidColumn(object.y,columns));
++      Require(ValidColumnPair(object.x,object.y,columns));
+     else
+       csv := ResolveCsvInCollection(csvCollection,object.csvId);
+       Require(csv # NoValue);
+       call columnDefinitions(csv.rows,csv.headerLines); columns := result;
+-      Require(ValidColumn(object.x,columns) /\ ValidColumn(object.y,columns));
++      Require(ValidColumnPair(object.x,object.y,columns));
+     end if;
+     Require(object.type \in {"scatter","markers","lines+markers","bar","hidden"});
+     Require(object.xAxisSide \in {"bottom","top"} /\ object.yAxisSide \in {"left","right"});
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index c52fda2..3855755 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -4297,12 +4297,21 @@
+           !Array.isArray(chart.graph.frames)
+         )
+           throw Error(`${label} graph 구조가 올바르지 않습니다.`);
++        const conversion = chartUsesConversionView(chart);
++        if (conversion && (!Array.isArray(chart.editor.conversionRows) ||
++            !chart.editor.conversionRows.every(Array.isArray)))
++          throw Error(`${label} conversionRows table이 올바르지 않습니다.`);
+         chart.editor.objects.forEach((object, index) => {
+-          if (
+-            !chartUsesConversionView(chart) &&
+-            (!Number.isInteger(object.csvId) || !getProjectCsv(object.csvId, csvCollection))
+-          )
++          if (!object || typeof object !== "object" || Array.isArray(object))
++            throw Error(`${label} 그래프 객체 ${index + 1} 구조가 올바르지 않습니다.`);
++          const csv = conversion ? null : getProjectCsv(object.csvId, csvCollection);
++          if (!conversion && (!Number.isInteger(object.csvId) || !csv))
+             throw Error(`${label} 그래프 객체 ${index + 1}의 csvId가 올바르지 않습니다.`);
++          const columns = columnDefinitions(conversion ? chart.editor.conversionRows : csv.rows,
++            conversion ? chart.editor.headerLines : csv.headerLines),
++            valid = (id) => columns.some((column) => column.id === id);
++          if (columns.length ? !valid(object.x) || !valid(object.y) : object.x !== "" || object.y !== "")
++            throw Error(`${label} 그래프 객체 ${index + 1}의 x/y column이 올바르지 않습니다.`);
+         });
+         return chart;
+       }
+diff --git a/sourcescript/backend/graphs.py b/sourcescript/backend/graphs.py
+index c971d38..ec2c0a5 100644
+--- a/sourcescript/backend/graphs.py
++++ b/sourcescript/backend/graphs.py
+@@ -216,7 +216,8 @@ def connectDataToSlotModel(slot, data, sourceName, projectCsv):
+        non-editable chart에는 실제 CSV object를 conversion view로 섞지 않으며 실패 시 project/selection을 보존한다.
+        편집 가능 전환은 기존 graphs.setEditable의 명시적 별도 command를 사용한다.
+     3. chart가 없으면 next chart id를 사용하는 새 chart candidate와 slot.chart candidate를 만든다.
+-    4. graph object는 실제 projectCsv id와 유효한 column selection만 참조한다.
++    4. graph object는 실제 projectCsv id를 참조한다. column이 있으면 유효한 column selection만 사용하고,
++       최대 row 폭이 0인 CSV는 x=y=empty string으로 연결한다. 가짜 column을 생성하지 않는다.
+     5. candidate chart projection을 계산하고 project-level mutation action이 검증/commit하도록 반환한다.
+     """
+     candidate = "CSV가 연결된 slot/chart candidate"
+@@ -238,7 +239,10 @@ EMPTY_CSV_GRAPH_RULE = (
+     "public Application createEmptyProjectCsvAndSelect가 commit 성공 뒤 실제 CSV path로 검증된 SELECT_ASSET을 보낸다. "
+     "사후 선택 거부/오류는 이미 생성된 CSV를 rollback하거나 Backend 선택으로 대체하지 않는다. "
+     "사용자가 오브젝트 추가를 실행하면 graphEditorAdd는 그 현재 선택 CSV id를 resolve하여 기존 SLOT_DATA_CONNECTED 또는 "
+-    "GRAPH_OBJECTS_REPLACED 경로로 graph object를 생성한다. 빈 CSV 전용 chart type, protected object, fake default object를 만들지 않는다."
++    "GRAPH_OBJECTS_REPLACED 경로로 graph object를 생성한다. 빈 CSV 전용 chart type, protected object, fake default object를 만들지 않는다. "
++    "rows가 [] 또는 모든 row 폭이 0이면 columnDefinitions는 empty이고 일반 object의 x/y는 모두 empty string이어야 한다. "
++    "한쪽만 empty거나 존재하지 않는 column id는 거부한다. column이 하나라도 있으면 x/y 모두 실제 column id여야 한다. "
++    "해당 CSV의 참조/id는 유지하며 zero-column object의 trace는 []이다. CSV가 바뀌는 one-object edit는 같은 선택 fallback을 쓴다."
+ )
+ 
+ 
+@@ -509,6 +513,10 @@ def validateChartModel(chart, csvCollection):
+       conversion object의 x/y가 그 table column인지와 style shape는 검증한다.
+     - 그 밖의 실제 project CSV object는 editable flag와 무관하게 각 csvId를 csvCollection에서 resolve하고
+       해당 CSV의 x/y column identifier를 검증한다. 편집 가능했던 일반 chart를 잠시 non-editable로 바꿔도 이 reference는 보존한다.
++    - 위 두 representation 모두 columnDefinitions 결과가 empty면 x/y 모두 정확히 empty string인 경우만 허용한다.
++      table은 [] 또는 0폭 row들일 수 있다. column이 있으면 x/y 모두 그 실제 column id여야 하며 한 column일 때 x=y가 허용된다.
++      이는 참조 검사 예외가 아니다. 일반 object의 csvId는 zero-column이어도 실제 CSV로 resolve되어야 한다.
++      zero-column object는 tracesSingle의 기존 invalid-coordinate/no-trace 규칙으로 []를 투영한다.
+     - fake CSV/id를 생성하지 않으며 dangling project reference를 conversion view로 간주해 검증을 우회하지 않는다.
+     - 두 경우 모두 enum/numeric style field와 아래 chart/imported 구조를 검증한다.
+     - globalSettings와 네 axis가 정규화 가능한 shape다.
+diff --git a/agent_space/reviews/review-20261018-020-empty-columns-closure.md b/agent_space/reviews/review-20261018-020-empty-columns-closure.md
+new file mode 100644
+index 0000000..817577a
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-020-empty-columns-closure.md
+@@ -0,0 +1,29 @@
++# Source41 zero-column reference closure → pseudocode16 → code58 (whole alignment open)
++
++Baseline f4690dfd53bf4cf8999db4e4d26d964913042354. No policy edits; optional model26 remains stale/not run. All test/build/checker execution only Actions default runner.
++
++## Source-first decision and closure
++
++Trigger: review019's lower validation audit found a conflict between Source40 graphDataSelection's explicit no-columns x=y="", EMPTY_CSV_GRAPH_RULE's ordinary empty CSV object creation, and the lower pseudocode's unconditional membership preconditions. Prior closure failed to carry this boundary across selection/construction/validation; merely calling helpers with broad names hid the contradiction. Code's previously weak shared validator is not the authority for deciding the outcome.
++
++Decision BEFORE lower edits: Source41 preserves promised real empty CSV references and makes the acceptance boundary explicit in connectDataToSlotModel/EMPTY_CSV_GRAPH_RULE/validateChartModel. Resolve real csvId even without columns. Zero maximum row width (including [] and [[],[]]) requires exactly both x/y empty text; any positive width requires both actual column IDs (single column may repeat). Apply the same coordinate boundary to conversion-table views without manufacturing a Project CSV. Missing real CSV always fails. tracesSingle already yields no trace for unresolvable coordinates, so no new renderer mode/state is needed. One-object edits use the existing requested-valid/current-valid/default selection and may transition between empty and nonempty CSVs.
++
++Closure criteria:
++1. Logical completeness: empty/nonempty width, both coordinates, one-column equality, both representations, dangling real references, construction/edit/validation/projection boundaries explicit; no new persistent field, authority or Frontend transition.
++2. Purpose: keep ordinary empty CSV usable for object creation and prevent invalid column IDs from being silently accepted by shared validation. Reject banning empty objects (contradicts promised creation), fake C1/C2 or fake CSV (breaks reference truth), silently repairing invalid input in query/validation (violates purity), and relaxing missing real reference validation (dangling corruption).
++3. No unjustified duplication: same coordinate predicate used by construction and shared validation; data defaults remain graphDataSelection and projection remains tracesSingle. Source adds only the missing cross-boundary condition, not JavaScript implementation details. Rest of Source40 closure inherited from review018. Source41 closed for this clarification; broader implementation still incomplete.
++
++## Ordered translation / prompt-to-artifact audit
++
++| Requirement | Direct artifact/evidence | Status |
++| --- | --- | --- |
++| Source highest, close before lower translation | Source41 paragraphs above; actual sourcescript/backend/graphs.py diff in patch044 | Closed statically; canonical digest pending runner |
++| Zero/nonzero coordinate predicate | pseudocode/backend/graphs.pcal ValidColumnPair, CreateBaseGraphObject and validateChartModel use same resolved definitions | Translated after Source closure; same resolved columns and explicit empty-pair predicate statically compared |
++| Backend pure shared real/conversion reference validation | sourcecode/fast-figure.js validateChartModel resolves supplied CSV collection or conversionRows and validates coordinate pair without repairing object | Implemented pure supplied-collection coordinate branch; runtime pending |
++| Ordinary empty CSV survives real one-object edit and projects no trace; nonempty fallback preserved | browser cases66/67; real CSV ID/path/bytes untouched, both-empty, invalid pair, absent CSV, conversion distinction, pure validation failure | Cases66/67 implemented; Actions pending |
++| Canonical lineage and actual distributions | Source41/pseudocode16/code58 metadata, default-runner canonical digests, cumulative version gate, inline+split regression and build at exact SHA | Prior canonical fingerprints transparently provisional until runner diagnostic; no local execution |
++| Paired rollbackable unit/commit/push | patch044 includes Source/pseudocode/code/tests/metadata/plan/review; user-authorized atomic Git | Prepared for atomic commit/push |
++
++## Limits
++
++Only coordinate/reference validation is tightened. Shared full enum/style/global/four-axis/graph imported shape validation and all legacy add/move/delete/palette command ownership are not claimed aligned. The existing one-object branch's current-authority retry/commit remains tested separately, not proof of all commands. Canonical import, asset candidates/cascade, raster composition and supplied dashboard/API cutover remain open. Code58 remains stale; no whole-goal completion from these tests or metadata.

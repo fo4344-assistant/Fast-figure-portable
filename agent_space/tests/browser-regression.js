@@ -2525,6 +2525,77 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+    await run(66, "Shared coordinate validation preserves zero-column real references without fake columns", () => {
+      const before = JSON.stringify(activeProject._state),
+        csv = { id: 99101, rows: [], headerLines: 0 },
+        style = BackendSettings.defaults.chartSettings.editor.objectStyle,
+        chart = createChartModel({ id: 99102, editor: { editable: true,
+          objects: [{ ...style, csvId: csv.id, x: "", y: "" }] } });
+      const rejects = (model, collection = [csv]) => {
+        const snapshot = JSON.stringify(model); let rejected = false;
+        try { validateChartModel(model, "coordinate fixture", collection); } catch { rejected = true; }
+        check(rejected && JSON.stringify(model) === snapshot, "invalid coordinates accepted or validator repaired input");
+      };
+      for (const rows of [[], [[]], [[], []]]) {
+        csv.rows = rows;
+        const snapshot = JSON.stringify(chart), selection = graphDataSelection(rows, 0);
+        check(selection.x === "" && selection.y === "" && validateChartModel(chart, "empty", [csv]) === chart &&
+          JSON.stringify(chart) === snapshot && traces(chart, { assets: { csvFiles: [csv] } }).length === 0,
+          "zero-column real object rejected, changed or projected synthetic trace");
+        for (const pair of [["C1", ""], ["", "C1"], ["C1", "C1"], [undefined, ""], [null, ""]]) {
+          const invalid = projectClone(chart); invalid.editor.objects[0].x = pair[0]; invalid.editor.objects[0].y = pair[1];
+          rejects(invalid);
+        }
+      }
+      rejects(chart, []);
+      csv.rows = [[""]];
+      rejects(chart);
+      chart.editor.objects[0].x = "C1"; chart.editor.objects[0].y = "C1";
+      check(validateChartModel(chart, "single", [csv]) === chart, "single actual column could not supply both coordinates");
+      const outside = projectClone(chart); outside.editor.objects[0].y = "C2"; rejects(outside);
+      chart.editor.editable = false;
+      rejects(chart, []);
+      chart.editor.conversionRows = [];
+      chart.editor.objects[0].x = ""; chart.editor.objects[0].y = "";
+      check(validateChartModel(chart, "conversion", []) === chart, "zero-column conversion required a fake CSV");
+      chart.editor.conversionRows = [["x", "y"]];
+      rejects(chart, []);
+      chart.editor.objects[0].x = "C1"; chart.editor.objects[0].y = "C2";
+      check(validateChartModel(chart, "conversion", []) === chart, "real conversion columns rejected");
+      chart.editor.conversionRows = [null]; rejects(chart, []);
+      check(JSON.stringify(activeProject._state) === before, "supplied reference validation changed Project");
+    });
+
+    await run(67, "Current one-object command can move between empty and populated CSV references", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        render = renderDashboard;
+      try {
+        const slot = activeProject.slots.find((item) => !item.hidden && item.contentType !== "image");
+        api.slots.reset(slot.id); select(slotAt(slot.id));
+        const populated = createProjectCsv([["X", "Y"], [1, 2]], "column-switch-populated.csv"),
+          empty = createProjectCsv([["temporary"]], "column-switch-empty.csv");
+        api.graphs.addObject(populated.id);
+        const chartId = slotAt(slot.id).chart, fixture = projectClone(activeProject._state);
+        fixture.assets.csvFiles.find((item) => item.id === empty.id).rows = [];
+        activeProject.initialize(fixture);
+        const assets = JSON.stringify(activeProject._state.assets), path = interfaceFSM.state.assetPath;
+        renderDashboard = () => {};
+        const result = graphEditorObjectValues(chartId, 0, { csvId: empty.id, x: "C99", y: "C1" }),
+          object = getChart(chartId).editor.objects[0];
+        check(object.csvId === empty.id && object.x === "" && object.y === "" &&
+          result !== getChart(chartId) && Object.isFrozen(result.editor.objects[0]) &&
+          getChart(chartId).graph.data.length === 0 && JSON.stringify(activeProject._state.assets) === assets &&
+          interfaceFSM.state.assetPath === path, "empty CSV switch lost reference, mutated assets/selection or created fake data");
+        const base = baseGraphObject(getChart(chartId), getProjectCsv(empty.id));
+        check(base.csvId === empty.id && base.x === "" && base.y === "", "ordinary base object invented columns");
+        graphEditorObjectValues(chartId, 0, { csvId: populated.id });
+        const restored = getChart(chartId).editor.objects[0];
+        check(restored.csvId === populated.id && restored.x === "C1" && restored.y === "C2" &&
+          getChart(chartId).graph.data.length > 0 && JSON.stringify(activeProject._state.assets) === assets,
+          "populated CSV did not recover current valid column fallback/projection");
+      } finally { renderDashboard = render; activeProject.initialize(saved); selectedSlotId = selected; interfaceFSM.state = session; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
