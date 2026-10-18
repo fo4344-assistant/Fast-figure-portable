@@ -5194,6 +5194,103 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(116, "Raw asset batch imports copy inputs and commit one current Backend candidate", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
+        report = status, notify = interfaceFSM.notify, query = readBackendProjection;
+      try {
+        const parent = api.assets.createDirectory("/assets", "atomic-import"), file = csv("atomic.csv", "X,Y\n1,2"),
+          source = activeProject._state;
+        let commits = 0, effects = 0, reads = 0, commands = 0, captured;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = status = () => { effects++; }; interfaceFSM.notify = () => {};
+        projectEFSM.send = function (event, payload) {
+          if (event === "ASSETS_IMPORTED") { commands++; captured = payload;
+            check(!payload.candidate && !payload.imported && Array.isArray(payload.choices) &&
+              payload.files.every(file => file.bytes instanceof Uint8Array && !file.arrayBuffer), "Application candidate/File leaked to Backend"); }
+          return send.call(this, event, payload);
+        };
+        readBackendProjection = function (kind, request) {
+          if (request?.operation === "assets.readDeletionTarget") reads++;
+          return query(kind, request);
+        };
+        check((await api.assets.importToDirectory([], parent, () => { throw Error("empty chose"); })).length === 0,
+          "empty import did not return empty list");
+        check(await api.assets.importToDirectory([file], parent, () => null) === null && !commands && !commits &&
+          activeProject._state === source, "cancelled import performed command/write");
+        const imported = await api.assets.importToDirectory([file, file], parent, choose("rename"));
+        check(commits === 1 && commands === 1 && reads === 2 && imported.length === 2 && imported[0].id !== imported[1].id &&
+          imported.every(Object.isFrozen) && imported[0].name === "atomic.csv" && imported[1].name === "atomic (2).csv",
+          "batch did not commit once and return actual input-order copied query assets");
+        captured.files[0].bytes.fill(0);
+        check(getProjectCsv(imported[0].id).rows[1][0] === "1", "command bytes aliased authoritative rows");
+        const before = activeProject._state, frontend = interfaceFSM.state, oldEffects = effects, oldReads = reads;
+        const rejected = await api.assets.importToDirectory([csv("would-add.csv", "X,Y\n3,4"),
+          new File(["{"], "broken.json", { type: "application/json" })], parent, choose("rename"));
+        check(!rejected.committed && commits === 1 && activeProject._state === before && interfaceFSM.state === frontend &&
+          effects === oldEffects && reads === oldReads, "later parse rejection partially committed or did success work");
+        projectEFSM.send = () => Object.freeze({ committed: false });
+        const noncommit = await api.assets.importToDirectory([file], parent, choose("rename"));
+        check(!noncommit.committed && effects === oldEffects && reads === oldReads, "noncommit imported success projection");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render; status = report;
+        interfaceFSM.notify = notify; readBackendProjection = query; initialize.call(activeProject, saved);
+        interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(117, "Slot imports preserve local state, retry current ids and never roll back late read failures", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, validate = validateProjectObjectState, query = readBackendProjection,
+        render = renderDashboard, report = status, notify = interfaceFSM.notify, failure = Error("import success read");
+      try {
+        const id = activeProject.slots.find(slot => !slot.hidden).id;
+        api.slots.reset(id); api.slots.setContentType(id, "image"); select(slotAt(id));
+        slotAt(id).content.importExtension = { keep: true };
+        const settings = JSON.stringify(slotAt(id).content.imageSettings),
+          image = new File(['<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'], "atomic-image.svg", { type: "image/svg+xml" });
+        let commits = 0, effects = 0;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = status = () => { effects++; }; interfaceFSM.notify = () => {};
+        const imported = await api.assets.importToSlot(image, id, choose("rename"));
+        check(commits === 1 && Object.isFrozen(imported) && slotAt(id).imageId === imported.id &&
+          JSON.stringify(slotAt(id).content.imageSettings) === settings && slotAt(id).content.importExtension.keep,
+          "asset/link not one commit or slot-local settings/extension lost");
+        const state = activeProject._state, previousEffects = effects;
+        validateProjectObjectState = () => { throw failure; };
+        const invalid = await api.assets.importToSlot(image, id, choose("rename"));
+        check(!invalid.committed && activeProject._state === state && commits === 1 && effects === previousEffects,
+          "validation rejection did partial commit/success work"); validateProjectObjectState = validate;
+        activeProject.initialize = initialize;
+        api.slots.reset(id); api.slots.setContentType(id, "graph");
+        commits = 0; let attempts = 0, expected;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        validateProjectObjectState = function (candidate, options) {
+          const answer = validate(candidate, options); attempts++;
+          if (attempts === 1) {
+            const newer = projectClone(activeProject._state), nextId = newer.nextId.csv++;
+            newer.assets.csvFiles.push({ id: nextId, name: "concurrent-import.csv", directory: PROJECT_ASSET_DIRECTORIES.csv,
+              mime: "text/csv", bytesBase64: ffpxBytesToBase64(new TextEncoder().encode("X,Y\n9,10")),
+              rows: [["X", "Y"], ["9", "10"]], headerLines: 1 });
+            expected = newer.nextId.csv; initialize.call(activeProject, newer);
+          }
+          return answer;
+        };
+        const data = await api.assets.importToSlot(csv("atomic-graph.csv", "X,Y\n3,4"), id, choose("rename"));
+        check(attempts === 2 && commits === 1 && data.id === expected && getChart(slotAt(id).chart).editor.objects[0].csvId === data.id,
+          "source replacement reused old candidate/id or missed graph connection");
+        validateProjectObjectState = validate;
+        readBackendProjection = function (kind, request) {
+          if (request?.operation === "assets.readDeletionTarget") throw failure;
+          return query(kind, request);
+        };
+        const oldEffects = effects, oldCommits = commits; let caught;
+        try { await api.assets.importToSlot(csv("late-atomic.csv", "X,Y\n5,6"), id, choose("rename")); } catch (error) { caught = error; }
+        check(caught === failure && commits === oldCommits + 1 && effects === oldEffects &&
+          activeProject.csvFiles.some(asset => asset.name === "late-atomic.csv"), "late success read rolled back or did later useful work");
+      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; readBackendProjection = query;
+        renderDashboard = render; status = report; interfaceFSM.notify = notify; initialize.call(activeProject, saved);
+        interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
