@@ -10,6 +10,7 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE_DIR = ROOT / "sourcecode"
 DEFAULT_DIST_DIR = ROOT / "dist"
 INLINE_NAME = "Fast-figure.html"
 SPLIT_ARCHIVE_NAME = "Fast-figure.zip"
@@ -32,20 +33,20 @@ SCRIPTS = (
     ),
     (
         b'<script src="./fast-figure.js"></script>',
-        ROOT / "fast-figure.js",
+        SOURCE_DIR / "fast-figure.js",
         b'<script>',
     ),
     (
         b'<script src="./fast-figure-ui.js"></script>',
-        ROOT / "fast-figure-ui.js",
+        SOURCE_DIR / "fast-figure-ui.js",
         b'<script>',
     ),
 )
 
 SPLIT_FILES = (
-    (ROOT / "Fast-figure.html", Path("Fast-figure.html")),
-    (ROOT / "fast-figure.js", Path("fast-figure.js")),
-    (ROOT / "fast-figure-ui.js", Path("fast-figure-ui.js")),
+    (SOURCE_DIR / "Fast-figure.html", Path("Fast-figure.html")),
+    (SOURCE_DIR / "fast-figure.js", Path("fast-figure.js")),
+    (SOURCE_DIR / "fast-figure-ui.js", Path("fast-figure-ui.js")),
     (ROOT / "vendor" / "plotly.min.js", Path("vendor/plotly.min.js")),
     (
         ROOT / "vendor" / "fast-figure-ui-runtime.js",
@@ -183,13 +184,15 @@ def render_readme_html(markdown: str) -> str:
 
 
 def build_source_html() -> bytes:
-    source = ROOT / "Fast-figure.html"
+    source = SOURCE_DIR / "Fast-figure.html"
     if not source.is_file():
         raise FileNotFoundError(source)
     if not README_SOURCE.is_file():
         raise FileNotFoundError(README_SOURCE)
 
     document = source.read_bytes()
+    # Keep packaged vendor URLs relative to the unchanged distribution layout.
+    document = document.replace(b'src="../vendor/', b'src="./vendor/')
     if document.count(SETTINGS_MARKER) != 1:
         raise RuntimeError("expected exactly one Backend settings build marker")
     settings = json.loads(SETTINGS_SOURCE.read_text(encoding="utf-8"))

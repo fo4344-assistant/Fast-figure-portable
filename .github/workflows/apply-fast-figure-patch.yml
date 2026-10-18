@@ -47,7 +47,7 @@ jobs:
           fi
           for target in "${targets[@]}"; do
             case "$target" in
-              Fast-figure.html|fast-figure.js|fast-figure-ui.js|vendor/plotly.min.js|vendor/fast-figure-ui-runtime.js|README.md|scripts/build-portable.py) ;;
+              sourcecode/Fast-figure.html|sourcecode/fast-figure.js|sourcecode/fast-figure-ui.js|vendor/plotly.min.js|vendor/fast-figure-ui-runtime.js|README.md|scripts/build-portable.py) ;;
               *)
                 echo "Unsupported Fast Figure patch target: $target" >&2
                 exit 1
@@ -69,10 +69,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node --check fast-figure.js
+          node --check sourcecode/fast-figure.js
           node --check vendor/fast-figure-ui-runtime.js
-          if [ -f fast-figure-ui.js ]; then
-            node --check fast-figure-ui.js
+          if [ -f sourcecode/fast-figure-ui.js ]; then
+            node --check sourcecode/fast-figure-ui.js
           fi
           if git diff --name-only | grep -Fxq 'vendor/plotly.min.js'; then
             node --check vendor/plotly.min.js
@@ -97,8 +97,17 @@ jobs:
           fi
           smoke_dir="$(mktemp -d)"
           mkdir -p "$smoke_dir/split/vendor" "$smoke_dir/portable"
-          cp Fast-figure.html fast-figure.js "$smoke_dir/split/"
-          if [ -f fast-figure-ui.js ]; then cp fast-figure-ui.js "$smoke_dir/split/"; fi
+          python - "$smoke_dir/split/Fast-figure.html" <<'PY'
+          from pathlib import Path
+          import sys
+          import importlib.util
+          spec = importlib.util.spec_from_file_location("portable", "scripts/build-portable.py")
+          portable = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(portable)
+          Path(sys.argv[1]).write_bytes(portable.build_source_html())
+          PY
+          cp sourcecode/fast-figure.js "$smoke_dir/split/"
+          if [ -f sourcecode/fast-figure-ui.js ]; then cp sourcecode/fast-figure-ui.js "$smoke_dir/split/"; fi
           cp vendor/plotly.min.js vendor/fast-figure-ui-runtime.js "$smoke_dir/split/vendor/"
           cp /tmp/fast-figure-portable/Fast-figure.html "$smoke_dir/portable/Fast-figure.html"
           python - "$smoke_dir/split/Fast-figure.html" "$smoke_dir/portable/Fast-figure.html" <<'PY'
@@ -133,13 +142,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t changed < <(git status --short -- Fast-figure.html fast-figure.js fast-figure-ui.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js README.md scripts/build-portable.py)
+          mapfile -t changed < <(git status --short -- sourcecode/Fast-figure.html sourcecode/fast-figure.js sourcecode/fast-figure-ui.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js README.md scripts/build-portable.py)
           if [ "${#changed[@]}" -eq 0 ]; then
             echo "Patch produced no Fast Figure source change." >&2
             exit 1
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- Fast-figure.html fast-figure.js fast-figure-ui.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js README.md scripts/build-portable.py "${{ steps.patch.outputs.path }}"
+          git add -- sourcecode/Fast-figure.html sourcecode/fast-figure.js sourcecode/fast-figure-ui.js vendor/plotly.min.js vendor/fast-figure-ui-runtime.js README.md scripts/build-portable.py "${{ steps.patch.outputs.path }}"
           git commit -m "Apply agent patch ${{ steps.patch.outputs.name }} — 불안정 chatgpt 작업본"
           git push

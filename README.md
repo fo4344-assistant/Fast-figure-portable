@@ -60,6 +60,18 @@ The `agent_space` directory is reserved for AI agent development work.
 
 It is not required to run or use Fast Figure, and end users should not download this directory.
 
+## Repository source layout
+
+- `sourcescript/`: high-level specifications and shared Backend settings.
+- `pseudocode/`: language-neutral implementation procedures.
+- `sourcecode/`: HTML template and JavaScript implementation files.
+- `vendor/`: bundled third-party runtimes.
+- `scripts/`: build and verification tooling.
+- `dist/`: generated offline distributions (their layout is unchanged).
+
+Build from the repository root using `python scripts/build-portable.py`.
+The template at `sourcecode/Fast-figure.html` is not the packaged entry point.
+
 ## Project structure
 
 A Fast Figure project contains the complete persistent state of one figure, including:
