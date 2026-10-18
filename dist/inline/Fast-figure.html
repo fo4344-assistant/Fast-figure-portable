@@ -11407,21 +11407,27 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
       function applyProjectDirectoryCreatedAction({ machine, payload }) {
         machine.assertWritable("files","PROJECT_DIRECTORY_CREATED");
-        let parent=normalizeProjectPath(payload.parent||"/assets",{directory:true}),
-          rawName=String(payload.name||"").trim(),
-          name=projectCsvName(rawName,"");
-        if(parent!=="/"&&!activeProject.fileSystem.directories.includes(parent))
-          throw Error(`상위 폴더 ${parent}가 없습니다.`);
-        if(!name||name!==rawName||/[\\/]/.test(rawName))
-          throw Error("폴더 이름이 올바르지 않습니다.");
-        let path=normalizeProjectPath(`${parent}/${name}`,{directory:true}),
-          candidate=projectClone(activeProject._state);
-        projectVfs.ensure(candidate);
-        if(projectVfs.exists(path,candidate))throw Error(`${path}가 이미 존재합니다.`);
-        candidate.fileSystem.directories.push(path);
-        candidate.fileSystem.directories.sort();
-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
-        payload.path=path;
+        while (true) {
+          const source = activeProject._state,
+            parent = normalizeProjectPath(payload.parent, { directory: true }),
+            rawName = String(payload.name || "").trim(), name = projectCsvName(rawName, "");
+          if (parent !== "/" && !source.fileSystem.directories.includes(parent))
+            throw Error(`상위 폴더 ${parent}가 없습니다.`);
+          if (!name || name !== rawName || /[\\/]/.test(rawName))
+            throw Error("폴더 이름이 올바르지 않습니다.");
+          const path = normalizeProjectPath(`${parent}/${name}`, { directory: true });
+          if (projectVfs.exists(path, source)) throw Error(`${path}가 이미 존재합니다.`);
+          const candidate = projectClone(source);
+          candidate.fileSystem.directories.push(path);
+          candidate.fileSystem.directories.sort();
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const actual = projectVfs.resolve(path, activeProject._state);
+          payload.changed = { slotIds: [], chartIds: [], csvIds: [], imageIds: [], assets: [],
+            createdDirectoryPath: actual.path };
+          return;
+        }
       }
       function immutableProjectCopy(value) {
         const freeze = (copy) => {
@@ -16384,13 +16390,11 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         return { path: payload.path, trashed: payload.trashed };
       }
       function createProjectDirectory(parent, name) {
-        let payload = { parent, name, direction: "ui-to-fsm" };
-        appFSM.send("PROJECT_DIRECTORY_CREATED", payload);
-        appFSM.send("SELECT_ASSET", {
-          kind: "directory", path: payload.path, direction: "ui-to-fsm",
-        });
-        status(`${payload.path} 폴더를 만들었습니다.`);
-        return payload.path;
+        const result = dispatchProjectCommand("PROJECT_DIRECTORY_CREATED", { parent, name });
+        if (!result.committed) return null;
+        const path = result.changed.createdDirectoryPath;
+        appFSM.send("SELECT_ASSET", { kind: "directory", path, direction: "ui-to-fsm" });
+        return path;
       }
       function emptyProjectTrash() {
         let payload = { direction: "ui-to-fsm" };
