@@ -6,6 +6,12 @@ Source42 defined separate global/slot ownership but not input coercion or the di
 
 Completeness: target/input/empty/error/retry/read semantics now explicit, existing candidate invariants inherited. Independent purpose: distinguish global document body from optional slot annotation, preserve user text, prevent editing stale/covered target. No duplicate meaning/state: one domain rule, EFSM consumes it; no editor mirror/cache. Reject raw arbitrary payload persistence (schema risk), string-only ban (unnecessarily loses useful scalar edits), trim/placeholder data (changes user content), hidden-id coercion (wrong owner), or Source merely describing current JS. Previous closure missed this boundary; closure remains bounded and existing upstream closure elsewhere inherited.
 
+## Source44 refinement before propagation
+
+Audit of Source43/code86 found legacy immediate caption display sync had been removed merely because original abstract wrapper omitted it. Preserve useful behavior by independent Application/Frontend contract: after commit, query copied caption state once, pass supplied state to caption renderer, return it; read/render errors propagate without rollback. Renderer cannot query Backend or mutate text. Source44 defines this boundary first, pseudocode22 translates it, code87 supplies that projection instead of restoring the old implicit Backend-reading renderer call. This is presentation responsibility, not new persistent authority. Completeness covers success/none/error ordering, purpose is immediate visible body editing, no duplicate text owner/cache. Earlier closure missed that UI consequence; Source43 input/owner decisions inherited unchanged.
+
+At ea73d2e80c26d407a84332df0a05a5a75672f3d1 build39125775439 PASS; regression39125775440 prior102+104 pass both forms,103 fails `caption text changed selection, canonical content extension or work count`. Full runtime identity assertion incorrectly included legitimate reconciliation revision/direction; compare actual selection fields and retain direct canonical extension assertion. Diagnostic39125775474 failed provisional Source fingerprint; actual43 52696eeb9c40457e2f8f57bc7b6991bfd8b3d9ea0184629510e057935a22ce8d/pseudo21 541efd90ce4a4f7cff71d71f7a818145eaf8f64ca8fb70f22c024d74254e7bf3/code86 dc6b831b47bfc64dc7a7e554c06f6d44a9f7d542972ecbddd20c5e3045bfa9a1. These are historical diagnostics, not final44/22/87 metadata.
+
 ## Prompt-to-artifact checklist (execution pending)
 
 - Source43 domain rule + Application contract → pseudocode21 TextOrEmpty/empty-to-none + existing common retry → code86 current candidate loop.
@@ -13,4 +19,4 @@ Completeness: target/input/empty/error/retry/read semantics now explicit, existi
 - nullish/number/whitespace/Unicode/empty mapping, immutable copied global/slot read/no repair:103.
 - original conversion/validator errors, noncommit/no read/effect, latest authority retry, postcommit query/reconcile errors no rollback:104.
 
-Source43/pseudocode21 fingerprints provisional until actual Actions default-runner diagnostics; code86 stale. Tests104+104/build/cumulative gate pending. Whole Plan023 open: other asset/cascade/import/schema/raster/dashboard/legacy serializer and timing gaps not covered. No policy edit/delegation/local runtime execution; optional TLC not run.
+Source44/pseudocode22 fingerprints provisional until actual Actions default-runner diagnostics; code87 stale. Tests104+104/build/cumulative gate pending. Whole Plan023 open: other asset/cascade/import/schema/raster/dashboard/legacy serializer and timing gaps not covered. No policy edit/delegation/local runtime execution; optional TLC not run.

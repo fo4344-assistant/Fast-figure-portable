@@ -1,0 +1,195 @@
+diff --git a/agent_space/reviews/review-20261018-039-caption-text-closure.md b/agent_space/reviews/review-20261018-039-caption-text-closure.md
+index f775ac1..510d6be 100644
+--- a/agent_space/reviews/review-20261018-039-caption-text-closure.md
++++ b/agent_space/reviews/review-20261018-039-caption-text-closure.md
+@@ -6,6 +6,12 @@ Source42 defined separate global/slot ownership but not input coercion or the di
+ 
+ Completeness: target/input/empty/error/retry/read semantics now explicit, existing candidate invariants inherited. Independent purpose: distinguish global document body from optional slot annotation, preserve user text, prevent editing stale/covered target. No duplicate meaning/state: one domain rule, EFSM consumes it; no editor mirror/cache. Reject raw arbitrary payload persistence (schema risk), string-only ban (unnecessarily loses useful scalar edits), trim/placeholder data (changes user content), hidden-id coercion (wrong owner), or Source merely describing current JS. Previous closure missed this boundary; closure remains bounded and existing upstream closure elsewhere inherited.
+ 
++## Source44 refinement before propagation
++
++Audit of Source43/code86 found legacy immediate caption display sync had been removed merely because original abstract wrapper omitted it. Preserve useful behavior by independent Application/Frontend contract: after commit, query copied caption state once, pass supplied state to caption renderer, return it; read/render errors propagate without rollback. Renderer cannot query Backend or mutate text. Source44 defines this boundary first, pseudocode22 translates it, code87 supplies that projection instead of restoring the old implicit Backend-reading renderer call. This is presentation responsibility, not new persistent authority. Completeness covers success/none/error ordering, purpose is immediate visible body editing, no duplicate text owner/cache. Earlier closure missed that UI consequence; Source43 input/owner decisions inherited unchanged.
++
++At ea73d2e80c26d407a84332df0a05a5a75672f3d1 build39125775439 PASS; regression39125775440 prior102+104 pass both forms,103 fails `caption text changed selection, canonical content extension or work count`. Full runtime identity assertion incorrectly included legitimate reconciliation revision/direction; compare actual selection fields and retain direct canonical extension assertion. Diagnostic39125775474 failed provisional Source fingerprint; actual43 52696eeb9c40457e2f8f57bc7b6991bfd8b3d9ea0184629510e057935a22ce8d/pseudo21 541efd90ce4a4f7cff71d71f7a818145eaf8f64ca8fb70f22c024d74254e7bf3/code86 dc6b831b47bfc64dc7a7e554c06f6d44a9f7d542972ecbddd20c5e3045bfa9a1. These are historical diagnostics, not final44/22/87 metadata.
++
+ ## Prompt-to-artifact checklist (execution pending)
+ 
+ - Source43 domain rule + Application contract → pseudocode21 TextOrEmpty/empty-to-none + existing common retry → code86 current candidate loop.
+@@ -13,4 +19,4 @@ Completeness: target/input/empty/error/retry/read semantics now explicit, existi
+ - nullish/number/whitespace/Unicode/empty mapping, immutable copied global/slot read/no repair:103.
+ - original conversion/validator errors, noncommit/no read/effect, latest authority retry, postcommit query/reconcile errors no rollback:104.
+ 
+-Source43/pseudocode21 fingerprints provisional until actual Actions default-runner diagnostics; code86 stale. Tests104+104/build/cumulative gate pending. Whole Plan023 open: other asset/cascade/import/schema/raster/dashboard/legacy serializer and timing gaps not covered. No policy edit/delegation/local runtime execution; optional TLC not run.
++Source44/pseudocode22 fingerprints provisional until actual Actions default-runner diagnostics; code87 stale. Tests104+104/build/cumulative gate pending. Whole Plan023 open: other asset/cascade/import/schema/raster/dashboard/legacy serializer and timing gaps not covered. No policy edit/delegation/local runtime execution; optional TLC not run.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 697da0f..ad0a3dc 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4511,9 +4511,13 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         const fixture = projectClone(activeProject._state); fixture.slots.find(slot => slot.id === a.id).caption = "prior a";
+         fixture.slots.find(slot => slot.id === b.id).caption = "prior b"; initialize.call(activeProject, fixture);
+         for (const slot of activeProject.slots) slot.content.captionTextExtension = { retained: slot.id };
+-        const runtime = interfaceFSM.state, before = projectClone(activeProject._state);
+-        let commits = 0, reads = 0, result;
+-        renderDashboard = syncDashboardCaption = () => {}; interfaceFSM.notify = () => {};
++        const selection = () => JSON.stringify({ slotId: selectedSlotId, path: interfaceFSM.state.assetPath,
++          kind: interfaceFSM.state.assetSelection, index: interfaceFSM.state.graphObjectIndex, workspace: interfaceFSM.state.workspace }),
++          runtime = selection(), before = projectClone(activeProject._state);
++        let commits = 0, reads = 0, result, rendered = 0;
++        renderDashboard = () => {}; interfaceFSM.notify = () => {};
++        syncDashboardCaption = state => { check(Object.isFrozen(state) && typeof state.text === "string",
++          "caption renderer did not receive copied state"); rendered++; };
+         activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+         projectEFSM.send = function (event, payload) {
+           check(event === "CAPTION_TEXT_INPUT" && !Object.hasOwn(payload, "candidate") && !Object.hasOwn(payload, "model") &&
+@@ -4540,7 +4544,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         check(api.captions.setGlobalText(undefined).text === "" && activeProject.annotations.captions.text === "" &&
+           activeProject.slots.find(slot => slot.id === b.id).caption === "prior b", "global empty changed slot captions");
+         const exact = api.captions.setSlotText(a.id, text);
+-        check(exact.text === text && interfaceFSM.state === runtime && commits === 5 && reads === 5 &&
++        check(exact.text === text && selection() === runtime && commits === 5 && reads === 5 && rendered === 2 &&
+           activeProject.slots.every(slot => slot.content.captionTextExtension?.retained === slot.id),
+           "caption text changed selection, canonical content extension or work count");
+         const source = activeProject._state, first = api.captions.readSlot(a.id), second = api.captions.readSlot(a.id);
+@@ -4616,6 +4620,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         try { api.captions.setGlobalText("committed global"); } catch (error) { caught = error; }
+         check(caught === failure && commits === 4 && activeProject.annotations.captions.text === "committed global",
+           "caption postcommit reconciliation error rolled back/swallowed");
++        interfaceFSM.reconcileProjectResult = reconcile; syncDashboardCaption = () => { throw failure; }; caught = null;
++        try { api.captions.setGlobalText("body before renderer error"); } catch (error) { caught = error; }
++        check(caught === failure && commits === 5 && activeProject.annotations.captions.text === "body before renderer error",
++          "caption postcommit renderer error rolled back/swallowed");
+       } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+         validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
+         syncDashboardCaption = sync; renderDashboard = render; interfaceFSM.notify = notify;
+diff --git a/development-versions.json b/development-versions.json
+index 920d1b3..2726bb4 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,7 +9,7 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 43,
++      "revision": 44,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+       "fingerprint": "sha256:5b26424594c12918fd8ca51453483922bfbfcf29216e67bcd61cf959297ba9d2",
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 86,
++      "revision": 87,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -47,7 +47,7 @@
+       "validation_review": "agent_space/reviews/review-20261018-039-caption-text-closure.md"
+     }, 
+     "pseudocode": {
+-      "revision": 21,
++      "revision": 22,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+       "fingerprint": "sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51",
+diff --git a/pseudocode/application/public_api/layout_annotations.pcal b/pseudocode/application/public_api/layout_annotations.pcal
+index b1aec77..09a4cb5 100644
+--- a/pseudocode/application/public_api/layout_annotations.pcal
++++ b/pseudocode/application/public_api/layout_annotations.pcal
+@@ -239,13 +239,14 @@ CompletionNotPositionCommit:
+ end procedure;
+ 
+ procedure setGlobalCaptionText(text)
+-variables tuple = NoValue;
++variables tuple = NoValue, state = NoValue;
+ begin
+ ExplicitGlobalOwner:
+   call dispatchProjectCommand("CAPTION_TEXT_INPUT",[target |-> [kind |-> "global"],text |-> text]); tuple := result;
+   if ~tuple[1].committed then result := FALSE; return; end if;
+-  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]);
+-  return;
++  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]); state := result;
++  call syncDashboardCaption(state);
++  result := state; return;
+ end procedure;
+ 
+ procedure setSlotCaptionText(slotId,text)
+diff --git a/pseudocode/frontend/renderer.pcal b/pseudocode/frontend/renderer.pcal
+index 13174ea..0d2fb29 100644
+--- a/pseudocode/frontend/renderer.pcal
++++ b/pseudocode/frontend/renderer.pcal
+@@ -13,6 +13,13 @@ variables result = NoValue,
+   dashboardGeneration = 0, graphInstances = [], imageSurfaces = [],
+   dragSource = NoValue, suppressBookmarkClick = FALSE;
+ 
++procedure syncDashboardCaption(captionState)
++begin
++SuppliedCaptionOnlyNoBackendQueryOrPersistentWrite:
++  ApplyCaptionHostsFromSuppliedTextNameSettingsEnabled(captionState);
++  result := None; return;
++end procedure;
++
+ procedure publishUiTelemetry(patch)
+ begin
+ ProjectionOnly:
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 9f4ad47..fa349b0 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -7840,7 +7840,9 @@
+           target: { kind: "global" }, text,
+         });
+         if (!result.committed) return false;
+-        return readGlobalCaptionState();
++        const state = readGlobalCaptionState();
++        syncDashboardCaption(state);
++        return state;
+       }
+       function setSlotCaptionText(slotId,text) {
+         let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index 179f748..4998e05 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -344,7 +344,8 @@ def setGlobalCaptionText(text):
+ 
+     처리:
+     Backend CAPTION_TEXT_RULE의 nullish/text 변환과 empty 저장 규칙으로 global caption project property 하나만 변경한다.
+-    slot caption 값은 변경하지 않는다.
++    slot caption 값은 변경하지 않는다. commit 후 official copied state를 한 번 읽고 그 supplied state로 caption renderer를 갱신한다.
++    read/renderer 오류는 전파하며 committed text를 rollback하지 않는다. 미commit은 read/render를 실행하지 않는다.
+     CAPTION_TEXT_INPUT에 explicit global owner를 전달해 projectEFSM으로 commit한다.
+     """
+     result, interfaceState, rendererInput = dispatchProjectCommand(
+@@ -353,7 +354,9 @@ def setGlobalCaptionText(text):
+     )
+     if not result.committed:
+         return False
+-    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
++    state = dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
++    syncDashboardCaption(state)  # supplied immutable caption projection만 소비하는 Frontend renderer
++    return state
+ 
+ 
+ def setSlotCaptionText(slotId, text):
+diff --git a/sourcescript/frontend/renderer.py b/sourcescript/frontend/renderer.py
+index 0150457..27d86da 100644
+--- a/sourcescript/frontend/renderer.py
++++ b/sourcescript/frontend/renderer.py
+@@ -15,6 +15,15 @@ RENDERER_INPUT_CONTRACT = {
+ }
+ 
+ 
++def syncDashboardCaption(captionState):
++    """
++    explicit immutable captionState의 text/name/settings/enabled 값으로 caption host를 표시한다.
++    Backend/Project/Application query를 재호출하거나 persistent text를 변경하지 않는다.
++    DOM 표시 오류는 caller에 전파한다. renderer-local 값은 이 호출 범위 밖의 의미 원천이 아니다.
++    """
++    return None
++
++
+ RENDERER_HOSTS = {
+     "graphArea": "dashboard와 caption을 포함하는 scroll/render host",
+     "dashboard": "slot grid renderer host",

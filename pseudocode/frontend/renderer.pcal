@@ -13,6 +13,13 @@ variables result = NoValue,
   dashboardGeneration = 0, graphInstances = [], imageSurfaces = [],
   dragSource = NoValue, suppressBookmarkClick = FALSE;
 
+procedure syncDashboardCaption(captionState)
+begin
+SuppliedCaptionOnlyNoBackendQueryOrPersistentWrite:
+  ApplyCaptionHostsFromSuppliedTextNameSettingsEnabled(captionState);
+  result := None; return;
+end procedure;
+
 procedure publishUiTelemetry(patch)
 begin
 ProjectionOnly:

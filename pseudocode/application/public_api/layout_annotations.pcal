@@ -239,13 +239,14 @@ CompletionNotPositionCommit:
 end procedure;
 
 procedure setGlobalCaptionText(text)
-variables tuple = NoValue;
+variables tuple = NoValue, state = NoValue;
 begin
 ExplicitGlobalOwner:
   call dispatchProjectCommand("CAPTION_TEXT_INPUT",[target |-> [kind |-> "global"],text |-> text]); tuple := result;
   if ~tuple[1].committed then result := FALSE; return; end if;
-  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]);
-  return;
+  call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]); state := result;
+  call syncDashboardCaption(state);
+  result := state; return;
 end procedure;
 
 procedure setSlotCaptionText(slotId,text)

@@ -4511,9 +4511,13 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         const fixture = projectClone(activeProject._state); fixture.slots.find(slot => slot.id === a.id).caption = "prior a";
         fixture.slots.find(slot => slot.id === b.id).caption = "prior b"; initialize.call(activeProject, fixture);
         for (const slot of activeProject.slots) slot.content.captionTextExtension = { retained: slot.id };
-        const runtime = interfaceFSM.state, before = projectClone(activeProject._state);
-        let commits = 0, reads = 0, result;
-        renderDashboard = syncDashboardCaption = () => {}; interfaceFSM.notify = () => {};
+        const selection = () => JSON.stringify({ slotId: selectedSlotId, path: interfaceFSM.state.assetPath,
+          kind: interfaceFSM.state.assetSelection, index: interfaceFSM.state.graphObjectIndex, workspace: interfaceFSM.state.workspace }),
+          runtime = selection(), before = projectClone(activeProject._state);
+        let commits = 0, reads = 0, result, rendered = 0;
+        renderDashboard = () => {}; interfaceFSM.notify = () => {};
+        syncDashboardCaption = state => { check(Object.isFrozen(state) && typeof state.text === "string",
+          "caption renderer did not receive copied state"); rendered++; };
         activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
         projectEFSM.send = function (event, payload) {
           check(event === "CAPTION_TEXT_INPUT" && !Object.hasOwn(payload, "candidate") && !Object.hasOwn(payload, "model") &&
@@ -4540,7 +4544,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(api.captions.setGlobalText(undefined).text === "" && activeProject.annotations.captions.text === "" &&
           activeProject.slots.find(slot => slot.id === b.id).caption === "prior b", "global empty changed slot captions");
         const exact = api.captions.setSlotText(a.id, text);
-        check(exact.text === text && interfaceFSM.state === runtime && commits === 5 && reads === 5 &&
+        check(exact.text === text && selection() === runtime && commits === 5 && reads === 5 && rendered === 2 &&
           activeProject.slots.every(slot => slot.content.captionTextExtension?.retained === slot.id),
           "caption text changed selection, canonical content extension or work count");
         const source = activeProject._state, first = api.captions.readSlot(a.id), second = api.captions.readSlot(a.id);
@@ -4616,6 +4620,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         try { api.captions.setGlobalText("committed global"); } catch (error) { caught = error; }
         check(caught === failure && commits === 4 && activeProject.annotations.captions.text === "committed global",
           "caption postcommit reconciliation error rolled back/swallowed");
+        interfaceFSM.reconcileProjectResult = reconcile; syncDashboardCaption = () => { throw failure; }; caught = null;
+        try { api.captions.setGlobalText("body before renderer error"); } catch (error) { caught = error; }
+        check(caught === failure && commits === 5 && activeProject.annotations.captions.text === "body before renderer error",
+          "caption postcommit renderer error rolled back/swallowed");
       } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
         validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
         syncDashboardCaption = sync; renderDashboard = render; interfaceFSM.notify = notify;

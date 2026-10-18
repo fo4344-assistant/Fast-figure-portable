@@ -344,7 +344,8 @@ def setGlobalCaptionText(text):
 
     처리:
     Backend CAPTION_TEXT_RULE의 nullish/text 변환과 empty 저장 규칙으로 global caption project property 하나만 변경한다.
-    slot caption 값은 변경하지 않는다.
+    slot caption 값은 변경하지 않는다. commit 후 official copied state를 한 번 읽고 그 supplied state로 caption renderer를 갱신한다.
+    read/renderer 오류는 전파하며 committed text를 rollback하지 않는다. 미commit은 read/render를 실행하지 않는다.
     CAPTION_TEXT_INPUT에 explicit global owner를 전달해 projectEFSM으로 commit한다.
     """
     result, interfaceState, rendererInput = dispatchProjectCommand(
@@ -353,7 +354,9 @@ def setGlobalCaptionText(text):
     )
     if not result.committed:
         return False
-    return dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
+    state = dispatchProjectQuery("project-api", {"operation": "captions.readGlobal"})
+    syncDashboardCaption(state)  # supplied immutable caption projection만 소비하는 Frontend renderer
+    return state
 
 
 def setSlotCaptionText(slotId, text):

@@ -7840,7 +7840,9 @@
           target: { kind: "global" }, text,
         });
         if (!result.committed) return false;
-        return readGlobalCaptionState();
+        const state = readGlobalCaptionState();
+        syncDashboardCaption(state);
+        return state;
       }
       function setSlotCaptionText(slotId,text) {
         let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {

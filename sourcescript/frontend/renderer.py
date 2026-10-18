@@ -15,6 +15,15 @@ RENDERER_INPUT_CONTRACT = {
 }
 
 
+def syncDashboardCaption(captionState):
+    """
+    explicit immutable captionState의 text/name/settings/enabled 값으로 caption host를 표시한다.
+    Backend/Project/Application query를 재호출하거나 persistent text를 변경하지 않는다.
+    DOM 표시 오류는 caller에 전파한다. renderer-local 값은 이 호출 범위 밖의 의미 원천이 아니다.
+    """
+    return None
+
+
 RENDERER_HOSTS = {
     "graphArea": "dashboard와 caption을 포함하는 scroll/render host",
     "dashboard": "slot grid renderer host",
