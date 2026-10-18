@@ -621,7 +621,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "addObject mutated non-editable chart",
       );
       if (chart.editor.objects.length) {
-        api.graphs.setObjectValues(0, { legendName: "should-not-change" });
+        let rejected = false;
+        try { api.graphs.setObjectValues(0, { legendName: "should-not-change" }); } catch { rejected = true; }
+        check(rejected, "non-editable edit did not reject through the command");
         api.graphs.deleteObject(0);
         check(
           JSON.stringify(getChart(slotAt(slot.id).chart).editor.objects) === before,
@@ -2404,6 +2406,122 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       } finally {
         unsubscribe(); readBackendProjection = query; interfaceFSM.send = send; validateFrontendIntent = validate;
         activeProject.initialize(saved); interfaceFSM.state = session;
+      }
+    });
+
+    await run(64, "Official graph read separates current CSV, object columns and immutable chart", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId;
+      try {
+        const slot = activeProject.slots.find((item) => !item.hidden && item.contentType !== "image");
+        api.slots.reset(slot.id); select(slotAt(slot.id));
+        const first = createProjectCsv([["X", "Y", "Z"], [1, 2, 3]], "graph-read-object.csv"),
+          second = createProjectCsv([["Only"], [7]], "graph-read-current.csv");
+        api.graphs.addObject(first.id);
+        const chartId = slotAt(slot.id).chart, request = { operation: "graphs.readData", chartId,
+          frontendState: { assetSelection: "csv", assetPath: projectAssetPath(second), graphObjectIndex: 0 } },
+          before = JSON.stringify(activeProject._state), read = appFSM.query("project-api", request),
+          again = appFSM.query("project-api", request);
+        check(read.chart.id === chartId && read.selectedIndex === 0 && read.currentCsv.id === second.id &&
+          read.columns.length === 1 && read.objectColumns.length === 3 && read.objects[0].csvId === first.id,
+          "graph read mixed current CSV with object reference or lost explicit owner");
+        check(Object.isFrozen(read.chart.editor.objects[0]) && Object.isFrozen(read.currentCsv.rows[0]) &&
+          read.chart !== again.chart && read.chart !== getChart(chartId) && read.objects !== getChart(chartId).editor.objects &&
+          JSON.stringify(activeProject._state) === before, "graph read aliases authority, is mutable or repairs live state");
+        const absent = appFSM.query("project-api", { operation: "graphs.readData", chartId: -1 });
+        check(absent.chart === null && absent.objects.length === 0 && absent.selectedIndex === null &&
+          absent.currentCsv === null && absent.objectColumns.length === 0, "missing graph projection mismatch");
+        getChart(chartId).editor.editable = false;
+        const frozen = appFSM.query("project-api", request);
+        check(frozen.selectedIndex === null && frozen.objectColumns.length === 0 && frozen.currentCsv.id === second.id,
+          "non-editable graph supplied editable object columns or replaced current CSV");
+      } finally { activeProject.initialize(saved); selectedSlotId = selected; interfaceFSM.state = session; }
+    });
+
+    await run(65, "One-object edit calculates current candidate, retries and gates copied success read", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, query = readBackendProjection, render = renderDashboard,
+        send = projectEFSM.send, validate = validateProjectObjectState, rebuild = rebuildEditableGraph,
+        reconcile = interfaceFSM.reconcileProjectResult;
+      let commits = 0, successReads = 0, renders = 0, reconciliations = 0, result;
+      try {
+        const slot = activeProject.slots.find((item) => !item.hidden && item.contentType !== "image");
+        api.slots.reset(slot.id); select(slotAt(slot.id));
+        const first = createProjectCsv([["X", "Y", "Z"], [1, 2, 3]], "object-edit-first.csv"),
+          second = createProjectCsv([["Only"], [7]], "object-edit-second.csv");
+        api.graphs.addObject(first.id); api.graphs.addObject(first.id);
+        const chartId = slotAt(slot.id).chart, assetPath = interfaceFSM.state.assetPath;
+        getChart(chartId).editor.objects[1].plotlyTrace = { meta: { retained: "extension" } };
+        const other = JSON.stringify(getChart(chartId).editor.objects[1]);
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        renderDashboard = () => { renders++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        readBackendProjection = (kind, request) => {
+          if (kind === "project-api" && request.operation === "graphs.readData" && Object.hasOwn(request, "chartId")) successReads++;
+          return query(kind, request);
+        };
+        projectEFSM.send = function (event, payload) {
+          if (event === "GRAPH_OBJECTS_REPLACED") check(payload.operation === "graphs.setObjectValues" &&
+            payload.chartId === chartId && !Object.hasOwn(payload, "objects") && !Object.hasOwn(payload, "candidate"),
+            "Application supplies candidate/objects or wrong scalar command");
+          return result = send.call(this, event, payload);
+        };
+        const edited = api.graphs.setObjectValues(0, { color: "rgb(1, 2, 3)", legendName: "", lineDash: "invalid", markerSymbol: "invalid",
+          lineWidth: 999, markerSize: 0, barOpacity: Infinity, barLineWidth: 0, csvId: -1, x: "bad" });
+        const object = getChart(chartId).editor.objects[0];
+        check(edited !== getChart(chartId) && Object.isFrozen(edited.editor.objects[0]) && commits === 1 &&
+          successReads === 1 && renders === 1 && reconciliations === 1, "edit did not commit once then copied read/render/reconcile");
+        check(object.color === "rgb(1, 2, 3)" && object.legendName === "" && object.lineDash === "solid" &&
+          object.markerSymbol === "circle" && object.lineWidth === 20 && object.markerSize === 1 &&
+          object.barOpacity === 1 && object.barLineWidth === 0 && object.csvId === first.id && object.x === "C1" &&
+          JSON.stringify(getChart(chartId).editor.objects[1]) === other, "edit normalization or one-object isolation mismatch");
+        check(interfaceFSM.state.assetPath === assetPath && interfaceFSM.state.graphObjectIndex === 0 &&
+          result.selectionHints.chartId === chartId && result.selectionHints.selectedIndexHint === 0 &&
+          result.changed.chartIds.includes(chartId) && result.changed.csvIds.length === 0,
+          "edit replaced selected CSV or lost actual facts/index hint");
+        graphEditorObjectValues(chartId, 0, { csvId: second.id, x: "bad", y: "bad", type: "bar" });
+        check(getChart(chartId).editor.objects[0].csvId === second.id && getChart(chartId).editor.objects[0].x === "C1" &&
+          getChart(chartId).editor.objects[0].y === "C1", "requested current CSV did not revalidate/fallback columns");
+        graphEditorObjectValues(chartId, 0, Object.assign(Object.create({ color: "red", csvId: first.id }),
+          { lineWidth: null, markerSize: NaN, legendName: 23, color: "" }));
+        check(getChart(chartId).editor.objects[0].csvId === second.id && getChart(chartId).editor.objects[0].color === "rgb(1, 2, 3)" &&
+          getChart(chartId).editor.objects[0].lineWidth === 20 && getChart(chartId).editor.objects[0].markerSize === 1 &&
+          getChart(chartId).editor.objects[0].legendName === "", "invalid/omitted/inherited edits overwrote current fields");
+        const before = JSON.stringify(activeProject._state), stable = interfaceFSM.state,
+          count = commits, reads = successReads, painted = renders, reconciled = reconciliations,
+          failure = Error("expected one-object failure");
+        for (const mode of ["getter", "validator", "projection"]) {
+          if (mode === "validator") validateProjectObjectState = () => { throw failure; };
+          if (mode === "projection") rebuildEditableGraph = () => { throw failure; };
+          let caught;
+          try { graphEditorObjectValues(chartId, 0, mode === "getter" ? { get color() { throw failure; } } : { legendName: "failed" }); }
+          catch (error) { caught = error; }
+          validateProjectObjectState = validate; rebuildEditableGraph = rebuild;
+          check(caught === failure && commits === count && successReads === reads && renders === painted &&
+            reconciliations === reconciled && interfaceFSM.state === stable && JSON.stringify(activeProject._state) === before,
+            "failed candidate committed, reconciled or performed success work");
+        }
+        const noncommit = Object.freeze({ committed: false });
+        projectEFSM.send = () => noncommit;
+        check(graphEditorObjectValues(chartId, 0, {}) === noncommit && successReads === reads && renders === painted &&
+          reconciliations === reconciled, "noncommit performed success work");
+        projectEFSM.send = send;
+        let rejected = false;
+        try { graphEditorObjectValues(chartId, -1, {}); } catch { rejected = true; }
+        check(rejected && commits === count && JSON.stringify(activeProject._state) === before, "invalid current index changed authority");
+        let attempts = 0;
+        graphEditorObjectValues(chartId, 0, { get legendName() {
+          if (!attempts++) { const newer = projectClone(activeProject._state); newer.meta.projectName = "new object authority";
+            initialize.call(activeProject, newer); }
+          return "retry";
+        } });
+        check(attempts === 2 && commits === count + 1 && activeProject.projectName === "new object authority" &&
+          getChart(chartId).editor.objects[0].legendName === "retry", "stale graph candidate overwrote newer authority instead of recalculating");
+        check(!/getProjectCsv|activeProject|ensureGraphObjects|baseGraphObject|graphEditorCommit/.test(graphEditorObjectValues.toString()),
+          "Application still calculates graph candidate or reads domain state");
+      } finally {
+        activeProject.initialize = initialize; readBackendProjection = query; renderDashboard = render; projectEFSM.send = send;
+        validateProjectObjectState = validate; rebuildEditableGraph = rebuild; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
       }
     });
 

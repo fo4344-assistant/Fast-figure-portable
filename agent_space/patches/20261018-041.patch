@@ -1,0 +1,383 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 1f0c672..717737f 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -107,6 +107,10 @@ Code56 at9a943783b286a36efb2de233464a4e8bd8168559: regression39102449795 passed6
+ 
+ Unit16 bounded verification atcee4833cfb8ae32a1c82a4d3461afd943fa5cc39: cumulative versions39102536844 PASS against a6d6d2c35e1dde59e13f3ec159a1ede594b3927e, regression39102539665 PASS63 inline +63 split with subscriber final-publication coverage. Build39102449674 passed identical code56 inputs. Review018 final audit distinguishes verifier coverage from semantic review and lists all remaining whole-goal gaps. Patch040 records evidence only. Source40 current/closed, pseudocode15 current, whole code56 stale, model26 stale/optional. Next bounded target: graphs.setObjectValues current-authority command-local arrays/whole candidate projection/one commit, official graphs.readData copied read and supplied chart/index selection reconciliation; Source/pseudocode already define these. Other legacy add/move/delete/palette paths stay explicitly open until converted. Goal remains open, not completed by63-case suite.
+ 
++## Seventeenth implementation unit — current-authority one-object graph edit
++
++Baseline e66e1decf0c1a44ee592ad3e3cbe7a57a1643bcf. Existing Source40/pseudocode15 already define CalculateOneObjectValues/NormalizeOneObjectEdit/GraphCommitInAttempt and copied graphs.readData; no new meaning or upstream change. Code57 routes public setObjectValues via an official chart-ID binding and scalar/new-value command, calculates CSV/columns/style inside a current-state candidate, builds its figure before validation/one commit, retries replaced authority and returns actual changed facts/index hints. Matching chart hints reconcile without replacing current CSV selection; success alone performs a fresh copied chart read/render. Cases64/65 cover graph-read isolation, invalid/finite/text/column branches, other-object/extension retention, noncommit/failures and retry. Review019 and patch041 pair track pending Actions regression65+65/build/canonical metadata and cumulative gate. Full shared graph validation is still incomplete (explicitly not proved by calling its existing implementation), as are other graph mutations/public reads, remaining asset candidates, canonical import, raster snapshots and supplied renderer/API integration. Code57 remains stale and active goal open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 51826b7..4d97fe6 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -621,7 +621,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         "addObject mutated non-editable chart",
+       );
+       if (chart.editor.objects.length) {
+-        api.graphs.setObjectValues(0, { legendName: "should-not-change" });
++        let rejected = false;
++        try { api.graphs.setObjectValues(0, { legendName: "should-not-change" }); } catch { rejected = true; }
++        check(rejected, "non-editable edit did not reject through the command");
+         api.graphs.deleteObject(0);
+         check(
+           JSON.stringify(getChart(slotAt(slot.id).chart).editor.objects) === before,
+@@ -2407,6 +2409,122 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(64, "Official graph read separates current CSV, object columns and immutable chart", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId;
++      try {
++        const slot = activeProject.slots.find((item) => !item.hidden && item.contentType !== "image");
++        api.slots.reset(slot.id); select(slotAt(slot.id));
++        const first = createProjectCsv([["X", "Y", "Z"], [1, 2, 3]], "graph-read-object.csv"),
++          second = createProjectCsv([["Only"], [7]], "graph-read-current.csv");
++        api.graphs.addObject(first.id);
++        const chartId = slotAt(slot.id).chart, request = { operation: "graphs.readData", chartId,
++          frontendState: { assetSelection: "csv", assetPath: projectAssetPath(second), graphObjectIndex: 0 } },
++          before = JSON.stringify(activeProject._state), read = appFSM.query("project-api", request),
++          again = appFSM.query("project-api", request);
++        check(read.chart.id === chartId && read.selectedIndex === 0 && read.currentCsv.id === second.id &&
++          read.columns.length === 1 && read.objectColumns.length === 3 && read.objects[0].csvId === first.id,
++          "graph read mixed current CSV with object reference or lost explicit owner");
++        check(Object.isFrozen(read.chart.editor.objects[0]) && Object.isFrozen(read.currentCsv.rows[0]) &&
++          read.chart !== again.chart && read.chart !== getChart(chartId) && read.objects !== getChart(chartId).editor.objects &&
++          JSON.stringify(activeProject._state) === before, "graph read aliases authority, is mutable or repairs live state");
++        const absent = appFSM.query("project-api", { operation: "graphs.readData", chartId: -1 });
++        check(absent.chart === null && absent.objects.length === 0 && absent.selectedIndex === null &&
++          absent.currentCsv === null && absent.objectColumns.length === 0, "missing graph projection mismatch");
++        getChart(chartId).editor.editable = false;
++        const frozen = appFSM.query("project-api", request);
++        check(frozen.selectedIndex === null && frozen.objectColumns.length === 0 && frozen.currentCsv.id === second.id,
++          "non-editable graph supplied editable object columns or replaced current CSV");
++      } finally { activeProject.initialize(saved); selectedSlotId = selected; interfaceFSM.state = session; }
++    });
++
++    await run(65, "One-object edit calculates current candidate, retries and gates copied success read", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, query = readBackendProjection, render = renderDashboard,
++        send = projectEFSM.send, validate = validateProjectObjectState, rebuild = rebuildEditableGraph,
++        reconcile = interfaceFSM.reconcileProjectResult;
++      let commits = 0, successReads = 0, renders = 0, reconciliations = 0, result;
++      try {
++        const slot = activeProject.slots.find((item) => !item.hidden && item.contentType !== "image");
++        api.slots.reset(slot.id); select(slotAt(slot.id));
++        const first = createProjectCsv([["X", "Y", "Z"], [1, 2, 3]], "object-edit-first.csv"),
++          second = createProjectCsv([["Only"], [7]], "object-edit-second.csv");
++        api.graphs.addObject(first.id); api.graphs.addObject(first.id);
++        const chartId = slotAt(slot.id).chart, assetPath = interfaceFSM.state.assetPath;
++        getChart(chartId).editor.objects[1].plotlyTrace = { meta: { retained: "extension" } };
++        const other = JSON.stringify(getChart(chartId).editor.objects[1]);
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        renderDashboard = () => { renders++; };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        readBackendProjection = (kind, request) => {
++          if (kind === "project-api" && request.operation === "graphs.readData" && Object.hasOwn(request, "chartId")) successReads++;
++          return query(kind, request);
++        };
++        projectEFSM.send = function (event, payload) {
++          if (event === "GRAPH_OBJECTS_REPLACED") check(payload.operation === "graphs.setObjectValues" &&
++            payload.chartId === chartId && !Object.hasOwn(payload, "objects") && !Object.hasOwn(payload, "candidate"),
++            "Application supplies candidate/objects or wrong scalar command");
++          return result = send.call(this, event, payload);
++        };
++        const edited = api.graphs.setObjectValues(0, { color: "rgb(1, 2, 3)", legendName: "", lineDash: "invalid", markerSymbol: "invalid",
++          lineWidth: 999, markerSize: 0, barOpacity: Infinity, barLineWidth: 0, csvId: -1, x: "bad" });
++        const object = getChart(chartId).editor.objects[0];
++        check(edited !== getChart(chartId) && Object.isFrozen(edited.editor.objects[0]) && commits === 1 &&
++          successReads === 1 && renders === 1 && reconciliations === 1, "edit did not commit once then copied read/render/reconcile");
++        check(object.color === "rgb(1, 2, 3)" && object.legendName === "" && object.lineDash === "solid" &&
++          object.markerSymbol === "circle" && object.lineWidth === 20 && object.markerSize === 1 &&
++          object.barOpacity === 1 && object.barLineWidth === 0 && object.csvId === first.id && object.x === "C1" &&
++          JSON.stringify(getChart(chartId).editor.objects[1]) === other, "edit normalization or one-object isolation mismatch");
++        check(interfaceFSM.state.assetPath === assetPath && interfaceFSM.state.graphObjectIndex === 0 &&
++          result.selectionHints.chartId === chartId && result.selectionHints.selectedIndexHint === 0 &&
++          result.changed.chartIds.includes(chartId) && result.changed.csvIds.length === 0,
++          "edit replaced selected CSV or lost actual facts/index hint");
++        graphEditorObjectValues(chartId, 0, { csvId: second.id, x: "bad", y: "bad", type: "bar" });
++        check(getChart(chartId).editor.objects[0].csvId === second.id && getChart(chartId).editor.objects[0].x === "C1" &&
++          getChart(chartId).editor.objects[0].y === "C1", "requested current CSV did not revalidate/fallback columns");
++        graphEditorObjectValues(chartId, 0, Object.assign(Object.create({ color: "red", csvId: first.id }),
++          { lineWidth: null, markerSize: NaN, legendName: 23, color: "" }));
++        check(getChart(chartId).editor.objects[0].csvId === second.id && getChart(chartId).editor.objects[0].color === "rgb(1, 2, 3)" &&
++          getChart(chartId).editor.objects[0].lineWidth === 20 && getChart(chartId).editor.objects[0].markerSize === 1 &&
++          getChart(chartId).editor.objects[0].legendName === "", "invalid/omitted/inherited edits overwrote current fields");
++        const before = JSON.stringify(activeProject._state), stable = interfaceFSM.state,
++          count = commits, reads = successReads, painted = renders, reconciled = reconciliations,
++          failure = Error("expected one-object failure");
++        for (const mode of ["getter", "validator", "projection"]) {
++          if (mode === "validator") validateProjectObjectState = () => { throw failure; };
++          if (mode === "projection") rebuildEditableGraph = () => { throw failure; };
++          let caught;
++          try { graphEditorObjectValues(chartId, 0, mode === "getter" ? { get color() { throw failure; } } : { legendName: "failed" }); }
++          catch (error) { caught = error; }
++          validateProjectObjectState = validate; rebuildEditableGraph = rebuild;
++          check(caught === failure && commits === count && successReads === reads && renders === painted &&
++            reconciliations === reconciled && interfaceFSM.state === stable && JSON.stringify(activeProject._state) === before,
++            "failed candidate committed, reconciled or performed success work");
++        }
++        const noncommit = Object.freeze({ committed: false });
++        projectEFSM.send = () => noncommit;
++        check(graphEditorObjectValues(chartId, 0, {}) === noncommit && successReads === reads && renders === painted &&
++          reconciliations === reconciled, "noncommit performed success work");
++        projectEFSM.send = send;
++        let rejected = false;
++        try { graphEditorObjectValues(chartId, -1, {}); } catch { rejected = true; }
++        check(rejected && commits === count && JSON.stringify(activeProject._state) === before, "invalid current index changed authority");
++        let attempts = 0;
++        graphEditorObjectValues(chartId, 0, { get legendName() {
++          if (!attempts++) { const newer = projectClone(activeProject._state); newer.meta.projectName = "new object authority";
++            initialize.call(activeProject, newer); }
++          return "retry";
++        } });
++        check(attempts === 2 && commits === count + 1 && activeProject.projectName === "new object authority" &&
++          getChart(chartId).editor.objects[0].legendName === "retry", "stale graph candidate overwrote newer authority instead of recalculating");
++        check(!/getProjectCsv|activeProject|ensureGraphObjects|baseGraphObject|graphEditorCommit/.test(graphEditorObjectValues.toString()),
++          "Application still calculates graph candidate or reads domain state");
++      } finally {
++        activeProject.initialize = initialize; readBackendProjection = query; renderDashboard = render; projectEFSM.send = send;
++        validateProjectObjectState = validate; rebuildEditableGraph = rebuild; interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
++      }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index dbc184a..8a976a0 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 56,
++      "revision": 57,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:b881c18a38ab94e99e12c3e49389ae168a30aca6f17e3f7b07948c5799638d18",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-018-selection-receipt-closure.md"
++      "validation_review": "agent_space/reviews/review-20261018-019-code-graph-object-values-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 15,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 2aa5b8d..c52fda2 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -418,6 +418,24 @@
+           return immutableProjectCopy({ target: node.asset, kind: node.kind,
+             path: projectAssetPath(node.asset), referenceCount: references.length, references });
+         }
++        if (kind === "project-api" && request.operation === "graphs.readData") {
++          const source = activeProject._state, state = request.frontendState || {},
++            owners = Object.hasOwn(request, "chartId")
++              ? source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === request.chartId) : [],
++            slot = Object.hasOwn(request, "chartId") ? (owners.length === 1 ? owners[0] : null)
++              : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden),
++            chartId = slot?.content?.chart ?? slot?.chart,
++            chart = source.charts.find((item) => item.id === chartId) || null,
++            objects = chart?.editor?.objects || [], index = state.graphObjectIndex,
++            selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length
++              ? index : null,
++            node = state.assetSelection === "csv" && state.assetPath ? projectVfs.resolve(state.assetPath, source) : null,
++            csv = node?.kind === "csv" ? node.asset : null,
++            objectCsv = selectedIndex === null ? null : source.assets.csvFiles.find((item) => item.id === objects[selectedIndex].csvId);
++          return immutableProjectCopy({ chart, objects, selectedIndex, currentCsv: csv,
++            columns: csv ? columnDefinitions(csv.rows, csv.headerLines) : [],
++            objectColumns: objectCsv ? columnDefinitions(objectCsv.rows, objectCsv.headerLines) : [] });
++        }
+         if (kind === "project-api" && request.operation === "print.readSettings")
+           return Object.freeze({ ...activeProject.exportSettings });
+         if ((kind === "project-api" && request.operation === "images.readEditor") ||
+@@ -544,6 +562,8 @@
+           assetPath = null;
+         }
+         let chart = slotId !== null && slot.contentType !== "image" ? getChart(slot.chart) : null;
++        if (chart && hints.chartId === chart.id && Object.hasOwn(hints, "selectedIndexHint"))
++          graphObjectIndex = hints.selectedIndexHint;
+         if (payload.clearGraphSelection || hints.clearGraphSelection ||
+             !Number.isInteger(graphObjectIndex) || graphObjectIndex < 0 ||
+             graphObjectIndex >= (chart?.editor?.objects?.length || 0))
+@@ -1106,7 +1126,85 @@
+         payload.chart=committed;
+         payload.clearGraphSelection=true;
+       }
+-      function applyGraphObjectsReplacedAction({ machine, payload }) {
++      function applyGraphObjectValuesAction({ machine, payload }) {
++        machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
++        const defaults = BackendSettings.defaults.chartSettings.editor.objectStyle,
++          limits = BackendSettings.defaults.limits.graphObject,
++          enums = { type: ["scatter", "markers", "lines+markers", "bar", "hidden"],
++            xAxisSide: ["bottom", "top"], yAxisSide: ["left", "right"],
++            lineDash: ["solid", "dot", "dash", "dashdot"],
++            markerSymbol: ["circle", "square", "diamond", "cross", "x", "triangle-up", "triangle-down"] };
++        while (true) {
++          const source = activeProject._state,
++            current = source.charts.find((chart) => chart.id === payload.chartId),
++            owners = source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === payload.chartId),
++            index = payload.index, values = payload.values || {};
++          if (!current || owners.length !== 1 || current.editor?.editable === false ||
++              !Number.isInteger(index) || index < 0 || index >= current.editor.objects.length)
++            throw Error("변경할 현재 편집 가능 차트/오브젝트 또는 유일한 owner가 없습니다.");
++          const candidate = projectClone(source), chart = candidate.charts.find((item) => item.id === current.id),
++            object = chart.editor.objects[index], requestedCsvId = Object.hasOwn(values, "csvId") ? values.csvId : null,
++            csv = candidate.assets.csvFiles.find((item) => item.id === requestedCsvId) ||
++              candidate.assets.csvFiles.find((item) => item.id === object.csvId);
++          if (!csv) throw Error("그래프 오브젝트에 연결할 현재 CSV가 없습니다.");
++          const columns = new Set(columnDefinitions(csv.rows, csv.headerLines).map((column) => column.id)),
++            selection = graphDataSelection(csv.rows, csv.headerLines);
++          object.csvId = csv.id;
++          for (const key of ["x", "y"]) {
++            const value = Object.hasOwn(values, key) ? values[key] : undefined;
++            object[key] = columns.has(value) ? value : columns.has(object[key]) ? object[key] : selection[key];
++          }
++          for (const [key, value] of Object.entries(defaults))
++            if (!Object.hasOwn(object, key)) object[key] = projectClone(value);
++          for (const [key, allowed] of Object.entries(enums)) {
++            if (Object.hasOwn(values, key)) {
++              const value = values[key];
++              if (allowed.includes(value)) object[key] = value;
++            }
++          }
++          for (const [key, [min, max]] of Object.entries(limits)) {
++            if (Object.hasOwn(values, key)) {
++              const edit = values[key], value = edit === null ? NaN : Number(edit);
++              if (Number.isFinite(value)) object[key] = Math.max(min, Math.min(max, value));
++            }
++          }
++          if (Object.hasOwn(values, "color")) {
++            const color = values.color;
++            if (typeof color === "string" && color.length) object.color = color;
++          }
++          if (Object.hasOwn(values, "legendName")) {
++            const legend = values.legendName;
++            if (typeof legend === "string") object.legendName = legend;
++          }
++          // NormalizeCommandObjects fills only missing style, never references/order/extensions.
++          for (const item of chart.editor.objects) {
++            for (const [key, value] of Object.entries(defaults))
++              if (!Object.hasOwn(item, key)) item[key] = projectClone(value);
++            for (const [key, allowed] of Object.entries(enums))
++              if (!allowed.includes(item[key])) throw Error(`그래프 오브젝트 ${key} enum이 올바르지 않습니다.`);
++            for (const [key, [min, max]] of Object.entries(limits))
++              if (!Number.isFinite(item[key]) || item[key] < min || item[key] > max)
++                throw Error(`그래프 오브젝트 ${key} 범위가 올바르지 않습니다.`);
++          }
++          validateChartModel(chart, "변경할 차트", candidate.assets.csvFiles);
++          rebuildEditableGraph(chart, candidate);
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const post = activeProject._state,
++            changedIds = (before, after) => after.filter((item) =>
++              JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id);
++          payload.changed = { slotIds: changedIds(source.slots, post.slots),
++            chartIds: changedIds(source.charts, post.charts),
++            csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
++            imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
++          payload.selectionHints = Object.freeze({ chartId: current.id, selectedIndexHint: index });
++          return;
++        }
++      }
++      function applyGraphObjectsReplacedAction(context) {
++        const { machine, payload } = context;
++        if (payload.operation === "graphs.setObjectValues") return applyGraphObjectValuesAction(context);
+         machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
+         let current=getChart(payload.chartId);
+         if(!current||!current.editor||current.editor.editable===false)
+@@ -5991,30 +6089,20 @@
+         appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
+         return input.reference;
+       }
+-      function graphEditorObjectValues(index, values = {}) {
+-        let chart = graphEditorChart(), objects = ensureGraphObjects(chart), current = objects[index];
+-        if (!chart || !current) return null;
+-        let csv = getProjectCsv(Number(values.csvId)) || getProjectCsv(current.csvId);
+-        if (!csv) return null;
+-        let defaults = baseGraphObject(chart, csv), columns = new Set(columnDefinitions(csv.rows, csv.headerLines).map((column) => column.id));
+-        let clamp = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(max, Number(value))) : fallback;
+-        let next = { ...defaults, ...current, csvId: csv.id };
+-        next.x = columns.has(values.x) ? values.x : columns.has(next.x) ? next.x : defaults.x;
+-        next.y = columns.has(values.y) ? values.y : columns.has(next.y) ? next.y : defaults.y;
+-        if (["bottom", "top"].includes(values.xAxisSide)) next.xAxisSide = values.xAxisSide;
+-        if (["left", "right"].includes(values.yAxisSide)) next.yAxisSide = values.yAxisSide;
+-        if (["scatter", "markers", "lines+markers", "bar", "hidden"].includes(values.type)) next.type = values.type;
+-        if (values.legendName !== undefined) next.legendName = String(values.legendName);
+-        if (values.lineDash !== undefined) next.lineDash = String(values.lineDash || "solid");
+-        if (values.markerSymbol !== undefined) next.markerSymbol = String(values.markerSymbol || "circle");
+-        if (/^#[0-9a-f]{6}$/i.test(values.color || "")) next.color = values.color;
+-        next.lineWidth = clamp(values.lineWidth, next.lineWidth, 0.1, 20);
+-        next.markerSize = clamp(values.markerSize, next.markerSize, 1, 40);
+-        next.barOpacity = clamp(values.barOpacity, next.barOpacity, 0.05, 1);
+-        next.barLineWidth = clamp(values.barLineWidth, next.barLineWidth, 0, 10);
+-        let updated = [...objects];
+-        updated[index] = next;
+-        return graphEditorCommit(updated, index);
++      function graphEditorObjectValues(chartId, index, values = {}) {
++        const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
++          chartId, operation: "graphs.setObjectValues", index, values,
++        });
++        if (!result.committed) return result;
++        const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
++        renderDashboard();
++        return chart;
++      }
++      function setGraphObjectValuesApi(index, values = {}) {
++        const context = appFSM.query("project-api", {
++          operation: "graphs.readData", frontendState: interfaceFSM.readState(),
++        });
++        return graphEditorObjectValues(context.chart?.id ?? null, index, values);
+       }
+       function graphEditorAdd(csvId = selectedProjectCsv()?.id) {
+         let slot = getSelectedSlot(), csv = getProjectCsv(Number(csvId));
+@@ -7746,7 +7834,7 @@
+           addObject: graphEditorAdd,
+           moveObject: graphEditorMove,
+           selectObject: graphEditorSelectObject,
+-          setObjectValues: graphEditorObjectValues,
++          setObjectValues: setGraphObjectValuesApi,
+           deleteObject: graphEditorDelete,
+           updateLayout: updateGraphLayoutApi,
+           applyPalette: applyGraphPaletteApi,
+diff --git a/agent_space/reviews/review-20261018-019-code-graph-object-values-open.md b/agent_space/reviews/review-20261018-019-code-graph-object-values-open.md
+new file mode 100644
+index 0000000..3f1cedf
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-019-code-graph-object-values-open.md
+@@ -0,0 +1,23 @@
++# Code57 — current-authority one-object edit (whole alignment open)
++
++Baseline e66e1decf0c1a44ee592ad3e3cbe7a57a1643bcf. Source40 and pseudocode15 remain current: existing meanings suffice; no Source, pseudocode, policy or optional model edits. Code57 stays stale. No execution outside GitHub Actions default runner.
++
++## Prompt-to-artifact audit / scope
++
++| Existing authority requirement | Implementation / intended direct evidence | Preparation status |
++| --- | --- | --- |
++| Source `backend/graphs.py:graphEditorCommit`, pseudocode `backend/graphs.pcal:CalculateOneObjectValues`, `NormalizeOneObjectEdit`, `GraphCommitInAttempt`: current chart/index/CSV; requested-valid/current-valid/default columns; missing style only; enum/numeric/text rules; retain other objects/extensions | `applyGraphObjectValuesAction` builds a current-source detached candidate, uses configured style/limits and own edits; case65 invalid/omitted/inherited edits, real alternate CSV/column fallback, extension and other-object retention | Implemented; Actions pending |
++| Source `backend/project_efsm.py`, pseudocode `backend/project_efsm.pcal:CalculateSourceCommandCandidate/ProjectStateMachine_send`: projection/validation before commit, recheck authority and retry, actual changed facts and index hint | supplied-candidate `rebuildEditableGraph`, existing whole validator, reference-identity retry, one initialize, actual pre/post IDs and chartId/selectedIndexHint; case65 getter/validator/projection failures and injected authority replacement | Implemented bounded branch; Actions pending |
++| Source `application/public_api/graphs.py:graphEditorObjectValues`: identities/new values only, noncommit gate, fresh explicit chart read after success, no selected-CSV write | `graphEditorObjectValues(chartId,index,values)`, public binding `setGraphObjectValuesApi(index,values)` captures chart ID through official read, no candidate array; case65 captures command and success-work counts | Implemented; Actions pending |
++| Source `backend/project_state.py:graphs.readData`, pseudocode `backend/project_state.pcal:BuildGraphEditorRead` | immutable fresh chart/objects, independent current CSV/columns, objectColumns only for valid editable selection; explicit unique-owner chart read or visible selected slot; case64 read purity/copies/frozen selection/missing chart | Implemented; Actions pending |
++| Existing Backend reconciliation hint contract | `buildFrontendReconciliationInput` consumes matching selectedIndexHint then existing current reference validation; case65 preserves current asset path while selecting edited index | Implemented; Actions pending |
++| Preserve advanced existing behavior unless Source chooses otherwise | existing real CSV data, graph extensions, public index-only binding and existing renderer coordination retained; invalid enums preserve current values; Source nonempty text color intentionally replaces legacy hex-only acceptance | Static comparison; runtime pending |
++| Ordered authority, paired records, commit/push and lineage | Source40 → pseudocode15 unchanged → code57; patch041 pair, Plan023 unit17, this review, metadata in same atomic user-authorized Git unit | Fingerprint provisional until canonical runner output, cumulative versions required |
++
++## Explicit uncovered requirements / no whole completion
++
++This unit converts only `graphs.setObjectValues`; legacy add/move/delete/palette/editor-conversion commands and UI data-read cutover remain open. Shared `validateChartModel` still lacks the complete Source schema/coordinate validation; this command adds enum/finite-style checks for its normalized objects and invokes the existing whole validator, but does not claim that invoking it proves full Source validation. Complete schema/reference/coordinate normalization must be aligned in the following ownership work. The official query's implementation is not proof that all existing public graph read bindings consume it. Candidate code does not yet unify every other EFSM action's retry/commit path. No claim of full supplied dashboard renderer, canonical import/image-settings retention or raster capture/resource composition. Optional model26 remains stale/TLC not run. Green subset results cannot close the active goal.
++
++## Execution plan / pending evidence
++
++Push triggers actual regression (prior63 plus64/65, inline and split), version diagnostics and build on ubuntu-latest. The prior code56 fingerprint is deliberately retained provisionally, not represented as code57's canonical fingerprint. Record exact SHA/run IDs and failures; correct from runner output with paired record, then run cumulative versions against this baseline. No local test/parser/checker/build executed.
