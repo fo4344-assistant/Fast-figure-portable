@@ -1,4 +1,4 @@
-# Unit42 — pure current-authority import decisions (pending Actions)
+# Unit42 — pure current-authority import decisions (bounded verified; whole goal open)
 
 ## Policy / Source-to-PlusCal audit
 
@@ -15,6 +15,16 @@ Continue development-policy.md v0.2.6 and AGENT.md, already read completely: Sou
 
 ## Lineage / verification limits
 
-Code93 remains stale, derived from unchanged Source45/pseudocode23. Staged Git path/blob fingerprint calculation sha256:e093d67e1ed7100419ab1941b44762f68867865b48d7deeb74444cfa357e80a7 is not a locally executed version checker; default GitHub-hosted Actions must independently confirm. New exact-SHA115 inline/split, repeat, build, canonical/cumulative version and fidelity PENDING. No local app/test/build/checker or TLC execution. Plan023 overall NOT complete.
+Code93 remains stale, derived from unchanged Source45/pseudocode23. Staged Git path/blob fingerprint calculation sha256:e093d67e1ed7100419ab1941b44762f68867865b48d7deeb74444cfa357e80a7 is not a locally executed version checker; default GitHub-hosted Actions must independently confirm. Canonical/default-runner final evidence is recorded below; initial pending status is superseded only for this bounded unit. No local app/test/build/checker or TLC execution. Plan023 overall NOT complete.
+
+## Actual execution evidence
+
+Implementation e847d7c66c1c1a50c73f0bbe951bd77cfc628e41: regression39152078247 PASS115 inline+115 split; push canonical39152078255, cumulative39152086749 (base9a8bd7b781ad28360b3e88256f5d133513370a8c), fidelity39152089292 and build39152078275 PASS. Build generated dist-only8dc0869ab23a914bab3b700886254771056c3c36, fast-forwarded locally without local build.
+
+At that final bot SHA8dc0869ab23a914bab3b700886254771056c3c36, regression39152149067 and independent repeat39152171592 PASS115 inline+115 split each, including114/115. Build39152174710 PASS and reports artifacts already current. Cumulative versions39152177605 PASS from9a8bd7b781ad28360b3e88256f5d133513370a8c; canonical checker independently confirms code93 sha256:e093d67e1ed7100419ab1941b44762f68867865b48d7deeb74444cfa357e80a7 with unchanged Source45/pseudocode23 fingerprints. Fidelity39152180555 PASS cumulative lineage and static coverage/binding; semantic checklist above is separate. Source/tests/metadata unchanged between implementation and bot SHA, only generated distributions. This later result document is not the executed source/test SHA. Bounded unit42 verified, code93 stale and whole goal open; no quota/auth/service blocker observed.
+
+## Concrete next ownership unit and remaining gaps
 
 Backend-owned atomic ASSETS_IMPORTED, byte/parse/current-source retry, official input-order success reads, broader import router/lifecycle, schema/serializer/raster/supplied dashboard/timing are still open. Existing directory import command still receives an Application candidate; this unit tests only its chooser integration and does not claim that command aligned. No temporary Backend UI callback, extra proposal cache or duplicate state introduced to disguise that remaining work.
+
+Next coherent unit should cut over the actual raw import command and its directory/slot producers together, rather than another preparation bridge: completed choices + copied prepared file inputs only, Backend current directory/visible slot/identity/path/id and whole candidate/affected-reference calculation, validation/source replacement retry/one commit, actual input-order facts and official success reads. Source assets.py explicitly allows Application pure byte-read/parse, so investigate preparing those copied inputs before the currently synchronous command instead of assuming an async EFSM redesign is required. Inspect all ASSETS_IMPORTED producers and raw loader/router call sites before editing; legacy directory candidate and slot candidate/connection logic must not survive as a second owner. Domain candidate rejection versus unexpected throw must follow the actual existing Source/common send rules, not a blanket catch. Preserve earlier commits after later per-file router failure. Full completion still requires broader requirement audit, not only these115 cases.
