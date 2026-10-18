@@ -4264,6 +4264,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       try {
         const fixture = projectClone(activeProject._state);
         fixture.export = { width: 800, heightMode: "explicit", height: 600, dpi: 300, format: "png" };
+        normalizeSlotContents(fixture.slots);
+        const sentinelId = fixture.slots[0].id;
+        fixture.slots[0].content.printUnownedExtension = { retained: ["canonical", 17] };
         initialize.call(activeProject, fixture);
         const before = JSON.stringify(activeProject._state), runtime = interfaceFSM.state,
           read = api.print.readSettings(), again = api.print.readSettings();
@@ -4284,6 +4287,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         const expected = JSON.parse(before); expected.export = { width: 20000, heightMode: "explicit", height: 100, dpi: 36, format: "jpeg" };
         check(Object.isFrozen(result) && commits === 1 && reads === 1 &&
           JSON.stringify(activeProject._state) === JSON.stringify(expected) && read.width === 800 &&
+          activeProject.slots.find(slot => slot.id === sentinelId).content.printUnownedExtension?.retained.join(",") === "canonical,17" &&
           Object.isFrozen(last.changed) && ["slotIds","chartIds","csvIds","imageIds","assets"].every(key => !last.changed[key].length),
           "print settings changed unrelated domain or wrong limits/read/facts");
         const inherited = Object.create({ width: 500, dpi: 900 }); inherited.heightMode = "auto"; inherited.height = 999;
@@ -4294,7 +4298,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           "invalid/missing field replaced current or wrong explicit height fallback");
         const retained = api.print.setSettings({ heightMode: "invalid", width: "bad", height: undefined });
         check(JSON.stringify(retained) === JSON.stringify(explicit) && commits === 4 && reads === 4 &&
-          interfaceFSM.readState().selectedSlotId === selected && interfaceFSM.state.assetPath === session.assetPath,
+          interfaceFSM.readState().selectedSlotId === selected && interfaceFSM.state.assetPath === session.assetPath &&
+          activeProject.slots.find(slot => slot.id === sentinelId).content.printUnownedExtension?.retained.join(",") === "canonical,17",
           "invalid settings changed current values or selection");
       } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }

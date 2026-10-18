@@ -1,0 +1,72 @@
+diff --git a/agent_space/reviews/review-20261018-037-code-export-settings-open.md b/agent_space/reviews/review-20261018-037-code-export-settings-open.md
+index 36c3579..df93f86 100644
+--- a/agent_space/reviews/review-20261018-037-code-export-settings-open.md
++++ b/agent_space/reviews/review-20261018-037-code-export-settings-open.md
+@@ -13,4 +13,4 @@ Code83 applyExportSettingsChangedAction retains edit normalization but captures
+ - authority replaced during conversion or validation recalculates current fields, one final commit:100 two retries.
+ - late success-query/reconciliation errors propagate without rollback:100.
+ 
+-Actual default-runner100+100/build/canonical/cumulative pending; Source42/pseudocode20 unchanged, code83 stale. Optional model/TLC not run. Larger resource owners/schema/assets/import/raster/supplied dashboard/serializer/timing remain open, no whole-goal claim. No policy or local runtime changes.
++At code83 90ab7fbdd00edfe1c647a13009cac482d7b679d1 regression39124845158 PASS100+100/build39124845127 PASS; diagnostic39124845134 actual83 1002957edb7de85256cf1134ad25a79d560f53bf0e2e1569d41227eec886f0fe (still failed provisional mismatch). Audit found JSON-based test equality and command clone both omit canonical slot content extensions via legacy toJSON. Green assertions were insufficient to prove export-only mutation. Code84 restores canonical content from same captured source inside private candidate, and99 directly retains sentinel extension across all edits. Source42 single-owner/extension retention/export-only contract already requires this; no new upper meaning. Code84 actual default-runner100+100/build/canonical/cumulative pending; Source42/pseudocode20 unchanged, code83 stale. Optional model/TLC not run. Larger resource owners/schema/assets/import/raster/supplied dashboard/serializer/timing remain open, no whole-goal claim. No policy or local runtime changes.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 5fc1199..617e817 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4264,6 +4264,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       try {
+         const fixture = projectClone(activeProject._state);
+         fixture.export = { width: 800, heightMode: "explicit", height: 600, dpi: 300, format: "png" };
++        normalizeSlotContents(fixture.slots);
++        const sentinelId = fixture.slots[0].id;
++        fixture.slots[0].content.printUnownedExtension = { retained: ["canonical", 17] };
+         initialize.call(activeProject, fixture);
+         const before = JSON.stringify(activeProject._state), runtime = interfaceFSM.state,
+           read = api.print.readSettings(), again = api.print.readSettings();
+@@ -4284,6 +4287,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         const expected = JSON.parse(before); expected.export = { width: 20000, heightMode: "explicit", height: 100, dpi: 36, format: "jpeg" };
+         check(Object.isFrozen(result) && commits === 1 && reads === 1 &&
+           JSON.stringify(activeProject._state) === JSON.stringify(expected) && read.width === 800 &&
++          activeProject.slots.find(slot => slot.id === sentinelId).content.printUnownedExtension?.retained.join(",") === "canonical,17" &&
+           Object.isFrozen(last.changed) && ["slotIds","chartIds","csvIds","imageIds","assets"].every(key => !last.changed[key].length),
+           "print settings changed unrelated domain or wrong limits/read/facts");
+         const inherited = Object.create({ width: 500, dpi: 900 }); inherited.heightMode = "auto"; inherited.height = 999;
+@@ -4294,7 +4298,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           "invalid/missing field replaced current or wrong explicit height fallback");
+         const retained = api.print.setSettings({ heightMode: "invalid", width: "bad", height: undefined });
+         check(JSON.stringify(retained) === JSON.stringify(explicit) && commits === 4 && reads === 4 &&
+-          interfaceFSM.readState().selectedSlotId === selected && interfaceFSM.state.assetPath === session.assetPath,
++          interfaceFSM.readState().selectedSlotId === selected && interfaceFSM.state.assetPath === session.assetPath &&
++          activeProject.slots.find(slot => slot.id === sentinelId).content.printUnownedExtension?.retained.join(",") === "canonical,17",
+           "invalid settings changed current values or selection");
+       } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+diff --git a/development-versions.json b/development-versions.json
+index edc6a38..5b1fb09 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 83,
++      "revision": 84,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index f3e4ffa..062cb01 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1877,6 +1877,12 @@
+         while (true) {
+           const source = activeProject._state, candidate = projectClone(source), current = source.export,
+             next = { ...current }, values = payload.settings || {}, limits = BackendSettings.defaults.limits.export;
++          // Legacy slot.toJSON omits canonical content extensions; export edits do not own them.
++          normalizeSlotContents(candidate.slots);
++          for (const slot of candidate.slots) {
++            const original = source.slots.find(item => item.id === slot.id);
++            if (original?.content) slot.content = projectClone(original.content);
++          }
+           for (const [key, allowed] of [["heightMode", ["auto", "explicit"]], ["format", ["png", "jpeg"]]]) {
+             if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+             const value = values[key];

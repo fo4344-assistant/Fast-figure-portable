@@ -1877,6 +1877,12 @@
         while (true) {
           const source = activeProject._state, candidate = projectClone(source), current = source.export,
             next = { ...current }, values = payload.settings || {}, limits = BackendSettings.defaults.limits.export;
+          // Legacy slot.toJSON omits canonical content extensions; export edits do not own them.
+          normalizeSlotContents(candidate.slots);
+          for (const slot of candidate.slots) {
+            const original = source.slots.find(item => item.id === slot.id);
+            if (original?.content) slot.content = projectClone(original.content);
+          }
           for (const [key, allowed] of [["heightMode", ["auto", "explicit"]], ["format", ["png", "jpeg"]]]) {
             if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
             const value = values[key];
