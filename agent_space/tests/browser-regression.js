@@ -2980,6 +2980,110 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+    await run(74, "Editable conversion owns CSV creation, copied return and selection preservation", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, query = readBackendProjection, render = renderDashboard, send = projectEFSM.send;
+      let commits = 0, paints = 0, reads = 0, result;
+      try {
+        const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+        select(slot);
+        await api.graphs.importFile(new File([JSON.stringify({ data: [{ x: [1, 2], y: [3, 4], customdata: ["kept"] }],
+          layout: { title: "candidate conversion", xaxis: { title: "retained axis" } }, config: { responsive: true } })], "editable.json"));
+        const chartId = slotAt(slot.id).chart, imported = getChart(chartId),
+          original = JSON.stringify(imported.graph.imported), global = JSON.stringify(imported.editor.globalSettings),
+          collision = createProjectCsv([["X", "Y"], [8, 9]], "Plotly JSON.csv");
+        api.assets.selectCsv(projectAssetPath(collision));
+        const path = interfaceFSM.state.assetPath, csvBefore = JSON.stringify(activeProject.csvFiles), next = activeProject._state.nextId.csv;
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        renderDashboard = () => { paints++; };
+        readBackendProjection = (kind, request) => { if (kind === "project-api" && request.operation === "graphs.readData") reads++;
+          return query(kind, request); };
+        projectEFSM.send = function (event, payload) {
+          check(event === "CHART_MODEL_REPLACED" && payload.slotId === slot.id && payload.chartId === chartId &&
+            typeof payload.editable === "boolean" && !Object.hasOwn(payload, "candidate") && !Object.hasOwn(payload, "chart"),
+            "Application sent editable candidate/model instead of scalar command");
+          result = send.call(this, event, payload); return result;
+        };
+        check(api.graphs.setEditable(true) === true && commits === 1 && paints === 1 && reads === 2, "editable did not commit/read once");
+        const chart = getChart(chartId), csv = getProjectCsv(next), fact = result.changed.assets[0];
+        check(csv && csv.mime === "text/csv" && csv.headerLines === 1 && csv.bytesBase64 &&
+          projectAssetPath(csv) !== projectAssetPath(collision) && activeProject._state.nextId.csv === next + 1 &&
+          chart.editor.objects.every(object => object.csvId === csv.id) && !Object.hasOwn(chart.editor, "conversionRows") &&
+          JSON.stringify(chart.graph.imported) === original && JSON.stringify(chart.editor.globalSettings) === global &&
+          JSON.stringify(activeProject.csvFiles.filter(item => item.id !== next)) === csvBefore &&
+          interfaceFSM.state.assetPath === path && fact.role === "created" && fact.kind === "csv" && fact.id === next &&
+          fact.path === projectAssetPath(csv) && fact.owners[0].slotId === slot.id && fact.owners[0].chartId === chartId &&
+          result.changed.csvIds.includes(next) && result.changed.chartIds.includes(chartId) && Object.isFrozen(fact.owners),
+          "conversion lost import/settings/reference, generated wrong CSV/facts or selected new CSV");
+        const allocated = JSON.stringify(activeProject.csvFiles);
+        projectEFSM.send = send;
+        api.graphs.selectObject(0);
+        check(graphEditorSetEditable(slot.id, chartId, false) === false && interfaceFSM.state.graphObjectIndex === null &&
+          interfaceFSM.state.assetPath === path, "noneditable transition retained graph selection or changed CSV selection");
+        check(graphEditorSetEditable(slot.id, chartId, true) === true && graphEditorSetEditable(slot.id, chartId, true) === true &&
+          JSON.stringify(activeProject.csvFiles) === allocated && activeProject._state.nextId.csv === next + 1 &&
+          JSON.stringify(getChart(chartId).graph.imported) === original, "real-reference/repeat conversion allocated duplicate CSV or lost imported source");
+      } finally {
+        activeProject.initialize = initialize; readBackendProjection = query; renderDashboard = render; projectEFSM.send = send;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
+      }
+    });
+    await run(75, "Editable failures are atomic and retry resolves current next-id and collision path", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, query = readBackendProjection, render = renderDashboard, send = projectEFSM.send,
+        validate = validateProjectObjectState, rebuild = rebuildEditableGraph, reconcile = interfaceFSM.reconcileProjectResult;
+      let commits = 0, paints = 0, reads = 0, reconciliations = 0;
+      try {
+        const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+        select(slot);
+        await api.graphs.importFile(new File([JSON.stringify({ data: [{ x: [1], y: [2] }] })], "editable-failure.json"));
+        const chartId = slotAt(slot.id).chart, before = JSON.stringify(activeProject._state), stable = interfaceFSM.state,
+          failure = Error("expected editable candidate failure");
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        renderDashboard = () => { paints++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        readBackendProjection = (kind, request) => { if (kind === "project-api" && request.operation === "graphs.readData") reads++;
+          return query(kind, request); };
+        const noEffects = () => check(commits === 0 && paints === 0 && reads === 0 && reconciliations === 0 &&
+          interfaceFSM.state === stable && JSON.stringify(activeProject._state) === before, "editable rejection did success work/partial CSV or chart commit");
+        for (const args of [[-1, chartId, true], [slot.id, -1, true], [slot.id, chartId, "true"]]) {
+          let caught; try { graphEditorSetEditable(...args); } catch (error) { caught = error; }
+          check(caught, "invalid current chart/slot/boolean accepted"); noEffects();
+        }
+        for (const mode of ["validator", "projection"]) {
+          if (mode === "validator") validateProjectObjectState = () => { throw failure; };
+          else rebuildEditableGraph = () => { throw failure; };
+          let caught; try { graphEditorSetEditable(slot.id, chartId, true); } catch (error) { caught = error; }
+          validateProjectObjectState = validate; rebuildEditableGraph = rebuild;
+          check(caught === failure, "editable candidate error replaced"); noEffects();
+        }
+        const noncommit = Object.freeze({ committed: false }); projectEFSM.send = () => noncommit;
+        check(graphEditorSetEditable(slot.id, chartId, true) === noncommit, "editable noncommit result replaced"); noEffects(); projectEFSM.send = send;
+        let attempts = 0, finalNext;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) {
+            const newer = projectClone(activeProject._state), csv = buildProjectCsvModel([["A"], [7]], "Plotly JSON.csv",
+              newer.nextId.csv++, "", "text/csv", 1, newer);
+            newer.assets.csvFiles.push(csv); newer.meta.projectName = "new editable authority";
+            finalNext = newer.nextId.csv; initialize.call(activeProject, newer);
+          }
+          return valid;
+        };
+        check(graphEditorSetEditable(slot.id, chartId, true) === true, "retry conversion failed");
+        validateProjectObjectState = validate;
+        check(attempts === 2 && commits === 1 && paints === 1 && reads === 1 && reconciliations === 1 &&
+          activeProject.projectName === "new editable authority" && getProjectCsv(finalNext) &&
+          getChart(chartId).editor.objects.every(object => object.csvId === finalNext) &&
+          activeProject._state.nextId.csv === finalNext + 1 && getProjectCsv(finalNext - 1).rows[0][0] === "A",
+          "conversion committed stale next-id/path/source or more than one partial commit");
+      } finally {
+        activeProject.initialize = initialize; readBackendProjection = query; renderDashboard = render; projectEFSM.send = send;
+        validateProjectObjectState = validate; rebuildEditableGraph = rebuild; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
+      }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
