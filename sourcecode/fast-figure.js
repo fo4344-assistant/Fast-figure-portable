@@ -473,6 +473,12 @@
             src: projectImageDataUrl(image), settings: normalizeImageSettings(slot),
           }) : null;
         }
+        if (kind === "export" && request.operation == null) {
+          const source = activeProject._state;
+          return immutableProjectCopy({ ...source,
+            slots: source.slots.map(slot => ({ ...slot, content: { ...slot.content } })),
+          });
+        }
         if (kind === "export" && request.operation === "project.exportFile") {
           const source = activeProject._state, bundle = ffpxBuildProject(source);
           return Object.freeze({
@@ -5234,17 +5240,6 @@
         validateProjectObject(candidate,{requireSlots:true});
         return candidate;
       }
-      function captureProjectRuntimeState(machine) {
-        return {selectedSlotId,graphObject:machine.state.graphObject,graphObjectIndex:machine.state.graphObjectIndex};
-      }
-      function restoreProjectRuntimeState(snapshot,machine) {
-        selectedSlotId=snapshot.selectedSlotId;
-        machine.state=Object.freeze({...machine.state,graphObject:snapshot.graphObject,graphObjectIndex:snapshot.graphObjectIndex});
-      }
-      function resetProjectRuntimeState(machine) {
-        selectedSlotId=null;
-        machine.state=Object.freeze({...machine.state,graphObject:"none",graphObjectIndex:null});
-      }
       function renderProjectObject(project = activeProject) {
         applySlotStyle(false, false);
         applyCurrentUiPalette(false);
@@ -5252,57 +5247,39 @@
         updateFileAvailability();
       }
       function applyProjectLoadedAction({ machine, payload }) {
-        for (let scope of [
-          "project", "layout", "labels", "captions", "data", "images",
-          "files", "charts", "slots",
-        ])
-          machine.assertWritable(scope, "PROJECT_LOADED");
-        let candidate = validateProjectObject(payload.project, { requireSlots: true }),
-          previousState = activeProject._state,
-          previousImages = activeProject.images,
-          candidateImages = candidate.images;
-        try {
+        for (const scope of projectObjects.names()) machine.assertWritable(scope, "PROJECT_LOADED");
+        while (true) {
+          const source = activeProject._state, file = payload.file;
+          if (!file || !(file.bytes instanceof Uint8Array)) throw Error("불러올 copied FFPX bytes가 없습니다.");
+          const candidate = buildProjectObject(ffpxReadProjectBytes(new Uint8Array(file.bytes)), file.name)._state;
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
           activeProject.initialize(candidate);
           projectObjectGeneration += 1;
-        } catch (error) {
-          releaseProjectImageDisplayUrls(candidateImages);
-          activeProject.initialize(previousState);
-          projectObjectGeneration += 1;
-          throw error;
+          const changedIds = (before, after) => [...new Set([...before, ...after].map(item => item.id))]
+            .filter(id => JSON.stringify(before.find(item => item.id === id) && { ...before.find(item => item.id === id) }) !==
+              JSON.stringify(after.find(item => item.id === id) && { ...after.find(item => item.id === id) }));
+          payload.changed = { slotIds: changedIds(source.slots, candidate.slots),
+            chartIds: changedIds(source.charts, candidate.charts),
+            csvIds: changedIds(source.assets.csvFiles, candidate.assets.csvFiles),
+            imageIds: changedIds(source.assets.images, candidate.assets.images), assets: [] };
+          payload.generation = projectObjectGeneration;
+          payload.selectionHints = Object.freeze({ resetInterfaceSelection: true });
+          releaseProjectImageDisplayUrls(source.assets.images);
+          return;
         }
-        releaseProjectImageDisplayUrls(previousImages);
-        payload.project = activeProject;
-        payload.generation = projectObjectGeneration;
-        payload.selectionHints = { resetInterfaceSelection: true };
       }
-      function importProject(payload, fileName) {
-        let candidate = ProjectObject.fromFFPX(payload, fileName);
-        appFSM.send("PROJECT_LOADED", {
-          project: candidate,
-          fileName,
-          direction: "model-to-fsm",
+      function importProjectFile(file) {
+        return appFSM.run("importing", "project.importFile", async () => {
+          const [copied] = await prepareCopiedImportFiles([file]),
+            result = dispatchProjectCommand("PROJECT_LOADED", { file: copied });
+          if (!result.committed) return result;
+          const snapshot = appFSM.query("export", {});
+          renderProjectObject(); renderDashboard();
+          appFSM.send("CLOSE_OVERLAY", { reason: "project-loaded" });
+          status(`${file.name} 프로젝트를 불러왔습니다.`);
+          return snapshot;
         });
-        renderProjectObject(activeProject);
-        renderDashboard();
-        appFSM.send("CLOSE_OVERLAY", { reason: "project-loaded" });
-        status(`${fileName} 프로젝트를 불러왔습니다.`);
-        debugLog("project:import", {
-          name: fileName,
-          charts: activeProject.charts.length,
-          slots: activeProject.slots.length,
-          gridRows: activeProject.gridRows,
-          gridCols: activeProject.gridCols,
-          generation: projectObjectGeneration,
-        });
-        return activeProject;
-      }
-      async function importProjectFile(file) {
-        let header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
-        let payload =
-          header.length === 4 && header[0] === 0x50 && header[1] === 0x4b
-            ? await ffpxReadProject(file)
-            : JSON.parse(await file.text());
-        return importProject(payload, file.name);
       }
       function ffpxBytesToBase64(bytes) {
         let text = "",
@@ -5868,7 +5845,10 @@
         };
       }
       async function ffpxReadProject(file) {
-        let assets = ffpxZipRead(new Uint8Array(await file.arrayBuffer())),
+        return ffpxReadProjectBytes(new Uint8Array(await file.arrayBuffer()));
+      }
+      function ffpxReadProjectBytes(bytes) {
+        let assets = ffpxZipRead(bytes),
           xmlBytes = assets.get("project.xml");
         if (!xmlBytes) throw Error("FFPX project.xml이 없습니다.");
         let projectRoot = ffpxReadXmlDocument(

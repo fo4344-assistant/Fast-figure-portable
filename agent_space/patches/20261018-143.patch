@@ -1,0 +1,363 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 4683319..21928a5 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -269,6 +269,10 @@ Baseline47a10598dce0c8356ab74a878642a65857073573. Source45 graphs.importSelected
+ 
+ Unit45 final evidence: ebd4a568b7bdde2c951f58c45aeb75d2413693db regression39155392487/repeat39155412792 PASS124 inline+124 split each, canonical39155392502/cumulative39155392586(base47a10598dce0c8356ab74a878642a65857073573), build39155394993 (already current)/fidelity39155397298 PASS. Review047 preserves fixture failures and CLI missing-completion runs, uses CDP actual completion under existing90-second wall deadline instead of virtual-time DOM dump; assertions unchanged, no retries. Source45 unchanged; pseudocode24 corrects extra graph-only guard; code96 canonical52448be81eafaa1f6d06551fc8d7ca36cade75f6e25b29a3f6a597ca6157a18a stays stale. tests/tests.md removes stale duplicate lineage/local-execution claims. Next coherent gap: public FFPX import/PROJECT_LOADED Backend raw parse/build/whole validation/one replacement/copied result/lifecycle; current Application parses guessed JSON and hands a built model to Backend with rollback initialization. Common initialize/schema/serializer/raster/dashboard/timing full requirement audit remains open. This bounded proof is not whole completion.
+ 
++## Forty-sixth bounded unit — Backend-owned whole-project import
++
++Baseline41247eff5171017bd3dd70656b55f2ed14ce8267. Source45/pseudocode24 already require current FFPX/file-only PROJECT_LOADED, complete Backend parse/build/validation/current-source retry/one commit and committed-only plain immutable official export snapshot. Code97 directly translates: copied-byte I/O only in Application, synchronous private FFPX parser, current-source action/all-scope locks, one replace/reset hint/actual IDs, postcommit previous-image release, no rollback/mutable-authority return/JSON legacy fallback. Public lifecycle owns task; Mantine no nested task or duplicated success. Cases125/126 and review048/patch143 map ownership, canonical snapshot, CRC/validation/I/O/noncommit/current-retry/late-error boundaries. Exact-SHA126+126/repeat/build/canonical+cumulative/fidelity pending. Upper45/24 unchanged, whole code stale; schema/serializer/common commit/raster/dashboard/timing audit open. No local execution or policy change.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-048-code-project-import-open.md b/agent_space/reviews/review-20261018-048-code-project-import-open.md
+new file mode 100644
+index 0000000..3f42d77
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-048-code-project-import-open.md
+@@ -0,0 +1,19 @@
++# Unit46 — whole-project FFPX import command ownership (pending Actions)
++
++## Policy and existing authority
++
++Continue fully read development-policy.md v0.2.6 and AGENT.md ownership/direct-translation/paired-patch/lineage requirements. Source45 remains highest semantic authority; no policy or upper meaning changes. Source application/public_api/assets.py importProjectFile only accepts current FFPX, passes file input to PROJECT_LOADED and returns a committed-only official immutable export snapshot, never mutable ProjectObject authority. Pure copied-byte input preparation follows the existing file boundary, not caller-side parsing/model construction. Source backend/assets_files.py ffpxReadProject/buildProjectObject and the common command transaction require complete parse/validation and current-source retry before one replacement. Pseudocode24 project_efsm.pcal PROJECT_LOADED branch and project_state.pcal BuildPlainProjectRead/export translate those meanings. No async EFSM/caller-candidate bridge needed.
++
++## Prompt-to-artifact bounded checklist
++
++- Public importProjectFile owns one importing lifecycle, prepares copied bytes only, dispatches file-only input, commit-gates one official plain export read and useful presentation; busy/noncommit/original errors retain existing outcomes. Mantine caller no longer nests lifecycle or invents success for noncommit.
++- Backend applyProjectLoadedAction locks all registered Project scopes, parses ffpxReadProjectBytes and builds/validates private Project, compares captured authority after validation and retries full parsing if replaced; initializes once, emits actual changed IDs/reset selection hint, increments generation, releases previous images only after commit. No rollback initializer or mutable ProjectObject in command/result payload.
++- ffpxReadProject remains pure async file reader delegating to synchronous private bytes parser; no Application ZIP/XML interpretation or JSON legacy fallback. Removed now-unreferenced legacy capture/restore/reset Project-runtime helpers with old load path, not a second Frontend state owner.
++- Official operation-less export constructs the existing plain canonical Project shape with recursively immutable copied slots/content, not the compatibility toJSON flattening or an encoded package. Retains extensions and never normalizes authority.
++- Case125: real graph/CSV+image FFPX, minimal copied-file command, one I/O/parse/commit/official snapshot/read lifecycle, selection reset, postcommit previous-image release, detached canonical snapshot and extension copy.
++- Case126: validation/CRC/unsupported legacy JSON/I/O errors before commit; noncommit skips export; authority replacement during validation reparses entire package before one commit; late official-read/resource failures retain commit/original error; nested busy rejected.
++- Prior124 and earlier roundtrip/export/package cases retained. This does not close all typed XML grammar/build normalization/serializer/raster/dashboard/timing requirements.
++
++## Lineage, execution evidence and remaining gaps
++
++Source45/pseudocode24 unchanged. Code97 remains stale; staged Git blob digest is metadata calculation only, authorized GitHub-hosted canonical checker must confirm. Exact-SHA126 inline/split regression/repeat/build/canonical/cumulative/fidelity PENDING. No local application/test/build/checker, dist editing, policy change or optional TLC pass. Existing aggregate postcommit renderer still not supplied-projection aligned. Common initialize performs normalization/validation after many actions' source-reference check; broader common commit audit remains open, not masked by bounded retry tests. Full schema/typed serializer/import/export/raster/current-capture/dashboard/lifecycle timing audit remains open. No whole goal completion from this checklist or green structural coverage.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 8ce586b..7ce73ca 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5597,6 +5597,129 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(125, "Whole-project FFPX import owns parsing and returns one immutable official snapshot", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
++        render = renderDashboard, projectRender = renderProjectObject, report = status, notify = interfaceFSM.notify,
++        release = releaseProjectImageDisplayUrls, parse = ffpxReadProjectBytes;
++      try {
++        initialize.call(activeProject, createProjectState());
++        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
++        renderDashboard = renderProjectObject = status = () => {}; interfaceFSM.notify = () => {};
++        const [a, b] = activeProject.slots.filter(item => !item.hidden),
++          asset = api.assets.createCsv([["x", "y"], [1, 2]], "project-owned.csv");
++        select(a); api.graphs.addObject(asset.id);
++        api.slots.setContentType(b.id, "image"); select(slotAt(b.id)); api.images.insertEmpty();
++        api.project.setName("owned whole project");
++        const file = ffpxFile(), bytes = new Uint8Array(await file.arrayBuffer()), originalRead = file.arrayBuffer.bind(file);
++        activeProject.meta.projectName = "outgoing whole project";
++        const before = activeProject._state, oldImage = activeProject.images[0];
++        let commits = 0, reads = 0, parses = 0, snapshots = 0, releases = 0;
++        Object.defineProperty(file, "arrayBuffer", { value: () => { reads++; return originalRead(); } });
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        projectEFSM.send = function (event, payload) {
++          if (event === "PROJECT_LOADED") check(Object.keys(payload).join() === "file" &&
++            payload.file.bytes instanceof Uint8Array && payload.file.bytes.length === bytes.length &&
++            !payload.project && appFSM.state.lifecycle === "importing", "project command did not carry only copied file");
++          return send.call(this, event, payload);
++        };
++        ffpxReadProjectBytes = input => { parses++; check(appFSM.state.lifecycle === "importing", "parse escaped lifecycle"); return parse(input); };
++        readBackendProjection = function (kind, request) {
++          if (kind === "export" && request.operation == null) snapshots++;
++          return query(kind, request);
++        };
++        releaseProjectImageDisplayUrls = images => {
++          check(activeProject._state !== before && images.includes(oldImage), "project resources released before commit or wrong source");
++          releases++; release(images);
++        };
++        const snapshot = await api.project.importFile(file);
++        check(commits === 1 && reads === 1 && parses === 1 && snapshots === 1 && releases === 1 &&
++          appFSM.state.lifecycle === "ready" && snapshot.meta.projectName === "owned whole project" &&
++          snapshot.assets.csvFiles.length === 1 && snapshot.assets.images.length === 1 && snapshot.charts.length === 1 &&
++          snapshot.slots.find(item => item.id === b.id).content.contentType === "image" &&
++          interfaceFSM.state.selectedSlotId === null && interfaceFSM.state.assetPath === null,
++          "whole-project import did not commit/read/reset once or returned wrong project");
++        check(snapshot !== activeProject && !(snapshot instanceof ProjectObject) && Object.isFrozen(snapshot) &&
++          Object.isFrozen(snapshot.slots[0].content) && snapshot.slots[0].content !== activeProject.slots[0].content,
++          "project import exposed mutable authority instead of canonical plain copied snapshot");
++        activeProject.slots[0].content.snapshotProbe = { retained: true };
++        const authority = activeProject._state, canonical = appFSM.query("export", {});
++        check(canonical.slots[0].content.snapshotProbe.retained && Object.isFrozen(canonical.slots[0].content.snapshotProbe) &&
++          activeProject._state === authority, "plain export lost canonical extension or normalized authority");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
++        renderDashboard = render; renderProjectObject = projectRender; status = report; interfaceFSM.notify = notify;
++        releaseProjectImageDisplayUrls = release; ffpxReadProjectBytes = parse;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(126, "FFPX failures and current-source retry preserve one commit and original late errors", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
++        query = readBackendProjection, parse = ffpxReadProjectBytes, release = releaseProjectImageDisplayUrls,
++        render = renderDashboard, projectRender = renderProjectObject, report = status, notify = interfaceFSM.notify;
++      try {
++        initialize.call(activeProject, createProjectState());
++        const ready = () => { interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, lifecycle: "ready" }); };
++        ready(); renderDashboard = renderProjectObject = status = () => {}; interfaceFSM.notify = () => {};
++        const file = ffpxFile(), initial = activeProject._state, failure = Error("project-validation-owned");
++        let commits = 0, caught, exports = 0, parses = 0;
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        validateProjectObjectState = () => { throw failure; };
++        try { await api.project.importFile(file); } catch (error) { caught = error; }
++        check(caught === failure && commits === 0 && activeProject._state === initial, "FFPX validation error changed authority or original error");
++        validateProjectObjectState = validate; ready();
++        const bytes = new Uint8Array(await file.arrayBuffer()), view = new DataView(bytes.buffer);
++        bytes[30 + view.getUint16(26, true) + view.getUint16(28, true)] ^= 1;
++        caught = null;
++        try { await api.project.importFile(new File([bytes], "bad-crc.ffpx")); } catch (error) { caught = error; }
++        check(caught && /CRC/i.test(caught.message) && commits === 0 && activeProject._state === initial,
++          "bad FFPX CRC was not rejected before commit"); ready();
++        caught = null;
++        try { await api.project.importFile(new File([JSON.stringify({ schema: "fast-figure-project", version: PACKAGE_FORMAT_VERSION })], "legacy.json")); }
++        catch (error) { caught = error; }
++        check(caught && commits === 0 && activeProject._state === initial, "project import bypassed Backend FFPX parser through JSON fallback"); ready();
++        const io = Error("project-file-read-owned"), unread = { name: "unread.ffpx", type: "", arrayBuffer() { throw io; } };
++        caught = null;
++        try { await api.project.importFile(unread); } catch (error) { caught = error; }
++        check(caught === io && commits === 0 && activeProject._state === initial, "project I/O error changed authority or original error"); ready();
++        readBackendProjection = function (kind, request) { if (kind === "export") exports++; return query(kind, request); };
++        projectEFSM.send = event => ({ event, committed: false, changed: {}, selectionHints: {} });
++        const rejected = await api.project.importFile(file);
++        check(!rejected.committed && commits === 0 && exports === 0, "noncommit project import performed success read");
++        projectEFSM.send = send;
++        let replaced = false;
++        ffpxReadProjectBytes = bytes => { parses++; return parse(bytes); };
++        validateProjectObjectState = function (candidate, options) {
++          const checked = validate(candidate, options);
++          if (options?.requireSlots && !replaced) {
++            replaced = true; const newer = projectClone(activeProject._state); newer.meta.projectName = "newer during FFPX";
++            initialize.call(activeProject, newer);
++          }
++          return checked;
++        };
++        const loaded = await api.project.importFile(file);
++        check(parses === 2 && commits === 1 && loaded.meta.projectName !== "newer during FFPX" && exports === 1,
++          "FFPX did not recalculate whole candidate on source replacement before one commit");
++        validateProjectObjectState = validate;
++        const late = Error("project-late-export-owned"); caught = null;
++        readBackendProjection = function (kind, request) { if (kind === "export") throw late; return query(kind, request); };
++        const beforeLate = activeProject._state;
++        try { await api.project.importFile(file); } catch (error) { caught = error; }
++        check(caught === late && commits === 2 && activeProject._state !== beforeLate, "late project read rolled back committed replacement"); ready();
++        readBackendProjection = query; caught = null;
++        releaseProjectImageDisplayUrls = () => { throw late; };
++        const beforeRelease = activeProject._state;
++        try { await api.project.importFile(file); } catch (error) { caught = error; }
++        check(caught === late && commits === 3 && activeProject._state !== beforeRelease, "late project resource error rolled back commit"); ready();
++        releaseProjectImageDisplayUrls = release;
++        const busy = await appFSM.run("importing", "FFPX_BUSY_PROBE", () => api.project.importFile(file)).then(() => null, error => error);
++        check(busy && commits === 3, "public project import nested lifecycle instead of rejecting busy task");
++      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
++        readBackendProjection = query; ffpxReadProjectBytes = parse; releaseProjectImageDisplayUrls = release;
++        renderDashboard = render; renderProjectObject = projectRender; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 089e769..6ce359a 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 96,
++      "revision": 97,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:52448be81eafaa1f6d06551fc8d7ca36cade75f6e25b29a3f6a597ca6157a18a",
++      "fingerprint": "sha256:0aab180b509b3df9c91a80464f68c78d5765ce6f14f6e78df9456939be1ab286",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-047-code-package-import-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-048-code-project-import-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 24,
+diff --git a/sourcecode/fast-figure-ui.js b/sourcecode/fast-figure-ui.js
+index 9df2cc2..41a2bf4 100644
+--- a/sourcecode/fast-figure-ui.js
++++ b/sourcecode/fast-figure-ui.js
+@@ -1260,15 +1260,12 @@
+     const importProjectFileFromMantine = async (file) => {
+       if (!file) return;
+       try {
+-        await runLifecycleTask("importing", "PROJECT_IMPORT", async () => {
+-          try {
+-            await projectApi.importFile(file);
+-            status(`${file.name} 프로젝트를 불러왔습니다.`);
+-          } catch (error) {
+-            status("프로젝트 불러오기 오류: " + error.message);
+-            debugLog("project:import-error", { message: error.message });
+-          }
+-        });
++        try {
++          await projectApi.importFile(file);
++        } catch (error) {
++          status("프로젝트 불러오기 오류: " + error.message);
++          debugLog("project:import-error", { message: error.message });
++        }
+       } finally {
+         importResetRef.current?.();
+       }
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 70d64fc..7584ed7 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -473,6 +473,12 @@
+             src: projectImageDataUrl(image), settings: normalizeImageSettings(slot),
+           }) : null;
+         }
++        if (kind === "export" && request.operation == null) {
++          const source = activeProject._state;
++          return immutableProjectCopy({ ...source,
++            slots: source.slots.map(slot => ({ ...slot, content: { ...slot.content } })),
++          });
++        }
+         if (kind === "export" && request.operation === "project.exportFile") {
+           const source = activeProject._state, bundle = ffpxBuildProject(source);
+           return Object.freeze({
+@@ -5234,17 +5240,6 @@
+         validateProjectObject(candidate,{requireSlots:true});
+         return candidate;
+       }
+-      function captureProjectRuntimeState(machine) {
+-        return {selectedSlotId,graphObject:machine.state.graphObject,graphObjectIndex:machine.state.graphObjectIndex};
+-      }
+-      function restoreProjectRuntimeState(snapshot,machine) {
+-        selectedSlotId=snapshot.selectedSlotId;
+-        machine.state=Object.freeze({...machine.state,graphObject:snapshot.graphObject,graphObjectIndex:snapshot.graphObjectIndex});
+-      }
+-      function resetProjectRuntimeState(machine) {
+-        selectedSlotId=null;
+-        machine.state=Object.freeze({...machine.state,graphObject:"none",graphObjectIndex:null});
+-      }
+       function renderProjectObject(project = activeProject) {
+         applySlotStyle(false, false);
+         applyCurrentUiPalette(false);
+@@ -5252,57 +5247,39 @@
+         updateFileAvailability();
+       }
+       function applyProjectLoadedAction({ machine, payload }) {
+-        for (let scope of [
+-          "project", "layout", "labels", "captions", "data", "images",
+-          "files", "charts", "slots",
+-        ])
+-          machine.assertWritable(scope, "PROJECT_LOADED");
+-        let candidate = validateProjectObject(payload.project, { requireSlots: true }),
+-          previousState = activeProject._state,
+-          previousImages = activeProject.images,
+-          candidateImages = candidate.images;
+-        try {
++        for (const scope of projectObjects.names()) machine.assertWritable(scope, "PROJECT_LOADED");
++        while (true) {
++          const source = activeProject._state, file = payload.file;
++          if (!file || !(file.bytes instanceof Uint8Array)) throw Error("불러올 copied FFPX bytes가 없습니다.");
++          const candidate = buildProjectObject(ffpxReadProjectBytes(new Uint8Array(file.bytes)), file.name)._state;
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
+           activeProject.initialize(candidate);
+           projectObjectGeneration += 1;
+-        } catch (error) {
+-          releaseProjectImageDisplayUrls(candidateImages);
+-          activeProject.initialize(previousState);
+-          projectObjectGeneration += 1;
+-          throw error;
++          const changedIds = (before, after) => [...new Set([...before, ...after].map(item => item.id))]
++            .filter(id => JSON.stringify(before.find(item => item.id === id) && { ...before.find(item => item.id === id) }) !==
++              JSON.stringify(after.find(item => item.id === id) && { ...after.find(item => item.id === id) }));
++          payload.changed = { slotIds: changedIds(source.slots, candidate.slots),
++            chartIds: changedIds(source.charts, candidate.charts),
++            csvIds: changedIds(source.assets.csvFiles, candidate.assets.csvFiles),
++            imageIds: changedIds(source.assets.images, candidate.assets.images), assets: [] };
++          payload.generation = projectObjectGeneration;
++          payload.selectionHints = Object.freeze({ resetInterfaceSelection: true });
++          releaseProjectImageDisplayUrls(source.assets.images);
++          return;
+         }
+-        releaseProjectImageDisplayUrls(previousImages);
+-        payload.project = activeProject;
+-        payload.generation = projectObjectGeneration;
+-        payload.selectionHints = { resetInterfaceSelection: true };
+-      }
+-      function importProject(payload, fileName) {
+-        let candidate = ProjectObject.fromFFPX(payload, fileName);
+-        appFSM.send("PROJECT_LOADED", {
+-          project: candidate,
+-          fileName,
+-          direction: "model-to-fsm",
+-        });
+-        renderProjectObject(activeProject);
+-        renderDashboard();
+-        appFSM.send("CLOSE_OVERLAY", { reason: "project-loaded" });
+-        status(`${fileName} 프로젝트를 불러왔습니다.`);
+-        debugLog("project:import", {
+-          name: fileName,
+-          charts: activeProject.charts.length,
+-          slots: activeProject.slots.length,
+-          gridRows: activeProject.gridRows,
+-          gridCols: activeProject.gridCols,
+-          generation: projectObjectGeneration,
+-        });
+-        return activeProject;
+       }
+-      async function importProjectFile(file) {
+-        let header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+-        let payload =
+-          header.length === 4 && header[0] === 0x50 && header[1] === 0x4b
+-            ? await ffpxReadProject(file)
+-            : JSON.parse(await file.text());
+-        return importProject(payload, file.name);
++      function importProjectFile(file) {
++        return appFSM.run("importing", "project.importFile", async () => {
++          const [copied] = await prepareCopiedImportFiles([file]),
++            result = dispatchProjectCommand("PROJECT_LOADED", { file: copied });
++          if (!result.committed) return result;
++          const snapshot = appFSM.query("export", {});
++          renderProjectObject(); renderDashboard();
++          appFSM.send("CLOSE_OVERLAY", { reason: "project-loaded" });
++          status(`${file.name} 프로젝트를 불러왔습니다.`);
++          return snapshot;
++        });
+       }
+       function ffpxBytesToBase64(bytes) {
+         let text = "",
+@@ -5868,7 +5845,10 @@
+         };
+       }
+       async function ffpxReadProject(file) {
+-        let assets = ffpxZipRead(new Uint8Array(await file.arrayBuffer())),
++        return ffpxReadProjectBytes(new Uint8Array(await file.arrayBuffer()));
++      }
++      function ffpxReadProjectBytes(bytes) {
++        let assets = ffpxZipRead(bytes),
+           xmlBytes = assets.get("project.xml");
+         if (!xmlBytes) throw Error("FFPX project.xml이 없습니다.");
+         let projectRoot = ffpxReadXmlDocument(

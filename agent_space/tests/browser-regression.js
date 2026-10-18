@@ -5597,6 +5597,129 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(125, "Whole-project FFPX import owns parsing and returns one immutable official snapshot", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        render = renderDashboard, projectRender = renderProjectObject, report = status, notify = interfaceFSM.notify,
+        release = releaseProjectImageDisplayUrls, parse = ffpxReadProjectBytes;
+      try {
+        initialize.call(activeProject, createProjectState());
+        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+        renderDashboard = renderProjectObject = status = () => {}; interfaceFSM.notify = () => {};
+        const [a, b] = activeProject.slots.filter(item => !item.hidden),
+          asset = api.assets.createCsv([["x", "y"], [1, 2]], "project-owned.csv");
+        select(a); api.graphs.addObject(asset.id);
+        api.slots.setContentType(b.id, "image"); select(slotAt(b.id)); api.images.insertEmpty();
+        api.project.setName("owned whole project");
+        const file = ffpxFile(), bytes = new Uint8Array(await file.arrayBuffer()), originalRead = file.arrayBuffer.bind(file);
+        activeProject.meta.projectName = "outgoing whole project";
+        const before = activeProject._state, oldImage = activeProject.images[0];
+        let commits = 0, reads = 0, parses = 0, snapshots = 0, releases = 0;
+        Object.defineProperty(file, "arrayBuffer", { value: () => { reads++; return originalRead(); } });
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        projectEFSM.send = function (event, payload) {
+          if (event === "PROJECT_LOADED") check(Object.keys(payload).join() === "file" &&
+            payload.file.bytes instanceof Uint8Array && payload.file.bytes.length === bytes.length &&
+            !payload.project && appFSM.state.lifecycle === "importing", "project command did not carry only copied file");
+          return send.call(this, event, payload);
+        };
+        ffpxReadProjectBytes = input => { parses++; check(appFSM.state.lifecycle === "importing", "parse escaped lifecycle"); return parse(input); };
+        readBackendProjection = function (kind, request) {
+          if (kind === "export" && request.operation == null) snapshots++;
+          return query(kind, request);
+        };
+        releaseProjectImageDisplayUrls = images => {
+          check(activeProject._state !== before && images.includes(oldImage), "project resources released before commit or wrong source");
+          releases++; release(images);
+        };
+        const snapshot = await api.project.importFile(file);
+        check(commits === 1 && reads === 1 && parses === 1 && snapshots === 1 && releases === 1 &&
+          appFSM.state.lifecycle === "ready" && snapshot.meta.projectName === "owned whole project" &&
+          snapshot.assets.csvFiles.length === 1 && snapshot.assets.images.length === 1 && snapshot.charts.length === 1 &&
+          snapshot.slots.find(item => item.id === b.id).content.contentType === "image" &&
+          interfaceFSM.state.selectedSlotId === null && interfaceFSM.state.assetPath === null,
+          "whole-project import did not commit/read/reset once or returned wrong project");
+        check(snapshot !== activeProject && !(snapshot instanceof ProjectObject) && Object.isFrozen(snapshot) &&
+          Object.isFrozen(snapshot.slots[0].content) && snapshot.slots[0].content !== activeProject.slots[0].content,
+          "project import exposed mutable authority instead of canonical plain copied snapshot");
+        activeProject.slots[0].content.snapshotProbe = { retained: true };
+        const authority = activeProject._state, canonical = appFSM.query("export", {});
+        check(canonical.slots[0].content.snapshotProbe.retained && Object.isFrozen(canonical.slots[0].content.snapshotProbe) &&
+          activeProject._state === authority, "plain export lost canonical extension or normalized authority");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        renderDashboard = render; renderProjectObject = projectRender; status = report; interfaceFSM.notify = notify;
+        releaseProjectImageDisplayUrls = release; ffpxReadProjectBytes = parse;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(126, "FFPX failures and current-source retry preserve one commit and original late errors", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
+        query = readBackendProjection, parse = ffpxReadProjectBytes, release = releaseProjectImageDisplayUrls,
+        render = renderDashboard, projectRender = renderProjectObject, report = status, notify = interfaceFSM.notify;
+      try {
+        initialize.call(activeProject, createProjectState());
+        const ready = () => { interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, lifecycle: "ready" }); };
+        ready(); renderDashboard = renderProjectObject = status = () => {}; interfaceFSM.notify = () => {};
+        const file = ffpxFile(), initial = activeProject._state, failure = Error("project-validation-owned");
+        let commits = 0, caught, exports = 0, parses = 0;
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        validateProjectObjectState = () => { throw failure; };
+        try { await api.project.importFile(file); } catch (error) { caught = error; }
+        check(caught === failure && commits === 0 && activeProject._state === initial, "FFPX validation error changed authority or original error");
+        validateProjectObjectState = validate; ready();
+        const bytes = new Uint8Array(await file.arrayBuffer()), view = new DataView(bytes.buffer);
+        bytes[30 + view.getUint16(26, true) + view.getUint16(28, true)] ^= 1;
+        caught = null;
+        try { await api.project.importFile(new File([bytes], "bad-crc.ffpx")); } catch (error) { caught = error; }
+        check(caught && /CRC/i.test(caught.message) && commits === 0 && activeProject._state === initial,
+          "bad FFPX CRC was not rejected before commit"); ready();
+        caught = null;
+        try { await api.project.importFile(new File([JSON.stringify({ schema: "fast-figure-project", version: PACKAGE_FORMAT_VERSION })], "legacy.json")); }
+        catch (error) { caught = error; }
+        check(caught && commits === 0 && activeProject._state === initial, "project import bypassed Backend FFPX parser through JSON fallback"); ready();
+        const io = Error("project-file-read-owned"), unread = { name: "unread.ffpx", type: "", arrayBuffer() { throw io; } };
+        caught = null;
+        try { await api.project.importFile(unread); } catch (error) { caught = error; }
+        check(caught === io && commits === 0 && activeProject._state === initial, "project I/O error changed authority or original error"); ready();
+        readBackendProjection = function (kind, request) { if (kind === "export") exports++; return query(kind, request); };
+        projectEFSM.send = event => ({ event, committed: false, changed: {}, selectionHints: {} });
+        const rejected = await api.project.importFile(file);
+        check(!rejected.committed && commits === 0 && exports === 0, "noncommit project import performed success read");
+        projectEFSM.send = send;
+        let replaced = false;
+        ffpxReadProjectBytes = bytes => { parses++; return parse(bytes); };
+        validateProjectObjectState = function (candidate, options) {
+          const checked = validate(candidate, options);
+          if (options?.requireSlots && !replaced) {
+            replaced = true; const newer = projectClone(activeProject._state); newer.meta.projectName = "newer during FFPX";
+            initialize.call(activeProject, newer);
+          }
+          return checked;
+        };
+        const loaded = await api.project.importFile(file);
+        check(parses === 2 && commits === 1 && loaded.meta.projectName !== "newer during FFPX" && exports === 1,
+          "FFPX did not recalculate whole candidate on source replacement before one commit");
+        validateProjectObjectState = validate;
+        const late = Error("project-late-export-owned"); caught = null;
+        readBackendProjection = function (kind, request) { if (kind === "export") throw late; return query(kind, request); };
+        const beforeLate = activeProject._state;
+        try { await api.project.importFile(file); } catch (error) { caught = error; }
+        check(caught === late && commits === 2 && activeProject._state !== beforeLate, "late project read rolled back committed replacement"); ready();
+        readBackendProjection = query; caught = null;
+        releaseProjectImageDisplayUrls = () => { throw late; };
+        const beforeRelease = activeProject._state;
+        try { await api.project.importFile(file); } catch (error) { caught = error; }
+        check(caught === late && commits === 3 && activeProject._state !== beforeRelease, "late project resource error rolled back commit"); ready();
+        releaseProjectImageDisplayUrls = release;
+        const busy = await appFSM.run("importing", "FFPX_BUSY_PROBE", () => api.project.importFile(file)).then(() => null, error => error);
+        check(busy && commits === 3, "public project import nested lifecycle instead of rejecting busy task");
+      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
+        readBackendProjection = query; ffpxReadProjectBytes = parse; releaseProjectImageDisplayUrls = release;
+        renderDashboard = render; renderProjectObject = projectRender; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

@@ -1260,15 +1260,12 @@
     const importProjectFileFromMantine = async (file) => {
       if (!file) return;
       try {
-        await runLifecycleTask("importing", "PROJECT_IMPORT", async () => {
-          try {
-            await projectApi.importFile(file);
-            status(`${file.name} 프로젝트를 불러왔습니다.`);
-          } catch (error) {
-            status("프로젝트 불러오기 오류: " + error.message);
-            debugLog("project:import-error", { message: error.message });
-          }
-        });
+        try {
+          await projectApi.importFile(file);
+        } catch (error) {
+          status("프로젝트 불러오기 오류: " + error.message);
+          debugLog("project:import-error", { message: error.message });
+        }
       } finally {
         importResetRef.current?.();
       }

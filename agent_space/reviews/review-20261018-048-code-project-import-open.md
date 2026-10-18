@@ -1,0 +1,19 @@
+# Unit46 — whole-project FFPX import command ownership (pending Actions)
+
+## Policy and existing authority
+
+Continue fully read development-policy.md v0.2.6 and AGENT.md ownership/direct-translation/paired-patch/lineage requirements. Source45 remains highest semantic authority; no policy or upper meaning changes. Source application/public_api/assets.py importProjectFile only accepts current FFPX, passes file input to PROJECT_LOADED and returns a committed-only official immutable export snapshot, never mutable ProjectObject authority. Pure copied-byte input preparation follows the existing file boundary, not caller-side parsing/model construction. Source backend/assets_files.py ffpxReadProject/buildProjectObject and the common command transaction require complete parse/validation and current-source retry before one replacement. Pseudocode24 project_efsm.pcal PROJECT_LOADED branch and project_state.pcal BuildPlainProjectRead/export translate those meanings. No async EFSM/caller-candidate bridge needed.
+
+## Prompt-to-artifact bounded checklist
+
+- Public importProjectFile owns one importing lifecycle, prepares copied bytes only, dispatches file-only input, commit-gates one official plain export read and useful presentation; busy/noncommit/original errors retain existing outcomes. Mantine caller no longer nests lifecycle or invents success for noncommit.
+- Backend applyProjectLoadedAction locks all registered Project scopes, parses ffpxReadProjectBytes and builds/validates private Project, compares captured authority after validation and retries full parsing if replaced; initializes once, emits actual changed IDs/reset selection hint, increments generation, releases previous images only after commit. No rollback initializer or mutable ProjectObject in command/result payload.
+- ffpxReadProject remains pure async file reader delegating to synchronous private bytes parser; no Application ZIP/XML interpretation or JSON legacy fallback. Removed now-unreferenced legacy capture/restore/reset Project-runtime helpers with old load path, not a second Frontend state owner.
+- Official operation-less export constructs the existing plain canonical Project shape with recursively immutable copied slots/content, not the compatibility toJSON flattening or an encoded package. Retains extensions and never normalizes authority.
+- Case125: real graph/CSV+image FFPX, minimal copied-file command, one I/O/parse/commit/official snapshot/read lifecycle, selection reset, postcommit previous-image release, detached canonical snapshot and extension copy.
+- Case126: validation/CRC/unsupported legacy JSON/I/O errors before commit; noncommit skips export; authority replacement during validation reparses entire package before one commit; late official-read/resource failures retain commit/original error; nested busy rejected.
+- Prior124 and earlier roundtrip/export/package cases retained. This does not close all typed XML grammar/build normalization/serializer/raster/dashboard/timing requirements.
+
+## Lineage, execution evidence and remaining gaps
+
+Source45/pseudocode24 unchanged. Code97 remains stale; staged Git blob digest is metadata calculation only, authorized GitHub-hosted canonical checker must confirm. Exact-SHA126 inline/split regression/repeat/build/canonical/cumulative/fidelity PENDING. No local application/test/build/checker, dist editing, policy change or optional TLC pass. Existing aggregate postcommit renderer still not supplied-projection aligned. Common initialize performs normalization/validation after many actions' source-reference check; broader common commit audit remains open, not masked by bounded retry tests. Full schema/typed serializer/import/export/raster/current-capture/dashboard/lifecycle timing audit remains open. No whole goal completion from this checklist or green structural coverage.
