@@ -1,0 +1,49 @@
+diff --git a/agent_space/reviews/review-20261018-021-code-graph-order-open.md b/agent_space/reviews/review-20261018-021-code-graph-order-open.md
+index f5e7a08..6581c26 100644
+--- a/agent_space/reviews/review-20261018-021-code-graph-order-open.md
++++ b/agent_space/reviews/review-20261018-021-code-graph-order-open.md
+@@ -22,3 +22,9 @@ Selection uses existing shared chart-scoped reconciliation, not an independent m
+ ## Choices / exclusions
+ 
+ Reuse one current candidate/normalization/commit path rather than duplicate another order controller. Existing add/palette/graphEditorCommit remain legacy and are NOT claimed aligned. Full shared enum/style/global/axis/imported-shape validator and canonical import are still uncovered, despite the validation call; tests target only this bounded contract. Asset cascade/current-authority commands, raster composition, supplied dashboard/public read integration and whole Plan023 remain open. Optional model26 stale/TLC pending, not required to progress. No policy edits or local test/build/checker.
++
++## Initial Actions execution and followup
++
++At1edbc2cd14131baeef3bf80f082f358fec07c932 build39103628193 PASS, dist-only bot42a051ab40de4151b12413afe8249e8bbe219645 inspected and fast-forwarded. Regression39103628198 passes new68/69 both distributions plus all prior cases except25: `Error: 변경할 현재 편집 가능 차트 또는 유일한 visible graph owner가 없습니다.` Legacy25 still called deleteObject without catching the now-explicit command rejection; its prior one-object portion already asserted rejection. Source public graphEditorDelete and Backend editable precondition require original rejection propagation, not silent success/no-op. Patch048 adds explicit rejection assertions for delete and equal move, retaining exact object-state equality and disabled controls. No runtime change or weakened precondition.
++
++Version39103628229 diagnostic FAIL prints exact code59 canonical `sha256:0dcc648b0c985935d8f272c121b1a16c38db7a6385f11317d319e503f17cb7a0`; metadata correction retains revision59/stale and unchanged Source41/pseudocode16 derivations. Corrected69+69 regression and cumulative version against a37bb486bcee99b6bc793e36bf390780f7bce22a pending; no local execution.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 4e03048..6b4935d 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -624,10 +624,15 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         let rejected = false;
+         try { api.graphs.setObjectValues(0, { legendName: "should-not-change" }); } catch { rejected = true; }
+         check(rejected, "non-editable edit did not reject through the command");
+-        api.graphs.deleteObject(0);
++        rejected = false;
++        try { api.graphs.deleteObject(0); } catch { rejected = true; }
++        check(rejected, "non-editable delete did not reject through the command");
++        rejected = false;
++        try { api.graphs.moveObject(0, 0); } catch { rejected = true; }
++        check(rejected, "non-editable equal move bypassed command preconditions");
+         check(
+           JSON.stringify(getChart(slotAt(slot.id).chart).editor.objects) === before,
+-          "object edit/delete mutated non-editable chart",
++          "object edit/delete/move mutated non-editable chart",
+         );
+       }
+ 
+diff --git a/development-versions.json b/development-versions.json
+index 33afc5b..ae202db 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,7 +38,7 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:c4392333de189f86ff307adf8a5ff1e0d2227cddd79b9c2bc0a96e8926e1b97e",
++      "fingerprint": "sha256:0dcc648b0c985935d8f272c121b1a16c38db7a6385f11317d319e503f17cb7a0",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5",
+         "pseudocode": "sha256:e25d2057a10e358127598141d3d94de2f5700108da14809a0ef5e92e11be71e9",

@@ -22,3 +22,9 @@ Selection uses existing shared chart-scoped reconciliation, not an independent m
 ## Choices / exclusions
 
 Reuse one current candidate/normalization/commit path rather than duplicate another order controller. Existing add/palette/graphEditorCommit remain legacy and are NOT claimed aligned. Full shared enum/style/global/axis/imported-shape validator and canonical import are still uncovered, despite the validation call; tests target only this bounded contract. Asset cascade/current-authority commands, raster composition, supplied dashboard/public read integration and whole Plan023 remain open. Optional model26 stale/TLC pending, not required to progress. No policy edits or local test/build/checker.
+
+## Initial Actions execution and followup
+
+At1edbc2cd14131baeef3bf80f082f358fec07c932 build39103628193 PASS, dist-only bot42a051ab40de4151b12413afe8249e8bbe219645 inspected and fast-forwarded. Regression39103628198 passes new68/69 both distributions plus all prior cases except25: `Error: 변경할 현재 편집 가능 차트 또는 유일한 visible graph owner가 없습니다.` Legacy25 still called deleteObject without catching the now-explicit command rejection; its prior one-object portion already asserted rejection. Source public graphEditorDelete and Backend editable precondition require original rejection propagation, not silent success/no-op. Patch048 adds explicit rejection assertions for delete and equal move, retaining exact object-state equality and disabled controls. No runtime change or weakened precondition.
+
+Version39103628229 diagnostic FAIL prints exact code59 canonical `sha256:0dcc648b0c985935d8f272c121b1a16c38db7a6385f11317d319e503f17cb7a0`; metadata correction retains revision59/stale and unchanged Source41/pseudocode16 derivations. Corrected69+69 regression and cumulative version against a37bb486bcee99b6bc793e36bf390780f7bce22a pending; no local execution.

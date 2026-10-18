@@ -624,10 +624,15 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         let rejected = false;
         try { api.graphs.setObjectValues(0, { legendName: "should-not-change" }); } catch { rejected = true; }
         check(rejected, "non-editable edit did not reject through the command");
-        api.graphs.deleteObject(0);
+        rejected = false;
+        try { api.graphs.deleteObject(0); } catch { rejected = true; }
+        check(rejected, "non-editable delete did not reject through the command");
+        rejected = false;
+        try { api.graphs.moveObject(0, 0); } catch { rejected = true; }
+        check(rejected, "non-editable equal move bypassed command preconditions");
         check(
           JSON.stringify(getChart(slotAt(slot.id).chart).editor.objects) === before,
-          "object edit/delete mutated non-editable chart",
+          "object edit/delete/move mutated non-editable chart",
         );
       }
 
