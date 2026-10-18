@@ -3918,6 +3918,85 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         validateProjectObjectState = validate; initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+
+    await run(93, "File-drop preparation uses official context and accepted selection without Project edits", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        query = readBackendProjection, send = interfaceFSM.send, render = renderDashboard, command = projectEFSM.send,
+        drag = slotDragSourceId;
+      try {
+        api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+        select(slotAt(a.id)); const before = JSON.stringify(activeProject._state);
+        let events = 0, reads = 0, paints = 0;
+        renderDashboard = () => { paints++; };
+        projectEFSM.send = () => { throw Error("file-drop preparation issued Project command"); };
+        readBackendProjection = function (kind, request) {
+          reads++; check(kind === "slot-selection-context" && Object.keys(request).join(",") === "slotId", "file-drop bypassed official scalar query");
+          return query(kind, request);
+        };
+        interfaceFSM.send = function (event, payload) {
+          events++; check(event === "SELECT_SLOT" && payload.slotId === b.id && payload.direction === "model-to-fsm" &&
+            !Object.hasOwn(payload, "contentType"), "file-drop invented type/pending selection input");
+          return send.call(this, event, payload);
+        };
+        slotDragSourceId = a.id;
+        check(api.slots.prepareFileDrop(b.id) === true && interfaceFSM.readState().selectedSlotId === b.id &&
+          events === 1 && reads === 1 && paints === 1 && slotDragSourceId === a.id &&
+          JSON.stringify(activeProject._state) === before, "drop prep did not ensure accepted selection or changed domain/drag state");
+        const runtime = interfaceFSM.state;
+        check(api.slots.prepareFileDrop(b.id) === true && events === 1 && reads === 2 && paints === 1 &&
+          interfaceFSM.state === runtime, "same-slot prep toggled/published/rendered");
+        const element = document.querySelector("#dashboard .slot"); element?.classList.add("drag-over");
+        check(api.slots.finishFileDrop() === null && slotDragSourceId === null &&
+          !document.querySelector("#dashboard .slot.drag-over") && interfaceFSM.state === runtime &&
+          JSON.stringify(activeProject._state) === before, "drop finish changed lifecycle/selection/Project or failed cleanup");
+      } finally { readBackendProjection = query; interfaceFSM.send = send; renderDashboard = render; projectEFSM.send = command;
+        activeProject.initialize(saved); interfaceFSM.state = session; selectedSlotId = selected; slotDragSourceId = drag; }
+    });
+
+    await run(94, "File-drop rejected/stale references preserve selection and propagate exact failures", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        query = readBackendProjection, validate = validateFrontendIntent, send = interfaceFSM.send, render = renderDashboard,
+        failure = Error("file-drop boundary"), drag = slotDragSourceId;
+      try {
+        api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+        select(slotAt(a.id)); const source = activeProject._state, runtime = interfaceFSM.state;
+        let events = 0, paints = 0, caught;
+        renderDashboard = () => { paints++; };
+        interfaceFSM.send = function (...args) { events++; return send.apply(this, args); };
+        slotDragSourceId = a.id;
+        for (const id of [null, undefined, -1]) check(api.slots.prepareFileDrop(id) === false, "missing drop target accepted");
+        check(events === 0 && paints === 0 && interfaceFSM.state === runtime && activeProject._state === source &&
+          slotDragSourceId === a.id, "missing prep changed interaction state");
+        validateFrontendIntent = () => Object.freeze({ accepted: false });
+        check(api.slots.prepareFileDrop(b.id) === false && interfaceFSM.state === runtime && !events && !paints, "rejected selection returned success");
+        validateFrontendIntent = validate; readBackendProjection = () => { throw failure; };
+        try { api.slots.prepareFileDrop(b.id); } catch (error) { caught = error; }
+        check(caught === failure && interfaceFSM.state === runtime && !events && !paints, "drop query error swallowed");
+        readBackendProjection = query; interfaceFSM.send = () => { throw failure; }; caught = null;
+        try { api.slots.prepareFileDrop(b.id); } catch (error) { caught = error; }
+        check(caught === failure && interfaceFSM.state === runtime && !paints, "drop adapter error swallowed/changed state");
+        interfaceFSM.send = send;
+        readBackendProjection = function (kind, request) {
+          const context = query(kind, request);
+          if (kind === "slot-selection-context") {
+            const newer = projectClone(activeProject._state); newer.slots.find(slot => slot.id === b.id).hidden = true;
+            activeProject.initialize(newer);
+          }
+          return context;
+        };
+        check(api.slots.prepareFileDrop(b.id) === false && interfaceFSM.state === runtime && !paints,
+          "stale query reference bypassed current revalidation");
+        readBackendProjection = query;
+        check(api.slots.prepareFileDrop(b.id) === false && interfaceFSM.state === runtime, "hidden drop target accepted");
+        const visible = projectClone(activeProject._state); visible.slots.find(slot => slot.id === b.id).hidden = false;
+        activeProject.initialize(visible); renderDashboard = () => { throw failure; }; caught = null;
+        try { api.slots.prepareFileDrop(b.id); } catch (error) { caught = error; }
+        check(caught === failure && interfaceFSM.readState().selectedSlotId === b.id,
+          "drop renderer failure swallowed or accepted selection rolled back");
+      } finally { readBackendProjection = query; validateFrontendIntent = validate; interfaceFSM.send = send; renderDashboard = render;
+        activeProject.initialize(saved); interfaceFSM.state = session; selectedSlotId = selected; slotDragSourceId = drag; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

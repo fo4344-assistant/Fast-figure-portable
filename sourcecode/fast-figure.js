@@ -6008,14 +6008,17 @@
         return null;
       }
       function prepareDashboardFileDrop(slotId) {
-        let slot = slotAt(slotId);
-        clearSlotDragState();
-        if (!slot || slot.hidden) return false;
-        if (!isSlotSelected(slot)) setSelectedSlot(slot.id);
+        const context = appFSM.query("slot-selection-context", { slotId });
+        if (!context) return false;
+        if (interfaceFSM.readState().selectedSlotId === slotId) return true;
+        appFSM.send("SELECT_SLOT", { slotId, direction: "model-to-fsm" });
+        if (interfaceFSM.readState().selectedSlotId !== slotId) return false;
+        renderDashboard();
         return true;
       }
       function finishDashboardFileDrop() {
         clearSlotDragState();
+        return null;
       }
       function readImageEditorApi() {
         return appFSM.query("project-api", {

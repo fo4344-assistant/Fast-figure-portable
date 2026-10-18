@@ -1,0 +1,172 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index a7c4a02..28075dc 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -199,6 +199,10 @@ Baselinece3deed0f0ae1667715f61fdcd835b4de8ef0067. Source41/pseudocode19 already
+ 
+ Unit31 Source-first return loop: initial39123076936 91/92 candidate validation exposed Source41 missing chart-reference replacement despite exclusivity invariant. Source42 closes intentional insertion removing only owned chart/clearing chart reference in same candidate, preserves old image/CSV assets/settings/caption/geometry; rejected dual references/validator weakening/two commits. Pseudocode20 then code78 translate directly (patch091/review033 closure). At02ecbdbedf69bf4bbc16d4c3639e273f7c344e43 regression39123172664 PASS92+92/build39123172745 PASS. At corrected686cfd957fc148275ebd84a5fe6fdd6c6d16a361 cumulative39123246206 PASS fromce3deed0f0ae1667715f61fdcd835b4de8ef0067, repeat39123248409 PASS92 inline+92 split/184 records. Canonical Source42 sha256:5b26424594c12918fd8ca51453483922bfbfcf29216e67bcd61cf959297ba9d2, pseudocode20 sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51, code78 sha256:7847c2bbb89e413e1c3ffb1225c429986ce170f9250df82768b19ddc48784b65; identical runtime/build/test inputs. Review033 bounded actual checklist; whole code stale/open, other imports/assets/schema/raster/dashboard still uncovered.
+ 
++## Thirty-second bounded implementation unit — file-drop selection preparation and finish
++
++Baseline719584378eae1871064c00b809ec7329de70e734. Existing Source42/pseudocode20 specify official visible context, same-target no transition, rejected/stale reference False, no pending type/Project mutation, Frontend-only finish cleanup/None. Code79 directly translates query and validated final selection, removes early cleanup/live read and unconditional success, keeps finish selection/lifecycle/Project unchanged. Cases93/94 cover official scalar input/accepted once/same no-op, missing/hidden/rejected/stale, exact query/adapter/late render errors and interaction-only cleanup. Review034/patch094 track pending Actions94+94/build/canonical gate; upper unchanged, whole code stale/open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 0593fab..a25532f 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3918,6 +3918,85 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         validateProjectObjectState = validate; initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++
++    await run(93, "File-drop preparation uses official context and accepted selection without Project edits", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        query = readBackendProjection, send = interfaceFSM.send, render = renderDashboard, command = projectEFSM.send,
++        drag = slotDragSourceId;
++      try {
++        api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
++        select(slotAt(a.id)); const before = JSON.stringify(activeProject._state);
++        let events = 0, reads = 0, paints = 0;
++        renderDashboard = () => { paints++; };
++        projectEFSM.send = () => { throw Error("file-drop preparation issued Project command"); };
++        readBackendProjection = function (kind, request) {
++          reads++; check(kind === "slot-selection-context" && Object.keys(request).join(",") === "slotId", "file-drop bypassed official scalar query");
++          return query(kind, request);
++        };
++        interfaceFSM.send = function (event, payload) {
++          events++; check(event === "SELECT_SLOT" && payload.slotId === b.id && payload.direction === "model-to-fsm" &&
++            !Object.hasOwn(payload, "contentType"), "file-drop invented type/pending selection input");
++          return send.call(this, event, payload);
++        };
++        slotDragSourceId = a.id;
++        check(api.slots.prepareFileDrop(b.id) === true && interfaceFSM.readState().selectedSlotId === b.id &&
++          events === 1 && reads === 1 && paints === 1 && slotDragSourceId === a.id &&
++          JSON.stringify(activeProject._state) === before, "drop prep did not ensure accepted selection or changed domain/drag state");
++        const runtime = interfaceFSM.state;
++        check(api.slots.prepareFileDrop(b.id) === true && events === 1 && reads === 2 && paints === 1 &&
++          interfaceFSM.state === runtime, "same-slot prep toggled/published/rendered");
++        const element = document.querySelector("#dashboard .slot"); element?.classList.add("drag-over");
++        check(api.slots.finishFileDrop() === null && slotDragSourceId === null &&
++          !document.querySelector("#dashboard .slot.drag-over") && interfaceFSM.state === runtime &&
++          JSON.stringify(activeProject._state) === before, "drop finish changed lifecycle/selection/Project or failed cleanup");
++      } finally { readBackendProjection = query; interfaceFSM.send = send; renderDashboard = render; projectEFSM.send = command;
++        activeProject.initialize(saved); interfaceFSM.state = session; selectedSlotId = selected; slotDragSourceId = drag; }
++    });
++
++    await run(94, "File-drop rejected/stale references preserve selection and propagate exact failures", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        query = readBackendProjection, validate = validateFrontendIntent, send = interfaceFSM.send, render = renderDashboard,
++        failure = Error("file-drop boundary"), drag = slotDragSourceId;
++      try {
++        api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
++        select(slotAt(a.id)); const source = activeProject._state, runtime = interfaceFSM.state;
++        let events = 0, paints = 0, caught;
++        renderDashboard = () => { paints++; };
++        interfaceFSM.send = function (...args) { events++; return send.apply(this, args); };
++        slotDragSourceId = a.id;
++        for (const id of [null, undefined, -1]) check(api.slots.prepareFileDrop(id) === false, "missing drop target accepted");
++        check(events === 0 && paints === 0 && interfaceFSM.state === runtime && activeProject._state === source &&
++          slotDragSourceId === a.id, "missing prep changed interaction state");
++        validateFrontendIntent = () => Object.freeze({ accepted: false });
++        check(api.slots.prepareFileDrop(b.id) === false && interfaceFSM.state === runtime && !events && !paints, "rejected selection returned success");
++        validateFrontendIntent = validate; readBackendProjection = () => { throw failure; };
++        try { api.slots.prepareFileDrop(b.id); } catch (error) { caught = error; }
++        check(caught === failure && interfaceFSM.state === runtime && !events && !paints, "drop query error swallowed");
++        readBackendProjection = query; interfaceFSM.send = () => { throw failure; }; caught = null;
++        try { api.slots.prepareFileDrop(b.id); } catch (error) { caught = error; }
++        check(caught === failure && interfaceFSM.state === runtime && !paints, "drop adapter error swallowed/changed state");
++        interfaceFSM.send = send;
++        readBackendProjection = function (kind, request) {
++          const context = query(kind, request);
++          if (kind === "slot-selection-context") {
++            const newer = projectClone(activeProject._state); newer.slots.find(slot => slot.id === b.id).hidden = true;
++            activeProject.initialize(newer);
++          }
++          return context;
++        };
++        check(api.slots.prepareFileDrop(b.id) === false && interfaceFSM.state === runtime && !paints,
++          "stale query reference bypassed current revalidation");
++        readBackendProjection = query;
++        check(api.slots.prepareFileDrop(b.id) === false && interfaceFSM.state === runtime, "hidden drop target accepted");
++        const visible = projectClone(activeProject._state); visible.slots.find(slot => slot.id === b.id).hidden = false;
++        activeProject.initialize(visible); renderDashboard = () => { throw failure; }; caught = null;
++        try { api.slots.prepareFileDrop(b.id); } catch (error) { caught = error; }
++        check(caught === failure && interfaceFSM.readState().selectedSlotId === b.id,
++          "drop renderer failure swallowed or accepted selection rolled back");
++      } finally { readBackendProjection = query; validateFrontendIntent = validate; interfaceFSM.send = send; renderDashboard = render;
++        activeProject.initialize(saved); interfaceFSM.state = session; selectedSlotId = selected; slotDragSourceId = drag; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 7fc6d21..24a485e 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 78,
++      "revision": 79,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-033-code-empty-image-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-034-code-file-drop-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 20,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 3a5f525..232e007 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -6008,14 +6008,17 @@
+         return null;
+       }
+       function prepareDashboardFileDrop(slotId) {
+-        let slot = slotAt(slotId);
+-        clearSlotDragState();
+-        if (!slot || slot.hidden) return false;
+-        if (!isSlotSelected(slot)) setSelectedSlot(slot.id);
++        const context = appFSM.query("slot-selection-context", { slotId });
++        if (!context) return false;
++        if (interfaceFSM.readState().selectedSlotId === slotId) return true;
++        appFSM.send("SELECT_SLOT", { slotId, direction: "model-to-fsm" });
++        if (interfaceFSM.readState().selectedSlotId !== slotId) return false;
++        renderDashboard();
+         return true;
+       }
+       function finishDashboardFileDrop() {
+         clearSlotDragState();
++        return null;
+       }
+       function readImageEditorApi() {
+         return appFSM.query("project-api", {
+diff --git a/agent_space/reviews/review-20261018-034-code-file-drop-open.md b/agent_space/reviews/review-20261018-034-code-file-drop-open.md
+new file mode 100644
+index 0000000..36e22fe
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-034-code-file-drop-open.md
+@@ -0,0 +1,13 @@
++# Unit32 file-drop selection boundary
++
++Source42 sourcescript/application/public_api/layout_annotations.py prepareDashboardFileDrop/finishDashboardFileDrop and pseudocode20 application/public_api/layout_annotations.pcal directly specify official visible slot query, missing False, same selected True/no transition, different target via validated non-toggle SELECT_SLOT, rejected False/no state change, no domain command/pending mirror, finish Frontend interaction cleanup/None with selection/lifecycle/Project unchanged. Existing meaning closed, no upstream edits required. Code79 removes direct live slot lookup/unchecked success and early drag cleanup, routes official query and accepted final selection, committed runtime render only success; finish returns null.
++
++## Requirement-to-artifact checklist
++
++- official scalar query then reference validation, no slot-model authority: prepare wrapper,93 spy.
++- same selected id no toggle/event/publish/render; accepted different target once, no content type/Project command; domain/drag state unchanged:93.
++- missing/hidden target False/no events, rejected current selection False, stale official context still revalidated:94.
++- query/adapter errors original, accepted-render failure propagated without rollback:94.
++- finish only clears Frontend drag state/CSS then None, preserves lifecycle/selection/Project:93.
++
++Pending actual Actions default runner94+94/build/canonical digest/cumulative gate. Source42/pseudocode20 unchanged, code79 stale; full asset/import/schema/raster/supplied dashboard/earlier serializer+timing remain open. No local runtime/checker/build, no policy or optional TLC changes.
