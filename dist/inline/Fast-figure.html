@@ -14201,12 +14201,21 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           !Array.isArray(chart.graph.frames)
         )
           throw Error(`${label} graph 구조가 올바르지 않습니다.`);
+        const conversion = chartUsesConversionView(chart);
+        if (conversion && (!Array.isArray(chart.editor.conversionRows) ||
+            !chart.editor.conversionRows.every(Array.isArray)))
+          throw Error(`${label} conversionRows table이 올바르지 않습니다.`);
         chart.editor.objects.forEach((object, index) => {
-          if (
-            !chartUsesConversionView(chart) &&
-            (!Number.isInteger(object.csvId) || !getProjectCsv(object.csvId, csvCollection))
-          )
+          if (!object || typeof object !== "object" || Array.isArray(object))
+            throw Error(`${label} 그래프 객체 ${index + 1} 구조가 올바르지 않습니다.`);
+          const csv = conversion ? null : getProjectCsv(object.csvId, csvCollection);
+          if (!conversion && (!Number.isInteger(object.csvId) || !csv))
             throw Error(`${label} 그래프 객체 ${index + 1}의 csvId가 올바르지 않습니다.`);
+          const columns = columnDefinitions(conversion ? chart.editor.conversionRows : csv.rows,
+            conversion ? chart.editor.headerLines : csv.headerLines),
+            valid = (id) => columns.some((column) => column.id === id);
+          if (columns.length ? !valid(object.x) || !valid(object.y) : object.x !== "" || object.y !== "")
+            throw Error(`${label} 그래프 객체 ${index + 1}의 x/y column이 올바르지 않습니다.`);
         });
         return chart;
       }
