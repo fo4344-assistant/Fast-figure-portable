@@ -5293,6 +5293,86 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(118, "Import commands reject create and replacement races after bytes without retargeting", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        const parent = api.assets.createDirectory("/assets", "import-race"),
+          bytes = new TextEncoder().encode("X,Y\n1,2");
+        let commits = 0, effects = 0, newer;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = status = () => { effects++; }; interfaceFSM.notify = () => {};
+        const racedFile = { name: "race-create.csv", type: "text/csv", async arrayBuffer() {
+          const state = projectClone(activeProject._state), id = state.nextId.csv++;
+          state.assets.csvFiles.push({ id, name: this.name, directory: parent, mime: this.type,
+            rows: [["X", "Y"], ["9", "10"]], headerLines: 1, bytesBase64: ffpxBytesToBase64(new TextEncoder().encode("X,Y\n9,10")) });
+          initialize.call(activeProject, state); newer = activeProject._state;
+          return bytes.buffer;
+        } };
+        const createResult = await api.assets.importToDirectory([racedFile], parent, choose("rename"));
+        check(!createResult.committed && !commits && !effects && activeProject._state === newer &&
+          activeProject.csvFiles.find(asset => asset.name === racedFile.name).rows[1][0] === "9",
+          "occupied create choice overwrote/renamed current asset after byte wait");
+        const replacingFile = { name: racedFile.name, type: "text/csv", async arrayBuffer() {
+          const state = projectClone(activeProject._state), asset = state.assets.csvFiles.find(item => item.name === this.name);
+          asset.id = state.nextId.csv++; initialize.call(activeProject, state); newer = activeProject._state;
+          return bytes.buffer;
+        } };
+        const replaceResult = await api.assets.importToDirectory([replacingFile], parent, choose("replace"));
+        check(!replaceResult.committed && !commits && !effects && activeProject._state === newer,
+          "stale replacement choice retargeted new same-path identity after byte wait");
+        const source = activeProject._state, frontend = interfaceFSM.state,
+          shortcut = dispatchProjectCommand("ASSETS_IMPORTED", { candidate: projectClone(source), imported: [] });
+        check(!shortcut.committed && activeProject._state === source && interfaceFSM.state === frontend && !commits,
+          "removed Application candidate shortcut still commits");
+        activeProject.initialize = initialize;
+        const id = activeProject.slots.find(slot => !slot.hidden).id;
+        api.slots.reset(id); api.slots.setContentType(id, "image");
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        const image = { name: "race-slot.svg", type: "image/svg+xml", async arrayBuffer() {
+          const state = projectClone(activeProject._state); normalizeSlotContents(state.slots);
+          state.slots.find(slot => slot.id === id).contentType = "graph";
+          initialize.call(activeProject, state); newer = activeProject._state;
+          return new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>').buffer;
+        } };
+        const count = effects, slotResult = await api.assets.importToSlot(image, id, choose("rename"));
+        check(!slotResult.committed && activeProject._state === newer && !commits && effects === count &&
+          !activeProject.images.some(asset => asset.name === image.name), "changed target type committed orphan image or reset target");
+      } finally { activeProject.initialize = initialize; renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(119, "Image replacement import retains identity and releases only replaced resource after commit", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, release = releaseProjectImageDisplayUrl, render = renderDashboard,
+        report = status, notify = interfaceFSM.notify;
+      try {
+        const bytes = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'),
+          old = createProjectImage(bytes, "atomic-replace.svg", "image/svg+xml"),
+          unrelated = createProjectImage(bytes, "atomic-unrelated.svg", "image/svg+xml"),
+          id = activeProject.slots.find(slot => !slot.hidden).id;
+        api.slots.reset(id); api.slots.setContentType(id, "image");
+        api.assets.connectToSlot(projectAssetPath(old), "image", id);
+        const settings = JSON.stringify(slotAt(id).content.imageSettings), source = activeProject._state, released = [];
+        let commits = 0;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        releaseProjectImageDisplayUrl = image => {
+          if (image) { check(activeProject._state !== source && commits === 1, "image released before import commit"); released.push(image.id); }
+        };
+        const result = await api.assets.importToDirectory([new File([bytes], old.name, { type: "image/svg+xml" })],
+          old.directory, choose("replace"));
+        check(commits === 1 && result[0].id === old.id && released.join() === String(old.id) &&
+          getProjectImage(unrelated.id) && slotAt(id).imageId === old.id &&
+          JSON.stringify(slotAt(id).content.imageSettings) === settings, "replacement detached reference/settings or released unrelated resource");
+        const current = activeProject._state,
+          failed = await api.assets.importToDirectory([new File([], old.name, { type: "image/svg+xml" })], old.directory, choose("replace"));
+        check(!failed.committed && commits === 1 && activeProject._state === current && released.length === 1,
+          "empty replacement bytes committed/released old image");
+      } finally { activeProject.initialize = initialize; releaseProjectImageDisplayUrl = release; renderDashboard = render;
+        status = report; interfaceFSM.notify = notify; initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

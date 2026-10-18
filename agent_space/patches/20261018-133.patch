@@ -1,0 +1,104 @@
+diff --git a/agent_space/reviews/review-20261018-045-code-atomic-import-open.md b/agent_space/reviews/review-20261018-045-code-atomic-import-open.md
+index 9263d1c..df6ea22 100644
+--- a/agent_space/reviews/review-20261018-045-code-atomic-import-open.md
++++ b/agent_space/reviews/review-20261018-045-code-atomic-import-open.md
+@@ -17,6 +17,8 @@ Continue fully read development-policy.md v0.2.6/AGENT.md; unchanged. Source45 a
+ 
+ At955995cbf4c2930159f258cfa7dea470beb99ffb regression39152731857 prior115 PASS each form,116 FAIL `Error: batch did not commit once and return actual input-order copied query assets`,117 FAIL `Error: source replacement reused old candidate/id or missed graph connection`. Canonical39152731873 PASS code94 digest; build39152731911 PASS generated dist-onlyd342764b6cc378fc6b29856c9125b081804f9bb6. Case116 reused the old choose fixture that discarded third reserved argument: two equal filenames generated duplicate final plans, correctly rejected by the Backend. Case117 counted validation calls inside activeProject.initialize as fresh calculation attempts; initialize calls validateProjectObjectState(next) without requireSlots, while command attempts use requireSlots:true. Patch132 fixes the chooser to forward batch reservations to both official queries and counts only command validation attempts. No runtime/Source/PlusCal/fingerprint revision change or assertion relaxation; one commit and two real source attempts remain required. New exact-SHA rerun pending; neither failing run is called passed.
+ 
++At8a00043530370e47fbbc82ce98e4cc2af46db208 regression39152866621 PASS117 inline+117 split; versions39152866587 PASS. Review before closure adds118 (actual create/replacement collision after byte wait, changed image target type, removed caller-candidate shortcut) and119 (same-id image replacement keeps references/settings, releases only replaced image after commit, empty bytes rejection preserves resource). These are command boundaries, not a substitute of prior query tests. Patch133 has tests/review only, code94/upper/digest unchanged. Exact119+119/repeat/build/cumulative/fidelity pending.
++
+ ## Pending evidence and limits
+ 
+ Code94 stale, unchanged upper45/23 lineage; staged Git blob fingerprint sha256:2a28ac11cb5eae343d60ff4787c443b7038a7ee947ce1d5e80913ddcd1b03c01 not a local checker pass. New exact-SHA117+117/repeat/build/canonical+cumulative/fidelity PENDING; no local app/test/build/checker and no TLC claim. Existing aggregate dashboard renderer is not supplied-state aligned by this unit. Raw top-level router/legacy loader entrypoints and other CSV/image replace/connection/package import handlers still require whole-owner audit; do not infer their conformance from these two producer cutovers. Schema/serializer/raster/dashboard/lifecycle/timing and complete goal audit remain open. Tests for current collision introduced after completed choices/byte-await target changes and copied original image replacement resource boundaries should be checked during coverage review before bounded closure; prior115 query tests are not import-command proof.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 424e6ce..6a0a993 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5293,6 +5293,86 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(118, "Import commands reject create and replacement races after bytes without retargeting", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        const parent = api.assets.createDirectory("/assets", "import-race"),
++          bytes = new TextEncoder().encode("X,Y\n1,2");
++        let commits = 0, effects = 0, newer;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = status = () => { effects++; }; interfaceFSM.notify = () => {};
++        const racedFile = { name: "race-create.csv", type: "text/csv", async arrayBuffer() {
++          const state = projectClone(activeProject._state), id = state.nextId.csv++;
++          state.assets.csvFiles.push({ id, name: this.name, directory: parent, mime: this.type,
++            rows: [["X", "Y"], ["9", "10"]], headerLines: 1, bytesBase64: ffpxBytesToBase64(new TextEncoder().encode("X,Y\n9,10")) });
++          initialize.call(activeProject, state); newer = activeProject._state;
++          return bytes.buffer;
++        } };
++        const createResult = await api.assets.importToDirectory([racedFile], parent, choose("rename"));
++        check(!createResult.committed && !commits && !effects && activeProject._state === newer &&
++          activeProject.csvFiles.find(asset => asset.name === racedFile.name).rows[1][0] === "9",
++          "occupied create choice overwrote/renamed current asset after byte wait");
++        const replacingFile = { name: racedFile.name, type: "text/csv", async arrayBuffer() {
++          const state = projectClone(activeProject._state), asset = state.assets.csvFiles.find(item => item.name === this.name);
++          asset.id = state.nextId.csv++; initialize.call(activeProject, state); newer = activeProject._state;
++          return bytes.buffer;
++        } };
++        const replaceResult = await api.assets.importToDirectory([replacingFile], parent, choose("replace"));
++        check(!replaceResult.committed && !commits && !effects && activeProject._state === newer,
++          "stale replacement choice retargeted new same-path identity after byte wait");
++        const source = activeProject._state, frontend = interfaceFSM.state,
++          shortcut = dispatchProjectCommand("ASSETS_IMPORTED", { candidate: projectClone(source), imported: [] });
++        check(!shortcut.committed && activeProject._state === source && interfaceFSM.state === frontend && !commits,
++          "removed Application candidate shortcut still commits");
++        activeProject.initialize = initialize;
++        const id = activeProject.slots.find(slot => !slot.hidden).id;
++        api.slots.reset(id); api.slots.setContentType(id, "image");
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        const image = { name: "race-slot.svg", type: "image/svg+xml", async arrayBuffer() {
++          const state = projectClone(activeProject._state); normalizeSlotContents(state.slots);
++          state.slots.find(slot => slot.id === id).contentType = "graph";
++          initialize.call(activeProject, state); newer = activeProject._state;
++          return new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>').buffer;
++        } };
++        const count = effects, slotResult = await api.assets.importToSlot(image, id, choose("rename"));
++        check(!slotResult.committed && activeProject._state === newer && !commits && effects === count &&
++          !activeProject.images.some(asset => asset.name === image.name), "changed target type committed orphan image or reset target");
++      } finally { activeProject.initialize = initialize; renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(119, "Image replacement import retains identity and releases only replaced resource after commit", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, release = releaseProjectImageDisplayUrl, render = renderDashboard,
++        report = status, notify = interfaceFSM.notify;
++      try {
++        const bytes = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'),
++          old = createProjectImage(bytes, "atomic-replace.svg", "image/svg+xml"),
++          unrelated = createProjectImage(bytes, "atomic-unrelated.svg", "image/svg+xml"),
++          id = activeProject.slots.find(slot => !slot.hidden).id;
++        api.slots.reset(id); api.slots.setContentType(id, "image");
++        api.assets.connectToSlot(projectAssetPath(old), "image", id);
++        const settings = JSON.stringify(slotAt(id).content.imageSettings), source = activeProject._state, released = [];
++        let commits = 0;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        releaseProjectImageDisplayUrl = image => {
++          if (image) { check(activeProject._state !== source && commits === 1, "image released before import commit"); released.push(image.id); }
++        };
++        const result = await api.assets.importToDirectory([new File([bytes], old.name, { type: "image/svg+xml" })],
++          old.directory, choose("replace"));
++        check(commits === 1 && result[0].id === old.id && released.join() === String(old.id) &&
++          getProjectImage(unrelated.id) && slotAt(id).imageId === old.id &&
++          JSON.stringify(slotAt(id).content.imageSettings) === settings, "replacement detached reference/settings or released unrelated resource");
++        const current = activeProject._state,
++          failed = await api.assets.importToDirectory([new File([], old.name, { type: "image/svg+xml" })], old.directory, choose("replace"));
++        check(!failed.committed && commits === 1 && activeProject._state === current && released.length === 1,
++          "empty replacement bytes committed/released old image");
++      } finally { activeProject.initialize = initialize; releaseProjectImageDisplayUrl = release; renderDashboard = render;
++        status = report; interfaceFSM.notify = notify; initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
