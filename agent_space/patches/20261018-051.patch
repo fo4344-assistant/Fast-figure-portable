@@ -1,0 +1,36 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index b0ad2f5..a465c74 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -129,6 +129,8 @@ Unit19 bounded evidence: implementation1edbc2cd14131baeef3bf80f082f358fec07c932
+ 
+ Baseline5dc81c618461f4513c8a7aa06dae03da26ca524f. Existing Source41 GRAPH_PALETTE_RULE/public graphEditorApplyPalette and pseudocode16 calculateGraphObjectEdit already specify nonempty array of trimmed nonempty color text, current editable owner, color-only cycling, omitted index hint, valid zero-object chart and candidate/retry/commit. Code60 translates this operation through the shared Backend candidate path; Application passes chartId/new colors only, public selection binding uses official copied read, committed alone permits fresh read/render. No hex restriction/Plotly parser authority, fake object/CSV, manual selection or UI-palette mutation. Tests70/71 add immutable copies, exact non-color/order/extension/asset/other-chart/appearance retention, omitted hint/selection, zero chart, invalid/sparse/getter inputs and noneditable/validator/projection/noncommit/stale retry. Review022 and patch049 track Actions71+71/build/digest/cumulative gate. Initial regression39103881567 at94beb6e86c44e013435459039c8e9c240c980aa0 passed1–69 but70/71 exposed an actual wrapper bug: destructured `{result}` although local dispatchProjectCommand returns result directly. Patch050 corrects this code-only translation without changing Source/pseudocode or weakening tests; runtime advances code60→61, fingerprint remains provisional until new canonical diagnostic. Initial build39103881617 PASS is packaging-only, corrected execution pending. Source41/pseudocode16 unchanged, code60 stale; add/other commands, full validator, imports/assets/raster/supplied dashboard and whole Plan023 remain open.
+ 
++Unit20 code61 runtime correction verified at e2addf37b9095d492a0b3211b0a27249da7d228e: regression39103963775 PASS71 inline+71 split, build39103963815 PASS; diagnostic39103963788 supplies canonical code61 sha256:0dcd94e53c72794377a9bf62d709a3304d6d4535490483ceb484427b2fd7491d. Patch051 records digest without runtime/test/upper changes; repeat exact corrected-SHA regression/cumulative version from5dc81c618461f4513c8a7aa06dae03da26ca524f pending. No whole closure.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-022-code-graph-palette-open.md b/agent_space/reviews/review-20261018-022-code-graph-palette-open.md
+index 6bf7f3b..f51c93e 100644
+--- a/agent_space/reviews/review-20261018-022-code-graph-palette-open.md
++++ b/agent_space/reviews/review-20261018-022-code-graph-palette-open.md
+@@ -29,4 +29,4 @@ This review is not a completion audit for whole Plan023. Legacy add, connect/imp
+ 
+ At94beb6e86c44e013435459039c8e9c240c980aa0 regression39103881567 passed1–69 but70/71 failed both distributions: `TypeError: Cannot read properties of undefined (reading 'committed')`, stack at graphEditorApplyPalette. This is an actual JS wrapper translation bug, not a faulty test: this repository's dispatchProjectCommand returns the result directly, whereas the abstract Application tuple was incorrectly destructured as `{result}`. Source/pseudocode committed gate is correct and independent; code61 uses the direct result exactly like existing translated wrappers. No tests weakened, Backend meaning/selection contract untouched. Runtime change advances code60→61 rather than reusing a revision. Build39103881617 PASS at original code60 is only packaging evidence, NOT proof of the palette contract; dist-only bot361fe5b87ed0f2eacef811425de982eeb00d3021 inspected/fast-forwarded.
+ 
+-Version39103881600 diagnostic printed code60 sha256:6bed2459938a2e7ba28a711a345c7eeb22967b2bad361e1c263d90b55e98bf3c, now historical since the code61 correction changes runtime again. Metadata fingerprint remains explicitly provisional old code59 until canonical code61 diagnostic, not a claimed passing gate. Corrected71+71, actual build and cumulative version from5dc81c618461f4513c8a7aa06dae03da26ca524f pending Actions.
++Version39103881600 diagnostic printed code60 sha256:6bed2459938a2e7ba28a711a345c7eeb22967b2bad361e1c263d90b55e98bf3c, now historical since the code61 correction changes runtime again. Metadata fingerprint remains explicitly provisional old code59 until canonical code61 diagnostic, not a claimed passing gate. At e2addf37b9095d492a0b3211b0a27249da7d228e corrected regression39103963775 PASS71 inline+71 split (prior1–69 retained), build39103963815 PASS; artifacts inline6348686 bytes/split ZIP1733982 bytes. Version39103963788 expected provisional-digest FAIL supplies actual code61 sha256:0dcd94e53c72794377a9bf62d709a3304d6d4535490483ceb484427b2fd7491d. Source41 sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5 and pseudocode16 sha256:e25d2057a10e358127598141d3d94de2f5700108da14809a0ef5e92e11be71e9 unchanged. Dist-only bot490d256c513e608cfbd1472f85d2d25b4785531f inspected/fast-forwarded. Patch051 records canonical code61 digest, same revision/stale and derivations, no runtime/test/upper changes. This supplies bounded test rows above; cumulative version from5dc81c618461f4513c8a7aa06dae03da26ca524f and repeat exact corrected-SHA regression pending. Full goal remains open.
+diff --git a/development-versions.json b/development-versions.json
+index 56dc0c2..1b80f4c 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,7 +38,7 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:0dcc648b0c985935d8f272c121b1a16c38db7a6385f11317d319e503f17cb7a0",
++      "fingerprint": "sha256:0dcd94e53c72794377a9bf62d709a3304d6d4535490483ceb484427b2fd7491d",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5",
+         "pseudocode": "sha256:e25d2057a10e358127598141d3d94de2f5700108da14809a0ef5e92e11be71e9",
