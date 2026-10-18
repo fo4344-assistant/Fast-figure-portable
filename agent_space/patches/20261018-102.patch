@@ -1,0 +1,35 @@
+diff --git a/agent_space/reviews/review-20261018-036-code-image-settings-open.md b/agent_space/reviews/review-20261018-036-code-image-settings-open.md
+index 00ccc7f..428324b 100644
+--- a/agent_space/reviews/review-20261018-036-code-image-settings-open.md
++++ b/agent_space/reviews/review-20261018-036-code-image-settings-open.md
+@@ -11,4 +11,4 @@ Source42 application/public_api/layout_annotations.py applyImageSettingsFromValu
+ - getter/conversion/whole validator errors propagate no commit/reconcile/render/success read; missing editor False/no command; noncommit False/no successwork:98 and prior49.
+ - replaced authority during getter and whole validation recalculates latest current settings/name, one final commit, no rollback; late query/renderer errors propagate and retain committed values:98.
+ 
+-At fc754907b10d7dc0c264c0a1d2b2cd9eabce416e build39124256540 PASS; regression39124256531 prior96 pass both forms but97/98 fail compound effect assertions. Static audit shows notification spy attempted replacing frozen appFSM.notify, so it never observed notifications. Correct fixture to intercept writable interfaceFSM.notify and forward original (same production adapter route), retain every assertion and add diagnostic counts. No runtime or upper weakening. Diagnostic39124256572 FAIL reports actual code81 sha256:f6cab45ebfac9a951e0634dd2d5d413088650d57d5e5d742e54640c10a19ff70; record actual canonical digest, corrected regression/cumulative pending. Source42/pseudocode20 unchanged, code81 stale; full image schema/legacy display-resource owners/import/move/cascade/raster/supplied dashboard and prior serializer/timing remain open. No policy changes/local runtime/optional TLC.
++At fc754907b10d7dc0c264c0a1d2b2cd9eabce416e build39124256540 PASS; regression39124256531 prior96 pass both forms but97/98 fail compound effect assertions. Static audit shows notification spy attempted replacing frozen appFSM.notify, so it never observed notifications. Correct fixture to intercept writable interfaceFSM.notify and forward original (same production adapter route), retain every assertion and add diagnostic counts. No runtime or upper weakening. Diagnostic39124256572 FAIL reports actual code81 sha256:f6cab45ebfac9a951e0634dd2d5d413088650d57d5e5d742e54640c10a19ff70; record actual canonical digest. At afbcc52310fafe0137f9dc944f45bd6023faff65 cumulative39124377032 PASS fromcf5bed9751b5f9e5d46978dba0bd3618efd91f30, corrected-SHA build39124383889 PASS. Regression39124376388 prior96+97 PASS both forms;98 reaches postcommit test but fails `image postcommit query failure swallowed/rolled back`. Global second-read spy did not isolate wrapper return query from subscriber reads (UI image editor also calls images.readEditor). Correct spy to arm after wrapper renderer stage and suppress unrelated notification subscriber reads for that subcase, preserving state/error/commit assertions and positive notification tests. Original compound failure does not alone identify which condition failed; add exact diagnostics. Runtime unchanged; corrected regression pending. Source42/pseudocode20 unchanged, code81 stale; full image schema/legacy display-resource owners/import/move/cascade/raster/supplied dashboard and prior serializer/timing remain open. No policy changes/local runtime/optional TLC.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 189f47d..e4dc892 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4234,14 +4234,17 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         check(validations === 2 && commits === 2 && next.settings.x === 123 && next.settings.scale === 321 &&
+           activeProject.projectName === "image-newer-validation", "image validation source replacement not retried");
+         validateProjectObjectState = validate;
+-        let imageReads = 0;
++        let afterRenderer = false;
++        syncSlotImageElement = () => { afterRenderer = true; };
++        // Isolate this wrapper return query from unrelated UI subscriber reads.
++        interfaceFSM.notify = () => interfaceFSM.state;
+         readBackendProjection = function (kind, request) {
+-          if (kind === "project-api" && request.operation === "images.readEditor" && ++imageReads === 2) throw failure;
++          if (afterRenderer && kind === "project-api" && request.operation === "images.readEditor") throw failure;
+           return query(kind, request);
+         };
+         caught = null; try { applyImageSettingsFromValues(id, { x: 42 }); } catch (error) { caught = error; }
+         check(caught === failure && slotAt(id).imageSettings.x === 42 && commits === 3,
+-          "image postcommit query failure swallowed/rolled back");
++          `image postcommit query failure swallowed/rolled back: ${JSON.stringify({afterRenderer,originalError:caught === failure,commits,x:slotAt(id).imageSettings.x})}`);
+         readBackendProjection = query; syncSlotImageElement = () => { throw failure; }; caught = null;
+         try { applyImageSettingsFromValues(id, { x: 43 }); } catch (error) { caught = error; }
+         check(caught === failure && slotAt(id).imageSettings.x === 43 && commits === 4,

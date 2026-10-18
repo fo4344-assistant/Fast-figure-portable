@@ -4234,14 +4234,17 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(validations === 2 && commits === 2 && next.settings.x === 123 && next.settings.scale === 321 &&
           activeProject.projectName === "image-newer-validation", "image validation source replacement not retried");
         validateProjectObjectState = validate;
-        let imageReads = 0;
+        let afterRenderer = false;
+        syncSlotImageElement = () => { afterRenderer = true; };
+        // Isolate this wrapper return query from unrelated UI subscriber reads.
+        interfaceFSM.notify = () => interfaceFSM.state;
         readBackendProjection = function (kind, request) {
-          if (kind === "project-api" && request.operation === "images.readEditor" && ++imageReads === 2) throw failure;
+          if (afterRenderer && kind === "project-api" && request.operation === "images.readEditor") throw failure;
           return query(kind, request);
         };
         caught = null; try { applyImageSettingsFromValues(id, { x: 42 }); } catch (error) { caught = error; }
         check(caught === failure && slotAt(id).imageSettings.x === 42 && commits === 3,
-          "image postcommit query failure swallowed/rolled back");
+          `image postcommit query failure swallowed/rolled back: ${JSON.stringify({afterRenderer,originalError:caught === failure,commits,x:slotAt(id).imageSettings.x})}`);
         readBackendProjection = query; syncSlotImageElement = () => { throw failure; }; caught = null;
         try { applyImageSettingsFromValues(id, { x: 43 }); } catch (error) { caught = error; }
         check(caught === failure && slotAt(id).imageSettings.x === 43 && commits === 4,
