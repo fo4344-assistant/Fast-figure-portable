@@ -18,7 +18,7 @@ Source41 application/public_api/assets.py createProjectCsv/createEmptyProjectCsv
 | No success query/selection on noncommit/failure | committed gate; case78 invalid inputs/validator/noncommit |
 | Create-and-select occurs after commit, no rollback on late error | selectProjectCsv ordinary frontend event; case78 rejection and query throw |
 | Empty CSV remains ordinary template asset; no chart/object | existing template, general command, official selection; cases77/78 and previous regression |
-| Runner-only execution and strict lineage | pending canonical diagnostics, regression78+78, build and cumulative version run |
+| Runner-only execution and strict lineage | build39120647325 PASS; regression39120723974 PASS78+78; cumulative versions39120721691 PASS at8efc931 frombbb602bd |
 
 ## Decisions, exclusions
 
@@ -26,4 +26,8 @@ Preserve supplied bytes instead of normalizing them; synthesizing all files woul
 
 ## Execution evidence
 
-Implementation 003f484b1eaa07b44c31541857c0221bc981b4bc: default ubuntu-latest regression39120647317 PASS78 inline+78 split, including cases77/78 and prior76. Build39120647325 PASS; artifacts inline6383148 bytes/split ZIP1734868 bytes. Dist-only bot a192e11 inspected before fast-forward. Diagnostic39120647336 FAIL as expected on provisional prior pseudocode digest: recorded c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619; actual pseudocode18 sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a and code66 sha256:ff5070966a9ba3998a3268c836837e0d2528e2e399d6299f889795fcd90fe832. Source41 unchanged. Patch064 records canonical values without source/test changes; corrected cumulative version and repeat regression pending. Initial diagnostic failure remains evidence, not a passed gate.
+Implementation 003f484b1eaa07b44c31541857c0221bc981b4bc: default ubuntu-latest regression39120647317 PASS78 inline+78 split, including cases77/78 and prior76. Build39120647325 PASS; artifacts inline6383148 bytes/split ZIP1734868 bytes. Dist-only bot a192e11 inspected before fast-forward. Diagnostic39120647336 FAIL as expected on provisional prior pseudocode digest: recorded c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619; actual pseudocode18 sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a and code66 sha256:ff5070966a9ba3998a3268c836837e0d2528e2e399d6299f889795fcd90fe832. Source41 unchanged. Patch064 records canonical values without source/test changes. At corrected lineage8efc93112788818f19fed75b9b92a05aeb6ae62d, cumulative versions39120721691 PASS with BASE_SHA bbb602bd52b240ca875af2b871963edf83a4434b; repeat regression39120723974 PASS78 inline+78 split (156 individual pass records, no failures, same artifact sizes). git diff003f484..8efc931 sourcecode/scripts/sourcescript/pseudocode/tests is empty, so build39120647325 covers identical runtime/build inputs. Initial diagnostic failure remains evidence, not a passed gate.
+
+## Bounded completion audit
+
+Every checklist item above maps to inspected runtime/pseudocode branches and cases77/78 with actual runner logs. Added cases cover scalar commands, current-source retry, id/path collision, exact original/synthetic bytes, immutable success read, noncommit/validation gates and postcommit failure semantics. Prior76 cases also pass. This is not proof of whole Plan023: tabular parser/default ownership, other asset candidates/import/cascade, shared full graph validation, raster and supplied dashboard remain uncovered and open. Source41 remains highest authority; pseudocode18 derives directly from its existing rules, not from code. Code66 stays stale; optional model/TLC unchanged and not executed.
