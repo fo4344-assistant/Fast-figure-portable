@@ -1,0 +1,230 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 575e162..c9dbc42 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -95,6 +95,10 @@ Baseline a6d6d2c35e1dde59e13f3ec159a1ede594b3927e. Code53 translates existing as
+ 
+ At683867d85b10f0de78aed6dd238b1882b3f6ff13 regression39102004808 passed63 inline +63 split and build39102004806 passed; dist-only c5d2f36f249dbb8768c97f2abb714ca91e158aa4 fast-forwarded. Static comparison then found pseudocode13 lacked an acceptance discriminator for rejected repeat selection: matching old final path/kind is not proof the event succeeded. Source39 already explicitly requires rejection none and Frontend accepted-publish/rejected-revision rules. Preserve Source highest authority: patch035 corrects the PlusCal branch using pre/final revision, not Source to justify the weaker branch. Re-derive code54 from this corrected meaning; its existing actual-state-replacement check already distinguishes acceptance, so no JS discard or reverse-authority change is needed. Review017 records missed prior fidelity check, unchanged-area review005, canonical fingerprint diagnostics and pending final cumulative gate/regression. Code54 stale; whole goal open.
+ 
++### Unit16 Source40 receipt closure → pseudocode15 → code55
++
++Review018 corrects review017's overstatement: Source39 explicitly preserved rejected revision but did not explicitly require accepted same-value SELECT_ASSET publication/revision advancement. Inferring that positive rule from lower publishRuntime would invert authority. Source40 independently defines the Frontend acceptance receipt (accepted event publishes revision+1 exactly once even if same-value; rejected event unchanged) and public pre/final scalar consumption. Three closure criteria in review018. Then pseudocode15 propagates it and code55 replaces state-identity inference with revision comparison, preserving validated scalar intent/no Project writes. Case63 strengthens accepted-repeat assertion to exact +1. Other event semantics unchanged. Canonical runner diagnostics now expose all three digests before unchanged strict validation; fingerprints provisionally retained until actual outputs, then cumulative gate/regression/build required. Whole code55 stale, optional model26 stale, Source40 closed/current. Patch036 records both Source diffs and paired rationale. No whole-goal completion.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-017-csv-selection-translation-open.md b/agent_space/reviews/review-20261018-017-csv-selection-translation-open.md
+index 565d3b7..b30960a 100644
+--- a/agent_space/reviews/review-20261018-017-csv-selection-translation-open.md
++++ b/agent_space/reviews/review-20261018-017-csv-selection-translation-open.md
+@@ -1,6 +1,10 @@
+ # Pseudocode14 / code54 — CSV rejection fidelity correction
+ 
+-## Source authority decision
++## Supersession / corrected audit
++
++Review018 supersedes this review's assertion that Source39 explicitly guaranteed accepted same-value revision advancement. It explicitly guaranteed rejected preservation, but the positive receipt rule was underspecified. Do not use lower pseudocode publication as authority: Source40 first closes that rule independently, then pseudocode15/code55 propagate it. Diagnostic39102118697 atab90771b6b15634c4ca5c51bf7afd78f0bb3a78b failed as expected and reported pseudocode14 sha256:945792e6825ca41944d55dbb5f8a477187db149f0913bdbd43d0541acadcc037; no completed fidelity gate claimed for this intermediate unit.
++
++## Historical Source authority decision (qualified above)
+ 
+ Source39 `sourcescript/application/public_api/assets.py:selectProjectCsv` explicitly requires rejection to return none, including when an old selection already matches. `sourcescript/frontend/interface_fsm.py` specifies that rejected input preserves state/revision with no publish, while accepted external-store publication advances revision. Those upper contracts are already complete for this issue; changing Source to excuse a weaker lower branch would invert authority and is rejected.
+ 
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 539e80c..a80e1ea 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2371,7 +2371,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           appFSM.state.graphObjectIndex === null && appFSM.state.graphObject === "none" &&
+           selectedSlotId === slot && appFSM.state.workspace === workspace && JSON.stringify(activeProject._state) === before,
+           "selection changed Project/slot/workspace or failed to clear graph selection");
+-        check(api.assets.selectCsv(path)?.id === csv.id, "accepted repeat selection returned rejection");
++        const priorRevision = interfaceFSM.state.revision;
++        check(api.assets.selectCsv(path)?.id === csv.id && interfaceFSM.state.revision === priorRevision + 1,
++          "accepted repeat selection did not publish exactly one revision receipt");
+         const stable = interfaceFSM.state, count = events.length;
+         check(api.assets.selectCsv("/missing.csv") === null && api.assets.selectCsv("/assets/csv") === null &&
+           events.length === count && interfaceFSM.state === stable, "invalid CSV selection changed Frontend");
+diff --git a/development-versions.json b/development-versions.json
+index aa358e7..286d77c 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,13 +9,13 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 39,
++      "revision": 40,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+       "fingerprint": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+       "derived_from": null,
+       "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261018-005-grid-coordinate-translation.md"
++      "closure_review": "agent_space/reviews/review-20261018-018-selection-receipt-closure.md"
+     }, 
+     "verification-model": {
+       "revision": 26, 
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 54,
++      "revision": 55,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -41,20 +41,20 @@
+       "fingerprint": "sha256:c6b15fbe1ee149ea99c33d320b56a93daeb399a25cead083a99924e134d9cf49",
+       "derived_from": {
+         "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f",
+-        "pseudocode": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
++        "pseudocode": "sha256:945792e6825ca41944d55dbb5f8a477187db149f0913bdbd43d0541acadcc037",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-017-csv-selection-translation-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-018-selection-receipt-closure.md"
+     }, 
+     "pseudocode": {
+-      "revision": 14,
++      "revision": 15,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+-      "fingerprint": "sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a",
++      "fingerprint": "sha256:945792e6825ca41944d55dbb5f8a477187db149f0913bdbd43d0541acadcc037",
+       "derived_from": {
+         "source-script": "sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f"
+       },
+-      "translation_review": "agent_space/reviews/review-20261018-017-csv-selection-translation-open.md"
++      "translation_review": "agent_space/reviews/review-20261018-018-selection-receipt-closure.md"
+     }
+   }
+ }
+diff --git a/pseudocode/application/public_api/assets.pcal b/pseudocode/application/public_api/assets.pcal
+index fff9947..3046aa2 100644
+--- a/pseudocode/application/public_api/assets.pcal
++++ b/pseudocode/application/public_api/assets.pcal
+@@ -40,7 +40,8 @@ ValidatedSingleTransition:
+   call InterfaceStateMachine_readState(); priorRevision := result.revision;
+   call dispatchInterfaceEvent("SELECT_ASSET",[kind |-> "csv",path |-> canonical]); final := result;
+   \* Source requires rejection to return none even when that CSV was already selected.
+-  \* Frontend accepted publish advances revision; rejected input preserves it.
++  \* Source40 SELECT_ASSET receipt: accepted publication advances revision exactly once,
++  \* including repeat selection; rejected input preserves revision/state without publication.
+   if final.revision > priorRevision /\ final.assetSelection = "csv" /\ final.assetPath = canonical then result := target;
+   else result := NoValue; end if;
+   \* SELECT_ASSET itself clears graph object; no preceding clear/persistent mutation.
+diff --git a/scripts/check-development-layer-versions.py b/scripts/check-development-layer-versions.py
+index 18de230..759897c 100644
+--- a/scripts/check-development-layer-versions.py
++++ b/scripts/check-development-layer-versions.py
+@@ -529,6 +529,16 @@ def main() -> int:
+ 
+     try:
+         manifest = load_manifest()
++        # Canonical checkout diagnostics remain available even when a recorded
++        # digest is stale. They do not skip validation or imply a passing gate.
++        diagnostic_layers = manifest.get("layers")
++        if isinstance(diagnostic_layers, dict) and isinstance(diagnostic_layers.get("source-code"), dict):
++            for name, paths in (
++                ("source-script", source_script_paths()),
++                ("pseudocode", pseudocode_paths()),
++                ("source-code", source_code_paths(diagnostic_layers["source-code"])),
++            ):
++                print(f"canonical-checkout {name}: {layer_fingerprint(paths)}", flush=True)
+         fingerprints = validate_current_tree(manifest)
+         if args.base and set(args.base) != {"0"}:
+             validate_revision_progression(manifest, args.base)
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 41276d6..dbaae91 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1720,6 +1720,7 @@
+         machine.state = Object.freeze({
+           ...machine.state,
+           assetPath: path ?? null,
++          revision: machine.state.revision + (payload.validatedInput?.event === "SELECT_ASSET" ? 1 : 0),
+         });
+       }
+       function assetSelectionTarget({ payload }) {
+@@ -5623,10 +5624,10 @@
+       function selectProjectCsv(path) {
+         const resolved = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path });
+         if (resolved?.kind !== "csv") return null;
+-        const previous = appFSM.state, state = appFSM.send("SELECT_ASSET", {
++        const priorRevision = interfaceFSM.readState().revision, state = appFSM.send("SELECT_ASSET", {
+           kind: "csv", path: resolved.path, direction: "ui-to-fsm",
+         });
+-        return state !== previous && state.assetSelection === "csv" && state.assetPath === resolved.path
++        return state.revision > priorRevision && state.assetSelection === "csv" && state.assetPath === resolved.path
+           ? resolved.target : null;
+       }
+       function selectImageFromTree(path) {
+diff --git a/sourcescript/application/public_api/assets.py b/sourcescript/application/public_api/assets.py
+index f0b289a..9064d69 100644
+--- a/sourcescript/application/public_api/assets.py
++++ b/sourcescript/application/public_api/assets.py
+@@ -38,11 +38,16 @@ def selectProjectCsv(path):
+     Backend 재검증을 통과한 SELECT_ASSET이 asset selection을 바꾸고 graphObject/index를 함께 clear한다.
+     slot/workspace와 ProjectObject는 유지한다. 별도 CLEAR_GRAPH_OBJECT 선행 전이는 만들지 않는다.
+     거부되면 none이고 selection을 성공으로 반환하지 않는다. 성공하면 공식 query의 detached CSV를 반환한다.
++    event 직전 Frontend revision과 final revision을 비교한다. accepted SELECT_ASSET은 같은 값도 revision을 1 증가시키며,
++    revision이 증가하지 않았다면 예전 assetPath가 같아도 거부이므로 none이다.
+     query/adapter throw는 전파한다. projection 전체를 command candidate로 전달하거나 장기 저장하지 않는다.
+     """
+     resolved = dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": path})
+     target = "resolved의 detached CSV target; missing/wrong-kind면 event 전에 즉시 none 반환"
++    priorRevision = interfaceFSM.readState()["revision"]
+     finalState = dispatchInterfaceEvent("SELECT_ASSET", {"kind": "csv", "path": "target의 canonical path"})
++    if finalState["revision"] <= priorRevision:
++        return None
+     return "finalState가 요청 CSV selection이면 공식 query의 detached CSV, 아니면 none"
+ 
+ 
+diff --git a/sourcescript/frontend/interface_fsm.py b/sourcescript/frontend/interface_fsm.py
+index 9fbdfd8..c718de7 100644
+--- a/sourcescript/frontend/interface_fsm.py
++++ b/sourcescript/frontend/interface_fsm.py
+@@ -71,7 +71,10 @@ FRONTEND_TRANSITION_RULES = {
+         "overlay는 explicit deselection이면 유지하고 non-null slot 선택이면 닫는다."
+     ),
+     "SELECT_ASSET": (
+-        "validated kind/path 또는 none을 assetSelection/path에 반영하고 graphObject/index를 clear한다. slot/workspace는 유지한다."
++        "validated kind/path 또는 none을 assetSelection/path에 반영하고 graphObject/index를 clear한다. slot/workspace는 유지한다. "
++        "accepted event는 이미 같은 asset이 선택되어 값이 같아도 final state를 publish하며 revision을 정확히 1 증가시킨다. "
++        "이 revision 변화는 이번 selection intent가 수락되었다는 Frontend receipt다. "
++        "rejected event는 같은 asset이 이미 선택되어 있어도 revision/state를 보존하고 publish하지 않는다."
+     ),
+     "SELECT_GRAPH_OBJECT": (
+         "reference none이면 graphObject/index만 clear한다. accepted index면 graphObject=selected/index를 반영한다. "
+diff --git a/agent_space/reviews/review-20261018-018-selection-receipt-closure.md b/agent_space/reviews/review-20261018-018-selection-receipt-closure.md
+new file mode 100644
+index 0000000..044eacd
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-018-selection-receipt-closure.md
+@@ -0,0 +1,26 @@
++# Source40 selection receipt closure; pseudocode15 / code55 alignment open
++
++## Corrected authority audit
++
++Review017 correctly found a rejected repeat selection could satisfy pseudocode13's old kind/path branch, but overstated the existing Source39 guarantee: Source39 explicitly preserved revision on rejection and described publication, yet did not explicitly require accepted same-value SELECT_ASSET to advance revision exactly once. Inferring that positive rule from pseudocode's publishRuntime would itself give lower code authority. Therefore Source40 now independently specifies a Frontend receipt and its public consumption FIRST, followed by pseudocode15 and code55. Review017 is superseded on that positive-rule closure claim; its diagnostic39102118697 is a failed gate, not closure proof.
++
++## Source decision and three closure criteria
++
++1. Logical completeness: accepted SELECT_ASSET applies supplied validated kind/path, clears graph selection, preserves slot/workspace, and publishes final state with revision increment exactly one, even for same-value repeat selection. Rejected event preserves state/revision and publishes nothing. Application captures pre-event revision, dispatches once, and returns detached official query CSV only when revision advanced and final canonical path/kind match; otherwise none. Missing/invalid query remains no-event none; query/dispatch errors propagate. Persistent Project does not change.
++2. Independent purpose: a user can repeat the same intent; identical old state is not evidence it was accepted. Explicit Frontend acceptance receipt makes success observable without exposing mutable state identity, doing a second domain query or inventing a public persistent acceptance object. Revision already belongs to Frontend runtime; it must not authorize Backend domain data. This meaning is reasonable independently of existing implementation.
++3. No duplicate/justified integration: existing Frontend revision carries the receipt; no new store, event, candidate or Backend boolean mirror. Existing selected CSV query remains the sole domain-data result. Application only compares runtime scalar receipt. No generic redesign of other events or global revision semantics is asserted.
++
++Source scope: `sourcescript/frontend/interface_fsm.py:FRONTEND_TRANSITION_RULES[SELECT_ASSET]` and `sourcescript/application/public_api/assets.py:selectProjectCsv`. All other Source39 requirements remain unchanged; review005 covers unchanged established areas. Source40 is closed/current at this bounded contract, not a claim that whole implementation aligns.
++
++## Ordered translation / prompt-to-artifact audit
++
++- Source highest: the two Source contracts above explicitly supply accepted/rejected branches and independent purpose; no Source copies lower implementation identity tricks.
++- Pseudocode15: `pseudocode/application/public_api/assets.pcal:selectProjectCsv` captures priorRevision, requires final.revision advancement and final canonical path/kind. Existing `pseudocode/frontend/interface_fsm.pcal:publishRuntime` increments revision once on accepted SELECT_ASSET; rejection returns before publish. Existing SELECT_ASSET control path reaches this once. No lower meaning added; comment records Source40 origin.
++- Code55: `sourcecode/fast-figure.js:applyAssetSelectionAction` increments runtime revision only for validated SELECT_ASSET; unrelated clear event behavior unchanged. `selectProjectCsv` compares pre/final scalar revisions instead of state identity; one official detached query and one scalar event remain. Selection reducers do not mutate Project.
++- Regression: case63 now requires exactly one revision increment for accepted same-value repeat selection and byte-identical runtime/Project state for rejected repeat. Existing detached reads, changed-current target validation, invalid/missing no-event, original query/adapter failures and no Application domain resolver assertions retained. Cases1–62 are preserved.
++- Resource/lifecycle: synchronous selection has no new URL/file resources and introduces no exporting lifecycle.
++- Provenance/tooling: revision40→15→55; whole code stale and optional model26 stale/TLC not run. Canonical checkout diagnostics print all three actual digests before normal checker validation to avoid serial local hashing or gate weakening. Source patch036 includes both Source diffs, paired rationale, metadata, plan and reviews.
++
++## Verification pending / boundaries
++
++Prior implementation683867d85b10f0de78aed6dd238b1882b3f6ff13 regression39102004808 passed63+63/build39102004806 passed, but predates Source40. Diagnostic39102118697 atab90771b6b15634c4ca5c51bf7afd78f0bb3a78b reported pseudocode14 sha256:945792e6825ca41944d55dbb5f8a477187db149f0913bdbd43d0541acadcc037; pseudocode15 comment differs and needs new digest. Source40/code55 digests pending Actions and retained prior digests are explicitly provisional until runner outputs. Require corrected canonical metadata, cumulative version gate against a6d6d2c35e1dde59e13f3ec159a1ede594b3927e, exact-SHA63+63 regression and build. All executions Actions default runner; no local test/build/checker. Wider assets/graph/import/renderer integration remains open. No goal-completion claim.

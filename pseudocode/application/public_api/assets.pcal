@@ -40,7 +40,8 @@ ValidatedSingleTransition:
   call InterfaceStateMachine_readState(); priorRevision := result.revision;
   call dispatchInterfaceEvent("SELECT_ASSET",[kind |-> "csv",path |-> canonical]); final := result;
   \* Source requires rejection to return none even when that CSV was already selected.
-  \* Frontend accepted publish advances revision; rejected input preserves it.
+  \* Source40 SELECT_ASSET receipt: accepted publication advances revision exactly once,
+  \* including repeat selection; rejected input preserves revision/state without publication.
   if final.revision > priorRevision /\ final.assetSelection = "csv" /\ final.assetPath = canonical then result := target;
   else result := NoValue; end if;
   \* SELECT_ASSET itself clears graph object; no preceding clear/persistent mutation.

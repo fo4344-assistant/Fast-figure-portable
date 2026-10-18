@@ -1720,6 +1720,7 @@
         machine.state = Object.freeze({
           ...machine.state,
           assetPath: path ?? null,
+          revision: machine.state.revision + (payload.validatedInput?.event === "SELECT_ASSET" ? 1 : 0),
         });
       }
       function assetSelectionTarget({ payload }) {
@@ -5623,10 +5624,10 @@
       function selectProjectCsv(path) {
         const resolved = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path });
         if (resolved?.kind !== "csv") return null;
-        const previous = appFSM.state, state = appFSM.send("SELECT_ASSET", {
+        const priorRevision = interfaceFSM.readState().revision, state = appFSM.send("SELECT_ASSET", {
           kind: "csv", path: resolved.path, direction: "ui-to-fsm",
         });
-        return state !== previous && state.assetSelection === "csv" && state.assetPath === resolved.path
+        return state.revision > priorRevision && state.assetSelection === "csv" && state.assetPath === resolved.path
           ? resolved.target : null;
       }
       function selectImageFromTree(path) {

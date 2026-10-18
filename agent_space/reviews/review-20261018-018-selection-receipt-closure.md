@@ -1,0 +1,26 @@
+# Source40 selection receipt closure; pseudocode15 / code55 alignment open
+
+## Corrected authority audit
+
+Review017 correctly found a rejected repeat selection could satisfy pseudocode13's old kind/path branch, but overstated the existing Source39 guarantee: Source39 explicitly preserved revision on rejection and described publication, yet did not explicitly require accepted same-value SELECT_ASSET to advance revision exactly once. Inferring that positive rule from pseudocode's publishRuntime would itself give lower code authority. Therefore Source40 now independently specifies a Frontend receipt and its public consumption FIRST, followed by pseudocode15 and code55. Review017 is superseded on that positive-rule closure claim; its diagnostic39102118697 is a failed gate, not closure proof.
+
+## Source decision and three closure criteria
+
+1. Logical completeness: accepted SELECT_ASSET applies supplied validated kind/path, clears graph selection, preserves slot/workspace, and publishes final state with revision increment exactly one, even for same-value repeat selection. Rejected event preserves state/revision and publishes nothing. Application captures pre-event revision, dispatches once, and returns detached official query CSV only when revision advanced and final canonical path/kind match; otherwise none. Missing/invalid query remains no-event none; query/dispatch errors propagate. Persistent Project does not change.
+2. Independent purpose: a user can repeat the same intent; identical old state is not evidence it was accepted. Explicit Frontend acceptance receipt makes success observable without exposing mutable state identity, doing a second domain query or inventing a public persistent acceptance object. Revision already belongs to Frontend runtime; it must not authorize Backend domain data. This meaning is reasonable independently of existing implementation.
+3. No duplicate/justified integration: existing Frontend revision carries the receipt; no new store, event, candidate or Backend boolean mirror. Existing selected CSV query remains the sole domain-data result. Application only compares runtime scalar receipt. No generic redesign of other events or global revision semantics is asserted.
+
+Source scope: `sourcescript/frontend/interface_fsm.py:FRONTEND_TRANSITION_RULES[SELECT_ASSET]` and `sourcescript/application/public_api/assets.py:selectProjectCsv`. All other Source39 requirements remain unchanged; review005 covers unchanged established areas. Source40 is closed/current at this bounded contract, not a claim that whole implementation aligns.
+
+## Ordered translation / prompt-to-artifact audit
+
+- Source highest: the two Source contracts above explicitly supply accepted/rejected branches and independent purpose; no Source copies lower implementation identity tricks.
+- Pseudocode15: `pseudocode/application/public_api/assets.pcal:selectProjectCsv` captures priorRevision, requires final.revision advancement and final canonical path/kind. Existing `pseudocode/frontend/interface_fsm.pcal:publishRuntime` increments revision once on accepted SELECT_ASSET; rejection returns before publish. Existing SELECT_ASSET control path reaches this once. No lower meaning added; comment records Source40 origin.
+- Code55: `sourcecode/fast-figure.js:applyAssetSelectionAction` increments runtime revision only for validated SELECT_ASSET; unrelated clear event behavior unchanged. `selectProjectCsv` compares pre/final scalar revisions instead of state identity; one official detached query and one scalar event remain. Selection reducers do not mutate Project.
+- Regression: case63 now requires exactly one revision increment for accepted same-value repeat selection and byte-identical runtime/Project state for rejected repeat. Existing detached reads, changed-current target validation, invalid/missing no-event, original query/adapter failures and no Application domain resolver assertions retained. Cases1–62 are preserved.
+- Resource/lifecycle: synchronous selection has no new URL/file resources and introduces no exporting lifecycle.
+- Provenance/tooling: revision40→15→55; whole code stale and optional model26 stale/TLC not run. Canonical checkout diagnostics print all three actual digests before normal checker validation to avoid serial local hashing or gate weakening. Source patch036 includes both Source diffs, paired rationale, metadata, plan and reviews.
+
+## Verification pending / boundaries
+
+Prior implementation683867d85b10f0de78aed6dd238b1882b3f6ff13 regression39102004808 passed63+63/build39102004806 passed, but predates Source40. Diagnostic39102118697 atab90771b6b15634c4ca5c51bf7afd78f0bb3a78b reported pseudocode14 sha256:945792e6825ca41944d55dbb5f8a477187db149f0913bdbd43d0541acadcc037; pseudocode15 comment differs and needs new digest. Source40/code55 digests pending Actions and retained prior digests are explicitly provisional until runner outputs. Require corrected canonical metadata, cumulative version gate against a6d6d2c35e1dde59e13f3ec159a1ede594b3927e, exact-SHA63+63 regression and build. All executions Actions default runner; no local test/build/checker. Wider assets/graph/import/renderer integration remains open. No goal-completion claim.

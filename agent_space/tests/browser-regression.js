@@ -2371,7 +2371,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           appFSM.state.graphObjectIndex === null && appFSM.state.graphObject === "none" &&
           selectedSlotId === slot && appFSM.state.workspace === workspace && JSON.stringify(activeProject._state) === before,
           "selection changed Project/slot/workspace or failed to clear graph selection");
-        check(api.assets.selectCsv(path)?.id === csv.id, "accepted repeat selection returned rejection");
+        const priorRevision = interfaceFSM.state.revision;
+        check(api.assets.selectCsv(path)?.id === csv.id && interfaceFSM.state.revision === priorRevision + 1,
+          "accepted repeat selection did not publish exactly one revision receipt");
         const stable = interfaceFSM.state, count = events.length;
         check(api.assets.selectCsv("/missing.csv") === null && api.assets.selectCsv("/assets/csv") === null &&
           events.length === count && interfaceFSM.state === stable, "invalid CSV selection changed Frontend");

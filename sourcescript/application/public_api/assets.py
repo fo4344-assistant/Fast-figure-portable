@@ -38,11 +38,16 @@ def selectProjectCsv(path):
     Backend 재검증을 통과한 SELECT_ASSET이 asset selection을 바꾸고 graphObject/index를 함께 clear한다.
     slot/workspace와 ProjectObject는 유지한다. 별도 CLEAR_GRAPH_OBJECT 선행 전이는 만들지 않는다.
     거부되면 none이고 selection을 성공으로 반환하지 않는다. 성공하면 공식 query의 detached CSV를 반환한다.
+    event 직전 Frontend revision과 final revision을 비교한다. accepted SELECT_ASSET은 같은 값도 revision을 1 증가시키며,
+    revision이 증가하지 않았다면 예전 assetPath가 같아도 거부이므로 none이다.
     query/adapter throw는 전파한다. projection 전체를 command candidate로 전달하거나 장기 저장하지 않는다.
     """
     resolved = dispatchProjectQuery("project-api", {"operation": "assets.readDeletionTarget", "path": path})
     target = "resolved의 detached CSV target; missing/wrong-kind면 event 전에 즉시 none 반환"
+    priorRevision = interfaceFSM.readState()["revision"]
     finalState = dispatchInterfaceEvent("SELECT_ASSET", {"kind": "csv", "path": "target의 canonical path"})
+    if finalState["revision"] <= priorRevision:
+        return None
     return "finalState가 요청 CSV selection이면 공식 query의 detached CSV, 아니면 none"
 
 

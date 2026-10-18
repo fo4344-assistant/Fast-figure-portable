@@ -529,6 +529,16 @@ def main() -> int:
 
     try:
         manifest = load_manifest()
+        # Canonical checkout diagnostics remain available even when a recorded
+        # digest is stale. They do not skip validation or imply a passing gate.
+        diagnostic_layers = manifest.get("layers")
+        if isinstance(diagnostic_layers, dict) and isinstance(diagnostic_layers.get("source-code"), dict):
+            for name, paths in (
+                ("source-script", source_script_paths()),
+                ("pseudocode", pseudocode_paths()),
+                ("source-code", source_code_paths(diagnostic_layers["source-code"])),
+            ):
+                print(f"canonical-checkout {name}: {layer_fingerprint(paths)}", flush=True)
         fingerprints = validate_current_tree(manifest)
         if args.base and set(args.base) != {"0"}:
             validate_revision_progression(manifest, args.base)

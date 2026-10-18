@@ -1,6 +1,10 @@
 # Pseudocode14 / code54 — CSV rejection fidelity correction
 
-## Source authority decision
+## Supersession / corrected audit
+
+Review018 supersedes this review's assertion that Source39 explicitly guaranteed accepted same-value revision advancement. It explicitly guaranteed rejected preservation, but the positive receipt rule was underspecified. Do not use lower pseudocode publication as authority: Source40 first closes that rule independently, then pseudocode15/code55 propagate it. Diagnostic39102118697 atab90771b6b15634c4ca5c51bf7afd78f0bb3a78b failed as expected and reported pseudocode14 sha256:945792e6825ca41944d55dbb5f8a477187db149f0913bdbd43d0541acadcc037; no completed fidelity gate claimed for this intermediate unit.
+
+## Historical Source authority decision (qualified above)
 
 Source39 `sourcescript/application/public_api/assets.py:selectProjectCsv` explicitly requires rejection to return none, including when an old selection already matches. `sourcescript/frontend/interface_fsm.py` specifies that rejected input preserves state/revision with no publish, while accepted external-store publication advances revision. Those upper contracts are already complete for this issue; changing Source to excuse a weaker lower branch would invert authority and is rejected.
 

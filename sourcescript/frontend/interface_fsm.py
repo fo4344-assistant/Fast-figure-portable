@@ -71,7 +71,10 @@ FRONTEND_TRANSITION_RULES = {
         "overlay는 explicit deselection이면 유지하고 non-null slot 선택이면 닫는다."
     ),
     "SELECT_ASSET": (
-        "validated kind/path 또는 none을 assetSelection/path에 반영하고 graphObject/index를 clear한다. slot/workspace는 유지한다."
+        "validated kind/path 또는 none을 assetSelection/path에 반영하고 graphObject/index를 clear한다. slot/workspace는 유지한다. "
+        "accepted event는 이미 같은 asset이 선택되어 값이 같아도 final state를 publish하며 revision을 정확히 1 증가시킨다. "
+        "이 revision 변화는 이번 selection intent가 수락되었다는 Frontend receipt다. "
+        "rejected event는 같은 asset이 이미 선택되어 있어도 revision/state를 보존하고 publish하지 않는다."
     ),
     "SELECT_GRAPH_OBJECT": (
         "reference none이면 graphObject/index만 clear한다. accepted index면 graphObject=selected/index를 반영한다. "
