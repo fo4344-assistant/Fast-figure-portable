@@ -366,6 +366,8 @@
       }
       // Backend read providers: resolve references from current authority, never normalize live models.
       function readBackendProjection(kind, request = {}) {
+        if (kind === "project-api" && request.operation === "project.readName")
+          return activeProject._state.meta.projectName;
         if ((kind === "project-api" && request.operation === "appearance.readPalette") ||
             (kind === "renderer" && request.operation === "ui-palette"))
           return Object.freeze({ ...activeProject._state.appearance.uiPalette });
@@ -1705,11 +1707,25 @@
       }
       function applyProjectNameChangedAction({ machine, payload }) {
         machine.assertWritable("project", "PROJECT_NAME_CHANGED");
-        let candidate = projectClone(activeProject._state);
-        candidate.meta.projectName = String(payload.name ?? "").slice(0, 120);
-        validateProjectObjectState(candidate, { requireSlots: true });
-        activeProject.initialize(candidate);
-        payload.name = activeProject.projectName;
+        while (true) {
+          const source = activeProject._state;
+          let name = String(payload.value);
+          if (payload.trim === true) name = name.trim();
+          const candidate = projectClone(source);
+          candidate.meta.projectName = name.slice(0, BackendSettings.defaults.naming.projectNameMaxLength);
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const post = activeProject._state,
+            changedIds = (before, after) => [...new Set([...before, ...after].map(item => item.id))]
+              .filter(id => JSON.stringify(before.find(item => item.id === id)) !==
+                JSON.stringify(after.find(item => item.id === id)));
+          payload.changed = { slotIds: changedIds(source.slots, post.slots),
+            chartIds: changedIds(source.charts, post.charts),
+            csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
+            imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
+          return;
+        }
       }
       function applyLabelSettingsChangedAction({ machine, payload }) {
         machine.assertWritable("labels", "LABEL_SETTINGS_CHANGED");
@@ -5979,10 +5995,9 @@
         });
       }
       function setProjectName(value, trim = false) {
-        let name = (trim ? String(value).trim() : String(value)).slice(0, 120);
-        appFSM.send("PROJECT_NAME_CHANGED", { name, direction: "ui-to-fsm" });
-        if (trim) debugLog("project:name", { projectName: activeProject.projectName });
-        return activeProject.projectName;
+        const result = dispatchProjectCommand("PROJECT_NAME_CHANGED", { value, trim });
+        if (!result.committed) return null;
+        return appFSM.query("project-api", { operation: "project.readName" });
       }
       async function loadImageFile(
         file,
@@ -7872,7 +7887,7 @@
       }
       window.FastFigureApi = Object.freeze({
         project: Object.freeze({
-          readName: () => activeProject.projectName,
+          readName: () => appFSM.query("project-api", { operation: "project.readName" }),
           setName: setProjectName,
           importFile: importProjectFile,
           exportFile: downloadProject,

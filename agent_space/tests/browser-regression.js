@@ -3413,6 +3413,111 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
     });
 
+
+    await run(83, "project name Backend normalization and official success read", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        reconcile = interfaceFSM.reconcileProjectResult;
+      let commits = 0, reads = 0, reconciliations = 0, last;
+      try {
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        projectEFSM.send = function (event, payload) {
+          if (event === "PROJECT_NAME_CHANGED") check(Object.keys(payload).sort().join(",") === "trim,value",
+            "Application normalized name or supplied candidate");
+          return last = send.call(this, event, payload);
+        };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "project.readName") {
+            reads++; check(commits > 0, "success query before commit");
+          }
+          return query(kind, request);
+        };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        const prior = projectClone(activeProject._state), path = interfaceFSM.state.assetPath,
+          maximum = BackendSettings.defaults.naming.projectNameMaxLength;
+        let result = api.project.setName("  project name  ");
+        check(result === "  project name  " && commits === 1 && reads === 1 && reconciliations === 1,
+          "default no-trim/result/commit/query contract wrong");
+        prior.meta.projectName = result;
+        check(JSON.stringify(prior) === JSON.stringify(activeProject._state), "name changed another Project field");
+        check(last.committed && Object.isFrozen(last.changed) && Object.values(last.changed).every(value => value.length === 0),
+          "name command invented changed identity/asset facts");
+        check(api.project.setName("  trimmed  ", true) === "trimmed", "explicit trim ignored");
+        check(api.project.setName("  not boolean  ", "true") === "  not boolean  ", "truthy input treated as trim=True");
+        check(api.project.setName("a".repeat(maximum + 20), true).length === maximum, "configured name limit ignored");
+        check(api.project.setName(42) === "42" && api.project.setName(null) === "null" &&
+          api.project.setName(undefined) === "undefined" && api.project.setName("", true) === "",
+          "scalar text or empty name meaning changed");
+        const detached = api.project.readName();
+        check(typeof detached === "string" && detached === "", "official public read shape wrong");
+        api.project.setName("later");
+        check(detached === "" && api.project.readName() === "later" && interfaceFSM.state.assetPath === path &&
+          interfaceFSM.readState().selectedSlotId === selected, "name read stale/shared or selection changed");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        interfaceFSM.reconcileProjectResult = reconcile; initialize.call(activeProject, saved);
+        interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(84, "project name failure boundaries and current-authority retries", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult,
+        failure = Error("name boundary failure");
+      let commits = 0, reads = 0, reconciliations = 0, caught;
+      const noEffects = (source, runtime) => check(activeProject._state === source && interfaceFSM.state === runtime &&
+        commits === 0 && reads === 0 && reconciliations === 0, "failed name command produced success work");
+      try {
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "project.readName") reads++;
+          return query(kind, request);
+        };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        const source = activeProject._state, runtime = interfaceFSM.state;
+        caught = null; try { api.project.setName({ toString() { throw failure; } }); } catch (error) { caught = error; }
+        check(caught === failure, "text conversion error replaced"); noEffects(source, runtime);
+        validateProjectObjectState = () => { throw failure; };
+        caught = null; try { api.project.setName("invalid candidate"); } catch (error) { caught = error; }
+        check(caught === failure, "name validator error replaced"); noEffects(source, runtime);
+        validateProjectObjectState = validate;
+        projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.project.setName("uncommitted") === null, "name noncommit exposed adapter/current value");
+        noEffects(source, runtime); projectEFSM.send = send;
+        let conversions = 0;
+        const input = { toString() {
+          if (!conversions++) { const newer = projectClone(activeProject._state); newer.meta.appBuild = "name-newer-conversion";
+            initialize.call(activeProject, newer); }
+          return "retry name";
+        } };
+        check(api.project.setName(input) === "retry name" && conversions === 2 && commits === 1 && reads === 1 &&
+          reconciliations === 1 && activeProject._state.meta.appBuild === "name-newer-conversion",
+          "name conversion captured authority too late or overwrote concurrent state");
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
+            newer.meta.appBuild = "name-newer-validation"; initialize.call(activeProject, newer); }
+          return valid;
+        };
+        const before = commits;
+        check(api.project.setName("validation retry") === "validation retry" && attempts === 2 &&
+          commits === before + 1 && activeProject._state.meta.appBuild === "name-newer-validation",
+          "name validation stale attempt committed"); validateProjectObjectState = validate;
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "project.readName") throw failure;
+          return query(kind, request);
+        };
+        caught = null; try { api.project.setName("committed before query error"); } catch (error) { caught = error; }
+        check(caught === failure && activeProject.projectName === "committed before query error", "name query error swallowed/rolled back");
+        readBackendProjection = query;
+        interfaceFSM.reconcileProjectResult = () => { throw failure; };
+        caught = null; try { api.project.setName("committed before reconcile error"); } catch (error) { caught = error; }
+        check(caught === failure && activeProject.projectName === "committed before reconcile error", "name reconcile error swallowed/rolled back");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

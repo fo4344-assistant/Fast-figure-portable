@@ -169,6 +169,10 @@ Baseline ec6ce39065a53a9fb7bfb7580b15f92be375abb7. Existing Source41/pseudocode1
 
 Unit26 bounded evidence: implementation b4eff46135899d3be2b2cfd6ed72766de00f2e3c regression39121419238 PASS82 inline+82 split/build39121419225 PASS. Canonical code70 sha256:181e72ba2a4639391196271d4f93cda813d58fcde2d69d5f18d5ca852da609f5 recorded patch073; upper41/18 unchanged. At d1940e3909e954810eb5be40084ef85a01f93c0b cumulative39121486041 PASS fromec6ce39065a53a9fb7bfb7580b15f92be375abb7, repeat39121488364 PASS82+82/164 case passes. Runtime/build/test/upper inputs unchanged from successful build. Review028 checklist covers bounded unit; code70 stale and whole Plan023 open.
 
+## Twenty-seventh implementation unit — Current-authority project naming
+
+Baseline fb6906b4eba899ae10bf600f3778123d204c01af. Existing Source41/pseudocode18 already specify Backend scalar conversion/trim=True/configured limit, current authority validation/retry/single commit and Application committed-only official name read. Code71 replaces Application normalization/live return and unchecked Backend initialization with direct contracts; public readName uses official query. Cases83/84 cover exact normalization/copies/isolated change/facts, failures/noncommit, newer authority during conversion/validation and postcommit errors without rollback. Review029/patch075 track Actions84+84/build/canonical gate; Source/pseudocode unchanged, whole code stale/open. VFS move/cascade/other assets/full validation/import/raster/supplied dashboard remain uncovered.
+
 ## Temporary-file rule
 
 The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
