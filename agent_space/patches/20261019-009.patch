@@ -1,0 +1,28 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 8f08fbd..60aef9e 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -305,6 +305,8 @@ Unit50 verified at8a06cc2852910374f407427a38850146339192ab: regression3916667402
+ 
+ Baseline34756553c3e02b081e96f26bb26433f1056d9967. Source45/PlusCal24 unchanged: ReadFfpxDocumentPayload requires decoded schema/version before payload construction, ReadFfsxDocumentPayload requires graph contentType. Code102 checks these actual values instead of trusting overwritten transport fields. Case133 corrupts typed discriminants and every real FFPX/FFSX XML entry root/version, checks valid reads and read-only authority. Pair20261019-008/review-20261019-005-code-package-discriminants-open.md record mapping/exclusions. New exact-SHA133 inline+split/repeat/build/canonical+cumulative/fidelity pending; code stale/full audit open, no local runtime or manual dist change.
+ 
++Unit51 actual evidence: implementation2fc8f65712032130ffa4fe12f2a52002c71e24da push39166947212/repeat39166948498 PASS133 inline+133 split each (266 pass log lines each); standard ubuntu-24.04. Build39166947522 generated dist-only ed4f7784e17ecc1564e2951d05a4e090141925f3; canonical39166947284/cumulative39166950715(base795b3031075c2acced5db7c24d835b74c339c108)/fidelity39166952892 PASS. Review005/pair009 retain actual SHA evidence and next audited mismatch: Source parseProjectDataAsset requires explicit extension delimiter and internal blank rows, runtime package/raw parsers still use auto-detect/drop-blank legacy parsing with separate JSON paths. Resume with coherent shared parser and raw/package parity regressions. Code102 stale, full objective uncompleted; no local runtime or optional TLC.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261019-005-code-package-discriminants-open.md b/agent_space/reviews/review-20261019-005-code-package-discriminants-open.md
+index a07be39..5a8fc52 100644
+--- a/agent_space/reviews/review-20261019-005-code-package-discriminants-open.md
++++ b/agent_space/reviews/review-20261019-005-code-package-discriminants-open.md
+@@ -25,4 +25,10 @@ Code102 sha256:d960dbc3ebaf51f04bb6fbc8ae5795747fe90c6b1aeb50684113a26bccf775f2
+ | authorized gh/default hosted only | gh delivery/dispatch/logs; no local app/checker; no self-hosted/paid runner |
+ | completion/stop | No blocker observed; full objective remains OPEN, no update_goal complete |
+ 
++## Actual Unit51 evidence and resumption point
++
++Execution2fc8f65712032130ffa4fe12f2a52002c71e24da: push regression39166947212/manual repeat39166948498 PASS133 inline+133 split each (266 actual pass log lines each;133 inspected in both forms); standard ubuntu-24.04 image. Build39166947522 PASS generated dist-only successor ed4f7784e17ecc1564e2951d05a4e090141925f3, inspected diff only dist/inline/Fast-figure.html and dist/split/Fast-figure.zip. Canonical versions39166947284/cumulative39166950715(base795b3031075c2acced5db7c24d835b74c339c108)/fidelity39166952892 PASS. Each run headSha was separately inspected and equals implementation SHA, not successor. This supersedes only this unit's pending execution entries; code102 stays stale and global checklist OPEN.
++
++Next concrete audited discrepancy: sourcescript/backend/assets_files.py:440-457 parseProjectDataAsset requires extension-specific CSV comma/TSV tab, supported-extension/table-shape failure, internal blank row preservation and JSON top-level/data arrays. pseudocode/backend/assets_files.pcal:396-412 explicitly chooses delimiter and calls dataTable. Current sourcecode/fast-figure.js:5421-5428 parseProjectCsvAsset still calls auto-detect parseCSV and does not normalize CSV output via dataTable; parseCSV at3026 drops blank rows and guesses tab from first line. Raw import at3435 independently uses JSON.parse/parseCSV. Next coherent ownership unit should route both byte import and package readers through the Source-defined one parser, preserving copied original bytes and transaction boundaries; add explicit delimiter, internal blank rows, unsupported extensions/empty input, JSON data-array, quoted delimiter/newline and raw/package parity regressions. Do not weaken established row semantics to preserve the old helper. Other package/dataRef/ZIP/initializer/raster/dashboard/timing and exhaustive full inventory remain unverified; do not infer completion from133 or fidelity coverage.
++
+ Atomic gh Git Data delivery exception remains limited to coherent code+lineage immediate-parent gate requirements; parent and file SHA/new-path checks, non-force ref update. Ordinary evidence-only followups prefer sequential Contents API. Pending does not mean passed, and generated/documentation successor SHA must not be substituted for execution SHA.
