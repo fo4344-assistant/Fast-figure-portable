@@ -5109,6 +5109,91 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(114, "Import decision APIs use official pure queries and current reservation precedence", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, query = readBackendProjection, failure = Error("import query boundary");
+      try {
+        const csv = createProjectCsv([["X", "Y"], ["1", "2"]], "query-collision.csv"), path = projectAssetPath(csv),
+          file = { name: csv.name, type: "text/csv", arrayBuffer() { throw Error("query read bytes"); } },
+          source = activeProject._state, frontend = interfaceFSM.state, operations = [];
+        readBackendProjection = function (kind, request) {
+          check(kind === "project-api" && !request.file?.arrayBuffer && !request.candidate, "public query leaked byte source/candidate");
+          operations.push(request.operation); return query(kind, request);
+        };
+        for (const [name, type, expected] of [["A.FFSX", "image/png", "slot"], ["A.JSON", "image/png", "data"],
+          ["A.SVG", "", "image"], ["unknown", "IMAGE/PNG", "image"], ["", "", ""]])
+          check(api.assets.fileKind({ name, type }) === expected, `file kind priority: ${name}`);
+        const model = api.assets.collisionModel(file, csv.directory), original = JSON.stringify(model),
+          reserved = new Set([path]), blocked = api.assets.collisionModel(file, csv.directory, reserved),
+          replacement = api.assets.resolveImportPlan(model, "replace"),
+          rename = api.assets.resolveImportPlan(blocked, "rename", reserved);
+        check(Object.isFrozen(model) && model.assetKind === "data" && model.mode === "replace-or-rename" &&
+          model.replaceId === csv.id && replacement.path === path && replacement.replaceId === csv.id &&
+          Object.isFrozen(replacement), "current same-kind replace did not preserve copied identity");
+        check(blocked.mode === "rename-only" && blocked.replaceId === null && rename.path !== path &&
+          rename.replaceId === null && Object.isFrozen(rename) && reserved.size === 1 &&
+          JSON.stringify(model) === original, "batch reservation lost precedence or inputs mutated");
+        check(operations.filter(x => x === "assets.fileKind").length === 5 &&
+          operations.filter(x => x === "assets.collisionModel").length === 2 &&
+          operations.filter(x => x === "assets.resolveImportPlan").length === 2 &&
+          activeProject._state === source && interfaceFSM.state === frontend, "query path did writes or skipped official boundary");
+        for (const attempt of [() => api.assets.collisionModel({ name: "x.ffsx" }, csv.directory),
+          () => api.assets.collisionModel(file, "/missing-query-parent"),
+          () => api.assets.resolveImportPlan({ ...model, path: "/forged.csv" }, "replace"),
+          () => api.assets.resolveImportPlan({ ...model, replaceId: -1 }, "replace")]) {
+          let caught; try { attempt(); } catch (error) { caught = error; }
+          check(caught && activeProject._state === source && interfaceFSM.state === frontend, "malformed query changed authority");
+        }
+        readBackendProjection = () => { throw failure; };
+        for (const attempt of [() => api.assets.fileKind(file), () => api.assets.collisionModel(file, csv.directory),
+          () => api.assets.resolveImportPlan(model, "replace")]) {
+          let caught; try { attempt(); } catch (error) { caught = error; }
+          check(caught === failure, "public import read changed original error");
+        }
+      } finally { readBackendProjection = query; initialize.call(activeProject, saved);
+        interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(115, "Import plans reject stale replacement before available and refresh collision choices", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        const csv = createProjectCsv([["X", "Y"], ["1", "2"]], "query-stale.csv"), path = projectAssetPath(csv),
+          file = new File(["X,Y\n3,4"], csv.name, { type: "text/csv" }),
+          model = api.assets.collisionModel(file, csv.directory), baseline = projectClone(activeProject._state);
+        for (const change of ["deleted", "new-id", "directory"]) {
+          const next = projectClone(baseline);
+          if (change === "new-id") next.assets.csvFiles.find(x => x.id === csv.id).id = next.nextId.csv++;
+          else next.assets.csvFiles = next.assets.csvFiles.filter(x => x.id !== csv.id);
+          if (change === "directory") next.fileSystem.directories.push(path);
+          initialize.call(activeProject, next);
+          const source = activeProject._state, frontend = interfaceFSM.state;
+          let caught; try { api.assets.resolveImportPlan(model, "replace"); } catch (error) { caught = error; }
+          check(caught && activeProject._state === source && interfaceFSM.state === frontend,
+            `stale replace retargeted current ${change}`);
+        }
+        initialize.call(activeProject, baseline);
+        const freshFile = { name: "query-fresh.csv", type: "text/csv" },
+          available = api.assets.collisionModel(freshFile, csv.directory);
+        createProjectCsv([["X", "Y"]], freshFile.name);
+        const reserved = new Set([`${csv.directory}/query-fresh (2).csv`]),
+          freshPlan = api.assets.resolveImportPlan(available, "replace", reserved);
+        check(freshPlan.path === `${csv.directory}/query-fresh (3).csv` && freshPlan.replaceId === null,
+          "stale available proposal bypassed current owner/reservation or invented replacement");
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        const choices = [], imported = await api.assets.importToDirectory([file, file], csv.directory,
+          async (input, parent, batch) => {
+            const collision = api.assets.collisionModel(input, parent, batch);
+            choices.push(collision.mode);
+            return api.assets.resolveImportPlan(collision, "replace", batch);
+          });
+        check(choices.join() === "replace-or-rename,rename-only" && imported.length === 2 &&
+          imported[0].id === csv.id && imported[1].id !== csv.id,
+          "directory chooser confused existing VFS paths with this batch's reservations");
+      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

@@ -1,0 +1,20 @@
+# Unit42 — pure current-authority import decisions (pending Actions)
+
+## Policy / Source-to-PlusCal audit
+
+Continue development-policy.md v0.2.6 and AGENT.md, already read completely: Source highest authority, pure calculation separate from mutation, no independent stored proposal/reservation authority, direct translation before code, paired rollbackable patch and evidence. No policy, hierarchy, Source45 or pseudocode23 meaning changes. Source backend/assets_files.py slotFileKind/projectAssetImportCollisionModel/resolveProjectAssetImportPlan and project_state.py official query registry require copied filename/MIME only for classification, current VFS collision and batch reservations, proposal shape validation/current collision recomputation, and stale replacement rejection BEFORE an available fallback. Application assets.py readAssetFileKind/readAssetCollisionModel/readAssetImportPlan forward official queries. Pseudocode assets_files.pcal CalculateAssetCollisionInProject/ResolveAssetPlanInProject and project_state.pcal query branches directly translate those rules. The model assetKind is the file kind data/image in this direct translation; VFS CSV ownership remains csv, not a second persistent identifier.
+
+## Code93 ownership mapping and bounded checklist
+
+- One explicit supplied Project in calculateAssetCollisionInProject; only raw data/image accepted, current parent must resolve directory, normalized name/path, batch reservation precedes same-kind replace. UI message/notice retained as copied presentation fields, not authority.
+- Resolver validates the proposal shape, recomputes all collision facts from current source and reservations, rejects stale proposed replacement identity/kind/target before available fallback, otherwise current replace/rename. Frozen path/replaceId copies; never callback, mutation, modal, bytes or persistent reservation.
+- Three official project-api queries with copied inputs/immutable outputs. Public API fileKind/collisionModel/resolveImportPlan now forward these reads rather than bypassing Application boundary. Pure classifier retains .ffsx/data/image precedence and case-insensitive filename/MIME behavior.
+- Directory import's chooser-local reservation set starts empty, as Source CollectCompletedImportPlans requires, then reserves each completed batch plan. Current VFS is already separately checked; pre-reserving all existing paths would incorrectly suppress same-kind replacement with the corrected reservation precedence. This is the necessary consuming-boundary integration, not a new import candidate design.
+- Case114: actual public query operations/copies/no bytes, classifier priority, current replacement, reservation precedence, immutable outputs/no input or authority changes, malformed model/parent/kind rejection, original query errors.
+- Case115: stale replace deletion/new identity/directory rejection including before available branch; stale available with new owner plus reserved renamed path recalculates third filename and does not invent replacement; real two-file directory chooser differentiates existing owner from repeated batch reservation.
+
+## Lineage / verification limits
+
+Code93 remains stale, derived from unchanged Source45/pseudocode23. Staged Git path/blob fingerprint calculation sha256:e093d67e1ed7100419ab1941b44762f68867865b48d7deeb74444cfa357e80a7 is not a locally executed version checker; default GitHub-hosted Actions must independently confirm. New exact-SHA115 inline/split, repeat, build, canonical/cumulative version and fidelity PENDING. No local app/test/build/checker or TLC execution. Plan023 overall NOT complete.
+
+Backend-owned atomic ASSETS_IMPORTED, byte/parse/current-source retry, official input-order success reads, broader import router/lifecycle, schema/serializer/raster/supplied dashboard/timing are still open. Existing directory import command still receives an Application candidate; this unit tests only its chooser integration and does not claim that command aligned. No temporary Backend UI callback, extra proposal cache or duplicate state introduced to disguise that remaining work.

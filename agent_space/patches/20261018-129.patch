@@ -1,0 +1,299 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index de27b4f..a0515f6 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -245,6 +245,10 @@ Baseline f1fd3e52d87289b0f9e6f218d9b359b2ca578df9. Source45 assets.moveProjectNo
+ 
+ Unit41 final evidence: 1a2451ec1a63828e6468fe96dc0ddb7a90a61b41 regression39151597758/repeat39151604986 PASS113 inline+113 split, including immutable repeated-reference UI plan count3/actual removed2/index map [0,null,null,1]. Push versions39151597742/cumulative39151606978 (base f1fd3e52d87289b0f9e6f218d9b359b2ca578df9), build39151609555 (artifacts already current), fidelity39151611913 PASS. Review043 preserves executed SHA/log limits and first runs. Code92 canonical sha256:45e524e84694bab3686ed7acea650a64b9361b401eca3625b0aaeb2e6a9a1e89 remains stale, upper45/23 unchanged. Next concrete gap: official readonly import classification/collision/resolve queries, current collision/reservation precedence and stale-replace rejection, including correct batch-only reservation callers; then Backend-owned atomic ASSETS_IMPORTED candidate/retry and broader remaining owners. This is not whole completion.
+ 
++## Forty-second bounded unit — pure current-authority import decisions
++
++Baseline9a8bd7b781ad28360b3e88256f5d133513370a8c. Source45/pseudocode23 already close copied classification inputs, official query routing, raw data/image collision calculation from one Project, reservation precedence, current proposal revalidation and stale replace-before-available rejection. Code93 translates those meanings, replaces public bypasses with official queries, and fixes the directory chooser's reservation input to contain only completed batch plans, not every current VFS path. Cases114/115 test purity/copies/error identity/current collision/reservations and stale target rejection plus real batch chooser integration. Review044/patch129, new exact-SHA115+115/repeat/build/canonical+cumulative/fidelity pending; staged Git fingerprint only, no local runtime/checker. Upper45/23 unchanged, code stale. Backend-owned atomic ASSETS_IMPORTED/current candidate+byte parsing retry/input-order success query, import router/lifecycle and full schema/serializer/raster/dashboard/timing remain open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-044-code-import-decisions-open.md b/agent_space/reviews/review-20261018-044-code-import-decisions-open.md
+new file mode 100644
+index 0000000..90fa78b
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-044-code-import-decisions-open.md
+@@ -0,0 +1,20 @@
++# Unit42 — pure current-authority import decisions (pending Actions)
++
++## Policy / Source-to-PlusCal audit
++
++Continue development-policy.md v0.2.6 and AGENT.md, already read completely: Source highest authority, pure calculation separate from mutation, no independent stored proposal/reservation authority, direct translation before code, paired rollbackable patch and evidence. No policy, hierarchy, Source45 or pseudocode23 meaning changes. Source backend/assets_files.py slotFileKind/projectAssetImportCollisionModel/resolveProjectAssetImportPlan and project_state.py official query registry require copied filename/MIME only for classification, current VFS collision and batch reservations, proposal shape validation/current collision recomputation, and stale replacement rejection BEFORE an available fallback. Application assets.py readAssetFileKind/readAssetCollisionModel/readAssetImportPlan forward official queries. Pseudocode assets_files.pcal CalculateAssetCollisionInProject/ResolveAssetPlanInProject and project_state.pcal query branches directly translate those rules. The model assetKind is the file kind data/image in this direct translation; VFS CSV ownership remains csv, not a second persistent identifier.
++
++## Code93 ownership mapping and bounded checklist
++
++- One explicit supplied Project in calculateAssetCollisionInProject; only raw data/image accepted, current parent must resolve directory, normalized name/path, batch reservation precedes same-kind replace. UI message/notice retained as copied presentation fields, not authority.
++- Resolver validates the proposal shape, recomputes all collision facts from current source and reservations, rejects stale proposed replacement identity/kind/target before available fallback, otherwise current replace/rename. Frozen path/replaceId copies; never callback, mutation, modal, bytes or persistent reservation.
++- Three official project-api queries with copied inputs/immutable outputs. Public API fileKind/collisionModel/resolveImportPlan now forward these reads rather than bypassing Application boundary. Pure classifier retains .ffsx/data/image precedence and case-insensitive filename/MIME behavior.
++- Directory import's chooser-local reservation set starts empty, as Source CollectCompletedImportPlans requires, then reserves each completed batch plan. Current VFS is already separately checked; pre-reserving all existing paths would incorrectly suppress same-kind replacement with the corrected reservation precedence. This is the necessary consuming-boundary integration, not a new import candidate design.
++- Case114: actual public query operations/copies/no bytes, classifier priority, current replacement, reservation precedence, immutable outputs/no input or authority changes, malformed model/parent/kind rejection, original query errors.
++- Case115: stale replace deletion/new identity/directory rejection including before available branch; stale available with new owner plus reserved renamed path recalculates third filename and does not invent replacement; real two-file directory chooser differentiates existing owner from repeated batch reservation.
++
++## Lineage / verification limits
++
++Code93 remains stale, derived from unchanged Source45/pseudocode23. Staged Git path/blob fingerprint calculation sha256:e093d67e1ed7100419ab1941b44762f68867865b48d7deeb74444cfa357e80a7 is not a locally executed version checker; default GitHub-hosted Actions must independently confirm. New exact-SHA115 inline/split, repeat, build, canonical/cumulative version and fidelity PENDING. No local app/test/build/checker or TLC execution. Plan023 overall NOT complete.
++
++Backend-owned atomic ASSETS_IMPORTED, byte/parse/current-source retry, official input-order success reads, broader import router/lifecycle, schema/serializer/raster/supplied dashboard/timing are still open. Existing directory import command still receives an Application candidate; this unit tests only its chooser integration and does not claim that command aligned. No temporary Backend UI callback, extra proposal cache or duplicate state introduced to disguise that remaining work.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index ff4e27b..407cab2 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5109,6 +5109,91 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(114, "Import decision APIs use official pure queries and current reservation precedence", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, query = readBackendProjection, failure = Error("import query boundary");
++      try {
++        const csv = createProjectCsv([["X", "Y"], ["1", "2"]], "query-collision.csv"), path = projectAssetPath(csv),
++          file = { name: csv.name, type: "text/csv", arrayBuffer() { throw Error("query read bytes"); } },
++          source = activeProject._state, frontend = interfaceFSM.state, operations = [];
++        readBackendProjection = function (kind, request) {
++          check(kind === "project-api" && !request.file?.arrayBuffer && !request.candidate, "public query leaked byte source/candidate");
++          operations.push(request.operation); return query(kind, request);
++        };
++        for (const [name, type, expected] of [["A.FFSX", "image/png", "slot"], ["A.JSON", "image/png", "data"],
++          ["A.SVG", "", "image"], ["unknown", "IMAGE/PNG", "image"], ["", "", ""]])
++          check(api.assets.fileKind({ name, type }) === expected, `file kind priority: ${name}`);
++        const model = api.assets.collisionModel(file, csv.directory), original = JSON.stringify(model),
++          reserved = new Set([path]), blocked = api.assets.collisionModel(file, csv.directory, reserved),
++          replacement = api.assets.resolveImportPlan(model, "replace"),
++          rename = api.assets.resolveImportPlan(blocked, "rename", reserved);
++        check(Object.isFrozen(model) && model.assetKind === "data" && model.mode === "replace-or-rename" &&
++          model.replaceId === csv.id && replacement.path === path && replacement.replaceId === csv.id &&
++          Object.isFrozen(replacement), "current same-kind replace did not preserve copied identity");
++        check(blocked.mode === "rename-only" && blocked.replaceId === null && rename.path !== path &&
++          rename.replaceId === null && Object.isFrozen(rename) && reserved.size === 1 &&
++          JSON.stringify(model) === original, "batch reservation lost precedence or inputs mutated");
++        check(operations.filter(x => x === "assets.fileKind").length === 5 &&
++          operations.filter(x => x === "assets.collisionModel").length === 2 &&
++          operations.filter(x => x === "assets.resolveImportPlan").length === 2 &&
++          activeProject._state === source && interfaceFSM.state === frontend, "query path did writes or skipped official boundary");
++        for (const attempt of [() => api.assets.collisionModel({ name: "x.ffsx" }, csv.directory),
++          () => api.assets.collisionModel(file, "/missing-query-parent"),
++          () => api.assets.resolveImportPlan({ ...model, path: "/forged.csv" }, "replace"),
++          () => api.assets.resolveImportPlan({ ...model, replaceId: -1 }, "replace")]) {
++          let caught; try { attempt(); } catch (error) { caught = error; }
++          check(caught && activeProject._state === source && interfaceFSM.state === frontend, "malformed query changed authority");
++        }
++        readBackendProjection = () => { throw failure; };
++        for (const attempt of [() => api.assets.fileKind(file), () => api.assets.collisionModel(file, csv.directory),
++          () => api.assets.resolveImportPlan(model, "replace")]) {
++          let caught; try { attempt(); } catch (error) { caught = error; }
++          check(caught === failure, "public import read changed original error");
++        }
++      } finally { readBackendProjection = query; initialize.call(activeProject, saved);
++        interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(115, "Import plans reject stale replacement before available and refresh collision choices", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        const csv = createProjectCsv([["X", "Y"], ["1", "2"]], "query-stale.csv"), path = projectAssetPath(csv),
++          file = new File(["X,Y\n3,4"], csv.name, { type: "text/csv" }),
++          model = api.assets.collisionModel(file, csv.directory), baseline = projectClone(activeProject._state);
++        for (const change of ["deleted", "new-id", "directory"]) {
++          const next = projectClone(baseline);
++          if (change === "new-id") next.assets.csvFiles.find(x => x.id === csv.id).id = next.nextId.csv++;
++          else next.assets.csvFiles = next.assets.csvFiles.filter(x => x.id !== csv.id);
++          if (change === "directory") next.fileSystem.directories.push(path);
++          initialize.call(activeProject, next);
++          const source = activeProject._state, frontend = interfaceFSM.state;
++          let caught; try { api.assets.resolveImportPlan(model, "replace"); } catch (error) { caught = error; }
++          check(caught && activeProject._state === source && interfaceFSM.state === frontend,
++            `stale replace retargeted current ${change}`);
++        }
++        initialize.call(activeProject, baseline);
++        const freshFile = { name: "query-fresh.csv", type: "text/csv" },
++          available = api.assets.collisionModel(freshFile, csv.directory);
++        createProjectCsv([["X", "Y"]], freshFile.name);
++        const reserved = new Set([`${csv.directory}/query-fresh (2).csv`]),
++          freshPlan = api.assets.resolveImportPlan(available, "replace", reserved);
++        check(freshPlan.path === `${csv.directory}/query-fresh (3).csv` && freshPlan.replaceId === null,
++          "stale available proposal bypassed current owner/reservation or invented replacement");
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        const choices = [], imported = await api.assets.importToDirectory([file, file], csv.directory,
++          async (input, parent, batch) => {
++            const collision = api.assets.collisionModel(input, parent, batch);
++            choices.push(collision.mode);
++            return api.assets.resolveImportPlan(collision, "replace", batch);
++          });
++        check(choices.join() === "replace-or-rename,rename-only" && imported.length === 2 &&
++          imported[0].id === csv.id && imported[1].id !== csv.id,
++          "directory chooser confused existing VFS paths with this batch's reservations");
++      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 8b9db45..56a20a7 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 92,
++      "revision": 93,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:45e524e84694bab3686ed7acea650a64b9361b401eca3625b0aaeb2e6a9a1e89",
++      "fingerprint": "sha256:e093d67e1ed7100419ab1941b44762f68867865b48d7deeb74444cfa357e80a7",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:de6575d91cc0bfae1bee9e70b4b00b1e72c76dd47a7e9bd1417141bf8c1fe795",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-043-code-move-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-044-code-import-decisions-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 23,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 1a3d088..cc45b31 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -410,6 +410,14 @@
+         }
+         if (kind === "project-api" && request.operation === "assets.isTrashed")
+           return projectVfs.isTrashed(request.path);
++        if (kind === "project-api" && request.operation === "assets.fileKind")
++          return slotFileKind(request.file);
++        if (kind === "project-api" && request.operation === "assets.collisionModel")
++          return immutableProjectCopy(projectAssetImportCollisionModel(request.file, request.directory,
++            new Set(request.reservedPaths || [])));
++        if (kind === "project-api" && request.operation === "assets.resolveImportPlan")
++          return immutableProjectCopy(resolveProjectAssetImportPlan(request.model, request.choice,
++            new Set(request.reservedPaths || [])));
+         if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
+           const source = activeProject._state,
+             node = request.path ? projectVfs.resolve(request.path, source) : null;
+@@ -3322,39 +3330,55 @@
+           return model;
+         },
+       });
+-      function projectAssetImportCollisionModel(file,directory,reservedPaths=null) {
+-        let kind=slotFileKind(file),
+-          assetKind=kind==="data"?"csv":kind==="image"?"image":null;
+-        if(!assetKind)throw Error(`${file?.name||"파일"}: 지원하지 않는 파일 형식입니다.`);
+-        let parent=normalizeProjectPath(directory,{directory:true}),
+-          name=projectCsvName(file.name,assetKind==="csv"?"data.csv":"image.bin"),
+-          path=normalizeProjectPath(`${parent}/${name}`),
+-          collision=projectVfs.resolve(path),reserved=reservedPaths?.has(path)===true,
+-          replaceId=collision?.kind===assetKind?collision.asset.id:null,
+-          mode=!collision&&!reserved?"available":Number.isInteger(replaceId)?"replace-or-rename":"rename-only",
+-          message=mode==="replace-or-rename"
+-            ?`${path}에 같은 이름의 파일이 이미 있습니다.\n\n[확인] 기존 파일을 교체하고 참조를 유지합니다.\n[취소] 이름을 바꿔 새 파일로 추가합니다.`:"",
+-          notice=collision&&mode==="rename-only"
+-            ?`${path}의 기존 항목은 종류가 달라 참조를 유지한 채 교체할 수 없습니다. 이름을 바꿔 추가합니다.`:"";
+-        return Object.freeze({assetKind,parent,name,path,mode,replaceId,message,notice});
++      function calculateAssetCollisionInProject(source, kind, directory, filename, reservedPaths) {
++        if (!["data", "image"].includes(kind)) throw Error("지원하지 않는 자산 파일 형식입니다.");
++        const parent = normalizeProjectPath(directory, { directory: true });
++        if (projectVfs.resolve(parent, source)?.kind !== "directory") throw Error("대상 폴더가 없습니다.");
++        const name = projectCsvName(filename, kind === "data" ? "data.csv" : "image.bin"),
++          path = normalizeProjectPath(`${parent}/${name}`), collision = projectVfs.resolve(path, source),
++          sameKind = collision?.kind === (kind === "data" ? "csv" : "image"),
++          mode = reservedPaths?.has(path) ? "rename-only" : !collision ? "available" :
++            sameKind ? "replace-or-rename" : "rename-only",
++          replaceId = mode === "replace-or-rename" ? collision.asset.id : null,
++          message = mode === "replace-or-rename"
++            ? `${path}에 같은 이름의 파일이 이미 있습니다.\n\n[확인] 기존 파일을 교체하고 참조를 유지합니다.\n[취소] 이름을 바꿔 새 파일로 추가합니다.` : "",
++          notice = mode === "rename-only" ? `${path}은 이미 사용 중입니다. 이름을 바꿔 추가합니다.` : "";
++        return Object.freeze({ assetKind: kind, parent, name, path, mode, replaceId, message, notice });
++      }
++      function projectAssetImportCollisionModel(file, directory, reservedPaths = null) {
++        const source = activeProject._state;
++        return calculateAssetCollisionInProject(source, slotFileKind(file), directory, file?.name, reservedPaths);
+       }
+       function resolveProjectAssetImportPlan(model, choice = "rename", reservedPaths = null) {
+-        if (!model || typeof model !== "object")
++        const source = activeProject._state;
++        if (!model || !["data", "image"].includes(model.assetKind) ||
++            typeof model.parent !== "string" || typeof model.name !== "string" || !model.name ||
++            typeof model.path !== "string" || !["available", "replace-or-rename", "rename-only"].includes(model.mode) ||
++            !(model.replaceId === null || (Number.isInteger(model.replaceId) && model.replaceId > 0)) ||
++            model.parent !== normalizeProjectPath(model.parent, { directory: true }) ||
++            model.name !== projectCsvName(model.name, "asset") ||
++            model.path !== normalizeProjectPath(`${model.parent}/${model.name}`))
+           throw Error("프로젝트 자산 가져오기 계획이 올바르지 않습니다.");
+-        if (model.mode === "available")
+-          return { path: model.path, replaceId: null };
+-        if (choice === "replace" && Number.isInteger(model.replaceId))
+-          return { path: model.path, replaceId: model.replaceId };
+-        let unique = projectVfs.uniquePath(
+-          model.parent,
+-          model.name,
+-          activeProject._state,
+-          reservedPaths,
+-        );
+-        return {
+-          path: unique,
+-          replaceId: null,
+-        };
++        const fresh = calculateAssetCollisionInProject(source, model.assetKind, model.parent, model.name, reservedPaths);
++        if (choice === "replace" && model.replaceId !== null &&
++            (fresh.mode !== "replace-or-rename" || fresh.replaceId !== model.replaceId))
++          throw Error("교체할 자산이 변경되었습니다.");
++        if (fresh.mode === "available") return Object.freeze({ path: fresh.path, replaceId: null });
++        if (choice === "replace" && fresh.mode === "replace-or-rename" && model.replaceId === fresh.replaceId)
++          return Object.freeze({ path: fresh.path, replaceId: fresh.replaceId });
++        return Object.freeze({ path: projectVfs.uniquePath(fresh.parent, fresh.name, source, reservedPaths), replaceId: null });
++      }
++      function readAssetFileKind(file) {
++        return readBackendProjection("project-api", { operation: "assets.fileKind",
++          file: { name: file?.name, type: file?.type } });
++      }
++      function readAssetCollisionModel(file, directory, reservedPaths = null) {
++        return readBackendProjection("project-api", { operation: "assets.collisionModel",
++          file: { name: file?.name, type: file?.type }, directory, reservedPaths: Array.from(reservedPaths || []) });
++      }
++      function readAssetImportPlan(model, choice = "rename", reservedPaths = null) {
++        return readBackendProjection("project-api", { operation: "assets.resolveImportPlan",
++          model: immutableProjectCopy(model), choice, reservedPaths: Array.from(reservedPaths || []) });
+       }
+       async function stageProjectAssetImport(candidate, item) {
+         let bytes = new Uint8Array(await item.file.arrayBuffer());
+@@ -3421,12 +3445,7 @@
+         if (projectVfs.isTrashed(targetDirectory))
+           throw Error("외부 파일은 휴지통으로 직접 가져올 수 없습니다.");
+ 
+-        let reserved = new Set([
+-            ...activeProject.fileSystem.directories,
+-            ...activeProject.csvFiles.map(projectAssetPath),
+-            ...activeProject.images.map(projectAssetPath),
+-          ]),
+-          staged = [];
++        let reserved = new Set(), staged = [];
+         for (let file of list) {
+           let kind = slotFileKind(file);
+           if (kind !== "data" && kind !== "image")
+@@ -8000,10 +8019,10 @@
+           connectToSlot: connectProjectAssetPathToSlot,
+           importToDirectory: importProjectFilesToDirectory,
+           importToSlot: importProjectFileToSlot,
+-          fileKind: slotFileKind,
++          fileKind: readAssetFileKind,
+           importFiles: importProjectAssetFiles,
+-          collisionModel: projectAssetImportCollisionModel,
+-          resolveImportPlan: resolveProjectAssetImportPlan,
++          collisionModel: readAssetCollisionModel,
++          resolveImportPlan: readAssetImportPlan,
+           selectDirectory: selectDirectoryFromTree,
+           selectCsv: selectProjectCsv,
+           selectImage: selectImageFromTree,

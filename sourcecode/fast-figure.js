@@ -410,6 +410,14 @@
         }
         if (kind === "project-api" && request.operation === "assets.isTrashed")
           return projectVfs.isTrashed(request.path);
+        if (kind === "project-api" && request.operation === "assets.fileKind")
+          return slotFileKind(request.file);
+        if (kind === "project-api" && request.operation === "assets.collisionModel")
+          return immutableProjectCopy(projectAssetImportCollisionModel(request.file, request.directory,
+            new Set(request.reservedPaths || [])));
+        if (kind === "project-api" && request.operation === "assets.resolveImportPlan")
+          return immutableProjectCopy(resolveProjectAssetImportPlan(request.model, request.choice,
+            new Set(request.reservedPaths || [])));
         if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
           const source = activeProject._state,
             node = request.path ? projectVfs.resolve(request.path, source) : null;
@@ -3322,39 +3330,55 @@
           return model;
         },
       });
-      function projectAssetImportCollisionModel(file,directory,reservedPaths=null) {
-        let kind=slotFileKind(file),
-          assetKind=kind==="data"?"csv":kind==="image"?"image":null;
-        if(!assetKind)throw Error(`${file?.name||"파일"}: 지원하지 않는 파일 형식입니다.`);
-        let parent=normalizeProjectPath(directory,{directory:true}),
-          name=projectCsvName(file.name,assetKind==="csv"?"data.csv":"image.bin"),
-          path=normalizeProjectPath(`${parent}/${name}`),
-          collision=projectVfs.resolve(path),reserved=reservedPaths?.has(path)===true,
-          replaceId=collision?.kind===assetKind?collision.asset.id:null,
-          mode=!collision&&!reserved?"available":Number.isInteger(replaceId)?"replace-or-rename":"rename-only",
-          message=mode==="replace-or-rename"
-            ?`${path}에 같은 이름의 파일이 이미 있습니다.\n\n[확인] 기존 파일을 교체하고 참조를 유지합니다.\n[취소] 이름을 바꿔 새 파일로 추가합니다.`:"",
-          notice=collision&&mode==="rename-only"
-            ?`${path}의 기존 항목은 종류가 달라 참조를 유지한 채 교체할 수 없습니다. 이름을 바꿔 추가합니다.`:"";
-        return Object.freeze({assetKind,parent,name,path,mode,replaceId,message,notice});
+      function calculateAssetCollisionInProject(source, kind, directory, filename, reservedPaths) {
+        if (!["data", "image"].includes(kind)) throw Error("지원하지 않는 자산 파일 형식입니다.");
+        const parent = normalizeProjectPath(directory, { directory: true });
+        if (projectVfs.resolve(parent, source)?.kind !== "directory") throw Error("대상 폴더가 없습니다.");
+        const name = projectCsvName(filename, kind === "data" ? "data.csv" : "image.bin"),
+          path = normalizeProjectPath(`${parent}/${name}`), collision = projectVfs.resolve(path, source),
+          sameKind = collision?.kind === (kind === "data" ? "csv" : "image"),
+          mode = reservedPaths?.has(path) ? "rename-only" : !collision ? "available" :
+            sameKind ? "replace-or-rename" : "rename-only",
+          replaceId = mode === "replace-or-rename" ? collision.asset.id : null,
+          message = mode === "replace-or-rename"
+            ? `${path}에 같은 이름의 파일이 이미 있습니다.\n\n[확인] 기존 파일을 교체하고 참조를 유지합니다.\n[취소] 이름을 바꿔 새 파일로 추가합니다.` : "",
+          notice = mode === "rename-only" ? `${path}은 이미 사용 중입니다. 이름을 바꿔 추가합니다.` : "";
+        return Object.freeze({ assetKind: kind, parent, name, path, mode, replaceId, message, notice });
+      }
+      function projectAssetImportCollisionModel(file, directory, reservedPaths = null) {
+        const source = activeProject._state;
+        return calculateAssetCollisionInProject(source, slotFileKind(file), directory, file?.name, reservedPaths);
       }
       function resolveProjectAssetImportPlan(model, choice = "rename", reservedPaths = null) {
-        if (!model || typeof model !== "object")
+        const source = activeProject._state;
+        if (!model || !["data", "image"].includes(model.assetKind) ||
+            typeof model.parent !== "string" || typeof model.name !== "string" || !model.name ||
+            typeof model.path !== "string" || !["available", "replace-or-rename", "rename-only"].includes(model.mode) ||
+            !(model.replaceId === null || (Number.isInteger(model.replaceId) && model.replaceId > 0)) ||
+            model.parent !== normalizeProjectPath(model.parent, { directory: true }) ||
+            model.name !== projectCsvName(model.name, "asset") ||
+            model.path !== normalizeProjectPath(`${model.parent}/${model.name}`))
           throw Error("프로젝트 자산 가져오기 계획이 올바르지 않습니다.");
-        if (model.mode === "available")
-          return { path: model.path, replaceId: null };
-        if (choice === "replace" && Number.isInteger(model.replaceId))
-          return { path: model.path, replaceId: model.replaceId };
-        let unique = projectVfs.uniquePath(
-          model.parent,
-          model.name,
-          activeProject._state,
-          reservedPaths,
-        );
-        return {
-          path: unique,
-          replaceId: null,
-        };
+        const fresh = calculateAssetCollisionInProject(source, model.assetKind, model.parent, model.name, reservedPaths);
+        if (choice === "replace" && model.replaceId !== null &&
+            (fresh.mode !== "replace-or-rename" || fresh.replaceId !== model.replaceId))
+          throw Error("교체할 자산이 변경되었습니다.");
+        if (fresh.mode === "available") return Object.freeze({ path: fresh.path, replaceId: null });
+        if (choice === "replace" && fresh.mode === "replace-or-rename" && model.replaceId === fresh.replaceId)
+          return Object.freeze({ path: fresh.path, replaceId: fresh.replaceId });
+        return Object.freeze({ path: projectVfs.uniquePath(fresh.parent, fresh.name, source, reservedPaths), replaceId: null });
+      }
+      function readAssetFileKind(file) {
+        return readBackendProjection("project-api", { operation: "assets.fileKind",
+          file: { name: file?.name, type: file?.type } });
+      }
+      function readAssetCollisionModel(file, directory, reservedPaths = null) {
+        return readBackendProjection("project-api", { operation: "assets.collisionModel",
+          file: { name: file?.name, type: file?.type }, directory, reservedPaths: Array.from(reservedPaths || []) });
+      }
+      function readAssetImportPlan(model, choice = "rename", reservedPaths = null) {
+        return readBackendProjection("project-api", { operation: "assets.resolveImportPlan",
+          model: immutableProjectCopy(model), choice, reservedPaths: Array.from(reservedPaths || []) });
       }
       async function stageProjectAssetImport(candidate, item) {
         let bytes = new Uint8Array(await item.file.arrayBuffer());
@@ -3421,12 +3445,7 @@
         if (projectVfs.isTrashed(targetDirectory))
           throw Error("외부 파일은 휴지통으로 직접 가져올 수 없습니다.");
 
-        let reserved = new Set([
-            ...activeProject.fileSystem.directories,
-            ...activeProject.csvFiles.map(projectAssetPath),
-            ...activeProject.images.map(projectAssetPath),
-          ]),
-          staged = [];
+        let reserved = new Set(), staged = [];
         for (let file of list) {
           let kind = slotFileKind(file);
           if (kind !== "data" && kind !== "image")
@@ -8000,10 +8019,10 @@
           connectToSlot: connectProjectAssetPathToSlot,
           importToDirectory: importProjectFilesToDirectory,
           importToSlot: importProjectFileToSlot,
-          fileKind: slotFileKind,
+          fileKind: readAssetFileKind,
           importFiles: importProjectAssetFiles,
-          collisionModel: projectAssetImportCollisionModel,
-          resolveImportPlan: resolveProjectAssetImportPlan,
+          collisionModel: readAssetCollisionModel,
+          resolveImportPlan: readAssetImportPlan,
           selectDirectory: selectDirectoryFromTree,
           selectCsv: selectProjectCsv,
           selectImage: selectImageFromTree,
