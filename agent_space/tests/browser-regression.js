@@ -2200,7 +2200,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           check(!revoked.includes(this.href), "FFPX URL released before handoff");
         };
         readBackendProjection = (kind, request) => {
-          check(kind === "export" && request.operation === "project.exportFile" && appFSM.state.lifecycle === "exporting" &&
+          if (kind !== "export") return query(kind, request);
+          check(request.operation === "project.exportFile" && appFSM.state.lifecycle === "exporting" &&
             /^\d{4}-.*Z$/.test(request.stamp) && !/[:.]/.test(request.stamp), "project query outside lifecycle or wrong request");
           calls++; return query(kind, request);
         };

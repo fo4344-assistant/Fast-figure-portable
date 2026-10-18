@@ -15,7 +15,7 @@ Baseline `4b5b663adeb37c232c082fd700dd494a3639933d`. Source39 and pseudocode13 r
 
 ## Verification status
 
-Only file/diff/Git operations locally. Push will run default runner syntax/regression, distribution and lineage workflows. Record actual SHA/run IDs and runner fingerprint before claiming bounded verification. Cases1–58 remain required, not whole Source coverage. Optional TLC not executed; no browser disk-save acknowledgement promised.
+Only file/diff/Git operations locally. Implementation8d3d95cc530b3cf1004da2c1bd616372cc685f35 passed build39101438147; dist-only bot1bb6288 was fast-forwarded. Initial versions39101438005 failed as expected with prior digest, reporting actual code51 sha256:16c996c02e339c0a9cd118e65e881745623e0d6c546236623b275f8945e72cf1; patch031 records it without local execution. Initial regression39101438230 passed1–59 in both artifacts; case60 failed `project query outside lifecycle or wrong request` because its broad export spy also intercepted legitimate slot-selection validation queries while arranging the precondition. Patch031 forwards non-export queries, retaining all export/lifecycle/no-query assertions and changing no production code. Corrected regression and cumulative versions from4b5b663adeb37c232c082fd700dd494a3639933d remain pending; bounded completion is not claimed. Cases1–58 remain required, not whole Source coverage. Optional TLC not executed; no browser disk-save acknowledgement promised.
 
 ## Open whole-goal work
 
