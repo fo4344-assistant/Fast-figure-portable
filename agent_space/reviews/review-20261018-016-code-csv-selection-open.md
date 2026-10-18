@@ -17,7 +17,7 @@ Source39 `sourcescript/application/public_api/assets.py:selectProjectCsv`, its p
 
 ## Verification
 
-Pending: regression63 inline +63 split, build at identified implementation SHA, and cumulative canonical version check against a6d6d2c35e1dde59e13f3ec159a1ede594b3927e. All execution on GitHub Actions default runner, none locally. Preparation and checklists are not proof of pass.
+At683867d85b10f0de78aed6dd238b1882b3f6ff13, regression39102004808 passed63 inline +63 split and build39102004806 passed (dist-only c5d2f36f249dbb8768c97f2abb714ca91e158aa4). Diagnostic version39102004797 reported actual code digest sha256:c6b15fbe1ee149ea99c33d320b56a93daeb399a25cead083a99924e134d9cf49. Subsequent static audit found pseudocode13's final-state-only check could incorrectly accept rejected repeat selection despite Source39's explicit rejection rule. Review017/patch035 correct the translation first, then re-derive code54 without JS meaning changes. Therefore these runtime passes alone do not close lineage/fidelity: final cumulative canonical gate/regression remain pending there. All execution on Actions default runner, none locally.
 
 ## Not covered
 

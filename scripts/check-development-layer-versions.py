@@ -203,7 +203,8 @@ def validate_current_tree(manifest: dict) -> dict[str, str | None]:
     pseudocode_fp = layer_fingerprint(active_pseudocode_paths)
     if pseudocode.get("fingerprint") != pseudocode_fp:
         raise VersionError(
-            "PlusCal pseudocode fingerprint changed without updating development-versions.json"
+            "PlusCal pseudocode fingerprint changed without updating development-versions.json: "
+            f"recorded={pseudocode.get('fingerprint')!r}, actual={pseudocode_fp!r}"
         )
     if pseudocode_status == "current":
         if source_closure != "closed":

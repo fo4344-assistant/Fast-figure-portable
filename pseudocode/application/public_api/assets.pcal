@@ -30,15 +30,18 @@ RevalidateProposalNotReserve:
 end procedure;
 
 procedure selectProjectCsv(path)
-variables resolved = NoValue, target = NoValue, final = NoValue, canonical = "";
+variables resolved = NoValue, target = NoValue, final = NoValue, canonical = "", priorRevision = 0;
 begin
 CurrentIdentityBeforeAnyEvent:
   call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> path]); resolved := result;
   if ~ResolvedTargetIsCsv(resolved) then result := NoValue; return; end if;
   target := resolved.target; canonical := CanonicalAssetPath(target);
 ValidatedSingleTransition:
+  call InterfaceStateMachine_readState(); priorRevision := result.revision;
   call dispatchInterfaceEvent("SELECT_ASSET",[kind |-> "csv",path |-> canonical]); final := result;
-  if final.assetSelection = "csv" /\ final.assetPath = canonical then result := target;
+  \* Source requires rejection to return none even when that CSV was already selected.
+  \* Frontend accepted publish advances revision; rejected input preserves it.
+  if final.revision > priorRevision /\ final.assetSelection = "csv" /\ final.assetPath = canonical then result := target;
   else result := NoValue; end if;
   \* SELECT_ASSET itself clears graph object; no preceding clear/persistent mutation.
   return;
