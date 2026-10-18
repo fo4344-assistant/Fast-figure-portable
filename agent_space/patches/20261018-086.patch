@@ -1,0 +1,59 @@
+diff --git a/agent_space/reviews/review-20261018-032-code-slot-swap-open.md b/agent_space/reviews/review-20261018-032-code-slot-swap-open.md
+index a2be110..fd49457 100644
+--- a/agent_space/reviews/review-20261018-032-code-slot-swap-open.md
++++ b/agent_space/reviews/review-20261018-032-code-slot-swap-open.md
+@@ -13,6 +13,10 @@ Source41 sourcescript/backend/project_efsm.py SLOTS_SWAPPED explicitly requires
+ - Application scalar IDs, committed Boolean/render only committed, original errors, late renderer error no rollback: swapSlots public binding and89/90. Legacy drag adapter now passes IDs to same wrapper rather than independent mutation path.
+ - Prior88 cases plus actual Actions canonical chain/build gate pending. Source41 unchanged, pseudocode19 current pending measured fingerprint; code74 stale/whole Plan023 open.
+ 
++## Additional direct-coverage audit
++
++Before declaring bounded success, inspection found JSON-backed projectClone invokes legacy slot.toJSON, which flattens known fields and loses content extension fields; exact JSON comparison loses the same extension and is insufficient evidence. Code75 preserves each canonical slot.content explicitly inside the private candidate before swapping; case89 now directly asserts final content.extension at moved payload rather than relying on flattening JSON. This is existing Source complete-local-payload fidelity, not new higher meaning. Wider legacy serializer/query extension handling remains separate/open.
++
+ ## Evidence and exclusions
+ 
+ At f3ea2df83fff8ce11b41cd1230bb811bfa335f51 build39122647836 PASS. Regression39122647755 prior88+90 PASS both distributions;89 `Error: swap cleared selections instead of following payload`. Its direct interfaceFSM.send bypassed Backend validation and was correctly ignored, so index0 was never established. Correct setup through existing appFSM.send validated boundary and explicitly assert fixture index0 before operation; no runtime/upper/test expectation weakening. Version39122647746 diagnostic FAIL printed canonical pseudocode19 sha256:833d5e1bb3a10b68d16d0a31048f67f34549a211c90c2600d7577787f178f777 and code74 sha256:7b9a5b6cbd0a25fe42af228dce57bbe2b0005a206742c101bdead2d1cb18a19a; Source41 unchanged. Record these actual runner digests, corrected cumulative gate/repeat pending; initial failures not claimed passed. No local runtime/checker/build. Full shared validators/imports/asset cascade/raster/supplied dashboard and earlier timing stability remain uncovered. Optional model26 stale/TLC not run; policy unchanged.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 9afdb44..709e75f 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3740,7 +3740,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         firstExpected.content = secondExpected.content; firstExpected.caption = secondExpected.caption;
+         secondExpected.content = content; secondExpected.caption = caption;
+         check(JSON.stringify(activeProject._state) === JSON.stringify(before) && commits === 1 && paints === 1 &&
+-          slotAt(b.id).chart === chartId && getChart(chartId), "swap lost local extension/geometry/assets or made partial commits");
++          slotAt(b.id).chart === chartId && getChart(chartId) &&
++          JSON.stringify(slotAt(a.id).content.extension) === JSON.stringify({ preserved: [1, 2] }),
++          "swap lost local extension/geometry/assets or made partial commits");
+         check(interfaceFSM.readState().selectedSlotId === b.id && interfaceFSM.state.graphObjectIndex === 0 &&
+           interfaceFSM.state.assetPath === path, "swap cleared selections instead of following payload");
+         check(result.selectionHints.swapSlotIds.join(",") === [a.id, b.id].join(",") &&
+diff --git a/development-versions.json b/development-versions.json
+index 73b487a..31781c5 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 74,
++      "revision": 75,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 3110beb..3702ad1 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1110,6 +1110,11 @@
+           if (!first || !second || first.id === second.id) return false;
+           const candidate = projectClone(source);
+           normalizeSlotContents(candidate.slots);
++          // Legacy slot.toJSON flattens known fields; preserve the complete canonical content instead.
++          for (const slot of candidate.slots) {
++            const current = source.slots.find(item => item.id === slot.id);
++            if (current?.content) slot.content = projectClone(current.content);
++          }
+           const a = candidate.slots.find(slot => slot.id === first.id), b = candidate.slots.find(slot => slot.id === second.id),
+             content = a.content, caption = a.caption;
+           a.content = b.content; a.caption = b.caption;

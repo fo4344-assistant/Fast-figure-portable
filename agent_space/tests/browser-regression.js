@@ -3740,7 +3740,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         firstExpected.content = secondExpected.content; firstExpected.caption = secondExpected.caption;
         secondExpected.content = content; secondExpected.caption = caption;
         check(JSON.stringify(activeProject._state) === JSON.stringify(before) && commits === 1 && paints === 1 &&
-          slotAt(b.id).chart === chartId && getChart(chartId), "swap lost local extension/geometry/assets or made partial commits");
+          slotAt(b.id).chart === chartId && getChart(chartId) &&
+          JSON.stringify(slotAt(a.id).content.extension) === JSON.stringify({ preserved: [1, 2] }),
+          "swap lost local extension/geometry/assets or made partial commits");
         check(interfaceFSM.readState().selectedSlotId === b.id && interfaceFSM.state.graphObjectIndex === 0 &&
           interfaceFSM.state.assetPath === path, "swap cleared selections instead of following payload");
         check(result.selectionHints.swapSlotIds.join(",") === [a.id, b.id].join(",") &&
