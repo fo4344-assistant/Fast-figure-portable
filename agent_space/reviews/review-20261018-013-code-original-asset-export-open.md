@@ -11,7 +11,11 @@ Baseline `4052ee361c4a4825e906e67cfdbd88a2a265f581`. Source39 and pseudocode13 r
 | Renderer consumes copied payload; operation-local URL released on success/failure | sourcescript/frontend/renderer.py downloadExportPayload → pseudocode/frontend/renderer.pcal → downloadExportPayload | Case58 checks actual Blob bytes and release after click/anchor-creation failure. Anchor creation moved inside existing try/finally |
 | No Project/selection writes, backend resource allocation or Application status side effect | Same contracts | Cases57/58 snapshots and resource trap; pending Actions. No browser disk-save guarantee |
 | Source Script highest; do not discard advanced behavior | Existing original bytes/MIME/name retained; no higher-level semantic addition needed | No authority files modified; no speculative source/pseudocode rewrite |
-| Runner-only verification and lineage | development-versions.json code50 stale, same upper lineage | Fingerprint still previous code49 pending canonical runner diagnostic; version gate NOT passed and unit NOT complete |
+| Runner-only verification and lineage | development-versions.json code50 stale, same upper lineage | Patch028 records canonical runner code50 fingerprint sha256:400a291052b5fbd65e1a010a2f78a674b12b828b60d70ed8f860e90d02fddd57; cumulative version gate pending, unit NOT complete |
+
+## Actions evidence
+
+Implementation `6fdd71d28b31c9a52ff7e553d4a396ce87dd52a5`: ubuntu-latest build39101164483 passed; bot6e4565d updated only generated distributions and was fast-forwarded locally. Initial version39101164447 failed with `source-code fingerprint changed without updating development-versions.json`, reporting actual code50 sha256:400a291052b5fbd65e1a010a2f78a674b12b828b60d70ed8f860e90d02fddd57. Patch028 uses that output without local checker execution or semantic revision increase. Regression39101164429 still running at this record; success is not yet claimed. Cumulative version dispatch from4052ee361c4a4825e906e67cfdbd88a2a265f581 remains required.
 
 ## Scope boundaries and next checks
 
