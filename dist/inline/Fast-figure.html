@@ -10356,7 +10356,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             objectColumns: objectCsv ? columnDefinitions(objectCsv.rows, objectCsv.headerLines) : [] });
         }
         if (kind === "project-api" && request.operation === "print.readSettings")
-          return Object.freeze({ ...activeProject.exportSettings });
+          return immutableProjectCopy(activeProject._state.export);
         if ((kind === "project-api" && request.operation === "images.readEditor") ||
             (kind === "renderer" && request.operation === "slot-image")) {
           const source = activeProject._state,
@@ -11778,30 +11778,37 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       }
       function applyExportSettingsChangedAction({ machine, payload }) {
         machine.assertWritable("export", "EXPORT_SETTINGS_CHANGED");
-        const candidate = projectClone(activeProject._state), current = candidate.export,
-          next = { ...current }, values = payload.settings || {}, limits = BackendSettings.defaults.limits.export;
-        for (const [key, allowed] of [["heightMode", ["auto", "explicit"]], ["format", ["png", "jpeg"]]]) {
-          if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
-          const value = values[key];
-          if (allowed.includes(value)) next[key] = value;
-        }
-        for (const [key, limitKey] of [["width", "logicalWidth"], ["height", "logicalHeight"], ["dpi", "dpi"]]) {
-          if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
-          const value = values[key];
-          // NoValue is not numeric zero; conversion exceptions otherwise propagate.
-          const number = value === null ? NaN : Number(value);
-          if (Number.isFinite(number)) {
-            const [min, max] = limits[limitKey];
-            next[key] = Math.max(min, Math.min(max, number));
+        while (true) {
+          const source = activeProject._state, candidate = projectClone(source), current = source.export,
+            next = { ...current }, values = payload.settings || {}, limits = BackendSettings.defaults.limits.export;
+          for (const [key, allowed] of [["heightMode", ["auto", "explicit"]], ["format", ["png", "jpeg"]]]) {
+            if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+            const value = values[key];
+            if (allowed.includes(value)) next[key] = value;
           }
+          for (const [key, limitKey] of [["width", "logicalWidth"], ["height", "logicalHeight"], ["dpi", "dpi"]]) {
+            if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+            const value = values[key];
+            // NoValue is not numeric zero; conversion exceptions otherwise propagate.
+            const number = value === null ? NaN : Number(value);
+            if (Number.isFinite(number)) {
+              const [min, max] = limits[limitKey];
+              next[key] = Math.max(min, Math.min(max, number));
+            }
+          }
+          next.height = next.heightMode === "auto" ? null
+            : next.height ?? current.height ?? limits.logicalHeight[0];
+          candidate.export = next;
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const post = activeProject._state, changedIds = (before, after) => after.filter(item =>
+            JSON.stringify(before.find(old => old.id === item.id)) !== JSON.stringify(item)).map(item => item.id);
+          payload.changed = { slotIds: changedIds(source.slots, post.slots), chartIds: changedIds(source.charts, post.charts),
+            csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles), imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
+          return;
         }
-        next.height = next.heightMode === "auto" ? null
-          : next.height ?? current.height ?? limits.logicalHeight[0];
-        candidate.export = next;
-        validateProjectObjectState(candidate, { requireSlots: true });
-        activeProject.initialize(candidate);
       }
-
       function applySlotImageSettingsChangedAction({ machine, payload }) {
         machine.assertWritable("slots", "SLOT_IMAGE_SETTINGS_CHANGED");
         while (true) {
