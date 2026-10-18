@@ -2065,6 +2065,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     });
 
     await run(57, "Original asset export returns detached immutable bytes/name/MIME without mutation", async () => {
+      const image = createProjectImage(new TextEncoder().encode(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "original-export.svg", "image/svg+xml");
       const source = activeProject._state, asset = source.assets.csvFiles.find(item => item.bytesBase64),
         path = projectAssetPath(asset), original = asset.bytesBase64, mime = asset.mime,
         before = JSON.stringify(source), frontend = JSON.stringify(interfaceFSM.readState()),
@@ -2087,8 +2089,6 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         asset.bytesBase64 = "invalid base64 %"; let caught;
         try { appFSM.query("export", { operation: "assets.download", path }); } catch (error) { caught = error; }
         check(caught, "invalid byte encoding was silently repaired or swallowed");
-        const image = source.assets.images.find(item => item.bytesBase64);
-        check(image, "image export fixture missing");
         const imagePayload = appFSM.query("export", { operation: "assets.download", path: projectAssetPath(image) });
         check(imagePayload.name === image.name && imagePayload.mime === image.mime &&
           ffpxBytesToBase64(Uint8Array.from(imagePayload.bytes)) === image.bytesBase64, "image export regenerated original bytes");
@@ -2100,7 +2100,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     await run(58, "Public original download owns lifecycle, copied handoff and failure cleanup", async () => {
       const asset = activeProject._state.assets.csvFiles.find(item => item.bytesBase64), path = projectAssetPath(asset);
       api.assets.selectCsv(path);
-      const before = JSON.stringify(activeProject._state), frontend = JSON.stringify(interfaceFSM.readState()),
+      const selection = () => {
+        const state = interfaceFSM.readState();
+        return JSON.stringify([state.selectedSlotId, state.assetPath, state.assetSelection, state.graphObjectIndex, state.workspace]);
+      };
+      const before = JSON.stringify(activeProject._state), frontend = selection(),
         create = URL.createObjectURL, revoke = URL.revokeObjectURL, click = HTMLAnchorElement.prototype.click,
         element = document.createElement, query = readBackendProjection, failure = Error("original download failure");
       let calls = 0, created = [], released = [], clicked = [], fail = false, failElement = false;
@@ -2142,7 +2146,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         readBackendProjection = () => { throw failure; }; caught = null;
         try { await api.assets.download(path); } catch (error) { caught = error; }
         check(caught === failure && created.length === 3 && appFSM.state.lifecycle === "ready", "query failure swallowed or allocated resources");
-        check(JSON.stringify(activeProject._state) === before && JSON.stringify(interfaceFSM.readState()) === frontend &&
+        check(JSON.stringify(activeProject._state) === before && selection() === frontend &&
           !/activeProject|projectVfs|ffpxBase64ToBytes|status\(/.test(downloadProjectAsset.toString()),
           "original download changed selection/Project or Application owns Backend/status semantics");
       } finally {

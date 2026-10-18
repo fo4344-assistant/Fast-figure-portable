@@ -1,0 +1,57 @@
+diff --git a/agent_space/reviews/review-20261018-013-code-original-asset-export-open.md b/agent_space/reviews/review-20261018-013-code-original-asset-export-open.md
+index 94603fe..8241145 100644
+--- a/agent_space/reviews/review-20261018-013-code-original-asset-export-open.md
++++ b/agent_space/reviews/review-20261018-013-code-original-asset-export-open.md
+@@ -15,7 +15,7 @@ Baseline `4052ee361c4a4825e906e67cfdbd88a2a265f581`. Source39 and pseudocode13 r
+ 
+ ## Actions evidence
+ 
+-Implementation `6fdd71d28b31c9a52ff7e553d4a396ce87dd52a5`: ubuntu-latest build39101164483 passed; bot6e4565d updated only generated distributions and was fast-forwarded locally. Initial version39101164447 failed with `source-code fingerprint changed without updating development-versions.json`, reporting actual code50 sha256:400a291052b5fbd65e1a010a2f78a674b12b828b60d70ed8f860e90d02fddd57. Patch028 uses that output without local checker execution or semantic revision increase. Regression39101164429 still running at this record; success is not yet claimed. Cumulative version dispatch from4052ee361c4a4825e906e67cfdbd88a2a265f581 remains required.
++Implementation `6fdd71d28b31c9a52ff7e553d4a396ce87dd52a5`: ubuntu-latest build39101164483 passed; bot6e4565d updated only generated distributions and was fast-forwarded locally. Initial version39101164447 failed with `source-code fingerprint changed without updating development-versions.json`, reporting actual code50 sha256:400a291052b5fbd65e1a010a2f78a674b12b828b60d70ed8f860e90d02fddd57. Patch028 uses that output without local checker execution or semantic revision increase. Regression39101164429 failed: cases1–56 passed, case57 reported `image export fixture missing`; case58 compared all Frontend runtime fields although lifecycle transitions legitimately increment revision. Patch029 supplies an explicit image fixture and compares the five selection fields separately from lifecycle checks, retaining Project immutability and resource/error assertions. No production changes or weakened selection contract. Version39101206486 and cumulative dispatch39101207023 passed at feba7d20cbc70d629dfb58ba1b3faaa7819808e4 (base4052ee361c4a4825e906e67cfdbd88a2a265f581). Corrected regression remains pending; unit completion is not claimed.
+ 
+ ## Scope boundaries and next checks
+ 
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 614b8f3..48c8e5a 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2065,6 +2065,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+     });
+ 
+     await run(57, "Original asset export returns detached immutable bytes/name/MIME without mutation", async () => {
++      const image = createProjectImage(new TextEncoder().encode(
++        '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "original-export.svg", "image/svg+xml");
+       const source = activeProject._state, asset = source.assets.csvFiles.find(item => item.bytesBase64),
+         path = projectAssetPath(asset), original = asset.bytesBase64, mime = asset.mime,
+         before = JSON.stringify(source), frontend = JSON.stringify(interfaceFSM.readState()),
+@@ -2087,8 +2089,6 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         asset.bytesBase64 = "invalid base64 %"; let caught;
+         try { appFSM.query("export", { operation: "assets.download", path }); } catch (error) { caught = error; }
+         check(caught, "invalid byte encoding was silently repaired or swallowed");
+-        const image = source.assets.images.find(item => item.bytesBase64);
+-        check(image, "image export fixture missing");
+         const imagePayload = appFSM.query("export", { operation: "assets.download", path: projectAssetPath(image) });
+         check(imagePayload.name === image.name && imagePayload.mime === image.mime &&
+           ffpxBytesToBase64(Uint8Array.from(imagePayload.bytes)) === image.bytesBase64, "image export regenerated original bytes");
+@@ -2100,7 +2100,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+     await run(58, "Public original download owns lifecycle, copied handoff and failure cleanup", async () => {
+       const asset = activeProject._state.assets.csvFiles.find(item => item.bytesBase64), path = projectAssetPath(asset);
+       api.assets.selectCsv(path);
+-      const before = JSON.stringify(activeProject._state), frontend = JSON.stringify(interfaceFSM.readState()),
++      const selection = () => {
++        const state = interfaceFSM.readState();
++        return JSON.stringify([state.selectedSlotId, state.assetPath, state.assetSelection, state.graphObjectIndex, state.workspace]);
++      };
++      const before = JSON.stringify(activeProject._state), frontend = selection(),
+         create = URL.createObjectURL, revoke = URL.revokeObjectURL, click = HTMLAnchorElement.prototype.click,
+         element = document.createElement, query = readBackendProjection, failure = Error("original download failure");
+       let calls = 0, created = [], released = [], clicked = [], fail = false, failElement = false;
+@@ -2142,7 +2146,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         readBackendProjection = () => { throw failure; }; caught = null;
+         try { await api.assets.download(path); } catch (error) { caught = error; }
+         check(caught === failure && created.length === 3 && appFSM.state.lifecycle === "ready", "query failure swallowed or allocated resources");
+-        check(JSON.stringify(activeProject._state) === before && JSON.stringify(interfaceFSM.readState()) === frontend &&
++        check(JSON.stringify(activeProject._state) === before && selection() === frontend &&
+           !/activeProject|projectVfs|ffpxBase64ToBytes|status\(/.test(downloadProjectAsset.toString()),
+           "original download changed selection/Project or Application owns Backend/status semantics");
+       } finally {
