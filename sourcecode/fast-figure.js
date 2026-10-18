@@ -3023,15 +3023,16 @@
         validateProjectObjectState(candidate,{requireSlots:true});
         return candidate;
       }
-      function parseCSV(text) {
-        const d = (text.split(/\r?\n/)[0] || "").includes("\t") ? "\t" : ",";
+      function parseCSV(text, d = ",") {
         let a = [],
           r = [],
           c = "",
-          q = false;
+          q = false,
+          rowStarted = false;
         for (let i = 0; i < text.length; i++) {
           let z = text[i],
             n = text[i + 1];
+          rowStarted = true;
           if (z === '"' && q && n === '"') {
             c += '"';
             i++;
@@ -3042,23 +3043,26 @@
           } else if ((z === "\n" || z === "\r") && !q) {
             if (z === "\r" && n === "\n") i++;
             r.push(c);
-            if (r.some((v) => v.trim())) a.push(r.splice(0));
+            a.push(r);
+            r = [];
             c = "";
+            rowStarted = false;
           } else c += z;
         }
-        if (c || r.length) {
+        if (q) throw Error("CSV 인용 문자열이 닫히지 않았습니다.");
+        if (rowStarted || r.length) {
           r.push(c);
-          if (r.some((v) => v.trim())) a.push(r);
+          a.push(r);
         }
         return a;
       }
       function dataTable(data) {
         if (!Array.isArray(data) || !data.length) throw Error("행이 하나 이상이어야 합니다.");
-        if (Array.isArray(data[0]))
-          return data.map((row) => (Array.isArray(row) ? row.map((value) => value ?? "") : []));
-        if (typeof data[0] === "object" && data[0] !== null) {
-          let headers = [...new Set(data.flatMap((row) => Object.keys(row || {})))];
-          return [headers, ...data.map((row) => headers.map((header) => row?.[header] ?? ""))];
+        if (data.every(Array.isArray)) return structuredClone(data);
+        if (data.every((row) => row !== null && typeof row === "object" && !Array.isArray(row))) {
+          let headers = [...new Set(data.flatMap((row) => Object.keys(row)))];
+          return [headers, ...data.map((row) => headers.map((header) =>
+            Object.hasOwn(row, header) ? structuredClone(row[header]) : ""))];
         }
         throw Error("CSV 행 배열 또는 객체 배열이어야 합니다.");
       }
@@ -3431,10 +3435,7 @@
       function stageProjectAssetImport(candidate, item) {
         let bytes = new Uint8Array(item.file.bytes);
         if (item.kind === "data") {
-          let text = new TextDecoder().decode(bytes),
-            data = item.file.name.toLowerCase().endsWith(".json") ? JSON.parse(text) : parseCSV(text);
-          if (!Array.isArray(data) && Array.isArray(data?.data)) data = data.data;
-          if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
+          const data = parseProjectCsvAsset(item.file.name, bytes);
           let id = Number.isInteger(item.replaceId) ? item.replaceId : candidate.nextId.csv++,
             model = buildProjectCsvModel(
               data,
@@ -5425,7 +5426,9 @@
           if (!Array.isArray(data) && Array.isArray(data?.data)) data = data.data;
           return dataTable(data);
         }
-        return parseCSV(text);
+        const extension = /\.[^./]+$/.exec(String(name))?.[0]?.toLowerCase();
+        if (![".csv", ".tsv"].includes(extension)) throw Error("지원하는 데이터 확장자가 아닙니다.");
+        return dataTable(parseCSV(text, extension === ".tsv" ? "\t" : ","));
       }
       function projectCsvDataRef(csv) {
         const extension = /\.[^./]+$/.exec(csv.path || "")?.[0]?.toLowerCase();

@@ -5999,6 +5999,65 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+    await run(134, "Data byte parser follows explicit extensions preserves blank rows and rejects mixed table shape", () => {
+      const project = activeProject._state, frontend = interfaceFSM.state,
+        parse = (name, text) => parseProjectCsvAsset(name, new TextEncoder().encode(text));
+      check(JSON.stringify(parse("fixed.CSV", 'a\tb,c\n"x,y",2\n\n"a""b",3\n')) ===
+        JSON.stringify([["a\tb", "c"], ["x,y", "2"], [""], ['a"b', "3"]]), "CSV guessed tab or dropped blank/quoted row");
+      check(JSON.stringify(parse("fixed.TSV", 'a,b\tc\r\n1\t"two\r\nlines"\r\n\r\n3\t4')) ===
+        JSON.stringify([["a,b", "c"], ["1", "two\r\nlines"], [""], ["3", "4"]]), "TSV delimiter/newline/blank row changed");
+      check(JSON.stringify(parse("one.csv", '""')) === '[[""]]' &&
+        JSON.stringify(parse("row.csv", "  \n")) === '[["  "]]', "empty quoted/whitespace cell lost");
+      check(JSON.stringify(parse("data.json", '{"data":[["x","y"],[null,2]]}')) === '[["x","y"],[null,2]]', "JSON data-array/null cell changed");
+      check(JSON.stringify(parse("objects.json", '[{"a":null},{"b":2,"a":1}]')) ===
+        JSON.stringify([["a", "b"], [null, ""], [1, 2]]), "ordered object key union/null/missing cells changed");
+      for (const [name, text] of [["empty.csv", ""], ["empty.tsv", ""], ["foreign.txt", "a,b\n1,2"],
+        ["empty.json", "[]"], ["mixed.json", '[[1],{"x":2}]'], ["mixed.json", '[{"x":1},null]'],
+        ["shape.json", '{"data":{}}'], ["quote.csv", 'a,b\n"open,2']]) {
+        let failed = false; try { parse(name, text); } catch (_) { failed = true; }
+        check(failed, `invalid data accepted: ${name}/${text}`);
+      }
+      const input = [[null, { nested: [1] }]], copy = dataTable(input); copy[0][1].nested.push(2);
+      check(input[0][1].nested.length === 1 && copy[0][0] === null, "table copy aliased input or normalized null");
+      check(activeProject._state === project && interfaceFSM.state === frontend, "data parsing changed authority");
+    });
+    await run(135, "Raw imports and FFPX FFSX byte restoration share one parser with atomic parse rejection", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+      try {
+        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+        initialize.call(activeProject, createProjectState());
+        const fixtures = [["explicit.csv", 'x\ty,v\n1,2\n\n3,4\n'],
+          ["explicit.tsv", 'x,y\tv\n1\t2\n\n3\t4\n'],
+          ["wrapped.json", '{"data":[["x","v"],[null,2],[3,4]]}']],
+          files = fixtures.map(([name, text]) => new File([text], name));
+        const imported = await api.assets.importToDirectory(files, PROJECT_ASSET_DIRECTORIES.csv, choose("rename"));
+        check(imported.committed, "raw parser fixture batch failed");
+        const id = activeProject.slots[0].id; select(slotAt(id));
+        for (const [name, text] of fixtures) {
+          const asset = activeProject.csvFiles.find(item => item.name === name), bytes = new TextEncoder().encode(text);
+          check(asset && JSON.stringify(asset.rows) === JSON.stringify(parseProjectCsvAsset(name, bytes)) &&
+            asset.bytesBase64 === ffpxBytesToBase64(bytes), `raw ${name} changed bytes or rows`);
+          api.graphs.addObject(asset.id);
+        }
+        const project = activeProject._state, frontend = interfaceFSM.state,
+          ffpx = ffpxReadProjectBytes(ffpxZipStore(ffpxBuildProject().assets)), current = slotAt(id),
+          ffsx = ffsxReadSlotBytes(ffpxZipStore(ffsxBuildSlot(current, getChart(current.chart)).assets));
+        for (const [name, text] of fixtures) for (const read of [ffpx, ffsx]) {
+          const asset = read.csvFiles.find(item => item.name === name);
+          check(asset && asset.bytesBase64 === ffpxBytesToBase64(new TextEncoder().encode(text)) &&
+            JSON.stringify(asset.rows) === JSON.stringify(parseProjectCsvAsset(name, new TextEncoder().encode(text))),
+            `package parser diverged from raw ${name}`);
+        }
+        check(activeProject._state === project && interfaceFSM.state === frontend, "package read committed parser fixture");
+        const rejected = await api.assets.importToDirectory([new File(["x,y\n1,2"], "not-committed.csv"),
+          new File([""], "empty-rejected.csv")], PROJECT_ASSET_DIRECTORIES.csv, choose("rename"));
+        check(!rejected.committed && activeProject._state === project && interfaceFSM.state === frontend,
+          "empty data parse partially committed batch or changed Frontend");
+      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

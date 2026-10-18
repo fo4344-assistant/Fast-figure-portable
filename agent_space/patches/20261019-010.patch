@@ -1,0 +1,223 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 60aef9e..a84d006 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -307,6 +307,10 @@ Baseline34756553c3e02b081e96f26bb26433f1056d9967. Source45/PlusCal24 unchanged:
+ 
+ Unit51 actual evidence: implementation2fc8f65712032130ffa4fe12f2a52002c71e24da push39166947212/repeat39166948498 PASS133 inline+133 split each (266 pass log lines each); standard ubuntu-24.04. Build39166947522 generated dist-only ed4f7784e17ecc1564e2951d05a4e090141925f3; canonical39166947284/cumulative39166950715(base795b3031075c2acced5db7c24d835b74c339c108)/fidelity39166952892 PASS. Review005/pair009 retain actual SHA evidence and next audited mismatch: Source parseProjectDataAsset requires explicit extension delimiter and internal blank rows, runtime package/raw parsers still use auto-detect/drop-blank legacy parsing with separate JSON paths. Resume with coherent shared parser and raw/package parity regressions. Code102 stale, full objective uncompleted; no local runtime or optional TLC.
+ 
++### Fifty-second bounded unit — one explicit-extension byte parser
++
++Baselineb2c59aeb142670e9de72684a5e16f4740879cc12. Source45/PlusCal24 unchanged: parseProjectDataAsset explicit comma/tab/JSON normalization, preserved blank rows, unsupported/invalid failure, and dataTable uniform row shapes/value preservation. Code103 routes raw import and package restoration through parseProjectCsvAsset, explicit parseCSV delimiter/blank-row retention and strict uniform deep-copied dataTable. Cases134/135 test parser contracts and public raw→actual FFPX/FFSX ZIP parity/exact bytes/atomic good+empty batch rejection. Pair20261019-010/review-20261019-006-code-data-parser-open.md record mapping/rejected alternatives/exclusions. Exact-SHA135 inline+split/repeat/build/canonical+cumulative/fidelity pending; code stale and full requirement audit open. No local runtime or manual dist change.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261019-006-code-data-parser-open.md b/agent_space/reviews/review-20261019-006-code-data-parser-open.md
+new file mode 100644
+index 0000000..d394ccf
+--- /dev/null
++++ b/agent_space/reviews/review-20261019-006-code-data-parser-open.md
+@@ -0,0 +1,21 @@
++# Plan023 Unit52 — shared extension-specific byte parser (open)
++
++Baselineb2c59aeb142670e9de72684a5e16f4740879cc12. Clean preflight; latest documentation versions39167149961 PASS. Prior Unit51 exact execution2fc8f65712032130ffa4fe12f2a52002c71e24da regression39166947212/repeat39166948498 PASS133 inline+133 split each, build39166947522/canonical39166947284/cumulative39166950715/fidelity39166952892 PASS. Do not repeat completed caption/package wrapper/discriminant work.
++
++## Existing authority mapped to actual implementation
++
++Source45 sourcescript/backend/assets_files.py:440-457 parseProjectDataAsset requires UTF8, explicit .csv comma/.tsv tab, JSON top-level/data array, quoted delimiters/newlines/doubled quotes, row order and internal blank rows, unsupported extension/invalid table failure. PlusCal24 pseudocode/backend/assets_files.pcal:396-412 chooses extension/delimiter then calls dataTable. Source graphs.dataTable at sourcescript/backend/graphs.py:150-165 preserves row-array values, object array union header, rejects all other/empty shapes; pseudocode/backend/graphs.pcal:36-64 requires every row sequence or every row record and deep copies row arrays.
++
++Runtime sourcecode/fast-figure.js parseCSV(text,d) no longer auto-detects delimiter or discards blank rows; tracks started last row (including quoted empty cell), retains CRLF inside quotes/doubled quotes, rejects unterminated quoted text. parseProjectCsvAsset(name,bytes) is the single Source byte-parser binding: supported extension, explicit delimiter and dataTable for all formats. stageProjectAssetImport now calls this same Backend helper rather than a separate JSON/auto-detected CSV implementation. Both package readers already call it. Owned original bytes remain independent unchanged base64; no UI/Frontend read introduced. dataTable now checks every row shape, deep-copies row arrays preserving explicit null instead of replacing it, and preserves explicit object cell values while filling only absent keys. This is existing Source meaning, not a new table format or migration.
++
++Rejected preserving auto-detect/drop-blank behavior as compatibility authority, a second package-only parser, mixed-shape silent empty rows, Source weakening, or normalizing away null cells. Existing functions/responsibility boundary reused; no new shared state. Source45/PlusCal24 unchanged.
++
++## Tests and evidence obligations
++
++Case134 directly tests explicit comma/tab despite opposite delimiter in header, uppercase extensions, quoted delimiter/doubled quote/CRLF/newline, internal blank/whitespace/empty quoted rows, JSON data-array/object key union/null/missing cell/deep copy, invalid extension/empty/mixed/null row/unclosed quote failure and unchanged authority. Case135 actual public raw multi-file import then FFPX/FFSX ZIP restoration requires exact original bytes and identical derived rows for CSV/TSV/wrapped JSON, real graph references, read-only parsing, and atomic rejection of good+empty-file batch without Project/Frontend replacement. Tests written, not executed locally. Prior133 cumulative remains; exact new135 inline+135 split/repeat/build/canonical+cumulative versions/fidelity PENDING.
++
++Code103 sha256:85bfdd4db7623556b1645f315ac6457866760def1a0d7ac6b34932d6a6c95a6a remains stale, current Source45/PlusCal24 lineage preserved. Patch010/Plan023/this review/lineage accompany implementation. Atomic gh code+lineage exception remains required by demonstrated immediate-parent revision gate; parent/current blobs/new paths checked before non-force publication. Ordinary docs use Contents API. No local application/test/build/checker or optional TLC; default hosted ubuntu-latest only; dist generator-only.
++
++## Completion audit remains OPEN
++
++Concrete whole-goal success: every Source/PlusCal contract directly implemented preserving features/hierarchy, every explicit Plan023/prompt requirement mapped to inspected artifacts and semantic coverage, all exact-SHA hosted gates, no uncertain gap. This review covers ONLY the byte-parser unit, not full conformance. Remaining package ZIP/dataRef/metadata/settings/initializer ownership, raster/resource/current snapshot, dashboard/timing and exhaustive cross-module requirement inventory remain OPEN. Passing135/fidelity would not close these. No auth/service/quota blocker observed; no update_goal complete while any required item is unverified.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index e7b90b5..4f4d73d 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5999,6 +5999,65 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++    await run(134, "Data byte parser follows explicit extensions preserves blank rows and rejects mixed table shape", () => {
++      const project = activeProject._state, frontend = interfaceFSM.state,
++        parse = (name, text) => parseProjectCsvAsset(name, new TextEncoder().encode(text));
++      check(JSON.stringify(parse("fixed.CSV", 'a\tb,c\n"x,y",2\n\n"a""b",3\n')) ===
++        JSON.stringify([["a\tb", "c"], ["x,y", "2"], [""], ['a"b', "3"]]), "CSV guessed tab or dropped blank/quoted row");
++      check(JSON.stringify(parse("fixed.TSV", 'a,b\tc\r\n1\t"two\r\nlines"\r\n\r\n3\t4')) ===
++        JSON.stringify([["a,b", "c"], ["1", "two\r\nlines"], [""], ["3", "4"]]), "TSV delimiter/newline/blank row changed");
++      check(JSON.stringify(parse("one.csv", '""')) === '[[""]]' &&
++        JSON.stringify(parse("row.csv", "  \n")) === '[["  "]]', "empty quoted/whitespace cell lost");
++      check(JSON.stringify(parse("data.json", '{"data":[["x","y"],[null,2]]}')) === '[["x","y"],[null,2]]', "JSON data-array/null cell changed");
++      check(JSON.stringify(parse("objects.json", '[{"a":null},{"b":2,"a":1}]')) ===
++        JSON.stringify([["a", "b"], [null, ""], [1, 2]]), "ordered object key union/null/missing cells changed");
++      for (const [name, text] of [["empty.csv", ""], ["empty.tsv", ""], ["foreign.txt", "a,b\n1,2"],
++        ["empty.json", "[]"], ["mixed.json", '[[1],{"x":2}]'], ["mixed.json", '[{"x":1},null]'],
++        ["shape.json", '{"data":{}}'], ["quote.csv", 'a,b\n"open,2']]) {
++        let failed = false; try { parse(name, text); } catch (_) { failed = true; }
++        check(failed, `invalid data accepted: ${name}/${text}`);
++      }
++      const input = [[null, { nested: [1] }]], copy = dataTable(input); copy[0][1].nested.push(2);
++      check(input[0][1].nested.length === 1 && copy[0][0] === null, "table copy aliased input or normalized null");
++      check(activeProject._state === project && interfaceFSM.state === frontend, "data parsing changed authority");
++    });
++    await run(135, "Raw imports and FFPX FFSX byte restoration share one parser with atomic parse rejection", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
++      try {
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        initialize.call(activeProject, createProjectState());
++        const fixtures = [["explicit.csv", 'x\ty,v\n1,2\n\n3,4\n'],
++          ["explicit.tsv", 'x,y\tv\n1\t2\n\n3\t4\n'],
++          ["wrapped.json", '{"data":[["x","v"],[null,2],[3,4]]}']],
++          files = fixtures.map(([name, text]) => new File([text], name));
++        const imported = await api.assets.importToDirectory(files, PROJECT_ASSET_DIRECTORIES.csv, choose("rename"));
++        check(imported.committed, "raw parser fixture batch failed");
++        const id = activeProject.slots[0].id; select(slotAt(id));
++        for (const [name, text] of fixtures) {
++          const asset = activeProject.csvFiles.find(item => item.name === name), bytes = new TextEncoder().encode(text);
++          check(asset && JSON.stringify(asset.rows) === JSON.stringify(parseProjectCsvAsset(name, bytes)) &&
++            asset.bytesBase64 === ffpxBytesToBase64(bytes), `raw ${name} changed bytes or rows`);
++          api.graphs.addObject(asset.id);
++        }
++        const project = activeProject._state, frontend = interfaceFSM.state,
++          ffpx = ffpxReadProjectBytes(ffpxZipStore(ffpxBuildProject().assets)), current = slotAt(id),
++          ffsx = ffsxReadSlotBytes(ffpxZipStore(ffsxBuildSlot(current, getChart(current.chart)).assets));
++        for (const [name, text] of fixtures) for (const read of [ffpx, ffsx]) {
++          const asset = read.csvFiles.find(item => item.name === name);
++          check(asset && asset.bytesBase64 === ffpxBytesToBase64(new TextEncoder().encode(text)) &&
++            JSON.stringify(asset.rows) === JSON.stringify(parseProjectCsvAsset(name, new TextEncoder().encode(text))),
++            `package parser diverged from raw ${name}`);
++        }
++        check(activeProject._state === project && interfaceFSM.state === frontend, "package read committed parser fixture");
++        const rejected = await api.assets.importToDirectory([new File(["x,y\n1,2"], "not-committed.csv"),
++          new File([""], "empty-rejected.csv")], PROJECT_ASSET_DIRECTORIES.csv, choose("rename"));
++        check(!rejected.committed && activeProject._state === project && interfaceFSM.state === frontend,
++          "empty data parse partially committed batch or changed Frontend");
++      } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 8d10fa1..f40e439 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 102,
++      "revision": 103,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:d960dbc3ebaf51f04bb6fbc8ae5795747fe90c6b1aeb50684113a26bccf775f2",
++      "fingerprint": "sha256:85bfdd4db7623556b1645f315ac6457866760def1a0d7ac6b34932d6a6c95a6a",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261019-005-code-package-discriminants-open.md"
++      "validation_review": "agent_space/reviews/review-20261019-006-code-data-parser-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 24,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index e46fec0..c4656ce 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -3023,15 +3023,16 @@
+         validateProjectObjectState(candidate,{requireSlots:true});
+         return candidate;
+       }
+-      function parseCSV(text) {
+-        const d = (text.split(/\r?\n/)[0] || "").includes("\t") ? "\t" : ",";
++      function parseCSV(text, d = ",") {
+         let a = [],
+           r = [],
+           c = "",
+-          q = false;
++          q = false,
++          rowStarted = false;
+         for (let i = 0; i < text.length; i++) {
+           let z = text[i],
+             n = text[i + 1];
++          rowStarted = true;
+           if (z === '"' && q && n === '"') {
+             c += '"';
+             i++;
+@@ -3042,23 +3043,26 @@
+           } else if ((z === "\n" || z === "\r") && !q) {
+             if (z === "\r" && n === "\n") i++;
+             r.push(c);
+-            if (r.some((v) => v.trim())) a.push(r.splice(0));
++            a.push(r);
++            r = [];
+             c = "";
++            rowStarted = false;
+           } else c += z;
+         }
+-        if (c || r.length) {
++        if (q) throw Error("CSV 인용 문자열이 닫히지 않았습니다.");
++        if (rowStarted || r.length) {
+           r.push(c);
+-          if (r.some((v) => v.trim())) a.push(r);
++          a.push(r);
+         }
+         return a;
+       }
+       function dataTable(data) {
+         if (!Array.isArray(data) || !data.length) throw Error("행이 하나 이상이어야 합니다.");
+-        if (Array.isArray(data[0]))
+-          return data.map((row) => (Array.isArray(row) ? row.map((value) => value ?? "") : []));
+-        if (typeof data[0] === "object" && data[0] !== null) {
+-          let headers = [...new Set(data.flatMap((row) => Object.keys(row || {})))];
+-          return [headers, ...data.map((row) => headers.map((header) => row?.[header] ?? ""))];
++        if (data.every(Array.isArray)) return structuredClone(data);
++        if (data.every((row) => row !== null && typeof row === "object" && !Array.isArray(row))) {
++          let headers = [...new Set(data.flatMap((row) => Object.keys(row)))];
++          return [headers, ...data.map((row) => headers.map((header) =>
++            Object.hasOwn(row, header) ? structuredClone(row[header]) : ""))];
+         }
+         throw Error("CSV 행 배열 또는 객체 배열이어야 합니다.");
+       }
+@@ -3431,10 +3435,7 @@
+       function stageProjectAssetImport(candidate, item) {
+         let bytes = new Uint8Array(item.file.bytes);
+         if (item.kind === "data") {
+-          let text = new TextDecoder().decode(bytes),
+-            data = item.file.name.toLowerCase().endsWith(".json") ? JSON.parse(text) : parseCSV(text);
+-          if (!Array.isArray(data) && Array.isArray(data?.data)) data = data.data;
+-          if (!Array.isArray(data)) throw Error("지원하는 데이터 배열 형식이 아닙니다.");
++          const data = parseProjectCsvAsset(item.file.name, bytes);
+           let id = Number.isInteger(item.replaceId) ? item.replaceId : candidate.nextId.csv++,
+             model = buildProjectCsvModel(
+               data,
+@@ -5425,7 +5426,9 @@
+           if (!Array.isArray(data) && Array.isArray(data?.data)) data = data.data;
+           return dataTable(data);
+         }
+-        return parseCSV(text);
++        const extension = /\.[^./]+$/.exec(String(name))?.[0]?.toLowerCase();
++        if (![".csv", ".tsv"].includes(extension)) throw Error("지원하는 데이터 확장자가 아닙니다.");
++        return dataTable(parseCSV(text, extension === ".tsv" ? "\t" : ","));
+       }
+       function projectCsvDataRef(csv) {
+         const extension = /\.[^./]+$/.exec(csv.path || "")?.[0]?.toLowerCase();
