@@ -6248,6 +6248,24 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       check(activeProject._state === project && interfaceFSM.state === frontend, "pure validator touched live authority");
     });
 
+    await run(141, "Project candidate copying preserves canonical extensions and never invokes live legacy serialization", () => {
+      const source = createProjectState(), slot = source.slots[0], content = slot.content,
+        settings = content.imageSettings, project = activeProject._state, frontend = interfaceFSM.state;
+      content.extension = { nested: [false, 0, ""] }; slot.caption = "";
+      const freeze = value => { if (value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
+      freeze(source);
+      const copy = projectClone(source);
+      check(copy !== source && copy.slots[0] !== slot && copy.slots[0].content !== content &&
+        copy.slots[0].content.imageSettings !== settings && source.slots[0].content === content &&
+        content.imageSettings === settings && copy.slots[0].caption === "" &&
+        JSON.stringify(copy.slots[0].content.extension) === '{"nested":[false,0,""]}' &&
+        copy.slots[0].chart === content.chart && validateProjectObjectState(copy, { requireSlots: true }) === copy,
+        "candidate clone flattened canonical extensions, touched frozen source or omitted owned compatibility aliases");
+      copy.slots[0].content.extension.nested.push("owned");
+      check(content.extension.nested.length === 3 && activeProject._state === project && interfaceFSM.state === frontend,
+        "candidate extension aliases original or clone touched live authority");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
