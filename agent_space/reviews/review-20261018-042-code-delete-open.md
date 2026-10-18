@@ -1,4 +1,4 @@
-# Unit40 — current-authority asset deletion (pending Actions)
+# Unit40 — current-authority asset deletion (bounded verified; whole goal open)
 
 ## Policy and upper-layer requirement audit
 
@@ -17,6 +17,12 @@ Code90 removes the Application-owned whole candidate and the Backend caller-cand
 
 At877eed3938152484e26423106309e1105b7bd587 version39150693477 PASS canonical code90 e5f53517a8eac8681cf3f67cfdeec85dc9d9fa9790a37e5e538018392d374bdd; build39150693426 PASS generated dist-only04e0803b299be32cef825716ce38ebeee4ab096e. Regression39150693529 FAIL both forms:11/111 `TypeError: dispatchProjectCommand is not a function or its return value is not iterable`,110 `ReferenceError: dispatchProjectQuery is not defined`, with UI controls absent in several old cases. Repeat39150723812 at bot04e0803 also FAIL; cumulative version39150719251/fidelity39150721731 at that bot PASS only static checks. Inspection of actual adapter source shows `dispatchProjectCommand(event, payload = {})` returns the command result directly, not the pseudocode logical tuple; the existing query binding is `appFSM.query`. Patch124 corrects only these two lower-language bindings, rederives code91 and retains all tests. Source/PlusCal meaning unchanged; this was missed implementation-binding review, not a reason to change the upper contract. No regression pass inferred from green build/version/static coverage. New exact-SHA Actions pending.
 
-## Lineage and verification status
+## Final bounded execution and resume boundary
+
+At d4b2428a41c3840ac1b700163885baf31cf5f4bb, regression39150815435 and repeat39150827650 PASS111 inline +111 split, including110/111 and all prior cases. Push version39150815352 and cumulative version39150823007 PASS (baseline ecce1fb4d8a45fda442984c1acd97196e403ecaa), confirming code91 sha256:ed89653993164e4c42ab9f68c19af21259e35acc49bd43b5db9d7ca6e0690f2e and unchanged Source45/pseudocode23. Build39150815454 PASS generated dist-only d8935e8285e3c86f0f7558349c4da8de01c22051, fast-forwarded locally. Fidelity39150825183 PASS cumulative gate and static coverage/binding (not semantic proof). This later result record does not change the executed application SHA or claim its own source execution.
+
+Unit40 bounded requirement checklist above is verified; no local runtime/tests/build/checker, optional TLC not run, policy unchanged. Whole Plan023 remains open with source-code stale. Next coherent ownership unit: current-authority asset/directory movement and its public useful result, using existing PROJECT_NODE_MOVED Source/PlusCal branch. Current lower handler still calculates against live authority before cloning, accepts an Application-derived plan and uses legacy selection/reset behavior; compare that complete ownership unit to existing current candidate/shared detach/index-map rules before changing anything. Do not merely prepare a bridge or claim movement/import/schema/serializer/raster/dashboard/timing aligned from these deletion tests. Keep patch/evidence and completed requirements; no unrelated temporary-file cleanup.
+
+## Lineage and verification status (pre-execution history)
 
 Source45 and pseudocode23 fingerprints/lineage unchanged. Code90 remains stale. Fingerprint was calculated from the canonical staged Git blob identities (not executing a version checker); the authorized default GitHub-hosted canonical development-layer checker must independently confirm it. Exact new-SHA regression111 inline/split, repeat, build, cumulative versions and fidelity PENDING. No TLC execution claimed. This review is not a full-goal closure, and green static coverage alone is not semantic proof.
