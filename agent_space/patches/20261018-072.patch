@@ -1,0 +1,241 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 798739b..79deb97 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -163,6 +163,10 @@ Baseline c52bffa5828dcbd55e21dc2402855ea225034241. Existing Source41 createProje
+ 
+ Unit25 audit corrected CopyBytes before Application dispatch in code68 and ArrayBuffer detachment in69 (not only Backend copy); case79 mutates caller input before Backend. Final runtime a2a7b69ec664b7d5d80dbfb45c8726540d9bf111 build39121136199 PASS; regression39121136278 attempt1 inline26 collision timeout cascaded to8 failures, attempt2 unchanged SHA PASS80+80. Root timing cause not proven/fixed, preserved in review027. At1f177161159f3ab2d846ab624a8eb87e27a28e56 independent regression39121234368 PASS80 inline+80 split, cumulative version39121232213 PASS fromc52bffa5828dcbd55e21dc2402855ea225034241. Canonical code69 sha256:c79ec768fde46a3543d911024c4fbf8e0c088584a9f0e0b1e925d7201250263c, Source41/pseudocode18 unchanged; runtime/build/test/upper diff from successful build empty. Whole code stale/open, broader integration and legacy UI timing stability remain unproven.
+ 
++## Twenty-sixth implementation unit — Current-authority directory creation
++
++Baseline ec6ce39065a53a9fb7bfb7580b15f92be375abb7. Existing Source41/pseudocode18 already close directory create: Backend validates current parent/name/node collision, clones candidate, validates/retries current authority and commits once, records actual canonical createdDirectoryPath. Application dispatches new parent/name only, returns None on noncommit and selects actual committed path only; selection rejection/exception never rolls back directory. Code70 removes live parent validation/unchecked initialize and payload.path/status ownership. Cases81/82 cover root/nested path, exact isolated mutation/frozen facts, invalid/validator/noncommit/no-effects, newer-source retry/removed-parent rejection and postcommit selection outcomes. Review028/patch072 track Actions82+82/build/canonical gate; whole code stale/open, other asset candidates and integration remain unfinished.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index d628228..0f9db3e 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3309,6 +3309,110 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
+     });
+ 
++    await run(81, "Directory create commits current candidate and selects actual immutable result path", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        send = projectEFSM.send, initialize = activeProject.initialize, frontendSend = interfaceFSM.send;
++      let commits = 0, result, selections = 0;
++      try {
++        const before = projectClone(activeProject._state), parent = PROJECT_ASSET_DIRECTORIES.csv;
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        projectEFSM.send = function (event, payload) {
++          check(event === "PROJECT_DIRECTORY_CREATED" && payload.parent === parent && payload.name === "directory-candidate" &&
++            !payload.candidate && !payload.path && !payload.model, "Application passed directory authority rather than new inputs");
++          result = send.call(this, event, payload); return result;
++        };
++        interfaceFSM.send = function (event, payload) {
++          if (event === "SELECT_ASSET") { selections++;
++            check(result.committed && payload.kind === "directory" && payload.path === result.changed.createdDirectoryPath,
++              "directory selection used stale request path"); }
++          return frontendSend.call(this, event, payload);
++        };
++        const path = api.assets.createDirectory(parent, "directory-candidate");
++        check(path === `${parent}/directory-candidate` && commits === 1 && selections === 1 &&
++          projectVfs.resolve(path).kind === "directory" && interfaceFSM.state.assetPath === path &&
++          interfaceFSM.state.assetSelection === "directory", "directory not committed/selected once");
++        check(Object.isFrozen(result.changed) && result.changed.createdDirectoryPath === path &&
++          result.changed.chartIds.length === 0 && result.changed.csvIds.length === 0 && result.changed.imageIds.length === 0 &&
++          result.changed.slotIds.length === 0 && result.changed.assets.length === 0, "directory actual changed facts wrong");
++        const expected = projectClone(before); expected.fileSystem.directories.push(path); expected.fileSystem.directories.sort();
++        check(JSON.stringify(activeProject._state) === JSON.stringify(expected), "directory create changed assets/slots/next-id");
++        projectEFSM.send = send; interfaceFSM.send = frontendSend;
++        const nested = api.assets.createDirectory(path, "nested"), root = api.assets.createDirectory("/", "root-candidate");
++        check(nested === `${path}/nested` && root === "/root-candidate" && projectVfs.resolve(nested).kind === "directory",
++          "nested/root current parent creation failed");
++        check(!/status\(|projectVfs\.|activeProject/.test(createProjectDirectory.toString()), "Application owns directory calculation/status");
++      } finally { projectEFSM.send = send; activeProject.initialize = initialize; interfaceFSM.send = frontendSend;
++        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
++    });
++    await run(82, "Directory create retries latest parent and gates selection on commit without rollback", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
++        frontendSend = interfaceFSM.send, reconcile = interfaceFSM.reconcileProjectResult, parent = PROJECT_ASSET_DIRECTORIES.csv,
++        failure = Error("directory original failure");
++      let commits = 0, selections = 0, reconciliations = 0;
++      try {
++        const baseline = JSON.stringify(activeProject._state), stable = interfaceFSM.state;
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        interfaceFSM.send = function (event, payload) { if (event === "SELECT_ASSET") selections++;
++          return frontendSend.call(this, event, payload); };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        const noEffects = () => check(commits === 0 && selections === 0 && reconciliations === 0 &&
++          JSON.stringify(activeProject._state) === baseline && interfaceFSM.state === stable, "rejected directory performed success work");
++        for (const args of [["/no-parent", "folder"], [parent, ""], [parent, ".."], [parent, "a/b"],
++          [projectParentPath(parent), projectPathName(parent)]]) {
++          let caught; try { api.assets.createDirectory(...args); } catch (error) { caught = error; }
++          check(caught, "invalid/colliding directory accepted"); noEffects();
++        }
++        let caught; try { api.assets.createDirectory(parent, { toString() { throw failure; } }); } catch (error) { caught = error; }
++        check(caught === failure, "directory input error replaced"); noEffects();
++        validateProjectObjectState = () => { throw failure; };
++        caught = null; try { api.assets.createDirectory(parent, "validator-fails"); } catch (error) { caught = error; }
++        check(caught === failure, "directory validation error replaced"); noEffects(); validateProjectObjectState = validate;
++        projectEFSM.send = () => Object.freeze({ committed: false });
++        check(api.assets.createDirectory(parent, "uncommitted") === null, "directory noncommit return leaked result");
++        noEffects(); projectEFSM.send = send;
++        let attempts = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const valid = validate(candidate, options);
++          if (options?.requireSlots && !attempts++) {
++            const newer = projectClone(activeProject._state); newer.meta.projectName = "latest directory authority";
++            newer.fileSystem.directories.push(`${parent}/concurrent`); initialize.call(activeProject, newer);
++          }
++          return valid;
++        };
++        const path = api.assets.createDirectory(parent, "retry-directory"); validateProjectObjectState = validate;
++        check(attempts === 2 && commits === 1 && selections === 1 && reconciliations === 1 &&
++          activeProject.projectName === "latest directory authority" && projectVfs.resolve(`${parent}/concurrent`) && projectVfs.resolve(path),
++          "directory create overwrote newer source or committed more than once");
++        let stateBeforeSelection;
++        interfaceFSM.send = function (event, payload) { if (event === "SELECT_ASSET") {
++          selections++; stateBeforeSelection = this.state; return this.state; } return frontendSend.call(this, event, payload); };
++        const rejected = api.assets.createDirectory(parent, "selection-rejected");
++        check(rejected === `${parent}/selection-rejected` && projectVfs.resolve(rejected) && interfaceFSM.state === stateBeforeSelection,
++          "rejected selection rolled back committed directory/changed return");
++        interfaceFSM.send = function (event, payload) { if (event === "SELECT_ASSET") throw failure;
++          return frontendSend.call(this, event, payload); };
++        caught = null; try { api.assets.createDirectory(parent, "selection-throws"); } catch (error) { caught = error; }
++        check(caught === failure && projectVfs.resolve(`${parent}/selection-throws`), "selection error swallowed or rolled back directory");
++        // Parent disappearance during validation must reject the recalculated attempt, not commit stale directory.
++        const disappearing = `${parent}/disappearing`, prep = projectClone(activeProject._state);
++        prep.fileSystem.directories.push(disappearing); initialize.call(activeProject, prep); attempts = 0;
++        const priorCommits = commits, priorSelections = selections;
++        validateProjectObjectState = function (candidate, options) {
++          const valid = validate(candidate, options);
++          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
++            newer.fileSystem.directories = newer.fileSystem.directories.filter(path => path !== disappearing);
++            initialize.call(activeProject, newer); }
++          return valid;
++        };
++        caught = null; try { api.assets.createDirectory(disappearing, "child"); } catch (error) { caught = error; }
++        check(caught && commits === priorCommits && selections === priorSelections &&
++          !projectVfs.resolve(`${disappearing}/child`), "stale removed parent candidate committed");
++      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
++        interfaceFSM.send = frontendSend; interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 1d42d25..6d7b252 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 69,
++      "revision": 70,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-027-code-image-create-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-028-code-directory-create-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 18,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index a34ed44..718faaf 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1503,21 +1503,27 @@
+       }
+       function applyProjectDirectoryCreatedAction({ machine, payload }) {
+         machine.assertWritable("files","PROJECT_DIRECTORY_CREATED");
+-        let parent=normalizeProjectPath(payload.parent||"/assets",{directory:true}),
+-          rawName=String(payload.name||"").trim(),
+-          name=projectCsvName(rawName,"");
+-        if(parent!=="/"&&!activeProject.fileSystem.directories.includes(parent))
+-          throw Error(`상위 폴더 ${parent}가 없습니다.`);
+-        if(!name||name!==rawName||/[\\/]/.test(rawName))
+-          throw Error("폴더 이름이 올바르지 않습니다.");
+-        let path=normalizeProjectPath(`${parent}/${name}`,{directory:true}),
+-          candidate=projectClone(activeProject._state);
+-        projectVfs.ensure(candidate);
+-        if(projectVfs.exists(path,candidate))throw Error(`${path}가 이미 존재합니다.`);
+-        candidate.fileSystem.directories.push(path);
+-        candidate.fileSystem.directories.sort();
+-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+-        payload.path=path;
++        while (true) {
++          const source = activeProject._state,
++            parent = normalizeProjectPath(payload.parent, { directory: true }),
++            rawName = String(payload.name || "").trim(), name = projectCsvName(rawName, "");
++          if (parent !== "/" && !source.fileSystem.directories.includes(parent))
++            throw Error(`상위 폴더 ${parent}가 없습니다.`);
++          if (!name || name !== rawName || /[\\/]/.test(rawName))
++            throw Error("폴더 이름이 올바르지 않습니다.");
++          const path = normalizeProjectPath(`${parent}/${name}`, { directory: true });
++          if (projectVfs.exists(path, source)) throw Error(`${path}가 이미 존재합니다.`);
++          const candidate = projectClone(source);
++          candidate.fileSystem.directories.push(path);
++          candidate.fileSystem.directories.sort();
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const actual = projectVfs.resolve(path, activeProject._state);
++          payload.changed = { slotIds: [], chartIds: [], csvIds: [], imageIds: [], assets: [],
++            createdDirectoryPath: actual.path };
++          return;
++        }
+       }
+       function immutableProjectCopy(value) {
+         const freeze = (copy) => {
+@@ -6480,13 +6486,11 @@
+         return { path: payload.path, trashed: payload.trashed };
+       }
+       function createProjectDirectory(parent, name) {
+-        let payload = { parent, name, direction: "ui-to-fsm" };
+-        appFSM.send("PROJECT_DIRECTORY_CREATED", payload);
+-        appFSM.send("SELECT_ASSET", {
+-          kind: "directory", path: payload.path, direction: "ui-to-fsm",
+-        });
+-        status(`${payload.path} 폴더를 만들었습니다.`);
+-        return payload.path;
++        const result = dispatchProjectCommand("PROJECT_DIRECTORY_CREATED", { parent, name });
++        if (!result.committed) return null;
++        const path = result.changed.createdDirectoryPath;
++        appFSM.send("SELECT_ASSET", { kind: "directory", path, direction: "ui-to-fsm" });
++        return path;
+       }
+       function emptyProjectTrash() {
+         let payload = { direction: "ui-to-fsm" };
+diff --git a/agent_space/reviews/review-20261018-028-code-directory-create-open.md b/agent_space/reviews/review-20261018-028-code-directory-create-open.md
+new file mode 100644
+index 0000000..0b4fc2b
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-028-code-directory-create-open.md
+@@ -0,0 +1,17 @@
++# Directory create — bounded Source41/pseudocode18 translation
++
++Baseline ec6ce39065a53a9fb7bfb7580b15f92be375abb7; Source highest. Existing sourcescript/application/public_api/assets.py createProjectDirectory/ASSET_MUTATION_RESULT_RULE and sourcescript/backend/project_efsm.py common candidate contract already require current parent/name validation, actual committed path, committed-only validated selection, None on noncommit, late failure propagation without rollback. Pseudocode backend/project_efsm.pcal PROJECT_DIRECTORY_CREATED/BuildActualChanged and application/public_api/assets.pcal createProjectDirectory directly translate these. No new meaning or upper edit needed; source closure inherited, policy immutable.
++
++## Prompt-to-artifact checklist
++
++| Requirement | Artifact/evidence |
++|---|---|
++| Application new parent/name only, no VFS calculation/status ownership | createProjectDirectory; case81 scalar spy/function check |
++| Backend current parent/node collision/name and isolated candidate | applyProjectDirectoryCreatedAction;81 root/nested,82 invalid/missing/collision |
++| Whole validate then source-reference retry/one initialize |82 exact validator failure/newer authority/removed-parent retry |
++| Actual immutable canonical changed.createdDirectoryPath; no assets/slots/next-id effects |81 frozen result and exact project comparison |
++| Committed-only SELECT_ASSET actual path; noncommit None |81 event spy,82 noncommit/no-effects |
++| Selection rejection preserves actual committed path; error propagates without rollback |82 both explicit branches |
++| Runner-only strict lineage/build/regression82+82 | pending actual Actions; prior fingerprint provisional until runner diagnostic |
++
++Code70 stays stale. Existing legacy UI timeout from prior image unit remains open, not fixed/hidden here. This unit does not cover move/delete/trash/import/cascade or complete VFS query/UI cutover, shared full validation, raster/supplied dashboard. No resource handles allocated; no optional model/TLC execution. Application does not publish status on its own; normal command adapter owns commit reconciliation.

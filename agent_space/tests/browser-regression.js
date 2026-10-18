@@ -3309,6 +3309,110 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
     });
 
+    await run(81, "Directory create commits current candidate and selects actual immutable result path", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        send = projectEFSM.send, initialize = activeProject.initialize, frontendSend = interfaceFSM.send;
+      let commits = 0, result, selections = 0;
+      try {
+        const before = projectClone(activeProject._state), parent = PROJECT_ASSET_DIRECTORIES.csv;
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        projectEFSM.send = function (event, payload) {
+          check(event === "PROJECT_DIRECTORY_CREATED" && payload.parent === parent && payload.name === "directory-candidate" &&
+            !payload.candidate && !payload.path && !payload.model, "Application passed directory authority rather than new inputs");
+          result = send.call(this, event, payload); return result;
+        };
+        interfaceFSM.send = function (event, payload) {
+          if (event === "SELECT_ASSET") { selections++;
+            check(result.committed && payload.kind === "directory" && payload.path === result.changed.createdDirectoryPath,
+              "directory selection used stale request path"); }
+          return frontendSend.call(this, event, payload);
+        };
+        const path = api.assets.createDirectory(parent, "directory-candidate");
+        check(path === `${parent}/directory-candidate` && commits === 1 && selections === 1 &&
+          projectVfs.resolve(path).kind === "directory" && interfaceFSM.state.assetPath === path &&
+          interfaceFSM.state.assetSelection === "directory", "directory not committed/selected once");
+        check(Object.isFrozen(result.changed) && result.changed.createdDirectoryPath === path &&
+          result.changed.chartIds.length === 0 && result.changed.csvIds.length === 0 && result.changed.imageIds.length === 0 &&
+          result.changed.slotIds.length === 0 && result.changed.assets.length === 0, "directory actual changed facts wrong");
+        const expected = projectClone(before); expected.fileSystem.directories.push(path); expected.fileSystem.directories.sort();
+        check(JSON.stringify(activeProject._state) === JSON.stringify(expected), "directory create changed assets/slots/next-id");
+        projectEFSM.send = send; interfaceFSM.send = frontendSend;
+        const nested = api.assets.createDirectory(path, "nested"), root = api.assets.createDirectory("/", "root-candidate");
+        check(nested === `${path}/nested` && root === "/root-candidate" && projectVfs.resolve(nested).kind === "directory",
+          "nested/root current parent creation failed");
+        check(!/status\(|projectVfs\.|activeProject/.test(createProjectDirectory.toString()), "Application owns directory calculation/status");
+      } finally { projectEFSM.send = send; activeProject.initialize = initialize; interfaceFSM.send = frontendSend;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
+    });
+    await run(82, "Directory create retries latest parent and gates selection on commit without rollback", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send,
+        frontendSend = interfaceFSM.send, reconcile = interfaceFSM.reconcileProjectResult, parent = PROJECT_ASSET_DIRECTORIES.csv,
+        failure = Error("directory original failure");
+      let commits = 0, selections = 0, reconciliations = 0;
+      try {
+        const baseline = JSON.stringify(activeProject._state), stable = interfaceFSM.state;
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        interfaceFSM.send = function (event, payload) { if (event === "SELECT_ASSET") selections++;
+          return frontendSend.call(this, event, payload); };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        const noEffects = () => check(commits === 0 && selections === 0 && reconciliations === 0 &&
+          JSON.stringify(activeProject._state) === baseline && interfaceFSM.state === stable, "rejected directory performed success work");
+        for (const args of [["/no-parent", "folder"], [parent, ""], [parent, ".."], [parent, "a/b"],
+          [projectParentPath(parent), projectPathName(parent)]]) {
+          let caught; try { api.assets.createDirectory(...args); } catch (error) { caught = error; }
+          check(caught, "invalid/colliding directory accepted"); noEffects();
+        }
+        let caught; try { api.assets.createDirectory(parent, { toString() { throw failure; } }); } catch (error) { caught = error; }
+        check(caught === failure, "directory input error replaced"); noEffects();
+        validateProjectObjectState = () => { throw failure; };
+        caught = null; try { api.assets.createDirectory(parent, "validator-fails"); } catch (error) { caught = error; }
+        check(caught === failure, "directory validation error replaced"); noEffects(); validateProjectObjectState = validate;
+        projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.assets.createDirectory(parent, "uncommitted") === null, "directory noncommit return leaked result");
+        noEffects(); projectEFSM.send = send;
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) {
+            const newer = projectClone(activeProject._state); newer.meta.projectName = "latest directory authority";
+            newer.fileSystem.directories.push(`${parent}/concurrent`); initialize.call(activeProject, newer);
+          }
+          return valid;
+        };
+        const path = api.assets.createDirectory(parent, "retry-directory"); validateProjectObjectState = validate;
+        check(attempts === 2 && commits === 1 && selections === 1 && reconciliations === 1 &&
+          activeProject.projectName === "latest directory authority" && projectVfs.resolve(`${parent}/concurrent`) && projectVfs.resolve(path),
+          "directory create overwrote newer source or committed more than once");
+        let stateBeforeSelection;
+        interfaceFSM.send = function (event, payload) { if (event === "SELECT_ASSET") {
+          selections++; stateBeforeSelection = this.state; return this.state; } return frontendSend.call(this, event, payload); };
+        const rejected = api.assets.createDirectory(parent, "selection-rejected");
+        check(rejected === `${parent}/selection-rejected` && projectVfs.resolve(rejected) && interfaceFSM.state === stateBeforeSelection,
+          "rejected selection rolled back committed directory/changed return");
+        interfaceFSM.send = function (event, payload) { if (event === "SELECT_ASSET") throw failure;
+          return frontendSend.call(this, event, payload); };
+        caught = null; try { api.assets.createDirectory(parent, "selection-throws"); } catch (error) { caught = error; }
+        check(caught === failure && projectVfs.resolve(`${parent}/selection-throws`), "selection error swallowed or rolled back directory");
+        // Parent disappearance during validation must reject the recalculated attempt, not commit stale directory.
+        const disappearing = `${parent}/disappearing`, prep = projectClone(activeProject._state);
+        prep.fileSystem.directories.push(disappearing); initialize.call(activeProject, prep); attempts = 0;
+        const priorCommits = commits, priorSelections = selections;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state);
+            newer.fileSystem.directories = newer.fileSystem.directories.filter(path => path !== disappearing);
+            initialize.call(activeProject, newer); }
+          return valid;
+        };
+        caught = null; try { api.assets.createDirectory(disappearing, "child"); } catch (error) { caught = error; }
+        check(caught && commits === priorCommits && selections === priorSelections &&
+          !projectVfs.resolve(`${disappearing}/child`), "stale removed parent candidate committed");
+      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
+        interfaceFSM.send = frontendSend; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
