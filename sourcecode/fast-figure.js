@@ -1422,7 +1422,41 @@
           return;
         }
       }
-      function applySlotImageImportedAction({ machine, payload }) {
+      function applyEmptyImageInsertedAction({ machine, payload }) {
+        machine.assertWritable("slots", "SLOT_IMAGE_IMPORTED");
+        machine.assertWritable("images", "SLOT_IMAGE_IMPORTED");
+        machine.assertWritable("files", "SLOT_IMAGE_IMPORTED");
+        while (true) {
+          const source = activeProject._state, current = source.slots.find(slot => slot.id === payload.slotId && !slot.hidden);
+          if (!current || (current.content?.contentType ?? current.contentType) !== "image")
+            throw Error("빈 이미지를 삽입할 현재 visible image 슬롯이 없습니다.");
+          const input = payload.imageInput, bytes = new Uint8Array(input.bytes || []), directory = PROJECT_ASSET_DIRECTORIES.image;
+          if (!bytes.length || !source.fileSystem.directories.includes(directory)) throw Error("이미지 데이터 또는 directory가 없습니다.");
+          const path = projectVfs.uniquePath(directory, projectCsvName(input.name, "image.bin"), source), id = source.nextId.image;
+          if (!Number.isInteger(id) || id <= 0 || source.assets.images.some(image => image.id === id))
+            throw Error("이미지 next-id가 올바르지 않습니다.");
+          const candidate = projectClone(source);
+          normalizeSlotContents(candidate.slots);
+          for (const slot of candidate.slots) {
+            const original = source.slots.find(item => item.id === slot.id);
+            if (original?.content) slot.content = projectClone(original.content);
+          }
+          candidate.assets.images.push({ id, name: projectPathName(path), directory: projectParentPath(path),
+            mime: typeof input.mime === "string" && input.mime ? input.mime : "application/octet-stream", bytesBase64: ffpxBytesToBase64(bytes) });
+          candidate.nextId.image = id + 1;
+          candidate.slots.find(slot => slot.id === current.id).content.imageId = id;
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const image = activeProject._state.assets.images.find(item => item.id === id);
+          payload.changed = { slotIds: [current.id], chartIds: [], csvIds: [], imageIds: [id],
+            assets: [{ role: "created", kind: "image", id, path: projectAssetPath(image), owners: [{ slotId: current.id, chartId: null }] }] };
+          return;
+        }
+      }
+      function applySlotImageImportedAction(context) {
+        const { machine, payload } = context;
+        if (payload.operation === "images.insertEmpty") return applyEmptyImageInsertedAction(context);
         machine.assertWritable("slots","SLOT_IMAGE_IMPORTED");
         machine.assertWritable("images","SLOT_IMAGE_IMPORTED");
         machine.assertWritable("charts","SLOT_IMAGE_IMPORTED");
@@ -5918,26 +5952,17 @@
         status(`${image.name}을 선택했습니다. 이미지 슬롯의 추가 버튼이나 드롭으로 연결할 수 있습니다.`);
       }
       function insertEmptyImageIntoSelectedSlot() {
-        let slot = getSelectedSlot();
-        if (!slot || slot.contentType !== "image")
-          return status("빈 이미지를 삽입할 이미지 슬롯을 먼저 선택하세요.");
-        let svg =
-            '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>',
-          image = buildProjectImageModel(
-            new TextEncoder().encode(svg),
-            "빈 이미지.svg",
-            "image/svg+xml",
-            activeProject.imageId,
-          );
-        appFSM.send("SLOT_IMAGE_IMPORTED", {
-          slotId: slot.id,
-          model: image,
-          direction: "fsm-to-model",
-        });
-        updateFileAvailability();
+        const slotId = interfaceFSM.readState().selectedSlotId,
+          context = appFSM.query("slot-selection-context", { slotId });
+        if (!context || context.contentType !== "image") return null;
+        const imageInput = { bytes: new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>'),
+          name: "빈 이미지.svg", mime: "image/svg+xml" },
+          result = dispatchProjectCommand("SLOT_IMAGE_IMPORTED", { slotId, operation: "images.insertEmpty", imageInput });
+        if (!result.committed) return null;
+        const path = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image").path,
+          target = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path }).target;
         renderDashboard();
-        status("선택 슬롯에 빈 이미지를 삽입했습니다.");
-        return image;
+        return target;
       }
       function setSlotContentType(slotId, contentType) {
         const result = dispatchProjectCommand("SLOT_TYPE_CHANGED", { slotId, contentType });

@@ -3810,6 +3810,114 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+
+    await run(91, "Empty image inserts raw SVG using one current candidate and copied actual-path read", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection, render = renderDashboard;
+      try {
+        api.layout.setGrid(2, 2); const id = activeProject.slots.find(slot => !slot.hidden).id;
+        select(slotAt(id)); api.slots.setContentType(id, "graph");
+        const noImage = activeProject._state;
+        check(api.images.insertEmpty() === null && activeProject._state === noImage, "non-image empty insertion changed Project");
+        api.slots.setContentType(id, "image");
+        const fixture = projectClone(activeProject._state); normalizeSlotContents(fixture.slots);
+        const slot = fixture.slots.find(slot => slot.id === id); slot.caption = "retained";
+        slot.content.imageSettings = { fit: "manual", scale: 140, x: 8, y: 9 }; initialize.call(activeProject, fixture);
+        const before = projectClone(activeProject._state), runtime = interfaceFSM.readState();
+        let commits = 0, paints = 0, reads = 0, result, actualPath;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = () => { paints++; };
+        projectEFSM.send = function (event, payload) {
+          if (event === "SLOT_IMAGE_IMPORTED") {
+            check(payload.slotId === id && payload.operation === "images.insertEmpty" &&
+              Object.keys(payload).sort().join(",") === "imageInput,operation,slotId" &&
+              Object.keys(payload.imageInput).sort().join(",") === "bytes,mime,name" &&
+              payload.imageInput.bytes instanceof Uint8Array, "empty image passed Project/model authority");
+          }
+          return result = send.call(this, event, payload);
+        };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
+            reads++; check(result.committed && commits === 1 && request.path === result.changed.assets[0].path, "empty image read before commit/wrong path");
+            actualPath = request.path;
+          }
+          return query(kind, request);
+        };
+        const image = api.images.insertEmpty(), model = getProjectImage(image.id),
+          expectedSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>';
+        check(commits === 1 && reads === 1 && paints === 1 && Object.isFrozen(image) && image !== model &&
+          image.id === before.nextId.image && image.name.startsWith("빈 이미지") && image.mime === "image/svg+xml" &&
+          new TextDecoder().decode(ffpxBase64ToBytes(image.bytesBase64)) === expectedSvg &&
+          activeProject._state.nextId.image === image.id + 1 && slotAt(id).imageId === image.id, "empty image wrong copied bytes/identity or multi-commit");
+        check(JSON.stringify(activeProject._state.assets.csvFiles) === JSON.stringify(before.assets.csvFiles) &&
+          activeProject.images.length === before.assets.images.length + 1 && JSON.stringify(activeProject.charts) === JSON.stringify(before.charts) &&
+          slotAt(id).caption === "retained" && slotAt(id).content.imageSettings.scale === 140 &&
+          interfaceFSM.readState().selectedSlotId === runtime.selectedSlotId && interfaceFSM.state.assetPath === runtime.assetPath,
+          "empty image changed unrelated assets/chart/settings/caption/selection");
+        check(Object.isFrozen(result.changed.assets) && result.changed.slotIds.join(",") === String(id) &&
+          result.changed.assets[0].owners[0].slotId === id && result.changed.assets[0].owners[0].chartId === null &&
+          projectAssetPath(model) === actualPath, "empty image actual facts incorrect");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query; renderDashboard = render;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(92, "Empty image retries current ids/path and rejects stale slot without partial commit", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection, render = renderDashboard,
+        validate = validateProjectObjectState, failure = Error("empty image boundary");
+      try {
+        const id = activeProject.slots.find(slot => !slot.hidden).id; select(slotAt(id)); api.slots.setContentType(id, "image");
+        let commits = 0, paints = 0, successReads = 0, caught;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = () => { paints++; };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "assets.readDeletionTarget") successReads++;
+          return query(kind, request);
+        };
+        const source = activeProject._state;
+        validateProjectObjectState = () => { throw failure; };
+        try { api.images.insertEmpty(); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && !commits && !paints && !successReads, "empty validation error partially committed");
+        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.images.insertEmpty() === null && !commits && !paints && !successReads, "empty noncommit read/rendered"); projectEFSM.send = send;
+        let attempts = 0, expectedId, expectedPath;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) {
+            const newer = projectClone(activeProject._state), extra = buildProjectImageModel(new Uint8Array([1]), "빈 이미지.svg", "image/svg+xml", newer.nextId.image++, newer);
+            // Assign an explicit existing image in this newer authority to force fresh id/path resolution.
+            extra.name = "빈 이미지.svg"; extra.directory = PROJECT_ASSET_DIRECTORIES.image;
+            newer.assets.images.push(extra); newer.meta.projectName = "new image authority";
+            expectedId = newer.nextId.image; expectedPath = projectVfs.uniquePath(PROJECT_ASSET_DIRECTORIES.image, "빈 이미지.svg", newer);
+            initialize.call(activeProject, newer);
+          }
+          return valid;
+        };
+        const image = api.images.insertEmpty(); validateProjectObjectState = validate;
+        check(attempts === 2 && commits === 1 && paints === 1 && successReads === 1 && image.id === expectedId &&
+          projectAssetPath(image) === expectedPath && activeProject.projectName === "new image authority", "empty image committed stale next-id/path or multiple commits");
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "assets.readDeletionTarget") throw failure;
+          return query(kind, request);
+        };
+        const previousId = slotAt(id).imageId; caught = null;
+        try { api.images.insertEmpty(); } catch (error) { caught = error; }
+        check(caught === failure && slotAt(id).imageId !== previousId && commits === 2, "late empty query failure swallowed/rolled back");
+        readBackendProjection = function (kind, request) {
+          const value = query(kind, request);
+          if (kind === "slot-selection-context") {
+            const newer = projectClone(activeProject._state); normalizeSlotContents(newer.slots);
+            newer.slots.find(slot => slot.id === id).content.contentType = "graph"; initialize.call(activeProject, newer);
+          }
+          return value;
+        };
+        const imageCount = activeProject.images.length; caught = null;
+        try { api.images.insertEmpty(); } catch (error) { caught = error; }
+        check(caught && activeProject.images.length === imageCount && commits === 2, "stale slot accepted image creation");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query; renderDashboard = render;
+        validateProjectObjectState = validate; initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

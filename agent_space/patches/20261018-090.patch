@@ -1,0 +1,260 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index ad72095..072d7a9 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -193,6 +193,10 @@ Baseline7677ccfdea85d3e349f5fe89cbf5f71b92888c8e. Source41 says missing/hidden/e
+ 
+ Unit30 final bounded evidence: code76 at2d24f6a6407627ad320dfd1683279c0f7f062f30 regression39122819377 PASS90+90/build39122819380 PASS. Completion audit strengthened89 beyond legacy JSON flattening: canonical content extensions and extension-only actual changed slot IDs directly checked. At e174c38615586fbb45df90b2bba66f277f2ba253 cumulative39122882932 PASS from7677ccfdea85d3e349f5fe89cbf5f71b92888c8e, repeat39122885097 PASS90 inline+90 split/180 records. Code76 sha256:80e62260dd83d5223adfd16a650fb0fb7e27a2ad05917af31f8ab3d9f78aa259, pseudocode19 sha256:833d5e1bb3a10b68d16d0a31048f67f34549a211c90c2600d7577787f178f777, Source41 unchanged. Runtime/build/test/upper input diff since successful build empty; review032 bounded checklist/failures and wider serializer/schema/integration exclusions retained. Whole code stale/open.
+ 
++## Thirty-first bounded implementation unit — atomic current-authority empty image insertion
++
++Baselinece3deed0f0ae1667715f61fdcd835b4de8ef0067. Source41/pseudocode19 already close selected image-context/one captured slotId, raw SVG/name/MIME, current candidate image identity/path creation+reference, preserved slot settings and committed-only actual target query. Code77 directly translates this bounded operation, leaves legacy file imports open. Cases91/92 cover bytes/copies/new fields, one commit/facts/settings/assets/selection preservation, current-id/path retry, validation/noncommit/no effects, stale slot and postcommit read errors. Review033/patch090 record pending Actions92+92/build/canonical gate. Whole code stale/open, no upstream meaning change.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index f2ef0ad..5d43967 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3810,6 +3810,114 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++
++    await run(91, "Empty image inserts raw SVG using one current candidate and copied actual-path read", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection, render = renderDashboard;
++      try {
++        api.layout.setGrid(2, 2); const id = activeProject.slots.find(slot => !slot.hidden).id;
++        select(slotAt(id)); api.slots.setContentType(id, "graph");
++        const noImage = activeProject._state;
++        check(api.images.insertEmpty() === null && activeProject._state === noImage, "non-image empty insertion changed Project");
++        api.slots.setContentType(id, "image");
++        const fixture = projectClone(activeProject._state); normalizeSlotContents(fixture.slots);
++        const slot = fixture.slots.find(slot => slot.id === id); slot.caption = "retained";
++        slot.content.imageSettings = { fit: "manual", scale: 140, x: 8, y: 9 }; initialize.call(activeProject, fixture);
++        const before = projectClone(activeProject._state), runtime = interfaceFSM.readState();
++        let commits = 0, paints = 0, reads = 0, result, actualPath;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = () => { paints++; };
++        projectEFSM.send = function (event, payload) {
++          if (event === "SLOT_IMAGE_IMPORTED") {
++            check(payload.slotId === id && payload.operation === "images.insertEmpty" &&
++              Object.keys(payload).sort().join(",") === "imageInput,operation,slotId" &&
++              Object.keys(payload.imageInput).sort().join(",") === "bytes,mime,name" &&
++              payload.imageInput.bytes instanceof Uint8Array, "empty image passed Project/model authority");
++          }
++          return result = send.call(this, event, payload);
++        };
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "assets.readDeletionTarget") {
++            reads++; check(result.committed && commits === 1 && request.path === result.changed.assets[0].path, "empty image read before commit/wrong path");
++            actualPath = request.path;
++          }
++          return query(kind, request);
++        };
++        const image = api.images.insertEmpty(), model = getProjectImage(image.id),
++          expectedSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>';
++        check(commits === 1 && reads === 1 && paints === 1 && Object.isFrozen(image) && image !== model &&
++          image.id === before.nextId.image && image.name.startsWith("빈 이미지") && image.mime === "image/svg+xml" &&
++          new TextDecoder().decode(ffpxBase64ToBytes(image.bytesBase64)) === expectedSvg &&
++          activeProject._state.nextId.image === image.id + 1 && slotAt(id).imageId === image.id, "empty image wrong copied bytes/identity or multi-commit");
++        check(JSON.stringify(activeProject._state.assets.csvFiles) === JSON.stringify(before.assets.csvFiles) &&
++          activeProject.images.length === before.assets.images.length + 1 && JSON.stringify(activeProject.charts) === JSON.stringify(before.charts) &&
++          slotAt(id).caption === "retained" && slotAt(id).content.imageSettings.scale === 140 &&
++          interfaceFSM.readState().selectedSlotId === runtime.selectedSlotId && interfaceFSM.state.assetPath === runtime.assetPath,
++          "empty image changed unrelated assets/chart/settings/caption/selection");
++        check(Object.isFrozen(result.changed.assets) && result.changed.slotIds.join(",") === String(id) &&
++          result.changed.assets[0].owners[0].slotId === id && result.changed.assets[0].owners[0].chartId === null &&
++          projectAssetPath(model) === actualPath, "empty image actual facts incorrect");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query; renderDashboard = render;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(92, "Empty image retries current ids/path and rejects stale slot without partial commit", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection, render = renderDashboard,
++        validate = validateProjectObjectState, failure = Error("empty image boundary");
++      try {
++        const id = activeProject.slots.find(slot => !slot.hidden).id; select(slotAt(id)); api.slots.setContentType(id, "image");
++        let commits = 0, paints = 0, successReads = 0, caught;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = () => { paints++; };
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "assets.readDeletionTarget") successReads++;
++          return query(kind, request);
++        };
++        const source = activeProject._state;
++        validateProjectObjectState = () => { throw failure; };
++        try { api.images.insertEmpty(); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && !commits && !paints && !successReads, "empty validation error partially committed");
++        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
++        check(api.images.insertEmpty() === null && !commits && !paints && !successReads, "empty noncommit read/rendered"); projectEFSM.send = send;
++        let attempts = 0, expectedId, expectedPath;
++        validateProjectObjectState = function (candidate, options) {
++          const valid = validate(candidate, options);
++          if (options?.requireSlots && !attempts++) {
++            const newer = projectClone(activeProject._state), extra = buildProjectImageModel(new Uint8Array([1]), "빈 이미지.svg", "image/svg+xml", newer.nextId.image++, newer);
++            // Assign an explicit existing image in this newer authority to force fresh id/path resolution.
++            extra.name = "빈 이미지.svg"; extra.directory = PROJECT_ASSET_DIRECTORIES.image;
++            newer.assets.images.push(extra); newer.meta.projectName = "new image authority";
++            expectedId = newer.nextId.image; expectedPath = projectVfs.uniquePath(PROJECT_ASSET_DIRECTORIES.image, "빈 이미지.svg", newer);
++            initialize.call(activeProject, newer);
++          }
++          return valid;
++        };
++        const image = api.images.insertEmpty(); validateProjectObjectState = validate;
++        check(attempts === 2 && commits === 1 && paints === 1 && successReads === 1 && image.id === expectedId &&
++          projectAssetPath(image) === expectedPath && activeProject.projectName === "new image authority", "empty image committed stale next-id/path or multiple commits");
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "assets.readDeletionTarget") throw failure;
++          return query(kind, request);
++        };
++        const previousId = slotAt(id).imageId; caught = null;
++        try { api.images.insertEmpty(); } catch (error) { caught = error; }
++        check(caught === failure && slotAt(id).imageId !== previousId && commits === 2, "late empty query failure swallowed/rolled back");
++        readBackendProjection = function (kind, request) {
++          const value = query(kind, request);
++          if (kind === "slot-selection-context") {
++            const newer = projectClone(activeProject._state); normalizeSlotContents(newer.slots);
++            newer.slots.find(slot => slot.id === id).content.contentType = "graph"; initialize.call(activeProject, newer);
++          }
++          return value;
++        };
++        const imageCount = activeProject.images.length; caught = null;
++        try { api.images.insertEmpty(); } catch (error) { caught = error; }
++        check(caught && activeProject.images.length === imageCount && commits === 2, "stale slot accepted image creation");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query; renderDashboard = render;
++        validateProjectObjectState = validate; initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 2bc5ba4..b80ce0a 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 76,
++      "revision": 77,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:833d5e1bb3a10b68d16d0a31048f67f34549a211c90c2600d7577787f178f777",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-032-code-slot-swap-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-033-code-empty-image-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 19,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 69e2536..74befa7 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1422,7 +1422,41 @@
+           return;
+         }
+       }
+-      function applySlotImageImportedAction({ machine, payload }) {
++      function applyEmptyImageInsertedAction({ machine, payload }) {
++        machine.assertWritable("slots", "SLOT_IMAGE_IMPORTED");
++        machine.assertWritable("images", "SLOT_IMAGE_IMPORTED");
++        machine.assertWritable("files", "SLOT_IMAGE_IMPORTED");
++        while (true) {
++          const source = activeProject._state, current = source.slots.find(slot => slot.id === payload.slotId && !slot.hidden);
++          if (!current || (current.content?.contentType ?? current.contentType) !== "image")
++            throw Error("빈 이미지를 삽입할 현재 visible image 슬롯이 없습니다.");
++          const input = payload.imageInput, bytes = new Uint8Array(input.bytes || []), directory = PROJECT_ASSET_DIRECTORIES.image;
++          if (!bytes.length || !source.fileSystem.directories.includes(directory)) throw Error("이미지 데이터 또는 directory가 없습니다.");
++          const path = projectVfs.uniquePath(directory, projectCsvName(input.name, "image.bin"), source), id = source.nextId.image;
++          if (!Number.isInteger(id) || id <= 0 || source.assets.images.some(image => image.id === id))
++            throw Error("이미지 next-id가 올바르지 않습니다.");
++          const candidate = projectClone(source);
++          normalizeSlotContents(candidate.slots);
++          for (const slot of candidate.slots) {
++            const original = source.slots.find(item => item.id === slot.id);
++            if (original?.content) slot.content = projectClone(original.content);
++          }
++          candidate.assets.images.push({ id, name: projectPathName(path), directory: projectParentPath(path),
++            mime: typeof input.mime === "string" && input.mime ? input.mime : "application/octet-stream", bytesBase64: ffpxBytesToBase64(bytes) });
++          candidate.nextId.image = id + 1;
++          candidate.slots.find(slot => slot.id === current.id).content.imageId = id;
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const image = activeProject._state.assets.images.find(item => item.id === id);
++          payload.changed = { slotIds: [current.id], chartIds: [], csvIds: [], imageIds: [id],
++            assets: [{ role: "created", kind: "image", id, path: projectAssetPath(image), owners: [{ slotId: current.id, chartId: null }] }] };
++          return;
++        }
++      }
++      function applySlotImageImportedAction(context) {
++        const { machine, payload } = context;
++        if (payload.operation === "images.insertEmpty") return applyEmptyImageInsertedAction(context);
+         machine.assertWritable("slots","SLOT_IMAGE_IMPORTED");
+         machine.assertWritable("images","SLOT_IMAGE_IMPORTED");
+         machine.assertWritable("charts","SLOT_IMAGE_IMPORTED");
+@@ -5918,26 +5952,17 @@
+         status(`${image.name}을 선택했습니다. 이미지 슬롯의 추가 버튼이나 드롭으로 연결할 수 있습니다.`);
+       }
+       function insertEmptyImageIntoSelectedSlot() {
+-        let slot = getSelectedSlot();
+-        if (!slot || slot.contentType !== "image")
+-          return status("빈 이미지를 삽입할 이미지 슬롯을 먼저 선택하세요.");
+-        let svg =
+-            '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>',
+-          image = buildProjectImageModel(
+-            new TextEncoder().encode(svg),
+-            "빈 이미지.svg",
+-            "image/svg+xml",
+-            activeProject.imageId,
+-          );
+-        appFSM.send("SLOT_IMAGE_IMPORTED", {
+-          slotId: slot.id,
+-          model: image,
+-          direction: "fsm-to-model",
+-        });
+-        updateFileAvailability();
++        const slotId = interfaceFSM.readState().selectedSlotId,
++          context = appFSM.query("slot-selection-context", { slotId });
++        if (!context || context.contentType !== "image") return null;
++        const imageInput = { bytes: new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>'),
++          name: "빈 이미지.svg", mime: "image/svg+xml" },
++          result = dispatchProjectCommand("SLOT_IMAGE_IMPORTED", { slotId, operation: "images.insertEmpty", imageInput });
++        if (!result.committed) return null;
++        const path = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image").path,
++          target = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path }).target;
+         renderDashboard();
+-        status("선택 슬롯에 빈 이미지를 삽입했습니다.");
+-        return image;
++        return target;
+       }
+       function setSlotContentType(slotId, contentType) {
+         const result = dispatchProjectCommand("SLOT_TYPE_CHANGED", { slotId, contentType });
+diff --git a/agent_space/reviews/review-20261018-033-code-empty-image-open.md b/agent_space/reviews/review-20261018-033-code-empty-image-open.md
+new file mode 100644
+index 0000000..5df00de
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-033-code-empty-image-open.md
+@@ -0,0 +1,14 @@
++# Unit31 empty image insertion
++
++Existing Source41 sourcescript/application/public_api/layout_annotations.py insertEmptyImageIntoSelectedSlot defines exact SVG data, one captured selected-slot scalar and visible image context gate, new bytes/name/MIME-only command, committed-only actual created-path read. Source backend/project_efsm.py and pseudocode19 SLOT_IMAGE_IMPORTED calculate current VFS/id and asset+reference in one candidate; display settings remain slot-local. Upper meaning unchanged, no reverse-authority rewrite. Code77 adds bounded images.insertEmpty candidate path; other legacy image imports remain explicitly unaligned.
++
++## Requirement-to-artifact checklist
++
++- No selected visible image context -> None/no command; capture once, no Application model/id/path calculation: wrapper,91/92.
++- Exact UTF8 SVG/name/MIME/new input; immutable detached success target at actual created path:91 spies/byte checks.
++- Current image next-id/unique VFS path, whole candidate validates/rechecks authority/retries/single commit:92 collision/newer-id/name authority hook.
++- Asset creation+slot imageId only; caption/current image settings/chart/CSV/selection unchanged:91 comparisons, Backend changes only image reference and new asset/id.
++- Frozen actual created image id/path/slot owner with chartId none:91.
++- Validator/noncommit no partial writes or success reads/render; current slot changed to graph rejects after query; original postcommit query failure no rollback:92.
++
++Pending actual default-runner Actions92+92/build/canonical/cumulative gate. No local runtime/checker/build. Source41/pseudocode19 unchanged, code77 stale and whole Plan023 open; full import/other assets/shared schema/raster/dashboard and serializer/timing gaps remain. Optional model/TLC not run, policy unchanged.
