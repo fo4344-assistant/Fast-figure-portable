@@ -1,0 +1,77 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 8d82570..321af44 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -279,6 +279,10 @@ Unit46 final bounded evidence: a187cfa2bbcfefcd4a1d4027028db81ec4ba913b regressi
+ 
+ Baseline0ba01c3fb12bb7545c2e45c7e1fbef3f006560cf. Source45 assets.connectProjectAssetToSlot/pseudocode24 existing kind-specific connection require scalar path/kind/slotId, current non-trash matching asset/visible typed target, reference-only image link or candidate CSV/chart connection, common whole validation/source retry and committed-only model-to-fsm target selection preserving independent asset. Code98 translates shared current-source Backend connection and correct public image LINKED event, without caller slot/candidate, chart reset or new asset. Cases127/128 plus39 explicit image-type fixture. Review20261019-001/patch20261019-001; exact-SHA128+128/repeat/build/cumulative/fidelity pending. Upper unchanged, code stale; full initializer/schema/serializer/raster/dashboard/timing audit still open. No policy changes or local runtime execution.
+ 
++### Unit47 runner diagnosis and fixture correction
++
++At implementation `0aa44cc27ac9edeff662307b0945c0d5b1ed3302`, regression39157035056 passed126 and failed39/127 in each distribution. Existing Source/PlusCal whole validation forbids chart+image references together: type conversion retains the chart, so image-link success fixtures now explicitly reset first. Case127 also replaces nonexistent resizeGrid with official setGrid. No validator or command weakening, upper meaning/code revision unchanged. Build39157035112, versions39157035072/39157046956 and fidelity39157049483 succeeded; generated dist-only bot d5eed453907f6ac6da9a711353dba3a677b0ae01 fast-forwarded. Patch20261019-002/review20261019-001 preserve actual failures and correction; corrected exact-SHA cumulative/repeat verification pending. Full objective remains open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261019-001-code-asset-connect-open.md b/agent_space/reviews/review-20261019-001-code-asset-connect-open.md
+index d129519..fbe0f4f 100644
+--- a/agent_space/reviews/review-20261019-001-code-asset-connect-open.md
++++ b/agent_space/reviews/review-20261019-001-code-asset-connect-open.md
+@@ -1,4 +1,4 @@
+-# Unit47 — existing asset connection (pending Actions)
++# Unit47 — existing asset connection (regression fixture correction pending)
+ 
+ ## Authority and policy
+ 
+@@ -8,10 +8,10 @@ Continue fully read development-policy.md v0.2.6 and AGENT.md: Source highest au
+ 
+ - Public connect forwards only path/kind/slotId to kind-specific command (image LINKED, not IMPORTED); invalid kind errors, noncommit None with no target selection/render/status, committed target selection once and None return. No live slot/asset resolution/candidate in Application.
+ - Backend shared applyProjectAssetConnectedAction captures current state each attempt, resolves matching non-trash asset/visible same-type slot, copies canonical contents, changes only image reference or candidate graph/chart, rebuilds before whole validation, compares authority and retries before one commit. Actual changed slot/chart facts; graph add retains separate existing first-object route and no import/new asset is fabricated.
+-- Image link preserves canonical extensions, local settings and retained chart identity (type conversion is a separate explicit operation). Case39 previously connected to an arbitrary other slot through legacy implicit conversion; fixture now explicitly sets the required image type instead of weakening the already-current typed command contract.
+-- Case127: scalar payload, existing image/no new asset, image reference-only preservation with retained chart/settings/extension, independent asset selection, CSV candidate graph and one commit per command, final target/cleared graph selection.
++- Image link preserves canonical extensions and local settings; whole validation rejects simultaneous chart/image references (Source project_state.py validateProjectObjectState and PlusCal project_state.pcal). The original retained-chart success claim was wrong. Type conversion alone retains payload; fixtures must explicitly reset a chart-bearing slot before image linking, not expect linking to remove its chart or weaken schema.
++- Case127: scalar payload, existing image/no new asset, image reference-only preservation with null chart/settings/extension, independent asset selection, CSV candidate graph and one commit per command, final target/cleared graph selection.
+ - Case128: mismatched kind/path/target/type, unsupported kind, original validation failure, noncommit no selection, authority replacement during validation recalculates current next chart id, late selection failure keeps committed graph.
+ 
+ ## Lineage, execution and limits
+ 
+-Source45/pseudocode24 unchanged. Code98 stale; canonical staged Git blob fingerprint calculated without executing local checker, runner confirmation pending. Exact-SHA128 inline+128 split/repeat/build/cumulative version/fidelity pending. No local application/test/build/checker or optional TLC. Existing aggregate rendering not claimed fully supplied-state cutover. This bounded unit does not close global initializer revalidation/reentrancy, strict XML/schema/serializer, raster resources/current snapshot, dashboard or timing integration. Whole Plan023 remains open.
++Source45/pseudocode24 unchanged. Code98 stale; canonical staged Git blob fingerprint calculated without executing local checker, runner confirmation pending. Implementation SHA `0aa44cc27ac9edeff662307b0945c0d5b1ed3302`: regression39157035056 failed cases39/127 in both inline/split; other126 cases passed including128. Case39 hit `프로젝트 슬롯 오브젝트가 올바르지 않습니다.` because a retained chart plus linked image violates the existing no-dual-reference schema. Case127 hit `TypeError: api.layout.resizeGrid is not a function` before reaching its similarly invalid retained-chart success expectation. Test-only correction uses official layout.setGrid and explicit slots.reset before setContentType/link. It preserves the no-dual-reference validator and reference-only command; no Source/pseudocode/code change. Patch20261019-002 records this correction. Build39157035112, push version39157035072, cumulative version39157046956 and fidelity39157049483 succeeded at the same implementation SHA; bot `d5eed453907f6ac6da9a711353dba3a677b0ae01` contains generator-only dist. Corrected exact-SHA128 inline+128 split/repetition still pending; prior green structural checks are not semantic completion. No local application/test/build/checker or optional TLC. Existing aggregate rendering not claimed fully supplied-state cutover. This bounded unit does not close global initializer revalidation/reentrancy, strict XML/schema/serializer, raster resources/current snapshot, dashboard or timing integration. Whole Plan023 remains open.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index d65d4b0..360cc30 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1211,6 +1211,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       const imageId = slotAt(target.id).imageId;
+       const other = activeProject.slots.find((slot) => !slot.hidden && slot.id !== target.id);
+       if (other) {
++        api.slots.reset(other.id);
+         api.slots.setContentType(other.id, "image");
+         api.assets.connectToSlot(projectAssetPath(getProjectImage(imageId)), "image", other.id);
+         select(slotAt(target.id));
+@@ -5726,12 +5727,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+         initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+       try {
+-        initialize.call(activeProject, createProjectState()); api.layout.resizeGrid(2, 2);
++        initialize.call(activeProject, createProjectState()); api.layout.setGrid(2, 2);
+         const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+         select(slotAt(a.id));
+         const csv = createProjectCsv([["x","y"],[1,2]], "linked.csv");
+         api.graphs.addObject(csv.id);
+-        const oldChart = slotAt(a.id).chart;
++        api.slots.reset(a.id);
+         api.slots.setContentType(a.id, "image");
+         const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'), "linked.svg", "image/svg+xml");
+         slotAt(a.id).content.linkExtension = { kept: true };
+@@ -5748,8 +5749,8 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+           return send.call(this, event, payload);
+         };
+         check(api.assets.connectToSlot(projectAssetPath(image), "image", a.id) === null, "image connect exposed internal result");
+-        check(commits === 1 && slotAt(a.id).imageId === image.id && slotAt(a.id).chart === oldChart &&
+-          getChart(oldChart) && JSON.stringify(slotAt(a.id).imageSettings) === local && slotAt(a.id).content.linkExtension.kept &&
++        check(commits === 1 && slotAt(a.id).imageId === image.id && slotAt(a.id).chart === null &&
++          JSON.stringify(slotAt(a.id).imageSettings) === local && slotAt(a.id).content.linkExtension.kept &&
+           activeProject.images.length === imageCount, "image link reset local payload/chart or created an asset");
+         check(interfaceFSM.readState().assetPath === projectAssetPath(csv) && interfaceFSM.readState().selectedSlotId === a.id,
+           "image connect cleared independent asset selection or missed target selection");
