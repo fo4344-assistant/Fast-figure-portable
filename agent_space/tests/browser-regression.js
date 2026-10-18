@@ -3707,6 +3707,95 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+
+    await run(89, "Slot swap exchanges complete local payload and reconciles selection without clearing assets", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard;
+      try {
+        api.layout.setGrid(2, 2);
+        const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+        api.slots.reset(a.id); api.slots.reset(b.id);
+        const csv = createProjectCsv([["X", "Y"], [1, 2]], "swap-csv.csv");
+        select(slotAt(a.id)); api.graphs.addObject(csv.id);
+        const chartId = slotAt(a.id).chart, fixture = projectClone(activeProject._state); normalizeSlotContents(fixture.slots);
+        fixture.slots.find(slot => slot.id === a.id).caption = "A";
+        const second = fixture.slots.find(slot => slot.id === b.id);
+        second.caption = "B"; second.content.contentType = "image"; second.content.imageSettings = { fit: "manual", scale: 140, x: 8, y: 9 };
+        second.content.extension = { preserved: [1, 2] };
+        initialize.call(activeProject, fixture); select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(getProjectCsv(csv.id)));
+        interfaceFSM.send("SELECT_GRAPH_OBJECT", { index: 0, selectAsset: false });
+        const before = projectClone(activeProject._state), path = interfaceFSM.state.assetPath;
+        let commits = 0, paints = 0, result;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = () => { paints++; };
+        projectEFSM.send = function (event, payload) {
+          if (event === "SLOTS_SWAPPED") check(Object.keys(payload).sort().join(",") === "sourceSlotId,targetSlotId", "swap passed payload authority");
+          return result = send.call(this, event, payload);
+        };
+        check(api.slots.swap(a.id, b.id) === true, "swap did not return committed Boolean");
+        normalizeSlotContents(before.slots);
+        const firstExpected = before.slots.find(slot => slot.id === a.id), secondExpected = before.slots.find(slot => slot.id === b.id),
+          content = firstExpected.content, caption = firstExpected.caption;
+        firstExpected.content = secondExpected.content; firstExpected.caption = secondExpected.caption;
+        secondExpected.content = content; secondExpected.caption = caption;
+        check(JSON.stringify(activeProject._state) === JSON.stringify(before) && commits === 1 && paints === 1 &&
+          slotAt(b.id).chart === chartId && getChart(chartId), "swap lost local extension/geometry/assets or made partial commits");
+        check(interfaceFSM.readState().selectedSlotId === b.id && interfaceFSM.state.graphObjectIndex === 0 &&
+          interfaceFSM.state.assetPath === path, "swap cleared selections instead of following payload");
+        check(result.selectionHints.swapSlotIds.join(",") === [a.id, b.id].join(",") &&
+          Object.keys(result.selectionHints).length === 1 && Object.isFrozen(result.selectionHints.swapSlotIds) &&
+          result.changed.slotIds.length === 2 && !result.changed.chartIds.length && !result.changed.assets.length, "swap facts/hints invented changes");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(90, "Slot swap noops invalid targets and retries current payload with original failure boundaries", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
+        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult, failure = Error("swap boundary");
+      try {
+        api.layout.setGrid(2, 2);
+        const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+        let commits = 0, paints = 0, reconciliations = 0, caught;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        renderDashboard = () => { paints++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        const source = activeProject._state, runtime = interfaceFSM.state;
+        for (const [x, y] of [[a.id, a.id], [null, b.id], [a.id, -1], [String(a.id), b.id]]) {
+          check(api.slots.swap(x, y) === false && activeProject._state === source && interfaceFSM.state === runtime &&
+            !commits && !paints && !reconciliations, "invalid/equal swap threw or ran success work");
+        }
+        validateProjectObjectState = () => { throw failure; };
+        try { api.slots.swap(a.id, b.id); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && !commits && !paints, "swap validation error lost/partially committed");
+        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.slots.swap(a.id, b.id) === false && !paints && !reconciliations, "noncommit swap rendered/reconciled"); projectEFSM.send = send;
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) {
+            const newer = projectClone(activeProject._state); newer.meta.projectName = "latest swap authority";
+            newer.slots.find(slot => slot.id === a.id).caption = "newest A"; newer.slots.find(slot => slot.id === b.id).caption = "newest B";
+            initialize.call(activeProject, newer);
+          }
+          return valid;
+        };
+        check(api.slots.swap(a.id, b.id), "retry swap not committed"); validateProjectObjectState = validate;
+        check(attempts === 2 && commits === 1 && paints === 1 && reconciliations === 1 &&
+          activeProject.projectName === "latest swap authority" && slotAt(a.id).caption === "newest B" &&
+          slotAt(b.id).caption === "newest A", "swap used stale payload/authority or multiple commits");
+        const hidden = projectClone(activeProject._state); hidden.slots.find(slot => slot.id === b.id).hidden = true;
+        initialize.call(activeProject, hidden); const latest = activeProject._state;
+        check(api.slots.swap(a.id, b.id) === false && activeProject._state === latest && commits === 1, "hidden swap committed");
+        hidden.slots.find(slot => slot.id === b.id).hidden = false; initialize.call(activeProject, hidden);
+        renderDashboard = () => { throw failure; }; caught = null;
+        try { api.slots.swap(a.id, b.id); } catch (error) { caught = error; }
+        check(caught === failure && slotAt(a.id).caption === "newest A", "postcommit renderer error swallowed or rolled back");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

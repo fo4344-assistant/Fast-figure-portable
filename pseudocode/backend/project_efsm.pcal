@@ -24,6 +24,10 @@ PROJECT_COMMANDS == {
 \* Source graph edit operations, not a generic replacement-array public API:
 GRAPH_OPERATIONS == {"graphs.addObject", "graphs.moveObject", "graphs.setObjectValues",
                      "graphs.deleteObject", "graphs.applyPalette"}
+\* Command-private optional lookup; no required-slot exception for Source swap noops.
+FindByIdOrNone(slots,id) ==
+  LET matches == {i \in 1..Len(slots) : slots[i].id = id}
+  IN IF matches = {} THEN None ELSE slots[CHOOSE i \in matches : TRUE]
 \* No successful hint/map may be present in a failed outcome.
 
 (* --algorithm BackendProjectEFSM
@@ -412,9 +416,11 @@ DomainBranchNotAlternativeMutationEntry:
       i := i + 1;
     end while;
   elsif event = "SLOTS_SWAPPED" then
-    slot := ResolveCurrentVisibleSlot(source,payload.sourceSlotId);
-    other := ResolveCurrentVisibleSlot(source,payload.targetSlotId);
-    if slot.id = other.id then result := UncommittedUnchanged(); return; end if;
+    \* Source missing/hidden/same-id is uncommitted, not a throwing required-slot resolution.
+    slot := FindByIdOrNone(source.slots,payload.sourceSlotId);
+    other := FindByIdOrNone(source.slots,payload.targetSlotId);
+    if slot = None \/ other = None then result := UncommittedUnchanged(); return; end if;
+    if slot.hidden \/ other.hidden \/ slot.id = other.id then result := UncommittedUnchanged(); return; end if;
     SwapCompleteSlotLocalPayloadWithoutChangingGeometryOrIdentity(candidate,slot.id,other.id);
     hints := [swapSlotIds |-> <<slot.id,other.id>>];
   elsif event = "SLOT_CAPTIONS_INSERTED" then

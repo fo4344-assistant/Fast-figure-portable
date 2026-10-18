@@ -1,0 +1,279 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 747bad7..dafa1fc 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -187,6 +187,10 @@ Baseline b5a08902523a1c069022f23421815ad2345ea056. Source41/pseudocode18 require
+ 
+ Unit29 bounded evidence: runtime851b6bf16868c8f54618b57399dba48ac4b38d13 build39122365729 PASS. Initial regression39122365722 failed87 nonexistent flat imageSettings assertion, fixed test-only to content.imageSettings;88 and prior86 passed. At corrected lineage d5c13e2846e9ec1a0dac8e94413d72ed2d5bd991 regression39122432590 PASS88 inline+88 split/176 records, cumulative39122433005 PASS fromb5a08902523a1c069022f23421815ad2345ea056. Code73 canonical sha256:858aa0479d23d336d52d73e76f644ba483ff572b06a22b0b411544d270185ee0, Source41/pseudocode18 unchanged. Runtime/build input diff empty since successful build; review031 actual requirement audit and failed-run record retained. Whole code stale/open.
+ 
++## Thirtieth bounded implementation unit — current-authority complete slot swap
++
++Baseline7677ccfdea85d3e349f5fe89cbf5f71b92888c8e. Source41 says missing/hidden/equal uncommitted, complete slot-local swap without geometry/identity change and only common selection reconciliation. Pseudocode19 first fixes required-slot lookup ambiguity with explicit optional lookup/noop gate. Code74 captures current authority, swaps content/caption in candidate, whole validates/retries/single commit with actual slot facts and swap-only hint. Public slots.swap scalar-ID Boolean wrapper and legacy drag route share committed-only rendering. Cases89/90 assert exact Project/extension/settings/geometry preservation, selected payload follows slot without forced asset/index clear, missing/hidden/equal/no-commit, failure/current-retry/postcommit boundary. Review032/patch084 record pending Actions90+90/build/canonical gate. Source unchanged, whole code stale/open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 4f650f8..d79f596 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3707,6 +3707,95 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++
++    await run(89, "Slot swap exchanges complete local payload and reconciles selection without clearing assets", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard;
++      try {
++        api.layout.setGrid(2, 2);
++        const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
++        api.slots.reset(a.id); api.slots.reset(b.id);
++        const csv = createProjectCsv([["X", "Y"], [1, 2]], "swap-csv.csv");
++        select(slotAt(a.id)); api.graphs.addObject(csv.id);
++        const chartId = slotAt(a.id).chart, fixture = projectClone(activeProject._state); normalizeSlotContents(fixture.slots);
++        fixture.slots.find(slot => slot.id === a.id).caption = "A";
++        const second = fixture.slots.find(slot => slot.id === b.id);
++        second.caption = "B"; second.content.contentType = "image"; second.content.imageSettings = { fit: "manual", scale: 140, x: 8, y: 9 };
++        second.content.extension = { preserved: [1, 2] };
++        initialize.call(activeProject, fixture); select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(getProjectCsv(csv.id)));
++        interfaceFSM.send("SELECT_GRAPH_OBJECT", { index: 0, selectAsset: false });
++        const before = projectClone(activeProject._state), path = interfaceFSM.state.assetPath;
++        let commits = 0, paints = 0, result;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = () => { paints++; };
++        projectEFSM.send = function (event, payload) {
++          if (event === "SLOTS_SWAPPED") check(Object.keys(payload).sort().join(",") === "sourceSlotId,targetSlotId", "swap passed payload authority");
++          return result = send.call(this, event, payload);
++        };
++        check(api.slots.swap(a.id, b.id) === true, "swap did not return committed Boolean");
++        normalizeSlotContents(before.slots);
++        const firstExpected = before.slots.find(slot => slot.id === a.id), secondExpected = before.slots.find(slot => slot.id === b.id),
++          content = firstExpected.content, caption = firstExpected.caption;
++        firstExpected.content = secondExpected.content; firstExpected.caption = secondExpected.caption;
++        secondExpected.content = content; secondExpected.caption = caption;
++        check(JSON.stringify(activeProject._state) === JSON.stringify(before) && commits === 1 && paints === 1 &&
++          slotAt(b.id).chart === chartId && getChart(chartId), "swap lost local extension/geometry/assets or made partial commits");
++        check(interfaceFSM.readState().selectedSlotId === b.id && interfaceFSM.state.graphObjectIndex === 0 &&
++          interfaceFSM.state.assetPath === path, "swap cleared selections instead of following payload");
++        check(result.selectionHints.swapSlotIds.join(",") === [a.id, b.id].join(",") &&
++          Object.keys(result.selectionHints).length === 1 && Object.isFrozen(result.selectionHints.swapSlotIds) &&
++          result.changed.slotIds.length === 2 && !result.changed.chartIds.length && !result.changed.assets.length, "swap facts/hints invented changes");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(90, "Slot swap noops invalid targets and retries current payload with original failure boundaries", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, render = renderDashboard,
++        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult, failure = Error("swap boundary");
++      try {
++        api.layout.setGrid(2, 2);
++        const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
++        let commits = 0, paints = 0, reconciliations = 0, caught;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        renderDashboard = () => { paints++; };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        const source = activeProject._state, runtime = interfaceFSM.state;
++        for (const [x, y] of [[a.id, a.id], [null, b.id], [a.id, -1], [String(a.id), b.id]]) {
++          check(api.slots.swap(x, y) === false && activeProject._state === source && interfaceFSM.state === runtime &&
++            !commits && !paints && !reconciliations, "invalid/equal swap threw or ran success work");
++        }
++        validateProjectObjectState = () => { throw failure; };
++        try { api.slots.swap(a.id, b.id); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && !commits && !paints, "swap validation error lost/partially committed");
++        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
++        check(api.slots.swap(a.id, b.id) === false && !paints && !reconciliations, "noncommit swap rendered/reconciled"); projectEFSM.send = send;
++        let attempts = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const valid = validate(candidate, options);
++          if (options?.requireSlots && !attempts++) {
++            const newer = projectClone(activeProject._state); newer.meta.projectName = "latest swap authority";
++            newer.slots.find(slot => slot.id === a.id).caption = "newest A"; newer.slots.find(slot => slot.id === b.id).caption = "newest B";
++            initialize.call(activeProject, newer);
++          }
++          return valid;
++        };
++        check(api.slots.swap(a.id, b.id), "retry swap not committed"); validateProjectObjectState = validate;
++        check(attempts === 2 && commits === 1 && paints === 1 && reconciliations === 1 &&
++          activeProject.projectName === "latest swap authority" && slotAt(a.id).caption === "newest B" &&
++          slotAt(b.id).caption === "newest A", "swap used stale payload/authority or multiple commits");
++        const hidden = projectClone(activeProject._state); hidden.slots.find(slot => slot.id === b.id).hidden = true;
++        initialize.call(activeProject, hidden); const latest = activeProject._state;
++        check(api.slots.swap(a.id, b.id) === false && activeProject._state === latest && commits === 1, "hidden swap committed");
++        hidden.slots.find(slot => slot.id === b.id).hidden = false; initialize.call(activeProject, hidden);
++        renderDashboard = () => { throw failure; }; caught = null;
++        try { api.slots.swap(a.id, b.id); } catch (error) { caught = error; }
++        check(caught === failure && slotAt(a.id).caption === "newest A", "postcommit renderer error swallowed or rolled back");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
++        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 5459e64..b30cc15 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 73,
++      "revision": 74,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,17 +44,17 @@
+         "pseudocode": "sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-031-code-slot-reset-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-032-code-slot-swap-open.md"
+     }, 
+     "pseudocode": {
+-      "revision": 18,
++      "revision": 19,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+       "fingerprint": "sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5"
+       },
+-      "translation_review": "agent_space/reviews/review-20261018-026-code-csv-create-open.md"
++      "translation_review": "agent_space/reviews/review-20261018-032-code-slot-swap-open.md"
+     }
+   }
+ }
+diff --git a/pseudocode/backend/project_efsm.pcal b/pseudocode/backend/project_efsm.pcal
+index b712c2f..8255b45 100644
+--- a/pseudocode/backend/project_efsm.pcal
++++ b/pseudocode/backend/project_efsm.pcal
+@@ -24,6 +24,10 @@ PROJECT_COMMANDS == {
+ \* Source graph edit operations, not a generic replacement-array public API:
+ GRAPH_OPERATIONS == {"graphs.addObject", "graphs.moveObject", "graphs.setObjectValues",
+                      "graphs.deleteObject", "graphs.applyPalette"}
++\* Command-private optional lookup; no required-slot exception for Source swap noops.
++FindByIdOrNone(slots,id) ==
++  LET matches == {i \in 1..Len(slots) : slots[i].id = id}
++  IN IF matches = {} THEN None ELSE slots[CHOOSE i \in matches : TRUE]
+ \* No successful hint/map may be present in a failed outcome.
+ 
+ (* --algorithm BackendProjectEFSM
+@@ -412,9 +416,11 @@ DomainBranchNotAlternativeMutationEntry:
+       i := i + 1;
+     end while;
+   elsif event = "SLOTS_SWAPPED" then
+-    slot := ResolveCurrentVisibleSlot(source,payload.sourceSlotId);
+-    other := ResolveCurrentVisibleSlot(source,payload.targetSlotId);
+-    if slot.id = other.id then result := UncommittedUnchanged(); return; end if;
++    \* Source missing/hidden/same-id is uncommitted, not a throwing required-slot resolution.
++    slot := FindByIdOrNone(source.slots,payload.sourceSlotId);
++    other := FindByIdOrNone(source.slots,payload.targetSlotId);
++    if slot = None \/ other = None then result := UncommittedUnchanged(); return; end if;
++    if slot.hidden \/ other.hidden \/ slot.id = other.id then result := UncommittedUnchanged(); return; end if;
+     SwapCompleteSlotLocalPayloadWithoutChangingGeometryOrIdentity(candidate,slot.id,other.id);
+     hints := [swapSlotIds |-> <<slot.id,other.id>>];
+   elsif event = "SLOT_CAPTIONS_INSERTED" then
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 917f8cd..3110beb 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1103,23 +1103,26 @@
+         machine.assertWritable("slots", "SLOTS_SWAPPED");
+         machine.assertWritable("workspace", "SLOTS_SWAPPED");
+         machine.assertWritable("editor", "SLOTS_SWAPPED");
+-        let source=slotAt(Number(payload.sourceSlotId)),
+-          target=slotAt(Number(payload.targetSlotId));
+-        if(!source||!target||source===target||source.hidden||target.hidden)
+-          throw Error("교환할 슬롯이 올바르지 않습니다.");
+-        let candidate=projectClone(activeProject._state);
+-        normalizeSlotContents(candidate.slots);
+-        let a=candidate.slots.find(slot=>slot.id===source.id),
+-          b=candidate.slots.find(slot=>slot.id===target.id),
+-          aLocal=slotLocalState(a), bLocal=slotLocalState(b);
+-        setSlotLocalState(a,bLocal); setSlotLocalState(b,aLocal);
+-        validateProjectObjectState(candidate,{requireSlots:true});
+-        activeProject.initialize(candidate);
+-        payload.selectionHints = {
+-          swapSlotIds: [source.id, target.id],
+-          clearAssetSelection: true,
+-          clearGraphSelection: true,
+-        };
++        while (true) {
++          const source = activeProject._state,
++            first = source.slots.find(slot => slot.id === payload.sourceSlotId && !slot.hidden),
++            second = source.slots.find(slot => slot.id === payload.targetSlotId && !slot.hidden);
++          if (!first || !second || first.id === second.id) return false;
++          const candidate = projectClone(source);
++          normalizeSlotContents(candidate.slots);
++          const a = candidate.slots.find(slot => slot.id === first.id), b = candidate.slots.find(slot => slot.id === second.id),
++            content = a.content, caption = a.caption;
++          a.content = b.content; a.caption = b.caption;
++          b.content = content; b.caption = caption;
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const after = activeProject._state;
++          payload.changed = { slotIds: [first.id, second.id].filter(id => JSON.stringify(source.slots.find(slot => slot.id === id)) !==
++            JSON.stringify(after.slots.find(slot => slot.id === id))), chartIds: [], csvIds: [], imageIds: [], assets: [] };
++          payload.selectionHints = immutableProjectCopy({ swapSlotIds: [first.id, second.id] });
++          return;
++        }
+       }
+       function applySlotImageLinkedAction({ machine, payload }) {
+         machine.assertWritable("slots","SLOT_IMAGE_LINKED");
+@@ -3866,13 +3869,13 @@
+         if (projectionEffect === "FULL_DASHBOARD") renderDashboard();
+         return { state: appFSM.state, payload, projectionEffect };
+       }
++      function swapSlots(sourceSlotId, targetSlotId) {
++        const result = dispatchProjectCommand("SLOTS_SWAPPED", { sourceSlotId, targetSlotId });
++        if (result.committed) renderDashboard();
++        return result.committed;
++      }
+       function swapSlotContents(source, target) {
+-        if (!source || !target || source === target || source.hidden || target.hidden) return false;
+-        dispatchDashboardAffectingEvent("SLOTS_SWAPPED", {
+-          sourceSlotId: source.id,
+-          targetSlotId: target.id,
+-        });
+-        return true;
++        return swapSlots(source?.id, target?.id);
+       }
+       function clearSlotDragState() {
+         slotDragSourceId = null;
+@@ -7888,6 +7891,7 @@
+           select: setSelectedSlot,
+           setContentType: setSlotContentType,
+           reset: resetSlotApi,
++          swap: swapSlots,
+           prepareFileDrop: prepareDashboardFileDrop,
+           finishFileDrop: finishDashboardFileDrop,
+         }),
+diff --git a/agent_space/reviews/review-20261018-032-code-slot-swap-open.md b/agent_space/reviews/review-20261018-032-code-slot-swap-open.md
+new file mode 100644
+index 0000000..c371c1d
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-032-code-slot-swap-open.md
+@@ -0,0 +1,18 @@
++# Unit30 slot swap translation
++
++## Source authority and fidelity
++
++Source41 sourcescript/backend/project_efsm.py SLOTS_SWAPPED explicitly requires missing/hidden/same-ID uncommitted; full slot-local payload swap, geometry/identity unchanged, common selection reconciliation. sourcescript/application/public_api/layout_annotations.py swapSlots returns result.committed. Source already closes meaning, remains unchanged. Pseudocode18 required-slot lookup could throw for missing/hidden despite Source no-op. Pseudocode19 first makes optional lookup + explicit missing/hidden/equal uncommitted gate; rest of direct candidate algorithm preserved. Code74 then follows this and current-authority retry. No lower-level independent authority/new domain semantics.
++
++## Requirement-to-artifact checklist
++
++- Invalid/missing/hidden/equal returns False, no Project/runtime/render/commit: applySlotsSwappedAction/swapSlots and90.
++- Current authority capture; complete content/caption swap without geometry/identity/model/asset changes: candidate clone, local payload exchange,89 exact Project comparison including extension and config image settings.
++- Candidate whole validates before identity check/retry and one commit:90 injected validator error/newer caption+projectName authority.
++- Actual changed slot IDs only and immutable swapSlotIds hint, no forced asset/graph clear: command,89 facts and selected slot/chart-object follows payload while selected CSV unchanged.
++- Application scalar IDs, committed Boolean/render only committed, original errors, late renderer error no rollback: swapSlots public binding and89/90. Legacy drag adapter now passes IDs to same wrapper rather than independent mutation path.
++- Prior89 cases plus actual Actions canonical chain/build gate pending. Source41 unchanged, pseudocode19 current pending measured fingerprint; code74 stale/whole Plan023 open.
++
++## Evidence and exclusions
++
++Pending actual Actions default runner regression90+90/build/canonical digest/cumulative gate. No local runtime/checker/build. Full shared validators/imports/asset cascade/raster/supplied dashboard and earlier timing stability remain uncovered. Optional model26 stale/TLC not run; policy unchanged.
