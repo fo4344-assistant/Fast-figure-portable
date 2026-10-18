@@ -1,0 +1,332 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 00d3ca5..682c86c 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -215,6 +215,10 @@ Source42/pseudocode20 already specify current slot-local settings/new patch, con
+ 
+ Baseline f2f13c5f44d700a181c33c7c1fa2a3ebe00e3b26. Existing Source42/pseudocode20 already specify new-edits-only/current settings fallback/config limits/auto height/whole validation/retry/one commit and committed-only official read. Code83 closes missing source-reference retry/actual id facts and makes print.readSettings recursively detached immutable. Cases99/100 cover export-only mutation/normalization/immutability/original failures/noncommit/no success work/newer-authority conversion+validation retries/late query+reconciliation failures. Review037/patch106–109 preserve first83 green but insufficient JSON comparison: code84 explicitly retains canonical content extension and99 directly asserts it, no upper redesign. At01736c02532a72dad5f7b863300ee4928d380cb3 regression39124958423 PASS100+100/build39124958384 PASS. Canonical84 d3a31a0cb7f999e66b98e3c4f0fe7e3d2bdec0b9725578b92270e02f4f92548c. Corrected f4302999495ede1670dfb59f43b99c4875436fac cumulative39125032947 PASS baselinef2f13c5f44d700a181c33c7c1fa2a3ebe00e3b26, repeat39125034933 PASS100 inline+100 split/200 passes, corrected-SHA build39125037010 PASS. Source/scripts/upper/tests diff since implementation empty; Source42/pseudocode20 unchanged, bounded35 only, code84 stale and whole goal open.
+ 
++## Thirty-sixth bounded implementation unit — global caption settings current authority
++
++Baselinecd989f8a9ce43b41244f6e7cd98f237968bb65c0. Existing Source42/pseudocode20 specify new field edits/current candidate/config normalization/validate/retry/one commit and committed-only global caption copy. Code85 applies this to enabled/name/nameBold/font settings, preserves canonical slot content, makes official global read recursively immutable. Application passes supplied success read to renderer and removes direct persistent debug/legacy live-read helper. Cases101/102 cover exact ownership/copies/facts/config/scalar inputs/errors/noncommit/latest-state retry/no rollback; review038/patch110 pending Actions102+102/build/canonical/cumulative. Broader caption text/other owners/schema/import/raster/dashboard remain open; upper unchanged, code85 stale.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 617e817..d6ef88b 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4367,6 +4367,140 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++
++    await run(101, "Caption settings own only global fields and return immutable supplied copies", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
++        render = renderDashboard, sync = syncDashboardCaption, notify = appFSM.notify;
++      try {
++        const fixture = projectClone(saved); normalizeSlotContents(fixture.slots);
++        const id = fixture.slots[0].id; fixture.slots[0].content.captionUnowned = { marker: [17] };
++        fixture.annotations.captions.text = "persistent body"; fixture.annotations.captions.afterText = "tail";
++        fixture.annotations.captions.settings.extra = { nested: [3] };
++        initialize.call(activeProject, fixture);
++        const before = projectClone(activeProject._state), runtime = interfaceFSM.state,
++          read = query("project-api", { operation: "captions.readGlobal" }),
++          limits = BackendSettings.defaults.limits.captions, defaults = BackendSettings.project_object.annotations.captions.settings;
++        check(Object.isFrozen(read) && Object.isFrozen(read.settings.extra.nested) &&
++          read.settings.extra !== activeProject._state.annotations.captions.settings.extra &&
++          JSON.stringify(activeProject._state) === JSON.stringify(before), "caption query aliases/repairs authority");
++        let commits = 0, reads = 0, paints = 0, syncs = 0, notices = 0, actual;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        projectEFSM.send = function (event, payload) {
++          check(event === "CAPTION_SETTINGS_CHANGED" && !("model" in payload) && !("captions" in payload),
++            "Application sent caption model");
++          actual = send.call(this, event, payload); return actual;
++        };
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "captions.readGlobal") reads++;
++          return query(kind, request);
++        };
++        renderDashboard = () => { paints++; };
++        syncDashboardCaption = state => { check(Object.isFrozen(state) && state !== activeProject._state.annotations.captions,
++          "caption renderer not given copied read"); syncs++; };
++        appFSM.notify = () => { notices++; };
++        check(api.captions.setEnabled(true).enabled === true, "caption enabled result incorrect");
++        check(api.captions.setName({ toString: () => "caption name" }).name === "caption name", "caption name not converted");
++        check(api.captions.setNameBold(true).nameBold === true, "caption bold result incorrect");
++        const result = api.captions.setSettings({ fontFamily: 17, fontSize: 99999, lineHeight: -1, ignored: true }),
++          expected = projectClone(before);
++        Object.assign(expected.annotations.captions, { enabled: true, name: "caption name", nameBold: true });
++        Object.assign(expected.annotations.captions.settings, { fontFamily: "17", fontSize: limits.fontSize[1], lineHeight: limits.lineHeight[0] });
++        check(commits === 4 && reads === 4 && paints === 1 && syncs === 3 && notices === 4 &&
++          Object.isFrozen(actual.changed) && actual.changed.slotIds.length === 0 && actual.changed.chartIds.length === 0 &&
++          actual.changed.csvIds.length === 0 && actual.changed.imageIds.length === 0 &&
++          JSON.stringify(activeProject._state) === JSON.stringify(expected) && interfaceFSM.readState().selectedSlotId === selected &&
++          interfaceFSM.state.assetPath === runtime.assetPath && interfaceFSM.state.graphObjectIndex === runtime.graphObjectIndex &&
++          activeProject.slots.find(slot => slot.id === id).content.captionUnowned.marker[0] === 17 &&
++          result.settings.extra.nested[0] === 3 && read.name === before.annotations.captions.name,
++          "caption settings changed unowned state/facts or success work count/copy incorrect");
++        const fallback = api.captions.setSettings({ fontSize: Infinity, lineHeight: NaN });
++        check(fallback.settings.fontSize === defaults.fontSize && fallback.settings.lineHeight === defaults.lineHeight,
++          "caption nonfinite numbers not config default");
++        const inherited = api.captions.setSettings(Object.create({ fontSize: 99, fontFamily: "inherited" }));
++        check(inherited.settings.fontSize === defaults.fontSize && inherited.settings.fontFamily === "17",
++          "caption inherited fields used as edits");
++        for (const wrapper of [setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings])
++          check(!/activeProject|projectObjects|applyCaptionSettings\(/.test(wrapper.toString()), "caption Application reads/calculates domain");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
++        renderDashboard = render; syncDashboardCaption = sync; appFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(102, "Caption settings retry authority and preserve failure/noncommit boundaries", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
++        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult,
++        render = renderDashboard, sync = syncDashboardCaption, notify = appFSM.notify, failure = Error("caption settings boundary");
++      try {
++        let commits = 0, reads = 0, effects = 0, reconciliations = 0, caught;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "captions.readGlobal") reads++;
++          return query(kind, request);
++        };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        renderDashboard = syncDashboardCaption = () => { effects++; }; appFSM.notify = () => { effects++; };
++        const source = activeProject._state, runtime = interfaceFSM.state;
++        try { api.captions.setName({ toString() { throw failure; } }); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && interfaceFSM.state === runtime &&
++          !commits && !reads && !effects && !reconciliations, "caption conversion failure did success work");
++        validateProjectObjectState = () => { throw failure; }; caught = null;
++        try { api.captions.setEnabled(false); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && !commits && !reads && !effects && !reconciliations,
++          "caption validation failure changed authority");
++        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
++        for (const action of [() => api.captions.setEnabled(false), () => api.captions.setName("x"),
++          () => api.captions.setNameBold(false), () => api.captions.setSettings({ fontSize: 18 })])
++          check(action() === false, "caption noncommit not False");
++        check(!commits && !reads && !effects && !reconciliations, "caption noncommit did success work");
++        projectEFSM.send = send; let conversions = 0;
++        const retry = api.captions.setName({ toString() {
++          if (++conversions === 1) {
++            const newer = projectClone(activeProject._state); newer.meta.projectName = "latest caption authority";
++            newer.annotations.captions.settings.fontFamily = "latest family"; newer.annotations.captions.text = "latest body";
++            initialize.call(activeProject, newer);
++          }
++          return "retry caption";
++        } });
++        check(conversions === 2 && commits === 1 && reads === 1 && reconciliations === 1 &&
++          retry.name === "retry caption" && retry.text === "latest body" && retry.settings.fontFamily === "latest family" &&
++          activeProject.meta.projectName === "latest caption authority", "caption conversion retry used stale source");
++        let attempts = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const result = validate(candidate, options);
++          if (options?.requireSlots && ++attempts === 1) {
++            const newer = projectClone(activeProject._state); newer.annotations.captions.name = "newest name";
++            initialize.call(activeProject, newer);
++          }
++          return result;
++        };
++        const latest = api.captions.setSettings({ lineHeight: 2 });
++        check(attempts === 2 && commits === 2 && reads === 2 && reconciliations === 2 &&
++          latest.name === "newest name" && latest.settings.lineHeight === 2, "caption validator did not retry current fields");
++        validateProjectObjectState = validate;
++        const priorEffects = effects;
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "captions.readGlobal") throw failure;
++          return query(kind, request);
++        }; caught = null;
++        try { api.captions.setName("committed before query error"); } catch (error) { caught = error; }
++        check(caught === failure && commits === 3 && effects === priorEffects &&
++          activeProject.annotations.captions.name === "committed before query error", "caption query error swallowed/rolled back");
++        readBackendProjection = query; interfaceFSM.reconcileProjectResult = () => { throw failure; }; caught = null;
++        try { api.captions.setNameBold(false); } catch (error) { caught = error; }
++        check(caught === failure && commits === 4 && activeProject.annotations.captions.nameBold === false,
++          "caption reconciliation error rolled back");
++        interfaceFSM.reconcileProjectResult = reconcile; syncDashboardCaption = () => { throw failure; }; caught = null;
++        try { api.captions.setName("committed before renderer error"); } catch (error) { caught = error; }
++        check(caught === failure && commits === 5 && activeProject.annotations.captions.name === "committed before renderer error",
++          "caption renderer error swallowed/rolled back");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
++        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
++        renderDashboard = render; syncDashboardCaption = sync; appFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 12c8dfd..f3558f6 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 84,
++      "revision": 85,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-037-code-export-settings-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-038-code-caption-settings-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 20,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 062cb01..bc3d854 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -397,10 +397,9 @@
+         }
+         if (kind === "project-api" && request.operation === "captions.readGlobal") {
+           let captions = activeProject._state.annotations.captions;
+-          return Object.freeze({
++          return immutableProjectCopy({
+             enabled: captions.enabled, text: captions.text, afterText: captions.afterText,
+-            name: captions.name, nameBold: captions.nameBold,
+-            settings: Object.freeze({ ...captions.settings }),
++            name: captions.name, nameBold: captions.nameBold, settings: captions.settings,
+           });
+         }
+         if (kind === "project-api" && request.operation === "captions.readSlot") {
+@@ -1950,29 +1949,41 @@
+       }
+       function applyCaptionSettingsChangedAction({ machine, payload }) {
+         machine.assertWritable("captions", "CAPTION_SETTINGS_CHANGED");
+-        let candidate = projectClone(activeProject._state),
+-          captions = candidate.annotations.captions;
+-        if (Object.prototype.hasOwnProperty.call(payload, "enabled"))
+-          captions.enabled = payload.enabled === true;
+-        if (Object.prototype.hasOwnProperty.call(payload, "name"))
+-          captions.name = String(payload.name ?? "");
+-        if (Object.prototype.hasOwnProperty.call(payload, "nameBold"))
+-          captions.nameBold = payload.nameBold === true;
+-        if (payload.settings && typeof payload.settings === "object") {
+-          const edits = payload.settings,
+-            defaults = BackendSettings.project_object.annotations.captions.settings,
+-            limits = BackendSettings.defaults.limits.captions;
+-          if (Object.prototype.hasOwnProperty.call(edits, "fontFamily"))
+-            captions.settings.fontFamily = String(edits.fontFamily ?? "");
+-          for (const key of ["fontSize", "lineHeight"]) {
+-            if (!Object.prototype.hasOwnProperty.call(edits, key)) continue;
+-            const number = Number(edits[key]), [min, max] = limits[key];
+-            captions.settings[key] = Number.isFinite(number)
+-              ? Math.max(min, Math.min(max, number)) : defaults[key];
++        while (true) {
++          const source = activeProject._state, candidate = projectClone(source), captions = candidate.annotations.captions;
++          normalizeSlotContents(candidate.slots);
++          for (const slot of candidate.slots) {
++            const original = source.slots.find(item => item.id === slot.id);
++            if (original?.content) slot.content = projectClone(original.content);
+           }
++          if (Object.prototype.hasOwnProperty.call(payload, "enabled"))
++            captions.enabled = payload.enabled === true;
++          if (Object.prototype.hasOwnProperty.call(payload, "name"))
++            captions.name = String(payload.name ?? "");
++          if (Object.prototype.hasOwnProperty.call(payload, "nameBold"))
++            captions.nameBold = payload.nameBold === true;
++          if (payload.settings && typeof payload.settings === "object") {
++            const edits = payload.settings,
++              defaults = BackendSettings.project_object.annotations.captions.settings,
++              limits = BackendSettings.defaults.limits.captions;
++            if (Object.prototype.hasOwnProperty.call(edits, "fontFamily"))
++              captions.settings.fontFamily = String(edits.fontFamily ?? "");
++            for (const key of ["fontSize", "lineHeight"]) {
++              if (!Object.prototype.hasOwnProperty.call(edits, key)) continue;
++              const number = Number(edits[key]), [min, max] = limits[key];
++              captions.settings[key] = Number.isFinite(number)
++                ? Math.max(min, Math.min(max, number)) : defaults[key];
++            }
++          }
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const post = activeProject._state, changedIds = (before, after) => after.filter(item =>
++            JSON.stringify(before.find(old => old.id === item.id)) !== JSON.stringify(item)).map(item => item.id);
++          payload.changed = { slotIds: changedIds(source.slots, post.slots), chartIds: changedIds(source.charts, post.charts),
++            csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles), imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
++          return;
+         }
+-        validateProjectObjectState(candidate, { requireSlots: true });
+-        activeProject.initialize(candidate);
+       }
+       function applyLayoutStyleChangedAction({ machine, payload }) {
+         machine.assertWritable("layout", "LAYOUT_STYLE_CHANGED");
+@@ -7807,10 +7818,11 @@
+       function setCaptionsApiEnabled(enabled) {
+         let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { enabled });
+         if (!result.committed) return false;
++        const state = readGlobalCaptionState();
+         renderDashboard();
+-        debugLog("annotation:caption", { enabled: activeProject.captionsEnabled });
++        debugLog("annotation:caption", { enabled: state.enabled });
+         appFSM.notify("captions", "ANNOTATION_VISIBILITY_CHANGED");
+-        return readGlobalCaptionState();
++        return state;
+       }
+       function setGlobalCaptionText(text) {
+         let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
+@@ -7837,22 +7849,26 @@
+       function setCaptionsApiName(name) {
+         let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { name });
+         if (!result.committed) return false;
+-        syncDashboardCaption();
++        const state = readGlobalCaptionState();
++        syncDashboardCaption(state);
+         appFSM.notify("captions", "CAPTION_NAME_CHANGED");
+-        return readGlobalCaptionState();
++        return state;
+       }
+       function setCaptionsApiNameBold(bold) {
+         let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { nameBold: bold });
+         if (!result.committed) return false;
+-        syncDashboardCaption();
++        const state = readGlobalCaptionState();
++        syncDashboardCaption(state);
+         appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
+-        return readGlobalCaptionState();
++        return state;
+       }
+       function setCaptionsApiSettings(patch = {}) {
+         let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { settings: patch });
+         if (!result.committed) return false;
+-        applyCaptionSettings();
+-        return readGlobalCaptionState();
++        const state = readGlobalCaptionState();
++        syncDashboardCaption(state);
++        appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
++        return state;
+       }
+       function readPrintApiSettings() {
+         return appFSM.query("project-api", { operation: "print.readSettings" });
+diff --git a/agent_space/reviews/review-20261018-038-code-caption-settings-open.md b/agent_space/reviews/review-20261018-038-code-caption-settings-open.md
+new file mode 100644
+index 0000000..bb6d0f1
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-038-code-caption-settings-open.md
+@@ -0,0 +1,17 @@
++# Unit36 global caption settings current authority
++
++Source42 backend/layout_annotations.py ANNOTATION_SETTINGS_RULE/captionSettings, backend/project_efsm.py common current-source candidate/validation/reference-retry/one-commit and application/public_api/layout_annotations.py four caption settings methods are authority. Pseudocode20 backend/project_efsm.pcal CAPTION_SETTINGS_CHANGED and public wrapper committed-only fresh query directly translate it. No new meaning or upper edits needed.
++
++Code85 captures current authority before enabled/name/bold/settings conversions, builds only present edits with config limits/defaults, preserves canonical slot content explicitly against legacy toJSON omission, validates/retries then one initialize and actual changed facts. Official captions.readGlobal recursively detached frozen projection. Four Application wrappers retain success Frontend effects but first obtain official copied result, supply it to caption renderer and never read persistent domain state or call legacy live-read settings helper. Dashboard-wide supplied renderer remains separate open scope.
++
++## Requirement-to-artifact checklist
++
++- New fields only, no Application model/Backend reads:101 command spy and four wrapper source inspections.
++- Own fields, strict flags/text conversion/config finite clamps/defaults/omitted preservation:101.
++- Global caption only, body/afterText/other Project/selection unchanged, canonical slot sentinel retained:101 JSON plus direct canonical assertion.
++- Recursive immutable fresh query/actual changed facts and exactly one commit/read each:101.
++- Original conversion/whole validation failures and noncommit no read/reconciliation/render/notice:102.
++- Authority replacement during conversion/validation retains newer omitted fields and one final commit:102.
++- Late query/reconciliation/render failures propagate and preserve committed name/bold:102.
++
++Actions102+102/build/canonical/cumulative pending. Source42/pseudocode20 unchanged, code85 stale; optional model/TLC not run. Wider caption text/slot-caption construction, asset/schema/import/raster/dashboard/serializer/timing remain open. No policy or local runtime execution.

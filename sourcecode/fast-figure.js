@@ -397,10 +397,9 @@
         }
         if (kind === "project-api" && request.operation === "captions.readGlobal") {
           let captions = activeProject._state.annotations.captions;
-          return Object.freeze({
+          return immutableProjectCopy({
             enabled: captions.enabled, text: captions.text, afterText: captions.afterText,
-            name: captions.name, nameBold: captions.nameBold,
-            settings: Object.freeze({ ...captions.settings }),
+            name: captions.name, nameBold: captions.nameBold, settings: captions.settings,
           });
         }
         if (kind === "project-api" && request.operation === "captions.readSlot") {
@@ -1950,29 +1949,41 @@
       }
       function applyCaptionSettingsChangedAction({ machine, payload }) {
         machine.assertWritable("captions", "CAPTION_SETTINGS_CHANGED");
-        let candidate = projectClone(activeProject._state),
-          captions = candidate.annotations.captions;
-        if (Object.prototype.hasOwnProperty.call(payload, "enabled"))
-          captions.enabled = payload.enabled === true;
-        if (Object.prototype.hasOwnProperty.call(payload, "name"))
-          captions.name = String(payload.name ?? "");
-        if (Object.prototype.hasOwnProperty.call(payload, "nameBold"))
-          captions.nameBold = payload.nameBold === true;
-        if (payload.settings && typeof payload.settings === "object") {
-          const edits = payload.settings,
-            defaults = BackendSettings.project_object.annotations.captions.settings,
-            limits = BackendSettings.defaults.limits.captions;
-          if (Object.prototype.hasOwnProperty.call(edits, "fontFamily"))
-            captions.settings.fontFamily = String(edits.fontFamily ?? "");
-          for (const key of ["fontSize", "lineHeight"]) {
-            if (!Object.prototype.hasOwnProperty.call(edits, key)) continue;
-            const number = Number(edits[key]), [min, max] = limits[key];
-            captions.settings[key] = Number.isFinite(number)
-              ? Math.max(min, Math.min(max, number)) : defaults[key];
+        while (true) {
+          const source = activeProject._state, candidate = projectClone(source), captions = candidate.annotations.captions;
+          normalizeSlotContents(candidate.slots);
+          for (const slot of candidate.slots) {
+            const original = source.slots.find(item => item.id === slot.id);
+            if (original?.content) slot.content = projectClone(original.content);
           }
+          if (Object.prototype.hasOwnProperty.call(payload, "enabled"))
+            captions.enabled = payload.enabled === true;
+          if (Object.prototype.hasOwnProperty.call(payload, "name"))
+            captions.name = String(payload.name ?? "");
+          if (Object.prototype.hasOwnProperty.call(payload, "nameBold"))
+            captions.nameBold = payload.nameBold === true;
+          if (payload.settings && typeof payload.settings === "object") {
+            const edits = payload.settings,
+              defaults = BackendSettings.project_object.annotations.captions.settings,
+              limits = BackendSettings.defaults.limits.captions;
+            if (Object.prototype.hasOwnProperty.call(edits, "fontFamily"))
+              captions.settings.fontFamily = String(edits.fontFamily ?? "");
+            for (const key of ["fontSize", "lineHeight"]) {
+              if (!Object.prototype.hasOwnProperty.call(edits, key)) continue;
+              const number = Number(edits[key]), [min, max] = limits[key];
+              captions.settings[key] = Number.isFinite(number)
+                ? Math.max(min, Math.min(max, number)) : defaults[key];
+            }
+          }
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const post = activeProject._state, changedIds = (before, after) => after.filter(item =>
+            JSON.stringify(before.find(old => old.id === item.id)) !== JSON.stringify(item)).map(item => item.id);
+          payload.changed = { slotIds: changedIds(source.slots, post.slots), chartIds: changedIds(source.charts, post.charts),
+            csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles), imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
+          return;
         }
-        validateProjectObjectState(candidate, { requireSlots: true });
-        activeProject.initialize(candidate);
       }
       function applyLayoutStyleChangedAction({ machine, payload }) {
         machine.assertWritable("layout", "LAYOUT_STYLE_CHANGED");
@@ -7807,10 +7818,11 @@
       function setCaptionsApiEnabled(enabled) {
         let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { enabled });
         if (!result.committed) return false;
+        const state = readGlobalCaptionState();
         renderDashboard();
-        debugLog("annotation:caption", { enabled: activeProject.captionsEnabled });
+        debugLog("annotation:caption", { enabled: state.enabled });
         appFSM.notify("captions", "ANNOTATION_VISIBILITY_CHANGED");
-        return readGlobalCaptionState();
+        return state;
       }
       function setGlobalCaptionText(text) {
         let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
@@ -7837,22 +7849,26 @@
       function setCaptionsApiName(name) {
         let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { name });
         if (!result.committed) return false;
-        syncDashboardCaption();
+        const state = readGlobalCaptionState();
+        syncDashboardCaption(state);
         appFSM.notify("captions", "CAPTION_NAME_CHANGED");
-        return readGlobalCaptionState();
+        return state;
       }
       function setCaptionsApiNameBold(bold) {
         let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { nameBold: bold });
         if (!result.committed) return false;
-        syncDashboardCaption();
+        const state = readGlobalCaptionState();
+        syncDashboardCaption(state);
         appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
-        return readGlobalCaptionState();
+        return state;
       }
       function setCaptionsApiSettings(patch = {}) {
         let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { settings: patch });
         if (!result.committed) return false;
-        applyCaptionSettings();
-        return readGlobalCaptionState();
+        const state = readGlobalCaptionState();
+        syncDashboardCaption(state);
+        appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
+        return state;
       }
       function readPrintApiSettings() {
         return appFSM.query("project-api", { operation: "print.readSettings" });

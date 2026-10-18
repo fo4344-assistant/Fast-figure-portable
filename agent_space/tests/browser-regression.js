@@ -4367,6 +4367,140 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+
+    await run(101, "Caption settings own only global fields and return immutable supplied copies", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        render = renderDashboard, sync = syncDashboardCaption, notify = appFSM.notify;
+      try {
+        const fixture = projectClone(saved); normalizeSlotContents(fixture.slots);
+        const id = fixture.slots[0].id; fixture.slots[0].content.captionUnowned = { marker: [17] };
+        fixture.annotations.captions.text = "persistent body"; fixture.annotations.captions.afterText = "tail";
+        fixture.annotations.captions.settings.extra = { nested: [3] };
+        initialize.call(activeProject, fixture);
+        const before = projectClone(activeProject._state), runtime = interfaceFSM.state,
+          read = query("project-api", { operation: "captions.readGlobal" }),
+          limits = BackendSettings.defaults.limits.captions, defaults = BackendSettings.project_object.annotations.captions.settings;
+        check(Object.isFrozen(read) && Object.isFrozen(read.settings.extra.nested) &&
+          read.settings.extra !== activeProject._state.annotations.captions.settings.extra &&
+          JSON.stringify(activeProject._state) === JSON.stringify(before), "caption query aliases/repairs authority");
+        let commits = 0, reads = 0, paints = 0, syncs = 0, notices = 0, actual;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        projectEFSM.send = function (event, payload) {
+          check(event === "CAPTION_SETTINGS_CHANGED" && !("model" in payload) && !("captions" in payload),
+            "Application sent caption model");
+          actual = send.call(this, event, payload); return actual;
+        };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "captions.readGlobal") reads++;
+          return query(kind, request);
+        };
+        renderDashboard = () => { paints++; };
+        syncDashboardCaption = state => { check(Object.isFrozen(state) && state !== activeProject._state.annotations.captions,
+          "caption renderer not given copied read"); syncs++; };
+        appFSM.notify = () => { notices++; };
+        check(api.captions.setEnabled(true).enabled === true, "caption enabled result incorrect");
+        check(api.captions.setName({ toString: () => "caption name" }).name === "caption name", "caption name not converted");
+        check(api.captions.setNameBold(true).nameBold === true, "caption bold result incorrect");
+        const result = api.captions.setSettings({ fontFamily: 17, fontSize: 99999, lineHeight: -1, ignored: true }),
+          expected = projectClone(before);
+        Object.assign(expected.annotations.captions, { enabled: true, name: "caption name", nameBold: true });
+        Object.assign(expected.annotations.captions.settings, { fontFamily: "17", fontSize: limits.fontSize[1], lineHeight: limits.lineHeight[0] });
+        check(commits === 4 && reads === 4 && paints === 1 && syncs === 3 && notices === 4 &&
+          Object.isFrozen(actual.changed) && actual.changed.slotIds.length === 0 && actual.changed.chartIds.length === 0 &&
+          actual.changed.csvIds.length === 0 && actual.changed.imageIds.length === 0 &&
+          JSON.stringify(activeProject._state) === JSON.stringify(expected) && interfaceFSM.readState().selectedSlotId === selected &&
+          interfaceFSM.state.assetPath === runtime.assetPath && interfaceFSM.state.graphObjectIndex === runtime.graphObjectIndex &&
+          activeProject.slots.find(slot => slot.id === id).content.captionUnowned.marker[0] === 17 &&
+          result.settings.extra.nested[0] === 3 && read.name === before.annotations.captions.name,
+          "caption settings changed unowned state/facts or success work count/copy incorrect");
+        const fallback = api.captions.setSettings({ fontSize: Infinity, lineHeight: NaN });
+        check(fallback.settings.fontSize === defaults.fontSize && fallback.settings.lineHeight === defaults.lineHeight,
+          "caption nonfinite numbers not config default");
+        const inherited = api.captions.setSettings(Object.create({ fontSize: 99, fontFamily: "inherited" }));
+        check(inherited.settings.fontSize === defaults.fontSize && inherited.settings.fontFamily === "17",
+          "caption inherited fields used as edits");
+        for (const wrapper of [setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings])
+          check(!/activeProject|projectObjects|applyCaptionSettings\(/.test(wrapper.toString()), "caption Application reads/calculates domain");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        renderDashboard = render; syncDashboardCaption = sync; appFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(102, "Caption settings retry authority and preserve failure/noncommit boundaries", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult,
+        render = renderDashboard, sync = syncDashboardCaption, notify = appFSM.notify, failure = Error("caption settings boundary");
+      try {
+        let commits = 0, reads = 0, effects = 0, reconciliations = 0, caught;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "captions.readGlobal") reads++;
+          return query(kind, request);
+        };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        renderDashboard = syncDashboardCaption = () => { effects++; }; appFSM.notify = () => { effects++; };
+        const source = activeProject._state, runtime = interfaceFSM.state;
+        try { api.captions.setName({ toString() { throw failure; } }); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && interfaceFSM.state === runtime &&
+          !commits && !reads && !effects && !reconciliations, "caption conversion failure did success work");
+        validateProjectObjectState = () => { throw failure; }; caught = null;
+        try { api.captions.setEnabled(false); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && !commits && !reads && !effects && !reconciliations,
+          "caption validation failure changed authority");
+        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
+        for (const action of [() => api.captions.setEnabled(false), () => api.captions.setName("x"),
+          () => api.captions.setNameBold(false), () => api.captions.setSettings({ fontSize: 18 })])
+          check(action() === false, "caption noncommit not False");
+        check(!commits && !reads && !effects && !reconciliations, "caption noncommit did success work");
+        projectEFSM.send = send; let conversions = 0;
+        const retry = api.captions.setName({ toString() {
+          if (++conversions === 1) {
+            const newer = projectClone(activeProject._state); newer.meta.projectName = "latest caption authority";
+            newer.annotations.captions.settings.fontFamily = "latest family"; newer.annotations.captions.text = "latest body";
+            initialize.call(activeProject, newer);
+          }
+          return "retry caption";
+        } });
+        check(conversions === 2 && commits === 1 && reads === 1 && reconciliations === 1 &&
+          retry.name === "retry caption" && retry.text === "latest body" && retry.settings.fontFamily === "latest family" &&
+          activeProject.meta.projectName === "latest caption authority", "caption conversion retry used stale source");
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const result = validate(candidate, options);
+          if (options?.requireSlots && ++attempts === 1) {
+            const newer = projectClone(activeProject._state); newer.annotations.captions.name = "newest name";
+            initialize.call(activeProject, newer);
+          }
+          return result;
+        };
+        const latest = api.captions.setSettings({ lineHeight: 2 });
+        check(attempts === 2 && commits === 2 && reads === 2 && reconciliations === 2 &&
+          latest.name === "newest name" && latest.settings.lineHeight === 2, "caption validator did not retry current fields");
+        validateProjectObjectState = validate;
+        const priorEffects = effects;
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "captions.readGlobal") throw failure;
+          return query(kind, request);
+        }; caught = null;
+        try { api.captions.setName("committed before query error"); } catch (error) { caught = error; }
+        check(caught === failure && commits === 3 && effects === priorEffects &&
+          activeProject.annotations.captions.name === "committed before query error", "caption query error swallowed/rolled back");
+        readBackendProjection = query; interfaceFSM.reconcileProjectResult = () => { throw failure; }; caught = null;
+        try { api.captions.setNameBold(false); } catch (error) { caught = error; }
+        check(caught === failure && commits === 4 && activeProject.annotations.captions.nameBold === false,
+          "caption reconciliation error rolled back");
+        interfaceFSM.reconcileProjectResult = reconcile; syncDashboardCaption = () => { throw failure; }; caught = null;
+        try { api.captions.setName("committed before renderer error"); } catch (error) { caught = error; }
+        check(caught === failure && commits === 5 && activeProject.annotations.captions.name === "committed before renderer error",
+          "caption renderer error swallowed/rolled back");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
+        renderDashboard = render; syncDashboardCaption = sync; appFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
