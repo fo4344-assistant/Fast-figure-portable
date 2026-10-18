@@ -2153,6 +2153,9 @@
       }
 
       function applyAssetSelectionAction({ machine, payload }) {
+        if (payload.validatedInput?.event === "SELECT_SLOT" &&
+            payload.validatedInput.reference !== null &&
+            payload.validatedInput.selectionHint === "clear-graph-object") return;
         let path = payload.validatedInput?.event === "SELECT_ASSET"
           ? payload.validatedInput.reference : null;
         machine.state = Object.freeze({
@@ -2228,7 +2231,8 @@
           },
           SELECT_SLOT: {
             action: applyAssetSelectionAction,
-            target: "none",
+            target: ({ machine, payload }) => payload.validatedInput.reference !== null &&
+              payload.validatedInput.selectionHint === "clear-graph-object" ? machine.state.assetSelection : "none",
           },
         },
         APP_STATE_DEFINITIONS = {
