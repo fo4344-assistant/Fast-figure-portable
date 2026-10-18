@@ -2,7 +2,7 @@
 
 ## Authority and scope
 
-Source41 backend/project_efsm.py SLOTS_RESET and application/public_api/layout.py resetSlot, followed by pseudocode18 backend/project_efsm.pcal SLOTS_RESET, already require explicit visible IDs, config SLOT_LOCAL_DEFAULTS payload reset plus owned chart removal in one candidate. Source remains highest; no new meaning or upstream edits. Code73 directly translates source capture, candidate-only changes/whole validation, authority-reference recheck/retry, single initialize and actual changed facts. Application sends slotIds only, renders only committed success, returns None and preserves original errors. Unconditional CLEAR_ASSET_SELECTION/status removed: normal reconciliation alone owns runtime selection.
+Source41 backend/project_efsm.py SLOTS_RESET and application/public_api/layout_annotations.py resetSlotApi, followed by pseudocode18 backend/project_efsm.pcal SLOTS_RESET, already require explicit visible IDs, config SLOT_LOCAL_DEFAULTS payload reset plus owned chart removal in one candidate. Source remains highest; no new meaning or upstream edits. Code73 directly translates source capture, candidate-only changes/whole validation, authority-reference recheck/retry, single initialize and actual changed facts. Application sends slotIds only, renders only committed success, returns None and preserves original errors. Unconditional CLEAR_ASSET_SELECTION/status removed: normal reconciliation alone owns runtime selection.
 
 ## Requirement-to-artifact checklist
 
@@ -16,4 +16,4 @@ Source41 backend/project_efsm.py SLOTS_RESET and application/public_api/layout.p
 
 ## Execution evidence
 
-Pending actual GitHub Actions default-runner regression88+88/build/canonical digest and cumulative lineage gate. No local test/build/checker executed. Prior code72 digest provisional until runner diagnostics; no claim of passed version gate.
+At851b6bf16868c8f54618b57399dba48ac4b38d13 build39122365729 PASS; regression39122365722 prior86+new88 PASS both distributions,87 fails `Error: image reset deleted asset/defaults/selection`. The failing assertion read nonexistent legacy flat slot.imageSettings while authority is slot.content.imageSettings; first exact-Project/default check already passed. Correct test path only, keep all assertions/runtime/upper contracts unchanged. Version39122365808 expected provisional failure printed canonical code73 sha256:858aa0479d23d336d52d73e76f644ba483ff572b06a22b0b411544d270185ee0; record runner digest, not local hash. Source41/pseudocode18 unchanged. Dist-only bot5caaa77 inspected/fast-forwarded. Corrected regression/cumulative gate pending, no claim of passed failing diagnostic. No local test/build/checker executed.

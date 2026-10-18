@@ -3652,7 +3652,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           result.changed.imageIds.length === 0 && result.changed.assets.length === 0, "reset actual changed facts wrong");
         projectEFSM.send = send;
         check(api.slots.reset(other.id) === null && slotAt(other.id).imageId === null && slotAt(other.id).caption === null &&
-          JSON.stringify(slotAt(other.id).imageSettings) === JSON.stringify(DEFAULT_IMAGE_SETTINGS) &&
+          JSON.stringify(slotAt(other.id).content.imageSettings) === JSON.stringify(DEFAULT_IMAGE_SETTINGS) &&
           getProjectImage(image.id) && interfaceFSM.state.assetPath === path, "image reset deleted asset/defaults/selection");
       } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
