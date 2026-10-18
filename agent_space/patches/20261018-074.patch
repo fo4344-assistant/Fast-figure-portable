@@ -1,0 +1,34 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 79deb97..c6a7682 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -167,6 +167,8 @@ Unit25 audit corrected CopyBytes before Application dispatch in code68 and Array
+ 
+ Baseline ec6ce39065a53a9fb7bfb7580b15f92be375abb7. Existing Source41/pseudocode18 already close directory create: Backend validates current parent/name/node collision, clones candidate, validates/retries current authority and commits once, records actual canonical createdDirectoryPath. Application dispatches new parent/name only, returns None on noncommit and selects actual committed path only; selection rejection/exception never rolls back directory. Code70 removes live parent validation/unchecked initialize and payload.path/status ownership. Cases81/82 cover root/nested path, exact isolated mutation/frozen facts, invalid/validator/noncommit/no-effects, newer-source retry/removed-parent rejection and postcommit selection outcomes. Review028/patch072 track Actions82+82/build/canonical gate; whole code stale/open, other asset candidates and integration remain unfinished.
+ 
++Unit26 bounded evidence: implementation b4eff46135899d3be2b2cfd6ed72766de00f2e3c regression39121419238 PASS82 inline+82 split/build39121419225 PASS. Canonical code70 sha256:181e72ba2a4639391196271d4f93cda813d58fcde2d69d5f18d5ca852da609f5 recorded patch073; upper41/18 unchanged. At d1940e3909e954810eb5be40084ef85a01f93c0b cumulative39121486041 PASS fromec6ce39065a53a9fb7bfb7580b15f92be375abb7, repeat39121488364 PASS82+82/164 case passes. Runtime/build/test/upper inputs unchanged from successful build. Review028 checklist covers bounded unit; code70 stale and whole Plan023 open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-028-code-directory-create-open.md b/agent_space/reviews/review-20261018-028-code-directory-create-open.md
+index 1d92c74..63b463e 100644
+--- a/agent_space/reviews/review-20261018-028-code-directory-create-open.md
++++ b/agent_space/reviews/review-20261018-028-code-directory-create-open.md
+@@ -12,10 +12,14 @@ Baseline ec6ce39065a53a9fb7bfb7580b15f92be375abb7; Source highest. Existing sour
+ | Actual immutable canonical changed.createdDirectoryPath; no assets/slots/next-id effects |81 frozen result and exact project comparison |
+ | Committed-only SELECT_ASSET actual path; noncommit None |81 event spy,82 noncommit/no-effects |
+ | Selection rejection preserves actual committed path; error propagates without rollback |82 both explicit branches |
+-| Runner-only strict lineage/build/regression82+82 | implementation regression39121419238 PASS82+82; build39121419225 PASS; corrected cumulative gate pending |
++| Runner-only strict lineage/build/regression82+82 | implementation regression39121419238 PASS82+82; build39121419225 PASS; cumulative39121486041 PASS and repeat39121488364 PASS82+82 atd1940e3 |
+ 
+ ## Actual execution
+ 
+-At b4eff46135899d3be2b2cfd6ed72766de00f2e3c default ubuntu-latest regression39121419238 PASS82 inline+82 split (164 case passes, prior80 and new81/82), build39121419225 PASS. Diagnostic39121419226 FAIL on provisional old c79ec768... digest, printed canonical code70 sha256:181e72ba2a4639391196271d4f93cda813d58fcde2d69d5f18d5ca852da609f5; upper Source41/pseudocode18 unchanged. Dist-only bot d962889d363f8064d731c55cdce97adfbde4ee55 inspected and fast-forwarded. Patch073 records canonical fingerprint with no runtime/test/upper changes. Cumulative gate/repeat at corrected lineage pending; failed diagnostic not claimed passed.
++At b4eff46135899d3be2b2cfd6ed72766de00f2e3c default ubuntu-latest regression39121419238 PASS82 inline+82 split (164 case passes, prior80 and new81/82), build39121419225 PASS. Diagnostic39121419226 FAIL on provisional old c79ec768... digest, printed canonical code70 sha256:181e72ba2a4639391196271d4f93cda813d58fcde2d69d5f18d5ca852da609f5; upper Source41/pseudocode18 unchanged. Dist-only bot d962889d363f8064d731c55cdce97adfbde4ee55 inspected and fast-forwarded. Patch073 records canonical fingerprint with no runtime/test/upper changes. At corrected lineage d1940e3909e954810eb5be40084ef85a01f93c0b cumulative39121486041 PASS with BASE_SHA ec6ce39065a53a9fb7bfb7580b15f92be375abb7, repeat regression39121488364 PASS82 inline+82 split (164 passes/no failures, inline6401700 bytes/split ZIP1735025 bytes). git diff b4eff46..d1940e3 sourcecode/scripts/sourcescript/pseudocode/tests is empty; build39121419225 covers identical build inputs. Failed diagnostic not claimed passed.
++
++## Bounded completion audit
++
++Checklist items map to inspected current command/wrapper and cases81/82, not merely a manifest/green proxy. Source-state capture precedes normalization, parent and node collision are resolved against that capture, whole candidate validates before reference recheck/retry, and only final one-commit actual directory path feeds selection. Tests exercise newer authority, disappearing parent, input/validator errors, noncommit with no success work, and postcommit rejection/error without rollback. Exact whole-project comparison shows only directories changed. Both new cases and prior80 pass at corrected lineage. This closes unit26 only: other command candidates, full graph/schema validation, imports/raster/supplied dashboard and prior UI timing stability remain uncovered/open. Source41/pseudocode18 unchanged; no higher document rewritten as a code description and no whole-goal completion.
+ 
+ Code70 stays stale. Existing legacy UI timeout from prior image unit remains open, not fixed/hidden here. This unit does not cover move/delete/trash/import/cascade or complete VFS query/UI cutover, shared full validation, raster/supplied dashboard. No resource handles allocated; no optional model/TLC execution. Application does not publish status on its own; normal command adapter owns commit reconciliation.
