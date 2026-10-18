@@ -4637,7 +4637,9 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       try {
         api.layout.setGrid(2, 2); const fixture = projectClone(activeProject._state);
         fixture.annotations.labels.settings.format = "lower-alpha";
+        fixture.slots.forEach(slot => { slot.hidden = false; slot.rowSpan = 1; slot.colSpan = 1; });
         const ids = orderedSlotLabels(fixture).map(item => item.slotId);
+        check(ids.length === 4, "caption insertion fixture must own four visible anchors");
         fixture.annotations.captions.text = "prefix\n "; fixture.annotations.captions.afterText = "unchanged tail";
         [" A", "A", "", "B"].forEach((text, i) => { fixture.slots.find(slot => slot.id === ids[i]).caption = text || null; });
         initialize.call(activeProject, fixture);
