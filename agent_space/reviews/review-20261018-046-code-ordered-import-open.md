@@ -1,4 +1,4 @@
-# Unit44 — captured-target ordered import router (pending Actions)
+# Unit44 — captured-target ordered import router (bounded raw/routing cases verified; whole goal open)
 
 ## Upper-contract and policy audit
 
@@ -16,4 +16,10 @@ Continue fully read development-policy.md v0.2.6 and AGENT.md, unchanged. Source
 
 Package graph import still parses in Application importSlotFile and sends a chart/CSV model to applySlotChartImportedAction; this violates already-current Source graphs.importSelectedGraphFile raw-file-only/Backend ownership and remains OPEN. Do not infer package conformance from router stubs or prior roundtrip cases. The package wrapper's useful-work/noncommit boundary requires closing with that handler, not another caller-side rollback/temporary model. Inspect Source versus pseudocode target-kind guards before that cutover: Source describes target slot and ApplyFfsx preserves settings, while pseudocode main branch currently names ResolveCurrentVisibleGraphSlot; do not silently impose or remove an upper precondition from code convenience. Current package action also resets imageSettings and lacks current-source retry/canonical extension preservation. These are concrete next audit/implementation tasks, not fixed here.
 
-Common final-commit/initializer semantics, other mutation owners, schema/serializer/raster/current snapshot/resources, supplied dashboard and lifecycle/timing integration and full requirement audit remain open. Code95 stale; optional model/TLC not run. No local app/test/build/checker. All exact new-SHA121 inline+121 split/repeat/build/canonical/cumulative/fidelity PENDING; staged Git blob fingerprint is metadata calculation, not checker pass. No explicit quota/auth/service blocker.
+Common final-commit/initializer semantics, other mutation owners, schema/serializer/raster/current snapshot/resources, supplied dashboard and lifecycle/timing integration and full requirement audit remain open. Code95 stale; optional model/TLC not run. No local app/test/build/checker. Final exact-SHA121 inline+121 split/repeat/build/canonical/cumulative/fidelity evidence is recorded below; initial staged Git blob calculation was not a local checker pass. No explicit quota/auth/service blocker.
+
+## Final bounded execution evidence
+
+At717bbd4c4f1c9e31fa1ae5ef60eda10650b68dff, regression39153784646 and repeat39153798977 PASS121 inline+121 split each; canonical39153784657 PASS code95 sha256:9ffb7bbd0869689f27fd54162068b3b6d8c40969b39375362540e5df909adba9, Source45/pseudocode23 unchanged. Build39153784643 PASS generated dist-only43616eef6b9628c0d049b60f0efd21241e48d346. No local dist edit/build. Between those two SHAs only the two generated dist files differ; implementation/tests/lineage identical.
+
+At43616eef6b9628c0d049b60f0efd21241e48d346, regression39153890656 and independent repeat39153892990 PASS121 inline+121 split each, including120/121 and prior119. Build39153895363 PASS and artifacts already current. Cumulative development-layer39153801394 PASS (base506dc0d8284c4d5ee2935a3bd77cd646a3ea4c39) with the same canonical upper/code fingerprints; fidelity39153804651 PASS cumulative lineage plus static Source entry/input/API/call coverage. These gates are all on that exact SHA; coverage remains structural, not proof of every Source semantic requirement. This later result document is not the executed SHA. Package internals and the broader gaps above remain OPEN; no whole-goal closure/current status from these green bounded tests.
