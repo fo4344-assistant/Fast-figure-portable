@@ -10473,6 +10473,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           assetPath = null;
         }
         let chart = slotId !== null && slot.contentType !== "image" ? getChart(slot.chart) : null;
+        if (chart?.editor?.editable === false) chart = null;
         if (chart && hints.chartId === chart.id && Object.hasOwn(hints, "selectedIndexHint"))
           graphObjectIndex = hints.selectedIndexHint;
         if (payload.clearGraphSelection || hints.clearGraphSelection ||
@@ -11219,37 +11220,49 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         payload.layout=committed.graph.layout;
       }
       function applyChartModelReplacedAction({ machine, payload }) {
-        machine.assertWritable("charts", "CHART_MODEL_REPLACED");
-        machine.assertWritable("editor", "CHART_MODEL_REPLACED");
-        if (payload.candidate) {
-          machine.assertWritable("data", "CHART_MODEL_REPLACED");
-          machine.assertWritable("files", "CHART_MODEL_REPLACED");
-          activeProject.initialize(validateProjectObjectState(payload.candidate, { requireSlots: true }));
-          let committed = getChart(payload.chartId);
-          if (committed?.editor?.editable !== false) rebuildEditableGraph(committed);
-          payload.chart = committed;
+        for (const target of ["charts", "editor", "data", "files"])
+          machine.assertWritable(target, "CHART_MODEL_REPLACED");
+        while (true) {
+          const source = activeProject._state,
+            owners = source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === payload.chartId),
+            current = source.charts.find((chart) => chart.id === payload.chartId);
+          if (!current || owners.length !== 1 || owners[0].hidden || owners[0].contentType === "image" ||
+              owners[0].id !== payload.slotId || typeof payload.editable !== "boolean")
+            throw Error("편집 상태를 변경할 현재 차트 또는 유일한 graph owner가 없습니다.");
+          const candidate = projectClone(source),
+            chart = candidate.charts.find((item) => item.id === current.id);
+          let created = null;
+          if (payload.editable && chart.editor.editable === false && Object.hasOwn(chart.editor, "conversionRows")) {
+            if (chart.editor.objects.length) {
+              if (!Array.isArray(chart.editor.conversionRows) || !chart.editor.conversionRows.length ||
+                  !chart.editor.conversionRows.every(Array.isArray))
+                throw Error("Plotly 변환 데이터가 없어 편집 가능한 차트로 바꿀 수 없습니다.");
+              created = buildProjectCsvModel(chart.editor.conversionRows, "Plotly JSON.csv",
+                candidate.nextId.csv, "", "text/csv", 1, candidate);
+              projectVfs.prepare(created, "csv", candidate);
+              candidate.assets.csvFiles.push(created);
+              candidate.nextId.csv = created.id + 1;
+              for (const object of chart.editor.objects) object.csvId = created.id;
+            }
+            delete chart.editor.conversionRows;
+          }
+          chart.editor.editable = payload.editable;
+          validateChartModel(chart, "편집 상태 변경 차트", candidate.assets.csvFiles);
+          if (chart.editor.editable) rebuildEditableGraph(chart, candidate);
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const post = activeProject._state,
+            changedIds = (before, after) => after.filter((item) =>
+              JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id);
+          payload.changed = { slotIds: changedIds(source.slots, post.slots),
+            chartIds: changedIds(source.charts, post.charts),
+            csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
+            imageIds: changedIds(source.assets.images, post.assets.images),
+            assets: created ? [{ role: "created", kind: "csv", id: created.id, path: projectAssetPath(created),
+              owners: [{ slotId: owners[0].id, chartId: chart.id }] }] : [] };
           return;
         }
-        let slot = slotAt(payload.slotId),
-          chart = payload.chart,
-          index = activeProject.charts.findIndex((item) => item.id === payload.chartId);
-        if (
-          !slot ||
-          slot.contentType === "image" ||
-          slot.chart !== payload.chartId ||
-          !chart ||
-          chart.id !== payload.chartId ||
-          index < 0
-        )
-          throw Error("교체할 그래프 슬롯 또는 차트가 없습니다.");
-        if (!chart.editor || chart.editor.editable === false)
-          throw Error("편집 가능한 차트 모델이 아닙니다.");
-        let candidate=projectClone(activeProject._state),
-          next=projectClone(chart);
-        rebuildEditableGraph(next);
-        candidate.charts[index]=next;
-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
-        payload.chart=getChart(next.id);
       }
       function applySlotImageImportedAction({ machine, payload }) {
         machine.assertWritable("slots","SLOT_IMAGE_IMPORTED");
@@ -16148,63 +16161,19 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         renderDashboard();
         return read.target.headerLines;
       }
-      function graphEditorSetEditable(editable=null) {
-        let current=graphEditorChart();
-        if(!current)
-          return status("편집 모드를 바꿀 그래프 슬롯을 먼저 선택하세요.");
-        let next=typeof editable==="boolean"?editable:current.editor.editable===false;
-        if(next===current.editor.editable) return current;
-
-        let candidate=projectClone(activeProject._state),
-          chart=candidate.charts.find(item=>item.id===current.id);
-        if(!chart) throw Error("편집 상태를 변경할 차트가 없습니다.");
-
-        let createdCsvId=null;
-        if(next && chart.editor.editable===false){
-          let objects=Array.isArray(chart.editor.objects)?chart.editor.objects:[],
-            rows=Array.isArray(chart.editor.conversionRows)?chart.editor.conversionRows:[];
-          if(objects.length){
-            if(!rows.length)
-              throw Error("Plotly 변환 데이터가 없어 편집 가능한 차트로 바꿀 수 없습니다.");
-            let csvId=candidate.nextId.csv,
-              model=buildProjectCsvModel(
-                rows,
-                "Plotly JSON.csv",
-                csvId,
-                "",
-                "text/csv",
-                1,
-                candidate,
-              );
-            projectVfs.prepare(model,"csv",candidate);
-            candidate.assets.csvFiles.push(model);
-            candidate.nextId.csv=csvId+1;
-            objects.forEach(object=>{object.csvId=model.id;});
-            createdCsvId=model.id;
-          }
-          delete chart.editor.conversionRows;
-        }
-
-        chart.editor.editable=next;
-        validateChartModel(chart,"편집 상태 변경 차트",candidate.assets.csvFiles);
-        validateProjectObjectState(candidate,{requireSlots:true});
-        appFSM.send("CHART_MODEL_REPLACED", {
-          slotId: getSelectedSlot()?.id ?? null,
-          chartId: current.id,
-          candidate,
-          direction: "ui-to-fsm",
-        });
-
-        let committed=getChart(current.id);
-        if(next) rebuildEditableGraph(committed);
-        if(createdCsvId!==null) graphEditorSelectCsv(createdCsvId);
+      function graphEditorSetEditable(slotId, chartId, editable) {
+        const result = dispatchProjectCommand("CHART_MODEL_REPLACED", { slotId, chartId, editable });
+        if (!result.committed) return result;
+        const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
         renderDashboard();
-        status(next
-          ?"가져온 JSON을 편집기 설정으로 재구성했습니다."
-          :"가져온 원본 Plotly JSON 표시로 전환했습니다.");
-        debugLog("editor:editable",{chartId:committed.id,editable:next});
-        appFSM.notify("charts","GRAPH_EDITABLE_CHANGED");
-        return committed;
+        return chart.editor.editable;
+      }
+      function setGraphEditableApi(editable = null) {
+        const state = interfaceFSM.readState(),
+          context = appFSM.query("project-api", { operation: "graphs.readData", frontendState: state });
+        if (!context.chart) return null;
+        const next = typeof editable === "boolean" ? editable : context.chart.editor.editable === false;
+        return graphEditorSetEditable(state.selectedSlotId, context.chart.id, next);
       }
       function readGraphDataApi() {
         let chart = graphEditorChart(), objects = normalizedGraphObjects(chart);
@@ -17833,7 +17802,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           readPalette: readGraphPaletteApi,
           selectCsv: graphEditorSelectCsv,
           setHeaderLines: graphEditorHeaderLines,
-          setEditable: graphEditorSetEditable,
+          setEditable: setGraphEditableApi,
           addObject: addGraphObjectApi,
           moveObject: moveGraphObjectApi,
           selectObject: graphEditorSelectObject,
