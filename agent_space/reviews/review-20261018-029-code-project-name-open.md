@@ -14,7 +14,9 @@ Baseline fb6906b4eba899ae10bf600f3778123d204c01af. Source41 is highest, pseudoco
 
 ## Execution evidence
 
-Actions default ubuntu-latest runner only; no local runtime/build/test/checker execution. Implementation run/digest/cumulative gates pending. Prior digest in metadata is provisional until canonical runner diagnostics; do not treat diagnostic failure as success.
+Actions default ubuntu-latest runner only; no local runtime/build/test/checker execution. At implementation18fd9af4582301d4a902f426ac3a90d65f5f06ce regression39121717231 PASS84 inline+84 split including cases83/84 and prior82; build39121717235 PASS. Artifacts6410436-byte inline/1735115-byte split ZIP. Dist-only botdb3c606ed17898386b1efc1c79d393b41ec0330a inspected and fast-forwarded.
+
+Version39121717222 diagnostic FAIL (not a passed gate): `source-code fingerprint changed without updating development-versions.json: recorded='sha256:181e72ba2a4639391196271d4f93cda813d58fcde2d69d5f18d5ca852da609f5', actual='sha256:fee34f7c54684d7ab8db73673bd22b35109baca0dde3e336d560bf5b60110e37'`. Source41/pseudocode18 canonical digests unchanged. Patch076 records actual code71 digest; corrected cumulative gate and repeat pending.
 
 ## Boundaries and alternatives
 
