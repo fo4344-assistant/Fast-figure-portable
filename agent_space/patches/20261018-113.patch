@@ -1,0 +1,341 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 202ec06..52c0203 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -219,6 +219,10 @@ Baseline f2f13c5f44d700a181c33c7c1fa2a3ebe00e3b26. Existing Source42/pseudocode2
+ 
+ Baselinecd989f8a9ce43b41244f6e7cd98f237968bb65c0. Existing Source42/pseudocode20 specify new field edits/current candidate/config normalization/validate/retry/one commit and committed-only global caption copy. Code85 applies this to enabled/name/nameBold/font settings, preserves canonical slot content, makes official global read recursively immutable. Application passes supplied success read to renderer and removes direct persistent debug/legacy live-read helper. Cases101/102 cover exact ownership/copies/facts/config/scalar inputs/errors/noncommit/latest-state retry/no rollback. Review038/patch110–112 retain initial frozen-notify test instrumentation failure39125351942 and correction. Atb2fedec1c6501f3e06e487b2267f420d03dc484c regression39125442787 PASS102 inline+102 split, independent39125496323 PASS102+102/204 records, build39125476637 PASS same SHA. Cumulative39125443158 PASS fromcd989f8a9ce43b41244f6e7cd98f237968bb65c0, canonicalcode85 sha256:5ed36a0761fd715436ab26e45cade017873ddfb0b4839984097dce69efee7e9e. Unit36 bounded checklist complete only. Broader caption text/other owners/schema/import/raster/dashboard remain open; upper unchanged, code85 stale.
+ 
++## Thirty-seventh bounded unit — global/slot caption text
++
++Source43 explicitly closes nullish-to-empty/otherwise text conversion, global empty text versus slot none, strict visible slot owner, whitespace/Unicode preservation, original errors/current-source retry in CAPTION_TEXT_RULE; previous closure omitted input/empty distinction. Pseudocode21 applies direct conversion/none rule; code86 current candidate/validate/retry/onecommit with canonical content preservation and actual changed slots. Application global/slot text sends only owner/new text, committed-only official copied read, no extra Application text calculation or renderer action. Cases103/104 cover both owners/copies/extension retention/empty/errors/retry/noncommit/postcommit failures; review039/patch113. Actual Actions104+104/build/canonical gate pending; whole code stale/open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index daf6c5f..697da0f 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4501,6 +4501,127 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+     });
+ 
++
++    await run(103, "Caption text has separate owners, exact empty/text semantics and copied success facts", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        send = projectEFSM.send, initialize = activeProject.initialize, query = readBackendProjection,
++        sync = syncDashboardCaption, render = renderDashboard, notify = interfaceFSM.notify;
++      try {
++        api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
++        const fixture = projectClone(activeProject._state); fixture.slots.find(slot => slot.id === a.id).caption = "prior a";
++        fixture.slots.find(slot => slot.id === b.id).caption = "prior b"; initialize.call(activeProject, fixture);
++        for (const slot of activeProject.slots) slot.content.captionTextExtension = { retained: slot.id };
++        const runtime = interfaceFSM.state, before = projectClone(activeProject._state);
++        let commits = 0, reads = 0, result;
++        renderDashboard = syncDashboardCaption = () => {}; interfaceFSM.notify = () => {};
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        projectEFSM.send = function (event, payload) {
++          check(event === "CAPTION_TEXT_INPUT" && !Object.hasOwn(payload, "candidate") && !Object.hasOwn(payload, "model") &&
++            Object.keys(payload).sort().join(",") === "target,text", "Application supplied caption calculation/model");
++          result = send.call(this, event, payload); return result;
++        };
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && ["captions.readGlobal", "captions.readSlot"].includes(request.operation)) reads++;
++          return query(kind, request);
++        };
++        const text = "  Unicode 한글\n<&>  ", global = api.captions.setGlobalText(text), expected = projectClone(before);
++        expected.annotations.captions.text = text;
++        check(JSON.stringify(activeProject._state) === JSON.stringify(expected) && global.text === text &&
++          Object.isFrozen(global) && Object.isFrozen(global.settings) && commits === 1 && reads === 1 &&
++          Object.isFrozen(result.changed) && !result.changed.slotIds.length, "global text touched another owner/trimmed/not copied");
++        const slotRead = api.captions.setSlotText(a.id, 0); expected.slots.find(slot => slot.id === a.id).caption = "0";
++        check(slotRead.text === "0" && Object.isFrozen(slotRead) && JSON.stringify(activeProject._state) === JSON.stringify(expected) &&
++          result.changed.slotIds.join(",") === String(a.id) && !result.changed.chartIds.length &&
++          !result.changed.csvIds.length && !result.changed.imageIds.length && !result.changed.assets.length,
++          "slot caption changed other owners or actual facts");
++        const empty = api.captions.setSlotText(a.id, null);
++        check(empty.text === "" && activeProject.slots.find(slot => slot.id === a.id).caption === null && slotRead.text === "0",
++          "slot empty persisted placeholder or old read not detached");
++        check(api.captions.setGlobalText(undefined).text === "" && activeProject.annotations.captions.text === "" &&
++          activeProject.slots.find(slot => slot.id === b.id).caption === "prior b", "global empty changed slot captions");
++        const exact = api.captions.setSlotText(a.id, text);
++        check(exact.text === text && interfaceFSM.state === runtime && commits === 5 && reads === 5 &&
++          activeProject.slots.every(slot => slot.content.captionTextExtension?.retained === slot.id),
++          "caption text changed selection, canonical content extension or work count");
++        const source = activeProject._state, first = api.captions.readSlot(a.id), second = api.captions.readSlot(a.id);
++        check(first !== second && first.text === text && activeProject._state === source, "caption read repaired authority/reused mirror");
++      } finally { projectEFSM.send = send; activeProject.initialize = initialize; readBackendProjection = query;
++        syncDashboardCaption = sync; renderDashboard = render; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
++    await run(104, "Caption text current-source retry and original errors gate success work", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
++        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult,
++        sync = syncDashboardCaption, render = renderDashboard, notify = interfaceFSM.notify, failure = Error("caption text boundary");
++      try {
++        api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
++        const fixture = projectClone(activeProject._state); fixture.slots.find(slot => slot.id === b.id).hidden = true;
++        initialize.call(activeProject, fixture);
++        let commits = 0, reads = 0, effects = 0, reconciliations = 0, caught;
++        const source = activeProject._state, runtime = interfaceFSM.state;
++        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && ["captions.readGlobal", "captions.readSlot"].includes(request.operation)) reads++;
++          return query(kind, request);
++        };
++        renderDashboard = syncDashboardCaption = () => { effects++; }; interfaceFSM.notify = () => { effects++; };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        for (const id of [String(a.id), -1, null, b.id]) {
++          caught = null; try { api.captions.setSlotText(id, "invalid"); } catch (error) { caught = error; }
++          check(caught && activeProject._state === source && interfaceFSM.state === runtime &&
++            !commits && !reads && !effects && !reconciliations, "invalid/hidden caption owner committed/did success work");
++        }
++        try { api.captions.setGlobalText({ toString() { throw failure; } }); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && !commits && !reads, "caption conversion error swallowed/wrote");
++        validateProjectObjectState = () => { throw failure; }; caught = null;
++        try { api.captions.setSlotText(a.id, "no commit"); } catch (error) { caught = error; }
++        check(caught === failure && activeProject._state === source && !commits && !reads && !effects && !reconciliations,
++          "caption validation error did partial/success work");
++        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
++        check(api.captions.setGlobalText("x") === false && api.captions.setSlotText(a.id, "x") === false &&
++          !commits && !reads && !effects && !reconciliations, "caption noncommit did success work");
++        projectEFSM.send = send; let conversions = 0;
++        const retried = api.captions.setSlotText(a.id, { toString() {
++          if (++conversions === 1) {
++            const newer = projectClone(activeProject._state); newer.meta.projectName = "latest caption text authority";
++            newer.annotations.captions.text = "latest global"; initialize.call(activeProject, newer);
++          }
++          return "new local";
++        } });
++        check(conversions === 2 && commits === 1 && reads === 1 && reconciliations === 1 && retried.text === "new local" &&
++          activeProject.annotations.captions.text === "latest global" && activeProject.meta.projectName === "latest caption text authority",
++          "caption conversion retry overwrote newer authority");
++        let attempts = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const validated = validate(candidate, options);
++          if (options?.requireSlots && ++attempts === 1) {
++            const newer = projectClone(activeProject._state); newer.annotations.captions.name = "latest caption name";
++            initialize.call(activeProject, newer);
++          }
++          return validated;
++        };
++        check(api.captions.setGlobalText("latest body").name === "latest caption name" && attempts === 2 &&
++          commits === 2 && reads === 2 && reconciliations === 2, "caption validation retry lost latest fields");
++        validateProjectObjectState = validate; const priorEffects = effects;
++        readBackendProjection = function (kind, request) {
++          if (kind === "project-api" && request.operation === "captions.readSlot") throw failure;
++          return query(kind, request);
++        }; caught = null;
++        try { api.captions.setSlotText(a.id, "committed local"); } catch (error) { caught = error; }
++        check(caught === failure && commits === 3 && effects === priorEffects &&
++          activeProject.slots.find(slot => slot.id === a.id).caption === "committed local", "caption postcommit query error rolled back/swallowed");
++        readBackendProjection = query; interfaceFSM.reconcileProjectResult = () => { throw failure; }; caught = null;
++        try { api.captions.setGlobalText("committed global"); } catch (error) { caught = error; }
++        check(caught === failure && commits === 4 && activeProject.annotations.captions.text === "committed global",
++          "caption postcommit reconciliation error rolled back/swallowed");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
++        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
++        syncDashboardCaption = sync; renderDashboard = render; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 5c65966..920d1b3 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,13 +9,13 @@
+   "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+   "layers": {
+     "source-script": {
+-      "revision": 42,
++      "revision": 43,
+       "status": "current", 
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+       "fingerprint": "sha256:5b26424594c12918fd8ca51453483922bfbfcf29216e67bcd61cf959297ba9d2",
+       "derived_from": null,
+       "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261018-033-code-empty-image-open.md"
++      "closure_review": "agent_space/reviews/review-20261018-039-caption-text-closure.md"
+     }, 
+     "verification-model": {
+       "revision": 26, 
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 85,
++      "revision": 86,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,17 +44,17 @@
+         "pseudocode": "sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-038-code-caption-settings-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-039-caption-text-closure.md"
+     }, 
+     "pseudocode": {
+-      "revision": 20,
++      "revision": 21,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+       "fingerprint": "sha256:02ae42a7e14beec7a435e73f367135054d58e25ee60a5e7b7786f0168f84ab51",
+       "derived_from": {
+         "source-script": "sha256:5b26424594c12918fd8ca51453483922bfbfcf29216e67bcd61cf959297ba9d2"
+       },
+-      "translation_review": "agent_space/reviews/review-20261018-033-code-empty-image-open.md"
++      "translation_review": "agent_space/reviews/review-20261018-039-caption-text-closure.md"
+     }
+   }
+ }
+diff --git a/pseudocode/backend/project_efsm.pcal b/pseudocode/backend/project_efsm.pcal
+index 7120a93..f553e65 100644
+--- a/pseudocode/backend/project_efsm.pcal
++++ b/pseudocode/backend/project_efsm.pcal
+@@ -429,8 +429,10 @@ DomainBranchNotAlternativeMutationEntry:
+     candidate.annotations.captions.text := text;
+   elsif event = "CAPTION_TEXT_INPUT" then
+     if payload.target.kind = "slot" then
+-      slot := ResolveCurrentVisibleSlot(source,payload.target.id); CandidateSlot(candidate,slot.id).caption := payload.text;
+-    else Require(payload.target.kind = "global"); candidate.annotations.captions.text := payload.text; end if;
++      Require(IsInteger(payload.target.id)); slot := ResolveCurrentVisibleSlot(source,payload.target.id);
++      text := TextOrEmpty(payload.text);
++      CandidateSlot(candidate,slot.id).caption := IF text = Empty THEN None ELSE text;
++    else Require(payload.target.kind = "global"); candidate.annotations.captions.text := TextOrEmpty(payload.text); end if;
+   elsif event = "CAPTION_SETTINGS_CHANGED" then
+     ApplyOnlyPresentCaptionFieldsWithConfigLimits(candidate.annotations.captions,payload,
+       BackendSettings.project_object.annotations.captions,BackendSettings.defaults.limits.captions);
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index bc3d854..9f4ad47 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -905,16 +905,27 @@
+       function applyCaptionTextAction({ machine, payload }) {
+         machine.assertWritable("captions","CAPTION_TEXT_INPUT");
+         machine.assertWritable("slots","CAPTION_TEXT_INPUT");
+-        let candidate=projectClone(activeProject._state),
+-          target=payload.target;
+-        if(target?.kind==="slot"){
+-          let slot=candidate.slots.find((item)=>item.id===Number(target.id));
+-          if(!slot)throw Error("캡션을 변경할 슬롯이 없습니다.");
+-          slot.caption=String(payload.text??"")||null;
+-        } else if(target?.kind==="global") {
+-          candidate.annotations.captions.text=String(payload.text??"");
+-        } else throw Error("캡션 변경 대상이 올바르지 않습니다.");
+-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
++        while (true) {
++          const source = activeProject._state, target = payload.target;
++          if (target?.kind !== "global" && target?.kind !== "slot") throw Error("캡션 변경 대상이 올바르지 않습니다.");
++          const slot = target.kind === "slot" ? source.slots.find(item => item.id === target.id && !item.hidden) : null;
++          if (target.kind === "slot" && (!Number.isInteger(target.id) || !slot)) throw Error("캡션을 변경할 visible 슬롯이 없습니다.");
++          const text = String(payload.text ?? ""), candidate = projectClone(source);
++          normalizeSlotContents(candidate.slots);
++          for (const item of candidate.slots) {
++            const original = source.slots.find(before => before.id === item.id);
++            if (original?.content) item.content = projectClone(original.content);
++          }
++          if (slot) candidate.slots.find(item => item.id === slot.id).caption = text || null;
++          else candidate.annotations.captions.text = text;
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          payload.changed = { slotIds: candidate.slots.filter(after =>
++            JSON.stringify(source.slots.find(before => before.id === after.id)) !== JSON.stringify(after)).map(item => item.id),
++            chartIds: [], csvIds: [], imageIds: [], assets: [] };
++          return;
++        }
+       }
+       function applySlotCaptionsInsertedAction({ machine, payload }) {
+         machine.assertWritable("captions", "SLOT_CAPTIONS_INSERTED");
+@@ -7829,7 +7840,6 @@
+           target: { kind: "global" }, text,
+         });
+         if (!result.committed) return false;
+-        syncDashboardCaption();
+         return readGlobalCaptionState();
+       }
+       function setSlotCaptionText(slotId,text) {
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index 9739427..179f748 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -343,7 +343,7 @@ def setGlobalCaptionText(text):
+     - activeProject.annotations.captions.text.
+ 
+     처리:
+-    global caption project property 하나만 변경한다.
++    Backend CAPTION_TEXT_RULE의 nullish/text 변환과 empty 저장 규칙으로 global caption project property 하나만 변경한다.
+     slot caption 값은 변경하지 않는다.
+     CAPTION_TEXT_INPUT에 explicit global owner를 전달해 projectEFSM으로 commit한다.
+     """
+@@ -362,7 +362,8 @@ def setSlotCaptionText(slotId, text):
+     - 지정 slot object의 slot.caption.
+ 
+     처리:
+-    slotId를 current project에서 resolve하고 CAPTION_TEXT_INPUT에 explicit slot owner를 전달한다.
++    strict integer slotId의 current visible owner를 Backend에서 resolve하고 CAPTION_TEXT_RULE로 text를 정규화한다.
++    Application은 CAPTION_TEXT_INPUT에 explicit slot owner와 새 text만 전달한다.
+     UI의 selected-slot caption editor는 이 command를 호출할 뿐 별도 persistent slotMode를 만들지 않는다.
+     """
+     result, interfaceState, rendererInput = dispatchProjectCommand(
+diff --git a/sourcescript/backend/layout_annotations.py b/sourcescript/backend/layout_annotations.py
+index 3c2caa5..12a197b 100644
+--- a/sourcescript/backend/layout_annotations.py
++++ b/sourcescript/backend/layout_annotations.py
+@@ -25,6 +25,15 @@ LAYOUT_BOUNDARY_RULE = (
+     "Application wrapper는 identity와 새 edit 값만 보내며 candidate는 Project EFSM command 내부에서 계산한다. "
+     "Frontend renderer는 Application이 제공한 immutable snapshot/projection만 소비한다."
+ )
++CAPTION_TEXT_RULE = (
++    "CAPTION_TEXT_INPUT은 current Project source를 capture하고 explicit global owner 또는 strict integer visible slotId를 resolve한다. "
++    "text가 nullish이면 empty text, 그 외 언어의 text 변환을 시도한다. whitespace/Unicode/newline을 보존하며 trim/placeholder를 저장하지 않는다. "
++    "변환 오류는 commit 없이 전파한다. global empty는 empty text로, slot empty는 none으로 저장한다. "
++    "대상 text 외 caption name/settings/다른 slot caption/asset/Frontend selection은 변경하지 않는다. "
++    "whole candidate validation 후 source identity가 바뀌면 최신 authority에서 변환부터 재계산하며 성공 attempt만 한 번 commit한다. "
++    "readSlotCaptionState의 empty presentation은 read-only이며 slot.caption을 보완하지 않는다."
++)
++
+ layoutRules = "config reference: backend.defaults.limits.layout; bounds 적용 알고리즘은 기존 layout owner가 수행한다."
+ # zoom은 Frontend session/UI 의미이며 Backend config에 옮기지 않는다.
+ 
+diff --git a/sourcescript/backend/project_efsm.py b/sourcescript/backend/project_efsm.py
+index daf56db..da0aafd 100644
+--- a/sourcescript/backend/project_efsm.py
++++ b/sourcescript/backend/project_efsm.py
+@@ -211,6 +211,7 @@ class ProjectStateMachine:
+            project.appearance와 chart.editor가 각 의미의 원천이며 graph.data/layout/CSS는 candidate 계산/표시 결과다.
+            label/caption create/load/missing/partial edit는 layout_annotations.ANNOTATION_SETTINGS_RULE을 사용한다.
+            LABEL_POSITION_CHANGED의 reset=True는 settings.json backend.project_object.annotations.labels.settings.x/y를 Backend 내부에서 읽어 적용한다.
++           CAPTION_TEXT_INPUT은 layout_annotations.CAPTION_TEXT_RULE의 owner/문자열 변환/empty 저장 규칙을 command 내부에서 적용한다.
+            SLOT_CAPTIONS_INSERTED는 current candidate와 payload.slotIds로 layout_annotations.insertSlotCaptions를 계산한다.
+            no target이면 committed=False/unchanged이고 success read나 selection을 실행하지 않는다.
+            JSON config 값/계산 결과를 Frontend state에서 다시 만들거나 별도 authority로 저장하지 않는다.
+diff --git a/agent_space/reviews/review-20261018-039-caption-text-closure.md b/agent_space/reviews/review-20261018-039-caption-text-closure.md
+new file mode 100644
+index 0000000..f775ac1
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-039-caption-text-closure.md
+@@ -0,0 +1,16 @@
++# Unit37 caption text Source closure and translation
++
++## Source43 decision before lower translation
++
++Source42 defined separate global/slot ownership but not input coercion or the difference between persisted empty global text and absent slot caption. Pseudocode20 directly assigned payload.text while code85 already converted nullish to empty and other input to text; useful scalar editing must not be discarded or silently become lower-layer authority. Domain decision: Backend command captures current source, resolves explicit global owner or strict integer visible slot id, converts nullish to empty text and otherwise language text conversion once per attempt; whitespace/Unicode/newlines preserved, no trim/placeholder substitution. Conversion errors propagate without commit. Global empty persists empty string; slot empty persists none; reads may present absent slot caption as empty string without repair. Only target text changes, all other caption settings/name/body owners/assets/selection preserved. Whole candidate validation then source-reference recheck/retry and one commit/actual changed facts apply. Application sends identities/new text only and returns fresh official projection after committed result; noncommit False/no success work.
++
++Completeness: target/input/empty/error/retry/read semantics now explicit, existing candidate invariants inherited. Independent purpose: distinguish global document body from optional slot annotation, preserve user text, prevent editing stale/covered target. No duplicate meaning/state: one domain rule, EFSM consumes it; no editor mirror/cache. Reject raw arbitrary payload persistence (schema risk), string-only ban (unnecessarily loses useful scalar edits), trim/placeholder data (changes user content), hidden-id coercion (wrong owner), or Source merely describing current JS. Previous closure missed this boundary; closure remains bounded and existing upstream closure elsewhere inherited.
++
++## Prompt-to-artifact checklist (execution pending)
++
++- Source43 domain rule + Application contract → pseudocode21 TextOrEmpty/empty-to-none + existing common retry → code86 current candidate loop.
++- explicit visible strict id, preserved owners/settings/selection, actual changed IDs, one commit:103/104.
++- nullish/number/whitespace/Unicode/empty mapping, immutable copied global/slot read/no repair:103.
++- original conversion/validator errors, noncommit/no read/effect, latest authority retry, postcommit query/reconcile errors no rollback:104.
++
++Source43/pseudocode21 fingerprints provisional until actual Actions default-runner diagnostics; code86 stale. Tests104+104/build/cumulative gate pending. Whole Plan023 open: other asset/cascade/import/schema/raster/dashboard/legacy serializer and timing gaps not covered. No policy edit/delegation/local runtime execution; optional TLC not run.

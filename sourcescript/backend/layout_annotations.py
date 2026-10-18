@@ -25,6 +25,15 @@ LAYOUT_BOUNDARY_RULE = (
     "Application wrapper는 identity와 새 edit 값만 보내며 candidate는 Project EFSM command 내부에서 계산한다. "
     "Frontend renderer는 Application이 제공한 immutable snapshot/projection만 소비한다."
 )
+CAPTION_TEXT_RULE = (
+    "CAPTION_TEXT_INPUT은 current Project source를 capture하고 explicit global owner 또는 strict integer visible slotId를 resolve한다. "
+    "text가 nullish이면 empty text, 그 외 언어의 text 변환을 시도한다. whitespace/Unicode/newline을 보존하며 trim/placeholder를 저장하지 않는다. "
+    "변환 오류는 commit 없이 전파한다. global empty는 empty text로, slot empty는 none으로 저장한다. "
+    "대상 text 외 caption name/settings/다른 slot caption/asset/Frontend selection은 변경하지 않는다. "
+    "whole candidate validation 후 source identity가 바뀌면 최신 authority에서 변환부터 재계산하며 성공 attempt만 한 번 commit한다. "
+    "readSlotCaptionState의 empty presentation은 read-only이며 slot.caption을 보완하지 않는다."
+)
+
 layoutRules = "config reference: backend.defaults.limits.layout; bounds 적용 알고리즘은 기존 layout owner가 수행한다."
 # zoom은 Frontend session/UI 의미이며 Backend config에 옮기지 않는다.
 

@@ -211,6 +211,7 @@ class ProjectStateMachine:
            project.appearance와 chart.editor가 각 의미의 원천이며 graph.data/layout/CSS는 candidate 계산/표시 결과다.
            label/caption create/load/missing/partial edit는 layout_annotations.ANNOTATION_SETTINGS_RULE을 사용한다.
            LABEL_POSITION_CHANGED의 reset=True는 settings.json backend.project_object.annotations.labels.settings.x/y를 Backend 내부에서 읽어 적용한다.
+           CAPTION_TEXT_INPUT은 layout_annotations.CAPTION_TEXT_RULE의 owner/문자열 변환/empty 저장 규칙을 command 내부에서 적용한다.
            SLOT_CAPTIONS_INSERTED는 current candidate와 payload.slotIds로 layout_annotations.insertSlotCaptions를 계산한다.
            no target이면 committed=False/unchanged이고 success read나 selection을 실행하지 않는다.
            JSON config 값/계산 결과를 Frontend state에서 다시 만들거나 별도 authority로 저장하지 않는다.

@@ -343,7 +343,7 @@ def setGlobalCaptionText(text):
     - activeProject.annotations.captions.text.
 
     처리:
-    global caption project property 하나만 변경한다.
+    Backend CAPTION_TEXT_RULE의 nullish/text 변환과 empty 저장 규칙으로 global caption project property 하나만 변경한다.
     slot caption 값은 변경하지 않는다.
     CAPTION_TEXT_INPUT에 explicit global owner를 전달해 projectEFSM으로 commit한다.
     """
@@ -362,7 +362,8 @@ def setSlotCaptionText(slotId, text):
     - 지정 slot object의 slot.caption.
 
     처리:
-    slotId를 current project에서 resolve하고 CAPTION_TEXT_INPUT에 explicit slot owner를 전달한다.
+    strict integer slotId의 current visible owner를 Backend에서 resolve하고 CAPTION_TEXT_RULE로 text를 정규화한다.
+    Application은 CAPTION_TEXT_INPUT에 explicit slot owner와 새 text만 전달한다.
     UI의 selected-slot caption editor는 이 command를 호출할 뿐 별도 persistent slotMode를 만들지 않는다.
     """
     result, interfaceState, rendererInput = dispatchProjectCommand(

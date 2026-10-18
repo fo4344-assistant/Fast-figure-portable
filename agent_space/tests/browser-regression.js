@@ -4501,6 +4501,127 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
     });
 
+
+    await run(103, "Caption text has separate owners, exact empty/text semantics and copied success facts", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        send = projectEFSM.send, initialize = activeProject.initialize, query = readBackendProjection,
+        sync = syncDashboardCaption, render = renderDashboard, notify = interfaceFSM.notify;
+      try {
+        api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+        const fixture = projectClone(activeProject._state); fixture.slots.find(slot => slot.id === a.id).caption = "prior a";
+        fixture.slots.find(slot => slot.id === b.id).caption = "prior b"; initialize.call(activeProject, fixture);
+        for (const slot of activeProject.slots) slot.content.captionTextExtension = { retained: slot.id };
+        const runtime = interfaceFSM.state, before = projectClone(activeProject._state);
+        let commits = 0, reads = 0, result;
+        renderDashboard = syncDashboardCaption = () => {}; interfaceFSM.notify = () => {};
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        projectEFSM.send = function (event, payload) {
+          check(event === "CAPTION_TEXT_INPUT" && !Object.hasOwn(payload, "candidate") && !Object.hasOwn(payload, "model") &&
+            Object.keys(payload).sort().join(",") === "target,text", "Application supplied caption calculation/model");
+          result = send.call(this, event, payload); return result;
+        };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && ["captions.readGlobal", "captions.readSlot"].includes(request.operation)) reads++;
+          return query(kind, request);
+        };
+        const text = "  Unicode 한글\n<&>  ", global = api.captions.setGlobalText(text), expected = projectClone(before);
+        expected.annotations.captions.text = text;
+        check(JSON.stringify(activeProject._state) === JSON.stringify(expected) && global.text === text &&
+          Object.isFrozen(global) && Object.isFrozen(global.settings) && commits === 1 && reads === 1 &&
+          Object.isFrozen(result.changed) && !result.changed.slotIds.length, "global text touched another owner/trimmed/not copied");
+        const slotRead = api.captions.setSlotText(a.id, 0); expected.slots.find(slot => slot.id === a.id).caption = "0";
+        check(slotRead.text === "0" && Object.isFrozen(slotRead) && JSON.stringify(activeProject._state) === JSON.stringify(expected) &&
+          result.changed.slotIds.join(",") === String(a.id) && !result.changed.chartIds.length &&
+          !result.changed.csvIds.length && !result.changed.imageIds.length && !result.changed.assets.length,
+          "slot caption changed other owners or actual facts");
+        const empty = api.captions.setSlotText(a.id, null);
+        check(empty.text === "" && activeProject.slots.find(slot => slot.id === a.id).caption === null && slotRead.text === "0",
+          "slot empty persisted placeholder or old read not detached");
+        check(api.captions.setGlobalText(undefined).text === "" && activeProject.annotations.captions.text === "" &&
+          activeProject.slots.find(slot => slot.id === b.id).caption === "prior b", "global empty changed slot captions");
+        const exact = api.captions.setSlotText(a.id, text);
+        check(exact.text === text && interfaceFSM.state === runtime && commits === 5 && reads === 5 &&
+          activeProject.slots.every(slot => slot.content.captionTextExtension?.retained === slot.id),
+          "caption text changed selection, canonical content extension or work count");
+        const source = activeProject._state, first = api.captions.readSlot(a.id), second = api.captions.readSlot(a.id);
+        check(first !== second && first.text === text && activeProject._state === source, "caption read repaired authority/reused mirror");
+      } finally { projectEFSM.send = send; activeProject.initialize = initialize; readBackendProjection = query;
+        syncDashboardCaption = sync; renderDashboard = render; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
+    await run(104, "Caption text current-source retry and original errors gate success work", async () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection,
+        validate = validateProjectObjectState, reconcile = interfaceFSM.reconcileProjectResult,
+        sync = syncDashboardCaption, render = renderDashboard, notify = interfaceFSM.notify, failure = Error("caption text boundary");
+      try {
+        api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+        const fixture = projectClone(activeProject._state); fixture.slots.find(slot => slot.id === b.id).hidden = true;
+        initialize.call(activeProject, fixture);
+        let commits = 0, reads = 0, effects = 0, reconciliations = 0, caught;
+        const source = activeProject._state, runtime = interfaceFSM.state;
+        activeProject.initialize = function (candidate) { commits++; return initialize.call(this, candidate); };
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && ["captions.readGlobal", "captions.readSlot"].includes(request.operation)) reads++;
+          return query(kind, request);
+        };
+        renderDashboard = syncDashboardCaption = () => { effects++; }; interfaceFSM.notify = () => { effects++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        for (const id of [String(a.id), -1, null, b.id]) {
+          caught = null; try { api.captions.setSlotText(id, "invalid"); } catch (error) { caught = error; }
+          check(caught && activeProject._state === source && interfaceFSM.state === runtime &&
+            !commits && !reads && !effects && !reconciliations, "invalid/hidden caption owner committed/did success work");
+        }
+        try { api.captions.setGlobalText({ toString() { throw failure; } }); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && !commits && !reads, "caption conversion error swallowed/wrote");
+        validateProjectObjectState = () => { throw failure; }; caught = null;
+        try { api.captions.setSlotText(a.id, "no commit"); } catch (error) { caught = error; }
+        check(caught === failure && activeProject._state === source && !commits && !reads && !effects && !reconciliations,
+          "caption validation error did partial/success work");
+        validateProjectObjectState = validate; projectEFSM.send = () => Object.freeze({ committed: false });
+        check(api.captions.setGlobalText("x") === false && api.captions.setSlotText(a.id, "x") === false &&
+          !commits && !reads && !effects && !reconciliations, "caption noncommit did success work");
+        projectEFSM.send = send; let conversions = 0;
+        const retried = api.captions.setSlotText(a.id, { toString() {
+          if (++conversions === 1) {
+            const newer = projectClone(activeProject._state); newer.meta.projectName = "latest caption text authority";
+            newer.annotations.captions.text = "latest global"; initialize.call(activeProject, newer);
+          }
+          return "new local";
+        } });
+        check(conversions === 2 && commits === 1 && reads === 1 && reconciliations === 1 && retried.text === "new local" &&
+          activeProject.annotations.captions.text === "latest global" && activeProject.meta.projectName === "latest caption text authority",
+          "caption conversion retry overwrote newer authority");
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const validated = validate(candidate, options);
+          if (options?.requireSlots && ++attempts === 1) {
+            const newer = projectClone(activeProject._state); newer.annotations.captions.name = "latest caption name";
+            initialize.call(activeProject, newer);
+          }
+          return validated;
+        };
+        check(api.captions.setGlobalText("latest body").name === "latest caption name" && attempts === 2 &&
+          commits === 2 && reads === 2 && reconciliations === 2, "caption validation retry lost latest fields");
+        validateProjectObjectState = validate; const priorEffects = effects;
+        readBackendProjection = function (kind, request) {
+          if (kind === "project-api" && request.operation === "captions.readSlot") throw failure;
+          return query(kind, request);
+        }; caught = null;
+        try { api.captions.setSlotText(a.id, "committed local"); } catch (error) { caught = error; }
+        check(caught === failure && commits === 3 && effects === priorEffects &&
+          activeProject.slots.find(slot => slot.id === a.id).caption === "committed local", "caption postcommit query error rolled back/swallowed");
+        readBackendProjection = query; interfaceFSM.reconcileProjectResult = () => { throw failure; }; caught = null;
+        try { api.captions.setGlobalText("committed global"); } catch (error) { caught = error; }
+        check(caught === failure && commits === 4 && activeProject.annotations.captions.text === "committed global",
+          "caption postcommit reconciliation error rolled back/swallowed");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        validateProjectObjectState = validate; interfaceFSM.reconcileProjectResult = reconcile;
+        syncDashboardCaption = sync; renderDashboard = render; interfaceFSM.notify = notify;
+        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

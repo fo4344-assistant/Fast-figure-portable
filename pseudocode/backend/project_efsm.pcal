@@ -429,8 +429,10 @@ DomainBranchNotAlternativeMutationEntry:
     candidate.annotations.captions.text := text;
   elsif event = "CAPTION_TEXT_INPUT" then
     if payload.target.kind = "slot" then
-      slot := ResolveCurrentVisibleSlot(source,payload.target.id); CandidateSlot(candidate,slot.id).caption := payload.text;
-    else Require(payload.target.kind = "global"); candidate.annotations.captions.text := payload.text; end if;
+      Require(IsInteger(payload.target.id)); slot := ResolveCurrentVisibleSlot(source,payload.target.id);
+      text := TextOrEmpty(payload.text);
+      CandidateSlot(candidate,slot.id).caption := IF text = Empty THEN None ELSE text;
+    else Require(payload.target.kind = "global"); candidate.annotations.captions.text := TextOrEmpty(payload.text); end if;
   elsif event = "CAPTION_SETTINGS_CHANGED" then
     ApplyOnlyPresentCaptionFieldsWithConfigLimits(candidate.annotations.captions,payload,
       BackendSettings.project_object.annotations.captions,BackendSettings.defaults.limits.captions);
