@@ -26,4 +26,4 @@ Preserve supplied bytes instead of normalizing them; synthesizing all files woul
 
 ## Execution evidence
 
-Pending. Prior digests deliberately provisional until canonical Actions checkout diagnostic; not a passed version gate.
+Implementation 003f484b1eaa07b44c31541857c0221bc981b4bc: default ubuntu-latest regression39120647317 PASS78 inline+78 split, including cases77/78 and prior76. Build39120647325 PASS; artifacts inline6383148 bytes/split ZIP1734868 bytes. Dist-only bot a192e11 inspected before fast-forward. Diagnostic39120647336 FAIL as expected on provisional prior pseudocode digest: recorded c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619; actual pseudocode18 sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a and code66 sha256:ff5070966a9ba3998a3268c836837e0d2528e2e399d6299f889795fcd90fe832. Source41 unchanged. Patch064 records canonical values without source/test changes; corrected cumulative version and repeat regression pending. Initial diagnostic failure remains evidence, not a passed gate.

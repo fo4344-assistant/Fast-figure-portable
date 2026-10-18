@@ -1,0 +1,36 @@
+diff --git a/agent_space/reviews/review-20261018-026-code-csv-create-open.md b/agent_space/reviews/review-20261018-026-code-csv-create-open.md
+index 45b25ab..9bd617b 100644
+--- a/agent_space/reviews/review-20261018-026-code-csv-create-open.md
++++ b/agent_space/reviews/review-20261018-026-code-csv-create-open.md
+@@ -26,4 +26,4 @@ Preserve supplied bytes instead of normalizing them; synthesizing all files woul
+ 
+ ## Execution evidence
+ 
+-Pending. Prior digests deliberately provisional until canonical Actions checkout diagnostic; not a passed version gate.
++Implementation 003f484b1eaa07b44c31541857c0221bc981b4bc: default ubuntu-latest regression39120647317 PASS78 inline+78 split, including cases77/78 and prior76. Build39120647325 PASS; artifacts inline6383148 bytes/split ZIP1734868 bytes. Dist-only bot a192e11 inspected before fast-forward. Diagnostic39120647336 FAIL as expected on provisional prior pseudocode digest: recorded c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619; actual pseudocode18 sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a and code66 sha256:ff5070966a9ba3998a3268c836837e0d2528e2e399d6299f889795fcd90fe832. Source41 unchanged. Patch064 records canonical values without source/test changes; corrected cumulative version and repeat regression pending. Initial diagnostic failure remains evidence, not a passed gate.
+diff --git a/development-versions.json b/development-versions.json
+index f001c2d..929348c 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,10 +38,10 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:c7c226fa184cb585746f4a958d8427bce69c9a5c3090005315376f31f50f2ef4",
++      "fingerprint": "sha256:ff5070966a9ba3998a3268c836837e0d2528e2e399d6299f889795fcd90fe832",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5",
+-        "pseudocode": "sha256:c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619",
++        "pseudocode": "sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+       "validation_review": "agent_space/reviews/review-20261018-026-code-csv-create-open.md"
+@@ -50,7 +50,7 @@
+       "revision": 18,
+       "status": "current",
+       "path_rule": "pseudocode/**/*.pcal", 
+-      "fingerprint": "sha256:c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619",
++      "fingerprint": "sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a",
+       "derived_from": {
+         "source-script": "sha256:62af3282d0c33fd555e02188501f6cf340f8f2a8936fb646f07d379887c80dc5"
+       },
