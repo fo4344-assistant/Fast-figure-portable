@@ -11050,7 +11050,7 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           if (operation === "graphs.moveObject") {
             if (!validIndex(payload.from) || !validIndex(payload.to)) throw Error("이동할 현재 오브젝트 index가 없습니다.");
             if (payload.from === payload.to) return false;
-          } else if (!validIndex(index)) throw Error("변경할 현재 오브젝트 index가 없습니다.");
+          } else if (operation !== "graphs.applyPalette" && !validIndex(index)) throw Error("변경할 현재 오브젝트 index가 없습니다.");
           const candidate = projectClone(source), chart = candidate.charts.find((item) => item.id === current.id);
           let selectedIndexHint = index;
           if (operation === "graphs.moveObject") {
@@ -11060,6 +11060,14 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           } else if (operation === "graphs.deleteObject") {
             chart.editor.objects.splice(index, 1);
             selectedIndexHint = null;
+          } else if (operation === "graphs.applyPalette") {
+            if (!Array.isArray(payload.colors) || !payload.colors.length) throw Error("적용할 non-empty 색상 배열이 없습니다.");
+            const colors = [];
+            for (const color of payload.colors) {
+              if (typeof color !== "string" || !color.trim()) throw Error("팔레트 색상은 non-empty text여야 합니다.");
+              colors.push(color.trim());
+            }
+            chart.editor.objects.forEach((object, position) => { object.color = colors[position % colors.length]; });
           } else {
             const object = chart.editor.objects[index], requestedCsvId = Object.hasOwn(values, "csvId") ? values.csvId : null,
               csv = candidate.assets.csvFiles.find((item) => item.id === requestedCsvId) ||
@@ -11117,13 +11125,14 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             chartIds: changedIds(source.charts, post.charts),
             csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
             imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
-          payload.selectionHints = Object.freeze({ chartId: current.id, selectedIndexHint });
+          payload.selectionHints = Object.freeze(operation === "graphs.applyPalette" ?
+            { chartId: current.id } : { chartId: current.id, selectedIndexHint });
           return;
         }
       }
       function applyGraphObjectsReplacedAction(context) {
         const { machine, payload } = context;
-        if (["graphs.setObjectValues", "graphs.moveObject", "graphs.deleteObject"].includes(payload.operation))
+        if (["graphs.setObjectValues", "graphs.moveObject", "graphs.deleteObject", "graphs.applyPalette"].includes(payload.operation))
           return applyGraphObjectEditAction(context);
         machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
         let current=getChart(payload.chartId);
@@ -16524,18 +16533,16 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
         debugLog("mantine:graph-layout", { slotId: slot.id, chartId: chart.id });
         return readGraphLayoutApi();
       }
+      function graphEditorApplyPalette(chartId, colors) {
+        const { result } = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
+        if (!result.committed) return result;
+        const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+        renderDashboard();
+        return chart;
+      }
       function applyGraphPaletteApi(colors) {
-        let chart = graphEditorChart();
-        if (!chart || chart.editor?.editable === false)
-          return status("편집 가능 토글을 켠 뒤 색상 구성을 변경하세요.");
-        if (!Array.isArray(colors) || !colors.length)
-          throw Error("적용할 색상 배열이 없습니다.");
-        let objects = ensureGraphObjects(chart);
-        let index = appFSM.state.graphObjectIndex;
-        let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
-        return graphEditorCommit(objects.map((object, objectIndex) => ({
-          ...object, color: colors[objectIndex % colors.length],
-        })), selected);
+        const context = appFSM.query("project-api", { operation: "graphs.readData", frontendState: interfaceFSM.readState() });
+        return graphEditorApplyPalette(context.chart?.id ?? null, colors);
       }
       function setAnnotationEnabled(kind, enabled) {
         if (kind === "label")
