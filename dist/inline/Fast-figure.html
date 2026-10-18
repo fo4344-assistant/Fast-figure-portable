@@ -10325,6 +10325,16 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
             settings: Object.freeze(normalizeImageSettings(slot)),
           }) : null;
         }
+        if (kind === "export" && request.operation === "assets.download") {
+          const source = activeProject._state,
+            selected = request.path ? projectVfs.resolve(request.path, source) : null,
+            asset = ["csv", "image"].includes(selected?.kind) ? selected.asset : null;
+          if (!asset?.bytesBase64) return null;
+          return Object.freeze({
+            name: asset.name, mime: asset.mime || "application/octet-stream",
+            bytes: Object.freeze(Array.from(ffpxBase64ToBytes(asset.bytesBase64))),
+          });
+        }
         if (kind === "export" && ["graphs.exportPlotlyJson", "graphs.exportFfsx"].includes(request.operation)) {
           const source = activeProject._state,
             slot = source.slots.find((item) => item.id === request.slotId && !item.hidden),
@@ -15427,25 +15437,14 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
           debugLog("project:export-error", { message: error.message });
         }
       }
-      function downloadProjectAsset(path = appFSM.state.assetPath) {
-        let selected = path ? projectVfs.resolve(path) : null,
-          asset = ["csv", "image"].includes(selected?.kind) ? selected.asset : null;
-        if (!asset?.bytesBase64) {
-          status("다운로드할 CSV 또는 이미지 에셋을 선택하세요.");
-          return false;
-        }
-        let url = URL.createObjectURL(
-            new Blob([ffpxBase64ToBytes(asset.bytesBase64)], {
-              type: asset.mime || "application/octet-stream",
-            }),
-          ),
-          link = document.createElement("a");
-        link.href = url;
-        link.download = asset.name;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 0);
-        status(`${asset.name} 원본 에셋을 다운로드했습니다.`);
-        return true;
+      function downloadProjectAsset(path) {
+        return appFSM.run("exporting", "assets.download", async () => {
+          const target = path === undefined ? interfaceFSM.readState().assetPath : path,
+            payload = appFSM.query("export", { operation: "assets.download", path: target });
+          if (payload === null) return false;
+          await downloadExportPayload(payload);
+          return true;
+        });
       }
       function selectDirectoryFromTree(path) {
         let match = projectVfs.resolve(path);
@@ -17213,8 +17212,9 @@ fieldset:disabled .m_38aeed47:where(:not([data-inverted])),
       async function downloadExportPayload(payload) {
         const bytes = payload.entries ? ffpxZipStore(payload.entries) : Uint8Array.from(payload.bytes),
           blob = new Blob([bytes], { type: payload.mime }),
-          url = URL.createObjectURL(blob), link = document.createElement("a");
+          url = URL.createObjectURL(blob);
         try {
+          const link = document.createElement("a");
           link.href = url;
           link.download = payload.name;
           link.click();
