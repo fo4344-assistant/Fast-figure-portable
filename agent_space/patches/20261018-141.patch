@@ -1,0 +1,170 @@
+diff --git a/agent_space/reviews/review-20261018-047-code-package-import-open.md b/agent_space/reviews/review-20261018-047-code-package-import-open.md
+index 1489761..8c14bf9 100644
+--- a/agent_space/reviews/review-20261018-047-code-package-import-open.md
++++ b/agent_space/reviews/review-20261018-047-code-package-import-open.md
+@@ -30,6 +30,12 @@ At75663b582318f97cad89410c2fa4163774e04adc, repeat39154898587 PASS124 inline+124
+ 
+ Patch140 adds per-case progress (phase/number/name/completed count/virtual elapsed) and Chrome return code to missing-completion diagnostics. Complete result attribute remains mandatory, failures remain failures, no retries or virtual/wall timeout changes. This allows the next incomplete run to identify its active case rather than silently increasing a budget. Also remove browser probe's obsolete hardcoded Source19/pseudo5/code23 lineage claims: point to the single development-versions.json canonical checker and actual APP_BUILD instead of maintaining a duplicate stale version table. No new app/runtime/Source/pseudocode meaning. New exact-SHA124+124/repeat/build/gates pending, and incomplete-run root cause still open until evidence establishes it.
+ 
++## Completion-driver correction from diagnostic evidence
++
++Atb4b963f29f44e487ca7b4922458acf26eeb79737 push39155064655 fails split with Chrome returncode0, case123 running/completed122/virtualElapsed14299; manual39155131606 fails inline with the same case123/completed122/virtualElapsed11280. Case123 performs several awaited File.arrayBuffer preparations. These are missing-completion exits, not assertion results. Manual39155064707 actually ran older75663b582318f97cad89410c2fa4163774e04adc and passed124+124, so it is NOT evidence for the diagnostics checkout (branch dispatch raced remote propagation).
++
++The CLI --dump-dom/virtual budget terminates without awaiting the required asynchronous suite marker. Patch141 replaces that completion driver with Chrome's standard CDP pipe on the existing default POSIX runner, using Python stdlib only. Keep browser alive and read the same final attribute until the existing90-second wall deadline; actual page timers/File promises run normally, with no case or browser retries. Assertions/results/suite cardinality and failure gates unchanged; deadline/pipe/setup errors remain failures with last-progress/stderr. This is a completion-protocol correction, not increasing an arbitrary virtual budget or diagnosing DBus. Exact new-SHA execution is required before claiming it works; whole-goal timing/harness stability is not inferred from intent.
++
+ ## Lineage, pending evidence and limits
+ 
+ Source45 unchanged e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7; pseudocode24 fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4; code96 52448be81eafaa1f6d06551fc8d7ca36cade75f6e25b29a3f6a597ca6157a18a remains stale. Digests calculated from staged Git path/blob identities, not local checker execution; canonical Actions confirmation pending. Exact-SHA124 inline+124 split/repeat/build/cumulative development-layer/fidelity PENDING. Static fidelity gate is not semantic proof. Whole common commit/other mutation owners, schema/serializer, raster/current-snapshot resources, supplied dashboard and timing/lifecycle requirements still open. No whole-goal closure from bounded tests or manifest. No explicit quota/auth/service blocker observed.
+diff --git a/agent_space/tests/run-browser-regression.py b/agent_space/tests/run-browser-regression.py
+index e09d33d..86e14c5 100644
+--- a/agent_space/tests/run-browser-regression.py
++++ b/agent_space/tests/run-browser-regression.py
+@@ -2,9 +2,10 @@
+ """Run the in-page regression suite against both distribution artifacts."""
+ 
+ import base64
+-import html
+-from html.parser import HTMLParser
+ import json
++import os
++import select
++import time
+ from pathlib import Path
+ import shutil
+ import subprocess
+@@ -13,17 +14,6 @@ import tempfile
+ import zipfile
+ 
+ 
+-class ResultParser(HTMLParser):
+-    encoded = None
+-    progress = None
+-
+-    def handle_starttag(self, tag, attrs):
+-        if tag == "html":
+-            attributes = dict(attrs)
+-            self.encoded = attributes.get("data-fast-figure-regression")
+-            self.progress = attributes.get("data-fast-figure-regression-progress")
+-
+-
+ def run(browser, source, probe):
+     contents = source.read_text(encoding="utf-8")
+     assert "</body>" in contents, source
+@@ -31,31 +21,93 @@ def run(browser, source, probe):
+         contents.replace("</body>", f"<script>{probe}</script>\n</body>", 1),
+         encoding="utf-8",
+     )
+-    completed = subprocess.run(
+-        [
+-            browser,
+-            "--headless=new",
+-            "--no-sandbox",
+-            "--disable-gpu",
+-            "--allow-file-access-from-files",
+-            "--virtual-time-budget=20000",
+-            "--dump-dom",
+-            source.as_uri(),
+-        ],
+-        capture_output=True,
+-        text=True,
+-        timeout=90,
+-    )
+-    parser = ResultParser()
+-    parser.feed(completed.stdout)
+-    if not parser.encoded:
+-        raise RuntimeError(
+-            f"Regression did not finish on {source}: returncode={completed.returncode}; "
+-            f"last-progress={parser.progress!r}; stderr=" + completed.stderr[-2500:]
++    # Default Actions runners are POSIX. Chrome's CDP pipe uses fd3/fd4;
++    # poll the actual completion marker instead of dumping DOM on virtual time.
++    deadline = time.monotonic() + 90
++    browser_input, writer = os.pipe()
++    reader, browser_output = os.pipe()
++    with tempfile.TemporaryFile() as errors:
++        bootstrap = (
++            "import os,sys; a,b=int(sys.argv[1]),int(sys.argv[2]); "
++            "os.dup2(a,3); os.dup2(b,4); "
++            "os.execv(sys.argv[3],sys.argv[3:])"
+         )
+-    return json.loads(
+-        base64.b64decode(html.unescape(parser.encoded)).decode("utf-8")
+-    )
++        try:
++            process = subprocess.Popen(
++                [sys.executable, "-c", bootstrap, str(browser_input), str(browser_output),
++                 browser, "--headless=new", "--no-sandbox", "--disable-gpu",
++                 "--allow-file-access-from-files", "--remote-debugging-pipe", "about:blank"],
++                pass_fds=(browser_input, browser_output),
++                stdout=subprocess.DEVNULL, stderr=errors,
++            )
++        finally:
++            os.close(browser_input)
++            os.close(browser_output)
++        pending = b""
++        sequence = 0
++
++        def command(method, params=None, session=None):
++            nonlocal pending, sequence
++            sequence += 1
++            request = {"id": sequence, "method": method, "params": params or {}}
++            if session:
++                request["sessionId"] = session
++            os.write(writer, json.dumps(request).encode() + b"\0")
++            while time.monotonic() < deadline:
++                while b"\0" in pending:
++                    packet, pending = pending.split(b"\0", 1)
++                    response = json.loads(packet)
++                    if response.get("id") == sequence:
++                        if "error" in response:
++                            raise RuntimeError(f"CDP {method}: {response['error']}")
++                        return response["result"]
++                ready, _, _ = select.select([reader], [], [], max(0, deadline - time.monotonic()))
++                if ready:
++                    chunk = os.read(reader, 65536)
++                    if not chunk:
++                        raise RuntimeError("Chrome CDP pipe closed before regression completion")
++                    pending += chunk
++            raise TimeoutError("90-second regression wall deadline expired")
++
++        snapshot = {}
++        try:
++            target = command("Target.createTarget", {"url": "about:blank"})["targetId"]
++            session = command("Target.attachToTarget", {"targetId": target, "flatten": True})["sessionId"]
++            navigation = command("Page.navigate", {"url": source.as_uri()}, session)
++            if navigation.get("errorText"):
++                raise RuntimeError(f"Chrome navigation: {navigation['errorText']}")
++            expression = (
++                "document.documentElement && JSON.stringify({"
++                "encoded:document.documentElement.getAttribute('data-fast-figure-regression'),"
++                "progress:document.documentElement.getAttribute('data-fast-figure-regression-progress')})"
++            )
++            while time.monotonic() < deadline:
++                reply = command("Runtime.evaluate", {"expression": expression, "returnByValue": True}, session)
++                if reply.get("exceptionDetails"):
++                    raise RuntimeError(f"Regression marker read failed: {reply['exceptionDetails']}")
++                value = reply.get("result", {}).get("value")
++                if value:
++                    snapshot = json.loads(value)
++                    if snapshot.get("encoded"):
++                        return json.loads(base64.b64decode(snapshot["encoded"]).decode("utf-8"))
++                time.sleep(0.05)
++            raise TimeoutError("90-second regression wall deadline expired")
++        except Exception as error:
++            errors.seek(0)
++            stderr = errors.read().decode("utf-8", errors="replace")[-2500:]
++            raise RuntimeError(
++                f"Regression did not finish on {source}: returncode={process.poll()}; "
++                f"last-progress={snapshot.get('progress')!r}; cause={error}; stderr={stderr}"
++            ) from error
++        finally:
++            os.close(writer)
++            os.close(reader)
++            process.terminate()
++            try:
++                process.wait(timeout=5)
++            except subprocess.TimeoutExpired:
++                process.kill()
++                process.wait()
+ 
+ 
+ def main():

@@ -2,26 +2,16 @@
 """Run the in-page regression suite against both distribution artifacts."""
 
 import base64
-import html
-from html.parser import HTMLParser
 import json
+import os
+import select
+import time
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import zipfile
-
-
-class ResultParser(HTMLParser):
-    encoded = None
-    progress = None
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "html":
-            attributes = dict(attrs)
-            self.encoded = attributes.get("data-fast-figure-regression")
-            self.progress = attributes.get("data-fast-figure-regression-progress")
 
 
 def run(browser, source, probe):
@@ -31,31 +21,93 @@ def run(browser, source, probe):
         contents.replace("</body>", f"<script>{probe}</script>\n</body>", 1),
         encoding="utf-8",
     )
-    completed = subprocess.run(
-        [
-            browser,
-            "--headless=new",
-            "--no-sandbox",
-            "--disable-gpu",
-            "--allow-file-access-from-files",
-            "--virtual-time-budget=20000",
-            "--dump-dom",
-            source.as_uri(),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=90,
-    )
-    parser = ResultParser()
-    parser.feed(completed.stdout)
-    if not parser.encoded:
-        raise RuntimeError(
-            f"Regression did not finish on {source}: returncode={completed.returncode}; "
-            f"last-progress={parser.progress!r}; stderr=" + completed.stderr[-2500:]
+    # Default Actions runners are POSIX. Chrome's CDP pipe uses fd3/fd4;
+    # poll the actual completion marker instead of dumping DOM on virtual time.
+    deadline = time.monotonic() + 90
+    browser_input, writer = os.pipe()
+    reader, browser_output = os.pipe()
+    with tempfile.TemporaryFile() as errors:
+        bootstrap = (
+            "import os,sys; a,b=int(sys.argv[1]),int(sys.argv[2]); "
+            "os.dup2(a,3); os.dup2(b,4); "
+            "os.execv(sys.argv[3],sys.argv[3:])"
         )
-    return json.loads(
-        base64.b64decode(html.unescape(parser.encoded)).decode("utf-8")
-    )
+        try:
+            process = subprocess.Popen(
+                [sys.executable, "-c", bootstrap, str(browser_input), str(browser_output),
+                 browser, "--headless=new", "--no-sandbox", "--disable-gpu",
+                 "--allow-file-access-from-files", "--remote-debugging-pipe", "about:blank"],
+                pass_fds=(browser_input, browser_output),
+                stdout=subprocess.DEVNULL, stderr=errors,
+            )
+        finally:
+            os.close(browser_input)
+            os.close(browser_output)
+        pending = b""
+        sequence = 0
+
+        def command(method, params=None, session=None):
+            nonlocal pending, sequence
+            sequence += 1
+            request = {"id": sequence, "method": method, "params": params or {}}
+            if session:
+                request["sessionId"] = session
+            os.write(writer, json.dumps(request).encode() + b"\0")
+            while time.monotonic() < deadline:
+                while b"\0" in pending:
+                    packet, pending = pending.split(b"\0", 1)
+                    response = json.loads(packet)
+                    if response.get("id") == sequence:
+                        if "error" in response:
+                            raise RuntimeError(f"CDP {method}: {response['error']}")
+                        return response["result"]
+                ready, _, _ = select.select([reader], [], [], max(0, deadline - time.monotonic()))
+                if ready:
+                    chunk = os.read(reader, 65536)
+                    if not chunk:
+                        raise RuntimeError("Chrome CDP pipe closed before regression completion")
+                    pending += chunk
+            raise TimeoutError("90-second regression wall deadline expired")
+
+        snapshot = {}
+        try:
+            target = command("Target.createTarget", {"url": "about:blank"})["targetId"]
+            session = command("Target.attachToTarget", {"targetId": target, "flatten": True})["sessionId"]
+            navigation = command("Page.navigate", {"url": source.as_uri()}, session)
+            if navigation.get("errorText"):
+                raise RuntimeError(f"Chrome navigation: {navigation['errorText']}")
+            expression = (
+                "document.documentElement && JSON.stringify({"
+                "encoded:document.documentElement.getAttribute('data-fast-figure-regression'),"
+                "progress:document.documentElement.getAttribute('data-fast-figure-regression-progress')})"
+            )
+            while time.monotonic() < deadline:
+                reply = command("Runtime.evaluate", {"expression": expression, "returnByValue": True}, session)
+                if reply.get("exceptionDetails"):
+                    raise RuntimeError(f"Regression marker read failed: {reply['exceptionDetails']}")
+                value = reply.get("result", {}).get("value")
+                if value:
+                    snapshot = json.loads(value)
+                    if snapshot.get("encoded"):
+                        return json.loads(base64.b64decode(snapshot["encoded"]).decode("utf-8"))
+                time.sleep(0.05)
+            raise TimeoutError("90-second regression wall deadline expired")
+        except Exception as error:
+            errors.seek(0)
+            stderr = errors.read().decode("utf-8", errors="replace")[-2500:]
+            raise RuntimeError(
+                f"Regression did not finish on {source}: returncode={process.poll()}; "
+                f"last-progress={snapshot.get('progress')!r}; cause={error}; stderr={stderr}"
+            ) from error
+        finally:
+            os.close(writer)
+            os.close(reader)
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
 
 
 def main():
