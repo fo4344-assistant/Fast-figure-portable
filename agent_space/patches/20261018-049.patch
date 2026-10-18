@@ -1,0 +1,285 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index e45215f..6970f60 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -123,6 +123,12 @@ Unit18 bounded evidence: Source41/pseudocode16/code58 canonical digests correcte
+ 
+ Baseline a37bb486bcee99b6bc793e36bf390780f7bce22a. Existing Source41 GRAPH_OBJECT_EDIT_INPUT_CONTRACT and public graphEditorMove/Delete, plus pseudocode16 calculateGraphObjectEdit/GraphCommitInAttempt already specify scalar identity/indices, arbitrary move and explicit-none deletion hint; no new upper meaning. Code59 translates these into the shared current-authority graph candidate path: resolve unique visible graph owner/current editable chart and valid integer indices, compute move/delete locally, normalize missing styles only, rebuild supplied candidate, whole validate, retry replaced source, commit once and actual changed facts/hints. Application no longer calculates whole arrays or calls legacy graphEditorCommit for move/delete. Valid equal-index move is a copied no-op; invalid/noneditable rejects; last deletion keeps an empty chart. Public index-only signatures bind chart identity through official read, not live domain objects. Cases68/69 cover order/extensions, current retry, no-op, hints/selection, last delete, copied reads and failure/noncommit gates. Review021/patch047 track Actions69+69/build/canonical digest/cumulative gate; Source41/pseudocode16 unchanged, code59 stale, other graph/asset/full-validator/import/raster/dashboard work remains open.
+ 
++Unit19 bounded evidence: implementation1edbc2cd14131baeef3bf80f082f358fec07c932 build39103628193 PASS; review021 records expected digest diagnostic and legacy25 explicit-rejection correction (no runtime fix). At5dc81c618461f4513c8a7aa06dae03da26ca524f regression39103731272 PASS69 inline+69 split and cumulative version39103731890 PASS from a37bb486bcee99b6bc793e36bf390780f7bce22a, push39103731195 PASS. Whole alignment remains open.
++
++## Twentieth implementation unit — Current-authority color-only graph palette
++
++Baseline5dc81c618461f4513c8a7aa06dae03da26ca524f. Existing Source41 GRAPH_PALETTE_RULE/public graphEditorApplyPalette and pseudocode16 calculateGraphObjectEdit already specify nonempty array of trimmed nonempty color text, current editable owner, color-only cycling, omitted index hint, valid zero-object chart and candidate/retry/commit. Code60 translates this operation through the shared Backend candidate path; Application passes chartId/new colors only, public selection binding uses official copied read, committed alone permits fresh read/render. No hex restriction/Plotly parser authority, fake object/CSV, manual selection or UI-palette mutation. Tests70/71 add immutable copies, exact non-color/order/extension/asset/other-chart/appearance retention, omitted hint/selection, zero chart, invalid/sparse/getter inputs and noneditable/validator/projection/noncommit/stale retry. Review022 and patch049 track pending Actions71+71/build/digest/cumulative gate. Source41/pseudocode16 unchanged, code60 stale; add/other commands, full validator, imports/assets/raster/supplied dashboard and whole Plan023 remain open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-021-code-graph-order-open.md b/agent_space/reviews/review-20261018-021-code-graph-order-open.md
+index 6581c26..958555f 100644
+--- a/agent_space/reviews/review-20261018-021-code-graph-order-open.md
++++ b/agent_space/reviews/review-20261018-021-code-graph-order-open.md
+@@ -27,4 +27,4 @@ Reuse one current candidate/normalization/commit path rather than duplicate anot
+ 
+ At1edbc2cd14131baeef3bf80f082f358fec07c932 build39103628193 PASS, dist-only bot42a051ab40de4151b12413afe8249e8bbe219645 inspected and fast-forwarded. Regression39103628198 passes new68/69 both distributions plus all prior cases except25: `Error: 변경할 현재 편집 가능 차트 또는 유일한 visible graph owner가 없습니다.` Legacy25 still called deleteObject without catching the now-explicit command rejection; its prior one-object portion already asserted rejection. Source public graphEditorDelete and Backend editable precondition require original rejection propagation, not silent success/no-op. Patch048 adds explicit rejection assertions for delete and equal move, retaining exact object-state equality and disabled controls. No runtime change or weakened precondition.
+ 
+-Version39103628229 diagnostic FAIL prints exact code59 canonical `sha256:0dcc648b0c985935d8f272c121b1a16c38db7a6385f11317d319e503f17cb7a0`; metadata correction retains revision59/stale and unchanged Source41/pseudocode16 derivations. Corrected69+69 regression and cumulative version against a37bb486bcee99b6bc793e36bf390780f7bce22a pending; no local execution.
++Version39103628229 diagnostic FAIL prints exact code59 canonical `sha256:0dcc648b0c985935d8f272c121b1a16c38db7a6385f11317d319e503f17cb7a0`; metadata correction retains revision59/stale and unchanged Source41/pseudocode16 derivations. At5dc81c618461f4513c8a7aa06dae03da26ca524f corrected regression39103731272 PASS69 inline+69 split; cumulative version39103731890 PASS against a37bb486bcee99b6bc793e36bf390780f7bce22a (push39103731195 also PASS). Exact canonical upper/code digests confirmed. Runtime inputs identical to successful build39103628193. This supersedes bounded pending table entries, not whole-goal exclusions; no local execution.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 6b4935d..bd24585 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2746,6 +2746,126 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(70, "Graph palette changes only current object colors with omitted index hint", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, query = readBackendProjection, render = renderDashboard,
++        send = projectEFSM.send, reconcile = interfaceFSM.reconcileProjectResult;
++      let commits = 0, paints = 0, reconciliations = 0, reads = 0, outcome;
++      try {
++        const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
++        api.slots.reset(slot.id); select(slotAt(slot.id));
++        const csv = createProjectCsv([["X", "Y"], [1, 2]], "graph-palette.csv");
++        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
++        const chartId = slotAt(slot.id).chart, fixture = projectClone(activeProject._state);
++        fixture.charts.find(item => item.id === chartId).editor.objects.forEach((object, index) => {
++          object.legendName = `palette${index}`; object.plotlyTrace = { meta: { retained: index } };
++        });
++        initialize.call(activeProject, fixture);
++        api.assets.selectCsv(csv.path); api.graphs.selectObject(1);
++        const objects = projectClone(getChart(chartId).editor.objects), assets = JSON.stringify(activeProject._state.assets),
++          appearance = JSON.stringify(activeProject._state.appearance), path = interfaceFSM.state.assetPath,
++          others = JSON.stringify(activeProject.charts.filter(chart => chart.id !== chartId));
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        renderDashboard = () => { paints++; };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        readBackendProjection = (kind, request) => { if (kind === "project-api" && request.operation === "graphs.readData") reads++;
++          return query(kind, request); };
++        const colors = Object.freeze(["  red  ", "rgb(1, 2, 3)"]);
++        projectEFSM.send = function (event, payload) {
++          check(event === "GRAPH_OBJECTS_REPLACED" && payload.operation === "graphs.applyPalette" && payload.chartId === chartId &&
++            payload.colors === colors && !Object.hasOwn(payload, "objects") && !Object.hasOwn(payload, "candidate"),
++            "Application palette constructed graph candidate or supplied wrong context");
++          return outcome = send.call(this, event, payload);
++        };
++        const copied = api.graphs.applyPalette(colors), expected = objects.map((object, index) => ({ ...object,
++          color: index % 2 ? "rgb(1, 2, 3)" : "red" }));
++        check(JSON.stringify(getChart(chartId).editor.objects) === JSON.stringify(expected) && copied !== getChart(chartId) &&
++          Object.isFrozen(copied.editor.objects[0]) && reads === 2 && commits === 1 && paints === 1 && reconciliations === 1 &&
++          outcome.selectionHints.chartId === chartId && !Object.hasOwn(outcome.selectionHints, "selectedIndexHint") &&
++          interfaceFSM.state.graphObjectIndex === 1 && interfaceFSM.state.assetPath === path &&
++          JSON.stringify(activeProject._state.assets) === assets && JSON.stringify(activeProject._state.appearance) === appearance &&
++          JSON.stringify(activeProject.charts.filter(chart => chart.id !== chartId)) === others &&
++          JSON.stringify(colors) === '["  red  ","rgb(1, 2, 3)"]', "palette changed non-color authority/selection, lost color text or emitted explicit index hint");
++        projectEFSM.send = send;
++        const zero = projectClone(activeProject._state); zero.charts.find(chart => chart.id === chartId).editor.objects = [];
++        initialize.call(activeProject, zero);
++        interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, graphObject: "none", graphObjectIndex: null });
++        const empty = graphEditorApplyPalette(chartId, ["not-a-parser-authority"]);
++        check(empty.editor.objects.length === 0 && getChart(chartId).editor.objects.length === 0 && commits === 2 &&
++          paints === 2 && reconciliations === 2 && interfaceFSM.state.graphObjectIndex === null &&
++          JSON.stringify(activeProject._state.assets) === assets, "valid zero-object palette created an object/asset or rejected color text");
++        check(!/ensureGraphObjects|graphEditorCommit|activeProject|graphEditorChart/.test(graphEditorApplyPalette.toString()),
++          "Application still owns palette candidate");
++      } finally {
++        activeProject.initialize = initialize; readBackendProjection = query; renderDashboard = render; projectEFSM.send = send;
++        interfaceFSM.reconcileProjectResult = reconcile; initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
++      }
++    });
++
++    await run(71, "Graph palette validates every text and retries current authority without failure effects", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, query = readBackendProjection, render = renderDashboard,
++        send = projectEFSM.send, validate = validateProjectObjectState, rebuild = rebuildEditableGraph,
++        reconcile = interfaceFSM.reconcileProjectResult;
++      let commits = 0, paints = 0, reads = 0, reconciliations = 0;
++      try {
++        const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
++        api.slots.reset(slot.id); select(slotAt(slot.id));
++        const csv = createProjectCsv([["X", "Y"], [1, 2]], "graph-palette-fail.csv");
++        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
++        const chartId = slotAt(slot.id).chart;
++        api.graphs.selectObject(1);
++        const before = JSON.stringify(activeProject._state), stable = interfaceFSM.state, failure = Error("expected graph-palette failure");
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        renderDashboard = () => { paints++; };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        readBackendProjection = (kind, request) => { if (kind === "project-api" && request.operation === "graphs.readData") reads++;
++          return query(kind, request); };
++        const noEffects = () => check(commits === 0 && paints === 0 && reads === 0 && reconciliations === 0 &&
++          interfaceFSM.state === stable && JSON.stringify(activeProject._state) === before, "invalid palette/failure performed success work or persistent writes");
++        for (const colors of [null, "red", [], ["red", " "], ["red", 2], [null], Array(1), ["red", undefined]]) {
++          let caught = false; try { graphEditorApplyPalette(chartId, colors); } catch { caught = true; }
++          check(caught, "invalid or sparse palette accepted"); noEffects();
++        }
++        const throwing = []; Object.defineProperty(throwing, 0, { get() { throw failure; } });
++        let caught; try { graphEditorApplyPalette(chartId, throwing); } catch (error) { caught = error; }
++        check(caught === failure, "palette element error replaced"); noEffects();
++        for (const mode of ["validator", "projection"]) {
++          if (mode === "validator") validateProjectObjectState = () => { throw failure; };
++          else rebuildEditableGraph = () => { throw failure; };
++          caught = null; try { graphEditorApplyPalette(chartId, ["red"]); } catch (error) { caught = error; }
++          validateProjectObjectState = validate; rebuildEditableGraph = rebuild;
++          check(caught === failure, "candidate error replaced"); noEffects();
++        }
++        const noCommit = Object.freeze({ committed: false }); projectEFSM.send = () => noCommit;
++        check(graphEditorApplyPalette(chartId, ["red"]) === noCommit, "noncommit result replaced"); noEffects();
++        projectEFSM.send = send;
++        getChart(chartId).editor.editable = false;
++        caught = null; try { graphEditorApplyPalette(chartId, ["red"]); } catch (error) { caught = error; }
++        check(caught && commits === 0 && reads === 0 && paints === 0 && reconciliations === 0 && interfaceFSM.state === stable,
++          "noneditable palette did not reject before success work");
++        getChart(chartId).editor.editable = true; noEffects();
++        let attempts = 0;
++        validateProjectObjectState = function (candidate, options) {
++          const valid = validate(candidate, options);
++          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state), chart = newer.charts.find(item => item.id === chartId);
++            chart.editor.objects.unshift({ ...projectClone(chart.editor.objects[0]), legendName: "new first" });
++            newer.meta.projectName = "new palette authority"; initialize.call(activeProject, newer); }
++          return valid;
++        };
++        const copied = graphEditorApplyPalette(chartId, [" red ", "blue"]);
++        validateProjectObjectState = validate;
++        check(attempts === 2 && commits === 1 && reads === 1 && paints === 1 && reconciliations === 1 &&
++          activeProject.projectName === "new palette authority" && copied.editor.objects.length === 3 &&
++          copied.editor.objects[0].legendName === "new first" && copied.editor.objects.map(object => object.color).join() === "red,blue,red" &&
++          interfaceFSM.state.graphObjectIndex === 1, "palette committed stale objects instead of recalculating color positions on current authority");
++      } finally {
++        activeProject.initialize = initialize; readBackendProjection = query; renderDashboard = render; projectEFSM.send = send;
++        validateProjectObjectState = validate; rebuildEditableGraph = rebuild; interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
++      }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index ae202db..c963840 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 59,
++      "revision": 60,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:e25d2057a10e358127598141d3d94de2f5700108da14809a0ef5e92e11be71e9",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-021-code-graph-order-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-022-code-graph-palette-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 16,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 91b4d1e..3f8b4f4 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1146,7 +1146,7 @@
+           if (operation === "graphs.moveObject") {
+             if (!validIndex(payload.from) || !validIndex(payload.to)) throw Error("이동할 현재 오브젝트 index가 없습니다.");
+             if (payload.from === payload.to) return false;
+-          } else if (!validIndex(index)) throw Error("변경할 현재 오브젝트 index가 없습니다.");
++          } else if (operation !== "graphs.applyPalette" && !validIndex(index)) throw Error("변경할 현재 오브젝트 index가 없습니다.");
+           const candidate = projectClone(source), chart = candidate.charts.find((item) => item.id === current.id);
+           let selectedIndexHint = index;
+           if (operation === "graphs.moveObject") {
+@@ -1156,6 +1156,14 @@
+           } else if (operation === "graphs.deleteObject") {
+             chart.editor.objects.splice(index, 1);
+             selectedIndexHint = null;
++          } else if (operation === "graphs.applyPalette") {
++            if (!Array.isArray(payload.colors) || !payload.colors.length) throw Error("적용할 non-empty 색상 배열이 없습니다.");
++            const colors = [];
++            for (const color of payload.colors) {
++              if (typeof color !== "string" || !color.trim()) throw Error("팔레트 색상은 non-empty text여야 합니다.");
++              colors.push(color.trim());
++            }
++            chart.editor.objects.forEach((object, position) => { object.color = colors[position % colors.length]; });
+           } else {
+             const object = chart.editor.objects[index], requestedCsvId = Object.hasOwn(values, "csvId") ? values.csvId : null,
+               csv = candidate.assets.csvFiles.find((item) => item.id === requestedCsvId) ||
+@@ -1213,13 +1221,14 @@
+             chartIds: changedIds(source.charts, post.charts),
+             csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
+             imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
+-          payload.selectionHints = Object.freeze({ chartId: current.id, selectedIndexHint });
++          payload.selectionHints = Object.freeze(operation === "graphs.applyPalette" ?
++            { chartId: current.id } : { chartId: current.id, selectedIndexHint });
+           return;
+         }
+       }
+       function applyGraphObjectsReplacedAction(context) {
+         const { machine, payload } = context;
+-        if (["graphs.setObjectValues", "graphs.moveObject", "graphs.deleteObject"].includes(payload.operation))
++        if (["graphs.setObjectValues", "graphs.moveObject", "graphs.deleteObject", "graphs.applyPalette"].includes(payload.operation))
+           return applyGraphObjectEditAction(context);
+         machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
+         let current=getChart(payload.chartId);
+@@ -6620,18 +6629,16 @@
+         debugLog("mantine:graph-layout", { slotId: slot.id, chartId: chart.id });
+         return readGraphLayoutApi();
+       }
++      function graphEditorApplyPalette(chartId, colors) {
++        const { result } = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
++        if (!result.committed) return result;
++        const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
++        renderDashboard();
++        return chart;
++      }
+       function applyGraphPaletteApi(colors) {
+-        let chart = graphEditorChart();
+-        if (!chart || chart.editor?.editable === false)
+-          return status("편집 가능 토글을 켠 뒤 색상 구성을 변경하세요.");
+-        if (!Array.isArray(colors) || !colors.length)
+-          throw Error("적용할 색상 배열이 없습니다.");
+-        let objects = ensureGraphObjects(chart);
+-        let index = appFSM.state.graphObjectIndex;
+-        let selected = Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
+-        return graphEditorCommit(objects.map((object, objectIndex) => ({
+-          ...object, color: colors[objectIndex % colors.length],
+-        })), selected);
++        const context = appFSM.query("project-api", { operation: "graphs.readData", frontendState: interfaceFSM.readState() });
++        return graphEditorApplyPalette(context.chart?.id ?? null, colors);
+       }
+       function setAnnotationEnabled(kind, enabled) {
+         if (kind === "label")
+diff --git a/agent_space/reviews/review-20261018-022-code-graph-palette-open.md b/agent_space/reviews/review-20261018-022-code-graph-palette-open.md
+new file mode 100644
+index 0000000..f6de70d
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-022-code-graph-palette-open.md
+@@ -0,0 +1,26 @@
++# Code60 — Graph palette candidate (whole alignment open)
++
++Baseline5dc81c618461f4513c8a7aa06dae03da26ca524f. Source41 closed/current → pseudocode16 current → code60 stale. No upper meaning change: sourcescript/backend/graphs.py GRAPH_PALETTE_RULE independently requires current editable objects, trimmed nonempty text sequence, cycling color only, no parser authority/UI palette synchronization/new object or CSV, zero-object chart valid and index hint omitted. sourcescript/application/public_api/graphs.py graphEditorApplyPalette requires command-only inputs then committed-only detached official read. Pseudocode/backend/project_efsm.pcal calculateGraphObjectEdit and GraphCommitInAttempt/pseudocode/application/public_api/graphs.pcal matching wrapper directly translate this. Existing JS live object mapping and manual selected-index bridge were lower ownership violations, not reasons to change Source.
++
++## Bounded prompt-to-artifact checklist
++
++| Requirement | Code/test artifact | Evidence |
++| --- | --- | --- |
++| Source authority and translation order | Existing Source41 contracts above and pseudocode16; no new design added | Static inspected |
++| IDs/new values not authoritative object arrays | graphEditorApplyPalette dispatches chartId/colors only; public applyGraphPaletteApi binds chart through official read | Case70 spy pending |
++| Resolve current unique visible owner/editable chart | applyGraphObjectEditAction shared preconditions and same-source clone | Cases70/71 pending |
++| Every palette entry text, trim/nonempty, reject empty/non-array/sparse | Backend for-of validates string and trimmed value; no hex or Plotly parser | Cases70/71 pending |
++| Color only, sequence cycling; no reference/order/extension/style/asset/UI palette/other-chart changes | In candidate replaces object.color only then existing missing-style normalization/validation; rebuild derived figure from same candidate | Case70 exact snapshots pending |
++| Preserve graph selection via OMITTED hint key | result chartId only, not explicit null/index; shared reconciliation validates retained original index | Cases70/71 pending |
++| Zero objects valid, no fake object/CSV | Full input validation still runs; empty loop and same whole candidate path | Case70 pending |
++| Build/validate candidate before commit, retry changed authority | Shared rebuildEditableGraph(chart,candidate), validateProjectObjectState and identity check | Case71 validator/projection failure and injected-new-source retry pending |
++| Failures/noncommit have no success query/reconcile/render or writes, original errors propagate | Private Application committed gate; no catch/rollback added | Case71 pending |
++| Success fresh immutable read; no Application backend calculation | Official graphs.readData copied chart and render gate | Case70 pending |
++| Preserve prior1–69 both deployment forms | Existing browser cases plus70/71 | Actions pending; no local execution |
++| Fingerprint/build/version exact SHA | development-versions.json code60/stale unchanged upper derivations; prior code59 fingerprint provisional until canonical runner diagnostic | Actions pending |
++
++Retaining missing-style normalization follows existing graphEditorCommit contract; does not license overwriting present style or extension values. Ordinary named/rgb/hex/other nonempty text is stored without inventing a second color parser. Palette does not turn its absent hint into a request to clear selection. Valid zero-object palette is not rejected merely because no index exists.
++
++## Scope and exclusions
++
++This review is not a completion audit for whole Plan023. Legacy add, connect/import/editability/layout/header/full shared graph validation, asset rename/move/delete/cascade current-authority candidates, canonical package import and imageSettings identity, raster snapshots/composition and supplied dashboard/API integration remain uncovered unless earlier bounded reviews explicitly verify them. A shared validator call is NOT evidence it implements every Source rule. Code remains stale; model26 stale/TLC optional pending. No policy edits, delegation or local test/build/checker execution.

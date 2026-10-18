@@ -2746,6 +2746,126 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+    await run(70, "Graph palette changes only current object colors with omitted index hint", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, query = readBackendProjection, render = renderDashboard,
+        send = projectEFSM.send, reconcile = interfaceFSM.reconcileProjectResult;
+      let commits = 0, paints = 0, reconciliations = 0, reads = 0, outcome;
+      try {
+        const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+        api.slots.reset(slot.id); select(slotAt(slot.id));
+        const csv = createProjectCsv([["X", "Y"], [1, 2]], "graph-palette.csv");
+        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
+        const chartId = slotAt(slot.id).chart, fixture = projectClone(activeProject._state);
+        fixture.charts.find(item => item.id === chartId).editor.objects.forEach((object, index) => {
+          object.legendName = `palette${index}`; object.plotlyTrace = { meta: { retained: index } };
+        });
+        initialize.call(activeProject, fixture);
+        api.assets.selectCsv(csv.path); api.graphs.selectObject(1);
+        const objects = projectClone(getChart(chartId).editor.objects), assets = JSON.stringify(activeProject._state.assets),
+          appearance = JSON.stringify(activeProject._state.appearance), path = interfaceFSM.state.assetPath,
+          others = JSON.stringify(activeProject.charts.filter(chart => chart.id !== chartId));
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        renderDashboard = () => { paints++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        readBackendProjection = (kind, request) => { if (kind === "project-api" && request.operation === "graphs.readData") reads++;
+          return query(kind, request); };
+        const colors = Object.freeze(["  red  ", "rgb(1, 2, 3)"]);
+        projectEFSM.send = function (event, payload) {
+          check(event === "GRAPH_OBJECTS_REPLACED" && payload.operation === "graphs.applyPalette" && payload.chartId === chartId &&
+            payload.colors === colors && !Object.hasOwn(payload, "objects") && !Object.hasOwn(payload, "candidate"),
+            "Application palette constructed graph candidate or supplied wrong context");
+          return outcome = send.call(this, event, payload);
+        };
+        const copied = api.graphs.applyPalette(colors), expected = objects.map((object, index) => ({ ...object,
+          color: index % 2 ? "rgb(1, 2, 3)" : "red" }));
+        check(JSON.stringify(getChart(chartId).editor.objects) === JSON.stringify(expected) && copied !== getChart(chartId) &&
+          Object.isFrozen(copied.editor.objects[0]) && reads === 2 && commits === 1 && paints === 1 && reconciliations === 1 &&
+          outcome.selectionHints.chartId === chartId && !Object.hasOwn(outcome.selectionHints, "selectedIndexHint") &&
+          interfaceFSM.state.graphObjectIndex === 1 && interfaceFSM.state.assetPath === path &&
+          JSON.stringify(activeProject._state.assets) === assets && JSON.stringify(activeProject._state.appearance) === appearance &&
+          JSON.stringify(activeProject.charts.filter(chart => chart.id !== chartId)) === others &&
+          JSON.stringify(colors) === '["  red  ","rgb(1, 2, 3)"]', "palette changed non-color authority/selection, lost color text or emitted explicit index hint");
+        projectEFSM.send = send;
+        const zero = projectClone(activeProject._state); zero.charts.find(chart => chart.id === chartId).editor.objects = [];
+        initialize.call(activeProject, zero);
+        interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, graphObject: "none", graphObjectIndex: null });
+        const empty = graphEditorApplyPalette(chartId, ["not-a-parser-authority"]);
+        check(empty.editor.objects.length === 0 && getChart(chartId).editor.objects.length === 0 && commits === 2 &&
+          paints === 2 && reconciliations === 2 && interfaceFSM.state.graphObjectIndex === null &&
+          JSON.stringify(activeProject._state.assets) === assets, "valid zero-object palette created an object/asset or rejected color text");
+        check(!/ensureGraphObjects|graphEditorCommit|activeProject|graphEditorChart/.test(graphEditorApplyPalette.toString()),
+          "Application still owns palette candidate");
+      } finally {
+        activeProject.initialize = initialize; readBackendProjection = query; renderDashboard = render; projectEFSM.send = send;
+        interfaceFSM.reconcileProjectResult = reconcile; initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
+      }
+    });
+
+    await run(71, "Graph palette validates every text and retries current authority without failure effects", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, query = readBackendProjection, render = renderDashboard,
+        send = projectEFSM.send, validate = validateProjectObjectState, rebuild = rebuildEditableGraph,
+        reconcile = interfaceFSM.reconcileProjectResult;
+      let commits = 0, paints = 0, reads = 0, reconciliations = 0;
+      try {
+        const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+        api.slots.reset(slot.id); select(slotAt(slot.id));
+        const csv = createProjectCsv([["X", "Y"], [1, 2]], "graph-palette-fail.csv");
+        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
+        const chartId = slotAt(slot.id).chart;
+        api.graphs.selectObject(1);
+        const before = JSON.stringify(activeProject._state), stable = interfaceFSM.state, failure = Error("expected graph-palette failure");
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        renderDashboard = () => { paints++; };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        readBackendProjection = (kind, request) => { if (kind === "project-api" && request.operation === "graphs.readData") reads++;
+          return query(kind, request); };
+        const noEffects = () => check(commits === 0 && paints === 0 && reads === 0 && reconciliations === 0 &&
+          interfaceFSM.state === stable && JSON.stringify(activeProject._state) === before, "invalid palette/failure performed success work or persistent writes");
+        for (const colors of [null, "red", [], ["red", " "], ["red", 2], [null], Array(1), ["red", undefined]]) {
+          let caught = false; try { graphEditorApplyPalette(chartId, colors); } catch { caught = true; }
+          check(caught, "invalid or sparse palette accepted"); noEffects();
+        }
+        const throwing = []; Object.defineProperty(throwing, 0, { get() { throw failure; } });
+        let caught; try { graphEditorApplyPalette(chartId, throwing); } catch (error) { caught = error; }
+        check(caught === failure, "palette element error replaced"); noEffects();
+        for (const mode of ["validator", "projection"]) {
+          if (mode === "validator") validateProjectObjectState = () => { throw failure; };
+          else rebuildEditableGraph = () => { throw failure; };
+          caught = null; try { graphEditorApplyPalette(chartId, ["red"]); } catch (error) { caught = error; }
+          validateProjectObjectState = validate; rebuildEditableGraph = rebuild;
+          check(caught === failure, "candidate error replaced"); noEffects();
+        }
+        const noCommit = Object.freeze({ committed: false }); projectEFSM.send = () => noCommit;
+        check(graphEditorApplyPalette(chartId, ["red"]) === noCommit, "noncommit result replaced"); noEffects();
+        projectEFSM.send = send;
+        getChart(chartId).editor.editable = false;
+        caught = null; try { graphEditorApplyPalette(chartId, ["red"]); } catch (error) { caught = error; }
+        check(caught && commits === 0 && reads === 0 && paints === 0 && reconciliations === 0 && interfaceFSM.state === stable,
+          "noneditable palette did not reject before success work");
+        getChart(chartId).editor.editable = true; noEffects();
+        let attempts = 0;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) { const newer = projectClone(activeProject._state), chart = newer.charts.find(item => item.id === chartId);
+            chart.editor.objects.unshift({ ...projectClone(chart.editor.objects[0]), legendName: "new first" });
+            newer.meta.projectName = "new palette authority"; initialize.call(activeProject, newer); }
+          return valid;
+        };
+        const copied = graphEditorApplyPalette(chartId, [" red ", "blue"]);
+        validateProjectObjectState = validate;
+        check(attempts === 2 && commits === 1 && reads === 1 && paints === 1 && reconciliations === 1 &&
+          activeProject.projectName === "new palette authority" && copied.editor.objects.length === 3 &&
+          copied.editor.objects[0].legendName === "new first" && copied.editor.objects.map(object => object.color).join() === "red,blue,red" &&
+          interfaceFSM.state.graphObjectIndex === 1, "palette committed stale objects instead of recalculating color positions on current authority");
+      } finally {
+        activeProject.initialize = initialize; readBackendProjection = query; renderDashboard = render; projectEFSM.send = send;
+        validateProjectObjectState = validate; rebuildEditableGraph = rebuild; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session;
+      }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
