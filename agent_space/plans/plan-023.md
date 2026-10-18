@@ -143,6 +143,12 @@ Unit22 initial evidence/fidelity: build39104652534 PASS at49c519c; regression391
 
 Unit22 runner evidence: at6fee0c6248724c9e13a39bd5818d12fedaf0fae4 cumulative versions39104811673 PASS from86df1cf (automatic39104810958 PASS), repeat regression39104813416 PASS75 inline+75 split. Build39104652534 PASS at same runtime/build inputs49c519c. Bounded audit strengthens blank case4 to directly compare CSV assets/nextId, rather than infer no creation from FFSX's referenced-only package. Fresh test result pending; no runtime/lineage changes, whole code64 stale.
 
+Unit22 final strengthened evidence: at10e3d3d880a583045295d65c4ac2becdb000eac6 regression39104917750 PASS75 inline+75 split, version39104917691 PASS. Blank no-image/no-CSV transition now has direct CSV/next-id comparison as well as real package behavior, review024; whole still open.
+
+## Twenty-third implementation unit — FFPX null-image slot-local settings
+
+Baseline10e3d3d. Existing Source41 PACKAGE_IDENTITY_AND_SLOT_SETTINGS_RULE and pseudocode17 unconditional typed imageObject/settings require preservation even for imageRef null (no asset). Code65 removes conditional settings omission, emits typed null and no XML reference attribute; no new schema/version/domain authority, positive image/original bytes retained. Case76 tests supplied read immutability, actual typed XML/no media asset, real ZIP/read custom settings, positive asset identity/original bytes. Review025/patch060 track canonical digest and Actions76+76/build/cumulative version; broader canonical import/missing-default ownership/other commands/whole Plan023 remain open, code65 stale.
+
 ## Temporary-file rule
 
 The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.

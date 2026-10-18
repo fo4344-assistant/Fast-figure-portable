@@ -3088,6 +3088,42 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       }
     });
 
+    await run(76, "FFPX retains slot image settings with null reference without creating assets", async () => {
+      const live = JSON.stringify(activeProject._state), source = projectClone(activeProject._state),
+        settings = { ...DEFAULT_IMAGE_SETTINGS, fit: "manual", scale: 125, x: 17, y: 23 };
+      source.assets.images = [];
+      source.slots.forEach(slot => { slot.content.imageId = null; });
+      const slot = source.slots[0];
+      slot.content.imageSettings = projectClone(settings);
+      const before = JSON.stringify(source), bundle = ffpxBuildProject(source),
+        entries = new Map(bundle.assets.map(entry => [entry.name, entry.data])),
+        root = ffpxReadXmlDocument(entries, `slots/slot-${slot.id}.xml`, "fastFigureSlot"),
+        node = root.querySelector(":scope > slot > imageObject"),
+        typed = node && ffpxXmlReadValue(node.firstElementChild),
+        roundtrip = await ffpxReadProject(new File([ffpxZipStore(bundle.assets)], "empty-image.ffpx")),
+        restored = roundtrip.slots.find(item => item.id === slot.id);
+      check(node && !node.hasAttribute("imageRef") && typed.imageRef === null &&
+        JSON.stringify(typed.settings) === JSON.stringify(settings), "null image settings omitted or typed ref changed");
+      check(restored.imageId === null && JSON.stringify(restored.imageSettings) === JSON.stringify(settings) &&
+        roundtrip.images.length === 0 && !bundle.assets.some(entry => entry.name.startsWith("assets/media/")) &&
+        JSON.stringify(source) === before, "null image settings did not roundtrip or created asset/mutated source");
+      // Positive image references still retain real asset identity and original bytes.
+      const image = { id: source.nextId.image++, name: "settings-roundtrip.svg", directory: "/assets/images",
+        mime: "image/svg+xml", bytesBase64: ffpxBytesToBase64(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>')) };
+      source.assets.images.push(image); slot.content.imageId = image.id;
+      const attachedBefore = JSON.stringify(source), attached = ffpxBuildProject(source),
+        attachedRoot = ffpxReadXmlDocument(new Map(attached.assets.map(entry => [entry.name, entry.data])),
+          `slots/slot-${slot.id}.xml`, "fastFigureSlot"),
+        attachedNode = attachedRoot.querySelector(":scope > slot > imageObject"),
+        attachedRead = await ffpxReadProject(new File([ffpxZipStore(attached.assets)], "attached-image.ffpx")),
+        attachedSlot = attachedRead.slots.find(item => item.id === slot.id);
+      check(attachedNode.getAttribute("imageRef") === String(image.id) && attachedSlot.imageId === image.id &&
+        JSON.stringify(attachedSlot.imageSettings) === JSON.stringify(settings) &&
+        attachedRead.images.length === 1 && attachedRead.images[0].id === image.id &&
+        attachedRead.images[0].bytesBase64 === image.bytesBase64 && JSON.stringify(source) === attachedBefore &&
+        JSON.stringify(activeProject._state) === live, "positive image package changed identity/bytes/settings or live authority");
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

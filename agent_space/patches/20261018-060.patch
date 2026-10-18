@@ -1,0 +1,168 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 8923905..9695ede 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -143,6 +143,12 @@ Unit22 initial evidence/fidelity: build39104652534 PASS at49c519c; regression391
+ 
+ Unit22 runner evidence: at6fee0c6248724c9e13a39bd5818d12fedaf0fae4 cumulative versions39104811673 PASS from86df1cf (automatic39104810958 PASS), repeat regression39104813416 PASS75 inline+75 split. Build39104652534 PASS at same runtime/build inputs49c519c. Bounded audit strengthens blank case4 to directly compare CSV assets/nextId, rather than infer no creation from FFSX's referenced-only package. Fresh test result pending; no runtime/lineage changes, whole code64 stale.
+ 
++Unit22 final strengthened evidence: at10e3d3d880a583045295d65c4ac2becdb000eac6 regression39104917750 PASS75 inline+75 split, version39104917691 PASS. Blank no-image/no-CSV transition now has direct CSV/next-id comparison as well as real package behavior, review024; whole still open.
++
++## Twenty-third implementation unit — FFPX null-image slot-local settings
++
++Baseline10e3d3d. Existing Source41 PACKAGE_IDENTITY_AND_SLOT_SETTINGS_RULE and pseudocode17 unconditional typed imageObject/settings require preservation even for imageRef null (no asset). Code65 removes conditional settings omission, emits typed null and no XML reference attribute; no new schema/version/domain authority, positive image/original bytes retained. Case76 tests supplied read immutability, actual typed XML/no media asset, real ZIP/read custom settings, positive asset identity/original bytes. Review025/patch060 track canonical digest and Actions76+76/build/cumulative version; broader canonical import/missing-default ownership/other commands/whole Plan023 remain open, code65 stale.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/reviews/review-20261018-024-code-graph-editable-open.md b/agent_space/reviews/review-20261018-024-code-graph-editable-open.md
+index c4867a2..a235c07 100644
+--- a/agent_space/reviews/review-20261018-024-code-graph-editable-open.md
++++ b/agent_space/reviews/review-20261018-024-code-graph-editable-open.md
+@@ -11,13 +11,13 @@ Source41 sourcescript/application/public_api/graphs.py graphEditorSetEditable an
+ | Public existing selected-chart binding/toggle; Application scalar slotId/chartId/editable only | setGraphEditableApi; graphEditorSetEditable; case74 | verified74 |
+ | Current visible unique owner, valid bool, chart resolved at each attempt | applyChartModelReplacedAction; case75 invalid IDs/bool | verified75 |
+ | Conversion rows+objects allocate one real encoded CSV from current next-id/path, remap all refs | same action/buildProjectCsvModel with candidate; case74 collision/path/MIME/bytes/ids | verified74 |
+-| No conversionRows keeps real refs; repeat editable no duplicate CSV; zero objects no fake CSV | same action; case74 reverse/repeat and existing4 blank | verified74;4 direct asset/next-id strengthening pending |
++| No conversionRows keeps real refs; repeat editable no duplicate CSV; zero objects no fake CSV | same action; case74 reverse/repeat and existing4 blank | verified74; strengthened4 PASS39104917750 at10e3d3d |
+ | Preserve imported/global/axis representation and unrelated assets/CSV selection | same action and copied official postcommit query; case74 | verified74 |
+ | Rebuild with candidate, validate whole, source ref retry, initialize once | action; case75 exact validator/projection errors/no mutation and stale authority/next-id retry | verified75; shared validator completeness excluded |
+ | Actual immutable changed CSV/chart/asset owner facts, no invented hint | action; case74 checks facts; existing send copies/freeze | verified74 |
+ | Noncommit no success read/render/reconcile; success returns boolean | wrapper; cases74/75 | verified74/75 |
+ | Noneditable chart cannot keep graph-object selection | existing Source project_state reconciliation step4 translated guard; case74 | verified74 |
+-| Retain all prior regressions and actual canonical lineage/packaging | Actions default runner suite/build/version exact SHAs listed below | verified through6fee0c6; strengthened test repeat pending |
++| Retain all prior regressions and actual canonical lineage/packaging | Actions default runner suite/build/version exact SHAs listed below | verified through10e3d3d (39104917691 versions,39104917750 regression75+75) |
+ 
+ ## Exclusions and verification boundary
+ 
+@@ -29,4 +29,4 @@ At49c519c65161026ee3f1cbe9ea80070b9fa9ba7b, build39104652534 PASS, regression391
+ 
+ Additional fidelity audit: Source41 graphs.py chartModel.editor.conversionRows states editable transition removes conversion-only rows; convertImportedChartToEditable step2 explicitly permits zero objects/no CSV. Prior PlusCal16 removed field only when object count>0, leaving conversion-only data on zero-object editable charts. Prior closure missed this branch; no new Source meaning required or reverse-authority explanation. Pseudocode17 moves RemoveField outside nonzero branch but inside HasField. Both paths now remove transient imported-conversion rows, retain zero-asset rule and imported graph/settings, directly translating Source41. Source logical completeness/purpose/no duplicate authority unchanged; previous other translations inherited, no independent lower design authority. Code64 records derivation update (same runtime as63).
+ 
+-Version39104652606 diagnostic reports canonical code63/64 sha256:53a6e764f33db5b9c50bdb10106329a151f4a969611764e3caed0395767aa6ef, recorded now; Source41 unchanged. At initial implementation the pseudocode17 digest/derived metadata was provisional until a canonical runner. At d3161e87f3e4bfce7d05c33896805ab77ea6c3a7 corrected regression39104752488 PASS75 inline+75 split including strengthened4 (no retained conversionRows) and74/75. Version39104752485 intentionally failed provisional pseudo digest, actual canonical17 sha256:c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619; patch058 corrects both fingerprint and code derivation, unchanged41 and runtime64. At corrected lineage6fee0c6248724c9e13a39bd5818d12fedaf0fae4 cumulative strict gate39104811673 PASS from86df1cfddbd34b7f6f6fe0ff44267c4f574ad232, automatic39104810958 PASS; repeat regression39104813416 PASS75+75. Runtime/build inputs unchanged from49c519c successful build39104652534 (diff inspected). A bounded-completion audit found blank FFSX zero-CSV result alone could miss an unreferenced synthetic asset. Patch059 strengthens existing4 to compare actual CSV assets and nextId before/after zero-object conversion; its fresh runner result pending, not inferred from these older75-case results. No local app/test/build/checker execution; optional TLC not run. Whole goal/code64 remain open/stale.
++Version39104652606 diagnostic reports canonical code63/64 sha256:53a6e764f33db5b9c50bdb10106329a151f4a969611764e3caed0395767aa6ef, recorded now; Source41 unchanged. At initial implementation the pseudocode17 digest/derived metadata was provisional until a canonical runner. At d3161e87f3e4bfce7d05c33896805ab77ea6c3a7 corrected regression39104752488 PASS75 inline+75 split including strengthened4 (no retained conversionRows) and74/75. Version39104752485 intentionally failed provisional pseudo digest, actual canonical17 sha256:c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619; patch058 corrects both fingerprint and code derivation, unchanged41 and runtime64. At corrected lineage6fee0c6248724c9e13a39bd5818d12fedaf0fae4 cumulative strict gate39104811673 PASS from86df1cfddbd34b7f6f6fe0ff44267c4f574ad232, automatic39104810958 PASS; repeat regression39104813416 PASS75+75. Runtime/build inputs unchanged from49c519c successful build39104652534 (diff inspected). A bounded-completion audit found blank FFSX zero-CSV result alone could miss an unreferenced synthetic asset. Patch059 strengthens existing4 to compare actual CSV assets and nextId before/after zero-object conversion; at10e3d3d880a583045295d65c4ac2becdb000eac6 fresh regression39104917750 PASS75+75 and version39104917691 PASS, so no-allocation now has direct actual-state/next-id coverage, not just package inference. No local app/test/build/checker execution; optional TLC not run. Whole goal/code64 remain open/stale.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 834f9b6..cfd4567 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3088,6 +3088,42 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(76, "FFPX retains slot image settings with null reference without creating assets", async () => {
++      const live = JSON.stringify(activeProject._state), source = projectClone(activeProject._state),
++        settings = { ...DEFAULT_IMAGE_SETTINGS, fit: "manual", scale: 125, x: 17, y: 23 };
++      source.assets.images = [];
++      source.slots.forEach(slot => { slot.content.imageId = null; });
++      const slot = source.slots[0];
++      slot.content.imageSettings = projectClone(settings);
++      const before = JSON.stringify(source), bundle = ffpxBuildProject(source),
++        entries = new Map(bundle.assets.map(entry => [entry.name, entry.data])),
++        root = ffpxReadXmlDocument(entries, `slots/slot-${slot.id}.xml`, "fastFigureSlot"),
++        node = root.querySelector(":scope > slot > imageObject"),
++        typed = node && ffpxXmlReadValue(node.firstElementChild),
++        roundtrip = await ffpxReadProject(new File([ffpxZipStore(bundle.assets)], "empty-image.ffpx")),
++        restored = roundtrip.slots.find(item => item.id === slot.id);
++      check(node && !node.hasAttribute("imageRef") && typed.imageRef === null &&
++        JSON.stringify(typed.settings) === JSON.stringify(settings), "null image settings omitted or typed ref changed");
++      check(restored.imageId === null && JSON.stringify(restored.imageSettings) === JSON.stringify(settings) &&
++        roundtrip.images.length === 0 && !bundle.assets.some(entry => entry.name.startsWith("assets/media/")) &&
++        JSON.stringify(source) === before, "null image settings did not roundtrip or created asset/mutated source");
++      // Positive image references still retain real asset identity and original bytes.
++      const image = { id: source.nextId.image++, name: "settings-roundtrip.svg", directory: "/assets/images",
++        mime: "image/svg+xml", bytesBase64: ffpxBytesToBase64(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>')) };
++      source.assets.images.push(image); slot.content.imageId = image.id;
++      const attachedBefore = JSON.stringify(source), attached = ffpxBuildProject(source),
++        attachedRoot = ffpxReadXmlDocument(new Map(attached.assets.map(entry => [entry.name, entry.data])),
++          `slots/slot-${slot.id}.xml`, "fastFigureSlot"),
++        attachedNode = attachedRoot.querySelector(":scope > slot > imageObject"),
++        attachedRead = await ffpxReadProject(new File([ffpxZipStore(attached.assets)], "attached-image.ffpx")),
++        attachedSlot = attachedRead.slots.find(item => item.id === slot.id);
++      check(attachedNode.getAttribute("imageRef") === String(image.id) && attachedSlot.imageId === image.id &&
++        JSON.stringify(attachedSlot.imageSettings) === JSON.stringify(settings) &&
++        attachedRead.images.length === 1 && attachedRead.images[0].id === image.id &&
++        attachedRead.images[0].bytesBase64 === image.bytesBase64 && JSON.stringify(source) === attachedBefore &&
++        JSON.stringify(activeProject._state) === live, "positive image package changed identity/bytes/settings or live authority");
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index d4aa19b..67394e0 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 64,
++      "revision": 65,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:c576b3f037c76816f890f2f6adedd94a11fe6ea3bb6bc53712defbda47335619",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-024-code-graph-editable-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-025-code-empty-image-settings-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 17,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 1f12f56..73934bb 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -5518,12 +5518,10 @@
+                 ? graphObjects.map((object) => projectClone(object))
+                 : [],
+               chartState,
+-              imageObject: image
+-                ? {
+-                    imageRef: image.id,
+-                    settings: projectClone(slot.imageSettings || DEFAULT_IMAGE_SETTINGS),
+-                  }
+-                : null,
++              imageObject: {
++                imageRef: image?.id ?? null,
++                settings: projectClone(slot.imageSettings || DEFAULT_IMAGE_SETTINGS),
++              },
+             };
+           }),
+           refs =
+@@ -5620,7 +5618,7 @@
+                       : ""
+                   }${
+                     document.imageObject
+-                      ? `<imageObject imageRef="${document.imageObject.imageRef}">${ffpxXmlValue(
++                      ? `<imageObject${document.imageObject.imageRef === null ? "" : ` imageRef="${document.imageObject.imageRef}"`}>${ffpxXmlValue(
+                           document.imageObject,
+                         )}</imageObject>`
+                       : ""
+diff --git a/agent_space/reviews/review-20261018-025-code-empty-image-settings-open.md b/agent_space/reviews/review-20261018-025-code-empty-image-settings-open.md
+new file mode 100644
+index 0000000..46b96d7
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-025-code-empty-image-settings-open.md
+@@ -0,0 +1,20 @@
++# FFPX null-image slot settings — bounded review (whole open)
++
++## Source-first authority decision
++
++Existing Source41 sourcescript/backend/assets_files.py:148 PACKAGE_IDENTITY_AND_SLOT_SETTINGS_RULE explicitly retains slot-local imageSettings in typed imageObject/settings even when imageRef is None; None creates no image asset. Independent purpose: settings survive temporary absence of image, owned by slot not image registry. No duplicate authority/new schema property needed; logical branches null/real refs are explicit. Pseudocode17 backend/assets_files.pcal EachSlotSplitsItsStateWithoutChangingOwnership already always encodes typed object, omits imageRef XML attribute only for null; reader restores settings without creating image. No Source or pseudocode update needed, no reverse authority from implementation. Code65 directly translates this existing meaning; preserve original real-asset bytes/identity and current wire version. Other closure/translation areas unchanged.
++
++## Prompt-to-artifact checklist
++
++| Requirement | Artifact | Evidence |
++|---|---|---|
++| Null image reference still serializes slot-local settings | ffpxBuildProject slotDocuments.imageObject always typed, imageRef null | case76 pending runner |
++| Null XML attribute omitted, typed null retained, no fake asset | same builder slot XML; case76 actual map/typed decode/media count | pending |
++| Real ZIP reader restores custom fit/scale/x/y without asset | ffpxReadProject existing typed reader, case76 actual ZIP STORE/read | pending |
++| Positive reference/original bytes/settings/identity preserved | existing asset packaging unchanged; case76 supplied real image fixture | pending |
++| Detached supplied read, no live authority or source mutation | builder existing clone; case76 complete source/live comparisons | pending |
++| Current lineage and retained regression/packaging | code65 metadata stale, Actions canonical digest/version/build/76+76 | pending |
++
++## Exclusions and gate boundary
++
++Not full canonical import/validation: reader's broader schema/structural checks, missing-settings/default normalization ownership, remaining graph/asset candidates, raster snapshots and supplied dashboard/API integration remain open. No policy/Source/pseudo edits, optional TLC not run. Previous runtime digest transparently provisional until canonical runner and strict cumulative gate. All app/test/build/checker execution only Actions default runner; no local execution. Test numbers are coverage only, not whole-goal proof.

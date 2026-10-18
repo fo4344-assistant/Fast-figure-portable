@@ -5518,12 +5518,10 @@
                 ? graphObjects.map((object) => projectClone(object))
                 : [],
               chartState,
-              imageObject: image
-                ? {
-                    imageRef: image.id,
-                    settings: projectClone(slot.imageSettings || DEFAULT_IMAGE_SETTINGS),
-                  }
-                : null,
+              imageObject: {
+                imageRef: image?.id ?? null,
+                settings: projectClone(slot.imageSettings || DEFAULT_IMAGE_SETTINGS),
+              },
             };
           }),
           refs =
@@ -5620,7 +5618,7 @@
                       : ""
                   }${
                     document.imageObject
-                      ? `<imageObject imageRef="${document.imageObject.imageRef}">${ffpxXmlValue(
+                      ? `<imageObject${document.imageObject.imageRef === null ? "" : ` imageRef="${document.imageObject.imageRef}"`}>${ffpxXmlValue(
                           document.imageObject,
                         )}</imageObject>`
                       : ""
