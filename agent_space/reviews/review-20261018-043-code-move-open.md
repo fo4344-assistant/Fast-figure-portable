@@ -1,4 +1,4 @@
-# Unit41 — current-authority asset/directory movement (pending Actions)
+# Unit41 — current-authority asset/directory movement (bounded verified; whole goal open)
 
 ## Policy and upper-contract audit
 
@@ -20,6 +20,14 @@ At5e2067e71249554723b9e0ced5aa4ef7e38d63ff regression39151349136 PASS113 inline+
 
 Coverage review found case112 exercised entering-trash detach counts but did not assert the pure UI plan's repeated-reference count. Patch127 strengthens the existing case with two repeated real CSV refs plus image: immutable plan referenceCount3 without authority replacement, actual removedGraphReferenceCount2 and exact map [0,null,null,1]. Same113 cases, no runtime/Source/PlusCal/revision/fingerprint change. Its new exact-SHA Actions/repeat/build/version/fidelity pending; prior green runs are evidence only of their actual test version.
 
-## Lineage and verification
+## Final exact-SHA evidence and lineage
 
-Code92 remains stale derived from unchanged Source45/pseudocode23. Fingerprint sha256:45e524e84694bab3686ed7acea650a64b9361b401eca3625b0aaeb2e6a9a1e89 calculated from staged Git path/blob records only, NOT local checker execution. Exact new-SHA GitHub-hosted default-runner cumulative113 inline+113 split, repeat, generated build, canonical/cumulative development-layer and fidelity Actions PENDING. No local application/test/build/checker execution or TLC pass claimed. Aggregate dashboard renderer remains explicitly not full supplied-projection alignment. Whole assets/import/schema/serializer/raster/dashboard/timing requirement audit open; green structural gate is not semantic closure.
+At1a2451ec1a63828e6468fe96dc0ddb7a90a61b41, regression39151597758 and repeat39151604986 PASS113 inline+113 split each, including strengthened duplicate/count case112 and collision/retry/failure case113. Push version39151597742 and cumulative version39151606978 PASS (base f1fd3e52d87289b0f9e6f218d9b359b2ca578df9). Build39151609555 PASS at that same SHA, verified both distribution forms/settings and reports artifacts already current, so no generated bot commit in this run. Fidelity39151611913 PASS cumulative lineage and static entry/input/API/call binding only; this bounded semantic checklist is separate evidence. Canonical runner independently confirms code92 sha256:45e524e84694bab3686ed7acea650a64b9361b401eca3625b0aaeb2e6a9a1e89 and unchanged Source45/pseudocode23 fingerprints. This later documentation is not the executed source/test SHA.
+
+No local application/test/build/checker execution, no policy changes and no TLC pass claimed. Code92 remains stale because complete Plan023 implementation/audit is not finished. Aggregate dashboard renderer is not fully supplied-projection aligned. Passing these bounded cases and the static coverage gate is NOT whole-goal semantic closure.
+
+## Concrete next observed boundary / whole-goal gaps
+
+Static inspection after bounded movement verification finds import decision and command ownership still unaligned: sourcecode/fast-figure.js projectAssetImportCollisionModel ignores reservation precedence for an existing same-kind asset; resolveProjectAssetImportPlan trusts stale model.mode/path/id instead of current VFS (including stale replace-before-available rejection); public fileKind/collisionModel/resolveImportPlan directly call helpers instead of the three official Backend project-api reads required by Source assets.py/project_state.py and pseudocode assets_files.pcal/project_state.pcal. Pseudocode CalculateAssetCollisionInProject uses file kinds data/image, reservation precedence and one explicit state. Next coherent readonly import-decision unit must translate these existing meanings without adding a proposal cache, Backend UI callback or new Source meaning. Check all caller reservation sets: CollectCompletedImportPlans reserves only completed batch plans; existing import wrapper starts with every current path and must not turn ordinary same-kind collision into a false batch reservation.
+
+Larger import atomicity remains separately open: applyAssetsImportedAction still consumes payload.candidate built by Application; stageProjectAssetImport awaits bytes against an Application clone; this is not current-source/retry-owned Backend import. Full imports/router, schema/serializer, raster resource/current-snapshot capture, supplied dashboard renderer and lifecycle/timing integration still need requirement-to-artifact audit/implementation and exact-SHA tests. No claim those areas were verified by movement cases. No explicit quota/auth/service blocker observed.
