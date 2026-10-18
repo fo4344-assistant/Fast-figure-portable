@@ -1011,16 +1011,30 @@
       function applyImageObjectCreatedAction({ machine, payload }) {
         machine.assertWritable("images","IMAGE_OBJECT_CREATED");
         machine.assertWritable("files","IMAGE_OBJECT_CREATED");
-        let model=payload.model;
-        if(!model||activeProject.images.some((image)=>image.id===model.id))
-          throw Error(`이미지 ID ${model?.id}가 중복되었습니다.`);
-        let candidate=projectClone(activeProject._state),
-          next=projectClone(model);
-        projectVfs.prepare(next,"image",candidate);
-        candidate.assets.images.push(next);
-        candidate.nextId.image=Math.max(candidate.nextId.image,next.id+1);
-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
-        payload.image=getProjectImage(next.id);
+        while (true) {
+          const source = activeProject._state, candidate = projectClone(source),
+            requested = payload.path || `${PROJECT_ASSET_DIRECTORIES.image}/${projectCsvName(payload.name, "image.bin")}`,
+            normalized = normalizeProjectPath(requested), directory = projectParentPath(normalized);
+          if (!source.fileSystem.directories.includes(directory)) throw Error("이미지 상위 directory가 없습니다.");
+          const path = projectVfs.uniquePath(directory, projectPathName(normalized), source),
+            id = payload.id == null ? source.nextId.image : payload.id;
+          if (!Number.isInteger(id) || id <= 0 || source.assets.images.some(image => image.id === id))
+            throw Error(`이미지 ID ${id}가 올바르지 않거나 중복되었습니다.`);
+          const input = payload.bytes,
+            bytes = typeof input === "string" ? ffpxBase64ToBytes(input) : new Uint8Array(input || []);
+          if (!bytes.length) throw Error("이미지 데이터가 비어 있습니다.");
+          candidate.assets.images.push({ id, name: projectPathName(path), directory: projectParentPath(path),
+            mime: typeof payload.mime === "string" && payload.mime ? payload.mime : "application/octet-stream",
+            bytesBase64: ffpxBytesToBase64(bytes) });
+          candidate.nextId.image = Math.max(candidate.nextId.image, id + 1);
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          const image = activeProject._state.assets.images.find(item => item.id === id);
+          payload.changed = { slotIds: [], chartIds: [], csvIds: [], imageIds: [id],
+            assets: [{ role: "created", kind: "image", id, path: projectAssetPath(image), owners: [] }] };
+          return;
+        }
       }
       function applyImageObjectReplacedAction(context) {
         applyAssetObjectReplacedAction(context, "image");
@@ -2865,19 +2879,10 @@
         return model;
       }
       function createProjectImage(bytes, name, mime, id = null, path = null) {
-        let model = buildProjectImageModel(
-          bytes,
-          name,
-          mime,
-          Number.isInteger(id) && id > 0 ? id : activeProject.imageId,
-        );
-        if (path) projectVfs.assignLocation(model, path);
-        appFSM.send("IMAGE_OBJECT_CREATED", {
-          model,
-          imageId: model.id,
-          direction: "fsm-to-model",
-        });
-        return model;
+        const result = dispatchProjectCommand("IMAGE_OBJECT_CREATED", { bytes, name, mime, id, path });
+        if (!result.committed) return result;
+        const created = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image");
+        return appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: created.path }).target;
       }
       function projectCsvName(value, fallback = "data.csv") {
         let name = String(value || "")
@@ -6012,7 +6017,7 @@
               model: image,
               direction: "fsm-to-model",
             });
-          } else image = createProjectImage(bytes, file.name, file.type, null, null, plan.path);
+          } else image = createProjectImage(bytes, file.name, file.type, null, plan.path);
           updateFileAvailability();
           renderDashboard();
           status(

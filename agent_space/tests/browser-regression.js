@@ -3219,6 +3219,92 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
     });
 
+    await run(79, "Image create owns current identity, original bytes and immutable read without slot settings", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection;
+      let commits = 0, reads = 0, result;
+      try {
+        const next = activeProject._state.nextId.image, bytes = new Uint8Array([0, 255, 17, 128]),
+          before = JSON.stringify({ slots: activeProject._state.slots, charts: activeProject.charts, csv: activeProject.csvFiles });
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        projectEFSM.send = function (event, payload) {
+          check(event === "IMAGE_OBJECT_CREATED" && !Object.hasOwn(payload, "model") && !Object.hasOwn(payload, "candidate") &&
+            !Object.hasOwn(payload, "imageId"), "Application supplies authoritative image model");
+          result = send.call(this, event, payload); return result;
+        };
+        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") reads++;
+          return query(kind, request); };
+        const image = createProjectImage(bytes, "candidate-image.bin", "image/custom"), fact = result.changed.assets[0];
+        bytes[0] = 99;
+        check(commits === 1 && reads === 1 && image.id === next && image.mime === "image/custom" &&
+          JSON.stringify(Array.from(ffpxBase64ToBytes(image.bytesBase64))) === "[0,255,17,128]" && Object.isFrozen(image) &&
+          image !== getProjectImage(image.id) && fact.kind === "image" && fact.role === "created" && fact.id === image.id &&
+          fact.path === projectAssetPath(image) && Object.isFrozen(fact.owners) && fact.owners.length === 0 &&
+          result.changed.imageIds[0] === next && result.changed.csvIds.length === 0 && activeProject._state.nextId.image === next + 1 &&
+          !Object.hasOwn(image, "settings") && !Object.hasOwn(image, "fit"), "image bytes/identity/result ownership wrong");
+        const collision = createProjectImage(image.bytesBase64, "candidate-image.bin", ""),
+          explicit = createProjectImage(new Uint8Array([9]), "ignored.bin", "image/test", next + 20, "/assets/images/explicit.bin");
+        check(collision.name === "candidate-image (2).bin" && collision.mime === "application/octet-stream" &&
+          collision.bytesBase64 === image.bytesBase64 && explicit.id === next + 20 && explicit.name === "explicit.bin" &&
+          activeProject._state.nextId.image === next + 21 && getProjectImage(image.id).bytesBase64 === image.bytesBase64 &&
+          JSON.stringify({ slots: activeProject._state.slots, charts: activeProject.charts, csv: activeProject.csvFiles }) === before &&
+          interfaceFSM.state.assetPath === session.assetPath && interfaceFSM.readState().selectedSlotId === selected,
+          "collision replaced asset, explicit path/id ignored, or create changed slot/selection/CSV");
+      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
+    });
+    await run(80, "Image create validates before commit, retries current authority and preserves postcommit failures", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send, query = readBackendProjection,
+        reconcile = interfaceFSM.reconcileProjectResult;
+      let commits = 0, reads = 0, reconciliations = 0;
+      try {
+        const fixture = projectClone(activeProject._state), existing = buildProjectImageModel(new Uint8Array([7]), "retry-image.bin",
+          "image/test", fixture.nextId.image++, fixture);
+        fixture.assets.images.push(existing); initialize.call(activeProject, fixture);
+        const baseline = JSON.stringify(activeProject._state), stable = interfaceFSM.state, failure = Error("expected image create failure"),
+          noEffects = () => check(commits === 0 && reads === 0 && reconciliations === 0 && interfaceFSM.state === stable &&
+            JSON.stringify(activeProject._state) === baseline, "rejected image create performed success work");
+        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") reads++;
+          return query(kind, request); };
+        for (const args of [[new Uint8Array(), "bad.bin"], ["@@@", "bad.bin"], [new Uint8Array([1]), "bad.bin", "", 0],
+          [new Uint8Array([1]), "bad.bin", "", existing.id], [new Uint8Array([1]), "bad.bin", "", null, "/missing-parent/bad.bin"]]) {
+          let caught; try { createProjectImage(...args); } catch (error) { caught = error; }
+          check(caught, "invalid image input accepted"); noEffects();
+        }
+        validateProjectObjectState = () => { throw failure; };
+        let caught; try { createProjectImage(new Uint8Array([1]), "bad.bin"); } catch (error) { caught = error; }
+        check(caught === failure, "image validator exception replaced"); noEffects(); validateProjectObjectState = validate;
+        const noncommit = Object.freeze({ committed: false }); projectEFSM.send = () => noncommit;
+        check(createProjectImage(new Uint8Array([1]), "bad.bin") === noncommit, "noncommit image result replaced"); noEffects(); projectEFSM.send = send;
+        let attempts = 0, assigned;
+        validateProjectObjectState = function (candidate, options) {
+          const valid = validate(candidate, options);
+          if (options?.requireSlots && !attempts++) {
+            const newer = projectClone(activeProject._state), asset = buildProjectImageModel(new Uint8Array([8]), "retry-image.bin",
+              "image/test", newer.nextId.image++, newer);
+            newer.assets.images.push(asset); newer.meta.projectName = "new image authority"; assigned = newer.nextId.image;
+            initialize.call(activeProject, newer);
+          }
+          return valid;
+        };
+        const created = createProjectImage(new Uint8Array([0, 255]), "retry-image.bin"); validateProjectObjectState = validate;
+        check(attempts === 2 && commits === 1 && reads === 1 && reconciliations === 1 && created.id === assigned &&
+          created.name === "retry-image (3).bin" && activeProject.projectName === "new image authority" &&
+          getProjectImage(assigned - 1).bytesBase64 === ffpxBytesToBase64(new Uint8Array([8])), "image create committed stale authority/id/path");
+        const count = activeProject.images.length;
+        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") throw failure;
+          return query(kind, request); };
+        caught = null; try { createProjectImage(new Uint8Array([2]), "read-fails.bin"); } catch (error) { caught = error; }
+        check(caught === failure && commits === 2 && activeProject.images.length === count + 1,
+          "postcommit query error swallowed or rolled back image asset");
+      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
+        readBackendProjection = query; interfaceFSM.reconcileProjectResult = reconcile;
+        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {

@@ -1,0 +1,248 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index 5849365..629fcdd 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -157,6 +157,10 @@ Baseline bbb602bd52b240ca875af2b871963edf83a4434b. Source41 new-input-only creat
+ 
+ Unit24 bounded evidence: implementation003f484b1eaa07b44c31541857c0221bc981b4bc regression39120647317 PASS78+78/build39120647325 PASS. Canonical pseudocode18 sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a and code66 sha256:ff5070966a9ba3998a3268c836837e0d2528e2e399d6299f889795fcd90fe832 recorded patch064. At8efc93112788818f19fed75b9b92a05aeb6ae62d cumulative version39120721691 PASS frombbb602bd52b240ca875af2b871963edf83a4434b, repeat regression39120723974 PASS78 inline+78 split. Runtime/build/test/upper blobs unchanged from implementation; review026 audit remains bounded, whole code stale/open.
+ 
++## Twenty-fifth implementation unit — Current-authority image create
++
++Baseline c52bffa5828dcbd55e21dc2402855ea225034241. Existing Source41 createProjectImage/common send and pseudocode18 CalculateNewAsset already require new-input-only Application, copied bytes, current id/parent/collision, whole candidate validation/retry/one commit and immutable actual-path success read. Code67 directly translates this, removes Application model ownership and preserves binary/base64 input without slot display settings or selection changes. Fixes legacy image-import caller path argument position without claiming full import alignment. Cases79/80 cover bytes/id/path/copies/facts, invalid inputs/validator/noncommit/postcommit query failure and newer-authority retry. Review027/patch066 track pending Actions80+80/build/canonical and cumulative version. Source/pseudocode unchanged; whole code stale/open.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 411b3a6..a0f348c 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -3219,6 +3219,92 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
+     });
+ 
++    await run(79, "Image create owns current identity, original bytes and immutable read without slot settings", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, send = projectEFSM.send, query = readBackendProjection;
++      let commits = 0, reads = 0, result;
++      try {
++        const next = activeProject._state.nextId.image, bytes = new Uint8Array([0, 255, 17, 128]),
++          before = JSON.stringify({ slots: activeProject._state.slots, charts: activeProject.charts, csv: activeProject.csvFiles });
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        projectEFSM.send = function (event, payload) {
++          check(event === "IMAGE_OBJECT_CREATED" && !Object.hasOwn(payload, "model") && !Object.hasOwn(payload, "candidate") &&
++            !Object.hasOwn(payload, "imageId"), "Application supplies authoritative image model");
++          result = send.call(this, event, payload); return result;
++        };
++        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") reads++;
++          return query(kind, request); };
++        const image = createProjectImage(bytes, "candidate-image.bin", "image/custom"), fact = result.changed.assets[0];
++        bytes[0] = 99;
++        check(commits === 1 && reads === 1 && image.id === next && image.mime === "image/custom" &&
++          JSON.stringify(Array.from(ffpxBase64ToBytes(image.bytesBase64))) === "[0,255,17,128]" && Object.isFrozen(image) &&
++          image !== getProjectImage(image.id) && fact.kind === "image" && fact.role === "created" && fact.id === image.id &&
++          fact.path === projectAssetPath(image) && Object.isFrozen(fact.owners) && fact.owners.length === 0 &&
++          result.changed.imageIds[0] === next && result.changed.csvIds.length === 0 && activeProject._state.nextId.image === next + 1 &&
++          !Object.hasOwn(image, "settings") && !Object.hasOwn(image, "fit"), "image bytes/identity/result ownership wrong");
++        const collision = createProjectImage(image.bytesBase64, "candidate-image.bin", ""),
++          explicit = createProjectImage(new Uint8Array([9]), "ignored.bin", "image/test", next + 20, "/assets/images/explicit.bin");
++        check(collision.name === "candidate-image (2).bin" && collision.mime === "application/octet-stream" &&
++          collision.bytesBase64 === image.bytesBase64 && explicit.id === next + 20 && explicit.name === "explicit.bin" &&
++          activeProject._state.nextId.image === next + 21 && getProjectImage(image.id).bytesBase64 === image.bytesBase64 &&
++          JSON.stringify({ slots: activeProject._state.slots, charts: activeProject.charts, csv: activeProject.csvFiles }) === before &&
++          interfaceFSM.state.assetPath === session.assetPath && interfaceFSM.readState().selectedSlotId === selected,
++          "collision replaced asset, explicit path/id ignored, or create changed slot/selection/CSV");
++      } finally { activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
++        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
++    });
++    await run(80, "Image create validates before commit, retries current authority and preserves postcommit failures", () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, validate = validateProjectObjectState, send = projectEFSM.send, query = readBackendProjection,
++        reconcile = interfaceFSM.reconcileProjectResult;
++      let commits = 0, reads = 0, reconciliations = 0;
++      try {
++        const fixture = projectClone(activeProject._state), existing = buildProjectImageModel(new Uint8Array([7]), "retry-image.bin",
++          "image/test", fixture.nextId.image++, fixture);
++        fixture.assets.images.push(existing); initialize.call(activeProject, fixture);
++        const baseline = JSON.stringify(activeProject._state), stable = interfaceFSM.state, failure = Error("expected image create failure"),
++          noEffects = () => check(commits === 0 && reads === 0 && reconciliations === 0 && interfaceFSM.state === stable &&
++            JSON.stringify(activeProject._state) === baseline, "rejected image create performed success work");
++        activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
++        interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
++        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") reads++;
++          return query(kind, request); };
++        for (const args of [[new Uint8Array(), "bad.bin"], ["@@@", "bad.bin"], [new Uint8Array([1]), "bad.bin", "", 0],
++          [new Uint8Array([1]), "bad.bin", "", existing.id], [new Uint8Array([1]), "bad.bin", "", null, "/missing-parent/bad.bin"]]) {
++          let caught; try { createProjectImage(...args); } catch (error) { caught = error; }
++          check(caught, "invalid image input accepted"); noEffects();
++        }
++        validateProjectObjectState = () => { throw failure; };
++        let caught; try { createProjectImage(new Uint8Array([1]), "bad.bin"); } catch (error) { caught = error; }
++        check(caught === failure, "image validator exception replaced"); noEffects(); validateProjectObjectState = validate;
++        const noncommit = Object.freeze({ committed: false }); projectEFSM.send = () => noncommit;
++        check(createProjectImage(new Uint8Array([1]), "bad.bin") === noncommit, "noncommit image result replaced"); noEffects(); projectEFSM.send = send;
++        let attempts = 0, assigned;
++        validateProjectObjectState = function (candidate, options) {
++          const valid = validate(candidate, options);
++          if (options?.requireSlots && !attempts++) {
++            const newer = projectClone(activeProject._state), asset = buildProjectImageModel(new Uint8Array([8]), "retry-image.bin",
++              "image/test", newer.nextId.image++, newer);
++            newer.assets.images.push(asset); newer.meta.projectName = "new image authority"; assigned = newer.nextId.image;
++            initialize.call(activeProject, newer);
++          }
++          return valid;
++        };
++        const created = createProjectImage(new Uint8Array([0, 255]), "retry-image.bin"); validateProjectObjectState = validate;
++        check(attempts === 2 && commits === 1 && reads === 1 && reconciliations === 1 && created.id === assigned &&
++          created.name === "retry-image (3).bin" && activeProject.projectName === "new image authority" &&
++          getProjectImage(assigned - 1).bytesBase64 === ffpxBytesToBase64(new Uint8Array([8])), "image create committed stale authority/id/path");
++        const count = activeProject.images.length;
++        readBackendProjection = (kind, request) => { if (request.operation === "assets.readDeletionTarget") throw failure;
++          return query(kind, request); };
++        caught = null; try { createProjectImage(new Uint8Array([2]), "read-fails.bin"); } catch (error) { caught = error; }
++        check(caught === failure && commits === 2 && activeProject.images.length === count + 1,
++          "postcommit query error swallowed or rolled back image asset");
++      } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
++        readBackendProjection = query; interfaceFSM.reconcileProjectResult = reconcile;
++        initialize.call(activeProject, saved); selectedSlotId = selected; interfaceFSM.state = session; }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 929348c..39f3725 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 66,
++      "revision": 67,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -44,7 +44,7 @@
+         "pseudocode": "sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261018-026-code-csv-create-open.md"
++      "validation_review": "agent_space/reviews/review-20261018-027-code-image-create-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 18,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index f7ead3c..0cb2938 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -1011,16 +1011,30 @@
+       function applyImageObjectCreatedAction({ machine, payload }) {
+         machine.assertWritable("images","IMAGE_OBJECT_CREATED");
+         machine.assertWritable("files","IMAGE_OBJECT_CREATED");
+-        let model=payload.model;
+-        if(!model||activeProject.images.some((image)=>image.id===model.id))
+-          throw Error(`이미지 ID ${model?.id}가 중복되었습니다.`);
+-        let candidate=projectClone(activeProject._state),
+-          next=projectClone(model);
+-        projectVfs.prepare(next,"image",candidate);
+-        candidate.assets.images.push(next);
+-        candidate.nextId.image=Math.max(candidate.nextId.image,next.id+1);
+-        activeProject.initialize(validateProjectObjectState(candidate,{requireSlots:true}));
+-        payload.image=getProjectImage(next.id);
++        while (true) {
++          const source = activeProject._state, candidate = projectClone(source),
++            requested = payload.path || `${PROJECT_ASSET_DIRECTORIES.image}/${projectCsvName(payload.name, "image.bin")}`,
++            normalized = normalizeProjectPath(requested), directory = projectParentPath(normalized);
++          if (!source.fileSystem.directories.includes(directory)) throw Error("이미지 상위 directory가 없습니다.");
++          const path = projectVfs.uniquePath(directory, projectPathName(normalized), source),
++            id = payload.id == null ? source.nextId.image : payload.id;
++          if (!Number.isInteger(id) || id <= 0 || source.assets.images.some(image => image.id === id))
++            throw Error(`이미지 ID ${id}가 올바르지 않거나 중복되었습니다.`);
++          const input = payload.bytes,
++            bytes = typeof input === "string" ? ffpxBase64ToBytes(input) : new Uint8Array(input || []);
++          if (!bytes.length) throw Error("이미지 데이터가 비어 있습니다.");
++          candidate.assets.images.push({ id, name: projectPathName(path), directory: projectParentPath(path),
++            mime: typeof payload.mime === "string" && payload.mime ? payload.mime : "application/octet-stream",
++            bytesBase64: ffpxBytesToBase64(bytes) });
++          candidate.nextId.image = Math.max(candidate.nextId.image, id + 1);
++          validateProjectObjectState(candidate, { requireSlots: true });
++          if (activeProject._state !== source) continue;
++          activeProject.initialize(candidate);
++          const image = activeProject._state.assets.images.find(item => item.id === id);
++          payload.changed = { slotIds: [], chartIds: [], csvIds: [], imageIds: [id],
++            assets: [{ role: "created", kind: "image", id, path: projectAssetPath(image), owners: [] }] };
++          return;
++        }
+       }
+       function applyImageObjectReplacedAction(context) {
+         applyAssetObjectReplacedAction(context, "image");
+@@ -2865,19 +2879,10 @@
+         return model;
+       }
+       function createProjectImage(bytes, name, mime, id = null, path = null) {
+-        let model = buildProjectImageModel(
+-          bytes,
+-          name,
+-          mime,
+-          Number.isInteger(id) && id > 0 ? id : activeProject.imageId,
+-        );
+-        if (path) projectVfs.assignLocation(model, path);
+-        appFSM.send("IMAGE_OBJECT_CREATED", {
+-          model,
+-          imageId: model.id,
+-          direction: "fsm-to-model",
+-        });
+-        return model;
++        const result = dispatchProjectCommand("IMAGE_OBJECT_CREATED", { bytes, name, mime, id, path });
++        if (!result.committed) return result;
++        const created = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image");
++        return appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: created.path }).target;
+       }
+       function projectCsvName(value, fallback = "data.csv") {
+         let name = String(value || "")
+@@ -6012,7 +6017,7 @@
+               model: image,
+               direction: "fsm-to-model",
+             });
+-          } else image = createProjectImage(bytes, file.name, file.type, null, null, plan.path);
++          } else image = createProjectImage(bytes, file.name, file.type, null, plan.path);
+           updateFileAvailability();
+           renderDashboard();
+           status(
+diff --git a/agent_space/reviews/review-20261018-027-code-image-create-open.md b/agent_space/reviews/review-20261018-027-code-image-create-open.md
+new file mode 100644
+index 0000000..224271c
+--- /dev/null
++++ b/agent_space/reviews/review-20261018-027-code-image-create-open.md
+@@ -0,0 +1,30 @@
++# Image create — bounded Source41 / pseudocode18 translation
++
++Baseline c52bffa5828dcbd55e21dc2402855ea225034241. Source highest; no policy or upper semantic change. Whole code67 stale, optional model26/TLC unchanged/not run.
++
++## Authority and direct translation
++
++Source sourcescript/application/public_api/assets.py createProjectImage passes only new bytes/name/MIME/id/path, gates success read on committed and returns an immutable official asset read. sourcescript/backend/project_efsm.py ProjectStateMachine.send resolves current authority, rejects Application models, validates whole candidate, retries source replacement and commits once, then emits actual created id/path. Slot-local image settings remain solely on slots. pseudocode/application/public_api/assets.pcal createProjectImage and pseudocode/backend/project_efsm.pcal CalculateNewAsset/ProjectStateMachine_send directly specify copied bytes, current parent/collision/next-id and validation. These current upper contracts already close this ownership unit; no upper edits needed.
++
++## Prompt-to-artifact audit
++
++| Contract | Artifact and direct coverage |
++|---|---|
++| Application sends new values only; scalar id/path are requested inputs, not authority | sourcecode/fast-figure.js createProjectImage; case79 payload spy |
++| Backend current directory/id/collision and bytes copy; nonempty bytes and invalid base64 rejected | applyImageObjectCreatedAction; cases79/80 |
++| Preserve original binary/base64 input, MIME fallback; image owns no slot settings | case79 exact [0,255,17,128], input mutation detachment, no settings/slot/CSV/selection mutation |
++| Explicit valid id advances current next-id; duplicate/invalid id/parent rejected | cases79/80 |
++| Candidate validate then source-reference retry/one initialize; retain newer asset/name | case80 validation injection and retry |
++| Actual immutable changed id/path/owners; fresh frozen official read | case79 result facts and read spy |
++| Noncommit and validation exceptions perform no success read/reconcile; error identity retained | case80 |
++| Postcommit query failure propagates without rollback | case80 |
++| Caller path uses correct public parameter position | legacy importSelectedImageFile create branch now passes plan.path as fifth argument, previously silently ignored sixth; broader import ownership remains open |
++| Actions default runner build/regression80+80/canonical and cumulative version | pending actual runs |
++
++## Exclusions
++
++This is image asset create only, not slot image insertion/import/replacement or cascade/resource cleanup. Existing buildProjectImageModel remains for other unconverted import/candidate paths, not the public create authority. Shared full graph/schema validation and complete canonical imports/parser/raster/supplied dashboard remain open. No URL/DOM work added. Lower-layer useful binary and base64 input support retained as concrete byte representation, not new domain meaning. Invalid old explicit ids now reject rather than silently substitute next-id, as current upper contract requires.
++
++## Execution
++
++Pending. Prior code66 fingerprint intentionally provisional until runner prints canonical code67 digest; strict checker is not weakened. No local application/test/checker/build executed.

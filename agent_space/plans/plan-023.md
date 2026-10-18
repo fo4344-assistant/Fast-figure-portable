@@ -157,6 +157,10 @@ Baseline bbb602bd52b240ca875af2b871963edf83a4434b. Source41 new-input-only creat
 
 Unit24 bounded evidence: implementation003f484b1eaa07b44c31541857c0221bc981b4bc regression39120647317 PASS78+78/build39120647325 PASS. Canonical pseudocode18 sha256:9fb9e8f2240b339fa3f44c82682d9a8a81144cfcd5197b88b172f6c4f508859a and code66 sha256:ff5070966a9ba3998a3268c836837e0d2528e2e399d6299f889795fcd90fe832 recorded patch064. At8efc93112788818f19fed75b9b92a05aeb6ae62d cumulative version39120721691 PASS frombbb602bd52b240ca875af2b871963edf83a4434b, repeat regression39120723974 PASS78 inline+78 split. Runtime/build/test/upper blobs unchanged from implementation; review026 audit remains bounded, whole code stale/open.
 
+## Twenty-fifth implementation unit — Current-authority image create
+
+Baseline c52bffa5828dcbd55e21dc2402855ea225034241. Existing Source41 createProjectImage/common send and pseudocode18 CalculateNewAsset already require new-input-only Application, copied bytes, current id/parent/collision, whole candidate validation/retry/one commit and immutable actual-path success read. Code67 directly translates this, removes Application model ownership and preserves binary/base64 input without slot display settings or selection changes. Fixes legacy image-import caller path argument position without claiming full import alignment. Cases79/80 cover bytes/id/path/copies/facts, invalid inputs/validator/noncommit/postcommit query failure and newer-authority retry. Review027/patch066 track pending Actions80+80/build/canonical and cumulative version. Source/pseudocode unchanged; whole code stale/open.
+
 ## Temporary-file rule
 
 The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
