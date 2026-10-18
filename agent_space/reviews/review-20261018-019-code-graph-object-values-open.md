@@ -21,3 +21,13 @@ This unit converts only `graphs.setObjectValues`; legacy add/move/delete/palette
 ## Execution plan / pending evidence
 
 Push triggers actual regression (prior63 plus64/65, inline and split), version diagnostics and build on ubuntu-latest. The prior code56 fingerprint is deliberately retained provisionally, not represented as code57's canonical fingerprint. Record exact SHA/run IDs and failures; correct from runner output with paired record, then run cumulative versions against this baseline. No local test/parser/checker/build executed.
+
+## Code57 implementation evidence / canonical correction
+
+Implementation SHA 3dba3721ccaaf65e078743055be3ee91f139f9c9:
+
+- Regression39102929007 PASS65 inline +65 split, including cases64 copied read and65 command normalization/failure/noncommit/retry. Prior1–63 retained; exact thrown exception objects are checked before success work. Artifacts inline6317496 bytes / split ZIP1733428 bytes.
+- Build39102929019 PASS; dist-only bot277d3b60711699cf65be375c92de7285d978bdea inspected and fast-forwarded. Embedded Source settings/README/LICENSE distribution checks passed. Both workflows ran default ubuntu-latest, no local runtime execution.
+- Version39102929010 FAIL as transparently expected on provisional code56 fingerprint: recorded `sha256:feaea6a274e26dc96ee8450197be52afeb1dfdb9df6682fb0cd85bfe04e448e0`, actual `sha256:95c99ef36aba09751f3e0bbc67a702bbfaf7743d8e82782f9779923fcf2b403b`. Source40 and pseudocode15 canonical digests unchanged. Patch042 copies the actual runner digest into metadata without revision/status/runtime edits. Corrected cumulative version gate against e66e1decf0c1a44ee592ad3e3cbe7a57a1643bcf is still required; this initial failed gate is not a pass.
+
+The table's pending runtime assertions above are now covered by the named regression/build at the implementation SHA; whole shared validator/other-path limitations remain unchanged and uncovered. Do not promote whole code to current. Follow-up evidence recording itself is not the executed runtime SHA.
