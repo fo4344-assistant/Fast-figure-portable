@@ -4787,10 +4787,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         };
         check(api.assets.emptyTrash() === null && commits === 1 && paints === 1 && releases === 1,
           "trash success work or single commit incorrect");
-        check(!getProjectCsv(csv.id) && !getProjectImage(image.id) && slotAt(b.id).imageId === null &&
-          JSON.stringify(slotAt(b.id).content.imageSettings) === settings && slotAt(b.id).content.trashExtension.keep &&
-          getChart(chartId).editor.objects.length === 0 && getChart(chartId).graph.data.length === 0,
-          "trash did not detach/rebuild or changed display-owned settings/extension");
+        check(!getProjectCsv(csv.id) && !getProjectImage(image.id), "trash assets retained");
+        check(slotAt(b.id).imageId === null, "trash image reference retained");
+        check(JSON.stringify(slotAt(b.id).content.imageSettings) === settings && slotAt(b.id).content.trashExtension.keep,
+          "trash changed display-owned settings/extension");
+        check(getChart(chartId).editor.objects.length === 0 && getChart(chartId).graph.data.length === 0,
+          `trash graph not empty/rebuilt: objects=${getChart(chartId).editor.objects.length}, traces=${getChart(chartId).graph.data.length}`);
         check(last.changed.removedGraphReferenceCount === 2 && last.changed.resetImageSlotCount === 1 &&
           last.changed.csvIds.includes(csv.id) && last.changed.imageIds.includes(image.id) &&
           Object.isFrozen(last.changed.graphObjectIndexMaps) &&

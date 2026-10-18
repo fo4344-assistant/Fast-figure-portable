@@ -1,0 +1,49 @@
+diff --git a/agent_space/reviews/review-20261018-041-code-trash-open.md b/agent_space/reviews/review-20261018-041-code-trash-open.md
+index 89ecc65..bb607cb 100644
+--- a/agent_space/reviews/review-20261018-041-code-trash-open.md
++++ b/agent_space/reviews/review-20261018-041-code-trash-open.md
+@@ -16,6 +16,10 @@ Code89 translates shared detach using collectAssetReferences, original-position
+ - Shared helper conversion scope follows collectAssetReferences (conversion representation excluded); source ownership map retains original index relation. More adversarial retained-index / conversion integration tests remain to add if execution finds coverage insufficient.
+ - Regression prior106 plus107/108 both inline/split, repeat, generated build, canonical/cumulative development-layer gate and fidelity: PENDING. Code89 old digest is explicitly provisional until canonical runner output, not claimed passed/current.
+ 
++## Execution iteration1
++
++At49d2f25a1948c03546b326fcb019fdedb62d7801 build39149654863 PASS, generated dist758c0c3. Regression39149654840 prior106+108 PASS each form;107 FAIL `Error: trash did not detach/rebuild or changed display-owned settings/extension`. Split the composite assertion to identify the actual failed contract, retain all assertions; no production behavior change yet. Canonical version39149654801 printed code89 sha256:d939e8f9a00f9954e872fec7c407ade0c8b87f37b2535b4b0f4bbdb781a1f45e, recorded patch120. Source/pseudo digests unchanged. Gate initially failed intentionally provisional metadata, not passed. Corrected exact-SHA cumulative/repeat/fidelity pending.
++
+ ## Verified starting evidence and remaining scope
+ 
+ Baseline8835b561fa9aa33e15015b8e9fcd994e2eeda0fe: unit38 regression39126440751 and repeat39126510687 success (106 per form), build39126444023 success, development-layer39126440829 and cumulative39126441515 success. These prove only bounded prior work, not new unit or whole alignment. Whole assets/move/import/schema/serializer/raster/dashboard/timing audit still open; code stale, optional verification/TLC not run. Do not infer full completion from manifest/green CI.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index ed14eef..f64fd0c 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -4787,10 +4787,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         };
+         check(api.assets.emptyTrash() === null && commits === 1 && paints === 1 && releases === 1,
+           "trash success work or single commit incorrect");
+-        check(!getProjectCsv(csv.id) && !getProjectImage(image.id) && slotAt(b.id).imageId === null &&
+-          JSON.stringify(slotAt(b.id).content.imageSettings) === settings && slotAt(b.id).content.trashExtension.keep &&
+-          getChart(chartId).editor.objects.length === 0 && getChart(chartId).graph.data.length === 0,
+-          "trash did not detach/rebuild or changed display-owned settings/extension");
++        check(!getProjectCsv(csv.id) && !getProjectImage(image.id), "trash assets retained");
++        check(slotAt(b.id).imageId === null, "trash image reference retained");
++        check(JSON.stringify(slotAt(b.id).content.imageSettings) === settings && slotAt(b.id).content.trashExtension.keep,
++          "trash changed display-owned settings/extension");
++        check(getChart(chartId).editor.objects.length === 0 && getChart(chartId).graph.data.length === 0,
++          `trash graph not empty/rebuilt: objects=${getChart(chartId).editor.objects.length}, traces=${getChart(chartId).graph.data.length}`);
+         check(last.changed.removedGraphReferenceCount === 2 && last.changed.resetImageSlotCount === 1 &&
+           last.changed.csvIds.includes(csv.id) && last.changed.imageIds.includes(image.id) &&
+           Object.isFrozen(last.changed.graphObjectIndexMaps) &&
+diff --git a/development-versions.json b/development-versions.json
+index 11f0f43..1b4ebc0 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -38,7 +38,7 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:0f4877393c78596cb614d3e03e0778d7a3e5e61b612ebc4600f9ca6b294359de",
++      "fingerprint": "sha256:d939e8f9a00f9954e872fec7c407ade0c8b87f37b2535b4b0f4bbdb781a1f45e",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:de6575d91cc0bfae1bee9e70b4b00b1e72c76dd47a7e9bd1417141bf8c1fe795",

@@ -16,6 +16,10 @@ Code89 translates shared detach using collectAssetReferences, original-position 
 - Shared helper conversion scope follows collectAssetReferences (conversion representation excluded); source ownership map retains original index relation. More adversarial retained-index / conversion integration tests remain to add if execution finds coverage insufficient.
 - Regression prior106 plus107/108 both inline/split, repeat, generated build, canonical/cumulative development-layer gate and fidelity: PENDING. Code89 old digest is explicitly provisional until canonical runner output, not claimed passed/current.
 
+## Execution iteration1
+
+At49d2f25a1948c03546b326fcb019fdedb62d7801 build39149654863 PASS, generated dist758c0c3. Regression39149654840 prior106+108 PASS each form;107 FAIL `Error: trash did not detach/rebuild or changed display-owned settings/extension`. Split the composite assertion to identify the actual failed contract, retain all assertions; no production behavior change yet. Canonical version39149654801 printed code89 sha256:d939e8f9a00f9954e872fec7c407ade0c8b87f37b2535b4b0f4bbdb781a1f45e, recorded patch120. Source/pseudo digests unchanged. Gate initially failed intentionally provisional metadata, not passed. Corrected exact-SHA cumulative/repeat/fidelity pending.
+
 ## Verified starting evidence and remaining scope
 
 Baseline8835b561fa9aa33e15015b8e9fcd994e2eeda0fe: unit38 regression39126440751 and repeat39126510687 success (106 per form), build39126444023 success, development-layer39126440829 and cumulative39126441515 success. These prove only bounded prior work, not new unit or whole alignment. Whole assets/move/import/schema/serializer/raster/dashboard/timing audit still open; code stale, optional verification/TLC not run. Do not infer full completion from manifest/green CI.
