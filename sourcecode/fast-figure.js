@@ -95,9 +95,9 @@
           return value;
         }
         initialize(source) {
-          let next = source instanceof ProjectObject ? source._state : source;
+          let next = projectClone(source instanceof ProjectObject ? source._state : source);
           normalizeSlotContents(next.slots);
-          validateProjectObjectState(next);
+          validateProjectObjectState(next, { requireSlots: true });
           let previous = this._state;
           this._state = next;
           return previous;

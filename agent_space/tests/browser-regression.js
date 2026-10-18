@@ -6266,6 +6266,33 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         "candidate extension aliases original or clone touched live authority");
     });
 
+    await run(142, "Project initialize normalizes owned copies and preserves previous authority on invalid frozen sources", () => {
+      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
+        freeze = value => { if (value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
+      try {
+        const source = createProjectState(), slot = source.slots[0], local = slot.content;
+        local.extension = { kept: [false, 0, ""] }; slot.caption = "";
+        freeze(source);
+        const previous = activeProject._state, returned = activeProject.initialize(source), current = activeProject._state;
+        check(returned === previous && current !== source && current.slots[0] !== slot &&
+          current.slots[0].content !== local && slot.content === local && current.slots[0].caption === "" &&
+          JSON.stringify(current.slots[0].content.extension) === '{"kept":[false,0,""]}',
+          "initialize mutated frozen source, lost canonical extension or returned wrong previous authority");
+        current.slots[0].content.extension.kept.push("owned");
+        check(local.extension.kept.length === 3, "initialized state shares input extension");
+        for (const malformed of [value => { value.slots[0].row = 0; }, value => { value.slots = []; }]) {
+          const invalid = createProjectState(); malformed(invalid); freeze(invalid);
+          const before = activeProject._state; let caught = null;
+          try { activeProject.initialize(invalid); } catch (error) { caught = error; }
+          check(caught && activeProject._state === before, "invalid initialize source replaced authority");
+        }
+        const wrapped = new ProjectObject(createProjectState()), input = wrapped._state;
+        freeze(input); activeProject.initialize(wrapped);
+        check(activeProject._state !== input && interfaceFSM.state === session,
+          "ProjectObject initialize retained caller-owned state or wrote Frontend");
+      } finally { activeProject.initialize(saved); interfaceFSM.state = session; selectedSlotId = selected; }
+    });
+
   } catch (error) {
     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
   } finally {
