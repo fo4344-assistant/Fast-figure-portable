@@ -418,6 +418,13 @@
           return immutableProjectCopy({ target: node.asset, kind: node.kind,
             path: projectAssetPath(node.asset), referenceCount: references.length, references });
         }
+        if (kind === "project-api" && request.operation === "slots.readSelected") {
+          const source = activeProject._state,
+            slot = source.slots.find((item) => item.id === request.frontendState?.selectedSlotId && !item.hidden);
+          return slot ? immutableProjectCopy({ id: slot.id, row: slot.row, col: slot.col,
+            contentType: slot.contentType, chart: slot.content?.chart ?? slot.chart,
+            imageId: slot.content?.imageId ?? slot.imageId }) : null;
+        }
         if (kind === "project-api" && request.operation === "graphs.readData") {
           const source = activeProject._state, state = request.frontendState || {},
             owners = Object.hasOwn(request, "chartId")
@@ -1077,7 +1084,42 @@
         activeProject.initialize(candidate);
         payload.image=getProjectImage(image.id);
       }
-      function applySlotDataConnectedAction({ machine, payload }) {
+      function createCandidateBaseGraphObject(csv) {
+        const selection = graphDataSelection(csv.rows, csv.headerLines);
+        return { ...projectClone(BackendSettings.defaults.chartSettings.editor.objectStyle),
+          csvId: csv.id, x: selection.x, y: selection.y, color: DEFAULT_COLORS[0], legendName: "" };
+      }
+      function applyGraphFirstObjectAction({ machine, payload }) {
+        machine.assertWritable("slots", "SLOT_DATA_CONNECTED");
+        machine.assertWritable("charts", "SLOT_DATA_CONNECTED");
+        machine.assertWritable("editor", "SLOT_DATA_CONNECTED");
+        while (true) {
+          const source = activeProject._state,
+            slot = source.slots.find((item) => item.id === payload.slotId && !item.hidden),
+            csv = source.assets.csvFiles.find((item) => item.id === payload.csvId);
+          if (!slot || slot.contentType !== "graph" || !csv || (slot.content?.chart ?? slot.chart) != null)
+            throw Error("첫 오브젝트의 현재 빈 graph 슬롯 또는 CSV가 없습니다.");
+          const candidate = projectClone(source);
+          normalizeSlotContents(candidate.slots);
+          const target = candidate.slots.find((item) => item.id === slot.id),
+            candidateCsv = candidate.assets.csvFiles.find((item) => item.id === csv.id),
+            chart = createChartModel({ id: candidate.nextId.chart++, editor: {
+              title: candidateCsv.name, globalSettings: readGlobalSettings({ editor: {} }),
+              plotlyExtensions: { layout: {}, config: {} }, objects: [createCandidateBaseGraphObject(candidateCsv)],
+            } });
+          candidate.charts.push(chart); target.chart = chart.id;
+          rebuildEditableGraph(chart, candidate);
+          validateProjectObjectState(candidate, { requireSlots: true });
+          if (activeProject._state !== source) continue;
+          activeProject.initialize(candidate);
+          payload.changed = { slotIds: [slot.id], chartIds: [chart.id], csvIds: [], imageIds: [], assets: [] };
+          payload.selectionHints = Object.freeze({ chartId: chart.id, selectedIndexHint: 0 });
+          return;
+        }
+      }
+      function applySlotDataConnectedAction(context) {
+        const { machine, payload } = context;
+        if (payload.operation === "graphs.addObject") return applyGraphFirstObjectAction(context);
         machine.assertWritable("slots","SLOT_DATA_CONNECTED");
         machine.assertWritable("charts","SLOT_DATA_CONNECTED");
         machine.assertWritable("editor","SLOT_DATA_CONNECTED");
@@ -1135,10 +1177,12 @@
             lineDash: ["solid", "dot", "dash", "dashdot"],
             markerSymbol: ["circle", "square", "diamond", "cross", "x", "triangle-up", "triangle-down"] };
         while (true) {
-          const source = activeProject._state,
-            current = source.charts.find((chart) => chart.id === payload.chartId),
-            owners = source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === payload.chartId),
-            index = payload.index, values = payload.values || {}, operation = payload.operation;
+          const source = activeProject._state, operation = payload.operation,
+            target = operation === "graphs.addObject" ? source.slots.find((slot) => slot.id === payload.slotId && !slot.hidden) : null,
+            chartId = operation === "graphs.addObject" ? target?.content?.chart ?? target?.chart : payload.chartId,
+            current = source.charts.find((chart) => chart.id === chartId),
+            owners = source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === chartId),
+            index = payload.index, values = payload.values || {};
           if (!current || owners.length !== 1 || owners[0].hidden || owners[0].contentType === "image" ||
               current.editor?.editable === false)
             throw Error("변경할 현재 편집 가능 차트 또는 유일한 visible graph owner가 없습니다.");
@@ -1146,10 +1190,15 @@
           if (operation === "graphs.moveObject") {
             if (!validIndex(payload.from) || !validIndex(payload.to)) throw Error("이동할 현재 오브젝트 index가 없습니다.");
             if (payload.from === payload.to) return false;
-          } else if (operation !== "graphs.applyPalette" && !validIndex(index)) throw Error("변경할 현재 오브젝트 index가 없습니다.");
+          } else if (!["graphs.applyPalette", "graphs.addObject"].includes(operation) && !validIndex(index)) throw Error("변경할 현재 오브젝트 index가 없습니다.");
           const candidate = projectClone(source), chart = candidate.charts.find((item) => item.id === current.id);
           let selectedIndexHint = index;
-          if (operation === "graphs.moveObject") {
+          if (operation === "graphs.addObject") {
+            const csv = candidate.assets.csvFiles.find((item) => item.id === payload.csvId);
+            if (!csv) throw Error("추가할 현재 CSV가 없습니다.");
+            chart.editor.objects.push(createCandidateBaseGraphObject(csv));
+            selectedIndexHint = chart.editor.objects.length - 1;
+          } else if (operation === "graphs.moveObject") {
             const moved = chart.editor.objects.splice(payload.from, 1)[0];
             chart.editor.objects.splice(payload.to, 0, moved);
             selectedIndexHint = payload.to;
@@ -1228,7 +1277,7 @@
       }
       function applyGraphObjectsReplacedAction(context) {
         const { machine, payload } = context;
-        if (["graphs.setObjectValues", "graphs.moveObject", "graphs.deleteObject", "graphs.applyPalette"].includes(payload.operation))
+        if (["graphs.setObjectValues", "graphs.moveObject", "graphs.deleteObject", "graphs.applyPalette", "graphs.addObject"].includes(payload.operation))
           return applyGraphObjectEditAction(context);
         machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
         let current=getChart(payload.chartId);
@@ -6138,24 +6187,21 @@
         });
         return graphEditorObjectValues(context.chart?.id ?? null, index, values);
       }
-      function graphEditorAdd(csvId = selectedProjectCsv()?.id) {
-        let slot = getSelectedSlot(), csv = getProjectCsv(Number(csvId));
-        if (!slot || slot.contentType === "image" || !csv) return status("그래프 슬롯과 데이터를 먼저 선택하세요.");
-        graphEditorSelectCsv(csv.id);
-        let chart = graphEditorChart();
-        if (!chart) {
-          let payload = { slotId: slot.id, csvId: csv.id, direction: "fsm-to-model" };
-          appFSM.send("SLOT_DATA_CONNECTED", payload);
-          chart = payload.chart;
-          if (!chart) return status("빈 슬롯에 그래프를 추가하지 못했습니다.");
-          return graphEditorCommit(ensureGraphObjects(chart), 0);
-        }
-        if (chart.editor?.editable === false) {
-          status("원본 JSON 그래프는 편집 가능 상태로 전환한 뒤 오브젝트를 추가할 수 있습니다.");
-          return null;
-        }
-        let objects = ensureGraphObjects(chart);
-        return graphEditorCommit([...objects, baseGraphObject(chart, csv)], objects.length);
+      function graphEditorAdd(slotId, csvId) {
+        const slot = appFSM.query("project-api", { operation: "slots.readSelected", frontendState: { selectedSlotId: slotId } }),
+          event = slot?.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED",
+          result = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
+        if (!result.committed) return result;
+        const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;
+        renderDashboard();
+        return chart;
+      }
+      function addGraphObjectApi(csvId) {
+        const state = interfaceFSM.readState();
+        if (csvId === undefined) csvId = appFSM.query("project-api", {
+          operation: "graphs.readData", frontendState: state,
+        }).currentCsv?.id;
+        return graphEditorAdd(state.selectedSlotId, csvId);
       }
       function graphEditorMove(chartId, from, to) {
         const context = appFSM.query("project-api", { operation: "graphs.readData", chartId });
@@ -7884,7 +7930,7 @@
           selectCsv: graphEditorSelectCsv,
           setHeaderLines: graphEditorHeaderLines,
           setEditable: graphEditorSetEditable,
-          addObject: graphEditorAdd,
+          addObject: addGraphObjectApi,
           moveObject: moveGraphObjectApi,
           selectObject: graphEditorSelectObject,
           setObjectValues: setGraphObjectValuesApi,
