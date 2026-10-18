@@ -1,4 +1,4 @@
-# Unit45 — Backend-owned FFSX/Plotly import (pending Actions)
+# Unit45 — Backend-owned FFSX/Plotly import (bounded verified; whole goal open)
 
 ## Policy, Source audit and missed translation guard
 
@@ -35,6 +35,14 @@ Patch140 adds per-case progress (phase/number/name/completed count/virtual elaps
 Atb4b963f29f44e487ca7b4922458acf26eeb79737 push39155064655 fails split with Chrome returncode0, case123 running/completed122/virtualElapsed14299; manual39155131606 fails inline with the same case123/completed122/virtualElapsed11280. Case123 performs several awaited File.arrayBuffer preparations. These are missing-completion exits, not assertion results. Manual39155064707 actually ran older75663b582318f97cad89410c2fa4163774e04adc and passed124+124, so it is NOT evidence for the diagnostics checkout (branch dispatch raced remote propagation).
 
 The CLI --dump-dom/virtual budget terminates without awaiting the required asynchronous suite marker. Patch141 replaces that completion driver with Chrome's standard CDP pipe on the existing default POSIX runner, using Python stdlib only. Keep browser alive and read the same final attribute until the existing90-second wall deadline; actual page timers/File promises run normally, with no case or browser retries. Assertions/results/suite cardinality and failure gates unchanged; deadline/pipe/setup errors remain failures with last-progress/stderr. This is a completion-protocol correction, not increasing an arbitrary virtual budget or diagnosing DBus. Exact new-SHA execution is required before claiming it works; whole-goal timing/harness stability is not inferred from intent.
+
+## Final exact-SHA evidence
+
+Atebd4a568b7bdde2c951f58c45aeb75d2413693db with the CDP completion driver, push regression39155392487 and independent repeat39155412792 PASS124 inline+124 split each (no blocked/fail entries), including122/123/124 and corrected44. Canonical39155392502/cumulative39155392586 PASS, base47a10598dce0c8356ab74a878642a65857073573. Canonical Source45 sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7, pseudocode24 sha256:fcc1dab67abc9ab37a6ef42f187726555507cee32adeee585aa25abc2183c9b4, code96 sha256:52448be81eafaa1f6d06551fc8d7ca36cade75f6e25b29a3f6a597ca6157a18a. Build39155394993 PASS (distribution already current), fidelity39155397298 PASS cumulative lineage/static binding only. Every listed final run headSha is ebd4a568b7bdde2c951f58c45aeb75d2413693db. This later result document is not that executed SHA. Earlier CLI incomplete runs remain failed historical evidence; two completed runs establish this bounded suite's execution, not global timing conformance or proof of arbitrary future stability. Code96 remains stale; no whole-goal/TLC completion.
+
+## Next concrete ownership gap
+
+Source45 application/public_api/assets.py importProjectFile requires raw file only -> PROJECT_LOADED Backend current FFPX parse/buildProjectObject/full validation/one replacement -> official immutable export snapshot; only current FFPX is accepted, legacy conversion belongs outside Application. Existing sourcecode/fast-figure.js importProjectFile instead parses FFPX or guessed JSON in Application, importProject builds the persistent model there, and applyProjectLoadedAction consumes payload.project, initializes previous state again in a catch and returns mutable authority through the wrapper. Next unit must close this whole public/Backend ownership boundary and lifecycle/commit-gated read/resource/Frontend reset behavior against Source, not insert a caller-candidate bridge. Common initializer revalidation and wider schema/serializer/raster/dashboard/timing still need full audit; green124 cases do not close those gaps.
 
 ## Lineage, pending evidence and limits
 
