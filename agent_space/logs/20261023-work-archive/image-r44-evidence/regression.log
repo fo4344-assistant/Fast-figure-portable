@@ -1,0 +1,234 @@
+browser	Set up job	﻿2026-10-17T17:55:37.7651369Z Current runner version: '2.337.0'
+browser	Set up job	2026-10-17T17:55:37.7677451Z ##[group]Runner Image Provisioner
+browser	Set up job	2026-10-17T17:55:37.7678644Z Hosted Compute Agent
+browser	Set up job	2026-10-17T17:55:37.7679695Z Version: 20261012.601
+browser	Set up job	2026-10-17T17:55:37.7680391Z Commit: f3dc54e1fb89da6852db922499a0233137369e1d
+browser	Set up job	2026-10-17T17:55:37.7681131Z Build Date: 2026-10-12T17:48:21Z
+browser	Set up job	2026-10-17T17:55:37.7681934Z Worker ID: {3ba71ba2-f0b4-4de7-b69f-b772ae8e18be}
+browser	Set up job	2026-10-17T17:55:37.7682894Z Region: eastus2
+browser	Set up job	2026-10-17T17:55:37.7683499Z Cloud: Azure
+browser	Set up job	2026-10-17T17:55:37.7684105Z ##[endgroup]
+browser	Set up job	2026-10-17T17:55:37.7685793Z ##[group]Operating System
+browser	Set up job	2026-10-17T17:55:37.7686559Z Ubuntu
+browser	Set up job	2026-10-17T17:55:37.7687101Z 24.04.5
+browser	Set up job	2026-10-17T17:55:37.7687687Z LTS
+browser	Set up job	2026-10-17T17:55:37.7688243Z ##[endgroup]
+browser	Set up job	2026-10-17T17:55:37.7688812Z ##[group]Runner Image
+browser	Set up job	2026-10-17T17:55:37.7689475Z Image: ubuntu-24.04
+browser	Set up job	2026-10-17T17:55:37.7690060Z Version: 20261012.334.1
+browser	Set up job	2026-10-17T17:55:37.7691166Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261012.334/images/ubuntu/Ubuntu2404-Readme.md
+browser	Set up job	2026-10-17T17:55:37.7693184Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261012.334
+browser	Set up job	2026-10-17T17:55:37.7694232Z ##[endgroup]
+browser	Set up job	2026-10-17T17:55:37.7695400Z ##[group]GITHUB_TOKEN Permissions
+browser	Set up job	2026-10-17T17:55:37.7697531Z Contents: read
+browser	Set up job	2026-10-17T17:55:37.7698168Z Metadata: read
+browser	Set up job	2026-10-17T17:55:37.7699166Z ##[endgroup]
+browser	Set up job	2026-10-17T17:55:37.7701273Z Secret source: Actions
+browser	Set up job	2026-10-17T17:55:37.7702572Z Cache mode: write
+browser	Set up job	2026-10-17T17:55:37.7703329Z Prepare workflow directory
+browser	Set up job	2026-10-17T17:55:37.8053921Z Prepare all required actions
+browser	Set up job	2026-10-17T17:55:37.8103233Z Getting action download info
+browser	Set up job	2026-10-17T17:55:38.0604504Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+browser	Set up job	2026-10-17T17:55:38.2565435Z Complete job name: browser
+browser	Run actions/checkout@v4	﻿2026-10-17T17:55:38.3446172Z ##[group]Run actions/checkout@v4
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3447183Z with:
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3447728Z   repository: fo4344-assistant/Fast-figure-portable
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3451630Z   token: ***
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3452329Z   ssh-strict: true
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3452798Z   ssh-user: git
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3453259Z   persist-credentials: true
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3453768Z   clean: true
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3454243Z   sparse-checkout-cone-mode: true
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3454780Z   fetch-depth: 1
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3455295Z   fetch-tags: false
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3455752Z   show-progress: true
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3456200Z   lfs: false
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3456628Z   submodules: false
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3457096Z   set-safe-directory: true
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3457622Z   allow-unsafe-pr-checkout: false
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.3458441Z ##[endgroup]
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4460920Z Syncing repository: fo4344-assistant/Fast-figure-portable
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4464172Z ##[group]Getting Git version info
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4465759Z Working directory is '/home/runner/work/Fast-figure-portable/Fast-figure-portable'
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4467963Z [command]/usr/bin/git version
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4521996Z git version 2.55.0
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4545643Z ##[endgroup]
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4561391Z Temporarily overriding HOME='/home/runner/work/_temp/9081096a-8813-41c8-ac2a-a52ac3036229' before making global git config changes
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4563770Z Adding repository directory to the temporary git global config as a safe directory
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4566983Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Fast-figure-portable/Fast-figure-portable
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4619423Z Deleting the contents of '/home/runner/work/Fast-figure-portable/Fast-figure-portable'
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4623849Z ##[group]Initializing the repository
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4627769Z [command]/usr/bin/git init /home/runner/work/Fast-figure-portable/Fast-figure-portable
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4745947Z hint: Using 'master' as the name for the initial branch. This default branch name
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4748068Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4750234Z hint: to use in all of your new repositories, which will suppress this warning,
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4751878Z hint: call:
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4753557Z hint:
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4754805Z hint: 	git config --global init.defaultBranch <name>
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4756193Z hint:
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4757776Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4759973Z hint: 'development'. The just-created branch can be renamed via this command:
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4761592Z hint:
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4763274Z hint: 	git branch -m <name>
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4764557Z hint:
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4766121Z hint: Disable this message with "git config set advice.defaultBranchName false"
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4768438Z Initialized empty Git repository in /home/runner/work/Fast-figure-portable/Fast-figure-portable/.git/
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4774631Z [command]/usr/bin/git remote add origin https://github.com/fo4344-assistant/Fast-figure-portable
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4823272Z ##[endgroup]
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4825045Z ##[group]Disabling automatic garbage collection
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4828794Z [command]/usr/bin/git config --local gc.auto 0
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4863417Z ##[endgroup]
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4864698Z ##[group]Setting up auth
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4870729Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.4906121Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.5278823Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.5321223Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.5561591Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.5598651Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.5827069Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.5867228Z ##[endgroup]
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.5868265Z ##[group]Fetching the repository
+browser	Run actions/checkout@v4	2026-10-17T17:55:38.5877299Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +ad3a5f468409397fc21abf8efb1e4ddaab23eac9:refs/remotes/origin/main
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.1190262Z From https://github.com/fo4344-assistant/Fast-figure-portable
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.1193235Z  * [new ref]         ad3a5f468409397fc21abf8efb1e4ddaab23eac9 -> origin/main
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.1199431Z ##[endgroup]
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.1201913Z ##[group]Determining the checkout info
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.1205180Z ##[endgroup]
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.1207043Z [command]/usr/bin/git sparse-checkout disable
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.1260377Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.1296034Z ##[group]Checking out the ref
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.1301008Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.3449570Z Switched to a new branch 'main'
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.3454541Z branch 'main' set up to track 'origin/main'.
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.3471805Z ##[endgroup]
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.3527587Z [command]/usr/bin/git log -1 --format=%H
+browser	Run actions/checkout@v4	2026-10-17T17:55:40.3558229Z ad3a5f468409397fc21abf8efb1e4ddaab23eac9
+browser	Check syntax	﻿2026-10-17T17:55:40.3784782Z ##[group]Run node --check agent_space/tests/browser-regression.js
+browser	Check syntax	2026-10-17T17:55:40.3785443Z ^[[36;1mnode --check agent_space/tests/browser-regression.js^[[0m
+browser	Check syntax	2026-10-17T17:55:40.4054240Z shell: /usr/bin/bash -e {0}
+browser	Check syntax	2026-10-17T17:55:40.4054650Z ##[endgroup]
+browser	Run split and portable regression	﻿2026-10-17T17:55:40.6013958Z ##[group]Run python agent_space/tests/run-browser-regression.py
+browser	Run split and portable regression	2026-10-17T17:55:40.6014787Z ^[[36;1mpython agent_space/tests/run-browser-regression.py^[[0m
+browser	Run split and portable regression	2026-10-17T17:55:40.6080787Z shell: /usr/bin/bash -e {0}
+browser	Run split and portable regression	2026-10-17T17:55:40.6081112Z ##[endgroup]
+browser	Run split and portable regression	2026-10-17T17:55:56.1907319Z 
+browser	Run split and portable regression	2026-10-17T17:55:56.1908378Z inline file:// regression:
+browser	Run split and portable regression	2026-10-17T17:55:56.1909437Z 15.    pass  startup projects initial slots before interaction
+browser	Run split and portable regression	2026-10-17T17:55:56.1910319Z 16.    pass  layout preview cells follow grid tracks
+browser	Run split and portable regression	2026-10-17T17:55:56.1911107Z 17.    pass  label preview typography matches dashboard label
+browser	Run split and portable regression	2026-10-17T17:55:56.1911990Z 18.    pass  annotation font selectors preserve predefined and custom values
+browser	Run split and portable regression	2026-10-17T17:55:56.1913028Z  1.    pass  FFPX save and reload
+browser	Run split and portable regression	2026-10-17T17:55:56.1913646Z  2.    pass  mixed assets, graph, merge, labels, captions
+browser	Run split and portable regression	2026-10-17T17:55:56.1914317Z  3.    pass  empty image and graph slots
+browser	Run split and portable regression	2026-10-17T17:55:56.1914928Z  4.    pass  FFSX blank graph
+browser	Run split and portable regression	2026-10-17T17:55:56.1915548Z 19.    pass  graph font selector preserves auto and custom values
+browser	Run split and portable regression	2026-10-17T17:55:56.1918016Z  5.    pass  multi-CSV FFSX
+browser	Run split and portable regression	2026-10-17T17:55:56.1918537Z  6.    pass  imported Plotly edit and FFPX
+browser	Run split and portable regression	2026-10-17T17:55:56.1919132Z  7.    pass  Plotly export and import
+browser	Run split and portable regression	2026-10-17T17:55:56.1919703Z  8.    pass  persistent export settings
+browser	Run split and portable regression	2026-10-17T17:55:56.1920398Z  9.    pass  palette save and load
+browser	Run split and portable regression	2026-10-17T17:55:56.1920994Z 10.    pass  collision replace and rename
+browser	Run split and portable regression	2026-10-17T17:55:56.1921559Z 11.    pass  asset delete cascade
+browser	Run split and portable regression	2026-10-17T17:55:56.1922019Z 12.    pass  move to trash cascade
+browser	Run split and portable regression	2026-10-17T17:55:56.1923056Z 13.    pass  layout and label preview geometry
+browser	Run split and portable regression	2026-10-17T17:55:56.1923736Z 14.    pass  Mantine primary button follows UI color
+browser	Run split and portable regression	2026-10-17T17:55:56.1924413Z 20.    pass  slot selection is state-first and background deselects
+browser	Run split and portable regression	2026-10-17T17:55:56.1925125Z 21.    pass  empty slot surface remains selectable
+browser	Run split and portable regression	2026-10-17T17:55:56.1925759Z 22.    pass  bookmark drag consumes post-drag click
+browser	Run split and portable regression	2026-10-17T17:55:56.1926517Z 23.    pass  image asset selection does not link until explicit add
+browser	Run split and portable regression	2026-10-17T17:55:56.1927346Z 24.    pass  graph readData separates current CSV from objectColumns
+browser	Run split and portable regression	2026-10-17T17:55:56.1928121Z 25.    pass  non-editable imported graph rejects object mutation
+browser	Run split and portable regression	2026-10-17T17:55:56.1928815Z 26.    pass  collision modal dismissal cancels import
+browser	Run split and portable regression	2026-10-17T17:55:56.1929478Z 27.    pass  empty CSV creation selects a normal project CSV only
+browser	Run split and portable regression	2026-10-17T17:55:56.1930241Z 28.    pass  layout preview preserves aspect without a preview resize handle
+browser	Run split and portable regression	2026-10-17T17:55:56.1931052Z 29.    pass  settings overlays share width and resize their own height
+browser	Run split and portable regression	2026-10-17T17:55:56.1931975Z 30.    pass  trashed asset remains selectable and can be dragged out of trash
+browser	Run split and portable regression	2026-10-17T17:55:56.1933058Z 31.    pass  Mantine Tree resource drags to slot connection target
+browser	Run split and portable regression	2026-10-17T17:55:56.1933788Z 32.    pass  new project layout outer margin defaults to zero
+browser	Run split and portable regression	2026-10-17T17:55:56.1934495Z 33.    pass  layout selection clears on non-slot modal content
+browser	Run split and portable regression	2026-10-17T17:55:56.1935270Z 34.    pass  trash reference detach invalidates dashboard immediately
+browser	Run split and portable regression	2026-10-17T17:55:56.1936109Z 35.    pass  image editor and dashboard reads preserve project authority
+browser	Run split and portable regression	2026-10-17T17:55:56.1937039Z 36.    pass  application lifecycle task owns execution and Frontend FSM receives events
+browser	Run split and portable regression	2026-10-17T17:55:56.1938141Z 37.    pass  selection validation is read-only and rejected references preserve Frontend state
+browser	Run split and portable regression	2026-10-17T17:55:56.1939293Z 38.    pass  post-commit reconciliation preserves unrelated references and resolves moved assets
+browser	Run split and portable regression	2026-10-17T17:55:56.1940400Z 39.    pass  image settings use current Backend authority and projection-only renderer
+browser	Run split and portable regression	2026-10-17T17:55:56.1941537Z 40.    pass  print settings use Backend queries and current-authority partial commands
+browser	Run split and portable regression	2026-10-17T17:55:56.1942852Z 41.    pass  caption insertion follows exact Backend grouping and committed query boundaries
+browser	Run split and portable regression	2026-10-17T17:55:56.1943982Z 42.    pass  Backend config packaging and caption settings preserve current command ownership
+browser	Run split and portable regression	2026-10-17T17:55:56.1945482Z 43.    pass  Labels use current Backend edits and immutable reference geometry
+browser	Run split and portable regression	2026-10-17T17:55:56.1946657Z 44.    pass  Palette command and renderer use detached one-way projections
+browser	Run split and portable regression	2026-10-17T17:55:56.1947571Z 45.    pass  Layout reads and partial style commands use current Backend authority
+browser	Run split and portable regression	2026-10-17T17:55:56.1948566Z 46.    pass  Layout zoom is Frontend-owned with stable lock anchor and no persistent writes
+browser	Run split and portable regression	2026-10-17T17:55:56.1949640Z 47.    pass  Grid resize uses one-based coordinates and preserves ownership before one commit
+browser	Run split and portable regression	2026-10-17T17:55:56.1950666Z 48.    pass  Merge/split preserve one current payload and return official layout reads
+browser	Run split and portable regression	2026-10-17T17:55:56.1951671Z 49.    pass  Image edits preserve valid zero, current fields and explicit target ownership
+browser	Run split and portable regression	2026-10-17T17:55:56.1952551Z 
+browser	Run split and portable regression	2026-10-17T17:56:02.7888238Z 
+browser	Run split and portable regression	2026-10-17T17:56:02.7888738Z split-zip file:// regression:
+browser	Run split and portable regression	2026-10-17T17:56:02.7889441Z 15.    pass  startup projects initial slots before interaction
+browser	Run split and portable regression	2026-10-17T17:56:02.7890081Z 16.    pass  layout preview cells follow grid tracks
+browser	Run split and portable regression	2026-10-17T17:56:02.7890729Z 17.    pass  label preview typography matches dashboard label
+browser	Run split and portable regression	2026-10-17T17:56:02.7891447Z 18.    pass  annotation font selectors preserve predefined and custom values
+browser	Run split and portable regression	2026-10-17T17:56:02.7892355Z  1.    pass  FFPX save and reload
+browser	Run split and portable regression	2026-10-17T17:56:02.7892884Z  2.    pass  mixed assets, graph, merge, labels, captions
+browser	Run split and portable regression	2026-10-17T17:56:02.7893454Z  3.    pass  empty image and graph slots
+browser	Run split and portable regression	2026-10-17T17:56:02.7904037Z  4.    pass  FFSX blank graph
+browser	Run split and portable regression	2026-10-17T17:56:02.7904621Z 19.    pass  graph font selector preserves auto and custom values
+browser	Run split and portable regression	2026-10-17T17:56:02.7905208Z  5.    pass  multi-CSV FFSX
+browser	Run split and portable regression	2026-10-17T17:56:02.7905647Z  6.    pass  imported Plotly edit and FFPX
+browser	Run split and portable regression	2026-10-17T17:56:02.7906123Z  7.    pass  Plotly export and import
+browser	Run split and portable regression	2026-10-17T17:56:02.7906610Z  8.    pass  persistent export settings
+browser	Run split and portable regression	2026-10-17T17:56:02.7907122Z  9.    pass  palette save and load
+browser	Run split and portable regression	2026-10-17T17:56:02.7907629Z 10.    pass  collision replace and rename
+browser	Run split and portable regression	2026-10-17T17:56:02.7908105Z 11.    pass  asset delete cascade
+browser	Run split and portable regression	2026-10-17T17:56:02.7908566Z 12.    pass  move to trash cascade
+browser	Run split and portable regression	2026-10-17T17:56:02.7909046Z 13.    pass  layout and label preview geometry
+browser	Run split and portable regression	2026-10-17T17:56:02.7909610Z 14.    pass  Mantine primary button follows UI color
+browser	Run split and portable regression	2026-10-17T17:56:02.7910253Z 20.    pass  slot selection is state-first and background deselects
+browser	Run split and portable regression	2026-10-17T17:56:02.7910942Z 21.    pass  empty slot surface remains selectable
+browser	Run split and portable regression	2026-10-17T17:56:02.7911464Z 22.    pass  bookmark drag consumes post-drag click
+browser	Run split and portable regression	2026-10-17T17:56:02.7912344Z 23.    pass  image asset selection does not link until explicit add
+browser	Run split and portable regression	2026-10-17T17:56:02.7913011Z 24.    pass  graph readData separates current CSV from objectColumns
+browser	Run split and portable regression	2026-10-17T17:56:02.7913644Z 25.    pass  non-editable imported graph rejects object mutation
+browser	Run split and portable regression	2026-10-17T17:56:02.7914216Z 26.    pass  collision modal dismissal cancels import
+browser	Run split and portable regression	2026-10-17T17:56:02.7914772Z 27.    pass  empty CSV creation selects a normal project CSV only
+browser	Run split and portable regression	2026-10-17T17:56:02.7915535Z 28.    pass  layout preview preserves aspect without a preview resize handle
+browser	Run split and portable regression	2026-10-17T17:56:02.7916380Z 29.    pass  settings overlays share width and resize their own height
+browser	Run split and portable regression	2026-10-17T17:56:02.7917123Z 30.    pass  trashed asset remains selectable and can be dragged out of trash
+browser	Run split and portable regression	2026-10-17T17:56:02.7917822Z 31.    pass  Mantine Tree resource drags to slot connection target
+browser	Run split and portable regression	2026-10-17T17:56:02.7918409Z 32.    pass  new project layout outer margin defaults to zero
+browser	Run split and portable regression	2026-10-17T17:56:02.7918988Z 33.    pass  layout selection clears on non-slot modal content
+browser	Run split and portable regression	2026-10-17T17:56:02.7919597Z 34.    pass  trash reference detach invalidates dashboard immediately
+browser	Run split and portable regression	2026-10-17T17:56:02.7920269Z 35.    pass  image editor and dashboard reads preserve project authority
+browser	Run split and portable regression	2026-10-17T17:56:02.7921027Z 36.    pass  application lifecycle task owns execution and Frontend FSM receives events
+browser	Run split and portable regression	2026-10-17T17:56:02.7921902Z 37.    pass  selection validation is read-only and rejected references preserve Frontend state
+browser	Run split and portable regression	2026-10-17T17:56:02.7923766Z 38.    pass  post-commit reconciliation preserves unrelated references and resolves moved assets
+browser	Run split and portable regression	2026-10-17T17:56:02.7924672Z 39.    pass  image settings use current Backend authority and projection-only renderer
+browser	Run split and portable regression	2026-10-17T17:56:02.7925633Z 40.    pass  print settings use Backend queries and current-authority partial commands
+browser	Run split and portable regression	2026-10-17T17:56:02.7926584Z 41.    pass  caption insertion follows exact Backend grouping and committed query boundaries
+browser	Run split and portable regression	2026-10-17T17:56:02.7927570Z 42.    pass  Backend config packaging and caption settings preserve current command ownership
+browser	Run split and portable regression	2026-10-17T17:56:02.7928482Z 43.    pass  Labels use current Backend edits and immutable reference geometry
+browser	Run split and portable regression	2026-10-17T17:56:02.7929315Z 44.    pass  Palette command and renderer use detached one-way projections
+browser	Run split and portable regression	2026-10-17T17:56:02.7930194Z 45.    pass  Layout reads and partial style commands use current Backend authority
+browser	Run split and portable regression	2026-10-17T17:56:02.7931107Z 46.    pass  Layout zoom is Frontend-owned with stable lock anchor and no persistent writes
+browser	Run split and portable regression	2026-10-17T17:56:02.7932450Z 47.    pass  Grid resize uses one-based coordinates and preserves ownership before one commit
+browser	Run split and portable regression	2026-10-17T17:56:02.7933321Z 48.    pass  Merge/split preserve one current payload and return official layout reads
+browser	Run split and portable regression	2026-10-17T17:56:02.7934210Z 49.    pass  Image edits preserve valid zero, current fields and explicit target ownership
+browser	Run split and portable regression	2026-10-17T17:56:02.7934803Z 
+browser	Run split and portable regression	2026-10-17T17:56:02.7935128Z distribution artifacts: inline=6247058 bytes, split-zip=1730634 bytes
+browser	Post Run actions/checkout@v4	﻿2026-10-17T17:56:02.8185297Z Post job cleanup.
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9034996Z [command]/usr/bin/git version
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9079575Z git version 2.55.0
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9121920Z Temporarily overriding HOME='/home/runner/work/_temp/df28b0c5-7bd0-4c23-96a6-4068051f9499' before making global git config changes
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9123835Z Adding repository directory to the temporary git global config as a safe directory
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9133397Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Fast-figure-portable/Fast-figure-portable
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9172759Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9209003Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9459868Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9497342Z http.https://github.com/.extraheader
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9510602Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9565509Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9839512Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+browser	Post Run actions/checkout@v4	2026-10-17T17:56:02.9884762Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+browser	Complete job	﻿2026-10-17T17:56:03.0419291Z Cleaning up orphan processes
+browser	Complete job	2026-10-17T17:56:03.0884089Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

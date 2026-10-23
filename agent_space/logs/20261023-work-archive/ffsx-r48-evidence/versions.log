@@ -1,0 +1,162 @@
+version-chain	Set up job	﻿2026-10-17T18:29:13.6869624Z Current runner version: '2.337.0'
+version-chain	Set up job	2026-10-17T18:29:13.6898649Z ##[group]Runner Image Provisioner
+version-chain	Set up job	2026-10-17T18:29:13.6899572Z Hosted Compute Agent
+version-chain	Set up job	2026-10-17T18:29:13.6900248Z Version: 20261012.601
+version-chain	Set up job	2026-10-17T18:29:13.6900970Z Commit: f3dc54e1fb89da6852db922499a0233137369e1d
+version-chain	Set up job	2026-10-17T18:29:13.6902069Z Build Date: 2026-10-12T17:48:21Z
+version-chain	Set up job	2026-10-17T18:29:13.6903223Z Worker ID: {b4b0a931-2822-40ef-ac2b-27a1818603c1}
+version-chain	Set up job	2026-10-17T18:29:13.6904024Z Region: canadaeast
+version-chain	Set up job	2026-10-17T18:29:13.6905098Z Cloud: Azure
+version-chain	Set up job	2026-10-17T18:29:13.6905815Z ##[endgroup]
+version-chain	Set up job	2026-10-17T18:29:13.6907464Z ##[group]Operating System
+version-chain	Set up job	2026-10-17T18:29:13.6908251Z Ubuntu
+version-chain	Set up job	2026-10-17T18:29:13.6908788Z 24.04.5
+version-chain	Set up job	2026-10-17T18:29:13.6909351Z LTS
+version-chain	Set up job	2026-10-17T18:29:13.6909971Z ##[endgroup]
+version-chain	Set up job	2026-10-17T18:29:13.6910536Z ##[group]Runner Image
+version-chain	Set up job	2026-10-17T18:29:13.6911196Z Image: ubuntu-24.04
+version-chain	Set up job	2026-10-17T18:29:13.6911775Z Version: 20261012.334.1
+version-chain	Set up job	2026-10-17T18:29:13.6913058Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261012.334/images/ubuntu/Ubuntu2404-Readme.md
+version-chain	Set up job	2026-10-17T18:29:13.6914996Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261012.334
+version-chain	Set up job	2026-10-17T18:29:13.6916441Z ##[endgroup]
+version-chain	Set up job	2026-10-17T18:29:13.6917618Z ##[group]GITHUB_TOKEN Permissions
+version-chain	Set up job	2026-10-17T18:29:13.6919994Z Contents: read
+version-chain	Set up job	2026-10-17T18:29:13.6920658Z Metadata: read
+version-chain	Set up job	2026-10-17T18:29:13.6921317Z ##[endgroup]
+version-chain	Set up job	2026-10-17T18:29:13.6923910Z Secret source: Actions
+version-chain	Set up job	2026-10-17T18:29:13.6924980Z Cache mode: write
+version-chain	Set up job	2026-10-17T18:29:13.6926045Z Prepare workflow directory
+version-chain	Set up job	2026-10-17T18:29:13.7284041Z Prepare all required actions
+version-chain	Set up job	2026-10-17T18:29:13.7334061Z Getting action download info
+version-chain	Set up job	2026-10-17T18:29:14.0058154Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+version-chain	Set up job	2026-10-17T18:29:14.2124576Z Complete job name: version-chain
+version-chain	Run actions/checkout@v4	﻿2026-10-17T18:29:14.3031445Z ##[group]Run actions/checkout@v4
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3032379Z with:
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3033030Z   fetch-depth: 0
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3033583Z   repository: fo4344-assistant/Fast-figure-portable
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3037755Z   token: ***
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3038204Z   ssh-strict: true
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3038658Z   ssh-user: git
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3039112Z   persist-credentials: true
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3039602Z   clean: true
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3040051Z   sparse-checkout-cone-mode: true
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3040586Z   fetch-tags: false
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3041040Z   show-progress: true
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3041487Z   lfs: false
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3041917Z   submodules: false
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3042381Z   set-safe-directory: true
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3043113Z   allow-unsafe-pr-checkout: false
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.3043937Z ##[endgroup]
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4077039Z Syncing repository: fo4344-assistant/Fast-figure-portable
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4080260Z ##[group]Getting Git version info
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4081470Z Working directory is '/home/runner/work/Fast-figure-portable/Fast-figure-portable'
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4082767Z [command]/usr/bin/git version
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4167961Z git version 2.55.0
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4195100Z ##[endgroup]
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4212256Z Temporarily overriding HOME='/home/runner/work/_temp/ebbb4366-08f1-4d24-9aa2-1e31ed8de4e9' before making global git config changes
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4215140Z Adding repository directory to the temporary git global config as a safe directory
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4218669Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Fast-figure-portable/Fast-figure-portable
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4279621Z Deleting the contents of '/home/runner/work/Fast-figure-portable/Fast-figure-portable'
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4288120Z ##[group]Initializing the repository
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4294687Z [command]/usr/bin/git init /home/runner/work/Fast-figure-portable/Fast-figure-portable
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4406248Z hint: Using 'master' as the name for the initial branch. This default branch name
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4408119Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4409967Z hint: to use in all of your new repositories, which will suppress this warning,
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4411185Z hint: call:
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4412051Z hint:
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4413144Z hint: 	git config --global init.defaultBranch <name>
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4414331Z hint:
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4415308Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4416816Z hint: 'development'. The just-created branch can be renamed via this command:
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4418073Z hint:
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4418744Z hint: 	git branch -m <name>
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4419578Z hint:
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4420673Z hint: Disable this message with "git config set advice.defaultBranchName false"
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4422583Z Initialized empty Git repository in /home/runner/work/Fast-figure-portable/Fast-figure-portable/.git/
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4434255Z [command]/usr/bin/git remote add origin https://github.com/fo4344-assistant/Fast-figure-portable
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4487418Z ##[endgroup]
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4488677Z ##[group]Disabling automatic garbage collection
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4491296Z [command]/usr/bin/git config --local gc.auto 0
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4525239Z ##[endgroup]
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4526401Z ##[group]Setting up auth
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4532722Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4566747Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4935419Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.4976947Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.5211662Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.5249719Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.5480690Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.5523422Z ##[endgroup]
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.5524344Z ##[group]Fetching the repository
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:14.5534322Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1806462Z From https://github.com/fo4344-assistant/Fast-figure-portable
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1808771Z  * [new branch]      agent/20260908-clean-final2 -> origin/agent/20260908-clean-final2
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1810686Z  * [new branch]      agent/20260908-clean-final3 -> origin/agent/20260908-clean-final3
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1812546Z  * [new branch]      agent/20260908-clean-real -> origin/agent/20260908-clean-real
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1815153Z  * [new branch]      agent/20260908-mantine-continue -> origin/agent/20260908-mantine-continue
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1817251Z  * [new branch]      agent/20260908-mantine-continue-clean -> origin/agent/20260908-mantine-continue-clean
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1819749Z  * [new branch]      agent/20260908-mantine-continue-clean2 -> origin/agent/20260908-mantine-continue-clean2
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1822409Z  * [new branch]      agent/20260908-mantine-continue-clean3 -> origin/agent/20260908-mantine-continue-clean3
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1825553Z  * [new branch]      agent/20260908-mantine-continue-final -> origin/agent/20260908-mantine-continue-final
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1827876Z  * [new branch]      agent/20260908-work    -> origin/agent/20260908-work
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1830048Z  * [new branch]      agent/distribution-build-r2-20261002 -> origin/agent/distribution-build-r2-20261002
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1832721Z  * [new branch]      agent/distribution-build-r2-final -> origin/agent/distribution-build-r2-final
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1836370Z  * [new branch]      agent/mantine-regression-qa-20261002 -> origin/agent/mantine-regression-qa-20261002
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1839177Z  * [new branch]      agent/readme-build-20261002 -> origin/agent/readme-build-20261002
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1841774Z  * [new branch]      agent/source-sync-r12-20261002 -> origin/agent/source-sync-r12-20261002
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1844516Z  * [new branch]      agent/tlc-2x2-20261002 -> origin/agent/tlc-2x2-20261002
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1846841Z  * [new branch]      agent/tlc-module-map-20261002 -> origin/agent/tlc-module-map-20261002
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1849644Z  * [new branch]      agent/track-distribution-20261002 -> origin/agent/track-distribution-20261002
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1852726Z  * [new branch]      agent/unify-button-ui-color-20261002 -> origin/agent/unify-button-ui-color-20261002
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1856092Z  * [new branch]      backup/mantine-migration-20260906 -> origin/backup/mantine-migration-20260906
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1859131Z  * [new branch]      fix/gui-fsm-20261008-review -> origin/fix/gui-fsm-20261008-review
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1861741Z  * [new branch]      fix/gui-selection-20261008 -> origin/fix/gui-selection-20261008
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1864937Z  * [new branch]      main                   -> origin/main
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1869811Z [command]/usr/bin/git branch --list --remote origin/main
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1872736Z   origin/main
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1877346Z [command]/usr/bin/git rev-parse refs/remotes/origin/main
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1899287Z 3769e4bd2ba72fe2a22503fb293aabe4b2331eee
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1905229Z ##[endgroup]
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1907421Z ##[group]Determining the checkout info
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1910069Z ##[endgroup]
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1919324Z [command]/usr/bin/git sparse-checkout disable
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.1970090Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.2002688Z ##[group]Checking out the ref
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.2005556Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.4489897Z Switched to a new branch 'main'
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.4494140Z branch 'main' set up to track 'origin/main'.
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.4527081Z ##[endgroup]
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.4573638Z [command]/usr/bin/git log -1 --format=%H
+version-chain	Run actions/checkout@v4	2026-10-17T18:29:17.4600930Z 3769e4bd2ba72fe2a22503fb293aabe4b2331eee
+version-chain	Validate development layer versions	﻿2026-10-17T18:29:17.4831789Z ##[group]Run if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+version-chain	Validate development layer versions	2026-10-17T18:29:17.4832584Z ^[[36;1mif [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then^[[0m
+version-chain	Validate development layer versions	2026-10-17T18:29:17.4833543Z ^[[36;1m  python scripts/check-development-layer-versions.py --base "$BASE_SHA"^[[0m
+version-chain	Validate development layer versions	2026-10-17T18:29:17.4834024Z ^[[36;1melse^[[0m
+version-chain	Validate development layer versions	2026-10-17T18:29:17.4834370Z ^[[36;1m  python scripts/check-development-layer-versions.py^[[0m
+version-chain	Validate development layer versions	2026-10-17T18:29:17.4834777Z ^[[36;1mfi^[[0m
+version-chain	Validate development layer versions	2026-10-17T18:29:17.5089169Z shell: /usr/bin/bash -e {0}
+version-chain	Validate development layer versions	2026-10-17T18:29:17.5089561Z env:
+version-chain	Validate development layer versions	2026-10-17T18:29:17.5089889Z   BASE_SHA: d2d06a8e2aa30e25232f7e7ae8512500fca24e01
+version-chain	Validate development layer versions	2026-10-17T18:29:17.5090272Z ##[endgroup]
+version-chain	Validate development layer versions	2026-10-17T18:29:17.5697049Z development-layer-version: PASS
+version-chain	Validate development layer versions	2026-10-17T18:29:17.5697867Z   priority: source-script > pseudocode > source-code
+version-chain	Validate development layer versions	2026-10-17T18:29:17.5698948Z   source-script: r39 current/closed sha256:7f655d197edc6d4f237596b0466804a0c345f3f0f237ccb9f1dd3d0e67c6137f
+version-chain	Validate development layer versions	2026-10-17T18:29:17.5700247Z   pseudocode: r13 current sha256:ba8a98be043a0a62959c9b5a028d93fcc80108a413bb012f99673de94e1dec6a
+version-chain	Validate development layer versions	2026-10-17T18:29:17.5701066Z   verification-model: r26 stale/pending sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a
+version-chain	Validate development layer versions	2026-10-17T18:29:17.5701882Z   source-code: r48 stale sha256:ac03d2dca4d4bf9eca607cbb8bcd8fa8d607a079b0c7cd01b2478c5de5726c27
+version-chain	Post Run actions/checkout@v4	﻿2026-10-17T18:29:17.5888495Z Post job cleanup.
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.6745732Z [command]/usr/bin/git version
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.6790305Z git version 2.55.0
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.6833164Z Temporarily overriding HOME='/home/runner/work/_temp/00a0a30a-4297-40cd-9b83-6737c9751342' before making global git config changes
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.6835408Z Adding repository directory to the temporary git global config as a safe directory
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.6838701Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Fast-figure-portable/Fast-figure-portable
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.6881243Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.6921412Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.7177678Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.7208839Z http.https://github.com/.extraheader
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.7222127Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.7261066Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.7544236Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+version-chain	Post Run actions/checkout@v4	2026-10-17T18:29:17.7592778Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+version-chain	Complete job	﻿2026-10-17T18:29:17.8021486Z Cleaning up orphan processes
+version-chain	Complete job	2026-10-17T18:29:17.8384875Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

@@ -1,0 +1,198 @@
+build-and-commit	Set up job	﻿2026-10-17T18:29:13.7607452Z Current runner version: '2.337.0'
+build-and-commit	Set up job	2026-10-17T18:29:13.7627189Z ##[group]Runner Image Provisioner
+build-and-commit	Set up job	2026-10-17T18:29:13.7627782Z Hosted Compute Agent
+build-and-commit	Set up job	2026-10-17T18:29:13.7628221Z Version: 20261012.601
+build-and-commit	Set up job	2026-10-17T18:29:13.7628648Z Commit: f3dc54e1fb89da6852db922499a0233137369e1d
+build-and-commit	Set up job	2026-10-17T18:29:13.7629071Z Build Date: 2026-10-12T17:48:21Z
+build-and-commit	Set up job	2026-10-17T18:29:13.7629530Z Worker ID: {126eb8c0-c479-4299-82b4-09b471150692}
+build-and-commit	Set up job	2026-10-17T18:29:13.7629955Z Region: centralus
+build-and-commit	Set up job	2026-10-17T18:29:13.7630344Z Cloud: Azure
+build-and-commit	Set up job	2026-10-17T18:29:13.7630688Z ##[endgroup]
+build-and-commit	Set up job	2026-10-17T18:29:13.7631792Z ##[group]Operating System
+build-and-commit	Set up job	2026-10-17T18:29:13.7632200Z Ubuntu
+build-and-commit	Set up job	2026-10-17T18:29:13.7632516Z 24.04.5
+build-and-commit	Set up job	2026-10-17T18:29:13.7632848Z LTS
+build-and-commit	Set up job	2026-10-17T18:29:13.7633227Z ##[endgroup]
+build-and-commit	Set up job	2026-10-17T18:29:13.7633560Z ##[group]Runner Image
+build-and-commit	Set up job	2026-10-17T18:29:13.7633958Z Image: ubuntu-24.04
+build-and-commit	Set up job	2026-10-17T18:29:13.7634305Z Version: 20261012.334.1
+build-and-commit	Set up job	2026-10-17T18:29:13.7634940Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261012.334/images/ubuntu/Ubuntu2404-Readme.md
+build-and-commit	Set up job	2026-10-17T18:29:13.7636058Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261012.334
+build-and-commit	Set up job	2026-10-17T18:29:13.7636646Z ##[endgroup]
+build-and-commit	Set up job	2026-10-17T18:29:13.7637322Z ##[group]GITHUB_TOKEN Permissions
+build-and-commit	Set up job	2026-10-17T18:29:13.7638831Z Contents: write
+build-and-commit	Set up job	2026-10-17T18:29:13.7639185Z Metadata: read
+build-and-commit	Set up job	2026-10-17T18:29:13.7639759Z ##[endgroup]
+build-and-commit	Set up job	2026-10-17T18:29:13.7641281Z Secret source: Actions
+build-and-commit	Set up job	2026-10-17T18:29:13.7641885Z Cache mode: write
+build-and-commit	Set up job	2026-10-17T18:29:13.7642361Z Prepare workflow directory
+build-and-commit	Set up job	2026-10-17T18:29:13.7985661Z Prepare all required actions
+build-and-commit	Set up job	2026-10-17T18:29:13.8020441Z Getting action download info
+build-and-commit	Set up job	2026-10-17T18:29:14.0124312Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+build-and-commit	Set up job	2026-10-17T18:29:14.5140026Z Complete job name: build-and-commit
+build-and-commit	Run actions/checkout@v4	﻿2026-10-17T18:29:14.5804061Z ##[group]Run actions/checkout@v4
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5804598Z with:
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5804894Z   ref: main
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5805172Z   fetch-depth: 0
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5805516Z   repository: fo4344-assistant/Fast-figure-portable
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5807935Z   token: ***
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5808208Z   ssh-strict: true
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5808485Z   ssh-user: git
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5808764Z   persist-credentials: true
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5809072Z   clean: true
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5809364Z   sparse-checkout-cone-mode: true
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5809703Z   fetch-tags: false
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5809986Z   show-progress: true
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5810262Z   lfs: false
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5810636Z   submodules: false
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5811163Z   set-safe-directory: true
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5811491Z   allow-unsafe-pr-checkout: false
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.5811930Z ##[endgroup]
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6500559Z Syncing repository: fo4344-assistant/Fast-figure-portable
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6502660Z ##[group]Getting Git version info
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6503623Z Working directory is '/home/runner/work/Fast-figure-portable/Fast-figure-portable'
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6504722Z [command]/usr/bin/git version
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6603000Z git version 2.55.0
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6625140Z ##[endgroup]
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6633908Z Temporarily overriding HOME='/home/runner/work/_temp/3f0ec334-44c5-48a1-932d-4336037def4c' before making global git config changes
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6635509Z Adding repository directory to the temporary git global config as a safe directory
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6637547Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Fast-figure-portable/Fast-figure-portable
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6749194Z Deleting the contents of '/home/runner/work/Fast-figure-portable/Fast-figure-portable'
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6755844Z ##[group]Initializing the repository
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6758923Z [command]/usr/bin/git init /home/runner/work/Fast-figure-portable/Fast-figure-portable
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6954306Z hint: Using 'master' as the name for the initial branch. This default branch name
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6956301Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6958269Z hint: to use in all of your new repositories, which will suppress this warning,
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6959093Z hint: call:
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6959888Z hint:
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6960630Z hint: 	git config --global init.defaultBranch <name>
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6961366Z hint:
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6961943Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6962856Z hint: 'development'. The just-created branch can be renamed via this command:
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6963722Z hint:
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6964167Z hint: 	git branch -m <name>
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6964618Z hint:
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6965210Z hint: Disable this message with "git config set advice.defaultBranchName false"
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6966376Z Initialized empty Git repository in /home/runner/work/Fast-figure-portable/Fast-figure-portable/.git/
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.6968527Z [command]/usr/bin/git remote add origin https://github.com/fo4344-assistant/Fast-figure-portable
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.7132864Z ##[endgroup]
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.7133759Z ##[group]Disabling automatic garbage collection
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.7134428Z [command]/usr/bin/git config --local gc.auto 0
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.7324488Z ##[endgroup]
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.7325578Z ##[group]Setting up auth
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.7331818Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.7365794Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.7712262Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.7743857Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.7927439Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.7962957Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.8166252Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.8312254Z ##[endgroup]
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.8313303Z ##[group]Fetching the repository
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:14.8319821Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2142538Z From https://github.com/fo4344-assistant/Fast-figure-portable
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2144969Z  * [new branch]      agent/20260908-clean-final2 -> origin/agent/20260908-clean-final2
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2146910Z  * [new branch]      agent/20260908-clean-final3 -> origin/agent/20260908-clean-final3
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2148813Z  * [new branch]      agent/20260908-clean-real -> origin/agent/20260908-clean-real
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2150668Z  * [new branch]      agent/20260908-mantine-continue -> origin/agent/20260908-mantine-continue
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2153007Z  * [new branch]      agent/20260908-mantine-continue-clean -> origin/agent/20260908-mantine-continue-clean
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2155624Z  * [new branch]      agent/20260908-mantine-continue-clean2 -> origin/agent/20260908-mantine-continue-clean2
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2157897Z  * [new branch]      agent/20260908-mantine-continue-clean3 -> origin/agent/20260908-mantine-continue-clean3
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2160189Z  * [new branch]      agent/20260908-mantine-continue-final -> origin/agent/20260908-mantine-continue-final
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2162260Z  * [new branch]      agent/20260908-work    -> origin/agent/20260908-work
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2164166Z  * [new branch]      agent/distribution-build-r2-20261002 -> origin/agent/distribution-build-r2-20261002
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2166020Z  * [new branch]      agent/distribution-build-r2-final -> origin/agent/distribution-build-r2-final
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2168195Z  * [new branch]      agent/mantine-regression-qa-20261002 -> origin/agent/mantine-regression-qa-20261002
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2170090Z  * [new branch]      agent/readme-build-20261002 -> origin/agent/readme-build-20261002
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2172676Z  * [new branch]      agent/source-sync-r12-20261002 -> origin/agent/source-sync-r12-20261002
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2175015Z  * [new branch]      agent/tlc-2x2-20261002 -> origin/agent/tlc-2x2-20261002
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2176902Z  * [new branch]      agent/tlc-module-map-20261002 -> origin/agent/tlc-module-map-20261002
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2179199Z  * [new branch]      agent/track-distribution-20261002 -> origin/agent/track-distribution-20261002
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2182067Z  * [new branch]      agent/unify-button-ui-color-20261002 -> origin/agent/unify-button-ui-color-20261002
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2184582Z  * [new branch]      backup/mantine-migration-20260906 -> origin/backup/mantine-migration-20260906
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2186748Z  * [new branch]      fix/gui-fsm-20261008-review -> origin/fix/gui-fsm-20261008-review
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2188311Z  * [new branch]      fix/gui-selection-20261008 -> origin/fix/gui-selection-20261008
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2190108Z  * [new branch]      main                   -> origin/main
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2193742Z ##[endgroup]
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2195001Z ##[group]Determining the checkout info
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2196031Z [command]/usr/bin/git branch --list --remote origin/main
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2197099Z   origin/main
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2199249Z ##[endgroup]
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2200010Z [command]/usr/bin/git sparse-checkout disable
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2639641Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2831931Z ##[group]Checking out the ref
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.2835410Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.4612215Z Switched to a new branch 'main'
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.4622431Z branch 'main' set up to track 'origin/main'.
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.4685436Z ##[endgroup]
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.4688200Z [command]/usr/bin/git log -1 --format=%H
+build-and-commit	Run actions/checkout@v4	2026-10-17T18:29:17.4715975Z 3769e4bd2ba72fe2a22503fb293aabe4b2331eee
+build-and-commit	Build distribution	﻿2026-10-17T18:29:17.4875049Z ##[group]Run python scripts/build-portable.py
+build-and-commit	Build distribution	2026-10-17T18:29:17.4875295Z ^[[36;1mpython scripts/build-portable.py^[[0m
+build-and-commit	Build distribution	2026-10-17T18:29:17.5091713Z shell: /usr/bin/bash -e {0}
+build-and-commit	Build distribution	2026-10-17T18:29:17.5091886Z ##[endgroup]
+build-and-commit	Verify distribution	﻿2026-10-17T18:29:17.7376327Z ##[group]Run test -s dist/inline/Fast-figure.html
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7376607Z ^[[36;1mtest -s dist/inline/Fast-figure.html^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7376779Z ^[[36;1mtest -s dist/split/Fast-figure.zip^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7376940Z ^[[36;1mpython - <<'PY'^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7377068Z ^[[36;1mimport json^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7377185Z ^[[36;1mimport re^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7377310Z ^[[36;1mfrom pathlib import Path^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7377468Z ^[[36;1mfrom zipfile import ZipFile^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7377607Z ^[[36;1m^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7377793Z ^[[36;1mexpected = json.loads(Path("sourcescript/backend/settings.json").read_text())^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7378025Z ^[[36;1mdef check_settings(document):^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7378306Z ^[[36;1m    matches = re.findall(rb'<script id="ff-backend-settings" type="application/json">(.*?)</script>', document, re.S)^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7378593Z ^[[36;1m    assert len(matches) == 1^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7378759Z ^[[36;1m    assert json.loads(matches[0]) == expected^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7378991Z ^[[36;1m    assert b"<!-- FAST_FIGURE_BACKEND_SETTINGS -->" not in document^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7379181Z ^[[36;1m^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7379342Z ^[[36;1mcheck_settings(Path("dist/inline/Fast-figure.html").read_bytes())^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7379582Z ^[[36;1mwith ZipFile("dist/split/Fast-figure.zip") as archive:^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7379840Z ^[[36;1m    assert archive.read("Fast-figure/README.md") == Path("README.md").read_bytes()^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7380246Z ^[[36;1m    assert archive.read("Fast-figure/LICENSE") == Path("LICENSE").read_bytes()^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7380510Z ^[[36;1m    check_settings(archive.read("Fast-figure/Fast-figure.html"))^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7380700Z ^[[36;1mPY^[[0m
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7431382Z shell: /usr/bin/bash -e {0}
+build-and-commit	Verify distribution	2026-10-17T18:29:17.7431533Z ##[endgroup]
+build-and-commit	Commit distribution artifacts	﻿2026-10-17T18:29:17.8573641Z ##[group]Run git fetch origin main
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8573880Z ^[[36;1mgit fetch origin main^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8574085Z ^[[36;1mif [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD)" ]; then^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8574372Z ^[[36;1m  echo "main advanced during this run; a newer workflow run will build it."^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8574594Z ^[[36;1m  exit 0^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8574712Z ^[[36;1mfi^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8574822Z ^[[36;1m^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8574992Z ^[[36;1mgit add dist/inline/Fast-figure.html dist/split/Fast-figure.zip^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8575222Z ^[[36;1mif git diff --cached --quiet; then^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8575429Z ^[[36;1m  echo "distribution artifacts are already current."^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8575611Z ^[[36;1m  exit 0^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8575725Z ^[[36;1mfi^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8575831Z ^[[36;1m^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8575962Z ^[[36;1mgit config user.name "github-actions[bot]"^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8576213Z ^[[36;1mgit config user.email "41898282+github-actions[bot]@users.noreply.github.com"^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8576497Z ^[[36;1mgit commit -m "Build distribution artifacts"^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8576675Z ^[[36;1mgit push origin HEAD:main^[[0m
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8630167Z shell: /usr/bin/bash -e {0}
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:17.8630325Z ##[endgroup]
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:18.0886276Z From https://github.com/fo4344-assistant/Fast-figure-portable
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:18.0886611Z  * branch            main       -> FETCH_HEAD
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:18.3211611Z [main aa24706] Build distribution artifacts
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:18.3211909Z  2 files changed, 28 insertions(+), 35 deletions(-)
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:20.1233364Z To https://github.com/fo4344-assistant/Fast-figure-portable
+build-and-commit	Commit distribution artifacts	2026-10-17T18:29:20.1233791Z    3769e4b..aa24706  HEAD -> main
+build-and-commit	Post Run actions/checkout@v4	﻿2026-10-17T18:29:20.1339863Z Post job cleanup.
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.1869298Z [command]/usr/bin/git version
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.1899359Z git version 2.55.0
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.1924186Z Temporarily overriding HOME='/home/runner/work/_temp/a57761ed-a3bd-4532-b9cc-c03ccae22353' before making global git config changes
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.1924932Z Adding repository directory to the temporary git global config as a safe directory
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.1928019Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Fast-figure-portable/Fast-figure-portable
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.1962310Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.1990100Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.2191466Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.2213791Z http.https://github.com/.extraheader
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.2225436Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.2257010Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.2448683Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+build-and-commit	Post Run actions/checkout@v4	2026-10-17T18:29:20.2477291Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+build-and-commit	Complete job	﻿2026-10-17T18:29:20.2764709Z Cleaning up orphan processes
+build-and-commit	Complete job	2026-10-17T18:29:20.2954854Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

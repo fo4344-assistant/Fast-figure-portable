@@ -1,0 +1,127 @@
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 94c0d36..06dc038 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1263,6 +1263,45 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+         "failed print command changed Project or reconciled Frontend success");
+     });
+ 
++    await run(41, "appearance palette uses read projections and post-commit CSS projection", async () => {
++      const beforeRead = JSON.stringify(activeProject._state), frontendBeforeRead = appFSM.state;
++      const stale = api.appearance.readPalette();
++      check(Object.isFrozen(stale) && stale !== activeProject.appearance.uiPalette &&
++        JSON.stringify(activeProject._state) === beforeRead && appFSM.state === frontendBeforeRead,
++        "appearance query exposed authority or changed state");
++      const values = { ...stale, uiColor: "#123456", paperColor: "#654321", fontColor: "#112233" };
++      const updated = api.appearance.setPalette(values);
++      check(Object.isFrozen(updated) && updated.uiColor === values.uiColor && updated.paperColor === values.paperColor &&
++        stale !== updated && stale.uiColor !== updated.uiColor, "palette apply did not return a fresh immutable projection");
++      check(document.documentElement.style.getPropertyValue("--ui-color") === values.uiColor &&
++        document.documentElement.style.getPropertyValue("--graph-bg") === values.paperColor &&
++        document.documentElement.style.getPropertyValue("--ink") === values.fontColor,
++        "committed palette was not projected to CSS");
++      const projection = appFSM.query("renderer", { operation: "ui-palette" });
++      const authority = JSON.stringify(activeProject._state), frontend = appFSM.state;
++      syncUiPaletteElement(projection);
++      check(Object.isFrozen(projection) && JSON.stringify(activeProject._state) === authority && appFSM.state === frontend,
++        "CSS renderer changed Project or Frontend authority");
++      check(!/activeProject|projectEFSM/.test(readAppearanceApiPalette.toString() + applyUiPaletteValues.toString() + applyUiPalette.toString()) &&
++        !/activeProject|appFSM|renderDashboard|dispatchProjectCommand/.test(syncUiPaletteElement.toString()),
++        "palette boundary retains direct Backend access or recursive CSS renderer commands");
++      const beforeFailure = JSON.stringify(activeProject._state), frontendBeforeFailure = appFSM.state,
++        styleBeforeFailure = document.documentElement.getAttribute("style");
++      let failed = false;
++      try { api.appearance.setPalette({ uiColor: { toString() { throw Error("invalid palette value"); } } }); }
++      catch { failed = true; }
++      check(failed && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === frontendBeforeFailure &&
++        document.documentElement.getAttribute("style") === styleBeforeFailure,
++        "failed palette command changed authority or rendered success");
++      const normalized = api.appearance.setPalette({ uiColor: "invalid" });
++      check(normalized.uiColor === DEFAULT_UI_PALETTE.uiColor && normalized.paperColor === DEFAULT_UI_PALETTE.paperColor,
++        "palette default normalization semantics changed");
++      const reset = api.appearance.resetPalette();
++      check(Object.isFrozen(reset) && JSON.stringify(reset) === JSON.stringify(DEFAULT_UI_PALETTE) &&
++        document.documentElement.style.getPropertyValue("--ui-color") === reset.uiColor,
++        "palette reset did not commit and project defaults");
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/fast-figure.js b/fast-figure.js
+index b146f77..07c5923 100644
+--- a/fast-figure.js
++++ b/fast-figure.js
+@@ -404,6 +404,9 @@
+       }
+       // Backend read providers: resolve references from current authority, never normalize live models.
+       function readBackendProjection(kind, request = {}) {
++        if ((kind === "project-api" && request.operation === "appearance.readPalette") ||
++            (kind === "renderer" && request.operation === "ui-palette"))
++          return Object.freeze({ ...activeProject.appearance.uiPalette });
+         if (kind === "project-api" && request.operation === "print.readSettings")
+           return Object.freeze({ ...activeProject.exportSettings });
+         if ((kind === "project-api" && request.operation === "images.readEditor") ||
+@@ -4632,7 +4635,7 @@
+       }
+       function renderProjectObject(project = activeProject) {
+         applySlotStyle(false, false);
+-        applyUiPalette(false, false);
++        applyUiPalette(false);
+         syncDashboardCaption();
+         updateFileAvailability();
+       }
+@@ -7348,8 +7351,7 @@
+         else commitDashboardScale("unlock-reset-100");
+         debugLog("dashboard:zoom-lock", { locked, width: dashboardZoomLockedWidth });
+       }
+-      function applyUiPalette(_fromControls = false, notify = true) {
+-        let palette = activeProject.appearance.uiPalette;
++      function syncUiPaletteElement(palette) {
+         document.documentElement.style.setProperty("--ui-color", palette.uiColor);
+         document.documentElement.style.setProperty(
+           "--paper",
+@@ -7358,16 +7360,20 @@
+         document.documentElement.style.setProperty("--ui-subtle", palette.uiSubtleColor);
+         document.documentElement.style.setProperty("--ink", palette.fontColor);
+         document.documentElement.style.setProperty("--graph-bg", palette.paperColor);
++      }
++      function applyUiPalette(notify = true) {
++        syncUiPaletteElement(appFSM.query("renderer", { operation: "ui-palette" }));
+         renderDashboard();
+         if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
+       }
+       function applyUiPaletteValues(values, notify = true) {
+-        appFSM.send("APPEARANCE_CHANGED", {
+-          palette: values,
++        let result = dispatchProjectCommand("APPEARANCE_CHANGED", {
++          palette: { ...values },
+           direction: "ui-to-fsm",
+         });
+-        applyUiPalette(false, notify);
+-        return activeProject.appearance.uiPalette;
++        if (!result.committed) return false;
++        applyUiPalette(notify);
++        return readAppearanceApiPalette();
+       }
+       function readGlobalCaptionState() {
+         return Object.freeze({
+@@ -7579,15 +7585,13 @@
+         return updateLabelsApiPosition(0, 0, "LABEL_POSITION_RESET");
+       }
+       function readAppearanceApiPalette() {
+-        return Object.freeze({ ...activeProject.appearance.uiPalette });
++        return appFSM.query("project-api", { operation: "appearance.readPalette" });
+       }
+       function setAppearanceApiPalette(values) {
+-        applyUiPaletteValues(values);
+-        return readAppearanceApiPalette();
++        return applyUiPaletteValues(values);
+       }
+       function resetAppearanceApiPalette() {
+-        applyUiPaletteValues(DEFAULT_UI_PALETTE);
+-        return readAppearanceApiPalette();
++        return applyUiPaletteValues(DEFAULT_UI_PALETTE);
+       }
+       function readLayoutApiState(previewWidth = 600) {
+         let width = readProjectNumber(previewWidth, 600, 1, 20000),
