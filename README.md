@@ -82,9 +82,6 @@ The builder links the ES modules into a classic `fast-figure.js` for offline
 `file://` loading, shared by the inline HTML and split ZIP. Generated application
 JavaScript is never a second editable source under `sourcecode/`.
 The template at `sourcecode/Fast-figure.html` is not the packaged entry point.
-Module ownership follows Source Script/pseudocode; the implementation is still WIP.
-Remaining legacy cross-layer reads/callbacks are tracked in Plan023 and the r116 review;
-physical module separation does not mark source-code alignment as complete.
 
 ## Project structure
 

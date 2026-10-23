@@ -1,28 +1,11 @@
-# Fast Figure verification model r26
+# Fast Figure verification models
 
-이 디렉터리는 current PlusCal pseudocode에서 상태 기반 검증이 필요한 범위를 파생한 verification model이다.
+이 디렉터리는 PlusCal pseudocode에서 상태 기반 검증이 필요한 범위를 파생하여 표현하는 선택적 verification model을 보관한다.
 verification model은 Source Script/PlusCal을 재설계하는 별도 권위가 아니다.
 
-```text
-Source Script r25
-→ PlusCal pseudocode r11
-→ Source Code
+계층 revision/fingerprint/파생 관계는 저장소 루트의 `development-versions.json`에서 확인한다. 실제 TLC 실행 결과와 검증 판단은 관련 review와 원시 로그에 기록하며, 이 README는 버전·실행 상태를 복제하지 않는다.
 
-선택적 검증: PlusCal pseudocode r11 → verification model r26 → TLA+/TLC
-```
-
-## 현재 lineage
-
-- Source Script: r25 / current / closed
-- Source Script fingerprint: `sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f`
-- PlusCal pseudocode: r11 / current
-- pseudocode fingerprint: `sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5`
-- verification-model: r26 / current
-- verification fingerprint: `sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a`
-- TLC: pending
-
-verification fingerprint는 `verification/**/*.tla`와 `verification/**/*.cfg`만 포함한다.
-README 자체는 의미 fingerprint에 포함하지 않는다.
+verification fingerprint는 `verification/**/*.tla`와 `verification/**/*.cfg`만 포함한다. README 자체는 의미 fingerprint에 포함하지 않는다.
 
 ## canonical verification modules
 
@@ -59,31 +42,9 @@ r26 correction review:
 
 `agent_space/reviews/review-20261015-024-verification-r26-correction.md`
 
-## TLC 상태
+## TLC 사용과 결과 해석
 
-r25 최초 GitHub Actions 실행 `38703339145`에서 Boundary Core의 SANY parse는 성공했지만
-`ConsumeReadProjection`의 `phase'` 변경과 `UNCHANGED vars`가 충돌하여 `read-ready` deadlock이 발견되었다.
-
-이 오류는 Source Script/PlusCal 의미가 아니라 verification model 표현 오류로 판정했고,
-r26에서 `phase`를 제외한 나머지 state만 `UNCHANGED`로 수정했다.
-
-수정 커밋 `444927f2083652f4ce967942ae575b0c77180c7d`의 GitHub Actions run
-`38703609264`에서 현재 확인된 상태는 다음과 같다.
-
-- Interaction Core: success
-- Boundary Core: success
-- Slot Core: model check 실행 중
-
-따라서 현재 상태는 다음과 같다.
-
-```text
-verification-model r26 = current derivation
-TLC = pending
-validation_review = null
-```
-
-실제 검증 결과가 확인된 경우에만 그에 맞는 상태와 validation review를 기록한다.
-TLC 실행·통과는 plan-016 Source Code 구현 또는 `current` 판정의 필수 조건이 아니다.
+실제 검증 결과가 확인된 경우에만 그에 맞는 상태와 validation review를 기록한다. TLC 실행·통과는 Source Code 구현 또는 `current` 판정의 필수 조건이 아니다.
 
 ## bounded verification의 의미
 

@@ -2,9 +2,9 @@
 
 ## Active translation
 
-The active hierarchical `**/*.pcal` files translate Source Script r38. The previous flat r11 files are removed, not retained as fallback modules. `development-versions.json` records the authoritative revision, fingerprint, exact Source lineage and translation review; this README is not a second version registry.
+The active hierarchical `**/*.pcal` files are the language-neutral translation of Source Script. `development-versions.json` records authoritative revisions, fingerprints, Source lineage and translation reviews; this README explains the directory, not version or work status.
 
-Hierarchy follows Source: `system`, `backend`, `application/adapter`, the single logical `application/public_api` boundary (four physical files), `frontend`, and `portable_build`. Backend settings are read from `sourcescript/backend/settings.json`, never copied into a Frontend configuration authority. No application-code, optional verification-model, or TLC completion is implied by this cutover.
+Hierarchy follows Source: `system`, `backend`, `application/adapter`, the single logical `application/public_api` boundary, `frontend`, and `portable_build`. Backend settings are read from `sourcescript/backend/settings.json`, never copied into a Frontend configuration authority.
 
 ## Notation and composition
 
@@ -20,7 +20,7 @@ These files are language-neutral PlusCal algorithm notation, not independently r
 
 Target-platform primitives remain abstract: scalar conversion with invalid/finite results (conversion exceptions propagate), integer/finite arithmetic, sequence/record lookup/copy/field operations, text/UTF-8/base64, XML tree construction/parsing/escaping, ZIP STORE directory/CRC and copied-byte access, time, DOM measurement/events/painting, Plotly host lifecycle, browser download handoff, and file output. Pure schema predicates and field selectors mean the **explicit fields/ranges/relations in the corresponding Source contract**, not permission to invent a candidate builder or fallback behavior.
 
-Domain algorithms are expanded in their owning files: VFS collision/replace planning, package document splitting/reassembly and ID remapping, missing-only normalization, current-candidate asset/chart construction, graph numeric transforms/selection/layout, original-position cascade maps, grid/merge/split, caption ranges/wrapping/geometry, projection-effect calculation, all public routes/results and lifecycle/resource cleanup. The spelling of current package documents and the zero-based identity rules are explicitly bound in Source r38; compatibility code is not an alternate authority.
+Domain algorithms are expanded in their owning files: VFS collision/replace planning, package document splitting/reassembly and ID remapping, missing-only normalization, current-candidate asset/chart construction, graph numeric transforms/selection/layout, original-position cascade maps, grid/merge/split, caption ranges/wrapping/geometry, projection-effect calculation, all public routes/results and lifecycle/resource cleanup. The spelling of current package documents and the zero-based identity rules are explicitly bound in the corresponding Source Script; compatibility code is not an alternate authority.
 
 ## Verification scope
 
