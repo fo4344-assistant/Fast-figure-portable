@@ -6,6 +6,8 @@ import html
 import json
 import re
 from pathlib import Path
+import subprocess
+import tempfile
 import zipfile
 
 
@@ -33,20 +35,14 @@ SCRIPTS = (
     ),
     (
         b'<script src="./fast-figure.js"></script>',
-        SOURCE_DIR / "fast-figure.js",
-        b'<script>',
-    ),
-    (
-        b'<script src="./fast-figure-ui.js"></script>',
-        SOURCE_DIR / "fast-figure-ui.js",
+        None,  # Generated from sourcecode/system.js and its module imports.
         b'<script>',
     ),
 )
 
 SPLIT_FILES = (
     (SOURCE_DIR / "Fast-figure.html", Path("Fast-figure.html")),
-    (SOURCE_DIR / "fast-figure.js", Path("fast-figure.js")),
-    (SOURCE_DIR / "fast-figure-ui.js", Path("fast-figure-ui.js")),
+    (None, Path("fast-figure.js")),
     (ROOT / "vendor" / "plotly.min.js", Path("vendor/plotly.min.js")),
     (
         ROOT / "vendor" / "fast-figure-ui-runtime.js",
@@ -218,16 +214,30 @@ def build_source_html() -> bytes:
     return document.replace(README_MARKER, readme_html, 1)
 
 
-def build_inline(output: Path) -> None:
+def bundle_runtime() -> bytes:
+    with tempfile.TemporaryDirectory(prefix="fast-figure-bundle-") as temp:
+        output = Path(temp) / "fast-figure.js"
+        subprocess.run(
+            ["node", str(SOURCE_DIR / "portable_build" / "portable_build.mjs"), str(output)],
+            check=True,
+        )
+        return output.read_bytes()
+
+
+def build_inline(output: Path, runtime: bytes | None = None) -> None:
+    runtime = bundle_runtime() if runtime is None else runtime
     portable = build_source_html()
     for tag, source, open_tag in SCRIPTS:
         if portable.count(tag) != 1:
             raise RuntimeError(f"expected exactly one external script tag: {tag!r}")
-        if not source.is_file():
+        if source is not None and not source.is_file():
             raise FileNotFoundError(source)
+        content = runtime if source is None else source.read_bytes()
+        # An inline classic script must not terminate on a string/comment in JS.
+        content = re.sub(rb"</script", b"<\\\\/script", content, flags=re.IGNORECASE)
         portable = portable.replace(
             tag,
-            open_tag + source.read_bytes() + b"</script>",
+            open_tag + content + b"</script>",
             1,
         )
     for tag, _, _ in SCRIPTS:
@@ -244,9 +254,10 @@ def _zip_info(path: Path) -> zipfile.ZipInfo:
     return info
 
 
-def build_split_zip(output: Path) -> None:
+def build_split_zip(output: Path, runtime: bytes | None = None) -> None:
+    runtime = bundle_runtime() if runtime is None else runtime
     for source, _ in SPLIT_FILES:
-        if not source.is_file():
+        if source is not None and not source.is_file():
             raise FileNotFoundError(source)
 
     built_html = build_source_html()
@@ -258,7 +269,8 @@ def build_split_zip(output: Path) -> None:
         compresslevel=9,
     ) as archive:
         for source, relative in SPLIT_FILES:
-            content = built_html if relative == Path("Fast-figure.html") else source.read_bytes()
+            content = (runtime if source is None else
+                       built_html if relative == Path("Fast-figure.html") else source.read_bytes())
             archive.writestr(
                 _zip_info(SPLIT_ROOT / relative),
                 content,
@@ -274,8 +286,9 @@ def build_distribution(
 ) -> tuple[Path, Path]:
     inline = inline_output or dist_dir / "inline" / INLINE_NAME
     split_zip = zip_output or dist_dir / "split" / SPLIT_ARCHIVE_NAME
-    build_inline(inline)
-    build_split_zip(split_zip)
+    runtime = bundle_runtime()
+    build_inline(inline, runtime)
+    build_split_zip(split_zip, runtime)
     return inline, split_zip
 
 

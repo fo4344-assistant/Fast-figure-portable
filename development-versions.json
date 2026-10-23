@@ -1,55 +1,71 @@
 {
-  "schema": 2, 
+  "schema": 2,
   "precedence": [
-    "source-script", 
-    "pseudocode", 
+    "source-script",
+    "pseudocode",
     "source-code"
-  ], 
-  "fingerprint_algorithm": "sha256(sorted path + NUL + git-blob-sha1 + LF)", 
-  "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.", 
+  ],
+  "fingerprint_algorithm": "sha256(sorted path + NUL + git-blob-sha1 + LF)",
+  "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.",
   "layers": {
     "source-script": {
       "revision": 45,
-      "status": "current", 
+      "status": "current",
       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
       "fingerprint": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
       "derived_from": null,
       "closure": "closed",
       "closure_review": "agent_space/reviews/review-20261018-040-caption-insertion-closure.md"
-    }, 
+    },
     "verification-model": {
-      "revision": 26, 
+      "revision": 26,
       "status": "stale",
-      "path_rule": "verification/**/*.{tla,cfg}", 
-      "fingerprint": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a", 
+      "path_rule": "verification/**/*.{tla,cfg}",
+      "fingerprint": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a",
       "derived_from": {
-        "source-script": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f", 
+        "source-script": "sha256:7da7df78942382dc19d66dbf0e0759cf4f621350308b2e99d79b3ef1e6b6b73f",
         "pseudocode": "sha256:ead7ec7f3cc45baf2d6c88d9ccfe56ec4ebcd562444aa6741c43dee5f963cae5"
-      }, 
-      "tlc": "pending", 
+      },
+      "tlc": "pending",
       "validation_review": null
-    }, 
+    },
     "source-code": {
-      "revision": 114,
-      "status": "stale", 
+      "revision": 128,
+      "status": "stale",
       "paths": [
+        "package-lock.json",
+        "package.json",
+        "scripts/build-portable.py",
         "sourcecode/Fast-figure.html",
-        "sourcecode/fast-figure-ui.js",
-        "sourcecode/fast-figure.js",
-        "scripts/build-portable.py"
-      ], 
-      "fingerprint": "sha256:629d6bb6998aebf0e1374d4a28c97de4f2e216921ddc96e00a638ab89b26ce5f",
+        "sourcecode/application/adapter.js",
+        "sourcecode/application/public_api/assets.js",
+        "sourcecode/application/public_api/graphs.js",
+        "sourcecode/application/public_api/index.js",
+        "sourcecode/application/public_api/layout_annotations.js",
+        "sourcecode/backend/assets_files.js",
+        "sourcecode/backend/graphs.js",
+        "sourcecode/backend/layout_annotations.js",
+        "sourcecode/backend/project_efsm.js",
+        "sourcecode/backend/project_state.js",
+        "sourcecode/backend/settings.js",
+        "sourcecode/frontend/interface_fsm.js",
+        "sourcecode/frontend/mantine_ui.js",
+        "sourcecode/frontend/renderer.js",
+        "sourcecode/portable_build/portable_build.mjs",
+        "sourcecode/system.js"
+      ],
+      "fingerprint": "sha256:4bf8697d36c4b2d6f38a4697cf082762199304f85003830a0ee8a280b7bed212",
       "derived_from": {
         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
-      }, 
-      "validation_review": "agent_space/reviews/review-20261019-015-code-surface-query-open.md"
-    }, 
+      },
+      "validation_review": "agent_space/reviews/review-20261023-016-file-drop-boundary-open.md"
+    },
     "pseudocode": {
       "revision": 25,
       "status": "current",
-      "path_rule": "pseudocode/**/*.pcal", 
+      "path_rule": "pseudocode/**/*.pcal",
       "fingerprint": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
       "derived_from": {
         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7"

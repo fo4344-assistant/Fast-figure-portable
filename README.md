@@ -25,8 +25,12 @@ are generated outputs and should not be edited directly.
 To reproduce the same artifacts locally, run:
 
 ```bash
+npm ci
 python scripts/build-portable.py
 ```
+
+Building requires Node.js 22+ and Python 3.10+. `npm ci` installs the pinned
+build-only esbuild dependency; neither Node.js nor npm is needed to run a distribution.
 
 The inline build contains the application and all JavaScript dependencies in one
 HTML file. Both builds embed the common `sourcescript/backend/settings.json` as
@@ -40,7 +44,6 @@ The split ZIP extracts to:
 Fast-figure/
 ├─ Fast-figure.html
 ├─ fast-figure.js
-├─ fast-figure-ui.js
 ├─ vendor/
 │  ├─ plotly.min.js
 │  └─ fast-figure-ui-runtime.js
@@ -64,13 +67,24 @@ It is not required to run or use Fast Figure, and end users should not download 
 
 - `sourcescript/`: high-level specifications and shared Backend settings.
 - `pseudocode/`: language-neutral implementation procedures.
-- `sourcecode/`: HTML template and JavaScript implementation files.
+- `sourcecode/system.js`: runtime initialization and integration checks.
+- `sourcecode/backend/`: project state, EFSM, assets/files, graphs and layout/annotations.
+- `sourcecode/application/`: adapter and public API modules.
+- `sourcecode/frontend/`: interface FSM, renderer and Mantine UI.
+- `sourcecode/portable_build/`: build-only JavaScript module linker.
+- `sourcecode/Fast-figure.html`: HTML build template.
 - `vendor/`: bundled third-party runtimes.
 - `scripts/`: build and verification tooling.
-- `dist/`: generated offline distributions (their layout is unchanged).
+- `dist/`: generated offline distributions; the split package contains one linked application script.
 
-Build from the repository root using `python scripts/build-portable.py`.
+Build from the repository root using `npm ci` then `python scripts/build-portable.py`.
+The builder links the ES modules into a classic `fast-figure.js` for offline
+`file://` loading, shared by the inline HTML and split ZIP. Generated application
+JavaScript is never a second editable source under `sourcecode/`.
 The template at `sourcecode/Fast-figure.html` is not the packaged entry point.
+Module ownership follows Source Script/pseudocode; the implementation is still WIP.
+Remaining legacy cross-layer reads/callbacks are tracked in Plan023 and the r116 review;
+physical module separation does not mark source-code alignment as complete.
 
 ## Project structure
 

@@ -6,10 +6,11 @@ on:
     paths:
       - 'agent_space/tests/browser-regression.js'
       - 'agent_space/tests/run-browser-regression.py'
+      - 'agent_space/tests/test-module-build.py'
       - '.github/workflows/fast-figure-regression.yml'
-      - 'sourcecode/Fast-figure.html'
-      - 'sourcecode/fast-figure.js'
-      - 'sourcecode/fast-figure-ui.js'
+      - 'sourcecode/**'
+      - 'package.json'
+      - 'package-lock.json'
       - 'scripts/build-portable.py'
       - 'sourcescript/backend/settings.json'
       - 'README.md'
@@ -24,7 +25,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install build dependencies
+        run: npm ci
+
       - name: Check syntax
         run: node --check agent_space/tests/browser-regression.js
+      - name: Check modular source and offline packaging
+        run: python agent_space/tests/test-module-build.py
       - name: Run split and portable regression
         run: python agent_space/tests/run-browser-regression.py

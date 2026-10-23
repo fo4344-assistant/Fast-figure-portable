@@ -1,0 +1,31 @@
+# code123 — supplied workspace/selected-chart boundary; stage1 open
+
+## Contract → implementation → authored check
+
+Read `sourcescript/frontend/renderer.py:304–330` and `pseudocode/frontend/renderer.pcal:274–286`: resolve selected chart ONLY using supplied visible slot/chart relation; no retained global editing pointer. Update graph/image workspace from the supplied relation and final interface selection, never DOM/control buffers as a project read source.
+
+Actual official read shape was inspected in `sourcecode/backend/project_state.js:428–453`: buildBackendSurfaceRead copies visible slots, resolves `slot.chart` to a chart object, supplies `slot.figure` and `slot.imageView`; readBackendProjection wraps the result immutable. There is no need for another Backend query kind, writable chart pointer or persisted workspace snapshot. `sourcecode/application/public_api/layout_annotations.js:setSelectedSlot` already dispatches SELECT_SLOT before calling Application updateGraphView. Mantine's useAppState subscribes to the final FSM state and graph/image controls use their public read APIs; this patch must not introduce another UI store or pass a retained renderer chart back to those editors. interface_fsm remains renderer-neutral apart from debug logging.
+
+Previously adapter.updateGraphView just called full renderDashboard, recreating all image surfaces/decode work on each selection and not explicitly implementing the selected-chart/workspace procedures. Added in physical renderer:
+
+- `resolveSelectedChart(projectProjection, interfaceState)`: returns the exact supplied visible graph slot's resolved chart object, or null for absent/image/no-chart selection. The result is call-local only.
+- `updateGraphViewProjection(projectProjection, interfaceState, frontendActions = {})`: validates existing DOM/surface associations as presentation-lifetime guards, then updates selection CSS and graph interactivity using supplied chart/figure/image relations and final state. DOM is not a project read source. Compatible image surfaces retain their pending decode and identity. No dashboard generation bump and no mutation of Backend/FSM/input. Graph presentation uses existing operation tokens and serialized Plotly work; stale operations cannot replace current work. A detached/missing host/plot/image or replaced chart/image source falls back through full renderer cleanup. Completion preserves current graph/image errors and never revokes sibling image resources.
+- adapter.updateGraphView obtains one official immutable renderer read and one final interface read, logs that same state, and passes explicit public presentation callbacks. No change to selection transaction order, Mantine subscription or public editor reads.
+
+Authored158 uses a frozen supplied graph+image projection while Backend query/chart calculation/getChart are forbidden. It checks exact chart resolution/null cases; graph→image→none selection CSS and Plotly static interactivity; no image redecode/surface or graph-host replacement/generation change; authority/input/FSM preservation; original current graph error with sibling image intact; detached-host full fallback.159 isolates actual adapter one-query/one-final-state handoff, immutable identity/public actions and original error preservation. Existing20 covers state-first selection/background and existing151–157 remain broader supplied renderer/ownership/startup evidence. Tests are authored, NOT executed. Synthetic158's chart object is intentionally the real official-read shape; old supplied-render fixture151 only exercises full rendering and is not evidence for selected-chart resolution.
+
+## Prompt-to-artifact audit (partial; not completion)
+
+| Requirement | Concrete evidence / status |
+|---|---|
+| Source45 > PlusCal25 > JS, no invented semantics or upper-layer edits | Above exact procedures and actual supplied type inspected; no sourcescript/pseudocode/policy diff. |
+| Application official task-local immutable input; no renderer authority reread/domain calculation | adapter.updateGraphView; renderer's two new supplied functions;158 forbids read/recompute,159 checks boundary. Static inspection only; execution pending. |
+| Coherent adapter/interface_fsm/mantine_ui/system boundary | select public API already dispatches then calls adapter; inspected Mantine final-state subscription and public editor reads; no unnecessary UI/FSM store changes. System startup123 retains the122 one-read boundary. |
+| Surface/resource lifetime | Reuses presentSuppliedGraph operation token, image pending identity, existing full-cleanup fallback;158 current-error/sibling/fallback checks. Full export/current capture remains stage2. |
+| Source/PlusCal procedure mapping + regression | This unit closes review009's missing named selected-chart/workspace entry in static code. Review009 maps broader screen procedures; authored158/159 add focused evidence, not a whole-stage green proxy. |
+| Actual diff/lineage/dated patch/docs | code123/stale; Git-filtered declared runtime fingerprint sha256:5546f9c4e3e4af838f415be5ec566a81a067bf605c4dab8ba1195c0a0294bff4; unchanged upper/derived fingerprints; plan023 unit70/tests/review010/patch010 pair. |
+| Preserve WIP/user files, no forbidden execution | No application/test/build/checker/Actions/TLC, commit/push/delegation/policy/dist/cleanup. Existing HEAD d7aa9e2972c83ba745ab4aaebead5c44b4251d87 unchanged. |
+| Static verification vs actual closure | Changed runtime module/browser syntax and unique complete authored IDs1–159 checked. Whitespace check separately recorded by patch010. No version checker/browser/build pass or `current` claim. |
+| Stage1 full renderer success / next stage goal | NOT achieved: full geometry/zoom/resize/controller/caller/helper and remaining legacy-fixture mapping still needs actual file evidence. No update_goal/new stage goal. Execution pending alone does not block next implementation. |
+
+Next concrete ownership target: screen resize/zoom/controller reachability and operation-local callbacks—inspect Source/pcal against actual renderer observer/controller and Application/UI callers, implement any missing contract immediately, without turning whole-program audit into an implementation gate. No authority conflict or permission blocker discovered in this unit.

@@ -141,7 +141,6 @@ def main():
         expected_members = {
             "Fast-figure/Fast-figure.html",
             "Fast-figure/fast-figure.js",
-            "Fast-figure/fast-figure-ui.js",
             "Fast-figure/vendor/plotly.min.js",
             "Fast-figure/vendor/fast-figure-ui-runtime.js",
             "Fast-figure/README.md",

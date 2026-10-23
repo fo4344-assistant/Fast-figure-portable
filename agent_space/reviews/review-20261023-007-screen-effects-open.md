@@ -1,0 +1,27 @@
+# r121 — actual commit effects and narrow appearance
+
+Stage1 remains active. Source45 > PlusCal25 unchanged; code121 stale.
+
+## Contract → actual implementation → authored verification
+
+1. pseudocode/backend/project_efsm.pcal VisualCommitFacts / CalculateProjectionEffect: backend/project_efsm.js calculateProjectionEffect consumes call-local pre/post. It compares visible slots, charts, actual ordinary CSV rows/headerLines and image bytes/mime, plus layout/annotations/appearance. Asset names/directories/tree/nextId are excluded. Reference MULTISETS preserve duplicate removals without treating graph object index movement as removal. Conversion views do not invent CSV references. Object key order is canonicalized for equality, not domain normalization.
+2. FormActualMutationResult: existing candidate replacement sites now use commitProjectCandidate. It captures authority immediately at that successful replacement, calls existing initialize exactly once and forms immutable projectionEffect from actual post. No entry-snapshot cache, persisted token or new Frontend callback. Existing action retry/freshness/validation and side effects remain. send clears caller-supplied flags and returns only actual committed facts; noncommit yields null. Official buildFrontendReconciliationInput carries the same immutable facts.
+3. Renderer appearance narrow branch: apply supplied CSS palette and supplied graph figures on SAME graph host/slot/chart. It preserves generation and image surface/decode. Shared presentSuppliedGraph has a per-host presentation attempt identity as well as generation, so a superseded queued attempt cannot attach old listeners/resize. No persistent state/query/domain figure recalculation.
+4. Application applyUiPaletteValues now passes its actual committed result, not fabricated flags. Asset move/trash consumers and dispatchDashboardAffectingEvent use applyCommittedDashboardProjection with official fresh supplied input instead of guessed event/counter rendering.
+5. Authored154 now checks appearance CSS/graph refresh with stable graph/image/generation. New155 checks duplicate reference removal/index reorder, asset-name-only vs referenced-row changes, forged flag rejection, command-time authority replacement/retry and immutable result facts reaching official reconciliation.
+
+## Actual static checks / defects caught
+
+- Runtime modules and browser probe passed node syntax-only checks; git diff --check passed.
+- Mechanical edit's initial exact-text batch failed uniqueness and applied nothing; retry used unique minimal contexts. Initial syntax check caught duplicate local event declarations in three shared asset handlers; signatures were corrected to retain their existing command-specific local event. Final syntax checks passed. This is static evidence, not runtime execution.
+- Static case-ID coverage1–155 and Git-filtered source fingerprint calculated. No application/test/build/checker/Actions/TLC run. No commit/push/delegation/policy/upper-layer/dist changes. Existing WIP and evidence retained.
+
+## Stage1 completion audit — still missing
+
+- Full Source frontend screen procedure/caller mapping remains unfinished: startup/resize/selection/relayout/drop and annotation text/insertion consumers must be checked, not inferred from function names.
+- Legacy browser fixture expectations may still assume full-render callbacks; inspect/update only when the new Source semantics require it, preserving assertions about authority, failures, noncommit and useful results.
+- New actual commit-effect plumbing across all candidate owners has syntax coverage, NOT runtime proof. Action retry tests and real mutation effect fixtures require permitted Actions eventually.155 covers one winning-source retry; broader mutation branches retain old suite but have not been executed.
+- Actual caller inspection: system.js initializeFastFigure applies zoom/controller/style/render before appFSM.ready; renderer resize paths only resize live current graph records or call Application refresh; interaction controller forwards selection directions and slot swap to injected actions. This is inspected code, not tested behavior.
+- Do NOT mechanically reroute all caption APIs through full invalidation: sourcescript/application/public_api/layout_annotations.py setGlobalCaptionText and insertSlotCaptionsIntoGlobalCaption explicitly require one official global-caption copy and exactly one syncDashboardCaption(same state); setSlotCaptionText has no additional screen side effect. Existing wrapper behavior and tests103–106 preserve these stronger procedure-specific contracts. Name/bold/settings still use supplied caption sync. Any remaining layout/geometry query issue must be addressed without adding extra official caption reads or discarding original failure semantics.
+- Concrete uncovered regression debt: browser fixtures97/98 (image settings),101/102 (caption settings),107/108 (trash),112/113 (moves) retain old renderDashboard/syncSlotImageElement spies and expected full-render counts. Inspect and move their observation points to the actual narrow/full supplied renderer entry, preserving mutation/noncommit/query/retry/original-error assertions. Authored154/155 do NOT substitute for these integration fixtures. No claim of suite readiness or pass.
+- Complete screen/caller artifact checklist and residual ownership report before closing stage1. Stage2 capture/resource lifetime, stage3 remaining Backend/Application/UI and stage4 integration remain open. No goal completion or next-goal replacement yet.

@@ -1,0 +1,742 @@
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+index a09251f..0cf10e9 100644
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -359,6 +359,10 @@ Baselineb92c0d2533bcf2c7091c3e38854e3b26ce8622d2 generated dist-only; preceding9
+ 
+ Initiale85df4be3313a19c320adb4aeb56e68d9aef5b1c146 failed39171913642/39171914478 after1–145 PASS with current non-trash kind/path error; image.path is stored directory metadata, fixture must pass projectAssetPath(image) full path (same as existing127). Fix fixture only, no runtime/spec/assertion weakening. Build39171913640/cumulative39171916653/fidelity39171918631 passed; generated1bb56a2fe080a5db556dc832b730b621007131c3 two-dist-only diff inspected/merged. Pair029/review015; corrected exact146 verification pending.
+ 
++## Sixty-second bounded unit — print consumers (local WIP)
++
++Baseline d7aa9e2972c83ba745ab4aaebead5c44b4251d87; incorporates the previously uncommitted target-save draft. Code115/stale: Application obtains one official print.save/print.capture input and passes snapshot/statusSink to Frontend. Target consumes supplied figures/images/labels/palette/settings; current capture consumes supplied content/settings and one-shot measured viewport, checks supplied raster limits, shares Blob handoff and returns rounded saved outcome without writing persistent presets. Frontend presentation geometry is read before asynchronous work. Tests52/147/148/149 authored, NOT executed. Source45/PlusCal25 unchanged. Patch20261023-001/review20261023-001 record actual local diff and limits. General-principle and resource/failure follow-ups are memoed at agent_space/memo/20261023-001.md per user request rather than blocking all implementation. Original render error masking by purge and current-surface lifetime remain unresolved; no completion/conformance claim. No local application/test/build/checker or Actions execution, no commit/push, no dist regeneration. Full screen renderer translation and broader Plan023 remain OPEN.
++
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 6e72590..602d9aa 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1892,43 +1892,46 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+     });
+ 
+     await run(52, "Target export uniformly scales one reference layout and rejects before download", async () => {
+-      const source = createTargetExportSnapshot, encode = exportCanvasBlob, click = HTMLAnchorElement.prototype.click;
++      const encode = exportCanvasBlob, click = HTMLAnchorElement.prototype.click;
+       const before = JSON.stringify(activeProject._state);
+       const captions = { enabled: true, name: "Caption", nameBold: false, text: "one two three four five six seven eight",
+         afterText: "separate", settings: { fontFamily: "sans-serif", fontSize: 10, lineHeight: 2 } };
+       const snapshot = {
+         revision: 0, layout: { gridRows: 2, gridCols: 2, slotStyle: { referenceWidth: 200, aspect: 2, gap: 0, outerMargin: 0, radius: 0 } },
+-        annotations: { captions }, captionView: captions,
++        annotations: { captions, labels: { enabled: false } },
+         captionReferenceStyle: { padding: 8, dashboardGap: 10, borderHeight: 2, minimumTextWidth: 10 },
+         rasterLimits: { rasterDimension: 16384, rasterArea: 64000000 },
+-        slots: [], charts: [], images: [], labels: { enabled: false }, bordersVisible: false,
+-        dashboardStyle: { background: "#fff" }, captionStyle: { background: "#fff", color: "#000" },
++        visibleSlots: [], orderedSlotLabels: [], appearance: { uiPalette: { paperColor: "#fff", fontColor: "#000", uiColor: "#aaa" } },
++        export: { width: 200, height: 100, heightMode: "auto", dpi: 96, format: "png" },
+       };
+       let downloads = 0, sizes = [];
+       try {
+-        createTargetExportSnapshot = () => snapshot;
++        const render = (width, height = null, dpi = 96) => {
++          snapshot.export = { width, height, heightMode: height === null ? "auto" : "explicit", dpi, format: "png" };
++          return exportDashboardTarget(snapshot);
++        };
+         exportCanvasBlob = async canvas => { sizes.push([canvas.width, canvas.height]); return new Blob(["raster"]); };
+         HTMLAnchorElement.prototype.click = () => { downloads++; };
+-        const one = await exportDashboardTarget({ width: 200, height: null, dpi: 96 });
+-        const dpiOnly = await exportDashboardTarget({ width: 200, height: null, dpi: 600 });
+-        const two = await exportDashboardTarget({ width: 400, height: null, dpi: 96 });
++        const one = await render(200, null, 96);
++        const dpiOnly = await render(200, null, 600);
++        const two = await render(400, null, 96);
+         check(one.outcome === "saved" && one.height === dpiOnly.height && two.height === one.height * 2 &&
+           two.width === 400 && downloads === 3 && sizes[2][1] === two.height,
+           "caption rewrapped at output width, DPI changed pixel geometry, or handoff returned different raster dimensions");
+         snapshot.rasterLimits.rasterDimension = 300;
+-        check((await exportDashboardTarget({ width: 400 })).reason === "raster-limit" && downloads === 3,
++        check((await render(400)).reason === "raster-limit" && downloads === 3,
+           "supplied raster limits were ignored or rejected output downloaded");
+         snapshot.rasterLimits.rasterDimension = 16384;
+         captions.text = Array(30).fill("paragraph").join("\n");
+-        check((await exportDashboardTarget({ width: 200, height: 100 })).reason === "caption-height" && downloads === 3,
++        check((await render(200, 100)).reason === "caption-height" && downloads === 3,
+           "explicit total height was silently enlarged or auto-substituted");
+         captions.enabled = false;
+         snapshot.layout.slotStyle.gap = 1000;
+-        check((await exportDashboardTarget({ width: 200 })).reason === "grid-geometry" && downloads === 3,
++        check((await render(200)).reason === "grid-geometry" && downloads === 3,
+           "nonpositive grid cell threw/downloaded instead of returning its declared rejection");
+         check(JSON.stringify(activeProject._state) === before, "target render changed persistent state");
+       } finally {
+-        createTargetExportSnapshot = source; exportCanvasBlob = encode; HTMLAnchorElement.prototype.click = click;
++        exportCanvasBlob = encode; HTMLAnchorElement.prototype.click = click;
+       }
+     });
+ 
+@@ -6424,6 +6427,136 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
+       }
+     });
+ 
++    await run(147, "Print save captures one official snapshot and target rendering never rereads changed authority", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = selectedSlotId,
++        initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify,
++        target = exportDashboardTarget, query = readBackendProjection, calculate = chartFigure,
++        chartImage = exportChartImage, encode = exportCanvasBlob, download = downloadExportPayload;
++      try {
++        const fresh = createProjectState(); fresh.annotations.captions.enabled = false;
++        fresh.export.width = 200; fresh.export.heightMode = "auto";
++        initialize.call(activeProject, fresh);
++        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
++        renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
++        const slot = activeProject.slots[0]; select(slot);
++        const csv = createProjectCsv([["x","y"],["1","3"],["2","5"]], "raster-owned.csv");
++        api.graphs.addObject(csv.id);
++        let reads = 0, captured = null, supplied = null;
++        const sink = () => {};
++        readBackendProjection = (kind, request) => {
++          if (kind === "export" && request.operation === "print.save") reads++;
++          return query(kind, request);
++        };
++        exportDashboardTarget = async (snapshot, statusSink) => {
++          captured = snapshot; supplied = statusSink;
++          return { outcome: "saved", width: 200, height: 100, automaticHeight: true };
++        };
++        const handed = await api.print.save({ onStatus: sink });
++        check(handed.outcome === "saved" && reads === 1 && supplied === sink && Object.isFrozen(captured) &&
++          captured.visibleSlots.find(item => item.id === slot.id).figure.data.some(trace => trace.y?.includes(5)),
++          "Application did not capture exactly one official immutable print snapshot for Frontend");
++        exportDashboardTarget = target;
++        initialize.call(activeProject, createProjectState());
++        const current = activeProject._state, frontend = interfaceFSM.state, input = JSON.stringify(captured);
++        chartFigure = () => { throw Error("Frontend recalculated Backend graph"); };
++        let pictures = 0, files = 0;
++        exportChartImage = async figure => {
++          check(figure.data.some(trace => trace.y?.includes(5)), "Frontend did not consume captured numeric figure");
++          pictures++; return document.createElement("canvas").toDataURL();
++        };
++        exportCanvasBlob = async () => new Blob(["owned raster"]);
++        downloadExportPayload = async payload => { check(payload.blob instanceof Blob, "raster handoff lost encoded blob"); files++; };
++        const result = await exportDashboardTarget(captured, sink);
++        check(result.outcome === "saved" && result.width === 200 && pictures === 1 && files === 1 && reads === 1 &&
++          JSON.stringify(captured) === input && activeProject._state === current && interfaceFSM.state === frontend,
++          "target renderer reread current Backend/Frontend, mutated snapshot/state or downloaded more than once");
++      } finally {
++        exportDashboardTarget = target; readBackendProjection = query; chartFigure = calculate; exportChartImage = chartImage;
++        exportCanvasBlob = encode; downloadExportPayload = download;
++        renderDashboard = render; status = report; interfaceFSM.notify = notify;
++        initialize.call(activeProject, saved); interfaceFSM.state = session; selectedSlotId = selected;
++      }
++    });
++
++    await run(148, "Raster graph presentation scales copied figures and cleans only its temporary host", async () => {
++      const plot = Plotly.newPlot, image = Plotly.toImage, purge = Plotly.purge, calculate = chartFigure,
++        supplied = { data: [{ y: [1], line: { width: 2 } }], layout: { font: { size: 10 } }, config: { editable: true } },
++        before = JSON.stringify(supplied), hosts = [];
++      try {
++        chartFigure = () => { throw Error("Frontend queried graph authority"); };
++        Plotly.newPlot = async (host, data, layout, config) => {
++          hosts.push(host); check(data[0].line.width === 4 && layout.font.size === 20 && layout.width === 40 &&
++            config.staticPlot && config.responsive === false, "presentation scaled domain input incorrectly");
++        };
++        Plotly.toImage = async () => "owned-image"; Plotly.purge = () => {};
++        check(await exportChartImage(supplied, 40, 30, 2, 1) === "owned-image" && !hosts[0].isConnected &&
++          JSON.stringify(supplied) === before, "raster helper mutated supplied figure or leaked success host");
++        const failure = Error("raster-render-owned"); Plotly.toImage = async () => { throw failure; };
++        let caught = null; try { await exportChartImage(supplied, 40, 30, 2, 1); } catch (error) { caught = error; }
++        check(caught === failure && !hosts[1].isConnected, "raster helper masked original render failure or leaked host");
++        const cleanup = Error("raster-cleanup-owned"); Plotly.toImage = async () => "owned-image";
++        Plotly.purge = () => { throw cleanup; }; caught = null;
++        try { await exportChartImage(supplied, 40, 30, 2, 1); } catch (error) { caught = error; }
++        check(caught === cleanup && !hosts[2].isConnected, "purge failure prevented owned host removal");
++      } finally { Plotly.newPlot = plot; Plotly.toImage = image; Plotly.purge = purge; chartFigure = calculate; hosts.forEach(host => host.remove()); }
++    });
++
++    await run(149, "Current capture uses one official snapshot and one-shot viewport without changing export presets", async () => {
++      const saved = projectClone(activeProject._state), session = interfaceFSM.state,
++        initialize = activeProject.initialize, capture = exportDashboard, query = readBackendProjection,
++        encode = exportCanvasBlob, download = downloadExportPayload, dashboard = $("dashboard"),
++        bounds = dashboard.getBoundingClientRect, elements = dashboard.querySelectorAll;
++      try {
++        const fresh = createProjectState(); fresh.annotations.captions.enabled = false;
++        fresh.annotations.labels.enabled = false; fresh.export.width = 987; fresh.export.height = 654;
++        fresh.export.dpi = 144; fresh.export.format = "jpeg";
++        initialize.call(activeProject, fresh);
++        interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
++        let reads = 0, captured, sink, measurements = 0, files = 0;
++        const statusSink = () => {};
++        readBackendProjection = (kind, request) => {
++          if (kind === "export" && request.operation === "print.capture") reads++;
++          return query(kind, request);
++        };
++        exportDashboard = async (snapshot, status) => {
++          captured = snapshot; sink = status;
++          return { outcome: "saved", width: 321, height: 123, automaticHeight: false };
++        };
++        await api.print.capture({ onStatus: statusSink });
++        check(reads === 1 && sink === statusSink && Object.isFrozen(captured) && captured.export.width === 987,
++          "capture did not forward one official immutable snapshot/status sink");
++        exportDashboard = capture;
++        initialize.call(activeProject, createProjectState());
++        const current = activeProject._state, frontend = interfaceFSM.state, before = JSON.stringify(captured);
++        dashboard.getBoundingClientRect = () => {
++          measurements++; return { left: 0, top: 0, right: 321.2, bottom: 123.4, width: 321.2, height: 123.4 };
++        };
++        dashboard.querySelectorAll = () => [];
++        exportCanvasBlob = async (canvas, mime, dpi) => {
++          check(canvas.width === 321 && canvas.height === 123 && mime === "image/jpeg" && dpi === 144,
++            "capture used live export settings or target pixel dimensions instead of viewport");
++          return new Blob(["viewport"]);
++        };
++        downloadExportPayload = async payload => { check(payload.blob instanceof Blob, "capture handoff lost blob"); files++; };
++        const result = await exportDashboard(captured, sink);
++        check(result.outcome === "saved" && result.width === 321 && result.height === 123 &&
++          result.automaticHeight === false && measurements === 1 && files === 1 && reads === 1 &&
++          activeProject._state === current && interfaceFSM.state === frontend && JSON.stringify(captured) === before,
++          "capture reread authority/viewport, changed settings or lost one-shot outcome");
++        const limited = projectClone(captured); limited.rasterLimits.rasterDimension = 300;
++        check((await exportDashboard(limited)).reason === "raster-limit" && files === 1,
++          "current capture ignored supplied raster limit or downloaded rejected output");
++        const failure = Error("current-encode-failure"); exportCanvasBlob = async () => { throw failure; };
++        let caught; try { await exportDashboard(captured); } catch (error) { caught = error; }
++        check(caught === failure && files === 1 && activeProject._state === current,
++          "current capture swallowed encoding failure, handed off failure or mutated Project");
++      } finally {
++        exportDashboard = capture; readBackendProjection = query; exportCanvasBlob = encode; downloadExportPayload = download;
++        dashboard.getBoundingClientRect = bounds; dashboard.querySelectorAll = elements;
++        initialize.call(activeProject, saved); interfaceFSM.state = session;
++      }
++    });
++
+   } catch (error) {
+     results.push({ number: 0, name: "setup", result: "fail", detail: String(error?.stack || error) });
+   } finally {
+diff --git a/development-versions.json b/development-versions.json
+index 46305ad..3317b43 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     }, 
+     "source-code": {
+-      "revision": 114,
++      "revision": 115,
+       "status": "stale", 
+       "paths": [
+         "sourcecode/Fast-figure.html",
+@@ -38,13 +38,13 @@
+         "sourcecode/fast-figure.js",
+         "scripts/build-portable.py"
+       ], 
+-      "fingerprint": "sha256:629d6bb6998aebf0e1374d4a28c97de4f2e216921ddc96e00a638ab89b26ce5f",
++      "fingerprint": "sha256:4b3a521fb94f47aa6349370eaaee922f454df6c3e1647f46256494c7a4681c97",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       }, 
+-      "validation_review": "agent_space/reviews/review-20261019-015-code-surface-query-open.md"
++      "validation_review": "agent_space/reviews/review-20261023-001-code-print-consumers-open.md"
+     }, 
+     "pseudocode": {
+       "revision": 25,
+diff --git a/sourcecode/fast-figure.js b/sourcecode/fast-figure.js
+index 152c568..6daf7ac 100644
+--- a/sourcecode/fast-figure.js
++++ b/sourcecode/fast-figure.js
+@@ -6674,30 +6674,38 @@
+             mime === "image/png" ? exportSetPngDpi(bytes, dpi) : exportSetJpegDpi(bytes, dpi);
+         return new Blob([withDpi], { type: mime });
+       }
+-      async function exportDashboard(capture = false, options = null) {
++      async function exportDashboard(snapshot, statusSink) {
+         let dashboard = $("dashboard"),
+           caption = $("dashboardCaption"),
+           statusOut = {
+             set textContent(value) {
+-              options?.onStatus?.(value);
++              statusSink?.(value);
+             },
+           },
+-          bordersVisible = activeProject.layout.slotStyle.showBorders,
+-          captionView = activeCaptionView(),
++          bordersVisible = snapshot.layout.slotStyle.showBorders,
++          captionView = snapshot.annotations.captions,
+           dashboardRect = dashboard.getBoundingClientRect();
+         if (!dashboardRect.width || !dashboardRect.height) {
+           statusOut.textContent = "저장할 그래프 영역이 없습니다.";
+-          return;
++          return { outcome: "rejected", reason: "grid-geometry" };
+         }
+-        let captionShown = !caption.classList.contains("hidden"),
++        let captionShown = captionView.enabled && !caption.classList.contains("hidden"),
+           captionRect = captionShown ? caption.getBoundingClientRect() : null,
+-          labels = [...dashboard.querySelectorAll(".slot-label")],
++          labels = snapshot.annotations.labels.enabled ? [...dashboard.querySelectorAll(".slot-label")].flatMap(element => {
++            const slotId = Number(element.closest(".slot")?.dataset.slot),
++              label = snapshot.orderedSlotLabels.find(item => item.slotId === slotId);
++            if (!label) return [];
++            const style = getComputedStyle(element);
++            return [{ rect: element.getBoundingClientRect(), text: label.displayLabel,
++              color: style.color, fontWeight: style.fontWeight, fontSize: parseFloat(style.fontSize),
++              fontFamily: style.fontFamily, paddingLeft: parseFloat(style.paddingLeft || 0) }];
++          }) : [],
+           left = dashboardRect.left,
+           top = dashboardRect.top,
+           right = dashboardRect.right,
+           bottom = Math.max(dashboardRect.bottom, captionRect?.bottom || 0);
+         labels.forEach((label) => {
+-          let rect = label.getBoundingClientRect();
++          let rect = label.rect;
+           left = Math.min(left, rect.left);
+           top = Math.min(top, rect.top);
+           right = Math.max(right, rect.right);
+@@ -6705,20 +6713,22 @@
+         });
+         let sourceWidth = right - left,
+           sourceHeight = bottom - top,
+-          width = capture
+-            ? Math.round(sourceWidth)
+-            : Math.max(
+-                100,
+-                Math.min(20000, Number(options?.width) || Math.round(sourceWidth)),
+-              ),
+-          height = capture
+-            ? Math.round(sourceHeight)
+-            : Math.max(
+-                100,
+-                Math.min(20000, Number(options?.height) || Math.round(sourceHeight)),
+-              ),
+-          dpi = Math.max(36, Math.min(1200, Number(options?.dpi) || 300)),
+-          format = options?.format === "jpeg" ? "jpeg" : "png";
++          width = Math.round(sourceWidth), height = Math.round(sourceHeight),
++          dpi = snapshot.export.dpi, format = snapshot.export.format;
++        if (width > snapshot.rasterLimits.rasterDimension || height > snapshot.rasterLimits.rasterDimension ||
++            width * height > snapshot.rasterLimits.rasterArea) {
++          return { outcome: "rejected", reason: "raster-limit" };
++        }
++        // Read viewport presentation once, before any asynchronous raster work.
++        const slotElements = [...dashboard.querySelectorAll(".slot")].flatMap(element => {
++          const slot = snapshot.visibleSlots.find(item => item.id === Number(element.dataset.slot));
++          if (!slot) return [];
++          const style = getComputedStyle(element);
++          return [{ slot, rect: element.getBoundingClientRect(), background: style.backgroundColor,
++            border: style.borderColor, plot: element.querySelector(".plot-item") }];
++        }), captionStyle = captionShown ? getComputedStyle(caption) : null,
++          captionColors = captionStyle ? { background: captionStyle.backgroundColor,
++            border: captionStyle.borderColor, color: captionStyle.color } : null;
+         let canvas = document.createElement("canvas"),
+           ctx = canvas.getContext("2d"),
+           scaleX = width / sourceWidth,
+@@ -6735,10 +6745,9 @@
+         ctx.fillRect(0, 0, width, height);
+         statusOut.textContent = "그래프를 합성하는 중…";
+         try {
+-          let slotElements = [...dashboard.querySelectorAll(".slot")];
+           for (let element of slotElements) {
+-            let rect = point(element.getBoundingClientRect());
+-            ctx.fillStyle = getComputedStyle(element).backgroundColor || "#fff";
++            let rect = point(element.rect);
++            ctx.fillStyle = element.background || "#fff";
+             ctx.fillRect(
+               rect.left * scaleX,
+               rect.top * scaleY,
+@@ -6746,7 +6755,7 @@
+               rect.height * scaleY,
+             );
+             if (bordersVisible) {
+-              ctx.strokeStyle = getComputedStyle(element).borderColor || "#B0CFCE";
++              ctx.strokeStyle = element.border || "#B0CFCE";
+               ctx.lineWidth = Math.max(1, scaleX);
+               ctx.strokeRect(
+                 rect.left * scaleX,
+@@ -6755,8 +6764,7 @@
+                 rect.height * scaleY,
+               );
+             }
+-            let plot = element.querySelector(".plot-item"),
+-              imageElement = element.querySelector(".slot-image");
++            let plot = element.plot, imageView = element.slot.imageView;
+             if (plot) {
+               let uri = await Plotly.toImage(plot, {
+                 format: "png",
+@@ -6771,51 +6779,46 @@
+                 rect.width * scaleX,
+                 rect.height * scaleY,
+               );
+-            } else if (imageElement) {
+-              let image = await exportImageLoad(imageElement.currentSrc || imageElement.src),
+-                slot = slotAt(+element.dataset.slot);
+-              exportDrawImage(ctx, image, rect, slot, scaleX, scaleY);
++            } else if (imageView) {
++              let image = await exportImageLoad(imageView.src);
++              exportDrawImage(ctx, image, rect, element.slot, scaleX, scaleY);
+             }
+           }
+           for (let label of labels) {
+-            let rect = point(label.getBoundingClientRect()),
+-              style = getComputedStyle(label);
+-            ctx.fillStyle = style.color || "#383A42";
+-            ctx.font = `${style.fontWeight} ${parseFloat(style.fontSize) * scaleY}px ${style.fontFamily}`;
++            let rect = point(label.rect);
++            ctx.fillStyle = label.color || "#383A42";
++            ctx.font = `${label.fontWeight} ${label.fontSize * scaleY}px ${label.fontFamily}`;
+             ctx.textBaseline = "middle";
+             ctx.fillText(
+-              label.textContent || "",
+-              (rect.left + parseFloat(style.paddingLeft || 0)) * scaleX,
++              label.text,
++              (rect.left + label.paddingLeft) * scaleX,
+               (rect.top + rect.height / 2) * scaleY,
+             );
+           }
+           if (captionShown && captionRect) {
+-            let rect = point(captionRect),
+-              style = getComputedStyle(caption);
+-            ctx.fillStyle = style.backgroundColor || "#fff";
++            let rect = point(captionRect), style = captionColors;
++            ctx.fillStyle = style.background || "#fff";
+             ctx.fillRect(
+               rect.left * scaleX,
+               rect.top * scaleY,
+               rect.width * scaleX,
+               rect.height * scaleY,
+             );
+-            ctx.strokeStyle = style.borderColor || "#B0CFCE";
++            ctx.strokeStyle = style.border || "#B0CFCE";
+             ctx.strokeRect(
+               rect.left * scaleX,
+               rect.top * scaleY,
+               rect.width * scaleX,
+               rect.height * scaleY,
+             );
+-            let prefix = $("captionPrefix").textContent || "",
+-              body = captionView.aggregate
+-                ? captionView.exportText
+-                : $("captionText").textContent || "",
++            let prefix = captionView.name || "",
++              body = captionView.text || "",
+               fontSize = captionView.settings.fontSize * scaleY,
+               lineHeight =
+                 captionView.settings.fontSize * captionView.settings.lineHeight * scaleY,
+               baseX = (rect.left + 8) * scaleX,
+               y = (rect.top + 8) * scaleY + fontSize;
+-            ctx.fillStyle = getComputedStyle(caption).color || "#383A42";
++            ctx.fillStyle = style.color || "#383A42";
+             if (prefix) {
+               ctx.font = `${captionView.nameBold ? "700" : "400"} ${fontSize}px ${captionView.settings.fontFamily}`;
+               ctx.fillText(prefix, baseX, y);
+@@ -6851,23 +6854,22 @@
+           }
+           let mime = format === "jpeg" ? "image/jpeg" : "image/png",
+             blob = await exportCanvasBlob(canvas, mime, dpi),
+-            link = document.createElement("a"),
+             stamp = new Date().toISOString().replace(/[:.]/g, "-");
+-          link.href = URL.createObjectURL(blob);
+-          link.download = `전체-그래프-${width}x${height}-${dpi}dpi-${stamp}.${format === "jpeg" ? "jpg" : "png"}`;
+-          link.click();
+-          setTimeout(() => URL.revokeObjectURL(link.href), 0);
++          await downloadExportPayload({ blob,
++            name: `전체-그래프-${width}x${height}-${dpi}dpi-${stamp}.${format === "jpeg" ? "jpg" : "png"}`,
++          });
+           statusOut.textContent = `${width} × ${height}px, ${dpi} DPI로 저장했습니다.`;
+           debugLog("dashboard:export", { format, width, height, dpi, slots: slotElements.length });
++          return { outcome: "saved", width, height, automaticHeight: false };
+         } catch (error) {
+           statusOut.textContent = "저장 실패: " + error.message;
+           debugLog("dashboard:export-error", { message: error.message });
+           throw error;
+         }
+       }
+-      async function exportChartImage(chart, width, height, layoutScale, rasterScale) {
++      async function exportChartImage(suppliedFigure, width, height, layoutScale, rasterScale) {
+         let host = document.createElement("div"),
+-          figure = chartFigure(chart, activeProject._state, layoutScale);
++          figure = scalePlotlyFigure(suppliedFigure, layoutScale);
+         host.style.cssText =
+           "position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;";
+         host.style.width = `${Math.max(2, width)}px`;
+@@ -6878,7 +6880,7 @@
+             host,
+             figure.data,
+             { ...figure.layout, width, height, autosize: false },
+-            plotlyConfig(chart, { ...figure.config, staticPlot: true, responsive: false }),
++            { ...figure.config, staticPlot: true, responsive: false },
+           );
+           return await Plotly.toImage(host, {
+             format: "png",
+@@ -6887,8 +6889,7 @@
+             scale: rasterScale,
+           });
+         } finally {
+-          Plotly.purge(host);
+-          host.remove();
++          try { Plotly.purge(host); } finally { host.remove(); }
+         }
+       }
+       async function exportCaptionLayout(snapshot, measureText) {
+@@ -6979,80 +6980,26 @@
+         if (settings.format === "upper-roman") return romanIdentifier(index);
+         return alphaIdentifier(index, settings.format === "upper-alpha");
+       }
+-      function createTargetExportSnapshot() {
+-        let objects = projectObjects.snapshot([
+-            "layout",
+-            "labels",
+-            "captions",
+-            "images",
+-            "charts",
+-            "slots",
+-          ]),
+-          dashboard = $("dashboard"),
+-          caption = $("dashboardCaption"),
+-          visibleSlots = objects.slots.filter((slot) => !slot.hidden),
+-          ordered = [...visibleSlots].sort((a, b) =>
+-            objects.labels.settings.order === "column-major"
+-              ? a.col - b.col || a.row - b.row
+-              : a.row - b.row || a.col - b.col,
+-          );
+-        return Object.freeze({
+-          revision: appFSM.state.revision,
+-          ...objects,
+-          annotations: { captions: objects.captions },
+-          captionReferenceStyle: projectClone(BackendSettings.defaults.captionReferenceStyle),
+-          rasterLimits: projectClone(BackendSettings.defaults.limits.export),
+-          bordersVisible: activeProject.layout.slotStyle.showBorders,
+-          slotColors: Object.fromEntries(
+-            visibleSlots.map((slot) => {
+-              let element = $(`plot-${slot.id}`)?.closest(".slot"),
+-                style = element ? getComputedStyle(element) : null;
+-              return [
+-                slot.id,
+-                {
+-                  background: style?.backgroundColor || "#fff",
+-                  border: style?.borderColor || "#B0CFCE",
+-                },
+-              ];
+-            }),
+-          ),
+-          labelText: Object.fromEntries(
+-            ordered.map((slot, index) => {
+-              let identifier = targetSlotIdentifier(index, objects.labels.settings),
+-                text =
+-                  objects.labels.settings.parentheses === true
+-                    ? `(${identifier})`
+-                    : identifier;
+-              return [slot.id, text];
+-            }),
+-          ),
+-          dashboardStyle: {
+-            background: getComputedStyle(dashboard).backgroundColor || "#fff",
+-            color: getComputedStyle(dashboard).color || "#383A42",
+-          },
+-          captionStyle: {
+-            background: getComputedStyle(caption).backgroundColor || "#fff",
+-            border: getComputedStyle(caption).borderColor || "#B0CFCE",
+-            color: getComputedStyle(caption).color || "#383A42",
+-          },
+-        });
++      function createTargetExportView(input) {
++        const palette = input.appearance.uiPalette,
++          style = { background: palette.paperColor, border: palette.uiColor, color: palette.fontColor };
++        return {
++          ...input, slots: input.visibleSlots, labels: input.annotations.labels,
++          bordersVisible: input.layout.slotStyle.showBorders,
++          slotColors: Object.fromEntries(input.visibleSlots.map(slot => [slot.id, style])),
++          labelText: Object.fromEntries(input.orderedSlotLabels.map(label => [label.slotId, label.displayLabel])),
++          dashboardStyle: style, captionStyle: style,
++        };
+       }
+-      async function exportDashboardTarget(options = null) {
+-        let statusOut = {
+-            set textContent(value) {
+-              options?.onStatus?.(value);
+-            },
+-          },
+-          snapshot = createTargetExportSnapshot(),
++      async function exportDashboardTarget(suppliedSnapshot, statusSink) {
++        let statusOut = { set textContent(value) { statusSink?.(value); } },
++          snapshot = createTargetExportView(suppliedSnapshot), options = snapshot.export,
+           captionView = snapshot.annotations.captions,
+-          width = Math.max(
+-            100,
+-            Math.min(20000, Number(options?.width) || 1000),
+-          ),
+-          requestedHeight = Number(options?.height),
+-          dpi = Math.max(36, Math.min(1200, Number(options?.dpi) || 300)),
++          width = options.width,
++          requestedHeight = options.height,
++          dpi = options.dpi,
+           rasterScale = 1,
+-          format = options?.format === "jpeg" ? "jpeg" : "png",
++          format = options.format,
+           bordersVisible = snapshot.bordersVisible,
+           visibleSlots = snapshot.slots.filter((slot) => !slot.hidden),
+           captionShown = captionView.enabled;
+@@ -7072,10 +7019,10 @@
+             height: captionReference.height * outputScale,
+             gap: captionReference.gap * outputScale,
+           },
+-          automaticHeight = !Number.isFinite(requestedHeight) || requestedHeight <= 0,
++          automaticHeight = options.heightMode === "auto",
+           height = automaticHeight
+             ? Math.ceil(baseReference.height + captionLayout.height + captionLayout.gap)
+-            : Math.max(100, Math.min(20000, requestedHeight)),
++            : requestedHeight,
+           rasterWidth = Math.round(width),
+           rasterHeight = Math.round(height),
+           maxRasterDimension = snapshot.rasterLimits.rasterDimension,
+@@ -7128,17 +7075,17 @@
+           for (let slot of visibleSlots) {
+             let rect = slotRect(slot),
+               colors = snapshot.slotColors[slot.id],
+-              chart = slot.chart && snapshot.charts.find((item) => item.id === slot.chart),
+-              imageModel = slotImage(slot, snapshot.images);
++              figure = slot.figure,
++              imageModel = slot.imageView;
+             ctx.save();
+             ctx.beginPath();
+               ctx.roundRect(rect.left, rect.top, rect.width, rect.height, slotRadius());
+             ctx.clip();
+             ctx.fillStyle = colors?.background || "#fff";
+             ctx.fillRect(rect.left, rect.top, rect.width, rect.height);
+-            if (slot.contentType !== "image" && chart) {
++            if (slot.content.contentType !== "image" && figure) {
+               let uri = await exportChartImage(
+-                  chart,
++                  figure,
+                   rect.width,
+                   rect.height,
+                   geometry.scale,
+@@ -7147,7 +7094,7 @@
+                 image = await exportImageLoad(uri);
+               ctx.drawImage(image, rect.left, rect.top, rect.width, rect.height);
+             } else if (imageModel) {
+-              let image = await exportImageLoad(projectImageDataUrl(imageModel));
++              let image = await exportImageLoad(imageModel.src);
+               exportDrawImage(ctx, image, rect, slot, 1, 1);
+             }
+             ctx.restore();
+@@ -7166,11 +7113,7 @@
+             }
+           }
+           if (snapshot.labels.enabled) {
+-            let ordered = [...visibleSlots].sort((a, b) =>
+-              snapshot.labels.settings.order === "column-major"
+-                ? a.col - b.col || a.row - b.row
+-                : a.row - b.row || a.col - b.col,
+-            );
++            let ordered = snapshot.orderedSlotLabels.map(label => visibleSlots.find(slot => slot.id === label.slotId));
+             for (let slot of ordered) {
+               let rect = slotRect(slot),
+                 text = snapshot.labelText[slot.id],
+@@ -7219,12 +7162,10 @@
+           }
+           let mime = format === "jpeg" ? "image/jpeg" : "image/png",
+             blob = await exportCanvasBlob(canvas, mime, dpi),
+-            link = document.createElement("a"),
+             stamp = new Date().toISOString().replace(/[:.]/g, "-");
+-          link.href = URL.createObjectURL(blob);
+-          link.download = `전체-그래프-${width}x${height}-r${rasterWidth}x${rasterHeight}-${dpi}dpi-${stamp}.${format === "jpeg" ? "jpg" : "png"}`;
+-          link.click();
+-          setTimeout(() => URL.revokeObjectURL(link.href), 0);
++          await downloadExportPayload({ blob,
++            name: `전체-그래프-${width}x${height}-r${rasterWidth}x${rasterHeight}-${dpi}dpi-${stamp}.${format === "jpeg" ? "jpg" : "png"}`,
++          });
+           statusOut.textContent = `레이아웃 ${width} × ${height}px · 래스터 ${rasterWidth} × ${rasterHeight}px · ${dpi} DPI로 저장했습니다.`;
+           debugLog("dashboard:export-target", {
+             format,
+@@ -7419,8 +7360,9 @@
+           exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportFfsx"));
+       }
+       async function downloadExportPayload(payload) {
+-        const bytes = payload.entries ? ffpxZipStore(payload.entries) : Uint8Array.from(payload.bytes),
+-          blob = new Blob([bytes], { type: payload.mime }),
++        const blob = payload.blob || new Blob([
++            payload.entries ? ffpxZipStore(payload.entries) : Uint8Array.from(payload.bytes),
++          ], { type: payload.mime }),
+           url = URL.createObjectURL(blob);
+         try {
+           const link = document.createElement("a");
+@@ -7558,22 +7500,12 @@
+         return result.committed ? readPrintApiSettings() : false;
+       }
+       function savePrintApi(options={}) {
+-        let settings=readPrintApiSettings();
+-        return exportDashboardTarget({
+-          width:settings.width,
+-          height:settings.heightMode==="explicit"?settings.height:"",
+-          dpi:settings.dpi,
+-          format:settings.format,
+-          onStatus:options.onStatus,
+-        });
++        const snapshot = appFSM.query("export", { operation: "print.save" });
++        return exportDashboardTarget(snapshot, options.onStatus);
+       }
+       function capturePrintApi(options={}) {
+-        let settings=readPrintApiSettings();
+-        return exportDashboard(true,{
+-          dpi:settings.dpi,
+-          format:settings.format,
+-          onStatus:options.onStatus,
+-        });
++        const snapshot = appFSM.query("export", { operation: "print.capture" });
++        return exportDashboard(snapshot, options.onStatus);
+       }
+       function readLabelsApiState() {
+         return appFSM.query("project-api", {
+diff --git a/agent_space/memo/20261023-001.md b/agent_space/memo/20261023-001.md
+new file mode 100644
+index 0000000..c95f314
+--- /dev/null
++++ b/agent_space/memo/20261023-001.md
+@@ -0,0 +1,16 @@
++# 후속 확인 항목
++
++사용자 요청에 따라 일반 코딩 원칙의 전체 준수 확인은 후속 체크리스트로 기록하고, 확정된 명세의 구현을 계속한다. 메모는 새로운 설계·정책 원천이 아니다.
++
++- [ ] 개발 정책 §2: 계산/상태 변경 분리, current-authority 조건 검증 및 단일 mutation 경로.
++- [ ] Single Source of Truth: export snapshot/view/DOM 측정값은 한 작업의 읽기 전용 입력으로만 소비하고 다른 작업 또는 mutation 입력에 재유입하지 않는지 확인.
++- [ ] 참조 무결성: visible slot ID, ordered label ID, figure/image projection의 대응과 누락 처리를 확인.
++- [ ] 최소 복잡도: createTargetExportView 등의 작업 로컬 adapter가 필요한 표현 변환만 하는지, 중복 상태·책임·불필요한 추상화를 추가하지 않는지 확인.
++- [ ] 자원 정리: exportChartImage의 렌더링 실패와 purge 실패가 동시에 발생하면 원래 실패가 가려지는 문제. pseudocode/frontend/renderer.pcal의 PropagateOriginalFailure 대응을 확인한다. 현재 초안을 완료로 취급하지 않는다.
++- [ ] 정리만 실패한 경우 결과 의미를 Source Script/PlusCal의 전체 관련 계약에서 확인한다. 미확정이면 하위 구현에서 임의로 오류 무시/성공/실패 규칙을 결정하지 않는다.
++- [ ] statusSink 실패가 실제 encoding/handoff 오류를 가리는 경우와 handoff 완료 후 status 실패의 결과 의미를 확인.
++- [ ] current capture: DOM Plotly handle의 비동기 수명, 화면 변경 중 일관성, image clipping 및 caption paragraph 표현을 관련 명세와 대조.
++- [ ] 회귀 148에 렌더링·정리 동시 실패 검사를 추가하고, 149의 현재 viewport 외 실제 plot/image/label 경로도 검증한다.
++- [ ] 최신 변경을 실제 허가된 Actions에서 검증하고, 실행 기준 commit/run ID/로그를 기록한다. 과거 d7aa9e2의 성공을 현재 작업 검증으로 사용하지 않는다.
++
++정책 §7.2에 따라 구현 후 전체 역검증을 새로운 공통 필수 gate로 만들지 않는다. 위 항목은 현재 작업에서 발견한 구체적인 확인 사항이다. 정책은 수정하지 않는다.
+diff --git a/agent_space/reviews/review-20261023-001-code-print-consumers-open.md b/agent_space/reviews/review-20261023-001-code-print-consumers-open.md
+new file mode 100644
+index 0000000..487baba
+--- /dev/null
++++ b/agent_space/reviews/review-20261023-001-code-print-consumers-open.md
+@@ -0,0 +1,25 @@
++# Print consumer translation — WIP / OPEN
++
++Baseline: d7aa9e2972c83ba745ab4aaebead5c44b4251d87. Source Script45 / PlusCal25 unchanged. Source-code115 remains stale; this record is not validation success or whole-plan completion.
++
++## Implementation correspondence
++
++- sourcescript/application/public_api/layout_annotations.py print save/capture and sourcescript/frontend/renderer.py renderDashboardTarget/renderDashboardCurrent; corresponding pseudocode/application/public_api/layout_annotations.pcal and pseudocode/frontend/renderer.pcal remain the authorities.
++- Existing uncommitted save work is included in this change: savePrintApi obtains one immutable print.save Backend export query and passes snapshot/statusSink to target rendering. Numeric graph figures, image data, ordered labels, palette and export settings come from this input rather than live Backend/DOM configuration. Figure scaling operates on a copy. Raster handoff uses downloadExportPayload.
++- capturePrintApi now obtains one print.capture export snapshot. exportDashboard consumes that snapshot's settings/content and current Frontend viewport presentation. It measures dashboard/label/slot rectangles before asynchronous work; current dimensions are rounded without writing target export presets. Label strings and image content/settings use supplied projections, not DOM content or slotAt/current Project reads.
++- Current raster limits are checked before encoding/download. Current capture returns saved rounded width/height/automaticHeight:false, uses supplied dpi/format, and hands the Blob to downloadExportPayload. Existing displayed Plotly handles remain Frontend capture inputs; current capture is not target re-rendering.
++
++## Added/updated tests (authored, NOT executed)
++
++- 52: exercise target renderer through supplied snapshot, preserve pixel/DPI/geometry rejection assertions.
++- 147: one official save snapshot, authority replaced after capture, precomputed figure/no live numeric recalculation, immutable input and one handoff.
++- 148: supplied-figure presentation scaling, success/render-failure/cleanup-only host removal. Does NOT cover simultaneous render and cleanup failure; cleanup-only expected rejection remains subject to the recorded contract check.
++- 149: one official capture snapshot/status forwarding, one-shot fractional viewport rounded to321x123, output uses supplied144 DPI/JPEG rather than live settings or987x654 target, no Project/Frontend/input mutation, supplied raster rejection before download, original encoding rejection.
++
++## Verification and limits
++
++Only repository inspection, diff whitespace checking and metadata fingerprint preparation were performed. No application, browser regression, build or version checker was executed locally. No Actions dispatch, commit or push was performed. Thus all new runtime assertions and source-code115 version-check acceptance are PENDING; generated dist is unchanged.
++
++The source-code fingerprint is prepared from Git-filtered blob hashes for the four declared paths; this is NOT execution of scripts/check-development-layer-versions.py. Attempts to use available python/python3 only for metadata preparation failed (python was Python2 without pathlib; python3 exited49), so shell Git hashes/sha256sum were used instead.
++
++Known unresolved issues are explicitly tracked in agent_space/memo/20261023-001.md: original failure masking by purge, cleanup-only result semantics, status failure masking, asynchronous current-surface handle lifetime and remaining capture parity. The user requested that general-principle checks be memoed rather than used to pause implementation. These are not silently approved or closed. Full supplied-input screen renderer and wider Plan023 translation remain open; do not infer full conformance from this bounded code change.
