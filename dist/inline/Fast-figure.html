@@ -9803,7 +9803,7 @@ python scripts/build-portable.py</code></pre>
 <li><code>scripts/</code>: build and verification tooling.</li>
 <li><code>dist/</code>: generated offline distributions; the split package contains one linked application script.</li>
 </ul>
-<p>Build from the repository root using <code>npm ci</code> then <code>python scripts/build-portable.py</code>. The builder links the ES modules into a classic <code>fast-figure.js</code> for offline <code>file://</code> loading, shared by the inline HTML and split ZIP. Generated application JavaScript is never a second editable source under <code>sourcecode/</code>. The template at <code>sourcecode/Fast-figure.html</code> is not the packaged entry point. Module ownership follows Source Script/pseudocode; the implementation is still WIP. Remaining legacy cross-layer reads/callbacks are tracked in Plan023 and the r116 review; physical module separation does not mark source-code alignment as complete.</p>
+<p>Build from the repository root using <code>npm ci</code> then <code>python scripts/build-portable.py</code>. The builder links the ES modules into a classic <code>fast-figure.js</code> for offline <code>file://</code> loading, shared by the inline HTML and split ZIP. Generated application JavaScript is never a second editable source under <code>sourcecode/</code>. The template at <code>sourcecode/Fast-figure.html</code> is not the packaged entry point.</p>
 <h2>Project structure</h2>
 <p>A Fast Figure project contains the complete persistent state of one figure, including:</p>
 <ul>
