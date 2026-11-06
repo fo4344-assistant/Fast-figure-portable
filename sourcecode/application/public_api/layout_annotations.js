@@ -1,8 +1,8 @@
 // Source: sourcescript/application/public_api/layout_annotations.py (same logical owner); pseudocode/application/public_api/layout_annotations.pcal.
-import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, renderDashboard, syncDashboardCaption, applyDashboardZoom, applySlotStyle, applyUiPaletteValues, updateGraphView } from '../adapter.js';
+import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, dispatchSlotSelection, renderDashboard, syncDashboardCaption, applyDashboardZoom, applySlotStyle, applyUiPaletteValues, updateGraphView } from '../adapter.js';
 import { activeProject } from '../../backend/project_state.js';
 import { DEFAULT_UI_PALETTE } from '../../backend/settings.js';
-import { interfaceFSM, interfaceRuntime } from '../../frontend/interface_fsm.js';
+import { interfaceFSM } from '../../frontend/interface_fsm.js';
 import { clearSlotDragState, debugLog, exportDashboard, exportDashboardTarget, readDashboardRenderedWidth, schedulePlotResize, syncSlotImageElement } from '../../frontend/renderer.js';
 
 export function swapSlots(sourceSlotId, targetSlotId) {
@@ -11,16 +11,12 @@ export function swapSlots(sourceSlotId, targetSlotId) {
   return result.committed;
 }
 
-export function setSelectedSlot(slotId = null, direction = "fsm-to-model") {
-  debugLog("setSelectedSlot:command", {
-    slotId,
-    previous: interfaceRuntime.selectedSlotId,
-    direction,
-  });
-  appFSM.send("SELECT_SLOT", { slotId, direction });
-  updateGraphView();
+export function setSelectedSlot(slotId = null, direction = "ui-to-fsm", pendingContentType = null) {
+  const [state, , projection] = dispatchSlotSelection(slotId, pendingContentType, direction);
+  if (projection === null) return state;
+  updateGraphView(projection, state);
   requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
-  return interfaceFSM.readState();
+  return state;
 }
 
 export function mergeSlots(slotIds=[]) {
@@ -82,9 +78,9 @@ export function prepareDashboardFileDrop(slotId) {
   const context = appFSM.query("slot-selection-context", { slotId });
   if (!context) return false;
   if (interfaceFSM.readState().selectedSlotId === slotId) return true;
-  appFSM.send("SELECT_SLOT", { slotId, direction: "model-to-fsm" });
-  if (interfaceFSM.readState().selectedSlotId !== slotId) return false;
-  renderDashboard();
+  const [state, , projection] = dispatchSlotSelection(slotId, null, "model-to-fsm");
+  if (projection === null || state.selectedSlotId !== slotId) return false;
+  updateGraphView(projection, state);
   return true;
 }
 
@@ -202,13 +198,17 @@ export function setPrintApiSettings(values={}) {
 }
 
 export function savePrintApi(options={}) {
-  const snapshot = appFSM.query("export", { operation: "print.save" });
-  return exportDashboardTarget(snapshot, options.onStatus);
+  return appFSM.run("exporting", "print.save", () => {
+    const snapshot = appFSM.query("export", { operation: "print.save" });
+    return exportDashboardTarget(snapshot, options.onStatus);
+  });
 }
 
 export function capturePrintApi(options={}) {
-  const snapshot = appFSM.query("export", { operation: "print.capture" });
-  return exportDashboard(snapshot, options.onStatus);
+  return appFSM.run("exporting", "print.capture", () => {
+    const snapshot = appFSM.query("export", { operation: "print.capture" });
+    return exportDashboard(snapshot, options.onStatus);
+  });
 }
 
 export function readLabelsApiState() {
