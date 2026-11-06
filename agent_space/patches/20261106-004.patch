@@ -1,0 +1,259 @@
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -1,5 +1,5 @@
+ // Source: sourcescript/backend/project_state.py (same logical owner); pseudocode/backend/project_state.pcal.
+-import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, projectAssetImportCollisionModel, projectAssetPath, projectDataTreeSnapshot, projectFileStem, projectImageDataUrl, projectPathInDirectory, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
++import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectDataTreeSnapshot, projectFileStem, projectImageDataUrl, projectPathInDirectory, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
+ import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraphLayoutSettings, validateChartModel } from './graphs.js';
+ import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
+ import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_SLOT_STYLE, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
+@@ -295,6 +295,24 @@
+   }
+   if (kind === "project-api" && request.operation === "assets.isTrashed")
+     return projectVfs.isTrashed(request.path);
++  if (kind === "project-api" && request.operation === "assets.planMove")
++    return planProjectNodeMove(request.path, request.directory, activeProject._state);
++  if (kind === "project-api" && ["assets.movable", "assets.moveOptions",
++      "assets.draggableAsset", "assets.resolveTreeSelection"].includes(request.operation)) {
++    const source = activeProject._state, path = normalizeProjectPath(request.path, { directory: true }),
++      node = projectVfs.resolve(path, source), fixed = projectVfs.isFixedDirectory(path);
++    if (request.operation === "assets.movable") return !!node && !fixed;
++    if (request.operation === "assets.moveOptions")
++      return immutableProjectCopy(!node || fixed ? [] : source.fileSystem.directories.filter(directory =>
++        node.kind !== "directory" || !projectPathInDirectory(directory, path)));
++    if (request.operation === "assets.resolveTreeSelection")
++      return immutableProjectCopy(node ? { accepted: true, kind: node.kind,
++        path: node.kind === "directory" ? node.path : projectAssetPath(node.asset) }
++        : { accepted: false, kind: null, path: null });
++    if (!node || !["csv", "image"].includes(node.kind) || projectVfs.isTrashed(path)) return null;
++    return immutableProjectCopy({ kind: node.kind, id: node.asset.id,
++      path: projectAssetPath(node.asset), name: node.asset.name });
++  }
+   if (kind === "project-api" && request.operation === "assets.fileKind")
+     return slotFileKind(request.file);
+   if (kind === "project-api" && request.operation === "assets.collisionModel")
+diff --git a/sourcecode/application/public_api/assets.js b/sourcecode/application/public_api/assets.js
+--- a/sourcecode/application/public_api/assets.js
++++ b/sourcecode/application/public_api/assets.js
+@@ -1,9 +1,9 @@
+ // Source: sourcescript/application/public_api/assets.py (same logical owner); pseudocode/application/public_api/assets.pcal.
+ import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, runLifecycleTask, renderDashboard, updateFileAvailability } from '../adapter.js';
+ import { importSelectedGraphFile } from './graphs.js';
+-import { readSelectedSlotApi, setSelectedSlot } from './layout_annotations.js';
+-import { PROJECT_ASSET_DIRECTORIES, PROJECT_TRASH_DIRECTORY, projectAssetPath, projectAssetReferenceCount, projectDataTreeSnapshot, projectParentPath, projectPathInDirectory, projectPathName, projectVfs } from '../../backend/assets_files.js';
+-import { activeProject, immutableProjectCopy, projectObjects, readBackendProjection } from '../../backend/project_state.js';
++import { setSelectedSlot } from './layout_annotations.js';
++import { PROJECT_ASSET_DIRECTORIES, PROJECT_TRASH_DIRECTORY, projectAssetReferenceCount, projectDataTreeSnapshot, projectParentPath, projectPathName, projectVfs } from '../../backend/assets_files.js';
++import { immutableProjectCopy, projectObjects, readBackendProjection } from '../../backend/project_state.js';
+ import { interfaceFSM } from '../../frontend/interface_fsm.js';
+ import { downloadExportPayload, status } from '../../frontend/renderer.js';
+ 
+@@ -92,14 +92,7 @@
+ }
+ 
+ export function selectDirectoryFromTree(path) {
+-  let match = projectVfs.resolve(path);
+-  if (match?.kind !== "directory") return status("프로젝트 폴더를 선택할 수 없습니다.");
+-  appFSM.send("SELECT_ASSET", {
+-    kind: "directory",
+-    path: match.path,
+-    direction: "ui-to-fsm",
+-  });
+-  status(`${match.path} 폴더를 선택했습니다.`);
++  return appFSM.send("SELECT_ASSET", { kind: "directory", path, direction: "ui-to-fsm" });
+ }
+ 
+ export function selectProjectCsv(path) {
+@@ -113,25 +106,7 @@
+ }
+ 
+ export function selectImageFromTree(path) {
+-  let slot = readSelectedSlotApi(),
+-    match = projectVfs.resolve(path),
+-    image = match?.kind === "image" ? match.asset : null;
+-  if (!image) return status("프로젝트 이미지를 먼저 선택하세요.");
+-  appFSM.send("CLEAR_GRAPH_OBJECT", {
+-    index: null,
+-    direction: "ui-to-fsm",
+-  });
+-  appFSM.send("SELECT_ASSET", {
+-    kind: "image",
+-    path: projectAssetPath(image),
+-    direction: "ui-to-fsm",
+-  });
+-  updateFileAvailability();
+-  if (!slot) {
+-    status(`${image.name}을 선택했습니다.`);
+-    return;
+-  }
+-  status(`${image.name}을 선택했습니다. 이미지 슬롯의 추가 버튼이나 드롭으로 연결할 수 있습니다.`);
++  return appFSM.send("SELECT_ASSET", { kind: "image", path, direction: "ui-to-fsm" });
+ }
+ 
+ export function readAssetDeletionTarget() {
+@@ -169,11 +144,7 @@
+ }
+ 
+ export function projectNodeMoveOptions(path) {
+-  let match = path ? projectVfs.resolve(path) : null;
+-  return activeProject.fileSystem.directories.filter((directory) =>
+-    (directory === "/assets" || directory.startsWith("/assets/")) &&
+-    !projectVfs.isTrashed(directory) &&
+-    !(match?.kind === "directory" && projectPathInDirectory(directory, path)));
++  return appFSM.query("project-api", { operation: "assets.moveOptions", path });
+ }
+ 
+ export function moveProjectNode(plan, useUniqueName = false) {
+@@ -209,9 +180,7 @@
+ }
+ 
+ export function draggableProjectAsset(path) {
+-  let match = path ? projectVfs.resolve(path) : null;
+-  return match && match.kind !== "directory" && !projectVfs.isTrashed(path)
+-    ? { path, kind: match.kind } : null;
++  return appFSM.query("project-api", { operation: "assets.draggableAsset", path });
+ }
+ 
+ export function connectProjectAssetPathToSlot(path, kind, slotId) {
+diff --git a/sourcecode/application/public_api/index.js b/sourcecode/application/public_api/index.js
+--- a/sourcecode/application/public_api/index.js
++++ b/sourcecode/application/public_api/index.js
+@@ -4,7 +4,6 @@
+ import { connectProjectAssetPathToSlot, createProjectDirectory, deleteProjectAsset, downloadProjectAsset, draggableProjectAsset, emptyProjectTrash, importProjectAssetFiles, importProjectFileToSlot, importProjectFilesToDirectory, moveProjectNode, prepareCopiedImportFiles, projectNodeMoveOptions, readAssetCollisionModel, readAssetDeletionTarget, readAssetFileKind, readAssetImportPlan, readProjectTrash, selectDirectoryFromTree, selectImageFromTree, selectProjectCsv } from './assets.js';
+ import { addGraphObjectApi, applyGraphPaletteApi, createEmptyProjectCsvAndSelect, deleteGraphObjectApi, downloadPlotlyJson, downloadSlotFfsx, graphEditorHeaderLines, graphEditorSelectCsv, graphEditorSelectObject, importSelectedGraphFile, moveGraphObjectApi, readGraphDataApi, readGraphLayoutApi, readGraphPaletteApi, setGraphEditableApi, setGraphObjectValuesApi, updateGraphLayoutApi } from './graphs.js';
+ import { applyImageSettingsFromValues, capturePrintApi, commitLayoutApiZoom, finishDashboardFileDrop, finishLabelsApiPositionInteraction, insertCaptionsApiSlotCaptions, insertEmptyImageIntoSelectedSlot, mergeSlots, prepareDashboardFileDrop, readAppearanceApiPalette, readGlobalCaptionState, readImageEditorApi, readLabelsApiState, readLayoutApiState, readPrintApiSettings, readSelectedSlotApi, readSlotCaptionState, resetAppearanceApiPalette, resetLabelsApiPosition, resetLayoutApiZoom, resetSlotApi, savePrintApi, setAppearanceApiPalette, setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings, setGlobalCaptionText, setLabelsApiEnabled, setLabelsApiPosition, setLabelsApiSettings, setLayoutApiGrid, setLayoutApiStyle, setLayoutApiZoom, setLayoutApiZoomLocked, setPrintApiSettings, setSelectedSlot, setSlotCaptionText, setSlotContentType, splitSlots, swapSlots } from './layout_annotations.js';
+-import { movableProjectNode, planProjectNodeMove, projectVfs } from '../../backend/assets_files.js';
+ import { interfaceFSM } from '../../frontend/interface_fsm.js';
+ import { downloadExportPayload, status } from '../../frontend/renderer.js';
+ 
+@@ -66,11 +65,11 @@
+     readDeletionTarget: readAssetDeletionTarget,
+     delete: deleteProjectAsset,
+     readTree: () => appFSM.query("project-api", { operation: "assets.readTree" }),
+-    isTrashed: (path) => projectVfs.isTrashed(path),
+-    movable: movableProjectNode,
++    isTrashed: (path) => appFSM.query("project-api", { operation: "assets.isTrashed", path }),
++    movable: (path) => appFSM.query("project-api", { operation: "assets.movable", path }),
+     readTrash: readProjectTrash,
+     moveOptions: projectNodeMoveOptions,
+-    planMove: planProjectNodeMove,
++    planMove: (path, directory) => appFSM.query("project-api", { operation: "assets.planMove", path, directory }),
+     move: moveProjectNode,
+     createDirectory: createProjectDirectory,
+     createEmptyCsv: createEmptyProjectCsvAndSelect,
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5062,6 +5062,28 @@
+         initialize.call(activeProject, fixture);
+         slotAt(b.id).content.moveExtension = { keep: true };
+         const settings = JSON.stringify(slotAt(b.id).content.imageSettings);
++        const beforeReads = activeProject._state, options = api.assets.moveOptions(folder),
++          dragged = api.assets.draggableAsset(projectAssetPath(getProjectCsv(csv.id)));
++        check(Object.isFrozen(options) && options.includes(PROJECT_TRASH_DIRECTORY) &&
++          !options.includes(folder) && !options.includes(`${folder}/nested`) &&
++          api.assets.moveOptions("/missing").length === 0 && api.assets.moveOptions("/assets").length === 0,
++          "move options bypassed current source/fixed-root/subtree rules");
++        check(api.assets.movable(folder) && !api.assets.movable("/assets") && !api.assets.movable("/missing") &&
++          Object.isFrozen(dragged) && dragged.id === csv.id && dragged.name === csv.name &&
++          dragged.path === `${folder}/move-owned.csv` && !api.assets.draggableAsset(folder) &&
++          activeProject._state === beforeReads, "VFS reads changed authority or returned a live/incomplete drag identity");
++        const resolved = appFSM.query("project-api", { operation: "assets.resolveTreeSelection", path: folder });
++        check(Object.isFrozen(resolved) && resolved.accepted && resolved.kind === "directory" && resolved.path === folder,
++          "tree selection did not return detached canonical scalars");
++        api.assets.selectDirectory(folder);
++        check(interfaceFSM.readState().assetPath === folder && interfaceFSM.readState().assetSelection === "directory",
++          "directory selection did not use the validated event");
++        api.assets.selectImage(projectAssetPath(getProjectImage(image.id)));
++        const selectedImage = interfaceFSM.state;
++        api.assets.selectImage(folder);
++        check(interfaceFSM.state === selectedImage && selectedImage.assetSelection === "image" &&
++          selectedImage.graphObjectIndex === null && activeProject._state === beforeReads,
++          "wrong-kind selection published effects or valid image selection changed Project");
+         select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(keep)); api.graphs.selectObject(3);
+         const source = activeProject._state, plan = api.assets.planMove(folder, PROJECT_TRASH_DIRECTORY);
+         check(Object.isFrozen(plan) && plan.referenceCount === 3 && activeProject._state === source,
+@@ -5086,6 +5108,11 @@
+           interfaceFSM.readState().assetPath === projectAssetPath(keep), "move cascade or retained selection map incorrect");
+         check(slotAt(b.id).imageId === null && JSON.stringify(slotAt(b.id).content.imageSettings) === settings &&
+           slotAt(b.id).content.moveExtension.keep, "move reset image-owned local settings/extension");
++        check(api.assets.movable(moved.path) && api.assets.isTrashed(moved.path) &&
++          !api.assets.isTrashed("/assets/trash-like") &&
++          !api.assets.draggableAsset(projectAssetPath(getProjectCsv(csv.id))) &&
++          api.assets.moveOptions(moved.path).includes("/assets"),
++          "trash membership, drag rejection or restore eligibility used stale/source-independent reads");
+         const restored = api.assets.move(api.assets.planMove(moved.path, "/assets"));
+         check(!restored.trashed && restored.path === folder && commits === 2 && paints === 1 &&
+           result.changed.removedGraphReferenceCount === 0 && result.changed.resetImageSlotCount === 0 &&
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 131,
++      "revision": 132,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:b76090c94f3190e7737220658fa97f7815a684ffc4c299035bb20f0ba1cb4882",
++      "fingerprint": "sha256:96643e941e147d88e03cfb600af3fa31bd77f52e5644e3b9c048633110a54727",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261106-003-graph-read-boundary-open.md"
++      "validation_review": "agent_space/reviews/review-20261106-004-vfs-boundary-open.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -520,3 +520,9 @@
+ Actual graph data/palette components consume the declared chart/currentCsv/columns/objectColumns and color-sequence results directly. Available CSV choices come from the official asset tree; ID-valued object edits remain distinct from path-valued current-CSV selection. Thirty-row preview truncation remains UI-only. No compatibility facade, retained snapshot, new mutation authority, cache, candidate or task framework was added. Existing cases24/64/168 alone were updated for declared read shape, real public selection/read paths, detached tree/palette/default values and visible graph vs empty/image/hidden selection semantics. Historical case count remains167; none were executed.
+ 
+ Code131 stays stale, canonical LF fingerprint b76090c94f3190e7737220658fa97f7815a684ffc4c299035bb20f0ba1cb4882; Source45/PlusCal25/verification26 and lineage unchanged. Review20261106-003 and numeric patch20261106-003 pair record the incremental change over preserved WIP. Static file/diff/hash and whitespace inspection only; no application/test/build/checker/Actions/TLC execution. Official version validation and runtime/React integration remain pending authorized Actions, not declared complete. Whole stage1 and later capture/resource/other-owner/integration stages remain open. No policy/upper-layer/dist/remote/commit/push/delegation changes.
++
++## Eightieth translation unit — asset-tree movement, drag and selection (r132)
++
++Continue stage1 with the connected VFS ownership boundary. Public isTrashed/movable/planMove/moveOptions/draggableAsset now use official Backend queries; Backend resolves the current canonical source, excludes missing/fixed sources and self/descendant directory destinations, preserves current directory order and returns immutable drag identity. Existing move-plan calculation receives the authoritative source explicitly; commands still revalidate their scalar inputs. Directory/image selection now uses one validated SELECT_ASSET without preliminary graph clearing, direct VFS reads or success effects after a rejected reference. No UI return-shape compatibility bridge is needed. The registered resolveTreeSelection query also returns detached accepted/kind/path scalars.
++
++Only existing regression112 was extended for these connected read/selection/trash-restore semantics; no test cases were added or executed. Code132 remains stale with canonical LF fingerprint96643e941e147d88e03cfb600af3fa31bd77f52e5644e3b9c048633110a54727. Source45/PlusCal25/verification26 and lineage remain unchanged. Review20261106-004 and patch20261106-004 pair record the incremental unit over preserved WIP. Static file/diff/hash inspection only; no application/test/build/checker/Actions/TLC/remote writes. Official version validation remains pending authorized Actions. Application readTrash summary, exact tree projection and their UI consumers remain open alongside the rest of stage1 and stages2–4; this bounded unit does not claim full asset-owner conformance.
+diff --git a/agent_space/reviews/review-20261106-004-vfs-boundary-open.md b/agent_space/reviews/review-20261106-004-vfs-boundary-open.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261106-004-vfs-boundary-open.md
+@@ -0,0 +1,25 @@
++# VFS movement, drag and selection boundary — bounded translation, open integration
++
++## Authority and scope
++
++Source r45 / PlusCal r25 remain unchanged. This unit translates the VFS read contracts in `sourcescript/backend/project_state.py` (`assets.movable`, `assets.moveOptions`, `assets.draggableAsset`, `assets.resolveTreeSelection`, `assets.planMove`, `assets.isTrashed`) and `pseudocode/backend/project_state.pcal` (`BuildVfsRead`, project-api dispatch), together with the direct select-asset routes in `pseudocode/application/public_api/contract.pcal` and `sourcescript/application/public_api/__init__.py`.
++
++The scope was chosen as one connected asset-tree ownership unit, not an execution-failure fix: public movement/drag reads still bypassed official Backend queries, move candidates were filtered by Application-owned rules, and image selection published an extra graph-clear transition before the validated asset event.
++
++## Changes
++
++- Public isTrashed/movable/planMove now invoke explicit project-api queries. Move planning reuses the existing pure Backend calculation with the current authoritative source passed explicitly; the move command still revalidates scalar path/directory/useUniqueName at commit.
++- Backend movable/moveOptions resolve the canonical requested path against the current source. Missing/fixed sources have no move destinations; directory destinations exclude the source and descendants. Existing directory order is preserved. No Application-only exclusion of trash destinations remains.
++- Backend draggableAsset returns an immutable canonical kind/id/path/name identity for current CSV/images outside trash; directory/missing/trash inputs return null. resolveTreeSelection returns immutable accepted/kind/path scalars, not a live node.
++- Public directory/image selection sends exactly one SELECT_ASSET through Adapter validation. Wrong-kind/missing references cannot publish preliminary graph clearing, availability updates or success diagnostics. The accepted event already owns clearing graph-object selection. UI callers use these APIs for their effects and require no return-shape bridge.
++- Existing regression case112 now contains the related official-read, destination, canonical drag, valid/invalid selection and trash/restore assertions. No case or test suite was added. These assertions were not executed.
++
++## Verification state
++
++Only source/pseudocode/code/caller inspection, incremental diff inspection and static file/hash operations were performed. No application, test, build, checker, browser or TLC execution; no Actions, commit or remote writes. Patch applicability/whitespace checks are static diff operations, not runtime verification.
++
++The LF-canonical git-blob fingerprint calculation reproduced r131 `sha256:b76090c94f3190e7737220658fa97f7815a684ffc4c299035bb20f0ba1cb4882` from the pre-unit baseline and calculated r132 `sha256:96643e941e147d88e03cfb600af3fa31bd77f52e5644e3b9c048633110a54727`. This is not an official version-checker pass. Checkout CRLF bytes and upper-layer lineage were not normalized or modified. Version-checker validation remains pending authorized Actions; code remains stale.
++
++## Explicit limits
++
++This does not close the whole asset owner, stage1, or plan023. The preexisting Application readTrash summary and its UI confirmation consumers, exact tree-projection translation, other public wrappers/reads, capture/resource lifetime and full integration remain open. No new compatibility facade, state mirror or Source semantics was introduced. Prior WIP and evidence remain intact.
