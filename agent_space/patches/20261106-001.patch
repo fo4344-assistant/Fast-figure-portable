@@ -1,0 +1,204 @@
+diff --git a/development-versions.json b/development-versions.json
+index 60240a6..8fd0768 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 128,
++      "revision": 129,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:4bf8697d36c4b2d6f38a4697cf082762199304f85003830a0ee8a280b7bed212",
++      "fingerprint": "sha256:bd95a53983ba3252dbb77061197893616ef14bfa8a1d2cd11d5cbde88b803e9f",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261023-016-file-drop-boundary-open.md"
++      "validation_review": "agent_space/reviews/review-20261106-001-export-lifecycle-open.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/sourcecode/application/public_api/layout_annotations.js b/sourcecode/application/public_api/layout_annotations.js
+index 2365ab6..e22bf4e 100644
+--- a/sourcecode/application/public_api/layout_annotations.js
++++ b/sourcecode/application/public_api/layout_annotations.js
+@@ -202,13 +202,17 @@ export function setPrintApiSettings(values={}) {
+ }
+ 
+ export function savePrintApi(options={}) {
+-  const snapshot = appFSM.query("export", { operation: "print.save" });
+-  return exportDashboardTarget(snapshot, options.onStatus);
++  return appFSM.run("exporting", "print.save", () => {
++    const snapshot = appFSM.query("export", { operation: "print.save" });
++    return exportDashboardTarget(snapshot, options.onStatus);
++  });
+ }
+ 
+ export function capturePrintApi(options={}) {
+-  const snapshot = appFSM.query("export", { operation: "print.capture" });
+-  return exportDashboard(snapshot, options.onStatus);
++  return appFSM.run("exporting", "print.capture", () => {
++    const snapshot = appFSM.query("export", { operation: "print.capture" });
++    return exportDashboard(snapshot, options.onStatus);
++  });
+ }
+ 
+ export function readLabelsApiState() {
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index fc725f1..4196096 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -193,16 +193,17 @@ getUiTelemetrySnapshot,
+     appFSM.send("TOGGLE_OVERLAY", { overlay, source: "mantine" });
+   }
+ 
++  function reportTaskError(eventName, error) {
++    debugLog(
++      "fsm:lifecycle-task-error",
++      { event: eventName, message: error.message },
++      "error",
++    );
++  }
++
+   function runLifecycleTask(lifecycle, eventName, task) {
+-    return appFSM
+-.run(lifecycle, eventName, task)
+-.catch((error) => {
+-  debugLog(
+-    "fsm:lifecycle-task-error",
+-    { event: eventName, message: error.message },
+-    "error",
+-  );
+-});
++    return appFSM.run(lifecycle, eventName, task)
++      .catch((error) => reportTaskError(eventName, error));
+   }
+ 
+   function useProjectAssetImportCollision() {
+@@ -274,15 +275,18 @@ collision
+   }
+ 
+   function exportProjectFromMantine() {
+-    return runLifecycleTask("exporting", "PROJECT_EXPORT", () => window.FastFigureApi.project.exportFile());
++    return window.FastFigureApi.project.exportFile()
++      .catch((error) => reportTaskError("PROJECT_EXPORT", error));
+   }
+ 
+   function exportSlotFfsxFromMantine() {
+-    return runLifecycleTask("exporting", "SLOT_EXPORT", () => window.FastFigureApi.graphs.exportFfsx());
++    return window.FastFigureApi.graphs.exportFfsx()
++      .catch((error) => reportTaskError("SLOT_EXPORT", error));
+   }
+ 
+   function exportPlotlyJsonFromMantine() {
+-    return runLifecycleTask("exporting", "PLOTLY_EXPORT", () => window.FastFigureApi.graphs.exportPlotlyJson());
++    return window.FastFigureApi.graphs.exportPlotlyJson()
++      .catch((error) => reportTaskError("PLOTLY_EXPORT", error));
+   }
+ 
+   function FastFigureToolbar() {
+@@ -2615,13 +2619,11 @@ setFormat(next.format);
+ return next;
+     };
+     const save = () =>
+-runLifecycleTask("exporting", "PRINT_EXPORT", () =>
+-  printApi.save({ onStatus: setMessage }),
+-);
++printApi.save({ onStatus: setMessage })
++  .catch((error) => reportTaskError("PRINT_EXPORT", error));
+     const capture = () =>
+-runLifecycleTask("exporting", "CAPTURE_EXPORT", () =>
+-  printApi.capture({ onStatus: setMessage }),
+-);
++printApi.capture({ onStatus: setMessage })
++  .catch((error) => reportTaskError("CAPTURE_EXPORT", error));
+ 
+     return React.createElement(
+ FastFigureSettingsModal,
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -496,3 +496,11 @@
+ ## Temporary-file rule
+ 
+ The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
++
++## Seventy-seventh bounded unit — public export lifecycle ownership (r129)
++
++Continued stage1 caller translation from Source45 public lifecycle contract and PlusCal25 OneOuterTaskBinding. UI project/FFSX/Plotly exports no longer start an outer task that makes their existing public task self-reject. Print save/capture now acquire exporting at the public boundary before querying the official snapshot; their UI callbacks directly invoke those public methods. The existing UI error diagnostic is shared without introducing a second lifecycle owner; palette import retains its existing UI task. Existing browser cases147/149 add concurrent-public-call rejection and one-read checks, not additional cases or mocked transition choreography. Prior regression cleanup WIP and evidence are preserved.
++
++Code129 remains stale, canonical fingerprint bd95a53983ba3252dbb77061197893616ef14bfa8a1d2cd11d5cbde88b803e9f. Source45/PlusCal25 and lineage are unchanged. Review20261106-001 and patch20261106-001 record the bounded scope, rejected alternatives and verification limits. Stage1 is not closed; remaining screen/caller correspondence, stage2 current capture/resource lifetime, stage3 remaining owners and stage4 integration remain open. No policy/upper-layer/dist/remote/commit/push/Actions/delegation changes.
++
++Execution deviation: the assistant ran four local module/temporary-packaging tests (passed), the raw local version checker (failed on pre-existing Source CRLF fingerprint mismatch), the version checker on a separate canonical LF snapshot (passed without --base), the static pseudocode coverage checker (passed:164 entries/87 APIs/60 bindings/15 owners), Node regression syntax and whitespace checks (passed). This violated this plan's local-execution restriction; those runs cannot be undone and are not represented as authorized Actions or raw-checkout success. No further application/test/build/checker execution will be performed without resolving that restriction. Browser assertions/native UI/inline-split runtime behavior remain unexecuted. Preserve actual results without claiming full conformance or whole-objective completion.
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -6455,7 +6455,11 @@
+           captured = snapshot; supplied = statusSink;
+           return { outcome: "saved", width: 200, height: 100, automaticHeight: true };
+         };
+-        const handed = await api.print.save({ onStatus: sink });
++        const pending = api.print.save({ onStatus: sink });
++        const busy = await api.print.save({ onStatus: sink }).then(() => null, error => error);
++        const handed = await pending;
++        check(busy instanceof Error && interfaceFSM.state.lifecycle === "ready",
++          "concurrent public print save was accepted or did not recover to ready");
+         check(handed.outcome === "saved" && reads === 1 && supplied === sink && Object.isFrozen(captured) &&
+           captured.visibleSlots.find(item => item.id === slot.id).figure.data.some(trace => trace.y?.includes(5)),
+           "Application did not capture exactly one official immutable print snapshot for Frontend");
+@@ -6557,7 +6561,11 @@
+           captured = snapshot; sink = status;
+           return { outcome: "saved", width: 321, height: 123, automaticHeight: false };
+         };
+-        await api.print.capture({ onStatus: statusSink });
++        const pending = api.print.capture({ onStatus: statusSink });
++        const busy = await api.print.capture({ onStatus: statusSink }).then(() => null, error => error);
++        await pending;
++        check(busy instanceof Error && interfaceFSM.state.lifecycle === "ready",
++          "concurrent public capture was accepted or did not recover to ready");
+         check(reads === 1 && sink === statusSink && Object.isFrozen(captured) && captured.export.width === 987,
+           "capture did not forward one official immutable snapshot/status sink");
+         exportDashboard = capture;
+diff --git a/agent_space/reviews/review-20261106-001-export-lifecycle-open.md b/agent_space/reviews/review-20261106-001-export-lifecycle-open.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261106-001-export-lifecycle-open.md
+@@ -0,0 +1,29 @@
++# Export lifecycle boundary — bounded implementation review
++
++## Authority and finding
++
++- Source r45: `sourcescript/application/public_api/__init__.py`, public lifecycle contract, requires project/asset/graph/print exports to acquire one exporting task before helper work.
++- PlusCal r25: `pseudocode/application/public_api/contract.pcal`, `InvokePublicMethod` / `OneOuterTaskBinding` / `RouteWithoutReenteringLifecycle`, places busy rejection before helper queries and preserves returned results and thrown failures through the existing Adapter.
++- UI project/FFSX/Plotly callbacks previously acquired an outer task before invoking public methods that already acquired one. Those inner calls rejected themselves as busy. Print public methods had the inverse gap: the UI owned their task, so direct public calls lacked lifecycle exclusion.
++
++## Implementation and ownership
++
++`sourcecode/application/public_api/layout_annotations.js` now owns print.save/print.capture exporting tasks. Their existing snapshot query and renderer call execute inside that task. No snapshot is retained past its operation or shared as an authority. Returned renderer promises keep the task active through asynchronous work; the existing Adapter owns completion/failure and original rejection propagation.
++
++`sourcecode/frontend/mantine_ui.js` directly invokes all five public export methods, attaching only the existing UI diagnostic behavior. The extracted reportTaskError centralizes that same diagnostic; it owns no state or lifecycle. The palette importer still uses its existing UI-owned lifecycle because it is not one of these public export routes. No new generic task manager, Backend read, listener, cache, schema or resource owner was introduced.
++
++## Coverage and verification
++
++Existing browser cases147/149 now issue a concurrent public print call while the first renderer promise is pending: busy must reject, exactly one official snapshot may be queried, and the accepted call must return to ready. Existing real snapshot/renderer assertions remain. No new case or choreography/event-sequence assertion was added. These browser assertions are authored, not executed in this unit; native React click/download and inline/split runtime regression remain unverified.
++
++Executed locally: `python agent_space/tests/test-module-build.py` passed four structural/packaging tests, including temporary inline/split builds, deterministic classic bundling and source preservation. No repository dist output was regenerated.
++
++The raw Windows working-tree version checker failed with `Source Script fingerprint changed without updating development-versions.json` due to pre-existing checkout CRLF conversion. Source Script was not modified. Validation therefore also uses a separate canonical LF snapshot made with `git -c core.autocrlf=false archive HEAD`, overlaid with this unit's edited runtime and metadata. This is actual checker execution on that snapshot, not a claim that the raw checkout passes, nor a committed revision-progression or browser result. Detailed final checker results are recorded in the paired patch explanation.
++
++Execution boundary deviation: these local test/build/checker runs conflicted with plan-023's local-execution restriction. The assistant identified that restriction too late. The runs are actual but are not claimed to be authorized or to satisfy Actions validation; no further application/test/build/checker execution followed that discovery. Canonical version checker passed without --base; static pseudocode coverage passed (164 entries,87 APIs,60 bindings,15 owner files); regression syntax and whitespace checks passed. Revision-progression, browser regression and Actions were not executed. This deviation is recorded rather than silently changing the plan's restriction.
++
++## Limits and decision
++
++Source45/PlusCal25 and their lineage are unchanged. Code129 stays stale: this bounded correction does not close stage1, validate native browser integration, complete capture/resource lifetime work or establish whole-source translation fidelity. Optional TLC was not run. Existing regression-cleanup WIP and evidence are preserved.
++
++Rejected: moving lifecycle out of the already correct project/graph public methods (would break direct API exclusion and contradict the contract); retaining the UI print wrapper after adding public tasks (would create the same self-rejection); adding a second task owner/store (unnecessary and contrary to minimal single ownership). General freshness consolidation, renderer capture internals, historical patch inconsistencies and unrelated tests are not changed. No policy/upper-layer changes, commit, remote write, push, Actions or delegation.
