@@ -1,8 +1,8 @@
 // Source: sourcescript/backend/project_state.py (same logical owner); pseudocode/backend/project_state.pcal.
-import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, projectAssetImportCollisionModel, projectAssetPath, projectFileStem, projectImageDataUrl, projectPathInDirectory, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
+import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectDataTreeSnapshot, projectFileStem, projectImageDataUrl, projectPathInDirectory, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
 import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraphLayoutSettings, validateChartModel } from './graphs.js';
 import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
-import { APP_BUILD, BackendSettings, DEFAULT_IMAGE_SETTINGS, DEFAULT_SLOT_STYLE, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
+import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_SLOT_STYLE, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
 import { interfaceRuntime } from '../frontend/interface_fsm.js';
 
 export function createProjectState() {
@@ -295,6 +295,24 @@ export function readBackendProjection(kind, request = {}) {
   }
   if (kind === "project-api" && request.operation === "assets.isTrashed")
     return projectVfs.isTrashed(request.path);
+  if (kind === "project-api" && request.operation === "assets.planMove")
+    return planProjectNodeMove(request.path, request.directory, activeProject._state);
+  if (kind === "project-api" && ["assets.movable", "assets.moveOptions",
+      "assets.draggableAsset", "assets.resolveTreeSelection"].includes(request.operation)) {
+    const source = activeProject._state, path = normalizeProjectPath(request.path, { directory: true }),
+      node = projectVfs.resolve(path, source), fixed = projectVfs.isFixedDirectory(path);
+    if (request.operation === "assets.movable") return !!node && !fixed;
+    if (request.operation === "assets.moveOptions")
+      return immutableProjectCopy(!node || fixed ? [] : source.fileSystem.directories.filter(directory =>
+        node.kind !== "directory" || !projectPathInDirectory(directory, path)));
+    if (request.operation === "assets.resolveTreeSelection")
+      return immutableProjectCopy(node ? { accepted: true, kind: node.kind,
+        path: node.kind === "directory" ? node.path : projectAssetPath(node.asset) }
+        : { accepted: false, kind: null, path: null });
+    if (!node || !["csv", "image"].includes(node.kind) || projectVfs.isTrashed(path)) return null;
+    return immutableProjectCopy({ kind: node.kind, id: node.asset.id,
+      path: projectAssetPath(node.asset), name: node.asset.name });
+  }
   if (kind === "project-api" && request.operation === "assets.fileKind")
     return slotFileKind(request.file);
   if (kind === "project-api" && request.operation === "assets.collisionModel")
@@ -320,6 +338,21 @@ export function readBackendProjection(kind, request = {}) {
       contentType: slot.contentType, chart: slot.content?.chart ?? slot.chart,
       imageId: slot.content?.imageId ?? slot.imageId }) : null;
   }
+  if (kind === "project-api" && request.operation === "assets.readTree") {
+    const source = activeProject._state;
+    return immutableProjectCopy(projectDataTreeSnapshot({ files: source.fileSystem,
+      data: source.assets.csvFiles, images: source.assets.images, charts: source.charts, slots: source.slots }));
+  }
+  if (kind === "project-api" && request.operation === "graphs.defaultColors")
+    return immutableProjectCopy(DEFAULT_COLORS);
+  if (kind === "project-api" && request.operation === "graphs.hasSelectedSlot")
+    return activeProject._state.slots.some(slot => slot.id === request.selectedSlotId && !slot.hidden && slot.contentType === "graph");
+  if (kind === "project-api" && request.operation === "graphs.readPalette") {
+    const source = activeProject._state,
+      slot = source.slots.find(item => item.id === request.selectedSlotId && !item.hidden && item.contentType === "graph"),
+      chart = slot ? source.charts.find(item => item.id === (slot.content?.chart ?? slot.chart)) : null;
+    return immutableProjectCopy((chart?.editor?.objects || []).map(object => object.color));
+  }
   if (kind === "project-api" && request.operation === "graphs.readLayout") {
     const source = activeProject._state, slot = source.slots.find(item => item.id === request.selectedSlotId && !item.hidden),
       chartId = slot?.content?.chart ?? slot?.chart,
@@ -334,7 +367,8 @@ export function readBackendProjection(kind, request = {}) {
       slot = Object.hasOwn(request, "chartId") ? (owners.length === 1 ? owners[0] : null)
         : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden),
       chartId = slot?.content?.chart ?? slot?.chart,
-      chart = source.charts.find((item) => item.id === chartId) || null,
+      chart = slot && !slot.hidden && slot.contentType === "graph"
+        ? source.charts.find((item) => item.id === chartId) || null : null,
       objects = chart?.editor?.objects || [], index = state.graphObjectIndex,
       selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length
         ? index : null,
