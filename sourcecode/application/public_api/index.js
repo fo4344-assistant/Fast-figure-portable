@@ -1,11 +1,9 @@
 // Source: sourcescript/application/public_api/__init__.py; pseudocode/application/public_api/contract.pcal.
 // Public API composition; domain operations are implemented in the sibling modules.
 import { appFSM, dispatchProjectCommand, renderDashboard, renderProjectObject } from '../adapter.js';
-import { connectProjectAssetPathToSlot, createProjectDirectory, deleteProjectAsset, downloadProjectAsset, draggableProjectAsset, emptyProjectTrash, importProjectAssetFiles, importProjectFileToSlot, importProjectFilesToDirectory, moveProjectNode, prepareCopiedImportFiles, projectDataTreeObjects, projectNodeMoveOptions, readAssetCollisionModel, readAssetDeletionTarget, readAssetFileKind, readAssetImportPlan, readProjectTrash, selectDirectoryFromTree, selectImageFromTree, selectProjectCsv } from './assets.js';
+import { connectProjectAssetPathToSlot, createProjectDirectory, deleteProjectAsset, downloadProjectAsset, draggableProjectAsset, emptyProjectTrash, importProjectAssetFiles, importProjectFileToSlot, importProjectFilesToDirectory, moveProjectNode, prepareCopiedImportFiles, projectNodeMoveOptions, readAssetCollisionModel, readAssetDeletionTarget, readAssetFileKind, readAssetImportPlan, readProjectTrash, selectDirectoryFromTree, selectImageFromTree, selectProjectCsv } from './assets.js';
 import { addGraphObjectApi, applyGraphPaletteApi, createEmptyProjectCsvAndSelect, deleteGraphObjectApi, downloadPlotlyJson, downloadSlotFfsx, graphEditorHeaderLines, graphEditorSelectCsv, graphEditorSelectObject, importSelectedGraphFile, moveGraphObjectApi, readGraphDataApi, readGraphLayoutApi, readGraphPaletteApi, setGraphEditableApi, setGraphObjectValuesApi, updateGraphLayoutApi } from './graphs.js';
 import { applyImageSettingsFromValues, capturePrintApi, commitLayoutApiZoom, finishDashboardFileDrop, finishLabelsApiPositionInteraction, insertCaptionsApiSlotCaptions, insertEmptyImageIntoSelectedSlot, mergeSlots, prepareDashboardFileDrop, readAppearanceApiPalette, readGlobalCaptionState, readImageEditorApi, readLabelsApiState, readLayoutApiState, readPrintApiSettings, readSelectedSlotApi, readSlotCaptionState, resetAppearanceApiPalette, resetLabelsApiPosition, resetLayoutApiZoom, resetSlotApi, savePrintApi, setAppearanceApiPalette, setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings, setGlobalCaptionText, setLabelsApiEnabled, setLabelsApiPosition, setLabelsApiSettings, setLayoutApiGrid, setLayoutApiStyle, setLayoutApiZoom, setLayoutApiZoomLocked, setPrintApiSettings, setSelectedSlot, setSlotCaptionText, setSlotContentType, splitSlots, swapSlots } from './layout_annotations.js';
-import { movableProjectNode, planProjectNodeMove, projectDataTreeSnapshot, projectVfs } from '../../backend/assets_files.js';
-import { DEFAULT_COLORS } from '../../backend/settings.js';
 import { interfaceFSM } from '../../frontend/interface_fsm.js';
 import { downloadExportPayload, status } from '../../frontend/renderer.js';
 
@@ -66,12 +64,12 @@ window.FastFigureApi = Object.freeze({
   assets: Object.freeze({
     readDeletionTarget: readAssetDeletionTarget,
     delete: deleteProjectAsset,
-    readTree: () => projectDataTreeSnapshot(projectDataTreeObjects()),
-    isTrashed: (path) => projectVfs.isTrashed(path),
-    movable: movableProjectNode,
+    readTree: () => appFSM.query("project-api", { operation: "assets.readTree" }),
+    isTrashed: (path) => appFSM.query("project-api", { operation: "assets.isTrashed", path }),
+    movable: (path) => appFSM.query("project-api", { operation: "assets.movable", path }),
     readTrash: readProjectTrash,
     moveOptions: projectNodeMoveOptions,
-    planMove: planProjectNodeMove,
+    planMove: (path, directory) => appFSM.query("project-api", { operation: "assets.planMove", path, directory }),
     move: moveProjectNode,
     createDirectory: createProjectDirectory,
     createEmptyCsv: createEmptyProjectCsvAndSelect,
@@ -105,8 +103,10 @@ window.FastFigureApi = Object.freeze({
     deleteObject: deleteGraphObjectApi,
     updateLayout: updateGraphLayoutApi,
     applyPalette: applyGraphPaletteApi,
-    defaultColors: () => [...DEFAULT_COLORS],
-    hasSelectedSlot: () => !!readSelectedSlotApi(),
+    defaultColors: () => appFSM.query("project-api", { operation: "graphs.defaultColors" }),
+    hasSelectedSlot: () => appFSM.query("project-api", {
+      operation: "graphs.hasSelectedSlot", selectedSlotId: interfaceFSM.readState().selectedSlotId,
+    }),
     importFile: (...args) => appFSM.run("importing", "graphs.importFile", () =>
       importSelectedGraphFile(...args)),
     exportFfsx: downloadSlotFfsx,
