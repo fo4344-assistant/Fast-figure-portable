@@ -1,43 +1,12 @@
 // Source: sourcescript/application/public_api/graphs.py (same logical owner); pseudocode/application/public_api/graphs.pcal.
-import { appFSM, dispatchProjectCommand, selectedProjectCsv, renderDashboard, updateFileAvailability } from '../adapter.js';
+import { appFSM, dispatchProjectCommand, renderDashboard, updateFileAvailability } from '../adapter.js';
 import { prepareCopiedImportFiles, selectProjectCsv } from './assets.js';
-import { readSelectedSlotApi } from './layout_annotations.js';
 import { createEmptyProjectCsv, projectAssetPath } from '../../backend/assets_files.js';
-import { columnDefinitions, normalizedGraphObjects } from '../../backend/graphs.js';
-import { activeProject, getChart, getProjectCsv, projectClone, validateFrontendIntent } from '../../backend/project_state.js';
-import { interfaceFSM, interfaceRuntime } from '../../frontend/interface_fsm.js';
+import { interfaceFSM } from '../../frontend/interface_fsm.js';
 import { downloadExportPayload, status } from '../../frontend/renderer.js';
 
-export function graphEditorChart() {
-  let slot = readSelectedSlotApi();
-  return slot?.chart ? getChart(slot.chart) : null;
-}
-
-export function graphEditorCommit(objects,index=null) {
-  let chart=graphEditorChart();
-  if(!chart)return null;
-  if(chart.editor?.editable===false){
-    status("원본 JSON 그래프는 편집 가능 상태로 전환한 뒤 변경할 수 있습니다.");
-    return null;
-  }
-  let payload={chartId:chart.id,objects:[...objects],index,direction:"fsm-to-model"};
-  appFSM.send("GRAPH_OBJECTS_REPLACED",payload);
-  chart=payload.chart;
-  let selected=Number.isInteger(index)&&index>=0&&index<chart.editor.objects.length?index:null;
-  appFSM.send(selected===null?"CLEAR_GRAPH_OBJECT":"SELECT_GRAPH_OBJECT",
-    {index:selected,direction:"fsm-to-model"});
-  renderDashboard(); updateFileAvailability();
-  appFSM.notify("charts","GRAPH_OBJECTS_CHANGED");
-  return chart;
-}
-
-export function graphEditorSelectCsv(csvId) {
-  let csv = getProjectCsv(Number(csvId));
-  if (!csv) return null;
-  appFSM.send("CLEAR_GRAPH_OBJECT", { index: null, direction: "ui-to-fsm" });
-  appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(csv), direction: "ui-to-fsm" });
-  appFSM.notify("data", "CSV_SELECTION_CHANGED");
-  return csv;
+export function graphEditorSelectCsv(path) {
+  return appFSM.send("SELECT_ASSET", { kind: "csv", path, direction: "ui-to-fsm" });
 }
 
 export function createEmptyProjectCsvAndSelect() {
@@ -47,11 +16,10 @@ export function createEmptyProjectCsvAndSelect() {
 }
 
 export function graphEditorSelectObject(index) {
-  let input = validateFrontendIntent("SELECT_GRAPH_OBJECT", { index, selectedSlotId: interfaceRuntime.selectedSlotId, selectAsset: true });
-  if (!input.accepted) return null;
-  appFSM.send("SELECT_GRAPH_OBJECT", { index: input.reference, selectAsset: true, direction: "fsm-to-model" });
-  appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
-  return input.reference;
+  return appFSM.send("SELECT_GRAPH_OBJECT", {
+    index, selectedSlotId: interfaceFSM.readState().selectedSlotId,
+    selectAsset: true, direction: "ui-to-fsm",
+  });
 }
 
 export function graphEditorObjectValues(chartId, index, values = {}) {
@@ -152,26 +120,11 @@ export function setGraphEditableApi(editable = null) {
 }
 
 export function readGraphDataApi() {
-  let chart = graphEditorChart(), objects = normalizedGraphObjects(chart);
-  let index = appFSM.state.graphObjectIndex;
-  let selectedIndex = Number.isInteger(index) && objects[index] ? index : null;
-  let csv = selectedProjectCsv();
-  let objectCsv = selectedIndex === null ? null : getProjectCsv(objects[selectedIndex].csvId);
-  return {
-    objectColumns: objectCsv ? columnDefinitions(objectCsv.rows, objectCsv.headerLines) : [],
-    chartId: chart?.id ?? null,
-    editable: chart?.editor?.editable !== false,
-    objects: projectClone(objects),
-    selectedIndex,
-    csv: csv ? {
-      id: csv.id, headerLines: csv.headerLines, rowCount: csv.rows.length,
-      rows: projectClone(csv.rows.slice(0, 30)),
-      columns: columnDefinitions(csv.rows, csv.headerLines),
-    } : null,
-    csvOptions: activeProject.csvFiles.map((item) => ({
-      value: String(item.id), label: item.name,
-    })),
-  };
+  const state = interfaceFSM.readState();
+  return appFSM.query("project-api", { operation: "graphs.readData", frontendState: {
+    selectedSlotId: state.selectedSlotId, assetPath: state.assetPath,
+    assetSelection: state.assetSelection, graphObjectIndex: state.graphObjectIndex,
+  } });
 }
 
 export function readGraphLayoutApi() {
@@ -179,13 +132,9 @@ export function readGraphLayoutApi() {
 }
 
 export function readGraphPaletteApi() {
-  let chart = graphEditorChart();
-  return {
-    slotId: readSelectedSlotApi()?.id ?? null,
-    chartId: chart?.id ?? null,
-    editable: chart?.editor?.editable !== false,
-    colors: normalizedGraphObjects(chart).map((object) => object.color),
-  };
+  return appFSM.query("project-api", {
+    operation: "graphs.readPalette", selectedSlotId: interfaceFSM.readState().selectedSlotId,
+  });
 }
 
 export async function importSelectedGraphFile(file, slotId = interfaceFSM.readState().selectedSlotId) {
