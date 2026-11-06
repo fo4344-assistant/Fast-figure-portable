@@ -1,0 +1,171 @@
+--- a/sourcecode/application/adapter.js
++++ b/sourcecode/application/adapter.js
+@@ -125,10 +125,13 @@
+ export const PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
+ 
+ export function runLifecycleTask(lifecycle, event, task) {
+-  if (interfaceFSM.state.lifecycle !== "ready")
++  const state = interfaceFSM.readState();
++  if (state.lifecycle !== "ready")
+     return Promise.reject(
+-      Error(`현재 ${interfaceFSM.state.lifecycle} 상태에서는 ${event} 작업을 시작할 수 없습니다.`),
++      Error(`현재 ${state.lifecycle} 상태에서는 ${event} 작업을 시작할 수 없습니다.`),
+     );
++  if (lifecycle !== "importing" && lifecycle !== "exporting")
++    return Promise.reject(Error("작업 lifecycle은 importing 또는 exporting이어야 합니다."));
+   interfaceFSM.send("LIFECYCLE_START", { lifecycle, event });
+   const complete = (result) => {
+     const outcome = result?.outcome === "rejected" ? "rejected" : result?.outcome || "complete";
+--- a/sourcecode/application/public_api/assets.js
++++ b/sourcecode/application/public_api/assets.js
+@@ -235,11 +235,10 @@
+ }
+ 
+ export async function importProjectAssetFiles(files, choosePlan) {
+-  const inputs = Array.from(files && typeof files[Symbol.iterator] === "function" ? files : files ? [files] : []);
+-  if (!inputs.length) return [];
+-  const targetSlotId = interfaceFSM.readState().selectedSlotId;
+-  return runLifecycleTask("importing", "ASSET_IMPORT", async () => {
+-    const output = [];
++  return runLifecycleTask("importing", "assets.importFiles", async () => {
++    const inputs = Array.from(files && typeof files[Symbol.iterator] === "function" ? files : files ? [files] : []);
++    if (!inputs.length) return [];
++    const targetSlotId = interfaceFSM.readState().selectedSlotId, output = [];
+     for (const file of inputs) {
+       const kind = readAssetFileKind(file);
+       let item;
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 129,
++      "revision": 130,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:bd95a53983ba3252dbb77061197893616ef14bfa8a1d2cd11d5cbde88b803e9f",
++      "fingerprint": "sha256:29613ca0ba37bdb581e35d20541dbb94b661306ce80317e6a0c68c7f4ef554bc",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261106-001-export-lifecycle-open.md"
++      "validation_review": "agent_space/reviews/review-20261106-002-task-entry-open.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -504,3 +504,11 @@
+ Code129 remains stale, canonical fingerprint bd95a53983ba3252dbb77061197893616ef14bfa8a1d2cd11d5cbde88b803e9f. Source45/PlusCal25 and lineage are unchanged. Review20261106-001 and patch20261106-001 record the bounded scope, rejected alternatives and verification limits. Stage1 is not closed; remaining screen/caller correspondence, stage2 current capture/resource lifetime, stage3 remaining owners and stage4 integration remain open. No policy/upper-layer/dist/remote/commit/push/Actions/delegation changes.
+ 
+ Execution deviation: the assistant ran four local module/temporary-packaging tests (passed), the raw local version checker (failed on pre-existing Source CRLF fingerprint mismatch), the version checker on a separate canonical LF snapshot (passed without --base), the static pseudocode coverage checker (passed:164 entries/87 APIs/60 bindings/15 owners), Node regression syntax and whitespace checks (passed). This violated this plan's local-execution restriction; those runs cannot be undone and are not represented as authorized Actions or raw-checkout success. No further application/test/build/checker execution will be performed without resolving that restriction. Browser assertions/native UI/inline-split runtime behavior remain unexecuted. Preserve actual results without claiming full conformance or whole-objective completion.
++
++## Seventy-eighth bounded unit — lifecycle task entry and ordered import boundary (r130)
++
++Continue stage1 against Source45/PlusCal25, not test proliferation. Application Adapter now reads official Frontend state and rejects invalid lifecycle requests after busy rejection but before START/task execution. assets.importFiles now enters its one named importing task before input conversion, empty-input return or target read. Empty helper input still performs no classification/query/command/choice, while the accepted public invocation completes its required lifecycle; busy input is not iterated. Existing ordered routing, fixed target across awaits, cancellation/noncommit results and prior commits remain unchanged. No new state/authority/task manager or child lifecycle was introduced.
++
++Only existing cases36/120 were strengthened for these actual gaps: invalid/busy rejection without state/task effects and public empty/iterable input entry. No new test IDs or cases. Code130 remains stale with canonical LF fingerprint29613ca0ba37bdb581e35d20541dbb94b661306ce80317e6a0c68c7f4ef554bc; Source45/PlusCal25/verification26 and lineage are unchanged. Review20261106-002 and numeric patch20261106-002 pair record correspondence, alternatives and incremental baseline over preserved WIP.
++
++Static file/diff/hash and whitespace inspection only. No application/test/build/checker/Actions/TLC execution; official version checker and runtime validation remain pending authorized Actions, not claimed complete. Existing r129 execution results are not r130 verification. Whole stage1 and later capture/resource/other-owner/integration stages remain open. No policy/upper-layer/dist/remote/commit/push/delegation changes; no execution-only blocker imposed on further safe implementation.
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1104,7 +1104,12 @@
+         const busyError = await appFSM.run("importing", "LIFECYCLE_PROBE_BLOCKED", () => {
+           invokedWhileBusy = true;
+         }).then(() => null, (error) => error);
+-        check(!!busyError && !invokedWhileBusy, "busy lifecycle accepted nested task");
++        const busyState = interfaceFSM.state;
++        const invalidWhileBusy = await appFSM.run("ready", "LIFECYCLE_PROBE_BLOCKED", () => {
++          invokedWhileBusy = true;
++        }).then(() => null, (error) => error);
++        check(!!busyError && invalidWhileBusy?.message === busyError.message && !invokedWhileBusy &&
++          interfaceFSM.state === busyState, "busy lifecycle accepted a task or did not reject before request validation");
+         finish({ outcome: "complete" });
+         await pending;
+         check(appFSM.state.lifecycle === "ready", "async lifecycle did not complete");
+@@ -1116,6 +1121,16 @@
+         check(appFSM.state.lifecycle === "ready" &&
+           appFSM.state.error?.message === "expected lifecycle failure",
+           "Frontend FSM did not record and recover from lifecycle failure");
++        const rejectedState = interfaceFSM.state, authority = activeProject._state, eventCount = published.length;
++        let invalidInvoked = false;
++        for (const lifecycle of ["ready", "error", undefined]) {
++          const invalid = await appFSM.run(lifecycle, "LIFECYCLE_PROBE_INVALID", () => {
++            invalidInvoked = true;
++          }).then(() => null, error => error);
++          check(invalid instanceof Error && !invalidInvoked && interfaceFSM.state === rejectedState &&
++            activeProject._state === authority && published.length === eventCount,
++            "invalid lifecycle executed task, cleared error or changed Frontend/Project state");
++        }
+         check(published.some((event) => event.includes("LIFECYCLE_PROBE_SYNC:rejected")),
+           "lifecycle rejection event was not published");
+         check(published.some((event) => event.includes("LIFECYCLE_PROBE_FAIL:failed")) &&
+@@ -5413,7 +5428,10 @@
+           calls.push(directory); return [Object.freeze({ name: items[0].name })];
+         };
+         const empty = await api.assets.importFiles([]);
+-        check(empty.length === 0 && !events.length && !calls.length, "empty import entered lifecycle/read");
++        check(empty.length === 0 && !calls.length && interfaceFSM.state.lifecycle === "ready" &&
++          events.join() === "LIFECYCLE_START,LIFECYCLE_COMPLETE",
++          "empty public import skipped its one lifecycle or ran a helper/query");
++        events.length = 0;
+         const output = await api.assets.importFiles(files, () => {});
+         check(output.map(item => item.name).join() === files.map(file => file.name).join() &&
+           output.every(Object.isFrozen) && calls.join() === "kind:a.csv,a.csv,kind:b.svg,b.svg,kind:c.ffsx,c.ffsx" &&
+@@ -5433,10 +5451,16 @@
+           "noncommit did not preserve exact result/stop");
+         const count = calls.length, starts = events.filter(event => event === "LIFECYCLE_START").length;
+         interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, lifecycle: "importing" });
+-        let busy;
+-        try { await api.assets.importFiles(files, () => {}); } catch (error) { busy = error; }
+-        check(busy && calls.length === count && events.filter(event => event === "LIFECYCLE_START").length === starts,
+-          "busy router began a nested operation");
++        const busyState = interfaceFSM.state;
++        let inputRead = false;
++        const unreadFiles = { [Symbol.iterator]() { inputRead = true; return files[Symbol.iterator](); } };
++        for (const input of [[], files, unreadFiles]) {
++          let busy;
++          try { await api.assets.importFiles(input, () => {}); } catch (error) { busy = error; }
++          check(busy instanceof Error && !inputRead && calls.length === count && interfaceFSM.state === busyState &&
++            events.filter(event => event === "LIFECYCLE_START").length === starts,
++            "busy router read input, bypassed rejection for empty input or began a nested operation");
++        }
+         interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, lifecycle: "ready" });
+         const failure = Error("ordered-helper-original"); let caught;
+         importProjectFileToSlot = async () => { throw failure; };
+--- /dev/null
++++ b/agent_space/reviews/review-20261106-002-task-entry-open.md
+@@ -0,0 +1,25 @@
++# Lifecycle task entry — bounded implementation review
++
++## Purpose and authoritative correspondence
++
++Continue stage1 Source45 → PlusCal25 → implementation, not general cleanup or a test-growth pass.
++
++- `sourcescript/application/adapter.py:119–136` and `pseudocode/application/adapter.pcal:126–165` require one official Frontend state read, busy rejection first, then importing/exporting validation before START/task execution. `sourcecode/application/adapter.js` previously read internal state and omitted request validation. It now follows those checks without changing the existing completion/failure path.
++- `sourcescript/application/public_api/__init__.py` public lifecycle contract and `pseudocode/application/public_api/contract.pcal:111–136` include assets.importFiles in OneOuterTaskBinding: busy rejects before helper execution. `sourcecode/application/public_api/assets.js` previously converted input, returned for empty input and read selection before entering ASSET_IMPORT. All router helper work now runs inside the one importing task named assets.importFiles.
++- The empty-input no-query/command/choice rule in `sourcescript/application/public_api/assets.py` / `pseudocode/application/public_api/assets.pcal` describes helper work; it does not exempt the public invocation from its outer lifecycle. Accepted empty input returns [] through COMPLETE; busy empty input rejects without iteration. Target selection is still captured only once for nonempty input, before asynchronous choices, never retargeted afterward.
++
++No new state, wrapper layer, query, candidate, retry, rollback or cache. Ordered helper routing, prior commits, cancellation/noncommit results and original failures remain owned by their existing procedures.
++
++## Necessary coverage only
++
++No new cases. Existing case36 adds invalid-request refusal with unchanged error/Frontend/Project state and busy-before-validity ordering; no replacement of Adapter/FSM methods. Existing case120 replaces its contradictory empty-public-input expectation and adds busy empty/nonempty/iterable inputs, detecting iteration before rejection. Existing order, fixed target, cancellation, noncommit and failure checks remain. The existing helper stubs in120 are retained, not expanded into a new mocked transition suite. All167 historical cases remain; these assertions are authored, not executed.
++
++## Verification and boundaries
++
++Static incremental diff inspection and git whitespace checking only. Canonical LF fingerprint was calculated from git blobs plus modified runtime files, reproducing pre-unit r129 bd95a53983ba3252dbb77061197893616ef14bfa8a1d2cd11d5cbde88b803e9f and yielding r130 29613ca0ba37bdb581e35d20541dbb94b661306ce80317e6a0c68c7f4ef554bc. This is file/hash inspection, NOT a version-checker pass. The raw CRLF checkout was not normalized.
++
++No application/test/build/checker/Actions/TLC execution in this unit. The code metadata revision/fingerprint has been updated, but official checker and runtime validation remain pending authorized Actions; version work is not declared verified/complete. Prior r129 local execution deviation is recorded separately and is not repeated or used as r130 evidence.
++
++Code130 stays stale. Source45/PlusCal25/verification26 and derived_from are unchanged. No claim of whole-Adapter fidelity, native import integration or whole-stage completion. Stage1 remaining caller/screen correspondence, stage2 current capture/resource lifetime, stage3 remaining owners and stage4 integration remain open. Existing r129 changes, regression-cleanup WIP, reviews and failure log are preserved. No policy/upper-layer/dist/remote changes, commit, push or delegation.
++
++Rejected: guarding only current UI callers (leaves direct calls inconsistent); returning empty public input before lifecycle (contradicts OneOuterTaskBinding); moving child helpers behind additional public lifecycle bindings (self-rejection); introducing a task manager or duplicating router state (unnecessary). Patch20261106-002 records only this incremental unit over the existing working tree.
