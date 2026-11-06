@@ -1,0 +1,316 @@
+diff --git a/sourcecode/application/adapter.js b/sourcecode/application/adapter.js
+--- a/sourcecode/application/adapter.js
++++ b/sourcecode/application/adapter.js
+@@ -90,8 +90,24 @@
+   if (state.selectedSlotId !== null && state.overlay === "readme")
+     appFSM.send("CLOSE_OVERLAY", { reason: "slot-selected" });
+ }
+-export function updateGraphView() {
+-  const projection = readBackendProjection("renderer"), state = interfaceFSM.readState();
++export function dispatchSlotSelection(slotId, pendingContentType = null, direction = "ui-to-fsm") {
++  const validatedInput = validateFrontendIntent("SELECT_SLOT", { slotId, direction });
++  if (!validatedInput.accepted) return [interfaceFSM.readState(), null, null];
++  interfaceFSM.send("SELECT_SLOT", { slotId, direction, validatedInput });
++  let state = interfaceFSM.readState(), projectResult = null;
++  if (state.selectedSlotId !== null && pendingContentType !== null) {
++    const context = readBackendProjection("slot-selection-context", { slotId: state.selectedSlotId });
++    if (context?.empty && context.contentType !== pendingContentType) {
++      projectResult = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
++        slotId: state.selectedSlotId, contentType: pendingContentType,
++      });
++      state = interfaceFSM.readState();
++    }
++  }
++  return [state, projectResult, readBackendProjection("renderer", { frontendState: state })];
++}
++
++export function updateGraphView(projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
+   debugLog("updateGraphView", { selectedSlotId: state.selectedSlotId });
+   return updateGraphViewProjection(projection, state, dashboardFrontendActions());
+ }
+diff --git a/sourcecode/application/public_api/layout_annotations.js b/sourcecode/application/public_api/layout_annotations.js
+--- a/sourcecode/application/public_api/layout_annotations.js
++++ b/sourcecode/application/public_api/layout_annotations.js
+@@ -1,8 +1,8 @@
+ // Source: sourcescript/application/public_api/layout_annotations.py (same logical owner); pseudocode/application/public_api/layout_annotations.pcal.
+-import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, renderDashboard, syncDashboardCaption, applyDashboardZoom, applySlotStyle, applyUiPaletteValues, updateGraphView } from '../adapter.js';
++import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, dispatchSlotSelection, renderDashboard, syncDashboardCaption, applyDashboardZoom, applySlotStyle, applyUiPaletteValues, updateGraphView } from '../adapter.js';
+ import { activeProject } from '../../backend/project_state.js';
+ import { DEFAULT_UI_PALETTE } from '../../backend/settings.js';
+-import { interfaceFSM, interfaceRuntime } from '../../frontend/interface_fsm.js';
++import { interfaceFSM } from '../../frontend/interface_fsm.js';
+ import { clearSlotDragState, debugLog, exportDashboard, exportDashboardTarget, readDashboardRenderedWidth, schedulePlotResize, syncSlotImageElement } from '../../frontend/renderer.js';
+ 
+ export function swapSlots(sourceSlotId, targetSlotId) {
+@@ -11,16 +11,12 @@
+   return result.committed;
+ }
+ 
+-export function setSelectedSlot(slotId = null, direction = "fsm-to-model") {
+-  debugLog("setSelectedSlot:command", {
+-    slotId,
+-    previous: interfaceRuntime.selectedSlotId,
+-    direction,
+-  });
+-  appFSM.send("SELECT_SLOT", { slotId, direction });
+-  updateGraphView();
++export function setSelectedSlot(slotId = null, direction = "ui-to-fsm", pendingContentType = null) {
++  const [state, , projection] = dispatchSlotSelection(slotId, pendingContentType, direction);
++  if (projection === null) return state;
++  updateGraphView(projection, state);
+   requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+-  return interfaceFSM.readState();
++  return state;
+ }
+ 
+ export function mergeSlots(slotIds=[]) {
+@@ -82,9 +78,9 @@
+   const context = appFSM.query("slot-selection-context", { slotId });
+   if (!context) return false;
+   if (interfaceFSM.readState().selectedSlotId === slotId) return true;
+-  appFSM.send("SELECT_SLOT", { slotId, direction: "model-to-fsm" });
+-  if (interfaceFSM.readState().selectedSlotId !== slotId) return false;
+-  renderDashboard();
++  const [state, , projection] = dispatchSlotSelection(slotId, null, "model-to-fsm");
++  if (projection === null || state.selectedSlotId !== slotId) return false;
++  updateGraphView(projection, state);
+   return true;
+ }
+ 
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -6,12 +6,9 @@
+ // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
+ // the mounted UI owns only its collision resolver and drag finalization.
+ export async function dashboardExternalFileDrop(file, slotId, choosePlan, frontendActions) {
+-  if (!frontendActions.slots.prepareFileDrop(slotId)) {
+-    frontendActions.slots.finishFileDrop();
+-    return false;
+-  }
+   let failed = false;
+   try {
++    if (!frontendActions.slots.prepareFileDrop(slotId)) return false;
+     return await frontendActions.assets.importToSlot(file, slotId, choosePlan);
+   } catch (error) {
+     failed = true;
+@@ -3019,7 +3016,7 @@
+   const file = event.dataTransfer?.files?.[0];
+   if (!file) return;
+   const element = event.target.closest?.(".slot");
+-  const slotId = element ? Number(element.dataset.slot) : NaN;
++  const slotId = element?.parentElement === dashboard ? Number(element.dataset.slot) : NaN;
+   event.preventDefault();
+   event.stopPropagation();
+   try {
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1181,6 +1181,21 @@
+       appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(resource) });
+       check(appFSM.state.graphObjectIndex === null && appFSM.state.graphObject === "none",
+         "asset selection retained graph selection");
++      const rejectedState = interfaceFSM.state, rejectedSource = activeProject._state;
++      api.slots.select(-999, "ui-to-fsm", "image");
++      check(interfaceFSM.state === rejectedState && activeProject._state === rejectedSource,
++        "public rejected slot changed selection or applied pending type");
++      api.slots.select(target.id, "model-to-fsm", "image");
++      check(activeProject._state === rejectedSource && interfaceFSM.readState().selectedSlotId === target.id,
++        "pending type changed occupied slot or model selection toggled");
++      api.slots.reset(target.id);
++      const emptySource = activeProject._state;
++      api.slots.select(target.id, "ui-to-fsm", "image");
++      check(interfaceFSM.readState().selectedSlotId === null && activeProject._state === emptySource,
++        "toggle-clear applied a persistent type intent");
++      const finalState = api.slots.select(target.id, "ui-to-fsm", "image");
++      check(finalState.selectedSlotId === target.id && finalState.workspace === "slot.image" &&
++        slotAt(target.id).contentType === "image", "empty-slot intent did not reconcile final selection/workspace");
+       api.slots.select(null);
+       check(interfaceRuntime.selectedSlotId === null && appFSM.state.workspace === "project",
+         "explicit deselection did not clear slot workspace");
+@@ -3969,16 +3984,23 @@
+ 
+     await run(93, "File-drop preparation uses official context and accepted selection without Project edits", async () => {
+       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = interfaceRuntime.selectedSlotId,
+-        query = readBackendProjection, send = interfaceFSM.send, render = renderDashboard, command = projectEFSM.send,
++        query = readBackendProjection, send = interfaceFSM.send, render = updateGraphView, command = projectEFSM.send,
+         drag = rendererRuntime.slotDragSourceId;
+       try {
+         api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+         select(slotAt(a.id)); const before = JSON.stringify(activeProject._state);
+-        let events = 0, reads = 0, paints = 0;
+-        renderDashboard = () => { paints++; };
++        let events = 0, reads = 0, projections = 0, paints = 0;
++        updateGraphView = (projection, state) => {
++          paints++; check(state.selectedSlotId === b.id && projection.visibleSlots.some(slot => slot.id === b.id),
++            "drop did not consume the final supplied selection projection");
++        };
+         projectEFSM.send = () => { throw Error("file-drop preparation issued Project command"); };
+         readBackendProjection = function (kind, request) {
+-          reads++; check(kind === "slot-selection-context" && Object.keys(request).join(",") === "slotId", "file-drop bypassed official scalar query");
++          if (kind === "renderer") {
++            projections++; check(request.frontendState.selectedSlotId === b.id, "projection preceded final selection");
++          } else {
++            reads++; check(kind === "slot-selection-context" && Object.keys(request).join(",") === "slotId", "file-drop bypassed official scalar query");
++          }
+           return query(kind, request);
+         };
+         interfaceFSM.send = function (event, payload) {
+@@ -3988,28 +4010,28 @@
+         };
+         rendererRuntime.slotDragSourceId = a.id;
+         check(api.slots.prepareFileDrop(b.id) === true && interfaceFSM.readState().selectedSlotId === b.id &&
+-          events === 1 && reads === 1 && paints === 1 && rendererRuntime.slotDragSourceId === a.id &&
++          events === 1 && reads === 1 && projections === 1 && paints === 1 && rendererRuntime.slotDragSourceId === a.id &&
+           JSON.stringify(activeProject._state) === before, "drop prep did not ensure accepted selection or changed domain/drag state");
+         const runtime = interfaceFSM.state;
+-        check(api.slots.prepareFileDrop(b.id) === true && events === 1 && reads === 2 && paints === 1 &&
++        check(api.slots.prepareFileDrop(b.id) === true && events === 1 && reads === 2 && projections === 1 && paints === 1 &&
+           interfaceFSM.state === runtime, "same-slot prep toggled/published/rendered");
+         const element = document.querySelector("#dashboard .slot"); element?.classList.add("drag-over");
+         check(api.slots.finishFileDrop() === null && rendererRuntime.slotDragSourceId === null &&
+           !document.querySelector("#dashboard .slot.drag-over") && interfaceFSM.state === runtime &&
+           JSON.stringify(activeProject._state) === before, "drop finish changed lifecycle/selection/Project or failed cleanup");
+-      } finally { readBackendProjection = query; interfaceFSM.send = send; renderDashboard = render; projectEFSM.send = command;
++      } finally { readBackendProjection = query; interfaceFSM.send = send; updateGraphView = render; projectEFSM.send = command;
+         activeProject.initialize(saved); interfaceFSM.state = session; interfaceRuntime.selectedSlotId = selected; rendererRuntime.slotDragSourceId = drag; }
+     });
+ 
+     await run(94, "File-drop rejected/stale references preserve selection and propagate exact failures", async () => {
+       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = interfaceRuntime.selectedSlotId,
+-        query = readBackendProjection, validate = validateFrontendIntent, send = interfaceFSM.send, render = renderDashboard,
++        query = readBackendProjection, validate = validateFrontendIntent, send = interfaceFSM.send, render = updateGraphView,
+         failure = Error("file-drop boundary"), drag = rendererRuntime.slotDragSourceId;
+       try {
+         api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+         select(slotAt(a.id)); const source = activeProject._state, runtime = interfaceFSM.state;
+         let events = 0, paints = 0, caught;
+-        renderDashboard = () => { paints++; };
++        updateGraphView = () => { paints++; };
+         interfaceFSM.send = function (...args) { events++; return send.apply(this, args); };
+         rendererRuntime.slotDragSourceId = a.id;
+         for (const id of [null, undefined, -1]) check(api.slots.prepareFileDrop(id) === false, "missing drop target accepted");
+@@ -4037,11 +4059,11 @@
+         readBackendProjection = query;
+         check(api.slots.prepareFileDrop(b.id) === false && interfaceFSM.state === runtime, "hidden drop target accepted");
+         const visible = projectClone(activeProject._state); visible.slots.find(slot => slot.id === b.id).hidden = false;
+-        activeProject.initialize(visible); renderDashboard = () => { throw failure; }; caught = null;
++        activeProject.initialize(visible); updateGraphView = () => { throw failure; }; caught = null;
+         try { api.slots.prepareFileDrop(b.id); } catch (error) { caught = error; }
+         check(caught === failure && interfaceFSM.readState().selectedSlotId === b.id,
+           "drop renderer failure swallowed or accepted selection rolled back");
+-      } finally { readBackendProjection = query; validateFrontendIntent = validate; interfaceFSM.send = send; renderDashboard = render;
++      } finally { readBackendProjection = query; validateFrontendIntent = validate; interfaceFSM.send = send; updateGraphView = render;
+         activeProject.initialize(saved); interfaceFSM.state = session; interfaceRuntime.selectedSlotId = selected; rendererRuntime.slotDragSourceId = drag; }
+     });
+ 
+@@ -7477,10 +7499,15 @@
+     await run(171, "Dashboard drop uses the public lifecycle and finishes drag after settle without replacing original failures", async () => {
+       const session = interfaceFSM.state, notify = interfaceFSM.notify, toSlot = importProjectFileToSlot,
+         send = interfaceFSM.send, trace = [], file = Object.freeze({ name: "drop.csv" }), choosePlan = () => {};
+-      let accepted = true, finishFailure = false, task, starts = 0;
++      let accepted = true, finishFailure = false, prepareFailure = false, task, starts = 0;
++      const prepareError = Error("drop preparation failed");
+       const cleanupError = Error("drop cleanup failed"), actions = {
+         slots: {
+-          prepareFileDrop(id) { check(id === 751, "drop retargeted the explicit slot"); trace.push("prepare"); return accepted; },
++          prepareFileDrop(id) {
++            check(id === 751, "drop retargeted the explicit slot"); trace.push("prepare");
++            if (prepareFailure) throw prepareError;
++            return accepted;
++          },
+           finishFileDrop() {
+             check(interfaceFSM.state.lifecycle === "ready", "drag finished before public import settled/recovered");
+             trace.push("finish"); if (finishFailure) throw cleanupError;
+@@ -7524,6 +7551,10 @@
+         finishFailure = false; accepted = false; trace.length = 0; const before = starts;
+         check(await dashboardExternalFileDrop(file, 751, choosePlan, actions) === false &&
+           trace.join() === "prepare,finish" && starts === before, "invalid target imported, toggled selection or skipped drag finish");
++        prepareFailure = true; finishFailure = true; trace.length = 0; caught = null;
++        try { await dashboardExternalFileDrop(file, 751, choosePlan, actions); } catch (error) { caught = error; }
++        check(caught === prepareError && trace.join() === "prepare,finish" && starts === before,
++          "preparation failure skipped cleanup, imported or lost original failure");
+       } finally {
+         importProjectFileToSlot = toSlot; interfaceFSM.send = send; interfaceFSM.notify = notify; interfaceFSM.state = session;
+       }
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 132,
++      "revision": 133,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:96643e941e147d88e03cfb600af3fa31bd77f52e5644e3b9c048633110a54727",
++      "fingerprint": "sha256:3b7606514153b8193aa84fbe069a4d1531270264326b8d6bb20c111180f09eb9",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261106-004-vfs-boundary-open.md"
++      "validation_review": "agent_space/reviews/review-20261106-005-selection-screen-open.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/plans/plan-024.md b/agent_space/plans/plan-024.md
+--- a/agent_space/plans/plan-024.md
++++ b/agent_space/plans/plan-024.md
+@@ -88,3 +88,9 @@
+ - 허용되는 로컬 작업은 읽기·편집 및 정적 파일/diff/hash 작업이다. application/test/build/checker는 로컬에서 실행하지 않는다. Actions·commit/push·delegation·새 goal 등록은 이 계획의 암묵적 허가가 아니다.
+ - 임시 projection/snapshot은 작업 입력일 뿐 독립 권위·재사용 current cache·mutation candidate로 승격하지 않는다. 기존 정책, WIP, dist와 사용자 파일을 보존한다.
+ - 상위 계약의 충돌, 새 의미 필요, 해결 불가능한 동시 수정, 필요한 접근/실행 권한 부재 또는 실행 없이는 결정할 수 없는 장애가 있으면 해당 경계에서 중단한다. 근거 경로, 시도한 방법, 남은 불확실성과 필요한 사용자 입력을 보고한다. 인접 기능 수정으로 우회하거나 plan 순서를 바꾸지 않는다.
++
++## 8. 진행 기록 — r133 (2026-11-06, 1단계 유지)
++
++첫 경로의 실제 누락을 구현했다. Adapter의 dispatchSlotSelection을 Source/PlusCal대로 추가하고 public 선택과 drop 준비가 그 최종 state/projection을 소비하도록 연결했다. 거부 시 query/repaint/resize 없이 반환하며, explicit pending type은 final non-null empty target에만 Project command로 적용한다. mounted drop은 기존 단일 stable receiver를 유지하고 direct dashboard host만 target으로 인정한다. 선택 준비 오류도 finally drag cleanup을 거치며 원래 오류를 보존한다.
++
++기존37/93/94/171만 변경했으며 새 테스트를 추가하지 않았다. review `agent_space/reviews/review-20261106-005-selection-screen-open.md`, incremental patch `agent_space/patches/20261106-006.patch`/동명 설명이 범위와 한계를 기록한다. code133/stale, 공식 checker/브라우저/build/Actions 미실행이다. Source45/PlusCal25와 정책·dist·기존 WIP는 보존한다. 전체 단계 완료나 새 stage/goal 전환은 아니다. 다음은 §3의 나머지 화면 절차·실제 caller 중 graph/image completion·교체·실패 및 narrow invalidation/geometry 관계를 후속 구현까지 포함해 대조하고 실제 누락을 구현하는 것이다.
+diff --git a/agent_space/reviews/review-20261106-005-selection-screen-open.md b/agent_space/reviews/review-20261106-005-selection-screen-open.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261106-005-selection-screen-open.md
+@@ -0,0 +1,35 @@
++# r133 — dashboard selection/drop to supplied screen (open)
++
++## Scope and authority
++
++Plan024 §3 first path: mounted dashboard drop/selection → public API → final interface state → supplied renderer. This is stage1 work, not general Backend/VFS expansion. Source45 and PlusCal25 remain unchanged. No application/test/build/checker/Actions/TLC execution is performed or claimed.
++
++## Procedure / production caller correspondence
++
++| Authority | Actual production route / change | Limit |
++| --- | --- | --- |
++| sourcescript/application/adapter.py:dispatchSlotSelection; pseudocode/application/adapter.pcal:dispatchSlotSelection | New adapter.dispatchSlotSelection validates SELECT_SLOT once, returns unchanged state/no projection on rejection, sends validated runtime intent, conditionally issues SLOT_TYPE_CHANGED only after a final non-null selection and current empty/type context, then reads renderer input with final state | Other appFSM.send SELECT_SLOT callers remain generic Frontend event dispatch, not implicit persistent-intent dispatch |
++| sourcescript/frontend/renderer.py:setSelectedSlot, installSlotClickController; public contract slots.select | Public setSelectedSlot uses this operation and consumes its returned state/projection through updateGraphView. Rejected reference does not repaint or schedule resize. Renderer controller and actual Mantine layout controls already invoke this public path | Existing positional slotId/direction retained; optional third pendingContentType maps explicitly to Adapter's second parameter. No stored pending type. Default direction is ui-to-fsm per Adapter contract |
++| sourcescript/application/public_api/layout_annotations.py:prepareDashboardFileDrop; corresponding PlusCal | Missing context returns false; same selected target returns true without transition/additional renderer read/repaint. Other valid target uses the same Adapter with null pending type and model-to-fsm; consumes final supplied input, not a second read in renderDashboard | Current revalidation can reject a context that became stale; no content-type command, duplicate target authority or toggle |
++| sourcescript/frontend/mantine_ui.py:DASHBOARD_DROP_FLOW, DASHBOARD_DROP_LIFETIME_RULE; pseudocode/frontend/mantine_ui.pcal:MaintainDashboardDropReceiver / DashboardExternalFileDrop | Existing mounted component owns one dashboard capture listener; choosePlan is useCallback([]), collision updates do not replace it. Retain this receiver rather than invent another service. Receiver only accepts the direct dashboard slot host. dashboardExternalFileDrop now puts prepare inside try/finally so prepare query/selection/render errors also finish drag once and preserve the original failure even if cleanup throws | Source's unconditional finally/drag-only cleanup controls exceptional preparation as well; PlusCal's normal path spells out prepare then import/finalize, not a new permission to leak preparation drag state. No upper-layer semantic change |
++| public assets.importToSlot lifecycle | Unchanged one public importing owner. Import awaits collision choice, then original public result/throw settles before finish. Unmount collision cleanup resolves null through existing resolver | Native browser drop, React effect lifetime and actual collision/import integration remain unexecuted |
++
++The prior setSelectedSlot called appFSM.send then read/rendered even for rejected references and had no explicit pending intent operation. The prior drop preparation duplicated selection/render logic and reread renderer inputs. These are actual procedural omissions; this unit does not invent a new workspace/selection bridge or persistent candidate outside Project EFSM.
++
++## State, reads, mutation and failure
++
++- Backend validateFrontendIntent is current reference authority; Frontend FSM owns selectedSlotId/workspace; Project EFSM alone creates/validates/commits the optional type change. Rejected selection returns without renderer query or publication.
++- The Adapter tuple is one operation-local result, immediately consumed by the screen wrapper. Neither state nor projection is retained, synchronized, reused by unrelated features, or fed into mutation. Type command carries only final selectedSlotId and explicit type.
++- updateGraphView accepts explicit projection/state for this route; existing independent refresh callers omit them and read their own current inputs. No cache/freshness arbitration is added.
++- Public selection preserves accepted runtime state if subsequent rendering throws. Drop finally clears drag bookkeeping only; import or prepare failure remains original, including the existing null/undefined import rejection handling. Cleanup-only throw still propagates.
++- Generic assets.connectToSlot/tree dragging, current export capture and remaining owner translation are unchanged.
++
++## Authored evidence and actual inspection
++
++Existing cases37/93/94/171 only are adjusted. 37 uses real public selection/Backend/FSM for rejected, occupied, toggle-clear and empty pending intent outcomes. 93/94 follow final supplied renderer input and keep stale-reference/throw/drag-state coverage rather than demand legacy renderDashboard. 171 includes prepare+cleanup simultaneous failure without adding a new case. These are authored assertions, NOT executed results or native integration proof. The existing 167 historical IDs remain unchanged.
++
++Static file/diff/hash inspection only: canonical LF calculation reproduces r132 fingerprint `sha256:96643e941e147d88e03cfb600af3fa31bd77f52e5644e3b9c048633110a54727` before calculating r133 `sha256:3b7606514153b8193aa84fbe069a4d1531270264326b8d6bb20c111180f09eb9`. This is not execution of the official checker; raw CRLF files were not normalized. Source/PlusCal/verification lineage is preserved; code stays stale and official version acceptance remains pending.
++
++## Remaining objective
++
++This completes the bounded implementation path above, not stage1. Continue plan024 §3's remaining actual screen procedure/branch/caller correspondence, especially graph/image completion/replacement/failure and narrow invalidation/geometry interaction, removing only real uncovered gaps. The previous implementation units must be considered before labeling old OPEN findings as missing again. Mounted/native execution and full stage1 audit remain open. Do not jump to stage2 capture or general stage3 owner expansion.
