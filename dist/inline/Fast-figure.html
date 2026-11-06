@@ -12249,6 +12249,32 @@ function readBackendProjection(kind, request = {}) {
   }
   if (kind === "project-api" && request.operation === "assets.isTrashed")
     return projectVfs.isTrashed(request.path);
+  if (kind === "project-api" && request.operation === "assets.planMove")
+    return planProjectNodeMove(request.path, request.directory, activeProject._state);
+  if (kind === "project-api" && [
+    "assets.movable",
+    "assets.moveOptions",
+    "assets.draggableAsset",
+    "assets.resolveTreeSelection"
+  ].includes(request.operation)) {
+    const source = activeProject._state, path = normalizeProjectPath(request.path, { directory: true }), node = projectVfs.resolve(path, source), fixed = projectVfs.isFixedDirectory(path);
+    if (request.operation === "assets.movable") return !!node && !fixed;
+    if (request.operation === "assets.moveOptions")
+      return immutableProjectCopy(!node || fixed ? [] : source.fileSystem.directories.filter((directory) => node.kind !== "directory" || !projectPathInDirectory(directory, path)));
+    if (request.operation === "assets.resolveTreeSelection")
+      return immutableProjectCopy(node ? {
+        accepted: true,
+        kind: node.kind,
+        path: node.kind === "directory" ? node.path : projectAssetPath(node.asset)
+      } : { accepted: false, kind: null, path: null });
+    if (!node || !["csv", "image"].includes(node.kind) || projectVfs.isTrashed(path)) return null;
+    return immutableProjectCopy({
+      kind: node.kind,
+      id: node.asset.id,
+      path: projectAssetPath(node.asset),
+      name: node.asset.name
+    });
+  }
   if (kind === "project-api" && request.operation === "assets.fileKind")
     return slotFileKind(request.file);
   if (kind === "project-api" && request.operation === "assets.collisionModel")
@@ -12290,6 +12316,24 @@ function readBackendProjection(kind, request = {}) {
       imageId: slot2.content?.imageId ?? slot2.imageId
     }) : null;
   }
+  if (kind === "project-api" && request.operation === "assets.readTree") {
+    const source = activeProject._state;
+    return immutableProjectCopy(projectDataTreeSnapshot({
+      files: source.fileSystem,
+      data: source.assets.csvFiles,
+      images: source.assets.images,
+      charts: source.charts,
+      slots: source.slots
+    }));
+  }
+  if (kind === "project-api" && request.operation === "graphs.defaultColors")
+    return immutableProjectCopy(DEFAULT_COLORS);
+  if (kind === "project-api" && request.operation === "graphs.hasSelectedSlot")
+    return activeProject._state.slots.some((slot2) => slot2.id === request.selectedSlotId && !slot2.hidden && slot2.contentType === "graph");
+  if (kind === "project-api" && request.operation === "graphs.readPalette") {
+    const source = activeProject._state, slot2 = source.slots.find((item) => item.id === request.selectedSlotId && !item.hidden && item.contentType === "graph"), chart = slot2 ? source.charts.find((item) => item.id === (slot2.content?.chart ?? slot2.chart)) : null;
+    return immutableProjectCopy((chart?.editor?.objects || []).map((object) => object.color));
+  }
   if (kind === "project-api" && request.operation === "graphs.readLayout") {
     const source = activeProject._state, slot2 = source.slots.find((item) => item.id === request.selectedSlotId && !item.hidden), chartId = slot2?.content?.chart ?? slot2?.chart, chart = slot2?.contentType !== "image" ? source.charts.find((item) => item.id === chartId) : null;
     return chart ? immutableProjectCopy({
@@ -12300,7 +12344,7 @@ function readBackendProjection(kind, request = {}) {
     }) : null;
   }
   if (kind === "project-api" && request.operation === "graphs.readData") {
-    const source = activeProject._state, state = request.frontendState || {}, owners = Object.hasOwn(request, "chartId") ? source.slots.filter((slot3) => (slot3.content?.chart ?? slot3.chart) === request.chartId) : [], slot2 = Object.hasOwn(request, "chartId") ? owners.length === 1 ? owners[0] : null : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden), chartId = slot2?.content?.chart ?? slot2?.chart, chart = source.charts.find((item) => item.id === chartId) || null, objects = chart?.editor?.objects || [], index = state.graphObjectIndex, selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length ? index : null, node = state.assetSelection === "csv" && state.assetPath ? projectVfs.resolve(state.assetPath, source) : null, csv = node?.kind === "csv" ? node.asset : null, objectCsv = selectedIndex === null ? null : source.assets.csvFiles.find((item) => item.id === objects[selectedIndex].csvId);
+    const source = activeProject._state, state = request.frontendState || {}, owners = Object.hasOwn(request, "chartId") ? source.slots.filter((slot3) => (slot3.content?.chart ?? slot3.chart) === request.chartId) : [], slot2 = Object.hasOwn(request, "chartId") ? owners.length === 1 ? owners[0] : null : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden), chartId = slot2?.content?.chart ?? slot2?.chart, chart = slot2 && !slot2.hidden && slot2.contentType === "graph" ? source.charts.find((item) => item.id === chartId) || null : null, objects = chart?.editor?.objects || [], index = state.graphObjectIndex, selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length ? index : null, node = state.assetSelection === "csv" && state.assetPath ? projectVfs.resolve(state.assetPath, source) : null, csv = node?.kind === "csv" ? node.asset : null, objectCsv = selectedIndex === null ? null : source.assets.csvFiles.find((item) => item.id === objects[selectedIndex].csvId);
     return immutableProjectCopy({
       chart,
       objects,
@@ -16071,16 +16115,12 @@ function swapSlots(sourceSlotId, targetSlotId) {
   if (result.committed) renderDashboard();
   return result.committed;
 }
-function setSelectedSlot(slotId = null, direction = "fsm-to-model") {
-  debugLog("setSelectedSlot:command", {
-    slotId,
-    previous: interfaceRuntime.selectedSlotId,
-    direction
-  });
-  appFSM.send("SELECT_SLOT", { slotId, direction });
-  updateGraphView();
+function setSelectedSlot(slotId = null, direction = "ui-to-fsm", pendingContentType = null) {
+  const [state, , projection] = dispatchSlotSelection(slotId, pendingContentType, direction);
+  if (projection === null) return state;
+  updateGraphView(projection, state);
   requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
-  return interfaceFSM.readState();
+  return state;
 }
 function mergeSlots(slotIds = []) {
   const result = dispatchProjectCommand("SLOTS_MERGED", { slotIds });
@@ -16135,9 +16175,9 @@ function prepareDashboardFileDrop(slotId) {
   const context = appFSM.query("slot-selection-context", { slotId });
   if (!context) return false;
   if (interfaceFSM.readState().selectedSlotId === slotId) return true;
-  appFSM.send("SELECT_SLOT", { slotId, direction: "model-to-fsm" });
-  if (interfaceFSM.readState().selectedSlotId !== slotId) return false;
-  renderDashboard();
+  const [state, , projection] = dispatchSlotSelection(slotId, null, "model-to-fsm");
+  if (projection === null || state.selectedSlotId !== slotId) return false;
+  updateGraphView(projection, state);
   return true;
 }
 function finishDashboardFileDrop() {
@@ -16242,12 +16282,16 @@ function setPrintApiSettings(values = {}) {
   return result.committed ? readPrintApiSettings() : false;
 }
 function savePrintApi(options = {}) {
-  const snapshot = appFSM.query("export", { operation: "print.save" });
-  return exportDashboardTarget(snapshot, options.onStatus);
+  return appFSM.run("exporting", "print.save", () => {
+    const snapshot = appFSM.query("export", { operation: "print.save" });
+    return exportDashboardTarget(snapshot, options.onStatus);
+  });
 }
 function capturePrintApi(options = {}) {
-  const snapshot = appFSM.query("export", { operation: "print.capture" });
-  return exportDashboard(snapshot, options.onStatus);
+  return appFSM.run("exporting", "print.capture", () => {
+    const snapshot = appFSM.query("export", { operation: "print.capture" });
+    return exportDashboard(snapshot, options.onStatus);
+  });
 }
 function readLabelsApiState() {
   return appFSM.query("project-api", {
@@ -16428,8 +16472,24 @@ function updateFileAvailability() {
   if (state.selectedSlotId !== null && state.overlay === "readme")
     appFSM.send("CLOSE_OVERLAY", { reason: "slot-selected" });
 }
-function updateGraphView() {
-  const projection = readBackendProjection("renderer"), state = interfaceFSM.readState();
+function dispatchSlotSelection(slotId, pendingContentType = null, direction = "ui-to-fsm") {
+  const validatedInput = validateFrontendIntent("SELECT_SLOT", { slotId, direction });
+  if (!validatedInput.accepted) return [interfaceFSM.readState(), null, null];
+  interfaceFSM.send("SELECT_SLOT", { slotId, direction, validatedInput });
+  let state = interfaceFSM.readState(), projectResult = null;
+  if (state.selectedSlotId !== null && pendingContentType !== null) {
+    const context = readBackendProjection("slot-selection-context", { slotId: state.selectedSlotId });
+    if (context?.empty && context.contentType !== pendingContentType) {
+      projectResult = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
+        slotId: state.selectedSlotId,
+        contentType: pendingContentType
+      });
+      state = interfaceFSM.readState();
+    }
+  }
+  return [state, projectResult, readBackendProjection("renderer", { frontendState: state })];
+}
+function updateGraphView(projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
   debugLog("updateGraphView", { selectedSlotId: state.selectedSlotId });
   return updateGraphViewProjection(projection, state, dashboardFrontendActions());
 }
@@ -16460,10 +16520,13 @@ function renderProjectObject() {
 var BACKEND_REFERENCE_EVENTS = /* @__PURE__ */ new Set(["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]);
 var PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
 function runLifecycleTask(lifecycle, event2, task) {
-  if (interfaceFSM.state.lifecycle !== "ready")
+  const state = interfaceFSM.readState();
+  if (state.lifecycle !== "ready")
     return Promise.reject(
-      Error(`현재 ${interfaceFSM.state.lifecycle} 상태에서는 ${event2} 작업을 시작할 수 없습니다.`)
+      Error(`현재 ${state.lifecycle} 상태에서는 ${event2} 작업을 시작할 수 없습니다.`)
     );
+  if (lifecycle !== "importing" && lifecycle !== "exporting")
+    return Promise.reject(Error("작업 lifecycle은 importing 또는 exporting이어야 합니다."));
   interfaceFSM.send("LIFECYCLE_START", { lifecycle, event: event2 });
   const complete = (result) => {
     const outcome = result?.outcome === "rejected" ? "rejected" : result?.outcome || "complete";
@@ -16509,7 +16572,7 @@ var appFSM = Object.freeze({
       dispatchProjectCommand(event2, payload);
       return interfaceFSM.state;
     }
-    let validatedInput = BACKEND_REFERENCE_EVENTS.has(event2) ? validateFrontendIntent(event2, { ...payload, selectedSlotId: interfaceRuntime.selectedSlotId }) : null;
+    let validatedInput = BACKEND_REFERENCE_EVENTS.has(event2) ? validateFrontendIntent(event2, { ...payload, selectedSlotId: interfaceFSM.readState().selectedSlotId }) : null;
     if (validatedInput && !validatedInput.accepted) return interfaceFSM.state;
     interfaceFSM.send(event2, validatedInput ? { ...payload, validatedInput } : payload);
     return interfaceFSM.state;
@@ -16553,37 +16616,8 @@ function activateChartModel(id) {
 }
 
 // sourcecode/application/public_api/graphs.js
-function graphEditorChart() {
-  let slot = readSelectedSlotApi();
-  return slot?.chart ? getChart(slot.chart) : null;
-}
-function graphEditorCommit(objects, index = null) {
-  let chart = graphEditorChart();
-  if (!chart) return null;
-  if (chart.editor?.editable === false) {
-    status("원본 JSON 그래프는 편집 가능 상태로 전환한 뒤 변경할 수 있습니다.");
-    return null;
-  }
-  let payload = { chartId: chart.id, objects: [...objects], index, direction: "fsm-to-model" };
-  appFSM.send("GRAPH_OBJECTS_REPLACED", payload);
-  chart = payload.chart;
-  let selected = Number.isInteger(index) && index >= 0 && index < chart.editor.objects.length ? index : null;
-  appFSM.send(
-    selected === null ? "CLEAR_GRAPH_OBJECT" : "SELECT_GRAPH_OBJECT",
-    { index: selected, direction: "fsm-to-model" }
-  );
-  renderDashboard();
-  updateFileAvailability();
-  appFSM.notify("charts", "GRAPH_OBJECTS_CHANGED");
-  return chart;
-}
-function graphEditorSelectCsv(csvId) {
-  let csv = getProjectCsv(Number(csvId));
-  if (!csv) return null;
-  appFSM.send("CLEAR_GRAPH_OBJECT", { index: null, direction: "ui-to-fsm" });
-  appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(csv), direction: "ui-to-fsm" });
-  appFSM.notify("data", "CSV_SELECTION_CHANGED");
-  return csv;
+function graphEditorSelectCsv(path) {
+  return appFSM.send("SELECT_ASSET", { kind: "csv", path, direction: "ui-to-fsm" });
 }
 function createEmptyProjectCsvAndSelect() {
   const csv = createEmptyProjectCsv();
@@ -16591,11 +16625,12 @@ function createEmptyProjectCsvAndSelect() {
   return selectProjectCsv(projectAssetPath(csv));
 }
 function graphEditorSelectObject(index) {
-  let input = validateFrontendIntent("SELECT_GRAPH_OBJECT", { index, selectedSlotId: interfaceRuntime.selectedSlotId, selectAsset: true });
-  if (!input.accepted) return null;
-  appFSM.send("SELECT_GRAPH_OBJECT", { index: input.reference, selectAsset: true, direction: "fsm-to-model" });
-  appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
-  return input.reference;
+  return appFSM.send("SELECT_GRAPH_OBJECT", {
+    index,
+    selectedSlotId: interfaceFSM.readState().selectedSlotId,
+    selectAsset: true,
+    direction: "ui-to-fsm"
+  });
 }
 function graphEditorObjectValues(chartId, index, values = {}) {
   const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
@@ -16691,41 +16726,22 @@ function setGraphEditableApi(editable = null) {
   return graphEditorSetEditable(state.selectedSlotId, context.chart.id, next);
 }
 function readGraphDataApi() {
-  let chart = graphEditorChart(), objects = normalizedGraphObjects(chart);
-  let index = appFSM.state.graphObjectIndex;
-  let selectedIndex = Number.isInteger(index) && objects[index] ? index : null;
-  let csv = selectedProjectCsv();
-  let objectCsv = selectedIndex === null ? null : getProjectCsv(objects[selectedIndex].csvId);
-  return {
-    objectColumns: objectCsv ? columnDefinitions(objectCsv.rows, objectCsv.headerLines) : [],
-    chartId: chart?.id ?? null,
-    editable: chart?.editor?.editable !== false,
-    objects: projectClone(objects),
-    selectedIndex,
-    csv: csv ? {
-      id: csv.id,
-      headerLines: csv.headerLines,
-      rowCount: csv.rows.length,
-      rows: projectClone(csv.rows.slice(0, 30)),
-      columns: columnDefinitions(csv.rows, csv.headerLines)
-    } : null,
-    csvOptions: activeProject.csvFiles.map((item) => ({
-      value: String(item.id),
-      label: item.name
-    }))
-  };
+  const state = interfaceFSM.readState();
+  return appFSM.query("project-api", { operation: "graphs.readData", frontendState: {
+    selectedSlotId: state.selectedSlotId,
+    assetPath: state.assetPath,
+    assetSelection: state.assetSelection,
+    graphObjectIndex: state.graphObjectIndex
+  } });
 }
 function readGraphLayoutApi() {
   return appFSM.query("project-api", { operation: "graphs.readLayout", selectedSlotId: interfaceFSM.readState().selectedSlotId });
 }
 function readGraphPaletteApi() {
-  let chart = graphEditorChart();
-  return {
-    slotId: readSelectedSlotApi()?.id ?? null,
-    chartId: chart?.id ?? null,
-    editable: chart?.editor?.editable !== false,
-    colors: normalizedGraphObjects(chart).map((object) => object.color)
-  };
+  return appFSM.query("project-api", {
+    operation: "graphs.readPalette",
+    selectedSlotId: interfaceFSM.readState().selectedSlotId
+  });
 }
 async function importSelectedGraphFile(file, slotId = interfaceFSM.readState().selectedSlotId) {
   const [copied] = await prepareCopiedImportFiles([file]), result = dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId, file: copied });
@@ -16865,14 +16881,7 @@ function downloadProjectAsset(path) {
   });
 }
 function selectDirectoryFromTree(path) {
-  let match = projectVfs.resolve(path);
-  if (match?.kind !== "directory") return status("프로젝트 폴더를 선택할 수 없습니다.");
-  appFSM.send("SELECT_ASSET", {
-    kind: "directory",
-    path: match.path,
-    direction: "ui-to-fsm"
-  });
-  status(`${match.path} 폴더를 선택했습니다.`);
+  return appFSM.send("SELECT_ASSET", { kind: "directory", path, direction: "ui-to-fsm" });
 }
 function selectProjectCsv(path) {
   const resolved = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path });
@@ -16885,23 +16894,7 @@ function selectProjectCsv(path) {
   return state.revision > priorRevision && state.assetSelection === "csv" && state.assetPath === resolved.path ? resolved.target : null;
 }
 function selectImageFromTree(path) {
-  let slot = readSelectedSlotApi(), match = projectVfs.resolve(path), image = match?.kind === "image" ? match.asset : null;
-  if (!image) return status("프로젝트 이미지를 먼저 선택하세요.");
-  appFSM.send("CLEAR_GRAPH_OBJECT", {
-    index: null,
-    direction: "ui-to-fsm"
-  });
-  appFSM.send("SELECT_ASSET", {
-    kind: "image",
-    path: projectAssetPath(image),
-    direction: "ui-to-fsm"
-  });
-  updateFileAvailability();
-  if (!slot) {
-    status(`${image.name}을 선택했습니다.`);
-    return;
-  }
-  status(`${image.name}을 선택했습니다. 이미지 슬롯의 추가 버튼이나 드롭으로 연결할 수 있습니다.`);
+  return appFSM.send("SELECT_ASSET", { kind: "image", path, direction: "ui-to-fsm" });
 }
 function readAssetDeletionTarget() {
   const resolved = appFSM.query("project-api", {
@@ -16937,8 +16930,7 @@ function readProjectTrash() {
   };
 }
 function projectNodeMoveOptions(path) {
-  let match = path ? projectVfs.resolve(path) : null;
-  return activeProject.fileSystem.directories.filter((directory) => (directory === "/assets" || directory.startsWith("/assets/")) && !projectVfs.isTrashed(directory) && !(match?.kind === "directory" && projectPathInDirectory(directory, path)));
+  return appFSM.query("project-api", { operation: "assets.moveOptions", path });
 }
 function moveProjectNode(plan, useUniqueName = false) {
   if (!plan) return null;
@@ -16969,8 +16961,7 @@ function emptyProjectTrash() {
   return null;
 }
 function draggableProjectAsset(path) {
-  let match = path ? projectVfs.resolve(path) : null;
-  return match && match.kind !== "directory" && !projectVfs.isTrashed(path) ? { path, kind: match.kind } : null;
+  return appFSM.query("project-api", { operation: "assets.draggableAsset", path });
 }
 function connectProjectAssetPathToSlot(path, kind, slotId) {
   return connectProjectAssetToSlot(path, kind, slotId);
@@ -16990,11 +16981,10 @@ async function importProjectFileToSlot(file, slotId, choosePlan) {
   return imported;
 }
 async function importProjectAssetFiles(files, choosePlan) {
-  const inputs = Array.from(files && typeof files[Symbol.iterator] === "function" ? files : files ? [files] : []);
-  if (!inputs.length) return [];
-  const targetSlotId = interfaceFSM.readState().selectedSlotId;
-  return runLifecycleTask("importing", "ASSET_IMPORT", async () => {
-    const output = [];
+  return runLifecycleTask("importing", "assets.importFiles", async () => {
+    const inputs = Array.from(files && typeof files[Symbol.iterator] === "function" ? files : files ? [files] : []);
+    if (!inputs.length) return [];
+    const targetSlotId = interfaceFSM.readState().selectedSlotId, output = [];
     for (const file of inputs) {
       const kind = readAssetFileKind(file);
       let item;
@@ -17072,12 +17062,12 @@ function publishPublicApi() {
     assets: Object.freeze({
       readDeletionTarget: readAssetDeletionTarget,
       delete: deleteProjectAsset,
-      readTree: () => projectDataTreeSnapshot(projectDataTreeObjects()),
-      isTrashed: (path) => projectVfs.isTrashed(path),
-      movable: movableProjectNode,
+      readTree: () => appFSM.query("project-api", { operation: "assets.readTree" }),
+      isTrashed: (path) => appFSM.query("project-api", { operation: "assets.isTrashed", path }),
+      movable: (path) => appFSM.query("project-api", { operation: "assets.movable", path }),
       readTrash: readProjectTrash,
       moveOptions: projectNodeMoveOptions,
-      planMove: planProjectNodeMove,
+      planMove: (path, directory) => appFSM.query("project-api", { operation: "assets.planMove", path, directory }),
       move: moveProjectNode,
       createDirectory: createProjectDirectory,
       createEmptyCsv: createEmptyProjectCsvAndSelect,
@@ -17109,8 +17099,11 @@ function publishPublicApi() {
       deleteObject: deleteGraphObjectApi,
       updateLayout: updateGraphLayoutApi,
       applyPalette: applyGraphPaletteApi,
-      defaultColors: () => [...DEFAULT_COLORS],
-      hasSelectedSlot: () => !!readSelectedSlotApi(),
+      defaultColors: () => appFSM.query("project-api", { operation: "graphs.defaultColors" }),
+      hasSelectedSlot: () => appFSM.query("project-api", {
+        operation: "graphs.hasSelectedSlot",
+        selectedSlotId: interfaceFSM.readState().selectedSlotId
+      }),
       importFile: (...args) => appFSM.run("importing", "graphs.importFile", () => importSelectedGraphFile(...args)),
       exportFfsx: downloadSlotFfsx,
       exportPlotlyJson: downloadPlotlyJson
@@ -17161,12 +17154,9 @@ function publishPublicApi() {
 
 // sourcecode/frontend/mantine_ui.js
 async function dashboardExternalFileDrop(file, slotId, choosePlan, frontendActions) {
-  if (!frontendActions.slots.prepareFileDrop(slotId)) {
-    frontendActions.slots.finishFileDrop();
-    return false;
-  }
   let failed = false;
   try {
+    if (!frontendActions.slots.prepareFileDrop(slotId)) return false;
     return await frontendActions.assets.importToSlot(file, slotId, choosePlan);
   } catch (error) {
     failed = true;
@@ -17329,14 +17319,15 @@ function mountMantineUi() {
   function toggleOverlay(overlay) {
     appFSM.send("TOGGLE_OVERLAY", { overlay, source: "mantine" });
   }
+  function reportTaskError(eventName, error) {
+    debugLog(
+      "fsm:lifecycle-task-error",
+      { event: eventName, message: error.message },
+      "error"
+    );
+  }
   function runLifecycleTask2(lifecycle, eventName, task) {
-    return appFSM.run(lifecycle, eventName, task).catch((error) => {
-      debugLog(
-        "fsm:lifecycle-task-error",
-        { event: eventName, message: error.message },
-        "error"
-      );
-    });
+    return appFSM.run(lifecycle, eventName, task).catch((error) => reportTaskError(eventName, error));
   }
   function useProjectAssetImportCollision() {
     const resolverRef = useRef(null);
@@ -17397,13 +17388,13 @@ function mountMantineUi() {
     return { choosePlan, modal };
   }
   function exportProjectFromMantine() {
-    return runLifecycleTask2("exporting", "PROJECT_EXPORT", () => window.FastFigureApi.project.exportFile());
+    return window.FastFigureApi.project.exportFile().catch((error) => reportTaskError("PROJECT_EXPORT", error));
   }
   function exportSlotFfsxFromMantine() {
-    return runLifecycleTask2("exporting", "SLOT_EXPORT", () => window.FastFigureApi.graphs.exportFfsx());
+    return window.FastFigureApi.graphs.exportFfsx().catch((error) => reportTaskError("SLOT_EXPORT", error));
   }
   function exportPlotlyJsonFromMantine() {
-    return runLifecycleTask2("exporting", "PLOTLY_EXPORT", () => window.FastFigureApi.graphs.exportPlotlyJson());
+    return window.FastFigureApi.graphs.exportPlotlyJson().catch((error) => reportTaskError("PLOTLY_EXPORT", error));
   }
   function FastFigureToolbar() {
     const state = useAppState();
@@ -18373,12 +18364,14 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const graphApi = window.FastFigureApi.graphs;
     const assetApi = window.FastFigureApi.assets;
     const editor = graphApi.readData();
+    const chartId = editor.chart?.id ?? null, editable = editor.chart?.editor?.editable !== false;
+    const csvAssets = assetApi.readTree().data;
+    const csvOptions = csvAssets.map((csv) => ({ value: String(csv.id), label: csv.name }));
     const objects = editor.objects;
     const selectedIndex = editor.selectedIndex;
     const selected = selectedIndex === null ? null : objects[selectedIndex];
-    const activeCsv = editor.csv;
-    const csvOptions = editor.csvOptions;
-    const columns = activeCsv?.columns || [];
+    const activeCsv = editor.currentCsv;
+    const columns = editor.columns;
     const objectColumns = editor.objectColumns || [];
     const columnOptions = objectColumns.map((column) => ({ value: column.id, label: column.label }));
     const update = (values) => selectedIndex !== null && graphApi.setObjectValues(selectedIndex, values);
@@ -18416,13 +18409,16 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         data: csvOptions,
         value: activeCsv ? String(activeCsv.id) : null,
         disabled: busy || !csvOptions.length,
-        onChange: (value2) => value2 !== null && graphApi.selectCsv(Number(value2))
+        onChange: (value2) => {
+          const csv = csvAssets.find((item) => String(item.id) === value2);
+          if (csv) graphApi.selectCsv(csv.path);
+        }
       }),
       activeCsv ? React.createElement(NumberInput, {
         label: "헤더 행 수",
         value: activeCsv.headerLines,
         min: 0,
-        max: activeCsv.rowCount,
+        max: activeCsv.rows.length,
         allowDecimal: false,
         disabled: busy,
         onChange: (value2) => graphApi.setHeaderLines(activeCsv.id, value2)
@@ -18447,7 +18443,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           React.createElement(
             TableTbody,
             null,
-            ...activeCsv.rows.map(
+            ...activeCsv.rows.slice(0, 30).map(
               (row, rowIndex) => React.createElement(
                 TableTr,
                 { key: rowIndex },
@@ -18470,13 +18466,13 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         Group,
         { gap: "xs", grow: true },
         React.createElement(Button, {
-          variant: editor.editable ? "filled" : "light",
-          disabled: busy || !editor.chartId,
-          onClick: () => graphApi.setEditable(!editor.editable)
-        }, editor.editable ? "편집 가능" : "원본 JSON"),
+          variant: editable ? "filled" : "light",
+          disabled: busy || chartId === null,
+          onClick: () => graphApi.setEditable(!editable)
+        }, editable ? "편집 가능" : "원본 JSON"),
         React.createElement(Button, {
           variant: "light",
-          disabled: busy || !activeCsv || !editor.editable,
+          disabled: busy || !activeCsv || !editable,
           onClick: () => activeCsv && graphApi.addObject(activeCsv.id)
         }, "오브젝트 추가")
       ),
@@ -18487,22 +18483,22 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         ...objects.map((object, index) => React.createElement(
           Group,
           {
-            key: `${editor.chartId}-${index}`,
+            key: `${chartId}-${index}`,
             gap: 4,
             wrap: "nowrap",
-            draggable: editor.editable && !busy,
+            draggable: editable && !busy,
             onDragStart: (event2) => {
-              if (!editor.editable || busy) return event2.preventDefault();
+              if (!editable || busy) return event2.preventDefault();
               dragRef.current = index;
             },
             onDragEnd: () => {
               dragRef.current = null;
             },
             onDragOver: (event2) => {
-              if (editor.editable && !busy) event2.preventDefault();
+              if (editable && !busy) event2.preventDefault();
             },
             onDrop: (event2) => {
-              if (!editor.editable || busy) return;
+              if (!editable || busy) return;
               event2.preventDefault();
               if (Number.isInteger(dragRef.current)) graphApi.moveObject(dragRef.current, index);
               dragRef.current = null;
@@ -18518,19 +18514,19 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
             size: "xs",
             value: object.color,
             style: { width: 72 },
-            disabled: busy || !editor.editable,
+            disabled: busy || !editable,
             onChange: (color) => graphApi.setObjectValues(index, { color })
           }),
           React.createElement(ActionIcon, {
             size: "sm",
             variant: "subtle",
-            disabled: busy || !editor.editable,
+            disabled: busy || !editable,
             "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
             onClick: () => graphApi.deleteObject(index)
           }, "×")
         ))
       ) : React.createElement(Text, { size: "xs", c: "dimmed" }, "추가된 그래프 오브젝트가 없습니다."),
-      selected && activeCsv && editor.editable ? React.createElement(
+      selected && activeCsv && editable ? React.createElement(
         Stack,
         { gap: "xs" },
         React.createElement(Select, {
@@ -18781,18 +18777,18 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const importResetRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
     const graphApi = window.FastFigureApi.graphs;
-    const editor = graphApi.readPalette();
-    const canEdit = !!editor.chartId && editor.editable;
-    const commitColors = (colors) => graphApi.applyPalette(colors);
+    const editor = graphApi.readData(), colors = graphApi.readPalette();
+    const canEdit = !!editor.chart && editor.chart.editor.editable !== false;
+    const commitColors = (colors2) => graphApi.applyPalette(colors2);
     const resetPalette = () => {
-      if (!editor.chartId) return status("그래프 슬롯을 먼저 선택하세요.");
+      if (!editor.chart) return status("그래프 슬롯을 먼저 선택하세요.");
       commitColors(graphApi.defaultColors());
-      debugLog("graphPalette:reset", { slotId: editor.slotId });
+      debugLog("graphPalette:reset", { slotId: state.selectedSlotId });
     };
     const savePalette = () => {
-      if (!editor.chartId) return status("그래프 슬롯을 먼저 선택하세요.");
-      const colors = editor.colors.filter(Boolean);
-      const blob = new Blob([JSON.stringify({ colors }, null, 2)], {
+      if (!editor.chart) return status("그래프 슬롯을 먼저 선택하세요.");
+      const savedColors = colors.filter(Boolean);
+      const blob = new Blob([JSON.stringify({ colors: savedColors }, null, 2)], {
         type: "application/json;charset=utf-8"
       });
       const link = document.createElement("a");
@@ -18802,8 +18798,8 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 0);
       debugLog("graphPalette:save", {
-        slotId: editor.slotId,
-        colors: colors.length
+        slotId: state.selectedSlotId,
+        colors: savedColors.length
       });
     };
     const loadPalette = async (file) => {
@@ -18812,17 +18808,17 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         await runLifecycleTask2("importing", "PALETTE_IMPORT", async () => {
           try {
             const parsed = JSON.parse(await file.text());
-            const colors = Array.isArray(parsed) ? parsed : parsed.colors;
-            if (!Array.isArray(colors) || !colors.length)
+            const colors2 = Array.isArray(parsed) ? parsed : parsed.colors;
+            if (!Array.isArray(colors2) || !colors2.length)
               throw Error("colors 배열이 없습니다.");
-            const valid = colors.filter(
+            const valid = colors2.filter(
               (color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)
             );
             if (!valid.length) throw Error("유효한 HEX 색상이 없습니다.");
             commitColors(valid);
             status(`${file.name} 색상 구성을 덮어썼습니다.`);
             debugLog("graphPalette:load", {
-              slotId: editor.slotId,
+              slotId: appFSM.readState().selectedSlotId,
               name: file.name,
               colors: valid.length
             });
@@ -18850,7 +18846,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         ),
         React.createElement(
           Button,
-          { variant: "light", disabled: busy || !editor.chartId, onClick: savePalette },
+          { variant: "light", disabled: busy || !editor.chart, onClick: savePalette },
           "저장"
         ),
         React.createElement(
@@ -19613,16 +19609,8 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       setFormat(next.format);
       return next;
     };
-    const save = () => runLifecycleTask2(
-      "exporting",
-      "PRINT_EXPORT",
-      () => printApi.save({ onStatus: setMessage })
-    );
-    const capture = () => runLifecycleTask2(
-      "exporting",
-      "CAPTURE_EXPORT",
-      () => printApi.capture({ onStatus: setMessage })
-    );
+    const save = () => printApi.save({ onStatus: setMessage }).catch((error) => reportTaskError("PRINT_EXPORT", error));
+    const capture = () => printApi.capture({ onStatus: setMessage }).catch((error) => reportTaskError("CAPTURE_EXPORT", error));
     return React.createElement(
       FastFigureSettingsModal,
       {
@@ -19999,7 +19987,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         const file = event2.dataTransfer?.files?.[0];
         if (!file) return;
         const element = event2.target.closest?.(".slot");
-        const slotId = element ? Number(element.dataset.slot) : NaN;
+        const slotId = element?.parentElement === dashboard ? Number(element.dataset.slot) : NaN;
         event2.preventDefault();
         event2.stopPropagation();
         try {
