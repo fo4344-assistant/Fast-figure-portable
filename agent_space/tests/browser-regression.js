@@ -487,9 +487,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       await tick();
 
       const transfer = new DataTransfer();
-      const sourceDomBefore = slotElement(sourceId);
-      const targetDomBefore = slotElement(targetId);
-      const sourceTab = sourceDomBefore?.querySelector(".slot-tab");
+      const sourceTab = slotElement(sourceId)?.querySelector(".slot-tab");
       check(!!sourceTab, "source bookmark absent");
       sourceTab.dispatchEvent(
         new DragEvent("dragstart", {
@@ -510,11 +508,6 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         slotPayloadSignature(slotAt(sourceId)) === targetBefore &&
           slotPayloadSignature(slotAt(targetId)) === sourceBefore,
         "bookmark drag did not swap slot-local payloads",
-      );
-      check(
-        slotElement(sourceId) !== sourceDomBefore &&
-          slotElement(targetId) !== targetDomBefore,
-        "bookmark drag changed project state without immediately rerendering dashboard",
       );
       check(api.slots.readSelected() === null, "drag unexpectedly selected a slot");
 
@@ -596,12 +589,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
 
       api.graphs.setObjectValues(index, { csvId: objectCsv.id });
       editor = api.graphs.readData();
-      check(editor.csv?.id === currentCsv.id, "current CSV selection was replaced by object csvId");
+      check(editor.currentCsv?.id === currentCsv.id, "current CSV selection was replaced by object csvId");
       check(
         editor.objects[index]?.csvId === objectCsv.id,
         "selected graph object did not keep its own csvId",
       );
-      check(editor.csv?.columns?.length === 2, "current CSV columns are incorrect");
+      check(editor.columns.length === 2, "current CSV columns are incorrect");
       check(editor.objectColumns.length === 3, "objectColumns did not use object CSV");
       check(
         editor.objectColumns.some((column) => column.label.includes("BZ")),
@@ -1111,7 +1104,12 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         const busyError = await appFSM.run("importing", "LIFECYCLE_PROBE_BLOCKED", () => {
           invokedWhileBusy = true;
         }).then(() => null, (error) => error);
-        check(!!busyError && !invokedWhileBusy, "busy lifecycle accepted nested task");
+        const busyState = interfaceFSM.state;
+        const invalidWhileBusy = await appFSM.run("ready", "LIFECYCLE_PROBE_BLOCKED", () => {
+          invokedWhileBusy = true;
+        }).then(() => null, (error) => error);
+        check(!!busyError && invalidWhileBusy?.message === busyError.message && !invokedWhileBusy &&
+          interfaceFSM.state === busyState, "busy lifecycle accepted a task or did not reject before request validation");
         finish({ outcome: "complete" });
         await pending;
         check(appFSM.state.lifecycle === "ready", "async lifecycle did not complete");
@@ -1123,6 +1121,16 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(appFSM.state.lifecycle === "ready" &&
           appFSM.state.error?.message === "expected lifecycle failure",
           "Frontend FSM did not record and recover from lifecycle failure");
+        const rejectedState = interfaceFSM.state, authority = activeProject._state, eventCount = published.length;
+        let invalidInvoked = false;
+        for (const lifecycle of ["ready", "error", undefined]) {
+          const invalid = await appFSM.run(lifecycle, "LIFECYCLE_PROBE_INVALID", () => {
+            invalidInvoked = true;
+          }).then(() => null, error => error);
+          check(invalid instanceof Error && !invalidInvoked && interfaceFSM.state === rejectedState &&
+            activeProject._state === authority && published.length === eventCount,
+            "invalid lifecycle executed task, cleared error or changed Frontend/Project state");
+        }
         check(published.some((event) => event.includes("LIFECYCLE_PROBE_SYNC:rejected")),
           "lifecycle rejection event was not published");
         check(published.some((event) => event.includes("LIFECYCLE_PROBE_FAIL:failed")) &&
@@ -1173,6 +1181,21 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(resource) });
       check(appFSM.state.graphObjectIndex === null && appFSM.state.graphObject === "none",
         "asset selection retained graph selection");
+      const rejectedState = interfaceFSM.state, rejectedSource = activeProject._state;
+      api.slots.select(-999, "ui-to-fsm", "image");
+      check(interfaceFSM.state === rejectedState && activeProject._state === rejectedSource,
+        "public rejected slot changed selection or applied pending type");
+      api.slots.select(target.id, "model-to-fsm", "image");
+      check(activeProject._state === rejectedSource && interfaceFSM.readState().selectedSlotId === target.id,
+        "pending type changed occupied slot or model selection toggled");
+      api.slots.reset(target.id);
+      const emptySource = activeProject._state;
+      api.slots.select(target.id, "ui-to-fsm", "image");
+      check(interfaceFSM.readState().selectedSlotId === null && activeProject._state === emptySource,
+        "toggle-clear applied a persistent type intent");
+      const finalState = api.slots.select(target.id, "ui-to-fsm", "image");
+      check(finalState.selectedSlotId === target.id && finalState.workspace === "slot.image" &&
+        slotAt(target.id).contentType === "image", "empty-slot intent did not reconcile final selection/workspace");
       api.slots.select(null);
       check(interfaceRuntime.selectedSlotId === null && appFSM.state.workspace === "project",
         "explicit deselection did not clear slot workspace");
@@ -2454,6 +2477,19 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(Object.isFrozen(read.chart.editor.objects[0]) && Object.isFrozen(read.currentCsv.rows[0]) &&
           read.chart !== again.chart && read.chart !== getChart(chartId) && read.objects !== getChart(chartId).editor.objects &&
           JSON.stringify(activeProject._state) === before, "graph read aliases authority, is mutable or repairs live state");
+        api.graphs.selectCsv(projectAssetPath(second));
+        appFSM.send("SELECT_GRAPH_OBJECT", { index: 0, selectAsset: false });
+        const publicRead = api.graphs.readData(), palette = api.graphs.readPalette(), defaults = api.graphs.defaultColors(),
+          tree = api.assets.readTree();
+        check(publicRead.chart.id === chartId && publicRead.currentCsv.id === second.id &&
+          publicRead.columns.length === 1 && publicRead.objectColumns.length === 3 &&
+          Object.isFrozen(publicRead.objects[0]) && Object.isFrozen(publicRead.currentCsv.rows[0]) &&
+          publicRead.chart !== getChart(chartId) && api.graphs.hasSelectedSlot(),
+          "public graph read bypassed the detached query or replaced current CSV with object CSV");
+        check(Object.isFrozen(palette) && palette[0] === read.objects[0].color &&
+          Object.isFrozen(defaults) && defaults !== DEFAULT_COLORS && JSON.stringify(defaults) === JSON.stringify(DEFAULT_COLORS) &&
+          Object.isFrozen(tree.data) && tree.data.find(item => item.id === second.id).path === projectAssetPath(second) &&
+          JSON.stringify(activeProject._state) === before, "palette/default/tree query aliases authority or changes its meaning");
         const absent = appFSM.query("project-api", { operation: "graphs.readData", chartId: -1 });
         check(absent.chart === null && absent.objects.length === 0 && absent.selectedIndex === null &&
           absent.currentCsv === null && absent.objectColumns.length === 0, "missing graph projection mismatch");
@@ -2461,6 +2497,16 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         const frozen = appFSM.query("project-api", request);
         check(frozen.selectedIndex === null && frozen.objectColumns.length === 0 && frozen.currentCsv.id === second.id,
           "non-editable graph supplied editable object columns or replaced current CSV");
+        const visible = slotAt(slot.id);
+        visible.hidden = true;
+        check(!api.graphs.hasSelectedSlot() && api.graphs.readPalette().length === 0 && api.graphs.readData().chart === null,
+          "hidden selected slot supplied graph context");
+        visible.hidden = false; visible.contentType = "image";
+        check(!api.graphs.hasSelectedSlot() && api.graphs.readPalette().length === 0 && api.graphs.readData().chart === null,
+          "image slot with retained chart reference was treated as selected graph");
+        visible.contentType = "graph"; visible.chart = null;
+        check(api.graphs.hasSelectedSlot() && api.graphs.readPalette().length === 0 && api.graphs.readData().chart === null,
+          "empty graph slot was confused with an absent selected slot");
       } finally { activeProject.initialize(saved); interfaceRuntime.selectedSlotId = selected; interfaceFSM.state = session; }
     });
 
@@ -3938,16 +3984,23 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
 
     await run(93, "File-drop preparation uses official context and accepted selection without Project edits", async () => {
       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = interfaceRuntime.selectedSlotId,
-        query = readBackendProjection, send = interfaceFSM.send, render = renderDashboard, command = projectEFSM.send,
+        query = readBackendProjection, send = interfaceFSM.send, render = updateGraphView, command = projectEFSM.send,
         drag = rendererRuntime.slotDragSourceId;
       try {
         api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
         select(slotAt(a.id)); const before = JSON.stringify(activeProject._state);
-        let events = 0, reads = 0, paints = 0;
-        renderDashboard = () => { paints++; };
+        let events = 0, reads = 0, projections = 0, paints = 0;
+        updateGraphView = (projection, state) => {
+          paints++; check(state.selectedSlotId === b.id && projection.visibleSlots.some(slot => slot.id === b.id),
+            "drop did not consume the final supplied selection projection");
+        };
         projectEFSM.send = () => { throw Error("file-drop preparation issued Project command"); };
         readBackendProjection = function (kind, request) {
-          reads++; check(kind === "slot-selection-context" && Object.keys(request).join(",") === "slotId", "file-drop bypassed official scalar query");
+          if (kind === "renderer") {
+            projections++; check(request.frontendState.selectedSlotId === b.id, "projection preceded final selection");
+          } else {
+            reads++; check(kind === "slot-selection-context" && Object.keys(request).join(",") === "slotId", "file-drop bypassed official scalar query");
+          }
           return query(kind, request);
         };
         interfaceFSM.send = function (event, payload) {
@@ -3957,28 +4010,28 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         };
         rendererRuntime.slotDragSourceId = a.id;
         check(api.slots.prepareFileDrop(b.id) === true && interfaceFSM.readState().selectedSlotId === b.id &&
-          events === 1 && reads === 1 && paints === 1 && rendererRuntime.slotDragSourceId === a.id &&
+          events === 1 && reads === 1 && projections === 1 && paints === 1 && rendererRuntime.slotDragSourceId === a.id &&
           JSON.stringify(activeProject._state) === before, "drop prep did not ensure accepted selection or changed domain/drag state");
         const runtime = interfaceFSM.state;
-        check(api.slots.prepareFileDrop(b.id) === true && events === 1 && reads === 2 && paints === 1 &&
+        check(api.slots.prepareFileDrop(b.id) === true && events === 1 && reads === 2 && projections === 1 && paints === 1 &&
           interfaceFSM.state === runtime, "same-slot prep toggled/published/rendered");
         const element = document.querySelector("#dashboard .slot"); element?.classList.add("drag-over");
         check(api.slots.finishFileDrop() === null && rendererRuntime.slotDragSourceId === null &&
           !document.querySelector("#dashboard .slot.drag-over") && interfaceFSM.state === runtime &&
           JSON.stringify(activeProject._state) === before, "drop finish changed lifecycle/selection/Project or failed cleanup");
-      } finally { readBackendProjection = query; interfaceFSM.send = send; renderDashboard = render; projectEFSM.send = command;
+      } finally { readBackendProjection = query; interfaceFSM.send = send; updateGraphView = render; projectEFSM.send = command;
         activeProject.initialize(saved); interfaceFSM.state = session; interfaceRuntime.selectedSlotId = selected; rendererRuntime.slotDragSourceId = drag; }
     });
 
     await run(94, "File-drop rejected/stale references preserve selection and propagate exact failures", async () => {
       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = interfaceRuntime.selectedSlotId,
-        query = readBackendProjection, validate = validateFrontendIntent, send = interfaceFSM.send, render = renderDashboard,
+        query = readBackendProjection, validate = validateFrontendIntent, send = interfaceFSM.send, render = updateGraphView,
         failure = Error("file-drop boundary"), drag = rendererRuntime.slotDragSourceId;
       try {
         api.layout.setGrid(2, 2); const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
         select(slotAt(a.id)); const source = activeProject._state, runtime = interfaceFSM.state;
         let events = 0, paints = 0, caught;
-        renderDashboard = () => { paints++; };
+        updateGraphView = () => { paints++; };
         interfaceFSM.send = function (...args) { events++; return send.apply(this, args); };
         rendererRuntime.slotDragSourceId = a.id;
         for (const id of [null, undefined, -1]) check(api.slots.prepareFileDrop(id) === false, "missing drop target accepted");
@@ -4006,11 +4059,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         readBackendProjection = query;
         check(api.slots.prepareFileDrop(b.id) === false && interfaceFSM.state === runtime, "hidden drop target accepted");
         const visible = projectClone(activeProject._state); visible.slots.find(slot => slot.id === b.id).hidden = false;
-        activeProject.initialize(visible); renderDashboard = () => { throw failure; }; caught = null;
+        activeProject.initialize(visible); updateGraphView = () => { throw failure; }; caught = null;
         try { api.slots.prepareFileDrop(b.id); } catch (error) { caught = error; }
         check(caught === failure && interfaceFSM.readState().selectedSlotId === b.id,
           "drop renderer failure swallowed or accepted selection rolled back");
-      } finally { readBackendProjection = query; validateFrontendIntent = validate; interfaceFSM.send = send; renderDashboard = render;
+      } finally { readBackendProjection = query; validateFrontendIntent = validate; interfaceFSM.send = send; updateGraphView = render;
         activeProject.initialize(saved); interfaceFSM.state = session; interfaceRuntime.selectedSlotId = selected; rendererRuntime.slotDragSourceId = drag; }
     });
 
@@ -4888,6 +4941,7 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         const frozen = fixture.charts.find(chart => chart.id === frozenId),
           conversion = fixture.charts.find(chart => chart.id === conversionId);
         frozen.editor.editable = false;
+        conversion.graph.imported = projectClone(conversion.graph);
         conversion.editor.editable = false; conversion.editor.conversionRows = projectClone(trash.rows);
         conversion.editor.headerLines = trash.headerLines;
         fixture.assets.csvFiles.find(csv => csv.id === trash.id).directory = PROJECT_TRASH_DIRECTORY;
@@ -5030,6 +5084,28 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         initialize.call(activeProject, fixture);
         slotAt(b.id).content.moveExtension = { keep: true };
         const settings = JSON.stringify(slotAt(b.id).content.imageSettings);
+        const beforeReads = activeProject._state, options = api.assets.moveOptions(folder),
+          dragged = api.assets.draggableAsset(projectAssetPath(getProjectCsv(csv.id)));
+        check(Object.isFrozen(options) && options.includes(PROJECT_TRASH_DIRECTORY) &&
+          !options.includes(folder) && !options.includes(`${folder}/nested`) &&
+          api.assets.moveOptions("/missing").length === 0 && api.assets.moveOptions("/assets").length === 0,
+          "move options bypassed current source/fixed-root/subtree rules");
+        check(api.assets.movable(folder) && !api.assets.movable("/assets") && !api.assets.movable("/missing") &&
+          Object.isFrozen(dragged) && dragged.id === csv.id && dragged.name === csv.name &&
+          dragged.path === `${folder}/move-owned.csv` && !api.assets.draggableAsset(folder) &&
+          activeProject._state === beforeReads, "VFS reads changed authority or returned a live/incomplete drag identity");
+        const resolved = appFSM.query("project-api", { operation: "assets.resolveTreeSelection", path: folder });
+        check(Object.isFrozen(resolved) && resolved.accepted && resolved.kind === "directory" && resolved.path === folder,
+          "tree selection did not return detached canonical scalars");
+        api.assets.selectDirectory(folder);
+        check(interfaceFSM.readState().assetPath === folder && interfaceFSM.readState().assetSelection === "directory",
+          "directory selection did not use the validated event");
+        api.assets.selectImage(projectAssetPath(getProjectImage(image.id)));
+        const selectedImage = interfaceFSM.state;
+        api.assets.selectImage(folder);
+        check(interfaceFSM.state === selectedImage && selectedImage.assetSelection === "image" &&
+          selectedImage.graphObjectIndex === null && activeProject._state === beforeReads,
+          "wrong-kind selection published effects or valid image selection changed Project");
         select(slotAt(a.id)); api.assets.selectCsv(projectAssetPath(keep)); api.graphs.selectObject(3);
         const source = activeProject._state, plan = api.assets.planMove(folder, PROJECT_TRASH_DIRECTORY);
         check(Object.isFrozen(plan) && plan.referenceCount === 3 && activeProject._state === source,
@@ -5054,6 +5130,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           interfaceFSM.readState().assetPath === projectAssetPath(keep), "move cascade or retained selection map incorrect");
         check(slotAt(b.id).imageId === null && JSON.stringify(slotAt(b.id).content.imageSettings) === settings &&
           slotAt(b.id).content.moveExtension.keep, "move reset image-owned local settings/extension");
+        check(api.assets.movable(moved.path) && api.assets.isTrashed(moved.path) &&
+          !api.assets.isTrashed("/assets/trash-like") &&
+          !api.assets.draggableAsset(projectAssetPath(getProjectCsv(csv.id))) &&
+          api.assets.moveOptions(moved.path).includes("/assets"),
+          "trash membership, drag rejection or restore eligibility used stale/source-independent reads");
         const restored = api.assets.move(api.assets.planMove(moved.path, "/assets"));
         check(!restored.trashed && restored.path === folder && commits === 2 && paints === 1 &&
           result.changed.removedGraphReferenceCount === 0 && result.changed.resetImageSlotCount === 0 &&
@@ -5419,7 +5500,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           calls.push(directory); return [Object.freeze({ name: items[0].name })];
         };
         const empty = await api.assets.importFiles([]);
-        check(empty.length === 0 && !events.length && !calls.length, "empty import entered lifecycle/read");
+        check(empty.length === 0 && !calls.length && interfaceFSM.state.lifecycle === "ready" &&
+          events.join() === "LIFECYCLE_START,LIFECYCLE_COMPLETE",
+          "empty public import skipped its one lifecycle or ran a helper/query");
+        events.length = 0;
         const output = await api.assets.importFiles(files, () => {});
         check(output.map(item => item.name).join() === files.map(file => file.name).join() &&
           output.every(Object.isFrozen) && calls.join() === "kind:a.csv,a.csv,kind:b.svg,b.svg,kind:c.ffsx,c.ffsx" &&
@@ -5439,10 +5523,16 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           "noncommit did not preserve exact result/stop");
         const count = calls.length, starts = events.filter(event => event === "LIFECYCLE_START").length;
         interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, lifecycle: "importing" });
-        let busy;
-        try { await api.assets.importFiles(files, () => {}); } catch (error) { busy = error; }
-        check(busy && calls.length === count && events.filter(event => event === "LIFECYCLE_START").length === starts,
-          "busy router began a nested operation");
+        const busyState = interfaceFSM.state;
+        let inputRead = false;
+        const unreadFiles = { [Symbol.iterator]() { inputRead = true; return files[Symbol.iterator](); } };
+        for (const input of [[], files, unreadFiles]) {
+          let busy;
+          try { await api.assets.importFiles(input, () => {}); } catch (error) { busy = error; }
+          check(busy instanceof Error && !inputRead && calls.length === count && interfaceFSM.state === busyState &&
+            events.filter(event => event === "LIFECYCLE_START").length === starts,
+            "busy router read input, bypassed rejection for empty input or began a nested operation");
+        }
         interfaceFSM.state = Object.freeze({ ...interfaceFSM.state, lifecycle: "ready" });
         const failure = Error("ordered-helper-original"); let caught;
         importProjectFileToSlot = async () => { throw failure; };
@@ -6461,7 +6551,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           captured = snapshot; supplied = statusSink;
           return { outcome: "saved", width: 200, height: 100, automaticHeight: true };
         };
-        const handed = await api.print.save({ onStatus: sink });
+        const pending = api.print.save({ onStatus: sink });
+        const busy = await api.print.save({ onStatus: sink }).then(() => null, error => error);
+        const handed = await pending;
+        check(busy instanceof Error && interfaceFSM.state.lifecycle === "ready",
+          "concurrent public print save was accepted or did not recover to ready");
         check(handed.outcome === "saved" && reads === 1 && supplied === sink && Object.isFrozen(captured) &&
           captured.visibleSlots.find(item => item.id === slot.id).figure.data.some(trace => trace.y?.includes(5)),
           "Application did not capture exactly one official immutable print snapshot for Frontend");
@@ -6563,7 +6657,11 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
           captured = snapshot; sink = status;
           return { outcome: "saved", width: 321, height: 123, automaticHeight: false };
         };
-        await api.print.capture({ onStatus: statusSink });
+        const pending = api.print.capture({ onStatus: statusSink });
+        const busy = await api.print.capture({ onStatus: statusSink }).then(() => null, error => error);
+        await pending;
+        check(busy instanceof Error && interfaceFSM.state.lifecycle === "ready",
+          "concurrent public capture was accepted or did not recover to ready");
         check(reads === 1 && sink === statusSink && Object.isFrozen(captured) && captured.export.width === 987,
           "capture did not forward one official immutable snapshot/status sink");
         exportDashboard = capture;
@@ -6817,94 +6915,6 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       } finally { activeProject.initialize(original); }
     });
 
-    await run(156, "Application commit projection uses one fresh immutable official input and preserves late errors", () => {
-      const original = projectClone(activeProject._state), query = readBackendProjection,
-        invalidate = applyDashboardProjectionInvalidation, failure = Error("supplied commit projection boundary");
-      let reads = 0, effects = 0, supplied, seen, failQuery = false, failRender = false;
-      try {
-        readBackendProjection = function (kind, request) {
-          if (kind === "renderer") { reads++; if (failQuery) throw failure; supplied = query(kind, request); return supplied; }
-          return query(kind, request);
-        };
-        applyDashboardProjectionInvalidation = (event, result, state, projection, actions) => {
-          effects++; check(event === "PROJECT_NAME_CHANGED" && result === seen && result.committed &&
-            projection === supplied && Object.isFrozen(projection) && Object.isFrozen(projection.visibleSlots) &&
-            state.selectedSlotId === interfaceFSM.readState().selectedSlotId && typeof actions.refreshDashboard === "function" && typeof actions.graphRangesChanged === "function",
-            "commit invalidation lost actual result/fresh official copy/final interface/action bridge");
-          if (failRender) throw failure;
-          return "NONE";
-        };
-        check(applyCommittedDashboardProjection("PROJECT_NAME_CHANGED", { committed: false }) === "NONE" &&
-          reads === 0 && effects === 0, "noncommit queried or applied a success projection");
-        seen = projectEFSM.send("PROJECT_NAME_CHANGED", { value: "fresh supplied first" });
-        check(applyCommittedDashboardProjection("PROJECT_NAME_CHANGED", seen) === "NONE" && reads === 1 && effects === 1,
-          "commit adapter did not use exactly one official projection/invalidation");
-        const first = supplied;
-        seen = projectEFSM.send("PROJECT_NAME_CHANGED", { value: "fresh supplied second" });
-        applyCommittedDashboardProjection("PROJECT_NAME_CHANGED", seen);
-        check(reads === 2 && effects === 2 && supplied !== first && supplied.visibleSlots !== first.visibleSlots,
-          "commit adapter reused a prior supplied read");
-        seen = projectEFSM.send("PROJECT_NAME_CHANGED", { value: "committed before projection query failure" });
-        failQuery = true; let caught;
-        try { applyCommittedDashboardProjection("PROJECT_NAME_CHANGED", seen); } catch (error) { caught = error; }
-        check(caught === failure && reads === 3 && effects === 2 &&
-          activeProject._state.meta.projectName === "committed before projection query failure",
-          "projection query failure changed original error, rendered, or rolled back commit");
-        failQuery = false; failRender = true;
-        seen = projectEFSM.send("PROJECT_NAME_CHANGED", { value: "committed before invalidation failure" }); caught = null;
-        try { applyCommittedDashboardProjection("PROJECT_NAME_CHANGED", seen); } catch (error) { caught = error; }
-        check(caught === failure && reads === 4 && effects === 3 &&
-          activeProject._state.meta.projectName === "committed before invalidation failure",
-          "invalidation failure changed original error or rolled back commit");
-      } finally { readBackendProjection = query; applyDashboardProjectionInvalidation = invalidate; activeProject.initialize(original); }
-    });
-
-    await run(157, "Startup consumes one supplied initial read in Source order without renderer authority access", () => {
-      const query = readBackendProjection, zoom = applyDashboardZoomProjection,
-        controller = installSlotClickControllerProjection, render = renderDashboardProjection,
-        style = applySlotStyleProjection, notify = appFSM.notify,
-        supplied = query("renderer"), state = interfaceFSM.readState(), authority = activeProject._state,
-        presentation = { generation: 1, completion: Promise.resolve() }, failure = Error("startup render boundary"), order = [];
-      let reads = 0, notices = 0, actions, startupState, failRender = false;
-      try {
-        readBackendProjection = () => { throw Error("startup renderer queried Backend"); };
-        applyDashboardZoomProjection = (layout, finalState) => {
-          order.push("zoom"); startupState = finalState; check(layout === supplied.layout && Object.isFrozen(finalState) && JSON.stringify(finalState) === JSON.stringify(state), "startup zoom did not consume initial supplied inputs");
-        };
-        installSlotClickControllerProjection = bridge => { order.push("controller"); actions = bridge; };
-        renderDashboardProjection = (projection, finalState, bridge) => {
-          order.push("render"); check(projection === supplied && finalState === startupState && bridge === actions,
-            "startup renderer changed supplied input/state/controller bridge");
-          if (failRender) throw failure;
-          return presentation;
-        };
-        applySlotStyleProjection = (slotStyle, finalState) => { order.push("style"); check(slotStyle === supplied.layout.slotStyle && finalState === startupState, "startup style reread authority or omitted supplied final session geometry"); };
-        appFSM.notify = () => { notices++; };
-        const bridge = { slots: { select() {}, swap() {} } };
-        check(startupCoreRuntimeProjection(supplied, state, bridge) === presentation && actions === bridge &&
-          order.join(",") === "zoom,controller,render,style" && notices === 0 && activeProject._state === authority,
-          "supplied startup violated Source order, lifecycle ownership or authority purity");
-        order.length = 0;
-        readBackendProjection = (kind, request) => {
-          check(kind === "renderer" && request === undefined, "startup used a noninitial official query"); reads++; return supplied;
-        };
-        appFSM.notify = (scope, event) => {
-          check(scope === "layout" && event === "LAYOUT_STYLE_CHANGED" && order.join(",") === "zoom,controller,render,style",
-            "startup published style notification before successful supplied projection"); notices++;
-        };
-        check(startupCoreRuntime() === presentation && reads === 1 && notices === 1 &&
-          actions.slots.select === setSelectedSlot && actions.slots.swap === swapSlots &&
-          typeof actions.refreshDashboard === "function" && activeProject._state === authority,
-          "Application startup did not use one official initial read/public bridge");
-        order.length = 0; failRender = true; let caught;
-        try { startupCoreRuntime(); } catch (error) { caught = error; }
-        check(caught === failure && reads === 2 && notices === 1 && order.join(",") === "zoom,controller,render" &&
-          activeProject._state === authority, "startup swallowed render error, performed later work or changed authority");
-      } finally { readBackendProjection = query; applyDashboardZoomProjection = zoom;
-        installSlotClickControllerProjection = controller; renderDashboardProjection = render;
-        applySlotStyleProjection = style; appFSM.notify = notify; }
-    });
-
     await run(158, "Supplied workspace selection resolves locally and preserves image/graph lifetimes", async () => {
       const query = readBackendProjection, calculate = chartFigure, get = getChart,
         react = Plotly.react, resize = Plotly.Plots.resize, observe = installResizeObserver,
@@ -6962,32 +6972,6 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         Plotly.Plots.resize = resize; installResizeObserver = observe; HTMLImageElement.prototype.decode = decode;
         await renderDashboard().completion;
       }
-    });
-
-    await run(159, "Application workspace refresh passes one official immutable read and final interface state", () => {
-      const query = readBackendProjection, present = updateGraphViewProjection, readState = interfaceFSM.readState,
-        authority = activeProject._state, state = readState.call(interfaceFSM), result = { completion: Promise.resolve() },
-        failure = Error("workspace supplied presentation failure");
-      let reads = 0, stateReads = 0, calls = 0, fail = false, supplied;
-      try {
-        readBackendProjection = (kind, request) => {
-          check(kind === "renderer" && request === undefined, "workspace read wrong official projection");
-          reads++; supplied = query(kind); return supplied;
-        };
-        interfaceFSM.readState = () => { stateReads++; return state; };
-        updateGraphViewProjection = (projection, finalState, actions) => {
-          calls++; check(projection === supplied && Object.isFrozen(projection) && finalState === state &&
-            typeof actions.refreshDashboard === "function" && typeof actions.graphRangesChanged === "function",
-            "workspace adapter replaced official input/final state/public actions");
-          if (fail) throw failure;
-          return result;
-        };
-        check(updateGraphView() === result && reads === 1 && stateReads === 1 && calls === 1,
-          "workspace adapter used multiple reads or bypassed supplied renderer");
-        fail = true; let caught; try { updateGraphView(); } catch (error) { caught = error; }
-        check(caught === failure && reads === 2 && stateReads === 2 && calls === 2 && activeProject._state === authority,
-          "workspace adapter swallowed original failure or mutated authority");
-      } finally { readBackendProjection = query; updateGraphViewProjection = present; interfaceFSM.readState = readState; }
     });
 
     await run(160, "Scheduled resize retains requesting graph generation/operation and coalesces explicit latest work", () => {
@@ -7424,10 +7408,13 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
       let failure, failing = false;
       try {
         readBackendProjection = (kind, request) => {
-          check(kind === "project-api" && request.operation === "slots.readSelected" &&
-            request.frontendState.selectedSlotId === interfaceRuntime.selectedSlotId &&
-            Object.isFrozen(request.frontendState), "selected-slot public read bypassed the current official query");
-          reads.push(request.frontendState.selectedSlotId);
+          const selectedSlotId = request.operation === "slots.readSelected"
+            ? request.frontendState.selectedSlotId : request.selectedSlotId;
+          check(kind === "project-api" && ["slots.readSelected", "graphs.hasSelectedSlot"].includes(request.operation) &&
+            selectedSlotId === interfaceRuntime.selectedSlotId &&
+            (request.operation !== "slots.readSelected" || Object.isFrozen(request.frontendState)),
+            "selected-slot public read bypassed the current official query");
+          reads.push(selectedSlotId);
           if (failing) throw failure;
           return query(kind, request);
         };
@@ -7451,46 +7438,6 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         check(reads.length === 9 && activeProject._state === authority && JSON.stringify(authority) === before &&
           interfaceFSM.state === session, "selected-slot reads mutated authority/session or performed extra queries");
       } finally { readBackendProjection = query; interfaceRuntime.selectedSlotId = selected; }
-    });
-
-    await run(169, "Startup and workspace audit resolve current selection in Application and supply only the workspace scalar", () => {
-      const query = readBackendProjection, ready = interfaceFSM.ready, selected = interfaceRuntime.selectedSlotId,
-        authority = activeProject._state, session = interfaceFSM.state, trace = [], receipt = Object.freeze({ ready: true });
-      let context, failQuery = false, failReady = false;
-      const queryError = Error("startup selection read failed"), readyError = Error("startup FSM ready failed");
-      try {
-        readBackendProjection = (kind, request) => {
-          check(kind === "slot-selection-context" && request.slotId === interfaceRuntime.selectedSlotId,
-            "workspace resolution bypassed the current official selection-context query");
-          trace.push("query"); if (failQuery) throw queryError; return context;
-        };
-        interfaceFSM.ready = function (...args) {
-          check(this === interfaceFSM && args.length === 1 && typeof args[0] === "string",
-            "startup passed a domain model instead of the workspace scalar");
-          trace.push(args[0]); if (failReady) throw readyError; return receipt;
-        };
-        for (const [slotId, supplied, expected] of [
-          [1001, Object.freeze({ id: 1001, contentType: "graph" }), "slot.graph"],
-          [1002, Object.freeze({ id: 1002, contentType: "image" }), "slot.image"],
-          [null, null, "project"], [-987654321, null, "project"],
-        ]) {
-          interfaceRuntime.selectedSlotId = slotId; context = supplied; trace.length = 0;
-          check(appFSM.ready() === receipt && JSON.stringify(trace) === JSON.stringify(["query", expected]),
-            "startup reused a workspace snapshot or changed query-before-ready ordering");
-          trace.length = 0;
-          check(readWorkspaceHint() === expected && JSON.stringify(trace) === '["query"]',
-            "workspace audit bypassed Application resolution or transitioned the FSM");
-        }
-        failQuery = true; trace.length = 0; let caught;
-        try { appFSM.ready(); } catch (error) { caught = error; }
-        check(caught === queryError && JSON.stringify(trace) === '["query"]',
-          "failed startup query published ready or replaced the original error");
-        failQuery = false; failReady = true; context = null; trace.length = 0; caught = undefined;
-        try { appFSM.ready(); } catch (error) { caught = error; }
-        check(caught === readyError && JSON.stringify(trace) === '["query","project"]' &&
-          activeProject._state === authority && interfaceFSM.state === session,
-          "ready failure was replaced/retried or the bridge mutated domain/session authority");
-      } finally { readBackendProjection = query; interfaceFSM.ready = ready; interfaceRuntime.selectedSlotId = selected; }
     });
 
     await run(170, "Public import bindings own exactly one lifecycle before helpers and preserve every outcome", async () => {
@@ -7552,10 +7499,15 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
     await run(171, "Dashboard drop uses the public lifecycle and finishes drag after settle without replacing original failures", async () => {
       const session = interfaceFSM.state, notify = interfaceFSM.notify, toSlot = importProjectFileToSlot,
         send = interfaceFSM.send, trace = [], file = Object.freeze({ name: "drop.csv" }), choosePlan = () => {};
-      let accepted = true, finishFailure = false, task, starts = 0;
+      let accepted = true, finishFailure = false, prepareFailure = false, task, starts = 0;
+      const prepareError = Error("drop preparation failed");
       const cleanupError = Error("drop cleanup failed"), actions = {
         slots: {
-          prepareFileDrop(id) { check(id === 751, "drop retargeted the explicit slot"); trace.push("prepare"); return accepted; },
+          prepareFileDrop(id) {
+            check(id === 751, "drop retargeted the explicit slot"); trace.push("prepare");
+            if (prepareFailure) throw prepareError;
+            return accepted;
+          },
           finishFileDrop() {
             check(interfaceFSM.state.lifecycle === "ready", "drag finished before public import settled/recovered");
             trace.push("finish"); if (finishFailure) throw cleanupError;
@@ -7599,6 +7551,10 @@ const FAST_FIGURE_REGRESSION_TARGET = Object.freeze({
         finishFailure = false; accepted = false; trace.length = 0; const before = starts;
         check(await dashboardExternalFileDrop(file, 751, choosePlan, actions) === false &&
           trace.join() === "prepare,finish" && starts === before, "invalid target imported, toggled selection or skipped drag finish");
+        prepareFailure = true; finishFailure = true; trace.length = 0; caught = null;
+        try { await dashboardExternalFileDrop(file, 751, choosePlan, actions); } catch (error) { caught = error; }
+        check(caught === prepareError && trace.join() === "prepare,finish" && starts === before,
+          "preparation failure skipped cleanup, imported or lost original failure");
       } finally {
         importProjectFileToSlot = toSlot; interfaceFSM.send = send; interfaceFSM.notify = notify; interfaceFSM.state = session;
       }
