@@ -6,12 +6,9 @@ import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapsho
 // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
 // the mounted UI owns only its collision resolver and drag finalization.
 export async function dashboardExternalFileDrop(file, slotId, choosePlan, frontendActions) {
-  if (!frontendActions.slots.prepareFileDrop(slotId)) {
-    frontendActions.slots.finishFileDrop();
-    return false;
-  }
   let failed = false;
   try {
+    if (!frontendActions.slots.prepareFileDrop(slotId)) return false;
     return await frontendActions.assets.importToSlot(file, slotId, choosePlan);
   } catch (error) {
     failed = true;
@@ -193,16 +190,17 @@ getUiTelemetrySnapshot,
     appFSM.send("TOGGLE_OVERLAY", { overlay, source: "mantine" });
   }
 
+  function reportTaskError(eventName, error) {
+    debugLog(
+      "fsm:lifecycle-task-error",
+      { event: eventName, message: error.message },
+      "error",
+    );
+  }
+
   function runLifecycleTask(lifecycle, eventName, task) {
-    return appFSM
-.run(lifecycle, eventName, task)
-.catch((error) => {
-  debugLog(
-    "fsm:lifecycle-task-error",
-    { event: eventName, message: error.message },
-    "error",
-  );
-});
+    return appFSM.run(lifecycle, eventName, task)
+      .catch((error) => reportTaskError(eventName, error));
   }
 
   function useProjectAssetImportCollision() {
@@ -274,15 +272,18 @@ collision
   }
 
   function exportProjectFromMantine() {
-    return runLifecycleTask("exporting", "PROJECT_EXPORT", () => window.FastFigureApi.project.exportFile());
+    return window.FastFigureApi.project.exportFile()
+      .catch((error) => reportTaskError("PROJECT_EXPORT", error));
   }
 
   function exportSlotFfsxFromMantine() {
-    return runLifecycleTask("exporting", "SLOT_EXPORT", () => window.FastFigureApi.graphs.exportFfsx());
+    return window.FastFigureApi.graphs.exportFfsx()
+      .catch((error) => reportTaskError("SLOT_EXPORT", error));
   }
 
   function exportPlotlyJsonFromMantine() {
-    return runLifecycleTask("exporting", "PLOTLY_EXPORT", () => window.FastFigureApi.graphs.exportPlotlyJson());
+    return window.FastFigureApi.graphs.exportPlotlyJson()
+      .catch((error) => reportTaskError("PLOTLY_EXPORT", error));
   }
 
   function FastFigureToolbar() {
@@ -1353,12 +1354,14 @@ React.createElement(
     const graphApi = window.FastFigureApi.graphs;
     const assetApi = window.FastFigureApi.assets;
     const editor = graphApi.readData();
+    const chartId = editor.chart?.id ?? null, editable = editor.chart?.editor?.editable !== false;
+    const csvAssets = assetApi.readTree().data;
+    const csvOptions = csvAssets.map(csv => ({ value: String(csv.id), label: csv.name }));
     const objects = editor.objects;
     const selectedIndex = editor.selectedIndex;
     const selected = selectedIndex === null ? null : objects[selectedIndex];
-    const activeCsv = editor.csv;
-    const csvOptions = editor.csvOptions;
-    const columns = activeCsv?.columns || [];
+    const activeCsv = editor.currentCsv;
+    const columns = editor.columns;
     const objectColumns = editor.objectColumns || [];
     const columnOptions = objectColumns.map((column) => ({ value: column.id, label: column.label }));
     const update = (values) => selectedIndex !== null && graphApi.setObjectValues(selectedIndex, values);
@@ -1386,10 +1389,13 @@ React.createElement(
 React.createElement(Select, {
   label: "사용할 CSV", data: csvOptions, value: activeCsv ? String(activeCsv.id) : null,
   disabled: busy || !csvOptions.length,
-  onChange: (value) => value !== null && graphApi.selectCsv(Number(value)),
+  onChange: (value) => {
+    const csv = csvAssets.find(item => String(item.id) === value);
+    if (csv) graphApi.selectCsv(csv.path);
+  },
 }),
 activeCsv ? React.createElement(NumberInput, {
-  label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rowCount,
+  label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rows.length,
   allowDecimal: false, disabled: busy,
   onChange: (value) => graphApi.setHeaderLines(activeCsv.id, value),
 }) : null,
@@ -1414,7 +1420,7 @@ activeCsv && columns.length
         React.createElement(
           TableTbody,
           null,
-          ...activeCsv.rows.map((row, rowIndex) =>
+          ...activeCsv.rows.slice(0, 30).map((row, rowIndex) =>
             React.createElement(
               TableTr,
               { key: rowIndex },
@@ -1436,29 +1442,29 @@ activeCsv && columns.length
   : null,
 React.createElement(Group, { gap: "xs", grow: true },
   React.createElement(Button, {
-    variant: editor.editable ? "filled" : "light", disabled: busy || !editor.chartId,
-    onClick: () => graphApi.setEditable(!editor.editable),
-  }, editor.editable ? "편집 가능" : "원본 JSON"),
+    variant: editable ? "filled" : "light", disabled: busy || chartId === null,
+    onClick: () => graphApi.setEditable(!editable),
+  }, editable ? "편집 가능" : "원본 JSON"),
   React.createElement(Button, {
-    variant: "light", disabled: busy || !activeCsv || !editor.editable,
+    variant: "light", disabled: busy || !activeCsv || !editable,
     onClick: () => activeCsv && graphApi.addObject(activeCsv.id),
   }, "오브젝트 추가"),
 ),
 React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
 objects.length ? React.createElement(Stack, { gap: 4 },
   ...objects.map((object, index) => React.createElement(Group, {
-    key: `${editor.chartId}-${index}`, gap: 4, wrap: "nowrap",
-    draggable: editor.editable && !busy,
+    key: `${chartId}-${index}`, gap: 4, wrap: "nowrap",
+    draggable: editable && !busy,
     onDragStart: (event) => {
-      if (!editor.editable || busy) return event.preventDefault();
+      if (!editable || busy) return event.preventDefault();
       dragRef.current = index;
     },
     onDragEnd: () => { dragRef.current = null; },
     onDragOver: (event) => {
-      if (editor.editable && !busy) event.preventDefault();
+      if (editable && !busy) event.preventDefault();
     },
     onDrop: (event) => {
-      if (!editor.editable || busy) return;
+      if (!editable || busy) return;
       event.preventDefault();
       if (Number.isInteger(dragRef.current)) graphApi.moveObject(dragRef.current, index);
       dragRef.current = null;
@@ -1471,17 +1477,17 @@ objects.length ? React.createElement(Stack, { gap: 4 },
     }, `${index + 1}. ${object.legendName || `${object.x} · ${object.y}`}`),
     React.createElement(ColorInput, {
       size: "xs", value: object.color, style: { width: 72 },
-      disabled: busy || !editor.editable,
+      disabled: busy || !editable,
       onChange: (color) => graphApi.setObjectValues(index, { color }),
     }),
     React.createElement(ActionIcon, {
-      size: "sm", variant: "subtle", disabled: busy || !editor.editable,
+      size: "sm", variant: "subtle", disabled: busy || !editable,
       "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
       onClick: () => graphApi.deleteObject(index),
     }, "×"),
   )),
 ) : React.createElement(Text, { size: "xs", c: "dimmed" }, "추가된 그래프 오브젝트가 없습니다."),
-selected && activeCsv && editor.editable ? React.createElement(Stack, { gap: "xs" },
+selected && activeCsv && editable ? React.createElement(Stack, { gap: "xs" },
   React.createElement(Select, {
     label: "오브젝트 CSV", data: csvOptions, value: String(selected.csvId), disabled: busy,
     onChange: (value) => value !== null && update({ csvId: Number(value) }),
@@ -1735,18 +1741,18 @@ React.createElement(
     const importResetRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
     const graphApi = window.FastFigureApi.graphs;
-    const editor = graphApi.readPalette();
-    const canEdit = !!editor.chartId && editor.editable;
+    const editor = graphApi.readData(), colors = graphApi.readPalette();
+    const canEdit = !!editor.chart && editor.chart.editor.editable !== false;
     const commitColors = (colors) => graphApi.applyPalette(colors);
     const resetPalette = () => {
-if (!editor.chartId) return status("그래프 슬롯을 먼저 선택하세요.");
+if (!editor.chart) return status("그래프 슬롯을 먼저 선택하세요.");
 commitColors(graphApi.defaultColors());
-debugLog("graphPalette:reset", { slotId: editor.slotId });
+debugLog("graphPalette:reset", { slotId: state.selectedSlotId });
     };
     const savePalette = () => {
-if (!editor.chartId) return status("그래프 슬롯을 먼저 선택하세요.");
-const colors = editor.colors.filter(Boolean);
-const blob = new Blob([JSON.stringify({ colors }, null, 2)], {
+if (!editor.chart) return status("그래프 슬롯을 먼저 선택하세요.");
+const savedColors = colors.filter(Boolean);
+const blob = new Blob([JSON.stringify({ colors: savedColors }, null, 2)], {
   type: "application/json;charset=utf-8",
 });
 const link = document.createElement("a");
@@ -1756,8 +1762,8 @@ link.download = `chart-palette-${stamp}.json`;
 link.click();
 setTimeout(() => URL.revokeObjectURL(link.href), 0);
 debugLog("graphPalette:save", {
-  slotId: editor.slotId,
-  colors: colors.length,
+  slotId: state.selectedSlotId,
+  colors: savedColors.length,
 });
     };
     const loadPalette = async (file) => {
@@ -1776,7 +1782,7 @@ try {
       commitColors(valid);
       status(`${file.name} 색상 구성을 덮어썼습니다.`);
       debugLog("graphPalette:load", {
-        slotId: editor.slotId,
+        slotId: appFSM.readState().selectedSlotId,
         name: file.name,
         colors: valid.length,
       });
@@ -1805,7 +1811,7 @@ React.createElement(
   ),
   React.createElement(
     Button,
-    { variant: "light", disabled: busy || !editor.chartId, onClick: savePalette },
+    { variant: "light", disabled: busy || !editor.chart, onClick: savePalette },
     "저장",
   ),
   React.createElement(
@@ -2615,13 +2621,11 @@ setFormat(next.format);
 return next;
     };
     const save = () =>
-runLifecycleTask("exporting", "PRINT_EXPORT", () =>
-  printApi.save({ onStatus: setMessage }),
-);
+printApi.save({ onStatus: setMessage })
+  .catch((error) => reportTaskError("PRINT_EXPORT", error));
     const capture = () =>
-runLifecycleTask("exporting", "CAPTURE_EXPORT", () =>
-  printApi.capture({ onStatus: setMessage }),
-);
+printApi.capture({ onStatus: setMessage })
+  .catch((error) => reportTaskError("CAPTURE_EXPORT", error));
 
     return React.createElement(
 FastFigureSettingsModal,
@@ -3012,7 +3016,7 @@ const handleDrop = async (event) => {
   const file = event.dataTransfer?.files?.[0];
   if (!file) return;
   const element = event.target.closest?.(".slot");
-  const slotId = element ? Number(element.dataset.slot) : NaN;
+  const slotId = element?.parentElement === dashboard ? Number(element.dataset.slot) : NaN;
   event.preventDefault();
   event.stopPropagation();
   try {
