@@ -1,9 +1,9 @@
 // Source: sourcescript/application/public_api/assets.py (same logical owner); pseudocode/application/public_api/assets.pcal.
 import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, runLifecycleTask, renderDashboard, updateFileAvailability } from '../adapter.js';
 import { importSelectedGraphFile } from './graphs.js';
-import { readSelectedSlotApi, setSelectedSlot } from './layout_annotations.js';
-import { PROJECT_ASSET_DIRECTORIES, PROJECT_TRASH_DIRECTORY, projectAssetPath, projectAssetReferenceCount, projectDataTreeSnapshot, projectParentPath, projectPathInDirectory, projectPathName, projectVfs } from '../../backend/assets_files.js';
-import { activeProject, immutableProjectCopy, projectObjects, readBackendProjection } from '../../backend/project_state.js';
+import { setSelectedSlot } from './layout_annotations.js';
+import { PROJECT_ASSET_DIRECTORIES, PROJECT_TRASH_DIRECTORY, projectAssetReferenceCount, projectDataTreeSnapshot, projectParentPath, projectPathName, projectVfs } from '../../backend/assets_files.js';
+import { immutableProjectCopy, projectObjects, readBackendProjection } from '../../backend/project_state.js';
 import { interfaceFSM } from '../../frontend/interface_fsm.js';
 import { downloadExportPayload, status } from '../../frontend/renderer.js';
 
@@ -92,14 +92,7 @@ export function downloadProjectAsset(path) {
 }
 
 export function selectDirectoryFromTree(path) {
-  let match = projectVfs.resolve(path);
-  if (match?.kind !== "directory") return status("프로젝트 폴더를 선택할 수 없습니다.");
-  appFSM.send("SELECT_ASSET", {
-    kind: "directory",
-    path: match.path,
-    direction: "ui-to-fsm",
-  });
-  status(`${match.path} 폴더를 선택했습니다.`);
+  return appFSM.send("SELECT_ASSET", { kind: "directory", path, direction: "ui-to-fsm" });
 }
 
 export function selectProjectCsv(path) {
@@ -113,25 +106,7 @@ export function selectProjectCsv(path) {
 }
 
 export function selectImageFromTree(path) {
-  let slot = readSelectedSlotApi(),
-    match = projectVfs.resolve(path),
-    image = match?.kind === "image" ? match.asset : null;
-  if (!image) return status("프로젝트 이미지를 먼저 선택하세요.");
-  appFSM.send("CLEAR_GRAPH_OBJECT", {
-    index: null,
-    direction: "ui-to-fsm",
-  });
-  appFSM.send("SELECT_ASSET", {
-    kind: "image",
-    path: projectAssetPath(image),
-    direction: "ui-to-fsm",
-  });
-  updateFileAvailability();
-  if (!slot) {
-    status(`${image.name}을 선택했습니다.`);
-    return;
-  }
-  status(`${image.name}을 선택했습니다. 이미지 슬롯의 추가 버튼이나 드롭으로 연결할 수 있습니다.`);
+  return appFSM.send("SELECT_ASSET", { kind: "image", path, direction: "ui-to-fsm" });
 }
 
 export function readAssetDeletionTarget() {
@@ -169,11 +144,7 @@ export function readProjectTrash() {
 }
 
 export function projectNodeMoveOptions(path) {
-  let match = path ? projectVfs.resolve(path) : null;
-  return activeProject.fileSystem.directories.filter((directory) =>
-    (directory === "/assets" || directory.startsWith("/assets/")) &&
-    !projectVfs.isTrashed(directory) &&
-    !(match?.kind === "directory" && projectPathInDirectory(directory, path)));
+  return appFSM.query("project-api", { operation: "assets.moveOptions", path });
 }
 
 export function moveProjectNode(plan, useUniqueName = false) {
@@ -209,9 +180,7 @@ export function emptyProjectTrash() {
 }
 
 export function draggableProjectAsset(path) {
-  let match = path ? projectVfs.resolve(path) : null;
-  return match && match.kind !== "directory" && !projectVfs.isTrashed(path)
-    ? { path, kind: match.kind } : null;
+  return appFSM.query("project-api", { operation: "assets.draggableAsset", path });
 }
 
 export function connectProjectAssetPathToSlot(path, kind, slotId) {
@@ -235,11 +204,10 @@ export async function importProjectFileToSlot(file, slotId, choosePlan) {
 }
 
 export async function importProjectAssetFiles(files, choosePlan) {
-  const inputs = Array.from(files && typeof files[Symbol.iterator] === "function" ? files : files ? [files] : []);
-  if (!inputs.length) return [];
-  const targetSlotId = interfaceFSM.readState().selectedSlotId;
-  return runLifecycleTask("importing", "ASSET_IMPORT", async () => {
-    const output = [];
+  return runLifecycleTask("importing", "assets.importFiles", async () => {
+    const inputs = Array.from(files && typeof files[Symbol.iterator] === "function" ? files : files ? [files] : []);
+    if (!inputs.length) return [];
+    const targetSlotId = interfaceFSM.readState().selectedSlotId, output = [];
     for (const file of inputs) {
       const kind = readAssetFileKind(file);
       let item;
