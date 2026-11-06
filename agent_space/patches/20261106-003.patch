@@ -1,0 +1,528 @@
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -1,8 +1,8 @@
+ // Source: sourcescript/backend/project_state.py (same logical owner); pseudocode/backend/project_state.pcal.
+-import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, projectAssetImportCollisionModel, projectAssetPath, projectFileStem, projectImageDataUrl, projectPathInDirectory, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
++import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, projectAssetImportCollisionModel, projectAssetPath, projectDataTreeSnapshot, projectFileStem, projectImageDataUrl, projectPathInDirectory, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
+ import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraphLayoutSettings, validateChartModel } from './graphs.js';
+ import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
+-import { APP_BUILD, BackendSettings, DEFAULT_IMAGE_SETTINGS, DEFAULT_SLOT_STYLE, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
++import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_SLOT_STYLE, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
+ import { interfaceRuntime } from '../frontend/interface_fsm.js';
+ 
+ export function createProjectState() {
+@@ -320,6 +320,21 @@
+       contentType: slot.contentType, chart: slot.content?.chart ?? slot.chart,
+       imageId: slot.content?.imageId ?? slot.imageId }) : null;
+   }
++  if (kind === "project-api" && request.operation === "assets.readTree") {
++    const source = activeProject._state;
++    return immutableProjectCopy(projectDataTreeSnapshot({ files: source.fileSystem,
++      data: source.assets.csvFiles, images: source.assets.images, charts: source.charts, slots: source.slots }));
++  }
++  if (kind === "project-api" && request.operation === "graphs.defaultColors")
++    return immutableProjectCopy(DEFAULT_COLORS);
++  if (kind === "project-api" && request.operation === "graphs.hasSelectedSlot")
++    return activeProject._state.slots.some(slot => slot.id === request.selectedSlotId && !slot.hidden && slot.contentType === "graph");
++  if (kind === "project-api" && request.operation === "graphs.readPalette") {
++    const source = activeProject._state,
++      slot = source.slots.find(item => item.id === request.selectedSlotId && !item.hidden && item.contentType === "graph"),
++      chart = slot ? source.charts.find(item => item.id === (slot.content?.chart ?? slot.chart)) : null;
++    return immutableProjectCopy((chart?.editor?.objects || []).map(object => object.color));
++  }
+   if (kind === "project-api" && request.operation === "graphs.readLayout") {
+     const source = activeProject._state, slot = source.slots.find(item => item.id === request.selectedSlotId && !item.hidden),
+       chartId = slot?.content?.chart ?? slot?.chart,
+@@ -334,7 +349,8 @@
+       slot = Object.hasOwn(request, "chartId") ? (owners.length === 1 ? owners[0] : null)
+         : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden),
+       chartId = slot?.content?.chart ?? slot?.chart,
+-      chart = source.charts.find((item) => item.id === chartId) || null,
++      chart = slot && !slot.hidden && slot.contentType === "graph"
++        ? source.charts.find((item) => item.id === chartId) || null : null,
+       objects = chart?.editor?.objects || [], index = state.graphObjectIndex,
+       selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length
+         ? index : null,
+diff --git a/sourcecode/application/adapter.js b/sourcecode/application/adapter.js
+--- a/sourcecode/application/adapter.js
++++ b/sourcecode/application/adapter.js
+@@ -2,7 +2,7 @@
+ import { projectVfs } from '../backend/assets_files.js';
+ import { PROJECT_COMMAND_ACTIONS, projectEFSM } from '../backend/project_efsm.js';
+ import { buildFrontendReconciliationInput, getChart, getProjectCsv, readBackendProjection, validateFrontendIntent } from '../backend/project_state.js';
+-import { interfaceFSM, interfaceRuntime } from '../frontend/interface_fsm.js';
++import { interfaceFSM } from '../frontend/interface_fsm.js';
+ import { applyDashboardProjectionInvalidation, applyDashboardZoomProjection, applyReferenceGeometryProjection, applySlotStyleProjection, applyUiPaletteProjection, debugLog, installSlotClickControllerProjection, readDashboardRenderedWidth, renderDashboardProjection, startupCoreRuntimeProjection, syncDashboardCaptionProjection, updateGraphViewProjection } from '../frontend/renderer.js';
+ import { axisRangeValueFromPlotly } from '../backend/graphs.js';
+ import { readAppearanceApiPalette, setSelectedSlot, swapSlots } from './public_api/layout_annotations.js';
+@@ -176,7 +176,7 @@
+       return interfaceFSM.state;
+     }
+     let validatedInput = BACKEND_REFERENCE_EVENTS.has(event)
+-      ? validateFrontendIntent(event, { ...payload, selectedSlotId: interfaceRuntime.selectedSlotId }) : null;
++      ? validateFrontendIntent(event, { ...payload, selectedSlotId: interfaceFSM.readState().selectedSlotId }) : null;
+     if (validatedInput && !validatedInput.accepted) return interfaceFSM.state;
+     interfaceFSM.send(event, validatedInput ? { ...payload, validatedInput } : payload);
+     return interfaceFSM.state;
+diff --git a/sourcecode/application/public_api/graphs.js b/sourcecode/application/public_api/graphs.js
+--- a/sourcecode/application/public_api/graphs.js
++++ b/sourcecode/application/public_api/graphs.js
+@@ -1,43 +1,12 @@
+ // Source: sourcescript/application/public_api/graphs.py (same logical owner); pseudocode/application/public_api/graphs.pcal.
+-import { appFSM, dispatchProjectCommand, selectedProjectCsv, renderDashboard, updateFileAvailability } from '../adapter.js';
++import { appFSM, dispatchProjectCommand, renderDashboard, updateFileAvailability } from '../adapter.js';
+ import { prepareCopiedImportFiles, selectProjectCsv } from './assets.js';
+-import { readSelectedSlotApi } from './layout_annotations.js';
+ import { createEmptyProjectCsv, projectAssetPath } from '../../backend/assets_files.js';
+-import { columnDefinitions, normalizedGraphObjects } from '../../backend/graphs.js';
+-import { activeProject, getChart, getProjectCsv, projectClone, validateFrontendIntent } from '../../backend/project_state.js';
+-import { interfaceFSM, interfaceRuntime } from '../../frontend/interface_fsm.js';
++import { interfaceFSM } from '../../frontend/interface_fsm.js';
+ import { downloadExportPayload, status } from '../../frontend/renderer.js';
+ 
+-export function graphEditorChart() {
+-  let slot = readSelectedSlotApi();
+-  return slot?.chart ? getChart(slot.chart) : null;
+-}
+-
+-export function graphEditorCommit(objects,index=null) {
+-  let chart=graphEditorChart();
+-  if(!chart)return null;
+-  if(chart.editor?.editable===false){
+-    status("원본 JSON 그래프는 편집 가능 상태로 전환한 뒤 변경할 수 있습니다.");
+-    return null;
+-  }
+-  let payload={chartId:chart.id,objects:[...objects],index,direction:"fsm-to-model"};
+-  appFSM.send("GRAPH_OBJECTS_REPLACED",payload);
+-  chart=payload.chart;
+-  let selected=Number.isInteger(index)&&index>=0&&index<chart.editor.objects.length?index:null;
+-  appFSM.send(selected===null?"CLEAR_GRAPH_OBJECT":"SELECT_GRAPH_OBJECT",
+-    {index:selected,direction:"fsm-to-model"});
+-  renderDashboard(); updateFileAvailability();
+-  appFSM.notify("charts","GRAPH_OBJECTS_CHANGED");
+-  return chart;
+-}
+-
+-export function graphEditorSelectCsv(csvId) {
+-  let csv = getProjectCsv(Number(csvId));
+-  if (!csv) return null;
+-  appFSM.send("CLEAR_GRAPH_OBJECT", { index: null, direction: "ui-to-fsm" });
+-  appFSM.send("SELECT_ASSET", { kind: "csv", path: projectAssetPath(csv), direction: "ui-to-fsm" });
+-  appFSM.notify("data", "CSV_SELECTION_CHANGED");
+-  return csv;
++export function graphEditorSelectCsv(path) {
++  return appFSM.send("SELECT_ASSET", { kind: "csv", path, direction: "ui-to-fsm" });
+ }
+ 
+ export function createEmptyProjectCsvAndSelect() {
+@@ -47,11 +16,10 @@
+ }
+ 
+ export function graphEditorSelectObject(index) {
+-  let input = validateFrontendIntent("SELECT_GRAPH_OBJECT", { index, selectedSlotId: interfaceRuntime.selectedSlotId, selectAsset: true });
+-  if (!input.accepted) return null;
+-  appFSM.send("SELECT_GRAPH_OBJECT", { index: input.reference, selectAsset: true, direction: "fsm-to-model" });
+-  appFSM.notify("charts", "GRAPH_OBJECT_SELECTION_CHANGED");
+-  return input.reference;
++  return appFSM.send("SELECT_GRAPH_OBJECT", {
++    index, selectedSlotId: interfaceFSM.readState().selectedSlotId,
++    selectAsset: true, direction: "ui-to-fsm",
++  });
+ }
+ 
+ export function graphEditorObjectValues(chartId, index, values = {}) {
+@@ -152,26 +120,11 @@
+ }
+ 
+ export function readGraphDataApi() {
+-  let chart = graphEditorChart(), objects = normalizedGraphObjects(chart);
+-  let index = appFSM.state.graphObjectIndex;
+-  let selectedIndex = Number.isInteger(index) && objects[index] ? index : null;
+-  let csv = selectedProjectCsv();
+-  let objectCsv = selectedIndex === null ? null : getProjectCsv(objects[selectedIndex].csvId);
+-  return {
+-    objectColumns: objectCsv ? columnDefinitions(objectCsv.rows, objectCsv.headerLines) : [],
+-    chartId: chart?.id ?? null,
+-    editable: chart?.editor?.editable !== false,
+-    objects: projectClone(objects),
+-    selectedIndex,
+-    csv: csv ? {
+-      id: csv.id, headerLines: csv.headerLines, rowCount: csv.rows.length,
+-      rows: projectClone(csv.rows.slice(0, 30)),
+-      columns: columnDefinitions(csv.rows, csv.headerLines),
+-    } : null,
+-    csvOptions: activeProject.csvFiles.map((item) => ({
+-      value: String(item.id), label: item.name,
+-    })),
+-  };
++  const state = interfaceFSM.readState();
++  return appFSM.query("project-api", { operation: "graphs.readData", frontendState: {
++    selectedSlotId: state.selectedSlotId, assetPath: state.assetPath,
++    assetSelection: state.assetSelection, graphObjectIndex: state.graphObjectIndex,
++  } });
+ }
+ 
+ export function readGraphLayoutApi() {
+@@ -179,13 +132,9 @@
+ }
+ 
+ export function readGraphPaletteApi() {
+-  let chart = graphEditorChart();
+-  return {
+-    slotId: readSelectedSlotApi()?.id ?? null,
+-    chartId: chart?.id ?? null,
+-    editable: chart?.editor?.editable !== false,
+-    colors: normalizedGraphObjects(chart).map((object) => object.color),
+-  };
++  return appFSM.query("project-api", {
++    operation: "graphs.readPalette", selectedSlotId: interfaceFSM.readState().selectedSlotId,
++  });
+ }
+ 
+ export async function importSelectedGraphFile(file, slotId = interfaceFSM.readState().selectedSlotId) {
+diff --git a/sourcecode/application/public_api/index.js b/sourcecode/application/public_api/index.js
+--- a/sourcecode/application/public_api/index.js
++++ b/sourcecode/application/public_api/index.js
+@@ -1,11 +1,10 @@
+ // Source: sourcescript/application/public_api/__init__.py; pseudocode/application/public_api/contract.pcal.
+ // Public API composition; domain operations are implemented in the sibling modules.
+ import { appFSM, dispatchProjectCommand, renderDashboard, renderProjectObject } from '../adapter.js';
+-import { connectProjectAssetPathToSlot, createProjectDirectory, deleteProjectAsset, downloadProjectAsset, draggableProjectAsset, emptyProjectTrash, importProjectAssetFiles, importProjectFileToSlot, importProjectFilesToDirectory, moveProjectNode, prepareCopiedImportFiles, projectDataTreeObjects, projectNodeMoveOptions, readAssetCollisionModel, readAssetDeletionTarget, readAssetFileKind, readAssetImportPlan, readProjectTrash, selectDirectoryFromTree, selectImageFromTree, selectProjectCsv } from './assets.js';
++import { connectProjectAssetPathToSlot, createProjectDirectory, deleteProjectAsset, downloadProjectAsset, draggableProjectAsset, emptyProjectTrash, importProjectAssetFiles, importProjectFileToSlot, importProjectFilesToDirectory, moveProjectNode, prepareCopiedImportFiles, projectNodeMoveOptions, readAssetCollisionModel, readAssetDeletionTarget, readAssetFileKind, readAssetImportPlan, readProjectTrash, selectDirectoryFromTree, selectImageFromTree, selectProjectCsv } from './assets.js';
+ import { addGraphObjectApi, applyGraphPaletteApi, createEmptyProjectCsvAndSelect, deleteGraphObjectApi, downloadPlotlyJson, downloadSlotFfsx, graphEditorHeaderLines, graphEditorSelectCsv, graphEditorSelectObject, importSelectedGraphFile, moveGraphObjectApi, readGraphDataApi, readGraphLayoutApi, readGraphPaletteApi, setGraphEditableApi, setGraphObjectValuesApi, updateGraphLayoutApi } from './graphs.js';
+ import { applyImageSettingsFromValues, capturePrintApi, commitLayoutApiZoom, finishDashboardFileDrop, finishLabelsApiPositionInteraction, insertCaptionsApiSlotCaptions, insertEmptyImageIntoSelectedSlot, mergeSlots, prepareDashboardFileDrop, readAppearanceApiPalette, readGlobalCaptionState, readImageEditorApi, readLabelsApiState, readLayoutApiState, readPrintApiSettings, readSelectedSlotApi, readSlotCaptionState, resetAppearanceApiPalette, resetLabelsApiPosition, resetLayoutApiZoom, resetSlotApi, savePrintApi, setAppearanceApiPalette, setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings, setGlobalCaptionText, setLabelsApiEnabled, setLabelsApiPosition, setLabelsApiSettings, setLayoutApiGrid, setLayoutApiStyle, setLayoutApiZoom, setLayoutApiZoomLocked, setPrintApiSettings, setSelectedSlot, setSlotCaptionText, setSlotContentType, splitSlots, swapSlots } from './layout_annotations.js';
+-import { movableProjectNode, planProjectNodeMove, projectDataTreeSnapshot, projectVfs } from '../../backend/assets_files.js';
+-import { DEFAULT_COLORS } from '../../backend/settings.js';
++import { movableProjectNode, planProjectNodeMove, projectVfs } from '../../backend/assets_files.js';
+ import { interfaceFSM } from '../../frontend/interface_fsm.js';
+ import { downloadExportPayload, status } from '../../frontend/renderer.js';
+ 
+@@ -66,7 +65,7 @@
+   assets: Object.freeze({
+     readDeletionTarget: readAssetDeletionTarget,
+     delete: deleteProjectAsset,
+-    readTree: () => projectDataTreeSnapshot(projectDataTreeObjects()),
++    readTree: () => appFSM.query("project-api", { operation: "assets.readTree" }),
+     isTrashed: (path) => projectVfs.isTrashed(path),
+     movable: movableProjectNode,
+     readTrash: readProjectTrash,
+@@ -105,8 +104,10 @@
+     deleteObject: deleteGraphObjectApi,
+     updateLayout: updateGraphLayoutApi,
+     applyPalette: applyGraphPaletteApi,
+-    defaultColors: () => [...DEFAULT_COLORS],
+-    hasSelectedSlot: () => !!readSelectedSlotApi(),
++    defaultColors: () => appFSM.query("project-api", { operation: "graphs.defaultColors" }),
++    hasSelectedSlot: () => appFSM.query("project-api", {
++      operation: "graphs.hasSelectedSlot", selectedSlotId: interfaceFSM.readState().selectedSlotId,
++    }),
+     importFile: (...args) => appFSM.run("importing", "graphs.importFile", () =>
+       importSelectedGraphFile(...args)),
+     exportFfsx: downloadSlotFfsx,
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -1357,12 +1357,14 @@
+     const graphApi = window.FastFigureApi.graphs;
+     const assetApi = window.FastFigureApi.assets;
+     const editor = graphApi.readData();
++    const chartId = editor.chart?.id ?? null, editable = editor.chart?.editor?.editable !== false;
++    const csvAssets = assetApi.readTree().data;
++    const csvOptions = csvAssets.map(csv => ({ value: String(csv.id), label: csv.name }));
+     const objects = editor.objects;
+     const selectedIndex = editor.selectedIndex;
+     const selected = selectedIndex === null ? null : objects[selectedIndex];
+-    const activeCsv = editor.csv;
+-    const csvOptions = editor.csvOptions;
+-    const columns = activeCsv?.columns || [];
++    const activeCsv = editor.currentCsv;
++    const columns = editor.columns;
+     const objectColumns = editor.objectColumns || [];
+     const columnOptions = objectColumns.map((column) => ({ value: column.id, label: column.label }));
+     const update = (values) => selectedIndex !== null && graphApi.setObjectValues(selectedIndex, values);
+@@ -1390,10 +1392,13 @@
+ React.createElement(Select, {
+   label: "사용할 CSV", data: csvOptions, value: activeCsv ? String(activeCsv.id) : null,
+   disabled: busy || !csvOptions.length,
+-  onChange: (value) => value !== null && graphApi.selectCsv(Number(value)),
++  onChange: (value) => {
++    const csv = csvAssets.find(item => String(item.id) === value);
++    if (csv) graphApi.selectCsv(csv.path);
++  },
+ }),
+ activeCsv ? React.createElement(NumberInput, {
+-  label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rowCount,
++  label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rows.length,
+   allowDecimal: false, disabled: busy,
+   onChange: (value) => graphApi.setHeaderLines(activeCsv.id, value),
+ }) : null,
+@@ -1418,7 +1423,7 @@
+         React.createElement(
+           TableTbody,
+           null,
+-          ...activeCsv.rows.map((row, rowIndex) =>
++          ...activeCsv.rows.slice(0, 30).map((row, rowIndex) =>
+             React.createElement(
+               TableTr,
+               { key: rowIndex },
+@@ -1440,29 +1445,29 @@
+   : null,
+ React.createElement(Group, { gap: "xs", grow: true },
+   React.createElement(Button, {
+-    variant: editor.editable ? "filled" : "light", disabled: busy || !editor.chartId,
+-    onClick: () => graphApi.setEditable(!editor.editable),
+-  }, editor.editable ? "편집 가능" : "원본 JSON"),
++    variant: editable ? "filled" : "light", disabled: busy || chartId === null,
++    onClick: () => graphApi.setEditable(!editable),
++  }, editable ? "편집 가능" : "원본 JSON"),
+   React.createElement(Button, {
+-    variant: "light", disabled: busy || !activeCsv || !editor.editable,
++    variant: "light", disabled: busy || !activeCsv || !editable,
+     onClick: () => activeCsv && graphApi.addObject(activeCsv.id),
+   }, "오브젝트 추가"),
+ ),
+ React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
+ objects.length ? React.createElement(Stack, { gap: 4 },
+   ...objects.map((object, index) => React.createElement(Group, {
+-    key: `${editor.chartId}-${index}`, gap: 4, wrap: "nowrap",
+-    draggable: editor.editable && !busy,
++    key: `${chartId}-${index}`, gap: 4, wrap: "nowrap",
++    draggable: editable && !busy,
+     onDragStart: (event) => {
+-      if (!editor.editable || busy) return event.preventDefault();
++      if (!editable || busy) return event.preventDefault();
+       dragRef.current = index;
+     },
+     onDragEnd: () => { dragRef.current = null; },
+     onDragOver: (event) => {
+-      if (editor.editable && !busy) event.preventDefault();
++      if (editable && !busy) event.preventDefault();
+     },
+     onDrop: (event) => {
+-      if (!editor.editable || busy) return;
++      if (!editable || busy) return;
+       event.preventDefault();
+       if (Number.isInteger(dragRef.current)) graphApi.moveObject(dragRef.current, index);
+       dragRef.current = null;
+@@ -1475,17 +1480,17 @@
+     }, `${index + 1}. ${object.legendName || `${object.x} · ${object.y}`}`),
+     React.createElement(ColorInput, {
+       size: "xs", value: object.color, style: { width: 72 },
+-      disabled: busy || !editor.editable,
++      disabled: busy || !editable,
+       onChange: (color) => graphApi.setObjectValues(index, { color }),
+     }),
+     React.createElement(ActionIcon, {
+-      size: "sm", variant: "subtle", disabled: busy || !editor.editable,
++      size: "sm", variant: "subtle", disabled: busy || !editable,
+       "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
+       onClick: () => graphApi.deleteObject(index),
+     }, "×"),
+   )),
+ ) : React.createElement(Text, { size: "xs", c: "dimmed" }, "추가된 그래프 오브젝트가 없습니다."),
+-selected && activeCsv && editor.editable ? React.createElement(Stack, { gap: "xs" },
++selected && activeCsv && editable ? React.createElement(Stack, { gap: "xs" },
+   React.createElement(Select, {
+     label: "오브젝트 CSV", data: csvOptions, value: String(selected.csvId), disabled: busy,
+     onChange: (value) => value !== null && update({ csvId: Number(value) }),
+@@ -1739,18 +1744,18 @@
+     const importResetRef = useRef(null);
+     if (state.workspace !== "slot.graph") return null;
+     const graphApi = window.FastFigureApi.graphs;
+-    const editor = graphApi.readPalette();
+-    const canEdit = !!editor.chartId && editor.editable;
++    const editor = graphApi.readData(), colors = graphApi.readPalette();
++    const canEdit = !!editor.chart && editor.chart.editor.editable !== false;
+     const commitColors = (colors) => graphApi.applyPalette(colors);
+     const resetPalette = () => {
+-if (!editor.chartId) return status("그래프 슬롯을 먼저 선택하세요.");
++if (!editor.chart) return status("그래프 슬롯을 먼저 선택하세요.");
+ commitColors(graphApi.defaultColors());
+-debugLog("graphPalette:reset", { slotId: editor.slotId });
++debugLog("graphPalette:reset", { slotId: state.selectedSlotId });
+     };
+     const savePalette = () => {
+-if (!editor.chartId) return status("그래프 슬롯을 먼저 선택하세요.");
+-const colors = editor.colors.filter(Boolean);
+-const blob = new Blob([JSON.stringify({ colors }, null, 2)], {
++if (!editor.chart) return status("그래프 슬롯을 먼저 선택하세요.");
++const savedColors = colors.filter(Boolean);
++const blob = new Blob([JSON.stringify({ colors: savedColors }, null, 2)], {
+   type: "application/json;charset=utf-8",
+ });
+ const link = document.createElement("a");
+@@ -1760,8 +1765,8 @@
+ link.click();
+ setTimeout(() => URL.revokeObjectURL(link.href), 0);
+ debugLog("graphPalette:save", {
+-  slotId: editor.slotId,
+-  colors: colors.length,
++  slotId: state.selectedSlotId,
++  colors: savedColors.length,
+ });
+     };
+     const loadPalette = async (file) => {
+@@ -1780,7 +1785,7 @@
+       commitColors(valid);
+       status(`${file.name} 색상 구성을 덮어썼습니다.`);
+       debugLog("graphPalette:load", {
+-        slotId: editor.slotId,
++        slotId: appFSM.readState().selectedSlotId,
+         name: file.name,
+         colors: valid.length,
+       });
+@@ -1809,7 +1814,7 @@
+   ),
+   React.createElement(
+     Button,
+-    { variant: "light", disabled: busy || !editor.chartId, onClick: savePalette },
++    { variant: "light", disabled: busy || !editor.chart, onClick: savePalette },
+     "저장",
+   ),
+   React.createElement(
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -589,12 +589,12 @@
+ 
+       api.graphs.setObjectValues(index, { csvId: objectCsv.id });
+       editor = api.graphs.readData();
+-      check(editor.csv?.id === currentCsv.id, "current CSV selection was replaced by object csvId");
++      check(editor.currentCsv?.id === currentCsv.id, "current CSV selection was replaced by object csvId");
+       check(
+         editor.objects[index]?.csvId === objectCsv.id,
+         "selected graph object did not keep its own csvId",
+       );
+-      check(editor.csv?.columns?.length === 2, "current CSV columns are incorrect");
++      check(editor.columns.length === 2, "current CSV columns are incorrect");
+       check(editor.objectColumns.length === 3, "objectColumns did not use object CSV");
+       check(
+         editor.objectColumns.some((column) => column.label.includes("BZ")),
+@@ -2462,6 +2462,19 @@
+         check(Object.isFrozen(read.chart.editor.objects[0]) && Object.isFrozen(read.currentCsv.rows[0]) &&
+           read.chart !== again.chart && read.chart !== getChart(chartId) && read.objects !== getChart(chartId).editor.objects &&
+           JSON.stringify(activeProject._state) === before, "graph read aliases authority, is mutable or repairs live state");
++        api.graphs.selectCsv(projectAssetPath(second));
++        appFSM.send("SELECT_GRAPH_OBJECT", { index: 0, selectAsset: false });
++        const publicRead = api.graphs.readData(), palette = api.graphs.readPalette(), defaults = api.graphs.defaultColors(),
++          tree = api.assets.readTree();
++        check(publicRead.chart.id === chartId && publicRead.currentCsv.id === second.id &&
++          publicRead.columns.length === 1 && publicRead.objectColumns.length === 3 &&
++          Object.isFrozen(publicRead.objects[0]) && Object.isFrozen(publicRead.currentCsv.rows[0]) &&
++          publicRead.chart !== getChart(chartId) && api.graphs.hasSelectedSlot(),
++          "public graph read bypassed the detached query or replaced current CSV with object CSV");
++        check(Object.isFrozen(palette) && palette[0] === read.objects[0].color &&
++          Object.isFrozen(defaults) && defaults !== DEFAULT_COLORS && JSON.stringify(defaults) === JSON.stringify(DEFAULT_COLORS) &&
++          Object.isFrozen(tree.data) && tree.data.find(item => item.id === second.id).path === projectAssetPath(second) &&
++          JSON.stringify(activeProject._state) === before, "palette/default/tree query aliases authority or changes its meaning");
+         const absent = appFSM.query("project-api", { operation: "graphs.readData", chartId: -1 });
+         check(absent.chart === null && absent.objects.length === 0 && absent.selectedIndex === null &&
+           absent.currentCsv === null && absent.objectColumns.length === 0, "missing graph projection mismatch");
+@@ -2469,6 +2482,16 @@
+         const frozen = appFSM.query("project-api", request);
+         check(frozen.selectedIndex === null && frozen.objectColumns.length === 0 && frozen.currentCsv.id === second.id,
+           "non-editable graph supplied editable object columns or replaced current CSV");
++        const visible = slotAt(slot.id);
++        visible.hidden = true;
++        check(!api.graphs.hasSelectedSlot() && api.graphs.readPalette().length === 0 && api.graphs.readData().chart === null,
++          "hidden selected slot supplied graph context");
++        visible.hidden = false; visible.contentType = "image";
++        check(!api.graphs.hasSelectedSlot() && api.graphs.readPalette().length === 0 && api.graphs.readData().chart === null,
++          "image slot with retained chart reference was treated as selected graph");
++        visible.contentType = "graph"; visible.chart = null;
++        check(api.graphs.hasSelectedSlot() && api.graphs.readPalette().length === 0 && api.graphs.readData().chart === null,
++          "empty graph slot was confused with an absent selected slot");
+       } finally { activeProject.initialize(saved); interfaceRuntime.selectedSlotId = selected; interfaceFSM.state = session; }
+     });
+ 
+@@ -7336,10 +7359,13 @@
+       let failure, failing = false;
+       try {
+         readBackendProjection = (kind, request) => {
+-          check(kind === "project-api" && request.operation === "slots.readSelected" &&
+-            request.frontendState.selectedSlotId === interfaceRuntime.selectedSlotId &&
+-            Object.isFrozen(request.frontendState), "selected-slot public read bypassed the current official query");
+-          reads.push(request.frontendState.selectedSlotId);
++          const selectedSlotId = request.operation === "slots.readSelected"
++            ? request.frontendState.selectedSlotId : request.selectedSlotId;
++          check(kind === "project-api" && ["slots.readSelected", "graphs.hasSelectedSlot"].includes(request.operation) &&
++            selectedSlotId === interfaceRuntime.selectedSlotId &&
++            (request.operation !== "slots.readSelected" || Object.isFrozen(request.frontendState)),
++            "selected-slot public read bypassed the current official query");
++          reads.push(selectedSlotId);
+           if (failing) throw failure;
+           return query(kind, request);
+         };
+diff --git a/agent_space/plans/plan-023.md b/agent_space/plans/plan-023.md
+--- a/agent_space/plans/plan-023.md
++++ b/agent_space/plans/plan-023.md
+@@ -512,3 +512,11 @@
+ Only existing cases36/120 were strengthened for these actual gaps: invalid/busy rejection without state/task effects and public empty/iterable input entry. No new test IDs or cases. Code130 remains stale with canonical LF fingerprint29613ca0ba37bdb581e35d20541dbb94b661306ce80317e6a0c68c7f4ef554bc; Source45/PlusCal25/verification26 and lineage are unchanged. Review20261106-002 and numeric patch20261106-002 pair record correspondence, alternatives and incremental baseline over preserved WIP.
+ 
+ Static file/diff/hash and whitespace inspection only. No application/test/build/checker/Actions/TLC execution; official version checker and runtime validation remain pending authorized Actions, not claimed complete. Existing r129 execution results are not r130 verification. Whole stage1 and later capture/resource/other-owner/integration stages remain open. No policy/upper-layer/dist/remote/commit/push/delegation changes; no execution-only blocker imposed on further safe implementation.
++
++## Seventy-ninth translation unit — graph reads, selection and actual editor callers (r131)
++
++Continue stage1 as a connected Backend → public API → UI translation, not a polishing pass. Graph data now returns the existing official immutable graphs.readData projection using only explicit Frontend selection scalars, instead of live chart/CSV reads and a second UI-shaped contract. Backend now owns the specified palette sequence, graph-slot predicate (including empty graph slots) and default-color queries. The asset tree dependency is queried as assets.readTree from the Backend's explicit current project rather than assembled at the public boundary. CSV selection sends its canonical path and object selection sends one intent through Adapter validation; unused graphEditorChart/graphEditorCommit and duplicate caller validation/notification are removed. Adapter reference validation uses the official Frontend state read rather than its internal runtime alias.
++
++Actual graph data/palette components consume the declared chart/currentCsv/columns/objectColumns and color-sequence results directly. Available CSV choices come from the official asset tree; ID-valued object edits remain distinct from path-valued current-CSV selection. Thirty-row preview truncation remains UI-only. No compatibility facade, retained snapshot, new mutation authority, cache, candidate or task framework was added. Existing cases24/64/168 alone were updated for declared read shape, real public selection/read paths, detached tree/palette/default values and visible graph vs empty/image/hidden selection semantics. Historical case count remains167; none were executed.
++
++Code131 stays stale, canonical LF fingerprint b76090c94f3190e7737220658fa97f7815a684ffc4c299035bb20f0ba1cb4882; Source45/PlusCal25/verification26 and lineage unchanged. Review20261106-003 and numeric patch20261106-003 pair record the incremental change over preserved WIP. Static file/diff/hash and whitespace inspection only; no application/test/build/checker/Actions/TLC execution. Official version validation and runtime/React integration remain pending authorized Actions, not declared complete. Whole stage1 and later capture/resource/other-owner/integration stages remain open. No policy/upper-layer/dist/remote/commit/push/delegation changes.
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 130,
++      "revision": 131,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:29613ca0ba37bdb581e35d20541dbb94b661306ce80317e6a0c68c7f4ef554bc",
++      "fingerprint": "sha256:b76090c94f3190e7737220658fa97f7815a684ffc4c299035bb20f0ba1cb4882",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261106-002-task-entry-open.md"
++      "validation_review": "agent_space/reviews/review-20261106-003-graph-read-boundary-open.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/reviews/review-20261106-003-graph-read-boundary-open.md b/agent_space/reviews/review-20261106-003-graph-read-boundary-open.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261106-003-graph-read-boundary-open.md
+@@ -0,0 +1,24 @@
++# Graph reads and actual editor callers — translation review
++
++## Purpose and authority
++
++Continue plan-023 stage1 from Source45 → PlusCal25 → code across a connected responsibility boundary, rather than treating successful UI behavior as the criterion.
++
++- `sourcescript/backend/project_state.py` PUBLIC_BACKEND_READ_CONTRACTS (`graphs.readData`, `graphs.readPalette`, `graphs.hasSelectedSlot`, `graphs.defaultColors`, `assets.readTree`) and `pseudocode/backend/project_state.pcal` define Backend-owned detached reads. The existing graphs.readData calculation is reused, not reimplemented in Application. Its chart resolution now excludes hidden/non-graph slots, including explicit owner reads. Missing palette/graph-slot/default queries are translated; graph-slot presence deliberately does not require a chart. Default colors require no project read. Asset tree uses the existing pure calculation with explicit current project fields and immutable copy.
++- `sourcescript/application/public_api/__init__.py` and `pseudocode/application/public_api/contract.pcal` selected-query/query/select-asset/select-object routes control the public boundary. Graph readData passes only selectedSlotId/assetPath/assetSelection/graphObjectIndex; palette and hasSelectedSlot pass current selectedSlotId; defaultColors and assets.readTree simply query. No direct live chart/current-CSV model assembly remains in these reads.
++- Public graph CSV selection accepts canonical path, not a UI numeric-ID shortcut. Explicit object selection sends selectAsset=true through the Adapter's existing validation once. Source Adapter reference validation obtains current selection through official readState; the internal runtime alias is no longer imported by Adapter. Redundant public validation, extra notifications and unused graphEditorChart/graphEditorCommit are removed, not hidden behind a compatibility layer.
++- `sourcescript/frontend/mantine_ui.py` / `pseudocode/frontend/mantine_ui.pcal` retain UI responsibility for presentation and intent formation. The graph data/palette components now use the declared read shapes. CSV options derive from assets.readTree; UI maps selected option ID to canonical path, while object csvId mutation stays numeric. Thirty-row preview slicing happens only in the UI, not the public read. Palette eligibility uses detached chart data and its save uses the specified color sequence; no fabricated palette record is returned by Backend.
++
++No Source/PlusCal meaning was changed. All changed responsibilities already exist there; no Source amendment/closure change is needed. No new state, mirrors, retained read snapshots, candidate construction, retry/rollback, task owner or mutation path is introduced. Work-local UI values are presentation only.
++
++## Necessary existing coverage
++
++Case24 follows currentCsv/columns rather than the removed legacy csv.columns shape while retaining the distinction from objectColumns. Case64 now also exercises the real public CSV/object selection and immutable graph/palette/default/tree reads, and distinguishes hidden/image/empty-graph selections; it does not replace runtime owners with choreography mocks. Its existing fixture state restoration remains. Case168 recognizes the distinct official graphs.hasSelectedSlot query rather than requiring a slots.readSelected implementation shortcut. Cases/IDs remain167. No new test suite or IDs; authored assertions are not execution evidence.
++
++## Verification limits and open work
++
++Static incremental diff/read inspection, import/reference searches, canonical-byte hashing and git diff whitespace checking only. The hash calculation reproduced pre-unit r130 29613ca0ba37bdb581e35d20541dbb94b661306ce80317e6a0c68c7f4ef554bc and produced r131 b76090c94f3190e7737220658fa97f7815a684ffc4c299035bb20f0ba1cb4882. It is not the official version checker or semantic verification; raw CRLF checkout was not normalized. Official version validation, runtime/React integration and inline/split execution remain pending authorized Actions. No application/test/build/checker/Actions/TLC execution this unit. Prior r129 execution deviation is not reused as evidence.
++
++Code131 remains stale; Source45/PlusCal25/verification26 and derived_from are unchanged. This does not certify the whole graph owner, stage1, or remaining asset APIs. Stage1 caller/screen correspondence, stage2 current capture/resource lifetime, stage3 remaining owners, stage4 integration remain open. Existing WIP and earlier records are preserved. No policy/dist/remote/commit/push/delegation changes.
++
++Rejected: retain legacy csv/csvOptions/palette record as a compatibility facade (duplicates declared read contract); move UI option/preview assembly into Backend (mixes responsibilities); use asset tree as current-CSV/object authority (declared graph read already owns those meanings); implement hasSelectedSlot by selected-slot truthiness (accepts image slots); require a chart for hasSelectedSlot (rejects declared empty graph slots); retain a live graph helper for convenience (alternative authority); add broad mocked binding suites (not needed for this translation).
