@@ -1,0 +1,396 @@
+browser	Run split and portable regression	﻿2026-10-23T09:01:48.3525751Z ##[group]Run python agent_space/tests/run-browser-regression.py
+browser	Run split and portable regression	2026-10-23T09:01:48.3526328Z ^[[36;1mpython agent_space/tests/run-browser-regression.py^[[0m
+browser	Run split and portable regression	2026-10-23T09:01:48.3590110Z shell: /usr/bin/bash -e {0}
+browser	Run split and portable regression	2026-10-23T09:01:48.3590420Z ##[endgroup]
+browser	Run split and portable regression	2026-10-23T09:01:58.7107069Z 
+browser	Run split and portable regression	2026-10-23T09:01:58.7108147Z inline file:// regression:
+browser	Run split and portable regression	2026-10-23T09:01:58.7109299Z 15.    pass  startup projects initial slots before interaction
+browser	Run split and portable regression	2026-10-23T09:01:58.7110287Z 16.    pass  layout preview cells follow grid tracks
+browser	Run split and portable regression	2026-10-23T09:01:58.7111258Z 17.    pass  label preview typography matches dashboard label
+browser	Run split and portable regression	2026-10-23T09:01:58.7112410Z 18.    pass  annotation font selectors preserve predefined and custom values
+browser	Run split and portable regression	2026-10-23T09:01:58.7113431Z  1.    pass  FFPX save and reload
+browser	Run split and portable regression	2026-10-23T09:01:58.7114458Z  2.    pass  mixed assets, graph, merge, labels, captions
+browser	Run split and portable regression	2026-10-23T09:01:58.7116134Z  3.    pass  empty image and graph slots
+browser	Run split and portable regression	2026-10-23T09:01:58.7116855Z  4.    pass  FFSX blank graph
+browser	Run split and portable regression	2026-10-23T09:01:58.7117760Z 19.    pass  graph font selector preserves auto and custom values
+browser	Run split and portable regression	2026-10-23T09:01:58.7118687Z  5.    pass  multi-CSV FFSX
+browser	Run split and portable regression	2026-10-23T09:01:58.7119380Z  6.    pass  imported Plotly edit and FFPX
+browser	Run split and portable regression	2026-10-23T09:01:58.7120104Z  7.    pass  Plotly export and import
+browser	Run split and portable regression	2026-10-23T09:01:58.7120788Z  8.    pass  persistent export settings
+browser	Run split and portable regression	2026-10-23T09:01:58.7121456Z  9.    pass  palette save and load
+browser	Run split and portable regression	2026-10-23T09:01:58.7122190Z 10.    pass  collision replace and rename
+browser	Run split and portable regression	2026-10-23T09:01:58.7122888Z 11.    pass  asset delete cascade
+browser	Run split and portable regression	2026-10-23T09:01:58.7123549Z 12.    pass  move to trash cascade
+browser	Run split and portable regression	2026-10-23T09:01:58.7124395Z 13.    pass  layout and label preview geometry
+browser	Run split and portable regression	2026-10-23T09:01:58.7125478Z 14.    pass  Mantine primary button follows UI color
+browser	Run split and portable regression	2026-10-23T09:01:58.7126525Z 20.    pass  slot selection is state-first and background deselects
+browser	Run split and portable regression	2026-10-23T09:01:58.7127457Z 21.    pass  empty slot surface remains selectable
+browser	Run split and portable regression	2026-10-23T09:01:58.7128301Z 22.    fail  bookmark drag consumes post-drag click
+browser	Run split and portable regression	2026-10-23T09:01:58.7129922Z     Error: bookmark drag changed project state without immediately rerendering dashboard
+browser	Run split and portable regression	2026-10-23T09:01:58.7131228Z     at check (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:20508:27)
+browser	Run split and portable regression	2026-10-23T09:01:58.7132671Z     at file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:21003:7
+browser	Run split and portable regression	2026-10-23T09:01:58.7134162Z     at async run (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:20513:23)
+browser	Run split and portable regression	2026-10-23T09:01:58.7135721Z     at async file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:20940:5
+browser	Run split and portable regression	2026-10-23T09:01:58.7136530Z 23.    pass  image asset selection does not link until explicit add
+browser	Run split and portable regression	2026-10-23T09:01:58.7137092Z 24.    pass  graph readData separates current CSV from objectColumns
+browser	Run split and portable regression	2026-10-23T09:01:58.7137614Z 25.    pass  non-editable imported graph rejects object mutation
+browser	Run split and portable regression	2026-10-23T09:01:58.7138069Z 26.    pass  collision modal dismissal cancels import
+browser	Run split and portable regression	2026-10-23T09:01:58.7138563Z 27.    pass  empty CSV creation selects a normal project CSV only
+browser	Run split and portable regression	2026-10-23T09:01:58.7139114Z 28.    pass  layout preview preserves aspect without a preview resize handle
+browser	Run split and portable regression	2026-10-23T09:01:58.7139688Z 29.    pass  settings overlays share width and resize their own height
+browser	Run split and portable regression	2026-10-23T09:01:58.7140281Z 30.    pass  trashed asset remains selectable and can be dragged out of trash
+browser	Run split and portable regression	2026-10-23T09:01:58.7140875Z 31.    pass  Mantine Tree resource drags to slot connection target
+browser	Run split and portable regression	2026-10-23T09:01:58.7141377Z 32.    pass  new project layout outer margin defaults to zero
+browser	Run split and portable regression	2026-10-23T09:01:58.7141843Z 33.    pass  layout selection clears on non-slot modal content
+browser	Run split and portable regression	2026-10-23T09:01:58.7142353Z 34.    pass  trash reference detach invalidates dashboard immediately
+browser	Run split and portable regression	2026-10-23T09:01:58.7142893Z 35.    pass  image editor and dashboard reads preserve project authority
+browser	Run split and portable regression	2026-10-23T09:01:58.7143511Z 36.    pass  application lifecycle task owns execution and Frontend FSM receives events
+browser	Run split and portable regression	2026-10-23T09:01:58.7144214Z 37.    pass  selection validation is read-only and rejected references preserve Frontend state
+browser	Run split and portable regression	2026-10-23T09:01:58.7147244Z 38.    pass  post-commit reconciliation preserves unrelated references and resolves moved assets
+browser	Run split and portable regression	2026-10-23T09:01:58.7148452Z 39.    pass  image settings use current Backend authority and projection-only renderer
+browser	Run split and portable regression	2026-10-23T09:01:58.7149536Z 40.    pass  print settings use Backend queries and current-authority partial commands
+browser	Run split and portable regression	2026-10-23T09:01:58.7150305Z 41.    pass  caption insertion follows exact Backend grouping and committed query boundaries
+browser	Run split and portable regression	2026-10-23T09:01:58.7151128Z 42.    pass  Backend config packaging and caption settings preserve current command ownership
+browser	Run split and portable regression	2026-10-23T09:01:58.7152136Z 43.    pass  Labels use current Backend edits and immutable reference geometry
+browser	Run split and portable regression	2026-10-23T09:01:58.7153172Z 44.    pass  Palette command and renderer use detached one-way projections
+browser	Run split and portable regression	2026-10-23T09:01:58.7154094Z 45.    pass  Layout reads and partial style commands use current Backend authority
+browser	Run split and portable regression	2026-10-23T09:01:58.7155404Z 46.    pass  Layout zoom is Frontend-owned with stable lock anchor and no persistent writes
+browser	Run split and portable regression	2026-10-23T09:01:58.7156748Z 47.    pass  Grid resize uses one-based coordinates and preserves ownership before one commit
+browser	Run split and portable regression	2026-10-23T09:01:58.7158035Z 48.    pass  Merge/split preserve one current payload and return official layout reads
+browser	Run split and portable regression	2026-10-23T09:01:58.7159318Z 49.    pass  Image edits preserve valid zero, current fields and explicit target ownership
+browser	Run split and portable regression	2026-10-23T09:01:58.7160734Z 50.    pass  Print edits follow config limits, current fields and conversion failure boundaries
+browser	Run split and portable regression	2026-10-23T09:01:58.7162003Z 51.    pass  Reference caption lines, fonts and target geometry translate the supplied layout
+browser	Run split and portable regression	2026-10-23T09:01:58.7163239Z 52.    pass  Target export uniformly scales one reference layout and rejects before download
+browser	Run split and portable regression	2026-10-23T09:01:58.7164492Z 53.    pass  Graph figures resolve only their supplied Project and export copied JSON bytes
+browser	Run split and portable regression	2026-10-23T09:01:58.7166392Z 54.    pass  Plotly export owns one lifecycle, consumes copied payload and releases handoff resources
+browser	Run split and portable regression	2026-10-23T09:01:58.7168257Z 55.    pass  FFSX packages real references from one supplied Project and preserves conversion views
+browser	Run split and portable regression	2026-10-23T09:01:58.7169525Z 56.    pass  Public FFSX export queries once and hands off only copied ZIP entries
+browser	Run split and portable regression	2026-10-23T09:01:58.7170776Z 57.    pass  Original asset export returns detached immutable bytes/name/MIME without mutation
+browser	Run split and portable regression	2026-10-23T09:01:58.7172080Z 58.    pass  Public original download owns lifecycle, copied handoff and failure cleanup
+browser	Run split and portable regression	2026-10-23T09:01:58.7173239Z 59.    pass  FFPX query packages one supplied Project without normalizing authority
+browser	Run split and portable regression	2026-10-23T09:01:58.7174452Z 60.    pass  Public project export gates selection and owns copied ZIP handoff lifecycle
+browser	Run split and portable regression	2026-10-23T09:01:58.7178032Z 61.    pass  Asset target query copies original positions and excludes only conversion views
+browser	Run split and portable regression	2026-10-23T09:01:58.7179378Z 62.    pass  Header edit uses current candidate, actual changed path and commit-gated read
+browser	Run split and portable regression	2026-10-23T09:01:58.7180689Z 63.    pass  CSV selection queries copied authority then sends only one revalidated Frontend event
+browser	Run split and portable regression	2026-10-23T09:01:58.7182023Z 64.    pass  Official graph read separates current CSV, object columns and immutable chart
+browser	Run split and portable regression	2026-10-23T09:01:58.7183333Z 65.    pass  One-object edit calculates current candidate, retries and gates copied success read
+browser	Run split and portable regression	2026-10-23T09:01:58.7184748Z 66.    pass  Shared coordinate validation preserves zero-column real references without fake columns
+browser	Run split and portable regression	2026-10-23T09:01:58.7186283Z 67.    pass  Current one-object command can move between empty and populated CSV references
+browser	Run split and portable regression	2026-10-23T09:01:58.7187594Z 68.    pass  Graph move/delete calculate current order and explicit hints without public arrays
+browser	Run split and portable regression	2026-10-23T09:01:58.7188902Z 69.    pass  Graph order rejection, noncommit and stale-authority retry preserve boundaries
+browser	Run split and portable regression	2026-10-23T09:01:58.7190140Z 70.    pass  Graph palette changes only current object colors with omitted index hint
+browser	Run split and portable regression	2026-10-23T09:01:58.7191468Z 71.    pass  Graph palette validates every text and retries current authority without failure effects
+browser	Run split and portable regression	2026-10-23T09:01:58.7193083Z 72.    pass  Graph add resolves scalar inputs, creates once and preserves CSV selection
+browser	Run split and portable regression	2026-10-23T09:01:58.7194340Z 73.    pass  Graph add rejects stale routing, validates before commit and retries current CSV
+browser	Run split and portable regression	2026-10-23T09:01:58.7195904Z 74.    pass  Editable conversion owns CSV creation, copied return and selection preservation
+browser	Run split and portable regression	2026-10-23T09:01:58.7197238Z 75.    pass  Editable failures are atomic and retry resolves current next-id and collision path
+browser	Run split and portable regression	2026-10-23T09:01:58.7198473Z 76.    pass  FFPX retains slot image settings with null reference without creating assets
+browser	Run split and portable regression	2026-10-23T09:01:58.7199689Z 77.    pass  CSV create owns current candidate, bytes, location and immutable success read
+browser	Run split and portable regression	2026-10-23T09:01:58.7201073Z 78.    pass  CSV create retries authority and preserves commit boundary on failures and selection rejection
+browser	Run split and portable regression	2026-10-23T09:01:58.7202541Z 79.    pass  Image create owns current identity, original bytes and immutable read without slot settings
+browser	Run split and portable regression	2026-10-23T09:01:58.7204086Z 80.    pass  Image create validates before commit, retries current authority and preserves postcommit failures
+browser	Run split and portable regression	2026-10-23T09:01:58.7205888Z 81.    pass  Directory create commits current candidate and selects actual immutable result path
+browser	Run split and portable regression	2026-10-23T09:01:58.7207298Z 82.    pass  Directory create retries latest parent and gates selection on commit without rollback
+browser	Run split and portable regression	2026-10-23T09:01:58.7208460Z 83.    pass  project name Backend normalization and official success read
+browser	Run split and portable regression	2026-10-23T09:01:58.7209517Z 84.    pass  project name failure boundaries and current-authority retries
+browser	Run split and portable regression	2026-10-23T09:01:58.7210687Z 85.    pass  Explicit slot type edits preserve payload and selection without pending state
+browser	Run split and portable regression	2026-10-23T09:01:58.7211982Z 86.    pass  Slot type validates explicit current target and retries before one commit
+browser	Run split and portable regression	2026-10-23T09:01:58.7213162Z 87.    pass  Slot reset restores config local defaults and removes only owned chart
+browser	Run split and portable regression	2026-10-23T09:01:58.7214723Z 88.    pass  Slot reset rejects hidden references, retries latest payload and gates success
+browser	Run split and portable regression	2026-10-23T09:01:58.7216528Z 89.    pass  Slot swap exchanges complete local payload and reconciles selection without clearing assets
+browser	Run split and portable regression	2026-10-23T09:01:58.7218057Z 90.    pass  Slot swap noops invalid targets and retries current payload with original failure boundaries
+browser	Run split and portable regression	2026-10-23T09:01:58.7219484Z 91.    pass  Empty image inserts raw SVG using one current candidate and copied actual-path read
+browser	Run split and portable regression	2026-10-23T09:01:58.7220832Z 92.    pass  Empty image retries current ids/path and rejects stale slot without partial commit
+browser	Run split and portable regression	2026-10-23T09:01:58.7222315Z 93.    pass  File-drop preparation uses official context and accepted selection without Project edits
+browser	Run split and portable regression	2026-10-23T09:01:58.7223814Z 94.    pass  File-drop rejected/stale references preserve selection and propagate exact failures
+browser	Run split and portable regression	2026-10-23T09:01:58.7225658Z 95.    pass  Graph layout applies new edits in Backend and reads immutable normalized settings
+browser	Run split and portable regression	2026-10-23T09:01:58.7226973Z 96.    pass  Graph layout validates current ownership, retries and gates all success work
+browser	Run split and portable regression	2026-10-23T09:01:58.7228388Z 97.    pass  Image editor queries own copied bytes without resources and settings change only explicit slot
+browser	Run split and portable regression	2026-10-23T09:01:58.7229919Z 98.    pass  Image settings retry replaced authority and gate failures, noncommit and postcommit effects
+browser	Run split and portable regression	2026-10-23T09:01:58.7231362Z 99.    pass  Print settings normalize only new fields and return fresh immutable Backend reads
+browser	Run split and portable regression	2026-10-23T09:01:58.7232769Z 100.    pass  Print settings retry current authority and gate errors/noncommit/postcommit effects
+browser	Run split and portable regression	2026-10-23T09:01:58.7234043Z 101.    pass  Caption settings own only global fields and return immutable supplied copies
+browser	Run split and portable regression	2026-10-23T09:01:58.7235759Z 102.    pass  Caption settings retry authority and preserve failure/noncommit boundaries
+browser	Run split and portable regression	2026-10-23T09:01:58.7237123Z 103.    pass  Caption text has separate owners, exact empty/text semantics and copied success facts
+browser	Run split and portable regression	2026-10-23T09:01:58.7238491Z 104.    pass  Caption text current-source retry and original errors gate success work
+browser	Run split and portable regression	2026-10-23T09:01:58.7240164Z 105.    pass  Caption insertion retains exact grouping and every nonowned field with supplied success view
+browser	Run split and portable regression	2026-10-23T09:01:58.7241707Z 106.    pass  Caption insertion recalculates newer authority and gates all failure/noncommit effects
+browser	Run split and portable regression	2026-10-23T09:01:58.7243288Z 107.    pass  Trash transaction removes exact current references and preserves canonical display settings
+browser	Run split and portable regression	2026-10-23T09:01:58.7244620Z 108.    pass  Trash retries latest authority and gates failure/noncommit work
+browser	Run split and portable regression	2026-10-23T09:01:58.7246179Z 109.    fail  Trash cascade maps original duplicate positions and excludes only conversion views
+browser	Run split and portable regression	2026-10-23T09:01:58.7248010Z     Error: 그래프 객체 1가 참조하는 프로젝트 CSV가 없습니다.
+browser	Run split and portable regression	2026-10-23T09:01:58.7249162Z     at requireProjectCsv (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:12893:19)
+browser	Run split and portable regression	2026-10-23T09:01:58.7250576Z     at file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:13021:15
+browser	Run split and portable regression	2026-10-23T09:01:58.7251557Z     at Array.forEach (<anonymous>)
+browser	Run split and portable regression	2026-10-23T09:01:58.7252540Z     at traces (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:13020:14)
+browser	Run split and portable regression	2026-10-23T09:01:58.7254034Z     at rebuildEditableGraph (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:13208:22)
+browser	Run split and portable regression	2026-10-23T09:01:58.7255819Z     at chartFigure (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:13262:3)
+browser	Run split and portable regression	2026-10-23T09:01:58.7257361Z     at buildBackendSurfaceRead (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:12406:21)
+browser	Run split and portable regression	2026-10-23T09:01:58.7258970Z     at readBackendProjection (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:12319:51)
+browser	Run split and portable regression	2026-10-23T09:01:58.7260682Z     at applyCommittedDashboardProjection (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:16379:5)
+browser	Run split and portable regression	2026-10-23T09:01:58.7262483Z     at Object.emptyProjectTrash [as emptyTrash] (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:16966:3)
+browser	Run split and portable regression	2026-10-23T09:01:58.7264443Z 110.    pass  Asset deletion detaches current references only and preserves independent selection
+browser	Run split and portable regression	2026-10-23T09:01:58.7266169Z 111.    pass  Asset deletion gates missing, mismatched, failed and stale-authority operations
+browser	Run split and portable regression	2026-10-23T09:01:58.7267631Z 112.    pass  Directory movement detaches current subtree once and preserves local ownership
+browser	Run split and portable regression	2026-10-23T09:01:58.7268978Z 113.    pass  Movement recalculates unique destination and gates rejected and late operations
+browser	Run split and portable regression	2026-10-23T09:01:58.7270391Z 114.    pass  Import decision APIs use official pure queries and current reservation precedence
+browser	Run split and portable regression	2026-10-23T09:01:58.7271810Z 115.    pass  Import plans reject stale replacement before available and refresh collision choices
+browser	Run split and portable regression	2026-10-23T09:01:58.7273150Z 116.    pass  Raw asset batch imports copy inputs and commit one current Backend candidate
+browser	Run split and portable regression	2026-10-23T09:01:58.7274517Z 117.    pass  Slot imports preserve local state, retry current ids and never roll back late read failures
+browser	Run split and portable regression	2026-10-23T09:01:58.7276341Z 118.    pass  Import commands reject create and replacement races after bytes without retargeting
+browser	Run split and portable regression	2026-10-23T09:01:58.7277856Z 119.    pass  Image replacement import retains identity and releases only replaced resource after commit
+browser	Run split and portable regression	2026-10-23T09:01:58.7279203Z 120.    pass  Ordered import router captures one scalar target and owns one lifecycle
+browser	Run split and portable regression	2026-10-23T09:01:58.7280496Z 121.    pass  Real ordered imports process all images and preserve earlier per-file commits
+browser	Run split and portable regression	2026-10-23T09:01:58.7281828Z 122.    pass  FFSX command owns real-reference mapping and preserves image-slot local settings
+browser	Run split and portable regression	2026-10-23T09:01:58.7283301Z 123.    pass  Package validation, authority retry, noncommit and late read preserve transaction boundaries
+browser	Run split and portable regression	2026-10-23T09:01:58.7285219Z 124.    pass  FFSX conversion views and imported Plotly bytes preserve semantic data without fake CSV assets
+browser	Run split and portable regression	2026-10-23T09:01:58.7286793Z 125.    pass  Whole-project FFPX import owns parsing and returns one immutable official snapshot
+browser	Run split and portable regression	2026-10-23T09:01:58.7288492Z 126.    pass  FFPX failures and current-source retry preserve one commit and original late errors
+browser	Run split and portable regression	2026-10-23T09:01:58.7289963Z 127.    pass  Existing assets connect by current scalar references without slot resets or new assets
+browser	Run split and portable regression	2026-10-23T09:01:58.7291452Z 128.    pass  Asset connection rejects stale routing and retries before commit with gated late effects
+browser	Run split and portable regression	2026-10-23T09:01:58.7292917Z 129.    pass  Typed XML reader enforces scalar and recursive child shape without authority writes
+browser	Run split and portable regression	2026-10-23T09:01:58.7294395Z 130.    pass  Typed XML writer rejects unsupported values and preserves nested escaped roundtrips
+browser	Run split and portable regression	2026-10-23T09:01:58.7296173Z 131.    pass  FFPX rejects ambiguous direct wrappers and metadata values through actual ZIP parsing
+browser	Run split and portable regression	2026-10-23T09:01:58.7297539Z 132.    pass  FFSX rejects ambiguous slot graph and CSV wrappers through actual ZIP parsing
+browser	Run split and portable regression	2026-10-23T09:01:58.7298938Z 133.    pass  Package readers reject incompatible typed schema slot kind and every document version
+browser	Run split and portable regression	2026-10-23T09:01:58.7300583Z 134.    pass  Data byte parser follows explicit extensions preserves blank rows and rejects mixed table shape
+browser	Run split and portable regression	2026-10-23T09:01:58.7302213Z 135.    pass  Raw imports and FFPX FFSX byte restoration share one parser with atomic parse rejection
+browser	Run split and portable regression	2026-10-23T09:01:58.7303729Z 136.    pass  Synthetic conversion and candidate restoration bytes use the same filename-aware serializer
+browser	Run split and portable regression	2026-10-23T09:01:58.7305604Z 137.    pass  FFPX candidate normalization distinguishes absent header metadata from explicit null empty and zero
+browser	Run split and portable regression	2026-10-23T09:01:58.7307229Z 138.    pass  FFSX stored header metadata normalizes before chart validation and survives public slot import
+browser	Run split and portable regression	2026-10-23T09:01:58.7308856Z 139.    pass  STORE package paths distinguish parent segments and absolute roots from harmless dotted names
+browser	Run split and portable regression	2026-10-23T09:01:58.7310419Z 140.    pass  Whole Project validation reads canonical slots without normalization or settings repair
+browser	Run split and portable regression	2026-10-23T09:01:58.7312289Z 141.    pass  Project candidate copying preserves canonical extensions and never invokes live legacy serialization
+browser	Run split and portable regression	2026-10-23T09:01:58.7314066Z 142.    pass  Project initialize normalizes owned copies and preserves previous authority on invalid frozen sources
+browser	Run split and portable regression	2026-10-23T09:01:58.7315882Z 143.    pass  Slot normalization preserves present canonical values and fills only missing fields
+browser	Run split and portable regression	2026-10-23T09:01:58.7317302Z 144.    pass  Slot local reads and nondefault checks preserve frozen input and whole image settings
+browser	Run split and portable regression	2026-10-23T09:01:58.7318667Z 145.    pass  Local payload transfer replaces whole content without sanitizing or aliasing
+browser	Run split and portable regression	2026-10-23T09:01:58.7320090Z 146.    pass  Renderer and print queries own immutable same-source figures CSV views and image bytes
+browser	Run split and portable regression	2026-10-23T09:01:58.7321651Z 147.    pass  Print save captures one official snapshot and target rendering never rereads changed authority
+browser	Run split and portable regression	2026-10-23T09:01:58.7323198Z 148.    pass  Raster graph presentation scales copied figures and cleans only its temporary host
+browser	Run split and portable regression	2026-10-23T09:01:58.7324732Z 149.    pass  Current capture uses one official snapshot and one-shot viewport without changing export presets
+browser	Run split and portable regression	2026-10-23T09:01:58.7326587Z 150.    pass  Download handoff retains its original failure when releasing only its own URL also fails
+browser	Run split and portable regression	2026-10-23T09:01:58.7328041Z 151.    pass  Screen renderer consumes supplied immutable projection without authority reads
+browser	Run split and portable regression	2026-10-23T09:01:58.7329409Z 152.    pass  Superseded graph completion cannot replace an image or revive a detached host
+browser	Run split and portable regression	2026-10-23T09:01:58.7330796Z 153.    pass  Image decode completion owns only its current surface and preserves current failure
+browser	Run split and portable regression	2026-10-23T09:01:58.7332213Z 154.    pass  Supplied narrow projection preserves graph and image identities without domain reads
+browser	Run split and portable regression	2026-10-23T09:01:58.7333574Z 155.    pass  Commit projection facts use actual winning authority and reference multisets
+browser	Run split and portable regression	2026-10-23T09:01:58.7335310Z 156.    pass  Application commit projection uses one fresh immutable official input and preserves late errors
+browser	Run split and portable regression	2026-10-23T09:01:58.7336955Z 157.    fail  Startup consumes one supplied initial read in Source order without renderer authority access
+browser	Run split and portable regression	2026-10-23T09:01:58.7338567Z     Error: Application startup did not use one official initial read/public bridge
+browser	Run split and portable regression	2026-10-23T09:01:58.7339879Z     at check (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:20508:27)
+browser	Run split and portable regression	2026-10-23T09:01:58.7341189Z     at file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:27384:9
+browser	Run split and portable regression	2026-10-23T09:01:58.7342446Z     at run (file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:20513:29)
+browser	Run split and portable regression	2026-10-23T09:01:58.7343660Z     at file:///tmp/fast-figure-regression-eegqw0uu/dist/inline/Fast-figure.html:27351:11
+browser	Run split and portable regression	2026-10-23T09:01:58.7345262Z 158.    pass  Supplied workspace selection resolves locally and preserves image/graph lifetimes
+browser	Run split and portable regression	2026-10-23T09:01:58.7346999Z 159.    pass  Application workspace refresh passes one official immutable read and final interface state
+browser	Run split and portable regression	2026-10-23T09:01:58.7348671Z 160.    pass  Scheduled resize retains requesting graph generation/operation and coalesces explicit latest work
+browser	Run split and portable regression	2026-10-23T09:01:58.7350192Z 163.    pass  Zoom geometry consumes supplied width even when DOM measurement disagrees
+browser	Run split and portable regression	2026-10-23T09:01:58.7351577Z 162.    pass  Bookmark cleanup cannot release a newer drag suppression and file drop remains separate
+browser	Run split and portable regression	2026-10-23T09:01:58.7353294Z 164.    pass  Reused graph serializes generations and same-generation operations without stale callbacks or poisoned retries
+browser	Run split and portable regression	2026-10-23T09:01:58.7355276Z 165.    pass  Caption full and narrow projections consume exact supplied text/settings without replacing graph work
+browser	Run split and portable regression	2026-10-23T09:01:58.7356318Z 166.    pass  Graph range intent reads current Backend settings and dispatches only scalar owning-chart changes
+browser	Run split and portable regression	2026-10-23T09:01:58.7357293Z 167.    pass  Graph callbacks retain their presentation target and reject replaced or detached hosts including delayed double-click
+browser	Run split and portable regression	2026-10-23T09:01:58.7358197Z 161.    pass  Resize installation is single-owner in native/fallback paths and cleans failed observers
+browser	Run split and portable regression	2026-10-23T09:01:58.7359308Z 168.    pass  Selected-slot public reads use the official detached Backend query without retaining model references
+browser	Run split and portable regression	2026-10-23T09:01:58.7360219Z 169.    pass  Startup and workspace audit resolve current selection in Application and supply only the workspace scalar
+browser	Run split and portable regression	2026-10-23T09:01:58.7361075Z 170.    pass  Public import bindings own exactly one lifecycle before helpers and preserve every outcome
+browser	Run split and portable regression	2026-10-23T09:01:58.7361942Z 171.    pass  Dashboard drop uses the public lifecycle and finishes drag after settle without replacing original failures
+browser	Run split and portable regression	2026-10-23T09:01:58.7362450Z 
+browser	Run split and portable regression	2026-10-23T09:02:06.8411567Z 
+browser	Run split and portable regression	2026-10-23T09:02:06.8412481Z split-zip file:// regression:
+browser	Run split and portable regression	2026-10-23T09:02:06.8413448Z 15.    pass  startup projects initial slots before interaction
+browser	Run split and portable regression	2026-10-23T09:02:06.8414311Z 16.    pass  layout preview cells follow grid tracks
+browser	Run split and portable regression	2026-10-23T09:02:06.8415364Z 17.    pass  label preview typography matches dashboard label
+browser	Run split and portable regression	2026-10-23T09:02:06.8416451Z 18.    pass  annotation font selectors preserve predefined and custom values
+browser	Run split and portable regression	2026-10-23T09:02:06.8417274Z  1.    pass  FFPX save and reload
+browser	Run split and portable regression	2026-10-23T09:02:06.8417908Z  2.    pass  mixed assets, graph, merge, labels, captions
+browser	Run split and portable regression	2026-10-23T09:02:06.8418580Z  3.    pass  empty image and graph slots
+browser	Run split and portable regression	2026-10-23T09:02:06.8419096Z  4.    pass  FFSX blank graph
+browser	Run split and portable regression	2026-10-23T09:02:06.8419815Z 19.    pass  graph font selector preserves auto and custom values
+browser	Run split and portable regression	2026-10-23T09:02:06.8420459Z  5.    pass  multi-CSV FFSX
+browser	Run split and portable regression	2026-10-23T09:02:06.8420988Z  6.    pass  imported Plotly edit and FFPX
+browser	Run split and portable regression	2026-10-23T09:02:06.8421552Z  7.    pass  Plotly export and import
+browser	Run split and portable regression	2026-10-23T09:02:06.8422083Z  8.    pass  persistent export settings
+browser	Run split and portable regression	2026-10-23T09:02:06.8422604Z  9.    pass  palette save and load
+browser	Run split and portable regression	2026-10-23T09:02:06.8423003Z 10.    pass  collision replace and rename
+browser	Run split and portable regression	2026-10-23T09:02:06.8423333Z 11.    pass  asset delete cascade
+browser	Run split and portable regression	2026-10-23T09:02:06.8423630Z 12.    pass  move to trash cascade
+browser	Run split and portable regression	2026-10-23T09:02:06.8423975Z 13.    pass  layout and label preview geometry
+browser	Run split and portable regression	2026-10-23T09:02:06.8424672Z 14.    pass  Mantine primary button follows UI color
+browser	Run split and portable regression	2026-10-23T09:02:06.8425825Z 20.    pass  slot selection is state-first and background deselects
+browser	Run split and portable regression	2026-10-23T09:02:06.8426576Z 21.    pass  empty slot surface remains selectable
+browser	Run split and portable regression	2026-10-23T09:02:06.8427191Z 22.    fail  bookmark drag consumes post-drag click
+browser	Run split and portable regression	2026-10-23T09:02:06.8428049Z     Error: bookmark drag changed project state without immediately rerendering dashboard
+browser	Run split and portable regression	2026-10-23T09:02:06.8429318Z     at check (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/Fast-figure.html:9811:27)
+browser	Run split and portable regression	2026-10-23T09:02:06.8430658Z     at file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/Fast-figure.html:10306:7
+browser	Run split and portable regression	2026-10-23T09:02:06.8432011Z     at async run (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/Fast-figure.html:9816:23)
+browser	Run split and portable regression	2026-10-23T09:02:06.8433530Z     at async file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/Fast-figure.html:10243:5
+browser	Run split and portable regression	2026-10-23T09:02:06.8435337Z 23.    pass  image asset selection does not link until explicit add
+browser	Run split and portable regression	2026-10-23T09:02:06.8436702Z 24.    pass  graph readData separates current CSV from objectColumns
+browser	Run split and portable regression	2026-10-23T09:02:06.8437708Z 25.    pass  non-editable imported graph rejects object mutation
+browser	Run split and portable regression	2026-10-23T09:02:06.8438548Z 26.    pass  collision modal dismissal cancels import
+browser	Run split and portable regression	2026-10-23T09:02:06.8439391Z 27.    pass  empty CSV creation selects a normal project CSV only
+browser	Run split and portable regression	2026-10-23T09:02:06.8440392Z 28.    pass  layout preview preserves aspect without a preview resize handle
+browser	Run split and portable regression	2026-10-23T09:02:06.8441456Z 29.    pass  settings overlays share width and resize their own height
+browser	Run split and portable regression	2026-10-23T09:02:06.8442512Z 30.    pass  trashed asset remains selectable and can be dragged out of trash
+browser	Run split and portable regression	2026-10-23T09:02:06.8443584Z 31.    pass  Mantine Tree resource drags to slot connection target
+browser	Run split and portable regression	2026-10-23T09:02:06.8444473Z 32.    pass  new project layout outer margin defaults to zero
+browser	Run split and portable regression	2026-10-23T09:02:06.8446006Z 33.    pass  layout selection clears on non-slot modal content
+browser	Run split and portable regression	2026-10-23T09:02:06.8446980Z 34.    pass  trash reference detach invalidates dashboard immediately
+browser	Run split and portable regression	2026-10-23T09:02:06.8448025Z 35.    pass  image editor and dashboard reads preserve project authority
+browser	Run split and portable regression	2026-10-23T09:02:06.8449202Z 36.    pass  application lifecycle task owns execution and Frontend FSM receives events
+browser	Run split and portable regression	2026-10-23T09:02:06.8450551Z 37.    pass  selection validation is read-only and rejected references preserve Frontend state
+browser	Run split and portable regression	2026-10-23T09:02:06.8451979Z 38.    pass  post-commit reconciliation preserves unrelated references and resolves moved assets
+browser	Run split and portable regression	2026-10-23T09:02:06.8453290Z 39.    pass  image settings use current Backend authority and projection-only renderer
+browser	Run split and portable regression	2026-10-23T09:02:06.8454490Z 40.    pass  print settings use Backend queries and current-authority partial commands
+browser	Run split and portable regression	2026-10-23T09:02:06.8456032Z 41.    pass  caption insertion follows exact Backend grouping and committed query boundaries
+browser	Run split and portable regression	2026-10-23T09:02:06.8457382Z 42.    pass  Backend config packaging and caption settings preserve current command ownership
+browser	Run split and portable regression	2026-10-23T09:02:06.8458535Z 43.    pass  Labels use current Backend edits and immutable reference geometry
+browser	Run split and portable regression	2026-10-23T09:02:06.8459610Z 44.    pass  Palette command and renderer use detached one-way projections
+browser	Run split and portable regression	2026-10-23T09:02:06.8460702Z 45.    pass  Layout reads and partial style commands use current Backend authority
+browser	Run split and portable regression	2026-10-23T09:02:06.8461945Z 46.    pass  Layout zoom is Frontend-owned with stable lock anchor and no persistent writes
+browser	Run split and portable regression	2026-10-23T09:02:06.8463231Z 47.    pass  Grid resize uses one-based coordinates and preserves ownership before one commit
+browser	Run split and portable regression	2026-10-23T09:02:06.8464513Z 48.    pass  Merge/split preserve one current payload and return official layout reads
+browser	Run split and portable regression	2026-10-23T09:02:06.8466448Z 49.    pass  Image edits preserve valid zero, current fields and explicit target ownership
+browser	Run split and portable regression	2026-10-23T09:02:06.8467885Z 50.    pass  Print edits follow config limits, current fields and conversion failure boundaries
+browser	Run split and portable regression	2026-10-23T09:02:06.8469552Z 51.    pass  Reference caption lines, fonts and target geometry translate the supplied layout
+browser	Run split and portable regression	2026-10-23T09:02:06.8470888Z 52.    pass  Target export uniformly scales one reference layout and rejects before download
+browser	Run split and portable regression	2026-10-23T09:02:06.8472194Z 53.    pass  Graph figures resolve only their supplied Project and export copied JSON bytes
+browser	Run split and portable regression	2026-10-23T09:02:06.8473555Z 54.    pass  Plotly export owns one lifecycle, consumes copied payload and releases handoff resources
+browser	Run split and portable regression	2026-10-23T09:02:06.8475288Z 55.    pass  FFSX packages real references from one supplied Project and preserves conversion views
+browser	Run split and portable regression	2026-10-23T09:02:06.8476588Z 56.    pass  Public FFSX export queries once and hands off only copied ZIP entries
+browser	Run split and portable regression	2026-10-23T09:02:06.8477834Z 57.    pass  Original asset export returns detached immutable bytes/name/MIME without mutation
+browser	Run split and portable regression	2026-10-23T09:02:06.8479164Z 58.    pass  Public original download owns lifecycle, copied handoff and failure cleanup
+browser	Run split and portable regression	2026-10-23T09:02:06.8480449Z 59.    pass  FFPX query packages one supplied Project without normalizing authority
+browser	Run split and portable regression	2026-10-23T09:02:06.8481714Z 60.    pass  Public project export gates selection and owns copied ZIP handoff lifecycle
+browser	Run split and portable regression	2026-10-23T09:02:06.8483038Z 61.    pass  Asset target query copies original positions and excludes only conversion views
+browser	Run split and portable regression	2026-10-23T09:02:06.8484341Z 62.    pass  Header edit uses current candidate, actual changed path and commit-gated read
+browser	Run split and portable regression	2026-10-23T09:02:06.8485708Z 63.    pass  CSV selection queries copied authority then sends only one revalidated Frontend event
+browser	Run split and portable regression	2026-10-23T09:02:06.8486482Z 64.    pass  Official graph read separates current CSV, object columns and immutable chart
+browser	Run split and portable regression	2026-10-23T09:02:06.8487201Z 65.    pass  One-object edit calculates current candidate, retries and gates copied success read
+browser	Run split and portable regression	2026-10-23T09:02:06.8487995Z 66.    pass  Shared coordinate validation preserves zero-column real references without fake columns
+browser	Run split and portable regression	2026-10-23T09:02:06.8488728Z 67.    pass  Current one-object command can move between empty and populated CSV references
+browser	Run split and portable regression	2026-10-23T09:02:06.8489673Z 68.    pass  Graph move/delete calculate current order and explicit hints without public arrays
+browser	Run split and portable regression	2026-10-23T09:02:06.8490388Z 69.    pass  Graph order rejection, noncommit and stale-authority retry preserve boundaries
+browser	Run split and portable regression	2026-10-23T09:02:06.8491048Z 70.    pass  Graph palette changes only current object colors with omitted index hint
+browser	Run split and portable regression	2026-10-23T09:02:06.8491775Z 71.    pass  Graph palette validates every text and retries current authority without failure effects
+browser	Run split and portable regression	2026-10-23T09:02:06.8492477Z 72.    pass  Graph add resolves scalar inputs, creates once and preserves CSV selection
+browser	Run split and portable regression	2026-10-23T09:02:06.8493191Z 73.    pass  Graph add rejects stale routing, validates before commit and retries current CSV
+browser	Run split and portable regression	2026-10-23T09:02:06.8493891Z 74.    pass  Editable conversion owns CSV creation, copied return and selection preservation
+browser	Run split and portable regression	2026-10-23T09:02:06.8494591Z 75.    pass  Editable failures are atomic and retry resolves current next-id and collision path
+browser	Run split and portable regression	2026-10-23T09:02:06.8495561Z 76.    pass  FFPX retains slot image settings with null reference without creating assets
+browser	Run split and portable regression	2026-10-23T09:02:06.8496268Z 77.    pass  CSV create owns current candidate, bytes, location and immutable success read
+browser	Run split and portable regression	2026-10-23T09:02:06.8497015Z 78.    pass  CSV create retries authority and preserves commit boundary on failures and selection rejection
+browser	Run split and portable regression	2026-10-23T09:02:06.8497813Z 79.    pass  Image create owns current identity, original bytes and immutable read without slot settings
+browser	Run split and portable regression	2026-10-23T09:02:06.8498619Z 80.    pass  Image create validates before commit, retries current authority and preserves postcommit failures
+browser	Run split and portable regression	2026-10-23T09:02:06.8499394Z 81.    pass  Directory create commits current candidate and selects actual immutable result path
+browser	Run split and portable regression	2026-10-23T09:02:06.8500117Z 82.    pass  Directory create retries latest parent and gates selection on commit without rollback
+browser	Run split and portable regression	2026-10-23T09:02:06.8500751Z 83.    pass  project name Backend normalization and official success read
+browser	Run split and portable regression	2026-10-23T09:02:06.8501322Z 84.    pass  project name failure boundaries and current-authority retries
+browser	Run split and portable regression	2026-10-23T09:02:06.8502092Z 85.    pass  Explicit slot type edits preserve payload and selection without pending state
+browser	Run split and portable regression	2026-10-23T09:02:06.8502774Z 86.    pass  Slot type validates explicit current target and retries before one commit
+browser	Run split and portable regression	2026-10-23T09:02:06.8503406Z 87.    pass  Slot reset restores config local defaults and removes only owned chart
+browser	Run split and portable regression	2026-10-23T09:02:06.8504046Z 88.    pass  Slot reset rejects hidden references, retries latest payload and gates success
+browser	Run split and portable regression	2026-10-23T09:02:06.8505490Z 89.    pass  Slot swap exchanges complete local payload and reconciles selection without clearing assets
+browser	Run split and portable regression	2026-10-23T09:02:06.8506935Z 90.    pass  Slot swap noops invalid targets and retries current payload with original failure boundaries
+browser	Run split and portable regression	2026-10-23T09:02:06.8508262Z 91.    pass  Empty image inserts raw SVG using one current candidate and copied actual-path read
+browser	Run split and portable regression	2026-10-23T09:02:06.8509418Z 92.    pass  Empty image retries current ids/path and rejects stale slot without partial commit
+browser	Run split and portable regression	2026-10-23T09:02:06.8510189Z 93.    pass  File-drop preparation uses official context and accepted selection without Project edits
+browser	Run split and portable regression	2026-10-23T09:02:06.8510934Z 94.    pass  File-drop rejected/stale references preserve selection and propagate exact failures
+browser	Run split and portable regression	2026-10-23T09:02:06.8511662Z 95.    pass  Graph layout applies new edits in Backend and reads immutable normalized settings
+browser	Run split and portable regression	2026-10-23T09:02:06.8512401Z 96.    pass  Graph layout validates current ownership, retries and gates all success work
+browser	Run split and portable regression	2026-10-23T09:02:06.8513145Z 97.    pass  Image editor queries own copied bytes without resources and settings change only explicit slot
+browser	Run split and portable regression	2026-10-23T09:02:06.8513932Z 98.    pass  Image settings retry replaced authority and gate failures, noncommit and postcommit effects
+browser	Run split and portable regression	2026-10-23T09:02:06.8514661Z 99.    pass  Print settings normalize only new fields and return fresh immutable Backend reads
+browser	Run split and portable regression	2026-10-23T09:02:06.8515722Z 100.    pass  Print settings retry current authority and gate errors/noncommit/postcommit effects
+browser	Run split and portable regression	2026-10-23T09:02:06.8516629Z 101.    pass  Caption settings own only global fields and return immutable supplied copies
+browser	Run split and portable regression	2026-10-23T09:02:06.8535911Z 102.    pass  Caption settings retry authority and preserve failure/noncommit boundaries
+browser	Run split and portable regression	2026-10-23T09:02:06.8537186Z 103.    pass  Caption text has separate owners, exact empty/text semantics and copied success facts
+browser	Run split and portable regression	2026-10-23T09:02:06.8538473Z 104.    pass  Caption text current-source retry and original errors gate success work
+browser	Run split and portable regression	2026-10-23T09:02:06.8539960Z 105.    pass  Caption insertion retains exact grouping and every nonowned field with supplied success view
+browser	Run split and portable regression	2026-10-23T09:02:06.8541454Z 106.    pass  Caption insertion recalculates newer authority and gates all failure/noncommit effects
+browser	Run split and portable regression	2026-10-23T09:02:06.8542997Z 107.    pass  Trash transaction removes exact current references and preserves canonical display settings
+browser	Run split and portable regression	2026-10-23T09:02:06.8544240Z 108.    pass  Trash retries latest authority and gates failure/noncommit work
+browser	Run split and portable regression	2026-10-23T09:02:06.8545290Z 109.    fail  Trash cascade maps original duplicate positions and excludes only conversion views
+browser	Run split and portable regression	2026-10-23T09:02:06.8546186Z     Error: 그래프 객체 1가 참조하는 프로젝트 CSV가 없습니다.
+browser	Run split and portable regression	2026-10-23T09:02:06.8546855Z     at requireProjectCsv (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/fast-figure.js:2983:19)
+browser	Run split and portable regression	2026-10-23T09:02:06.8547683Z     at file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/fast-figure.js:3111:15
+browser	Run split and portable regression	2026-10-23T09:02:06.8548207Z     at Array.forEach (<anonymous>)
+browser	Run split and portable regression	2026-10-23T09:02:06.8548763Z     at traces (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/fast-figure.js:3110:14)
+browser	Run split and portable regression	2026-10-23T09:02:06.8549636Z     at rebuildEditableGraph (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/fast-figure.js:3298:22)
+browser	Run split and portable regression	2026-10-23T09:02:06.8550504Z     at chartFigure (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/fast-figure.js:3352:3)
+browser	Run split and portable regression	2026-10-23T09:02:06.8551404Z     at buildBackendSurfaceRead (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/fast-figure.js:2496:21)
+browser	Run split and portable regression	2026-10-23T09:02:06.8552568Z     at readBackendProjection (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/fast-figure.js:2409:51)
+browser	Run split and portable regression	2026-10-23T09:02:06.8553559Z     at applyCommittedDashboardProjection (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/fast-figure.js:6469:5)
+browser	Run split and portable regression	2026-10-23T09:02:06.8554614Z     at Object.emptyProjectTrash [as emptyTrash] (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/fast-figure.js:7056:3)
+browser	Run split and portable regression	2026-10-23T09:02:06.8555792Z 110.    pass  Asset deletion detaches current references only and preserves independent selection
+browser	Run split and portable regression	2026-10-23T09:02:06.8556537Z 111.    pass  Asset deletion gates missing, mismatched, failed and stale-authority operations
+browser	Run split and portable regression	2026-10-23T09:02:06.8557240Z 112.    pass  Directory movement detaches current subtree once and preserves local ownership
+browser	Run split and portable regression	2026-10-23T09:02:06.8557934Z 113.    pass  Movement recalculates unique destination and gates rejected and late operations
+browser	Run split and portable regression	2026-10-23T09:02:06.8558656Z 114.    pass  Import decision APIs use official pure queries and current reservation precedence
+browser	Run split and portable regression	2026-10-23T09:02:06.8559410Z 115.    pass  Import plans reject stale replacement before available and refresh collision choices
+browser	Run split and portable regression	2026-10-23T09:02:06.8560116Z 116.    pass  Raw asset batch imports copy inputs and commit one current Backend candidate
+browser	Run split and portable regression	2026-10-23T09:02:06.8560858Z 117.    pass  Slot imports preserve local state, retry current ids and never roll back late read failures
+browser	Run split and portable regression	2026-10-23T09:02:06.8561616Z 118.    pass  Import commands reject create and replacement races after bytes without retargeting
+browser	Run split and portable regression	2026-10-23T09:02:06.8562377Z 119.    pass  Image replacement import retains identity and releases only replaced resource after commit
+browser	Run split and portable regression	2026-10-23T09:02:06.8563069Z 120.    pass  Ordered import router captures one scalar target and owns one lifecycle
+browser	Run split and portable regression	2026-10-23T09:02:06.8563723Z 121.    pass  Real ordered imports process all images and preserve earlier per-file commits
+browser	Run split and portable regression	2026-10-23T09:02:06.8564578Z 122.    pass  FFSX command owns real-reference mapping and preserves image-slot local settings
+browser	Run split and portable regression	2026-10-23T09:02:06.8565871Z 123.    pass  Package validation, authority retry, noncommit and late read preserve transaction boundaries
+browser	Run split and portable regression	2026-10-23T09:02:06.8566712Z 124.    pass  FFSX conversion views and imported Plotly bytes preserve semantic data without fake CSV assets
+browser	Run split and portable regression	2026-10-23T09:02:06.8567479Z 125.    pass  Whole-project FFPX import owns parsing and returns one immutable official snapshot
+browser	Run split and portable regression	2026-10-23T09:02:06.8568230Z 126.    pass  FFPX failures and current-source retry preserve one commit and original late errors
+browser	Run split and portable regression	2026-10-23T09:02:06.8568973Z 127.    pass  Existing assets connect by current scalar references without slot resets or new assets
+browser	Run split and portable regression	2026-10-23T09:02:06.8569721Z 128.    pass  Asset connection rejects stale routing and retries before commit with gated late effects
+browser	Run split and portable regression	2026-10-23T09:02:06.8570450Z 129.    pass  Typed XML reader enforces scalar and recursive child shape without authority writes
+browser	Run split and portable regression	2026-10-23T09:02:06.8571191Z 130.    pass  Typed XML writer rejects unsupported values and preserves nested escaped roundtrips
+browser	Run split and portable regression	2026-10-23T09:02:06.8571965Z 131.    pass  FFPX rejects ambiguous direct wrappers and metadata values through actual ZIP parsing
+browser	Run split and portable regression	2026-10-23T09:02:06.8572686Z 132.    pass  FFSX rejects ambiguous slot graph and CSV wrappers through actual ZIP parsing
+browser	Run split and portable regression	2026-10-23T09:02:06.8573405Z 133.    pass  Package readers reject incompatible typed schema slot kind and every document version
+browser	Run split and portable regression	2026-10-23T09:02:06.8574196Z 134.    pass  Data byte parser follows explicit extensions preserves blank rows and rejects mixed table shape
+browser	Run split and portable regression	2026-10-23T09:02:06.8575210Z 135.    pass  Raw imports and FFPX FFSX byte restoration share one parser with atomic parse rejection
+browser	Run split and portable regression	2026-10-23T09:02:06.8576004Z 136.    pass  Synthetic conversion and candidate restoration bytes use the same filename-aware serializer
+browser	Run split and portable regression	2026-10-23T09:02:06.8576855Z 137.    pass  FFPX candidate normalization distinguishes absent header metadata from explicit null empty and zero
+browser	Run split and portable regression	2026-10-23T09:02:06.8577909Z 138.    pass  FFSX stored header metadata normalizes before chart validation and survives public slot import
+browser	Run split and portable regression	2026-10-23T09:02:06.8578738Z 139.    pass  STORE package paths distinguish parent segments and absolute roots from harmless dotted names
+browser	Run split and portable regression	2026-10-23T09:02:06.8579545Z 140.    pass  Whole Project validation reads canonical slots without normalization or settings repair
+browser	Run split and portable regression	2026-10-23T09:02:06.8580380Z 141.    pass  Project candidate copying preserves canonical extensions and never invokes live legacy serialization
+browser	Run split and portable regression	2026-10-23T09:02:06.8581253Z 142.    pass  Project initialize normalizes owned copies and preserves previous authority on invalid frozen sources
+browser	Run split and portable regression	2026-10-23T09:02:06.8582057Z 143.    pass  Slot normalization preserves present canonical values and fills only missing fields
+browser	Run split and portable regression	2026-10-23T09:02:06.8582799Z 144.    pass  Slot local reads and nondefault checks preserve frozen input and whole image settings
+browser	Run split and portable regression	2026-10-23T09:02:06.8583512Z 145.    pass  Local payload transfer replaces whole content without sanitizing or aliasing
+browser	Run split and portable regression	2026-10-23T09:02:06.8584232Z 146.    pass  Renderer and print queries own immutable same-source figures CSV views and image bytes
+browser	Run split and portable regression	2026-10-23T09:02:06.8585265Z 147.    pass  Print save captures one official snapshot and target rendering never rereads changed authority
+browser	Run split and portable regression	2026-10-23T09:02:06.8586040Z 148.    pass  Raster graph presentation scales copied figures and cleans only its temporary host
+browser	Run split and portable regression	2026-10-23T09:02:06.8586826Z 149.    pass  Current capture uses one official snapshot and one-shot viewport without changing export presets
+browser	Run split and portable regression	2026-10-23T09:02:06.8587620Z 150.    pass  Download handoff retains its original failure when releasing only its own URL also fails
+browser	Run split and portable regression	2026-10-23T09:02:06.8588337Z 151.    pass  Screen renderer consumes supplied immutable projection without authority reads
+browser	Run split and portable regression	2026-10-23T09:02:06.8589026Z 152.    pass  Superseded graph completion cannot replace an image or revive a detached host
+browser	Run split and portable regression	2026-10-23T09:02:06.8589873Z 153.    pass  Image decode completion owns only its current surface and preserves current failure
+browser	Run split and portable regression	2026-10-23T09:02:06.8590599Z 154.    pass  Supplied narrow projection preserves graph and image identities without domain reads
+browser	Run split and portable regression	2026-10-23T09:02:06.8591300Z 155.    pass  Commit projection facts use actual winning authority and reference multisets
+browser	Run split and portable regression	2026-10-23T09:02:06.8592057Z 156.    pass  Application commit projection uses one fresh immutable official input and preserves late errors
+browser	Run split and portable regression	2026-10-23T09:02:06.8592865Z 157.    fail  Startup consumes one supplied initial read in Source order without renderer authority access
+browser	Run split and portable regression	2026-10-23T09:02:06.8593533Z     Error: Application startup did not use one official initial read/public bridge
+browser	Run split and portable regression	2026-10-23T09:02:06.8594242Z     at check (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/Fast-figure.html:9811:27)
+browser	Run split and portable regression	2026-10-23T09:02:06.8595242Z     at file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/Fast-figure.html:16687:9
+browser	Run split and portable regression	2026-10-23T09:02:06.8596030Z     at run (file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/Fast-figure.html:9816:29)
+browser	Run split and portable regression	2026-10-23T09:02:06.8596787Z     at file:///tmp/fast-figure-regression-eegqw0uu/split-package/Fast-figure/Fast-figure.html:16654:11
+browser	Run split and portable regression	2026-10-23T09:02:06.8597546Z 158.    pass  Supplied workspace selection resolves locally and preserves image/graph lifetimes
+browser	Run split and portable regression	2026-10-23T09:02:06.8598328Z 159.    pass  Application workspace refresh passes one official immutable read and final interface state
+browser	Run split and portable regression	2026-10-23T09:02:06.8599148Z 160.    pass  Scheduled resize retains requesting graph generation/operation and coalesces explicit latest work
+browser	Run split and portable regression	2026-10-23T09:02:06.8599880Z 163.    pass  Zoom geometry consumes supplied width even when DOM measurement disagrees
+browser	Run split and portable regression	2026-10-23T09:02:06.8600584Z 162.    pass  Bookmark cleanup cannot release a newer drag suppression and file drop remains separate
+browser	Run split and portable regression	2026-10-23T09:02:06.8601455Z 164.    pass  Reused graph serializes generations and same-generation operations without stale callbacks or poisoned retries
+browser	Run split and portable regression	2026-10-23T09:02:06.8602539Z 165.    pass  Caption full and narrow projections consume exact supplied text/settings without replacing graph work
+browser	Run split and portable regression	2026-10-23T09:02:06.8603392Z 166.    pass  Graph range intent reads current Backend settings and dispatches only scalar owning-chart changes
+browser	Run split and portable regression	2026-10-23T09:02:06.8604315Z 167.    pass  Graph callbacks retain their presentation target and reject replaced or detached hosts including delayed double-click
+browser	Run split and portable regression	2026-10-23T09:02:06.8605446Z 161.    pass  Resize installation is single-owner in native/fallback paths and cleans failed observers
+browser	Run split and portable regression	2026-10-23T09:02:06.8606286Z 168.    pass  Selected-slot public reads use the official detached Backend query without retaining model references
+browser	Run split and portable regression	2026-10-23T09:02:06.8607180Z 169.    pass  Startup and workspace audit resolve current selection in Application and supply only the workspace scalar
+browser	Run split and portable regression	2026-10-23T09:02:06.8608028Z 170.    pass  Public import bindings own exactly one lifecycle before helpers and preserve every outcome
+browser	Run split and portable regression	2026-10-23T09:02:06.8608894Z 171.    pass  Dashboard drop uses the public lifecycle and finishes drag after settle without replacing original failures
+browser	Run split and portable regression	2026-10-23T09:02:06.8609349Z 
+browser	Run split and portable regression	2026-10-23T09:02:06.8609631Z distribution artifacts: inline=6719714 bytes, split-zip=1732567 bytes
+browser	Run split and portable regression	2026-10-23T09:02:06.8620614Z ##[error]Process completed with exit code 1.
