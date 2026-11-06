@@ -2,7 +2,7 @@
 import { projectVfs } from '../backend/assets_files.js';
 import { PROJECT_COMMAND_ACTIONS, projectEFSM } from '../backend/project_efsm.js';
 import { buildFrontendReconciliationInput, getChart, getProjectCsv, readBackendProjection, validateFrontendIntent } from '../backend/project_state.js';
-import { interfaceFSM, interfaceRuntime } from '../frontend/interface_fsm.js';
+import { interfaceFSM } from '../frontend/interface_fsm.js';
 import { applyDashboardProjectionInvalidation, applyDashboardZoomProjection, applyReferenceGeometryProjection, applySlotStyleProjection, applyUiPaletteProjection, debugLog, installSlotClickControllerProjection, readDashboardRenderedWidth, renderDashboardProjection, startupCoreRuntimeProjection, syncDashboardCaptionProjection, updateGraphViewProjection } from '../frontend/renderer.js';
 import { axisRangeValueFromPlotly } from '../backend/graphs.js';
 import { readAppearanceApiPalette, setSelectedSlot, swapSlots } from './public_api/layout_annotations.js';
@@ -90,8 +90,24 @@ export function updateFileAvailability() {
   if (state.selectedSlotId !== null && state.overlay === "readme")
     appFSM.send("CLOSE_OVERLAY", { reason: "slot-selected" });
 }
-export function updateGraphView() {
-  const projection = readBackendProjection("renderer"), state = interfaceFSM.readState();
+export function dispatchSlotSelection(slotId, pendingContentType = null, direction = "ui-to-fsm") {
+  const validatedInput = validateFrontendIntent("SELECT_SLOT", { slotId, direction });
+  if (!validatedInput.accepted) return [interfaceFSM.readState(), null, null];
+  interfaceFSM.send("SELECT_SLOT", { slotId, direction, validatedInput });
+  let state = interfaceFSM.readState(), projectResult = null;
+  if (state.selectedSlotId !== null && pendingContentType !== null) {
+    const context = readBackendProjection("slot-selection-context", { slotId: state.selectedSlotId });
+    if (context?.empty && context.contentType !== pendingContentType) {
+      projectResult = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
+        slotId: state.selectedSlotId, contentType: pendingContentType,
+      });
+      state = interfaceFSM.readState();
+    }
+  }
+  return [state, projectResult, readBackendProjection("renderer", { frontendState: state })];
+}
+
+export function updateGraphView(projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
   debugLog("updateGraphView", { selectedSlotId: state.selectedSlotId });
   return updateGraphViewProjection(projection, state, dashboardFrontendActions());
 }
@@ -125,10 +141,13 @@ export const BACKEND_REFERENCE_EVENTS = new Set(["SELECT_SLOT", "SELECT_ASSET", 
 export const PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
 
 export function runLifecycleTask(lifecycle, event, task) {
-  if (interfaceFSM.state.lifecycle !== "ready")
+  const state = interfaceFSM.readState();
+  if (state.lifecycle !== "ready")
     return Promise.reject(
-      Error(`현재 ${interfaceFSM.state.lifecycle} 상태에서는 ${event} 작업을 시작할 수 없습니다.`),
+      Error(`현재 ${state.lifecycle} 상태에서는 ${event} 작업을 시작할 수 없습니다.`),
     );
+  if (lifecycle !== "importing" && lifecycle !== "exporting")
+    return Promise.reject(Error("작업 lifecycle은 importing 또는 exporting이어야 합니다."));
   interfaceFSM.send("LIFECYCLE_START", { lifecycle, event });
   const complete = (result) => {
     const outcome = result?.outcome === "rejected" ? "rejected" : result?.outcome || "complete";
@@ -173,7 +192,7 @@ export const appFSM = Object.freeze({
       return interfaceFSM.state;
     }
     let validatedInput = BACKEND_REFERENCE_EVENTS.has(event)
-      ? validateFrontendIntent(event, { ...payload, selectedSlotId: interfaceRuntime.selectedSlotId }) : null;
+      ? validateFrontendIntent(event, { ...payload, selectedSlotId: interfaceFSM.readState().selectedSlotId }) : null;
     if (validatedInput && !validatedInput.accepted) return interfaceFSM.state;
     interfaceFSM.send(event, validatedInput ? { ...payload, validatedInput } : payload);
     return interfaceFSM.state;
