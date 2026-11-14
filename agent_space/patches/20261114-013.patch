@@ -1,0 +1,100 @@
+diff --git a/agent_space/memo/20261113-001.md b/agent_space/memo/20261113-001.md
+index 06e897b..ad043e5 100644
+--- a/agent_space/memo/20261113-001.md
++++ b/agent_space/memo/20261113-001.md
+@@ -1,15 +1,25 @@
+-# 상위 구현 결정이 필요한 항목
++# 상위 알고리즘 보완 및 번역 정합성 확인 항목
+ 
+-## 1. canonical VFS tree와 별도 slot/chart 표시의 공급 경계
++세부 알고리즘이나 구현 절차가 부족하면 반드시 기존 SSoT와 책임 경계를 지켜 보완한다. 변경하지 않는 값·변경 전제조건은 해당 owner의 현재 authoritative state와 공식 조회 경로를 기준으로 해결하며, UI 표시값·과거 projection·별도 mirror를 권위 원천으로 삼지 않는다. 이미 정책과 Source로 정해지는 내용을 새 사용자 선호 결정으로 취급하지 않는다. 보완이 필요한 상위 의미는 Source → PlusCal → 실제 코드/소비자 순서로 대응한다.
+ 
+-`pseudocode/backend/project_state.pcal`의 `BuildVfsRead`는 directories/assets의 canonical tree를 반환한다. 현재 UI의 별도 slot 목록은 visible slot의 contentType/chart/imageId와, 연결된 chart의 editability를 사용한다. 참조가 없는 chart도 이 목록에 나타날 수 있다. 이 facts를 어느 공식 read로 제공할지 Source에서 정하고 PlusCal에 반영해야 canonical tree의 공개 반환과 해당 UI 소비를 함께 전환할 수 있다. canonical tree에 slot/chart를 임의로 섞거나 Frontend가 Backend 내부를 읽는 방식으로 정하지 않는다.
++## 1. 슬롯별 사용 에셋 표시의 상위 알고리즘 보완과 번역 불일치 수정
+ 
+-명시 경로 자산 조회·삭제 대상·참조 수·휴지통 하위 트리 계산은 이 결정의 대상이 아니다.
++새 API 방식이나 사용자 선호를 결정할 항목이 아니라, 기존 표시 기능의 상위 알고리즘을 보완하고 번역 대응을 수정할 작업이다. 현재 UI는 에셋 목록과 `/slots` 아래 슬롯별 사용 에셋 항목을 표시한다. 독립적인 chart 관리 목록을 추가하는 작업이 아니다.
+ 
+-## 2. grid 단일 차원 편집의 입력 조합
++Source Script에는 슬롯·chart·에셋 연결 관계가 있으나, 슬롯별 사용 에셋을 조회·종합해 표시하는 절차가 명시적으로 연결돼 있지 않다. 레이아웃이 정한 표시 슬롯을 순회하고 각 슬롯 오브젝트의 imageId 또는 chart→graph objects→csvId 관계를 공식 조회 경로에서 해결해 표시 결과를 만드는 상위 알고리즘을 보완한다. 빈 슬롯·외부 에셋 참조가 없는 chart의 기존 표시도 보존한다. 기존 객체와 조회 책임을 재사용하며 전용 신규 API를 필수 조건으로 삼거나 Frontend가 Backend 내부를 직접 읽게 하지 않는다.
+ 
+-`setGrid(rows, cols)`의 명시 입력 계약은 정해져 있다. UI가 한 dimension만 편집할 때 나머지 값을 render 때 표시된 값으로 보낼지, 이벤트 시점의 공식 read 값으로 보낼지와 invalid-input fallback 조합을 결정해야 한다. 예를 들어 화면 2×2 뒤 현재가 2×3으로 바뀌었다면 row=3 편집을 3×2와 3×3 중 어느 입력으로 해석할지다. 이 결정 전에는 새 companion 병합 규칙을 추가하지 않는다.
++별도로 Source/PlusCal의 `assets.readTree`는 directories/assets의 canonical VFS tree를 반환하지만, 현재 구현은 `{ directories, data, images, charts, slots }` 평면 묶음을 반환하고 UI가 이를 소비한다. 상위 알고리즘 보완 후 Source → PlusCal → Backend read/public API/실제 UI 소비자 순서로 대응을 맞춰 이 번역 불일치를 수정한다. canonical 자산 트리와 슬롯별 연결 표시를 구분하고 두 기존 기능을 유지한다.
+ 
+-## 3. debug toggle의 명시 입력
++명시 경로 자산 조회·삭제 대상·참조 수·휴지통 하위 트리 계산은 이 작업으로 다시 열지 않는다.
+ 
+-`setDebugEnabled(value)`에 어떤 반전 값을 보낼지 정해야 한다. render 때 표시한 telemetry 값의 반전인지, 클릭 시점 runtime 값의 반전인지가 현재 상세 Source에 없다. 중간에 값이 바뀌는 경우의 의미를 정한 뒤 호출 입력을 번역한다.
++## 2. grid 단일 차원 편집의 SSoT 준수와 세부 절차 보완
++
++`setGrid(rows, cols)`는 변경 후 전체 행·열 수를 받아 현재 프로젝트에서 안전한 슬롯 유지·추가·삭제를 계산하는 기존 계약이다. 슬롯 resize 알고리즘이나 사용자 선호를 새로 결정할 문제가 아니다. SSoT는 Backend `activeProject.layout.gridRows/gridCols`이며 UI 입력란의 값은 공식 `layout.readState`에서 받은 표시용 projection이다.
++
++행만 편집하면 새 행 값과 현재 authoritative 열 값을, 열만 편집하면 현재 authoritative 행 값과 새 열 값을 조합한다. 공식 조회·명령 경계를 지키고 Frontend가 Backend 내부를 직접 읽지 않는다. 이전 render의 값을 별도 원천으로 사용해 변경하지 않은 차원을 덮어쓰거나 grid mirror를 추가하지 않는다. invalid 입력에서 기존 값을 유지할 필요가 있을 때도 현재 SSoT를 기준으로 하며 UI 복사본을 fallback authority로 쓰지 않는다. 이 입력 구성·조회·검증의 세부 알고리즘이 부족하면 SSoT 원칙에 맞게 Source에서 보완하고 PlusCal과 실제 소비자까지 대응한다. 현재 상태 재검증과 한 번의 candidate commit이라는 기존 Backend 규칙은 유지한다.
++
++## 3. debug toggle의 Source 처리 절차 보완과 번역 대응
++
++`sourcescript/system.py`는 `debugEnabled`를 session runtime authority로, `uiTelemetryState.debugEnabled`를 단방향 표시용 projection으로 정의하고 projection에서 authority로 되돌아가는 mutation 경로를 금지한다. 반전 기준을 사용자 선호나 미결정 UX 정책으로 다시 선택할 항목이 아니다.
++
++Source에 클릭 처리 → runtime owner의 현재 `debugEnabled` 읽기 → 반전 값 계산 → 공식 변경 경로 적용 → 표시 projection 갱신의 세부 절차를 명시적으로 연결하도록 보완한다. 읽기와 변경의 책임을 같은 runtime owner에 두고 UI가 과거 telemetry 값을 반전해 권위 상태에 되쓰거나 별도 debug mirror를 만들지 않도록 한다. 기존 `setDebugEnabled(value)`의 명시 bool 설정 계약과 runtime/project 책임 구분을 유지하며 새 toggle API나 새 상태 저장소를 필수 해법으로 도입하지 않는다. 보완한 Source를 PlusCal과 실제 UI/공식 setter/runtime owner의 소비 경로까지 순서대로 대응한다. 실제 구현 수정은 별도 반영 지시에 따른다.
+diff --git a/agent_space/plans/plan-027.md b/agent_space/plans/plan-027.md
+new file mode 100644
+index 0000000..df129a9
+--- /dev/null
++++ b/agent_space/plans/plan-027.md
+@@ -0,0 +1,56 @@
++# Plan 027 — SSoT에 따른 상위 알고리즘 보완과 번역 정합성 수정
++
++작성: 2026-11-14. 사용자 요청: debug 처리 절차 보완을 메모에 기록하고, 정정한 메모 전체를 바탕으로 작업 계획을 작성한다.
++
++## 1. 기준·이전 계획과의 관계
++
++- 기준 메모는 `agent_space/memo/20261113-001.md` 전체다. 세 항목은 새 사용자 선호 결정을 기다릴 문제가 아니라 기존 객체 관계·SSoT·공식 경계에 따라 상위 알고리즘과 세부 절차를 보완하고 번역 대응을 수정할 작업이다.
++- Plan026의 A 세 번역 수정은 r156에서 정적으로 대응한 이력으로 유지한다. 본 계획은 Plan026의 앞으로 수행할 B/C 순서와 ‘세 가지 상위 결정 대기’ 분류를 대체한다. 완료된 A를 반복하거나 과거 계획·검토·patch를 삭제하지 않는다.
++- 작성 기준은 HEAD `ae45be706abd50673b4ef9c52fd29b93bf47b22d`, Source45/current → PlusCal25/current → code156/stale다. 메모에는 이번 대화의 지시로 작성 중인 수정이 있다. 이전 Source closure/current 표시는 이번에 확인한 세부 절차 누락이 해결됐다는 증거로 재사용하지 않는다.
++- 이번 요청의 실행 범위는 메모·계획·실제 diff/설명 기록뿐이다. Source·PlusCal·application code·version metadata·업로드 스크립트·정책·AGENT는 변경하지 않는다. 아래 반영 작업은 모두 예정이며 계획 작성 자체를 알고리즘 보완 완료로 세지 않는다.
++
++## 2. 공통 기준
++
++- Source Script → PlusCal pseudocode → source code 순서를 지킨다. 상위가 미비하면 기존 정책과 확정된 의미로 먼저 보완하고 하위 코드에서 의미를 역으로 발명하지 않는다.
++- 세부 알고리즘이 부족해도 SSoT를 반드시 유지한다. owner의 현재 authority와 공식 조회·명령 경로를 사용하고 UI 표시값·이전 render projection·장기 mirror를 다른 권위 원천으로 사용하지 않는다.
++- Frontend가 Backend 내부 object/Registry/FSM을 직접 읽거나 변경하게 하지 않는다. Backend 내부 객체 조회의 조합은 기존 owner가 수행하고 Application 경계는 필요한 detached 결과만 전달한다.
++- 기존 객체·공식 조회·setter를 우선 재사용한다. 전용 신규 API, 별도 상태 저장소, 공통 결과 프로토콜, 동기화 계층을 필수 해법으로 가정하지 않는다.
++- 알고리즘 검토의 첫 원천은 Source다. 실제 source code는 상위 절차가 정리된 뒤 번역 불일치와 실제 소비자를 확인하는 데 사용한다. 중요한 관련 문서는 잘린 부분을 이어 읽어 전체를 확인하고, 이미 완독한 근거는 필요한 범위에서 재사용한다.
++
++## 3. 반영 대상과 보존 조건
++
++| 항목 / 상태 | 상위에서 보완할 절차 | 보존 조건·정적 종료 기준 |
++| --- | --- | --- |
++| 1. 슬롯별 사용 에셋 표시 / 예정 | 레이아웃이 정한 표시 슬롯을 순회해 각 슬롯의 imageId 또는 chart → graph objects → csvId를 기존 객체 조회로 해결하고 표시 정보를 종합한다. Source의 조회·합성·표시 책임과 입력/반환을 연결한다. | 에셋 목록과 `/slots`의 연결 에셋 표시를 모두 유지한다. 빈 슬롯, 참조 없는 graph, 외부 참조 없는 원본 Plotly chart도 기존 의미대로 표시한다. 독립적인 chart 관리 목록을 새로 만들지 않는다. canonical 자산 트리에 slot/chart를 임의로 혼합하지 않는다. |
++| 2. grid 단일 차원 편집 / 예정 | 행 편집은 새 행과 현재 authoritative 열, 열 편집은 현재 authoritative 행과 새 열을 조합하도록 공식 조회·입력 구성·명령 검증 순서를 명시한다. 현재 값 유지가 필요한 invalid 입력 처리도 같은 SSoT에서 해결한다. | authority는 `activeProject.layout.gridRows/gridCols`다. 표시용 값으로 변경하지 않은 차원을 덮어쓰지 않는다. `setGrid(rows, cols)`의 전체 크기 입력 계약과 기존 슬롯 ID/좌표/내용 보존, 새 좌표 추가, 안전한 축소 거부, whole-project 검증·한 번 commit을 유지한다. 완료된 grid shape 변경 시 local selection clear를 다시 미결정으로 열지 않는다. |
++| 3. debug toggle / 예정 | Source의 runtime owner에 클릭 → 현재 debugEnabled 읽기 → 반전 → 공식 변경 → 표시 projection 갱신 절차를 연결한다. owner의 읽기·변경 순서와 기존 bool setter 연결을 명시한다. | `debugEnabled`가 runtime authority이며 `uiTelemetryState.debugEnabled`는 단방향 표시용이다. telemetry를 반전해 authority로 되쓰지 않고 새 debug mirror/영속 project field를 만들지 않는다. 기존 `setDebugEnabled(value)`의 명시 bool 설정 계약을 불필요하게 바꾸거나 toggle API를 강제하지 않는다. |
++
++### 항목 1의 번역 불일치
++
++현재 Source/PlusCal의 `assets.readTree`는 directories/assets의 canonical VFS tree다. 현재 구현은 `{ directories, data, images, charts, slots }` 평면 묶음을 반환하며 UI가 이를 소비한다. 슬롯별 연결 표시의 상위 절차를 보완한 뒤 반환과 실제 소비자를 함께 맞춘다. Backend read와 public binding뿐 아니라 관련 `.directories/.data/.images/.charts/.slots` 소비자를 확인해 에셋 선택·목록 등의 기존 기능을 남김없이 연결한다. 반환만 바꾸고 슬롯별 표시나 다른 실제 소비자를 끊는 것을 완료로 보지 않는다. 별도 독립 slot/chart authority는 만들지 않는다.
++
++### 항목 2의 입력·변경 경계
++
++UI의 새 편집값과 owner가 유지하는 현재 값을 구분한다. 조회 이후 다른 변경이 개입할 수 있는 실제 경로에서는 기존 command의 current-authority 검증·재계산 규칙과 연결해 변경하지 않은 차원을 과거 값으로 되돌리지 않도록 상위 절차를 닫는다. 구체 동기화 primitive나 snapshot 공유를 먼저 도입하지 않는다. 입력 정규화·거부·기존 값 유지 규칙은 관련 Source 계약을 확인해 명시하며 새로운 숫자 fallback이나 암묵적 성공을 만들지 않는다.
++
++## 4. 적용 순서와 산출물
++
++1. **Source 보완:** 항목 1 → 2 → 3 순서로 관련 Source의 전체 계약을 확인하고 위 처리 절차, 입력/반환, 책임, 실패·거부·no-op 분기를 명시한다. 주된 관련 경로는 `sourcescript/backend/project_state.py`, `sourcescript/backend/layout_annotations.py`, `sourcescript/application/public_api/`, `sourcescript/frontend/mantine_ui.py`, `sourcescript/frontend/interface_fsm.py`, `sourcescript/system.py`다. 실제 책임이 있는 파일만 수정한다. Source의 기존 잘못된 닫힘 판단에서 놓친 범위도 변경 설명에 기록한다.
++2. **PlusCal 직접 번역:** 보완한 Source의 입력·값 흐름·조회 시점·권위 owner·상태 변화·실패 분기를 대응하는 `pseudocode/**/*.pcal`에 직접 옮긴다. 새 논리 계층이나 별도 상태 authority를 만들지 않는다.
++3. **실제 코드/소비자 연결:** 닫힌 상위 절차에 따라 Backend read → Application public API/Adapter → UI/runtime 소비자를 coherent한 책임 단위로 수정한다. 항목 1의 readTree 반환과 모든 관련 호출자, 항목 2의 입력란부터 resize command까지, 항목 3의 버튼부터 runtime owner와 표시 갱신까지 연결한다. 상위와 이미 맞는 코드는 그대로 둔다.
++4. **정적 정리·기록:** 실제 입력·분기·반환·변경 경계와 소비 경로를 대조하고 작업별 결과·실제 잔여만 간결하게 갱신한다. 각 계층 의미 파일이 실제 변경될 때만 revision/fingerprint/derived_from과 하위 stale 상태를 사실대로 관리한다. 실행하지 않은 checker·TLC·테스트를 통과로 표시하거나 임의로 current를 선언하지 않는다.
++
++각 반영 단위의 실제 native Git diff와 동명 patch 설명에는 목적·근거·선택 이유·기각한 대안·실제 미확인/후속 범위를 남긴다. 과거 완료 보고서나 중복 장문 review는 새로 복제하지 않는다. 이 계획 자체는 구현·commit·push 허가가 아니다.
++
++## 5. 확인 범위·제외 사항
++
++- 허용된 반영 단계에서는 관련 Source/PlusCal/실제 호출자의 정적 대응과 실제 diff를 확인한다. 실행 성공과 정적 대응을 구분한다.
++- 테스트·app·build·version checker·TLC·브라우저·Actions는 실행하지 않는다. 삭제된 테스트/workflow를 복원하거나 과거 실행 결과를 현재 결과로 재사용하지 않는다.
++- 기존 asset deletion-target·참조 수·trash read, r155의 palette/move 반환 소비, r156의 manual 이미지 0·ZIP 상한·grid selection clear는 구체적인 새 누락 근거 없이 다시 열지 않는다.
++- 정책·AGENT·Git 업로드 방식, 배포 산출물, 무관한 모듈을 정리하거나 새 snapshot/diff 도구를 만들지 않는다. commit/push는 별도 사용자 지시에 따른다.
++
++## 6. 종료·중단 기준
++
++- **완료:** 세 항목 모두 Source의 처리 절차가 구체적이고 SSoT와 책임 경계에 맞으며, 해당 PlusCal과 실제 조회·명령·표시 소비자에 동일한 의미로 연결돼 있다. 항목 1의 반환 불일치와 현재 표시 기능 보존을 함께 확인한다. 미실행 항목과 계층 lineage는 사실대로 기록한다.
++- 이미 확정된 SSoT 원칙을 사용자 선호 질문으로 되돌리지 않는다. 기존 계약만으로 정해지는 것은 그에 맞춰 처리한다.
++- 관련 Source 전체를 확인해도 새로운 기능 의미·상충 계약·결과 분기를 정할 수 없을 때만 정확한 근거와 필요한 최소 입력을 남기고 그 부분에서 멈춘다. 무관한 작업을 추가하거나 허가된 다른 항목까지 중단하지 않는다. 동시 수정·권한 제한이 있으면 실제 상태와 blocker를 구분해 보고한다.

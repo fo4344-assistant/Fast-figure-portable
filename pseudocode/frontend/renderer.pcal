@@ -1,6 +1,6 @@
 ---- MODULE FastFigureFrontendRendererR38 ----
 EXTENDS Naturals, Reals, Sequences
-\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
 \* No Backend/Application imports; supplied immutable inputs/actions only.
 \* Local surface/instance/generation/telemetry variables are Source runtime lifetime
 \* bookkeeping, never mirrored Project/FSM data or mutation candidates.
@@ -26,6 +26,14 @@ ProjectionOnly:
   uiTelemetryState := ImmutableMergeAndIncreaseRevision(uiTelemetryState,patch);
   NotifyUiTelemetrySubscribers(uiTelemetryState);
   result := uiTelemetryState;
+  return;
+end procedure;
+
+procedure readDebugEnabled()
+begin
+RuntimeOwnerNotTelemetry:
+  result := debugEnabled;
+  \* Pure current scalar read. No publish, mirror, Project access or callback.
   return;
 end procedure;
 

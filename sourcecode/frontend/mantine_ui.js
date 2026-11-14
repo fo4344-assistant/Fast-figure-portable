@@ -1,7 +1,7 @@
 // Source: sourcescript/frontend/mantine_ui.py (same logical owner); pseudocode/frontend/mantine_ui.pcal.
 import { appFSM } from '../application/adapter.js';
 import { PROJECT_TRASH_DIRECTORY, projectParentPath, projectPathInDirectory, projectPathName } from '../backend/assets_files.js';
-import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
+import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
 
 // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
 // the mounted UI owns only its collision resolver and drag finalization.
@@ -590,10 +590,26 @@ settings?.fit === "manual"
     );
   }
 
+  function readProjectAssetDisplay() {
+    const assetNodes = window.FastFigureApi.assets.readTree();
+    const slotRows = window.FastFigureApi.layout.readState().visibleSlots;
+    return { assetNodes, slotRows };
+  }
+
   function FastFigureProjectDataTree() {
     const state = useAppState();
     const assetApi = window.FastFigureApi.assets;
-    const snapshot = assetApi.readTree();
+    const { assetNodes, slotRows } = readProjectAssetDisplay();
+    const snapshot = {
+      directories: assetNodes.filter(node => node.kind === "directory").map(node => node.path),
+      data: assetNodes.filter(node => node.kind === "csv").map(node => ({
+        id: node.id, name: node.name, path: node.path, readable: Array.isArray(node.asset.rows),
+        rowCount: Math.max(0, node.asset.rows.length - (Number(node.asset.headerLines) || 0)),
+      })),
+      images: assetNodes.filter(node => node.kind === "image").map(node => ({
+        id: node.id, name: node.name, path: node.path,
+      })),
+    };
     const selectedSlotId = window.FastFigureApi.slots.readSelected()?.id;
     const assetTreeController = useTree({
 initialExpandedState: { "/assets": true },
@@ -693,13 +709,8 @@ try {
   status(`프로젝트 항목 이동 오류: ${error.message}`);
 }
     };
-    const csvReferenceCount = (id) =>
-snapshot.charts.reduce(
-  (count, chart) => count + chart.csvReferences.filter((csvId) => csvId === id).length,
-  0,
-);
-    const imageReferenceCount = (id) =>
-snapshot.slots.filter((slot) => slot.imageId === id).length;
+    const assetReferenceCount = (path) =>
+assetApi.readDeletionTarget(path)?.referenceCount ?? 0;
     const dataByPath = new Map(
 snapshot.data.map((asset) => [asset.path, { kind: "csv", asset }]),
     );
@@ -746,8 +757,8 @@ directorySet.has(path) ? "directory" : dataByPath.get(path)?.kind || null;
 const asset = dataByPath.get(path)?.asset;
 if (!asset) return "";
 return kind === "csv"
-  ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${csvReferenceCount(asset.id)}`
-  : `참조 ${imageReferenceCount(asset.id)}`;
+  ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${assetReferenceCount(path)}`
+  : `참조 ${assetReferenceCount(path)}`;
     };
     const allowProjectTreeDrop = ({ draggedNode, targetNode, position }) =>
 !busy &&
@@ -968,21 +979,12 @@ return React.createElement(
   menu,
 );
     };
-    const visibleSlots = snapshot.slots
-.filter((slot) => !slot.hidden)
+    const visibleSlots = [...slotRows]
 .sort((a, b) => a.row - b.row || a.col - b.col);
     const slotReference = (slot) => {
-if (slot.contentType === "image") {
-  const image = snapshot.images.find((item) => item.id === slot.imageId);
-  return image ? `${image.name} · ${image.path}` : "(에셋 없음)";
-}
-const chart = snapshot.charts.find((item) => item.id === slot.chart);
-if (!chart) return "(에셋 없음)";
-if (chart.editable === false) return "Plotly JSON 내부 데이터 · 외부 참조 없음";
-const references = chart.csvIds
-  .map((id) => snapshot.data.find((item) => item.id === id))
-  .filter(Boolean)
-  .map((csv) => `${csv.name} · ${csv.path}`);
+if (slot.assetDisplay.kind === "embedded")
+  return "Plotly JSON 내부 데이터 · 외부 참조 없음";
+const references = slot.assetDisplay.assets.map(asset => `${asset.name} · ${asset.path}`);
 return references.length ? references.join(", ") : "(에셋 없음)";
     };
     const draggedProjectAsset = (event) => {
@@ -1361,7 +1363,7 @@ React.createElement(
     const assetApi = window.FastFigureApi.assets;
     const editor = graphApi.readData();
     const chartId = editor.chart?.id ?? null, editable = editor.chart?.editor?.editable !== false;
-    const csvAssets = assetApi.readTree().data;
+    const csvAssets = assetApi.readTree().filter(node => node.kind === "csv").map(node => node.asset);
     const csvOptions = csvAssets.map(csv => ({ value: String(csv.id), label: csv.name }));
     const objects = editor.objects;
     const selectedIndex = editor.selectedIndex;
@@ -2039,7 +2041,7 @@ React.createElement(
       variant: telemetry.debugEnabled ? "filled" : "light",
       disabled: busy,
       "aria-pressed": telemetry.debugEnabled,
-      onClick: () => setDebugEnabled(!telemetry.debugEnabled),
+      onClick: () => setDebugEnabled(!readDebugEnabled()),
     },
     telemetry.debugEnabled ? "디버깅 끄기" : "디버깅 켜기",
   ),
@@ -2751,11 +2753,18 @@ const number = Number(value);
 return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
     };
     const commitStyle = (patch) => layoutApi.setStyle(patch);
-    const changeGrid = (patch) => {
-const rows = patch.rows ?? layout.gridRows;
-const cols = patch.cols ?? layout.gridCols;
-layoutApi.setGrid(rows, cols);
+    const changeGrid = (dimension, value) => {
+if (!["rows", "cols"].includes(dimension)) throw Error("알 수 없는 grid 편집 차원입니다.");
+const current = layoutApi.readState();
+const number = typeof value === "number" || (typeof value === "string" && value.trim() !== "")
+  ? Number(value) : NaN;
+const edited = Number.isFinite(number) ? Math.max(1, Math.min(8, number))
+  : dimension === "rows" ? current.gridRows : current.gridCols;
+const rows = dimension === "rows" ? edited : current.gridRows;
+const cols = dimension === "cols" ? edited : current.gridCols;
+const result = layoutApi.setGrid(rows, cols);
 setLayoutSelection(new Set());
+return result;
     };
     const toggleSlot = (slotId) => {
 setLayoutSelection((current) => {
@@ -2799,7 +2808,7 @@ React.createElement(
       allowDecimal: false,
       disabled: busy,
       onChange: (value) =>
-        changeGrid({ rows: clamp(value, layout.gridRows, 1, 8) }),
+        changeGrid("rows", value),
     }),
     React.createElement(NumberInput, {
       label: "열",
@@ -2809,7 +2818,7 @@ React.createElement(
       allowDecimal: false,
       disabled: busy,
       onChange: (value) =>
-        changeGrid({ cols: clamp(value, layout.gridCols, 1, 8) }),
+        changeGrid("cols", value),
     }),
   ),
   React.createElement(

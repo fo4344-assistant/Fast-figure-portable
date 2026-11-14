@@ -113,6 +113,8 @@ def readLayoutApiState(previewWidth=None):
     current layout.readState Backend query에 previewWidth만 전달한다.
     previewWidth의 omitted/invalid 기본값과 bounds는 Backend의 backend.defaults.preview에서만 read copy에 적용한다. Application은 값을 복제하지 않는다.
     반환은 gridRows/gridCols/slotStyle/visibleSlots/previewGeometry와 현재 Frontend zoom/zoomLocked다.
+    visibleSlots의 contentType/chart/imageId와 assetDisplay는 Backend가 같은 project read에서 resolve한 detached 값이다.
+    Application이 별도 chart/asset copy를 재조합하거나 canonical assets.readTree에 slot/chart를 끼워 넣지 않는다.
     Application이 interfaceFSM의 zoom/lock scalar를 합성하며 previewGeometry를 session/Project에 저장하지 않는다.
     """
     layout = dispatchProjectQuery("project-api", {"operation": "layout.readState", "renderedWidth": previewWidth})
@@ -174,6 +176,9 @@ def setLayoutApiGrid(rows, cols):
 
     처리:
     Application은 rows/cols만 GRID_LAYOUT_CHANGED에 전달한다. Backend command가 buildGridResizeCandidate와 전체 project 검증을 수행한다.
+    UI의 단일 dimension 입력은 mantine_ui.changeLayoutGridDimension이 이벤트 시점 공식 read로 두 값을 구성한다.
+    이 read부터 동기 dispatch/candidate 검증까지 await·외부 callback이나 다른 command를 삽입하지 않는다.
+    setLayoutApiGrid 자체는 두 명시 입력을 유지하며 생략 차원/telemetry/과거 layout copy를 권위 원천으로 해석하지 않는다.
     거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
     성공 candidate는 그 command가 한 번 commit한다.
     commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 Application boundary의 Backend reconciliation query와 Frontend FSM transition이 결정한다.

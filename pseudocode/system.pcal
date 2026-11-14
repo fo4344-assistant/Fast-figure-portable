@@ -1,11 +1,13 @@
 ---- MODULE FastFigureSystemR38 ----
 EXTENDS Sequences
 
-\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
 \* Hierarchy: Backend / Application boundary / Frontend / Portable build.
 \* No new system FSM. Qualified imported methods use '_' mechanically.
 \* activeProject below is an imported Backend binding, NOT a copied authority.
 \* projection/actions/interfaceState/result are startup-call-local values.
+\* Debug clicks synchronously read renderer-owned debugEnabled via readDebugEnabled,
+\* invert into existing setDebugEnabled, then display one-way telemetry; never invert telemetry.
 CONSTANT NoValue
 
 (* --algorithm FastFigureSystem

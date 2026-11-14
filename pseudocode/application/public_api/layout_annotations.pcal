@@ -1,6 +1,6 @@
 ---- MODULE FastFigurePublicLayoutAnnotationsR38 ----
 EXTENDS Naturals, Reals, Sequences
-\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
 \* Every adapter tuple is unpacked internally. Public return shapes are NOT unified.
 \* read/commit/render throws propagate; success-side failure never rolls back committed Project.
 CONSTANT NoValue, DEFAULT_UI_PALETTE
@@ -87,7 +87,8 @@ BackendNormalizesPreviewOnly:
   call dispatchProjectQuery("project-api",[operation |-> "layout.readState",renderedWidth |-> previewWidth]); layout := result;
   call InterfaceStateMachine_readState(); session := result;
   result := ImmutableRecordWith(layout,[zoom |-> session.dashboardZoomIntent,zoomLocked |-> session.dashboardZoomLocked]);
-  \* No saved preview or Application default copy.
+  \* visibleSlots retains Backend same-source contentType/chart/imageId/assetDisplay.
+  \* No re-resolve into a chart manager/tree bundle, saved preview or Application default copy.
   return;
 end procedure;
 

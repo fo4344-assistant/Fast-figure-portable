@@ -74,6 +74,15 @@ def publishUiTelemetry(patch):
     return telemetry
 
 
+def readDebugEnabled():
+    """
+    debug runtime owner의 현재 debugEnabled boolean을 읽는다. 변경·publish·Project read는 없다.
+    uiTelemetryState.debugEnabled나 DOM/표시 cache를 역으로 읽어 authority를 복원하지 않는다.
+    UI의 클릭 처리에 쓰는 call-local scalar이며 새 debug store/API namespace를 만들지 않는다.
+    """
+    return "현재 debugEnabled runtime authority의 boolean"
+
+
 def setDebugEnabled(enabled):
     """
     변경:
@@ -81,7 +90,9 @@ def setDebugEnabled(enabled):
     - uiTelemetryState.debugEnabled projection.
 
     처리:
-    입력을 boolean 의미로 정규화하고 projection을 즉시 publish한다.
+    입력을 boolean 의미로 정규화해 debugEnabled에 먼저 반영하고 그 실제 값을 projection으로 즉시 publish한다.
+    명시 bool 설정 계약을 유지하며 UI projection을 현재 runtime 값 대신 읽지 않는다.
+    publish 오류는 전파하고 이미 수행한 runtime 변경을 숨은 rollback으로 되돌리거나 성공으로 위장하지 않는다.
     """
     return "최종 debugEnabled"
 

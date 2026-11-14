@@ -56,7 +56,7 @@ PUBLIC_API_METHODS = {
     "assets": {
         "readDeletionTarget": "read/calculation; target asset과 collectAssetReferences 결과",
         "delete": "assets.deleteProjectAsset(target); kind-specific delete/detach one commit; 성공/missing/미commit None, 오류 전파; 내부 tuple 반환 없음",
-        "readTree": "read; current VFS/assets에서 tree projection 계산",
+        "readTree": "read; current directories/CSV/image의 canonical node sequence; slot/chart는 혼합하지 않고 layout.readState.visibleSlots.assetDisplay로 표시",
         "isTrashed": "read; canonical path의 trash subtree membership 계산",
         "movable": "read/calculation; current VFS에서 fixed directory 여부와 source 존재를 기준으로 tree move 가능 여부 계산; trash membership 자체는 move 금지 조건이 아님",
         "readTrash": "read; current trash subtree projection",
@@ -133,7 +133,7 @@ PUBLIC_API_METHODS = {
         "resetPalette": "layout_annotations.resetAppearanceApiPalette; 유일한 default를 같은 setPalette 경로로 commit -> fresh palette/False",
     },
     "layout": {
-        "readState": "layout_annotations.readLayoutApiState; Backend layout/preview copy + Frontend zoom/zoomLocked 합성; previewWidth 기본 600, transient read",
+        "readState": "layout_annotations.readLayoutApiState; Backend layout/preview 및 visible slot의 assetDisplay copy + Frontend zoom/zoomLocked 합성; previewWidth 기본 600, transient read",
         "setStyle": "layout_annotations.setLayoutApiStyle; LAYOUT_STYLE_CHANGED -> fresh public layout state/False",
         "setGrid": "layout_annotations.setLayoutApiGrid; GRID_LAYOUT_CHANGED -> fresh public layout state/False; implicit reflow 금지",
         "setZoom": "layout_annotations.setLayoutApiZoom; SET_DASHBOARD_ZOOM -> fresh layout state; finite 50..200/invalid 100, locked no-op",

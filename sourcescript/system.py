@@ -138,7 +138,9 @@ RESOLVED_REVIEW_ITEMS = [
     ),
     (
         "debugEnabled는 session runtime authority이고 uiTelemetryState.debugEnabled는 one-way UI projection이다. "
-        "Source Script에는 projection에서 debug authority로 되돌아가는 mutation 경로를 두지 않는다."
+        "Source Script에는 projection에서 debug authority로 되돌아가는 mutation 경로를 두지 않는다. "
+        "UI 클릭은 renderer runtime owner의 readDebugEnabled로 현재 boolean을 읽고 같은 동기 처리에서 반전을 "
+        "기존 setDebugEnabled에 전달한다. owner 변경 뒤 telemetry를 publish하며 표시값/별도 mirror를 반전 원천으로 쓰지 않는다."
     ),
     (
         "slot caption은 slot object의 local property로 확정했다. "

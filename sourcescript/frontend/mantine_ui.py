@@ -127,6 +127,57 @@ EMPTY_CSV_UI_RULE = (
 )
 
 
+def readProjectAssetDisplay():
+    """
+    이번 표시 작업에서 FastFigureApi.assets.readTree의 canonical node sequence와
+    FastFigureApi.layout.readState의 visibleSlots를 공식 경계로 읽는다.
+    두 read 사이에 await/다른 project command/외부 callback을 넣거나 이전 render 결과와 혼합하지 않는다.
+    canonical directory children과 asset metadata로 기존 에셋 목록을 표시하고,
+    visibleSlots의 id/row/col/contentType/chart/imageId 및 assetDisplay로 /slots의 기존 연결 표시를 만든다.
+    slot→chart→CSV/image resolve나 editable 판정은 Backend가 같은 current project에서 끝낸 값만 소비한다.
+    empty/embedded row도 유지한다. assetDisplay.assets의 kind/id/name/path로 표시·선택 intent를 구성하되
+    mutation은 기존 공식 API가 current identity를 다시 검증한다.
+    directory/CSV/image 선택 후보가 필요한 다른 UI도 canonical node의 kind/asset을 사용한다.
+    에셋 행의 참조 수는 assets.readDeletionTarget(node.path).referenceCount를 읽으며 slot 표시의 중복 제거 목록을 세지 않는다.
+    CSV 행 수 표시는 node.asset.rows의 길이에서 headerLines의 숫자값(없거나 변환 실패이면 기존 표시 fallback 0)을 제외한 nonnegative 값이다.
+    이는 기존 행 수 표시만 유지하며 새 CSV parser, project 정규화 또는 domain state를 만들지 않는다.
+    기존 flat tree의 .directories/.data/.images/.charts/.slots를 public read 계약처럼 소비하지 않는다.
+    component-local 순회/index는 이번 표시의 transient 계산일 뿐 다른 project store나 mutation authority가 아니다.
+    query 오류는 전파하며 예전 projection으로 성공을 위장하거나 조회 중 project를 수정하지 않는다.
+    """
+    return "canonical asset nodes와 같은 표시 작업의 visible slot assetDisplay"
+
+
+def changeLayoutGridDimension(dimension, value):
+    """
+    layout 행/열 입력 이벤트의 처리 절차. dimension은 rows 또는 cols이며 그 외는 입력 오류다.
+    1. 이벤트 시점에 FastFigureApi.layout.readState()를 호출해 current gridRows/gridCols를 읽는다.
+       이전 render의 layout, input DOM, 별도 mirror는 companion/fallback의 원천이 아니다.
+    2. 비어 있거나 숫자로 변환할 수 없거나 non-finite인 편집 입력은 같은 read의 해당 dimension을 유지한다.
+       유효 숫자는 기존 grid 입력 범위 1..8로 제한한다. 정수 여부 등 최종 유효성은 기존 Backend 검증이 담당한다.
+    3. rows 편집이면 새 rows와 current gridCols, cols 편집이면 current gridRows와 새 cols를 구성한다.
+    4. 이 read→입력 구성→FastFigureApi.layout.setGrid(rows, cols)는 await/외부 callback/다른 project command 없이
+       같은 동기 입력 처리에서 연속 실행한다. 별도 snapshot/session에 보관했다가 나중에 command로 보내지 않는다.
+       Application dispatch와 Backend candidate 계산/검증도 이 경로에서는 동기이며 대기 중 project 변경이 개입하지 않는다.
+       setGrid의 명시 전체 크기 계약과 Backend의 current-source 재확인·재계산·한 번 commit은 그대로 유지한다.
+    5. setter의 거부 False와 원래 예외를 그대로 처리하며 성공처럼 표시하거나 별도 resize/commit을 하지 않는다.
+       grid shape 변경과 overlay close의 local selection clear는 기존 interaction 규칙대로 수행한다.
+    """
+    return "공식 setGrid의 결과 또는 원래 실패"
+
+
+def handleDebugToggle():
+    """
+    클릭 이벤트 시 renderer runtime owner의 readDebugEnabled()로 현재 boolean을 읽고,
+    await/외부 callback 없이 그 반전을 기존 setDebugEnabled(value)에 전달한다.
+    telemetry는 버튼의 label/pressed 표시만 담당하고 반전 입력의 권위가 아니다.
+    setDebugEnabled가 owner를 변경한 뒤 telemetry를 publish하며 UI는 그 단방향 projection을 표시한다.
+    별도 debug mirror, Project mutation, toggle command/API 또는 두 번째 publish를 만들지 않는다.
+    명시 bool setter를 직접 사용하는 다른 caller의 계약을 바꾸지 않는다. 원래 오류는 caller에 전파한다.
+    """
+    return "runtime owner의 공식 setter 결과"
+
+
 def subscribeAppState(onStoreChange):
     """
     Return:

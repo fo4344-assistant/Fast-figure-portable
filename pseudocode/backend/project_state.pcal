@@ -1,7 +1,7 @@
 ---- MODULE FastFigureBackendProjectStateR38 ----
 EXTENDS Naturals, Integers, Sequences
 
-\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
 \* Source: sourcescript/backend/project_state.py r38.
 \* Source entries include queries, registry, creation/validation, reference helpers.
 \* Active direct Source r38 translation; see the translation review for scope/evidence.
@@ -560,6 +560,42 @@ CopyWithoutRevocableAllocation:
   return;
 end procedure;
 
+procedure buildSlotAssetDisplay(slot,source)
+variables display = [kind |-> "empty",assets |-> <<>>], image = NoValue,
+          chart = NoValue, csv = NoValue, seen = {}, i = 1;
+begin
+SameCurrentProjectWithoutMutationOrResource:
+  if slot.content.contentType = "image" then
+    image := ImageById(source,slot.content.imageId);
+    if image # NoValue then
+      display.kind := "assets";
+      display.assets := <<[kind |-> "image",id |-> image.id,name |-> image.name,path |-> CanonicalAssetPath(image)]>>;
+    end if;
+  elsif slot.content.contentType = "graph" then
+    chart := ChartById(source,slot.content.chart);
+    if chart # NoValue then
+      if chart.editor.editable = FALSE then display.kind := "embedded";
+      else
+        while i <= Len(chart.editor.objects) do
+          csv := CsvById(source,chart.editor.objects[i].csvId);
+          if csv # NoValue then
+            if csv.id \notin seen then
+              seen := seen \cup {csv.id};
+              display.assets := Append(display.assets,[kind |-> "csv",id |-> csv.id,name |-> csv.name,path |-> CanonicalAssetPath(csv)]);
+            end if;
+          end if;
+          i := i + 1;
+        end while;
+        if Len(display.assets) > 0 then display.kind := "assets"; end if;
+      end if;
+    end if;
+  end if;
+  result := ImmutableCopy(display);
+  \* Empty/embedded/no-reference slots remain visible. No conversion CSV resolve.
+  \* Metadata only; never bytes/rows/callbacks, Project writes or a retained read store.
+  return;
+end procedure;
+
 procedure BuildVfsRead(source,operation,request)
 variables path = "", node = NoValue, tree = <<>>, refs = <<>>, target = NoValue,
           csvIds = {}, imageIds = {}, options = <<>>, i = 1, directory = "";
@@ -703,6 +739,20 @@ PublicReadRegisteredOperation:
     call NormalizePreviewReadWidth(FieldOrNoValue(request,"renderedWidth")); width := result;
     call DashboardGeometryInProject(source,width,NoValue); geometry := result;
     output := LayoutGridStyleVisibleSlotsAndPreviewCopy(source,geometry);
+    slots := <<>>; i := 1;
+    while i <= Len(source.slots) do
+      slot := source.slots[i];
+      if ~slot.hidden then
+        call buildSlotAssetDisplay(slot,source);
+        slots := Append(slots,[id |-> slot.id,row |-> slot.row,col |-> slot.col,
+          rowSpan |-> slot.rowSpan,colSpan |-> slot.colSpan,
+          contentType |-> slot.content.contentType,chart |-> slot.content.chart,
+          imageId |-> slot.content.imageId,assetDisplay |-> result]);
+      end if;
+      i := i + 1;
+    end while;
+    output.visibleSlots := slots;
+    \* Same source as grid/style/geometry; not a separate chart manager or VFS tree field.
   elsif operation = "assets.fileKind" then call slotFileKind(request.file); output := result;
   elsif operation = "assets.collisionModel" then call projectAssetImportCollisionModel(request.file,request.directory,request.reservedPaths); output := result;
   elsif operation = "assets.resolveImportPlan" then call resolveProjectAssetImportPlan(request.model,request.choice,request.reservedPaths); output := result;

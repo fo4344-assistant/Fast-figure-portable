@@ -1,0 +1,849 @@
+diff --git a/agent_space/memo/20261113-001.md b/agent_space/memo/20261113-001.md
+index ad043e5..5af4340 100644
+--- a/agent_space/memo/20261113-001.md
++++ b/agent_space/memo/20261113-001.md
+@@ -1,6 +1,8 @@
+-# 상위 알고리즘 보완 및 번역 정합성 확인 항목
++# 상위 알고리즘 보완 및 번역 정합성 확인 기록
+ 
+-세부 알고리즘이나 구현 절차가 부족하면 반드시 기존 SSoT와 책임 경계를 지켜 보완한다. 변경하지 않는 값·변경 전제조건은 해당 owner의 현재 authoritative state와 공식 조회 경로를 기준으로 해결하며, UI 표시값·과거 projection·별도 mirror를 권위 원천으로 삼지 않는다. 이미 정책과 Source로 정해지는 내용을 새 사용자 선호 결정으로 취급하지 않는다. 보완이 필요한 상위 의미는 Source → PlusCal → 실제 코드/소비자 순서로 대응한다.
++2026-11-14 Plan027에서 아래 세 항목을 Source Script → pseudocode → source code 순서로 반영하고 실제 소비자를 정적으로 대조했다(r157, `patches/20261114-014.patch` 및 동명 설명). 아래 본문은 반영 전 지적·보완 근거의 이력이며 사용자 선호 결정이나 미반영 작업 목록이 아니다. 실행 확인은 하지 않았고 새 계층 상태는 stale이다.
++
++세부 알고리즘이나 구현 절차가 부족하면 반드시 기존 SSoT와 책임 경계를 지켜 보완한다. 변경하지 않는 값·변경 전제조건은 해당 owner의 현재 authoritative state와 공식 조회 경로를 기준으로 해결하며, UI 표시값·과거 projection·별도 mirror를 권위 원천으로 삼지 않는다. 이미 정책과 Source Script로 정해지는 내용을 새 사용자 선호 결정으로 취급하지 않는다. 보완이 필요한 상위 의미는 Source Script → pseudocode → 실제 코드/소비자 순서로 대응한다.
+ 
+ ## 1. 슬롯별 사용 에셋 표시의 상위 알고리즘 보완과 번역 불일치 수정
+ 
+@@ -8,7 +10,7 @@
+ 
+ Source Script에는 슬롯·chart·에셋 연결 관계가 있으나, 슬롯별 사용 에셋을 조회·종합해 표시하는 절차가 명시적으로 연결돼 있지 않다. 레이아웃이 정한 표시 슬롯을 순회하고 각 슬롯 오브젝트의 imageId 또는 chart→graph objects→csvId 관계를 공식 조회 경로에서 해결해 표시 결과를 만드는 상위 알고리즘을 보완한다. 빈 슬롯·외부 에셋 참조가 없는 chart의 기존 표시도 보존한다. 기존 객체와 조회 책임을 재사용하며 전용 신규 API를 필수 조건으로 삼거나 Frontend가 Backend 내부를 직접 읽게 하지 않는다.
+ 
+-별도로 Source/PlusCal의 `assets.readTree`는 directories/assets의 canonical VFS tree를 반환하지만, 현재 구현은 `{ directories, data, images, charts, slots }` 평면 묶음을 반환하고 UI가 이를 소비한다. 상위 알고리즘 보완 후 Source → PlusCal → Backend read/public API/실제 UI 소비자 순서로 대응을 맞춰 이 번역 불일치를 수정한다. canonical 자산 트리와 슬롯별 연결 표시를 구분하고 두 기존 기능을 유지한다.
++별도로 Source Script/pseudocode의 `assets.readTree`는 directories/assets의 canonical VFS tree를 반환하지만, 현재 구현은 `{ directories, data, images, charts, slots }` 평면 묶음을 반환하고 UI가 이를 소비한다. 상위 알고리즘 보완 후 Source Script → pseudocode → Backend read/public API/실제 UI 소비자 순서로 대응을 맞춰 이 번역 불일치를 수정한다. canonical 자산 트리와 슬롯별 연결 표시를 구분하고 두 기존 기능을 유지한다.
+ 
+ 명시 경로 자산 조회·삭제 대상·참조 수·휴지통 하위 트리 계산은 이 작업으로 다시 열지 않는다.
+ 
+@@ -16,10 +18,10 @@ Source Script에는 슬롯·chart·에셋 연결 관계가 있으나, 슬롯별
+ 
+ `setGrid(rows, cols)`는 변경 후 전체 행·열 수를 받아 현재 프로젝트에서 안전한 슬롯 유지·추가·삭제를 계산하는 기존 계약이다. 슬롯 resize 알고리즘이나 사용자 선호를 새로 결정할 문제가 아니다. SSoT는 Backend `activeProject.layout.gridRows/gridCols`이며 UI 입력란의 값은 공식 `layout.readState`에서 받은 표시용 projection이다.
+ 
+-행만 편집하면 새 행 값과 현재 authoritative 열 값을, 열만 편집하면 현재 authoritative 행 값과 새 열 값을 조합한다. 공식 조회·명령 경계를 지키고 Frontend가 Backend 내부를 직접 읽지 않는다. 이전 render의 값을 별도 원천으로 사용해 변경하지 않은 차원을 덮어쓰거나 grid mirror를 추가하지 않는다. invalid 입력에서 기존 값을 유지할 필요가 있을 때도 현재 SSoT를 기준으로 하며 UI 복사본을 fallback authority로 쓰지 않는다. 이 입력 구성·조회·검증의 세부 알고리즘이 부족하면 SSoT 원칙에 맞게 Source에서 보완하고 PlusCal과 실제 소비자까지 대응한다. 현재 상태 재검증과 한 번의 candidate commit이라는 기존 Backend 규칙은 유지한다.
++행만 편집하면 새 행 값과 현재 authoritative 열 값을, 열만 편집하면 현재 authoritative 행 값과 새 열 값을 조합한다. 공식 조회·명령 경계를 지키고 Frontend가 Backend 내부를 직접 읽지 않는다. 이전 render의 값을 별도 원천으로 사용해 변경하지 않은 차원을 덮어쓰거나 grid mirror를 추가하지 않는다. invalid 입력에서 기존 값을 유지할 필요가 있을 때도 현재 SSoT를 기준으로 하며 UI 복사본을 fallback authority로 쓰지 않는다. 이 입력 구성·조회·검증의 세부 알고리즘이 부족하면 SSoT 원칙에 맞게 Source Script에서 보완하고 pseudocode와 실제 소비자까지 대응한다. 현재 상태 재검증과 한 번의 candidate commit이라는 기존 Backend 규칙은 유지한다.
+ 
+-## 3. debug toggle의 Source 처리 절차 보완과 번역 대응
++## 3. debug toggle의 Source Script 처리 절차 보완과 번역 대응
+ 
+ `sourcescript/system.py`는 `debugEnabled`를 session runtime authority로, `uiTelemetryState.debugEnabled`를 단방향 표시용 projection으로 정의하고 projection에서 authority로 되돌아가는 mutation 경로를 금지한다. 반전 기준을 사용자 선호나 미결정 UX 정책으로 다시 선택할 항목이 아니다.
+ 
+-Source에 클릭 처리 → runtime owner의 현재 `debugEnabled` 읽기 → 반전 값 계산 → 공식 변경 경로 적용 → 표시 projection 갱신의 세부 절차를 명시적으로 연결하도록 보완한다. 읽기와 변경의 책임을 같은 runtime owner에 두고 UI가 과거 telemetry 값을 반전해 권위 상태에 되쓰거나 별도 debug mirror를 만들지 않도록 한다. 기존 `setDebugEnabled(value)`의 명시 bool 설정 계약과 runtime/project 책임 구분을 유지하며 새 toggle API나 새 상태 저장소를 필수 해법으로 도입하지 않는다. 보완한 Source를 PlusCal과 실제 UI/공식 setter/runtime owner의 소비 경로까지 순서대로 대응한다. 실제 구현 수정은 별도 반영 지시에 따른다.
++Source Script에 클릭 처리 → runtime owner의 현재 `debugEnabled` 읽기 → 반전 값 계산 → 공식 변경 경로 적용 → 표시 projection 갱신의 세부 절차를 명시적으로 연결하도록 보완한다. 읽기와 변경의 책임을 같은 runtime owner에 두고 UI가 과거 telemetry 값을 반전해 권위 상태에 되쓰거나 별도 debug mirror를 만들지 않도록 한다. 기존 `setDebugEnabled(value)`의 명시 bool 설정 계약과 runtime/project 책임 구분을 유지하며 새 toggle API나 새 상태 저장소를 필수 해법으로 도입하지 않는다. 보완한 Source Script를 pseudocode와 실제 UI/공식 setter/runtime owner의 소비 경로까지 순서대로 대응한다. 실제 구현 수정은 별도 반영 지시에 따른다.
+diff --git a/agent_space/plans/plan-027.md b/agent_space/plans/plan-027.md
+index df129a9..1a8dea8 100644
+--- a/agent_space/plans/plan-027.md
++++ b/agent_space/plans/plan-027.md
+@@ -6,51 +6,60 @@
+ 
+ - 기준 메모는 `agent_space/memo/20261113-001.md` 전체다. 세 항목은 새 사용자 선호 결정을 기다릴 문제가 아니라 기존 객체 관계·SSoT·공식 경계에 따라 상위 알고리즘과 세부 절차를 보완하고 번역 대응을 수정할 작업이다.
+ - Plan026의 A 세 번역 수정은 r156에서 정적으로 대응한 이력으로 유지한다. 본 계획은 Plan026의 앞으로 수행할 B/C 순서와 ‘세 가지 상위 결정 대기’ 분류를 대체한다. 완료된 A를 반복하거나 과거 계획·검토·patch를 삭제하지 않는다.
+-- 작성 기준은 HEAD `ae45be706abd50673b4ef9c52fd29b93bf47b22d`, Source45/current → PlusCal25/current → code156/stale다. 메모에는 이번 대화의 지시로 작성 중인 수정이 있다. 이전 Source closure/current 표시는 이번에 확인한 세부 절차 누락이 해결됐다는 증거로 재사용하지 않는다.
+-- 이번 요청의 실행 범위는 메모·계획·실제 diff/설명 기록뿐이다. Source·PlusCal·application code·version metadata·업로드 스크립트·정책·AGENT는 변경하지 않는다. 아래 반영 작업은 모두 예정이며 계획 작성 자체를 알고리즘 보완 완료로 세지 않는다.
++- 작성 기준은 HEAD `ae45be706abd50673b4ef9c52fd29b93bf47b22d`, Source Script 45/current → pseudocode 25/current → source code 156/stale다. 메모에는 이번 대화의 지시로 작성 중인 수정이 있다. 이전 Source Script closure/current 표시는 이번에 확인한 세부 절차 누락이 해결됐다는 증거로 재사용하지 않는다.
++- 최초 작성 요청은 메모·계획·실제 diff/설명 기록만 허용했다. 이후 사용자 지시(2026-11-14 23:02)에 따라 아래 Source Script → pseudocode → source code 반영을 수행했다. 구현 허가와 commit/push 허가는 구분하며 후자는 받지 않았다.
+ 
+ ## 2. 공통 기준
+ 
+-- Source Script → PlusCal pseudocode → source code 순서를 지킨다. 상위가 미비하면 기존 정책과 확정된 의미로 먼저 보완하고 하위 코드에서 의미를 역으로 발명하지 않는다.
++- Source Script → pseudocode → source code 순서를 지킨다. 상위가 미비하면 기존 정책과 확정된 의미로 먼저 보완하고 하위 코드에서 의미를 역으로 발명하지 않는다.
+ - 세부 알고리즘이 부족해도 SSoT를 반드시 유지한다. owner의 현재 authority와 공식 조회·명령 경로를 사용하고 UI 표시값·이전 render projection·장기 mirror를 다른 권위 원천으로 사용하지 않는다.
+ - Frontend가 Backend 내부 object/Registry/FSM을 직접 읽거나 변경하게 하지 않는다. Backend 내부 객체 조회의 조합은 기존 owner가 수행하고 Application 경계는 필요한 detached 결과만 전달한다.
+ - 기존 객체·공식 조회·setter를 우선 재사용한다. 전용 신규 API, 별도 상태 저장소, 공통 결과 프로토콜, 동기화 계층을 필수 해법으로 가정하지 않는다.
+-- 알고리즘 검토의 첫 원천은 Source다. 실제 source code는 상위 절차가 정리된 뒤 번역 불일치와 실제 소비자를 확인하는 데 사용한다. 중요한 관련 문서는 잘린 부분을 이어 읽어 전체를 확인하고, 이미 완독한 근거는 필요한 범위에서 재사용한다.
++- 알고리즘 검토의 첫 원천은 Source Script다. 실제 source code는 상위 절차가 정리된 뒤 번역 불일치와 실제 소비자를 확인하는 데 사용한다. 중요한 관련 문서는 잘린 부분을 이어 읽어 전체를 확인하고, 이미 완독한 근거는 필요한 범위에서 재사용한다.
+ 
+ ## 3. 반영 대상과 보존 조건
+ 
+ | 항목 / 상태 | 상위에서 보완할 절차 | 보존 조건·정적 종료 기준 |
+ | --- | --- | --- |
+-| 1. 슬롯별 사용 에셋 표시 / 예정 | 레이아웃이 정한 표시 슬롯을 순회해 각 슬롯의 imageId 또는 chart → graph objects → csvId를 기존 객체 조회로 해결하고 표시 정보를 종합한다. Source의 조회·합성·표시 책임과 입력/반환을 연결한다. | 에셋 목록과 `/slots`의 연결 에셋 표시를 모두 유지한다. 빈 슬롯, 참조 없는 graph, 외부 참조 없는 원본 Plotly chart도 기존 의미대로 표시한다. 독립적인 chart 관리 목록을 새로 만들지 않는다. canonical 자산 트리에 slot/chart를 임의로 혼합하지 않는다. |
+-| 2. grid 단일 차원 편집 / 예정 | 행 편집은 새 행과 현재 authoritative 열, 열 편집은 현재 authoritative 행과 새 열을 조합하도록 공식 조회·입력 구성·명령 검증 순서를 명시한다. 현재 값 유지가 필요한 invalid 입력 처리도 같은 SSoT에서 해결한다. | authority는 `activeProject.layout.gridRows/gridCols`다. 표시용 값으로 변경하지 않은 차원을 덮어쓰지 않는다. `setGrid(rows, cols)`의 전체 크기 입력 계약과 기존 슬롯 ID/좌표/내용 보존, 새 좌표 추가, 안전한 축소 거부, whole-project 검증·한 번 commit을 유지한다. 완료된 grid shape 변경 시 local selection clear를 다시 미결정으로 열지 않는다. |
+-| 3. debug toggle / 예정 | Source의 runtime owner에 클릭 → 현재 debugEnabled 읽기 → 반전 → 공식 변경 → 표시 projection 갱신 절차를 연결한다. owner의 읽기·변경 순서와 기존 bool setter 연결을 명시한다. | `debugEnabled`가 runtime authority이며 `uiTelemetryState.debugEnabled`는 단방향 표시용이다. telemetry를 반전해 authority로 되쓰지 않고 새 debug mirror/영속 project field를 만들지 않는다. 기존 `setDebugEnabled(value)`의 명시 bool 설정 계약을 불필요하게 바꾸거나 toggle API를 강제하지 않는다. |
++| 1. 슬롯별 사용 에셋 표시 / r157 정적 대응 | 레이아웃이 정한 표시 슬롯을 순회해 각 슬롯의 imageId 또는 chart → graph objects → csvId를 기존 객체 조회로 해결하고 표시 정보를 종합한다. Source Script의 조회·합성·표시 책임과 입력/반환을 연결한다. | 에셋 목록과 `/slots`의 연결 에셋 표시를 모두 유지한다. 빈 슬롯, 참조 없는 graph, 외부 참조 없는 원본 Plotly chart도 기존 의미대로 표시한다. 독립적인 chart 관리 목록을 새로 만들지 않는다. canonical 자산 트리에 slot/chart를 임의로 혼합하지 않는다. |
++| 2. grid 단일 차원 편집 / r157 정적 대응 | 행 편집은 새 행과 현재 authoritative 열, 열 편집은 현재 authoritative 행과 새 열을 조합하도록 공식 조회·입력 구성·명령 검증 순서를 명시한다. 현재 값 유지가 필요한 invalid 입력 처리도 같은 SSoT에서 해결한다. | authority는 `activeProject.layout.gridRows/gridCols`다. 표시용 값으로 변경하지 않은 차원을 덮어쓰지 않는다. `setGrid(rows, cols)`의 전체 크기 입력 계약과 기존 슬롯 ID/좌표/내용 보존, 새 좌표 추가, 안전한 축소 거부, whole-project 검증·한 번 commit을 유지한다. 완료된 grid shape 변경 시 local selection clear를 다시 미결정으로 열지 않는다. |
++| 3. debug toggle / r157 정적 대응 | Source Script의 runtime owner에 클릭 → 현재 debugEnabled 읽기 → 반전 → 공식 변경 → 표시 projection 갱신 절차를 연결한다. owner의 읽기·변경 순서와 기존 bool setter 연결을 명시한다. | `debugEnabled`가 runtime authority이며 `uiTelemetryState.debugEnabled`는 단방향 표시용이다. telemetry를 반전해 authority로 되쓰지 않고 새 debug mirror/영속 project field를 만들지 않는다. 기존 `setDebugEnabled(value)`의 명시 bool 설정 계약을 불필요하게 바꾸거나 toggle API를 강제하지 않는다. |
+ 
+ ### 항목 1의 번역 불일치
+ 
+-현재 Source/PlusCal의 `assets.readTree`는 directories/assets의 canonical VFS tree다. 현재 구현은 `{ directories, data, images, charts, slots }` 평면 묶음을 반환하며 UI가 이를 소비한다. 슬롯별 연결 표시의 상위 절차를 보완한 뒤 반환과 실제 소비자를 함께 맞춘다. Backend read와 public binding뿐 아니라 관련 `.directories/.data/.images/.charts/.slots` 소비자를 확인해 에셋 선택·목록 등의 기존 기능을 남김없이 연결한다. 반환만 바꾸고 슬롯별 표시나 다른 실제 소비자를 끊는 것을 완료로 보지 않는다. 별도 독립 slot/chart authority는 만들지 않는다.
++현재 Source Script/pseudocode의 `assets.readTree`는 directories/assets의 canonical VFS tree다. 현재 구현은 `{ directories, data, images, charts, slots }` 평면 묶음을 반환하며 UI가 이를 소비한다. 슬롯별 연결 표시의 상위 절차를 보완한 뒤 반환과 실제 소비자를 함께 맞춘다. Backend read와 public binding뿐 아니라 관련 `.directories/.data/.images/.charts/.slots` 소비자를 확인해 에셋 선택·목록 등의 기존 기능을 남김없이 연결한다. 반환만 바꾸고 슬롯별 표시나 다른 실제 소비자를 끊는 것을 완료로 보지 않는다. 별도 독립 slot/chart authority는 만들지 않는다.
+ 
+ ### 항목 2의 입력·변경 경계
+ 
+-UI의 새 편집값과 owner가 유지하는 현재 값을 구분한다. 조회 이후 다른 변경이 개입할 수 있는 실제 경로에서는 기존 command의 current-authority 검증·재계산 규칙과 연결해 변경하지 않은 차원을 과거 값으로 되돌리지 않도록 상위 절차를 닫는다. 구체 동기화 primitive나 snapshot 공유를 먼저 도입하지 않는다. 입력 정규화·거부·기존 값 유지 규칙은 관련 Source 계약을 확인해 명시하며 새로운 숫자 fallback이나 암묵적 성공을 만들지 않는다.
++UI의 새 편집값과 owner가 유지하는 현재 값을 구분한다. 조회 이후 다른 변경이 개입할 수 있는 실제 경로에서는 기존 command의 current-authority 검증·재계산 규칙과 연결해 변경하지 않은 차원을 과거 값으로 되돌리지 않도록 상위 절차를 닫는다. 구체 동기화 primitive나 snapshot 공유를 먼저 도입하지 않는다. 입력 정규화·거부·기존 값 유지 규칙은 관련 Source Script 계약을 확인해 명시하며 새로운 숫자 fallback이나 암묵적 성공을 만들지 않는다.
+ 
+ ## 4. 적용 순서와 산출물
+ 
+-1. **Source 보완:** 항목 1 → 2 → 3 순서로 관련 Source의 전체 계약을 확인하고 위 처리 절차, 입력/반환, 책임, 실패·거부·no-op 분기를 명시한다. 주된 관련 경로는 `sourcescript/backend/project_state.py`, `sourcescript/backend/layout_annotations.py`, `sourcescript/application/public_api/`, `sourcescript/frontend/mantine_ui.py`, `sourcescript/frontend/interface_fsm.py`, `sourcescript/system.py`다. 실제 책임이 있는 파일만 수정한다. Source의 기존 잘못된 닫힘 판단에서 놓친 범위도 변경 설명에 기록한다.
+-2. **PlusCal 직접 번역:** 보완한 Source의 입력·값 흐름·조회 시점·권위 owner·상태 변화·실패 분기를 대응하는 `pseudocode/**/*.pcal`에 직접 옮긴다. 새 논리 계층이나 별도 상태 authority를 만들지 않는다.
++1. **Source Script 보완:** 항목 1 → 2 → 3 순서로 관련 Source Script의 전체 계약을 확인하고 위 처리 절차, 입력/반환, 책임, 실패·거부·no-op 분기를 명시한다. 주된 관련 경로는 `sourcescript/backend/project_state.py`, `sourcescript/backend/layout_annotations.py`, `sourcescript/application/public_api/`, `sourcescript/frontend/mantine_ui.py`, `sourcescript/frontend/interface_fsm.py`, `sourcescript/system.py`다. 실제 책임이 있는 파일만 수정한다. Source Script의 기존 잘못된 닫힘 판단에서 놓친 범위도 변경 설명에 기록한다.
++2. **pseudocode 직접 번역:** 보완한 Source Script의 입력·값 흐름·조회 시점·권위 owner·상태 변화·실패 분기를 대응하는 `pseudocode/**/*.pcal`에 직접 옮긴다. 새 논리 계층이나 별도 상태 authority를 만들지 않는다.
+ 3. **실제 코드/소비자 연결:** 닫힌 상위 절차에 따라 Backend read → Application public API/Adapter → UI/runtime 소비자를 coherent한 책임 단위로 수정한다. 항목 1의 readTree 반환과 모든 관련 호출자, 항목 2의 입력란부터 resize command까지, 항목 3의 버튼부터 runtime owner와 표시 갱신까지 연결한다. 상위와 이미 맞는 코드는 그대로 둔다.
+ 4. **정적 정리·기록:** 실제 입력·분기·반환·변경 경계와 소비 경로를 대조하고 작업별 결과·실제 잔여만 간결하게 갱신한다. 각 계층 의미 파일이 실제 변경될 때만 revision/fingerprint/derived_from과 하위 stale 상태를 사실대로 관리한다. 실행하지 않은 checker·TLC·테스트를 통과로 표시하거나 임의로 current를 선언하지 않는다.
+ 
+-각 반영 단위의 실제 native Git diff와 동명 patch 설명에는 목적·근거·선택 이유·기각한 대안·실제 미확인/후속 범위를 남긴다. 과거 완료 보고서나 중복 장문 review는 새로 복제하지 않는다. 이 계획 자체는 구현·commit·push 허가가 아니다.
++각 반영 단위의 실제 native Git diff와 동명 patch 설명에는 목적·근거·선택 이유·기각한 대안·실제 미확인/후속 범위를 남긴다. 과거 완료 보고서나 중복 장문 review는 새로 복제하지 않는다. 계획 작성 자체와 이후 별도 구현 허가를 구분하며 commit/push는 여전히 별도 지시가 필요하다.
+ 
+ ## 5. 확인 범위·제외 사항
+ 
+-- 허용된 반영 단계에서는 관련 Source/PlusCal/실제 호출자의 정적 대응과 실제 diff를 확인한다. 실행 성공과 정적 대응을 구분한다.
++- 허용된 반영 단계에서는 관련 Source Script/pseudocode/실제 호출자의 정적 대응과 실제 diff를 확인한다. 실행 성공과 정적 대응을 구분한다.
+ - 테스트·app·build·version checker·TLC·브라우저·Actions는 실행하지 않는다. 삭제된 테스트/workflow를 복원하거나 과거 실행 결과를 현재 결과로 재사용하지 않는다.
+ - 기존 asset deletion-target·참조 수·trash read, r155의 palette/move 반환 소비, r156의 manual 이미지 0·ZIP 상한·grid selection clear는 구체적인 새 누락 근거 없이 다시 열지 않는다.
+ - 정책·AGENT·Git 업로드 방식, 배포 산출물, 무관한 모듈을 정리하거나 새 snapshot/diff 도구를 만들지 않는다. commit/push는 별도 사용자 지시에 따른다.
+ 
+ ## 6. 종료·중단 기준
+ 
+-- **완료:** 세 항목 모두 Source의 처리 절차가 구체적이고 SSoT와 책임 경계에 맞으며, 해당 PlusCal과 실제 조회·명령·표시 소비자에 동일한 의미로 연결돼 있다. 항목 1의 반환 불일치와 현재 표시 기능 보존을 함께 확인한다. 미실행 항목과 계층 lineage는 사실대로 기록한다.
++- **완료:** 세 항목 모두 Source Script의 처리 절차가 구체적이고 SSoT와 책임 경계에 맞으며, 해당 pseudocode과 실제 조회·명령·표시 소비자에 동일한 의미로 연결돼 있다. 항목 1의 반환 불일치와 현재 표시 기능 보존을 함께 확인한다. 미실행 항목과 계층 lineage는 사실대로 기록한다.
+ - 이미 확정된 SSoT 원칙을 사용자 선호 질문으로 되돌리지 않는다. 기존 계약만으로 정해지는 것은 그에 맞춰 처리한다.
+-- 관련 Source 전체를 확인해도 새로운 기능 의미·상충 계약·결과 분기를 정할 수 없을 때만 정확한 근거와 필요한 최소 입력을 남기고 그 부분에서 멈춘다. 무관한 작업을 추가하거나 허가된 다른 항목까지 중단하지 않는다. 동시 수정·권한 제한이 있으면 실제 상태와 blocker를 구분해 보고한다.
++- 관련 Source Script 전체를 확인해도 새로운 기능 의미·상충 계약·결과 분기를 정할 수 없을 때만 정확한 근거와 필요한 최소 입력을 남기고 그 부분에서 멈춘다. 무관한 작업을 추가하거나 허가된 다른 항목까지 중단하지 않는다. 동시 수정·권한 제한이 있으면 실제 상태와 blocker를 구분해 보고한다.
++
++## 7. 실제 반영 결과 — 2026-11-14
++
++- 세 항목 모두 Source Script의 절차·입력/반환·실패와 SSoT를 먼저 보완한 뒤 pseudocode, source code 순서로 연결했다. 이전 Source Script 45의 closure/current 기록은 이번 세부 절차 누락을 닫은 증거가 아니므로 새 revision에서 closure를 open으로 되돌렸다.
++- 에셋: `assets.readTree`는 canonical directory/CSV/image node sequence로 맞췄다. 기존 `layout.readState.visibleSlots`에 같은 current project의 `assetDisplay`를 공급해 `/slots`의 이미지·실제 CSV 연결/빈 슬롯/embedded graph 표시를 유지했다. 트리 UI와 CSV 선택 후보의 두 실제 readTree 소비자, 행별 공식 참조 수 조회를 함께 연결했다. 별도 chart 관리 API/store는 만들지 않았다.
++- grid: 입력 이벤트 시 공식 current layout을 읽고 companion/fallback을 구성해 동기 setGrid로 전달한다. 중간 await/외부 callback은 없고 기존 명시 전체 크기 계약·Backend 후보 검증/한 번 commit·local selection clear는 유지한다.
++- debug: runtime owner의 pure `readDebugEnabled()`에서 현재 boolean을 읽어 반전하고 기존 bool setter를 호출한다. telemetry는 표시만 담당한다.
++- Source Script 46 → pseudocode 26 → source code 157의 실제 fingerprint/derived_from을 기록했다. 세 계층 status는 stale이며 optional verification model/TLC 이력은 변경하지 않았다. 실제 native Git diff·설명은 `agent_space/patches/20261114-014.patch`와 동명 `.md`다.
++- 확인은 전체 관련 문서의 누락 구간 보충, 변경 전체 diff 및 실제 호출/반환/분기 정적 대조와 Git whitespace 확인이다. 테스트·app·build·version checker·TLC·브라우저·Actions를 실행하지 않았고 실행 성공/current를 선언하지 않는다. 이 세 항목에서 추가 사용자 선호 결정이나 알려진 잔여 구현은 확인되지 않았다. commit/push 미수행.
+diff --git a/development-versions.json b/development-versions.json
+index 836fb22..34f3cbd 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -6,16 +6,16 @@
+     "source-code"
+   ],
+   "fingerprint_algorithm": "sha256(sorted path + NUL + git-blob-sha1 + LF)",
+-  "authority_rule": "Source Script is the highest semantic authority. PlusCal pseudocode is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating Source Code implementation or current status.",
++  "authority_rule": "Source Script is the highest semantic authority. pseudocode (implemented in PlusCal) is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating source code implementation or current status.",
+   "layers": {
+     "source-script": {
+-      "revision": 45,
+-      "status": "current",
++      "revision": 46,
++      "status": "stale",
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+-      "fingerprint": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
++      "fingerprint": "sha256:605a19a7a6787baeb782b9f5aa5945bd6343aa65b4aba324d421c8518b86cf78",
+       "derived_from": null,
+-      "closure": "closed",
+-      "closure_review": "agent_space/reviews/review-20261018-040-caption-insertion-closure.md"
++      "closure": "open",
++      "closure_review": null
+     },
+     "verification-model": {
+       "revision": 26,
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 156,
++      "revision": 157,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,23 +54,23 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:bf25fd250591d93d61bfbea4366e825e797b8c6b4794eb2b9c955793e10c4b9a",
++      "fingerprint": "sha256:0b20697db1a985c659dd08d14b27ca2cdf66ee23cf6f1a12b19d18f5d363fa22",
+       "derived_from": {
+-        "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+-        "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
++        "source-script": "sha256:605a19a7a6787baeb782b9f5aa5945bd6343aa65b4aba324d421c8518b86cf78",
++        "pseudocode": "sha256:4589e59d50c88005bc3b9a942be675a22b10a8543a55934ccc9897b2a537aaab",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+       "validation_review": null
+     },
+     "pseudocode": {
+-      "revision": 25,
+-      "status": "current",
++      "revision": 26,
++      "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
++      "fingerprint": "sha256:4589e59d50c88005bc3b9a942be675a22b10a8543a55934ccc9897b2a537aaab",
+       "derived_from": {
+-        "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7"
++        "source-script": "sha256:605a19a7a6787baeb782b9f5aa5945bd6343aa65b4aba324d421c8518b86cf78"
+       },
+-      "translation_review": "agent_space/reviews/review-20261019-009-ffsx-header-translation-open.md"
++      "translation_review": null
+     }
+   }
+ }
+diff --git a/pseudocode/application/public_api/layout_annotations.pcal b/pseudocode/application/public_api/layout_annotations.pcal
+index 02377db..9645a8d 100644
+--- a/pseudocode/application/public_api/layout_annotations.pcal
++++ b/pseudocode/application/public_api/layout_annotations.pcal
+@@ -1,6 +1,6 @@
+ ---- MODULE FastFigurePublicLayoutAnnotationsR38 ----
+ EXTENDS Naturals, Reals, Sequences
+-\* Active direct Source r38 translation; see the translation review for scope/evidence.
++\* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
+ \* Every adapter tuple is unpacked internally. Public return shapes are NOT unified.
+ \* read/commit/render throws propagate; success-side failure never rolls back committed Project.
+ CONSTANT NoValue, DEFAULT_UI_PALETTE
+@@ -87,7 +87,8 @@ BackendNormalizesPreviewOnly:
+   call dispatchProjectQuery("project-api",[operation |-> "layout.readState",renderedWidth |-> previewWidth]); layout := result;
+   call InterfaceStateMachine_readState(); session := result;
+   result := ImmutableRecordWith(layout,[zoom |-> session.dashboardZoomIntent,zoomLocked |-> session.dashboardZoomLocked]);
+-  \* No saved preview or Application default copy.
++  \* visibleSlots retains Backend same-source contentType/chart/imageId/assetDisplay.
++  \* No re-resolve into a chart manager/tree bundle, saved preview or Application default copy.
+   return;
+ end procedure;
+ 
+diff --git a/pseudocode/backend/project_state.pcal b/pseudocode/backend/project_state.pcal
+index cc095c0..f8be4d7 100644
+--- a/pseudocode/backend/project_state.pcal
++++ b/pseudocode/backend/project_state.pcal
+@@ -1,7 +1,7 @@
+ ---- MODULE FastFigureBackendProjectStateR38 ----
+ EXTENDS Naturals, Integers, Sequences
+ 
+-\* Active direct Source r38 translation; see the translation review for scope/evidence.
++\* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
+ \* Source: sourcescript/backend/project_state.py r38.
+ \* Source entries include queries, registry, creation/validation, reference helpers.
+ \* Active direct Source r38 translation; see the translation review for scope/evidence.
+@@ -560,6 +560,42 @@ CopyWithoutRevocableAllocation:
+   return;
+ end procedure;
+ 
++procedure buildSlotAssetDisplay(slot,source)
++variables display = [kind |-> "empty",assets |-> <<>>], image = NoValue,
++          chart = NoValue, csv = NoValue, seen = {}, i = 1;
++begin
++SameCurrentProjectWithoutMutationOrResource:
++  if slot.content.contentType = "image" then
++    image := ImageById(source,slot.content.imageId);
++    if image # NoValue then
++      display.kind := "assets";
++      display.assets := <<[kind |-> "image",id |-> image.id,name |-> image.name,path |-> CanonicalAssetPath(image)]>>;
++    end if;
++  elsif slot.content.contentType = "graph" then
++    chart := ChartById(source,slot.content.chart);
++    if chart # NoValue then
++      if chart.editor.editable = FALSE then display.kind := "embedded";
++      else
++        while i <= Len(chart.editor.objects) do
++          csv := CsvById(source,chart.editor.objects[i].csvId);
++          if csv # NoValue then
++            if csv.id \notin seen then
++              seen := seen \cup {csv.id};
++              display.assets := Append(display.assets,[kind |-> "csv",id |-> csv.id,name |-> csv.name,path |-> CanonicalAssetPath(csv)]);
++            end if;
++          end if;
++          i := i + 1;
++        end while;
++        if Len(display.assets) > 0 then display.kind := "assets"; end if;
++      end if;
++    end if;
++  end if;
++  result := ImmutableCopy(display);
++  \* Empty/embedded/no-reference slots remain visible. No conversion CSV resolve.
++  \* Metadata only; never bytes/rows/callbacks, Project writes or a retained read store.
++  return;
++end procedure;
++
+ procedure BuildVfsRead(source,operation,request)
+ variables path = "", node = NoValue, tree = <<>>, refs = <<>>, target = NoValue,
+           csvIds = {}, imageIds = {}, options = <<>>, i = 1, directory = "";
+@@ -703,6 +739,20 @@ PublicReadRegisteredOperation:
+     call NormalizePreviewReadWidth(FieldOrNoValue(request,"renderedWidth")); width := result;
+     call DashboardGeometryInProject(source,width,NoValue); geometry := result;
+     output := LayoutGridStyleVisibleSlotsAndPreviewCopy(source,geometry);
++    slots := <<>>; i := 1;
++    while i <= Len(source.slots) do
++      slot := source.slots[i];
++      if ~slot.hidden then
++        call buildSlotAssetDisplay(slot,source);
++        slots := Append(slots,[id |-> slot.id,row |-> slot.row,col |-> slot.col,
++          rowSpan |-> slot.rowSpan,colSpan |-> slot.colSpan,
++          contentType |-> slot.content.contentType,chart |-> slot.content.chart,
++          imageId |-> slot.content.imageId,assetDisplay |-> result]);
++      end if;
++      i := i + 1;
++    end while;
++    output.visibleSlots := slots;
++    \* Same source as grid/style/geometry; not a separate chart manager or VFS tree field.
+   elsif operation = "assets.fileKind" then call slotFileKind(request.file); output := result;
+   elsif operation = "assets.collisionModel" then call projectAssetImportCollisionModel(request.file,request.directory,request.reservedPaths); output := result;
+   elsif operation = "assets.resolveImportPlan" then call resolveProjectAssetImportPlan(request.model,request.choice,request.reservedPaths); output := result;
+diff --git a/pseudocode/frontend/mantine_ui.pcal b/pseudocode/frontend/mantine_ui.pcal
+index 8ffd89f..086e641 100644
+--- a/pseudocode/frontend/mantine_ui.pcal
++++ b/pseudocode/frontend/mantine_ui.pcal
+@@ -1,6 +1,6 @@
+ ---- MODULE FastFigureFrontendMantineUiR38 ----
+ EXTENDS Naturals, Reals, Sequences, FiniteSets
+-\* Active direct Source r38 translation; see the translation review for scope/evidence.
++\* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
+ \* FastFigureApi is the supplied public action surface; no Backend import.
+ \* UI drafts/resolvers/selection/geometry below live only within component lifetime.
+ CONSTANT NoValue
+@@ -32,6 +32,64 @@ variables result = NoValue,
+   sidebarGeometry = InitialSessionSidebarGeometry(),
+   dropMounted = FALSE, dropAllowed = FALSE, dropReceiver = NoValue;
+ 
++procedure readProjectAssetDisplay()
++variables nodes = NoValue, layout = NoValue;
++begin
++OfficialReadsInOneSynchronousDisplay:
++  nodes := InvokePublicApi("assets.readTree",[]);
++  layout := InvokePublicApi("layout.readState",[]);
++  result := [assetNodes |-> nodes,slotRows |-> layout.visibleSlots];
++  \* No await/callback/command between reads, retained mirror or flat public tree contract.
++  \* Canonical node kind/asset supplies directory and CSV/image UI candidates.
++  \* Slot rows consume Backend assetDisplay, including empty and embedded rows.
++  return;
++end procedure;
++
++procedure readAssetRowDisplay(node)
++variables target = NoValue, rows = NoValue, header = NoValue;
++begin
++OfficialReferenceCountNotSlotDisplayDeduplication:
++  target := InvokePublicApi("assets.readDeletionTarget",[path |-> node.path]);
++  if node.kind = "csv" then
++    header := TryScalarNumber(FieldOrNoValue(node.asset,"headerLines"));
++    rows := Maximum(0,Len(node.asset.rows) - (IF header.valid THEN header.value ELSE 0));
++  end if;
++  result := [referenceCount |-> IF target = NoValue THEN 0 ELSE target.referenceCount,rowCount |-> rows];
++  \* Display arithmetic only. No new parser, collection ownership or mutation.
++  return;
++end procedure;
++
++procedure changeLayoutGridDimension(dimension,value)
++variables current = NoValue, number = NoValue, rows = NoValue, cols = NoValue;
++begin
++CurrentAuthorityThenSynchronousCommand:
++  Require(dimension \in {"rows","cols"});
++  current := InvokePublicApi("layout.readState",[]);
++  rows := current.gridRows; cols := current.gridCols;
++  number := TryNonemptyFiniteInputNumber(value);
++  if number.valid then
++    if dimension = "rows" then rows := Maximum(1,Minimum(8,number.value));
++    else cols := Maximum(1,Minimum(8,number.value)); end if;
++  end if;
++  result := InvokePublicApi("layout.setGrid",[rows |-> rows,cols |-> cols]);
++  \* Empty/invalid input keeps SAME current dimension; companion is also current.
++  \* This entire read/compose/dispatch is synchronous: no await/external callback/other command.
++  \* Existing Backend integer/candidate/whole-validation/current-source retry/one commit remains.
++  \* False and original failure are not converted to success. No second resize/commit.
++  return;
++end procedure;
++
++procedure handleDebugToggle()
++variables enabled = FALSE;
++begin
++OwnerReadNotDisplayProjection:
++  call readDebugEnabled(); enabled := result;
++  call setDebugEnabled(~enabled);
++  \* Same synchronous click, no callback/await between read and explicit bool setter.
++  \* Setter alone writes owner then publishes; UI only displays telemetry.
++  return;
++end procedure;
++
+ procedure subscribeAppState(onStoreChange)
+ begin
+ DirectFsmExternalStore:
+diff --git a/pseudocode/frontend/renderer.pcal b/pseudocode/frontend/renderer.pcal
+index 0d2fb29..bbf546f 100644
+--- a/pseudocode/frontend/renderer.pcal
++++ b/pseudocode/frontend/renderer.pcal
+@@ -1,6 +1,6 @@
+ ---- MODULE FastFigureFrontendRendererR38 ----
+ EXTENDS Naturals, Reals, Sequences
+-\* Active direct Source r38 translation; see the translation review for scope/evidence.
++\* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
+ \* No Backend/Application imports; supplied immutable inputs/actions only.
+ \* Local surface/instance/generation/telemetry variables are Source runtime lifetime
+ \* bookkeeping, never mirrored Project/FSM data or mutation candidates.
+@@ -29,6 +29,14 @@ ProjectionOnly:
+   return;
+ end procedure;
+ 
++procedure readDebugEnabled()
++begin
++RuntimeOwnerNotTelemetry:
++  result := debugEnabled;
++  \* Pure current scalar read. No publish, mirror, Project access or callback.
++  return;
++end procedure;
++
+ procedure setDebugEnabled(enabled)
+ begin
+ SessionAuthorityThenProjection:
+diff --git a/pseudocode/system.pcal b/pseudocode/system.pcal
+index 78f731c..25f7d59 100644
+--- a/pseudocode/system.pcal
++++ b/pseudocode/system.pcal
+@@ -1,11 +1,13 @@
+ ---- MODULE FastFigureSystemR38 ----
+ EXTENDS Sequences
+ 
+-\* Active direct Source r38 translation; see the translation review for scope/evidence.
++\* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
+ \* Hierarchy: Backend / Application boundary / Frontend / Portable build.
+ \* No new system FSM. Qualified imported methods use '_' mechanically.
+ \* activeProject below is an imported Backend binding, NOT a copied authority.
+ \* projection/actions/interfaceState/result are startup-call-local values.
++\* Debug clicks synchronously read renderer-owned debugEnabled via readDebugEnabled,
++\* invert into existing setDebugEnabled, then display one-way telemetry; never invert telemetry.
+ CONSTANT NoValue
+ 
+ (* --algorithm FastFigureSystem
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+index 44956c5..1624935 100644
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -1,5 +1,5 @@
+ // Source: sourcescript/backend/project_state.py (same logical owner); pseudocode/backend/project_state.pcal.
+-import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectDataTreeSnapshot, projectFileStem, projectImageDataUrl, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
++import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectFileStem, projectImageDataUrl, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
+ import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraphLayoutSettings, validateChartModel } from './graphs.js';
+ import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
+ import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
+@@ -268,6 +268,32 @@ const PUBLIC_BACKEND_READ_OPERATIONS = new Set([
+   "assets.resolveImportPlan",
+ ]);
+ 
++function buildSlotAssetDisplay(slot, source) {
++  const display = { kind: "empty", assets: [] };
++  if (slot.content.contentType === "image") {
++    const image = source.assets.images.find(item => item.id === slot.content.imageId);
++    if (image) {
++      display.kind = "assets";
++      display.assets.push({ kind: "image", id: image.id, name: image.name, path: projectAssetPath(image) });
++    }
++  } else if (slot.content.contentType === "graph") {
++    const chart = source.charts.find(item => item.id === slot.content.chart);
++    if (chart?.editor.editable === false) display.kind = "embedded";
++    else if (chart) {
++      const seen = new Set();
++      for (const object of chart.editor.objects) {
++        const csv = source.assets.csvFiles.find(item => item.id === object.csvId);
++        if (csv && !seen.has(csv.id)) {
++          seen.add(csv.id);
++          display.assets.push({ kind: "csv", id: csv.id, name: csv.name, path: projectAssetPath(csv) });
++        }
++      }
++      if (display.assets.length) display.kind = "assets";
++    }
++  }
++  return immutableProjectCopy(display);
++}
++
+ function buildBackendVfsTree(source) {
+   const nodes = new Map(source.fileSystem.directories.map(path => [path, {
+     kind: "directory", path, name: projectPathName(path), children: [],
+@@ -306,6 +332,8 @@ export function readBackendProjection(kind, request = {}) {
+       slotStyle: Object.freeze({ ...source.layout.slotStyle }),
+       visibleSlots: Object.freeze(source.slots.filter((slot) => !slot.hidden).map((slot) => Object.freeze({
+         id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
++        contentType: slot.content.contentType, chart: slot.content.chart, imageId: slot.content.imageId,
++        assetDisplay: buildSlotAssetDisplay(slot, source),
+       }))),
+       previewGeometry: Object.freeze(dashboardGeometryInProject(source, width)),
+     });
+@@ -383,8 +411,7 @@ export function readBackendProjection(kind, request = {}) {
+   }
+   if (kind === "project-api" && request.operation === "assets.readTree") {
+     const source = activeProject._state;
+-    return immutableProjectCopy(projectDataTreeSnapshot({ files: source.fileSystem,
+-      data: source.assets.csvFiles, images: source.assets.images, charts: source.charts, slots: source.slots }));
++    return immutableProjectCopy(Array.from(buildBackendVfsTree(source).values()));
+   }
+   if (kind === "project-api" && request.operation === "graphs.defaultColors")
+     return immutableProjectCopy(DEFAULT_COLORS);
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index dea7eab..80def3b 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -1,7 +1,7 @@
+ // Source: sourcescript/frontend/mantine_ui.py (same logical owner); pseudocode/frontend/mantine_ui.pcal.
+ import { appFSM } from '../application/adapter.js';
+ import { PROJECT_TRASH_DIRECTORY, projectParentPath, projectPathInDirectory, projectPathName } from '../backend/assets_files.js';
+-import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
++import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
+ 
+ // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
+ // the mounted UI owns only its collision resolver and drag finalization.
+@@ -590,10 +590,26 @@ settings?.fit === "manual"
+     );
+   }
+ 
++  function readProjectAssetDisplay() {
++    const assetNodes = window.FastFigureApi.assets.readTree();
++    const slotRows = window.FastFigureApi.layout.readState().visibleSlots;
++    return { assetNodes, slotRows };
++  }
++
+   function FastFigureProjectDataTree() {
+     const state = useAppState();
+     const assetApi = window.FastFigureApi.assets;
+-    const snapshot = assetApi.readTree();
++    const { assetNodes, slotRows } = readProjectAssetDisplay();
++    const snapshot = {
++      directories: assetNodes.filter(node => node.kind === "directory").map(node => node.path),
++      data: assetNodes.filter(node => node.kind === "csv").map(node => ({
++        id: node.id, name: node.name, path: node.path, readable: Array.isArray(node.asset.rows),
++        rowCount: Math.max(0, node.asset.rows.length - (Number(node.asset.headerLines) || 0)),
++      })),
++      images: assetNodes.filter(node => node.kind === "image").map(node => ({
++        id: node.id, name: node.name, path: node.path,
++      })),
++    };
+     const selectedSlotId = window.FastFigureApi.slots.readSelected()?.id;
+     const assetTreeController = useTree({
+ initialExpandedState: { "/assets": true },
+@@ -693,13 +709,8 @@ try {
+   status(`프로젝트 항목 이동 오류: ${error.message}`);
+ }
+     };
+-    const csvReferenceCount = (id) =>
+-snapshot.charts.reduce(
+-  (count, chart) => count + chart.csvReferences.filter((csvId) => csvId === id).length,
+-  0,
+-);
+-    const imageReferenceCount = (id) =>
+-snapshot.slots.filter((slot) => slot.imageId === id).length;
++    const assetReferenceCount = (path) =>
++assetApi.readDeletionTarget(path)?.referenceCount ?? 0;
+     const dataByPath = new Map(
+ snapshot.data.map((asset) => [asset.path, { kind: "csv", asset }]),
+     );
+@@ -746,8 +757,8 @@ directorySet.has(path) ? "directory" : dataByPath.get(path)?.kind || null;
+ const asset = dataByPath.get(path)?.asset;
+ if (!asset) return "";
+ return kind === "csv"
+-  ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${csvReferenceCount(asset.id)}`
+-  : `참조 ${imageReferenceCount(asset.id)}`;
++  ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${assetReferenceCount(path)}`
++  : `참조 ${assetReferenceCount(path)}`;
+     };
+     const allowProjectTreeDrop = ({ draggedNode, targetNode, position }) =>
+ !busy &&
+@@ -968,21 +979,12 @@ return React.createElement(
+   menu,
+ );
+     };
+-    const visibleSlots = snapshot.slots
+-.filter((slot) => !slot.hidden)
++    const visibleSlots = [...slotRows]
+ .sort((a, b) => a.row - b.row || a.col - b.col);
+     const slotReference = (slot) => {
+-if (slot.contentType === "image") {
+-  const image = snapshot.images.find((item) => item.id === slot.imageId);
+-  return image ? `${image.name} · ${image.path}` : "(에셋 없음)";
+-}
+-const chart = snapshot.charts.find((item) => item.id === slot.chart);
+-if (!chart) return "(에셋 없음)";
+-if (chart.editable === false) return "Plotly JSON 내부 데이터 · 외부 참조 없음";
+-const references = chart.csvIds
+-  .map((id) => snapshot.data.find((item) => item.id === id))
+-  .filter(Boolean)
+-  .map((csv) => `${csv.name} · ${csv.path}`);
++if (slot.assetDisplay.kind === "embedded")
++  return "Plotly JSON 내부 데이터 · 외부 참조 없음";
++const references = slot.assetDisplay.assets.map(asset => `${asset.name} · ${asset.path}`);
+ return references.length ? references.join(", ") : "(에셋 없음)";
+     };
+     const draggedProjectAsset = (event) => {
+@@ -1361,7 +1363,7 @@ React.createElement(
+     const assetApi = window.FastFigureApi.assets;
+     const editor = graphApi.readData();
+     const chartId = editor.chart?.id ?? null, editable = editor.chart?.editor?.editable !== false;
+-    const csvAssets = assetApi.readTree().data;
++    const csvAssets = assetApi.readTree().filter(node => node.kind === "csv").map(node => node.asset);
+     const csvOptions = csvAssets.map(csv => ({ value: String(csv.id), label: csv.name }));
+     const objects = editor.objects;
+     const selectedIndex = editor.selectedIndex;
+@@ -2039,7 +2041,7 @@ React.createElement(
+       variant: telemetry.debugEnabled ? "filled" : "light",
+       disabled: busy,
+       "aria-pressed": telemetry.debugEnabled,
+-      onClick: () => setDebugEnabled(!telemetry.debugEnabled),
++      onClick: () => setDebugEnabled(!readDebugEnabled()),
+     },
+     telemetry.debugEnabled ? "디버깅 끄기" : "디버깅 켜기",
+   ),
+@@ -2751,11 +2753,18 @@ const number = Number(value);
+ return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+     };
+     const commitStyle = (patch) => layoutApi.setStyle(patch);
+-    const changeGrid = (patch) => {
+-const rows = patch.rows ?? layout.gridRows;
+-const cols = patch.cols ?? layout.gridCols;
+-layoutApi.setGrid(rows, cols);
++    const changeGrid = (dimension, value) => {
++if (!["rows", "cols"].includes(dimension)) throw Error("알 수 없는 grid 편집 차원입니다.");
++const current = layoutApi.readState();
++const number = typeof value === "number" || (typeof value === "string" && value.trim() !== "")
++  ? Number(value) : NaN;
++const edited = Number.isFinite(number) ? Math.max(1, Math.min(8, number))
++  : dimension === "rows" ? current.gridRows : current.gridCols;
++const rows = dimension === "rows" ? edited : current.gridRows;
++const cols = dimension === "cols" ? edited : current.gridCols;
++const result = layoutApi.setGrid(rows, cols);
+ setLayoutSelection(new Set());
++return result;
+     };
+     const toggleSlot = (slotId) => {
+ setLayoutSelection((current) => {
+@@ -2799,7 +2808,7 @@ React.createElement(
+       allowDecimal: false,
+       disabled: busy,
+       onChange: (value) =>
+-        changeGrid({ rows: clamp(value, layout.gridRows, 1, 8) }),
++        changeGrid("rows", value),
+     }),
+     React.createElement(NumberInput, {
+       label: "열",
+@@ -2809,7 +2818,7 @@ React.createElement(
+       allowDecimal: false,
+       disabled: busy,
+       onChange: (value) =>
+-        changeGrid({ cols: clamp(value, layout.gridCols, 1, 8) }),
++        changeGrid("cols", value),
+     }),
+   ),
+   React.createElement(
+diff --git a/sourcecode/frontend/renderer.js b/sourcecode/frontend/renderer.js
+index 8ba7fe9..11025d1 100644
+--- a/sourcecode/frontend/renderer.js
++++ b/sourcecode/frontend/renderer.js
+@@ -45,6 +45,10 @@ export let debugEnabled = false;
+ 
+ export let debugSequence = 0;
+ 
++export function readDebugEnabled() {
++  return debugEnabled;
++}
++
+ export function setDebugEnabled(enabled) {
+   debugEnabled = enabled === true;
+   publishUiTelemetry({ debugEnabled });
+diff --git a/sourcescript/application/public_api/__init__.py b/sourcescript/application/public_api/__init__.py
+index 8cf74d0..629f031 100644
+--- a/sourcescript/application/public_api/__init__.py
++++ b/sourcescript/application/public_api/__init__.py
+@@ -56,7 +56,7 @@ PUBLIC_API_METHODS = {
+     "assets": {
+         "readDeletionTarget": "read/calculation; target asset과 collectAssetReferences 결과",
+         "delete": "assets.deleteProjectAsset(target); kind-specific delete/detach one commit; 성공/missing/미commit None, 오류 전파; 내부 tuple 반환 없음",
+-        "readTree": "read; current VFS/assets에서 tree projection 계산",
++        "readTree": "read; current directories/CSV/image의 canonical node sequence; slot/chart는 혼합하지 않고 layout.readState.visibleSlots.assetDisplay로 표시",
+         "isTrashed": "read; canonical path의 trash subtree membership 계산",
+         "movable": "read/calculation; current VFS에서 fixed directory 여부와 source 존재를 기준으로 tree move 가능 여부 계산; trash membership 자체는 move 금지 조건이 아님",
+         "readTrash": "read; current trash subtree projection",
+@@ -133,7 +133,7 @@ PUBLIC_API_METHODS = {
+         "resetPalette": "layout_annotations.resetAppearanceApiPalette; 유일한 default를 같은 setPalette 경로로 commit -> fresh palette/False",
+     },
+     "layout": {
+-        "readState": "layout_annotations.readLayoutApiState; Backend layout/preview copy + Frontend zoom/zoomLocked 합성; previewWidth 기본 600, transient read",
++        "readState": "layout_annotations.readLayoutApiState; Backend layout/preview 및 visible slot의 assetDisplay copy + Frontend zoom/zoomLocked 합성; previewWidth 기본 600, transient read",
+         "setStyle": "layout_annotations.setLayoutApiStyle; LAYOUT_STYLE_CHANGED -> fresh public layout state/False",
+         "setGrid": "layout_annotations.setLayoutApiGrid; GRID_LAYOUT_CHANGED -> fresh public layout state/False; implicit reflow 금지",
+         "setZoom": "layout_annotations.setLayoutApiZoom; SET_DASHBOARD_ZOOM -> fresh layout state; finite 50..200/invalid 100, locked no-op",
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index cdf7b86..06dabe4 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -113,6 +113,8 @@ def readLayoutApiState(previewWidth=None):
+     current layout.readState Backend query에 previewWidth만 전달한다.
+     previewWidth의 omitted/invalid 기본값과 bounds는 Backend의 backend.defaults.preview에서만 read copy에 적용한다. Application은 값을 복제하지 않는다.
+     반환은 gridRows/gridCols/slotStyle/visibleSlots/previewGeometry와 현재 Frontend zoom/zoomLocked다.
++    visibleSlots의 contentType/chart/imageId와 assetDisplay는 Backend가 같은 project read에서 resolve한 detached 값이다.
++    Application이 별도 chart/asset copy를 재조합하거나 canonical assets.readTree에 slot/chart를 끼워 넣지 않는다.
+     Application이 interfaceFSM의 zoom/lock scalar를 합성하며 previewGeometry를 session/Project에 저장하지 않는다.
+     """
+     layout = dispatchProjectQuery("project-api", {"operation": "layout.readState", "renderedWidth": previewWidth})
+@@ -174,6 +176,9 @@ def setLayoutApiGrid(rows, cols):
+ 
+     처리:
+     Application은 rows/cols만 GRID_LAYOUT_CHANGED에 전달한다. Backend command가 buildGridResizeCandidate와 전체 project 검증을 수행한다.
++    UI의 단일 dimension 입력은 mantine_ui.changeLayoutGridDimension이 이벤트 시점 공식 read로 두 값을 구성한다.
++    이 read부터 동기 dispatch/candidate 검증까지 await·외부 callback이나 다른 command를 삽입하지 않는다.
++    setLayoutApiGrid 자체는 두 명시 입력을 유지하며 생략 차원/telemetry/과거 layout copy를 권위 원천으로 해석하지 않는다.
+     거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
+     성공 candidate는 그 command가 한 번 commit한다.
+     commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 Application boundary의 Backend reconciliation query와 Frontend FSM transition이 결정한다.
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index 9720b02..6cb0cbc 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -310,8 +310,17 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
+     "captions.readGlobal": "project annotations.captions의 enabled/text/afterText/name/nameBold/settings copy",
+     "captions.readSlot": "explicit slotId의 slot.caption copy; 없는 slot이면 none; placeholder는 반환 presentation일 뿐 저장하지 않음",
+     "labels.readState": "sourcescript.backend.layout_annotations readLabelsApiState(slotId)의 label settings와 explicit slot reference geometry copy",
+-    "layout.readState": "gridRows/gridCols/slotStyle/visibleSlots와 renderedWidth로 계산한 previewGeometry copy; width는 backend.defaults.preview.widthRange/fallbackWidth 사용; Backend는 session zoom/lock을 읽지 않으며 Application만 public read에 합성; DOM 역추론/preview 저장 없음",
+-    "assets.readTree": "sourcescript.backend.assets_files의 current directories/assets로 계산한 canonical VFS tree copy",
++    "layout.readState": (
++        "같은 current project에서 gridRows/gridCols/slotStyle, visibleSlots, renderedWidth의 previewGeometry를 copy한다. "
++        "visibleSlots는 기존 id/row/col/rowSpan/colSpan과 contentType/chart/imageId 및 buildSlotAssetDisplay(slot, project)의 assetDisplay를 포함한다. "
++        "width는 backend.defaults.preview.widthRange/fallbackWidth를 사용한다. Backend는 session zoom/lock을 읽지 않으며 "
++        "Application만 public read에 합성한다. DOM 역추론/preview 저장이나 독립 slot/chart authority는 없다."
++    ),
++    "assets.readTree": (
++        "current directories 순서의 directory node와 CSV/image collection 순서의 asset node로 만든 canonical VFS node sequence copy. "
++        "directory는 kind/path/name/children, asset은 kind/path/id/name/asset detached copy를 갖고 canonical parent의 children으로 연결한다. "
++        "slot/chart collection을 이 반환에 혼합하거나 legacy directories/data/images/charts/slots 묶음으로 대체하지 않는다."
++    ),
+     "assets.readTrash": "같은 tree 계산의 trash subtree copy",
+     "assets.isTrashed": "canonical requested path의 trash subtree membership boolean",
+     "assets.movable": "current VFS source 존재와 fixed-root 규칙으로 계산한 boolean; trash 소속만으로 거부하지 않음",
+@@ -364,6 +373,32 @@ RENDERER_BACKEND_READ_CONTRACT = {
+ }
+ 
+ 
++def buildSlotAssetDisplay(slot, project):
++    """
++    Return:
++    - display: {kind: "empty"/"assets"/"embedded", assets: [{kind, id, name, path}, ...]}의 detached 값.
++
++    변경: 없음. project는 layout.readState가 이번 호출에서 읽은 동일 current authority다.
++
++    처리:
++    1. layout.readState가 기존 slot 순서를 유지하며 hidden=False인 각 slot에 대해 호출한다.
++       slot의 id/geometry/contentType/chart/imageId와 이 결과를 같은 visibleSlots entry에 copy한다.
++    2. contentType=image이면 같은 project.assets.images에서 imageId를 resolve한다.
++       있으면 kind=assets와 image metadata 한 항목, 없으면 kind=empty와 []다.
++    3. contentType=graph이면 같은 project.charts에서 slot.chart를 resolve한다.
++       chart가 없으면 empty/[]다. editor.editable=False이면 embedded/[]다.
++       non-editable conversion object의 csvId를 실제 project CSV로 resolve하지 않는다.
++    4. editable chart의 editor.objects 순서대로 같은 project.assets.csvFiles에서 csvId를 resolve한다.
++       실제 CSV마다 kind/id/name/canonical path만 copy하며 같은 CSV id는 처음 등장한 순서로 한 번만 담는다.
++       CSV가 하나 이상이면 assets, 하나도 없으면 empty다. 가짜 CSV/object/chart는 만들지 않는다.
++    5. 빈 슬롯과 외부 CSV 참조 없는 editable graph도 visibleSlots에서 제거하지 않는다.
++       embedded 표시는 독립 chart 관리 기능이 아니라 그 slot의 기존 사용 에셋 표시다.
++    6. asset metadata에 bytes/rows/Backend object/callback을 넣지 않는다. read는 mutation이나 resource 할당을 하지 않는다.
++       다음 표시 작업은 current authority에서 다시 조회하며 이 결과를 연결/삭제 command의 candidate로 보내지 않는다.
++    """
++    return "같은 current project에서 resolve한 slot의 immutable assetDisplay"
++
++
+ def readBackendProjection(kind, request):
+     """
+     Return:
+diff --git a/sourcescript/frontend/mantine_ui.py b/sourcescript/frontend/mantine_ui.py
+index e7946da..a4d7d62 100644
+--- a/sourcescript/frontend/mantine_ui.py
++++ b/sourcescript/frontend/mantine_ui.py
+@@ -127,6 +127,57 @@ EMPTY_CSV_UI_RULE = (
+ )
+ 
+ 
++def readProjectAssetDisplay():
++    """
++    이번 표시 작업에서 FastFigureApi.assets.readTree의 canonical node sequence와
++    FastFigureApi.layout.readState의 visibleSlots를 공식 경계로 읽는다.
++    두 read 사이에 await/다른 project command/외부 callback을 넣거나 이전 render 결과와 혼합하지 않는다.
++    canonical directory children과 asset metadata로 기존 에셋 목록을 표시하고,
++    visibleSlots의 id/row/col/contentType/chart/imageId 및 assetDisplay로 /slots의 기존 연결 표시를 만든다.
++    slot→chart→CSV/image resolve나 editable 판정은 Backend가 같은 current project에서 끝낸 값만 소비한다.
++    empty/embedded row도 유지한다. assetDisplay.assets의 kind/id/name/path로 표시·선택 intent를 구성하되
++    mutation은 기존 공식 API가 current identity를 다시 검증한다.
++    directory/CSV/image 선택 후보가 필요한 다른 UI도 canonical node의 kind/asset을 사용한다.
++    에셋 행의 참조 수는 assets.readDeletionTarget(node.path).referenceCount를 읽으며 slot 표시의 중복 제거 목록을 세지 않는다.
++    CSV 행 수 표시는 node.asset.rows의 길이에서 headerLines의 숫자값(없거나 변환 실패이면 기존 표시 fallback 0)을 제외한 nonnegative 값이다.
++    이는 기존 행 수 표시만 유지하며 새 CSV parser, project 정규화 또는 domain state를 만들지 않는다.
++    기존 flat tree의 .directories/.data/.images/.charts/.slots를 public read 계약처럼 소비하지 않는다.
++    component-local 순회/index는 이번 표시의 transient 계산일 뿐 다른 project store나 mutation authority가 아니다.
++    query 오류는 전파하며 예전 projection으로 성공을 위장하거나 조회 중 project를 수정하지 않는다.
++    """
++    return "canonical asset nodes와 같은 표시 작업의 visible slot assetDisplay"
++
++
++def changeLayoutGridDimension(dimension, value):
++    """
++    layout 행/열 입력 이벤트의 처리 절차. dimension은 rows 또는 cols이며 그 외는 입력 오류다.
++    1. 이벤트 시점에 FastFigureApi.layout.readState()를 호출해 current gridRows/gridCols를 읽는다.
++       이전 render의 layout, input DOM, 별도 mirror는 companion/fallback의 원천이 아니다.
++    2. 비어 있거나 숫자로 변환할 수 없거나 non-finite인 편집 입력은 같은 read의 해당 dimension을 유지한다.
++       유효 숫자는 기존 grid 입력 범위 1..8로 제한한다. 정수 여부 등 최종 유효성은 기존 Backend 검증이 담당한다.
++    3. rows 편집이면 새 rows와 current gridCols, cols 편집이면 current gridRows와 새 cols를 구성한다.
++    4. 이 read→입력 구성→FastFigureApi.layout.setGrid(rows, cols)는 await/외부 callback/다른 project command 없이
++       같은 동기 입력 처리에서 연속 실행한다. 별도 snapshot/session에 보관했다가 나중에 command로 보내지 않는다.
++       Application dispatch와 Backend candidate 계산/검증도 이 경로에서는 동기이며 대기 중 project 변경이 개입하지 않는다.
++       setGrid의 명시 전체 크기 계약과 Backend의 current-source 재확인·재계산·한 번 commit은 그대로 유지한다.
++    5. setter의 거부 False와 원래 예외를 그대로 처리하며 성공처럼 표시하거나 별도 resize/commit을 하지 않는다.
++       grid shape 변경과 overlay close의 local selection clear는 기존 interaction 규칙대로 수행한다.
++    """
++    return "공식 setGrid의 결과 또는 원래 실패"
++
++
++def handleDebugToggle():
++    """
++    클릭 이벤트 시 renderer runtime owner의 readDebugEnabled()로 현재 boolean을 읽고,
++    await/외부 callback 없이 그 반전을 기존 setDebugEnabled(value)에 전달한다.
++    telemetry는 버튼의 label/pressed 표시만 담당하고 반전 입력의 권위가 아니다.
++    setDebugEnabled가 owner를 변경한 뒤 telemetry를 publish하며 UI는 그 단방향 projection을 표시한다.
++    별도 debug mirror, Project mutation, toggle command/API 또는 두 번째 publish를 만들지 않는다.
++    명시 bool setter를 직접 사용하는 다른 caller의 계약을 바꾸지 않는다. 원래 오류는 caller에 전파한다.
++    """
++    return "runtime owner의 공식 setter 결과"
++
++
+ def subscribeAppState(onStoreChange):
+     """
+     Return:
+diff --git a/sourcescript/frontend/renderer.py b/sourcescript/frontend/renderer.py
+index 27d86da..318bd3c 100644
+--- a/sourcescript/frontend/renderer.py
++++ b/sourcescript/frontend/renderer.py
+@@ -74,6 +74,15 @@ def publishUiTelemetry(patch):
+     return telemetry
+ 
+ 
++def readDebugEnabled():
++    """
++    debug runtime owner의 현재 debugEnabled boolean을 읽는다. 변경·publish·Project read는 없다.
++    uiTelemetryState.debugEnabled나 DOM/표시 cache를 역으로 읽어 authority를 복원하지 않는다.
++    UI의 클릭 처리에 쓰는 call-local scalar이며 새 debug store/API namespace를 만들지 않는다.
++    """
++    return "현재 debugEnabled runtime authority의 boolean"
++
++
+ def setDebugEnabled(enabled):
+     """
+     변경:
+@@ -81,7 +90,9 @@ def setDebugEnabled(enabled):
+     - uiTelemetryState.debugEnabled projection.
+ 
+     처리:
+-    입력을 boolean 의미로 정규화하고 projection을 즉시 publish한다.
++    입력을 boolean 의미로 정규화해 debugEnabled에 먼저 반영하고 그 실제 값을 projection으로 즉시 publish한다.
++    명시 bool 설정 계약을 유지하며 UI projection을 현재 runtime 값 대신 읽지 않는다.
++    publish 오류는 전파하고 이미 수행한 runtime 변경을 숨은 rollback으로 되돌리거나 성공으로 위장하지 않는다.
+     """
+     return "최종 debugEnabled"
+ 
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index ffab47b..976630e 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -138,7 +138,9 @@ RESOLVED_REVIEW_ITEMS = [
+     ),
+     (
+         "debugEnabled는 session runtime authority이고 uiTelemetryState.debugEnabled는 one-way UI projection이다. "
+-        "Source Script에는 projection에서 debug authority로 되돌아가는 mutation 경로를 두지 않는다."
++        "Source Script에는 projection에서 debug authority로 되돌아가는 mutation 경로를 두지 않는다. "
++        "UI 클릭은 renderer runtime owner의 readDebugEnabled로 현재 boolean을 읽고 같은 동기 처리에서 반전을 "
++        "기존 setDebugEnabled에 전달한다. owner 변경 뒤 telemetry를 publish하며 표시값/별도 mirror를 반전 원천으로 쓰지 않는다."
+     ),
+     (
+         "slot caption은 slot object의 local property로 확정했다. "

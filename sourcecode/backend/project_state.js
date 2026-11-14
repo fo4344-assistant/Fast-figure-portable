@@ -1,5 +1,5 @@
 // Source: sourcescript/backend/project_state.py (same logical owner); pseudocode/backend/project_state.pcal.
-import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectDataTreeSnapshot, projectFileStem, projectImageDataUrl, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
+import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectFileStem, projectImageDataUrl, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
 import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraphLayoutSettings, validateChartModel } from './graphs.js';
 import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
 import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
@@ -268,6 +268,32 @@ const PUBLIC_BACKEND_READ_OPERATIONS = new Set([
   "assets.resolveImportPlan",
 ]);
 
+function buildSlotAssetDisplay(slot, source) {
+  const display = { kind: "empty", assets: [] };
+  if (slot.content.contentType === "image") {
+    const image = source.assets.images.find(item => item.id === slot.content.imageId);
+    if (image) {
+      display.kind = "assets";
+      display.assets.push({ kind: "image", id: image.id, name: image.name, path: projectAssetPath(image) });
+    }
+  } else if (slot.content.contentType === "graph") {
+    const chart = source.charts.find(item => item.id === slot.content.chart);
+    if (chart?.editor.editable === false) display.kind = "embedded";
+    else if (chart) {
+      const seen = new Set();
+      for (const object of chart.editor.objects) {
+        const csv = source.assets.csvFiles.find(item => item.id === object.csvId);
+        if (csv && !seen.has(csv.id)) {
+          seen.add(csv.id);
+          display.assets.push({ kind: "csv", id: csv.id, name: csv.name, path: projectAssetPath(csv) });
+        }
+      }
+      if (display.assets.length) display.kind = "assets";
+    }
+  }
+  return immutableProjectCopy(display);
+}
+
 function buildBackendVfsTree(source) {
   const nodes = new Map(source.fileSystem.directories.map(path => [path, {
     kind: "directory", path, name: projectPathName(path), children: [],
@@ -306,6 +332,8 @@ export function readBackendProjection(kind, request = {}) {
       slotStyle: Object.freeze({ ...source.layout.slotStyle }),
       visibleSlots: Object.freeze(source.slots.filter((slot) => !slot.hidden).map((slot) => Object.freeze({
         id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
+        contentType: slot.content.contentType, chart: slot.content.chart, imageId: slot.content.imageId,
+        assetDisplay: buildSlotAssetDisplay(slot, source),
       }))),
       previewGeometry: Object.freeze(dashboardGeometryInProject(source, width)),
     });
@@ -383,8 +411,7 @@ export function readBackendProjection(kind, request = {}) {
   }
   if (kind === "project-api" && request.operation === "assets.readTree") {
     const source = activeProject._state;
-    return immutableProjectCopy(projectDataTreeSnapshot({ files: source.fileSystem,
-      data: source.assets.csvFiles, images: source.assets.images, charts: source.charts, slots: source.slots }));
+    return immutableProjectCopy(Array.from(buildBackendVfsTree(source).values()));
   }
   if (kind === "project-api" && request.operation === "graphs.defaultColors")
     return immutableProjectCopy(DEFAULT_COLORS);

@@ -310,8 +310,17 @@ PUBLIC_BACKEND_READ_CONTRACTS = {
     "captions.readGlobal": "project annotations.captions의 enabled/text/afterText/name/nameBold/settings copy",
     "captions.readSlot": "explicit slotId의 slot.caption copy; 없는 slot이면 none; placeholder는 반환 presentation일 뿐 저장하지 않음",
     "labels.readState": "sourcescript.backend.layout_annotations readLabelsApiState(slotId)의 label settings와 explicit slot reference geometry copy",
-    "layout.readState": "gridRows/gridCols/slotStyle/visibleSlots와 renderedWidth로 계산한 previewGeometry copy; width는 backend.defaults.preview.widthRange/fallbackWidth 사용; Backend는 session zoom/lock을 읽지 않으며 Application만 public read에 합성; DOM 역추론/preview 저장 없음",
-    "assets.readTree": "sourcescript.backend.assets_files의 current directories/assets로 계산한 canonical VFS tree copy",
+    "layout.readState": (
+        "같은 current project에서 gridRows/gridCols/slotStyle, visibleSlots, renderedWidth의 previewGeometry를 copy한다. "
+        "visibleSlots는 기존 id/row/col/rowSpan/colSpan과 contentType/chart/imageId 및 buildSlotAssetDisplay(slot, project)의 assetDisplay를 포함한다. "
+        "width는 backend.defaults.preview.widthRange/fallbackWidth를 사용한다. Backend는 session zoom/lock을 읽지 않으며 "
+        "Application만 public read에 합성한다. DOM 역추론/preview 저장이나 독립 slot/chart authority는 없다."
+    ),
+    "assets.readTree": (
+        "current directories 순서의 directory node와 CSV/image collection 순서의 asset node로 만든 canonical VFS node sequence copy. "
+        "directory는 kind/path/name/children, asset은 kind/path/id/name/asset detached copy를 갖고 canonical parent의 children으로 연결한다. "
+        "slot/chart collection을 이 반환에 혼합하거나 legacy directories/data/images/charts/slots 묶음으로 대체하지 않는다."
+    ),
     "assets.readTrash": "같은 tree 계산의 trash subtree copy",
     "assets.isTrashed": "canonical requested path의 trash subtree membership boolean",
     "assets.movable": "current VFS source 존재와 fixed-root 규칙으로 계산한 boolean; trash 소속만으로 거부하지 않음",
@@ -362,6 +371,32 @@ RENDERER_BACKEND_READ_CONTRACT = {
     "ui-palette": "appearance.readPalette와 동일한 palette copy; CSS variable 적용은 Frontend가 수행",
     "lifetime": "한 render 작업에만 소비; 다음 작업은 current authority에서 재조회; mutation 입력이나 장기 project mirror로 재사용 금지",
 }
+
+
+def buildSlotAssetDisplay(slot, project):
+    """
+    Return:
+    - display: {kind: "empty"/"assets"/"embedded", assets: [{kind, id, name, path}, ...]}의 detached 값.
+
+    변경: 없음. project는 layout.readState가 이번 호출에서 읽은 동일 current authority다.
+
+    처리:
+    1. layout.readState가 기존 slot 순서를 유지하며 hidden=False인 각 slot에 대해 호출한다.
+       slot의 id/geometry/contentType/chart/imageId와 이 결과를 같은 visibleSlots entry에 copy한다.
+    2. contentType=image이면 같은 project.assets.images에서 imageId를 resolve한다.
+       있으면 kind=assets와 image metadata 한 항목, 없으면 kind=empty와 []다.
+    3. contentType=graph이면 같은 project.charts에서 slot.chart를 resolve한다.
+       chart가 없으면 empty/[]다. editor.editable=False이면 embedded/[]다.
+       non-editable conversion object의 csvId를 실제 project CSV로 resolve하지 않는다.
+    4. editable chart의 editor.objects 순서대로 같은 project.assets.csvFiles에서 csvId를 resolve한다.
+       실제 CSV마다 kind/id/name/canonical path만 copy하며 같은 CSV id는 처음 등장한 순서로 한 번만 담는다.
+       CSV가 하나 이상이면 assets, 하나도 없으면 empty다. 가짜 CSV/object/chart는 만들지 않는다.
+    5. 빈 슬롯과 외부 CSV 참조 없는 editable graph도 visibleSlots에서 제거하지 않는다.
+       embedded 표시는 독립 chart 관리 기능이 아니라 그 slot의 기존 사용 에셋 표시다.
+    6. asset metadata에 bytes/rows/Backend object/callback을 넣지 않는다. read는 mutation이나 resource 할당을 하지 않는다.
+       다음 표시 작업은 current authority에서 다시 조회하며 이 결과를 연결/삭제 command의 candidate로 보내지 않는다.
+    """
+    return "같은 current project에서 resolve한 slot의 immutable assetDisplay"
 
 
 def readBackendProjection(kind, request):

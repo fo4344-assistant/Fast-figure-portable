@@ -1,6 +1,6 @@
 ---- MODULE FastFigureFrontendMantineUiR38 ----
 EXTENDS Naturals, Reals, Sequences, FiniteSets
-\* Active direct Source r38 translation; see the translation review for scope/evidence.
+\* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
 \* FastFigureApi is the supplied public action surface; no Backend import.
 \* UI drafts/resolvers/selection/geometry below live only within component lifetime.
 CONSTANT NoValue
@@ -31,6 +31,64 @@ variables result = NoValue,
   layoutSelectedSlotIds = {}, settingsOverlayHeight = NoValue,
   sidebarGeometry = InitialSessionSidebarGeometry(),
   dropMounted = FALSE, dropAllowed = FALSE, dropReceiver = NoValue;
+
+procedure readProjectAssetDisplay()
+variables nodes = NoValue, layout = NoValue;
+begin
+OfficialReadsInOneSynchronousDisplay:
+  nodes := InvokePublicApi("assets.readTree",[]);
+  layout := InvokePublicApi("layout.readState",[]);
+  result := [assetNodes |-> nodes,slotRows |-> layout.visibleSlots];
+  \* No await/callback/command between reads, retained mirror or flat public tree contract.
+  \* Canonical node kind/asset supplies directory and CSV/image UI candidates.
+  \* Slot rows consume Backend assetDisplay, including empty and embedded rows.
+  return;
+end procedure;
+
+procedure readAssetRowDisplay(node)
+variables target = NoValue, rows = NoValue, header = NoValue;
+begin
+OfficialReferenceCountNotSlotDisplayDeduplication:
+  target := InvokePublicApi("assets.readDeletionTarget",[path |-> node.path]);
+  if node.kind = "csv" then
+    header := TryScalarNumber(FieldOrNoValue(node.asset,"headerLines"));
+    rows := Maximum(0,Len(node.asset.rows) - (IF header.valid THEN header.value ELSE 0));
+  end if;
+  result := [referenceCount |-> IF target = NoValue THEN 0 ELSE target.referenceCount,rowCount |-> rows];
+  \* Display arithmetic only. No new parser, collection ownership or mutation.
+  return;
+end procedure;
+
+procedure changeLayoutGridDimension(dimension,value)
+variables current = NoValue, number = NoValue, rows = NoValue, cols = NoValue;
+begin
+CurrentAuthorityThenSynchronousCommand:
+  Require(dimension \in {"rows","cols"});
+  current := InvokePublicApi("layout.readState",[]);
+  rows := current.gridRows; cols := current.gridCols;
+  number := TryNonemptyFiniteInputNumber(value);
+  if number.valid then
+    if dimension = "rows" then rows := Maximum(1,Minimum(8,number.value));
+    else cols := Maximum(1,Minimum(8,number.value)); end if;
+  end if;
+  result := InvokePublicApi("layout.setGrid",[rows |-> rows,cols |-> cols]);
+  \* Empty/invalid input keeps SAME current dimension; companion is also current.
+  \* This entire read/compose/dispatch is synchronous: no await/external callback/other command.
+  \* Existing Backend integer/candidate/whole-validation/current-source retry/one commit remains.
+  \* False and original failure are not converted to success. No second resize/commit.
+  return;
+end procedure;
+
+procedure handleDebugToggle()
+variables enabled = FALSE;
+begin
+OwnerReadNotDisplayProjection:
+  call readDebugEnabled(); enabled := result;
+  call setDebugEnabled(~enabled);
+  \* Same synchronous click, no callback/await between read and explicit bool setter.
+  \* Setter alone writes owner then publishes; UI only displays telemetry.
+  return;
+end procedure;
 
 procedure subscribeAppState(onStoreChange)
 begin

@@ -45,6 +45,10 @@ export let debugEnabled = false;
 
 export let debugSequence = 0;
 
+export function readDebugEnabled() {
+  return debugEnabled;
+}
+
 export function setDebugEnabled(enabled) {
   debugEnabled = enabled === true;
   publishUiTelemetry({ debugEnabled });
