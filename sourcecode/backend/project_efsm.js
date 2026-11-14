@@ -1,10 +1,10 @@
 // Source: sourcescript/backend/project_efsm.py (same logical owner); pseudocode/backend/project_efsm.pcal.
 import { PROJECT_ASSET_DIRECTORIES, buildProjectAssetImportCandidate, buildProjectCsvModel, buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBytesToBase64, ffpxReadProjectBytes, ffsxReadSlotBytes, normalizeProjectPath, planProjectNodeMove, projectAssetPath, projectCsvName, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, removeProjectAssetReferences, serializeNewDataTable } from './assets_files.js';
 import { chartCsvIds, chartUsesConversionView, columnDefinitions, createCandidateBaseGraphObject, createChartModel, dataTable, graphDataSelection, headerLineCount, normalizeGlobalSettings, normalizeGraphLayoutSettings, parsePlotlyToEditor, readGlobalSettings, rebuildEditableGraph, validateChartModel } from './graphs.js';
-import { buildGridResizeCandidate, insertSlotCaptions, resolveLayoutCommandSlots } from './layout_annotations.js';
-import { activeProject, getChart, getProjectCsv, getProjectImage, immutableProjectCopy, normalizeSlotContents, projectClone, projectObjects, projectRuntime, readProjectNumber, resetSlotLocalState, setSlotLocalState, slotAt, slotHasNonDefaultLocalState, slotLocalState, validateProjectObjectState } from './project_state.js';
-import { BackendSettings, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE } from './settings.js';
-import { releaseProjectImageDisplayUrl, releaseProjectImageDisplayUrls } from '../frontend/renderer.js';
+import { buildGridResizeInProject, insertSlotCaptions, resolveLayoutCommandSlots } from './layout_annotations.js';
+import { activeProject, immutableProjectCopy, normalizeSlotContents, projectClone, projectObjects, projectRuntime, readProjectNumber, resetSlotLocalState, setSlotLocalState, slotHasNonDefaultLocalState, slotLocalState, resolveOwningSlot, validateProjectObjectState } from './project_state.js';
+import { BackendSettings, DEFAULT_UI_PALETTE } from './settings.js';
+
 
 // Physical translation of VisualCommitFacts / CalculateProjectionEffect.
 // Both inputs belong to this successful commit; never retained as a read store.
@@ -51,6 +51,38 @@ function commitProjectCandidate(candidate, event, payload) {
   const pre = activeProject._state;
   activeProject.initialize(candidate);
   payload.projectionEffect = calculateProjectionEffect(event, pre, activeProject._state);
+  payload.commitFacts = { pre, post: activeProject._state };
+}
+
+// BuildActualChanged: call-local structural comparison, including removed identities.
+function commitValueKey(value) {
+  if (Array.isArray(value)) return JSON.stringify(value.map(item => JSON.parse(commitValueKey(item))));
+  if (value && typeof value === "object") return JSON.stringify(Object.fromEntries(
+    Object.keys(value).sort().map(key => [key, JSON.parse(commitValueKey(value[key]))])));
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+function actualChanged(payload) {
+  const { pre, post } = payload.commitFacts,
+    ids = (before, after) => [...new Set([...before, ...after].map(item => item.id))].filter(id =>
+      commitValueKey(before.find(item => item.id === id)) !== commitValueKey(after.find(item => item.id === id))),
+    changed = { ...payload.changed, slotIds: ids(pre.slots, post.slots), chartIds: ids(pre.charts, post.charts),
+      csvIds: ids(pre.assets.csvFiles, post.assets.csvFiles), imageIds: ids(pre.assets.images, post.assets.images), assets: [] };
+  for (const fact of payload.changed?.assets || []) {
+    const collection = fact.kind === "csv" ? "csvFiles" : "images",
+      source = fact.role === "deleted" ? pre : post,
+      asset = source.assets[collection].find(item => item.id === fact.id);
+    if (!asset || projectAssetPath(asset) !== fact.path) throw Error("commit 결과의 asset identity/path가 일치하지 않습니다.");
+    if (fact.role === "deleted") { changed.assets.push({ ...fact }); continue; }
+    const owners = fact.kind === "csv" ? post.charts.filter(chart =>
+      !chartUsesConversionView(chart) && chart.editor.objects.some(object => object.csvId === asset.id)).map(chart => {
+        const slot = resolveOwningSlot(chart.id, post);
+        if (!slot) throw Error("commit 결과 asset의 chart owner가 없습니다.");
+        return { slotId: slot.id, chartId: chart.id };
+      }) : post.slots.filter(slot => slot.content.imageId === asset.id).map(slot => ({ slotId: slot.id, chartId: null }));
+    changed.assets.push({ ...fact, id: asset.id, path: projectAssetPath(asset), owners });
+  }
+  return changed;
 }
 
 export class ProjectStateMachine {
@@ -64,20 +96,22 @@ export class ProjectStateMachine {
       throw Error(`${event} 전이 중 잠긴 ${scope} 프로젝트 범위를 수정할 수 없습니다.`);
   }
   send(event, payload = {}) {
-    let action = this.actions[event];
+    const action = Object.hasOwn(PROJECT_COMMAND_ACTIONS, event) && this.actions[event];
     if (!action) throw Error(`${event}는 등록된 ProjectObject command가 아닙니다.`);
-    // Caller-provided effect flags are never accepted as commit facts.
-    delete payload.projectionEffect;
-    let committed = action({ machine: this, event, payload }) !== false;
-    return Object.freeze({
-      event,
-      committed,
-      changed: immutableProjectCopy(committed ? payload.changed || {} : {}),
-      payload,
-      removedGraphReferenceCount: payload.removedGraphReferenceCount || 0,
-      resetImageSlotCount: payload.resetImageSlotCount || 0,
-      selectionHints: payload.selectionHints || null,
-      projectionEffect: committed ? payload.projectionEffect || null : null,
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+        ["project", "candidate", "model", "objects"].some(key => Object.hasOwn(payload, key)))
+      throw Error("Project command는 identity와 새 입력만 받습니다.");
+    // This command's private calculation fields never alias or modify the caller's input.
+    const input = { ...payload };
+    for (const key of ["changed", "selectionHints", "projectionEffect", "commitFacts",
+      "removedGraphReferenceCount", "resetImageSlotCount"]) delete input[key];
+    const outcome = action({ machine: this, event, payload: input }), committed = outcome !== false && !!input.commitFacts,
+      changed = committed ? actualChanged(input) : {};
+    return immutableProjectCopy({ event, committed, changed,
+      removedGraphReferenceCount: committed ? changed.removedGraphReferenceCount || input.removedGraphReferenceCount || 0 : 0,
+      resetImageSlotCount: committed ? changed.resetImageSlotCount || input.resetImageSlotCount || 0 : 0,
+      selectionHints: committed ? input.selectionHints || {} : {},
+      projectionEffect: committed ? input.projectionEffect : null,
     });
   }
 }
@@ -178,30 +212,40 @@ export function applyDataObjectCreatedAction({ machine, event, payload }) {
   }
 }
 
-export function applyAssetObjectReplacedAction({ machine, payload }, kind) {
-  let image=kind==="image",
-    event=image?"IMAGE_OBJECT_REPLACED":"DATA_OBJECT_REPLACED",
-    scope=image?"images":"data",
-    collection=image?activeProject.images:activeProject.csvFiles,
-    model=payload.model,
-    index=collection.findIndex((item)=>item.id===model?.id),
-    previous=index>=0?collection[index]:null;
-  machine.assertWritable(scope,event);
-  machine.assertWritable("files",event);
-  if(!previous||projectAssetPath(model)!==projectAssetPath(previous))
-    throw Error(`교체할 ${image?"이미지":"CSV"} 또는 참조 경로가 올바르지 않습니다.`);
-  let candidate=projectClone(activeProject._state),
-    next=projectClone(model),
-    candidateCollection=image?candidate.assets.images:candidate.assets.csvFiles;
-  if(image&&previous.settings)next.settings=projectClone(previous.settings);
-  candidateCollection[index]=next;
-  commitProjectCandidate(validateProjectObjectState(candidate,{requireSlots:true}), event, payload);
-  if(image)releaseProjectImageDisplayUrl(previous);
-  payload[image?"image":"csv"]=image?getProjectImage(next.id):getProjectCsv(next.id);
+export function applyAssetObjectReplacedAction({ machine, event, payload }, kind) {
+  const image = kind === "image", collection = image ? "images" : "csvFiles";
+  machine.assertWritable(image ? "images" : "data", event);
+  machine.assertWritable("files", event);
+  if (!image) machine.assertWritable("charts", event);
+  while (true) {
+    const source = activeProject._state, previous = source.assets[collection].find(item => item.id === payload.id);
+    if (!previous || (Object.hasOwn(payload, "path") && projectAssetPath(previous) !== payload.path))
+      throw Error("교체할 asset의 현재 id/path가 요청과 다릅니다.");
+    const candidate = projectClone(source), next = candidate.assets[collection].find(item => item.id === previous.id);
+    if (image) {
+      const bytes = typeof payload.bytes === "string" ? ffpxBase64ToBytes(payload.bytes) : new Uint8Array(payload.bytes || []);
+      if (!bytes.length) throw Error("이미지 데이터가 비어 있습니다.");
+      next.bytesBase64 = ffpxBytesToBase64(bytes);
+    } else {
+      next.rows = projectClone(dataTable(payload.data));
+      next.headerLines = headerLineCount(Object.hasOwn(payload, "headerLines") ? payload.headerLines : previous.headerLines, next.rows);
+      next.bytesBase64 = payload.bytesBase64 != null && payload.bytesBase64 !== "" ?
+        (ffpxBase64ToBytes(payload.bytesBase64), payload.bytesBase64) :
+        ffpxBytesToBase64(serializeNewDataTable(next.rows, projectAssetPath(previous)));
+      for (const chart of candidate.charts)
+        if (chart.editor.editable && chartCsvIds(chart).includes(next.id)) rebuildEditableGraph(chart, candidate);
+    }
+    if (Object.hasOwn(payload, "mime")) next.mime = payload.mime;
+    validateProjectObjectState(candidate, { requireSlots: true });
+    if (activeProject._state !== source) continue;
+    commitProjectCandidate(candidate, event, payload);
+    payload.changed = { assets: [{ role: "updated", kind, id: next.id, path: projectAssetPath(next) }] };
+    return;
+  }
 }
 
 export function applyDataObjectReplacedAction(context) {
-  const { machine, payload } = context;
+  const { machine, event, payload } = context;
   if (!Object.hasOwn(payload, "headerLines")) {
     applyAssetObjectReplacedAction(context, "csv");
     return;
@@ -279,7 +323,6 @@ export function applyAssetObjectDeletedAction({ machine, payload }, kind) {
       csvIds: [...csvIds], imageIds: [...imageIds], ...removedReferences,
       assets: [{ role: "deleted", kind, id: target.id, path: target.path, name: node.asset.name }] };
     payload.selectionHints = immutableProjectCopy({ graphObjectIndexMaps: removedReferences.graphObjectIndexMaps });
-    if (kind === "image") releaseProjectImageDisplayUrl(node.asset);
     return;
   }
 }
@@ -423,7 +466,6 @@ export function applyProjectAssetConnectedAction({ machine, payload }, kind) {
     commitProjectCandidate(candidate, event, payload);
     payload.changed = { slotIds: slot.chart !== target.chart || slot.imageId !== target.imageId ? [slot.id] : [],
       chartIds: chart ? [chart.id] : [], csvIds: [], imageIds: [], assets: [] };
-    if (chart) payload.selectionHints = Object.freeze({ chartId: chart.id, selectedIndexHint: null });
     return;
   }
 }
@@ -470,6 +512,8 @@ export function applyGraphObjectEditAction({ machine, event, payload }) {
       xAxisSide: ["bottom", "top"], yAxisSide: ["left", "right"],
       lineDash: ["solid", "dot", "dash", "dashdot"],
       markerSymbol: ["circle", "square", "diamond", "cross", "x", "triangle-up", "triangle-down"] };
+  if (!["graphs.setObjectValues", "graphs.moveObject", "graphs.deleteObject", "graphs.applyPalette", "graphs.addObject"].includes(payload.operation))
+    throw Error("등록된 graph object operation이 아닙니다.");
   while (true) {
     const source = activeProject._state, operation = payload.operation,
       target = operation === "graphs.addObject" ? source.slots.find((slot) => slot.id === payload.slotId && !slot.hidden) : null,
@@ -529,7 +573,7 @@ export function applyGraphObjectEditAction({ machine, event, payload }) {
       }
       for (const [key, [min, max]] of Object.entries(limits)) {
         if (Object.hasOwn(values, key)) {
-          const edit = values[key], value = edit === null ? NaN : Number(edit);
+          const edit = values[key], value = ["number", "string"].includes(typeof edit) ? Number(edit) : NaN;
           if (Number.isFinite(value)) object[key] = Math.max(min, Math.min(max, value));
         }
       }
@@ -571,23 +615,8 @@ export function applyGraphObjectEditAction({ machine, event, payload }) {
 }
 
 export function applyGraphObjectsReplacedAction(context) {
-  const { machine, event, payload } = context;
-  if (["graphs.setObjectValues", "graphs.moveObject", "graphs.deleteObject", "graphs.applyPalette", "graphs.addObject"].includes(payload.operation))
-    return applyGraphObjectEditAction(context);
-  machine.assertWritable("charts", "GRAPH_OBJECTS_REPLACED");
-  let current=getChart(payload.chartId);
-  if(!current||!current.editor||current.editor.editable===false)
-    throw Error("그래프 오브젝트를 변경할 편집 가능 차트가 없습니다.");
-  let candidate=projectClone(activeProject._state),
-    chart=candidate.charts.find(item=>item.id===payload.chartId);
-  chart.editor.objects=Array.isArray(payload.objects)?projectClone(payload.objects):[];
-  validateChartModel(chart,"변경할 차트",candidate.assets.csvFiles);
-  validateProjectObjectState(candidate,{requireSlots:true});
-  commitProjectCandidate(candidate, event, payload);
-  chart=getChart(payload.chartId);
-  if(chart.editor.editable!==false)rebuildEditableGraph(chart);
-  payload.graphObjectCount = chart.editor.objects.length;
-  payload.chart=chart;
+  // Only command-calculated objects enter GraphCommitInAttempt; no projected-array replacement path.
+  return applyGraphObjectEditAction(context);
 }
 
 export function applyChartLayoutChangedAction({ machine, event, payload }) {
@@ -598,25 +627,32 @@ export function applyChartLayoutChangedAction({ machine, event, payload }) {
       chartId = slot?.content?.chart ?? slot?.chart, current = source.charts.find(item => item.id === chartId),
       owners = source.slots.filter(item => (item.content?.chart ?? item.chart) === chartId), values = payload.settings;
     if (!slot || slot.contentType === "image" || !current || current.id !== payload.chartId ||
-        owners.length !== 1 || current.editor?.editable === false)
-      throw Error("전역 설정을 변경할 현재 편집 가능 owning chart가 없습니다.");
+        owners.length !== 1)
+      throw Error("전역 설정을 변경할 현재 owning chart가 없습니다.");
     if (!values || typeof values !== "object" || Array.isArray(values)) throw Error("적용할 그래프 설정이 없습니다.");
     const candidate = projectClone(source), chart = candidate.charts.find(item => item.id === chartId),
       settings = projectClone(chart.editor.globalSettings || {}), edits = values.globalSettings;
     if (Object.hasOwn(values, "title")) chart.editor.title = String(values.title ?? "");
-    if (edits && typeof edits === "object") {
-      for (const key of Object.keys(edits)) if (key !== "axes") settings[key] = edits[key];
-      if (edits.axes && typeof edits.axes === "object") {
-        settings.axes = { ...settings.axes };
+    const record = value => value && typeof value === "object" && !Array.isArray(value),
+      applyAxis = (key, patch) => {
+        if (!record(patch)) throw Error("axis settings는 record여야 합니다.");
+        for (const field of Object.keys(settings.axes[key]))
+          if (Object.hasOwn(patch, field)) settings.axes[key][field] = patch[field];
+      };
+    if (Object.hasOwn(values, "globalSettings")) {
+      if (!record(edits)) throw Error("global settings는 record여야 합니다.");
+      for (const key of ["showLegend", "showTitle", "showZeroLine", "graphFontFamily", "titleFontSize", "legendFontSize"])
+        if (Object.hasOwn(edits, key)) settings[key] = edits[key];
+      if (Object.hasOwn(edits, "axes")) {
+        if (!record(edits.axes)) throw Error("axes는 record여야 합니다.");
         for (const key of ["xBottom", "xTop", "yLeft", "yRight"])
-          if (Object.hasOwn(edits.axes, key)) settings.axes[key] = { ...settings.axes[key], ...edits.axes[key] };
+          if (Object.hasOwn(edits.axes, key)) applyAxis(key, edits.axes[key]);
       }
     }
-    const key = values.axisKey;
-    if (["xBottom", "xTop", "yLeft", "yRight"].includes(key))
-      settings.axes = { ...settings.axes, [key]: { ...settings.axes?.[key], ...values.axisValues } };
+    // Existing UI axisKey syntax is the same explicit axis patch, not a second algorithm.
+    if (["xBottom", "xTop", "yLeft", "yRight"].includes(values.axisKey)) applyAxis(values.axisKey, values.axisValues);
     chart.editor.globalSettings = normalizeGraphLayoutSettings(settings);
-    rebuildEditableGraph(chart, candidate);
+    if (chart.editor.editable) rebuildEditableGraph(chart, candidate);
     validateProjectObjectState(candidate, { requireSlots: true });
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
@@ -678,11 +714,14 @@ export function applyEmptyImageInsertedAction({ machine, event, payload }) {
   machine.assertWritable("slots", "SLOT_IMAGE_IMPORTED");
   machine.assertWritable("images", "SLOT_IMAGE_IMPORTED");
   machine.assertWritable("files", "SLOT_IMAGE_IMPORTED");
+  machine.assertWritable("charts", "SLOT_IMAGE_IMPORTED");
   while (true) {
     const source = activeProject._state, current = source.slots.find(slot => slot.id === payload.slotId && !slot.hidden);
     if (!current || (current.content?.contentType ?? current.contentType) !== "image")
       throw Error("빈 이미지를 삽입할 현재 visible image 슬롯이 없습니다.");
-    const input = payload.imageInput, bytes = new Uint8Array(input.bytes || []), directory = PROJECT_ASSET_DIRECTORIES.image;
+    const input = payload.operation === "images.insertEmpty" ? payload.imageInput : payload,
+      bytes = typeof input?.bytes === "string" ? ffpxBase64ToBytes(input.bytes) : new Uint8Array(input?.bytes || []),
+      directory = PROJECT_ASSET_DIRECTORIES.image;
     if (!bytes.length || !source.fileSystem.directories.includes(directory)) throw Error("이미지 데이터 또는 directory가 없습니다.");
     const path = projectVfs.uniquePath(directory, projectCsvName(input.name, "image.bin"), source), id = source.nextId.image;
     if (!Number.isInteger(id) || id <= 0 || source.assets.images.some(image => image.id === id))
@@ -711,37 +750,8 @@ export function applyEmptyImageInsertedAction({ machine, event, payload }) {
 }
 
 export function applySlotImageImportedAction(context) {
-  const { machine, event, payload } = context;
-  if (payload.operation === "images.insertEmpty") return applyEmptyImageInsertedAction(context);
-  machine.assertWritable("slots","SLOT_IMAGE_IMPORTED");
-  machine.assertWritable("images","SLOT_IMAGE_IMPORTED");
-  machine.assertWritable("charts","SLOT_IMAGE_IMPORTED");
-  machine.assertWritable("workspace","SLOT_IMAGE_IMPORTED");
-  machine.assertWritable("files","SLOT_IMAGE_IMPORTED");
-  let slot=slotAt(payload.slotId),source=payload.model||getProjectImage(payload.imageId);
-  if(!slot||!source||!Number.isInteger(source.id)||source.id<1||
-    typeof source.name!=="string"||typeof source.bytesBase64!=="string"||!source.bytesBase64)
-    throw Error("이미지를 연결할 슬롯 또는 이미지가 없습니다.");
-  let candidate=projectClone(activeProject._state);
-  normalizeSlotContents(candidate.slots);
-  let imageId=source.id;
-  if(payload.model){
-    if(candidate.assets.images.some(item=>item.id===imageId))
-      throw Error(`이미지 ID ${imageId}가 중복되었습니다.`);
-    let model=projectClone(source);delete model.settings;
-    projectVfs.prepare(model,"image",candidate);
-    candidate.assets.images.push(model);
-    candidate.nextId.image=Math.max(candidate.nextId.image,imageId+1);
-  }
-  let target=candidate.slots.find(item=>item.id===slot.id);
-  if(Number.isInteger(target.chart))
-    candidate.charts=candidate.charts.filter(chart=>chart.id!==target.chart);
-  target.chart=null;target.imageId=imageId;target.contentType="image";
-  target.content.imageSettings={...DEFAULT_IMAGE_SETTINGS};
-  validateProjectObjectState(candidate,{requireSlots:true});
-  commitProjectCandidate(candidate, event, payload);
-  payload.image=getProjectImage(imageId);
-  payload.clearGraphSelection = true;
+  // Both declared imports calculate a new asset from bytes/name/MIME, never a caller model.
+  return applyEmptyImageInsertedAction(context);
 }
 
 export function applySlotChartImportedAction({ machine, event, payload }) {
@@ -765,7 +775,7 @@ export function applySlotChartImportedAction({ machine, event, payload }) {
     if (!packaged && (!input || typeof input !== "object" || (!Array.isArray(input.data) && !input.layout)))
       throw Error("유효한 Plotly JSON이 아닙니다.");
     let chart = packaged ? projectClone(input.chart) : parsePlotlyToEditor(input, null);
-    normalizeGlobalSettings(chart);
+    chart.editor.globalSettings = normalizeGlobalSettings(chart.editor.globalSettings);
     const csvIds = [], assets = [];
     if (packaged) {
       const mapping = new Map();
@@ -791,6 +801,9 @@ export function applySlotChartImportedAction({ machine, event, payload }) {
     validateChartModel(chart, "불러온 슬롯 차트", candidate.assets.csvFiles);
     const target = candidate.slots.find(item => item.id === slot.id),
       oldChartId = target.content.chart;
+    if (oldChartId !== null && (!source.charts.some(item => item.id === oldChartId) ||
+        source.slots.filter(item => item.content.chart === oldChartId).length !== 1))
+      throw Error("교체할 차트의 슬롯 소유권이 올바르지 않습니다.");
     candidate.charts = candidate.charts.filter(item => item.id !== oldChartId);
     candidate.charts.push(chart);
     target.content.chart = chart.id;
@@ -803,7 +816,6 @@ export function applySlotChartImportedAction({ machine, event, payload }) {
     payload.changed = { slotIds: [slot.id],
       chartIds: [...new Set([oldChartId, chart.id].filter(Number.isInteger))],
       csvIds, imageIds: [], assets };
-    payload.selectionHints = immutableProjectCopy({ chartId: chart.id, selectedIndexHint: null });
     return;
   }
 }
@@ -811,10 +823,13 @@ export function applySlotChartImportedAction({ machine, event, payload }) {
 export function applyGridLayoutChangedAction({ machine, event, payload }) {
   machine.assertWritable("layout", "GRID_LAYOUT_CHANGED");
   machine.assertWritable("slots", "GRID_LAYOUT_CHANGED");
-  const candidate = buildGridResizeCandidate(payload.rows, payload.cols);
-  commitProjectCandidate(candidate, event, payload);
-  payload.clearGraphSelection = true;
-  payload.selectionHints = { reResolveSlotSelection: true, clearAssetSelection: true };
+  while (true) {
+    const source = activeProject._state,
+      candidate = buildGridResizeInProject(source, payload.rows, payload.cols);
+    if (activeProject._state !== source) continue;
+    commitProjectCandidate(candidate, event, payload);
+    return;
+  }
 }
 
 export function applyProjectDirectoryCreatedAction({ machine, event, payload }) {
@@ -880,7 +895,6 @@ export function applyProjectTrashEmptiedAction({ machine, event, payload }) {
       csvIds: [...csvIds], imageIds: [...imageIds], assets: [], ...removedReferences,
       csvCount: csvFiles.length, imageCount: images.length, directoryCount: directories.length };
     payload.selectionHints = immutableProjectCopy({ graphObjectIndexMaps: removedReferences.graphObjectIndexMaps });
-    images.forEach(releaseProjectImageDisplayUrl);
     return;
   }
 }
@@ -917,7 +931,9 @@ export function applyProjectNodeMovedAction({ machine, event, payload }) {
     if (match.kind === "directory") {
       candidate.fileSystem.directories = candidate.fileSystem.directories.map(path =>
         projectPathInDirectory(path, plan.path) ? rewrite(path) : path).sort();
-      moving.forEach(({ asset }) => { asset.directory = projectParentPath(rewrite(projectAssetPath(asset))); });
+      moving.filter(node => node.kind !== "directory").forEach(({ asset }) => {
+        asset.directory = projectParentPath(rewrite(projectAssetPath(asset)));
+      });
     } else {
       match.asset.directory = projectParentPath(destination);
       match.asset.name = projectPathName(destination);
@@ -964,7 +980,8 @@ export function applyProjectNameChangedAction({ machine, event, payload }) {
 
 export function applyLabelSettingsChangedAction({ machine, event, payload }) {
   machine.assertWritable("labels", "LABEL_SETTINGS_CHANGED");
-  let candidate = projectClone(activeProject._state);
+  while (true) {
+  const source = activeProject._state, candidate = projectClone(source);
   if (Object.prototype.hasOwnProperty.call(payload, "enabled"))
     candidate.annotations.labels.enabled = payload.enabled === true;
   if (payload.settings && typeof payload.settings === "object") {
@@ -988,12 +1005,16 @@ export function applyLabelSettingsChangedAction({ machine, event, payload }) {
     }
   }
   validateProjectObjectState(candidate, { requireSlots: true });
+  if (activeProject._state !== source) continue;
   commitProjectCandidate(candidate, event, payload);
+  return;
+  }
 }
 
 export function applyLabelPositionChangedAction({ machine, event, payload }) {
   machine.assertWritable("labels", "LABEL_POSITION_CHANGED");
-  let candidate = projectClone(activeProject._state),
+  while (true) {
+  const source = activeProject._state, candidate = projectClone(source),
     settings = candidate.annotations.labels.settings,
     defaults = BackendSettings.project_object.annotations.labels.settings,
     x = payload.reset === true ? defaults.x : payload.x,
@@ -1003,20 +1024,26 @@ export function applyLabelPositionChangedAction({ machine, event, payload }) {
   settings.x = x;
   settings.y = y;
   validateProjectObjectState(candidate, { requireSlots: true });
+  if (activeProject._state !== source) continue;
   commitProjectCandidate(candidate, event, payload);
+  return;
+  }
 }
 
 export function applyAppearanceChangedAction({ machine, event, payload }) {
   machine.assertWritable("appearance", "APPEARANCE_CHANGED");
-  let candidate = projectClone(activeProject._state);
-  candidate.appearance.uiPalette = Object.fromEntries(
-    Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => {
-      const value = payload.palette?.[key];
-      return [key, typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback];
-    }),
-  );
-  validateProjectObjectState(candidate, { requireSlots: true });
-  commitProjectCandidate(candidate, event, payload);
+  while (true) {
+    const source = activeProject._state, candidate = projectClone(source);
+    candidate.appearance.uiPalette = Object.fromEntries(
+      Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => {
+        const value = payload.palette?.[key];
+        return [key, typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback];
+      }));
+    validateProjectObjectState(candidate, { requireSlots: true });
+    if (activeProject._state !== source) continue;
+    commitProjectCandidate(candidate, event, payload);
+    return;
+  }
 }
 
 export function applyExportSettingsChangedAction({ machine, event, payload }) {
@@ -1038,8 +1065,8 @@ export function applyExportSettingsChangedAction({ machine, event, payload }) {
     for (const [key, limitKey] of [["width", "logicalWidth"], ["height", "logicalHeight"], ["dpi", "dpi"]]) {
       if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
       const value = values[key];
-      // NoValue is not numeric zero; conversion exceptions otherwise propagate.
-      const number = value === null ? NaN : Number(value);
+      // NoValue/arrays/records are not scalar numbers; primitive conversion errors propagate.
+      const number = value === null || typeof value === "object" ? NaN : Number(value);
       if (Number.isFinite(number)) {
         const [min, max] = limits[limitKey];
         next[key] = Math.max(min, Math.min(max, number));
@@ -1065,7 +1092,8 @@ export function applySlotImageSettingsChangedAction({ machine, event, payload })
     const source = activeProject._state, candidate = projectClone(source);
     normalizeSlotContents(candidate.slots);
     const target = candidate.slots.find((slot) => slot.id === payload.slotId);
-    if (!target || target.hidden || !candidate.assets.images.some((image) => image.id === target.imageId))
+    if (!target || target.hidden || target.content.contentType !== "image" ||
+        !candidate.assets.images.some((image) => image.id === target.content.imageId))
       throw Error("이미지 설정을 변경할 슬롯이 없습니다.");
     const next = { ...target.content.imageSettings }, values = payload.settings || {},
       limits = BackendSettings.defaults.limits.imageSettings;
@@ -1077,7 +1105,7 @@ export function applySlotImageSettingsChangedAction({ machine, event, payload })
       for (const key of ["scale", "x", "y"]) {
         if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
         const value = values[key];
-        const number = value === null ? NaN : Number(value);
+        const number = value === null || typeof value === "object" ? NaN : Number(value);
         if (Number.isFinite(number)) {
           const [min, max] = limits[key];
           next[key] = Math.max(min, Math.min(max, number));
@@ -1138,7 +1166,8 @@ export function applyCaptionSettingsChangedAction({ machine, event, payload }) {
 
 export function applyLayoutStyleChangedAction({ machine, event, payload }) {
   machine.assertWritable("layout", "LAYOUT_STYLE_CHANGED");
-  let candidate = projectClone(activeProject._state);
+  while (true) {
+  const source = activeProject._state, candidate = projectClone(source);
   const style = candidate.layout.slotStyle, limits = BackendSettings.defaults.limits.layout;
   for (const key of ["referenceWidth", "gap", "outerMargin", "radius", "aspect"]) {
     if (!Object.prototype.hasOwnProperty.call(payload, key)) continue;
@@ -1147,13 +1176,17 @@ export function applyLayoutStyleChangedAction({ machine, event, payload }) {
   if (Object.prototype.hasOwnProperty.call(payload, "showBorders"))
     style.showBorders = payload.showBorders === true;
   validateProjectObjectState(candidate, { requireSlots: true });
+  if (activeProject._state !== source) continue;
   commitProjectCandidate(candidate, event, payload);
+  return;
+  }
 }
 
 export function applySlotsMergedAction({ machine, event, payload }) {
   machine.assertWritable("slots", "SLOTS_MERGED");
   machine.assertWritable("charts", "SLOTS_MERGED");
-  let candidate = projectClone(activeProject._state);
+  while (true) {
+  const current = activeProject._state, candidate = projectClone(current);
   normalizeSlotContents(candidate.slots);
   let selected = resolveLayoutCommandSlots(candidate, payload.slotIds);
   let top = Math.min(...selected.map((slot) => slot.row)),
@@ -1175,8 +1208,7 @@ export function applySlotsMergedAction({ machine, event, payload }) {
   if (nonDefault.length > 1)
     throw Error("로컬 상태가 두 개 이상 있는 슬롯은 합칠 수 없습니다.");
   let anchor = cells.find((slot) => slot.row === top && slot.col === left),
-    source = nonDefault[0] || anchor,
-    local = slotLocalState(source);
+    local = nonDefault.length ? slotLocalState(nonDefault[0]) : null;
   cells.forEach((cell) => {
     cell.hidden = cell !== anchor;
     if (cell !== anchor) resetSlotLocalState(cell);
@@ -1186,16 +1218,20 @@ export function applySlotsMergedAction({ machine, event, payload }) {
   anchor.colSpan = right - left + 1;
   anchor.hidden = false;
   validateProjectObjectState(candidate, { requireSlots: true });
+  if (activeProject._state !== current) continue;
   commitProjectCandidate(candidate, event, payload);
   payload.selectionHints = {
     mergeSlotIds: selected.map((slot) => slot.id),
     anchorId: anchor.id,
   };
+  return;
+  }
 }
 
 export function applySlotsSplitAction({ machine, event, payload }) {
   machine.assertWritable("slots", "SLOTS_SPLIT");
-  let candidate = projectClone(activeProject._state);
+  while (true) {
+  const current = activeProject._state, candidate = projectClone(current);
   normalizeSlotContents(candidate.slots);
   let selected = resolveLayoutCommandSlots(candidate, payload.slotIds);
   if (selected.some((slot) => slot.rowSpan <= 1 && slot.colSpan <= 1))
@@ -1219,7 +1255,10 @@ export function applySlotsSplitAction({ machine, event, payload }) {
     });
   }
   validateProjectObjectState(candidate, { requireSlots: true });
+  if (activeProject._state !== current) continue;
   commitProjectCandidate(candidate, event, payload);
+  return;
+  }
 }
 
 export function applyAssetsImportedAction({ machine, event, payload }) {
@@ -1229,7 +1268,7 @@ export function applyAssetsImportedAction({ machine, event, payload }) {
     const source = activeProject._state, calculation = buildProjectAssetImportCandidate(source, payload);
     if (!calculation) return false;
     const { candidate, imported } = calculation;
-    try { validateProjectObjectState(candidate, { requireSlots: true }); } catch { return false; }
+    validateProjectObjectState(candidate, { requireSlots: true });
     if (activeProject._state !== source) continue;
     const changedIds = (before, after) => after.filter(item =>
       JSON.stringify(before.find(old => old.id === item.id)) !== JSON.stringify(item)).map(item => item.id);
@@ -1239,8 +1278,6 @@ export function applyAssetsImportedAction({ machine, event, payload }) {
       imageIds: changedIds(source.assets.images, candidate.assets.images), assets: imported };
     commitProjectCandidate(candidate, event, payload);
     payload.changed = changed;
-    for (const fact of imported)
-      if (fact.kind === "image") releaseProjectImageDisplayUrl(source.assets.images.find(image => image.id === fact.id));
     return;
   }
 }
@@ -1306,7 +1343,6 @@ export function applyProjectLoadedAction({ machine, event, payload }) {
       imageIds: changedIds(source.assets.images, candidate.assets.images), assets: [] };
     payload.generation = projectRuntime.projectObjectGeneration;
     payload.selectionHints = Object.freeze({ resetInterfaceSelection: true });
-    releaseProjectImageDisplayUrls(source.assets.images);
     return;
   }
 }

@@ -1,0 +1,992 @@
+diff --git a/sourcecode/application/public_api/index.js b/sourcecode/application/public_api/index.js
+index 2ed7d522d3abae8be73d692cbd9c667ea9eb8630..97ec923be3adec76a978e20636e7f44f153ff514 100644
+--- a/sourcecode/application/public_api/index.js
++++ b/sourcecode/application/public_api/index.js
+@@ -2,7 +2,7 @@
+ // Public API composition; domain operations are implemented in the sibling modules.
+ import { appFSM, dispatchProjectCommand, renderProjectObject } from '../adapter.js';
+ import { connectProjectAssetPathToSlot, createProjectDirectory, deleteProjectAsset, downloadProjectAsset, draggableProjectAsset, emptyProjectTrash, importProjectAssetFiles, importProjectFileToSlot, importProjectFilesToDirectory, moveProjectNode, prepareCopiedImportFiles, projectNodeMoveOptions, readAssetCollisionModel, readAssetDeletionTarget, readAssetFileKind, readAssetImportPlan, readProjectTrash, selectDirectoryFromTree, selectImageFromTree, selectProjectCsv } from './assets.js';
+-import { addGraphObjectApi, applyGraphPaletteApi, createEmptyProjectCsvAndSelect, deleteGraphObjectApi, downloadPlotlyJson, downloadSlotFfsx, graphEditorHeaderLines, graphEditorSelectCsv, graphEditorSelectObject, importSelectedGraphFile, moveGraphObjectApi, readGraphDataApi, readGraphLayoutApi, readGraphPaletteApi, setGraphEditableApi, setGraphObjectValuesApi, updateGraphLayoutApi } from './graphs.js';
++import { createEmptyProjectCsvAndSelect, downloadPlotlyJson, downloadSlotFfsx, graphEditorAdd, graphEditorApplyPalette, graphEditorDelete, graphEditorHeaderLines, graphEditorMove, graphEditorObjectValues, graphEditorSelectCsv, graphEditorSelectObject, graphEditorSetEditable, graphEditorUpdateLayout, importSelectedGraphFile, readGraphDataApi, readGraphLayoutApi, readGraphPaletteApi } from './graphs.js';
+ import { applyImageSettingsFromValues, capturePrintApi, commitLayoutApiZoom, finishDashboardFileDrop, finishLabelsApiPositionInteraction, insertCaptionsApiSlotCaptions, insertEmptyImageIntoSelectedSlot, mergeSlots, prepareDashboardFileDrop, readAppearanceApiPalette, readGlobalCaptionState, readImageEditorApi, readLabelsApiState, readLayoutApiState, readPrintApiSettings, readSelectedSlotApi, readSlotCaptionState, resetAppearanceApiPalette, resetLabelsApiPosition, resetLayoutApiZoom, resetSlotApi, savePrintApi, setAppearanceApiPalette, setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings, setGlobalCaptionText, setLabelsApiEnabled, setLabelsApiPosition, setLabelsApiSettings, setLayoutApiGrid, setLayoutApiStyle, setLayoutApiZoom, setLayoutApiZoomLocked, setPrintApiSettings, setSelectedSlot, setSlotCaptionText, setSlotContentType, splitSlots, swapSlots } from './layout_annotations.js';
+ import { interfaceFSM } from '../../frontend/interface_fsm.js';
+ import { downloadExportPayload, status } from '../../frontend/renderer.js';
+@@ -58,7 +58,7 @@
+   }),
+   images: Object.freeze({
+     readEditor: readImageEditorApi,
+-    setSettings: (values) => applyImageSettingsFromValues(appFSM.readState().selectedSlotId, values),
++    setSettings: applyImageSettingsFromValues,
+     insertEmpty: insertEmptyImageIntoSelectedSlot,
+   }),
+   assets: Object.freeze({
+@@ -95,28 +95,28 @@
+     readPalette: readGraphPaletteApi,
+     selectCsv: graphEditorSelectCsv,
+     setHeaderLines: graphEditorHeaderLines,
+-    setEditable: setGraphEditableApi,
+-    addObject: addGraphObjectApi,
+-    moveObject: moveGraphObjectApi,
+-    selectObject: graphEditorSelectObject,
+-    setObjectValues: setGraphObjectValuesApi,
+-    deleteObject: deleteGraphObjectApi,
+-    updateLayout: updateGraphLayoutApi,
+-    applyPalette: applyGraphPaletteApi,
++    setEditable: graphEditorSetEditable,
++    addObject: graphEditorAdd,
++    moveObject: graphEditorMove,
++    selectObject: graphEditorSelectObject,
++    setObjectValues: graphEditorObjectValues,
++    deleteObject: graphEditorDelete,
++    updateLayout: graphEditorUpdateLayout,
++    applyPalette: graphEditorApplyPalette,
+     defaultColors: () => appFSM.query("project-api", { operation: "graphs.defaultColors" }),
+     hasSelectedSlot: () => appFSM.query("project-api", {
+       operation: "graphs.hasSelectedSlot", selectedSlotId: interfaceFSM.readState().selectedSlotId,
+     }),
+-    importFile: (...args) => appFSM.run("importing", "graphs.importFile", () =>
+-      importSelectedGraphFile(...args)),
++    importFile: (slotId, file) => appFSM.run("importing", "graphs.importFile", () =>
++      importSelectedGraphFile(file, slotId)),
+     exportFfsx: downloadSlotFfsx,
+     exportPlotlyJson: downloadPlotlyJson,
+   }),
+   print: Object.freeze({
+     readSettings: readPrintApiSettings,
+     setSettings: setPrintApiSettings,
+-    save: savePrintApi,
+-    capture: capturePrintApi,
++    save: (statusSink) => savePrintApi({ onStatus: statusSink }),
++    capture: (statusSink) => capturePrintApi({ onStatus: statusSink }),
+   }),
+   captions: Object.freeze({
+     readGlobal: readGlobalCaptionState,
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index 46d8d63aa5971b909410de297741f6b5498becbf..09863130a1daf1a5c441263cae95819d76991d43 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -503,7 +503,7 @@
+     const settings = image?.settings;
+     const updateSettings = (patch) => {
+ if (!settings) return;
+-imageApi.setSettings(patch);
++imageApi.setSettings(image.slotId, patch);
+     };
+ 
+     return React.createElement(
+@@ -1364,7 +1364,7 @@
+     const columns = editor.columns;
+     const objectColumns = editor.objectColumns || [];
+     const columnOptions = objectColumns.map((column) => ({ value: column.id, label: column.label }));
+-    const update = (values) => selectedIndex !== null && graphApi.setObjectValues(selectedIndex, values);
++    const update = (values) => selectedIndex !== null && graphApi.setObjectValues(chartId, selectedIndex, values);
+     const selectField = (label, key, data) => React.createElement(Select, {
+ label, data, value: selected?.[key] ?? null, disabled: busy,
+ onChange: (value) => value !== null && update({ [key]: value }),
+@@ -1443,11 +1443,11 @@
+ React.createElement(Group, { gap: "xs", grow: true },
+   React.createElement(Button, {
+     variant: editable ? "filled" : "light", disabled: busy || chartId === null,
+-    onClick: () => graphApi.setEditable(!editable),
++    onClick: () => graphApi.setEditable(state.selectedSlotId, chartId, !editable),
+   }, editable ? "편집 가능" : "원본 JSON"),
+   React.createElement(Button, {
+     variant: "light", disabled: busy || !activeCsv || !editable,
+-    onClick: () => activeCsv && graphApi.addObject(activeCsv.id),
++    onClick: () => activeCsv && graphApi.addObject(state.selectedSlotId, activeCsv.id),
+   }, "오브젝트 추가"),
+ ),
+ React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
+@@ -1466,7 +1466,7 @@
+     onDrop: (event) => {
+       if (!editable || busy) return;
+       event.preventDefault();
+-      if (Number.isInteger(dragRef.current)) graphApi.moveObject(dragRef.current, index);
++      if (Number.isInteger(dragRef.current)) graphApi.moveObject(chartId, dragRef.current, index);
+       dragRef.current = null;
+     },
+   },
+@@ -1478,12 +1478,12 @@
+     React.createElement(ColorInput, {
+       size: "xs", value: object.color, style: { width: 72 },
+       disabled: busy || !editable,
+-      onChange: (color) => graphApi.setObjectValues(index, { color }),
++      onChange: (color) => graphApi.setObjectValues(chartId, index, { color }),
+     }),
+     React.createElement(ActionIcon, {
+       size: "sm", variant: "subtle", disabled: busy || !editable,
+       "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
+-      onClick: () => graphApi.deleteObject(index),
++      onClick: () => graphApi.deleteObject(chartId, index),
+     }, "×"),
+   )),
+ ) : React.createElement(Text, { size: "xs", c: "dimmed" }, "추가된 그래프 오브젝트가 없습니다."),
+@@ -1544,9 +1544,9 @@
+ yLeft: "왼쪽 Y축",
+ yRight: "오른쪽 Y축",
+     };
+-    const updateGlobal = (values) => graphApi.updateLayout({ globalSettings: values });
+-    const updateTitle = (title) => graphApi.updateLayout({ title });
+-    const updateAxis = (key, values) => graphApi.updateLayout({ axisKey: key, axisValues: values });
++    const updateGlobal = (values) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { globalSettings: values });
++    const updateTitle = (title) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { title });
++    const updateAxis = (key, values) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { axisKey: key, axisValues: values });
+     const toggleGlobal = (key, label) =>
+ React.createElement(
+   Button,
+@@ -1743,7 +1743,7 @@
+     const graphApi = window.FastFigureApi.graphs;
+     const editor = graphApi.readData(), colors = graphApi.readPalette();
+     const canEdit = !!editor.chart && editor.chart.editor.editable !== false;
+-    const commitColors = (colors) => graphApi.applyPalette(colors);
++    const commitColors = (colors) => graphApi.applyPalette(editor.chart?.id ?? null, colors);
+     const resetPalette = () => {
+ if (!editor.chart) return status("그래프 슬롯을 먼저 선택하세요.");
+ commitColors(graphApi.defaultColors());
+@@ -1847,7 +1847,7 @@
+     const importSlotFileFromMantine = async (file) => {
+ if (!file) return;
+ try {
+-  await graphApi.importFile(file);
++  await graphApi.importFile(state.selectedSlotId, file);
+ } catch (error) {
+   status("슬롯 불러오기 오류: " + String(error?.message ?? error));
+   debugLog("slot:import-error", { message: String(error?.message ?? error) });
+@@ -2621,10 +2621,10 @@
+ return next;
+     };
+     const save = () =>
+-printApi.save({ onStatus: setMessage })
+-  .catch((error) => reportTaskError("PRINT_EXPORT", error));
+-    const capture = () =>
+-printApi.capture({ onStatus: setMessage })
++printApi.save(setMessage)
++  .catch((error) => reportTaskError("PRINT_EXPORT", error));
++    const capture = () =>
++printApi.capture(setMessage)
+   .catch((error) => reportTaskError("CAPTURE_EXPORT", error));
+ 
+     return React.createElement(
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 22b123572837d83dd25b9784cc239188881b7d2f..0c4d05c09579429715e7f599fa7745940b8af33c 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -251,7 +251,7 @@
+       select(slots[1]);
+       api.slots.setContentType(api.slots.readSelected()?.id, "image");
+       api.images.insertEmpty();
+-      api.images.setSettings({ fit: "manual", scale: 135, x: 42, y: 61 });
++      api.images.setSettings(interfaceFSM.readState().selectedSlotId, { fit: "manual", scale: 135, x: 42, y: 61 });
+       api.layout.mergeSlots([slots[2].id, slots[3].id]);
+       api.labels.setEnabled(true);
+       api.captions.setEnabled(true);
+@@ -279,12 +279,12 @@
+     await run(4, "FFSX blank graph", async () => {
+       const slot = activeProject.slots[5];
+       select(slot);
+-      await api.graphs.importFile(new File(
++      await api.graphs.importFile(interfaceFSM.readState().selectedSlotId, new File(
+         [JSON.stringify({ data: [], layout: { title: "Blank graph" } })],
+         "blank.json",
+       ));
+       const originalCsvAssets = JSON.stringify(activeProject.csvFiles), originalNextCsv = activeProject._state.nextId.csv;
+-      api.graphs.setEditable(true);
++      api.graphs.setEditable(interfaceFSM.readState().selectedSlotId, api.graphs.readData().chart?.id ?? null, true);
+       let currentSlot = slotAt(slot.id);
+       const chart = getChart(currentSlot.chart);
+       check(chart && chart.editor.objects.length === 0 && !Object.hasOwn(chart.editor, "conversionRows"),
+@@ -294,15 +294,15 @@
+       const file = ffsxFile(currentSlot);
+       const payload = await ffsxReadSlot(file);
+       check(payload.chart && payload.csvFiles.length === 0, "blank FFSX contains synthetic CSV");
+-      await api.graphs.importFile(file);
++      await api.graphs.importFile(interfaceFSM.readState().selectedSlotId, file);
+       currentSlot = slotAt(slot.id);
+       check(!!currentSlot.chart && getChart(currentSlot.chart).editor.objects.length === 0, "blank FFSX import failed");
+     });
+     await run(19, "graph font selector preserves auto and custom values", async () => {
+-      api.graphs.setEditable(true);
+-      const slotId = api.slots.readSelected()?.id;
+-      const original = api.graphs.readLayout().settings.graphFontFamily;
+-      api.graphs.updateLayout({ globalSettings: { graphFontFamily: "" } });
++      api.graphs.setEditable(interfaceFSM.readState().selectedSlotId, api.graphs.readData().chart?.id ?? null, true);
++      const slotId = api.slots.readSelected()?.id;
++      const original = api.graphs.readLayout().settings.graphFontFamily;
++      api.graphs.updateLayout(interfaceFSM.readState().selectedSlotId, api.graphs.readLayout()?.chartId ?? null, { globalSettings: { graphFontFamily: "" } });
+       await new Promise((resolve) => setTimeout(resolve, 0));
+       const selectInput = () => {
+         const root = document.querySelector("[data-fastfigure-font-select='graph']");
+@@ -311,7 +311,7 @@
+       let input = selectInput();
+       check(!!input && input.classList.contains("mantine-Select-input"), "graph font is not a Select");
+       check(input.value === "자동", "graph automatic font option missing");
+-      api.graphs.updateLayout({ globalSettings: { graphFontFamily: "Legacy Graph Font, sans-serif" } });
++      api.graphs.updateLayout(interfaceFSM.readState().selectedSlotId, api.graphs.readLayout()?.chartId ?? null, { globalSettings: { graphFontFamily: "Legacy Graph Font, sans-serif" } });
+       check(
+         api.graphs.readLayout().settings.graphFontFamily === "Legacy Graph Font, sans-serif",
+         "graph custom font was not stored",
+@@ -322,18 +322,18 @@
+       await new Promise((resolve) => setTimeout(resolve, 0));
+       input = selectInput();
+       check(input?.value === "기존: Legacy Graph Font, sans-serif", "graph custom font not preserved");
+-      api.graphs.updateLayout({ globalSettings: { graphFontFamily: original } });
++      api.graphs.updateLayout(interfaceFSM.readState().selectedSlotId, api.graphs.readLayout()?.chartId ?? null, { globalSettings: { graphFontFamily: original } });
+       await new Promise((resolve) => setTimeout(resolve, 0));
+     });
+     await run(5, "multi-CSV FFSX", async () => {
+       const slotId = activeProject.slots[0].id;
+       select(slotAt(slotId));
+       const extra = createProjectCsv([["X", "Y"], ["9", "8"]], "second.csv");
+-      api.graphs.addObject(extra.id);
++      api.graphs.addObject(interfaceFSM.readState().selectedSlotId, extra.id);
+       const currentBeforeExport = slotAt(slotId);
+       const file = ffsxFile(currentBeforeExport);
+       check((await ffsxReadSlot(file)).csvFiles.length >= 2, "second CSV missing");
+-      await api.graphs.importFile(file);
++      await api.graphs.importFile(interfaceFSM.readState().selectedSlotId, file);
+       const current = slotAt(slotId);
+       check(current && chartCsvIds(getChart(current.chart)).length >= 2, "multi-CSV references lost");
+     });
+@@ -344,13 +344,13 @@
+         data: [{ x: [1, 2], y: [3, 4], type: "scatter" }],
+         layout: { title: "Plotly import" },
+       };
+-      await api.graphs.importFile(new File([JSON.stringify(figure)], "plotly.json"));
++      await api.graphs.importFile(interfaceFSM.readState().selectedSlotId, new File([JSON.stringify(figure)], "plotly.json"));
+       let current = slotAt(slotId),
+         imported = getChart(current.chart);
+       check(imported.editor.editable === false, "Plotly import did not remain non-editable");
+       check(Array.isArray(imported.editor.conversionRows) && imported.editor.conversionRows.length > 0,
+         "Plotly conversion rows were not preserved");
+-      api.graphs.setEditable(true);
++      api.graphs.setEditable(interfaceFSM.readState().selectedSlotId, api.graphs.readData().chart?.id ?? null, true);
+       current = slotAt(slotId);
+       const editable = getChart(current.chart);
+       check(editable.editor.editable !== false, "Plotly edit mode unavailable");
+@@ -366,7 +366,7 @@
+       select(source);
+       const figure = chartFigure(getChart(oldChartId));
+       check(Array.isArray(figure.data), "Plotly export invalid");
+-      await api.graphs.importFile(new File([JSON.stringify(figure)], "export.json"));
++      await api.graphs.importFile(interfaceFSM.readState().selectedSlotId, new File([JSON.stringify(figure)], "export.json"));
+       const current = slotAt(slotId),
+         imported = current?.chart ? getChart(current.chart) : null;
+       check(imported && current.chart !== oldChartId, "Plotly import did not replace the chart");
+@@ -416,7 +416,7 @@
+     await run(11, "asset delete cascade", async () => {
+       const slot = activeProject.slots[5]; select(slot);
+       const item = createProjectCsv([["X", "Y"], ["1", "2"]], "delete.csv");
+-      api.graphs.addObject(item.id);
++      api.graphs.addObject(interfaceFSM.readState().selectedSlotId, item.id);
+       check(chartCsvIds(getChart(slot.chart)).includes(item.id), "CSV reference absent");
+       api.assets.delete({ kind: "csv", id: item.id, path: projectAssetPath(item) });
+       check(!activeProject.csvFiles.some((c) => c.id === item.id), "CSV not deleted");
+@@ -427,7 +427,7 @@
+         csvId = created.id,
+         slotId = activeProject.slots[5].id;
+       select(slotAt(slotId));
+-      api.graphs.addObject(csvId);
++      api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csvId);
+       let currentSlot = slotAt(slotId),
+         currentCsv = getProjectCsv(csvId);
+       check(chartCsvIds(getChart(currentSlot.chart)).includes(csvId), "CSV reference absent before trash move");
+@@ -548,7 +548,7 @@
+           [["DX", "DY"], ["1", "2"]],
+           "drag-target.csv",
+         );
+-        api.graphs.addObject(helperCsv.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, helperCsv.id);
+         source = slotAt(source.id);
+         target = slotAt(target.id);
+       }
+@@ -656,12 +656,12 @@
+         "projection-object.csv",
+       );
+       api.assets.selectCsv(projectAssetPath(currentCsv));
+-      api.graphs.addObject(currentCsv.id);
++      api.graphs.addObject(interfaceFSM.readState().selectedSlotId, currentCsv.id);
+       let editor = api.graphs.readData();
+       check(editor.selectedIndex !== null, "new graph object was not selected");
+       const index = editor.selectedIndex;
+ 
+-      api.graphs.setObjectValues(index, { csvId: objectCsv.id });
++      api.graphs.setObjectValues(api.graphs.readData().chart?.id ?? null, index, { csvId: objectCsv.id });
+       editor = api.graphs.readData();
+       check(editor.currentCsv?.id === currentCsv.id, "current CSV selection was replaced by object csvId");
+       check(
+@@ -682,9 +682,7 @@
+         data: [{ x: [1, 2], y: [4, 8], type: "scatter", name: "guard" }],
+         layout: { title: "non-editable guard" },
+       };
+-      await api.graphs.importFile(
+-        new File([JSON.stringify(figure)], "non-editable-guard.json"),
+-      );
++      await api.graphs.importFile(, new File([JSON.stringify(figure)], "non-editable-guard.json"));
+       await tick();
+ 
+       const currentSlot = slotAt(slot.id);
+@@ -697,7 +695,7 @@
+       const before = JSON.stringify(chart.editor.objects);
+ 
+       let addRejected = false;
+-      try { api.graphs.addObject(guardCsv.id); } catch { addRejected = true; }
++      try { api.graphs.addObject(interfaceFSM.readState().selectedSlotId, guardCsv.id); } catch { addRejected = true; }
+       check(addRejected, "non-editable add did not reject through the command");
+       check(
+         JSON.stringify(getChart(slotAt(slot.id).chart).editor.objects) === before,
+@@ -705,13 +703,13 @@
+       );
+       if (chart.editor.objects.length) {
+         let rejected = false;
+-        try { api.graphs.setObjectValues(0, { legendName: "should-not-change" }); } catch { rejected = true; }
+-        check(rejected, "non-editable edit did not reject through the command");
+-        rejected = false;
+-        try { api.graphs.deleteObject(0); } catch { rejected = true; }
+-        check(rejected, "non-editable delete did not reject through the command");
+-        rejected = false;
+-        try { api.graphs.moveObject(0, 0); } catch { rejected = true; }
++        try { api.graphs.setObjectValues(api.graphs.readData().chart?.id ?? null, 0, { legendName: "should-not-change" }); } catch { rejected = true; }
++        check(rejected, "non-editable edit did not reject through the command");
++        rejected = false;
++        try { api.graphs.deleteObject(api.graphs.readData().chart?.id ?? null, 0); } catch { rejected = true; }
++        check(rejected, "non-editable delete did not reject through the command");
++        rejected = false;
++        try { api.graphs.moveObject(api.graphs.readData().chart?.id ?? null, 0, 0); } catch { rejected = true; }
+         check(rejected, "non-editable equal move bypassed command preconditions");
+         check(
+           JSON.stringify(getChart(slotAt(slot.id).chart).editor.objects) === before,
+@@ -948,7 +946,7 @@
+       api.slots.reset(referenceSlot.id);
+       select(slotAt(referenceSlot.id));
+       api.slots.setContentType(api.slots.readSelected()?.id, "graph");
+-      api.graphs.addObject(csvAsset.id);
++      api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csvAsset.id);
+       check(
+         chartCsvIds(getChart(slotAt(referenceSlot.id).chart)).includes(csvAsset.id),
+         "trash recovery test reference was not created",
+@@ -1248,7 +1246,7 @@
+       select(slotAt(target.id));
+       api.slots.setContentType(api.slots.readSelected()?.id, "graph");
+       const resource = createProjectCsv([["X", "Y"], ["1", "2"]], "boundary-selection.csv");
+-      api.graphs.addObject(resource.id);
++      api.graphs.addObject(interfaceFSM.readState().selectedSlotId, resource.id);
+       const authority = JSON.stringify(activeProject._state);
+       const chart = getChart(slotAt(target.id).chart);
+       const editor = chart.editor, objects = editor.objects;
+@@ -1411,7 +1409,7 @@
+       }
+       const othersBefore = JSON.stringify(activeProject.slots.filter((slot) => slot.id !== target.id));
+       const stale = api.images.readEditor();
+-      const result = api.images.setSettings({ fit: "manual", scale: 175, x: 25, y: 75 });
++      const result = api.images.setSettings(interfaceFSM.readState().selectedSlotId, { fit: "manual", scale: 175, x: 25, y: 75 });
+       check(result.slotId === target.id && Object.isFrozen(result.settings), "image query projection missing");
+       check(result.settings.scale === 175 && stale.settings.scale === 100, "image read snapshot became authority");
+       check(JSON.stringify(activeProject.slots.filter((slot) => slot.id !== target.id)) === othersBefore,
+@@ -1419,7 +1417,7 @@
+       const image = slotElement(target.id)?.querySelector(".slot-image");
+       check(image?.classList.contains("manual") && image.style.width === "175%" &&
+         image.style.left === "25%" && image.style.top === "75%", "targeted image projection missing");
+-      const patched = api.images.setSettings({ scale: 190 });
++      const patched = api.images.setSettings(interfaceFSM.readState().selectedSlotId, { scale: 190 });
+       check(patched.settings.scale === 190 && patched.settings.x === 25 && patched.settings.y === 75,
+         "partial image edit did not preserve untouched current Backend settings");
+       const projection = appFSM.query("renderer", { operation: "slot-image", slotId: target.id });
+@@ -1429,10 +1427,10 @@
+         "image renderer changed Backend or Frontend authority");
+       check(!/slotAt|slotImage|normalizeImageSettings|activeProject|appFSM/.test(syncSlotImageElement.toString()),
+         "narrow image renderer retains direct query or command path");
+-      api.images.setSettings({ fit: "contain" });
+-      check(!image.classList.contains("manual") && image.style.objectFit === "contain" && image.style.width === "",
+-        "contain projection retained manual styling");
+-      api.images.setSettings({ fit: "manual", scale: 5000, x: -500, y: 500 });
++      api.images.setSettings(interfaceFSM.readState().selectedSlotId, { fit: "contain" });
++      check(!image.classList.contains("manual") && image.style.objectFit === "contain" && image.style.width === "",
++        "contain projection retained manual styling");
++      api.images.setSettings(interfaceFSM.readState().selectedSlotId, { fit: "manual", scale: 5000, x: -500, y: 500 });
+       const normalized = slotAt(target.id).content.imageSettings;
+       check(normalized.scale === 1000 && normalized.x === -100 && normalized.y === 200,
+         "Backend did not normalize image settings");
+@@ -1443,7 +1441,7 @@
+       check(failed && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === frontendBeforeFailure,
+         "failed image command changed authority or reconciled success");
+       api.slots.select(target.id);
+-      check(api.images.readEditor() === null && api.images.setSettings({ fit: "cover" }) === false,
++      check(api.images.readEditor() === null && api.images.setSettings(interfaceFSM.readState().selectedSlotId, { fit: "cover" }) === false,
+         "missing selection must not update an image");
+     });
+ 
+@@ -2044,24 +2042,24 @@
+         api.slots.setContentType(api.slots.readSelected()?.id, "image");
+         api.images.insertEmpty();
+         const id = target.id, other = activeProject.slots.find(slot => !slot.hidden && slot.id !== id);
+-        const first = api.images.setSettings({ fit: "manual", scale: 0, x: 0, y: 0 });
+-        check(first.settings.scale === 1 && first.settings.x === 0 && first.settings.y === 0 &&
+-          Object.isFrozen(first.settings), "valid zero was replaced by a truthiness fallback");
+-        let next = api.images.setSettings({ fit: "invalid", scale: "invalid", x: Infinity, y: null });
+-        check(next.settings.fit === "manual" && next.settings.scale === 1 && next.settings.x === 0 && next.settings.y === 0,
+-          "invalid supplied image fields replaced current settings");
+-        next = api.images.setSettings({ fit: "contain", scale: 500, x: 180, y: -50, unknown: true });
++        const first = api.images.setSettings(interfaceFSM.readState().selectedSlotId, { fit: "manual", scale: 0, x: 0, y: 0 });
++        check(first.settings.scale === 1 && first.settings.x === 0 && first.settings.y === 0 &&
++          Object.isFrozen(first.settings), "valid zero was replaced by a truthiness fallback");
++        let next = api.images.setSettings(interfaceFSM.readState().selectedSlotId, { fit: "invalid", scale: "invalid", x: Infinity, y: null });
++        check(next.settings.fit === "manual" && next.settings.scale === 1 && next.settings.x === 0 && next.settings.y === 0,
++          "invalid supplied image fields replaced current settings");
++        next = api.images.setSettings(interfaceFSM.readState().selectedSlotId, { fit: "contain", scale: 500, x: 180, y: -50, unknown: true });
+         check(next.settings.scale === 1 && next.settings.x === 0 && next.settings.y === 0 &&
+           !Object.prototype.hasOwnProperty.call(slotAt(id).content.imageSettings, "unknown"),
+           "non-manual or undeclared numeric edits changed the candidate");
+-        api.images.setSettings({ fit: "manual" });
++        api.images.setSettings(interfaceFSM.readState().selectedSlotId, { fit: "manual" });
+         const send = projectEFSM.send;
+         try {
+           projectEFSM.send = function(event, payload) {
+             if (event === "SLOT_IMAGE_SETTINGS_CHANGED") slotAt(id).content.imageSettings.x = 88;
+             return send.call(this, event, payload);
+           };
+-          next = api.images.setSettings({ scale: 125 });
++          next = api.images.setSettings(interfaceFSM.readState().selectedSlotId, { scale: 125 });
+           check(next.settings.x === 88 && next.settings.scale === 125 && first.settings.x === 0,
+             "image edit used a stale read projection rather than command-time current settings");
+         } finally { projectEFSM.send = send; }
+@@ -2243,7 +2241,7 @@
+       const target = activeProject.slots.find(slot => !slot.hidden);
+       api.slots.reset(target.id); select(slotAt(target.id)); api.slots.setContentType(api.slots.readSelected()?.id, "graph");
+       const csv = createProjectCsv([["X", "Y"], ["11", "22"]], "figure-context.csv");
+-      api.graphs.addObject(csv.id);
++      api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+       const source = projectClone(activeProject._state), chart = source.charts.find(item => item.id === slotAt(target.id).chart);
+       source.assets.csvFiles.find(item => item.id === csv.id).rows[1] = ["101", "202"];
+       source.appearance.uiPalette.paperColor = "#123456";
+@@ -2748,7 +2746,7 @@
+         api.slots.reset(slot.id); select(slotAt(slot.id));
+         const first = createProjectCsv([["X", "Y", "Z"], [1, 2, 3]], "graph-read-object.csv"),
+           second = createProjectCsv([["Only"], [7]], "graph-read-current.csv");
+-        api.graphs.addObject(first.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, first.id);
+         const chartId = slotAt(slot.id).chart, request = { operation: "graphs.readData", chartId,
+           frontendState: { assetSelection: "csv", assetPath: projectAssetPath(second), graphObjectIndex: 0 } },
+           before = JSON.stringify(activeProject._state), read = appFSM.query("project-api", request),
+@@ -2803,7 +2801,7 @@
+         api.slots.reset(slot.id); select(slotAt(slot.id));
+         const first = createProjectCsv([["X", "Y", "Z"], [1, 2, 3]], "object-edit-first.csv"),
+           second = createProjectCsv([["Only"], [7]], "object-edit-second.csv");
+-        api.graphs.addObject(first.id); api.graphs.addObject(first.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, first.id); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, first.id);
+         const chartId = slotAt(slot.id).chart, assetPath = interfaceFSM.state.assetPath;
+         getChart(chartId).editor.objects[1].plotlyTrace = { meta: { retained: "extension" } };
+         const other = JSON.stringify(getChart(chartId).editor.objects[1]);
+@@ -2820,7 +2818,7 @@
+             "Application supplies candidate/objects or wrong scalar command");
+           return result = send.call(this, event, payload);
+         };
+-        const edited = api.graphs.setObjectValues(0, { color: "rgb(1, 2, 3)", legendName: "", lineDash: "invalid", markerSymbol: "invalid",
++        const edited = api.graphs.setObjectValues(api.graphs.readData().chart?.id ?? null, 0, { color: "rgb(1, 2, 3)", legendName: "", lineDash: "invalid", markerSymbol: "invalid",
+           lineWidth: 999, markerSize: 0, barOpacity: Infinity, barLineWidth: 0, csvId: -1, x: "bad" });
+         const object = getChart(chartId).editor.objects[0];
+         check(edited !== getChart(chartId) && Object.isFrozen(edited.editor.objects[0]) && commits === 1 &&
+@@ -3027,7 +3025,7 @@
+         api.slots.reset(slot.id); select(slotAt(slot.id));
+         const populated = createProjectCsv([["X", "Y"], [1, 2]], "column-switch-populated.csv"),
+           empty = createProjectCsv([["temporary"]], "column-switch-empty.csv");
+-        api.graphs.addObject(populated.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, populated.id);
+         const chartId = slotAt(slot.id).chart, fixture = projectClone(activeProject._state);
+         fixture.assets.csvFiles.find((item) => item.id === empty.id).rows = [];
+         activeProject.initialize(fixture);
+@@ -3063,7 +3061,7 @@
+         const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+         api.slots.reset(slot.id); select(slotAt(slot.id));
+         const csv = createProjectCsv([["X", "Y"], [1, 2]], "graph-order.csv");
+-        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         const chartId = slotAt(slot.id).chart, fixture = projectClone(activeProject._state),
+           chart = fixture.charts.find(item => item.id === chartId);
+         chart.editor.objects.forEach((object, index) => { object.legendName = `item${index}`;
+@@ -3089,7 +3087,7 @@
+             "Application supplied graph candidate or incorrect operation");
+           return result = send.call(this, event, payload);
+         };
+-        const moved = api.graphs.moveObject(0, 2);
++        const moved = api.graphs.moveObject(api.graphs.readData().chart?.id ?? null, 0, 2);
+         check(JSON.stringify(getChart(chartId).editor.objects) === JSON.stringify([objects[1], objects[2], objects[0]]) &&
+           moved !== getChart(chartId) && Object.isFrozen(moved.editor.objects[0]) && commits === 1 && renders === 1 &&
+           reconciliations === 1 && result.selectionHints.chartId === chartId && result.selectionHints.selectedIndexHint === 2 &&
+@@ -3108,7 +3106,7 @@
+         check(!directNoop.committed && directNoop.selectionHints === null && commits === count &&
+           reconciliations === reconciled && interfaceFSM.state === stable && noopState.selectedSlotId === slot.id &&
+           noopProjection === null, "Backend equal move committed, published hint or returned success projection");
+-        api.graphs.deleteObject(1);
++        api.graphs.deleteObject(api.graphs.readData().chart?.id ?? null, 1);
+         check(JSON.stringify(getChart(chartId).editor.objects) === JSON.stringify([objects[0], objects[2]]) &&
+           result.selectionHints.selectedIndexHint === null && interfaceFSM.state.graphObjectIndex === null,
+           "delete lost retained order or invented neighboring selection");
+@@ -3136,7 +3134,7 @@
+         const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+         api.slots.reset(slot.id); select(slotAt(slot.id));
+         const csv = createProjectCsv([["X", "Y"], [1, 2]], "graph-order-fail.csv");
+-        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         const chartId = slotAt(slot.id).chart, fixture = projectClone(activeProject._state);
+         fixture.charts.find(item => item.id === chartId).editor.objects.forEach((object, index) => object.legendName = `${index}`);
+         initialize.call(activeProject, fixture);
+@@ -3204,7 +3202,7 @@
+         const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+         api.slots.reset(slot.id); select(slotAt(slot.id));
+         const csv = createProjectCsv([["X", "Y"], [1, 2]], "graph-palette.csv");
+-        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         const chartId = slotAt(slot.id).chart, fixture = projectClone(activeProject._state);
+         fixture.charts.find(item => item.id === chartId).editor.objects.forEach((object, index) => {
+           object.legendName = `palette${index}`; object.plotlyTrace = { meta: { retained: index } };
+@@ -3226,7 +3224,7 @@
+             "Application palette constructed graph candidate or supplied wrong context");
+           return outcome = send.call(this, event, payload);
+         };
+-        const copied = api.graphs.applyPalette(colors), expected = objects.map((object, index) => ({ ...object,
++        const copied = api.graphs.applyPalette(api.graphs.readData().chart?.id ?? null, colors), expected = objects.map((object, index) => ({ ...object,
+           color: index % 2 ? "rgb(1, 2, 3)" : "red" }));
+         check(JSON.stringify(getChart(chartId).editor.objects) === JSON.stringify(expected) && copied !== getChart(chartId) &&
+           Object.isFrozen(copied.editor.objects[0]) && reads === 2 && commits === 1 && paints === 1 && reconciliations === 1 &&
+@@ -3261,7 +3259,7 @@
+         const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+         api.slots.reset(slot.id); select(slotAt(slot.id));
+         const csv = createProjectCsv([["X", "Y"], [1, 2]], "graph-palette-fail.csv");
+-        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         const chartId = slotAt(slot.id).chart;
+         api.graphs.selectObject(1);
+         const before = JSON.stringify(activeProject._state), stable = interfaceFSM.state, failure = Error("expected graph-palette failure");
+@@ -3337,7 +3335,7 @@
+             !Object.hasOwn(payload, "objects") && !Object.hasOwn(payload, "candidate") && !Object.hasOwn(payload, "chart"), "add sent projected model/array");
+           result = send.call(this, event, payload); return result;
+         };
+-        const first = api.graphs.addObject(csv.id), live = getChart(slotAt(slot.id).chart),
++        const first = api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id), live = getChart(slotAt(slot.id).chart),
+           base = first.editor.objects[0], defaults = BackendSettings.defaults.chartSettings.editor.objectStyle;
+         check(commits === 1 && paints === 1 && reads === 1 && first.id === next && first.editor.title === csv.name &&
+           activeProject._state.nextId.chart === next + 1 && base.csvId === csv.id && base.x === "C1" && base.y === "C2" &&
+@@ -3347,7 +3345,7 @@
+           interfaceFSM.state.graphObjectIndex === 0 && interfaceFSM.state.assetPath === path, "first add not a single copied candidate commit or selected CSV changed");
+         live.editor.objects[0].plotlyTrace = { customdata: ["preserved"] };
+         live.editor.type = "bar"; live.editor.legendName = "not a base default";
+-        const retained = JSON.stringify(live.editor.objects[0]), second = api.graphs.addObject(csv.id);
++        const retained = JSON.stringify(live.editor.objects[0]), second = api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         check(commits === 2 && paints === 2 && reads === 2 && second.editor.objects.length === 2 &&
+           JSON.stringify(second.editor.objects[0]) === retained && second.editor.objects[1].type === defaults.type &&
+           second.editor.objects[1].legendName === "" && first.editor.objects.length === 1 &&
+@@ -3355,7 +3353,7 @@
+           interfaceFSM.state.assetPath === path && JSON.stringify(activeProject._state.assets) === assets,
+           "append lost extension/order/defaults, reused old copy or changed selected CSV/assets");
+         projectEFSM.send = send;
+-        const bySelection = api.graphs.addObject();
++        const bySelection = api.graphs.addObject(interfaceFSM.readState().selectedSlotId, api.graphs.readData().currentCsv?.id);
+         check(bySelection.editor.objects[2].csvId === other.id && interfaceFSM.state.assetPath === path,
+           "omitted CSV did not bind current official selected CSV");
+       } finally {
+@@ -3433,7 +3431,7 @@
+       try {
+         const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+         select(slot);
+-        await api.graphs.importFile(new File([JSON.stringify({ data: [{ x: [1, 2], y: [3, 4], customdata: ["kept"] }],
++        await api.graphs.importFile(interfaceFSM.readState().selectedSlotId, new File([JSON.stringify({ data: [{ x: [1, 2], y: [3, 4], customdata: ["kept"] }],
+           layout: { title: "candidate conversion", xaxis: { title: "retained axis" } }, config: { responsive: true } })], "editable.json"));
+         const chartId = slotAt(slot.id).chart, imported = getChart(chartId),
+           original = JSON.stringify(imported.graph.imported), global = JSON.stringify(imported.editor.globalSettings),
+@@ -3450,7 +3448,7 @@
+             "Application sent editable candidate/model instead of scalar command");
+           result = send.call(this, event, payload); return result;
+         };
+-        check(api.graphs.setEditable(true) === true && commits === 1 && paints === 1 && reads === 2, "editable did not commit/read once");
++        check(api.graphs.setEditable(interfaceFSM.readState().selectedSlotId, api.graphs.readData().chart?.id ?? null, true) === true && commits === 1 && paints === 1 && reads === 2, "editable did not commit/read once");
+         const chart = getChart(chartId), csv = getProjectCsv(next), fact = result.changed.assets[0];
+         check(csv && csv.mime === "text/csv" && csv.headerLines === 1 && csv.bytesBase64 &&
+           projectAssetPath(csv) !== projectAssetPath(collision) && activeProject._state.nextId.csv === next + 1 &&
+@@ -3484,7 +3482,7 @@
+       try {
+         const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+         select(slot);
+-        await api.graphs.importFile(new File([JSON.stringify({ data: [{ x: [1], y: [2] }] })], "editable-failure.json"));
++        await api.graphs.importFile(interfaceFSM.readState().selectedSlotId, new File([JSON.stringify({ data: [{ x: [1], y: [2] }] })], "editable-failure.json"));
+         const chartId = slotAt(slot.id).chart, before = JSON.stringify(activeProject._state), stable = interfaceFSM.state,
+           failure = Error("expected editable candidate failure");
+         activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+@@ -4064,7 +4062,7 @@
+         const [target, other] = activeProject.slots.filter(slot => !slot.hidden);
+         const csv = createProjectCsv([["X", "Y"], [1, 2]], "reset-contract.csv");
+         // Build this test's owned chart independently of earlier cases.
+-        api.slots.reset(target.id); select(slotAt(target.id)); api.graphs.addObject(csv.id);
++        api.slots.reset(target.id); select(slotAt(target.id)); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         const chartId = slotAt(target.id).chart;
+         const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'), "reset.svg", "image/svg+xml");
+         const prepared = projectClone(activeProject._state); normalizeSlotContents(prepared.slots);
+@@ -4160,7 +4158,7 @@
+         const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+         api.slots.reset(a.id); api.slots.reset(b.id);
+         const csv = createProjectCsv([["X", "Y"], [1, 2]], "swap-csv.csv");
+-        select(slotAt(a.id)); api.graphs.addObject(csv.id);
++        select(slotAt(a.id)); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         const chartId = slotAt(a.id).chart, fixture = projectClone(activeProject._state); normalizeSlotContents(fixture.slots);
+         fixture.slots.find(slot => slot.id === a.id).caption = "A";
+         const second = fixture.slots.find(slot => slot.id === b.id);
+@@ -4458,7 +4456,7 @@
+         source.charts = source.charts.filter(item => item.id !== old); target.content.chart = null; target.content.contentType = "graph";
+         initialize.call(activeProject, source); select(slotAt(target.id));
+         const csv = createProjectCsv([["x", "y"], [2, 4], [4, 8]], "layout-owned.csv");
+-        const chart = api.graphs.addObject(csv.id), slotId = target.id;
++        const chart = api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id), slotId = target.id;
+         const seeded = projectClone(activeProject._state), c = seeded.charts.find(item => item.id === chart.id);
+         c.editor.globalSettings.axes.xBottom.lineWidth = -9;
+         c.editor.globalSettings.axes.yRight.title = "retained axis";
+@@ -4484,7 +4482,7 @@
+           axisKey: "xBottom", axisValues: { min: "1.5", max: null, tick: "bad", title: "reciprocal",
+             titleSize: 0, fontSize: "16", lineWidth: 0, scaleType: "reciprocal", tickMode: "increment",
+             divide: -2, notation: "power", visible: false, showGrid: false, minorTicks: true } };
+-        const returned = api.graphs.updateLayout(edits), axis = returned.settings.axes.xBottom;
++        const returned = api.graphs.updateLayout(interfaceFSM.readState().selectedSlotId, api.graphs.readLayout()?.chartId ?? null, edits), axis = returned.settings.axes.xBottom;
+         check(commits === 1 && paints === 1 && result.committed && result.changed.chartIds.includes(chart.id) &&
+           !result.changed.slotIds.length && Object.isFrozen(returned) && returned.title === "owned title" &&
+           returned.settings.titleFontSize === 19 && returned.settings.legendFontSize === "" && !("ignored" in returned.settings) &&
+@@ -4499,7 +4497,7 @@
+         check(committed.graph.layout.customLayoutFlag === "retained layout extension" &&
+           committed.graph.layout.uirevision === String(chart.id) && committed.graph.layout.xaxis.linewidth === 0,
+           "layout edit lost extension or failed owned uirevision/zero linewidth");
+-        const next = api.graphs.updateLayout({ axisKey: "xBottom", axisValues: { scaleType: "log", tickMode: "increment",
++        const next = api.graphs.updateLayout(interfaceFSM.readState().selectedSlotId, api.graphs.readLayout()?.chartId ?? null, { axisKey: "xBottom", axisValues: { scaleType: "log", tickMode: "increment",
+           divide: 0, notation: "invalid", title: 123, visible: "no", showValues: false } });
+         check(next.title === "owned title" && next.settings.axes.xBottom.scaleType === "log" &&
+           next.settings.axes.xBottom.tickMode === "plotly" && next.settings.axes.xBottom.divide === 1 &&
+@@ -4522,7 +4520,7 @@
+         const target = source.slots.find(item => !item.hidden), old = target.content.chart;
+         source.charts = source.charts.filter(item => item.id !== old); target.content.chart = null; target.content.contentType = "graph";
+         initialize.call(activeProject, source); select(slotAt(target.id));
+-        const csv = createProjectCsv([["x", "y"], [1, 2]], "layout-errors.csv"), chart = api.graphs.addObject(csv.id);
++        const csv = createProjectCsv([["x", "y"], [1, 2]], "layout-errors.csv"), chart = api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         let commits = 0, reads = 0, projections = 0, paints = 0;
+         activeProject.initialize = function (...args) { commits++; return initialize.apply(this, args); };
+         readBackendProjection = (kind, request) => {
+@@ -5246,7 +5244,7 @@
+         const [a, b] = activeProject.slots;
+         api.slots.reset(a.id); select(slotAt(a.id)); api.slots.setContentType(a.id, "graph");
+         const csv = createProjectCsv([["X", "Y"], ["1", "2"]], "trash-owned.csv");
+-        api.graphs.addObject(csv.id); api.graphs.addObject(csv.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         api.slots.reset(b.id); select(slotAt(b.id)); api.slots.setContentType(b.id, "image");
+         const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "trash-owned.svg", "image/svg+xml");
+         api.assets.connectToSlot(projectAssetPath(image), "image", b.id);
+@@ -5344,7 +5342,7 @@
+           trash = createProjectCsv([["X", "Y"], ["3", "4"]], "cascade-remove.csv");
+         for (const [slot, ids] of [[a, [keep.id, trash.id, trash.id, keep.id]], [b, [trash.id, trash.id]], [c, [trash.id]]]) {
+           api.slots.reset(slot.id); select(slotAt(slot.id)); api.slots.setContentType(slot.id, "graph");
+-          ids.forEach(id => api.graphs.addObject(id));
++          ids.forEach(id => api.graphs.addObject(interfaceFSM.readState().selectedSlotId, id));
+         }
+         const chartId = slotAt(a.id).chart, frozenId = slotAt(b.id).chart, conversionId = slotAt(c.id).chart,
+           fixture = projectClone(activeProject._state);
+@@ -5398,7 +5396,7 @@
+         api.slots.reset(a.id); select(slotAt(a.id)); api.slots.setContentType(a.id, "graph");
+         const keep = createProjectCsv([["X", "Y"], ["1", "2"]], "delete-keep.csv"),
+           removed = createProjectCsv([["X", "Y"], ["3", "4"]], "delete-owned.csv");
+-        [keep.id, removed.id, keep.id].forEach(id => api.graphs.addObject(id));
++        [keep.id, removed.id, keep.id].forEach(id => api.graphs.addObject(interfaceFSM.readState().selectedSlotId, id));
+         const chartId = slotAt(a.id).chart;
+         api.slots.reset(b.id); select(slotAt(b.id)); api.slots.setContentType(b.id, "image");
+         const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "delete-owned.svg", "image/svg+xml");
+@@ -5488,7 +5486,7 @@
+         api.slots.reset(a.id); select(slotAt(a.id)); api.slots.setContentType(a.id, "graph");
+         const keep = createProjectCsv([["X", "Y"], ["1", "2"]], "move-keep.csv"),
+           csv = createProjectCsv([["X", "Y"], ["3", "4"]], "move-owned.csv");
+-        [keep.id, csv.id, csv.id, keep.id].forEach(id => api.graphs.addObject(id));
++        [keep.id, csv.id, csv.id, keep.id].forEach(id => api.graphs.addObject(interfaceFSM.readState().selectedSlotId, id));
+         const chartId = slotAt(a.id).chart;
+         api.slots.reset(b.id); select(slotAt(b.id)); api.slots.setContentType(b.id, "image");
+         const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'), "move-owned.svg", "image/svg+xml");
+@@ -6004,7 +6002,7 @@
+         interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+         const [a, b] = activeProject.slots.filter(item => !item.hidden),
+           csvItem = createProjectCsv([["X", "Y"], ["1", "2"]], "package-owned.csv");
+-        select(a); api.graphs.addObject(csvItem.id); api.graphs.addObject(csvItem.id);
++        select(a); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csvItem.id); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csvItem.id);
+         const packet = ffsxFile(slotAt(a.id)), local = await ffsxReadSlot(packet),
+           candidate = projectClone(activeProject._state);
+         normalizeSlotContents(candidate.slots);
+@@ -6024,7 +6022,7 @@
+           const value = send.call(this, event, payload); if (event === "SLOT_CHART_IMPORTED") result = value; return value;
+         };
+         renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+-        const chart = await api.graphs.importFile(packet, b.id), actual = slotAt(b.id);
++        const chart = await api.graphs.importFile(b.id, packet), actual = slotAt(b.id);
+         check(commits === 1 && Object.isFrozen(chart) && chart.id === expectedChartId && actual.chart === chart.id &&
+           actual.contentType === "graph" && actual.imageId === null && activeProject.csvFiles.length === oldCount + 1 &&
+           chart.editor.objects.length === 2 && chart.editor.objects.every(item => item.csvId === expectedCsvId),
+@@ -6056,7 +6054,7 @@
+         const initial = activeProject._state, beforeSession = interfaceFSM.state, beforeSelection = interfaceRuntime.selectedSlotId,
+           failure = Error("package-validation-owned");
+         validateProjectObjectState = () => { throw failure; };
+-        try { await api.graphs.importFile(file, target.id); } catch (error) { caught = error; }
++        try { await api.graphs.importFile(target.id, file); } catch (error) { caught = error; }
+         check(caught === failure && commits === 0 && activeProject._state === initial &&
+           interfaceRuntime.selectedSlotId === beforeSelection && interfaceFSM.state.lifecycle === "ready" &&
+           interfaceFSM.state.error?.event === "graphs.importFile" && interfaceFSM.state.error.message === failure.message &&
+@@ -6064,7 +6062,7 @@
+           "package validation failure changed authority/selection/session beyond lifecycle recovery or replaced error");
+         validateProjectObjectState = validate;
+         caught = null;
+-        try { await api.graphs.importFile(new File(["broken"], "bad.ffsx"), target.id); } catch (error) { caught = error; }
++        try { await api.graphs.importFile(target.id, new File(["broken"], "bad.ffsx")); } catch (error) { caught = error; }
+         check(caught && commits === 0 && activeProject._state === initial, "bad package committed");
+         caught = null;
+         try { dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId: -1, file: copied }); } catch (error) { caught = error; }
+@@ -6072,7 +6070,7 @@
+         let queries = 0;
+         readBackendProjection = function (kind, request) { queries++; return query(kind, request); };
+         projectEFSM.send = event => ({ committed: false, changed: {}, selectionHints: {}, event });
+-        const rejected = await api.graphs.importFile(file, target.id);
++        const rejected = await api.graphs.importFile(target.id, file);
+         check(!rejected.committed && commits === 0 && queries === 0, "noncommit performed success query");
+         projectEFSM.send = send; readBackendProjection = query;
+         let attempts = 0, expectedChartId;
+@@ -6085,7 +6083,7 @@
+           }
+           return result;
+         };
+-        const chart = await api.graphs.importFile(file, target.id);
++        const chart = await api.graphs.importFile(target.id, file);
+         check(attempts === 2 && commits === 1 && chart.id === expectedChartId &&
+           activeProject.meta.projectName === "newer-package-source", "package failed whole current-source retry");
+         validateProjectObjectState = validate;
+@@ -6094,7 +6092,7 @@
+           if (kind === "project-api" && request.operation === "graphs.readData") throw late;
+           return query(kind, request);
+         };
+-        try { await api.graphs.importFile(file, target.id); } catch (error) { caught = error; }
++        try { await api.graphs.importFile(target.id, file); } catch (error) { caught = error; }
+         check(caught === late && commits === 2 && slotAt(target.id).chart !== chart.id,
+           "late package success-read error rolled back commit");
+       } finally { activeProject.initialize = initialize; validateProjectObjectState = validate; projectEFSM.send = send;
+@@ -6151,10 +6149,10 @@
+           frames: [{ name: "frame" }], config: { responsive: false }
+         };
+         select(a); renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+-        const plot = await api.graphs.importFile(new File([JSON.stringify(figure)], "copied.json"), a.id),
+-          imported = JSON.stringify(plot.graph.imported), rows = JSON.stringify(plot.editor.conversionRows),
+-          packet = ffsxFile(slotAt(a.id)), csvCount = activeProject.csvFiles.length,
+-          chart = await api.graphs.importFile(packet, b.id);
++        const plot = await api.graphs.importFile(a.id, new File([JSON.stringify(figure)], "copied.json")),
++          imported = JSON.stringify(plot.graph.imported), rows = JSON.stringify(plot.editor.conversionRows),
++          packet = ffsxFile(slotAt(a.id)), csvCount = activeProject.csvFiles.length,
++          chart = await api.graphs.importFile(b.id, packet);
+         check(chart.editor.editable === false && JSON.stringify(chart.graph.imported) === imported &&
+           JSON.stringify(chart.editor.conversionRows) === rows && activeProject.csvFiles.length === csvCount &&
+           chart.editor.objects.length === plot.editor.objects.length, "conversion FFSX remapped views or created fake CSV");
+@@ -6173,7 +6171,7 @@
+         renderDashboard = renderProjectObject = status = () => {}; interfaceFSM.notify = () => {};
+         const [a, b] = activeProject.slots.filter(item => !item.hidden),
+           asset = createProjectCsv([["x", "y"], ["1", "2"]], "project-owned.csv");
+-        select(a); api.graphs.addObject(asset.id);
++        select(a); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, asset.id);
+         api.slots.setContentType(b.id, "image"); select(slotAt(b.id)); api.images.insertEmpty();
+         api.project.setName("owned whole project");
+         const file = ffpxFile(), bytes = new Uint8Array(await file.arrayBuffer()), originalRead = file.arrayBuffer.bind(file);
+@@ -6294,7 +6292,7 @@
+         const [a, b] = activeProject.slots.filter(slot => !slot.hidden);
+         select(slotAt(a.id));
+         const csv = createProjectCsv([["x","y"],[1,2]], "linked.csv");
+-        api.graphs.addObject(csv.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         api.slots.reset(a.id);
+         api.slots.setContentType(a.id, "image");
+         const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'), "linked.svg", "image/svg+xml");
+@@ -6427,7 +6425,7 @@
+         renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+         initialize.call(activeProject, createProjectState());
+         const target = activeProject.slots[0]; select(target);
+-        const csv = createProjectCsv([["x", "y"], [1, 2]], "wrappers.csv"); api.graphs.addObject(csv.id);
++        const csv = createProjectCsv([["x", "y"], [1, 2]], "wrappers.csv"); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         const entries = ffpxBuildProject().assets, slotName = `slots/slot-${target.id}.xml`,
+           project = activeProject._state, frontend = interfaceFSM.state;
+         const read = (name, selector, mode) => {
+@@ -6474,7 +6472,7 @@
+         renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+         initialize.call(activeProject, createProjectState());
+         const target = activeProject.slots[0]; select(target);
+-        const csv = createProjectCsv([["x", "y"], [3, 4]], "wrappers.csv"); api.graphs.addObject(csv.id);
++        const csv = createProjectCsv([["x", "y"], [3, 4]], "wrappers.csv"); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         const current = slotAt(target.id), entries = ffsxBuildSlot(current, getChart(current.chart)).assets,
+           project = activeProject._state, frontend = interfaceFSM.state;
+         check(ffsxReadSlotBytes(ffpxZipStore(entries)).csvFiles.length === 1, "valid FFSX wrapper roundtrip failed");
+@@ -6518,7 +6516,7 @@
+         renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+         initialize.call(activeProject, createProjectState());
+         const target = activeProject.slots[0]; select(target);
+-        const csv = createProjectCsv([["x", "y"], [5, 6]], "schema.csv"); api.graphs.addObject(csv.id);
++        const csv = createProjectCsv([["x", "y"], [5, 6]], "schema.csv"); api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         const current = slotAt(target.id), packages = [
+           { entries: ffpxBuildProject().assets, read: ffpxReadProjectBytes, name: "project.xml", selector: "fastFigureProject > settings" },
+           { entries: ffsxBuildSlot(current, getChart(current.chart)).assets, read: ffsxReadSlotBytes, name: "slot.xml", selector: "slot > settings" },
+@@ -6605,7 +6603,7 @@
+           const asset = activeProject.csvFiles.find(item => item.name === name), bytes = new TextEncoder().encode(text);
+           check(asset && JSON.stringify(asset.rows) === JSON.stringify(parseProjectCsvAsset(name, bytes)) &&
+             asset.bytesBase64 === ffpxBytesToBase64(bytes), `raw ${name} changed bytes or rows`);
+-          api.graphs.addObject(asset.id);
++          api.graphs.addObject(interfaceFSM.readState().selectedSlotId, asset.id);
+         }
+         const project = activeProject._state, frontend = interfaceFSM.state,
+           ffpx = ffpxReadProjectBytes(ffpxZipStore(ffpxBuildProject().assets)), current = slotAt(id),
+@@ -6722,7 +6720,7 @@
+         const targetId = activeProject.slots.find(item => !item.hidden).id;
+         select(slotAt(targetId));
+         const csv = createProjectCsv([["x", "y"], ["1", "2"], ["3", "4"]], "slot-headers.csv");
+-        api.graphs.addObject(csv.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         const current = slotAt(targetId), entries = ffsxBuildSlot(current, getChart(current.chart)).assets,
+           bytes = csv.bytesBase64, rows = JSON.stringify(csv.rows);
+         for (const [present, value, expected] of [[false, undefined, 1], [true, null, 0], [true, "", 0], [true, 0, 0],
+@@ -6739,7 +6737,7 @@
+           check(local.headerLines === expected && local.bytesBase64 === bytes && JSON.stringify(local.rows) === rows &&
+             activeProject._state === project && interfaceFSM.state === frontend,
+             `FFSX stored header read changed authority or metadata: ${present}/${value}`);
+-          const chart = await api.graphs.importFile(new File([packageBytes], "slot-headers.ffsx"), targetId),
++          const chart = await api.graphs.importFile(targetId, new File([packageBytes], "slot-headers.ffsx")),
+             imported = getProjectCsv(chart.editor.objects[0].csvId);
+           check(imported.headerLines === expected && imported.bytesBase64 === bytes && JSON.stringify(imported.rows) === rows,
+             `FFSX public import lost normalized header/bytes/rows: ${present}/${value}`);
+@@ -6758,7 +6756,7 @@
+         const targetId = activeProject.slots.find(item => !item.hidden).id;
+         select(slotAt(targetId));
+         const csv = createProjectCsv([["x", "y"], ["1", "2"]], "path-probe.csv");
+-        api.graphs.addObject(csv.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         const vfs = projectClone(activeProject._state), path = projectAssetPath(csv),
+           before = JSON.stringify(vfs), plan = planProjectNodeMove(path, PROJECT_ASSET_DIRECTORIES.image, vfs);
+         check(plan.referenceCount === 1 && !plan.enteringTrash && JSON.stringify(vfs) === before,
+@@ -6824,7 +6822,7 @@
+             try {
+               const file = new File([bytes], `unsafe.${suffix}`);
+               if (suffix === "ffpx") await api.project.importFile(file);
+-              else await api.graphs.importFile(file, targetId);
++              else await api.graphs.importFile(targetId, file);
+             } catch (error) { caught = error; }
+             const after = interfaceFSM.readState();
+             check(caught?.message === "FFPX 자산 경로가 올바르지 않습니다." && activeProject._state === project &&
+@@ -7014,9 +7012,9 @@
+         const [a, b, c, d] = activeProject.slots;
+         select(a);
+         const csv = createProjectCsv([["x","y"],["1","3"],["2","5"]], "surface.csv");
+-        api.graphs.addObject(csv.id);
+-        const imported = { data: [{ x: [7], y: [9] }], layout: {}, frames: [{ name: "retained" }], config: {} };
+-        await api.graphs.importFile(new File([JSON.stringify(imported)], "converted.json"), b.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
++        const imported = { data: [{ x: [7], y: [9] }], layout: {}, frames: [{ name: "retained" }], config: {} };
++        await api.graphs.importFile(b.id, new File([JSON.stringify(imported)], "converted.json"));
+         api.layout.mergeSlots([c.id, d.id]); api.slots.setContentType(c.id, "image");
+         const image = createProjectImage(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'), "surface.svg", "image/svg+xml");
+         api.assets.connectToSlot(projectAssetPath(image), "image", c.id);
+@@ -7068,7 +7066,7 @@
+         renderDashboard = status = () => {}; interfaceFSM.notify = () => {};
+         const slot = activeProject.slots[0]; select(slot);
+         const csv = createProjectCsv([["x","y"],["1","3"],["2","5"]], "raster-owned.csv");
+-        api.graphs.addObject(csv.id);
++        api.graphs.addObject(interfaceFSM.readState().selectedSlotId, csv.id);
+         let reads = 0, captured = null, supplied = null;
+         const sink = () => {};
+         readBackendProjection = (kind, request) => {
+@@ -7079,8 +7077,8 @@
+           captured = snapshot; supplied = statusSink;
+           return { outcome: "saved", width: 200, height: 100, automaticHeight: true };
+         };
+-        const pending = api.print.save({ onStatus: sink });
+-        const busy = await api.print.save({ onStatus: sink }).then(() => null, error => error);
++        const pending = api.print.save(sink);
++        const busy = await api.print.save(sink).then(() => null, error => error);
+         const handed = await pending;
+         check(busy instanceof Error && interfaceFSM.state.lifecycle === "ready",
+           "concurrent public print save was accepted or did not recover to ready");
+@@ -7209,8 +7207,8 @@
+           captured = snapshot; sink = status;
+           return { outcome: "saved", width: 321, height: 123, automaticHeight: false };
+         };
+-        const pending = api.print.capture({ onStatus: statusSink });
+-        const busy = await api.print.capture({ onStatus: statusSink }).then(() => null, error => error);
++        const pending = api.print.capture(statusSink);
++        const busy = await api.print.capture(statusSink).then(() => null, error => error);
+         await pending;
+         check(busy instanceof Error && interfaceFSM.state.lifecycle === "ready",
+           "concurrent public capture was accepted or did not recover to ready");
+@@ -8156,13 +8154,18 @@
+         graph = importSelectedGraphFile, authority = activeProject._state, trace = [];
+       const file = Object.freeze({ name: "binding.csv" }), files = Object.freeze([file]),
+         choosePlan = () => {}, slotArgs = [file, 751, choosePlan], directoryArgs = [files, "/assets/csv", choosePlan],
+-        graphArgs = [file, 752];
++        graphArgs = [752, file];
+       let task, calls = 0;
+       const helper = (...args) => {
+         check(interfaceFSM.state.lifecycle === "importing", "helper ran before public lifecycle start");
+         calls++; trace.push("helper"); return task(args);
+       };
+       try {
++        check(api.graphs.addObject === graphEditorAdd && api.graphs.moveObject === graphEditorMove &&
++          api.graphs.deleteObject === graphEditorDelete && api.graphs.setObjectValues === graphEditorObjectValues &&
++          api.graphs.setEditable === graphEditorSetEditable && api.graphs.updateLayout === graphEditorUpdateLayout &&
++          api.graphs.applyPalette === graphEditorApplyPalette && api.images.setSettings === applyImageSettingsFromValues,
++          "public mutation bindings substituted selected-target convenience helpers");
+         interfaceFSM.notify = () => {};
+         interfaceFSM.send = function (event, payload) {
+           if (event.startsWith("LIFECYCLE_")) trace.push(event + ":" + payload.event);
+@@ -8177,8 +8180,9 @@
+           for (const output of [Object.freeze({ id: "copied-chart" }), null, undefined, Object.freeze({ committed: false })]) {
+             interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" }); trace.length = 0;
+             task = received => {
+-              check(received.length === args.length && received.every((value, index) => value === args[index]),
+-                "public import changed its helper arguments");
++              const expected = name === "graphs.importFile" ? [args[1], args[0]] : args;
++              check(received.length === expected.length && received.every((value, index) => value === expected[index]),
++                "public import changed its Source-named arguments");
+               return Promise.resolve(output);
+             };
+             check(await invoke(...args) === output && interfaceFSM.state.lifecycle === "ready" &&
+diff --git a/development-versions.json b/development-versions.json
+index e1934392d25c0eaa59a60a40933f552428f56fb7..f5f9c0e8246d10bccda371ae8e9bab3a8fd3c2fc 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 148,
++      "revision": 149,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:b91d96c82a07a51d6758a59d3af7d9edd7bce55ee61ceeafedef261f737e8c82",
++      "fingerprint": "sha256:74d64c3bccb30edae96f516e09f6e2b5577b4993544f96f5b3afba42380dd476",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261114-001-application-adapter-module-translation.md"
++      "validation_review": "agent_space/reviews/review-20261114-002-public-contract-bindings.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/reviews/review-20261114-002-public-contract-bindings.md b/agent_space/reviews/review-20261114-002-public-contract-bindings.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..9cfc364c6ee8267a80d7a5f157a514576caa38f9
+--- /dev/null
++++ b/agent_space/reviews/review-20261114-002-public-contract-bindings.md
+@@ -0,0 +1,10 @@
++# Public contract binding 대응 — r149
++
++`pseudocode/application/public_api/contract.pcal`의 `InvokePublicWrapper`에 맞춰 기존 binding을 갱신했다.
++
++- graph add/editable/layout은 명시적 slotId/chartId, object move/edit/delete/palette는 명시적 chartId를 해당 기존 helper에 전달한다.
++- image settings는 명시적 slotId를 전달한다. graph import는 `(slotId, file)`을 기존 file-first helper에 연결하고 기존 단일 importing lifecycle을 유지한다.
++- print save/capture는 statusSink 인자를 기존 export helper의 onStatus에 전달한다.
++- Mantine 호출자와 기존 회귀 호출을 같은 인자 순서로 갱신했다. 기존 사례170에 직접 helper binding 및 import 인자 전달을 확인하는 조건을 추가했다.
++
++상위 명세·domain helper 의미·lifecycle 절차는 변경하지 않았다. assets tree/trash 등 sibling 절차의 대응은 해당 모듈 작업에서 처리한다. 이 기록은 이번 binding 변경의 정적 대조이며 전체 public API 모듈 또는 실행 검증 완료 판정이 아니다. code149/stale; 테스트·빌드·공식 checker 미실행.

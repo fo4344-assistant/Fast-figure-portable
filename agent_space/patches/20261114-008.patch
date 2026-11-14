@@ -1,0 +1,35 @@
+diff --git a/development-versions.json b/development-versions.json
+index 7463815..e28d382 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 153,
++      "revision": 154,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,7 +54,7 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:72aeca36432073cae2c4fddd7e0942e5c0ce943a808054160ad9ba8fa0c4749e",
++      "fingerprint": "sha256:04dcbcaa3ce0fba57aacb2dcd9121541f42f54dc13a7335f87cfb9c79fc8471b",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+diff --git a/sourcecode/application/public_api/graphs.js b/sourcecode/application/public_api/graphs.js
+index a8d0a7f..6001b76 100644
+--- a/sourcecode/application/public_api/graphs.js
++++ b/sourcecode/application/public_api/graphs.js
+@@ -137,7 +137,7 @@ export function readGraphPaletteApi() {
+   });
+ }
+ 
+-export async function importSelectedGraphFile(file, slotId = interfaceFSM.readState().selectedSlotId) {
++export async function importSelectedGraphFile(file, slotId) {
+   const [copied] = await prepareCopiedImportFiles([file]),
+     [result, state, projection] = dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId, file: copied });
+   if (!result.committed) return result;

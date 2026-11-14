@@ -1,6 +1,6 @@
 // Source: sourcescript/backend/layout_annotations.py (same logical owner); pseudocode/backend/layout_annotations.pcal.
-import { activeProject, getProjectImage, normalizeSlotContent, normalizeSlotContents, projectClone, projectObjects, slotHasNonDefaultLocalState, validateProjectObjectState } from './project_state.js';
-import { DEFAULT_IMAGE_SETTINGS } from './settings.js';
+import { activeProject, getProjectImage, normalizeSlotContent, projectClone, projectObjects, slotHasNonDefaultLocalState, validateProjectObjectState } from './project_state.js';
+import { BackendSettings, DEFAULT_IMAGE_SETTINGS } from './settings.js';
 
 export function resolveLayoutCommandSlots(candidate, slotIds) {
   if (!Array.isArray(slotIds) || !slotIds.length || !slotIds.every(Number.isInteger))
@@ -53,7 +53,7 @@ export function dashboardGeometryInProject(project, width, heightOverride = null
     );
   return {
     referenceWidth,
-    width: referenceWidth * scale,
+    width,
     height,
     scale,
     aspect,
@@ -88,35 +88,34 @@ export function newGridSlot(id, row, col) {
     rowSpan: 1,
     colSpan: 1,
     hidden: false,
-    content: {
-      chart: null,
-      imageId: null,
-      contentType: "graph",
-      imageSettings: { ...DEFAULT_IMAGE_SETTINGS },
-    },
+    content: { ...projectClone(BackendSettings.defaults.slotSettings.content), chart: null, imageId: null },
     caption: null,
   });
 }
 
 export function buildGridResizeCandidate(rows, cols) {
-  if(!Number.isInteger(rows)||!Number.isInteger(cols)||rows<1||rows>8||cols<1||cols>8)
+  return buildGridResizeInProject(activeProject._state, rows, cols);
+}
+
+// BuildGridResizeInAttempt: the command's existing source, not a second authority read.
+export function buildGridResizeInProject(source, rows, cols) {
+  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < 1 || rows > 8 || cols < 1 || cols > 8)
     throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
-  let candidate=projectClone(activeProject._state);
-  normalizeSlotContents(candidate.slots);
-  const source = activeProject._state, oldRows = source.layout.gridRows, oldCols = source.layout.gridCols;
-  let nextId = Math.max(-1, ...source.slots.map(slot => slot.id)) + 1;
-  let removed=candidate.slots.filter(slot=>slot.row>rows||slot.col>cols);
-  if(removed.some(slot=>slot.hidden||slot.rowSpan!==1||slot.colSpan!==1||slotHasNonDefaultLocalState(slot)))
-    throw Error("내용이나 병합 상태가 있는 영역은 그리드 축소로 제거할 수 없습니다.");
-  let retained=candidate.slots.filter(slot=>slot.row<=rows&&slot.col<=cols);
-  if(retained.filter(slot=>!slot.hidden).some(slot=>
-    slot.row+slot.rowSpan-1>rows||slot.col+slot.colSpan-1>cols))
-    throw Error("병합된 슬롯을 가로지르도록 그리드를 축소할 수 없습니다.");
-  candidate.layout.gridRows=rows; candidate.layout.gridCols=cols; candidate.slots=retained;
-  for(let row=1;row<=rows;row++) for(let col=1;col<=cols;col++){
-    if(row>oldRows||col>oldCols) candidate.slots.push(newGridSlot(nextId++,row,col));
+  for (const slot of source.slots) {
+    if (slot.row + slot.rowSpan - 1 <= rows && slot.col + slot.colSpan - 1 <= cols) continue;
+    if (slotHasNonDefaultLocalState(slot))
+      throw Error("내용이 있는 영역은 그리드 축소로 제거할 수 없습니다.");
+    if (slot.rowSpan > 1 || slot.colSpan > 1)
+      throw Error("병합된 슬롯을 가로지르도록 그리드를 축소할 수 없습니다.");
   }
-  validateProjectObjectState(candidate,{requireSlots:true});
+  const candidate = projectClone(source), oldRows = source.layout.gridRows, oldCols = source.layout.gridCols;
+  let nextId = Math.max(-1, ...source.slots.map(slot => slot.id)) + 1;
+  candidate.layout.gridRows = rows; candidate.layout.gridCols = cols;
+  candidate.slots = candidate.slots.filter(slot => slot.row <= rows && slot.col <= cols);
+  for (let row = 1; row <= rows; row++) for (let col = 1; col <= cols; col++) {
+    if (row > oldRows || col > oldCols) candidate.slots.push(newGridSlot(nextId++, row, col));
+  }
+  validateProjectObjectState(candidate, { requireSlots: true });
   return candidate;
 }
 
@@ -139,14 +138,16 @@ export function readImageSettings(settings) {
   let source = settings && typeof settings === "object" && !Array.isArray(settings)
       ? settings
       : {},
-    fit = ["contain", "cover", "manual"].includes(source.fit) ? source.fit : "contain",
+    defaults = BackendSettings.defaults.slotSettings.content.imageSettings,
+    limits = BackendSettings.defaults.limits.imageSettings,
+    fit = ["contain", "cover", "manual"].includes(source.fit) ? source.fit : defaults.fit,
     number = (value, fallback, min, max) =>
       Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : fallback));
   return {
-    fit,
-    scale: number(source.scale, 100, 1, 1000),
-    x: number(source.x, 50, -100, 200),
-    y: number(source.y, 50, -100, 200),
+    ...projectClone(source), fit,
+    scale: number(source.scale, defaults.scale, ...limits.scale),
+    x: number(source.x, defaults.x, ...limits.x),
+    y: number(source.y, defaults.y, ...limits.y),
   };
 }
 
@@ -195,7 +196,7 @@ export function slotIdentifier(index, project = activeProject) {
 
 export function displayedSlotIdentifier(index, project = activeProject) {
   let identifier = slotIdentifier(index, project);
-  return project.labelSettings.parentheses === true ? `(${identifier})` : identifier;
+  return project.annotations.labels.settings.parentheses === true ? `(${identifier})` : identifier;
 }
 
 export function orderedVisibleSlots(project = activeProject) {

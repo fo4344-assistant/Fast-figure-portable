@@ -1,0 +1,129 @@
+diff --git a/agent_space/plans/plan-026.md b/agent_space/plans/plan-026.md
+index f53f0fd..af04057 100644
+--- a/agent_space/plans/plan-026.md
++++ b/agent_space/plans/plan-026.md
+@@ -5,9 +5,9 @@
+ ## 1. 기준과 범위
+ 
+ - 이 계획은 `agent_space/plans/plan-025.md`의 앞으로 수행할 작업 순서와 종료 관리를 대체한다. 기존 계획·메모·patch·review 및 누적 WIP는 이력으로 보존한다.
+-- 현재 기준은 `development-versions.json`의 Source45/current → PlusCal25/current → code155/stale다. HEAD `28e6dc762c75c8a2ffbbe53ed08b323f0b2b82bd`가 아니라 현재 미커밋 작업 트리를 대상으로 한다.
++- 최초 계획 작성 기준은 `development-versions.json`의 Source45/current → PlusCal25/current → code155/stale다. HEAD `28e6dc762c75c8a2ffbbe53ed08b323f0b2b82bd`가 아니라 현재 미커밋 작업 트리를 대상으로 한다.
+ - `agent_space/reviews/review-20261114-003-final-module-translation.md`의 하위 번역 잔여 없음 판정은 이번에 발견한 세 항목에 대해서 다시 연다. 다른 모듈을 전면 재작성하거나 과거 완료 주장을 독립 검토 근거로 삼지 않는다.
+-- 이번 작성 범위는 계획과 해당 patch/설명뿐이다. 코드·Source·PlusCal·메모·버전 메타데이터는 수정하지 않는다. 아래 작업의 상태는 모두 예정이며, 계획 작성 자체를 수정 완료로 세지 않는다.
++- 최초 계획 작성 범위는 계획과 해당 patch/설명뿐이었으며 코드·Source·PlusCal·메모·버전 메타데이터는 수정하지 않았다. 이후 사용자 반영 지시에 따른 실제 진척은 아래 표와 §7에 기록한다. 계획 작성 자체를 수정 완료로 세지 않는다.
+ - 의미 권위는 Source Script > PlusCal pseudocode > source code다. 이미 적힌 절차의 복원과 새 의미의 결정을 분리한다.
+ 
+ ## 2. 진행 순서와 단계 경계
+@@ -21,11 +21,11 @@
+ 
+ ## 3. A — 번역 누락·왜곡 정리
+ 
+-| 항목 / 초기 상태 | 근거와 영향 범위 | 처리 방향 | 정적 종료 기준 |
++| 항목 / 상태 | 근거와 영향 범위 | 처리 방향 | 정적 종료 기준 |
+ | --- | --- | --- | --- |
+-| A1. 수동 이미지 좌표 0 왜곡 / 예정 | `sourcecode/frontend/renderer.js:751-758`의 `Number(settings.x) || 50`, y 동일 처리. `sourcescript/backend/settings.json:57`은 x/y의 0을 허용하며 `pseudocode/frontend/renderer.pcal:417-423`은 supplied snapshot 이미지의 target 렌더를 요구한다. 실제 공통 소비자는 `sourcecode/frontend/renderer.js:960,1288`의 current capture/target save다. | 유효한 0을 기본값 50으로 바꾸지 않고 명시된 좌표를 그대로 계산한다. 설정 유효성·기본값의 기존 owner는 유지하며 새로운 보정 정책을 만들지 않는다. | manual x=0, y=0의 산식이 보존되고, 같은 helper를 사용하는 capture/save 양쪽이 supplied 설정과 일치한다. contain/cover·scale·오류/자원 수명은 불필요하게 바꾸지 않는다. |
+-| A2. 공개 grid 변경 시 레이아웃 선택 초기화 누락 / 예정 | `pseudocode/frontend/mantine_ui.pcal:174-175`, `sourcescript/frontend/mantine_ui.py:99`는 grid shape 변경 시 선택을 비우도록 한다. `sourcecode/frontend/mantine_ui.js:2722-2726,2754-2759`는 overlay close와 자체 changeGrid만 처리한다. `sourcecode/application/public_api/layout_annotations.js:294-300`의 공개 setGrid 경로는 overlay를 유지한다. | modal 내부 NumberInput뿐 아니라 공식 grid 변경이 반영되는 경로에서도 local selection clear가 대응하도록 한다. grid의 새로운 권위 상태나 Backend→UI 직접 callback을 만들지 않는다. | layout 창에서 선택 후 공개 `FastFigureApi.layout.setGrid(rows, cols)`로 실제 shape가 바뀌어도 이전 선택이 남지 않는 정적 호출·상태 경로가 확인된다. slot/control event 소비와 close clear는 유지한다. **B2의 companion/fallback 결정과 별개로 종료한다.** |
+-| A3. 명세에 없는 ZIP entry 상한 / 예정 | `sourcecode/backend/assets_files.js:803-807`은 읽기에만 `count > 10000` 거부를 추가한다. `pseudocode/backend/assets_files.pcal:491-505`와 `sourcescript/backend/assets_files.py:55-61`의 STORE/분할/경로/CRC/version 조건에는 이 상한이 없다. 같은 파일의 writer `:727-787`에는 대응 상한이 없어 자체 생성한 10,001-entry package도 reader가 거부한다. | 명세 없는 10,000 제한을 제거하고 기존 container/경로/CRC/version 검증을 보존한다. 다른 숫자로 교체하거나 새 자산 수·보안·ZIP 형식 정책을 도입하지 않는다. | 같은 지원 형식의 writer→reader 경로에서 이 임의 상한 때문에 정상 package를 거부하지 않는다. FFPX/FFSX 공통 reader의 영향과 원래 malformed 입력 거부 분기를 정적으로 확인한다. ZIP64/압축 등 지원 범위를 확대하는 작업은 하지 않는다. |
++| A1. 수동 이미지 좌표 0 왜곡 / 정적 대응(r156) | `sourcecode/frontend/renderer.js:751-758`의 `Number(settings.x) || 50`, y 동일 처리. `sourcescript/backend/settings.json:57`은 x/y의 0을 허용하며 `pseudocode/frontend/renderer.pcal:417-423`은 supplied snapshot 이미지의 target 렌더를 요구한다. 실제 공통 소비자는 `sourcecode/frontend/renderer.js:960,1288`의 current capture/target save다. | 유효한 0을 기본값 50으로 바꾸지 않고 명시된 좌표를 그대로 계산한다. 설정 유효성·기본값의 기존 owner는 유지하며 새로운 보정 정책을 만들지 않는다. | manual x=0, y=0의 산식이 보존되고, 같은 helper를 사용하는 capture/save 양쪽이 supplied 설정과 일치한다. contain/cover·scale·오류/자원 수명은 불필요하게 바꾸지 않는다. |
++| A2. 공개 grid 변경 시 레이아웃 선택 초기화 누락 / 정적 대응(r156) | `pseudocode/frontend/mantine_ui.pcal:174-175`, `sourcescript/frontend/mantine_ui.py:99`는 grid shape 변경 시 선택을 비우도록 한다. `sourcecode/frontend/mantine_ui.js:2722-2726,2754-2759`는 overlay close와 자체 changeGrid만 처리한다. `sourcecode/application/public_api/layout_annotations.js:294-300`의 공개 setGrid 경로는 overlay를 유지한다. | modal 내부 NumberInput뿐 아니라 공식 grid 변경이 반영되는 경로에서도 local selection clear가 대응하도록 한다. grid의 새로운 권위 상태나 Backend→UI 직접 callback을 만들지 않는다. | layout 창에서 선택 후 공개 `FastFigureApi.layout.setGrid(rows, cols)`로 실제 shape가 바뀌어도 이전 선택이 남지 않는 정적 호출·상태 경로가 확인된다. slot/control event 소비와 close clear는 유지한다. **B2의 companion/fallback 결정과 별개로 종료한다.** |
++| A3. 명세에 없는 ZIP entry 상한 / 정적 대응(r156) | `sourcecode/backend/assets_files.js:803-807`은 읽기에만 `count > 10000` 거부를 추가한다. `pseudocode/backend/assets_files.pcal:491-505`와 `sourcescript/backend/assets_files.py:55-61`의 STORE/분할/경로/CRC/version 조건에는 이 상한이 없다. `sourcecode/backend/assets_files.js:727-787`의 writer에는 대응 상한이 없어 자체 생성한 10,001-entry package도 reader가 거부한다. | 명세 없는 10,000 제한을 제거하고 기존 container/경로/CRC/version 검증을 보존한다. 다른 숫자로 교체하거나 새 자산 수·보안·ZIP 형식 정책을 도입하지 않는다. | 같은 지원 형식의 writer→reader 경로에서 이 임의 상한 때문에 정상 package를 거부하지 않는다. FFPX/FFSX 공통 reader의 영향과 원래 malformed 입력 거부 분기를 정적으로 확인한다. ZIP64/압축 등 지원 범위를 확대하는 작업은 하지 않는다. |
+ 
+ A의 변경 기록은 실제 수정 단위의 native Git diff와 동명 설명으로 남긴다. 코드 변경 시에만 revision/fingerprint 및 실제 lineage를 관리하며, checker 미실행을 통과로 표시하거나 `current`를 임의 선언하지 않는다. 세 항목의 처리 결과·잔여는 이 계획에 간결하게 갱신하고 별도 장문 완료 보고서를 반복 생성하지 않는다.
+ 
+@@ -58,3 +58,12 @@ B는 선택지 나열만으로 끝내지 않는다. 각 항목에서 기존 Sour
+ - 허용 범위는 요청된 문서 작성, 이후 허가된 번역 수정·정적 대조다. 테스트·app·build·checker·TLC·브라우저·Actions를 실행하지 않는다. remote write·commit·push·새 goal도 이 계획으로 허가되지 않는다.
+ - 기존 WIP·사용자가 삭제한 테스트를 보존한다. 자체 snapshot/diff 도구, 중복 권위·새 fallback·공통 결과 프로토콜·무관한 정리 작업을 추가하지 않는다.
+ - 명세 충돌·새 의미·동시 수정·권한 부족으로 막히면 근거, 시도, 정확한 blocker와 필요한 다음 입력을 남기고 해당 경계에서 멈춘다. 결정이 필요하지 않은 A 작업까지 묶어서 중단하지 않는다.
++
++## 7. 실제 진척 — A / r156 (2026-11-14)
++
++- 사용자 반영 지시에 따라 A1 → A2 → A3 순서로 수정했다. 앞선 검토에서 중요 Source/PlusCal/구현 전체를 읽은 기록을 재사용하고 해당 계약·호출 경로를 다시 대조했다.
++- A1: owner가 정규화한 `settings.x/y`를 export 산식에 그대로 사용한다. 0을 50으로 바꾸는 truthiness fallback만 제거했고 current capture/target save의 공통 helper 연결은 유지했다.
++- A2: 열린 layout의 기존 공식 read를 hook 앞에서 한 번 읽고, overlay와 그 read의 gridRows/gridCols 변화에 local selection clear를 연결했다. 닫힌 overlay에서는 새 Backend read를 만들지 않고 hook 호출 순서는 일정하게 유지했다. 실제 grid가 바뀌는 공개 API 경로도 같은 effect에 도달하며 별도 grid mirror나 Backend callback은 없다. 자체 changeGrid의 기존 동작은 유지하고 B2 입력 조합은 변경하지 않았다.
++- A3: 공통 ZIP reader의 `count > 10000` 거부만 제거했다. 중앙 directory 범위·STORE·분할·경로·CRC·version과 기존 writer 지원 형식은 그대로다.
++- 정적 호출·산식·실제 incremental diff 대조 범위에서 세 알려진 번역 문제를 대응했다. 테스트·app·build·checker·브라우저·Actions는 실행하지 않았다. Source45/PlusCal25와 derived_from은 불변, code156/stale다. fingerprint 갱신은 기존 도구의 hash 함수만 이용했고 checker main은 실행하지 않았다. 이전 최종 모듈 review를 r156 검증 근거로 재사용하지 않도록 source-code.validation_review는 null로 두었다.
++- 실제 변경 기록: `agent_space/patches/20261114-011.patch`와 동명 설명. 다음 작업은 B1 → B2 → B3의 결정사항 검토이며, 결정 확정이나 C 반영은 아직 수행하지 않았다.
+diff --git a/development-versions.json b/development-versions.json
+index 9b109ee..836fb22 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 155,
++      "revision": 156,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:37be78d624ec957680f40ad9e4aad8605155b33c16c0c7a1e41ab18ceec477e7",
++      "fingerprint": "sha256:bf25fd250591d93d61bfbea4366e825e797b8c6b4794eb2b9c955793e10c4b9a",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261114-003-final-module-translation.md"
++      "validation_review": null
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/sourcecode/backend/assets_files.js b/sourcecode/backend/assets_files.js
+index 900d5c4..85dd2d8 100644
+--- a/sourcecode/backend/assets_files.js
++++ b/sourcecode/backend/assets_files.js
+@@ -803,7 +803,7 @@ export function ffpxZipRead(bytes) {
+   let count = view.getUint16(end + 10, true),
+     centralSize = view.getUint32(end + 12, true),
+     offset = view.getUint32(end + 16, true);
+-  if (count > 10000 || offset + centralSize > end)
++  if (offset + centralSize > end)
+     throw Error("FFPX ZIP 중앙 디렉터리가 올바르지 않습니다.");
+   let decoder = new TextDecoder(),
+     assets = new Map(),
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index 7939963..dea7eab 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -2722,9 +2722,11 @@ React.createElement(
+     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
+     const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(600);
+     const previewFrameRef = useRef(null);
++    const layoutApi = window.FastFigureApi.layout;
++    const layout = state.overlay === "layout" ? layoutApi.readState(renderedPreviewWidth) : null;
+     useEffect(() => {
+-if (state.overlay !== "layout") setLayoutSelection(new Set());
+-    }, [state.overlay]);
++setLayoutSelection(new Set());
++    }, [state.overlay, layout?.gridRows, layout?.gridCols]);
+     useEffect(() => {
+ if (state.overlay !== "layout") return;
+ const element = previewFrameRef.current;
+@@ -2740,8 +2742,6 @@ return () => observer.disconnect();
+     }, [state.overlay]);
+     if (state.overlay !== "layout") return null;
+     const busy = state.lifecycle !== "ready";
+-    const layoutApi = window.FastFigureApi.layout;
+-    const layout = layoutApi.readState(renderedPreviewWidth);
+     const style = layout.slotStyle;
+     const visibleSlots = layout.visibleSlots;
+     const previewGeometry = layout.previewGeometry;
+diff --git a/sourcecode/frontend/renderer.js b/sourcecode/frontend/renderer.js
+index 794aa49..8ba7fe9 100644
+--- a/sourcecode/frontend/renderer.js
++++ b/sourcecode/frontend/renderer.js
+@@ -754,8 +754,8 @@ export function exportDrawImage(ctx,image,rect,slot,scaleX,scaleY) {
+     fit=settings.fit||"contain",drawW,drawH,left,top;
+   if(fit==="manual"){
+     drawW=(width*(Number(settings.scale)||100))/100; drawH=drawW/ratio;
+-    left=rect.left+width*((Number(settings.x)||50)/100)-drawW/2;
+-    top=rect.top+height*((Number(settings.y)||50)/100)-drawH/2;
++    left=rect.left+width*(settings.x/100)-drawW/2;
++    top=rect.top+height*(settings.y/100)-drawH/2;
+   } else {
+     let contain=fit!=="cover", fitWidth=width, fitHeight=fitWidth/ratio;
+     if((contain&&fitHeight>height)||(!contain&&fitHeight<height)){

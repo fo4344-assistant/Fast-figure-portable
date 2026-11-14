@@ -1,0 +1,346 @@
+diff --git a/sourcecode/backend/graphs.js b/sourcecode/backend/graphs.js
+index faaccb38ba43b89461605548a135bde6525b9ed1..1bfe0570ff90509171e1c73c48b294228d23efe9 100644
+--- a/sourcecode/backend/graphs.js
++++ b/sourcecode/backend/graphs.js
+@@ -675,142 +675,103 @@
+   return scalePlotlyFigure(copy.graph, scale);
+ }
+ 
+-export function setNestedAxisFromPlotly(target, axis = {}) {
+-  target.title = typeof axis.title === "string" ? axis.title : axis.title?.text || "";
+-  let scaleType = axis.type === "log" ? "log" : "linear";
+-  target.min = Array.isArray(axis.range)
+-    ? axisRangeValueFromPlotly(axis.range[0], scaleType)
+-    : "";
+-  target.max = Array.isArray(axis.range)
+-    ? axisRangeValueFromPlotly(axis.range[1], scaleType)
+-    : "";
+-  let linearTick =
+-      scaleType !== "log" &&
+-      typeof axis.dtick === "string" &&
+-      /^L(?:\d|\.)/.test(axis.dtick),
+-    denseLogTicks =
+-      scaleType === "log" &&
+-      (axis.dtick === "D1" ||
+-        (axis.minor &&
+-          (axis.minor.dtick === "D1" ||
+-            axis.minor.ticks === "inside" ||
+-            axis.minor.ticks === "outside" ||
+-            axis.minor.showgrid === true)));
+-  target.tick = linearTick
+-      ? axis.dtick.slice(1)
+-      : typeof axis.dtick === "number"
+-        && scaleType !== "log"
+-        ? axis.dtick
+-        : "";
+-  target.tickMode = linearTick ? "increment" : "plotly";
+-  target.minorTicks = denseLogTicks;
+-  target.titleSize = axis.title?.font?.size ?? target.titleSize;
+-  target.fontSize = axis.tickfont?.size ?? target.fontSize;
+-  target.lineWidth = axis.linewidth ?? target.lineWidth;
+-  target.showGrid = axis.showgrid !== false;
+-  target.visible = axis.visible !== false;
+-  target.showValues = axis.showticklabels !== false;
+-  target.scaleType = scaleType;
+-  target.notation =
+-    axis.exponentformat === "e" ? "e" : axis.exponentformat === "power" ? "power" : "none";
++export function setNestedAxisFromPlotly(target, input = {}, key = "xBottom") {
++  const axis = input && typeof input === "object" && !Array.isArray(input) ? input : {},
++    scaleType = axis.type === "log" ? "log" : "linear",
++    range = Array.isArray(axis.range) && axis.range.length === 2 ? axis.range : [],
++    bound = value => typeof value === "number" && Number.isFinite(value)
++      ? axisRangeValueFromPlotly(value, scaleType) : "",
++    linearTick = scaleType !== "log" && typeof axis.dtick === "string" &&
++      axis.dtick.startsWith("L") && axis.dtick.slice(1).trim() !== "" &&
++      Number.isFinite(Number(axis.dtick.slice(1))),
++    raw = {
++      title: typeof axis.title === "string" ? axis.title :
++        typeof axis.title?.text === "string" ? axis.title.text : "",
++      scaleType, divide: 1, min: bound(range[0]), max: bound(range[1]),
++      tick: linearTick ? Number(axis.dtick.slice(1)) :
++        scaleType !== "log" && typeof axis.dtick === "number" && Number.isFinite(axis.dtick) ? axis.dtick : "",
++      tickMode: linearTick ? "increment" : "plotly",
++      minorTicks: scaleType === "log" && (axis.dtick === "D1" || axis.minor?.dtick === "D1" ||
++        ["inside", "outside"].includes(axis.minor?.ticks) || axis.minor?.showgrid === true),
++      titleSize: axis.title?.font?.size, fontSize: axis.tickfont?.size, lineWidth: axis.linewidth,
++      showGrid: axis.showgrid !== false, showValues: axis.showticklabels !== false,
++      visible: axis.visible !== false,
++      notation: ["e", "power"].includes(axis.exponentformat) ? axis.exponentformat : "none",
++    };
++  Object.assign(target, normalizeGraphLayoutSettings({ axes: { [key]: raw } }).axes[key]);
+ }
+ 
+ export function parsePlotlyToEditor(figure, id) {
+-  let data = Array.isArray(figure.data) ? figure.data : [],
+-    rowsOut = [],
+-    objects = [];
++  const record = value => value !== null && typeof value === "object" && !Array.isArray(value),
++    text = value => typeof value === "string" ? value : "",
++    titleText = value => typeof value === "string" ? value : text(value?.text);
++  if (!record(figure) || (!Array.isArray(figure.data) && !record(figure.layout)) ||
++      (figure.data !== undefined && !Array.isArray(figure.data)) ||
++      (figure.layout !== undefined && !record(figure.layout)) ||
++      (figure.config !== undefined && !record(figure.config)) ||
++      (figure.frames !== undefined && !Array.isArray(figure.frames)) ||
++      (figure.data || []).some(trace => !record(trace)))
++    throw Error("유효한 Plotly figure 구조가 아닙니다.");
++  const data = figure.data || [], layoutIn = figure.layout || {},
++    defaults = BackendSettings.defaults.chartSettings.editor.objectStyle,
++    limits = BackendSettings.defaults.limits.graphObject,
++    style = (value, key) => {
++      const number = graphScalarNumber(value), [min, max] = limits[key];
++      return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : defaults[key];
++    },
++    headers = [], points = [], objects = [];
+   data.forEach((trace, index) => {
+-    let x = Array.isArray(trace.x) ? trace.x : [],
+-      y = Array.isArray(trace.y) ? trace.y : [],
+-      length = Math.max(x.length, y.length);
+-    let xKey = `trace${index + 1}_x`,
+-      yKey = `trace${index + 1}_y`;
+-    for (let i = 0; i < length; i++) {
+-      rowsOut[i] ??= {};
+-      rowsOut[i][xKey] = x[i] ?? "";
+-      rowsOut[i][yKey] = y[i] ?? "";
++    const x = Array.isArray(trace.x) ? trace.x : [], y = Array.isArray(trace.y) ? trace.y : [],
++      length = Math.max(x.length, y.length), column = headers.length;
++    headers.push(`trace${index + 1}_x`, `trace${index + 1}_y`);
++    for (let i = 0; i < length; i++) points[i] ??= [];
++    for (let i = 0; i < points.length; i++) {
++      points[i][column] = x[i] !== undefined ? projectClone(x[i]) : "";
++      points[i][column + 1] = y[i] !== undefined ? projectClone(y[i]) : "";
+     }
+-    if (length) {
+-      let isBar = trace.type === "bar",
+-        mode = isBar ? "bar" : trace.visible === false ? "hidden" : trace.mode || "scatter";
+-      let plotlyTrace = projectClone(trace);
+-      delete plotlyTrace.x;
+-      delete plotlyTrace.y;
+-      objects.push({
+-        x: xKey,
+-        y: yKey,
+-        xAxisSide: trace.xaxis === "x2" ? "top" : "bottom",
+-        yAxisSide: trace.yaxis === "y2" ? "right" : "left",
+-        type: mode,
+-        color:
+-          trace.line?.color ||
+-          trace.marker?.color ||
+-          DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+-        legendName: trace.name || "",
+-        lineWidth: trace.line?.width ?? 2,
+-        lineDash: trace.line?.dash || "solid",
+-        markerSymbol: trace.marker?.symbol || "circle",
+-        markerSize: Array.isArray(trace.marker?.size) ? 6 : (trace.marker?.size ?? 6),
+-        barOpacity: trace.opacity ?? 1,
+-        barLineWidth: trace.marker?.line?.width ?? 0,
+-        plotlyTrace,
+-      });
+-    }
++    if (!length) return;
++    const plotlyTrace = projectClone(trace), modes = text(trace.mode).split("+");
++    delete plotlyTrace.x; delete plotlyTrace.y;
++    objects.push({
++      ...projectClone(defaults),
++      x: `C${column + 1}`, y: `C${column + 2}`,
++      xAxisSide: trace.xaxis === "x2" ? "top" : "bottom",
++      yAxisSide: trace.yaxis === "y2" ? "right" : "left",
++      type: trace.visible === false ? "hidden" : trace.type === "bar" ? "bar" :
++        modes.includes("markers") ? modes.includes("lines") ? "lines+markers" : "markers" : "scatter",
++      color: [trace.line?.color, trace.marker?.color].find(value => typeof value === "string" && value.length) ||
++        DEFAULT_COLORS[index % DEFAULT_COLORS.length],
++      legendName: text(trace.name),
++      lineWidth: style(trace.line?.width, "lineWidth"),
++      lineDash: ALLOWED_LINE_DASHES.has(trace.line?.dash) ? trace.line.dash : defaults.lineDash,
++      markerSymbol: ALLOWED_MARKER_SYMBOLS.has(trace.marker?.symbol) ? trace.marker.symbol : defaults.markerSymbol,
++      markerSize: style(trace.marker?.size, "markerSize"),
++      barOpacity: style(trace.opacity, "barOpacity"),
++      barLineWidth: style(trace.marker?.line?.width, "barLineWidth"),
++      plotlyTrace,
++    });
+   });
+-  let sourceHeaders = [...new Set(rowsOut.flatMap((row) => Object.keys(row || {})))],
+-    columnMap = Object.fromEntries(
+-      sourceHeaders.map((header, index) => [header, `C${index + 1}`]),
+-    );
+-  objects = objects.map((object) => ({
+-    ...object,
+-    x: columnMap[object.x] || object.x,
+-    y: columnMap[object.y] || object.y,
+-  }));
+-  rowsOut = rowsOut.length ? dataTable(rowsOut) : [];
+-  let layoutIn = figure.layout && typeof figure.layout === "object" ? figure.layout : {},
+-    chart = createChartModel({
+-      id,
+-      editor: { editable: false, conversionRows: rowsOut, objects },
+-      graph: {
+-        data: [],
+-        layout: {},
+-        config: {},
+-        frames: [],
+-        imported: {
+-          data: projectClone(data),
+-          layout: projectClone(layoutIn),
+-          config: projectClone(figure.config || {}),
+-          frames: projectClone(figure.frames || []),
+-        },
+-      },
+-    });
+-  let settings = normalizeGlobalSettings(chart);
+-  chart.editor.title =
+-    typeof layoutIn.title === "string" ? layoutIn.title : layoutIn.title?.text || "";
+-  settings.showTitle = !!chart.editor.title;
+-  settings.showLegend = layoutIn.showlegend !== false;
+-  settings.graphFontFamily =
+-    layoutIn.title?.font?.family ||
+-    layoutIn.font?.family ||
+-    layoutIn.legend?.font?.family ||
+-    "";
+-  settings.titleFontSize = layoutIn.title?.font?.size ?? "";
+-  settings.legendFontSize = layoutIn.legend?.font?.size ?? "";
+-  setNestedAxisFromPlotly(settings.axes.xBottom, layoutIn.xaxis || {});
+-  setNestedAxisFromPlotly(settings.axes.xTop, layoutIn.xaxis2 || {});
+-  setNestedAxisFromPlotly(settings.axes.yLeft, layoutIn.yaxis || {});
+-  setNestedAxisFromPlotly(settings.axes.yRight, layoutIn.yaxis2 || {});
+-  chart.editor.globalSettings = settings;
+-  chart.editor.plotlyExtensions = {
+-    layout: projectClone(layoutIn),
+-    config: projectClone(figure.config || {}),
++  // Pad earlier trace columns when a later trace extends the point sequence.
++  const rows = objects.length ? [headers, ...points.map(row =>
++    headers.map((_, column) => Object.hasOwn(row, column) ? row[column] : ""))] : [];
++  const chart = createChartModel({
++    id, editor: { editable: false, conversionRows: rows, objects, title: titleText(layoutIn.title) },
++    graph: { config: projectClone(figure.config || {}), frames: projectClone(figure.frames || []),
++      imported: projectClone({ data, layout: layoutIn, config: figure.config || {}, frames: figure.frames || [] }) },
++  });
++  if (id === null || id === undefined) delete chart.id;
++  const settings = {
++    showTitle: chart.editor.title.length > 0, showLegend: layoutIn.showlegend !== false, showZeroLine: false,
++    graphFontFamily: [layoutIn.title?.font?.family, layoutIn.font?.family, layoutIn.legend?.font?.family]
++      .find(value => typeof value === "string" && value.length) || "",
++    titleFontSize: layoutIn.title?.font?.size, legendFontSize: layoutIn.legend?.font?.size, axes: {},
+   };
+-  chart.graph.config = projectClone(figure.config || {});
+-  chart.graph.frames = projectClone(figure.frames || []);
+-  if (objects.length) {
+-    Object.assign(chart.editor, objects[0]);
+-    chart.editor.colors = objects.map((object) => object.color);
++  for (const [key, plotlyKey] of [["xBottom", "xaxis"], ["xTop", "xaxis2"], ["yLeft", "yaxis"], ["yRight", "yaxis2"]]) {
++    settings.axes[key] = {};
++    setNestedAxisFromPlotly(settings.axes[key], layoutIn[plotlyKey], key);
+   }
++  chart.editor.globalSettings = normalizeGraphLayoutSettings(settings);
++  chart.editor.plotlyExtensions = projectClone({ layout: layoutIn, config: figure.config || {} });
+   return chart;
+ }
+ 
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 8e603370199178373d20cae91d8fcb403abddb0c..b9d9d42a93f93996b3c68eb32f5ce2617a44c180 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -5899,6 +5899,44 @@
+     });
+ 
+     await run(124, "FFSX conversion views and imported Plotly bytes preserve semantic data without fake CSV assets", async () => {
++      const fixture = { data: [
++        { x: [], y: [] },
++        { x: [null, 2], y: [3], type: "bar", visible: false, line: { width: -5, dash: "invalid", color: ["red"] },
++          marker: { color: "blue", size: [2, 3], symbol: "invalid", line: { width: 0 } }, opacity: 0, custom: { keep: true } },
++        { x: [9], y: [10], mode: "markers+lines", xaxis: "x2", yaxis: "y2" } ],
++        layout: { title: { text: "mapped", font: { family: 5, size: -1 } }, font: { family: "mapped-family" },
++          xaxis: { type: "log", range: [-1, 400], dtick: "D1", linewidth: 0 },
++          xaxis2: { range: [true, "2"], dtick: "L-2.5", title: { text: "top" } },
++          yaxis: { range: [1, 2, 3], dtick: Infinity }, yaxis2: { visible: false } },
++        config: { responsive: false }, frames: [{ name: "kept" }] },
++        fixtureBefore = JSON.stringify(fixture), parsed = parsePlotlyToEditor(fixture, null),
++        settings = parsed.editor.globalSettings, first = parsed.editor.objects[0],
++        defaults = BackendSettings.defaults.chartSettings.editor.objectStyle,
++        limits = BackendSettings.defaults.limits.graphObject;
++      check(!Object.hasOwn(parsed, "id") && parsed.editor.editable === false && parsed.editor.objects.length === 2 &&
++        first.x === "C3" && first.y === "C4" && first.type === "hidden" && first.color === "blue" &&
++        first.lineWidth === limits.lineWidth[0] && first.lineDash === defaults.lineDash &&
++        first.markerSize === defaults.markerSize && first.markerSymbol === defaults.markerSymbol &&
++        first.barLineWidth === 0 && first.barOpacity === limits.barOpacity[0] && !Object.hasOwn(first, "csvId") &&
++        !Object.hasOwn(first.plotlyTrace, "x") && !Object.hasOwn(first.plotlyTrace, "y") &&
++        parsed.editor.objects[1].type === "lines+markers" && parsed.editor.objects[1].xAxisSide === "top" &&
++        parsed.editor.objects[1].yAxisSide === "right", "import object/default/style/identity translation differs");
++      check(JSON.stringify(parsed.editor.conversionRows) === JSON.stringify([
++        ["trace1_x", "trace1_y", "trace2_x", "trace2_y", "trace3_x", "trace3_y"],
++        ["", "", null, 3, 9, 10], ["", "", 2, "", "", ""] ]) &&
++        settings.graphFontFamily === "mapped-family" && settings.titleFontSize === "" && settings.showTitle &&
++        !settings.showZeroLine && settings.axes.xBottom.min === 0.1 && settings.axes.xBottom.max === "" &&
++        settings.axes.xBottom.minorTicks && settings.axes.xBottom.lineWidth === 0 &&
++        settings.axes.xTop.min === "" && settings.axes.xTop.max === "" && settings.axes.xTop.tick === -2.5 &&
++        settings.axes.xTop.tickMode === "increment" && settings.axes.xTop.title === "top" &&
++        settings.axes.yLeft.min === "" && settings.axes.yLeft.max === "" && settings.axes.yLeft.tick === "" &&
++        settings.axes.yRight.visible === false, "import structural transpose/axis normalization differs");
++      parsed.graph.imported.frames[0].name = "changed";
++      first.plotlyTrace.custom.keep = false; parsed.editor.plotlyExtensions.config.responsive = true;
++      check(JSON.stringify(fixture) === fixtureBefore, "import conversion retained source aliases");
++      const empty = parsePlotlyToEditor({ data: [{ x: [], y: [] }], layout: {} }, 123);
++      check(empty.editor.objects.length === 0 && empty.editor.conversionRows.length === 0 &&
++        empty.graph.imported.data.length === 1, "empty import invented conversion rows or lost original trace");
+       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = interfaceRuntime.selectedSlotId,
+         initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify;
+       try {
+diff --git a/development-versions.json b/development-versions.json
+index 7f22e636ddbfe560a0e582e2fc28b47346b3ef96..7fddd9dc5f425814dcb523daf87b94b128dc46af 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 140,
++      "revision": 141,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:0c703981ba2cc0bc20f3d5f3005937a6008d9c8d22caf4566534baa162dc3e92",
++      "fingerprint": "sha256:a785b8dc5287466d4fac2893a925adda97378de307965dd688216226a554700f",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261112-006-graph-projection-translation.md"
++      "validation_review": "agent_space/reviews/review-20261112-007-plotly-import-translation.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/plans/plan-024.md b/agent_space/plans/plan-024.md
+index 31c5c4e9d9e27db562f39ac983b80ced215ea8ec..6b4d2a4b242b92e1904a0d7628adc416b07e1417 100644
+--- a/agent_space/plans/plan-024.md
++++ b/agent_space/plans/plan-024.md
+@@ -178,3 +178,9 @@
+ Per the user's direction to translate written procedures rather than polish, directly translated the graph calculation group after reading complete Source/PlusCal/runtime graph modules. NormalizeDivisor/ScaleCoordinate/tracesSingle now preserve scalar eligibility, ordered row pairing, divide-before-scale, finite-result rejection and config-owned computed styles. traces resolves the same-project unique owning chart/CSV and performs detached extension-first merges with explicit bar-mode omission. PlotlyAxis/layout reuse local normalized settings and configured defaults, preserve unknown extensions/font family, detach nested output and remove omitted optional fields. Existing Cartesian axis placeholders remain; no new feature/authority/public shape was designed. Existing regression66 was extended, no IDs added and no fixture execution. Correspondence/boundaries: `agent_space/reviews/review-20261112-006-graph-projection-translation.md`.
+ 
+ Code140/**stale**, independent canonical-LF fingerprint `sha256:0c703981ba2cc0bc20f3d5f3005937a6008d9c8d22caf4566534baa162dc3e92`; prior r139 fingerprint independently reproduced. Source45/PlusCal25/verification26 and derived_from unchanged. Incremental exact-WIP patch/explanation `agent_space/patches/20261112-006.patch` / `.md`. Static file/diff/hash/patch inspection only, not app/tests/build/checker execution; no Actions/remote/commit/push or upstream changes. **Stage3 remains open**: remaining Backend graph normalization/import/validation/candidate procedures and Backend layout correspondence are next written units; the previously recorded tree/UI input questions are separate and not permission to invent meaning.
++
++## 17. Written Plotly import conversion — r141 (2026-11-12)
++
++Translated ImportAxis/parsePlotlyToEditor directly: structural trace-order paired columns with null preservation and rectangular padding, config-owned bounded object styles and normalized modes, detached original/extension figures, no fake CSV/identity/rows, normalized title/font precedence and all four axes (finite inverse-log bounds, L ticks, minor-log rules). Import uses the existing pure normalizer rather than Application locks or first-object editor mirrors. Existing original and working config/frames copies remain independent for later conversion. Existing regression124 extended without new ids; fixtures NOT executed. Correspondence and actual candidate caller: `agent_space/reviews/review-20261112-007-plotly-import-translation.md`.
++
++Code141/**stale**, independently reproduced r140 baseline and matched canonical-LF fingerprint `sha256:a785b8dc5287466d4fac2893a925adda97378de307965dd688216226a554700f`. Source45/PlusCal25/verification26 and derived_from unchanged. Exact prior-WIP incremental pair `agent_space/patches/20261112-007.patch` / `.md`; static file/diff/hash/patch checks only, no app/tests/build/checker/Actions/remote/commit/push/upstream changes. **Stage3 remains open**; continue written graph validation/normalization/candidate procedures and Backend layout, not polishing or inventing unresolved UI semantics.
+diff --git a/agent_space/reviews/review-20261112-007-plotly-import-translation.md b/agent_space/reviews/review-20261112-007-plotly-import-translation.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..efe2847da1a19d2912534ecf724a6766a9888acc
+--- /dev/null
++++ b/agent_space/reviews/review-20261112-007-plotly-import-translation.md
+@@ -0,0 +1,12 @@
++# r141 — Written Plotly import conversion
++
++Parent static correspondence record, not independent review or executed validation. Authority: `pseudocode/backend/graphs.pcal` ImportAxis/parsePlotlyToEditor, clarified with `sourcescript/backend/graphs.py`. Complete upper graph modules were already read; relevant import procedures were checked directly again. No upper meaning changes.
++
++- `setNestedAxisFromPlotly` realizes ImportAxis using record-only input, exactly two range bounds with finite-number eligibility, finite inverse-log results, numeric L tick parsing (including signed values), log minor ticks, divide=1 and the existing pure axis normalizer. No reciprocal inference, caller/session defaults or Application lock consultation.
++- `parsePlotlyToEditor` checks interchange field shape, detaches original data/layout/config/frames, appends each trace's paired columns in source order and pads rectangular rows. Explicit null cells survive; missing cells are empty. Trace column ids do not depend on which row first has a value. No-point traces do not create objects; all-empty input produces no conversion rows or fake CSV.
++- Objects begin from configured style defaults; hidden precedes bar, scatter modes are normalized, supported scalar line/marker colors/styles map within configured limits and original non-XY fields remain detached extensions. The absent project identity is omitted rather than inventing an id. No project CSV or live authority mutation.
++- Global title/font precedence accepts only nonempty text, normalizes sizes and all four imported axes, and keeps zero-line false. Layout/config extensions are detached. Existing separate working graph config/frames copies remain available to later conversion; original imported representation remains independent. Removed legacy first-object/editor color summaries: specified conversion objects are the representation, not another mirrored editor authority.
++
++Actual caller: `applySlotChartImportedAction` parses into a local chart, then assigns the candidate chart id and validates/commits its whole project. `chartFigure` presents original imported data; later editable conversion consumes conversionRows. Existing regression124 extends these import/FFSX checks with direct conversion scalar/column/style/axis/detachment/empty cases; no ids added and no fixture execution.
++
++Code141 remains stale; Source45/PlusCal25/verification26 and derived_from unchanged. Independent baseline/current canonical-LF byte hashes and patch consistency only. No local app/tests/build/checker/TLC/browser, Actions, remote writes, commits/pushes, new goal or policy/spec/generated/workflow edits. Remaining graph validation/normalization/candidate translation and Backend layout are not certified by this bounded record; Plan024 stage3 stays open.

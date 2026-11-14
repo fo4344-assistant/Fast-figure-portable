@@ -1,0 +1,630 @@
+diff --git a/sourcecode/backend/project_efsm.js b/sourcecode/backend/project_efsm.js
+index 37b40e1db55fed5af466816dfe13df26e0256e27..14a4b2731895f9445c4692c7320edaa5b7931278 100644
+--- a/sourcecode/backend/project_efsm.js
++++ b/sourcecode/backend/project_efsm.js
+@@ -2,9 +2,9 @@
+ import { PROJECT_ASSET_DIRECTORIES, buildProjectAssetImportCandidate, buildProjectCsvModel, buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBytesToBase64, ffpxReadProjectBytes, ffsxReadSlotBytes, normalizeProjectPath, planProjectNodeMove, projectAssetPath, projectCsvName, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, removeProjectAssetReferences, serializeNewDataTable } from './assets_files.js';
+ import { chartCsvIds, chartUsesConversionView, columnDefinitions, createCandidateBaseGraphObject, createChartModel, dataTable, graphDataSelection, headerLineCount, normalizeGlobalSettings, normalizeGraphLayoutSettings, parsePlotlyToEditor, readGlobalSettings, rebuildEditableGraph, validateChartModel } from './graphs.js';
+ import { buildGridResizeInProject, insertSlotCaptions, resolveLayoutCommandSlots } from './layout_annotations.js';
+-import { activeProject, getChart, getProjectCsv, getProjectImage, immutableProjectCopy, normalizeSlotContents, projectClone, projectObjects, projectRuntime, readProjectNumber, resetSlotLocalState, setSlotLocalState, slotAt, slotHasNonDefaultLocalState, slotLocalState, validateProjectObjectState } from './project_state.js';
+-import { BackendSettings, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE } from './settings.js';
+-import { releaseProjectImageDisplayUrl, releaseProjectImageDisplayUrls } from '../frontend/renderer.js';
++import { activeProject, immutableProjectCopy, normalizeSlotContents, projectClone, projectObjects, projectRuntime, readProjectNumber, resetSlotLocalState, setSlotLocalState, slotHasNonDefaultLocalState, slotLocalState, resolveOwningSlot, validateProjectObjectState } from './project_state.js';
++import { BackendSettings, DEFAULT_UI_PALETTE } from './settings.js';
++
+ 
+ // Physical translation of VisualCommitFacts / CalculateProjectionEffect.
+ // Both inputs belong to this successful commit; never retained as a read store.
+@@ -51,6 +51,38 @@
+   const pre = activeProject._state;
+   activeProject.initialize(candidate);
+   payload.projectionEffect = calculateProjectionEffect(event, pre, activeProject._state);
++  payload.commitFacts = { pre, post: activeProject._state };
++}
++
++// BuildActualChanged: call-local structural comparison, including removed identities.
++function commitValueKey(value) {
++  if (Array.isArray(value)) return JSON.stringify(value.map(item => JSON.parse(commitValueKey(item))));
++  if (value && typeof value === "object") return JSON.stringify(Object.fromEntries(
++    Object.keys(value).sort().map(key => [key, JSON.parse(commitValueKey(value[key]))])));
++  return JSON.stringify(value === undefined ? null : value);
++}
++
++function actualChanged(payload) {
++  const { pre, post } = payload.commitFacts,
++    ids = (before, after) => [...new Set([...before, ...after].map(item => item.id))].filter(id =>
++      commitValueKey(before.find(item => item.id === id)) !== commitValueKey(after.find(item => item.id === id))),
++    changed = { ...payload.changed, slotIds: ids(pre.slots, post.slots), chartIds: ids(pre.charts, post.charts),
++      csvIds: ids(pre.assets.csvFiles, post.assets.csvFiles), imageIds: ids(pre.assets.images, post.assets.images), assets: [] };
++  for (const fact of payload.changed?.assets || []) {
++    const collection = fact.kind === "csv" ? "csvFiles" : "images",
++      source = fact.role === "deleted" ? pre : post,
++      asset = source.assets[collection].find(item => item.id === fact.id);
++    if (!asset || projectAssetPath(asset) !== fact.path) throw Error("commit 결과의 asset identity/path가 일치하지 않습니다.");
++    if (fact.role === "deleted") { changed.assets.push({ ...fact }); continue; }
++    const owners = fact.kind === "csv" ? post.charts.filter(chart =>
++      !chartUsesConversionView(chart) && chart.editor.objects.some(object => object.csvId === asset.id)).map(chart => {
++        const slot = resolveOwningSlot(chart.id, post);
++        if (!slot) throw Error("commit 결과 asset의 chart owner가 없습니다.");
++        return { slotId: slot.id, chartId: chart.id };
++      }) : post.slots.filter(slot => slot.content.imageId === asset.id).map(slot => ({ slotId: slot.id, chartId: null }));
++    changed.assets.push({ ...fact, id: asset.id, path: projectAssetPath(asset), owners });
++  }
++  return changed;
+ }
+ 
+ export class ProjectStateMachine {
+@@ -64,20 +96,22 @@
+       throw Error(`${event} 전이 중 잠긴 ${scope} 프로젝트 범위를 수정할 수 없습니다.`);
+   }
+   send(event, payload = {}) {
+-    let action = this.actions[event];
++    const action = Object.hasOwn(PROJECT_COMMAND_ACTIONS, event) && this.actions[event];
+     if (!action) throw Error(`${event}는 등록된 ProjectObject command가 아닙니다.`);
+-    // Caller-provided effect flags are never accepted as commit facts.
+-    delete payload.projectionEffect;
+-    let committed = action({ machine: this, event, payload }) !== false;
+-    return Object.freeze({
+-      event,
+-      committed,
+-      changed: immutableProjectCopy(committed ? payload.changed || {} : {}),
+-      payload,
+-      removedGraphReferenceCount: payload.removedGraphReferenceCount || 0,
+-      resetImageSlotCount: payload.resetImageSlotCount || 0,
+-      selectionHints: payload.selectionHints || null,
+-      projectionEffect: committed ? payload.projectionEffect || null : null,
++    if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
++        ["project", "candidate", "model", "objects"].some(key => Object.hasOwn(payload, key)))
++      throw Error("Project command는 identity와 새 입력만 받습니다.");
++    // This command's private calculation fields never alias or modify the caller's input.
++    const input = { ...payload };
++    for (const key of ["changed", "selectionHints", "projectionEffect", "commitFacts",
++      "removedGraphReferenceCount", "resetImageSlotCount"]) delete input[key];
++    const outcome = action({ machine: this, event, payload: input }), committed = outcome !== false && !!input.commitFacts,
++      changed = committed ? actualChanged(input) : {};
++    return immutableProjectCopy({ event, committed, changed,
++      removedGraphReferenceCount: committed ? changed.removedGraphReferenceCount || input.removedGraphReferenceCount || 0 : 0,
++      resetImageSlotCount: committed ? changed.resetImageSlotCount || input.resetImageSlotCount || 0 : 0,
++      selectionHints: committed ? input.selectionHints || {} : {},
++      projectionEffect: committed ? input.projectionEffect : null,
+     });
+   }
+ }
+@@ -178,30 +212,40 @@
+   }
+ }
+ 
+-export function applyAssetObjectReplacedAction({ machine, payload }, kind) {
+-  let image=kind==="image",
+-    event=image?"IMAGE_OBJECT_REPLACED":"DATA_OBJECT_REPLACED",
+-    scope=image?"images":"data",
+-    collection=image?activeProject.images:activeProject.csvFiles,
+-    model=payload.model,
+-    index=collection.findIndex((item)=>item.id===model?.id),
+-    previous=index>=0?collection[index]:null;
+-  machine.assertWritable(scope,event);
+-  machine.assertWritable("files",event);
+-  if(!previous||projectAssetPath(model)!==projectAssetPath(previous))
+-    throw Error(`교체할 ${image?"이미지":"CSV"} 또는 참조 경로가 올바르지 않습니다.`);
+-  let candidate=projectClone(activeProject._state),
+-    next=projectClone(model),
+-    candidateCollection=image?candidate.assets.images:candidate.assets.csvFiles;
+-  if(image&&previous.settings)next.settings=projectClone(previous.settings);
+-  candidateCollection[index]=next;
+-  commitProjectCandidate(validateProjectObjectState(candidate,{requireSlots:true}), event, payload);
+-  if(image)releaseProjectImageDisplayUrl(previous);
+-  payload[image?"image":"csv"]=image?getProjectImage(next.id):getProjectCsv(next.id);
++export function applyAssetObjectReplacedAction({ machine, event, payload }, kind) {
++  const image = kind === "image", collection = image ? "images" : "csvFiles";
++  machine.assertWritable(image ? "images" : "data", event);
++  machine.assertWritable("files", event);
++  if (!image) machine.assertWritable("charts", event);
++  while (true) {
++    const source = activeProject._state, previous = source.assets[collection].find(item => item.id === payload.id);
++    if (!previous || (Object.hasOwn(payload, "path") && projectAssetPath(previous) !== payload.path))
++      throw Error("교체할 asset의 현재 id/path가 요청과 다릅니다.");
++    const candidate = projectClone(source), next = candidate.assets[collection].find(item => item.id === previous.id);
++    if (image) {
++      const bytes = typeof payload.bytes === "string" ? ffpxBase64ToBytes(payload.bytes) : new Uint8Array(payload.bytes || []);
++      if (!bytes.length) throw Error("이미지 데이터가 비어 있습니다.");
++      next.bytesBase64 = ffpxBytesToBase64(bytes);
++    } else {
++      next.rows = projectClone(dataTable(payload.data));
++      next.headerLines = headerLineCount(Object.hasOwn(payload, "headerLines") ? payload.headerLines : previous.headerLines, next.rows);
++      next.bytesBase64 = payload.bytesBase64 != null && payload.bytesBase64 !== "" ?
++        (ffpxBase64ToBytes(payload.bytesBase64), payload.bytesBase64) :
++        ffpxBytesToBase64(serializeNewDataTable(next.rows, projectAssetPath(previous)));
++      for (const chart of candidate.charts)
++        if (chart.editor.editable && chartCsvIds(chart).includes(next.id)) rebuildEditableGraph(chart, candidate);
++    }
++    if (Object.hasOwn(payload, "mime")) next.mime = payload.mime;
++    validateProjectObjectState(candidate, { requireSlots: true });
++    if (activeProject._state !== source) continue;
++    commitProjectCandidate(candidate, event, payload);
++    payload.changed = { assets: [{ role: "updated", kind, id: next.id, path: projectAssetPath(next) }] };
++    return;
++  }
+ }
+ 
+ export function applyDataObjectReplacedAction(context) {
+-  const { machine, payload } = context;
++  const { machine, event, payload } = context;
+   if (!Object.hasOwn(payload, "headerLines")) {
+     applyAssetObjectReplacedAction(context, "csv");
+     return;
+@@ -279,7 +323,6 @@
+       csvIds: [...csvIds], imageIds: [...imageIds], ...removedReferences,
+       assets: [{ role: "deleted", kind, id: target.id, path: target.path, name: node.asset.name }] };
+     payload.selectionHints = immutableProjectCopy({ graphObjectIndexMaps: removedReferences.graphObjectIndexMaps });
+-    if (kind === "image") releaseProjectImageDisplayUrl(node.asset);
+     return;
+   }
+ }
+@@ -423,7 +466,6 @@
+     commitProjectCandidate(candidate, event, payload);
+     payload.changed = { slotIds: slot.chart !== target.chart || slot.imageId !== target.imageId ? [slot.id] : [],
+       chartIds: chart ? [chart.id] : [], csvIds: [], imageIds: [], assets: [] };
+-    if (chart) payload.selectionHints = Object.freeze({ chartId: chart.id, selectedIndexHint: null });
+     return;
+   }
+ }
+@@ -585,25 +627,32 @@
+       chartId = slot?.content?.chart ?? slot?.chart, current = source.charts.find(item => item.id === chartId),
+       owners = source.slots.filter(item => (item.content?.chart ?? item.chart) === chartId), values = payload.settings;
+     if (!slot || slot.contentType === "image" || !current || current.id !== payload.chartId ||
+-        owners.length !== 1 || current.editor?.editable === false)
+-      throw Error("전역 설정을 변경할 현재 편집 가능 owning chart가 없습니다.");
++        owners.length !== 1)
++      throw Error("전역 설정을 변경할 현재 owning chart가 없습니다.");
+     if (!values || typeof values !== "object" || Array.isArray(values)) throw Error("적용할 그래프 설정이 없습니다.");
+     const candidate = projectClone(source), chart = candidate.charts.find(item => item.id === chartId),
+       settings = projectClone(chart.editor.globalSettings || {}), edits = values.globalSettings;
+     if (Object.hasOwn(values, "title")) chart.editor.title = String(values.title ?? "");
+-    if (edits && typeof edits === "object") {
+-      for (const key of Object.keys(edits)) if (key !== "axes") settings[key] = edits[key];
+-      if (edits.axes && typeof edits.axes === "object") {
+-        settings.axes = { ...settings.axes };
++    const record = value => value && typeof value === "object" && !Array.isArray(value),
++      applyAxis = (key, patch) => {
++        if (!record(patch)) throw Error("axis settings는 record여야 합니다.");
++        for (const field of Object.keys(settings.axes[key]))
++          if (Object.hasOwn(patch, field)) settings.axes[key][field] = patch[field];
++      };
++    if (Object.hasOwn(values, "globalSettings")) {
++      if (!record(edits)) throw Error("global settings는 record여야 합니다.");
++      for (const key of ["showLegend", "showTitle", "showZeroLine", "graphFontFamily", "titleFontSize", "legendFontSize"])
++        if (Object.hasOwn(edits, key)) settings[key] = edits[key];
++      if (Object.hasOwn(edits, "axes")) {
++        if (!record(edits.axes)) throw Error("axes는 record여야 합니다.");
+         for (const key of ["xBottom", "xTop", "yLeft", "yRight"])
+-          if (Object.hasOwn(edits.axes, key)) settings.axes[key] = { ...settings.axes[key], ...edits.axes[key] };
+-      }
+-    }
+-    const key = values.axisKey;
+-    if (["xBottom", "xTop", "yLeft", "yRight"].includes(key))
+-      settings.axes = { ...settings.axes, [key]: { ...settings.axes?.[key], ...values.axisValues } };
++          if (Object.hasOwn(edits.axes, key)) applyAxis(key, edits.axes[key]);
++      }
++    }
++    // Existing UI axisKey syntax is the same explicit axis patch, not a second algorithm.
++    if (["xBottom", "xTop", "yLeft", "yRight"].includes(values.axisKey)) applyAxis(values.axisKey, values.axisValues);
+     chart.editor.globalSettings = normalizeGraphLayoutSettings(settings);
+-    rebuildEditableGraph(chart, candidate);
++    if (chart.editor.editable) rebuildEditableGraph(chart, candidate);
+     validateProjectObjectState(candidate, { requireSlots: true });
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+@@ -665,11 +714,14 @@
+   machine.assertWritable("slots", "SLOT_IMAGE_IMPORTED");
+   machine.assertWritable("images", "SLOT_IMAGE_IMPORTED");
+   machine.assertWritable("files", "SLOT_IMAGE_IMPORTED");
++  machine.assertWritable("charts", "SLOT_IMAGE_IMPORTED");
+   while (true) {
+     const source = activeProject._state, current = source.slots.find(slot => slot.id === payload.slotId && !slot.hidden);
+     if (!current || (current.content?.contentType ?? current.contentType) !== "image")
+       throw Error("빈 이미지를 삽입할 현재 visible image 슬롯이 없습니다.");
+-    const input = payload.imageInput, bytes = new Uint8Array(input.bytes || []), directory = PROJECT_ASSET_DIRECTORIES.image;
++    const input = payload.operation === "images.insertEmpty" ? payload.imageInput : payload,
++      bytes = typeof input?.bytes === "string" ? ffpxBase64ToBytes(input.bytes) : new Uint8Array(input?.bytes || []),
++      directory = PROJECT_ASSET_DIRECTORIES.image;
+     if (!bytes.length || !source.fileSystem.directories.includes(directory)) throw Error("이미지 데이터 또는 directory가 없습니다.");
+     const path = projectVfs.uniquePath(directory, projectCsvName(input.name, "image.bin"), source), id = source.nextId.image;
+     if (!Number.isInteger(id) || id <= 0 || source.assets.images.some(image => image.id === id))
+@@ -698,37 +750,8 @@
+ }
+ 
+ export function applySlotImageImportedAction(context) {
+-  const { machine, event, payload } = context;
+-  if (payload.operation === "images.insertEmpty") return applyEmptyImageInsertedAction(context);
+-  machine.assertWritable("slots","SLOT_IMAGE_IMPORTED");
+-  machine.assertWritable("images","SLOT_IMAGE_IMPORTED");
+-  machine.assertWritable("charts","SLOT_IMAGE_IMPORTED");
+-  machine.assertWritable("workspace","SLOT_IMAGE_IMPORTED");
+-  machine.assertWritable("files","SLOT_IMAGE_IMPORTED");
+-  let slot=slotAt(payload.slotId),source=payload.model||getProjectImage(payload.imageId);
+-  if(!slot||!source||!Number.isInteger(source.id)||source.id<1||
+-    typeof source.name!=="string"||typeof source.bytesBase64!=="string"||!source.bytesBase64)
+-    throw Error("이미지를 연결할 슬롯 또는 이미지가 없습니다.");
+-  let candidate=projectClone(activeProject._state);
+-  normalizeSlotContents(candidate.slots);
+-  let imageId=source.id;
+-  if(payload.model){
+-    if(candidate.assets.images.some(item=>item.id===imageId))
+-      throw Error(`이미지 ID ${imageId}가 중복되었습니다.`);
+-    let model=projectClone(source);delete model.settings;
+-    projectVfs.prepare(model,"image",candidate);
+-    candidate.assets.images.push(model);
+-    candidate.nextId.image=Math.max(candidate.nextId.image,imageId+1);
+-  }
+-  let target=candidate.slots.find(item=>item.id===slot.id);
+-  if(Number.isInteger(target.chart))
+-    candidate.charts=candidate.charts.filter(chart=>chart.id!==target.chart);
+-  target.chart=null;target.imageId=imageId;target.contentType="image";
+-  target.content.imageSettings={...DEFAULT_IMAGE_SETTINGS};
+-  validateProjectObjectState(candidate,{requireSlots:true});
+-  commitProjectCandidate(candidate, event, payload);
+-  payload.image=getProjectImage(imageId);
+-  payload.clearGraphSelection = true;
++  // Both declared imports calculate a new asset from bytes/name/MIME, never a caller model.
++  return applyEmptyImageInsertedAction(context);
+ }
+ 
+ export function applySlotChartImportedAction({ machine, event, payload }) {
+@@ -793,7 +816,6 @@
+     payload.changed = { slotIds: [slot.id],
+       chartIds: [...new Set([oldChartId, chart.id].filter(Number.isInteger))],
+       csvIds, imageIds: [], assets };
+-    payload.selectionHints = immutableProjectCopy({ chartId: chart.id, selectedIndexHint: null });
+     return;
+   }
+ }
+@@ -806,8 +828,6 @@
+       candidate = buildGridResizeInProject(source, payload.rows, payload.cols);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+-    payload.clearGraphSelection = true;
+-    payload.selectionHints = { reResolveSlotSelection: true, clearAssetSelection: true };
+     return;
+   }
+ }
+@@ -875,7 +895,6 @@
+       csvIds: [...csvIds], imageIds: [...imageIds], assets: [], ...removedReferences,
+       csvCount: csvFiles.length, imageCount: images.length, directoryCount: directories.length };
+     payload.selectionHints = immutableProjectCopy({ graphObjectIndexMaps: removedReferences.graphObjectIndexMaps });
+-    images.forEach(releaseProjectImageDisplayUrl);
+     return;
+   }
+ }
+@@ -1013,15 +1032,18 @@
+ 
+ export function applyAppearanceChangedAction({ machine, event, payload }) {
+   machine.assertWritable("appearance", "APPEARANCE_CHANGED");
+-  let candidate = projectClone(activeProject._state);
+-  candidate.appearance.uiPalette = Object.fromEntries(
+-    Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => {
+-      const value = payload.palette?.[key];
+-      return [key, typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback];
+-    }),
+-  );
+-  validateProjectObjectState(candidate, { requireSlots: true });
+-  commitProjectCandidate(candidate, event, payload);
++  while (true) {
++    const source = activeProject._state, candidate = projectClone(source);
++    candidate.appearance.uiPalette = Object.fromEntries(
++      Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => {
++        const value = payload.palette?.[key];
++        return [key, typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback];
++      }));
++    validateProjectObjectState(candidate, { requireSlots: true });
++    if (activeProject._state !== source) continue;
++    commitProjectCandidate(candidate, event, payload);
++    return;
++  }
+ }
+ 
+ export function applyExportSettingsChangedAction({ machine, event, payload }) {
+@@ -1043,8 +1065,8 @@
+     for (const [key, limitKey] of [["width", "logicalWidth"], ["height", "logicalHeight"], ["dpi", "dpi"]]) {
+       if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+       const value = values[key];
+-      // NoValue is not numeric zero; conversion exceptions otherwise propagate.
+-      const number = value === null ? NaN : Number(value);
++      // NoValue/arrays/records are not scalar numbers; primitive conversion errors propagate.
++      const number = value === null || typeof value === "object" ? NaN : Number(value);
+       if (Number.isFinite(number)) {
+         const [min, max] = limits[limitKey];
+         next[key] = Math.max(min, Math.min(max, number));
+@@ -1070,7 +1092,8 @@
+     const source = activeProject._state, candidate = projectClone(source);
+     normalizeSlotContents(candidate.slots);
+     const target = candidate.slots.find((slot) => slot.id === payload.slotId);
+-    if (!target || target.hidden || !candidate.assets.images.some((image) => image.id === target.imageId))
++    if (!target || target.hidden || target.content.contentType !== "image" ||
++        !candidate.assets.images.some((image) => image.id === target.content.imageId))
+       throw Error("이미지 설정을 변경할 슬롯이 없습니다.");
+     const next = { ...target.content.imageSettings }, values = payload.settings || {},
+       limits = BackendSettings.defaults.limits.imageSettings;
+@@ -1082,7 +1105,7 @@
+       for (const key of ["scale", "x", "y"]) {
+         if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+         const value = values[key];
+-        const number = value === null ? NaN : Number(value);
++        const number = value === null || typeof value === "object" ? NaN : Number(value);
+         if (Number.isFinite(number)) {
+           const [min, max] = limits[key];
+           next[key] = Math.max(min, Math.min(max, number));
+@@ -1185,8 +1208,7 @@
+   if (nonDefault.length > 1)
+     throw Error("로컬 상태가 두 개 이상 있는 슬롯은 합칠 수 없습니다.");
+   let anchor = cells.find((slot) => slot.row === top && slot.col === left),
+-    source = nonDefault[0] || anchor,
+-    local = slotLocalState(source);
++    local = nonDefault.length ? slotLocalState(nonDefault[0]) : null;
+   cells.forEach((cell) => {
+     cell.hidden = cell !== anchor;
+     if (cell !== anchor) resetSlotLocalState(cell);
+@@ -1246,7 +1268,7 @@
+     const source = activeProject._state, calculation = buildProjectAssetImportCandidate(source, payload);
+     if (!calculation) return false;
+     const { candidate, imported } = calculation;
+-    try { validateProjectObjectState(candidate, { requireSlots: true }); } catch { return false; }
++    validateProjectObjectState(candidate, { requireSlots: true });
+     if (activeProject._state !== source) continue;
+     const changedIds = (before, after) => after.filter(item =>
+       JSON.stringify(before.find(old => old.id === item.id)) !== JSON.stringify(item)).map(item => item.id);
+@@ -1256,8 +1278,6 @@
+       imageIds: changedIds(source.assets.images, candidate.assets.images), assets: imported };
+     commitProjectCandidate(candidate, event, payload);
+     payload.changed = changed;
+-    for (const fact of imported)
+-      if (fact.kind === "image") releaseProjectImageDisplayUrl(source.assets.images.find(image => image.id === fact.id));
+     return;
+   }
+ }
+@@ -1323,7 +1343,6 @@
+       imageIds: changedIds(source.assets.images, candidate.assets.images), assets: [] };
+     payload.generation = projectRuntime.projectObjectGeneration;
+     payload.selectionHints = Object.freeze({ resetInterfaceSelection: true });
+-    releaseProjectImageDisplayUrls(source.assets.images);
+-    return;
+-  }
+-}
++    return;
++  }
++}
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 095b615878dd0b3eaba36f0f1a59d759a827b705..96c9400ab345f49f42c5f7f16095d2995176e080 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1402,6 +1402,9 @@
+       const auto = api.print.setSettings({ heightMode: "auto", height: 1234, format: "invalid" });
+       check(auto.height === null && auto.format === "jpeg" && auto.width === 20000,
+         "auto height or invalid-format fallback changed");
++      const scalar = api.print.setSettings({ width: [], height: { value: 900 }, dpi: [300] });
++      check(scalar.width === 20000 && scalar.dpi === 1200 && scalar.height === null,
++        "export edit accepted arrays/records as scalar numbers");
+       const beforeFailure = JSON.stringify(activeProject._state), frontendBeforeFailure = appFSM.state;
+       let failed = false;
+       try { api.print.setSettings({ width: Symbol("invalid-width") }); } catch { failed = true; }
+@@ -4489,15 +4492,21 @@
+         check(caught === failure && commits === 2 && paints === 1 && getChart(chart.id).editor.title === "committed before query failure",
+           "postcommit layout query error swallowed/rolled back");
+         readBackendProjection = query;
+-        for (const kind of ["hidden", "frozen"]) {
+-          const invalid = projectClone(activeProject._state);
+-          if (kind === "hidden") invalid.slots.find(item => item.id === target.id).hidden = true;
+-          else { invalid.slots.find(item => item.id === target.id).hidden = false;
+-            invalid.charts.find(item => item.id === chart.id).editor.editable = false; }
+-          initialize.call(activeProject, invalid); caught = null;
+-          try { graphEditorUpdateLayout(target.id, chart.id, {}); } catch (error) { caught = error; }
+-          check(caught && commits === 2 && paints === 1, "hidden/noneditable layout target committed");
+-        }
++        const imported = projectClone(activeProject._state), frozenChart = imported.charts.find(item => item.id === chart.id);
++        frozenChart.editor.editable = false;
++        initialize.call(activeProject, imported);
++        const graphBefore = JSON.stringify(getChart(chart.id).graph);
++        graphEditorUpdateLayout(target.id, chart.id, { title: "stored imported title", globalSettings: { injected: 42,
++          axes: { xBottom: { title: "explicit axis", injected: 42 } } } });
++        check(getChart(chart.id).editor.title === "stored imported title" && JSON.stringify(getChart(chart.id).graph) === graphBefore &&
++          !Object.hasOwn(getChart(chart.id).editor.globalSettings, "injected") &&
++          !Object.hasOwn(getChart(chart.id).editor.globalSettings.axes.xBottom, "injected"),
++          "layout edit rebuilt imported original or accepted unspecified patch fields");
++        const count = commits, invalid = projectClone(activeProject._state);
++        invalid.slots.find(item => item.id === target.id).hidden = true;
++        initialize.call(activeProject, invalid); caught = null;
++        try { graphEditorUpdateLayout(target.id, chart.id, {}); } catch (error) { caught = error; }
++        check(caught && commits === count, "hidden layout target committed");
+       } finally {
+         activeProject.initialize = initialize; projectEFSM.send = send; readBackendProjection = query;
+         validateProjectObjectState = validate; rebuildEditableGraph = rebuild; renderDashboard = render;
+@@ -7463,8 +7472,54 @@
+           activeProject._state.annotations.labels.enabled === winning.annotations.labels.enabled,
+           "commit effects came from caller flags or the abandoned pre-retry authority");
+         const reconciliation = buildFrontendReconciliationInput("PROJECT_NAME_CHANGED", result, interfaceFSM.readState());
+-        check(reconciliation.projectionEffect === result.projectionEffect,
+-          "official reconciliation dropped actual immutable commit effect facts");
++        check(JSON.stringify(reconciliation.projectionEffect) === JSON.stringify(result.projectionEffect) &&
++          Object.isFrozen(reconciliation.projectionEffect), "official reconciliation dropped actual immutable commit effect facts");
++        const forged = Object.freeze({ sourceSlotId: null, targetSlotId: null,
++          changed: { slotIds: [999999] }, selectionHints: { resetInterfaceSelection: true },
++          removedGraphReferenceCount: 50, resetImageSlotCount: 60, projectionEffect: { referencesRemoved: true } }),
++          unchanged = activeProject._state, noCommit = projectEFSM.send("SLOTS_SWAPPED", forged);
++        check(!noCommit.committed && activeProject._state === unchanged && !noCommit.removedGraphReferenceCount &&
++          !noCommit.resetImageSlotCount && !Object.keys(noCommit.selectionHints).length && !Object.keys(noCommit.changed).length &&
++          forged.projectionEffect.referencesRemoved && !Object.hasOwn(noCommit, "payload"),
++          "noncommit retained caller facts or mutated/exposed the request");
++        const input = Object.freeze({ value: "immutable receipt", selectionHints: { clearAssetSelection: true }, changed: { csvIds: [999999] } }),
++          receipt = projectEFSM.send("PROJECT_NAME_CHANGED", input);
++        check(receipt.committed && Object.isFrozen(receipt.changed) && Object.isFrozen(receipt.changed.assets) &&
++          Object.isFrozen(receipt.selectionHints) && !receipt.changed.csvIds.length && !Object.keys(receipt.selectionHints).length &&
++          input.changed.csvIds[0] === 999999, "receipt used caller facts or leaked mutable nested result data");
++        for (const key of ["model", "candidate", "objects", "project"]) {
++          let caught; const before = activeProject._state;
++          try { projectEFSM.send("PROJECT_NAME_CHANGED", { value: "reject", [key]: {} }); } catch (error) { caught = error; }
++          check(caught && activeProject._state === before, "command accepted Application-provided authority");
++        }
++        const created = projectEFSM.send("IMAGE_OBJECT_CREATED", { name: "efsm-owned.png", mime: "image/png", bytes: new Uint8Array([1, 2]) }),
++          asset = created.changed.assets[0], replacedImage = projectEFSM.send("IMAGE_OBJECT_REPLACED", {
++            id: asset.id, path: asset.path, bytes: new Uint8Array([9, 8]), mime: "image/png" });
++        check(replacedImage.changed.assets[0].path === asset.path && getProjectImage(asset.id).bytesBase64 === ffpxBytesToBase64(new Uint8Array([9, 8])) &&
++          !Object.hasOwn(getProjectImage(asset.id), "settings"), "raw image replacement changed identity/path or accepted model settings");
++        const targetId = activeProject.slots.find(slot => !slot.hidden).id;
++        projectEFSM.send("SLOT_TYPE_CHANGED", { slotId: targetId, contentType: "image" });
++        const localBefore = slotLocalState(slotAt(targetId)), imported = projectEFSM.send("SLOT_IMAGE_IMPORTED", {
++          slotId: targetId, name: "new-raw.png", mime: "image/png", bytes: new Uint8Array([4, 5]) });
++        check(imported.committed && slotAt(targetId).content.chart === null && slotAt(targetId).caption === localBefore.caption &&
++          JSON.stringify(slotAt(targetId).content.imageSettings) === JSON.stringify(localBefore.imageSettings),
++          "raw image import did not preserve local settings/caption or remove the previous owned chart");
++        const validate = validateProjectObjectState, initialize = activeProject.initialize;
++        let attempts = 0, commits = 0;
++        try {
++          activeProject.initialize = function (...args) { commits++; return initialize.apply(this, args); };
++          validateProjectObjectState = function(candidate, options) {
++            const value = validate(candidate, options);
++            if (isCandidateValidation(options) && !attempts++) {
++              const newer = projectClone(activeProject._state); newer.meta.projectName = "appearance winning authority";
++              initialize.call(activeProject, newer);
++            }
++            return value;
++          };
++          const appearance = projectEFSM.send("APPEARANCE_CHANGED", { palette: { background: "#112233" } });
++          check(appearance.committed && attempts === 2 && commits === 1 && activeProject.projectName === "appearance winning authority",
++            "appearance command overwrote an intervening authority or committed twice");
++        } finally { validateProjectObjectState = validate; activeProject.initialize = initialize; }
+       } finally { activeProject.initialize(original); }
+     });
+ 
+diff --git a/development-versions.json b/development-versions.json
+index 1445f8ad074bf0e9923beb3211be348d639e9573..ad7334585ab66d925ffa1b5fc2fecd9e75a47c18 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 145,
++      "revision": 146,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:ba6ad182dc54a6045c4eb034ee6f59e871bed05bc5d9ad157a247a2c96d9716e",
++      "fingerprint": "sha256:3ab32590a35bf1358af69f180651c946bdb1c65890bda5b9bde051d32b41b909",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261113-002-project-state-translation-open.md"
++      "validation_review": "agent_space/reviews/review-20261113-003-project-efsm-module-translation.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/reviews/review-20261113-003-project-efsm-module-translation.md b/agent_space/reviews/review-20261113-003-project-efsm-module-translation.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..33c6b39c4a6d1c928c5fd9c9b2d6ca07add02589
+--- /dev/null
++++ b/agent_space/reviews/review-20261113-003-project-efsm-module-translation.md
+@@ -0,0 +1,42 @@
++# Plan025 5차 / backend/project_efsm — 정적 번역 종료
++
++2026-11-13, code146/stale. Source45의 `sourcescript/backend/project_efsm.py` 244줄, PlusCal25의 `pseudocode/backend/project_efsm.pcal` 773줄, 실제 runtime 전체를 읽고 등록 34 commands/14 PlusCal procedures를 실제 caller/공유 helper에 대조했다. 정책에 따라 이미 번역된 candidate/helper를 재사용하며 새로운 API/상태/재시도 의미를 설계하지 않았다. 아래는 정적 대응 종료이며 실행 통과가 아니다. Plan025는 사용자 요청대로 지금 재작성하지 않고 미완료 연결은 memo/20261113-001.md에 모았다.
++
++## 전체 절차와 command 대응
++
++E=`sourcecode/backend/project_efsm.js`, A=`sourcecode/backend/assets_files.js`, G=`sourcecode/backend/graphs.js`, L=`sourcecode/backend/layout_annotations.js`.
++
++| 명세 절차/등록 command | 실제 번역 경로와 분기 |
++| --- | --- |
++| ProjectStateMachine_send / CalculateSourceCommandCandidate | E.ProjectStateMachine.send/PROJECT_COMMAND_ACTIONS의 34개 등록 route. object/candidate/model/project 금지, identity/새 값/copied bytes만 받는다. scope lock→현재 authority→owned candidate→whole validate→source identity 재확인→단일 commit. 현재 파일 입력은 Application이 이미 읽은 copied bytes라 handler는 동기식이며 별도 async 저장소/engine은 만들지 않는다. 예외는 원형 전달, noncommit에는 성공 facts 없음. |
++| BuildActualChanged / FormActualMutationResult | E.commitProjectCandidate/actualChanged/commitValueKey/send. 성공 직전/직후 source를 command-local input에만 보관하고 동일 id의 structural 실제 변경/제거 ids를 계산한다. asset facts는 계산 순서를 유지하고 실제 canonical path/id/현재 chart-slot owners를 확인한다. caller changed/hints/effects/count는 배제하며 caller payload를 수정/반환하지 않는다. result 전체를 detached recursive immutable copy로 반환한다. |
++| VisualCommitFacts / CalculateProjectionEffect | E.calculateProjectionEffect: 실제 winning pre/post의 전체 dashboard input, 참조 multiset 제거와 path-only 여부. abandoned retry source/caller effect를 사용하지 않고 persistent mirror를 만들지 않는다. |
++| cascadeFilterWithOriginalIndexMap / DetachAssetReferences | A.collectAssetReferences/removeProjectAssetReferences와 E deletion/trash/move callers. 같은 representation-aware CSV/image 집합으로 참조를 모으고 original index→remaining index/null을 계산한다. 같은 csvId의 복수 object 참조도 별개로 세며 순서를 보존한다. empty editor 허용, 슬롯 imageId만 해제하고 settings/caption 보존. |
++| calculateGraphObjectEdit / GRAPH_OBJECTS_REPLACED | E.applyGraphObjectEditAction: 등록 operation만 command 내부에서 계산하며 append/delete/reorder/field/CSV/palette 분기를 current chart/CSV에 적용한다. G missing-only defaults/validation/rebuild, explicit current output index 또는 index map. projected objects 배열은 받지 않는다. 기존 r142 대응을 재사용했다. |
++| CalculateNewAsset / DATA_OBJECT_CREATED, IMAGE_OBJECT_CREATED | E.applyDataObjectCreatedAction/applyImageObjectCreatedAction. copied bytes 또는 새 table→config directory/canonical path/id→metadata→whole validate/recheck/commit→actual created asset. assets 자체에 슬롯 설정을 넣지 않는다. |
++| DATA_OBJECT_REPLACED, IMAGE_OBJECT_REPLACED | E.applyDataObjectReplacedAction/applyAssetObjectReplacedAction. current id/optional path를 확인하고 새 table/bytes/MIME만 반영, identity/path는 보존. CSV header-only 명시 분기와 graph rebuild를 유지하고 header action의 event를 context에서 받도록 수정했다. 모델 교체와 Frontend image-release callback은 제거했다. |
++| DATA_OBJECT_DELETED, IMAGE_OBJECT_DELETED / PROJECT_TRASH_EMPTIED | E.applyAssetObjectDeletedAction/applyProjectTrashEmptiedAction. current canonical target/actual contained assets, 단일 cascade 집합, reference counts/index maps, 실제 changed/removed ids 및 noncommit/throw. Backend에서 렌더러 URL을 회수하지 않는다. |
++| ASSETS_IMPORTED | E.applyAssetsImportedAction→A.buildProjectAssetImportCandidate. 실제 source 기준 최종 계획·path/id/target 재확인, ordered imported facts, validate/recheck/commit. validation throw를 false로 삼키던 처리를 제거했다. |
++| PROJECT_LOADED | E.applyProjectLoadedAction→A.ffpxReadProjectBytes/buildProjectObject. copied package bytes만 받고 candidate 검증/recheck/단일 authority 교체, resetInterfaceSelection hint, 실제 pre/post 전체 changed. 외부 candidate/partial fallback 없음. |
++| PROJECT_NAME_CHANGED, PROJECT_DIRECTORY_CREATED, PROJECT_NODE_MOVED | E.applyProjectNameChangedAction/applyProjectDirectoryCreatedAction/applyProjectNodeMovedAction. current source candidate, name coercion/canonical directory·move planner, trash cascade와 counts/paths, recheck. directory-inclusive descendants는 asset rewrite에서 directory 항목을 제외한다(r144). |
++| SLOT_TYPE_CHANGED, SLOTS_RESET, SLOTS_SWAPPED | E.applySlotTypeChangedAction/applySlotsResetAction/applySlotsSwappedAction. current explicit visible id resolve; type만 변경/owned chart 제거와 local default reset/whole local payload swap. 명시된 reset/remap hints와 actual changes. |
++| SLOT_DATA_CONNECTED, SLOT_IMAGE_LINKED | E.applySlotDataConnectedAction/applyProjectAssetConnectedAction. current slot/asset resolve, candidate CSV/chart 생성 또는 현재 model 연결; 이미지 연결은 graph를 제거하고 local settings/caption 보존. 단순 data connect에 명세 밖 selectedIndexHint:null을 강제하지 않는다. |
++| SLOT_IMAGE_IMPORTED | E.applySlotImageImportedAction→applyEmptyImageInsertedAction. empty-image helper 입력과 일반 copied bytes/name/MIME를 같은 new-asset 계산으로 처리한다. raw model/imageId-import 우회 경로를 제거하고 current visible image target/new path/id/owned chart 제거/settings·caption 유지. |
++| SLOT_CHART_IMPORTED, CHART_MODEL_REPLACED | E.applySlotChartImportedAction/applyChartModelReplacedAction. raw JSON/FFSX current target과 기존 chart의 단일 owner 확인, candidate imported rows/CSV/reference/id 정상화 또는 editable conversion. 일반 import의 비명세 강제 selectedIndexHint:null을 제거했다. |
++| ApplyChartLayoutEdits / CHART_LAYOUT_CHANGED | E.applyChartLayoutChangedAction. current visible owning chart와 explicit known title/global/axis patch, nested record 검증, pure normalize, editable일 때만 rebuild. Source/PlusCal에 없는 editable-only target 거부를 제거하여 noneditable imported original graph는 그대로 보존한다. 기존 UI axisKey/axisValues도 같은 명시 축 patch의 물리적 표기로 수용한다. |
++| GRID_LAYOUT_CHANGED, LAYOUT_STYLE_CHANGED | E.applyGridLayoutChangedAction→L.buildGridResizeInProject 및 applyLayoutStyleChangedAction. config/int/geometry/local-state validation, retry/single commit. grid의 비명세 clear/reResolve selection flags를 제거했다. r143 계산은 재작성하지 않았다. |
++| CalculateMergeOrSplit / SLOTS_MERGED, SLOTS_SPLIT | E.applySlotsMergedAction/applySlotsSplitAction. resolve distinct visible rectangular/unmerged cells, 최대 하나 nondefault local owner, anchor/local 이동·나머지 default reset와 span/hidden 처리, recheck. nondefault owner가 없으면 anchor의 잔여 extension을 복사하는 대신 명시된 empty local default를 사용한다. |
++| CAPTION_TEXT_INPUT, SLOT_CAPTIONS_INSERTED, CAPTION_SETTINGS_CHANGED | E.applyCaptionTextInputAction/applySlotCaptionsInsertedAction/applyCaptionSettingsChangedAction와 L.insertSlotCaptions. current visible targets, exact text/group generation, explicit settings patch/config ranges, validate/recheck/single commit. 기존 owner 경로 유지. |
++| LABEL_SETTINGS_CHANGED, LABEL_POSITION_CHANGED, APPEARANCE_CHANGED | E label/position/appearance actions. current config/explicit patch/whole validate/recheck. appearance의 빠졌던 source retry를 추가했다. r143 label 계산은 재사용했다. |
++| NormalizeImageEditsInAttempt / SLOT_IMAGE_SETTINGS_CHANGED | E.applySlotImageSettingsChangedAction. current visible image type와 실제 imageRef, config fit/manual/limits/center, unknown local settings 보존, array/record를 numeric scalar로 바꾸지 않으며 primitive conversion exception은 그대로 전달한다. |
++| NormalizeExportEditsInAttempt / EXPORT_SETTINGS_CHANGED | E.applyExportSettingsChangedAction. current settings partial patch, enum/auto-null/explicit-height/config ranges; scalar edit만 반영, conversion error 원형 전파와 source retry. |
++
++34개 command/14개 PlusCal procedure를 위 표에서 모두 다뤘다. 이 모듈의 등록 command 계산에서 알려진 미번역 분기는 남기지 않았다. Backend registry tree/UI 역의존, 실제 public/UI 입력 의미, Frontend runtime/legacy resource ownership과 통합 검증은 이 모듈의 종료로 함께 완료되는 것이 아니며 메모에 남겼다.
++
++## Fixtures / 증거 / 실행 경계
++
++기존 regression40/96/155만 확장했다: scalar print 입력·exception, current noneditable layout/원본 보존·unknown patch 제외, actual receipt와 immutable nested facts·forged caller/noncommit/authority model 거부, raw image create/replace/import와 local settings 보존, appearance source 교체 retry. 현재 명세와 다른 noneditable layout 거부 기대 및 r145 이전 effect alias 동일성 기대도 바로잡았다. 새 ID 없음, 미실행.
++
++code146/stale `sha256:3ab32590a35bf1358af69f180651c946bdb1c65890bda5b9bde051d32b41b909`. 이전145 `sha256:ba6ad182dc54a6045c4eb034ee6f59e871bed05bc5d9ad157a247a2c96d9716e` 독립 canonical-LF byte hash 재현. Source45/PlusCal25/verification26 및 derived_from 불변. app/test/build/checker/TLC/browser/Actions/remote/commit/push/goal 없음. 독립 hash/diff/patch 확인은 공식 checker/실행 검증을 대체하지 않는다.
++
++다음 모듈: Plan025 6a frontend/interface_fsm. 사용자 지시대로 미완료 항목은 메모에서 이어받고 전체 모듈 작업 후 계획을 갱신한다.
+diff --git a/agent_space/memo/20261113-001.md b/agent_space/memo/20261113-001.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..319132c71cab390e154417f8729aa05f6d5ef0f5
+--- /dev/null
++++ b/agent_space/memo/20261113-001.md
+@@ -0,0 +1,51 @@
++# 모듈 작업 후 새 Plan으로 이관할 미완료 작업
++
++2026-11-13. 사용자 지시대로 미완료 항목을 이 메모에 모으고, 모듈 작업이 끝난 뒤 새 Plan을 만들 때 회수한다. 현재 Plan025를 부분 패치마다 다시 쓰지 않는다. 이 문서는 새 명세나 실행 허가가 아니다.
++
++## 현재 위치
++
++- r142 graphs, r143 layout_annotations, r144 assets_files: 각 기록 범위에서 정적 번역 종료.
++- r145 project_state: 가능한 15개 Source 절차/PlusCal 확장은 번역했지만 아래 tree/trash 소비·UI 역의존이 남아 **모듈 전체 미완료**.
++- r146 project_efsm: 등록 34 commands/14 PlusCal procedures와 실제 caller의 정적 대응 종료. review-20261113-003-project-efsm-module-translation.md 참조. Plan025의 5차가 과거 상태여도 이 완료 기록을 잃지 않는다.
++- 다음은 Plan025 6a frontend/interface_fsm → 6b application/adapter → 7a–d public APIs → 8 Mantine → 9 system → 10 portable_build. 이미 닫힌 renderer/raster를 새 근거 없이 다시 조사·설계하지 않는다.
++
++## 미완료 목록과 담당 경계
++
++### 1. project_state canonical tree/trash → public assets → Mantine (4·7d·8)
++
++`sourcecode/backend/project_state.js`의 assets.readTree는 아직 과거 flat envelope이며, 등록된 assets.readTrash에 Backend branch가 없다. 현재 projectDataTreeSnapshot/실제 UI는 전체 slot/chart/editability 등의 추가 facts에 의존한다.
++
++canonical tree/subtree만 고립 교체하거나 기능을 누락하거나 Frontend에서 Backend를 직접 읽어 해결하지 않는다. conversion/zero-reference chart의 editability 등을 어떤 공식 read로 공급할지 미정인 부분은 Source→PlusCal 의미 결정이 필요하다.
++
++**tree 전체가 상위 미정은 아니다.** 명시적 path의 assets.readDeletionTarget, CSV header/rows, 실제 reference counts, canonical subtree traversal은 이미 Source에 있다. selected-only wrapper 제한은 번역 누락이다. review004의 과도한 차단 사유는 정정되었다.
++
++### 2. Backend UI registry 역의존 (4·6a·9)
++
++`sourcecode/backend/project_state.js:initializeProjectObjects`의 ui reader는 Frontend interfaceRuntime을 읽는다. Frontend notification metadata와 system audit도 이 registration에 의존한다.
++
++Backend에서 단독 제거해 audit를 깨뜨리지 말고 Frontend/system 소유 경로를 함께 번역한 뒤 project_state 잔여를 닫는다. 이는 새 상위 의미가 필요한 항목이 아니라 기존 소유 규칙의 연결 번역이다.
++
++### 3. Frontend command reconciliation/이미지 자원 연결 (6a·6b·8·9, 필요한 renderer caller만)
++
++- r146 EFSM은 caller payload를 수정/반환하지 않는다. result/hints/effects/counts는 실제 commit에서 계산한 deep immutable 값이다. Backend의 부재 assetKind=null → Frontend none은 r145에서 대응했다.
++- grid, 일반 data connect, 일반 chart import에 명세에 없는 강제 selection-clear hint를 넣지 않는다. 실제 committed references와 기본 reconciliation으로 처리한다. graph 추가의 실제 index hint, 삭제의 original-index map, reset/load의 명시 hint와 구별한다. 남은 Frontend caller의 가정은 Source와 대조한다.
++- EFSM의 renderer releaseProjectImageDisplayUrl(s) 호출은 r146에서 제거했다. Backend에 자원 소유를 부여하지 않는다. 과거 projectImageDisplayUrl/legacy URL cache가 실제 도달 가능하면 Frontend 소유 경로에서 자원 회수를 닫는다. 이미 pure copied-byte/data URL을 쓰는 read에 새 cache/동기화 protocol을 만들지 않는다. 미사용이면 cleanup 기구를 신설하지 않는다.
++
++### 4. UI 입력/결과의 미정 의미 (8, 필요한 7)
++
++- grid 한 dimension 편집 시 render 이후 companion이 바뀌었을 때의 조합 및 invalid-input fallback. current-read 규칙만으로 event-time companion 정책을 만들지 않는다.
++- palette load/reset 성공 판정, move null 결과, debug toggle 입력. public별 서로 다른 결과 계약을 일괄 success 형태로 바꾸지 않는다. Source에 이미 명확한 분기는 번역하고, 여전히 빠진 의미만 상위 결정 대상으로 적는다.
++
++### 5. 남은 모듈 전체 절차 대응 (6a 이후)
++
++기존 부분 기록을 재사용하고 미대응분만 번역한다. runtime 파일 존재나 작은 패치 수는 모듈 전체 종료의 증거가 아니다. system startup r139, public dispatch tuple r138, renderer/raster r137은 재사용하며 이를 native/browser/inline-split 실행 증거로 세지 않는다.
++
++### 6. 실행 검증 (최종 별도 허가)
++
++code146은 stale이다. Source45/PlusCal25/verification26/derived_from 불변. 공식 checker/fidelity/portable build/inline-split/browser/Plotly/drop/export regression은 최신 변경 집합으로 미실행이다.
++
++로컬은 read/edit/static diff/hash만 허용한다. 이 메모로 Actions/remote write/commit/push/goal 허가를 추정하지 않는다. 필요한 허가와 대상 SHA/run/job/log는 별도 확정한다.
++
++## 새 Plan 갱신 시 회수 기준
++
++정적 종료/미완료/상위 결정 대기/실행 대기를 구분한다. 각 항목을 완료·잔존·대체 중 하나로 회수하고 특히 project_state를 미완료인 채 종료 수에 포함하지 않는다. 상위 미정을 다른 번역 가능한 절차를 미루는 이유로 쓰지 않는다. 이번 작업에서 Plan 자체는 변경하지 않았다.

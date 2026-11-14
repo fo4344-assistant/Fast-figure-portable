@@ -1,0 +1,442 @@
+diff --git a/sourcecode/backend/graphs.js b/sourcecode/backend/graphs.js
+index 78e7bd8b71e032b29b82137fbd307b4c888a7f84..faaccb38ba43b89461605548a135bde6525b9ed1 100644
+--- a/sourcecode/backend/graphs.js
++++ b/sourcecode/backend/graphs.js
+@@ -274,67 +274,81 @@
+   };
+ }
+ 
++// Scalar primitives for NormalizeDivisor / ScaleCoordinate / tracesSingle.
++function graphScalarNumber(input) {
++  return input === null || ["number", "string", "boolean"].includes(typeof input)
++    ? Number(input) : NaN;
++}
++
++function graphDivisor(input) {
++  const number = graphScalarNumber(input);
++  return Number.isFinite(number) && number !== 0 ? number : 1;
++}
++
++function graphScaleCoordinate(value, numeric, scaleType) {
++  if (scaleType === "linear") return value;
++  if (!numeric) return undefined;
++  if (scaleType === "log") return Number.isFinite(value) && value > 0 ? value : undefined;
++  const reciprocal = value !== 0 ? 1 / value : NaN;
++  return Number.isFinite(value) && Number.isFinite(reciprocal) ? reciprocal : undefined;
++}
++
+ export function tracesSingle(c) {
+-  let b = {},
+-    colors = c.colors?.length ? c.colors : DEFAULT_COLORS,
+-    i = 0,
+-    xDivide = Number(c.xDivide) || 1,
+-    yDivide = Number(c.yDivide) || 1,
+-    xIndex = columnIndex(c.x),
+-    yIndex = columnIndex(c.y);
+-  if (xIndex < 0 || yIndex < 0) return [];
+-  dataRows(c.rows || [], c.headerLines ?? 1).forEach((r) => {
+-    let x = value(r?.[xIndex]),
+-      y = Number(r?.[yIndex]);
+-    if (x === "" || x === undefined || !Number.isFinite(y)) return;
+-    if (typeof x === "number") x /= xDivide;
+-    y /= yDivide;
+-    if (c.xScaleType === "reciprocal") {
+-      x = Number(x);
+-      if (!Number.isFinite(x) || x === 0) return;
+-      x = 1 / x;
+-    } else if (c.xScaleType === "log" && (!Number.isFinite(Number(x)) || Number(x) <= 0))
+-      return;
+-    if (c.yScaleType === "reciprocal") {
+-      if (y === 0) return;
+-      y = 1 / y;
+-    } else if (c.yScaleType === "log" && y <= 0) return;
+-    if (!Number.isFinite(y)) return;
+-    let g = "";
+-    (b[g] ??= []).push({ x, y });
+-  });
+-  return Object.entries(b).map(([g, p]) => {
+-    let color = colors[i++ % colors.length],
+-      isBar = c.type === "bar";
+-    return {
+-      x: p.map((v) => v.x),
+-      y: p.map((v) => v.y),
+-      name: c.y,
+-      type: isBar ? "bar" : "scatter",
+-      mode: isBar ? undefined : c.type === "hidden" ? "lines" : c.type,
+-      visible: c.type === "hidden" ? false : true,
+-      opacity: isBar ? Math.max(0.05, Math.min(1, Number(c.barOpacity) || 1)) : undefined,
+-      line: {
+-        color,
+-        width: isBar
+-          ? Math.max(0, Math.min(10, Number(c.barLineWidth) || 0))
+-          : Math.max(0.1, Math.min(20, Number(c.lineWidth) || 2)),
+-        dash: isBar ? undefined : c.lineDash || "solid",
+-      },
+-      marker: {
+-        color,
+-        symbol: c.markerSymbol || "circle",
+-        size: Math.max(1, Math.min(40, Number(c.markerSize) || 6)),
+-        line: isBar
+-          ? { color, width: Math.max(0, Math.min(10, Number(c.barLineWidth) || 0)) }
+-          : undefined,
+-      },
+-    };
+-  });
++  const rows = c.rows || [], width = columnDefinitions(rows, c.headerLines).length,
++    xi = columnIndex(c.x), yi = columnIndex(c.y),
++    dx = graphDivisor(c.xDivide), dy = graphDivisor(c.yDivide),
++    defaults = BackendSettings.defaults.chartSettings.editor.objectStyle,
++    limits = BackendSettings.defaults.limits.graphObject,
++    style = key => {
++      const number = graphScalarNumber(c[key]), [min, max] = limits[key];
++      return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : defaults[key];
++    }, xs = [], ys = [];
++  if (xi < 0 || yi < 0 || xi >= width || yi >= width) return [];
++  for (const row of dataRows(rows, c.headerLines ?? 1)) {
++    const rawX = row?.[xi], rawY = row?.[yi];
++    if (rawX === undefined || rawX === "" || rawY === undefined) continue;
++    let x = graphScalarNumber(rawX), y = graphScalarNumber(rawY);
++    if (!Number.isFinite(y)) continue;
++    const numericX = Number.isFinite(x);
++    if (!numericX) {
++      if (typeof rawX !== "string") continue;
++      x = rawX;
++    }
++    if (numericX) x /= dx;
++    y /= dy;
++    if (!Number.isFinite(y) || (numericX && !Number.isFinite(x))) continue;
++    x = graphScaleCoordinate(x, numericX, c.xScaleType ?? "linear");
++    y = graphScaleCoordinate(y, true, c.yScaleType ?? "linear");
++    if (x === undefined || y === undefined) continue;
++    xs.push(x); ys.push(y);
++  }
++  if (!xs.length) return [];
++  const trace = { x: xs, y: ys, name: c.y, visible: true,
++    line: { color: c.color }, marker: { color: c.color } };
++  if (c.type === "bar") {
++    trace.type = "bar";
++    trace.line.width = style("barLineWidth");
++    trace.marker.line = { color: c.color, width: trace.line.width };
++    trace.opacity = style("barOpacity");
++  } else {
++    trace.type = "scatter";
++    trace.mode = ["markers", "lines+markers"].includes(c.type) ? c.type : "lines";
++    trace.visible = c.type !== "hidden";
++    trace.line.width = style("lineWidth");
++    trace.line.dash = ALLOWED_LINE_DASHES.has(c.lineDash) ? c.lineDash : defaults.lineDash;
++    trace.marker.symbol = ALLOWED_MARKER_SYMBOLS.has(c.markerSymbol) ? c.markerSymbol : defaults.markerSymbol;
++    trace.marker.size = style("markerSize");
++  }
++  return [trace];
+ }
+ 
+ export function traces(c, project = activeProject._state) {
+-  let settings = readGlobalSettings(c),
++  const owners = project.slots.filter(slot => (slot.content?.chart ?? slot.chart) === c.id),
++    current = project.charts.find(chart => chart.id === c.id);
++  if (owners.length !== 1 || !current || chartUsesConversionView(current))
++    throw Error("그래프 투영에 같은 프로젝트의 유일한 owning chart가 필요합니다.");
++  c = current;
++  let settings = normalizeGraphLayoutSettings(c.editor.globalSettings),
+     editor = c.editor,
+     axes = settings.axes,
+     objectList =
+@@ -356,11 +370,11 @@
+         ...object,
+         rows: csv.rows,
+         headerLines: csv.headerLines,
+-        xDivide: Number(xAxis.divide) || 1,
+-        yDivide: Number(yAxis.divide) || 1,
++        xDivide: xAxis.divide,
++        yDivide: yAxis.divide,
+         xScaleType: xAxis.scaleType,
+         yScaleType: yAxis.scaleType,
+-        colors: [object.color || DEFAULT_COLORS[index % DEFAULT_COLORS.length]],
++        color: object.color || DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+       }).map((trace) => {
+         let extension =
+           object.plotlyTrace &&
+@@ -368,14 +382,16 @@
+           !Array.isArray(object.plotlyTrace)
+             ? projectClone(object.plotlyTrace)
+             : {};
+-        return {
+-          ...extension,
+-          ...trace,
+-          line: { ...(extension.line || {}), ...(trace.line || {}) },
+-          marker: { ...(extension.marker || {}), ...(trace.marker || {}) },
+-          name: object.legendName || trace.name,
+-          ...axisRefs,
+-        };
++        const record = value => value && typeof value === "object" && !Array.isArray(value) ? value : {},
++          merged = {
++            ...extension, ...trace,
++            line: { ...record(extension.line), ...trace.line },
++            marker: { ...record(extension.marker), ...trace.marker },
++            name: object.legendName || object.y,
++            ...axisRefs,
++          };
++        if (!Object.hasOwn(trace, "mode")) delete merged.mode;
++        return merged;
+       }),
+     );
+   });
+@@ -410,7 +426,9 @@
+   let bg = project.appearance.uiPalette.paperColor,
+     ink = project.appearance.uiPalette.fontColor,
+     editor = c.editor,
+-    settings = readGlobalSettings(c),
++    settings = normalizeGraphLayoutSettings(editor.globalSettings),
++    renderDefaults = BackendSettings.defaults.graphRendering,
++    axisDefaults = BackendSettings.defaults.chartSettings.editor.axis,
+     numberOrEmpty = (v) =>
+       v === "" || v === undefined || v === null ? undefined : Number(v),
+     axis = (title, key) => {
+@@ -424,15 +442,15 @@
+         type: scaleType === "log" ? "log" : "linear",
+         title: {
+           text: setting.visible === true ? setting.title || "" : "",
+-          font: { size: Number(setting.titleSize) || 14 },
++          font: { size: setting.titleSize || axisDefaults.titleSize },
+         },
+         visible: true,
+         showgrid: setting.visible === true && setting.showGrid !== false,
+         showticklabels: setting.visible === true && setting.showValues !== false,
+         ticks: setting.visible === true ? "outside" : "",
+-        gridcolor: "#E5E7EB",
++        gridcolor: renderDefaults.gridColor,
+         zeroline: setting.visible === true && settings.showZeroLine === true,
+-        zerolinecolor: "#CBD5E1",
++        zerolinecolor: renderDefaults.zeroLineColor,
+         showline: setting.visible === true,
+         linewidth: Number(setting.lineWidth) || 0,
+         range:
+@@ -456,24 +474,20 @@
+                   dtick: "D1",
+                   ticks: "outside",
+                   showgrid: setting.visible === true && setting.showGrid !== false,
+-                  gridcolor: "#E5E7EB",
++                  gridcolor: renderDefaults.gridColor,
+                 }
+               : { ticks: "", showgrid: false }
+             : undefined,
+         minorloglabels: scaleType === "log" ? "none" : undefined,
+-        tickfont: { size: Number(setting.fontSize) || 12 },
++        tickfont: { size: setting.fontSize || axisDefaults.fontSize },
+         automargin: true,
+         exponentformat: notation === "power" ? "power" : notation === "e" ? "e" : "none",
+         showexponent: notation === "none" ? "none" : "all",
+         tickformat: notation === "e" ? ".3e" : undefined,
+       };
+     };
+-  let extension =
+-      editor.plotlyExtensions?.layout &&
+-      typeof editor.plotlyExtensions.layout === "object" &&
+-      !Array.isArray(editor.plotlyExtensions.layout)
+-        ? editor.plotlyExtensions.layout
+-        : {},
++  const record = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
++  let extension = projectClone(record(editor.plotlyExtensions?.layout)),
+     known = {
+       uirevision: String(c.id),
+       title: {
+@@ -481,13 +495,13 @@
+         automargin: true,
+         font: {
+           ...(settings.graphFontFamily ? { family: settings.graphFontFamily } : {}),
+-          size: Number(settings.titleFontSize) > 0 ? Number(settings.titleFontSize) : 17,
++          size: settings.titleFontSize || renderDefaults.titleFontSize,
+         },
+       },
+       legend: {
+         font: {
+           ...(settings.graphFontFamily ? { family: settings.graphFontFamily } : {}),
+-          size: Number(settings.legendFontSize) > 0 ? Number(settings.legendFontSize) : 12,
++          size: settings.legendFontSize || renderDefaults.legendFontSize,
+         },
+       },
+       xaxis: axis(editor.x, "xBottom"),
+@@ -500,29 +514,18 @@
+         color: ink,
+         ...(settings.graphFontFamily ? { family: settings.graphFontFamily } : {}),
+       },
+-      margin: { l: 58, r: 58, t: 42, b: 50 },
++      margin: projectClone(renderDefaults.margin),
+       showlegend: settings.showLegend !== false,
+     };
+-  return {
+-    ...extension,
+-    ...known,
+-    title: {
+-      ...(extension.title || {}),
+-      ...known.title,
+-      font: { ...(extension.title?.font || {}), ...(known.title.font || {}) },
+-    },
+-    legend: {
+-      ...(extension.legend || {}),
+-      ...known.legend,
+-      font: { ...(extension.legend?.font || {}), ...(known.legend.font || {}) },
+-    },
+-    xaxis: { ...(extension.xaxis || {}), ...known.xaxis },
+-    xaxis2: { ...(extension.xaxis2 || {}), ...known.xaxis2 },
+-    yaxis: { ...(extension.yaxis || {}), ...known.yaxis },
+-    yaxis2: { ...(extension.yaxis2 || {}), ...known.yaxis2 },
+-    font: { ...(extension.font || {}), ...known.font },
+-    margin: { ...(extension.margin || {}), ...known.margin },
+-  };
++  const merged = { ...extension, ...known };
++  for (const key of ["title", "legend", "font", "margin", "xaxis", "xaxis2", "yaxis", "yaxis2"])
++    merged[key] = { ...record(extension[key]), ...known[key] };
++  for (const key of ["title", "legend"])
++    merged[key].font = { ...record(extension[key]?.font), ...known[key].font };
++  for (const key of ["xaxis", "xaxis2", "yaxis", "yaxis2"])
++    for (const field of ["range", "dtick", "minor", "minorloglabels", "tickformat"])
++      if (known[key][field] === undefined) delete merged[key][field];
++  return merged;
+ }
+ 
+ export function createChartModel({ id = null, editor = {}, graph = {} } = {}) {
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 0b1de7223f81d937cef65014ebcb39c2ef137b7b..8e603370199178373d20cae91d8fcb403abddb0c 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2764,7 +2764,8 @@
+         check(selection.x === "" && selection.y === "", `zero-column selection: ${JSON.stringify({ rows, selection })}`);
+         check(validateChartModel(chart, "empty", [csv]) === chart && JSON.stringify(chart) === snapshot,
+           "zero-column validator rejected or repaired candidate");
+-        const projected = traces(chart, { assets: { csvFiles: [csv] } });
++        const projected = traces(chart, { charts: [chart], slots: [{ id: 99103, content: { chart: chart.id } }],
++          assets: { csvFiles: [csv] } });
+         check(tracesSingle({ ...chart.editor.objects[0], rows, headerLines: 0 }).length === 0,
+           "zero-column object manufactured a data trace");
+         check(projected.length > 0 && projected.every(trace => trace.meta?.fastFigureAxisPlaceholder === true &&
+@@ -2792,6 +2793,56 @@
+       chart.editor.objects[0].x = "C1"; chart.editor.objects[0].y = "C2";
+       check(validateChartModel(chart, "conversion", []) === chart, "real conversion columns rejected");
+       chart.editor.conversionRows = [null]; rejects(chart, []);
++      const input = { ...style, x: "C1", y: "C2", color: "rgb(1, 2, 3)", headerLines: 1,
++        rows: [["x", "y"], [1, 2], ["", 99], [undefined, 3], [null, ""], [false, null],
++          [true, " "], ["category", "5"], [Infinity, 7], [2, Infinity], [[3], 4], [3, []], [-2, -4]],
++        xDivide: Infinity, yDivide: "invalid", xScaleType: "linear", yScaleType: "linear" },
++        snapshot = JSON.stringify(input), trace = tracesSingle(input)[0];
++      check(JSON.stringify(trace.x) === JSON.stringify([1, 0, 0, 1, "category", -2]) &&
++        JSON.stringify(trace.y) === JSON.stringify([2, 0, 0, 0, 5, -4]) && trace.mode === "lines" &&
++        trace.line.color === input.color && trace.marker.color === input.color &&
++        !Object.hasOwn(trace, "opacity") && !Object.hasOwn(trace.marker, "line") && JSON.stringify(input) === snapshot,
++        "scalar pairing/divisor fallback/style projection differs from supplied procedure");
++      const scaled = tracesSingle({ ...input, rows: [[-2, -8], [0, 2], ["category", 3], [1e-320, 4]],
++        headerLines: 0, xScaleType: "reciprocal", yScaleType: "linear", yDivide: -2 })[0];
++      check(JSON.stringify(scaled.x) === "[-0.5]" && JSON.stringify(scaled.y) === "[4]" &&
++        tracesSingle({ ...input, rows: [[1e308, 1]], headerLines: 0, xDivide: 1e-308 }).length === 0 &&
++        tracesSingle({ ...input, rows: [["category", 1], [-1, 2], [2, 3]], headerLines: 0,
++          xScaleType: "log" })[0].x.join() === "2",
++        "divide/independent scales retained category, zero or nonfinite coordinates");
++      const bar = tracesSingle({ ...input, type: "bar", rows: [[1, 2]], headerLines: 0,
++        barLineWidth: 0, barOpacity: 0 })[0];
++      check(!Object.hasOwn(bar, "mode") && !Object.hasOwn(bar.line, "dash") &&
++        !Object.hasOwn(bar.marker, "symbol") && bar.line.width === 0 && bar.marker.line.width === 0 &&
++        bar.opacity === BackendSettings.defaults.limits.graphObject.barOpacity[0], "bar computed fields/defaults differ");
++      const projectedChart = createChartModel({ id: 99202, editor: { objects: [{ ...style,
++        type: "bar", color: "red", csvId: 99201, x: "C1", y: "C2", xAxisSide: "top", yAxisSide: "right",
++        plotlyTrace: { mode: "lines", x: [999], visible: false, unknown: { keep: true },
++          line: { extensionLine: true }, marker: { extensionMarker: true } } }],
++        globalSettings: { axes: { xTop: { visible: true }, yRight: { visible: true } } },
++        plotlyExtensions: { layout: { unknown: { keep: true },
++          title: { font: { family: "extension-font", extensionFont: true } },
++          xaxis: { range: [9, 8], dtick: 3, minor: {}, minorloglabels: "all", tickformat: "stale", unknownAxis: true } } } } }),
++        project = { charts: [projectedChart], slots: [{ id: 99203, content: { chart: 99202 } }],
++          assets: { csvFiles: [{ id: 99201, rows: [[1, 2]], headerLines: 0 }] },
++          appearance: { uiPalette: { paperColor: "paper", fontColor: "ink" } } },
++        projectBefore = JSON.stringify(project), projected = traces(projectedChart, project),
++        graphLayout = layout(projectedChart, project);
++      check(projected[0].type === "bar" && !Object.hasOwn(projected[0], "mode") &&
++        projected[0].x.join() === "1" && projected[0].visible === true && projected[0].xaxis === "x2" &&
++        projected[0].yaxis === "y2" && projected[0].unknown.keep && projected[0].line.extensionLine &&
++        projected[0].marker.extensionMarker && projected.slice(1).map(t => `${t.xaxis}/${t.yaxis}`).join() ===
++          "x/y,x/y2,x2/y,x2/y2", "owning CSV/extension override/axis Cartesian order differs");
++      check(["range", "dtick", "minor", "minorloglabels", "tickformat"].every(key => !Object.hasOwn(graphLayout.xaxis, key)) &&
++        graphLayout.xaxis.unknownAxis && graphLayout.title.font.family === "extension-font" &&
++        graphLayout.title.font.extensionFont && graphLayout.paper_bgcolor === "paper" &&
++        graphLayout.font.color === "ink" && graphLayout.title.font.size === BackendSettings.defaults.graphRendering.titleFontSize,
++        "layout optional omission, extension merge or config projection differs");
++      graphLayout.unknown.keep = false; projected[0].unknown.keep = false;
++      check(JSON.stringify(project) === projectBefore, "detached graph projection changed supplied project");
++      let rejectedOwner = false;
++      try { traces(projectedChart, { ...project, slots: [] }); } catch { rejectedOwner = true; }
++      check(rejectedOwner, "graph projection accepted absent owning slot");
+       check(JSON.stringify(activeProject._state) === before, "supplied reference validation changed Project");
+     });
+ 
+diff --git a/development-versions.json b/development-versions.json
+index 2e814d0facce5044fec9702d10e137d12ec2837a..7f22e636ddbfe560a0e582e2fc28b47346b3ef96 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 139,
++      "revision": 140,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:419427a0e71efed193e0ae5f5cd1767e5b4e3ca78920d2d241efe7897ae917ea",
++      "fingerprint": "sha256:0c703981ba2cc0bc20f3d5f3005937a6008d9c8d22caf4566534baa162dc3e92",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261112-005-system-startup-translation.md"
++      "validation_review": "agent_space/reviews/review-20261112-006-graph-projection-translation.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/plans/plan-024.md b/agent_space/plans/plan-024.md
+index 7d15cab09258e060f619e732d27af18035d18df1..31c5c4e9d9e27db562f39ac983b80ced215ea8ec 100644
+--- a/agent_space/plans/plan-024.md
++++ b/agent_space/plans/plan-024.md
+@@ -172,3 +172,9 @@
+ The Layout companion-dimension proposal at the end of §14 is **not approved translation**: independent policy review found that current-read rules do not define event-time input completion or invalid-input fallback. Resolve that meaningful input contract in Source then PlusCal first. Palette success/reset, null-move result and debug-toggle caller questions remain open; no inferred uniform result/toggle protocol is adopted. Separate read-only scout coverage found existing corresponding config/debug setter/graph public and layout read/session owners, not a further missing unit in that inspected scope. Remaining Backend graph/layout calculation correspondence has not been exhaustively closed.
+ 
+ Code139/**stale**, independent canonical-LF fingerprint `sha256:419427a0e71efed193e0ae5f5cd1767e5b4e3ca78920d2d241efe7897ae917ea`; baseline r138 fingerprint independently reproduced. Source45/PlusCal25/verification26 and derived_from remain unchanged. Static read/edit/diff/hash/patch consistency only; no app/test/build/checker/TLC/browser/Actions/remote/commit/push, upper-policy/spec/dist/workflow changes or new goal. Independent reviewer `dc9f97c5-44cd-45c1-b66d-134037e5730f` returned no issues / OK with notes for scoped runtime and Case15 only; not whole-stage, metadata/docs or execution acceptance. Incremental exact-WIP patch/explanation `agent_space/patches/20261112-005.patch` / `.md`. **Stage3 remains open; no native/integration/official validation pass is claimed.**
++
++## 16. Written graph projection procedures — r140 (2026-11-12)
++
++Per the user's direction to translate written procedures rather than polish, directly translated the graph calculation group after reading complete Source/PlusCal/runtime graph modules. NormalizeDivisor/ScaleCoordinate/tracesSingle now preserve scalar eligibility, ordered row pairing, divide-before-scale, finite-result rejection and config-owned computed styles. traces resolves the same-project unique owning chart/CSV and performs detached extension-first merges with explicit bar-mode omission. PlotlyAxis/layout reuse local normalized settings and configured defaults, preserve unknown extensions/font family, detach nested output and remove omitted optional fields. Existing Cartesian axis placeholders remain; no new feature/authority/public shape was designed. Existing regression66 was extended, no IDs added and no fixture execution. Correspondence/boundaries: `agent_space/reviews/review-20261112-006-graph-projection-translation.md`.
++
++Code140/**stale**, independent canonical-LF fingerprint `sha256:0c703981ba2cc0bc20f3d5f3005937a6008d9c8d22caf4566534baa162dc3e92`; prior r139 fingerprint independently reproduced. Source45/PlusCal25/verification26 and derived_from unchanged. Incremental exact-WIP patch/explanation `agent_space/patches/20261112-006.patch` / `.md`. Static file/diff/hash/patch inspection only, not app/tests/build/checker execution; no Actions/remote/commit/push or upstream changes. **Stage3 remains open**: remaining Backend graph normalization/import/validation/candidate procedures and Backend layout correspondence are next written units; the previously recorded tree/UI input questions are separate and not permission to invent meaning.
+diff --git a/agent_space/reviews/review-20261112-006-graph-projection-translation.md b/agent_space/reviews/review-20261112-006-graph-projection-translation.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..ebd683578526103bae3cf7f39c2c76b0704d3ec2
+--- /dev/null
++++ b/agent_space/reviews/review-20261112-006-graph-projection-translation.md
+@@ -0,0 +1,24 @@
++# r140 — Graph projection procedure translation
++
++Scope: direct `pseudocode/backend/graphs.pcal` → `sourcecode/backend/graphs.js`, clarified against the complete `sourcescript/backend/graphs.py`. Both upper documents and the full runtime graph file were read in chunks without relying on truncated output. This is parent static correspondence inspection, not independent review or an executed validation.
++
++## Procedure correspondence
++
++| Written procedure | Runtime translation |
++| --- | --- |
++| NormalizeDivisor / ScaleCoordinate | Private graphScalarNumber, graphDivisor and graphScaleCoordinate: allowed scalar coercion, finite non-zero divisor or identity, linear/log/reciprocal selection, reject category on nonlinear scales and reciprocal overflow. No new domain operation. |
++| tracesSingle | Max-row-width column bounds; ordered header-excluded paired rows; reject missing coordinates and unsupported scalar types; retain null/boolean/whitespace numeric conversion and linear categories; divide before independent axis transform; paired finite checks; exactly one trace or none. Config-owned limits/defaults, scatter→lines, explicit hidden visibility, bar-only fields and omitted mode/dash. |
++| traces | Resolve chart and unique owner from the supplied project; reject conversion representation on this path. Resolve every object CSV from that same project; use normalized local axes and explicit per-object fallback color. Detached extension-first/known-last line/marker merge and remove extension mode when the computed bar trace omits mode. Existing figure-only axis Cartesian placeholders retained. |
++| PlotlyAxis / layout | Reuse local normalizeGraphLayoutSettings, config graphRendering/axis defaults and same supplied project palette. Preserve reversal, log range and tick semantics. Deep-copy extension, record-only merges at prescribed levels, retain unknown fields/font family; actually remove omitted range/dtick/minor/minorloglabels/tickformat fields rather than emitting own undefined keys. |
++
++The previous implementation grouped a single unnamed trace, used unbounded JS Number coercion, accepted nonfinite x on a linear axis and infinite divisors, emitted scatter mode as `scatter`, treated valid numeric zero as default, added undefined/bar-unrelated fields and retained extension layout object aliases. These are missing translations of explicit steps, not newly designed behavior. Existing physical flattened `xDivide/yDivide/xScaleType/yScaleType` objectView fields are preserved; only color now directly carries the caller-resolved object color. No public API shape changes.
++
++## Actual callers and fixture
++
++`chartFigure` → query-local rebuild → traces/layout remains the dashboard/export calculation route. Existing graph/csv/import/replacement command builders pass their whole-project candidate; traces now enforces the already-written chart/owner condition. Existing direct regression66 was supplied a complete synthetic project instead of only its CSV collection, and extended for scalar pairing, nonfinite arithmetic, scale order, computed styles, extension precedence/detachment, axes and layout omissions. No case IDs added. Fixtures were authored, NOT executed.
++
++## Boundaries / remaining work
++
++No Source/PlusCal/policy/verification changes or invented UI input semantics. No application/test/build/checker/TLC/browser/Actions/remote/commit/push execution. Independent canonical-LF hashing and patch checks only. Code140 remains stale. Source45, PlusCal25, verification26 and derived_from are unchanged.
++
++This closes only the named graph projection translation unit, not all Backend graph procedures or Plan024 stage3. Remaining graph normalization/import/validation/candidate procedures are not certified by this record; legacy graph-object replacement post-commit projection and Backend→Application helper dependencies are also not silently accepted as closed. Backend layout procedures and the already recorded upstream UI/tree questions remain separate. Continue with those written procedures, not polishing this unit or inventing the unresolved caller semantics.

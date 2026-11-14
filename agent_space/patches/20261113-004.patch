@@ -1,0 +1,577 @@
+diff --git a/sourcecode/frontend/interface_fsm.js b/sourcecode/frontend/interface_fsm.js
+index 36cdeaec5c4889a997f7b11f0fcf945c61ca3963..3d181ab7a1d6991aac76d0a6d434d7f331eaea59 100644
+--- a/sourcecode/frontend/interface_fsm.js
++++ b/sourcecode/frontend/interface_fsm.js
+@@ -1,230 +1,130 @@
+-// Source: sourcescript/frontend/interface_fsm.py (same logical owner); pseudocode/frontend/interface_fsm.pcal.
+-import { BACKEND_REFERENCE_EVENTS, PROJECT_COMMANDS, appFSM } from '../application/adapter.js';
++// Source: sourcescript/frontend/interface_fsm.py; pseudocode/frontend/interface_fsm.pcal.
+ import { debugLog } from './renderer.js';
++
++const REFERENCE_EVENTS = new Set(["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]);
++const INTERFACE_EVENTS = new Set([...REFERENCE_EVENTS, "CLEAR_ASSET_SELECTION", "CLEAR_GRAPH_OBJECT",
++  "TOGGLE_OVERLAY", "CLOSE_OVERLAY", "OUTSIDE_CLICK", "ESCAPE", "SET_DASHBOARD_ZOOM",
++  "SET_DASHBOARD_ZOOM_LOCK", "RESET_DASHBOARD_ZOOM", "LIFECYCLE_START", "LIFECYCLE_COMPLETE", "LIFECYCLE_FAILED"]);
+ 
+ export class InterfaceStateMachine {
+   constructor(definitions) {
+     this.definitions = definitions;
+-    this.state = Object.freeze({
+-      lifecycle: "booting",
+-      workspace: "project",
+-      overlay: "none",
+-      assetSelection: "none",
+-      assetPath: null,
+-      graphObject: "none",
+-      graphObjectIndex: null,
+-      direction: "model-to-ui",
+-      revision: 0,
+-      error: null,
+-    });
++    this.state = Object.freeze({ lifecycle: "booting", workspace: "project", overlay: "none",
++      assetSelection: "none", assetPath: null, graphObject: "none", graphObjectIndex: null,
++      direction: "model-to-ui", revision: 0, error: null });
+     this.listeners = new Set();
+-    this.transitioning = 0;
+     this.writeLocks = new Set();
+   }
+   definition(region, state = this.state[region]) {
+-    let definition = this.definitions[region]?.[state];
++    const definition = this.definitions[region]?.[state];
+     if (!definition) throw Error(`${region}.${state} FSM 상태가 등록되지 않았습니다.`);
+     return definition;
+   }
+-  context(region, state, event, payload) {
+-    return {
+-      machine: this,
+-      region,
+-      state,
+-      event,
+-      payload,
+-      direction: payload.direction || this.state.direction || "model-to-ui",
+-      canWrite: (scope) => !this.writeLocks.has(scope),
+-    };
+-  }
+-  withWriteLocks(scopes, operation) {
+-    scopes.forEach((scope) => this.writeLocks.add(scope));
+-    try {
+-      return operation();
+-    } finally {
+-      scopes.forEach((scope) => this.writeLocks.delete(scope));
+-    }
+-  }
+   assertWritable(scope, event) {
+-    if (this.writeLocks.has(scope))
+-      throw Error(`${event} 전이 중 잠긴 ${scope} 모델을 수정할 수 없습니다.`);
++    if (this.writeLocks.has(scope)) throw Error(`${event} 전이 중 잠긴 ${scope} 모델을 수정할 수 없습니다.`);
+   }
+   publish(event) {
+-    document.body.dataset.appLifecycle = this.state.lifecycle;
+-    document.body.dataset.appWorkspace = this.state.workspace;
+-    document.body.dataset.appOverlay = this.state.overlay;
+-    document.body.dataset.appAssetSelection = this.state.assetSelection;
+-    document.body.dataset.appGraphObject = this.state.graphObject;
+-    this.listeners.forEach((listener) => listener(this.state, event));
+-    debugLog("fsm:transition", { event, ...this.state });
+-    return this.state;
+-  }
+-  transition(region, target, event, payload = {}) {
+-    if (typeof target === "function")
+-      target = target(this.context(region, this.state[region], event, payload));
+-    let previous = this.state[region];
+-    if (!target || (target === previous && payload.reenter !== true)) {
+-      let definition = this.definition(region, previous);
+-      if (payload.direction)
+-        this.state = Object.freeze({
+-          ...this.state,
+-          direction: payload.direction,
+-        });
+-      let update = () =>
+-        definition.update?.(this.context(region, previous, event, payload));
+-      if (payload.direction === "model-to-fsm" && region === "workspace")
+-        this.withWriteLocks(["workspace", "editor"], update);
+-      else update();
+-      return this.publish(`${event}:${region}:update`);
+-    }
+-    this.transitioning++;
+-    try {
+-      this.definition(region, previous).exit?.(
+-        this.context(region, previous, event, payload),
+-      );
+-      this.state = Object.freeze({
+-        ...this.state,
+-        [region]: target,
+-        direction: payload.direction || this.state.direction,
+-      });
+-      let enter = () =>
+-        this.definition(region, target).entry?.(
+-          this.context(region, target, event, payload),
+-        );
+-      if (payload.direction === "model-to-fsm" && region === "workspace")
+-        this.withWriteLocks(["workspace", "editor"], enter);
+-      else enter();
+-    } finally {
+-      this.transitioning--;
+-    }
+-    return this.publish(`${event}:${region}:${previous}->${target}`);
+-  }
+-  transitionLifecycle(event, payload = {}) {
+-    const origin = payload.event || event;
+-    if (event === "LIFECYCLE_START") {
+-      this.state = Object.freeze({ ...this.state, error: null });
+-      return this.transition("lifecycle", payload.lifecycle, `${origin}:start`);
+-    }
+-    if (event === "LIFECYCLE_COMPLETE") {
+-      this.state = Object.freeze({ ...this.state, error: null });
+-      return this.transition("lifecycle", "ready", `${origin}:${payload.outcome || "complete"}`);
+-    }
+-    if (event === "LIFECYCLE_FAILED") {
+-      const error = payload.error;
+-      this.state = Object.freeze({
+-        ...this.state,
+-        error: { event: origin, message: error?.message || String(error) },
+-      });
+-      this.transition("lifecycle", "error", `${origin}:failed`, { error });
+-      return this.transition("lifecycle", "ready", `${origin}:recovered`);
+-    }
+-    return this.state;
++    this.state = Object.freeze({ ...this.state, revision: this.state.revision + 1 });
++    const state = this.readState(), busy = state.lifecycle === "importing" || state.lifecycle === "exporting";
++    document.body.classList.toggle("app-busy", busy);
++    document.body.setAttribute("aria-busy", String(busy));
++    document.body.dataset.appLifecycle = state.lifecycle;
++    document.body.dataset.appWorkspace = state.workspace;
++    document.body.dataset.appOverlay = state.overlay;
++    document.body.dataset.appAssetSelection = state.assetSelection;
++    document.body.dataset.appGraphObject = state.graphObject;
++    this.listeners.forEach(listener => listener(state, event));
++    debugLog("fsm:transition", { event, ...state });
++    return state;
+   }
+   send(event, payload = {}) {
+-    if (PROJECT_COMMANDS.has(event)) return this.state;
+-    if (BACKEND_REFERENCE_EVENTS.has(event) && payload.validatedInput?.accepted !== true)
+-      return this.state;
+-    if (event === "LIFECYCLE_START" || event === "LIFECYCLE_COMPLETE" ||
+-        event === "LIFECYCLE_FAILED")
+-      return this.transitionLifecycle(event, payload);
+-    if (event === "SELECT_ASSET") {
+-      // Source40: publish the final selection and receipt, not intermediate regions.
+-      const input = payload.validatedInput;
+-      this.assertWritable("editor", event);
+-      this.state = Object.freeze({ ...this.state,
+-        assetSelection: input.selectionHint || "none", assetPath: input.reference ?? null,
+-        graphObject: "none", graphObjectIndex: null,
+-        direction: payload.direction || this.state.direction, revision: this.state.revision + 1,
+-      });
+-      return this.publish(event);
+-    }
+-    if (event === "SET_DASHBOARD_ZOOM") {
+-      if (interfaceRuntime.dashboardZoomLocked) return this.state;
+-      let numeric;
+-      try { numeric = Number(payload.value); } catch { numeric = NaN; }
+-      const value = Number.isFinite(numeric) ? Math.max(50, Math.min(200, numeric)) : 100;
+-      if (value === interfaceRuntime.dashboardZoomIntent) return this.state;
++    // validatedInput is the existing Application transport envelope, not domain state.
++    const input = payload.validatedInput ?? (REFERENCE_EVENTS.has(event)
++      ? { accepted: false } : { accepted: payload.accepted !== false, payload });
++    if (input.accepted !== true) return this.readState();
++    if (!INTERFACE_EVENTS.has(event)) throw Error(`${event}는 등록된 Frontend event가 아닙니다.`);
++    const values = input.payload ?? payload, next = { ...this.state };
++    if (event === "SELECT_SLOT") {
++      const reference = input.reference;
++      interfaceRuntime.selectedSlotId = reference === null ||
++        (input.selectionHint === "toggle-clear" && reference === interfaceRuntime.selectedSlotId) ? null : reference;
++      next.workspace = interfaceRuntime.selectedSlotId === null ? "project" : input.workspaceHint;
++      next.graphObject = "none"; next.graphObjectIndex = null;
++      if (interfaceRuntime.selectedSlotId === null || input.selectionHint === "toggle-clear") {
++        next.assetSelection = "none"; next.assetPath = null;
++      }
++      if (interfaceRuntime.selectedSlotId !== null) next.overlay = "none";
++    } else if (event === "SELECT_ASSET") {
++      next.assetSelection = input.selectionHint ?? "none"; next.assetPath = input.reference;
++      next.graphObject = "none"; next.graphObjectIndex = null;
++    } else if (event === "SELECT_GRAPH_OBJECT") {
++      next.graphObject = input.reference === null ? "none" : "selected";
++      next.graphObjectIndex = input.reference;
++      if (input.reference !== null && input.selectionHint != null) {
++        next.assetSelection = "csv"; next.assetPath = input.selectionHint;
++      }
++    } else if (event === "CLEAR_ASSET_SELECTION") {
++      next.assetSelection = "none"; next.assetPath = null;
++    } else if (event === "CLEAR_GRAPH_OBJECT") {
++      next.graphObject = "none"; next.graphObjectIndex = null;
++    } else if (event === "TOGGLE_OVERLAY") {
++      next.overlay = next.overlay === values.overlay ? "none" : values.overlay;
++    } else if (["CLOSE_OVERLAY", "OUTSIDE_CLICK", "ESCAPE"].includes(event)) {
++      next.overlay = "none";
++    } else if (event === "SET_DASHBOARD_ZOOM") {
++      if (interfaceRuntime.dashboardZoomLocked) return this.readState();
++      const raw = values.value, numeric = typeof raw === "number" ||
++        (typeof raw === "string" && raw.trim() !== "") ? Number(raw) : NaN,
++        value = Number.isFinite(numeric) ? Math.max(50, Math.min(200, numeric)) : 100;
++      if (value === interfaceRuntime.dashboardZoomIntent) return this.readState();
+       interfaceRuntime.dashboardZoomIntent = value;
+-      return this.notify("layout", event);
+-    }
+-    if (event === "SET_DASHBOARD_ZOOM_LOCK" || event === "RESET_DASHBOARD_ZOOM") {
+-      if (event === "SET_DASHBOARD_ZOOM_LOCK" && payload.locked === true) {
+-        if (interfaceRuntime.dashboardZoomLocked || !Number.isFinite(payload.renderedWidth) || payload.renderedWidth <= 0) return this.state;
++    } else if (event === "SET_DASHBOARD_ZOOM_LOCK" || event === "RESET_DASHBOARD_ZOOM") {
++      if (event === "SET_DASHBOARD_ZOOM_LOCK" && values.locked === true) {
++        if (interfaceRuntime.dashboardZoomLocked || !Number.isFinite(values.renderedWidth) || values.renderedWidth <= 0)
++          return this.readState();
+         interfaceRuntime.dashboardZoomLocked = true;
+-        interfaceRuntime.dashboardZoomLockedWidth = payload.renderedWidth;
++        interfaceRuntime.dashboardZoomLockedWidth = values.renderedWidth;
+       } else {
+-        if (!interfaceRuntime.dashboardZoomLocked && interfaceRuntime.dashboardZoomLockedWidth === null && interfaceRuntime.dashboardZoomIntent === 100) return this.state;
+-        interfaceRuntime.dashboardZoomLocked = false;
+-        interfaceRuntime.dashboardZoomLockedWidth = null;
++        if (!interfaceRuntime.dashboardZoomLocked && interfaceRuntime.dashboardZoomLockedWidth === null &&
++            interfaceRuntime.dashboardZoomIntent === 100) return this.readState();
++        interfaceRuntime.dashboardZoomLocked = false; interfaceRuntime.dashboardZoomLockedWidth = null;
+         interfaceRuntime.dashboardZoomIntent = 100;
+       }
+-      return this.notify("layout", event);
++    } else if (event === "LIFECYCLE_START") {
++      next.lifecycle = values.lifecycle; next.error = null;
++    } else if (event === "LIFECYCLE_COMPLETE") {
++      next.lifecycle = "ready"; next.error = null;
++    } else if (event === "LIFECYCLE_FAILED") {
++      next.lifecycle = "error";
++      next.error = Object.freeze({ event: values.event, message: values.message });
++      this.state = Object.freeze(next);
++      this.publish(`${values.event}:failed`);
++      this.state = Object.freeze({ ...this.state, lifecycle: "ready" });
++      return this.publish(`${values.event}:recovered`);
+     }
+-    let handled = false;
+-    for (let region of [
+-      "lifecycle",
+-      "workspace",
+-      "overlay",
+-      "assetSelection",
+-      "graphObject",
+-    ]) {
+-      let transition = this.definition(region).on?.[event];
+-      if (!transition) continue;
+-      handled = true;
+-      if (typeof transition === "function")
+-        transition = transition(this.context(region, this.state[region], event, payload));
+-      let target = transition?.target ?? transition;
+-      transition?.action?.(this.context(region, this.state[region], event, payload));
+-      if (target) this.transition(region, target, event, payload);
+-    }
+-    if (!handled) debugLog("fsm:event-unhandled", { event, state: this.state }, "warn");
+-    return this.state;
++    this.state = Object.freeze(next);
++    const label = event === "LIFECYCLE_START" ? `${values.event}:start` :
++      event === "LIFECYCLE_COMPLETE" ? `${values.event}:${values.outcome || "complete"}` : event;
++    return this.publish(label);
+   }
+   readState() {
+     return Object.freeze({ ...this.state, selectedSlotId: interfaceRuntime.selectedSlotId,
+-      dashboardZoomIntent: interfaceRuntime.dashboardZoomIntent, dashboardZoomLocked: interfaceRuntime.dashboardZoomLocked, dashboardZoomLockedWidth: interfaceRuntime.dashboardZoomLockedWidth });
++      dashboardZoomIntent: interfaceRuntime.dashboardZoomIntent, dashboardZoomLocked: interfaceRuntime.dashboardZoomLocked,
++      dashboardZoomLockedWidth: interfaceRuntime.dashboardZoomLockedWidth });
+   }
+   reconcileProjectResult(event, input) {
+     interfaceRuntime.selectedSlotId = input.selectedSlot;
+-    this.state = Object.freeze({
+-      ...this.state,
+-      workspace: input.workspaceHint,
+-      assetSelection: input.assetKind ?? "none",
+-      assetPath: input.assetSelection,
+-      graphObject: input.graphObject === null ? "none" : "selected",
+-      graphObjectIndex: input.graphObject,
+-      direction: "model-to-ui",
+-      revision: this.state.revision + 1,
+-    });
+-    this.publish(`${event}:reconcile`);
+-    return this.readState();
+-  }
+-  notify(object, event, payload = {}) {
+-    if (this.state.lifecycle === "booting" || this.transitioning) return this.state;
+-    this.state = Object.freeze({
+-      ...this.state,
+-      direction: "model-to-ui",
+-      revision: this.state.revision + 1,
+-    });
+-    for (let region of ["workspace", "overlay"]) {
+-      let definition = this.definition(region);
+-      if (definition.objects?.includes(object))
+-        definition.update?.(
+-          this.context(region, this.state[region], event, {
+-            ...payload,
+-            direction: "model-to-ui",
+-          }),
+-        );
+-    }
++    this.state = Object.freeze({ ...this.state, workspace: input.workspaceHint,
++      assetSelection: input.assetKind ?? "none", assetPath: input.assetSelection,
++      graphObject: input.graphObject === null ? "none" : "selected", graphObjectIndex: input.graphObject });
++    return this.publish(`${event}:reconcile`);
++  }
++  notify(objectName, event, payload = {}) {
+     return this.publish(event);
+   }
+   ready(workspaceHint = "project") {
+-    this.transition("lifecycle", "ready", "READY");
+-    this.transition("workspace", workspaceHint, "WORKSPACE_INIT", {
+-      direction: "model-to-fsm",
+-    });
+-    this.transition("overlay", "none", "OVERLAY_INIT", { reenter: true });
+-    return this.state;
++    this.state = Object.freeze({ ...this.state, workspace: workspaceHint, overlay: "none" });
++    return this.send("LIFECYCLE_COMPLETE", { event: "READY" });
+   }
+   subscribe(listener) {
+     this.listeners.add(listener);
+@@ -263,8 +163,8 @@
+ 
+ export function selectedGraphObjectGuard() {
+   return (
+-    appFSM?.state.graphObject === "selected" &&
+-    Number.isInteger(appFSM.state.graphObjectIndex)
++    interfaceFSM?.state.graphObject === "selected" &&
++    Number.isInteger(interfaceFSM.state.graphObjectIndex)
+   );
+ }
+ 
+diff --git a/sourcecode/application/adapter.js b/sourcecode/application/adapter.js
+index 13711b7bada97dbbc567120ce7619f50d606a556..c01fc2a6c7927c81b720c5381605ac8de80c4485 100644
+--- a/sourcecode/application/adapter.js
++++ b/sourcecode/application/adapter.js
+@@ -153,7 +153,7 @@
+     return result;
+   };
+   const fail = (error) => {
+-    interfaceFSM.send("LIFECYCLE_FAILED", { event, error });
++    interfaceFSM.send("LIFECYCLE_FAILED", { event, message: error?.message || String(error) });
+     throw error;
+   };
+   try {
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+index 23167b8bf2074cd812c5f5a79ec53509f79e0003..a87e75b7db77b3cddd40afaac2f688c115e6b9ed 100644
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -3,7 +3,6 @@
+ import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraphLayoutSettings, validateChartModel } from './graphs.js';
+ import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
+ import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
+-import { interfaceRuntime } from '../frontend/interface_fsm.js';
+ 
+ export function createProjectState() {
+   let state = {
+@@ -627,13 +626,7 @@
+   .registerPath("slots", PROJECT_OBJECT_PATHS.slots)
+   .registerPath("sequences", PROJECT_OBJECT_PATHS.sequences)
+   .registerPath("appearance", PROJECT_OBJECT_PATHS.appearance)
+-  .registerPath("export", PROJECT_OBJECT_PATHS.export)
+-  .register("ui", {
+-    read: (project) => ({
+-      selectedSlotId: interfaceRuntime.selectedSlotId,
+-      palette: project.appearance.uiPalette,
+-    }),
+-  });
++  .registerPath("export", PROJECT_OBJECT_PATHS.export);
+ }
+ 
+ export function getProjectCsv(id, collection = activeProject.csvFiles) {
+diff --git a/sourcecode/system.js b/sourcecode/system.js
+index 207a6bdc2ad0b6cc382d2d4fbe77b1a16ff79385..c6e9b723708a79404c11002f2e4e430a3ef69c18 100644
+--- a/sourcecode/system.js
++++ b/sourcecode/system.js
+@@ -144,7 +144,9 @@
+     let definition = appFSM.definition(region);
+     (definition.objects || []).forEach((name) => {
+       try {
+-        projectObjects.read(name);
++        // Metadata names denote owners, not a Backend mirror of Frontend state.
++        if (name === "ui") interfaceFSM.readState();
++        else projectObjects.read(name);
+       } catch (error) {
+         issues.push({
+           kind: "fsm-object-unavailable",
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 96c9400ab345f49f42c5f7f16095d2995176e080..19e619239941997d5c458444845911d333335051 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1289,6 +1289,45 @@
+       api.slots.select(null);
+       check(interfaceRuntime.selectedSlotId === null && appFSM.state.workspace === "project",
+         "explicit deselection did not clear slot workspace");
++      const runtime = { ...interfaceRuntime }, dataset = { ...document.body.dataset },
++        busy = document.body.classList.contains("app-busy"), aria = document.body.getAttribute("aria-busy"),
++        probe = new InterfaceStateMachine(APP_STATE_DEFINITIONS), publications = [], source = activeProject._state;
++      probe.subscribe(state => publications.push(state));
++      const accept = (event, input) => probe.send(event, { validatedInput: { accepted: true, ...input } });
++      try {
++        probe.notify("ui", "BOOT_PROJECTION");
++        check(probe.state.revision === 1 && publications.length === 1, "booting notification suppressed Source revision");
++        accept("SELECT_ASSET", { reference: "/validated.csv", selectionHint: "csv" });
++        probe.send("TOGGLE_OVERLAY", { overlay: "layout" });
++        let count = publications.length, revision = probe.state.revision;
++        const selected = accept("SELECT_SLOT", { reference: target.id, workspaceHint: "slot.graph", selectionHint: "clear-graph-object" });
++        check(publications.length === count + 1 && selected.revision === revision + 1 && selected.selectedSlotId === target.id &&
++          selected.workspace === "slot.graph" && selected.overlay === "none" && selected.assetPath === "/validated.csv" &&
++          Object.isFrozen(publications.at(-1)), "slot selection published intermediate regions or lost supplied final scalars");
++        accept("SELECT_GRAPH_OBJECT", { reference: 0, selectionHint: null });
++        probe.send("CLEAR_GRAPH_OBJECT");
++        check(probe.state.graphObjectIndex === null && probe.state.assetPath === "/validated.csv",
++          "index-only selection/clear changed independent asset selection");
++        probe.send("TOGGLE_OVERLAY", { overlay: "caption" });
++        accept("SELECT_SLOT", { reference: null, workspaceHint: "project", selectionHint: "toggle-clear" });
++        check(probe.state.overlay === "caption" && probe.state.assetPath === null && probe.readState().selectedSlotId === null,
++          "explicit deselection closed overlay or retained asset selection");
++        const rejected = probe.state; count = publications.length;
++        probe.send("TOGGLE_OVERLAY", { validatedInput: { accepted: false, payload: { overlay: "print" } } });
++        check(probe.state === rejected && publications.length === count, "rejected local event published or changed state");
++        revision = probe.state.revision;
++        probe.send("LIFECYCLE_FAILED", { event: "probe", message: "original projection" });
++        check(probe.state.revision === revision + 2 && publications.at(-2).lifecycle === "error" &&
++          publications.at(-1).lifecycle === "ready" && Object.isFrozen(publications.at(-1).error) &&
++          publications.at(-2).error.message === "original projection", "failure/recovery lost exact two immutable publications");
++        const beforeNotify = probe.readState(); probe.notify("anything", "REVISION_ONLY", { operation() { throw Error("must not execute"); } });
++        check(probe.state.revision === beforeNotify.revision + 1 && probe.state.error.message === beforeNotify.error.message &&
++          activeProject._state === source, "notify executed payload or changed persistent authority/error");
++      } finally {
++        Object.assign(interfaceRuntime, runtime); Object.assign(document.body.dataset, dataset);
++        document.body.classList.toggle("app-busy", busy);
++        if (aria === null) document.body.removeAttribute("aria-busy"); else document.body.setAttribute("aria-busy", aria);
++      }
+     });
+     await run(38, "post-commit reconciliation preserves unrelated references and resolves moved assets", async () => {
+       const target = activeProject.slots.find((slot) => !slot.hidden);
+@@ -2637,12 +2676,13 @@
+           appFSM.state.graphObjectIndex === null && appFSM.state.graphObject === "none" &&
+           interfaceRuntime.selectedSlotId === slot && appFSM.state.workspace === workspace && JSON.stringify(activeProject._state) === before,
+           "selection changed Project/slot/workspace or failed to clear graph selection");
+-        check(publications.length === 1 && publications[0] === interfaceFSM.state &&
++        check(publications.length === 1 && publications[0].revision === interfaceFSM.state.revision &&
++          publications[0].selectedSlotId === interfaceRuntime.selectedSlotId &&
+           publications[0].graphObject === "none" && publications[0].graphObjectIndex === null,
+           "selection published an intermediate state instead of one final receipt");
+         const priorRevision = interfaceFSM.state.revision;
+         check(api.assets.selectCsv(path)?.id === csv.id && interfaceFSM.state.revision === priorRevision + 1 &&
+-          publications.length === 2 && publications[1] === interfaceFSM.state,
++          publications.length === 2 && publications[1].revision === interfaceFSM.state.revision,
+           "accepted repeat selection did not publish exactly one final revision receipt");
+         const stable = interfaceFSM.state, count = events.length;
+         check(api.assets.selectCsv("/missing.csv") === null && api.assets.selectCsv("/assets/csv") === null &&
+diff --git a/development-versions.json b/development-versions.json
+index ad7334585ab66d925ffa1b5fc2fecd9e75a47c18..191eb7cee721447f200e55da6c1f5f209632e779 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 146,
++      "revision": 147,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:3ab32590a35bf1358af69f180651c946bdb1c65890bda5b9bde051d32b41b909",
++      "fingerprint": "sha256:8ed2e241069dddedb626a927d3bc80fa71b0b4c7df7e00f88f8183a89c788590",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261113-003-project-efsm-module-translation.md"
++      "validation_review": "agent_space/reviews/review-20261113-004-interface-fsm-module-translation.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/memo/20261113-001.md b/agent_space/memo/20261113-001.md
+index 319132c71cab390e154417f8729aa05f6d5ef0f5..fbd0131b9ffc041f35c81d639bf453b588ef0cc8 100644
+--- a/agent_space/memo/20261113-001.md
++++ b/agent_space/memo/20261113-001.md
+@@ -5,9 +5,10 @@
+ ## 현재 위치
+ 
+ - r142 graphs, r143 layout_annotations, r144 assets_files: 각 기록 범위에서 정적 번역 종료.
+-- r145 project_state: 가능한 15개 Source 절차/PlusCal 확장은 번역했지만 아래 tree/trash 소비·UI 역의존이 남아 **모듈 전체 미완료**.
++- r145 project_state: 가능한 15개 Source 절차/PlusCal 확장은 번역했지만 tree/trash 소비 연결이 남아 **모듈 전체 미완료**. UI 역의존은 r147에서 해소했다.
+ - r146 project_efsm: 등록 34 commands/14 PlusCal procedures와 실제 caller의 정적 대응 종료. review-20261113-003-project-efsm-module-translation.md 참조. Plan025의 5차가 과거 상태여도 이 완료 기록을 잃지 않는다.
+-- 다음은 Plan025 6a frontend/interface_fsm → 6b application/adapter → 7a–d public APIs → 8 Mantine → 9 system → 10 portable_build. 이미 닫힌 renderer/raster를 새 근거 없이 다시 조사·설계하지 않는다.
++- r147 6a frontend/interface_fsm: 4개 Source methods/5개 PlusCal procedures와 15 events의 정적 대응 종료. revision/publish, final selection, lifecycle recovery와 ui 소유 연결을 번역했다. 실행 검증은 미실행이다.
++- 다음은 Plan025 6b application/adapter → 7a–d public APIs → 8 Mantine → 9 system → 10 portable_build. 이미 닫힌 renderer/raster를 새 근거 없이 다시 조사·설계하지 않는다.
+ 
+ ## 미완료 목록과 담당 경계
+ 
+@@ -19,11 +20,11 @@
+ 
+ **tree 전체가 상위 미정은 아니다.** 명시적 path의 assets.readDeletionTarget, CSV header/rows, 실제 reference counts, canonical subtree traversal은 이미 Source에 있다. selected-only wrapper 제한은 번역 누락이다. review004의 과도한 차단 사유는 정정되었다.
+ 
+-### 2. Backend UI registry 역의존 (4·6a·9)
++### 2. Backend UI registry 역의존 — r147 해소 (4·6a·9)
+ 
+-`sourcecode/backend/project_state.js:initializeProjectObjects`의 ui reader는 Frontend interfaceRuntime을 읽는다. Frontend notification metadata와 system audit도 이 registration에 의존한다.
++Frontend notify는 이제 revision publish만 하며 region update/Backend reader callback을 실행하지 않는다. `sourcecode/backend/project_state.js:initializeProjectObjects`의 ui reader와 Frontend import를 제거했다. system audit는 metadata의 ui 이름을 Frontend `interfaceFSM.readState()`로 확인하고 나머지 영속 이름만 Backend registry로 읽는다. metadata를 삭제하거나 새 mirror를 만들지 않고 같은 소유 단위로 연결했다.
+ 
+-Backend에서 단독 제거해 audit를 깨뜨리지 말고 Frontend/system 소유 경로를 함께 번역한 뒤 project_state 잔여를 닫는다. 이는 새 상위 의미가 필요한 항목이 아니라 기존 소유 규칙의 연결 번역이다.
++이 역의존은 종료했으나 project_state의 canonical tree/trash 소비 연결과 system 전체 audit 절차 대응까지 완료한 것은 아니다.
+ 
+ ### 3. Frontend command reconciliation/이미지 자원 연결 (6a·6b·8·9, 필요한 renderer caller만)
+ 
+@@ -42,7 +43,7 @@
+ 
+ ### 6. 실행 검증 (최종 별도 허가)
+ 
+-code146은 stale이다. Source45/PlusCal25/verification26/derived_from 불변. 공식 checker/fidelity/portable build/inline-split/browser/Plotly/drop/export regression은 최신 변경 집합으로 미실행이다.
++code147은 stale이다. Source45/PlusCal25/verification26/derived_from 불변. 공식 checker/fidelity/portable build/inline-split/browser/Plotly/drop/export regression은 최신 변경 집합으로 미실행이다.
+ 
+ 로컬은 read/edit/static diff/hash만 허용한다. 이 메모로 Actions/remote write/commit/push/goal 허가를 추정하지 않는다. 필요한 허가와 대상 SHA/run/job/log는 별도 확정한다.
+ 
+diff --git a/agent_space/reviews/review-20261113-004-interface-fsm-module-translation.md b/agent_space/reviews/review-20261113-004-interface-fsm-module-translation.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..324c0787dcf9c9e6ed095c508fec80b6830c8470
+--- /dev/null
++++ b/agent_space/reviews/review-20261113-004-interface-fsm-module-translation.md
+@@ -0,0 +1,39 @@
++# Plan025 6a / frontend/interface_fsm — 정적 번역 종료
++
++2026-11-13, code147/stale. Source150줄/PlusCal212줄/runtime507줄을 확인하고 4개 Source methods, 5개 PlusCal procedures, 15개 events 및 실제 Application/system caller를 대응했다. 정책/기존 대응 기록은 재사용했다. 목적은 명시된 전이·revision·소유 경계를 번역하는 것이며 UI 폴리싱이나 새 FSM 설계가 아니다. Plan은 그대로 두고 미완료 메모를 갱신했다.
++
++## 전체 대응
++
++| 명세 | sourcecode/frontend/interface_fsm.js 실제 경로 |
++| --- | --- |
++| InterfaceStateMachine_readState | readState: Frontend state와 단일 interfaceRuntime의 selectedSlotId/zoom/lock scalars만 immutable projection으로 반환. Backend read/import 없음. |
++| publishRuntime | publish: revision을 정확히 한 번 올리고 readState의 final immutable projection을 subscriber에 전달. DOM dataset/busy/aria/debug는 그 결과의 target runtime 표시뿐이다. |
++| InterfaceStateMachine_send / reject | 기존 Application validatedInput transport를 소비한다. rejected는 state/revision/selection을 유지하며 publish하지 않는다. 수락된 event는 Source 15 events에 한정한다. Backend command/query/task callback을 실행하지 않는다. 기존 region별 중간 publish loop 대신 Source의 최종 state를 한 번 publish한다. |
++| SELECT_SLOT | validated reference/toggle-clear/workspaceHint만 소비, graphObject/index clear, 최종 none 또는 toggle-clear 시 asset clear, non-null model 선택은 독립 asset 보존, non-null 최종 선택만 overlay close. explicit deselection은 overlay 보존. raw slotId/direction으로 다시 판단하지 않는다. |
++| SELECT_ASSET | supplied kind/path, graph selection clear, slot/workspace 보존. accepted repeat도 revision+1/publication 1회, rejected repeat는 그대로 유지. |
++| SELECT_GRAPH_OBJECT / CLEAR_GRAPH_OBJECT | supplied validated index만 사용. CSV path hint가 제공된 경우에만 asset 변경, index-only 선택/clear는 독립 asset 보존. |
++| CLEAR_ASSET_SELECTION | asset kind/path만 clear. |
++| TOGGLE_OVERLAY / CLOSE_OVERLAY / OUTSIDE_CLICK / ESCAPE | supplied local overlay toggle 또는 close. 최종 state/publication 1회. |
++| SET_DASHBOARD_ZOOM | locked면 no-op. finite numeric scalar/numeric text 입력은 50..200, invalid는100, actual change만 publish. Project layout/referenceWidth 수정 없음. |
++| SET_DASHBOARD_ZOOM_LOCK / RESET_DASHBOARD_ZOOM | 첫 lock에 supplied finite positive width만 저장. invalid/repeated lock unchanged. unlock/reset은 lock=false,width=null,zoom100을 함께 적용하고 actual change만 publish. |
++| LIFECYCLE_START / COMPLETE | Application이 전달한 lifecycle/완료를 반영하고 error clear, 한 번 publish. event/outcome label은 기존 subscriber plumbing이고 project result를 대체하지 않는다. |
++| LIFECYCLE_FAILED | Application이 만든 event/message projection을 freeze, error publication→같은 처리의 ready recovery publication. error는 다음 START/COMPLETE까지 유지. 두 번의 revision/publication을 보존한다. Error 객체 해석은 실제 Application runLifecycleTask로 옮겼다. |
++| InterfaceStateMachine_reconcileProjectResult | supplied selectedSlot/assetKind/path/graph index/workspaceHint만 한 번 반영·publish. Backend null kind는 Frontend none으로 표현. 별도 hint 저장/SELECT_GRAPH_OBJECT 재전송/Backend 조회 없음. |
++| InterfaceStateMachine_notify | booting/region과 무관하게 projection revision만 publish. 정의의 update 또는 payload callback을 실행하지 않는다. |
++
++기존 definitions/객체명 metadata와 물리적 helper는 재설계하지 않았다. 실제 send/notify는 region callback dispatch를 더 이상 사용하지 않는다. 초기 ready helper는 기존 Application-supplied workspace로 준비된 runtime을 완료하며 추가 Backend read를 하지 않는다.
++
++## 같은 소유 단위의 실제 caller 연결
++
++- application/adapter.js의 lifecycle failure는 error 원본을 다시 실행/소비시키지 않고 event/message만 Frontend에 전달한다. 원래 task error의 전파는 Application에 그대로 남는다.
++- backend/project_state.js에서 Frontend interfaceRuntime import 및 ui registry mirror를 제거했다. Frontend notify도 Backend 객체 metadata/update reader를 호출하지 않는다.
++- system.js audit는 metadata의 ui 이름을 Frontend interfaceFSM.readState로 확인하고 나머지 영속 이름만 projectObjects.read로 확인한다. metadata를 삭제하거나 Backend에 runtime 사본을 두지 않고 실제 audit 소비자까지 함께 번역했다. 이로써 memo의 ui 역의존은 해소했지만 tree/trash 때문에 project_state 전체는 여전히 미완료다.
++- subscriber는 이제 중간 region state가 아니라 final immutable read projection을 받는다. 기존 regression63의 state pointer 동일성 기대를 revision/final selectedSlot 값으로 맞췄다.
++
++## 정적 증거 / 다음 범위
++
++기존 regression37을 확장해 boot notify, final slot 한 번 publish/독립 asset 보존, index-only/clear, explicit deselection overlay, rejected local event, immutable error→ready 두 번 publish, notify callback 미실행을 기록했다. probe 종료 시 runtime/DOM 표시를 복원한다. 기존 lifecycle36과 zoom46의 계약도 정적으로 대조했다. 새 ID 없음, 모든 fixtures 미실행.
++
++code147/stale `sha256:8ed2e241069dddedb626a927d3bc80fa71b0b4c7df7e00f88f8183a89c788590`. 독립 canonical-LF hash로 이전146 `sha256:3ab32590a35bf1358af69f180651c946bdb1c65890bda5b9bde051d32b41b909`를 재현했다. Source45/PlusCal25/verification26/derived_from 불변. app/test/build/checker/TLC/browser/Actions/remote/commit/push/goal 없음. 정적 번역 종료는 공식 checker/native 통합 검증 통과가 아니다.
++
++다음은 Plan025 6b application/adapter 전체 절차다. 미완료 tree/public/UI 의미·Frontend legacy 자원·실행 검증은 memo/20261113-001.md에서 이어받는다. system/adapter 전체 모듈을 이번 연결 수정만으로 종료한 것은 아니다.

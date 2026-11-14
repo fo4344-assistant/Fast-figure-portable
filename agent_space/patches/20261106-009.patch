@@ -1,0 +1,250 @@
+diff --git a/sourcecode/application/public_api/layout_annotations.js b/sourcecode/application/public_api/layout_annotations.js
+--- a/sourcecode/application/public_api/layout_annotations.js
++++ b/sourcecode/application/public_api/layout_annotations.js
+@@ -1,5 +1,5 @@
+ // Source: sourcescript/application/public_api/layout_annotations.py (same logical owner); pseudocode/application/public_api/layout_annotations.pcal.
+-import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, dispatchSlotSelection, renderDashboard, syncDashboardCaption, applyDashboardZoom, applySlotStyle, applyUiPaletteValues, updateGraphView } from '../adapter.js';
++import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, dispatchSlotSelection, renderDashboard, syncDashboardCaption, applyUiPaletteValues, updateGraphView } from '../adapter.js';
+ import { activeProject } from '../../backend/project_state.js';
+ import { DEFAULT_UI_PALETTE } from '../../backend/settings.js';
+ import { interfaceFSM } from '../../frontend/interface_fsm.js';
+@@ -285,29 +285,27 @@
+ export function setLayoutApiStyle(patch = {}) {
+   const result = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
+   if (!result.committed) return false;
+-  applySlotStyle(false);
+-  applyDashboardZoom(false);
+-  schedulePlotResize();
++  applyCommittedDashboardProjection("LAYOUT_STYLE_CHANGED", result);
++  appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+   return readLayoutApiState();
+ }
+ 
+ export function setLayoutApiGrid(rows, cols) {
+   const result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", { rows, cols });
+   if (!result.committed) return false;
+-  renderDashboard();
+-  applySlotStyle(false);
+-  schedulePlotResize();
++  applyCommittedDashboardProjection("GRID_LAYOUT_CHANGED", result);
++  appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+   return readLayoutApiState();
+ }
+ 
+ export function setLayoutApiZoom(value) {
+-  appFSM.send("SET_DASHBOARD_ZOOM", { value });
+-  applyDashboardZoom(false);
++  const session = interfaceFSM.readState();
++  const state = appFSM.send("SET_DASHBOARD_ZOOM", { value });
++  if (state.revision !== session.revision) renderDashboard();
+   return readLayoutApiState();
+ }
+ 
+ export function commitLayoutApiZoom() {
+-  renderDashboard();
+   appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
+   return readLayoutApiState();
+ }
+@@ -319,15 +317,14 @@
+     renderedWidth = readDashboardRenderedWidth();
+     if (!Number.isFinite(renderedWidth) || renderedWidth <= 0) return false;
+   }
+-  appFSM.send("SET_DASHBOARD_ZOOM_LOCK", { locked: locked === true, renderedWidth });
+-  applyDashboardZoom(false);
+-  schedulePlotResize();
++  const state = appFSM.send("SET_DASHBOARD_ZOOM_LOCK", { locked: locked === true, renderedWidth });
++  if (state.revision !== session.revision) renderDashboard();
+   return readLayoutApiState();
+ }
+ 
+ export function resetLayoutApiZoom() {
+-  appFSM.send("RESET_DASHBOARD_ZOOM");
+-  applyDashboardZoom(false);
+-  schedulePlotResize();
+-  return readLayoutApiState();
+-}
++  const session = interfaceFSM.readState();
++  const state = appFSM.send("RESET_DASHBOARD_ZOOM");
++  if (state.revision !== session.revision) renderDashboard();
++  return readLayoutApiState();
++}
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1539,7 +1539,11 @@
+         api.layout.readState(Infinity).previewGeometry.width === preview.fallbackWidth &&
+         api.layout.readState(0).previewGeometry.width === preview.widthRange[0] &&
+         api.layout.readState(1e9).previewGeometry.width === preview.widthRange[1], "preview width does not use Backend config");
++      const generation = rendererRuntime.dashboardRenderGeneration;
+       const current = api.layout.setStyle({ referenceWidth: 1600, gap: 14, outerMargin: 12, radius: 0, aspect: 2, showBorders: false });
++      check(rendererRuntime.dashboardRenderGeneration === generation + 1 &&
++        $("dashboard").style.getPropertyValue("--dashboard-aspect") === "2 / 1",
++        "style commit did not reach the supplied full content/geometry renderer");
+       check(current.slotStyle.referenceWidth === 1600 && current.slotStyle.gap === 14 && current.slotStyle.radius === 0 &&
+         !current.slotStyle.showBorders && read.slotStyle !== current.slotStyle && read.previewGeometry.width === 800,
+         "style edit discarded zero/false or rewrote detached snapshot");
+@@ -1560,14 +1564,12 @@
+       try { api.layout.setStyle(broken); } catch { failed = true; }
+       check(failed && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === beforeFrontend,
+         "failed style normalization partially committed or reconciled");
+-      const send = projectEFSM.send, apply = applySlotStyle, zoom = applyDashboardZoom, resize = schedulePlotResize;
+-      let rendered = 0;
++      const send = projectEFSM.send, beforeRender = rendererRuntime.dashboardRenderGeneration;
+       try {
+         projectEFSM.send = () => Object.freeze({ committed: false });
+-        applySlotStyle = applyDashboardZoom = schedulePlotResize = () => { rendered++; };
+         check(api.layout.setStyle({ gap: 8 }) === false, "uncommitted style returned successful layout read");
+-      } finally { projectEFSM.send = send; applySlotStyle = apply; applyDashboardZoom = zoom; schedulePlotResize = resize; }
+-      check(rendered === 0 && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === beforeFrontend,
++      } finally { projectEFSM.send = send; }
++      check(rendererRuntime.dashboardRenderGeneration === beforeRender && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === beforeFrontend,
+         "uncommitted style rendered or mutated state");
+       check(!/activeProject|projectObjects|readProjectNumber|dashboardGeometry/.test(readLayoutApiState.toString() + setLayoutApiStyle.toString()),
+         "layout Application still owns Backend reads or normalization");
+@@ -1576,11 +1578,15 @@
+ 
+     await run(46, "Layout zoom is Frontend-owned with stable lock anchor and no persistent writes", async () => {
+       api.layout.resetZoom();
+-      const authority = JSON.stringify(activeProject._state);
+-      check(api.layout.setZoom(125).zoom === 125, "zoom intent event not applied");
+-      const stable = appFSM.state;
++      const authority = JSON.stringify(activeProject._state),
++        captionFont = readBackendProjection("renderer").annotations.captions.settings.fontSize;
++      check(api.layout.setZoom(125).zoom === 125 &&
++        Math.abs(parseFloat($("dashboardCaption").style.fontSize) - captionFont * 1.25) < .0001,
++        "zoom intent did not reach supplied content scaling before completion");
++      const stable = appFSM.state, generation = rendererRuntime.dashboardRenderGeneration;
+       api.layout.setZoom(125);
+-      check(appFSM.state === stable, "same zoom republished runtime");
++      check(appFSM.state === stable && rendererRuntime.dashboardRenderGeneration === generation,
++        "same zoom republished runtime or repainted content");
+       check(api.layout.setZoom(0).zoom === 50 && api.layout.setZoom(1000).zoom === 200 &&
+         api.layout.setZoom(NaN).zoom === 100 && api.layout.setZoom(Symbol("invalid zoom")).zoom === 100,
+         "zoom limits/invalid fallback do not match Frontend contract");
+@@ -1593,24 +1599,33 @@
+           !interfaceFSM.readState().dashboardZoomLocked, "invalid initial lock changed runtime");
+         readDashboardRenderedWidth = () => { measured++; return 840; };
+         check(api.layout.setZoomLocked(true).zoomLocked && measured === 2 &&
+-          interfaceFSM.readState().dashboardZoomLockedWidth === 840, "initial lock did not capture exactly one valid width");
+-        const locked = appFSM.state;
++          interfaceFSM.readState().dashboardZoomLockedWidth === 840 &&
++          Math.abs(parseFloat($("dashboardCaption").style.fontSize) -
++            captionFont * 840 / api.layout.readState().slotStyle.referenceWidth) < .0001,
++          "initial lock did not capture exactly one valid width and apply its content scale");
++        const locked = appFSM.state, lockedGeneration = rendererRuntime.dashboardRenderGeneration;
+         readDashboardRenderedWidth = () => { throw Error("repeated lock measured again"); };
+         api.layout.setZoomLocked(true);
+         api.layout.setZoom(175);
+         check(appFSM.state === locked && interfaceFSM.readState().dashboardZoomLockedWidth === 840 &&
+-          api.layout.readState().zoom === 100, "lock changed anchor/intent or republished on no-op");
++          api.layout.readState().zoom === 100 && rendererRuntime.dashboardRenderGeneration === lockedGeneration,
++          "lock changed anchor/intent, republished or repainted on no-op");
+         check(!api.layout.setZoomLocked(false).zoomLocked && api.layout.readState().zoom === 100 &&
+-          interfaceFSM.readState().dashboardZoomLockedWidth === null, "unlock did not reset session atomically");
++          interfaceFSM.readState().dashboardZoomLockedWidth === null &&
++          parseFloat($("dashboardCaption").style.fontSize) === captionFont,
++          "unlock did not reset session and content scale together");
+         api.layout.setZoom(150);
+         api.layout.resetZoom();
+         const reset = appFSM.state;
+         api.layout.resetZoom();
+-        check(appFSM.state === reset && api.layout.readState().zoom === 100, "repeated reset published a change");
++        check(appFSM.state === reset && api.layout.readState().zoom === 100 &&
++          parseFloat($("dashboardCaption").style.fontSize) === captionFont,
++          "reset missed content scale or repeated reset published a change");
+       } finally { readDashboardRenderedWidth = readWidth; }
+-      const revision = appFSM.state.revision;
++      const revision = appFSM.state.revision, beforeCompletion = rendererRuntime.dashboardRenderGeneration;
+       api.layout.commitZoom();
+-      check(appFSM.state.revision === revision + 1 && JSON.stringify(activeProject._state) === authority,
++      check(appFSM.state.revision === revision + 1 && rendererRuntime.dashboardRenderGeneration === beforeCompletion &&
++        JSON.stringify(activeProject._state) === authority,
+         "zoom completion did not notify once or zoom wrote persistent layout");
+       check(!/dashboardZoom\w*\s*=|activeProject|readProjectNumber/.test(setLayoutApiZoom.toString() +
+         setLayoutApiZoomLocked.toString() + resetLayoutApiZoom.toString()), "zoom Application owns session mutation or Backend normalization");
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 134,
++      "revision": 135,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:6e197059a9c6a006fef7a252b386f49708694a05dc29be9f5e77389dddf4b256",
++      "fingerprint": "sha256:29c5e333e63d5d7a64b0b145c543053b04eb26bf5b8387241ecd4428bbf94091",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261106-006-surface-ownership-open.md"
++      "validation_review": "agent_space/reviews/review-20261106-007-layout-screen-open.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/plans/plan-024.md b/agent_space/plans/plan-024.md
+--- a/agent_space/plans/plan-024.md
++++ b/agent_space/plans/plan-024.md
+@@ -103,3 +103,16 @@
+ 기존153/154/158/164만 필요한 범위에서 수정했고 167개 ID를 유지했다. review `agent_space/reviews/review-20261106-006-surface-ownership-open.md`, incremental patch `agent_space/patches/20261106-008.patch`/동명 설명. code134/stale, canonical LF hash 정적 계산만 수행했다. 앞선 d8ac43924660080e575c5fd68bee9088b4f96c2b 대상 version/fidelity/regression/build Actions 성공은 r133에 한정되며 이번 변경의 실행 근거가 아니다. 이번 단위는 local app/test/build/checker 또는 Actions/remote write를 실행하지 않았다.
+ 
+ 1단계 전체 종료 판정은 아직 아니다. 후속은 supplied geometry/zoom/style이 graph/image/label/caption의 실제 caller까지 전달되는 관계와 나머지 click/bookmark/controller 분기를 상위 절차에 대조하고, 구체 누락이 확인되면 같은 owner 단위로 구현한다. capture/export·일반 API 확장으로 우회하지 않는다. 상위 Source/PlusCal/정책, dist, 기존 WIP·실행 로그·patch를 보존한다.
++
++
++## 10. Geometry/style/zoom actual screen callers — r135 (2026-11-06)
++
++Continues stage1, not capture/export or general API expansion. Source public layout procedures and supplied renderer steps1/6/7 are connected through the actual Mantine style/grid/zoom/lock/reset/completion entries.
++
++- Committed style/grid now use the existing committed-projection invalidation boundary and its full supplied renderer. Rejection has no success render. Separate CSS-only updates/redundant resize requests were removed; existing layout notification and fresh public reads are retained.
++- Changed session zoom/lock/reset now present current supplied geometry **and content scale** together. First-lock measurement, invalid-width refusal, no-op state and Project nonmutation semantics are preserved. No-op calls do not repaint. Zoom completion only notifies once and reads, rather than delaying the actual content update until completion.
++- Existing cases45/46 were adapted, with no new IDs/suites. Caption scaling/generation checks observe the real renderer, not an added helper choreography. All execution verification remains pending.
++- Code r135/stale, canonical-LF static fingerprint `sha256:29c5e333e63d5d7a64b0b145c543053b04eb26bf5b8387241ecd4428bbf94091`. Source45/PlusCal25/verification26 and lineage unchanged. Static calculation is not official checker validation. No application/test/build/checker/Actions execution, commit or push in this unit.
++- Evidence: `agent_space/reviews/review-20261106-007-layout-screen-open.md`, actual incremental patch/explanation `agent_space/patches/20261106-009.patch` / `.md`. Existing WIP and records preserved.
++
++Stage1 remains open: finish remaining controller/caller and narrow effect correspondence, distinguishing implementation coverage from pending execution. No new authority, general refresh/cache mechanism, or local execution permission is introduced.
+diff --git a/agent_space/reviews/review-20261106-007-layout-screen-open.md b/agent_space/reviews/review-20261106-007-layout-screen-open.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261106-007-layout-screen-open.md
+@@ -0,0 +1,33 @@
++# Layout screen caller translation — r135 / OPEN
++
++## Authority and bounded scope
++
++Plan024 stage1: translate geometry/style/zoom callers into the supplied screen renderer. Source r45 and PlusCal r25 are unchanged. This is not a layout Backend redesign, preview algorithm change, capture/export change, or stage3 freshness expansion.
++
++- `sourcescript/application/public_api/layout_annotations.py`: layout style/grid commands commit in Backend, reject without success rendering, then read current layout; zoom/lock/reset belong solely to Frontend session; completion is one notification, not a second commit.
++- `pseudocode/application/public_api/layout_annotations.pcal`: corresponding style/grid, session-only zoom, first-lock measurement, single reset and completion procedures.
++- `sourcescript/frontend/renderer.py`: `renderDashboard(projectProjection, interfaceState)` steps1/6/7 require supplied width/reference geometry, graph/image/label/caption representation, and current-host resizing after content/style/geometry. Locked width survives reference changes. Renderer never reconstructs Project values from DOM.
++
++## Confirmed gap and implementation
++
++The actual Mantine layout callers already invoke public setStyle/setGrid/setZoom/commitZoom/setZoomLocked/resetZoom. Previously style, live zoom, lock/unlock and reset stopped at CSS geometry/resize utilities. They did not pass the new scale to graph figures, labels and captions. Only zoom completion performed a full render; lock/reset have no separate completion render. Under a fixed width, changing referenceWidth therefore also left content at its previous scale. This is a missing ownership connection, not a request for visual polishing.
++
++| Procedure / actual entry | Implemented caller boundary |
++| --- | --- |
++| Mantine commitStyle -> public setLayoutApiStyle | On committed LAYOUT_STYLE_CHANGED, existing committed-projection boundary reads current authority/final session and invokes supplied invalidation, whose non-narrow branch performs full presentation. Retains one existing layout notification. Rejection returns False before presentation. |
++| Mantine changeGrid -> public setLayoutApiGrid | Uses the same committed-projection boundary, replacing full-render plus redundant separate style/resize calls; retains existing notification and fresh public return. No preview/candidate is fed back into Backend. |
++| Mantine changeZoom -> public setLayoutApiZoom | Session event first; actual revision change invokes existing fresh supplied dashboard entry immediately, updating all content scale, not only CSS width. Same value/locked no-op still returns fresh layout without repaint. |
++| Mantine zoom lock/reset buttons -> public methods | First lock still measures once; invalid width returns unchanged False. Accepted changed state renders current supplied content; repeated lock/reset/no-op does not repaint. No additional Project command or width authority. |
++| Mantine completion -> commitLayoutApiZoom | Only existing DASHBOARD_ZOOM_CHANGED notification plus fresh read. Removes delayed full render now owned by the actual change; no second saved value or presentation commit. |
++
++The before/after revision comparison is a call-local Frontend transition receipt, not a cached view or new authority. Rendering uses the existing Application entry's fresh Backend projection and current final Frontend state. No geometry snapshots, width caches, shared refresh registry, or secondary figure computation were added. Existing renderer generation/instance guards and its resize ownership remain in force.
++
++## Evidence and limits
++
++Existing browser cases45/46 only were adapted: style success reaches full renderer; rejection preserves generation/state; live zoom changes real caption scale; same zoom does not repaint; unlock/reset restore content scale; completion notifies once without a second render. Test45's rejected-command check now observes actual generation instead of replacing three obsolete CSS helper calls. No new test IDs or suites (167 authored cases remain).
++
++No application, test, build, checker, Actions or TLC execution occurred. `git diff --check` and patch reverse-applicability are static file checks only. Prior r133 Actions results do not validate r134/r135.
++
++Code metadata r135 remains stale. Static canonical-LF git-blob calculation first reproduced r134 `sha256:6e197059a9c6a006fef7a252b386f49708694a05dc29be9f5e77389dddf4b256`, then calculated r135 `sha256:29c5e333e63d5d7a64b0b145c543053b04eb26bf5b8387241ecd4428bbf94091`. This is not an official version-checker pass; version completion remains pending authorized Actions. Source45/PlusCal25/verification26 and existing lineage are unchanged; working-tree line endings were not normalized.
++
++Stage1 as a whole is not closed. Remaining procedure/caller correspondence, including controller interactions and narrow effects, must be finished before stage2 capture/resource lifetime. No whole-stage audit or integration success is claimed.

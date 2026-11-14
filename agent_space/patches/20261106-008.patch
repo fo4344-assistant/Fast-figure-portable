@@ -1,0 +1,272 @@
+diff --git a/sourcecode/frontend/renderer.js b/sourcecode/frontend/renderer.js
+--- a/sourcecode/frontend/renderer.js
++++ b/sourcecode/frontend/renderer.js
+@@ -170,6 +170,23 @@
+   );
+ }
+ 
++// Connectivity alone is not ownership: a detached/reparented child no longer
++// belongs to its recorded slot host even if another live host contains it.
++function hasLiveGraphSurface(record) {
++  return record.host.isConnected && record.plot.isConnected && record.host.contains(record.plot);
++}
++
++function hasLiveImageSurface(surface) {
++  return surface.host.isConnected && surface.element.isConnected && surface.host.contains(surface.element);
++}
++
++function releaseImageSurface(surface) {
++  if (rendererRuntime.imageSurfaces.get(surface.slotId) === surface)
++    rendererRuntime.imageSurfaces.delete(surface.slotId);
++  surface.element.remove();
++  surface.element.removeAttribute("src");
++}
++
+ function currentResizeRequests() {
+   return [...rendererRuntime.graphInstances.values()].map(record => ({
+     record, generation: record.generation, operation: record.operation,
+@@ -182,7 +199,7 @@
+     if (generation !== rendererRuntime.dashboardRenderGeneration || record.generation !== generation ||
+         record.operation !== operation || record.slotId !== slotId || record.chartId !== chartId ||
+         record.host !== host || record.plot !== plot || rendererRuntime.graphInstances.get(slotId) !== record ||
+-        !host.isConnected || !plot.isConnected) continue;
++        !hasLiveGraphSurface(record)) continue;
+     try {
+       Plotly.Plots.resize(plot);
+     } catch (_) {}
+@@ -377,7 +394,8 @@
+   const operation = {}, slotId = slot.id, chartId = slot.content.chart;
+   record.operation = operation;
+   const current = () => generation === rendererRuntime.dashboardRenderGeneration &&
+-    record.generation === generation && record.operation === operation && rendererRuntime.graphInstances.get(slotId) === record && record.host.isConnected;
++    record.generation === generation && record.operation === operation && record.slotId === slotId &&
++    record.chartId === chartId && rendererRuntime.graphInstances.get(slotId) === record && hasLiveGraphSurface(record);
+   // Serialize updates to a reused Plotly host; old work must settle before the next
+   // react. A superseded queued generation skips work rather than overwriting it.
+   record.pending = record.pending.catch(() => {}).then(async () => {
+@@ -419,11 +437,11 @@
+       if (!host) return false;
+       if (slot.contentType !== "image" && slot.figure) {
+         const record = rendererRuntime.graphInstances.get(slot.id);
+-        return record?.host === host && record.chartId === slot.content.chart && record.plot.isConnected;
++        return record?.host === host && record.chartId === slot.content.chart && hasLiveGraphSurface(record);
+       }
+       if (slot.imageView) {
+         const surface = rendererRuntime.imageSurfaces.get(slot.id);
+-        return surface?.host === host && surface.element.isConnected && surface.imageInput.src === slot.imageView.src;
++        return surface?.host === host && hasLiveImageSurface(surface) && surface.imageInput.src === slot.imageView.src;
+       }
+       return host.classList.contains("empty");
+     }),
+@@ -497,9 +515,9 @@
+       surface = rendererRuntime.imageSurfaces.get(slot.id);
+     if (!host?.isConnected) return true;
+     if (slot.contentType !== "image" && slot.figure)
+-      return !record || record.host !== host || !record.plot.isConnected || record.chartId !== slot.content.chart;
++      return !record || record.host !== host || !hasLiveGraphSurface(record) || record.chartId !== slot.content.chart;
+     if (record) return true;
+-    return slot.imageView ? !surface || surface.host !== host || !surface.element.isConnected || surface.imageInput.src !== slot.imageView.src : !!surface;
++    return slot.imageView ? !surface || surface.host !== host || !hasLiveImageSurface(surface) || surface.imageInput.src !== slot.imageView.src : !!surface;
+   })) return renderDashboardProjection(projectProjection, interfaceState, frontendActions);
+   const chart = resolveSelectedChart(projectProjection, interfaceState), style = projectProjection.layout.slotStyle,
+     scale = (interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
+@@ -555,6 +573,7 @@
+   const discard = record => {
+     rendererRuntime.graphInstances.delete(record.slotId);
+     record.host.remove();
++    record.plot.remove();
+     try { Plotly.purge(record.plot); } catch {}
+     // A pending Plotly operation may finish after detach; it must never revive a live view.
+     record.pending?.finally(() => { try { Plotly.purge(record.plot); } catch {} }).catch(() => {});
+@@ -562,15 +581,11 @@
+   for (const record of rendererRuntime.graphInstances.values()) {
+     const slot = slots.find(slot => slot.id === record.slotId);
+     if (!slot || slot.contentType === "image" || !slot.figure || slot.content.chart !== record.chartId ||
+-        !record.host.isConnected) discard(record);
++        !hasLiveGraphSurface(record)) discard(record);
+   }
+   // Image elements are surface-owned decode handles, never shared asset handles.
+   // Detach before dropping src; an obsolete decode may reject but is no longer current.
+-  for (const surface of rendererRuntime.imageSurfaces.values()) {
+-    rendererRuntime.imageSurfaces.delete(surface.slotId);
+-    surface.element.remove();
+-    surface.element.removeAttribute("src");
+-  }
++  for (const surface of rendererRuntime.imageSurfaces.values()) releaseImageSurface(surface);
+   const ids = new Set(slots.map(slot => String(slot.id)));
+   dashboard.querySelectorAll(":scope > .slot").forEach(host => {
+     if (!ids.has(host.dataset.slot)) host.remove();
+@@ -609,19 +624,18 @@
+         rendererRuntime.imageSurfaces.set(slot.id, surface);
+         const current = () => generation === rendererRuntime.dashboardRenderGeneration &&
+           rendererRuntime.imageSurfaces.get(slot.id) === surface && surface.imageInput === image &&
+-          host.isConnected && element.parentElement === frame;
++          hasLiveImageSurface(surface) && element.parentElement === frame;
+         surface.pending = Promise.resolve().then(async () => {
+-          if (!current()) return;
++          if (!current()) { releaseImageSurface(surface); return; }
+           try {
+             await element.decode();
+-            if (!current()) return;
++            if (!current()) releaseImageSurface(surface);
+           } catch (error) {
+-            if (!current()) return;
+-            // A failed temporary surface owns only this element; preserve decode's
+-            // original failure without invalidating another surface of the same asset.
+-            rendererRuntime.imageSurfaces.delete(slot.id);
+-            element.remove(); element.removeAttribute("src");
+-            throw error;
++            const wasCurrent = current();
++            // Release only this decode's surface, including stale work whose
++            // frame was removed without a newer dashboard render.
++            releaseImageSurface(surface);
++            if (wasCurrent) throw error;
+           }
+         });
+       }
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -6824,6 +6824,16 @@
+           pending[4].element.hasAttribute("src") && rendererRuntime.imageSurfaces.has(9879) &&
+           !rendererRuntime.imageSurfaces.has(9878),
+           "one failed surface invalidated another live surface of the same image input");
++        const orphaned = renderDashboardProjection(supplied, state); await Promise.resolve();
++        const orphan = pending[5].element, frame = orphan.parentElement;
++        document.body.append(frame); // Still connected, but no longer owned by its slot host.
++        pending[5].resolve(); await orphaned.completion; frame.remove();
++        check(!orphan.isConnected && !orphan.hasAttribute("src") && !rendererRuntime.imageSurfaces.has(9878),
++          "stale successful decode retained a reparented surface or its bytes");
++        const detached = renderDashboardProjection(supplied, state); await Promise.resolve();
++        pending[6].element.parentElement.remove(); pending[6].reject(failure); await detached.completion;
++        check(!pending[6].element.hasAttribute("src") && !rendererRuntime.imageSurfaces.has(9878) &&
++          activeProject._state === authority, "obsolete decode failure leaked its detached surface or changed authority");
+       } finally {
+         pending.forEach(item => item.resolve()); HTMLImageElement.prototype.decode = decode;
+         installResizeObserver = observe; await renderDashboard().completion;
+@@ -6869,9 +6879,15 @@
+         check(applyDashboardProjectionInvalidation("PROJECT_NODE_MOVED", {
+           projectionEffect: { pathOnly: true, referencesRemoved: false } }, state, changed) === "NONE" &&
+           rendererRuntime.dashboardRenderGeneration === generation, "path-only facts triggered a render");
+-        graph.host.remove();
++        graph.plot.remove();
+         check(applyDashboardProjectionInvalidation("LABEL_SETTINGS_CHANGED", result, state, changed) === "FULL_DASHBOARD" &&
+-          rendererRuntime.graphInstances.get(9880) !== graph, "missing host did not force full projection fallback");
++          rendererRuntime.graphInstances.get(9880) !== graph, "missing graph child did not rebuild its retained host association");
++        await Promise.all([...rendererRuntime.graphInstances.values()].map(record => record.pending));
++        const moved = rendererRuntime.imageSurfaces.get(9881);
++        rendererRuntime.graphInstances.get(9880).host.append(moved.element);
++        check(applyDashboardProjectionInvalidation("SLOT_IMAGE_SETTINGS_CHANGED", result, state, changed) === "FULL_DASHBOARD" &&
++          rendererRuntime.imageSurfaces.get(9881) !== moved && !moved.element.hasAttribute("src"),
++          "connected image under another host was treated as the recorded slot surface");
+         await Promise.all([...rendererRuntime.graphInstances.values()].map(record => record.pending));
+       } finally {
+         readBackendProjection = query; Plotly.react = react; Plotly.Plots.resize = resize;
+@@ -6962,7 +6978,7 @@
+         check(caught === failure && rendererRuntime.imageSurfaces.get(9891) === image && decodes === 1,
+           "workspace swallowed current graph failure or disturbed sibling image ownership");
+         Plotly.react = draw;
+-        graph.host.remove();
++        graph.plot.remove();
+         const replacement = updateGraphViewProjection(supplied, selectedGraph);
+         await replacement.completion;
+         check(rendererRuntime.graphInstances.get(9890) !== graph && replacement.generation > generation && decodes === 2,
+@@ -7188,6 +7204,17 @@
+           rendererRuntime.graphInstances.get(9920) === record && JSON.stringify(firstInput.visibleSlots[0].figure.data) === '[{"y":[1]}]' &&
+           activeProject._state === authority && interfaceFSM.state === session,
+           "failed operation poisoned retry, changed supplied input/authority or leaked instance ownership");
++        const oldCallback = handlers.get("plotly_relayout"), beforeReports = reports.length, beforeResize = resized.length;
++        $("dashboard").append(plot); // Connected is not equivalent to still owned by this slot host.
++        oldCallback({ "xaxis.range[0]": 9 });
++        while (frames.length) frames.shift()();
++        resizePlots();
++        check(reports.length === beforeReports && resized.length === beforeResize,
++          "reparented graph child emitted an old intent or received delayed/immediate resize");
++        const repaired = updateGraphViewProjection(input(10), state, actions); outstanding.push(repaired.completion);
++        await repaired.completion;
++        check(rendererRuntime.graphInstances.get(9920) !== record && !plot.isConnected && purged.includes(plot),
++          "workspace fallback retained a graph child owned by the wrong host");
+       } finally {
+         for (const gate of gates.values()) gate.resolve();
+         await Promise.allSettled(outstanding);
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 133,
++      "revision": 134,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:3b7606514153b8193aa84fbe069a4d1531270264326b8d6bb20c111180f09eb9",
++      "fingerprint": "sha256:6e197059a9c6a006fef7a252b386f49708694a05dc29be9f5e77389dddf4b256",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261106-005-selection-screen-open.md"
++      "validation_review": "agent_space/reviews/review-20261106-006-surface-ownership-open.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/plans/plan-024.md b/agent_space/plans/plan-024.md
+--- a/agent_space/plans/plan-024.md
++++ b/agent_space/plans/plan-024.md
+@@ -94,3 +94,12 @@
+ 첫 경로의 실제 누락을 구현했다. Adapter의 dispatchSlotSelection을 Source/PlusCal대로 추가하고 public 선택과 drop 준비가 그 최종 state/projection을 소비하도록 연결했다. 거부 시 query/repaint/resize 없이 반환하며, explicit pending type은 final non-null empty target에만 Project command로 적용한다. mounted drop은 기존 단일 stable receiver를 유지하고 direct dashboard host만 target으로 인정한다. 선택 준비 오류도 finally drag cleanup을 거치며 원래 오류를 보존한다.
+ 
+ 기존37/93/94/171만 변경했으며 새 테스트를 추가하지 않았다. review `agent_space/reviews/review-20261106-005-selection-screen-open.md`, incremental patch `agent_space/patches/20261106-006.patch`/동명 설명이 범위와 한계를 기록한다. code133/stale, 공식 checker/브라우저/build/Actions 미실행이다. Source45/PlusCal25와 정책·dist·기존 WIP는 보존한다. 전체 단계 완료나 새 stage/goal 전환은 아니다. 다음은 §3의 나머지 화면 절차·실제 caller 중 graph/image completion·교체·실패 및 narrow invalidation/geometry 관계를 후속 구현까지 포함해 대조하고 실제 누락을 구현하는 것이다.
++
++
++## 9. 진행 기록 — r134 (2026-11-06, 1단계 유지)
++
++다음 단위는 §3의 graph/image 완료·교체·실패와 resize의 surface ownership으로 정했다. document에 연결되어 있다는 사실만으로 같은 slot host의 자식이라고 판단하던 누락을 번역했다. graph child가 사라진 경우 narrow/workspace fallback과 full-render 교체가 같은 소유 판정을 사용하고, 연결된 다른 host로 이동한 plot에는 old callback/resize를 적용하지 않는다. image도 host containment를 확인하며 새 render 없이 stale decode가 성공/실패해도 자신이 소유한 element/src만 해제한다. 동일 association인지 확인한 뒤 map entry를 제거하므로 새 surface나 공유 image의 다른 surface를 무효화하지 않는다.
++
++기존153/154/158/164만 필요한 범위에서 수정했고 167개 ID를 유지했다. review `agent_space/reviews/review-20261106-006-surface-ownership-open.md`, incremental patch `agent_space/patches/20261106-008.patch`/동명 설명. code134/stale, canonical LF hash 정적 계산만 수행했다. 앞선 d8ac43924660080e575c5fd68bee9088b4f96c2b 대상 version/fidelity/regression/build Actions 성공은 r133에 한정되며 이번 변경의 실행 근거가 아니다. 이번 단위는 local app/test/build/checker 또는 Actions/remote write를 실행하지 않았다.
++
++1단계 전체 종료 판정은 아직 아니다. 후속은 supplied geometry/zoom/style이 graph/image/label/caption의 실제 caller까지 전달되는 관계와 나머지 click/bookmark/controller 분기를 상위 절차에 대조하고, 구체 누락이 확인되면 같은 owner 단위로 구현한다. capture/export·일반 API 확장으로 우회하지 않는다. 상위 Source/PlusCal/정책, dist, 기존 WIP·실행 로그·patch를 보존한다.
+diff --git a/agent_space/reviews/review-20261106-006-surface-ownership-open.md b/agent_space/reviews/review-20261106-006-surface-ownership-open.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261106-006-surface-ownership-open.md
+@@ -0,0 +1,32 @@
++# r134 — supplied screen surface ownership (OPEN)
++
++2026-11-06. plan024 §3, stage1. Source45 → PlusCal25 → code134/stale. This is implementation of existing screen lifetime branches, not capture/export or general API work.
++
++## Authority and actual paths
++
++- `sourcescript/frontend/renderer.py:126–162`, renderDashboard steps7–8: same live host/slot/chart association, generation-checked graph completion/resize; image decode input and surface ownership, discard stale completion and release only owned resources.
++- `pseudocode/frontend/renderer.pcal`, renderDashboard / CompleteGraphRender / CompleteImageRender: purge replaced associations; SameLiveGraphHostSlotChart / SameCurrentImageSurfaceInput; obsolete completion cannot revive a view.
++- Production callers: Application `renderDashboard` / `updateGraphView` / `applyCommittedDashboardProjection` → supplied renderer functions; public selection/drop and mutation wrappers reach these boundaries. No Backend query, FSM command, new mirrored state or current projection cache added in renderer.
++
++## Gap and translation
++
++The existing implementation checked document connectivity but not child ownership. A graph plot could disappear while its slot host remained connected: workspace/narrow code fell back to full render, but full render retained the broken graph record. A child moved under another live host could also pass connectivity checks, allowing stale graph callbacks/resize or image settings to reach the wrong surface. A detached image frame whose decode settled without another render retained its source and association.
++
++| Source branch | Implementation and ownership |
++| --- | --- |
++| Same graph host/slot/chart | `hasLiveGraphSurface`, latest operation/generation and captured slot/chart guards in presentation completion/callbacks; same predicate in resize, workspace, narrow invalidation and full-render replacement |
++| Replacement/full fallback | Invalid child-host association discards prior graph record, removes owned host and plot, purges old instance; queued old operation cannot revive it |
++| Same image host/input | `hasLiveImageSurface` checks containment as well as connection; workspace/narrow fallback rebuilds invalid associations |
++| Obsolete image success/failure | `releaseImageSurface` removes only that surface's element/src and deletes its map entry only if still identical; used at replacement, stale predecode/settlement and current failure |
++| Current decode failure | Original error still rejects; obsolete failure is discarded and cannot remove a newer surface or sibling image |
++| Geometry-triggered resize | Existing generation/operation/slot/chart/host/plot identity guards retained; additionally reject a connected plot outside its owning host |
++
++No speculative freeze, general freshness layer or new resource service. Pure copied image URLs remain unchanged. Existing graph serialization, current failure propagation, image settings and graph figure calculations are not redesigned.
++
++## Evidence and limits
++
++Existing cases153/154/158/164 are adapted, no new IDs (167 remain). Cover orphaned image decode success/failure, missing graph child fallback, connected child reparenting, stale callback and resize rejection, replacement cleanup. These assertions are authored, NOT executed for r134.
++
++Static file/diff/hash operations only. Canonical LF fingerprint calculation reproduced r133 `sha256:3b7606514153b8193aa84fbe069a4d1531270264326b8d6bb20c111180f09eb9`, then produced code134 `sha256:6e197059a9c6a006fef7a252b386f49708694a05dc29be9f5e77389dddf4b256`. This is not the official version checker; no working-tree line-ending normalization. Prior Actions on d8ac43924660080e575c5fd68bee9088b4f96c2b passed r133, not r134.
++
++No local application/test/build/checker, Actions, remote writes, commit/push or TLC this unit. Source/PlusCal/verification lineage and stale status preserved. Official checker and native Plotly/decode/mounted inline/split execution remain pending. This bounded unit does not close all stage1 screen procedures, later capture lifetime, remaining owners or integration. Geometry content scaling and remaining screen/controller caller correspondence still need their own Source-based determination; no defect claim from unexecuted speculation.

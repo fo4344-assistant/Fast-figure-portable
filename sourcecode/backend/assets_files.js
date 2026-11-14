@@ -1,10 +1,8 @@
 // Source: sourcescript/backend/assets_files.py (same logical owner); pseudocode/backend/assets_files.pcal.
 import { appFSM, dispatchProjectCommand } from '../application/adapter.js';
 import { chartCsvIds, chartExportCopy, chartUsesConversionView, createCandidateBaseGraphObject, createChartModel, dataTable, headerLineCount, normalizeGlobalSettings, readGlobalSettings, rebuildEditableGraph, validateChartModel } from './graphs.js';
-import { readImageSettings } from './layout_annotations.js';
-import { ProjectObject, activeProject, getProjectCsv, getProjectImage, immutableProjectCopy, normalizeSlotContent, normalizeSlotContents, projectClone, projectColor, readFiniteProjectNumber, readProjectNumber, validateProjectObject, validateProjectObjectState } from './project_state.js';
-import { DEFAULT_IMAGE_SETTINGS, DEFAULT_SLOT_STYLE, DEFAULT_UI_PALETTE, PACKAGE_FORMAT_VERSION } from './settings.js';
-import { debugLog } from '../frontend/renderer.js';
+import { ProjectObject, activeProject, getProjectCsv, immutableProjectCopy, normalizeSlotContent, normalizeSlotContents, projectClone, projectColor, validateProjectObjectState } from './project_state.js';
+import { BackendSettings, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PACKAGE_FORMAT_VERSION } from './settings.js';
 
 export function projectImageDataUrl(image) {
   return image
@@ -60,7 +58,7 @@ export function removeProjectAssetReferences(csvIds, imageIds, state=activeProje
 export function buildProjectAssetImportCandidate(source, payload) {
   const { files, choices, targetSlotId } = payload;
   if (!Array.isArray(files) || !files.length || !Array.isArray(choices) || files.length !== choices.length ||
-      typeof payload.directory !== "string" || projectVfs.resolve(payload.directory, source)?.kind !== "directory" || projectVfs.isTrashed(payload.directory))
+      typeof payload.directory !== "string" || projectVfs.resolve(payload.directory, source)?.kind !== "directory")
     return null;
   const directory = normalizeProjectPath(payload.directory, { directory: true }),
     candidate = projectClone(source), reserved = new Set(), imported = [];
@@ -112,41 +110,45 @@ export function buildProjectAssetImportCandidate(source, payload) {
   for (const fact of imported)
     fact.owners = collectAssetReferences(new Set(fact.kind === "csv" ? [fact.id] : []),
       new Set(fact.kind === "image" ? [fact.id] : []), candidate);
+  try { validateProjectObjectState(candidate, { requireSlots: true }); } catch { return null; }
   return { candidate, imported };
 }
 
 export function parseCSV(text, d = ",") {
-  let a = [],
-    r = [],
-    c = "",
-    q = false,
-    rowStarted = false;
+  const rows = [];
+  let row = [], field = "", quoted = false, afterQuote = false,
+    explicitLine = false, pendingBlankLines = 0;
+  const finish = () => {
+    if (explicitLine || field.length || row.length || afterQuote) {
+      while (pendingBlankLines > 0) { rows.push([""]); pendingBlankLines--; }
+      rows.push([...row, field]);
+    } else pendingBlankLines++;
+    row = []; field = ""; afterQuote = false; explicitLine = false;
+  };
   for (let i = 0; i < text.length; i++) {
-    let z = text[i],
-      n = text[i + 1];
-    rowStarted = true;
-    if (z === '"' && q && n === '"') {
-      c += '"';
-      i++;
-    } else if (z === '"') q = !q;
-    else if (z === d && !q) {
-      r.push(c);
-      c = "";
-    } else if ((z === "\n" || z === "\r") && !q) {
-      if (z === "\r" && n === "\n") i++;
-      r.push(c);
-      a.push(r);
-      r = [];
-      c = "";
-      rowStarted = false;
-    } else c += z;
+    const char = text[i];
+    if (quoted) {
+      if (char === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else { quoted = false; afterQuote = true; }
+      } else field += char;
+      continue;
+    }
+    if (char === d) { row.push(field); field = ""; afterQuote = false; explicitLine = true; }
+    else if (char === "\r" || char === "\n") {
+      finish();
+      if (char === "\r" && text[i + 1] === "\n") i++;
+    } else if (char === '"') {
+      if (field.length || afterQuote) throw Error("CSV 인용 문자열 위치가 올바르지 않습니다.");
+      quoted = true; explicitLine = true;
+    } else {
+      if (afterQuote) throw Error("CSV 닫는 인용부호 뒤에 문자가 있습니다.");
+      field += char; explicitLine = true;
+    }
   }
-  if (q) throw Error("CSV 인용 문자열이 닫히지 않았습니다.");
-  if (rowStarted || r.length) {
-    r.push(c);
-    a.push(r);
-  }
-  return a;
+  if (quoted) throw Error("CSV 인용 문자열이 닫히지 않았습니다.");
+  if (explicitLine || field.length || row.length || afterQuote) finish();
+  return rows;
 }
 
 export function buildProjectImageModel(
@@ -171,7 +173,7 @@ export function buildProjectImageModel(
 
 export function createProjectImage(bytes, name, mime, id = null, path = null) {
   const copiedBytes = typeof bytes === "string" ? bytes : new Uint8Array(bytes || []).slice(),
-    result = dispatchProjectCommand("IMAGE_OBJECT_CREATED", { bytes: copiedBytes, name, mime, id, path });
+    [result] = dispatchProjectCommand("IMAGE_OBJECT_CREATED", { bytes: copiedBytes, name, mime, id, path });
   if (!result.committed) return result;
   const created = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image");
   return appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: created.path }).target;
@@ -225,7 +227,7 @@ export function createProjectCsv(
   headerLines = 1,
   path = null,
 ) {
-  const result = dispatchProjectCommand("DATA_OBJECT_CREATED", {
+  const [result] = dispatchProjectCommand("DATA_OBJECT_CREATED", {
     data, name, id, bytesBase64, mime, headerLines, path,
   });
   if (!result.committed) return result;
@@ -245,23 +247,18 @@ export function createEmptyProjectCsv() {
 }
 
 export const PROJECT_ASSET_DIRECTORIES = Object.freeze({
-  csv: "/assets/csv",
-  image: "/assets/images",
+  csv: BackendSettings.defaults.vfs.csv,
+  image: BackendSettings.defaults.vfs.image,
 });
 
-export const PROJECT_TRASH_DIRECTORY = "/assets/trash";
+export const PROJECT_TRASH_DIRECTORY = BackendSettings.defaults.vfs.trash;
 
-export const PROJECT_FIXED_DIRECTORIES = Object.freeze([
-  "/assets",
-  PROJECT_ASSET_DIRECTORIES.csv,
-  PROJECT_ASSET_DIRECTORIES.image,
-  PROJECT_TRASH_DIRECTORY,
-]);
+export const PROJECT_FIXED_DIRECTORIES = Object.freeze(Object.values(BackendSettings.defaults.vfs));
 
 export function projectPathInDirectory(path, directory) {
   let normalized = normalizeProjectPath(path, { directory: true }),
     parent = normalizeProjectPath(directory, { directory: true });
-  return normalized === parent || normalized.startsWith(`${parent}/`);
+  return parent === "/" || normalized === parent || normalized.startsWith(`${parent}/`);
 }
 
 export function normalizeProjectPath(value, { directory = false } = {}) {
@@ -301,13 +298,7 @@ export function projectAssetPath(asset) {
 
 export const projectVfs = Object.freeze({
   exists(path, state = activeProject._state) {
-    let target = normalizeProjectPath(path, { directory: true });
-    return (
-      (state.fileSystem?.directories || []).includes(target) ||
-      [...(state.assets?.csvFiles || []), ...(state.assets?.images || [])].some(
-        (asset) => projectAssetPath(asset) === target,
-      )
-    );
+    return this.resolve(path, state) !== null;
   },
   uniquePath(directory, name, state = activeProject._state, reservedPaths = null) {
     let parent = normalizeProjectPath(directory, { directory: true }),
@@ -357,17 +348,16 @@ export const projectVfs = Object.freeze({
     return state.fileSystem;
   },
   resolve(path, state = activeProject._state) {
-    let normalized = normalizeProjectPath(path, { directory: true });
-    if ((state.fileSystem?.directories || []).includes(normalized))
-      return { kind: "directory", path: normalized };
-    for (let [kind, assets] of [
-      ["csv", state.assets.csvFiles],
-      ["image", state.assets.images],
-    ]) {
-      let asset = assets.find((item) => projectAssetPath(item) === normalized);
-      if (asset) return { kind, asset };
-    }
-    return null;
+    const normalized = normalizeProjectPath(path, { directory: true }),
+      directories = state.fileSystem?.directories || [],
+      matches = directories.filter(item => item === normalized).map(path => ({ kind: "directory", path }));
+    if (PROJECT_FIXED_DIRECTORIES.includes(normalized) && !directories.includes(normalized))
+      matches.push({ kind: "directory", path: normalized });
+    for (const [kind, assets] of [["csv", state.assets.csvFiles], ["image", state.assets.images]])
+      for (const asset of assets)
+        if (projectAssetPath(asset) === normalized) matches.push({ kind, asset });
+    if (matches.length > 1) throw Error("프로젝트 경로에 둘 이상의 소유자가 있습니다.");
+    return matches[0] || null;
   },
   isFixedDirectory(path) {
     let normalized = normalizeProjectPath(path, { directory: true });
@@ -377,14 +367,14 @@ export const projectVfs = Object.freeze({
     return projectPathInDirectory(path, PROJECT_TRASH_DIRECTORY);
   },
   descendants(path, state = activeProject._state) {
-    let root = normalizeProjectPath(path, { directory: true }),
-      prefix = `${root}/`;
+    const parent = normalizeProjectPath(path, { directory: true });
     return [
-      ...(state.assets?.csvFiles || []).map((asset) => ({ kind: "csv", asset })),
-      ...(state.assets?.images || []).map((asset) => ({ kind: "image", asset })),
-    ].filter(({ asset }) => {
-      let path = projectAssetPath(asset);
-      return path === root || path.startsWith(prefix);
+      ...(state.fileSystem?.directories || []).map(path => ({ kind: "directory", path })),
+      ...(state.assets?.csvFiles || []).map(asset => ({ kind: "csv", asset })),
+      ...(state.assets?.images || []).map(asset => ({ kind: "image", asset })),
+    ].filter(node => {
+      const path = node.kind === "directory" ? node.path : projectAssetPath(node.asset);
+      return path !== parent && projectPathInDirectory(path, parent);
     });
   },
   assignLocation(model, path) {
@@ -462,51 +452,24 @@ export function resolveProjectAssetImportPlan(model, choice = "rename", reserved
 }
 
 export function stageProjectAssetImport(candidate, item) {
-  let bytes = new Uint8Array(item.file.bytes);
-  if (item.kind === "data") {
-    const data = parseProjectCsvAsset(item.file.name, bytes);
-    let id = Number.isInteger(item.replaceId) ? item.replaceId : candidate.nextId.csv++,
-      model = buildProjectCsvModel(
-        data,
-        item.file.name,
-        id,
-        ffpxBytesToBase64(bytes),
-        item.file.type || "text/csv",
-        1,
-        candidate,
-      );
-    projectVfs.assignLocation(model, item.path);
-    let index = candidate.assets.csvFiles.findIndex((asset) => asset.id === id);
-    if (Number.isInteger(item.replaceId)) {
-      if (index < 0) throw Error("교체할 CSV가 없습니다.");
-      candidate.assets.csvFiles[index] = model;
-    } else {
-      if (index >= 0) throw Error(`CSV ID ${id}가 중복되었습니다.`);
-      candidate.assets.csvFiles.push(model);
-    }
-    return { kind: "csv", id, name: model.name, model };
+  if (!["data", "image"].includes(item.kind)) throw Error("지원하지 않는 자산 종류입니다.");
+  const bytes = new Uint8Array(item.file.bytes), kind = item.kind === "data" ? "csv" : "image",
+    id = item.replaceId === null ? candidate.nextId[kind]++ : item.replaceId,
+    model = projectVfs.assignLocation({ id, mime: item.file.type, bytesBase64: ffpxBytesToBase64(bytes) }, item.path),
+    collection = candidate.assets[kind === "csv" ? "csvFiles" : "images"],
+    index = collection.findIndex(asset => asset.id === id);
+  if (kind === "csv") {
+    model.rows = parseProjectCsvAsset(item.file.name, bytes);
+    model.headerLines = headerLineCount(1, model.rows);
   }
-
-  let id = Number.isInteger(item.replaceId) ? item.replaceId : candidate.nextId.image++,
-    model = buildProjectImageModel(
-      bytes,
-      item.file.name,
-      item.file.type,
-      id,
-      candidate,
-    );
-  projectVfs.assignLocation(model, item.path);
-  let index = candidate.assets.images.findIndex((asset) => asset.id === id);
-  if (Number.isInteger(item.replaceId)) {
-    if (index < 0) throw Error("교체할 이미지가 없습니다.");
-    if (candidate.assets.images[index]?.settings)
-      model.settings = projectClone(candidate.assets.images[index].settings);
-    candidate.assets.images[index] = model;
+  if (item.replaceId !== null) {
+    if (index < 0) throw Error("교체할 자산이 없습니다.");
+    collection[index] = model;
   } else {
-    if (index >= 0) throw Error(`이미지 ID ${id}가 중복되었습니다.`);
-    candidate.assets.images.push(model);
+    if (index >= 0) throw Error(`자산 ID ${id}가 중복되었습니다.`);
+    collection.push(model);
   }
-  return { kind: "image", id, name: model.name, model };
+  return { kind, id, name: model.name, model };
 }
 
 export function projectDataTreeSnapshot(objects = {}) {
@@ -616,99 +579,107 @@ export function importedProjectImageState(payload) {
   };
 }
 
-export function buildProjectObject(payload,fileName) {
-  if(payload?.schema!=="fast-figure-project"||payload.version!==PACKAGE_FORMAT_VERSION)
+export function fillMissingSettingRecord(current, defaults) {
+  if (!current || typeof current !== "object" || Array.isArray(current))
+    throw Error("프로젝트 설정 구조가 올바르지 않습니다.");
+  const copy = projectClone(current);
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!Object.hasOwn(copy, key)) copy[key] = projectClone(value);
+    else if (value && typeof value === "object" && !Array.isArray(value) &&
+        copy[key] && typeof copy[key] === "object" && !Array.isArray(copy[key]))
+      copy[key] = fillMissingSettingRecord(copy[key], value);
+  }
+  return copy;
+}
+
+export function buildProjectObject(payload, fileName) {
+  if (payload?.schema !== "fast-figure-project" || payload.version !== PACKAGE_FORMAT_VERSION)
     throw Error("지원하지 않는 FFPX 프로젝트 형식입니다.");
-  let candidate=new ProjectObject();
-  candidate.projectName=typeof payload.projectName==="string"?payload.projectName.trim().slice(0,120):"";
-  if(!candidate.projectName)
-    candidate.projectName=String(fileName||"").replace(/\.[^.]+$/,"").trim().slice(0,120);
-  let rows=Number(payload.gridRows),cols=Number(payload.gridCols);
-  if(!Number.isInteger(rows)||!Number.isInteger(cols)||rows<1||rows>8||cols<1||cols>8)
-    throw Error("프로젝트의 행 또는 열 값이 올바르지 않습니다.");
-  if(!Array.isArray(payload.charts)||!Array.isArray(payload.slots))
-    throw Error("프로젝트의 charts 또는 slots 배열이 없습니다.");
-  let csvState=importedProjectCsvState(payload),imageState=importedProjectImageState(payload),
-    charts=projectClone(payload.charts),chartIds=new Set();
-  charts.forEach((chart,index)=>{
-    validateChartModel(chart,`프로젝트 차트 ${index+1}`,csvState.csvFiles);
-    if(!Number.isInteger(chart.id)||chartIds.has(chart.id))throw Error("프로젝트 차트 ID가 올바르지 않습니다.");
-    chartIds.add(chart.id);normalizeGlobalSettings(chart,true);
-  });
-  let slotIds=new Set(),slots=projectClone(payload.slots).map(raw=>{
-    if(!raw||typeof raw!=="object"||!Number.isInteger(raw.id)||slotIds.has(raw.id))
+  const defaults = BackendSettings.project_object, limits = BackendSettings.defaults.limits,
+    own = (source, key, fallback) => Object.hasOwn(source, key) ? source[key] : fallback,
+    record = value => !!value && typeof value === "object" && !Array.isArray(value);
+  if (payload.kind !== "fast-figure-project-object" || !record(payload.meta) ||
+      typeof payload.meta.projectName !== "string" ||
+      payload.meta.projectName.length > BackendSettings.defaults.naming.projectNameMaxLength || !record(payload.layout) ||
+      !Number.isInteger(payload.layout.gridRows) || !Number.isInteger(payload.layout.gridCols) ||
+      payload.layout.gridRows < limits.layout.gridRows[0] || payload.layout.gridRows > limits.layout.gridRows[1] ||
+      payload.layout.gridCols < limits.layout.gridCols[0] || payload.layout.gridCols > limits.layout.gridCols[1] ||
+      !Array.isArray(payload.charts) || !Array.isArray(payload.slots) || !record(payload.fileSystem) || !record(payload.assets))
+    throw Error("프로젝트 이름, grid 또는 목록 구조가 올바르지 않습니다.");
+  const candidate = structuredClone(payload);
+  delete candidate.schema; delete candidate.version; delete candidate.layout.layoutMapWidth;
+  candidate.assets = { csvFiles: [], images: [] }; candidate.slots = []; candidate.nextId = {};
+  const paths = new Set();
+  for (const [kind, collection] of [["csv", payload.assets.csvFiles], ["image", payload.assets.images]]) {
+    if (!Array.isArray(collection)) throw Error("프로젝트 자산 목록이 없습니다.");
+    const ids = new Set();
+    for (const raw of collection) {
+      if (!record(raw) || !Number.isInteger(raw.id) || raw.id < 1 || ids.has(raw.id) ||
+          typeof raw.bytesBase64 !== "string" || (kind === "image" && Object.hasOwn(raw, "imageSettings")))
+        throw Error("프로젝트 자산 데이터가 올바르지 않습니다.");
+      const path = projectAssetPath(raw);
+      if (paths.has(path) || !candidate.fileSystem.directories?.includes(projectParentPath(path)))
+        throw Error("프로젝트 자산 경로가 중복되거나 parent가 없습니다.");
+      ids.add(raw.id); paths.add(path);
+      const asset = { id: raw.id, directory: projectParentPath(path), name: projectPathName(path),
+        mime: raw.mime, bytesBase64: ffpxBytesToBase64(ffpxBase64ToBytes(raw.bytesBase64)) };
+      if (kind === "csv") {
+        asset.rows = dataTable(raw.rows);
+        asset.headerLines = headerLineCount(own(raw, "headerLines", 1), asset.rows);
+      }
+      candidate.assets[kind === "csv" ? "csvFiles" : "images"].push(asset);
+    }
+  }
+  for (const chart of candidate.charts) {
+    if (!record(chart?.editor) || !Array.isArray(chart.editor.objects) || !Number.isInteger(chart.id) || chart.id < 1)
+      throw Error("프로젝트 차트 구조가 올바르지 않습니다.");
+    chart.editor.globalSettings = normalizeGlobalSettings(chart.editor.globalSettings);
+    chart.editor.objects = chart.editor.objects.map(object =>
+      fillMissingSettingRecord(object, BackendSettings.defaults.chartSettings.editor.objectStyle));
+    validateChartModel(chart, "프로젝트 차트", candidate.assets.csvFiles);
+  }
+  const slotIds = new Set(), owners = new Map(candidate.charts.map(chart => [chart.id, 0]));
+  for (const raw of payload.slots) {
+    const slot = normalizeSlotContent(structuredClone(raw));
+    if (!slot || !Number.isInteger(slot.id) || slotIds.has(slot.id) || typeof slot.hidden !== "boolean" ||
+        ![slot.row, slot.col, slot.rowSpan, slot.colSpan].every(value => Number.isInteger(value) && value > 0) ||
+        slot.row + slot.rowSpan - 1 > candidate.layout.gridRows || slot.col + slot.colSpan - 1 > candidate.layout.gridCols ||
+        !["graph", "image"].includes(slot.content.contentType) ||
+        (slot.content.chart !== null && slot.content.imageId !== null) ||
+        (slot.content.chart !== null && !owners.has(slot.content.chart)) ||
+        (slot.content.imageId !== null && !candidate.assets.images.some(image => image.id === slot.content.imageId)) ||
+        !(slot.caption === null || typeof slot.caption === "string"))
       throw Error("프로젝트 슬롯 데이터가 올바르지 않습니다.");
-    slotIds.add(raw.id);
-    let row=Number(raw.row),col=Number(raw.col),rowSpan=Number(raw.rowSpan??1),colSpan=Number(raw.colSpan??1);
-    if(!Number.isInteger(row)||!Number.isInteger(col)||!Number.isInteger(rowSpan)||!Number.isInteger(colSpan)||
-      row<1||col<1||rowSpan<1||colSpan<1||row+rowSpan-1>rows||col+colSpan-1>cols)
-      throw Error("프로젝트 슬롯 위치가 올바르지 않습니다.");
-    let chart=raw.chart==null?null:(chartIds.has(raw.chart)?raw.chart:null),
-      imageId=raw.imageId==null?null:(getProjectImage(raw.imageId,imageState.images)?.id??null);
-    if(raw.chart!=null&&chart===null)throw Error("프로젝트 슬롯이 존재하지 않는 차트를 참조합니다.");
-    if(raw.imageId!=null&&imageId===null)throw Error("프로젝트 슬롯이 존재하지 않는 이미지를 참조합니다.");
-    return normalizeSlotContent({
-      id:raw.id,row,col,rowSpan,colSpan,hidden:raw.hidden===true,
-      content:{
-        chart,imageId,
-        contentType:raw.contentType==="image"?"image":"graph",
-        imageSettings:readImageSettings(raw.imageSettings||raw.content?.imageSettings),
-      },
-      caption:typeof raw.caption==="string"&&raw.caption?raw.caption:null,
-    });
-  });
-  if(!slots.length)throw Error("프로젝트 슬롯이 없습니다.");
-  candidate.gridRows=rows;candidate.gridCols=cols;
-  candidate.csvFiles=csvState.csvFiles;candidate.images=imageState.images;
-  candidate.charts=charts;candidate.slots=slots;
-  candidate.fileSystem={directories:Array.isArray(payload.fileSystem?.directories)?projectClone(payload.fileSystem.directories):[]};
-  projectVfs.ensure(candidate._state);
-  candidate.csvId=Math.max(Number.isInteger(payload.csvId)?payload.csvId:1,csvState.csvId);
-  candidate.imageId=Math.max(Number.isInteger(payload.imageId)?payload.imageId:1,imageState.imageId);
-  candidate.chartId=Math.max(Number.isInteger(payload.chartId)?payload.chartId:1,1,...charts.map(chart=>chart.id+1));
-  let annotations=payload.annotations&&typeof payload.annotations==="object"?payload.annotations:{},
-    labelPatch=annotations.labelSettings&&typeof annotations.labelSettings==="object"?annotations.labelSettings:{},
-    captionPatch=annotations.captionSettings&&typeof annotations.captionSettings==="object"?annotations.captionSettings:{};
-  candidate.labelsEnabled=annotations.labelsEnabled===true;
-  candidate.labelSettings={...candidate.labelSettings,...labelPatch,
-    parentheses:labelPatch.parentheses===true,
-    x:readFiniteProjectNumber(labelPatch.x,candidate.labelSettings.x),
-    y:readFiniteProjectNumber(labelPatch.y,candidate.labelSettings.y),
-    fontSize:Math.max(6,readFiniteProjectNumber(labelPatch.fontSize,candidate.labelSettings.fontSize))};
-  candidate.captionsEnabled=annotations.captionsEnabled===true;
-  candidate.captionText=typeof annotations.captionText==="string"?annotations.captionText:"";
-  candidate.captionAfterText=typeof annotations.captionAfterText==="string"?annotations.captionAfterText:"";
-  candidate.captionName=typeof annotations.captionName==="string"?annotations.captionName:"";
-  candidate.captionNameBold=annotations.captionNameBold===true;
-  candidate.captionSettings={...candidate.captionSettings,...captionPatch,
-    fontSize:readProjectNumber(captionPatch.fontSize,candidate.captionSettings.fontSize,6,96),
-    lineHeight:readProjectNumber(captionPatch.lineHeight,candidate.captionSettings.lineHeight,0.8,4)};
-  let style=payload.slotStyle&&typeof payload.slotStyle==="object"?payload.slotStyle:{},
-    palette=payload.uiPalette&&typeof payload.uiPalette==="object"?payload.uiPalette:{},
-    output=payload.export&&typeof payload.export==="object"?payload.export:{};
-  candidate.layout.slotStyle={
-    referenceWidth:readProjectNumber(style.referenceWidth,1200,100,20000),
-    gap:readProjectNumber(style.gap,0,0,2000),
-    outerMargin:readProjectNumber(
-      style.outerMargin,
-      DEFAULT_SLOT_STYLE.outerMargin,
-      0,
-      5000,
-    ),
-    radius:readProjectNumber(style.radius,0,0,2000),
-    aspect:readProjectNumber(style.aspect,1.618,0.1,10),
-    showBorders:style.showBorders!==false};
-  candidate.appearance.uiPalette=Object.fromEntries(Object.entries(DEFAULT_UI_PALETTE)
-    .map(([key,fallback])=>[key,projectColor(palette[key],fallback)]));
-  let heightMode=output.heightMode==="explicit"?"explicit":"auto";
-  candidate.exportSettings={
-    width:readProjectNumber(output.width,candidate.layout.slotStyle.referenceWidth,100,20000),
-    heightMode,
-    height:heightMode==="explicit"?readProjectNumber(output.height,100,100,20000):null,
-    dpi:readProjectNumber(output.dpi,300,36,1200),
-    format:output.format==="jpeg"?"jpeg":"png"};
-  validateProjectObject(candidate,{requireSlots:true});
-  return candidate;
+    slotIds.add(slot.id);
+    if (slot.content.chart !== null) owners.set(slot.content.chart, owners.get(slot.content.chart) + 1);
+    if (!["contain", "cover", "manual"].includes(slot.content.imageSettings.fit) ||
+        Object.entries(limits.imageSettings).some(([key, [min, max]]) =>
+          !Number.isFinite(slot.content.imageSettings[key]) || slot.content.imageSettings[key] < min || slot.content.imageSettings[key] > max))
+      throw Error("프로젝트 슬롯 이미지 설정이 올바르지 않습니다.");
+    candidate.slots.push(slot);
+  }
+  if ([...owners.values()].some(count => count !== 1)) throw Error("프로젝트 차트의 슬롯 소유권이 올바르지 않습니다.");
+  candidate.layout = fillMissingSettingRecord(candidate.layout, defaults.layout);
+  if (!Object.hasOwn(candidate, "annotations")) candidate.annotations = {};
+  if (!record(candidate.annotations)) throw Error("프로젝트 annotation 구조가 올바르지 않습니다.");
+  for (const key of ["labels", "captions"])
+    candidate.annotations[key] = fillMissingSettingRecord(own(candidate.annotations, key, {}), defaults.annotations[key]);
+  for (const key of ["text", "afterText", "name"])
+    if (!Object.hasOwn(candidate.annotations.captions, key)) candidate.annotations.captions[key] = "";
+  if (!Object.hasOwn(candidate, "appearance")) candidate.appearance = {};
+  if (!record(candidate.appearance)) throw Error("프로젝트 appearance 구조가 올바르지 않습니다.");
+  const palette = own(candidate.appearance, "uiPalette", {});
+  if (!record(palette)) throw Error("프로젝트 palette 구조가 올바르지 않습니다.");
+  candidate.appearance.uiPalette = Object.fromEntries(Object.entries(DEFAULT_UI_PALETTE)
+    .map(([key, fallback]) => [key, projectColor(palette[key], fallback)]));
+  candidate.export = fillMissingSettingRecord(own(candidate, "export", {}), defaults.export);
+  if (!Object.hasOwn(candidate.export, "width")) candidate.export.width = candidate.layout.slotStyle.referenceWidth;
+  if (!Object.hasOwn(candidate.export, "height")) candidate.export.height = candidate.export.heightMode === "auto"
+    ? null : limits.export.logicalHeight[0];
+  for (const [kind, collection] of [["csv", candidate.assets.csvFiles], ["image", candidate.assets.images],
+      ["chart", candidate.charts]]) candidate.nextId[kind] = Math.max(0, ...collection.map(item => item.id)) + 1;
+  validateProjectObjectState(candidate, { requireSlots: true });
+  return new ProjectObject(candidate);
 }
 
 export function ffpxBytesToBase64(bytes) {
@@ -832,7 +803,7 @@ export function ffpxZipRead(bytes) {
   let count = view.getUint16(end + 10, true),
     centralSize = view.getUint32(end + 12, true),
     offset = view.getUint32(end + 16, true);
-  if (count > 10000 || offset + centralSize > end)
+  if (offset + centralSize > end)
     throw Error("FFPX ZIP 중앙 디렉터리가 올바르지 않습니다.");
   let decoder = new TextDecoder(),
     assets = new Map(),
@@ -859,13 +830,19 @@ export function ffpxZipRead(bytes) {
       /^[\\/]|^[A-Za-z]:[\\/]/.test(name) ||
       assets.has(name) ||
       localOffset + 30 > bytes.length ||
+      view.getUint16(cursor + 34, true) !== 0 ||
       view.getUint32(localOffset, true) !== 0x04034b50
     )
       throw Error("FFPX 자산 경로가 올바르지 않습니다.");
     let localNameLength = view.getUint16(localOffset + 26, true),
       localExtraLength = view.getUint16(localOffset + 28, true),
       start = localOffset + 30 + localNameLength + localExtraLength;
-    if (start + size > bytes.length) throw Error("FFPX 자산 범위를 벗어났습니다.");
+    if (start + size > offset ||
+        view.getUint16(localOffset + 6, true) !== flags || view.getUint16(localOffset + 8, true) !== method ||
+        view.getUint32(localOffset + 14, true) !== crc ||
+        view.getUint32(localOffset + 18, true) !== compressed || view.getUint32(localOffset + 22, true) !== size ||
+        decoder.decode(bytes.subarray(localOffset + 30, localOffset + 30 + localNameLength)) !== name)
+      throw Error("FFPX ZIP local entry가 올바르지 않습니다.");
     let data = bytes.slice(start, start + size);
     if (ffpxCrc32(data) !== crc) throw Error("FFPX 자산 CRC 검증에 실패했습니다.");
     assets.set(name, data);
@@ -898,7 +875,7 @@ export function parseProjectCsvAsset(name, bytes) {
 }
 
 export function projectCsvDataRef(csv) {
-  const extension = /\.[^./]+$/.exec(csv.path || "")?.[0]?.toLowerCase();
+  const extension = /\.[^./]+$/.exec(csv.name || "")?.[0]?.toLowerCase();
   return `data/csv-${csv.id}${[".json", ".tsv", ".csv"].includes(extension) ? extension : ".csv"}`;
 }
 
@@ -1042,27 +1019,26 @@ export function ffpxNamedValue(root, name) {
 }
 
 export function ffpxDeriveHiddenSlots(slotList) {
-  let byCell = new Map(
-    slotList.map((slot) => [`${Number(slot.row)},${Number(slot.col)}`, slot]),
-  );
-  slotList.forEach((slot) => {
-    slot.hidden = false;
-  });
-  for (let anchor of slotList) {
-    let rowSpan = Number(anchor.rowSpan) || 1,
-      colSpan = Number(anchor.colSpan) || 1;
-    if (rowSpan === 1 && colSpan === 1) continue;
-    for (let row = Number(anchor.row); row < Number(anchor.row) + rowSpan; row++)
-      for (let col = Number(anchor.col); col < Number(anchor.col) + colSpan; col++) {
-        if (row === Number(anchor.row) && col === Number(anchor.col)) continue;
-        let covered = byCell.get(`${row},${col}`);
-        if (!covered) throw Error("FFPX 병합 영역에 대응하는 슬롯이 없습니다.");
-        if (covered.chart != null || covered.imageId != null)
+  const slots = projectClone(slotList);
+  for (const slot of slots) slot.hidden = false;
+  for (const anchor of slots) {
+    if (!Number.isInteger(anchor.rowSpan) || anchor.rowSpan < 1 ||
+        !Number.isInteger(anchor.colSpan) || anchor.colSpan < 1 ||
+        !Number.isInteger(anchor.row) || !Number.isInteger(anchor.col))
+      throw Error("FFPX 병합 geometry가 올바르지 않습니다.");
+    if (anchor.rowSpan === 1 && anchor.colSpan === 1) continue;
+    for (let row = anchor.row; row < anchor.row + anchor.rowSpan; row++)
+      for (let col = anchor.col; col < anchor.col + anchor.colSpan; col++) {
+        if (row === anchor.row && col === anchor.col) continue;
+        const matches = slots.filter(slot => slot.row === row && slot.col === col);
+        if (matches.length !== 1) throw Error("FFPX 병합 영역에 단일 슬롯이 필요합니다.");
+        const covered = matches[0];
+        if ((covered.content?.chart ?? covered.chart) != null || (covered.content?.imageId ?? covered.imageId) != null)
           throw Error("FFPX 병합 영역의 가려진 슬롯은 비어 있어야 합니다.");
         covered.hidden = true;
       }
   }
-  return slotList;
+  return slots;
 }
 
 export function ffpxBuildProject(source = activeProject._state) {
@@ -1365,10 +1341,6 @@ export function ffpxReadProjectBytes(bytes) {
         .filter((node) => node.tagName === "imageAsset").map(ffpxWrappedValue),
       charts = [],
       slots = [];
-    debugLog("project:read-version", {
-      format: "FFPX",
-      appBuild: typeof project?.appBuild === "string" ? project.appBuild : null,
-    });
     for (let placement of layout.placements || []) {
       let slotRoot = ffpxReadXmlDocument(
           assets,
@@ -1393,12 +1365,11 @@ export function ffpxReadProjectBytes(bytes) {
         id: placement.slotId,
         chart: chart?.id ?? null,
         imageId: imageObject?.imageRef ?? null,
-        imageSettings: readImageSettings(imageObject?.settings),
-        caption:
-          typeof slotCaption?.text === "string" ? slotCaption.text : null,
+        ...(imageObject && Object.hasOwn(imageObject, "settings") ? { imageSettings: projectClone(imageObject.settings) } : {}),
+        caption: slotCaption.text,
       });
     }
-    ffpxDeriveHiddenSlots(slots);
+    slots = ffpxDeriveHiddenSlots(slots);
     let appearance =
       project.appearance && typeof project.appearance === "object"
         ? project.appearance
@@ -1464,7 +1435,35 @@ export function ffpxReadProjectBytes(bytes) {
     image.bytesBase64 = ffpxBytesToBase64(assets.get(dataRef));
     delete image.dataRef;
   }
-  return payload;
+  if (!payload.fileSystem || !Array.isArray(payload.fileSystem.directories))
+    throw Error("FFPX 폴더 목록이 없습니다.");
+  for (const path of PROJECT_FIXED_DIRECTORIES)
+    if (!payload.fileSystem.directories.includes(path)) payload.fileSystem.directories.push(path);
+  if (!Object.hasOwn(payload, "export")) {
+    payload.export = projectClone(BackendSettings.project_object.export);
+    payload.export.width = payload.slotStyle?.referenceWidth ?? BackendSettings.project_object.layout.slotStyle.referenceWidth;
+    payload.export.height = payload.export.heightMode === "auto" ? null : BackendSettings.defaults.limits.export.logicalHeight[0];
+  }
+  const captionState = {};
+  for (const [source, target] of [["enabled", "enabled"], ["beforeText", "text"],
+      ["afterText", "afterText"], ["name", "name"], ["nameBold", "nameBold"], ["settings", "settings"]])
+    if (Object.hasOwn(caption, source)) captionState[target] = projectClone(caption[source]);
+  const decoded = {
+    schema: project.schema, version: project.version, kind: "fast-figure-project-object",
+    meta: { projectName: project.projectName, appBuild: project.appBuild },
+    layout: { gridRows: layout.gridRows, gridCols: layout.gridCols },
+    annotations: { labels: projectClone(labels), captions: captionState },
+    fileSystem: payload.fileSystem, assets: { csvFiles: payload.csvFiles, images: payload.images },
+    charts, slots: slots.map(slot => ({
+      id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
+      hidden: slot.hidden, caption: slot.caption,
+      content: { contentType: slot.contentType, chart: slot.chart, imageId: slot.imageId,
+        ...(Object.hasOwn(slot, "imageSettings") ? { imageSettings: slot.imageSettings } : {}) },
+    })), appearance: {}, export: payload.export,
+  };
+  if (Object.hasOwn(appearance, "slotStyle")) decoded.layout.slotStyle = projectClone(appearance.slotStyle);
+  if (Object.hasOwn(appearance, "uiPalette")) decoded.appearance.uiPalette = projectClone(appearance.uiPalette);
+  return decoded;
 }
 
 export function projectFileStem(value) {
@@ -1473,7 +1472,7 @@ export function projectFileStem(value) {
     .replace(/[\\/:*?"<>|\x00-\x1F]/g, "-")
     .replace(/\s+/g, " ")
     .replace(/[. ]+$/, "")
-    .slice(0, 100);
+    .slice(0, BackendSettings.defaults.naming.exportStemMaxLength);
   return stem || "fast-figure-project";
 }
 
@@ -1522,7 +1521,7 @@ export function planProjectNodeMove(path, directory, state = activeProject._stat
     enteringTrash = projectVfs.isTrashed(destination) && !projectVfs.isTrashed(source);
   return immutableProjectCopy({ path: source, kind: match.kind, directory: targetDirectory,
     destination, collision, uniqueName: projectPathName(uniquePath), enteringTrash,
-    referenceCount: enteringTrash ? projectNodeReferenceCount(source, state) : 0 });
+    referenceCount: projectNodeReferenceCount(source, state) });
 }
 
 export function ffsxBuildSlot(slot, chart, source = activeProject._state) {
@@ -1636,10 +1635,6 @@ export function ffsxReadSlotBytes(bytes) {
       );
     if (slot?.contentType !== "graph") throw Error("FFSX graph 슬롯이 필요합니다.");
     delete chart.id;
-    debugLog("slotFfsx:read-version", {
-      format: "FFSX",
-      appBuild: typeof slot?.appBuild === "string" ? slot.appBuild : null,
-    });
     delete slot.appBuild;
     chart.editor.objects = [...ffpxDirectChild(graphNode, "graphObjects").children]
       .filter((node) => node.tagName === "graphObject").map(ffpxWrappedValue);
@@ -1648,7 +1643,7 @@ export function ffsxReadSlotBytes(bytes) {
       version: PACKAGE_FORMAT_VERSION,
       slot: {
         ...slot,
-        caption: typeof caption?.text === "string" ? caption.text : null,
+        caption: caption.text,
       },
       chart,
       csvFiles: [...ffpxDirectChild(assetRoot, "dataAssets").children]
@@ -1669,7 +1664,6 @@ export function ffsxReadSlotBytes(bytes) {
       data = typeof dataRef === "string" ? assets.get(dataRef) : null;
     if (
       !csv ||
-      !chartCsvIds(chart).includes(csv.id) ||
       typeof csv.name !== "string" ||
       typeof dataRef !== "string" ||
       !dataRef.startsWith("assets/data/") ||

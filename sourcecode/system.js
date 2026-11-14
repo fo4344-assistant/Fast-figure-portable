@@ -1,19 +1,21 @@
 // Source: sourcescript/system.py (same logical owner); pseudocode/system.pcal.
 import { appFSM, readWorkspaceHint, renderDashboard, startupCoreRuntime, renderProjectObject } from './application/adapter.js';
-import { downloadProject, publishPublicApi } from './application/public_api/index.js';
+import { downloadProject, importProjectFile, publishPublicApi } from './application/public_api/index.js';
 import { applyImageSettingsFromValues } from './application/public_api/layout_annotations.js';
 import { buildProjectObject, ffpxBase64ToBytes, ffpxBytesToBase64, ffpxDataUrlBytes, ffpxReadProject, projectVfs } from './backend/assets_files.js';
 import { ALLOWED_AXIS_SIDES, ALLOWED_CHART_TYPES, ALLOWED_LINE_DASHES, ALLOWED_MARKER_SYMBOLS, CURRENT_OBJECT_KEYS, layout, normalizeGlobalSettings, traces } from './backend/graphs.js';
 import { normalizeImageSettings } from './backend/layout_annotations.js';
 import { ProjectStateMachine, initializeProjectEFSM, projectEFSM } from './backend/project_efsm.js';
-import { ProjectObject, ProjectObjectRegistry, activeProject, getProjectCsv, initializeActiveProject, initializeProjectObjects, projectClone, projectObjects, readProjectNumber, validateProjectObject } from './backend/project_state.js';
+import { ProjectObject, ProjectObjectRegistry, activeProject, createProjectState, getProjectCsv, initializeActiveProject, initializeProjectObjects, projectClone, projectObjects, readProjectNumber, validateProjectObject } from './backend/project_state.js';
 import { APP_STATE_DEFINITIONS, InterfaceStateMachine, initializeInterfaceFSM, interfaceFSM } from './frontend/interface_fsm.js';
 import { mountMantineUi } from './frontend/mantine_ui.js';
 import { debugLog } from './frontend/renderer.js';
 
+export const REQUIRED_RENDERER_HOSTS = ["dashboard", "dashboardCaption", "graphArea", "readmeContent"];
+
 export const REQUIRED_APP_FUNCTIONS = [
   ["readProjectNumber", () => typeof readProjectNumber === "function"],
-  ["importProject", () => typeof importProject === "function"],
+  ["importProjectFile", () => typeof importProjectFile === "function"],
   ["ffpxReadProject", () => typeof ffpxReadProject === "function"],
   ["downloadProject", () => typeof downloadProject === "function"],
   ["ffpxDataUrlBytes", () => typeof ffpxDataUrlBytes === "function"],
@@ -24,7 +26,7 @@ export const REQUIRED_APP_FUNCTIONS = [
   ["traces", () => typeof traces === "function"],
   ["layout", () => typeof layout === "function"],
   ["renderDashboard", () => typeof renderDashboard === "function"],
-  ["makeSlots", () => typeof makeSlots === "function"],
+  ["createProjectState", () => typeof createProjectState === "function"],
   ["applyImageSettingsFromValues", () => typeof applyImageSettingsFromValues === "function"],
   ["projectClone", () => typeof projectClone === "function"],
   ["ProjectObject", () => activeProject instanceof ProjectObject],
@@ -36,6 +38,18 @@ export const REQUIRED_APP_FUNCTIONS = [
   ["projectEFSM", () => projectEFSM instanceof ProjectStateMachine],
   ["auditApp", () => typeof auditApp === "function"],
 ];
+
+// system.pcal RequireCoreAndHosts: reject before any initial presentation,
+// lifecycle completion, public publication or UI mount. These are platform
+// bindings for the Source-defined core/renderer prerequisites, not project state.
+export function requireCoreRuntimeAndRendererHosts() {
+  const missing = REQUIRED_APP_FUNCTIONS.filter(([, check]) => !check()).map(([name]) => name);
+  missing.push(...REQUIRED_RENDERER_HOSTS.filter((id) => !document.getElementById(id)));
+  if (typeof window.Plotly?.react !== "function") missing.push("Plotly.react");
+  if (!window.FastFigureUiRuntime) missing.push("FastFigureUiRuntime");
+  if (!window.fastFigureUiRoot) missing.push("fastFigureUiRoot");
+  if (missing.length) throw Error(`Fast Figure startup prerequisites missing: ${missing.join(", ")}`);
+}
 
 export function auditObject(object, chartId, index, issues, allowNoCsv = false) {
   if (!object || typeof object !== "object") {
@@ -89,7 +103,7 @@ export function auditApp(context = "manual") {
   let issues = [],
     ids = [...document.querySelectorAll("[id]")].map((node) => node.id),
     duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))],
-    missingControls = ["dashboard", "dashboardCaption", "graphArea", "readmeContent"].filter(
+    missingControls = REQUIRED_RENDERER_HOSTS.filter(
       (id) => !document.getElementById(id),
     ),
     missingFunctions = REQUIRED_APP_FUNCTIONS.filter(([, check]) => !check()).map(
@@ -130,7 +144,9 @@ export function auditApp(context = "manual") {
     let definition = appFSM.definition(region);
     (definition.objects || []).forEach((name) => {
       try {
-        projectObjects.read(name);
+        // Metadata names denote owners, not a Backend mirror of Frontend state.
+        if (name === "ui") interfaceFSM.readState();
+        else projectObjects.read(name);
       } catch (error) {
         issues.push({
           kind: "fsm-object-unavailable",
@@ -274,7 +290,7 @@ export function initializeFastFigure() {
   initializeProjectObjects();
   initializeInterfaceFSM();
   initializeProjectEFSM();
-  publishPublicApi();
+  requireCoreRuntimeAndRendererHosts();
 window.addEventListener("error", (event) =>
   debugLog("window:error", {
     message: event.message,
@@ -310,7 +326,10 @@ debugLog(
   "info",
 );
 
-auditApp("app:init");
+  // Source/PlusCal: ready -> expose -> mount -> final owner audit.
+  publishPublicApi();
   mountMantineUi();
+  auditApp("app:init");
+  return "initialized_runtime";
 }
 initializeFastFigure();

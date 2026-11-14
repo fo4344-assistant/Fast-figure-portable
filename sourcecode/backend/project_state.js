@@ -1,19 +1,14 @@
 // Source: sourcescript/backend/project_state.py (same logical owner); pseudocode/backend/project_state.pcal.
-import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectDataTreeSnapshot, projectFileStem, projectImageDataUrl, projectPathInDirectory, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
+import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectDataTreeSnapshot, projectFileStem, projectImageDataUrl, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
 import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraphLayoutSettings, validateChartModel } from './graphs.js';
 import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
-import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_SLOT_STYLE, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
-import { interfaceRuntime } from '../frontend/interface_fsm.js';
+import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
 
 export function createProjectState() {
   let state = {
     kind: "fast-figure-project-object",
     meta: { projectName: "", appBuild: APP_BUILD },
-    layout: {
-      gridRows: BackendSettings.project_object.layout.gridRows,
-      gridCols: BackendSettings.project_object.layout.gridCols,
-      slotStyle: { ...DEFAULT_SLOT_STYLE },
-    },
+    layout: structuredClone(BackendSettings.project_object.layout),
     annotations: {
       labels: projectClone(BackendSettings.project_object.annotations.labels),
       captions: {
@@ -30,15 +25,16 @@ export function createProjectState() {
     nextId: { csv: 1, image: 1, chart: 1 },
     appearance: { uiPalette: { ...DEFAULT_UI_PALETTE } },
     export: {
-      width: DEFAULT_SLOT_STYLE.referenceWidth,
-      ...BackendSettings.project_object.export,
-      height: null,
+      ...structuredClone(BackendSettings.project_object.export),
+      width: BackendSettings.project_object.layout.slotStyle.referenceWidth,
+      height: BackendSettings.project_object.export.heightMode === "auto" ? null
+        : BackendSettings.defaults.limits.export.logicalHeight[0],
     },
   };
   for (let index = 0; index < state.layout.gridRows * state.layout.gridCols; index++)
     state.slots.push(newGridSlot(index, Math.floor(index / state.layout.gridCols) + 1,
       (index % state.layout.gridCols) + 1));
-  return state;
+  return validateProjectObjectState(state, { requireSlots: true });
 }
 
 export function projectObjectPath(state, path) {
@@ -211,7 +207,9 @@ export class ProjectObject {
 
 export let activeProject;
 export function initializeActiveProject() {
-  activeProject = new ProjectObject();
+  const candidate = createProjectState();
+  validateProjectObjectState(candidate, { requireSlots: true });
+  activeProject = new ProjectObject(candidate);
 }
 
 export class ProjectObjectRegistry {
@@ -241,15 +239,59 @@ export class ProjectObjectRegistry {
       throw Error("활성 프로젝트 오브젝트가 없습니다.");
     return adapter.read(project);
   }
-  snapshot(names = [...this.adapters.keys()]) {
-    return Object.fromEntries(names.map((name) => [name, projectClone(this.read(name))]));
+  snapshot(names = Object.keys(PROJECT_OBJECT_PATHS)) {
+    const project = this.projectProvider();
+    if (!(project instanceof ProjectObject)) throw Error("활성 프로젝트 오브젝트가 없습니다.");
+    const source = project._state;
+    return immutableProjectCopy(Object.fromEntries(names.map(name => {
+      const adapter = this.adapters.get(name);
+      if (!Object.hasOwn(PROJECT_OBJECT_PATHS, name) || !adapter?.path)
+        throw Error(`프로젝트 오브젝트 ${name}이 없습니다.`);
+      const value = projectObjectPath(source, adapter.path);
+      if (value === undefined) throw Error(`프로젝트 오브젝트 경로 ${adapter.path}가 없습니다.`);
+      return [name, value];
+    })));
   }
   names() {
     return [...this.adapters.keys()];
   }
 }
 
+const BACKEND_QUERY_KINDS = new Set(["project-api", "slot-selection-context", "interface-intent",
+  "interface-reconciliation", "renderer", "export"]);
+const PUBLIC_BACKEND_READ_OPERATIONS = new Set([
+  "project.readName", "slots.readSelected", "images.readEditor", "print.readSettings", "appearance.readPalette",
+  "graphs.readData", "graphs.readLayout", "graphs.readPalette", "graphs.hasSelectedSlot", "graphs.defaultColors",
+  "captions.readGlobal", "captions.readSlot", "labels.readState", "layout.readState", "assets.readTree",
+  "assets.readTrash", "assets.isTrashed", "assets.movable", "assets.draggableAsset", "assets.readDeletionTarget",
+  "assets.moveOptions", "assets.planMove", "assets.resolveTreeSelection", "assets.fileKind", "assets.collisionModel",
+  "assets.resolveImportPlan",
+]);
+
+function buildBackendVfsTree(source) {
+  const nodes = new Map(source.fileSystem.directories.map(path => [path, {
+    kind: "directory", path, name: projectPathName(path), children: [],
+  }]));
+  for (const [kind, assets] of [["csv", source.assets.csvFiles], ["image", source.assets.images]]) {
+    for (const asset of assets) {
+      const path = projectAssetPath(asset);
+      nodes.set(path, { kind, path, id: asset.id, name: asset.name, asset: structuredClone(asset) });
+    }
+  }
+  for (const node of nodes.values()) {
+    const parent = nodes.get(projectParentPath(node.path));
+    if (parent && parent !== node) parent.children.push(node);
+  }
+  return nodes;
+}
+
 export function readBackendProjection(kind, request = {}) {
+  if (!BACKEND_QUERY_KINDS.has(kind) ||
+      (kind === "project-api" && !PUBLIC_BACKEND_READ_OPERATIONS.has(request.operation)))
+    throw Error(`알 수 없는 Backend query: ${kind}/${request.operation}`);
+  if (kind === "interface-intent") return validateFrontendIntent(request.event, request.payload);
+  if (kind === "interface-reconciliation")
+    return buildFrontendReconciliationInput(request.event, request.mutationResult, request.frontendReferences);
   if (kind === "project-api" && request.operation === "project.readName")
     return activeProject._state.meta.projectName;
   if ((kind === "project-api" && request.operation === "appearance.readPalette") ||
@@ -259,7 +301,7 @@ export function readBackendProjection(kind, request = {}) {
     const source = activeProject._state, preview = BackendSettings.defaults.preview,
       width = request.renderedWidth == null ? preview.fallbackWidth : readProjectNumber(
         request.renderedWidth, preview.fallbackWidth, ...preview.widthRange);
-    return Object.freeze({
+    return immutableProjectCopy({
       gridRows: source.layout.gridRows, gridCols: source.layout.gridCols,
       slotStyle: Object.freeze({ ...source.layout.slotStyle }),
       visibleSlots: Object.freeze(source.slots.filter((slot) => !slot.hidden).map((slot) => Object.freeze({
@@ -274,7 +316,7 @@ export function readBackendProjection(kind, request = {}) {
       geometry = dashboardGeometryInProject(source, source.layout.slotStyle.referenceWidth),
       reference = gridSlotGeometry(source.layout, geometry, slot),
       identifier = slotIdentifier(0, source);
-    return Object.freeze({
+    return immutableProjectCopy({
       enabled: labels.enabled, settings: Object.freeze({ ...labels.settings }),
       reference: Object.freeze(reference),
       sampleText: labels.settings.parentheses ? `(${identifier})` : identifier,
@@ -282,13 +324,10 @@ export function readBackendProjection(kind, request = {}) {
   }
   if (kind === "project-api" && request.operation === "captions.readGlobal") {
     let captions = activeProject._state.annotations.captions;
-    return immutableProjectCopy({
-      enabled: captions.enabled, text: captions.text, afterText: captions.afterText,
-      name: captions.name, nameBold: captions.nameBold, settings: captions.settings,
-    });
+    return immutableProjectCopy(captions);
   }
   if (kind === "project-api" && request.operation === "captions.readSlot") {
-    const slot = activeProject._state.slots.find((item) => item.id === request.slotId);
+    const slot = activeProject._state.slots.find((item) => item.id === request.slotId && !item.hidden);
     return slot ? Object.freeze({
       id: slot.id, row: slot.row, col: slot.col, text: slot.caption ?? "",
     }) : null;
@@ -335,8 +374,12 @@ export function readBackendProjection(kind, request = {}) {
     const source = activeProject._state,
       slot = source.slots.find((item) => item.id === request.frontendState?.selectedSlotId && !item.hidden);
     return slot ? immutableProjectCopy({ id: slot.id, row: slot.row, col: slot.col,
-      contentType: slot.contentType, chart: slot.content?.chart ?? slot.chart,
-      imageId: slot.content?.imageId ?? slot.imageId }) : null;
+      contentType: slot.content.contentType, chart: slot.content.chart,
+      imageId: slot.content.imageId }) : null;
+  }
+  if (kind === "project-api" && request.operation === "assets.readTrash") {
+    const source = activeProject._state, tree = buildBackendVfsTree(source);
+    return immutableProjectCopy(tree.get(BackendSettings.defaults.vfs.trash) ?? null);
   }
   if (kind === "project-api" && request.operation === "assets.readTree") {
     const source = activeProject._state;
@@ -346,28 +389,26 @@ export function readBackendProjection(kind, request = {}) {
   if (kind === "project-api" && request.operation === "graphs.defaultColors")
     return immutableProjectCopy(DEFAULT_COLORS);
   if (kind === "project-api" && request.operation === "graphs.hasSelectedSlot")
-    return activeProject._state.slots.some(slot => slot.id === request.selectedSlotId && !slot.hidden && slot.contentType === "graph");
+    return activeProject._state.slots.some(slot => slot.id === request.selectedSlotId && !slot.hidden && slot.content.contentType === "graph");
   if (kind === "project-api" && request.operation === "graphs.readPalette") {
     const source = activeProject._state,
-      slot = source.slots.find(item => item.id === request.selectedSlotId && !item.hidden && item.contentType === "graph"),
-      chart = slot ? source.charts.find(item => item.id === (slot.content?.chart ?? slot.chart)) : null;
+      slot = source.slots.find(item => item.id === request.selectedSlotId && !item.hidden && item.content.contentType === "graph"),
+      chart = slot ? source.charts.find(item => item.id === slot.content.chart) : null;
     return immutableProjectCopy((chart?.editor?.objects || []).map(object => object.color));
   }
   if (kind === "project-api" && request.operation === "graphs.readLayout") {
     const source = activeProject._state, slot = source.slots.find(item => item.id === request.selectedSlotId && !item.hidden),
-      chartId = slot?.content?.chart ?? slot?.chart,
-      chart = slot?.contentType !== "image" ? source.charts.find(item => item.id === chartId) : null;
+      chartId = slot?.content.chart,
+      chart = slot?.content.contentType === "graph" ? source.charts.find(item => item.id === chartId) : null;
     return chart ? immutableProjectCopy({ chartId: chart.id, editable: chart.editor?.editable !== false,
       title: chart.editor?.title ?? "", settings: normalizeGraphLayoutSettings(chart.editor?.globalSettings) }) : null;
   }
   if (kind === "project-api" && request.operation === "graphs.readData") {
     const source = activeProject._state, state = request.frontendState || {},
-      owners = Object.hasOwn(request, "chartId")
-        ? source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === request.chartId) : [],
-      slot = Object.hasOwn(request, "chartId") ? (owners.length === 1 ? owners[0] : null)
+      slot = Object.hasOwn(request, "chartId") ? resolveOwningSlot(request.chartId, source)
         : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden),
-      chartId = slot?.content?.chart ?? slot?.chart,
-      chart = slot && !slot.hidden && slot.contentType === "graph"
+      chartId = slot?.content.chart,
+      chart = slot && slot.content.contentType === "graph"
         ? source.charts.find((item) => item.id === chartId) || null : null,
       objects = chart?.editor?.objects || [], index = state.graphObjectIndex,
       selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length
@@ -385,7 +426,7 @@ export function readBackendProjection(kind, request = {}) {
       (kind === "renderer" && request.operation === "slot-image")) {
     return immutableProjectCopy(buildBackendImageRead(activeProject._state, request.slotId));
   }
-  if ((kind === "renderer" && request.operation == null) ||
+  if (kind === "renderer" ||
       (kind === "export" && ["print.save", "print.capture"].includes(request.operation))) {
     const source = activeProject._state, output = buildBackendSurfaceRead(source);
     if (kind === "export") {
@@ -423,8 +464,8 @@ export function readBackendProjection(kind, request = {}) {
   if (kind === "export" && ["graphs.exportPlotlyJson", "graphs.exportFfsx"].includes(request.operation)) {
     const source = activeProject._state,
       slot = source.slots.find((item) => item.id === request.slotId && !item.hidden),
-      chart = slot && slot.contentType !== "image"
-        ? source.charts.find((item) => item.id === slot.chart) : null;
+      chart = slot && slot.content.contentType === "graph"
+        ? source.charts.find((item) => item.id === slot.content.chart) : null;
     if (!chart) return null;
     if (request.operation === "graphs.exportFfsx") {
       const bundle = ffsxBuildSlot(slot, chart, source);
@@ -445,18 +486,21 @@ export function readBackendProjection(kind, request = {}) {
   let slot = request.slotId == null ? null : slotAt(request.slotId);
   return slot && !slot.hidden ? Object.freeze({
     id: slot.id,
-    empty: !slot.chart && !slot.imageId,
-    contentType: slot.contentType,
+    empty: slot.content.chart === null && slot.content.imageId === null,
+    contentType: slot.content.contentType,
   }) : null;
 }
 
 export function buildBackendImageRead(source, slotId) {
-  const slot = source.slots.find(item => item.id === slotId && !item.hidden),
-    image = slot ? source.assets.images.find(item => item.id === slot.content.imageId) : null;
-  return image ? { slotId: slot.id, name: image.name,
+  const original = source.slots.find(item => item.id === slotId && !item.hidden);
+  if (!original || original.content.contentType !== "image") return null;
+  const image = source.assets.images.find(item => item.id === original.content.imageId);
+  if (!image) return null;
+  const slot = normalizeSlotContent(structuredClone(original));
+  return { slotId: slot.id, name: image.name,
     bytes: Array.from(ffpxBase64ToBytes(image.bytesBase64 || "")),
     src: projectImageDataUrl(image), settings: structuredClone(slot.content.imageSettings),
-  } : null;
+  };
 }
 
 export function buildBackendSurfaceRead(source) {
@@ -487,19 +531,24 @@ export function buildBackendSurfaceRead(source) {
 }
 
 export function validateFrontendIntent(event, payload = {}) {
-  let input = { event, accepted: true, reference: null, workspaceHint: "project", selectionHint: null };
+  let input = { event, accepted: true, reference: null, workspaceHint: null, selectionHint: null };
   if (event === "SELECT_SLOT") {
-    if (payload.slotId != null) {
+    if (!Object.hasOwn(payload, "slotId")) input.accepted = false;
+    else if (payload.slotId === null) {
+      input.workspaceHint = "project";
+      input.selectionHint = "toggle-clear";
+    } else {
       let slot = slotAt(payload.slotId);
       if (!slot || slot.hidden) input.accepted = false;
       else {
         input.reference = slot.id;
-        input.workspaceHint = slot.contentType === "image" ? "slot.image" : "slot.graph";
+        input.workspaceHint = slot.content.contentType === "image" ? "slot.image" : "slot.graph";
         input.selectionHint = payload.direction === "model-to-fsm" ? "clear-graph-object" : "toggle-clear";
       }
     }
   } else if (event === "SELECT_ASSET") {
-    if (payload.path != null) {
+    if (!Object.hasOwn(payload, "path")) input.accepted = false;
+    else if (payload.path !== null) {
       let match = projectVfs.resolve(payload.path);
       if (!match || match.kind !== payload.kind || !["csv", "image", "directory"].includes(match.kind))
         input.accepted = false;
@@ -509,13 +558,14 @@ export function validateFrontendIntent(event, payload = {}) {
       }
     }
   } else if (event === "SELECT_GRAPH_OBJECT") {
-    if (payload.index != null) {
+    if (!Object.hasOwn(payload, "index")) input.accepted = false;
+    else if (payload.index !== null) {
       let slot = slotAt(payload.selectedSlotId),
-        chart = slot && !slot.hidden && slot.contentType !== "image" ? getChart(slot.chart) : null,
+        chart = slot && !slot.hidden && slot.content.contentType === "graph" ? getChart(slot.content.chart) : null,
         object = Number.isInteger(payload.index) && payload.index >= 0
           ? chart?.editor?.objects?.[payload.index] : null,
         csv = object ? getProjectCsv(object.csvId) : null;
-      if (!object || !csv) input.accepted = false;
+      if (chart?.editor?.editable === false || !object || !csv) input.accepted = false;
       else {
         input.reference = payload.index;
         input.selectionHint = payload.selectAsset === true ? projectAssetPath(csv) : null;
@@ -526,7 +576,8 @@ export function validateFrontendIntent(event, payload = {}) {
 }
 
 export function buildFrontendReconciliationInput(event, result, references) {
-  let payload = result.payload || {}, hints = result.selectionHints || {},
+  if (result.committed !== true) throw Error("commit된 Project 결과만 재조정할 수 있습니다.");
+  let hints = result.selectionHints || {},
     slotId = references.selectedSlotId,
     assetPath = references.assetPath,
     graphObjectIndex = references.graphObjectIndex;
@@ -549,8 +600,8 @@ export function buildFrontendReconciliationInput(event, result, references) {
       (hints.enteringTrash && projectVfs.isTrashed(assetPath))) {
     asset = null;
     assetPath = null;
-  }
-  let chart = slotId !== null && slot.contentType !== "image" ? getChart(slot.chart) : null;
+  } else assetPath = asset.kind === "directory" ? asset.path : projectAssetPath(asset.asset);
+  let chart = slotId !== null && slot.content.contentType === "graph" ? getChart(slot.content.chart) : null;
   if (chart?.editor?.editable === false) chart = null;
   if (chart && hints.chartId === chart.id && Object.hasOwn(hints, "selectedIndexHint"))
     graphObjectIndex = hints.selectedIndexHint;
@@ -558,16 +609,16 @@ export function buildFrontendReconciliationInput(event, result, references) {
     const map = hints.graphObjectIndexMaps?.find(item => item.chartId === chart.id);
     if (map) graphObjectIndex = Number.isInteger(graphObjectIndex) ? map.indices[graphObjectIndex] ?? null : null;
   }
-  if (payload.clearGraphSelection || hints.clearGraphSelection ||
+  if (hints.resetInterfaceSelection || hints.clearGraphSelection ||
       !Number.isInteger(graphObjectIndex) || graphObjectIndex < 0 ||
       graphObjectIndex >= (chart?.editor?.objects?.length || 0))
     graphObjectIndex = null;
   return Object.freeze({
     event, selectedSlot: slotId,
-    projectionEffect: result.projectionEffect,
-    assetSelection: assetPath, assetKind: asset?.kind || "none",
+    projectionEffect: result.projectionEffect ? immutableProjectCopy(result.projectionEffect) : result.projectionEffect,
+    assetSelection: assetPath, assetKind: asset?.kind ?? null,
     graphObject: graphObjectIndex,
-    workspaceHint: slotId === null ? "project" : slot.contentType === "image" ? "slot.image" : "slot.graph",
+    workspaceHint: slotId === null ? "project" : slot.content.contentType === "image" ? "slot.image" : "slot.graph",
   });
 }
 
@@ -579,7 +630,7 @@ export function immutableProjectCopy(value) {
     }
     return copy;
   };
-  return freeze(projectClone(value));
+  return freeze(structuredClone(value));
 }
 
 export let projectObjects;
@@ -596,13 +647,7 @@ export function initializeProjectObjects() {
   .registerPath("slots", PROJECT_OBJECT_PATHS.slots)
   .registerPath("sequences", PROJECT_OBJECT_PATHS.sequences)
   .registerPath("appearance", PROJECT_OBJECT_PATHS.appearance)
-  .registerPath("export", PROJECT_OBJECT_PATHS.export)
-  .register("ui", {
-    read: (project) => ({
-      selectedSlotId: interfaceRuntime.selectedSlotId,
-      palette: project.appearance.uiPalette,
-    }),
-  });
+  .registerPath("export", PROJECT_OBJECT_PATHS.export);
 }
 
 export function getProjectCsv(id, collection = activeProject.csvFiles) {
@@ -613,8 +658,14 @@ export function getProjectImage(id, collection = activeProject.images) {
   return collection.find((image) => image.id === id) || null;
 }
 
+export function resolveOwningSlot(chartId, state) {
+  if (!state.charts.some(chart => chart.id === chartId)) return null;
+  const owners = state.slots.filter(slot => slot.content.chart === chartId);
+  return owners.length === 1 ? owners[0] : null;
+}
+
 export function getChart(id) {
-  return activeProject.charts.find((chart) => chart.id === id);
+  return activeProject.charts.find((chart) => chart.id === id) ?? null;
 }
 
 export function slotAt(id) {
@@ -646,6 +697,15 @@ export function resetSlotLocalState(slot) {
   return setSlotLocalState(slot, SLOT_LOCAL_DEFAULTS);
 }
 
+function projectValuesEqual(left, right) {
+  if (left === right) return true;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object" ||
+      Array.isArray(left) !== Array.isArray(right)) return false;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every(key =>
+    Object.hasOwn(right, key) && projectValuesEqual(left[key], right[key]));
+}
+
 export function slotHasNonDefaultLocalState(slot) {
   let local = slotLocalState(slot),
     defaults = SLOT_LOCAL_DEFAULTS;
@@ -654,11 +714,7 @@ export function slotHasNonDefaultLocalState(slot) {
     local.imageId !== defaults.imageId ||
     local.contentType !== defaults.contentType ||
     local.caption !== defaults.caption ||
-    Object.keys(local.imageSettings).length !== Object.keys(defaults.imageSettings).length ||
-    local.imageSettings.fit !== defaults.imageSettings.fit ||
-    local.imageSettings.scale !== defaults.imageSettings.scale ||
-    local.imageSettings.x !== defaults.imageSettings.x ||
-    local.imageSettings.y !== defaults.imageSettings.y
+    !projectValuesEqual(local.imageSettings, defaults.imageSettings)
   );
 }
 
@@ -755,7 +811,10 @@ export function validateProjectObjectState(state, { requireSlots = false } = {})
     throw Error("프로젝트 오브젝트 구조가 올바르지 않습니다.");
   if(typeof state.meta.projectName!=="string"||typeof state.meta.appBuild!=="string"||
     !Number.isInteger(state.layout.gridRows)||!Number.isInteger(state.layout.gridCols)||
-    state.layout.gridRows<1||state.layout.gridRows>8||state.layout.gridCols<1||state.layout.gridCols>8||
+    state.layout.gridRows<BackendSettings.defaults.limits.layout.gridRows[0]||
+    state.layout.gridRows>BackendSettings.defaults.limits.layout.gridRows[1]||
+    state.layout.gridCols<BackendSettings.defaults.limits.layout.gridCols[0]||
+    state.layout.gridCols>BackendSettings.defaults.limits.layout.gridCols[1]||
     typeof state.annotations.labels.enabled!=="boolean"||
     typeof state.annotations.captions.enabled!=="boolean"||
     typeof state.annotations.captions.text!=="string"||
@@ -764,20 +823,21 @@ export function validateProjectObjectState(state, { requireSlots = false } = {})
     typeof state.annotations.captions.nameBold!=="boolean")
     throw Error("프로젝트 메타데이터 또는 레이아웃이 올바르지 않습니다.");
   let style=state.layout.slotStyle;
-  for(let [key,min,max] of [["referenceWidth",100,20000],["gap",0,2000],["outerMargin",0,5000],
-    ["radius",0,2000],["aspect",0.1,10]])
-    if(!Number.isFinite(style[key])||style[key]<min||style[key]>max)
+  const limits = BackendSettings.defaults.limits;
+  for(let key of ["referenceWidth","gap","outerMargin","radius","aspect"])
+    if(!Number.isFinite(style[key])||style[key]<limits.layout[key][0]||style[key]>limits.layout[key][1])
       throw Error(`프로젝트 슬롯 스타일 ${key}가 올바르지 않습니다.`);
   if(typeof style.showBorders!=="boolean")throw Error("프로젝트 슬롯 외곽선 설정이 올바르지 않습니다.");
   let labelSettings=state.annotations.labels.settings;
   if(!Number.isFinite(labelSettings.x)||!Number.isFinite(labelSettings.y)||
-    !Number.isFinite(labelSettings.fontSize)||labelSettings.fontSize<6)
+    !Number.isFinite(labelSettings.fontSize)||labelSettings.fontSize<limits.labels.fontSizeMin)
     throw Error("프로젝트 레이블 위치 또는 크기가 올바르지 않습니다.");
   let output=state.export, explicit=output.heightMode==="explicit";
-  if(!Number.isFinite(output.width)||output.width<100||output.width>20000||
+  if(!Number.isFinite(output.width)||output.width<limits.export.logicalWidth[0]||output.width>limits.export.logicalWidth[1]||
     !["auto","explicit"].includes(output.heightMode)||
-    (explicit&&(!Number.isFinite(output.height)||output.height<100||output.height>20000))||
-    !Number.isFinite(output.dpi)||output.dpi<36||output.dpi>1200||
+    (!explicit&&output.height!==null)||
+    (explicit&&(!Number.isFinite(output.height)||output.height<limits.export.logicalHeight[0]||output.height>limits.export.logicalHeight[1]))||
+    !Number.isFinite(output.dpi)||output.dpi<limits.export.dpi[0]||output.dpi>limits.export.dpi[1]||
     !["png","jpeg"].includes(output.format))
     throw Error("프로젝트 출력 설정이 올바르지 않습니다.");
   for(let key of Object.keys(DEFAULT_UI_PALETTE))
@@ -794,7 +854,7 @@ export function validateProjectObjectState(state, { requireSlots = false } = {})
       throw Error("프로젝트 폴더 경로가 올바르지 않습니다.");
     directoryPaths.add(path);
   });
-  for(let required of ["/assets","/assets/csv","/assets/images","/assets/trash"])
+  for(let required of Object.values(BackendSettings.defaults.vfs))
     if(!directoryPaths.has(required))throw Error(`프로젝트 기본 폴더 ${required}가 없습니다.`);
   let csvIds=new Set();
   state.assets.csvFiles.forEach(csv=>{
@@ -840,9 +900,9 @@ export function validateProjectObjectState(state, { requireSlots = false } = {})
       throw Error("프로젝트 슬롯 오브젝트가 올바르지 않습니다.");
     const settings=slot.content.imageSettings;
     if(!record(settings)||!["contain","cover","manual"].includes(settings.fit)||
-      !Number.isFinite(settings.scale)||settings.scale<1||settings.scale>1000||
-      !Number.isFinite(settings.x)||settings.x< -100||settings.x>200||
-      !Number.isFinite(settings.y)||settings.y< -100||settings.y>200)
+      !Number.isFinite(settings.scale)||settings.scale<limits.imageSettings.scale[0]||settings.scale>limits.imageSettings.scale[1]||
+      !Number.isFinite(settings.x)||settings.x<limits.imageSettings.x[0]||settings.x>limits.imageSettings.x[1]||
+      !Number.isFinite(settings.y)||settings.y<limits.imageSettings.y[0]||settings.y>limits.imageSettings.y[1])
       throw Error("프로젝트 슬롯 이미지 설정이 올바르지 않습니다.");
     if(slot.content.chart!==null)owners.set(slot.content.chart,owners.get(slot.content.chart)+1);
     slotIds.add(slot.id);
@@ -864,7 +924,7 @@ export function validateProjectObject(project, options = {}) {
 }
 
 export function readProjectNumber(value, fallback, min, max) {
-  let number = Number(value);
+  let number = ["number", "string", "boolean"].includes(typeof value) || value === null ? Number(value) : NaN;
   return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
 }
 

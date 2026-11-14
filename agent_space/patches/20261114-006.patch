@@ -1,0 +1,173 @@
+diff --git a/development-versions.json b/development-versions.json
+index dbe80f6..f461e51 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 151,
++      "revision": 152,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,7 +54,7 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:3cda88c463cb6c39d4b9f2e602911ac2f86652a7b983d4f537296598616382f5",
++      "fingerprint": "sha256:3a277fc835bde911b7c921e50807763d28941f4ffc04327c9889fe49ca1152ef",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+diff --git a/sourcecode/application/public_api/assets.js b/sourcecode/application/public_api/assets.js
+index e9373ae..d09c2c8 100644
+--- a/sourcecode/application/public_api/assets.js
++++ b/sourcecode/application/public_api/assets.js
+@@ -2,7 +2,7 @@
+ import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, runLifecycleTask, renderDashboard, updateFileAvailability } from '../adapter.js';
+ import { importSelectedGraphFile } from './graphs.js';
+ import { setSelectedSlot } from './layout_annotations.js';
+-import { PROJECT_ASSET_DIRECTORIES, PROJECT_TRASH_DIRECTORY, projectAssetReferenceCount, projectDataTreeSnapshot, projectParentPath, projectPathName, projectVfs } from '../../backend/assets_files.js';
++import { PROJECT_ASSET_DIRECTORIES, projectParentPath, projectPathName } from '../../backend/assets_files.js';
+ import { immutableProjectCopy, projectObjects, readBackendProjection } from '../../backend/project_state.js';
+ import { interfaceFSM } from '../../frontend/interface_fsm.js';
+ import { downloadExportPayload, status } from '../../frontend/renderer.js';
+@@ -108,12 +108,8 @@ export function selectImageFromTree(path) {
+   return appFSM.send("SELECT_ASSET", { kind: "image", path, direction: "ui-to-fsm" });
+ }
+ 
+-export function readAssetDeletionTarget() {
+-  const resolved = appFSM.query("project-api", {
+-    operation: "assets.readDeletionTarget", path: interfaceFSM.readState().assetPath,
+-  });
+-  return resolved ? immutableProjectCopy({ kind: resolved.kind, id: resolved.target.id,
+-    path: resolved.path, name: resolved.target.name, referenceCount: resolved.referenceCount }) : null;
++export function readAssetDeletionTarget(path) {
++  return appFSM.query("project-api", { operation: "assets.readDeletionTarget", path });
+ }
+ 
+ export function deleteProjectAsset(target) {
+@@ -129,17 +125,7 @@ export function deleteProjectAsset(target) {
+ }
+ 
+ export function readProjectTrash() {
+-  let snapshot = projectDataTreeSnapshot(projectDataTreeObjects());
+-  let csvIds = new Set(snapshot.data.filter((asset) =>
+-    projectVfs.isTrashed(asset.path)).map((asset) => asset.id));
+-  let imageIds = new Set(snapshot.images.filter((asset) =>
+-    projectVfs.isTrashed(asset.path)).map((asset) => asset.id));
+-  return {
+-    hasContents: snapshot.directories.some((path) =>
+-      path !== PROJECT_TRASH_DIRECTORY && projectVfs.isTrashed(path)) ||
+-      csvIds.size > 0 || imageIds.size > 0,
+-    referenceCount: projectAssetReferenceCount(csvIds, imageIds),
+-  };
++  return appFSM.query("project-api", { operation: "assets.readTrash" });
+ }
+ 
+ export function projectNodeMoveOptions(path) {
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+index a87e75b..44956c5 100644
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -1,5 +1,5 @@
+ // Source: sourcescript/backend/project_state.py (same logical owner); pseudocode/backend/project_state.pcal.
+-import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectDataTreeSnapshot, projectFileStem, projectImageDataUrl, projectPathInDirectory, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
++import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectDataTreeSnapshot, projectFileStem, projectImageDataUrl, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
+ import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraphLayoutSettings, validateChartModel } from './graphs.js';
+ import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
+ import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
+@@ -268,6 +268,23 @@ const PUBLIC_BACKEND_READ_OPERATIONS = new Set([
+   "assets.resolveImportPlan",
+ ]);
+ 
++function buildBackendVfsTree(source) {
++  const nodes = new Map(source.fileSystem.directories.map(path => [path, {
++    kind: "directory", path, name: projectPathName(path), children: [],
++  }]));
++  for (const [kind, assets] of [["csv", source.assets.csvFiles], ["image", source.assets.images]]) {
++    for (const asset of assets) {
++      const path = projectAssetPath(asset);
++      nodes.set(path, { kind, path, id: asset.id, name: asset.name, asset: structuredClone(asset) });
++    }
++  }
++  for (const node of nodes.values()) {
++    const parent = nodes.get(projectParentPath(node.path));
++    if (parent && parent !== node) parent.children.push(node);
++  }
++  return nodes;
++}
++
+ export function readBackendProjection(kind, request = {}) {
+   if (!BACKEND_QUERY_KINDS.has(kind) ||
+       (kind === "project-api" && !PUBLIC_BACKEND_READ_OPERATIONS.has(request.operation)))
+@@ -360,6 +377,10 @@ export function readBackendProjection(kind, request = {}) {
+       contentType: slot.content.contentType, chart: slot.content.chart,
+       imageId: slot.content.imageId }) : null;
+   }
++  if (kind === "project-api" && request.operation === "assets.readTrash") {
++    const source = activeProject._state, tree = buildBackendVfsTree(source);
++    return immutableProjectCopy(tree.get(BackendSettings.defaults.vfs.trash) ?? null);
++  }
+   if (kind === "project-api" && request.operation === "assets.readTree") {
+     const source = activeProject._state;
+     return immutableProjectCopy(projectDataTreeSnapshot({ files: source.fileSystem,
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index 62f612d..3338d1b 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -322,7 +322,7 @@ React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트"
+     const slotType = slot?.contentType || "graph";
+     const [resetSlotId, setResetSlotId] = useState(null);
+     const assetApi = window.FastFigureApi.assets;
+-    const selectedAssetDeletable = !!assetApi.readDeletionTarget();
++    const selectedAssetDeletable = !!assetApi.readDeletionTarget(state.assetPath);
+     const [deleteTarget, setDeleteTarget] = useState(null);
+     const fileResetRef = useRef(null);
+     const { choosePlan: chooseProjectAssetImportPlan, modal: importCollisionModal } =
+@@ -341,14 +341,14 @@ try {
+ 
+     const performAssetDelete = (target) => {
+ try {
+-  assetApi.delete(target);
++  assetApi.delete({ kind: target.kind, id: target.target.id, path: target.path });
+   setDeleteTarget(null);
+ } catch (error) {
+   status(`에셋 삭제 오류: ${error.message}`);
+ }
+     };
+     const requestAssetDelete = () => {
+-const target = assetApi.readDeletionTarget();
++const target = assetApi.readDeletionTarget(appFSM.readState().assetPath);
+ if (!target) return;
+ if (target.referenceCount > 0) setDeleteTarget(target);
+ else performAssetDelete(target);
+@@ -441,8 +441,8 @@ React.createElement(
+           Text,
+           null,
+           deleteTarget.kind === "csv"
+-            ? `${deleteTarget.name}을 ${deleteTarget.referenceCount}개 그래프 오브젝트가 참조 중입니다. 참조 중인 그래프 오브젝트와 CSV를 함께 삭제할까요?`
+-            : `${deleteTarget.name}을 ${deleteTarget.referenceCount}개 이미지 슬롯이 참조 중입니다. 참조 슬롯을 초기화하고 이미지를 삭제할까요?`,
++            ? `${deleteTarget.target.name}을 ${deleteTarget.referenceCount}개 그래프 오브젝트가 참조 중입니다. 참조 중인 그래프 오브젝트와 CSV를 함께 삭제할까요?`
++            : `${deleteTarget.target.name}을 ${deleteTarget.referenceCount}개 이미지 슬롯이 참조 중입니다. 참조 슬롯을 초기화하고 이미지를 삭제할까요?`,
+         ),
+         React.createElement(
+           Group,
+@@ -640,10 +640,14 @@ try {
+     const trashSelected =
+ state.assetSelection === "directory" && state.assetPath === PROJECT_TRASH_DIRECTORY;
+     const trash = assetApi.readTrash();
+-    const trashHasContents = trash.hasContents;
++    const trashHasContents = !!trash?.children.length;
++    const countTrashReferences = node => node.kind === "directory"
++? node.children.reduce((count, child) => count + countTrashReferences(child), 0)
++: assetApi.readDeletionTarget(node.path)?.referenceCount ?? 0;
++    const trashReferenceCount = trash ? countTrashReferences(trash) : 0;
+     const openTrashDialog = () => {
+ if (!trashSelected || !trashHasContents) return;
+-setTrashDialog({ referenceCount: trash.referenceCount });
++setTrashDialog({ referenceCount: trashReferenceCount });
+     };
+     const closeTrashDialog = () => setTrashDialog(null);
+     const emptyTrashFromMantine = () => {

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import html
+from html.parser import HTMLParser
 import json
 import re
 from pathlib import Path
@@ -224,6 +225,16 @@ def bundle_runtime() -> bytes:
         return output.read_bytes()
 
 
+class _ExternalScriptDetector(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.found = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "script" and any(name == "src" for name, _ in attrs):
+            self.found = True
+
+
 def build_inline(output: Path, runtime: bytes | None = None) -> None:
     runtime = bundle_runtime() if runtime is None else runtime
     portable = build_source_html()
@@ -240,9 +251,11 @@ def build_inline(output: Path, runtime: bytes | None = None) -> None:
             open_tag + content + b"</script>",
             1,
         )
-    for tag, _, _ in SCRIPTS:
-        if tag in portable:
-            raise RuntimeError(f"external script tag remains: {tag!r}")
+    dependencies = _ExternalScriptDetector()
+    dependencies.feed(portable.decode("utf-8"))
+    dependencies.close()
+    if dependencies.found:
+        raise RuntimeError("external script remains in portable HTML")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(portable)
 

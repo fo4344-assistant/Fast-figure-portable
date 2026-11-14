@@ -1,0 +1,634 @@
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+index 268fc23168d70b07e2b661411ba3aa760442bfd1..23167b8bf2074cd812c5f5a79ec53509f79e0003 100644
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -2,18 +2,14 @@
+ import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectDataTreeSnapshot, projectFileStem, projectImageDataUrl, projectPathInDirectory, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
+ import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraphLayoutSettings, validateChartModel } from './graphs.js';
+ import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
+-import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_SLOT_STYLE, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
++import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
+ import { interfaceRuntime } from '../frontend/interface_fsm.js';
+ 
+ export function createProjectState() {
+   let state = {
+     kind: "fast-figure-project-object",
+     meta: { projectName: "", appBuild: APP_BUILD },
+-    layout: {
+-      gridRows: BackendSettings.project_object.layout.gridRows,
+-      gridCols: BackendSettings.project_object.layout.gridCols,
+-      slotStyle: { ...DEFAULT_SLOT_STYLE },
+-    },
++    layout: structuredClone(BackendSettings.project_object.layout),
+     annotations: {
+       labels: projectClone(BackendSettings.project_object.annotations.labels),
+       captions: {
+@@ -30,15 +26,16 @@
+     nextId: { csv: 1, image: 1, chart: 1 },
+     appearance: { uiPalette: { ...DEFAULT_UI_PALETTE } },
+     export: {
+-      width: DEFAULT_SLOT_STYLE.referenceWidth,
+-      ...BackendSettings.project_object.export,
+-      height: null,
++      ...structuredClone(BackendSettings.project_object.export),
++      width: BackendSettings.project_object.layout.slotStyle.referenceWidth,
++      height: BackendSettings.project_object.export.heightMode === "auto" ? null
++        : BackendSettings.defaults.limits.export.logicalHeight[0],
+     },
+   };
+   for (let index = 0; index < state.layout.gridRows * state.layout.gridCols; index++)
+     state.slots.push(newGridSlot(index, Math.floor(index / state.layout.gridCols) + 1,
+       (index % state.layout.gridCols) + 1));
+-  return state;
++  return validateProjectObjectState(state, { requireSlots: true });
+ }
+ 
+ export function projectObjectPath(state, path) {
+@@ -243,15 +240,42 @@
+       throw Error("활성 프로젝트 오브젝트가 없습니다.");
+     return adapter.read(project);
+   }
+-  snapshot(names = [...this.adapters.keys()]) {
+-    return Object.fromEntries(names.map((name) => [name, projectClone(this.read(name))]));
++  snapshot(names = Object.keys(PROJECT_OBJECT_PATHS)) {
++    const project = this.projectProvider();
++    if (!(project instanceof ProjectObject)) throw Error("활성 프로젝트 오브젝트가 없습니다.");
++    const source = project._state;
++    return immutableProjectCopy(Object.fromEntries(names.map(name => {
++      const adapter = this.adapters.get(name);
++      if (!Object.hasOwn(PROJECT_OBJECT_PATHS, name) || !adapter?.path)
++        throw Error(`프로젝트 오브젝트 ${name}이 없습니다.`);
++      const value = projectObjectPath(source, adapter.path);
++      if (value === undefined) throw Error(`프로젝트 오브젝트 경로 ${adapter.path}가 없습니다.`);
++      return [name, value];
++    })));
+   }
+   names() {
+     return [...this.adapters.keys()];
+   }
+ }
+ 
++const BACKEND_QUERY_KINDS = new Set(["project-api", "slot-selection-context", "interface-intent",
++  "interface-reconciliation", "renderer", "export"]);
++const PUBLIC_BACKEND_READ_OPERATIONS = new Set([
++  "project.readName", "slots.readSelected", "images.readEditor", "print.readSettings", "appearance.readPalette",
++  "graphs.readData", "graphs.readLayout", "graphs.readPalette", "graphs.hasSelectedSlot", "graphs.defaultColors",
++  "captions.readGlobal", "captions.readSlot", "labels.readState", "layout.readState", "assets.readTree",
++  "assets.readTrash", "assets.isTrashed", "assets.movable", "assets.draggableAsset", "assets.readDeletionTarget",
++  "assets.moveOptions", "assets.planMove", "assets.resolveTreeSelection", "assets.fileKind", "assets.collisionModel",
++  "assets.resolveImportPlan",
++]);
++
+ export function readBackendProjection(kind, request = {}) {
++  if (!BACKEND_QUERY_KINDS.has(kind) ||
++      (kind === "project-api" && !PUBLIC_BACKEND_READ_OPERATIONS.has(request.operation)))
++    throw Error(`알 수 없는 Backend query: ${kind}/${request.operation}`);
++  if (kind === "interface-intent") return validateFrontendIntent(request.event, request.payload);
++  if (kind === "interface-reconciliation")
++    return buildFrontendReconciliationInput(request.event, request.mutationResult, request.frontendReferences);
+   if (kind === "project-api" && request.operation === "project.readName")
+     return activeProject._state.meta.projectName;
+   if ((kind === "project-api" && request.operation === "appearance.readPalette") ||
+@@ -261,7 +285,7 @@
+     const source = activeProject._state, preview = BackendSettings.defaults.preview,
+       width = request.renderedWidth == null ? preview.fallbackWidth : readProjectNumber(
+         request.renderedWidth, preview.fallbackWidth, ...preview.widthRange);
+-    return Object.freeze({
++    return immutableProjectCopy({
+       gridRows: source.layout.gridRows, gridCols: source.layout.gridCols,
+       slotStyle: Object.freeze({ ...source.layout.slotStyle }),
+       visibleSlots: Object.freeze(source.slots.filter((slot) => !slot.hidden).map((slot) => Object.freeze({
+@@ -276,7 +300,7 @@
+       geometry = dashboardGeometryInProject(source, source.layout.slotStyle.referenceWidth),
+       reference = gridSlotGeometry(source.layout, geometry, slot),
+       identifier = slotIdentifier(0, source);
+-    return Object.freeze({
++    return immutableProjectCopy({
+       enabled: labels.enabled, settings: Object.freeze({ ...labels.settings }),
+       reference: Object.freeze(reference),
+       sampleText: labels.settings.parentheses ? `(${identifier})` : identifier,
+@@ -334,8 +358,8 @@
+     const source = activeProject._state,
+       slot = source.slots.find((item) => item.id === request.frontendState?.selectedSlotId && !item.hidden);
+     return slot ? immutableProjectCopy({ id: slot.id, row: slot.row, col: slot.col,
+-      contentType: slot.contentType, chart: slot.content?.chart ?? slot.chart,
+-      imageId: slot.content?.imageId ?? slot.imageId }) : null;
++      contentType: slot.content.contentType, chart: slot.content.chart,
++      imageId: slot.content.imageId }) : null;
+   }
+   if (kind === "project-api" && request.operation === "assets.readTree") {
+     const source = activeProject._state;
+@@ -345,28 +369,26 @@
+   if (kind === "project-api" && request.operation === "graphs.defaultColors")
+     return immutableProjectCopy(DEFAULT_COLORS);
+   if (kind === "project-api" && request.operation === "graphs.hasSelectedSlot")
+-    return activeProject._state.slots.some(slot => slot.id === request.selectedSlotId && !slot.hidden && slot.contentType === "graph");
++    return activeProject._state.slots.some(slot => slot.id === request.selectedSlotId && !slot.hidden && slot.content.contentType === "graph");
+   if (kind === "project-api" && request.operation === "graphs.readPalette") {
+     const source = activeProject._state,
+-      slot = source.slots.find(item => item.id === request.selectedSlotId && !item.hidden && item.contentType === "graph"),
+-      chart = slot ? source.charts.find(item => item.id === (slot.content?.chart ?? slot.chart)) : null;
++      slot = source.slots.find(item => item.id === request.selectedSlotId && !item.hidden && item.content.contentType === "graph"),
++      chart = slot ? source.charts.find(item => item.id === slot.content.chart) : null;
+     return immutableProjectCopy((chart?.editor?.objects || []).map(object => object.color));
+   }
+   if (kind === "project-api" && request.operation === "graphs.readLayout") {
+     const source = activeProject._state, slot = source.slots.find(item => item.id === request.selectedSlotId && !item.hidden),
+-      chartId = slot?.content?.chart ?? slot?.chart,
+-      chart = slot?.contentType !== "image" ? source.charts.find(item => item.id === chartId) : null;
++      chartId = slot?.content.chart,
++      chart = slot?.content.contentType === "graph" ? source.charts.find(item => item.id === chartId) : null;
+     return chart ? immutableProjectCopy({ chartId: chart.id, editable: chart.editor?.editable !== false,
+       title: chart.editor?.title ?? "", settings: normalizeGraphLayoutSettings(chart.editor?.globalSettings) }) : null;
+   }
+   if (kind === "project-api" && request.operation === "graphs.readData") {
+     const source = activeProject._state, state = request.frontendState || {},
+-      owners = Object.hasOwn(request, "chartId")
+-        ? source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === request.chartId) : [],
+-      slot = Object.hasOwn(request, "chartId") ? (owners.length === 1 ? owners[0] : null)
++      slot = Object.hasOwn(request, "chartId") ? resolveOwningSlot(request.chartId, source)
+         : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden),
+-      chartId = slot?.content?.chart ?? slot?.chart,
+-      chart = slot && !slot.hidden && slot.contentType === "graph"
++      chartId = slot?.content.chart,
++      chart = slot && slot.content.contentType === "graph"
+         ? source.charts.find((item) => item.id === chartId) || null : null,
+       objects = chart?.editor?.objects || [], index = state.graphObjectIndex,
+       selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length
+@@ -384,7 +406,7 @@
+       (kind === "renderer" && request.operation === "slot-image")) {
+     return immutableProjectCopy(buildBackendImageRead(activeProject._state, request.slotId));
+   }
+-  if ((kind === "renderer" && request.operation == null) ||
++  if (kind === "renderer" ||
+       (kind === "export" && ["print.save", "print.capture"].includes(request.operation))) {
+     const source = activeProject._state, output = buildBackendSurfaceRead(source);
+     if (kind === "export") {
+@@ -422,8 +444,8 @@
+   if (kind === "export" && ["graphs.exportPlotlyJson", "graphs.exportFfsx"].includes(request.operation)) {
+     const source = activeProject._state,
+       slot = source.slots.find((item) => item.id === request.slotId && !item.hidden),
+-      chart = slot && slot.contentType !== "image"
+-        ? source.charts.find((item) => item.id === slot.chart) : null;
++      chart = slot && slot.content.contentType === "graph"
++        ? source.charts.find((item) => item.id === slot.content.chart) : null;
+     if (!chart) return null;
+     if (request.operation === "graphs.exportFfsx") {
+       const bundle = ffsxBuildSlot(slot, chart, source);
+@@ -444,8 +466,8 @@
+   let slot = request.slotId == null ? null : slotAt(request.slotId);
+   return slot && !slot.hidden ? Object.freeze({
+     id: slot.id,
+-    empty: !slot.chart && !slot.imageId,
+-    contentType: slot.contentType,
++    empty: slot.content.chart === null && slot.content.imageId === null,
++    contentType: slot.content.contentType,
+   }) : null;
+ }
+ 
+@@ -489,19 +511,24 @@
+ }
+ 
+ export function validateFrontendIntent(event, payload = {}) {
+-  let input = { event, accepted: true, reference: null, workspaceHint: "project", selectionHint: null };
++  let input = { event, accepted: true, reference: null, workspaceHint: null, selectionHint: null };
+   if (event === "SELECT_SLOT") {
+-    if (payload.slotId != null) {
++    if (!Object.hasOwn(payload, "slotId")) input.accepted = false;
++    else if (payload.slotId === null) {
++      input.workspaceHint = "project";
++      input.selectionHint = "toggle-clear";
++    } else {
+       let slot = slotAt(payload.slotId);
+       if (!slot || slot.hidden) input.accepted = false;
+       else {
+         input.reference = slot.id;
+-        input.workspaceHint = slot.contentType === "image" ? "slot.image" : "slot.graph";
++        input.workspaceHint = slot.content.contentType === "image" ? "slot.image" : "slot.graph";
+         input.selectionHint = payload.direction === "model-to-fsm" ? "clear-graph-object" : "toggle-clear";
+       }
+     }
+   } else if (event === "SELECT_ASSET") {
+-    if (payload.path != null) {
++    if (!Object.hasOwn(payload, "path")) input.accepted = false;
++    else if (payload.path !== null) {
+       let match = projectVfs.resolve(payload.path);
+       if (!match || match.kind !== payload.kind || !["csv", "image", "directory"].includes(match.kind))
+         input.accepted = false;
+@@ -511,13 +538,14 @@
+       }
+     }
+   } else if (event === "SELECT_GRAPH_OBJECT") {
+-    if (payload.index != null) {
++    if (!Object.hasOwn(payload, "index")) input.accepted = false;
++    else if (payload.index !== null) {
+       let slot = slotAt(payload.selectedSlotId),
+-        chart = slot && !slot.hidden && slot.contentType !== "image" ? getChart(slot.chart) : null,
++        chart = slot && !slot.hidden && slot.content.contentType === "graph" ? getChart(slot.content.chart) : null,
+         object = Number.isInteger(payload.index) && payload.index >= 0
+           ? chart?.editor?.objects?.[payload.index] : null,
+         csv = object ? getProjectCsv(object.csvId) : null;
+-      if (!object || !csv) input.accepted = false;
++      if (chart?.editor?.editable === false || !object || !csv) input.accepted = false;
+       else {
+         input.reference = payload.index;
+         input.selectionHint = payload.selectAsset === true ? projectAssetPath(csv) : null;
+@@ -528,7 +556,8 @@
+ }
+ 
+ export function buildFrontendReconciliationInput(event, result, references) {
+-  let payload = result.payload || {}, hints = result.selectionHints || {},
++  if (result.committed !== true) throw Error("commit된 Project 결과만 재조정할 수 있습니다.");
++  let hints = result.selectionHints || {},
+     slotId = references.selectedSlotId,
+     assetPath = references.assetPath,
+     graphObjectIndex = references.graphObjectIndex;
+@@ -551,8 +580,8 @@
+       (hints.enteringTrash && projectVfs.isTrashed(assetPath))) {
+     asset = null;
+     assetPath = null;
+-  }
+-  let chart = slotId !== null && slot.contentType !== "image" ? getChart(slot.chart) : null;
++  } else assetPath = asset.kind === "directory" ? asset.path : projectAssetPath(asset.asset);
++  let chart = slotId !== null && slot.content.contentType === "graph" ? getChart(slot.content.chart) : null;
+   if (chart?.editor?.editable === false) chart = null;
+   if (chart && hints.chartId === chart.id && Object.hasOwn(hints, "selectedIndexHint"))
+     graphObjectIndex = hints.selectedIndexHint;
+@@ -560,16 +589,16 @@
+     const map = hints.graphObjectIndexMaps?.find(item => item.chartId === chart.id);
+     if (map) graphObjectIndex = Number.isInteger(graphObjectIndex) ? map.indices[graphObjectIndex] ?? null : null;
+   }
+-  if (payload.clearGraphSelection || hints.clearGraphSelection ||
++  if (hints.resetInterfaceSelection || hints.clearGraphSelection ||
+       !Number.isInteger(graphObjectIndex) || graphObjectIndex < 0 ||
+       graphObjectIndex >= (chart?.editor?.objects?.length || 0))
+     graphObjectIndex = null;
+   return Object.freeze({
+     event, selectedSlot: slotId,
+-    projectionEffect: result.projectionEffect,
+-    assetSelection: assetPath, assetKind: asset?.kind || "none",
++    projectionEffect: result.projectionEffect ? immutableProjectCopy(result.projectionEffect) : result.projectionEffect,
++    assetSelection: assetPath, assetKind: asset?.kind ?? null,
+     graphObject: graphObjectIndex,
+-    workspaceHint: slotId === null ? "project" : slot.contentType === "image" ? "slot.image" : "slot.graph",
++    workspaceHint: slotId === null ? "project" : slot.content.contentType === "image" ? "slot.image" : "slot.graph",
+   });
+ }
+ 
+@@ -581,7 +610,7 @@
+     }
+     return copy;
+   };
+-  return freeze(projectClone(value));
++  return freeze(structuredClone(value));
+ }
+ 
+ export let projectObjects;
+@@ -615,8 +644,14 @@
+   return collection.find((image) => image.id === id) || null;
+ }
+ 
++export function resolveOwningSlot(chartId, state) {
++  if (!state.charts.some(chart => chart.id === chartId)) return null;
++  const owners = state.slots.filter(slot => slot.content.chart === chartId);
++  return owners.length === 1 ? owners[0] : null;
++}
++
+ export function getChart(id) {
+-  return activeProject.charts.find((chart) => chart.id === id);
++  return activeProject.charts.find((chart) => chart.id === id) ?? null;
+ }
+ 
+ export function slotAt(id) {
+@@ -646,6 +681,15 @@
+ 
+ export function resetSlotLocalState(slot) {
+   return setSlotLocalState(slot, SLOT_LOCAL_DEFAULTS);
++}
++
++function projectValuesEqual(left, right) {
++  if (left === right) return true;
++  if (!left || !right || typeof left !== "object" || typeof right !== "object" ||
++      Array.isArray(left) !== Array.isArray(right)) return false;
++  const keys = Object.keys(left);
++  return keys.length === Object.keys(right).length && keys.every(key =>
++    Object.hasOwn(right, key) && projectValuesEqual(left[key], right[key]));
+ }
+ 
+ export function slotHasNonDefaultLocalState(slot) {
+@@ -656,11 +700,7 @@
+     local.imageId !== defaults.imageId ||
+     local.contentType !== defaults.contentType ||
+     local.caption !== defaults.caption ||
+-    Object.keys(local.imageSettings).length !== Object.keys(defaults.imageSettings).length ||
+-    local.imageSettings.fit !== defaults.imageSettings.fit ||
+-    local.imageSettings.scale !== defaults.imageSettings.scale ||
+-    local.imageSettings.x !== defaults.imageSettings.x ||
+-    local.imageSettings.y !== defaults.imageSettings.y
++    !projectValuesEqual(local.imageSettings, defaults.imageSettings)
+   );
+ }
+ 
+@@ -757,7 +797,10 @@
+     throw Error("프로젝트 오브젝트 구조가 올바르지 않습니다.");
+   if(typeof state.meta.projectName!=="string"||typeof state.meta.appBuild!=="string"||
+     !Number.isInteger(state.layout.gridRows)||!Number.isInteger(state.layout.gridCols)||
+-    state.layout.gridRows<1||state.layout.gridRows>8||state.layout.gridCols<1||state.layout.gridCols>8||
++    state.layout.gridRows<BackendSettings.defaults.limits.layout.gridRows[0]||
++    state.layout.gridRows>BackendSettings.defaults.limits.layout.gridRows[1]||
++    state.layout.gridCols<BackendSettings.defaults.limits.layout.gridCols[0]||
++    state.layout.gridCols>BackendSettings.defaults.limits.layout.gridCols[1]||
+     typeof state.annotations.labels.enabled!=="boolean"||
+     typeof state.annotations.captions.enabled!=="boolean"||
+     typeof state.annotations.captions.text!=="string"||
+@@ -766,20 +809,21 @@
+     typeof state.annotations.captions.nameBold!=="boolean")
+     throw Error("프로젝트 메타데이터 또는 레이아웃이 올바르지 않습니다.");
+   let style=state.layout.slotStyle;
+-  for(let [key,min,max] of [["referenceWidth",100,20000],["gap",0,2000],["outerMargin",0,5000],
+-    ["radius",0,2000],["aspect",0.1,10]])
+-    if(!Number.isFinite(style[key])||style[key]<min||style[key]>max)
++  const limits = BackendSettings.defaults.limits;
++  for(let key of ["referenceWidth","gap","outerMargin","radius","aspect"])
++    if(!Number.isFinite(style[key])||style[key]<limits.layout[key][0]||style[key]>limits.layout[key][1])
+       throw Error(`프로젝트 슬롯 스타일 ${key}가 올바르지 않습니다.`);
+   if(typeof style.showBorders!=="boolean")throw Error("프로젝트 슬롯 외곽선 설정이 올바르지 않습니다.");
+   let labelSettings=state.annotations.labels.settings;
+   if(!Number.isFinite(labelSettings.x)||!Number.isFinite(labelSettings.y)||
+-    !Number.isFinite(labelSettings.fontSize)||labelSettings.fontSize<6)
++    !Number.isFinite(labelSettings.fontSize)||labelSettings.fontSize<limits.labels.fontSizeMin)
+     throw Error("프로젝트 레이블 위치 또는 크기가 올바르지 않습니다.");
+   let output=state.export, explicit=output.heightMode==="explicit";
+-  if(!Number.isFinite(output.width)||output.width<100||output.width>20000||
++  if(!Number.isFinite(output.width)||output.width<limits.export.logicalWidth[0]||output.width>limits.export.logicalWidth[1]||
+     !["auto","explicit"].includes(output.heightMode)||
+-    (explicit&&(!Number.isFinite(output.height)||output.height<100||output.height>20000))||
+-    !Number.isFinite(output.dpi)||output.dpi<36||output.dpi>1200||
++    (!explicit&&output.height!==null)||
++    (explicit&&(!Number.isFinite(output.height)||output.height<limits.export.logicalHeight[0]||output.height>limits.export.logicalHeight[1]))||
++    !Number.isFinite(output.dpi)||output.dpi<limits.export.dpi[0]||output.dpi>limits.export.dpi[1]||
+     !["png","jpeg"].includes(output.format))
+     throw Error("프로젝트 출력 설정이 올바르지 않습니다.");
+   for(let key of Object.keys(DEFAULT_UI_PALETTE))
+@@ -796,7 +840,7 @@
+       throw Error("프로젝트 폴더 경로가 올바르지 않습니다.");
+     directoryPaths.add(path);
+   });
+-  for(let required of ["/assets","/assets/csv","/assets/images","/assets/trash"])
++  for(let required of Object.values(BackendSettings.defaults.vfs))
+     if(!directoryPaths.has(required))throw Error(`프로젝트 기본 폴더 ${required}가 없습니다.`);
+   let csvIds=new Set();
+   state.assets.csvFiles.forEach(csv=>{
+@@ -842,9 +886,9 @@
+       throw Error("프로젝트 슬롯 오브젝트가 올바르지 않습니다.");
+     const settings=slot.content.imageSettings;
+     if(!record(settings)||!["contain","cover","manual"].includes(settings.fit)||
+-      !Number.isFinite(settings.scale)||settings.scale<1||settings.scale>1000||
+-      !Number.isFinite(settings.x)||settings.x< -100||settings.x>200||
+-      !Number.isFinite(settings.y)||settings.y< -100||settings.y>200)
++      !Number.isFinite(settings.scale)||settings.scale<limits.imageSettings.scale[0]||settings.scale>limits.imageSettings.scale[1]||
++      !Number.isFinite(settings.x)||settings.x<limits.imageSettings.x[0]||settings.x>limits.imageSettings.x[1]||
++      !Number.isFinite(settings.y)||settings.y<limits.imageSettings.y[0]||settings.y>limits.imageSettings.y[1])
+       throw Error("프로젝트 슬롯 이미지 설정이 올바르지 않습니다.");
+     if(slot.content.chart!==null)owners.set(slot.content.chart,owners.get(slot.content.chart)+1);
+     slotIds.add(slot.id);
+@@ -866,7 +910,7 @@
+ }
+ 
+ export function readProjectNumber(value, fallback, min, max) {
+-  let number = Number(value);
++  let number = ["number", "string", "boolean"].includes(typeof value) || value === null ? Number(value) : NaN;
+   return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+ }
+ 
+diff --git a/sourcecode/frontend/interface_fsm.js b/sourcecode/frontend/interface_fsm.js
+index 8dc568a510d47792e0d3b5a1f9fac57b5f39d49b..36cdeaec5c4889a997f7b11f0fcf945c61ca3963 100644
+--- a/sourcecode/frontend/interface_fsm.js
++++ b/sourcecode/frontend/interface_fsm.js
+@@ -189,7 +189,7 @@
+     this.state = Object.freeze({
+       ...this.state,
+       workspace: input.workspaceHint,
+-      assetSelection: input.assetKind,
++      assetSelection: input.assetKind ?? "none",
+       assetPath: input.assetSelection,
+       graphObject: input.graphObject === null ? "none" : "selected",
+       graphObjectIndex: input.graphObject,
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 0aa0918d835b561956a4f9096776f03a141c1300..095b615878dd0b3eaba36f0f1a59d759a827b705 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1248,6 +1248,22 @@
+       api.graphs.selectObject(-1);
+       check(appFSM.state === previous, "public graph selector cleared invalid input");
+       check(JSON.stringify(activeProject._state) === authority, "validation changed project authority");
++      for (const event of ["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]) {
++        const field = event === "SELECT_SLOT" ? "slotId" : event === "SELECT_ASSET" ? "path" : "index";
++        for (const payload of [{}, { [field]: undefined }])
++          check(!readBackendProjection("interface-intent", { event, payload }).accepted,
++            "absent reference was accepted as explicit deselection");
++        check(readBackendProjection("interface-intent", { event, payload: { [field]: null } }).accepted,
++          "explicit null reference was rejected");
++      }
++      check(validateFrontendIntent("SELECT_SLOT", { slotId: null, direction: "model-to-fsm" }).selectionHint === "toggle-clear",
++        "model deselection omitted explicit graph/asset clear hint");
++      const editable = chart.editor.editable;
++      try {
++        chart.editor.editable = false;
++        check(!validateFrontendIntent("SELECT_GRAPH_OBJECT", { selectedSlotId: target.id, index: 0 }).accepted,
++          "noneditable graph object was accepted through a matching project CSV");
++      } finally { chart.editor.editable = editable; }
+       const validated = validateFrontendIntent("SELECT_SLOT", { slotId: target.id });
+       check(Object.isFrozen(validated) && validated.reference === target.id,
+         "validated reference is not immutable");
+@@ -1296,7 +1312,15 @@
+       api.assets.move(api.assets.planMove(original, destination));
+       check(appFSM.state.assetPath === `${destination}/boundary-reconcile.csv`,
+         "asset move did not reconcile selected path");
+-      const input = buildFrontendReconciliationInput("PROBE", { payload: {} }, interfaceFSM.readState());
++      const input = buildFrontendReconciliationInput("PROBE", { committed: true }, interfaceFSM.readState());
++      let rejected = false;
++      try { readBackendProjection("interface-reconciliation", { event: "PROBE", mutationResult: { committed: false },
++        frontendReferences: interfaceFSM.readState() }); } catch { rejected = true; }
++      check(rejected, "reconciliation accepted a noncommitted result");
++      const reconciled = readBackendProjection("interface-reconciliation", { event: "PROBE",
++        mutationResult: { committed: true, payload: { clearGraphSelection: true } }, frontendReferences: interfaceFSM.readState() });
++      check(reconciled.selectedSlot === input.selectedSlot && reconciled.assetSelection === input.assetSelection,
++        "registered reconciliation query disagrees with owner calculation");
+       check(Object.isFrozen(input) && input.selectedSlot === target.id,
+         "reconciliation input is not an immutable resolved reference");
+       const moved = appFSM.state.assetPath;
+@@ -5267,9 +5291,15 @@
+           getChart(frozenId).editor.editable === false && JSON.stringify(getChart(conversionId)) === conversionBefore &&
+           !result.changed.chartIds.includes(conversionId), "cascade lost retained identity or mutated conversion/frozen scope");
+         const refs = interfaceFSM.readState(), hints = { graphObjectIndexMaps: maps, chartId, selectedIndexHint: null };
+-        check(buildFrontendReconciliationInput("PROBE", { selectionHints: hints }, refs).graphObject === null,
++        check(buildFrontendReconciliationInput("PROBE", { committed: true, payload: { clearGraphSelection: true } }, refs)
++          .graphObject === refs.graphObjectIndex, "raw command payload overrode committed reconciliation hints");
++        const effect = { referencesRemoved: false, pathOnly: true }, resolved = buildFrontendReconciliationInput("PROBE",
++          { committed: true, projectionEffect: effect, selectionHints: { resetInterfaceSelection: true } }, refs);
++        check(resolved.graphObject === null && resolved.assetKind === null && Object.isFrozen(resolved.projectionEffect) &&
++          resolved.projectionEffect !== effect && !Object.isFrozen(effect), "reconciliation leaked mutable effects or lost explicit none");
++        check(buildFrontendReconciliationInput("PROBE", { committed: true, selectionHints: hints }, refs).graphObject === null,
+           "cascade map overrode explicit none hint");
+-        check(buildFrontendReconciliationInput("PROBE", { selectionHints: { graphObjectIndexMaps: maps } },
++        check(buildFrontendReconciliationInput("PROBE", { committed: true, selectionHints: { graphObjectIndexMaps: maps } },
+           { ...refs, graphObjectIndex: 2 }).graphObject === null, "removed original object selection was retained");
+       } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboardProjection = render; interfaceFSM.notify = notify;
+         initialize.call(activeProject, saved); interfaceFSM.state = session; interfaceRuntime.selectedSlotId = selected; }
+@@ -6744,6 +6774,9 @@
+             Object.assign(value.slots[0].content.imageSettings, patch);
+           }),
+         value => { delete value.slots[0].content.imageSettings.scale; },
++        value => { value.export.height = BackendSettings.defaults.limits.export.logicalHeight[0]; },
++        value => { value.layout.gridRows = BackendSettings.defaults.limits.layout.gridRows[1] + 1; },
++        value => { value.layout.slotStyle.radius = BackendSettings.defaults.limits.layout.radius[1] + 1; },
+       ];
+       for (const mutate of invalid) {
+         const candidate = structuredClone(state); mutate(candidate);
+@@ -6762,6 +6795,18 @@
+       content.extension = { nested: [false, 0, ""] }; slot.caption = "";
+       const freeze = value => { if (value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
+       freeze(source);
++      let reads = 0;
++      const first = new ProjectObject(createProjectState()), second = new ProjectObject(createProjectState());
++      first.projectName = "snapshot-first"; second.projectName = "snapshot-second";
++      const registry = new ProjectObjectRegistry(() => ++reads === 1 ? first : second)
++        .registerPath("project", PROJECT_OBJECT_PATHS.project).registerPath("layout", PROJECT_OBJECT_PATHS.layout);
++      const snapshot = registry.snapshot(["project", "layout"]);
++      check(reads === 1 && snapshot.project.projectName === "snapshot-first" &&
++        Object.isFrozen(snapshot) && Object.isFrozen(snapshot.layout.slotStyle) && snapshot.layout !== first.layout,
++        "registry snapshot queried multiple authorities or returned mutable aliases");
++      const detached = immutableProjectCopy(source);
++      check(Object.isFrozen(detached.slots[0].content.extension.nested) && !Object.hasOwn(detached.slots[0], "chart"),
++        "immutable read normalized slots or omitted recursive detachment");
+       const copy = projectClone(source);
+       check(copy !== source && copy.slots[0] !== slot && copy.slots[0].content !== content &&
+         copy.slots[0].content.imageSettings !== settings && source.slots[0].content === content &&
+@@ -6846,6 +6891,9 @@
+       check(read.imageSettings !== local.imageSettings && source.content === local && !slotHasNonDefaultLocalState(source),
+         "pure local read normalized live frozen input or counted geometry as payload");
+       const extended = structuredClone(source); extended.content.imageSettings.extension = { kept: true };
++      const reordered = structuredClone(source);
++      reordered.content.imageSettings = Object.fromEntries(Object.entries(reordered.content.imageSettings).reverse());
++      check(!slotHasNonDefaultLocalState(reordered), "record key ordering changed local-default equality");
+       const captioned = structuredClone(source); captioned.caption = "";
+       check(slotHasNonDefaultLocalState(extended) && slotHasNonDefaultLocalState(captioned),
+         "nondefault query ignored whole image settings or explicit empty caption");
+diff --git a/development-versions.json b/development-versions.json
+index 8715590676c93a2e6bc4ff519314eccd5670dad2..1445f8ad074bf0e9923beb3211be348d639e9573 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 144,
++      "revision": 145,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:21da391d3918b20b7041083cbdd09762847afe8d6232cab19e445b115a5fbf68",
++      "fingerprint": "sha256:ba6ad182dc54a6045c4eb034ee6f59e871bed05bc5d9ad157a247a2c96d9716e",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261113-001-assets-files-module-translation.md"
++      "validation_review": "agent_space/reviews/review-20261113-002-project-state-translation-open.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/plans/plan-025.md b/agent_space/plans/plan-025.md
+index 05f4b1f5070cb179f445e4e42310bf9a82d443be..4f4fe10e82bb85242087033028c0ed250b7e1975 100644
+--- a/agent_space/plans/plan-025.md
++++ b/agent_space/plans/plan-025.md
+@@ -6,7 +6,7 @@
+ 
+ 이 계획은 Plan024의 **앞으로 수행할 작업 선택·순서·종료 관리**를 대체한다. Plan023/024, 기존 patch/review와 WIP는 이력으로 보존한다. Source/PlusCal/정책을 바꾸거나 새 논리 모듈을 설계하는 계획이 아니다. Plan024의 화면 → raster → 나머지 번역 → 허가된 통합 검증 순서는 유지한다. 앞 두 범위의 정적 대응 기록을 재사용하고, 현재 세 번째 범위를 모듈별로 마무리한다.
+ 
+-기준은 `development-versions.json`의 Source45/current, PlusCal25/current, code144/stale, 선택적 verification26/stale이다(3차 번역 반영). HEAD는 `28e6dc762c75c8a2ffbbe53ed08b323f0b2b82bd`이며 현재 코드는 그 이후 미커밋 WIP를 포함한다. 본 계획의 최초 작성은 문서 변경뿐이었으며, 이후 코드 번역 차수에서만 revision/fingerprint를 갱신한다. derived_from은 같은 상위 명세를 유지한다.
++기준은 `development-versions.json`의 Source45/current, PlusCal25/current, code145/stale, 선택적 verification26/stale이다(4차의 번역 가능한 절차 반영, 4차 전체 종료 아님). HEAD는 `28e6dc762c75c8a2ffbbe53ed08b323f0b2b82bd`이며 현재 코드는 그 이후 미커밋 WIP를 포함한다. 본 계획의 최초 작성은 문서 변경뿐이었으며, 이후 코드 번역 차수에서만 revision/fingerprint를 갱신한다. derived_from은 같은 상위 명세를 유지한다.
+ 
+ 지금까지 한 일: r133–136 화면 선택·host 수명·geometry/zoom·resize 연결, r137 renderer 화면/raster 절차군, r138 command tuple와 실제 public 소비자, r139 system 시작 순서, r140 graph 계산, r141 Plotly import 변환을 번역했다. 이것은 유효한 부분 진척이지 15개 모듈 전체 완료가 아니다. 마지막 모듈 현황 답변의 ‘전체 미판정’은 **미작성/전면 재작성 필요**라는 뜻이 아니다. 기존 대응 기록과 코드를 이용해 남은 부분만 닫는다.
+ 
+@@ -34,8 +34,8 @@
+ | 1 — 정적 종료(r142) | `backend/graphs` | r140 계산·r141 import를 재사용하고 15개 Source 절차/PlusCal 확장과 실제 candidate/import caller의 대응을 마쳤다. pure normalize, raw header/scalar selection, 전체 validation, command 내부 object 경로와 chart 반환을 번역했다. | `agent_space/reviews/review-20261112-008-graphs-module-translation.md`. 알려진 번역 누락/상위 차단 없음. 실행 검증 대기. |
+ | 2 — 정적 종료(r143) | `backend/layout_annotations` | 11개 Source 절차/PlusCal 확장과 실제 read/candidate caller를 대응했다. grid source/검사/생성 순서, config image 기본값·limits·copy, visible image/caption read와 global caption copy, 관련 current-source 재계산을 번역했다. | `agent_space/reviews/review-20261112-009-layout-annotations-module-translation.md`. 알려진 번역 누락/상위 차단 없음. 실행 검증 대기. Mantine grid 입력 조합은 별도 8차. |
+ | 3 — 정적 종료(r144) | `backend/assets_files` | 21개 Source 절차/PlusCal private expansion과 실제 import/move/FFSX caller를 대응했다. parser/VFS/current metadata, typed package/canonical decoded payload, missing-only constructor·owner·bytes·id 순서를 번역했다. | `agent_space/reviews/review-20261113-001-assets-files-module-translation.md`. 알려진 번역 누락/상위 차단 없음. 실행 검증 대기. wire v3 불변; public/UI tree는 별도 차수. |
+-| 4 — 다음 작업 | `backend/project_state` | 부분 대응. 초기화·schema/reference/owner validation, 공식 read/projection, reconciliation 입력과 tree/trash/deletion-target 경계를 닫는다. | read의 정확한 shape·불변성·전체 Project 참조 검증. canonical tree의 고립된 shape 교체는 하지 않고 public/UI 소비와 연결 가능한 범위를 구분한다(§4). |
+-| 5 | `backend/project_efsm` | 부분 대응. 모든 등록 command의 current resolve → candidate → normalize/validate → 재확인/commit → receipt/effect 분기를 닫는다. | 1–4차 helper와 실제 command가 일치해야 한다. 부분 commit/live fallback/중복 후처리/상태 복구를 임의로 더하지 않는다. 누락이 있으면 해당 command의 caller까지 같은 단위에서 수정한다. |
++| 4 — 진행/연결 대기(r145) | `backend/project_state` | 15개 Source 절차·메서드/PlusCal 확장을 대조하고 current snapshot·pure immutable read, explicit identity/committed hints, config create/validation·local equality를 번역했다. tree/trash의 실제 소비와 ui registry 역참조는 미완료다. | `agent_space/reviews/review-20261113-002-project-state-translation-open.md`. canonical all-chart 표시 read는 상위 결정 대기(7d/8); ui metadata/audit 소유권 연결은 6a/9에서 처리 후 재종료 판정. 전체 종료로 세지 않는다. |
++| 5 — 다음 독립 작업 | `backend/project_efsm` | 부분 대응. 모든 등록 command의 current resolve → candidate → normalize/validate → 재확인/commit → receipt/effect 분기를 닫는다. | 1–4차 helper와 실제 command가 일치해야 한다. 부분 commit/live fallback/중복 후처리/상태 복구를 임의로 더하지 않는다. 누락이 있으면 해당 command의 caller까지 같은 단위에서 수정한다. |
+ | 6a | `frontend/interface_fsm` | 부분 대응. lifecycle/선택/drag/zoom/lock와 reconciliation 전체를 닫는다. r138 final state 반환은 유지한다. | Frontend 소유 session과 Backend 참조 입력, 거부/무변경/실패·publish 순서 대응. renderer를 다시 설계하지 않는다. |
+ | 6b | `application/adapter` | 부분 대응. dispatchProjectCommand/dispatchSlotSelection은 재사용하고 read/preparation/action routing/compatibility facade/실패 전달의 남은 절차를 닫는다. | 5차 receipt → 6a final state → supplied renderer 경계 및 다른 tuple 순서 보존. 일반 강제 refresh/cache/별도 상태 authority를 만들지 않는다. |
+ | 7a | `application/public_api/contract` | 부분 대응. 공개 binding·입력 검증·target capture·단일 lifecycle·helper/wrapper·동기/비동기 결과/오류 계약을 전체 확인한다. | index.js/adapter/system의 실제 노출 경로까지 대응. 이미 처리한 lifecycle/tuple을 재작성하지 않는다. |
+@@ -56,6 +56,7 @@
+ | 항목 | 담당 차수 | 이미 확인된 경계 / 필요한 결정 |
+ | --- | --- | --- |
+ | canonical tree/trash와 all-chart/slot 표시 | 4·7d·8 | tree/subtree, CSV 정보·실제 reference count는 기존 Source/explicit deletion-target로 가능한 범위다. 이전 docs004의 과도한 차단은 §15의 정정을 적용한다. conversion/zero-reference chart의 editability 등 남은 all-chart 표시를 어떤 공식 read로 공급할지가 미정인 부분만 상위 결정 대상으로 둔다. |
++| Backend ui registry 역참조 | 4·6a·9 | 기존 custom reader가 interfaceRuntime.selectedSlotId를 읽고 실제 Frontend metadata/System audit가 ui를 Backend registry 항목처럼 사용한다. callback만 지우거나 가짜 Backend ui를 만들지 않는다. 이미 명시된 소유권의 연결 번역 잔여이며 새 상위 의미 공백은 아니다. 해당 caller와 묶어 제거하기 전 4차를 종료로 세지 않는다. |
+ | grid 단일 차원 변경 | 8 | setGrid(rows,cols)는 명시되어 있으나 render 이후 companion 변경 시 입력 조합/invalid fallback 의미는 미정. freshness 규칙만으로 event-time companion 정책을 만들지 않는다. |
+ | palette load/reset, move null 결과, debug toggle | 8 | public별 서로 다른 결과 계약을 일괄 success 프로토콜로 바꾸지 않는다. Source에 없는 UI 입력/결과 분기는 별도 결정 대상으로 구체화한다. |
+ | programmaticPlotlyRelayout / image decode | 유지·필요한 caller만 | writer 없는 map에 새 sync/cleanup 프로토콜을 만들지 않는다. 이미 번역한 decode identity/최신 settings 구분은 새 증거 없이 재작업하지 않는다. |
+@@ -66,10 +67,11 @@
+ - 모든 변경은 실제 incremental `YYYYMMDD-NNN.patch`/동명 설명으로 기록한다. 코드 변경 때만 revision/fingerprint와 Source/PlusCal lineage를 관리한다. 문서만 고치면 코드 revision을 올리지 않는다. 기존 WIP를 HEAD diff로 덮어쓰거나 제거하지 않는다.
+ - 허용되는 로컬 작업은 읽기·편집·정적 파일/diff/hash뿐이다. app/test/build/checker/TLC/browser를 실행하지 않는다. 이 일정은 Actions/remote write/commit/push/new goal 허가가 아니다. 이전 subagent 사용 허가는 범위 내에서만 적용하며 writer는 하나로 유지한다. 독립 탐색/검토가 실제 필요할 때만 분리하고 중복 문서 읽기를 위한 fanout을 기본 단계로 만들지 않는다.
+ - 새로운 상위 의미, 해결 불가능한 동시 수정, 필요한 접근/실행 권한 부재로 막힌 범위는 근거·시도·정확한 결정/허가 요청을 남기고 그 경계에서 중단한다. 이를 핑계로 번역 가능한 다른 절차를 미루거나, 인접 기능/폴리싱으로 우회하지 않는다.
+-- 최초 계획 작성은 문서 변경뿐이었다. 이후 1차 backend/graphs(r142), 2차 backend/layout_annotations(r143), 3차 backend/assets_files(r144)의 정적 번역을 종료했다. 다음 실행 항목은 **4차 backend/project_state 전체 절차와 실제 read/candidate caller를 끝내는 것**이다.
++- 최초 계획 작성은 문서 변경뿐이었다. 이후 1차 backend/graphs(r142), 2차 backend/layout_annotations(r143), 3차 backend/assets_files(r144)의 정적 번역을 종료했다. 4차의 번역 가능한 절차를 r145에 반영했지만 tree/trash·ui 연결은 위 표처럼 남겼다. 다음 독립 실행 항목은 **5차 backend/project_efsm의 전체 command·receipt/effect 대응**이다. 4차 잔여를 감추거나 완료로 세지 않는다.
+ 
+ ## 6. 차수별 완료 기록
+ 
+ - 1차 / r142: graph 15개 Source 절차 및 PlusCal private expansion의 전체 대응표는 review008에 기록했다. 순수 설정 normalize와 실제 import caller 반환값 대입, enum/style/figure/global/reference validation, header 원값·scalar column 선택, graph-only 반환과 미명세 live postcommit replacement 경로를 바로잡았다. 기존 regression65/66만 확장했다(미실행). Source45/PlusCal25/verification26 및 derived_from 불변, code142/stale. 증분 patch009. 당시 다음 모듈은 2차이며 EFSM/assets 전체까지 종료한 것은 아니다.
+ - 2차 / r143: 11개 Source 절차 및 PlusCal 확장/실제 read·command 대응표는 review009. source-scoped grid 후보, config image 설정, read 복사/visible owner 및 global caption 전체 copy, 관련 label/layout/merge/split의 최신 source 재계산을 번역했다. 기존 regression47/97/106만 확장(미실행). Source45/PlusCal25/verification26/derived_from 불변, code143/stale. 증분 patch010. 당시 다음은 3차 backend/assets_files였으며 EFSM/project_state 전체 종료나 실행 검증을 뜻하지 않는다.
+-- 3차 / r144(2026-11-13): 21개 Source 절차/PlusCal private expansion과 실제 command/import caller 대응표는 `agent_space/reviews/review-20261113-001-assets-files-module-translation.md`. strict delimited parser, unique-owner/directory-inclusive VFS, current final metadata·bytes, typed package/canonical decoded payload와 missing-only constructor·chart owner 검증을 번역했다. 관련 기존 fixtures만 확장·조정(미실행). Source45/PlusCal25/verification26/derived_from 불변, code144/stale. 증분 `agent_space/patches/20261113-001.patch`. 다음은 4차 backend/project_state이며 public/UI tree나 EFSM 전체 종료를 뜻하지 않는다.
++- 3차 / r144(2026-11-13): 21개 Source 절차/PlusCal private expansion과 실제 command/import caller 대응표는 `agent_space/reviews/review-20261113-001-assets-files-module-translation.md`. strict delimited parser, unique-owner/directory-inclusive VFS, current final metadata·bytes, typed package/canonical decoded payload와 missing-only constructor·chart owner 검증을 번역했다. 관련 기존 fixtures만 확장·조정(미실행). Source45/PlusCal25/verification26/derived_from 불변, code144/stale. 증분 `agent_space/patches/20261113-001.patch`. 당시 다음은 4차 backend/project_state였으며 public/UI tree나 EFSM 전체 종료를 뜻하지 않는다.
++- 4차 / r145(2026-11-13): 15개 Source 절차·메서드/PlusCal private expansion의 대응·번역/잔여표는 `agent_space/reviews/review-20261113-002-project-state-translation-open.md`. same-source snapshot, normalize 없는 recursive immutable read, explicit null 참조 승인, committed hint-only reconciliation와 Frontend none 변환, config-owned create/validation·구조적 local equality를 번역했다. 기존 fixtures만 확장·조정(미실행). tree/trash consumer 계약과 Backend ui 역참조가 남아 전체 종료 아님. Source45/PlusCal25/verification26/derived_from 불변, code145/stale. 증분 `agent_space/patches/20261113-002.patch`. 다음 독립 모듈은 5차이며 4차 잔여는 6a/7d/8/9에서 실제 caller와 묶어 해소한다.
+diff --git a/agent_space/reviews/review-20261113-002-project-state-translation-open.md b/agent_space/reviews/review-20261113-002-project-state-translation-open.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..e35d4ea4205c96fc8e6783c3689499baac491f15
+--- /dev/null
++++ b/agent_space/reviews/review-20261113-002-project-state-translation-open.md
+@@ -0,0 +1,36 @@
++# Plan025 / 4차 backend/project_state — r145 번역, 전체 종료 아님
++
++2026-11-13. Source45/PlusCal25를 code145로 번역했다. Source729줄/PlusCal746줄/runtime880줄을 끝까지 확인하고 실제 registry/Frontend/System/public asset 소비자를 대조했다. 이미 대응된 절차는 재사용했다. 실행 검증은 하지 않았다.
++
++## 15개 Source 절차·메서드 / PlusCal 확장 대응
++
++| Source / private 확장 | 대응 및 이번 번역 |
++| --- | --- |
++| createProjectState | Backend config의 layout template 전체를 복사하고 export width를 referenceWidth에서 최종 도출, auto height=null/explicit height 하한으로 설정, 새 빈 slot 이후 whole validation을 거쳐 반환. config는 공유 불변 데이터이며 instance state가 아니다. |
++| validateProjectObjectState | 기존 schema/record/assets bytes·metadata/VFS parent/path/id/nextId/chart owner/geometry/local state 검사 유지. grid/style/label/export/image 범위와 고정 경로는 Backend config를 사용한다. auto height의 명시적 null 제약을 추가. 보정/commit은 하지 않는다. |
++| normalizeSlotContent | 기존 canonical content 우선, missing-only 초기값, legacy alias의 단일 owner plumbing과 extension 보존을 유지. 읽기 시 normalize하는 경로를 제거해 normalize와 immutable read를 구분했다. |
++| slotHasNonDefaultLocalState | content type/chart/image/caption 및 imageSettings 전체의 구조적 값 비교. 고정 4필드 비교 대신 record 순서와 무관한 equality로 Source의 전체 설정 비교를 구현한다. |
++| ProjectObject.read | projectObjectPath의 명시 path를 읽고 structuredClone+recursive freeze. 이전 projectClone의 whole-project slot normalize가 읽기 복사에 섞이지 않게 변경. 권위 변경/보정 없음. |
++| ProjectObject.initialize | 기존 source copy→slot normalize→validate→단일 _state 교체를 유지. Source의 교체 전 실패 보존과 대응한다. |
++| ProjectObjectRegistry.read | 기존 등록 path/reader 확인→현재 provider의 ProjectObject 확인→공식 immutable read를 유지. 아래 ui custom adapter는 별도 미완료 경계다. |
++| Registry.snapshot / SnapshotProjectPathsInRead | provider와 raw _state를 한 번 capture하고 지정된 registered PROJECT_OBJECT_PATHS를 같은 source에서 읽어 전체 immutable snapshot으로 반환. this.read 반복으로 다른 current를 섞거나 읽기 복사에 normalize하지 않는다. 기본 names는 Backend project paths이며 ui는 snapshot field가 아니다. |
++| resolveOwningSlot | 지정 project에 chart가 있고 content.chart를 참조하는 slot이 정확히 하나일 때 반환하는 helper를 추가했다. graph editor 명시 chartId read가 사용한다. |
++| getProjectCsv / getProjectImage / getChart | current collection의 id resolve, 없으면 null. chart의 undefined 반환을 null로 맞췄다. |
++| validateFrontendIntent | 명시 null만 deselection, missing/undefined는 거부. null SELECT_SLOT은 direction과 무관하게 project/toggle-clear. visible content/chart/editable/CSV 참조를 확인한 뒤 승인하며 잘못된 선택은 UI를 변경하지 않는다. reference와 hint만 반환. |
++| buildFrontendReconciliationInput | committed 결과만 수용. reset/clear → 같은 chart의 explicit index hint → 같은 chart map/유효 index 우선순위, current slot/asset 재확인과 canonical path. raw payload.clearGraphSelection을 권위로 사용하지 않는다. projectionEffect는 detached/frozen, 자산 없음은 Backend null이다. 실제 Frontend 소비자만 null을 자기 state의 none으로 변환한다. graph index-only 계산은 CSV 선택을 새로 만들지 않는다. |
++| readBackendProjection / BuildPlainProjectRead | 등록 kind/operation guard와 interface-intent/reconciliation owner 연결. plain immutable copy는 slot을 normalize하지 않는다. Project/slot/layout/labels/settings/palette 반환은 해당 same-source snapshot이며 nested extension도 freeze한다. |
++| BuildGraphEditorRead / BuildImageEditorRead / BuildSurfaceRead / NormalizePreviewReadWidth | canonical slot.content 참조로 읽고 graphId는 유일 owner를 resolve. explicit chart owner는 selected-slot read의 visibility와 혼동하지 않는다. 기존 graph/CSV table/figure/image copied bytes·pure data URL·supplied screen projection은 재사용했다. preview scalar는 number/string/boolean/null만 숫자 변환하고 array/object coercion은 하지 않는다. renderer의 slot-image 외 요청은 supplied surface 분기다. |
++| BuildVfsRead | 기존 path/collision/move/deletion-target 계산의 read 경계를 유지. canonical tree/trash 소비 연결은 아래처럼 남아 있으므로 이 행/모듈을 종료로 표시하지 않는다. |
++
++## 아직 남은 정확한 경계
++
++1. **canonical tree/trash의 coherent public/UI 소비**: Backend `assets.readTree`는 아직 legacy `projectDataTreeSnapshot` flat envelope를 반환하고 `assets.readTrash`는 등록 목록에 있으나 구현 분기가 없다. PlusCal의 canonical node tree/trash subtree로 Backend만 바꾸면 실제 public/Mantine의 directories/data/images/charts/slots·editability 표시가 깨진다. 새 envelope/API, all-chart 공식 read, feature 삭제나 unused Backend-only parallel branch를 만들지 않았다. docs004의 정정대로 CSV metadata/reference counts/explicit-path deletion target은 이미 Source에 있다. 미정인 all-chart/slot 표시 공급 의미만 상위 결정 대상이다. 7d/8차의 실제 소비와 함께 해소 후 이 모듈을 닫는다.
++2. **ui registry의 Backend→Frontend 역참조**: initializeProjectObjects의 기존 ui custom reader가 interfaceRuntime.selectedSlotId를 읽는다. 실제 Frontend definition.objects 알림과 System audit가 ui를 registry 항목처럼 사용하므로 callback 하나만 제거하거나 가짜 Backend ui state로 대체하지 않았다. 이는 새 상위 의미 결정이 아니라 이미 명시된 소유권의 연결 번역 잔여다. 6a/9차에서 실제 metadata/audit owner 경로와 묶어 제거해야 하며 그 전에는 이 모듈을 전체 종료로 표시하지 않는다. snapshot을 Backend path로 한정한 것이 이 custom reader 자체를 제거한 것은 아니다.
++
++알려진 두 경계를 이유로 이미 명시된 다른 절차 번역을 미루지 않았다. Plan025 규칙에 따라 이 모듈은 **미완료/연결 대기**로 남기고 다음 독립 5차 backend/project_efsm을 진행할 수 있다. 상위 결정은 필요할 때 구체적인 read/표시 선택지로 요청하며 freshness나 권위 정책에서 UI 의미를 추측하지 않는다.
++
++## 증거와 실행 경계
++
++기존 regression37/38/109/140/141/142에 명시 null vs missing, noneditable 선택 거부, committed-only/hint-only 우선순위·detached effect, 설정 범위/auto height, one-provider immutable snapshot, read의 normalize 무혼입, record 순서 독립 비교를 추가했다. 새 ID 없이 authored-only, 미실행이다.
++
++r144 canonical-LF byte hash `sha256:21da391d3918b20b7041083cbdd09762847afe8d6232cab19e445b115a5fbf68`를 재현했다. code145/stale `sha256:ba6ad182dc54a6045c4eb034ee6f59e871bed05bc5d9ad157a247a2c96d9716e`. Source45/PlusCal25/verification26/derived_from 불변. 이 독립 hash/정적 대조는 공식 checker/전체 current 판정이 아니다. app/tests/build/checker/TLC/browser/Actions/remote/commit/push/new goal은 실행하지 않았다.

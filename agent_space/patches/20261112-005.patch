@@ -1,0 +1,313 @@
+diff --git a/sourcecode/system.js b/sourcecode/system.js
+index 6eeb22eba01770d378c759f3e4bc92631c39b81d..207a6bdc2ad0b6cc382d2d4fbe77b1a16ff79385 100644
+--- a/sourcecode/system.js
++++ b/sourcecode/system.js
+@@ -1,19 +1,21 @@
+ // Source: sourcescript/system.py (same logical owner); pseudocode/system.pcal.
+ import { appFSM, readWorkspaceHint, renderDashboard, startupCoreRuntime, renderProjectObject } from './application/adapter.js';
+-import { downloadProject, publishPublicApi } from './application/public_api/index.js';
++import { downloadProject, importProjectFile, publishPublicApi } from './application/public_api/index.js';
+ import { applyImageSettingsFromValues } from './application/public_api/layout_annotations.js';
+ import { buildProjectObject, ffpxBase64ToBytes, ffpxBytesToBase64, ffpxDataUrlBytes, ffpxReadProject, projectVfs } from './backend/assets_files.js';
+ import { ALLOWED_AXIS_SIDES, ALLOWED_CHART_TYPES, ALLOWED_LINE_DASHES, ALLOWED_MARKER_SYMBOLS, CURRENT_OBJECT_KEYS, layout, normalizeGlobalSettings, traces } from './backend/graphs.js';
+ import { normalizeImageSettings } from './backend/layout_annotations.js';
+ import { ProjectStateMachine, initializeProjectEFSM, projectEFSM } from './backend/project_efsm.js';
+-import { ProjectObject, ProjectObjectRegistry, activeProject, getProjectCsv, initializeActiveProject, initializeProjectObjects, projectClone, projectObjects, readProjectNumber, validateProjectObject } from './backend/project_state.js';
++import { ProjectObject, ProjectObjectRegistry, activeProject, createProjectState, getProjectCsv, initializeActiveProject, initializeProjectObjects, projectClone, projectObjects, readProjectNumber, validateProjectObject } from './backend/project_state.js';
+ import { APP_STATE_DEFINITIONS, InterfaceStateMachine, initializeInterfaceFSM, interfaceFSM } from './frontend/interface_fsm.js';
+ import { mountMantineUi } from './frontend/mantine_ui.js';
+ import { debugLog } from './frontend/renderer.js';
+ 
++export const REQUIRED_RENDERER_HOSTS = ["dashboard", "dashboardCaption", "graphArea", "readmeContent"];
++
+ export const REQUIRED_APP_FUNCTIONS = [
+   ["readProjectNumber", () => typeof readProjectNumber === "function"],
+-  ["importProject", () => typeof importProject === "function"],
++  ["importProjectFile", () => typeof importProjectFile === "function"],
+   ["ffpxReadProject", () => typeof ffpxReadProject === "function"],
+   ["downloadProject", () => typeof downloadProject === "function"],
+   ["ffpxDataUrlBytes", () => typeof ffpxDataUrlBytes === "function"],
+@@ -24,7 +26,7 @@
+   ["traces", () => typeof traces === "function"],
+   ["layout", () => typeof layout === "function"],
+   ["renderDashboard", () => typeof renderDashboard === "function"],
+-  ["makeSlots", () => typeof makeSlots === "function"],
++  ["createProjectState", () => typeof createProjectState === "function"],
+   ["applyImageSettingsFromValues", () => typeof applyImageSettingsFromValues === "function"],
+   ["projectClone", () => typeof projectClone === "function"],
+   ["ProjectObject", () => activeProject instanceof ProjectObject],
+@@ -36,6 +38,18 @@
+   ["projectEFSM", () => projectEFSM instanceof ProjectStateMachine],
+   ["auditApp", () => typeof auditApp === "function"],
+ ];
++
++// system.pcal RequireCoreAndHosts: reject before any initial presentation,
++// lifecycle completion, public publication or UI mount. These are platform
++// bindings for the Source-defined core/renderer prerequisites, not project state.
++export function requireCoreRuntimeAndRendererHosts() {
++  const missing = REQUIRED_APP_FUNCTIONS.filter(([, check]) => !check()).map(([name]) => name);
++  missing.push(...REQUIRED_RENDERER_HOSTS.filter((id) => !document.getElementById(id)));
++  if (typeof window.Plotly?.react !== "function") missing.push("Plotly.react");
++  if (!window.FastFigureUiRuntime) missing.push("FastFigureUiRuntime");
++  if (!window.fastFigureUiRoot) missing.push("fastFigureUiRoot");
++  if (missing.length) throw Error(`Fast Figure startup prerequisites missing: ${missing.join(", ")}`);
++}
+ 
+ export function auditObject(object, chartId, index, issues, allowNoCsv = false) {
+   if (!object || typeof object !== "object") {
+@@ -89,7 +103,7 @@
+   let issues = [],
+     ids = [...document.querySelectorAll("[id]")].map((node) => node.id),
+     duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))],
+-    missingControls = ["dashboard", "dashboardCaption", "graphArea", "readmeContent"].filter(
++    missingControls = REQUIRED_RENDERER_HOSTS.filter(
+       (id) => !document.getElementById(id),
+     ),
+     missingFunctions = REQUIRED_APP_FUNCTIONS.filter(([, check]) => !check()).map(
+@@ -274,7 +288,7 @@
+   initializeProjectObjects();
+   initializeInterfaceFSM();
+   initializeProjectEFSM();
+-  publishPublicApi();
++  requireCoreRuntimeAndRendererHosts();
+ window.addEventListener("error", (event) =>
+   debugLog("window:error", {
+     message: event.message,
+@@ -310,7 +324,10 @@
+   "info",
+ );
+ 
+-auditApp("app:init");
++  // Source/PlusCal: ready -> expose -> mount -> final owner audit.
++  publishPublicApi();
+   mountMantineUi();
++  auditApp("app:init");
++  return "initialized_runtime";
+ }
+ initializeFastFigure();
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+index 87e802760a903bc394dd5df4334fc6fa12d2dbe8..f6794e10da4564f751fd8599417f0122ad5794ec 100644
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -211,7 +211,9 @@
+ 
+ export let activeProject;
+ export function initializeActiveProject() {
+-  activeProject = new ProjectObject();
++  const candidate = createProjectState();
++  validateProjectObjectState(candidate, { requireSlots: true });
++  activeProject = new ProjectObject(candidate);
+ }
+ 
+ export class ProjectObjectRegistry {
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 40abb6a0d5eb3f8ee9cadcfff9b191c1b3e38399..0b1de7223f81d937cef65014ebcb39c2ef137b7b 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -98,6 +98,66 @@
+       }
+       check(JSON.stringify(input) === before && activeProject._state === original && interfaceFSM.readState().revision === state.revision,
+         "startup audit repaired input, mutated project or published runtime state");
++
++      // Exercise the actual system caller without reinitializing the mounted app.
++      // Owners are controlled only for this call; the real prerequisite guard
++      // still resolves the current runtime and existing renderer hosts.
++      const startup = { initializeActiveProject, initializeProjectObjects, initializeInterfaceFSM,
++        initializeProjectEFSM, requireCoreRuntimeAndRendererHosts, startupCoreRuntime,
++        publishPublicApi, mountMantineUi, auditApp, debugLog, createProjectState,
++        ready: interfaceFSM.ready, readyDescriptor: Object.getOwnPropertyDescriptor(interfaceFSM, "ready"),
++        addEventListener: window.addEventListener };
++      const order = [];
++      try {
++        const invalidInitial = projectClone(original); invalidInitial.slots = [];
++        createProjectState = () => invalidInitial;
++        let invalidRejected = false;
++        try { startup.initializeActiveProject(); } catch { invalidRejected = true; }
++        check(invalidRejected && activeProject._state === original,
++          "invalid initial candidate replaced Backend authority before validation");
++        createProjectState = startup.createProjectState;
++        const requiredLength = REQUIRED_APP_FUNCTIONS.length;
++        REQUIRED_APP_FUNCTIONS.push(["regression-missing-core", () => false]);
++        let prerequisiteRejected = false;
++        try { startup.requireCoreRuntimeAndRendererHosts(); }
++        catch (error) { prerequisiteRejected = error.message.includes("regression-missing-core"); }
++        finally { REQUIRED_APP_FUNCTIONS.length = requiredLength; }
++        check(prerequisiteRejected, "missing core prerequisite was not rejected");
++
++        initializeActiveProject = () => order.push("project");
++        initializeProjectObjects = () => order.push("registry");
++        initializeInterfaceFSM = () => order.push("frontend");
++        initializeProjectEFSM = () => order.push("backend-fsm");
++        requireCoreRuntimeAndRendererHosts = () => {
++          order.push("require"); startup.requireCoreRuntimeAndRendererHosts();
++        };
++        startupCoreRuntime = () => order.push("supplied-startup");
++        interfaceFSM.ready = () => order.push("ready");
++        publishPublicApi = () => order.push("expose");
++        mountMantineUi = () => order.push("mount");
++        auditApp = (context) => { order.push("audit"); check(context === "app:init", "wrong startup audit context"); };
++        debugLog = () => {};
++        window.addEventListener = () => {};
++        check(initializeFastFigure() === "initialized_runtime", "system startup completion was not returned");
++        check(order.join(",") === "project,registry,frontend,backend-fsm,require,supplied-startup,ready,expose,mount,audit",
++          `system startup diverged from pseudocode order: ${order}`);
++        order.length = 0;
++        const failure = new Error("missing startup host");
++        requireCoreRuntimeAndRendererHosts = () => { order.push("require"); throw failure; };
++        let observed;
++        try { initializeFastFigure(); } catch (error) { observed = error; }
++        check(observed === failure && order.join(",") === "project,registry,frontend,backend-fsm,require",
++          "startup failure continued into render/ready/expose/mount/audit or replaced the failure");
++      } finally {
++        ({ initializeActiveProject, initializeProjectObjects, initializeInterfaceFSM,
++          initializeProjectEFSM, requireCoreRuntimeAndRendererHosts, startupCoreRuntime,
++          publishPublicApi, mountMantineUi, auditApp, debugLog, createProjectState } = startup);
++        if (startup.readyDescriptor) Object.defineProperty(interfaceFSM, "ready", startup.readyDescriptor);
++        else delete interfaceFSM.ready;
++        window.addEventListener = startup.addEventListener;
++      }
++      check(activeProject._state === original && interfaceFSM.readState().revision === state.revision,
++        "controlled system startup fixture changed real authority/runtime state");
+     });
+     await run(16, "layout preview cells follow grid tracks", async () => {
+       appFSM.send("TOGGLE_OVERLAY", { overlay: "layout", source: "regression" });
+diff --git a/development-versions.json b/development-versions.json
+index e1df509eb8edc125df8298ee9f6ac60227c4f4bf..d938fb4307272d972af6ddc13065ff7b1d89d1fc 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 138,
++      "revision": 139,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:65ac8481f55dbb75be947d677f6d199e3f9ccef95a23e54b6a6dbc880157590a",
++      "fingerprint": "sha256:419427a0e71efed193e0ae5f5cd1767e5b4e3ca78920d2d241efe7897ae917ea",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261112-003-command-boundary-translation.md"
++      "validation_review": "agent_space/reviews/review-20261112-005-system-startup-translation.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/plans/plan-024.md b/agent_space/plans/plan-024.md
+index b5d1b29f1749bbf2411d83ec4d8e96151b50ebc9..7d15cab09258e060f619e732d27af18035d18df1 100644
+--- a/agent_space/plans/plan-024.md
++++ b/agent_space/plans/plan-024.md
+@@ -160,3 +160,15 @@
+ No runtime, fixture, metadata or upstream bytes changed. Code138/**stale** and canonical-LF fingerprint `sha256:65ac8481f55dbb75be947d677f6d199e3f9ccef95a23e54b6a6dbc880157590a` independently reproduced; Source45/PlusCal25/verification26 and lineage byte-preserved. Static read/search/diff/hash and incremental patch consistency only; no app/test/build/checker/TLC/browser/Actions/remote/commit/push/generated/dist/workflow/policy execution/change. No test-count or unexecuted validation claim. Exact pre-edit WIP baseline and prior artifacts preserved; incremental docs patch/explanation `agent_space/patches/20261112-004.patch` / `.md`. Independent reviewer gate remains required, not final acceptance.
+ 
+ One independent already-specified next proposal, **not edited/auto-authorized**: Layout `changeGrid` invocation-time companion dimension (§5), replacing render-closure completion through the existing current `layout.readState`/setGrid owners, without stale whole-layout merge, cache or API. Authority/caller locations and the bounded proposal are recorded in the review. Continue only under the supervisor's next bounded assignment; do not reopen the blocked tree shape by invention.
++
++## 15. System startup translation and independent blocker correction — r139 (2026-11-12)
++
++Continued under the user's translation-only instruction and authorized separated subagent exploration/review. A direct full Source/system and PlusCal/system correspondence found a concrete complete-caller gap: the actual system published API before initial presentation/ready and audited before Mantine mount, with no explicit core/renderer prerequisite assertion. Earlier stage1 static supplied-renderer coverage did not close that system-caller order; this is a correction to its recorded boundary, not a new product design.
++
++Translated `initializeFastFigure` as one sequence: initial candidate must validate with required slots before replacing Backend authority; construct existing concrete registries/FSMs; require actual core bindings and renderer hosts; existing Application supplies initial read/state/actions to startup renderer; ready; expose immutable public API; mount UI; final owner audit; return the specified completion. Existing invalid legacy callable checks now bind the actual import/initial-candidate owners. No new FSM, state store, fallback/retry/rollback or synchronization rule. Existing regression15 covers ordering, prerequisite/candidate failure and restored mocks; fixtures are not executed. Full correspondence: `agent_space/reviews/review-20261112-005-system-startup-translation.md`.
++
++Independent review of §14/review004 **blocked its overbroad blocker claims**. Canonical trash traversal plus existing specified explicit-path deletion-target reads supplies nonempty detection, disjoint real-reference counts and detached CSV rows/headerLines. The selected-only JS wrapper is an untranslated implementation restriction, not missing upstream permission. These facts do not need a new aggregate API/envelope. The genuine remaining preservation gap is all-chart/slot display correspondence, particularly editability for conversion/zero-reference charts. Review004/explanation004 now carry an explicit correction; original patch004 remains historical evidence and patch005 records the correction. The whole tree consumer migration still remains open; no runtime shape change was made here.
++
++The Layout companion-dimension proposal at the end of §14 is **not approved translation**: independent policy review found that current-read rules do not define event-time input completion or invalid-input fallback. Resolve that meaningful input contract in Source then PlusCal first. Palette success/reset, null-move result and debug-toggle caller questions remain open; no inferred uniform result/toggle protocol is adopted. Separate read-only scout coverage found existing corresponding config/debug setter/graph public and layout read/session owners, not a further missing unit in that inspected scope. Remaining Backend graph/layout calculation correspondence has not been exhaustively closed.
++
++Code139/**stale**, independent canonical-LF fingerprint `sha256:419427a0e71efed193e0ae5f5cd1767e5b4e3ca78920d2d241efe7897ae917ea`; baseline r138 fingerprint independently reproduced. Source45/PlusCal25/verification26 and derived_from remain unchanged. Static read/edit/diff/hash/patch consistency only; no app/test/build/checker/TLC/browser/Actions/remote/commit/push, upper-policy/spec/dist/workflow changes or new goal. Independent reviewer `dc9f97c5-44cd-45c1-b66d-134037e5730f` returned no issues / OK with notes for scoped runtime and Case15 only; not whole-stage, metadata/docs or execution acceptance. Incremental exact-WIP patch/explanation `agent_space/patches/20261112-005.patch` / `.md`. **Stage3 remains open; no native/integration/official validation pass is claimed.**
+diff --git a/agent_space/reviews/review-20261112-004-tree-trash-contract-open.md b/agent_space/reviews/review-20261112-004-tree-trash-contract-open.md
+index 8d87fbf6e67513deaa2cf8338b1ccd15458baee8..25b8007948200380ac327c2b595432d2d10e134e 100644
+--- a/agent_space/reviews/review-20261112-004-tree-trash-contract-open.md
++++ b/agent_space/reviews/review-20261112-004-tree-trash-contract-open.md
+@@ -1,6 +1,14 @@
+ # Tree/trash public projection contract blocker — 2026-11-12
+ 
+-## Decision and scope
++## Independent review correction — 2026-11-12 (supersedes overbroad blocker claims below)
++
++Independent reviewer `0e250b82-85e9-4231-9c64-80c2c9c88a8b` blocked acceptance of the original report. The genuine unresolved fact is **all-chart/slot display correspondence, particularly editability for conversion or zero-reference charts**. Canonical tree/trash and existing explicit-path deletion-target reads already support CSV metadata and trash confirmation: traverse the exact trash subtree, identify distinct CSV/image paths, obtain detached targets/owners/counts through the specified public binding, and sum disjoint per-asset real-reference counts. CSV targets expose rows/headerLines for readability/row-count display. Source `backend/project_state.py:319`, PlusCal `application/public_api/contract.pcal:39,144-146` and `backend/project_state.pcal:595-603` specify this route. The selected-only JS wrapper is an untranslated restriction, **not missing upstream permission**. No aggregate API/envelope or Backend access from UI is needed for these facts. Original contrary statements below are historical and superseded by this correction; the remaining all-chart gap still prevents the entire consumer-preserving tree migration from closing.
++
++The Layout changeGrid proposal below was independently rejected by reviewer `2e261b7c-675b-42ea-9278-05f0c4ebd6fb`: current-read rules do not decide event-time companion dimension or invalid-input normalization. It is not an already-authorized translation seam. Source meaning then PlusCal must resolve that input contract first. No runtime changes implement either proposal in patch004/005.
++
++The original patch004 is preserved as historical evidence; patch005 records this correction and its explanation rather than rewriting a previously recorded diff.
++
++## Decision and scope (original record; qualifications above apply)
+ 
+ Plan024 stage3 remains **pseudocode → sourcecode translation**, not new feature/API design. The bounded tree/readTrash unit was traced through Backend projection, public boundary and every production Mantine consumer. A concrete upstream-contract gap prevents a coherent consumer-preserving translation. The supervisor approved **documentation only**: do not add an unused Backend-only branch, change the public shape in isolation, omit slot/reference UI, invent a new envelope/read API or expose Backend internals to Mantine. No runtime or fixture bytes changed in this unit. This is not tree scope closure, stage3 completion or final acceptance.
+ 
+@@ -51,8 +59,8 @@
+ Before the coherent runtime unit can continue, the authority owner must specify how the retained UI obtains:
+ 
+ 1. All visible slot identities/ordering/content references and each owning chart's editability/real CSV references, preserving conversion exclusion and repeated reference counts.
+-2. CSV readability/row-count metadata and image/CSV display identity alongside the canonical tree, without changing canonical parent/order semantics.
+-3. Empty-trash nonempty detection and aggregate reference confirmation using the same real-reference set as cascade; specify the official public read/caller adaptation and read-time scope. Existing selected-only deletion wrapper is not a drop-in aggregate.
++2. CSV readability/row-count metadata and trash confirmation do **not** require new upstream meaning: explicit-path detached deletion targets plus canonical traversal provide those facts. Translate the existing selected-only public wrapper restriction when the coherent tree consumer unit can proceed.
++3. Keep confirmation UI-local and command-time revalidation with the existing emptyTrash owner; no new aggregate query is needed. The unresolved contract concerns all-chart/slot display facts, not the already-specified reference set.
+ 4. Exact public/caller shape correspondence: whether existing explicit reads are sufficient after a specified adaptation/composition, or an upstream-defined public projection is needed. If any product behavior is intentionally removed/changed, that requires an explicit upstream decision rather than worker omission.
+ 
+ These are options/questions for the authority owner, not permission to add a summary API, tree envelope or new domain branch. Any new meaning must start in Source, close there and propagate through PlusCal before runtime translation. The current canonical tree/trash meaning itself is not proposed for reversal to match JS.
+diff --git a/agent_space/patches/20261112-004.md b/agent_space/patches/20261112-004.md
+index cfc1389b0714f42884199a9ff08a77e17d594552..64f3776a9645b7b675a1f3c4e22b5504eb7df668 100644
+--- a/agent_space/patches/20261112-004.md
++++ b/agent_space/patches/20261112-004.md
+@@ -1,6 +1,10 @@
+ # 20261112-004 — Tree/trash contract blocker (documentation only)
+ 
+-## Change and rationale
++## Subsequent independent-review correction (recorded by patch005)
++
++The original blocker was too broad: canonical trash traversal plus the specified explicit-path `assets.readDeletionTarget` route supplies nonempty detection, disjoint real-reference counts and detached CSV metadata. The selected-only JavaScript wrapper is an untranslated restriction, not absent upstream permission. Only unavailable all-chart/slot facts (notably editability for conversion/zero-reference charts) remain the demonstrated preservation-contract blocker. See the correction at the top of review004 and Plan024 §15. The Layout invocation-time composition proposal was independently blocked because its mutation-input rule is not specified. These corrections supersede contrary claims below; original patch004 bytes/hash remain unchanged as historical evidence. No runtime change belongs to patch004.
++
++## Change and rationale (historical; correction above applies)
+ 
+ This Plan024 stage3 unit traced the full official canonical tree/trash read, public boundary and actual Mantine consumers. Source/PlusCal require a current immutable canonical VFS tree and exact trash subtree. Current JavaScript instead exposes flat directories/data/images/charts/slots and Application `{hasContents,referenceCount}` summaries. Actual consumers depend on all-slot/chart/reference data, CSV readability/row counts, trash confirmation and graph-editor CSV options. Existing selected-only owner reads and visible layout geometry do not specify their complete replacement.
+ 
+diff --git a/agent_space/reviews/review-20261112-005-system-startup-translation.md b/agent_space/reviews/review-20261112-005-system-startup-translation.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..a5a2bb4940ec1465cc0a66cd59937fae76434634 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261112-005-system-startup-translation.md
+@@ -0,0 +1,38 @@
++# System startup correspondence and remaining stage3 scope — 2026-11-12
++
++## Authority and bounded result
++
++This is pseudocode → sourcecode translation, not product/API design. Source45 > PlusCal25 > code139/stale; policy, upper meaning and lineage are unchanged. `sourcescript/system.py:208-237` and the complete `pseudocode/system.pcal:14-49` specify initial candidate validation, prerequisite checking, supplied initial rendering, ready, API exposure, Mantine mount and final invariant audit. The actual system caller previously exposed the public API before rendering/ready, omitted a prerequisite gate and audited before mount. Earlier stage1 supplied-renderer closure did not establish this complete system-caller order. This correction qualifies that historical closure: renderer procedure coverage remains, but system orchestration needed the changes recorded here. It is not a reason to rewrite already-translated procedures for volume.
++
++## Procedure / branch / real-caller map
++
++| Authoritative step | Target translation and actual call path |
++| --- | --- |
++| `CreateValidatedInitialProject` | `sourcecode/system.js:initializeFastFigure()` invokes Backend `initializeActiveProject()`. `sourcecode/backend/project_state.js:initializeActiveProject()` now creates the candidate, calls `validateProjectObjectState(candidate,{requireSlots:true})`, then binds the new `ProjectObject`. Failure leaves the previous binding untouched; no empty initial authority is published first. Existing constructor validation is retained, not a new validation protocol. No CSV or fake chart is created. |
++| `RequireCoreAndHosts` | After concrete registry/FSM construction, `requireCoreRuntimeAndRendererHosts()` checks existing required callable/type bindings and the required renderer host IDs, Plotly presentation function and UI runtime/root. Missing prerequisites throw before supplied presentation, ready, public publication or mount. These concrete platform checks realize the specified assertion; no new recover/retry/fallback/lifecycle branch. |
++| Concrete lexical bindings | Existing `REQUIRED_APP_FUNCTIONS` incorrectly tested absent `importProject`/`makeSlots` identifiers. It now imports/tests the actual project import wrapper `importProjectFile` and initial candidate owner `createProjectState`. Other audit checks remain. The shared required-host list is reused by the startup guard and existing manual/final audit, not duplicated as project state. |
++| `PrepareBoundaryInputs` / `PrepareAndRenderCore` | Existing Application `startupCoreRuntime()` obtains the one official renderer projection and Interface read, builds public action references from real wrappers, then calls `startupCoreRuntimeProjection`. That frontend procedure preserves zoom → controller → existing slots → style → supplied-reference audit. It does not depend on early `window.FastFigureApi` publication. Physical placement of those Application-owned steps is retained; no second read/store/authority. |
++| `ReadyThroughApplication` | Existing Application facade `appFSM.ready()` remains after supplied rendering, using owner-resolved workspace. This change does not manufacture a second lifecycle state or event. |
++| `ExposeExistingBoundary` | `publishPublicApi()` is moved after ready. Its existing immutable public composition and individual public outputs are unchanged. |
++| `MountExistingUi` / `AuditStartup` | Existing `mountMantineUi()` is invoked before `auditApp("app:init")`. Final project/reference/runtime checks remain with their existing owners. The system returns the PlusCal completion `"initialized_runtime"`; no new session object/envelope. React commit timing is not claimed verified or made into a new synchronization protocol. |
++| Failure | Candidate validation and prerequisite failures propagate without continuing into rendering/ready/API/mount/audit. There is no invented rollback of a successful initialization, caught-and-converted failure, retry or partial-startup success result. |
++
++## Fixture correspondence, not execution
++
++Existing regression15 is extended, without new IDs. It exercises actual `initializeFastFigure()` with call-local owner mocks, asserts project/registry/FSM → guard → supplied-startup → ready → expose → mount → audit, checks returned completion, and asserts a prerequisite failure is preserved and stops downstream work. It also exercises the actual candidate initializer against an empty-slot candidate and actual prerequisite guard against a missing callable. All mocked bindings/listener function/ready property descriptor are restored in finally; the fixture checks the live project identity and Interface revision remain unchanged. Existing supplied-reference audit tests remain. These fixtures were authored and statically inspected, **not run**.
++
++## Independent tree review correction and remaining scope
++
++Independent reviewer `0e250b82-85e9-4231-9c64-80c2c9c88a8b` blocked the original review004 documentation: trash confirmation and CSV metadata do not require new upstream meaning. Canonical traversal and the specified explicit-path `assets.readDeletionTarget` public route provide detached targets, rows/headerLines, owners and disjoint real-reference counts. The selected-only JS wrapper is an untranslated restriction, not lack of authority. Corrections are recorded atop review004 and explanation004; original patch004 is preserved, and patch005 records the correction rather than rewriting a historical diff. All-chart/slot display facts, especially editability of conversion/zero-reference charts, remain a genuine unavailable-public-read correspondence. No new tree envelope/API or Frontend Backend access is selected here, and no tree runtime migration is claimed.
++
++The earlier Layout invocation-time companion proposal was independently rejected by reviewer `2e261b7c-675b-42ea-9278-05f0c4ebd6fb`: official-current-read rules do not decide whether an unedited grid dimension/invalid-input fallback follows event-time or rendered values. Source then PlusCal must resolve that input meaning. Palette success/reset, null move UI interpretation and the debug-toggle caller likewise are not authorization to invent uniform result/toggle protocols. Debug setter authority-before-telemetry is already translated; no new runtime read API is added.
++
++Read-only scout `4a480e4c-ca78-4208-a107-46e0fec0d33e` found corresponding configuration freezing, debug setter, graph public wrappers and layout read/session wrappers in its bounded search. It did not establish another missing coherent unit and did not audit all Backend graph/layout calculations. This is neither a whole-stage closure claim nor proof that no other translation gap exists.
++
++## Evidence and omissions
++
++- Exact pre-edit r138 WIP snapshot, not HEAD, is the incremental basis. Prior WIP/artifacts preserved. Original review004 preimage is recovered exactly from its recorded all-addition patch; explanation004 is snapshotted before correction.
++- Independent canonical-LF byte aggregation reproduces r138 `sha256:65ac8481f55dbb75be947d677f6d199e3f9ccef95a23e54b6a6dbc880157590a`; current runtime fingerprint `sha256:419427a0e71efed193e0ae5f5cd1767e5b4e3ca78920d2d241efe7897ae917ea`. Source45/PlusCal25/verification26 and derived_from are unchanged.
++- Only reads, edits, searches, static byte/diff/hash and patch consistency inspections are permitted here. Official checker not executed; code remains stale, not validated/current. No local app/test/build/TLC/browser, Actions, remote write, commit/push, policy/Source/PlusCal/dist/generated/workflow changes or new goal.
++- One auxiliary reviewer launch failed due to a parent cwd typo; failure was reported and that lane stopped, with no CLI workaround. The completed existing reviewer was explicitly resumed for the current runtime/fixture review (`dc9f97c5-44cd-45c1-b66d-134037e5730f`). Its full saved result was read: no issues, OK with notes for scoped runtime/Case15 only, not metadata/docs/whole-stage or execution acceptance. Report: `C:/Users/CNU/.pi/agent/sessions/--C--Users-CNU-Desktop-rclone-v1.74.4-windows-amd64-shared-agent_space--/subagent-artifacts/outputs/0e250b82-85e9-4231-9c64-80c2c9c88a8b/stage3/tree-blocker-final-review.dc9f97c5.md`.
++- Stage3 remains open, with known upstream questions and remaining bounded Backend graph/layout correspondence to inspect. Native Plotly/browser/Mantine mount/download and inline/split/official validation remain separately pending. Execution permission is not a prerequisite for further safe translation.

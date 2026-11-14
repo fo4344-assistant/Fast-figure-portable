@@ -1,0 +1,37 @@
+diff --git a/development-versions.json b/development-versions.json
+index f5f9c0e..2023810 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 149,
++      "revision": 150,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,7 +54,7 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:74d64c3bccb30edae96f516e09f6e2b5577b4993544f96f5b3afba42380dd476",
++      "fingerprint": "sha256:763bbf55995abd9daa1d864de6c5125641c22a2febeb6ea23db687acbd358b85",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+diff --git a/sourcecode/application/public_api/assets.js b/sourcecode/application/public_api/assets.js
+index 69ec041..e9373ae 100644
+--- a/sourcecode/application/public_api/assets.js
++++ b/sourcecode/application/public_api/assets.js
+@@ -187,8 +187,9 @@ export function connectProjectAssetPathToSlot(path, kind, slotId) {
+ }
+ 
+ export async function importProjectFileToSlot(file, slotId, choosePlan) {
+-  const target = readBackendProjection("slot-selection-context", { slotId }), kind = readAssetFileKind(file);
++  const target = readBackendProjection("slot-selection-context", { slotId });
+   if (!target) throw Error("가져올 대상 슬롯이 없습니다.");
++  const kind = readAssetFileKind(file);
+   if (kind === "slot") return importSelectedGraphFile(file, target.id);
+   if (!["data", "image"].includes(kind)) throw Error("지원하지 않는 파일 형식입니다.");
+   const directory = PROJECT_ASSET_DIRECTORIES[kind === "data" ? "csv" : "image"],

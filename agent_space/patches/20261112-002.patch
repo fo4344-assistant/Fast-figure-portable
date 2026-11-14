@@ -1,0 +1,613 @@
+--- a/sourcecode/frontend/renderer.js
++++ b/sourcecode/frontend/renderer.js
+@@ -542,7 +542,25 @@
+   installSlotClickControllerProjection(frontendActions);
+   const presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
+   applySlotStyleProjection(projectProjection.layout.slotStyle, interfaceState);
++  auditSuppliedRendererContracts(projectProjection, interfaceState);
+   return presentation;
++}
++
++// Low-level realization of startup's supplied project/reference/runtime audit.
++// This checks the boundary input; it does not resolve Backend state or repair it.
++function auditSuppliedRendererContracts(projectProjection, interfaceState) {
++  const slots = new Map();
++  for (const slot of projectProjection.visibleSlots) {
++    if (slots.has(slot.id) || slot.hidden ||
++        (slot.content.chart != null && slot.chart?.id !== slot.content.chart) ||
++        (slot.imageView && slot.imageView.slotId !== slot.id))
++      throw Error("renderer input의 visible slot reference가 유효하지 않습니다.");
++    slots.set(slot.id, slot);
++  }
++  for (const label of projectProjection.orderedSlotLabels)
++    if (!slots.has(label.slotId)) throw Error("renderer input의 label reference가 유효하지 않습니다.");
++  if (interfaceState.selectedSlotId != null && !slots.has(interfaceState.selectedSlotId))
++    throw Error("renderer input의 selected slot reference가 유효하지 않습니다.");
+ }
+ 
+ // Physical renderer entry for Source renderDashboard(projectProjection, interfaceState).
+@@ -699,10 +717,35 @@
+ export function exportImageLoad(src) {
+   return new Promise((resolve, reject) => {
+     let image = new Image();
+-    image.onload = () => resolve(image);
+-    image.onerror = () => reject(Error("이미지를 읽을 수 없습니다."));
+-    image.src = src;
+-  });
++    image.onload = () => {
++      image.onload = image.onerror = null;
++      resolve(image);
++    };
++    image.onerror = () => {
++      const failure = Error("이미지를 읽을 수 없습니다.");
++      image.onload = image.onerror = null;
++      try { image.removeAttribute("src"); } catch {}
++      reject(failure);
++    };
++    try { image.src = src; }
++    catch (failure) {
++      image.onload = image.onerror = null;
++      try { image.removeAttribute("src"); } catch {}
++      reject(failure);
++    }
++  });
++}
++
++// This decode belongs to one raster task, never a live dashboard surface.
++async function paintExportImage(src, paint) {
++  const image = await exportImageLoad(src);
++  let failed = false;
++  try { return paint(image); }
++  catch (failure) { failed = true; throw failure; }
++  finally {
++    try { image.removeAttribute("src"); }
++    catch (cleanupFailure) { if (!failed) throw cleanupFailure; }
++  }
+ }
+ 
+ export function exportDrawImage(ctx,image,rect,slot,scaleX,scaleY) {
+@@ -854,12 +897,18 @@
+     if (!slot) return [];
+     const style = getComputedStyle(element);
+     return [{ slot, rect: element.getBoundingClientRect(), background: style.backgroundColor,
+-      border: style.borderColor, plot: element.querySelector(".plot-item") }];
++      border: style.borderColor, radius: parseFloat(style.borderRadius) || 0 }];
+   }), captionStyle = captionShown ? getComputedStyle(caption) : null,
+     captionColors = captionStyle ? { background: captionStyle.backgroundColor,
+-      border: captionStyle.borderColor, color: captionStyle.color } : null;
+-  let canvas = document.createElement("canvas"),
+-    ctx = canvas.getContext("2d"),
++      border: captionStyle.borderColor, color: captionStyle.color,
++      fontFamily: captionStyle.fontFamily, fontSize: parseFloat(captionStyle.fontSize),
++      padding: parseFloat(captionStyle.paddingLeft) || 0,
++      lineHeight: parseFloat(captionStyle.lineHeight) / parseFloat(captionStyle.fontSize) } : null,
++    presentationScale = dashboardRect.width / snapshot.layout.slotStyle.referenceWidth;
++  const canvas = document.createElement("canvas");
++  let failed = false;
++  try {
++  const ctx = canvas.getContext("2d"),
+     scaleX = width / sourceWidth,
+     scaleY = height / sourceHeight,
+     point = (rect) => ({
+@@ -873,7 +922,6 @@
+   ctx.fillStyle = getComputedStyle(dashboard).backgroundColor || "#fff";
+   ctx.fillRect(0, 0, width, height);
+   statusOut.textContent = "그래프를 합성하는 중…";
+-  try {
+     for (let element of slotElements) {
+       let rect = point(element.rect);
+       ctx.fillStyle = element.background || "#fff";
+@@ -893,25 +941,25 @@
+           rect.height * scaleY,
+         );
+       }
+-      let plot = element.plot, imageView = element.slot.imageView;
+-      if (plot) {
+-        let uri = await Plotly.toImage(plot, {
+-          format: "png",
+-          width: Math.max(2, Math.round(rect.width * scaleX)),
+-          height: Math.max(2, Math.round(rect.height * scaleY)),
+-        });
+-        let image = await exportImageLoad(uri);
+-        ctx.drawImage(
+-          image,
+-          rect.left * scaleX,
+-          rect.top * scaleY,
+-          rect.width * scaleX,
+-          rect.height * scaleY,
+-        );
+-      } else if (imageView) {
+-        let image = await exportImageLoad(imageView.src);
+-        exportDrawImage(ctx, image, rect, element.slot, scaleX, scaleY);
+-      }
++      // Rasterize the supplied figure in a task-owned host. A live plot may be
++      // replaced/purged while a preceding slot awaits; it is not a task resource.
++      ctx.save();
++      try {
++        ctx.beginPath();
++        ctx.roundRect(rect.left * scaleX, rect.top * scaleY, rect.width * scaleX,
++          rect.height * scaleY, element.radius * Math.min(scaleX, scaleY));
++        ctx.clip();
++        const figure = element.slot.figure, imageView = element.slot.imageView;
++        if (element.slot.content.contentType !== "image" && figure) {
++          const uri = await exportChartImage(figure, rect.width * scaleX, rect.height * scaleY,
++            presentationScale * scaleY, 1);
++          await paintExportImage(uri, image => ctx.drawImage(image, rect.left * scaleX,
++            rect.top * scaleY, rect.width * scaleX, rect.height * scaleY));
++        } else if (imageView) {
++          await paintExportImage(imageView.src, image =>
++            exportDrawImage(ctx, image, rect, element.slot, scaleX, scaleY));
++        }
++      } finally { ctx.restore(); }
+     }
+     for (let label of labels) {
+       let rect = point(label.rect);
+@@ -933,53 +981,43 @@
+         rect.width * scaleX,
+         rect.height * scaleY,
+       );
+-      ctx.strokeStyle = style.border || "#B0CFCE";
+-      ctx.strokeRect(
+-        rect.left * scaleX,
+-        rect.top * scaleY,
+-        rect.width * scaleX,
+-        rect.height * scaleY,
+-      );
+-      let prefix = captionView.name || "",
+-        body = captionView.text || "",
+-        fontSize = captionView.settings.fontSize * scaleY,
+-        lineHeight =
+-          captionView.settings.fontSize * captionView.settings.lineHeight * scaleY,
+-        baseX = (rect.left + 8) * scaleX,
+-        y = (rect.top + 8) * scaleY + fontSize;
+-      ctx.fillStyle = style.color || "#383A42";
+-      if (prefix) {
+-        ctx.font = `${captionView.nameBold ? "700" : "400"} ${fontSize}px ${captionView.settings.fontFamily}`;
+-        ctx.fillText(prefix, baseX, y);
+-        let prefixWidth = ctx.measureText(prefix + " ").width,
+-          available = Math.max(10, (rect.width - 16) * scaleX),
+-          words = body.split(/\s+/).filter(Boolean),
+-          firstLine = "";
+-        ctx.font = `400 ${fontSize}px ${captionView.settings.fontFamily}`;
+-        while (words.length) {
+-          let trial = firstLine ? `${firstLine} ${words[0]}` : words[0];
+-          if (
+-            firstLine &&
+-            ctx.measureText(trial).width > Math.max(10, available - prefixWidth)
+-          )
+-            break;
+-          firstLine = trial;
+-          words.shift();
++      if (bordersVisible) {
++        ctx.strokeStyle = style.border || "#B0CFCE";
++        ctx.strokeRect(rect.left * scaleX, rect.top * scaleY, rect.width * scaleX, rect.height * scaleY);
++      }
++      // Same paragraph/prefix algorithm as target export, measured at this
++      // capture's viewport font/width. It never changes the persistent preset.
++      const layout = await exportCaptionLayout({
++        ...snapshot,
++        layout: { ...snapshot.layout, slotStyle: { ...snapshot.layout.slotStyle, referenceWidth: rect.width } },
++        annotations: { ...snapshot.annotations, captions: { ...captionView,
++          settings: { ...captionView.settings, fontFamily: style.fontFamily,
++            fontSize: style.fontSize, lineHeight: style.lineHeight } } },
++        captionReferenceStyle: { ...snapshot.captionReferenceStyle, padding: style.padding },
++      }, (text, family, size, weight) => {
++        ctx.font = `${weight} ${size}px ${family}`;
++        return ctx.measureText(text).width;
++      });
++      ctx.save();
++      try {
++        ctx.beginPath();
++        ctx.rect(rect.left * scaleX, rect.top * scaleY, rect.width * scaleX, rect.height * scaleY);
++        ctx.clip();
++        ctx.fillStyle = style.color || "#383A42";
++        ctx.textBaseline = "alphabetic";
++        let y = (rect.top + layout.padding + layout.fontSize) * scaleY;
++        for (const line of layout.lines) {
++          let x = (rect.left + layout.padding) * scaleX;
++          if (line.prefix) {
++            ctx.font = `${layout.prefixWeight} ${layout.fontSize * scaleY}px ${layout.fontFamily}`;
++            ctx.fillText(line.prefix, x, y);
++            x += line.prefixWidth * scaleX;
++          }
++          ctx.font = `${layout.bodyWeight} ${layout.fontSize * scaleY}px ${layout.fontFamily}`;
++          ctx.fillText(line.text, x, y);
++          y += layout.lineHeight * scaleY;
+         }
+-        if (firstLine) ctx.fillText(firstLine, baseX + prefixWidth, y);
+-        body = words.join(" ");
+-        if (body) y += lineHeight;
+-      }
+-      ctx.font = `400 ${fontSize}px ${captionView.settings.fontFamily}`;
+-      if (body)
+-        exportWrapText(
+-          ctx,
+-          body,
+-          baseX,
+-          y,
+-          Math.max(10, (rect.width - 16) * scaleX),
+-          lineHeight,
+-        );
++      } finally { ctx.restore(); }
+     }
+     let mime = format === "jpeg" ? "image/jpeg" : "image/png",
+       blob = await exportCanvasBlob(canvas, mime, dpi),
+@@ -991,10 +1029,15 @@
+     try { debugLog("dashboard:export", { format, width, height, dpi, slots: slotElements.length }); } catch {}
+     return { outcome: "saved", width, height, automaticHeight: false };
+   } catch (error) {
++    failed = true;
+     // Progress/debug reporting is not authority over an already failed export.
+     try { statusOut.textContent = "저장 실패: " + (error?.message ?? String(error)); } catch {}
+     try { debugLog("dashboard:export-error", { message: error?.message ?? String(error) }); } catch {}
+     throw error;
++  } finally {
++    // Drop only this task's backing store, including encoding/handoff failures.
++    try { canvas.width = canvas.height = 0; }
++    catch (cleanupFailure) { if (!failed) throw cleanupFailure; }
+   }
+ }
+ 
+@@ -1150,8 +1193,10 @@
+     bordersVisible = snapshot.bordersVisible,
+     visibleSlots = snapshot.slots.filter((slot) => !slot.hidden),
+     captionShown = captionView.enabled;
+-  let canvas = document.createElement("canvas"),
+-    ctx = canvas.getContext("2d"),
++  const canvas = document.createElement("canvas");
++  let failed = false;
++  try {
++  const ctx = canvas.getContext("2d"),
+     baseReference = targetExportGeometry(snapshot.layout, width),
+     outputScale = width / baseReference.referenceWidth,
+     captionReference = await exportCaptionLayout(snapshot, (text, family, size, weight) => {
+@@ -1218,7 +1263,6 @@
+   });
+   let slotRadius = () => geometry.radius;
+   statusOut.textContent = "출력 크기로 그래프를 다시 렌더링하는 중…";
+-  try {
+     for (let slot of visibleSlots) {
+       let rect = slotRect(slot),
+         colors = snapshot.slotColors[slot.id],
+@@ -1237,12 +1281,11 @@
+             rect.height,
+             geometry.scale,
+             rasterScale,
+-          ),
+-          image = await exportImageLoad(uri);
+-        ctx.drawImage(image, rect.left, rect.top, rect.width, rect.height);
++          );
++        await paintExportImage(uri, image =>
++          ctx.drawImage(image, rect.left, rect.top, rect.width, rect.height));
+       } else if (imageModel) {
+-        let image = await exportImageLoad(imageModel.src);
+-        exportDrawImage(ctx, image, rect, slot, 1, 1);
++        await paintExportImage(imageModel.src, image => exportDrawImage(ctx, image, rect, slot, 1, 1));
+       }
+       ctx.restore();
+       if (bordersVisible) {
+@@ -1293,6 +1336,7 @@
+       ctx.rect(0, top, width, captionLayout.height);
+       ctx.clip();
+       let y = top + captionLayout.padding + captionLayout.fontSize;
++      ctx.textBaseline = "alphabetic";
+       ctx.fillStyle = snapshot.captionStyle.color;
+       for (let line of captionLayout.lines) {
+         let x = captionLayout.padding;
+@@ -1337,10 +1381,14 @@
+     }); } catch {}
+     return { outcome: "saved", width: rasterWidth, height: rasterHeight, automaticHeight };
+   } catch (error) {
++    failed = true;
+     // Progress/debug reporting is not authority over an already failed export.
+     try { statusOut.textContent = "저장 실패: " + (error?.message ?? String(error)); } catch {}
+     try { debugLog("dashboard:export-error", { message: error?.message ?? String(error) }); } catch {}
+     throw error;
++  } finally {
++    try { canvas.width = canvas.height = 0; }
++    catch (cleanupFailure) { if (!failed) throw cleanupFailure; }
+   }
+ }
+ 
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -84,6 +84,20 @@
+       check(activeProject.slots.length === 4, "default project does not contain four slots");
+       const rendered = document.querySelectorAll("#dashboard .slot:not(.hidden)");
+       check(rendered.length === 4, "default 2x2 slots were not rendered before interaction");
++      const input = readBackendProjection("renderer"), state = interfaceFSM.readState(),
++        before = JSON.stringify(input), original = activeProject._state;
++      auditSuppliedRendererContracts(input, state);
++      const badLabel = projectClone(input); badLabel.orderedSlotLabels = [{ slotId: -1 }];
++      const duplicate = projectClone(input); duplicate.visibleSlots.push(duplicate.visibleSlots[0]);
++      const badChart = projectClone(input); badChart.visibleSlots[0].content.chart = -1;
++      for (const [projection, runtime] of [[badLabel, state], [duplicate, state], [badChart, state],
++          [input, { ...state, selectedSlotId: -1 }]]) {
++        let rejected = false;
++        try { auditSuppliedRendererContracts(projection, runtime); } catch { rejected = true; }
++        check(rejected, "startup supplied-reference audit accepted an invalid boundary relation");
++      }
++      check(JSON.stringify(input) === before && activeProject._state === original && interfaceFSM.readState().revision === state.revision,
++        "startup audit repaired input, mutated project or published runtime state");
+     });
+     await run(16, "layout preview cells follow grid tracks", async () => {
+       appFSM.send("TOGGLE_OVERLAY", { overlay: "layout", source: "regression" });
+@@ -6546,7 +6560,7 @@
+       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = interfaceRuntime.selectedSlotId,
+         initialize = activeProject.initialize, render = renderDashboard, report = status, notify = interfaceFSM.notify,
+         target = exportDashboardTarget, query = readBackendProjection, calculate = chartFigure, diagnostic = debugLog,
+-        chartImage = exportChartImage, encode = exportCanvasBlob, download = downloadExportPayload;
++        chartImage = exportChartImage, encode = exportCanvasBlob, download = downloadExportPayload, load = exportImageLoad;
+       try {
+         const fresh = createProjectState(); fresh.annotations.captions.enabled = false;
+         fresh.export.width = 200; fresh.export.heightMode = "auto";
+@@ -6578,15 +6592,18 @@
+         initialize.call(activeProject, createProjectState());
+         const current = activeProject._state, frontend = interfaceFSM.state, input = JSON.stringify(captured);
+         chartFigure = () => { throw Error("Frontend recalculated Backend graph"); };
+-        let pictures = 0, files = 0;
++        let pictures = 0, files = 0, encodedCanvas;
++        const decodes = [];
++        exportImageLoad = async src => { const image = await load(src); decodes.push(image); return image; };
+         exportChartImage = async figure => {
+           check(figure.data.some(trace => trace.y?.includes(5)), "Frontend did not consume captured numeric figure");
+           pictures++; return document.createElement("canvas").toDataURL();
+         };
+-        exportCanvasBlob = async () => new Blob(["owned raster"]);
++        exportCanvasBlob = async canvas => { encodedCanvas = canvas; return new Blob(["owned raster"]); };
+         downloadExportPayload = async payload => { check(payload.blob instanceof Blob, "raster handoff lost encoded blob"); files++; };
+         const result = await exportDashboardTarget(captured, sink);
+         check(result.outcome === "saved" && result.width === 200 && pictures === 1 && files === 1 && reads === 1 &&
++          encodedCanvas.width === 0 && encodedCanvas.height === 0 && decodes.length === 1 && decodes[0].getAttribute("src") === null &&
+           JSON.stringify(captured) === input && activeProject._state === current && interfaceFSM.state === frontend,
+           "target renderer reread current Backend/Frontend, mutated snapshot/state or downloaded more than once");
+         const progress = [];
+@@ -6610,7 +6627,7 @@
+         check(caught === failure && files === 2 && activeProject._state === current,
+           "target status/debug reporting replaced original failure or handed off failed output");
+       } finally {
+-        exportDashboardTarget = target; readBackendProjection = query; chartFigure = calculate; exportChartImage = chartImage; debugLog = diagnostic;
++        exportDashboardTarget = target; readBackendProjection = query; chartFigure = calculate; exportChartImage = chartImage; debugLog = diagnostic; exportImageLoad = load;
+         exportCanvasBlob = encode; downloadExportPayload = download;
+         renderDashboard = render; status = report; interfaceFSM.notify = notify;
+         initialize.call(activeProject, saved); interfaceFSM.state = session; interfaceRuntime.selectedSlotId = selected;
+@@ -6620,7 +6637,7 @@
+     await run(148, "Raster graph presentation scales copied figures and cleans only its temporary host", async () => {
+       const plot = Plotly.newPlot, image = Plotly.toImage, purge = Plotly.purge, calculate = chartFigure,
+         supplied = { data: [{ y: [1], line: { width: 2 } }], layout: { font: { size: 10 } }, config: { editable: true } },
+-        before = JSON.stringify(supplied), hosts = [];
++        before = JSON.stringify(supplied), hosts = [], load = exportImageLoad;
+       try {
+         chartFigure = () => { throw Error("Frontend queried graph authority"); };
+         Plotly.newPlot = async (host, data, layout, config) => {
+@@ -6648,21 +6665,42 @@
+         caught = null;
+         try { await exportChartImage(supplied, 40, 30, 2, 1); } catch (error) { caught = error; }
+         check(caught === failure && !hosts.at(-1).isConnected, "initial plot failure was masked by purge or leaked host");
+-      } finally { Plotly.newPlot = plot; Plotly.toImage = image; Plotly.purge = purge; chartFigure = calculate; hosts.forEach(host => host.remove()); }
++        let released = 0;
++        const decoded = { removeAttribute: name => { check(name === "src", "released unrelated image field"); released++; } };
++        exportImageLoad = async () => decoded;
++        check(await paintExportImage("task-image", value => { check(value === decoded, "paint lost owned decode"); return 7; }) === 7 && released === 1,
++          "successful paint retained its decode or lost return value");
++        decoded.removeAttribute = () => { released++; throw cleanup; };
++        for (const primary of [failure, null, undefined]) {
++          let rejected = false;
++          try { await paintExportImage("task-image", () => { throw primary; }); }
++          catch (error) { rejected = true; check(error === primary, "decode cleanup replaced paint failure"); }
++          check(rejected, "failed paint resolved during cleanup");
++        }
++        caught = null;
++        try { await paintExportImage("task-image", () => 7); } catch (error) { caught = error; }
++        check(caught === cleanup && released === 5, "cleanup-only failure was hidden or decode released more than once");
++        exportImageLoad = async () => { throw failure; };
++        caught = null;
++        try { await paintExportImage("bad-image", () => { throw Error("paint after failed decode"); }); }
++        catch (error) { caught = error; }
++        check(caught === failure && released === 5, "failed decode painted or released another task's image");
++      } finally { Plotly.newPlot = plot; Plotly.toImage = image; Plotly.purge = purge; chartFigure = calculate; exportImageLoad = load; hosts.forEach(host => host.remove()); }
+     });
+ 
+     await run(149, "Current capture uses one official snapshot and one-shot viewport without changing export presets", async () => {
+       const saved = projectClone(activeProject._state), session = interfaceFSM.state,
+         initialize = activeProject.initialize, capture = exportDashboard, query = readBackendProjection,
+         encode = exportCanvasBlob, download = downloadExportPayload, dashboard = $("dashboard"), diagnostic = debugLog,
+-        bounds = dashboard.getBoundingClientRect, elements = dashboard.querySelectorAll;
++        bounds = dashboard.getBoundingClientRect, elements = dashboard.querySelectorAll,
++        raster = exportChartImage, load = exportImageLoad;
+       try {
+         const fresh = createProjectState(); fresh.annotations.captions.enabled = false;
+         fresh.annotations.labels.enabled = false; fresh.export.width = 987; fresh.export.height = 654;
+         fresh.export.dpi = 144; fresh.export.format = "jpeg";
+         initialize.call(activeProject, fresh);
+         interfaceFSM.state = Object.freeze({ ...session, lifecycle: "ready" });
+-        let reads = 0, captured, sink, measurements = 0, files = 0;
++        let reads = 0, captured, sink, measurements = 0, files = 0, encodedCanvas;
+         const statusSink = () => {};
+         readBackendProjection = (kind, request) => {
+           if (kind === "export" && request.operation === "print.capture") reads++;
+@@ -6687,6 +6725,7 @@
+         };
+         dashboard.querySelectorAll = () => [];
+         exportCanvasBlob = async (canvas, mime, dpi) => {
++          encodedCanvas = canvas;
+           check(canvas.width === 321 && canvas.height === 123 && mime === "image/jpeg" && dpi === 144,
+             "capture used live export settings or target pixel dimensions instead of viewport");
+           return new Blob(["viewport"]);
+@@ -6695,7 +6734,7 @@
+         const result = await exportDashboard(captured, sink);
+         check(result.outcome === "saved" && result.width === 321 && result.height === 123 &&
+           result.automaticHeight === false && measurements === 1 && files === 1 && reads === 1 &&
+-          activeProject._state === current && interfaceFSM.state === frontend && JSON.stringify(captured) === before,
++          encodedCanvas.width === 0 && encodedCanvas.height === 0 && activeProject._state === current && interfaceFSM.state === frontend && JSON.stringify(captured) === before,
+           "capture reread authority/viewport, changed settings or lost one-shot outcome");
+         const limited = projectClone(captured); limited.rasterLimits.rasterDimension = 300;
+         check((await exportDashboard(limited)).reason === "raster-limit" && files === 1,
+@@ -6718,7 +6757,73 @@
+         const empty = await exportDashboard(captured, noisySink);
+         check(empty.outcome === "rejected" && empty.reason === "grid-geometry" && files === 2 && progress.length === 3,
+           "current empty-viewport status failure replaced rejection or handed off output");
++
++        // Actual current raster path: replacing viewport hosts after the first
++        // await cannot make later slots read live/purged plots or project state.
++        const surfaces = projectClone(captured), graphCalls = [], decoded = [], hosts = [];
++        surfaces.visibleSlots = surfaces.visibleSlots.slice(0, 3);
++        surfaces.visibleSlots.forEach((slot, index) => {
++          slot.content.contentType = index === 1 ? "image" : "graph";
++          slot.figure = index === 1 ? null : { data: [{ y: [index] }], layout: {}, config: {} };
++          slot.imageView = index === 1 ? { src: "copied-image" } : null;
++          const host = document.createElement("div"); host.dataset.slot = slot.id;
++          host.style.borderRadius = "4px";
++          host.getBoundingClientRect = () => ({ left: index * 100, top: 0, width: 100, height: 100 });
++          host.querySelector = () => { throw Error("capture retained a live plot"); };
++          hosts.push(host);
++        });
++        const surfaceBefore = JSON.stringify(surfaces);
++        dashboard.getBoundingClientRect = () => ({ left: 0, top: 0, right: 321.2, bottom: 123.4, width: 321.2, height: 123.4 });
++        dashboard.querySelectorAll = () => hosts;
++        let release;
++        const gate = new Promise(resolve => { release = resolve; });
++        exportChartImage = async (figure, width, height, scale, rasterScale) => {
++          graphCalls.push({ figure, width, height, scale, rasterScale });
++          if (graphCalls.length === 1) await gate;
++          return "owned-raster";
++        };
++        exportImageLoad = async src => {
++          const image = document.createElement("canvas"); image.width = image.height = 2;
++          image.naturalWidth = image.naturalHeight = 2;
++          image.removeAttribute = name => { check(name === "src", "capture released unrelated decode state"); decoded.push(src); };
++          return image;
++        };
++        exportCanvasBlob = async canvas => { encodedCanvas = canvas; return new Blob(["surfaces"]); };
++        const pendingCapture = exportDashboard(surfaces);
++        hosts.forEach(host => { host.getBoundingClientRect = () => { throw Error("viewport reread after await"); }; });
++        release();
++        const surfaceResult = await pendingCapture;
++        check(surfaceResult.outcome === "saved" && graphCalls.length === 2 && decoded.join(",") === "owned-raster,copied-image,owned-raster" &&
++          graphCalls[0].figure === surfaces.visibleSlots[0].figure && graphCalls[1].figure === surfaces.visibleSlots[2].figure &&
++          graphCalls.every(call => call.width > 0 && call.height > 0 && call.scale > 0 && call.rasterScale === 1) &&
++          encodedCanvas.width === 0 && encodedCanvas.height === 0 && JSON.stringify(surfaces) === surfaceBefore && activeProject._state === current,
++          "capture lost supplied figures, retained decoded resources, reread live plots/geometry or mutated input/authority");
++        const captionNode = $("dashboardCaption"), captionBounds = captionNode.getBoundingClientRect,
++          captionCss = captionNode.style.cssText, captionClass = captionNode.className,
++          fillText = CanvasRenderingContext2D.prototype.fillText, painted = [];
++        try {
++          const captionInput = projectClone(captured);
++          captionInput.annotations.captions.enabled = true;
++          captionInput.annotations.captions.name = "Title";
++          captionInput.annotations.captions.text = "first\n\nlast";
++          captionNode.classList.remove("hidden");
++          captionNode.style.cssText = "font:16px Arial;line-height:24px;padding:8px;";
++          captionNode.getBoundingClientRect = () => ({ left: 0, top: 130, right: 321.2, bottom: 250, width: 321.2, height: 120 });
++          dashboard.querySelectorAll = () => [];
++          CanvasRenderingContext2D.prototype.fillText = function(text, x, y) {
++            painted.push({ text, x, y }); return fillText.call(this, text, x, y);
++          };
++          await exportDashboard(captionInput);
++          const first = painted.find(value => value.text === "first"), last = painted.find(value => value.text === "last");
++          check(painted.some(value => value.text === "Title ") && first && last && last.y - first.y > 40 &&
++            encodedCanvas.width === 0 && encodedCanvas.height === 0 && captionInput.annotations.captions.text === "first\n\nlast",
++            "current caption flattened blank paragraphs, lost prefix, retained canvas or changed supplied text");
++        } finally {
++          captionNode.getBoundingClientRect = captionBounds; captionNode.style.cssText = captionCss; captionNode.className = captionClass;
++          CanvasRenderingContext2D.prototype.fillText = fillText;
++        }
+       } finally {
++        exportChartImage = raster; exportImageLoad = load;
+         exportDashboard = capture; readBackendProjection = query; exportCanvasBlob = encode; downloadExportPayload = download; debugLog = diagnostic;
+         dashboard.getBoundingClientRect = bounds; dashboard.querySelectorAll = elements;
+         initialize.call(activeProject, saved); interfaceFSM.state = session;
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 136,
++      "revision": 137,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:88a9efa34356b8e38b355e8f8b18f1ae7a844f09a80aaac86202cc6f15ec5acc",
++      "fingerprint": "sha256:789a25f36c02776a713b180ea0c9a0550c73ba9a77a34295795a968d704d94de",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261112-001-selection-resize-open.md"
++      "validation_review": "agent_space/reviews/review-20261112-002-screen-export-translation.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+--- a/agent_space/plans/plan-024.md
++++ b/agent_space/plans/plan-024.md
+@@ -124,3 +124,15 @@
+ Existing case160 is extended through the actual public entry: exact final state/projection handoff, obsolete operation ignored, current selection resized and rejected selection silent; it rejects any synthetic global event. No new case IDs. Static diff/whitespace and canonical-LF hash checks only; no app/test/build/checker/Actions execution. Prior r135 hash was independently reproduced from pre-edit bytes. Code136/stale hash `sha256:88a9efa34356b8e38b355e8f8b18f1ae7a844f09a80aaac86202cc6f15ec5acc`; Source45/PlusCal25/verification26 unchanged. Review `agent_space/reviews/review-20261112-001-selection-resize-open.md`; incremental patch/explanation `agent_space/patches/20261112-001.patch` / `.md`.
+ 
+ Stage1 remains open: finish the remaining procedure/caller map and narrow effect/controller correspondence using current implementations, not historical OPEN lists. Native browser/Plotly/mounted listener and inline/split execution remain pending separately. No capture/export/general API work, policy/dist changes, commit/push or delegation; prior WIP preserved.
++
++## 12. Screen scope closure and current/target raster translation — r137 (2026-11-12)
++
++User clarification: this is pseudocode → sourcecode translation, not new feature implementation. The complete policy was reread, with Source consulted for ambiguous intent. The remaining screen controller/narrow/workspace/geometry/startup procedures and actual callers are mapped in `agent_space/reviews/review-20261112-002-screen-export-translation.md`. Already translated procedures were not rewritten for volume. One missing startup primitive was translated: supplied project/reference/runtime audit now follows style, without Backend reads, repairs or publication. Final authoritative invariant audit remains with system/owners.
++
++**Stage1 static translation scope is closed** after that correction and procedure/caller map; native Plotly/browser/mounted timing/inline-split execution is still pending. This does not promote whole code lineage to current or claim fidelity validation.
++
++Then the planned stage2 current/target raster unit was translated coherently. Current capture no longer retains live plot handles across awaits: supplied figures render in task-owned hosts at one-shot measured viewport dimensions. Graph/image slot clipping, supplied caption border visibility, paragraph/prefix/blank-line caption painting and measured viewport font/padding are connected. Target caption painting uses an explicit alphabetic baseline. Both paths use finally-owned decoded image sources and canvas backing stores, retaining existing task-local Plotly/URL cleanup, original Error/null/undefined failure, limits/encoding/one-handoff outcomes and non-authoritative progress. No capture preset, cross-task snapshot store, freeze/latest-sync protocol or new domain rules.
++
++The named stage2 procedures/resource boundaries are now translated in the statically inspected scope; remaining native font/Plotly/canvas/download and integration verification is explicitly deferred, not substituted with helper-count claims. The next translation scope is stage3: general dispatchProjectCommand tuple and actual public consumers, then remaining Backend/Application/UI correspondence and deferred read/freshness owners. Execution permission is not required to continue that translation.
++
++Existing cases15/147/148/149 were extended; no new case IDs. Only static file/diff/whitespace and independent canonical-LF hash inspection; no application/test/build/checker/TLC/Actions/remote/commit/push/delegation. Code137/stale canonical fingerprint `sha256:789a25f36c02776a713b180ea0c9a0550c73ba9a77a34295795a968d704d94de`; Source45/PlusCal25/verification26 and lineage unchanged. Official checker validation remains pending. Incremental pre-edit-WIP patch/explanation: `agent_space/patches/20261112-002.patch` / `.md`; prior WIP, policy, upper layers, dist and existing evidence preserved.
+--- /dev/null
++++ b/agent_space/reviews/review-20261112-002-screen-export-translation.md
+@@ -0,0 +1,46 @@
++# Screen / raster translation correspondence — r137
++
++## Task and authority
++
++This is PlusCal → JavaScript translation, not feature design. Read the complete development policy v0.2.6 again, complete renderer Source/PlusCal, public layout Source/PlusCal, interface FSM Source/PlusCal, Application adapter Source/PlusCal, system Source/PlusCal, Mantine Source and current plan. Ambiguous current-capture intent was checked directly against `sourcescript/frontend/renderer.py`, `renderDashboardCurrent`: supplied snapshot plus one-shot viewport is allowed, persistent target width/height must not change, and target limit/encoding/handoff/error/finally rules apply. No policy or upper-layer changes.
++
++## Stage 1: screen procedure and actual-caller map
++
++The following is a static translation-scope conclusion, **not** an executed fidelity/browser/checker pass.
++
++| PlusCal procedure in `pseudocode/frontend/renderer.pcal` | JavaScript realization and actual boundary |
++| --- | --- |
++| syncDashboardCaption | `sourcecode/frontend/renderer.js`: syncDashboardCaptionProjection; `sourcecode/application/adapter.js`: syncDashboardCaption supplies official caption input; public caption edits and Mantine editors use this boundary. Literal text/name/settings, visibility and supplied scaling; no project read inside renderer. |
++| publishUiTelemetry / setDebugEnabled / status | `sourcecode/frontend/renderer.js`: corresponding telemetry/debug/status functions; runtime status is one-way display, not project authority. |
++| applyDashboardProjectionInvalidation | `sourcecode/frontend/renderer.js`: same entry; `sourcecode/application/adapter.js`: applyCommittedDashboardProjection gates uncommitted results and supplies current official input/final runtime state. Label/image/palette/caption narrow branches preserve live surfaces; structural/source/geometry mismatch falls back to full supplied render. |
++| renderDashboard / CompleteGraphRender / CompleteImageRender | `sourcecode/frontend/renderer.js`: renderDashboardProjection, presentSuppliedGraph, current host/operation/generation checks and independent image surfaces. Supplied rows/columns/figure/image/labels/styles only. Empty/image/graph branches, removal, reuse, queued success/current failure/stale completion and detached/reparented children mapped. Existing resize queue retains requesting associations; native/fallback observer installation has one owner. |
++| setSelectedSlot / resolveSelectedChart / updateGraphView | `sourcecode/application/public_api/layout_annotations.js`: setSelectedSlot → dispatchSlotSelection → updateGraphView; `sourcecode/application/adapter.js` hands final supplied inputs to updateGraphViewProjection. `sourcecode/frontend/renderer.js`: resolveSelectedChart resolves only supplied relations. Rejection silent; same user target toggles; model selection retains; optional type command only for final non-null empty slot; no synthetic global resize. Mantine reads final public workspace/selection. |
++| installSlotClickController / HandleSlotClick | `sourcecode/frontend/renderer.js`: installSlotClickControllerProjection; bookmark selects content slots, empty surface selects empty slots, content body interaction does not select. Public actions own validation/mutation. |
++| StartBookmarkDrag / EndBookmarkDrag / ConsumePostDragClick / swapSlotContents | Same controller and suppression-token cleanup; current token owns one post-drag click or delayed no-click cleanup. Valid internal target invokes one public swap. OS-file drag is separate; no duplicate persistent commit at finish. |
++| finishDashboardFileDropInteraction / Renderer_prepareDashboardFileDrop | `sourcecode/frontend/renderer.js`: clearSlotDragState; `sourcecode/application/public_api/layout_annotations.js`: prepareDashboardFileDrop; `sourcecode/frontend/mantine_ui.js`: dashboardExternalFileDrop and mounted FastFigureDashboardFileDrop. Direct host target, public prepare-not-toggle, one awaited import/collision operation, finally drag-only finish. Stable mounted receiver does not depend on ordinary render-local state. |
++| applyUiPalette / applySlotStyle | `sourcecode/frontend/renderer.js`: applyUiPaletteProjection/applySlotStyleProjection/applyReferenceGeometryProjection; Application acquires supplied input. Actual Mantine style/grid/zoom/lock/reset calls use full supplied render for content and geometry; completion notification is not another render. |
++| startupCoreRuntime / readDashboardRenderedWidth | `sourcecode/frontend/renderer.js`: startupCoreRuntimeProjection and readDashboardRenderedWidth; `sourcecode/application/adapter.js`: initial official input/public action handoff; `sourcecode/system.js`: lifecycle ready and final owner-based audit. Startup order is zoom → controller → existing supplied slots → style → supplied reference audit. No default CSV/fake graph/grid recreation. Width is one finite positive measured scalar or none, never a project setting. |
++
++One additional untranslated primitive was found while completing this map: startup applied style but omitted `AuditSuppliedProjectReferenceRuntimeProjectionContracts`. r137 now realizes that primitive locally with `auditSuppliedRendererContracts`: unique visible slots, supplied chart/image relation identity, labels pointing into the supplied visible set, and runtime selected reference in that set. It neither queries Backend nor repairs/publishes input. The existing final system audit remains responsible for authoritative project invariants through their owners. It is not substituted for the earlier supplied-input audit.
++
++Stage 1 static translation scope is closed after this correction. Native Plotly, mounted listener timing, real pointer/browser rendering and inline/split verification remain pending; their absence is not treated as a translation permission gate. Historical OPEN notes remain historical rather than being deleted or silently rewritten.
++
++## Stage 2: current/target raster procedure translation
++
++`pseudocode/frontend/renderer.pcal`: renderDashboardCurrent, renderDashboardTarget, exportCaptionLayout, downloadExportPayload. Actual public callers are `sourcecode/application/public_api/layout_annotations.js`: capturePrintApi/savePrintApi, exposed by `sourcecode/application/public_api/index.js`. Both acquire one official export input inside the existing exporting lifecycle and pass only that input/status sink. No protocol or second authority is introduced.
++
++- **Current:** all visible-slot rectangles, colors/radius, label geometry, caption geometry/font/padding and source bounds are captured before asynchronous raster work. Live `.plot-item` handles are no longer retained across earlier-slot awaits. Supplied precomputed figures are copied/scaled/rendered in exportChartImage's task-owned host at measured viewport size; no CSV transformation/Backend reread, live plot purge, freeze, revision sync or persistent preset update. Snapshot + viewport is the Source-permitted one-shot representation, not target width/height rendering.
++- **Clipping:** current image/graph painting is clipped to the captured slot radius, including cover/manual images. Caption border follows supplied visibility. Target retains its target-geometry clip.
++- **Caption:** current uses the existing paragraph/prefix algorithm with a task-local viewport measurement input (measured width/font/line-height/padding). This is a read-only physical measurement adaptation, not a new export preset or modified official snapshot. Explicit and blank paragraphs, first-line name/prefix, resolved fonts and clipping use the same emitted line list for painting. Target caption baseline is explicitly alphabetic, independent of label painting.
++- **Resources:** paintExportImage owns one decode through synchronous painting and releases its src in finally. exportImageLoad removes callbacks on completion and releases src on decode/setup failure. Current and target canvas backing stores are released on success, early rejection and exception; a boolean preserves even null/undefined primary failures if cleanup also fails. Existing exportChartImage host/Plotly purge and downloadExportPayload URL/handoff lifetime remain task-local and preserve original failure.
++- **Completion:** existing supplied dimension/area limits, rejected reasons, PNG/JPEG DPI encoding, one download handoff, saved shape and automaticHeight meanings remain. Progress/debug failures do not authorize cancellation, retries, rollback or replacement failure. No disk-save confirmation is invented.
++
++Stage 2's named current/target procedure and resource boundaries have now been translated in the statically inspected scope. Next is Plan024 stage 3's remaining general Backend/Application/UI translation, especially the general dispatchProjectCommand tuple and its public consumers; do not expand that protocol as an incidental screen/export fix.
++
++## Evidence and limitations
++
++Extended existing regression cases only: 15 supplied startup audit/no mutation; 147 target decode/canvas release; 148 shared paint cleanup, cleanup-only rejection and original Error/null/undefined preservation; 149 current supplied graph/image/graph work across a controlled await, no live-plot/geometry reread, task decode/canvas release and explicit blank caption paragraphs. No new case IDs or test-count progress metric.
++
++These fixtures are authored, **not executed**. Only file/diff/whitespace and independent canonical-LF byte-hash inspection were performed. No local application, test suite, build, official version checker, TLC, Actions, commit, push, remote write or delegation. Source45/PlusCal25/verification26 and derived fingerprints unchanged; code137 remains stale. Official checker and integrated native browser/inline/split checks are pending. Prior r133 Actions and later static hashes are not validation of r137.
++
++Incremental patch/explanation: `agent_space/patches/20261112-002.patch` / `agent_space/patches/20261112-002.md`, from exact r136 pre-edit working bytes, preserving earlier uncommitted work and records.

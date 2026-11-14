@@ -170,6 +170,23 @@ export function esc(v) {
   );
 }
 
+// Connectivity alone is not ownership: a detached/reparented child no longer
+// belongs to its recorded slot host even if another live host contains it.
+function hasLiveGraphSurface(record) {
+  return record.host.isConnected && record.plot.isConnected && record.host.contains(record.plot);
+}
+
+function hasLiveImageSurface(surface) {
+  return surface.host.isConnected && surface.element.isConnected && surface.host.contains(surface.element);
+}
+
+function releaseImageSurface(surface) {
+  if (rendererRuntime.imageSurfaces.get(surface.slotId) === surface)
+    rendererRuntime.imageSurfaces.delete(surface.slotId);
+  surface.element.remove();
+  surface.element.removeAttribute("src");
+}
+
 function currentResizeRequests() {
   return [...rendererRuntime.graphInstances.values()].map(record => ({
     record, generation: record.generation, operation: record.operation,
@@ -182,7 +199,7 @@ export function resizePlots(requests = currentResizeRequests()) {
     if (generation !== rendererRuntime.dashboardRenderGeneration || record.generation !== generation ||
         record.operation !== operation || record.slotId !== slotId || record.chartId !== chartId ||
         record.host !== host || record.plot !== plot || rendererRuntime.graphInstances.get(slotId) !== record ||
-        !host.isConnected || !plot.isConnected) continue;
+        !hasLiveGraphSurface(record)) continue;
     try {
       Plotly.Plots.resize(plot);
     } catch (_) {}
@@ -377,7 +394,8 @@ function presentSuppliedGraph(record, slot, selected, generation, scale, fronten
   const operation = {}, slotId = slot.id, chartId = slot.content.chart;
   record.operation = operation;
   const current = () => generation === rendererRuntime.dashboardRenderGeneration &&
-    record.generation === generation && record.operation === operation && rendererRuntime.graphInstances.get(slotId) === record && record.host.isConnected;
+    record.generation === generation && record.operation === operation && record.slotId === slotId &&
+    record.chartId === chartId && rendererRuntime.graphInstances.get(slotId) === record && hasLiveGraphSurface(record);
   // Serialize updates to a reused Plotly host; old work must settle before the next
   // react. A superseded queued generation skips work rather than overwriting it.
   record.pending = record.pending.catch(() => {}).then(async () => {
@@ -419,11 +437,11 @@ export function applyDashboardProjectionInvalidation(event, mutationResult, inte
       if (!host) return false;
       if (slot.contentType !== "image" && slot.figure) {
         const record = rendererRuntime.graphInstances.get(slot.id);
-        return record?.host === host && record.chartId === slot.content.chart && record.plot.isConnected;
+        return record?.host === host && record.chartId === slot.content.chart && hasLiveGraphSurface(record);
       }
       if (slot.imageView) {
         const surface = rendererRuntime.imageSurfaces.get(slot.id);
-        return surface?.host === host && surface.element.isConnected && surface.imageInput.src === slot.imageView.src;
+        return surface?.host === host && hasLiveImageSurface(surface) && surface.imageInput.src === slot.imageView.src;
       }
       return host.classList.contains("empty");
     }),
@@ -497,9 +515,9 @@ export function updateGraphViewProjection(projectProjection, interfaceState, fro
       surface = rendererRuntime.imageSurfaces.get(slot.id);
     if (!host?.isConnected) return true;
     if (slot.contentType !== "image" && slot.figure)
-      return !record || record.host !== host || !record.plot.isConnected || record.chartId !== slot.content.chart;
+      return !record || record.host !== host || !hasLiveGraphSurface(record) || record.chartId !== slot.content.chart;
     if (record) return true;
-    return slot.imageView ? !surface || surface.host !== host || !surface.element.isConnected || surface.imageInput.src !== slot.imageView.src : !!surface;
+    return slot.imageView ? !surface || surface.host !== host || !hasLiveImageSurface(surface) || surface.imageInput.src !== slot.imageView.src : !!surface;
   })) return renderDashboardProjection(projectProjection, interfaceState, frontendActions);
   const chart = resolveSelectedChart(projectProjection, interfaceState), style = projectProjection.layout.slotStyle,
     scale = (interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
@@ -524,7 +542,25 @@ export function startupCoreRuntimeProjection(projectProjection, interfaceState, 
   installSlotClickControllerProjection(frontendActions);
   const presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
   applySlotStyleProjection(projectProjection.layout.slotStyle, interfaceState);
+  auditSuppliedRendererContracts(projectProjection, interfaceState);
   return presentation;
+}
+
+// Low-level realization of startup's supplied project/reference/runtime audit.
+// This checks the boundary input; it does not resolve Backend state or repair it.
+function auditSuppliedRendererContracts(projectProjection, interfaceState) {
+  const slots = new Map();
+  for (const slot of projectProjection.visibleSlots) {
+    if (slots.has(slot.id) || slot.hidden ||
+        (slot.content.chart != null && slot.chart?.id !== slot.content.chart) ||
+        (slot.imageView && slot.imageView.slotId !== slot.id))
+      throw Error("renderer input의 visible slot reference가 유효하지 않습니다.");
+    slots.set(slot.id, slot);
+  }
+  for (const label of projectProjection.orderedSlotLabels)
+    if (!slots.has(label.slotId)) throw Error("renderer input의 label reference가 유효하지 않습니다.");
+  if (interfaceState.selectedSlotId != null && !slots.has(interfaceState.selectedSlotId))
+    throw Error("renderer input의 selected slot reference가 유효하지 않습니다.");
 }
 
 // Physical renderer entry for Source renderDashboard(projectProjection, interfaceState).
@@ -555,6 +591,7 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
   const discard = record => {
     rendererRuntime.graphInstances.delete(record.slotId);
     record.host.remove();
+    record.plot.remove();
     try { Plotly.purge(record.plot); } catch {}
     // A pending Plotly operation may finish after detach; it must never revive a live view.
     record.pending?.finally(() => { try { Plotly.purge(record.plot); } catch {} }).catch(() => {});
@@ -562,15 +599,11 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
   for (const record of rendererRuntime.graphInstances.values()) {
     const slot = slots.find(slot => slot.id === record.slotId);
     if (!slot || slot.contentType === "image" || !slot.figure || slot.content.chart !== record.chartId ||
-        !record.host.isConnected) discard(record);
+        !hasLiveGraphSurface(record)) discard(record);
   }
   // Image elements are surface-owned decode handles, never shared asset handles.
   // Detach before dropping src; an obsolete decode may reject but is no longer current.
-  for (const surface of rendererRuntime.imageSurfaces.values()) {
-    rendererRuntime.imageSurfaces.delete(surface.slotId);
-    surface.element.remove();
-    surface.element.removeAttribute("src");
-  }
+  for (const surface of rendererRuntime.imageSurfaces.values()) releaseImageSurface(surface);
   const ids = new Set(slots.map(slot => String(slot.id)));
   dashboard.querySelectorAll(":scope > .slot").forEach(host => {
     if (!ids.has(host.dataset.slot)) host.remove();
@@ -609,19 +642,18 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
         rendererRuntime.imageSurfaces.set(slot.id, surface);
         const current = () => generation === rendererRuntime.dashboardRenderGeneration &&
           rendererRuntime.imageSurfaces.get(slot.id) === surface && surface.imageInput === image &&
-          host.isConnected && element.parentElement === frame;
+          hasLiveImageSurface(surface) && element.parentElement === frame;
         surface.pending = Promise.resolve().then(async () => {
-          if (!current()) return;
+          if (!current()) { releaseImageSurface(surface); return; }
           try {
             await element.decode();
-            if (!current()) return;
+            if (!current()) releaseImageSurface(surface);
           } catch (error) {
-            if (!current()) return;
-            // A failed temporary surface owns only this element; preserve decode's
-            // original failure without invalidating another surface of the same asset.
-            rendererRuntime.imageSurfaces.delete(slot.id);
-            element.remove(); element.removeAttribute("src");
-            throw error;
+            const wasCurrent = current();
+            // Release only this decode's surface, including stale work whose
+            // frame was removed without a newer dashboard render.
+            releaseImageSurface(surface);
+            if (wasCurrent) throw error;
           }
         });
       }
@@ -685,10 +717,35 @@ export function dataTransferHasFiles(dataTransfer) {
 export function exportImageLoad(src) {
   return new Promise((resolve, reject) => {
     let image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(Error("이미지를 읽을 수 없습니다."));
-    image.src = src;
+    image.onload = () => {
+      image.onload = image.onerror = null;
+      resolve(image);
+    };
+    image.onerror = () => {
+      const failure = Error("이미지를 읽을 수 없습니다.");
+      image.onload = image.onerror = null;
+      try { image.removeAttribute("src"); } catch {}
+      reject(failure);
+    };
+    try { image.src = src; }
+    catch (failure) {
+      image.onload = image.onerror = null;
+      try { image.removeAttribute("src"); } catch {}
+      reject(failure);
+    }
   });
+}
+
+// This decode belongs to one raster task, never a live dashboard surface.
+async function paintExportImage(src, paint) {
+  const image = await exportImageLoad(src);
+  let failed = false;
+  try { return paint(image); }
+  catch (failure) { failed = true; throw failure; }
+  finally {
+    try { image.removeAttribute("src"); }
+    catch (cleanupFailure) { if (!failed) throw cleanupFailure; }
+  }
 }
 
 export function exportDrawImage(ctx,image,rect,slot,scaleX,scaleY) {
@@ -697,8 +754,8 @@ export function exportDrawImage(ctx,image,rect,slot,scaleX,scaleY) {
     fit=settings.fit||"contain",drawW,drawH,left,top;
   if(fit==="manual"){
     drawW=(width*(Number(settings.scale)||100))/100; drawH=drawW/ratio;
-    left=rect.left+width*((Number(settings.x)||50)/100)-drawW/2;
-    top=rect.top+height*((Number(settings.y)||50)/100)-drawH/2;
+    left=rect.left+width*(settings.x/100)-drawW/2;
+    top=rect.top+height*(settings.y/100)-drawH/2;
   } else {
     let contain=fit!=="cover", fitWidth=width, fitHeight=fitWidth/ratio;
     if((contain&&fitHeight>height)||(!contain&&fitHeight<height)){
@@ -840,12 +897,18 @@ export async function exportDashboard(snapshot, statusSink) {
     if (!slot) return [];
     const style = getComputedStyle(element);
     return [{ slot, rect: element.getBoundingClientRect(), background: style.backgroundColor,
-      border: style.borderColor, plot: element.querySelector(".plot-item") }];
+      border: style.borderColor, radius: parseFloat(style.borderRadius) || 0 }];
   }), captionStyle = captionShown ? getComputedStyle(caption) : null,
     captionColors = captionStyle ? { background: captionStyle.backgroundColor,
-      border: captionStyle.borderColor, color: captionStyle.color } : null;
-  let canvas = document.createElement("canvas"),
-    ctx = canvas.getContext("2d"),
+      border: captionStyle.borderColor, color: captionStyle.color,
+      fontFamily: captionStyle.fontFamily, fontSize: parseFloat(captionStyle.fontSize),
+      padding: parseFloat(captionStyle.paddingLeft) || 0,
+      lineHeight: parseFloat(captionStyle.lineHeight) / parseFloat(captionStyle.fontSize) } : null,
+    presentationScale = dashboardRect.width / snapshot.layout.slotStyle.referenceWidth;
+  const canvas = document.createElement("canvas");
+  let failed = false;
+  try {
+  const ctx = canvas.getContext("2d"),
     scaleX = width / sourceWidth,
     scaleY = height / sourceHeight,
     point = (rect) => ({
@@ -859,7 +922,6 @@ export async function exportDashboard(snapshot, statusSink) {
   ctx.fillStyle = getComputedStyle(dashboard).backgroundColor || "#fff";
   ctx.fillRect(0, 0, width, height);
   statusOut.textContent = "그래프를 합성하는 중…";
-  try {
     for (let element of slotElements) {
       let rect = point(element.rect);
       ctx.fillStyle = element.background || "#fff";
@@ -879,25 +941,25 @@ export async function exportDashboard(snapshot, statusSink) {
           rect.height * scaleY,
         );
       }
-      let plot = element.plot, imageView = element.slot.imageView;
-      if (plot) {
-        let uri = await Plotly.toImage(plot, {
-          format: "png",
-          width: Math.max(2, Math.round(rect.width * scaleX)),
-          height: Math.max(2, Math.round(rect.height * scaleY)),
-        });
-        let image = await exportImageLoad(uri);
-        ctx.drawImage(
-          image,
-          rect.left * scaleX,
-          rect.top * scaleY,
-          rect.width * scaleX,
-          rect.height * scaleY,
-        );
-      } else if (imageView) {
-        let image = await exportImageLoad(imageView.src);
-        exportDrawImage(ctx, image, rect, element.slot, scaleX, scaleY);
-      }
+      // Rasterize the supplied figure in a task-owned host. A live plot may be
+      // replaced/purged while a preceding slot awaits; it is not a task resource.
+      ctx.save();
+      try {
+        ctx.beginPath();
+        ctx.roundRect(rect.left * scaleX, rect.top * scaleY, rect.width * scaleX,
+          rect.height * scaleY, element.radius * Math.min(scaleX, scaleY));
+        ctx.clip();
+        const figure = element.slot.figure, imageView = element.slot.imageView;
+        if (element.slot.content.contentType !== "image" && figure) {
+          const uri = await exportChartImage(figure, rect.width * scaleX, rect.height * scaleY,
+            presentationScale * scaleY, 1);
+          await paintExportImage(uri, image => ctx.drawImage(image, rect.left * scaleX,
+            rect.top * scaleY, rect.width * scaleX, rect.height * scaleY));
+        } else if (imageView) {
+          await paintExportImage(imageView.src, image =>
+            exportDrawImage(ctx, image, rect, element.slot, scaleX, scaleY));
+        }
+      } finally { ctx.restore(); }
     }
     for (let label of labels) {
       let rect = point(label.rect);
@@ -919,53 +981,43 @@ export async function exportDashboard(snapshot, statusSink) {
         rect.width * scaleX,
         rect.height * scaleY,
       );
-      ctx.strokeStyle = style.border || "#B0CFCE";
-      ctx.strokeRect(
-        rect.left * scaleX,
-        rect.top * scaleY,
-        rect.width * scaleX,
-        rect.height * scaleY,
-      );
-      let prefix = captionView.name || "",
-        body = captionView.text || "",
-        fontSize = captionView.settings.fontSize * scaleY,
-        lineHeight =
-          captionView.settings.fontSize * captionView.settings.lineHeight * scaleY,
-        baseX = (rect.left + 8) * scaleX,
-        y = (rect.top + 8) * scaleY + fontSize;
-      ctx.fillStyle = style.color || "#383A42";
-      if (prefix) {
-        ctx.font = `${captionView.nameBold ? "700" : "400"} ${fontSize}px ${captionView.settings.fontFamily}`;
-        ctx.fillText(prefix, baseX, y);
-        let prefixWidth = ctx.measureText(prefix + " ").width,
-          available = Math.max(10, (rect.width - 16) * scaleX),
-          words = body.split(/\s+/).filter(Boolean),
-          firstLine = "";
-        ctx.font = `400 ${fontSize}px ${captionView.settings.fontFamily}`;
-        while (words.length) {
-          let trial = firstLine ? `${firstLine} ${words[0]}` : words[0];
-          if (
-            firstLine &&
-            ctx.measureText(trial).width > Math.max(10, available - prefixWidth)
-          )
-            break;
-          firstLine = trial;
-          words.shift();
-        }
-        if (firstLine) ctx.fillText(firstLine, baseX + prefixWidth, y);
-        body = words.join(" ");
-        if (body) y += lineHeight;
+      if (bordersVisible) {
+        ctx.strokeStyle = style.border || "#B0CFCE";
+        ctx.strokeRect(rect.left * scaleX, rect.top * scaleY, rect.width * scaleX, rect.height * scaleY);
       }
-      ctx.font = `400 ${fontSize}px ${captionView.settings.fontFamily}`;
-      if (body)
-        exportWrapText(
-          ctx,
-          body,
-          baseX,
-          y,
-          Math.max(10, (rect.width - 16) * scaleX),
-          lineHeight,
-        );
+      // Same paragraph/prefix algorithm as target export, measured at this
+      // capture's viewport font/width. It never changes the persistent preset.
+      const layout = await exportCaptionLayout({
+        ...snapshot,
+        layout: { ...snapshot.layout, slotStyle: { ...snapshot.layout.slotStyle, referenceWidth: rect.width } },
+        annotations: { ...snapshot.annotations, captions: { ...captionView,
+          settings: { ...captionView.settings, fontFamily: style.fontFamily,
+            fontSize: style.fontSize, lineHeight: style.lineHeight } } },
+        captionReferenceStyle: { ...snapshot.captionReferenceStyle, padding: style.padding },
+      }, (text, family, size, weight) => {
+        ctx.font = `${weight} ${size}px ${family}`;
+        return ctx.measureText(text).width;
+      });
+      ctx.save();
+      try {
+        ctx.beginPath();
+        ctx.rect(rect.left * scaleX, rect.top * scaleY, rect.width * scaleX, rect.height * scaleY);
+        ctx.clip();
+        ctx.fillStyle = style.color || "#383A42";
+        ctx.textBaseline = "alphabetic";
+        let y = (rect.top + layout.padding + layout.fontSize) * scaleY;
+        for (const line of layout.lines) {
+          let x = (rect.left + layout.padding) * scaleX;
+          if (line.prefix) {
+            ctx.font = `${layout.prefixWeight} ${layout.fontSize * scaleY}px ${layout.fontFamily}`;
+            ctx.fillText(line.prefix, x, y);
+            x += line.prefixWidth * scaleX;
+          }
+          ctx.font = `${layout.bodyWeight} ${layout.fontSize * scaleY}px ${layout.fontFamily}`;
+          ctx.fillText(line.text, x, y);
+          y += layout.lineHeight * scaleY;
+        }
+      } finally { ctx.restore(); }
     }
     let mime = format === "jpeg" ? "image/jpeg" : "image/png",
       blob = await exportCanvasBlob(canvas, mime, dpi),
@@ -977,10 +1029,15 @@ export async function exportDashboard(snapshot, statusSink) {
     try { debugLog("dashboard:export", { format, width, height, dpi, slots: slotElements.length }); } catch {}
     return { outcome: "saved", width, height, automaticHeight: false };
   } catch (error) {
+    failed = true;
     // Progress/debug reporting is not authority over an already failed export.
     try { statusOut.textContent = "저장 실패: " + (error?.message ?? String(error)); } catch {}
     try { debugLog("dashboard:export-error", { message: error?.message ?? String(error) }); } catch {}
     throw error;
+  } finally {
+    // Drop only this task's backing store, including encoding/handoff failures.
+    try { canvas.width = canvas.height = 0; }
+    catch (cleanupFailure) { if (!failed) throw cleanupFailure; }
   }
 }
 
@@ -1136,8 +1193,10 @@ export async function exportDashboardTarget(suppliedSnapshot, statusSink) {
     bordersVisible = snapshot.bordersVisible,
     visibleSlots = snapshot.slots.filter((slot) => !slot.hidden),
     captionShown = captionView.enabled;
-  let canvas = document.createElement("canvas"),
-    ctx = canvas.getContext("2d"),
+  const canvas = document.createElement("canvas");
+  let failed = false;
+  try {
+  const ctx = canvas.getContext("2d"),
     baseReference = targetExportGeometry(snapshot.layout, width),
     outputScale = width / baseReference.referenceWidth,
     captionReference = await exportCaptionLayout(snapshot, (text, family, size, weight) => {
@@ -1204,7 +1263,6 @@ export async function exportDashboardTarget(suppliedSnapshot, statusSink) {
   });
   let slotRadius = () => geometry.radius;
   statusOut.textContent = "출력 크기로 그래프를 다시 렌더링하는 중…";
-  try {
     for (let slot of visibleSlots) {
       let rect = slotRect(slot),
         colors = snapshot.slotColors[slot.id],
@@ -1223,12 +1281,11 @@ export async function exportDashboardTarget(suppliedSnapshot, statusSink) {
             rect.height,
             geometry.scale,
             rasterScale,
-          ),
-          image = await exportImageLoad(uri);
-        ctx.drawImage(image, rect.left, rect.top, rect.width, rect.height);
+          );
+        await paintExportImage(uri, image =>
+          ctx.drawImage(image, rect.left, rect.top, rect.width, rect.height));
       } else if (imageModel) {
-        let image = await exportImageLoad(imageModel.src);
-        exportDrawImage(ctx, image, rect, slot, 1, 1);
+        await paintExportImage(imageModel.src, image => exportDrawImage(ctx, image, rect, slot, 1, 1));
       }
       ctx.restore();
       if (bordersVisible) {
@@ -1279,6 +1336,7 @@ export async function exportDashboardTarget(suppliedSnapshot, statusSink) {
       ctx.rect(0, top, width, captionLayout.height);
       ctx.clip();
       let y = top + captionLayout.padding + captionLayout.fontSize;
+      ctx.textBaseline = "alphabetic";
       ctx.fillStyle = snapshot.captionStyle.color;
       for (let line of captionLayout.lines) {
         let x = captionLayout.padding;
@@ -1323,10 +1381,14 @@ export async function exportDashboardTarget(suppliedSnapshot, statusSink) {
     }); } catch {}
     return { outcome: "saved", width: rasterWidth, height: rasterHeight, automaticHeight };
   } catch (error) {
+    failed = true;
     // Progress/debug reporting is not authority over an already failed export.
     try { statusOut.textContent = "저장 실패: " + (error?.message ?? String(error)); } catch {}
     try { debugLog("dashboard:export-error", { message: error?.message ?? String(error) }); } catch {}
     throw error;
+  } finally {
+    try { canvas.width = canvas.height = 0; }
+    catch (cleanupFailure) { if (!failed) throw cleanupFailure; }
   }
 }
 

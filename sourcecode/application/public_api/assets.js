@@ -2,7 +2,7 @@
 import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, runLifecycleTask, renderDashboard, updateFileAvailability } from '../adapter.js';
 import { importSelectedGraphFile } from './graphs.js';
 import { setSelectedSlot } from './layout_annotations.js';
-import { PROJECT_ASSET_DIRECTORIES, PROJECT_TRASH_DIRECTORY, projectAssetReferenceCount, projectDataTreeSnapshot, projectParentPath, projectPathName, projectVfs } from '../../backend/assets_files.js';
+import { PROJECT_ASSET_DIRECTORIES, projectParentPath, projectPathName } from '../../backend/assets_files.js';
 import { immutableProjectCopy, projectObjects, readBackendProjection } from '../../backend/project_state.js';
 import { interfaceFSM } from '../../frontend/interface_fsm.js';
 import { downloadExportPayload, status } from '../../frontend/renderer.js';
@@ -54,10 +54,10 @@ export async function importProjectFilesToDirectory(files, directory, planImport
   const choices = await collectCompletedImportChoices(list, directory, planImport);
   if (!choices) return null;
   const copied = await prepareCopiedImportFiles(list),
-    result = dispatchProjectCommand("ASSETS_IMPORTED", { files: copied, directory, choices });
+    [result, state, projection] = dispatchProjectCommand("ASSETS_IMPORTED", { files: copied, directory, choices });
   if (!result.committed) return result;
   const imported = readImportedAssets(result);
-  updateFileAvailability(); renderDashboard(); status(`${imported.length}개 자산을 프로젝트에 추가했습니다.`);
+  updateFileAvailability(); renderDashboard(projection, state); status(`${imported.length}개 자산을 프로젝트에 추가했습니다.`);
   return imported;
 }
 
@@ -73,10 +73,9 @@ export function projectDataTreeObjects() {
 
 export function connectProjectAssetToSlot(path, kind, slotId) {
   if (!["csv", "image"].includes(kind)) throw Error("연결할 asset kind가 올바르지 않습니다.");
-  const result = dispatchProjectCommand(kind === "csv" ? "SLOT_DATA_CONNECTED" : "SLOT_IMAGE_LINKED", { path, kind, slotId });
+  const [result] = dispatchProjectCommand(kind === "csv" ? "SLOT_DATA_CONNECTED" : "SLOT_IMAGE_LINKED", { path, kind, slotId });
   if (!result.committed) return null;
   setSelectedSlot(slotId, "model-to-fsm");
-  renderDashboard();
   status("프로젝트 파일을 슬롯에 연결했습니다.");
   return null;
 }
@@ -109,38 +108,24 @@ export function selectImageFromTree(path) {
   return appFSM.send("SELECT_ASSET", { kind: "image", path, direction: "ui-to-fsm" });
 }
 
-export function readAssetDeletionTarget() {
-  const resolved = appFSM.query("project-api", {
-    operation: "assets.readDeletionTarget", path: interfaceFSM.readState().assetPath,
-  });
-  return resolved ? immutableProjectCopy({ kind: resolved.kind, id: resolved.target.id,
-    path: resolved.path, name: resolved.target.name, referenceCount: resolved.referenceCount }) : null;
+export function readAssetDeletionTarget(path) {
+  return appFSM.query("project-api", { operation: "assets.readDeletionTarget", path });
 }
 
 export function deleteProjectAsset(target) {
   if (!target || !["csv", "image"].includes(target.kind)) return null;
-  const result = dispatchProjectCommand(target.kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED", {
+  const [result, state, projection] = dispatchProjectCommand(target.kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED", {
     target: { kind: target.kind, id: target.id, path: target.path },
   });
   if (!result.committed) return null;
   const removed = result.changed.assets[0], count = result.changed.removedGraphReferenceCount + result.changed.resetImageSlotCount;
-  if (count) renderDashboard();
+  if (count) renderDashboard(projection, state);
   status(`${removed.name}을 프로젝트에서 삭제했습니다.`);
   return null;
 }
 
 export function readProjectTrash() {
-  let snapshot = projectDataTreeSnapshot(projectDataTreeObjects());
-  let csvIds = new Set(snapshot.data.filter((asset) =>
-    projectVfs.isTrashed(asset.path)).map((asset) => asset.id));
-  let imageIds = new Set(snapshot.images.filter((asset) =>
-    projectVfs.isTrashed(asset.path)).map((asset) => asset.id));
-  return {
-    hasContents: snapshot.directories.some((path) =>
-      path !== PROJECT_TRASH_DIRECTORY && projectVfs.isTrashed(path)) ||
-      csvIds.size > 0 || imageIds.size > 0,
-    referenceCount: projectAssetReferenceCount(csvIds, imageIds),
-  };
+  return appFSM.query("project-api", { operation: "assets.readTrash" });
 }
 
 export function projectNodeMoveOptions(path) {
@@ -149,13 +134,13 @@ export function projectNodeMoveOptions(path) {
 
 export function moveProjectNode(plan, useUniqueName = false) {
   if (!plan) return null;
-  const result = dispatchProjectCommand("PROJECT_NODE_MOVED", {
+  const [result, state, projection] = dispatchProjectCommand("PROJECT_NODE_MOVED", {
     path: plan.path, directory: plan.directory, useUniqueName,
   });
   if (!result.committed) return null;
   const path = result.changed.movedPathTo,
     trashed = appFSM.query("project-api", { operation: "assets.isTrashed", path });
-  applyCommittedDashboardProjection("PROJECT_NODE_MOVED", result);
+  applyCommittedDashboardProjection("PROJECT_NODE_MOVED", result, state, projection);
   status(trashed
     ? `${projectPathName(result.changed.movedPathFrom)}을 휴지통으로 이동했습니다.`
     : `${projectPathName(result.changed.movedPathFrom)}을 ${projectParentPath(path)}로 이동했습니다.`);
@@ -163,7 +148,7 @@ export function moveProjectNode(plan, useUniqueName = false) {
 }
 
 export function createProjectDirectory(parent, name) {
-  const result = dispatchProjectCommand("PROJECT_DIRECTORY_CREATED", { parent, name });
+  const [result] = dispatchProjectCommand("PROJECT_DIRECTORY_CREATED", { parent, name });
   if (!result.committed) return null;
   const path = result.changed.createdDirectoryPath;
   appFSM.send("SELECT_ASSET", { kind: "directory", path, direction: "ui-to-fsm" });
@@ -171,9 +156,9 @@ export function createProjectDirectory(parent, name) {
 }
 
 export function emptyProjectTrash() {
-  const result = dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {});
+  const [result, state, projection] = dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {});
   if (!result.committed) return null;
-  applyCommittedDashboardProjection("PROJECT_TRASH_EMPTIED", result);
+  applyCommittedDashboardProjection("PROJECT_TRASH_EMPTIED", result, state, projection);
   updateFileAvailability();
   status(`휴지통을 비웠습니다. 폴더 ${result.changed.directoryCount}개, CSV ${result.changed.csvCount}개, 이미지 ${result.changed.imageCount}개를 삭제했습니다.`);
   return null;
@@ -188,18 +173,19 @@ export function connectProjectAssetPathToSlot(path, kind, slotId) {
 }
 
 export async function importProjectFileToSlot(file, slotId, choosePlan) {
-  const target = readBackendProjection("slot-selection-context", { slotId }), kind = readAssetFileKind(file);
+  const target = readBackendProjection("slot-selection-context", { slotId });
   if (!target) throw Error("가져올 대상 슬롯이 없습니다.");
+  const kind = readAssetFileKind(file);
   if (kind === "slot") return importSelectedGraphFile(file, target.id);
   if (!["data", "image"].includes(kind)) throw Error("지원하지 않는 파일 형식입니다.");
   const directory = PROJECT_ASSET_DIRECTORIES[kind === "data" ? "csv" : "image"],
     choices = await collectCompletedImportChoices([file], directory, choosePlan);
   if (!choices) return null;
   const files = await prepareCopiedImportFiles([file]),
-    result = dispatchProjectCommand("ASSETS_IMPORTED", { files, directory, choices, targetSlotId: slotId });
+    [result, state, projection] = dispatchProjectCommand("ASSETS_IMPORTED", { files, directory, choices, targetSlotId: slotId });
   if (!result.committed) return result;
   const imported = readImportedAssets(result)[0];
-  renderDashboard(); updateFileAvailability();
+  renderDashboard(projection, state); updateFileAvailability();
   return imported;
 }
 

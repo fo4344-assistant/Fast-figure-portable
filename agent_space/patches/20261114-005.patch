@@ -1,0 +1,81 @@
+diff --git a/development-versions.json b/development-versions.json
+index 2023810..dbe80f6 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 150,
++      "revision": 151,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,7 +54,7 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:763bbf55995abd9daa1d864de6c5125641c22a2febeb6ea23db687acbd358b85",
++      "fingerprint": "sha256:3cda88c463cb6c39d4b9f2e602911ac2f86652a7b983d4f537296598616382f5",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+diff --git a/scripts/build-portable.py b/scripts/build-portable.py
+index bbb9a89..d3f89b4 100644
+--- a/scripts/build-portable.py
++++ b/scripts/build-portable.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ 
+ import argparse
+ import html
++from html.parser import HTMLParser
+ import json
+ import re
+ from pathlib import Path
+@@ -224,6 +225,16 @@ def bundle_runtime() -> bytes:
+         return output.read_bytes()
+ 
+ 
++class _ExternalScriptDetector(HTMLParser):
++    def __init__(self) -> None:
++        super().__init__()
++        self.found = False
++
++    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
++        if tag == "script" and any(name == "src" for name, _ in attrs):
++            self.found = True
++
++
+ def build_inline(output: Path, runtime: bytes | None = None) -> None:
+     runtime = bundle_runtime() if runtime is None else runtime
+     portable = build_source_html()
+@@ -240,9 +251,11 @@ def build_inline(output: Path, runtime: bytes | None = None) -> None:
+             open_tag + content + b"</script>",
+             1,
+         )
+-    for tag, _, _ in SCRIPTS:
+-        if tag in portable:
+-            raise RuntimeError(f"external script tag remains: {tag!r}")
++    dependencies = _ExternalScriptDetector()
++    dependencies.feed(portable.decode("utf-8"))
++    dependencies.close()
++    if dependencies.found:
++        raise RuntimeError("external script remains in portable HTML")
+     output.parent.mkdir(parents=True, exist_ok=True)
+     output.write_bytes(portable)
+ 
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index 0986313..62f612d 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -6,9 +6,9 @@ import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapsho
+ // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
+ // the mounted UI owns only its collision resolver and drag finalization.
+ export async function dashboardExternalFileDrop(file, slotId, choosePlan, frontendActions) {
++  if (!frontendActions.slots.prepareFileDrop(slotId)) return false;
+   let failed = false;
+   try {
+-    if (!frontendActions.slots.prepareFileDrop(slotId)) return false;
+     return await frontendActions.assets.importToSlot(file, slotId, choosePlan);
+   } catch (error) {
+     failed = true;

@@ -23,12 +23,12 @@ export function graphEditorSelectObject(index) {
 }
 
 export function graphEditorObjectValues(chartId, index, values = {}) {
-  const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
+  const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
     chartId, operation: "graphs.setObjectValues", index, values,
   });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard();
+  renderDashboard(projection, state);
   return chart;
 }
 
@@ -42,10 +42,10 @@ export function setGraphObjectValuesApi(index, values = {}) {
 export function graphEditorAdd(slotId, csvId) {
   const slot = appFSM.query("project-api", { operation: "slots.readSelected", frontendState: { selectedSlotId: slotId } }),
     event = slot?.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED",
-    result = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
+    [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;
-  renderDashboard();
+  renderDashboard(projection, state);
   return chart;
 }
 
@@ -61,22 +61,22 @@ export function graphEditorMove(chartId, from, to) {
   const context = appFSM.query("project-api", { operation: "graphs.readData", chartId });
   if (from === to && context.chart?.editor.editable !== false && Number.isInteger(from) &&
       from >= 0 && from < context.objects.length) return context.chart;
-  const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
+  const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
     chartId, operation: "graphs.moveObject", from, to,
   });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard();
+  renderDashboard(projection, state);
   return chart;
 }
 
 export function graphEditorDelete(chartId, index) {
-  const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
+  const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
     chartId, operation: "graphs.deleteObject", index,
   });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard();
+  renderDashboard(projection, state);
   return chart;
 }
 
@@ -95,19 +95,19 @@ export function deleteGraphObjectApi(index) {
 }
 
 export function graphEditorHeaderLines(csvId, value) {
-  const result = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value });
+  const [result, state, projection] = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value });
   if (!result.committed) return result;
   const updated = result.changed.assets.find((asset) => asset.kind === "csv" && asset.role === "updated"),
     read = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: updated.path });
-  renderDashboard();
+  renderDashboard(projection, state);
   return read.target.headerLines;
 }
 
 export function graphEditorSetEditable(slotId, chartId, editable) {
-  const result = dispatchProjectCommand("CHART_MODEL_REPLACED", { slotId, chartId, editable });
+  const [result, state, projection] = dispatchProjectCommand("CHART_MODEL_REPLACED", { slotId, chartId, editable });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard();
+  renderDashboard(projection, state);
   return chart.editor.editable;
 }
 
@@ -137,23 +137,23 @@ export function readGraphPaletteApi() {
   });
 }
 
-export async function importSelectedGraphFile(file, slotId = interfaceFSM.readState().selectedSlotId) {
+export async function importSelectedGraphFile(file, slotId) {
   const [copied] = await prepareCopiedImportFiles([file]),
-    result = dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId, file: copied });
+    [result, state, projection] = dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId, file: copied });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", {
     operation: "graphs.readData", frontendState: { selectedSlotId: slotId },
   }).chart;
-  renderDashboard(); updateFileAvailability();
+  renderDashboard(projection, state); updateFileAvailability();
   status(`${file.name}을 슬롯에 불러왔습니다.`);
   return chart;
 }
 
 export function graphEditorUpdateLayout(slotId, chartId, values) {
-  const result = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId, settings: values });
+  const [result, state, projection] = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId, settings: values });
   if (!result.committed) return result;
   const output = appFSM.query("project-api", { operation: "graphs.readLayout", selectedSlotId: slotId });
-  renderDashboard();
+  renderDashboard(projection, state);
   return output;
 }
 
@@ -164,10 +164,10 @@ export function updateGraphLayoutApi(values = {}) {
 }
 
 export function graphEditorApplyPalette(chartId, colors) {
-  const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
+  const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard();
+  renderDashboard(projection, state);
   return chart;
 }
 

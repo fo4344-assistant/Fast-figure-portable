@@ -1,0 +1,291 @@
+diff --git a/sourcecode/application/adapter.js b/sourcecode/application/adapter.js
+index c01fc2a6c7927c81b720c5381605ac8de80c4485..de0933c2a092597186f0c80c4c523ce07947e4b3 100644
+--- a/sourcecode/application/adapter.js
++++ b/sourcecode/application/adapter.js
+@@ -92,8 +92,7 @@
+ export function dispatchSlotSelection(slotId, pendingContentType = null, direction = "ui-to-fsm") {
+   const validatedInput = validateFrontendIntent("SELECT_SLOT", { slotId, direction });
+   if (!validatedInput.accepted) return [interfaceFSM.readState(), null, null];
+-  interfaceFSM.send("SELECT_SLOT", { slotId, direction, validatedInput });
+-  let state = interfaceFSM.readState(), projectResult = null;
++  let state = interfaceFSM.send("SELECT_SLOT", { validatedInput }), projectResult = null;
+   if (state.selectedSlotId !== null && pendingContentType !== null) {
+     const context = readBackendProjection("slot-selection-context", { slotId: state.selectedSlotId });
+     if (context?.empty && context.contentType !== pendingContentType) {
+@@ -138,6 +137,19 @@
+ 
+ export const PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
+ 
++export function dispatchProjectQuery(query, payload) {
++  return readBackendProjection(query, payload);
++}
++
++export function dispatchInterfaceEvent(event, payload = {}) {
++  const request = event === "SELECT_GRAPH_OBJECT"
++    ? { ...payload, selectedSlotId: interfaceFSM.readState().selectedSlotId } : payload ?? {},
++    validatedInput = BACKEND_REFERENCE_EVENTS.has(event) ? validateFrontendIntent(event, request)
++      : { event, accepted: true, payload };
++  if (!validatedInput.accepted) return interfaceFSM.readState();
++  return interfaceFSM.send(event, { ...payload, validatedInput });
++}
++
+ export function runLifecycleTask(lifecycle, event, task) {
+   const state = interfaceFSM.readState();
+   if (state.lifecycle !== "ready")
+@@ -146,28 +158,19 @@
+     );
+   if (lifecycle !== "importing" && lifecycle !== "exporting")
+     return Promise.reject(Error("작업 lifecycle은 importing 또는 exporting이어야 합니다."));
+-  interfaceFSM.send("LIFECYCLE_START", { lifecycle, event });
++  dispatchInterfaceEvent("LIFECYCLE_START", { lifecycle, event });
+   const complete = (result) => {
+-    const outcome = result?.outcome === "rejected" ? "rejected" : result?.outcome || "complete";
+-    interfaceFSM.send("LIFECYCLE_COMPLETE", { event, outcome });
++    dispatchInterfaceEvent("LIFECYCLE_COMPLETE", { event, outcome: result });
+     return result;
+   };
+   const fail = (error) => {
+-    interfaceFSM.send("LIFECYCLE_FAILED", { event, message: error?.message || String(error) });
++    dispatchInterfaceEvent("LIFECYCLE_FAILED", { event, message: error?.message || String(error) });
+     throw error;
+   };
+-  try {
+-    const result = task();
+-    return result && typeof result.then === "function"
+-      ? result.then(complete, fail)
+-      : Promise.resolve(complete(result));
+-  } catch (error) {
+-    try {
+-      fail(error);
+-    } catch (failed) {
+-      return Promise.reject(failed);
+-    }
+-  }
++  let completion;
++  try { completion = task(); }
++  catch (error) { return Promise.reject(error).then(undefined, fail); }
++  return Promise.resolve(completion).then(complete, fail);
+ }
+ 
+ export function dispatchProjectCommand(event, payload = {}) {
+@@ -184,18 +187,14 @@
+   get state() { return interfaceFSM.state; },
+   get writeLocks() { return interfaceFSM.writeLocks; },
+   readState: () => interfaceFSM.readState(),
+-  query: (kind, request) => readBackendProjection(kind, request),
++  query: (kind, request) => dispatchProjectQuery(kind, request),
+   definition: (...args) => interfaceFSM.definition(...args),
+   send(event, payload = {}) {
+     if (PROJECT_COMMANDS.has(event)) {
+       const [, state] = dispatchProjectCommand(event, payload);
+       return state;
+     }
+-    let validatedInput = BACKEND_REFERENCE_EVENTS.has(event)
+-      ? validateFrontendIntent(event, { ...payload, selectedSlotId: interfaceFSM.readState().selectedSlotId }) : null;
+-    if (validatedInput && !validatedInput.accepted) return interfaceFSM.state;
+-    interfaceFSM.send(event, validatedInput ? { ...payload, validatedInput } : payload);
+-    return interfaceFSM.state;
++    return dispatchInterfaceEvent(event, payload);
+   },
+   notify: (...args) => interfaceFSM.notify(...args),
+   run: (...args) => runLifecycleTask(...args),
+diff --git a/sourcecode/frontend/interface_fsm.js b/sourcecode/frontend/interface_fsm.js
+index 3d181ab7a1d6991aac76d0a6d434d7f331eaea59..527b8273f7316abf6270811dd3f13d0ce70f7cac 100644
+--- a/sourcecode/frontend/interface_fsm.js
++++ b/sourcecode/frontend/interface_fsm.js
+@@ -103,8 +103,10 @@
+       return this.publish(`${values.event}:recovered`);
+     }
+     this.state = Object.freeze(next);
++    const outcomeLabel = event === "LIFECYCLE_COMPLETE"
++      ? (typeof values.outcome === "string" ? values.outcome : values.outcome?.outcome) : null;
+     const label = event === "LIFECYCLE_START" ? `${values.event}:start` :
+-      event === "LIFECYCLE_COMPLETE" ? `${values.event}:${values.outcome || "complete"}` : event;
++      event === "LIFECYCLE_COMPLETE" ? `${values.event}:${outcomeLabel || "complete"}` : event;
+     return this.publish(label);
+   }
+   readState() {
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 19e619239941997d5c458444845911d333335051..22b123572837d83dd25b9784cc239188881b7d2f 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1210,6 +1210,33 @@
+         check(published.some((event) => event.includes("LIFECYCLE_PROBE_FAIL:failed")) &&
+           published.some((event) => event.includes("LIFECYCLE_PROBE_FAIL:recovered")),
+           "lifecycle failure/recovery events were not published");
++        const send = interfaceFSM.send, validate = validateFrontendIntent, marker = Object.freeze({ outcome: "cancelled" });
++        let completions = 0, invocations = 0, validations = 0, suppliedOutcome;
++        try {
++          validateFrontendIntent = (...args) => { validations++; return validate(...args); };
++          interfaceFSM.send = function(event, payload) {
++            if (event.startsWith("LIFECYCLE_")) check(payload.validatedInput?.accepted === true,
++              "lifecycle bypassed local accepted Application input");
++            if (event === "LIFECYCLE_COMPLETE") { completions++; suppliedOutcome = payload.validatedInput.payload.outcome; }
++            return send.call(this, event, payload);
++          };
++          const returned = await runLifecycleTask("exporting", "LIFECYCLE_PROBE_THENABLE", () => {
++            invocations++; return { then(resolve, reject) { resolve(marker); reject(Error("late")); resolve(null); } };
++          });
++          check(returned === marker && suppliedOutcome === marker && completions === 1 && invocations === 1 && !validations,
++            "task result identity/once-only completion/local event routing changed");
++          const beforeReject = interfaceFSM.readState(), rejectedSelection = dispatchInterfaceEvent("SELECT_SLOT", null);
++          check(rejectedSelection.revision === beforeReject.revision &&
++            rejectedSelection.selectedSlotId === beforeReject.selectedSlotId && validations === 1,
++            "missing reference event published state or skipped Backend rejection");
++          for (const original of [null, undefined]) {
++            let rejected = false, caught;
++            try { await runLifecycleTask("importing", "LIFECYCLE_PROBE_PRIMITIVE", () => { throw original; }); }
++            catch (error) { rejected = true; caught = error; }
++            check(rejected && caught === original && appFSM.state.lifecycle === "ready" &&
++              appFSM.state.error.message === String(original), "primitive task failure was replaced or recovery omitted");
++          }
++        } finally { interfaceFSM.send = send; validateFrontendIntent = validate; }
+       } finally {
+         unsubscribe();
+       }
+@@ -1423,6 +1450,12 @@
+     await run(40, "print settings use Backend queries and current-authority partial commands", async () => {
+       api.print.setSettings({ width: 1400, heightMode: "explicit", height: 800, dpi: 300, format: "png" });
+       const beforeRead = JSON.stringify(activeProject._state), frontendBeforeRead = appFSM.state;
++      const backendRead = readBackendProjection, supplied = Object.freeze({ read: "only" }), request = { operation: "probe" };
++      try {
++        readBackendProjection = (kind, input) => { check(kind === "probe" && input === request, "query adapter changed request"); return supplied; };
++        check(dispatchProjectQuery("probe", request) === supplied && appFSM.query("probe", request) === supplied,
++          "official query/facade did not forward the exact immutable Backend projection");
++      } finally { readBackendProjection = backendRead; }
+       const stale = api.print.readSettings();
+       check(Object.isFrozen(stale) && stale !== activeProject.exportSettings, "print projection is not immutable/detached");
+       check(JSON.stringify(activeProject._state) === beforeRead && appFSM.state === frontendBeforeRead,
+diff --git a/development-versions.json b/development-versions.json
+index 191eb7cee721447f200e55da6c1f5f209632e779..dda3ed44a5f6bd6b90eee035861d12bd3a7c2c22 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 147,
++      "revision": 148,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:8ed2e241069dddedb626a927d3bc80fa71b0b4c7df7e00f88f8183a89c788590",
++      "fingerprint": "sha256:b91d96c82a07a51d6758a59d3af7d9edd7bce55ee61ceeafedef261f737e8c82",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261113-004-interface-fsm-module-translation.md"
++      "validation_review": "agent_space/reviews/review-20261114-001-application-adapter-module-translation.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/memo/20261113-001.md b/agent_space/memo/20261113-001.md
+index fbd0131b9ffc041f35c81d639bf453b588ef0cc8..9e13581b289dd54058763c36602a933fe57ff244 100644
+--- a/agent_space/memo/20261113-001.md
++++ b/agent_space/memo/20261113-001.md
+@@ -1,52 +1,21 @@
+-# 모듈 작업 후 새 Plan으로 이관할 미완료 작업
++# 명세 미확정 / Source 복귀가 필요한 차단 항목
+ 
+-2026-11-13. 사용자 지시대로 미완료 항목을 이 메모에 모으고, 모듈 작업이 끝난 뒤 새 Plan을 만들 때 회수한다. 현재 Plan025를 부분 패치마다 다시 쓰지 않는다. 이 문서는 새 명세나 실행 허가가 아니다.
++2026-11-14 사용자 정정 반영: 이 메모는 번역 가능한 작업을 미뤄 두는 backlog가 아니다. 명세가 미확정이라 번역할 수 없거나 Source 결정을 먼저 받아야 하는 항목만 남긴다. 정해진 절차/실제 caller/소유 연결은 해당 모듈에서 끝내고, 모듈 진행 기록은 review에 둔다. 전체 모듈 작업 후 새 Plan을 갱신할 때 아래 차단 항목을 회수한다.
+ 
+-## 현재 위치
++## 1. canonical tree의 전체 chart/slot 표시 read 계약 (4·7d·8)
+ 
+-- r142 graphs, r143 layout_annotations, r144 assets_files: 각 기록 범위에서 정적 번역 종료.
+-- r145 project_state: 가능한 15개 Source 절차/PlusCal 확장은 번역했지만 tree/trash 소비 연결이 남아 **모듈 전체 미완료**. UI 역의존은 r147에서 해소했다.
+-- r146 project_efsm: 등록 34 commands/14 PlusCal procedures와 실제 caller의 정적 대응 종료. review-20261113-003-project-efsm-module-translation.md 참조. Plan025의 5차가 과거 상태여도 이 완료 기록을 잃지 않는다.
+-- r147 6a frontend/interface_fsm: 4개 Source methods/5개 PlusCal procedures와 15 events의 정적 대응 종료. revision/publish, final selection, lifecycle recovery와 ui 소유 연결을 번역했다. 실행 검증은 미실행이다.
+-- 다음은 Plan025 6b application/adapter → 7a–d public APIs → 8 Mantine → 9 system → 10 portable_build. 이미 닫힌 renderer/raster를 새 근거 없이 다시 조사·설계하지 않는다.
++현재 UI가 사용하는 conversion/zero-reference chart의 editability 등 전체 chart/slot 표시 facts를 어떤 공식 read로 공급할지가 상위 read 계약에 명확하지 않다. canonical VFS tree/subtree로 별도의 영속 graph/slot 의미를 임의 확장하거나, Frontend가 Backend를 직접 읽거나, 표시 기능을 임의 삭제하는 결정을 코드에서 만들지 않는다. 필요한 사실과 공급 경계를 Source에서 정하고 PlusCal에 전파해야 한다.
+ 
+-## 미완료 목록과 담당 경계
++이것은 **tree 전체가 번역 불가라는 뜻이 아니다.** explicit-path assets.readDeletionTarget, CSV header/rows, 실제 reference counts, canonical subtree traversal은 이미 Source에 있다. selected-only wrapper 제한 등 이와 관련한 미번역은 7d의 수행 작업이지 이 메모에 미뤄 둘 차단이 아니다. review004의 과도한 차단 주장은 정정되었다.
+ 
+-### 1. project_state canonical tree/trash → public assets → Mantine (4·7d·8)
++project_state 모듈 전체는 이 소비 연결이 닫히기 전까지 미완료다. ui registry 역의존은 r147에서 실제 Frontend/system 소비까지 함께 해소했으므로 차단 항목에서 제외한다.
+ 
+-`sourcecode/backend/project_state.js`의 assets.readTree는 아직 과거 flat envelope이며, 등록된 assets.readTrash에 Backend branch가 없다. 현재 projectDataTreeSnapshot/실제 UI는 전체 slot/chart/editability 등의 추가 facts에 의존한다.
++## 2. UI가 보낼 입력 / 결과 해석의 미정 의미 (8, 필요한 7)
+ 
+-canonical tree/subtree만 고립 교체하거나 기능을 누락하거나 Frontend에서 Backend를 직접 읽어 해결하지 않는다. conversion/zero-reference chart의 editability 등을 어떤 공식 read로 공급할지 미정인 부분은 Source→PlusCal 의미 결정이 필요하다.
++- grid 한 dimension 편집에서 render 이후 companion dimension이 달라졌을 때 어떤 두 값을 setGrid에 보낼지, invalid-input fallback을 어떻게 조합할지가 미정이다. current-read 원칙만으로 event-time companion 정책을 발명하지 않는다.
++- palette load/reset에서 public의 어떤 결과를 성공으로 해석할지, move null 결과를 UI에서 어떻게 처리할지, debug toggle을 어떤 명시 입력으로 만들지가 상세 Source에서 부족한 부분이다. 기존 public마다 다른 결과를 새 일괄 success 프로토콜로 바꾸지 않는다.
++- 해당 모듈에서 Source를 직접 확인해 이미 정해진 의미가 확인되면 즉시 번역하고 이 항목에서 제거한다. 끝내 의미가 없는 분기만 정확한 선택지와 함께 Source 결정 대상으로 남긴다. 모듈 전체를 막는 근거로 확대하지 않는다.
+ 
+-**tree 전체가 상위 미정은 아니다.** 명시적 path의 assets.readDeletionTarget, CSV header/rows, 실제 reference counts, canonical subtree traversal은 이미 Source에 있다. selected-only wrapper 제한은 번역 누락이다. review004의 과도한 차단 사유는 정정되었다.
++## 제외한 일반 작업
+ 
+-### 2. Backend UI registry 역의존 — r147 해소 (4·6a·9)
+-
+-Frontend notify는 이제 revision publish만 하며 region update/Backend reader callback을 실행하지 않는다. `sourcecode/backend/project_state.js:initializeProjectObjects`의 ui reader와 Frontend import를 제거했다. system audit는 metadata의 ui 이름을 Frontend `interfaceFSM.readState()`로 확인하고 나머지 영속 이름만 Backend registry로 읽는다. metadata를 삭제하거나 새 mirror를 만들지 않고 같은 소유 단위로 연결했다.
+-
+-이 역의존은 종료했으나 project_state의 canonical tree/trash 소비 연결과 system 전체 audit 절차 대응까지 완료한 것은 아니다.
+-
+-### 3. Frontend command reconciliation/이미지 자원 연결 (6a·6b·8·9, 필요한 renderer caller만)
+-
+-- r146 EFSM은 caller payload를 수정/반환하지 않는다. result/hints/effects/counts는 실제 commit에서 계산한 deep immutable 값이다. Backend의 부재 assetKind=null → Frontend none은 r145에서 대응했다.
+-- grid, 일반 data connect, 일반 chart import에 명세에 없는 강제 selection-clear hint를 넣지 않는다. 실제 committed references와 기본 reconciliation으로 처리한다. graph 추가의 실제 index hint, 삭제의 original-index map, reset/load의 명시 hint와 구별한다. 남은 Frontend caller의 가정은 Source와 대조한다.
+-- EFSM의 renderer releaseProjectImageDisplayUrl(s) 호출은 r146에서 제거했다. Backend에 자원 소유를 부여하지 않는다. 과거 projectImageDisplayUrl/legacy URL cache가 실제 도달 가능하면 Frontend 소유 경로에서 자원 회수를 닫는다. 이미 pure copied-byte/data URL을 쓰는 read에 새 cache/동기화 protocol을 만들지 않는다. 미사용이면 cleanup 기구를 신설하지 않는다.
+-
+-### 4. UI 입력/결과의 미정 의미 (8, 필요한 7)
+-
+-- grid 한 dimension 편집 시 render 이후 companion이 바뀌었을 때의 조합 및 invalid-input fallback. current-read 규칙만으로 event-time companion 정책을 만들지 않는다.
+-- palette load/reset 성공 판정, move null 결과, debug toggle 입력. public별 서로 다른 결과 계약을 일괄 success 형태로 바꾸지 않는다. Source에 이미 명확한 분기는 번역하고, 여전히 빠진 의미만 상위 결정 대상으로 적는다.
+-
+-### 5. 남은 모듈 전체 절차 대응 (6a 이후)
+-
+-기존 부분 기록을 재사용하고 미대응분만 번역한다. runtime 파일 존재나 작은 패치 수는 모듈 전체 종료의 증거가 아니다. system startup r139, public dispatch tuple r138, renderer/raster r137은 재사용하며 이를 native/browser/inline-split 실행 증거로 세지 않는다.
+-
+-### 6. 실행 검증 (최종 별도 허가)
+-
+-code147은 stale이다. Source45/PlusCal25/verification26/derived_from 불변. 공식 checker/fidelity/portable build/inline-split/browser/Plotly/drop/export regression은 최신 변경 집합으로 미실행이다.
+-
+-로컬은 read/edit/static diff/hash만 허용한다. 이 메모로 Actions/remote write/commit/push/goal 허가를 추정하지 않는다. 필요한 허가와 대상 SHA/run/job/log는 별도 확정한다.
+-
+-## 새 Plan 갱신 시 회수 기준
+-
+-정적 종료/미완료/상위 결정 대기/실행 대기를 구분한다. 각 항목을 완료·잔존·대체 중 하나로 회수하고 특히 project_state를 미완료인 채 종료 수에 포함하지 않는다. 상위 미정을 다른 번역 가능한 절차를 미루는 이유로 쓰지 않는다. 이번 작업에서 Plan 자체는 변경하지 않았다.
++Frontend reconciliation, Backend ui 역의존, 실제 자원 소유 연결, 남은 모듈 전수 대응, 통합 검증 일정은 명세 미확정 메모로 이월하지 않는다. ui 역의존은 r147 완료, adapter 다섯 절차와 실제 호출 경로는 r148 대응 기록으로 관리한다. 과거 projectImageDisplayUrl/release helper는 정적 호출 검색에서 production caller가 없으며 pure copied-byte/data URL 경로를 위해 새 cache/cleanup protocol을 만들 필요가 없다. 실행 검증 미실행은 각 review의 증거 한계로 기록하며 이를 번역 중단 사유로 쓰지 않는다.
+diff --git a/agent_space/reviews/review-20261114-001-application-adapter-module-translation.md b/agent_space/reviews/review-20261114-001-application-adapter-module-translation.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..5782ca3061f6b7d9f33b26f05f2e1c464a579b8d
+--- /dev/null
++++ b/agent_space/reviews/review-20261114-001-application-adapter-module-translation.md
+@@ -0,0 +1,29 @@
++# Plan025 6b — application/adapter 정적 번역 종료 (r148)
++
++Source `sourcescript/application/adapter.py` 134줄, PlusCal `pseudocode/application/adapter.pcal` 168줄, runtime `sourcecode/application/adapter.js` 전체를 확인했다. 기존 r138 command tuple/r133 selection/r147 Frontend owner 연결을 재사용하고 남은 직접 대응을 끝냈다. Source45/PlusCal25는 바꾸지 않았다. 이 모듈의 번역 가능한 절차를 메모로 이월하지 않는다.
++
++## 다섯 절차와 실제 호출 경로
++
++| Source / PlusCal | 코드 및 전체 분기 대응 |
++| --- | --- |
++| dispatchProjectQuery | 같은 이름의 thin Backend query 함수를 정의하고 실제 appFSM.query가 통과하게 했다. kind/request와 immutable projection을 그대로 전달하며 별도 read store/복제 candidate/Frontend mutable model 노출을 만들지 않는다. 기존 public API의 query 경로도 이 facade를 통과한다. |
++| dispatchInterfaceEvent | reference events만 current Backend validate; graph selection에는 기존처럼 current Frontend selectedSlotId를 참조 입력으로 추가한다. rejected면 readState를 반환하고 publish하지 않는다. local event는 accepted envelope로 보내 Backend query를 하지 않는다. 실제 appFSM.send의 Frontend 경로를 이 절차로 연결했다. explicit graph selectAsset intent는 그대로 유지한다. persistent command facade routing은 기존 dispatchProjectCommand를 사용한다. |
++| dispatchSlotSelection | validation→rejected unchanged tuple 또는 send의 반환 final state→선택이 남고 pending type이 명시된 경우만 official context read→empty/type 차이가 있을 때만 일반 command→final renderer query→[state,result,projection]. send 뒤 불필요한 두 번째 read 대신 반환 state를 사용한다. toggle clear/explicit null/direction, noncommit 조건부 command, failure propagation은 기존 owner 경로를 유지한다. 일반 command와 tuple 순서가 다름을 보존한다. |
++| dispatchProjectCommand | 등록 확인→Backend send→Frontend read→noncommit tuple, 또는 validated reconciliation→한 번 reconcile→그 반환 final state/mutation을 renderer query에 전달→[result,state,projection]. 독립 graph-selection 재호출/추가 성공 read/rollback/별도 authority를 만들지 않는다. public wrapper의 scalar/settings/chart 반환은 해당 wrapper 책임이다. r138/r147 실제 구현을 재사용했다. |
++| runLifecycleTask | ready 검사→requested importing/exporting 검사→local accepted START→task 정확히 한 번 invoke/await→성공 시 원래 task result를 outcome에 그대로 보내 COMPLETE, 원래 값을 반환한다. cancelled/rejected 결과도 완료이지 commit 주장이 아니다. sync throw/async rejection은 FAILED event/message→Frontend error/ready publish 뒤 원래 failure를 전파한다. Promise.resolve로 target-language InvokeAndAwaitOnce를 실현해 임의 thenable의 여러 resolve/reject에서도 completion이 한 번이며, completion 처리 오류를 task throw로 재분류하지 않는다. 실제 appFSM.run/public lifecycle callers가 이 절차를 통과한다. |
++
++Frontend event label의 기존 cancelled/rejected 표시를 유지하도록 `sourcecode/frontend/interface_fsm.js`는 원래 outcome 값/기존 outcome 문자열을 표시용으로 해석한다. 원래 task result 자체를 다른 성공 payload로 바꾸거나 저장하지 않는다. Frontend에 task callback은 전달하지 않는다.
++
++## 관련 production helper / 소유 연결
++
++supplied renderer 준비/selection/geometry/style/palette/range callback helpers는 r133–139의 실제 화면 caller 대응을 재사용한다. Application 경계에서 공식 read와 final Frontend state를 일시 전달할 뿐 세 번째 FSM이나 저장된 read authority가 없다. lower-level Plotly range 변환도 Backend helper를 사용하고 command에는 identity/new patch만 준다.
++
++정적 호출 검색에서 selectedProjectAsset/selectedProjectCsv/activateChartModel 및 dispatchDashboardAffectingEvent는 runtime 내부 production caller가 없는 legacy definitions다. 이를 새 논리 절차나 Frontend mutable read API로 사용하지 않았으며 이름 정리/삭제를 위한 폴리싱도 하지 않았다. projectImageDisplayUrl/release helper 역시 production caller가 없고 현재 공식 image read는 copied bytes/pure data URL이므로 새 resource cache/cleanup protocol이 필요하지 않다. Backend ui 역의존은 r147에서 실제 system/Frontend 소비까지 이미 해소되어 이번에 미완료로 돌리지 않는다.
++
++## 증거 한계 / 메모 정정
++
++기존 regression36은 accepted local lifecycle 경로, 적대적 thenable의 once-only 완료/원래 outcome identity, missing reference rejection 무publish, null/undefined 원래 failure의 recovery 후 전파를 추가했다. 기존 regression40은 직접 query/facade forwarding identity를 추가했다. 기존 command tuple/selection/lifecycle fixture도 유지했다. 새 ID 없이 fixtures를 작성했으며 실행하지 않았다.
++
++사용자 정정에 맞춰 `agent_space/memo/20261113-001.md`에서 일반 모듈 backlog/미실행 검증 일정/이미 해결된 owner 연결을 제거했다. 남긴 것은 all-chart/slot read 의미 및 미정 UI input/result 분기처럼 Source 결정을 먼저 받아야 하는 항목뿐이다. 해당 Source에서 이미 정의된 tree/CSV/deletion-target 절차는 미룰 차단으로 세지 않는다. 이 adapter 모듈에는 알려진 번역 누락이나 Source 복귀 차단이 없다. project_state 전체 종료를 주장하지 않는다.
++
++계획은 사용자 지시대로 지금 재작성하지 않는다. 다음 순서는 기존 Plan025 7a `application/public_api/contract`다. 공식 checker/fidelity/build/browser/inline-split 검증은 미실행이며 code148은 stale이다. 로컬 app/test/build/checker/TLC/browser, Actions, remote write, commit/push, new goal을 실행하지 않았다. byte hash/patch/whitespace 확인만 수행한다.

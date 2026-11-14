@@ -1,0 +1,49 @@
+diff --git a/development-versions.json b/development-versions.json
+index f461e51..7463815 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 152,
++      "revision": 153,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,7 +54,7 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:3a277fc835bde911b7c921e50807763d28941f4ffc04327c9889fe49ca1152ef",
++      "fingerprint": "sha256:72aeca36432073cae2c4fddd7e0942e5c0ce943a808054160ad9ba8fa0c4749e",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+diff --git a/sourcecode/application/public_api/index.js b/sourcecode/application/public_api/index.js
+index 97ec923..99c9105 100644
+--- a/sourcecode/application/public_api/index.js
++++ b/sourcecode/application/public_api/index.js
+@@ -49,7 +49,8 @@ window.FastFigureApi = Object.freeze({
+   }),
+   slots: Object.freeze({
+     readSelected: readSelectedSlotApi,
+-    select: setSelectedSlot,
++    select: (slotId, pendingContentType = null, direction = "ui-to-fsm") =>
++      setSelectedSlot(slotId, direction, pendingContentType),
+     setContentType: setSlotContentType,
+     reset: resetSlotApi,
+     swap: swapSlots,
+diff --git a/sourcecode/application/public_api/layout_annotations.js b/sourcecode/application/public_api/layout_annotations.js
+index 0039ced..588867e 100644
+--- a/sourcecode/application/public_api/layout_annotations.js
++++ b/sourcecode/application/public_api/layout_annotations.js
+@@ -11,7 +11,7 @@ export function swapSlots(sourceSlotId, targetSlotId) {
+   return result.committed;
+ }
+ 
+-export function setSelectedSlot(slotId = null, direction = "ui-to-fsm", pendingContentType = null) {
++export function setSelectedSlot(slotId, direction = "ui-to-fsm", pendingContentType = null) {
+   const [state, , projection] = dispatchSlotSelection(slotId, pendingContentType, direction);
+   if (projection === null) return state;
+   updateGraphView(projection, state);

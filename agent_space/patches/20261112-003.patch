@@ -1,0 +1,1036 @@
+diff --git a/sourcecode/application/adapter.js b/sourcecode/application/adapter.js
+index 8292173e390c734a956a935f76b460bb6bded45d..13711b7bada97dbbc567120ce7619f50d606a556 100644
+--- a/sourcecode/application/adapter.js
++++ b/sourcecode/application/adapter.js
+@@ -18,10 +18,10 @@
+   return installSlotClickControllerProjection({ slots: { select: setSelectedSlot, swap: swapSlots } });
+ }
+ 
+-// Every refresh reads the current authority at the Application boundary, never
+-// a renderer-retained domain snapshot. Callbacks carry intents, not writable models.
+-export function renderDashboard() {
+-  return renderDashboardProjection(readBackendProjection("renderer"), interfaceFSM.readState(), dashboardFrontendActions());
++// Commands supply their call-local final projection/state; standalone refreshes
++// read current authority here. Callbacks carry intents, not writable models.
++export function renderDashboard(projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
++  return renderDashboardProjection(projection, state, dashboardFrontendActions());
+ }
+ 
+ export function startupCoreRuntime() {
+@@ -32,10 +32,9 @@
+   return presentation;
+ }
+ 
+-export function applyCommittedDashboardProjection(event, result) {
++export function applyCommittedDashboardProjection(event, result, state, projection) {
+   if (!result.committed) return "NONE";
+-  return applyDashboardProjectionInvalidation(event, result, interfaceFSM.readState(),
+-    readBackendProjection("renderer"), dashboardFrontendActions());
++  return applyDashboardProjectionInvalidation(event, result, state, projection, dashboardFrontendActions());
+ }
+ 
+ function dashboardFrontendActions() {
+@@ -53,15 +52,15 @@
+         if (min !== setting.min || max !== setting.max) axes[key] = { min, max };
+       }
+       if (!Object.keys(axes).length) return false;
+-      return dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId,
+-        settings: { globalSettings: { axes } } }).committed;
++      const [result] = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId,
++        settings: { globalSettings: { axes } } });
++      return result.committed;
+     },
+   };
+ }
+ 
+-export function syncDashboardCaption(view) {
+-  const projection = readBackendProjection("renderer"), state = interfaceFSM.readState(),
+-    style = projection.layout.slotStyle,
++export function syncDashboardCaption(view, projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
++  const style = projection.layout.slotStyle,
+     width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth : style.referenceWidth * state.dashboardZoomIntent / 100;
+   return syncDashboardCaptionProjection(view || projection.annotations.captions, width / style.referenceWidth);
+ }
+@@ -98,10 +97,9 @@
+   if (state.selectedSlotId !== null && pendingContentType !== null) {
+     const context = readBackendProjection("slot-selection-context", { slotId: state.selectedSlotId });
+     if (context?.empty && context.contentType !== pendingContentType) {
+-      projectResult = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
++      [projectResult, state] = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
+         slotId: state.selectedSlotId, contentType: pendingContentType,
+       });
+-      state = interfaceFSM.readState();
+     }
+   }
+   return [state, projectResult, readBackendProjection("renderer", { frontendState: state })];
+@@ -124,14 +122,14 @@
+   return renderDashboard();
+ }
+ export function applyUiPaletteValues(values, notify = true) {
+-  const result = dispatchProjectCommand("APPEARANCE_CHANGED", { palette: values });
++  const [result, state, projection] = dispatchProjectCommand("APPEARANCE_CHANGED", { palette: values });
+   if (!result.committed) return false;
+-  applyCommittedDashboardProjection("APPEARANCE_CHANGED", result);
++  applyCommittedDashboardProjection("APPEARANCE_CHANGED", result, state, projection);
+   if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
+   return readAppearanceApiPalette();
+ }
+-export function renderProjectObject() {
+-  const presentation = renderDashboard();
++export function renderProjectObject(projection, state) {
++  const presentation = renderDashboard(projection, state);
+   updateFileAvailability();
+   return presentation;
+ }
+@@ -173,11 +171,13 @@
+ }
+ 
+ export function dispatchProjectCommand(event, payload = {}) {
+-  let result = projectEFSM.send(event, payload);
+-  if (result.committed)
+-    interfaceFSM.reconcileProjectResult(event,
+-      buildFrontendReconciliationInput(event, result, interfaceFSM.readState()));
+-  return result;
++  if (!PROJECT_COMMANDS.has(event)) throw Error(`${event}는 등록된 ProjectObject command가 아닙니다.`);
++  const result = projectEFSM.send(event, payload), frontendBefore = interfaceFSM.readState();
++  if (!result.committed) return [result, frontendBefore, null];
++  const reconciliationInput = buildFrontendReconciliationInput(event, result, frontendBefore),
++    state = interfaceFSM.reconcileProjectResult(event, reconciliationInput),
++    projection = readBackendProjection("renderer", { frontendState: state, mutationResult: result });
++  return [result, state, projection];
+ }
+ 
+ export const appFSM = Object.freeze({
+@@ -188,8 +188,8 @@
+   definition: (...args) => interfaceFSM.definition(...args),
+   send(event, payload = {}) {
+     if (PROJECT_COMMANDS.has(event)) {
+-      dispatchProjectCommand(event, payload);
+-      return interfaceFSM.state;
++      const [, state] = dispatchProjectCommand(event, payload);
++      return state;
+     }
+     let validatedInput = BACKEND_REFERENCE_EVENTS.has(event)
+       ? validateFrontendIntent(event, { ...payload, selectedSlotId: interfaceFSM.readState().selectedSlotId }) : null;
+@@ -224,9 +224,9 @@
+ }
+ 
+ export function dispatchDashboardAffectingEvent(event, payload = {}) {
+-  const result = dispatchProjectCommand(event, payload),
+-    projectionEffect = applyCommittedDashboardProjection(event, result);
+-  return { state: appFSM.state, payload, projectionEffect };
++  const [result, state, projection] = dispatchProjectCommand(event, payload),
++    projectionEffect = applyCommittedDashboardProjection(event, result, state, projection);
++  return { state, payload, projectionEffect };
+ }
+ 
+ export function activateChartModel(id) {
+diff --git a/sourcecode/application/public_api/assets.js b/sourcecode/application/public_api/assets.js
+index 10aba3bfd2e1bb3b6cb17c74676fa32865cdd635..69ec0414398a86bc87a96b9dea186be9ce3ad2f0 100644
+--- a/sourcecode/application/public_api/assets.js
++++ b/sourcecode/application/public_api/assets.js
+@@ -54,10 +54,10 @@
+   const choices = await collectCompletedImportChoices(list, directory, planImport);
+   if (!choices) return null;
+   const copied = await prepareCopiedImportFiles(list),
+-    result = dispatchProjectCommand("ASSETS_IMPORTED", { files: copied, directory, choices });
++    [result, state, projection] = dispatchProjectCommand("ASSETS_IMPORTED", { files: copied, directory, choices });
+   if (!result.committed) return result;
+   const imported = readImportedAssets(result);
+-  updateFileAvailability(); renderDashboard(); status(`${imported.length}개 자산을 프로젝트에 추가했습니다.`);
++  updateFileAvailability(); renderDashboard(projection, state); status(`${imported.length}개 자산을 프로젝트에 추가했습니다.`);
+   return imported;
+ }
+ 
+@@ -73,10 +73,9 @@
+ 
+ export function connectProjectAssetToSlot(path, kind, slotId) {
+   if (!["csv", "image"].includes(kind)) throw Error("연결할 asset kind가 올바르지 않습니다.");
+-  const result = dispatchProjectCommand(kind === "csv" ? "SLOT_DATA_CONNECTED" : "SLOT_IMAGE_LINKED", { path, kind, slotId });
++  const [result] = dispatchProjectCommand(kind === "csv" ? "SLOT_DATA_CONNECTED" : "SLOT_IMAGE_LINKED", { path, kind, slotId });
+   if (!result.committed) return null;
+   setSelectedSlot(slotId, "model-to-fsm");
+-  renderDashboard();
+   status("프로젝트 파일을 슬롯에 연결했습니다.");
+   return null;
+ }
+@@ -119,12 +118,12 @@
+ 
+ export function deleteProjectAsset(target) {
+   if (!target || !["csv", "image"].includes(target.kind)) return null;
+-  const result = dispatchProjectCommand(target.kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED", {
++  const [result, state, projection] = dispatchProjectCommand(target.kind === "csv" ? "DATA_OBJECT_DELETED" : "IMAGE_OBJECT_DELETED", {
+     target: { kind: target.kind, id: target.id, path: target.path },
+   });
+   if (!result.committed) return null;
+   const removed = result.changed.assets[0], count = result.changed.removedGraphReferenceCount + result.changed.resetImageSlotCount;
+-  if (count) renderDashboard();
++  if (count) renderDashboard(projection, state);
+   status(`${removed.name}을 프로젝트에서 삭제했습니다.`);
+   return null;
+ }
+@@ -149,13 +148,13 @@
+ 
+ export function moveProjectNode(plan, useUniqueName = false) {
+   if (!plan) return null;
+-  const result = dispatchProjectCommand("PROJECT_NODE_MOVED", {
++  const [result, state, projection] = dispatchProjectCommand("PROJECT_NODE_MOVED", {
+     path: plan.path, directory: plan.directory, useUniqueName,
+   });
+   if (!result.committed) return null;
+   const path = result.changed.movedPathTo,
+     trashed = appFSM.query("project-api", { operation: "assets.isTrashed", path });
+-  applyCommittedDashboardProjection("PROJECT_NODE_MOVED", result);
++  applyCommittedDashboardProjection("PROJECT_NODE_MOVED", result, state, projection);
+   status(trashed
+     ? `${projectPathName(result.changed.movedPathFrom)}을 휴지통으로 이동했습니다.`
+     : `${projectPathName(result.changed.movedPathFrom)}을 ${projectParentPath(path)}로 이동했습니다.`);
+@@ -163,7 +162,7 @@
+ }
+ 
+ export function createProjectDirectory(parent, name) {
+-  const result = dispatchProjectCommand("PROJECT_DIRECTORY_CREATED", { parent, name });
++  const [result] = dispatchProjectCommand("PROJECT_DIRECTORY_CREATED", { parent, name });
+   if (!result.committed) return null;
+   const path = result.changed.createdDirectoryPath;
+   appFSM.send("SELECT_ASSET", { kind: "directory", path, direction: "ui-to-fsm" });
+@@ -171,9 +170,9 @@
+ }
+ 
+ export function emptyProjectTrash() {
+-  const result = dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {});
+-  if (!result.committed) return null;
+-  applyCommittedDashboardProjection("PROJECT_TRASH_EMPTIED", result);
++  const [result, state, projection] = dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {});
++  if (!result.committed) return null;
++  applyCommittedDashboardProjection("PROJECT_TRASH_EMPTIED", result, state, projection);
+   updateFileAvailability();
+   status(`휴지통을 비웠습니다. 폴더 ${result.changed.directoryCount}개, CSV ${result.changed.csvCount}개, 이미지 ${result.changed.imageCount}개를 삭제했습니다.`);
+   return null;
+@@ -196,10 +195,10 @@
+     choices = await collectCompletedImportChoices([file], directory, choosePlan);
+   if (!choices) return null;
+   const files = await prepareCopiedImportFiles([file]),
+-    result = dispatchProjectCommand("ASSETS_IMPORTED", { files, directory, choices, targetSlotId: slotId });
++    [result, state, projection] = dispatchProjectCommand("ASSETS_IMPORTED", { files, directory, choices, targetSlotId: slotId });
+   if (!result.committed) return result;
+   const imported = readImportedAssets(result)[0];
+-  renderDashboard(); updateFileAvailability();
++  renderDashboard(projection, state); updateFileAvailability();
+   return imported;
+ }
+ 
+diff --git a/sourcecode/application/public_api/graphs.js b/sourcecode/application/public_api/graphs.js
+index 23e1cd2c3f255f14ab2eecc383cb136045344c30..a8d0a7f4f653c9a979fcaff050df923b610439a5 100644
+--- a/sourcecode/application/public_api/graphs.js
++++ b/sourcecode/application/public_api/graphs.js
+@@ -23,12 +23,12 @@
+ }
+ 
+ export function graphEditorObjectValues(chartId, index, values = {}) {
+-  const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
++  const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
+     chartId, operation: "graphs.setObjectValues", index, values,
+   });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+-  renderDashboard();
++  renderDashboard(projection, state);
+   return chart;
+ }
+ 
+@@ -42,10 +42,10 @@
+ export function graphEditorAdd(slotId, csvId) {
+   const slot = appFSM.query("project-api", { operation: "slots.readSelected", frontendState: { selectedSlotId: slotId } }),
+     event = slot?.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED",
+-    result = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
++    [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;
+-  renderDashboard();
++  renderDashboard(projection, state);
+   return chart;
+ }
+ 
+@@ -61,22 +61,22 @@
+   const context = appFSM.query("project-api", { operation: "graphs.readData", chartId });
+   if (from === to && context.chart?.editor.editable !== false && Number.isInteger(from) &&
+       from >= 0 && from < context.objects.length) return context.chart;
+-  const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
++  const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
+     chartId, operation: "graphs.moveObject", from, to,
+   });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+-  renderDashboard();
++  renderDashboard(projection, state);
+   return chart;
+ }
+ 
+ export function graphEditorDelete(chartId, index) {
+-  const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
++  const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", {
+     chartId, operation: "graphs.deleteObject", index,
+   });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+-  renderDashboard();
++  renderDashboard(projection, state);
+   return chart;
+ }
+ 
+@@ -95,19 +95,19 @@
+ }
+ 
+ export function graphEditorHeaderLines(csvId, value) {
+-  const result = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value });
++  const [result, state, projection] = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value });
+   if (!result.committed) return result;
+   const updated = result.changed.assets.find((asset) => asset.kind === "csv" && asset.role === "updated"),
+     read = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: updated.path });
+-  renderDashboard();
++  renderDashboard(projection, state);
+   return read.target.headerLines;
+ }
+ 
+ export function graphEditorSetEditable(slotId, chartId, editable) {
+-  const result = dispatchProjectCommand("CHART_MODEL_REPLACED", { slotId, chartId, editable });
++  const [result, state, projection] = dispatchProjectCommand("CHART_MODEL_REPLACED", { slotId, chartId, editable });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+-  renderDashboard();
++  renderDashboard(projection, state);
+   return chart.editor.editable;
+ }
+ 
+@@ -139,21 +139,21 @@
+ 
+ export async function importSelectedGraphFile(file, slotId = interfaceFSM.readState().selectedSlotId) {
+   const [copied] = await prepareCopiedImportFiles([file]),
+-    result = dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId, file: copied });
++    [result, state, projection] = dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId, file: copied });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", {
+     operation: "graphs.readData", frontendState: { selectedSlotId: slotId },
+   }).chart;
+-  renderDashboard(); updateFileAvailability();
++  renderDashboard(projection, state); updateFileAvailability();
+   status(`${file.name}을 슬롯에 불러왔습니다.`);
+   return chart;
+ }
+ 
+ export function graphEditorUpdateLayout(slotId, chartId, values) {
+-  const result = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId, settings: values });
++  const [result, state, projection] = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId, settings: values });
+   if (!result.committed) return result;
+   const output = appFSM.query("project-api", { operation: "graphs.readLayout", selectedSlotId: slotId });
+-  renderDashboard();
++  renderDashboard(projection, state);
+   return output;
+ }
+ 
+@@ -164,10 +164,10 @@
+ }
+ 
+ export function graphEditorApplyPalette(chartId, colors) {
+-  const result = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
++  const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+-  renderDashboard();
++  renderDashboard(projection, state);
+   return chart;
+ }
+ 
+diff --git a/sourcecode/application/public_api/index.js b/sourcecode/application/public_api/index.js
+index ed4496035e8ee9b6bb76e4a826d3606100a1ba7c..2ed7d522d3abae8be73d692cbd9c667ea9eb8630 100644
+--- a/sourcecode/application/public_api/index.js
++++ b/sourcecode/application/public_api/index.js
+@@ -1,6 +1,6 @@
+ // Source: sourcescript/application/public_api/__init__.py; pseudocode/application/public_api/contract.pcal.
+ // Public API composition; domain operations are implemented in the sibling modules.
+-import { appFSM, dispatchProjectCommand, renderDashboard, renderProjectObject } from '../adapter.js';
++import { appFSM, dispatchProjectCommand, renderProjectObject } from '../adapter.js';
+ import { connectProjectAssetPathToSlot, createProjectDirectory, deleteProjectAsset, downloadProjectAsset, draggableProjectAsset, emptyProjectTrash, importProjectAssetFiles, importProjectFileToSlot, importProjectFilesToDirectory, moveProjectNode, prepareCopiedImportFiles, projectNodeMoveOptions, readAssetCollisionModel, readAssetDeletionTarget, readAssetFileKind, readAssetImportPlan, readProjectTrash, selectDirectoryFromTree, selectImageFromTree, selectProjectCsv } from './assets.js';
+ import { addGraphObjectApi, applyGraphPaletteApi, createEmptyProjectCsvAndSelect, deleteGraphObjectApi, downloadPlotlyJson, downloadSlotFfsx, graphEditorHeaderLines, graphEditorSelectCsv, graphEditorSelectObject, importSelectedGraphFile, moveGraphObjectApi, readGraphDataApi, readGraphLayoutApi, readGraphPaletteApi, setGraphEditableApi, setGraphObjectValuesApi, updateGraphLayoutApi } from './graphs.js';
+ import { applyImageSettingsFromValues, capturePrintApi, commitLayoutApiZoom, finishDashboardFileDrop, finishLabelsApiPositionInteraction, insertCaptionsApiSlotCaptions, insertEmptyImageIntoSelectedSlot, mergeSlots, prepareDashboardFileDrop, readAppearanceApiPalette, readGlobalCaptionState, readImageEditorApi, readLabelsApiState, readLayoutApiState, readPrintApiSettings, readSelectedSlotApi, readSlotCaptionState, resetAppearanceApiPalette, resetLabelsApiPosition, resetLayoutApiZoom, resetSlotApi, savePrintApi, setAppearanceApiPalette, setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings, setGlobalCaptionText, setLabelsApiEnabled, setLabelsApiPosition, setLabelsApiSettings, setLayoutApiGrid, setLayoutApiStyle, setLayoutApiZoom, setLayoutApiZoomLocked, setPrintApiSettings, setSelectedSlot, setSlotCaptionText, setSlotContentType, splitSlots, swapSlots } from './layout_annotations.js';
+@@ -10,10 +10,10 @@
+ export function importProjectFile(file) {
+   return appFSM.run("importing", "project.importFile", async () => {
+     const [copied] = await prepareCopiedImportFiles([file]),
+-      result = dispatchProjectCommand("PROJECT_LOADED", { file: copied });
++      [result, state, projection] = dispatchProjectCommand("PROJECT_LOADED", { file: copied });
+     if (!result.committed) return result;
+     const snapshot = appFSM.query("export", {});
+-    renderProjectObject(); renderDashboard();
++    renderProjectObject(projection, state);
+     appFSM.send("CLOSE_OVERLAY", { reason: "project-loaded" });
+     status(`${file.name} 프로젝트를 불러왔습니다.`);
+     return snapshot;
+@@ -34,7 +34,7 @@
+ }
+ 
+ export function setProjectName(value, trim = false) {
+-  const result = dispatchProjectCommand("PROJECT_NAME_CHANGED", { value, trim });
++  const [result] = dispatchProjectCommand("PROJECT_NAME_CHANGED", { value, trim });
+   if (!result.committed) return null;
+   return appFSM.query("project-api", { operation: "project.readName" });
+ }
+diff --git a/sourcecode/application/public_api/layout_annotations.js b/sourcecode/application/public_api/layout_annotations.js
+index 920618e247dae629ac40938f3f9df825f09b2462..0039cede2a2845202d55d87e1490799ee0e2d110 100644
+--- a/sourcecode/application/public_api/layout_annotations.js
++++ b/sourcecode/application/public_api/layout_annotations.js
+@@ -6,8 +6,8 @@
+ import { clearSlotDragState, debugLog, exportDashboard, exportDashboardTarget, readDashboardRenderedWidth, schedulePlotResize, syncSlotImageElement } from '../../frontend/renderer.js';
+ 
+ export function swapSlots(sourceSlotId, targetSlotId) {
+-  const result = dispatchProjectCommand("SLOTS_SWAPPED", { sourceSlotId, targetSlotId });
+-  if (result.committed) renderDashboard();
++  const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SWAPPED", { sourceSlotId, targetSlotId });
++  if (result.committed) renderDashboard(projection, frontendState);
+   return result.committed;
+ }
+ 
+@@ -22,16 +22,16 @@
+ }
+ 
+ export function mergeSlots(slotIds=[]) {
+-  const result = dispatchProjectCommand("SLOTS_MERGED", { slotIds });
+-  if (!result.committed) return false;
+-  renderDashboard();
++  const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_MERGED", { slotIds });
++  if (!result.committed) return false;
++  renderDashboard(projection, frontendState);
+   return readLayoutApiState();
+ }
+ 
+ export function splitSlots(slotIds=[]) {
+-  const result = dispatchProjectCommand("SLOTS_SPLIT", { slotIds });
+-  if (!result.committed) return false;
+-  renderDashboard();
++  const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SPLIT", { slotIds });
++  if (!result.committed) return false;
++  renderDashboard(projection, frontendState);
+   return readLayoutApiState();
+ }
+ 
+@@ -41,25 +41,25 @@
+   if (!context || context.contentType !== "image") return null;
+   const imageInput = { bytes: new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"></svg>'),
+     name: "빈 이미지.svg", mime: "image/svg+xml" },
+-    result = dispatchProjectCommand("SLOT_IMAGE_IMPORTED", { slotId, operation: "images.insertEmpty", imageInput });
++    [result, frontendState, projection] = dispatchProjectCommand("SLOT_IMAGE_IMPORTED", { slotId, operation: "images.insertEmpty", imageInput });
+   if (!result.committed) return null;
+   const path = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image").path,
+     target = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path }).target;
+-  renderDashboard();
++  renderDashboard(projection, frontendState);
+   return target;
+ }
+ 
+ export function setSlotContentType(slotId, contentType) {
+-  const result = dispatchProjectCommand("SLOT_TYPE_CHANGED", { slotId, contentType });
+-  if (result.committed) renderDashboard();
++  const [result, frontendState, projection] = dispatchProjectCommand("SLOT_TYPE_CHANGED", { slotId, contentType });
++  if (result.committed) renderDashboard(projection, frontendState);
+   return null;
+ }
+ 
+ export function applyImageSettingsFromValues(slotId, values={}) {
+   if (!appFSM.query("project-api", { operation: "images.readEditor", slotId })) return false;
+-  let result=dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId, settings: values });
+-  if (!result.committed) return false;
+-  applyCommittedDashboardProjection("SLOT_IMAGE_SETTINGS_CHANGED", result);
++  let [result, frontendState, projection] = dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId, settings: values });
++  if (!result.committed) return false;
++  applyCommittedDashboardProjection("SLOT_IMAGE_SETTINGS_CHANGED", result, frontendState, projection);
+   appFSM.notify("images","IMAGE_SETTINGS_CHANGED");
+   return appFSM.query("project-api", { operation: "images.readEditor", slotId });
+ }
+@@ -71,8 +71,8 @@
+ }
+ 
+ export function resetSlotApi(slotId) {
+-  const result = dispatchProjectCommand("SLOTS_RESET", { slotIds: [slotId] });
+-  if (result.committed) renderDashboard();
++  const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_RESET", { slotIds: [slotId] });
++  if (result.committed) renderDashboard(projection, frontendState);
+   return null;
+ }
+ 
+@@ -129,63 +129,63 @@
+ }
+ 
+ export function setCaptionsApiEnabled(enabled) {
+-  let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { enabled });
+-  if (!result.committed) return false;
+-  const state = readGlobalCaptionState();
+-  applyCommittedDashboardProjection("CAPTION_SETTINGS_CHANGED", result);
++  let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { enabled });
++  if (!result.committed) return false;
++  const state = readGlobalCaptionState();
++  applyCommittedDashboardProjection("CAPTION_SETTINGS_CHANGED", result, frontendState, projection);
+   debugLog("annotation:caption", { enabled: state.enabled });
+   appFSM.notify("captions", "ANNOTATION_VISIBILITY_CHANGED");
+   return state;
+ }
+ 
+ export function setGlobalCaptionText(text) {
+-  let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
++  let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
+     target: { kind: "global" }, text,
+   });
+   if (!result.committed) return false;
+   const state = readGlobalCaptionState();
+-  syncDashboardCaption(state);
++  syncDashboardCaption(state, projection, frontendState);
+   return state;
+ }
+ 
+ export function setSlotCaptionText(slotId,text) {
+-  let result = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
++  let [result] = dispatchProjectCommand("CAPTION_TEXT_INPUT", {
+     target: { kind: "slot", id: slotId }, text,
+   });
+   return result.committed ? readSlotCaptionState(slotId) : false;
+ }
+ 
+ export function insertCaptionsApiSlotCaptions(slotIds = null) {
+-  let result = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", { slotIds });
++  let [result, frontendState, projection] = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", { slotIds });
+   if (!result.committed) return false;
+   let state = readGlobalCaptionState();
+-  syncDashboardCaption(state);
++  syncDashboardCaption(state, projection, frontendState);
+   return state;
+ }
+ 
+ export function setCaptionsApiName(name) {
+-  let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { name });
+-  if (!result.committed) return false;
+-  const state = readGlobalCaptionState();
+-  syncDashboardCaption(state);
++  let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { name });
++  if (!result.committed) return false;
++  const state = readGlobalCaptionState();
++  syncDashboardCaption(state, projection, frontendState);
+   appFSM.notify("captions", "CAPTION_NAME_CHANGED");
+   return state;
+ }
+ 
+ export function setCaptionsApiNameBold(bold) {
+-  let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { nameBold: bold });
+-  if (!result.committed) return false;
+-  const state = readGlobalCaptionState();
+-  syncDashboardCaption(state);
++  let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { nameBold: bold });
++  if (!result.committed) return false;
++  const state = readGlobalCaptionState();
++  syncDashboardCaption(state, projection, frontendState);
+   appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
+   return state;
+ }
+ 
+ export function setCaptionsApiSettings(patch = {}) {
+-  let result = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { settings: patch });
+-  if (!result.committed) return false;
+-  const state = readGlobalCaptionState();
+-  syncDashboardCaption(state);
++  let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { settings: patch });
++  if (!result.committed) return false;
++  const state = readGlobalCaptionState();
++  syncDashboardCaption(state, projection, frontendState);
+   appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
+   return state;
+ }
+@@ -195,7 +195,7 @@
+ }
+ 
+ export function setPrintApiSettings(values={}) {
+-  let result = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", { settings: values });
++  let [result] = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", { settings: values });
+   return result.committed ? readPrintApiSettings() : false;
+ }
+ 
+@@ -220,27 +220,27 @@
+ }
+ 
+ export function setLabelsApiEnabled(enabled) {
+-  let result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { enabled });
+-  if (!result.committed) return false;
+-  applyCommittedDashboardProjection("LABEL_SETTINGS_CHANGED", result);
++  let [result, frontendState, projection] = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { enabled });
++  if (!result.committed) return false;
++  applyCommittedDashboardProjection("LABEL_SETTINGS_CHANGED", result, frontendState, projection);
+   debugLog("annotation:label", { enabled });
+   appFSM.notify("labels", "ANNOTATION_VISIBILITY_CHANGED");
+   return readLabelsApiState();
+ }
+ 
+ export function setLabelsApiSettings(patch = {}) {
+-  let result = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { settings: patch });
+-  if (!result.committed) return false;
+-  applyCommittedDashboardProjection("LABEL_SETTINGS_CHANGED", result);
++  let [result, frontendState, projection] = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { settings: patch });
++  if (!result.committed) return false;
++  applyCommittedDashboardProjection("LABEL_SETTINGS_CHANGED", result, frontendState, projection);
+   debugLog("mantine:label-settings", { ...patch });
+   appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
+   return readLabelsApiState();
+ }
+ 
+ export function updateLabelsApiPosition(x, y, eventName = null) {
+-  let result = dispatchProjectCommand("LABEL_POSITION_CHANGED", { x, y });
+-  if (!result.committed) return false;
+-  applyCommittedDashboardProjection("LABEL_POSITION_CHANGED", result);
++  let [result, frontendState, projection] = dispatchProjectCommand("LABEL_POSITION_CHANGED", { x, y });
++  if (!result.committed) return false;
++  applyCommittedDashboardProjection("LABEL_POSITION_CHANGED", result, frontendState, projection);
+   if (eventName) {
+     debugLog("mantine:label-settings", { x, y });
+     appFSM.notify("labels", eventName);
+@@ -259,9 +259,9 @@
+ }
+ 
+ export function resetLabelsApiPosition() {
+-  let result = dispatchProjectCommand("LABEL_POSITION_CHANGED", { reset: true });
+-  if (!result.committed) return false;
+-  applyCommittedDashboardProjection("LABEL_POSITION_CHANGED", result);
++  let [result, frontendState, projection] = dispatchProjectCommand("LABEL_POSITION_CHANGED", { reset: true });
++  if (!result.committed) return false;
++  applyCommittedDashboardProjection("LABEL_POSITION_CHANGED", result, frontendState, projection);
+   appFSM.notify("labels", "LABEL_POSITION_RESET");
+   return readLabelsApiState();
+ }
+@@ -285,17 +285,17 @@
+ }
+ 
+ export function setLayoutApiStyle(patch = {}) {
+-  const result = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
+-  if (!result.committed) return false;
+-  applyCommittedDashboardProjection("LAYOUT_STYLE_CHANGED", result);
++  const [result, frontendState, projection] = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
++  if (!result.committed) return false;
++  applyCommittedDashboardProjection("LAYOUT_STYLE_CHANGED", result, frontendState, projection);
+   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+   return readLayoutApiState();
+ }
+ 
+ export function setLayoutApiGrid(rows, cols) {
+-  const result = dispatchProjectCommand("GRID_LAYOUT_CHANGED", { rows, cols });
+-  if (!result.committed) return false;
+-  applyCommittedDashboardProjection("GRID_LAYOUT_CHANGED", result);
++  const [result, frontendState, projection] = dispatchProjectCommand("GRID_LAYOUT_CHANGED", { rows, cols });
++  if (!result.committed) return false;
++  applyCommittedDashboardProjection("GRID_LAYOUT_CHANGED", result, frontendState, projection);
+   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+   return readLayoutApiState();
+ }
+diff --git a/sourcecode/backend/assets_files.js b/sourcecode/backend/assets_files.js
+index c4f029f5de5e36b53d0685f3e82d513f90dd023c..f27e0cfb358e1b236b344bfec6a674479e455b24 100644
+--- a/sourcecode/backend/assets_files.js
++++ b/sourcecode/backend/assets_files.js
+@@ -171,7 +171,7 @@
+ 
+ export function createProjectImage(bytes, name, mime, id = null, path = null) {
+   const copiedBytes = typeof bytes === "string" ? bytes : new Uint8Array(bytes || []).slice(),
+-    result = dispatchProjectCommand("IMAGE_OBJECT_CREATED", { bytes: copiedBytes, name, mime, id, path });
++    [result] = dispatchProjectCommand("IMAGE_OBJECT_CREATED", { bytes: copiedBytes, name, mime, id, path });
+   if (!result.committed) return result;
+   const created = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image");
+   return appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: created.path }).target;
+@@ -225,7 +225,7 @@
+   headerLines = 1,
+   path = null,
+ ) {
+-  const result = dispatchProjectCommand("DATA_OBJECT_CREATED", {
++  const [result] = dispatchProjectCommand("DATA_OBJECT_CREATED", {
+     data, name, id, bytesBase64, mime, headerLines, path,
+   });
+   if (!result.committed) return result;
+diff --git a/sourcecode/frontend/interface_fsm.js b/sourcecode/frontend/interface_fsm.js
+index 85abf4d310bd23d550e40229a13fa566cdd6021b..8dc568a510d47792e0d3b5a1f9fac57b5f39d49b 100644
+--- a/sourcecode/frontend/interface_fsm.js
++++ b/sourcecode/frontend/interface_fsm.js
+@@ -196,7 +196,8 @@
+       direction: "model-to-ui",
+       revision: this.state.revision + 1,
+     });
+-    return this.publish(`${event}:reconcile`);
++    this.publish(`${event}:reconcile`);
++    return this.readState();
+   }
+   notify(object, event, payload = {}) {
+     if (this.state.lifecycle === "booting" || this.transitioning) return this.state;
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index a89f17e31e053f07b10f5b4bfe302c4fd2c19eed..40abb6a0d5eb3f8ee9cadcfff9b191c1b3e38399 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -1305,7 +1305,7 @@
+       check(JSON.stringify(activeProject._state) === beforeRead && appFSM.state === frontendBeforeRead,
+         "print query changed authority");
+       api.print.setSettings({ width: 1800, dpi: 600 });
+-      const result = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", { settings: { format: "jpeg" } });
++      const [result] = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", { settings: { format: "jpeg" } });
+       const current = api.print.readSettings();
+       check(result.committed && current.width === 1800 && current.dpi === 600 && current.height === 800 &&
+         current.format === "jpeg" && stale.width === 1400 && stale.format === "png",
+@@ -1323,6 +1323,66 @@
+       try { api.print.setSettings({ width: Symbol("invalid-width") }); } catch { failed = true; }
+       check(failed && JSON.stringify(activeProject._state) === beforeFailure && appFSM.state === frontendBeforeFailure,
+         "failed print command changed Project or reconciled Frontend success");
++      const send = projectEFSM.send, readState = interfaceFSM.readState,
++        reconcile = interfaceFSM.reconcileProjectResult, build = buildFrontendReconciliationInput,
++        query = readBackendProjection, invalidate = applyDashboardProjectionInvalidation,
++        failure = Error("command renderer query failed"), order = [];
++      let mutation, finalState, rendererInput, rendererValue, ownerReads = 0, reject = false, failQuery = false;
++      try {
++        projectEFSM.send = function(event, payload) {
++          order.push("command");
++          return mutation = reject ? Object.freeze({ committed: false }) : send.call(this, event, payload);
++        };
++        interfaceFSM.readState = function() {
++          order.push("frontend"); return readState.call(this);
++        };
++        buildFrontendReconciliationInput = (...args) => {
++          order.push("input"); return build(...args);
++        };
++        interfaceFSM.reconcileProjectResult = function(...args) {
++          order.push("reconcile"); return finalState = reconcile.apply(this, args);
++        };
++        readBackendProjection = (kind, request) => {
++          if (kind === "renderer") {
++            order.push("renderer"); rendererInput = request;
++            if (failQuery) throw failure;
++            return rendererValue = query(kind, request);
++          }
++          if (kind === "project-api" && request.operation === "print.readSettings") ownerReads++;
++          return query(kind, request);
++        };
++        let caught;
++        try { dispatchProjectCommand("NOT_A_PROJECT_COMMAND"); } catch (error) { caught = error; }
++        check(caught && !order.length, "unregistered command reached Backend or Frontend");
++        reject = true;
++        const rejected = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", { settings: { width: 333 } });
++        check(rejected[0] === mutation && rejected[1].selectedSlotId === readState.call(interfaceFSM).selectedSlotId &&
++          rejected[2] === null && order.join() === "command,frontend",
++          "noncommit tuple queried/reconciled success or lost postcommand references");
++        reject = false; order.length = 0;
++        const committed = dispatchProjectCommand("EXPORT_SETTINGS_CHANGED", { settings: { width: 777 } });
++        check(committed[0] === mutation && committed[1] === finalState && committed[2] === rendererValue &&
++          rendererInput.frontendState === finalState && rendererInput.mutationResult === mutation &&
++          finalState.selectedSlotId === readState.call(interfaceFSM).selectedSlotId &&
++          order.join() === "command,frontend,input,reconcile,frontend,renderer",
++          "command tuple lost final runtime/projection identity or transaction/reconciliation/query order");
++        applyDashboardProjectionInvalidation = (event, result, state, projection) => {
++          check(result === committed[0] && state === committed[1] && projection === committed[2],
++            "presentation discarded supplied command handoff"); return "NARROW";
++        };
++        order.length = 0;
++        check(applyCommittedDashboardProjection("EXPORT_SETTINGS_CHANGED", ...committed) === "NARROW" && !order.length,
++          "command presentation performed redundant Frontend/renderer reads");
++        failQuery = true; order.length = 0; caught = null;
++        try { api.print.setSettings({ width: 888 }); } catch (error) { caught = error; }
++        check(caught === failure && activeProject.exportSettings.width === 888 && ownerReads === 0 &&
++          order.join() === "command,frontend,input,reconcile,frontend,renderer",
++          "postcommit renderer failure rolled back, swallowed error or ran public success read");
++      } finally {
++        projectEFSM.send = send; interfaceFSM.readState = readState;
++        interfaceFSM.reconcileProjectResult = reconcile; buildFrontendReconciliationInput = build;
++        readBackendProjection = query; applyDashboardProjectionInvalidation = invalidate;
++      }
+     });
+ 
+     await run(41, "caption insertion follows exact Backend grouping and committed query boundaries", async () => {
+@@ -2714,7 +2774,7 @@
+       const saved = projectClone(activeProject._state), session = interfaceFSM.state, selected = interfaceRuntime.selectedSlotId,
+         initialize = activeProject.initialize, query = readBackendProjection, render = renderDashboard,
+         send = projectEFSM.send, reconcile = interfaceFSM.reconcileProjectResult;
+-      let commits = 0, renders = 0, reconciliations = 0, result, reads = 0;
++      let commits = 0, renders = 0, reconciliations = 0, result, reads = 0, commandProjection, commandFrontend;
+       try {
+         const slot = activeProject.slots.find(item => !item.hidden && item.contentType !== "image");
+         api.slots.reset(slot.id); select(slotAt(slot.id));
+@@ -2728,10 +2788,17 @@
+         const objects = projectClone(getChart(chartId).editor.objects), assets = JSON.stringify(activeProject._state.assets),
+           assetPath = interfaceFSM.state.assetPath;
+         activeProject.initialize = function (state) { commits++; return initialize.call(this, state); };
+-        renderDashboard = () => { renders++; };
++        renderDashboard = (projection, state) => {
++          check(projection === commandProjection && state === commandFrontend && state.selectedSlotId === slot.id,
++            "public graph wrapper discarded command final-state/projection handoff"); renders++;
++        };
+         interfaceFSM.reconcileProjectResult = function (...args) { reconciliations++; return reconcile.apply(this, args); };
+-        readBackendProjection = (kind, request) => { if (kind === "project-api" && request.operation === "graphs.readData") reads++;
+-          return query(kind, request); };
++        readBackendProjection = (kind, request) => {
++          if (kind === "project-api" && request.operation === "graphs.readData") reads++;
++          const value = query(kind, request);
++          if (kind === "renderer") { commandProjection = value; commandFrontend = request.frontendState; }
++          return value;
++        };
+         projectEFSM.send = function (event, payload) {
+           check(event === "GRAPH_OBJECTS_REPLACED" && ["graphs.moveObject", "graphs.deleteObject"].includes(payload.operation) &&
+             payload.chartId === chartId && !Object.hasOwn(payload, "objects") && !Object.hasOwn(payload, "candidate"),
+@@ -2753,9 +2820,10 @@
+         check(noop !== getChart(chartId) && Object.isFrozen(noop.editor.objects[0]) && commits === count &&
+           interfaceFSM.state === stable && renders === paints && reconciliations === reconciled && reads === readCount + 1 &&
+           JSON.stringify(activeProject._state) === before, "valid equal-index move mutated/reconciled/rendered instead of copied no-op");
+-        const directNoop = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.moveObject", from: 0, to: 0 });
++        const [directNoop, noopState, noopProjection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.moveObject", from: 0, to: 0 });
+         check(!directNoop.committed && directNoop.selectionHints === null && commits === count &&
+-          reconciliations === reconciled && interfaceFSM.state === stable, "Backend equal move committed or published hint");
++          reconciliations === reconciled && interfaceFSM.state === stable && noopState.selectedSlotId === slot.id &&
++          noopProjection === null, "Backend equal move committed, published hint or returned success projection");
+         api.graphs.deleteObject(1);
+         check(JSON.stringify(getChart(chartId).editor.objects) === JSON.stringify([objects[0], objects[2]]) &&
+           result.selectionHints.selectedIndexHint === null && interfaceFSM.state.graphObjectIndex === null,
+@@ -3848,7 +3916,7 @@
+         y.content = { ...projectClone(x.content), extension: "right" }; x.caption = y.caption = null;
+         onlyExtensions.charts = onlyExtensions.charts.filter(chart => chart.id !== chartId);
+         initialize.call(activeProject, onlyExtensions);
+-        const canonicalResult = dispatchProjectCommand("SLOTS_SWAPPED", { sourceSlotId: a.id, targetSlotId: b.id });
++        const [canonicalResult] = dispatchProjectCommand("SLOTS_SWAPPED", { sourceSlotId: a.id, targetSlotId: b.id });
+         check(canonicalResult.changed.slotIds.length === 2 && slotAt(a.id).content.extension === "right" &&
+           slotAt(b.id).content.extension === "left", "extension-only swap omitted actual changed slot facts");
+       } finally { activeProject.initialize = initialize; projectEFSM.send = send; renderDashboard = render;
+@@ -4171,12 +4239,16 @@
+         source.charts = source.charts.filter(item => item.id !== old); target.content.chart = null; target.content.contentType = "graph";
+         initialize.call(activeProject, source); select(slotAt(target.id));
+         const csv = createProjectCsv([["x", "y"], [1, 2]], "layout-errors.csv"), chart = api.graphs.addObject(csv.id);
+-        let commits = 0, reads = 0, paints = 0;
++        let commits = 0, reads = 0, projections = 0, paints = 0;
+         activeProject.initialize = function (...args) { commits++; return initialize.apply(this, args); };
+-        readBackendProjection = (kind, request) => { reads++; return query(kind, request); };
++        readBackendProjection = (kind, request) => {
++          if (kind === "project-api" && request.operation === "graphs.readLayout") reads++;
++          if (kind === "renderer") projections++;
++          return query(kind, request);
++        };
+         renderDashboard = () => { paints++; };
+         const before = activeProject._state, runtime = interfaceFSM.state;
+-        const noSuccess = () => check(!commits && !reads && !paints && activeProject._state === before &&
++        const noSuccess = () => check(!commits && !reads && !projections && !paints && activeProject._state === before &&
+           interfaceFSM.state === runtime, "failed layout did success work or changed authority");
+         const attempt = values => { let caught; try { graphEditorUpdateLayout(target.id, chart.id, values); } catch (error) { caught = error; } return caught; };
+         check(attempt({ get title() { throw failure; } }) === failure, "layout edit getter error swallowed"); noSuccess();
+@@ -4201,7 +4273,7 @@
+         };
+         const output = graphEditorUpdateLayout(target.id, chart.id, { title: "retry title" });
+         validateProjectObjectState = validate;
+-        check(attempts === 2 && commits === 1 && reads === 1 && paints === 1 && output.title === "retry title" &&
++        check(attempts === 2 && commits === 1 && reads === 1 && projections === 1 && paints === 1 && output.title === "retry title" &&
+           output.settings.graphFontFamily === "newer authority font" && activeProject.projectName === "newer layout authority",
+           "layout committed stale candidate or applied edits twice");
+         readBackendProjection = () => { throw failure; }; caught = null;
+@@ -5452,7 +5524,7 @@
+         check(!replaceResult.committed && !commits && !effects && activeProject._state === newer,
+           "stale replacement choice retargeted new same-path identity after byte wait");
+         const source = activeProject._state, frontend = interfaceFSM.state,
+-          shortcut = dispatchProjectCommand("ASSETS_IMPORTED", { candidate: projectClone(source), imported: [] });
++          [shortcut] = dispatchProjectCommand("ASSETS_IMPORTED", { candidate: projectClone(source), imported: [] });
+         check(!shortcut.committed && activeProject._state === source && interfaceFSM.state === frontend && !commits,
+           "removed Application candidate shortcut still commits");
+         activeProject.initialize = initialize;
+@@ -7432,7 +7504,7 @@
+         };
+         dispatchProjectCommand = (event, payload) => {
+           if (dispatchFailure) throw dispatchFailure;
+-          commands.push({ event, payload }); return { committed };
++          commands.push({ event, payload }); return [{ committed }, session, null];
+         };
+         check(renderDashboard() === renderResult, "range bridge lost renderer result");
+         const report = ranges => actions.graphRangesChanged(9922, 1262, ranges);
+diff --git a/development-versions.json b/development-versions.json
+index 49ac989811c38263013a8a9e68d8aae3b16ee08f..e0be30ebf3f5b9e32c012b2262ac62fdc5aa8944 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 137,
++      "revision": 138,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:789a25f36c02776a713b180ea0c9a0550c73ba9a77a34295795a968d704d94de",
++      "fingerprint": "sha256:65ac8481f55dbb75be947d677f6d199e3f9ccef95a23e54b6a6dbc880157590a",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261112-002-screen-export-translation.md"
++      "validation_review": "agent_space/reviews/review-20261112-003-command-boundary-translation.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/plans/plan-024.md b/agent_space/plans/plan-024.md
+index 77bda9b7208570140f9d83990845648051bf11ee..f7f1a48e66c4ce467ab1c67ce0b0ffa9b7612dee 100644
+--- a/agent_space/plans/plan-024.md
++++ b/agent_space/plans/plan-024.md
+@@ -136,3 +136,15 @@
+ The named stage2 procedures/resource boundaries are now translated in the statically inspected scope; remaining native font/Plotly/canvas/download and integration verification is explicitly deferred, not substituted with helper-count claims. The next translation scope is stage3: general dispatchProjectCommand tuple and actual public consumers, then remaining Backend/Application/UI correspondence and deferred read/freshness owners. Execution permission is not required to continue that translation.
+ 
+ Existing cases15/147/148/149 were extended; no new case IDs. Only static file/diff/whitespace and independent canonical-LF hash inspection; no application/test/build/checker/TLC/Actions/remote/commit/push/delegation. Code137/stale canonical fingerprint `sha256:789a25f36c02776a713b180ea0c9a0550c73ba9a77a34295795a968d704d94de`; Source45/PlusCal25/verification26 and lineage unchanged. Official checker validation remains pending. Incremental pre-edit-WIP patch/explanation: `agent_space/patches/20261112-002.patch` / `.md`; prior WIP, policy, upper layers, dist and existing evidence preserved.
++
++## 13. General command tuple and public-consumer boundary — r138 (2026-11-12)
++
++Continues stage3 as pseudocode → sourcecode translation, not feature design. `dispatchProjectCommand` now preserves the full Source/PlusCal procedure: registered-command requirement, one Backend transaction, postcommand Frontend reference read, noncommit `[result,state,null]`, or one validated reconciliation followed by the renderer query with final state and mutation result, returning `[result,state,projection]`. Errors propagate; later query/render failure does not undo a commit. Reconciliation's returned read includes runtime selected slot/zoom, without another publication.
++
++Every production direct consumer was searched and adapted: adapter-local range/palette/selection/facade/invalidation paths, all four public API files, and physically Backend-located Application CSV/image creators. Public chart/settings/scalar/path/item/null/false/noncommit return contracts remain distinct; the internal tuple does not escape through public bindings. Supplied final state/projection reaches existing narrow/full presentation owners without rereading or forcing full rendering. Project import and post-connect selection no longer duplicate presentation. Fresh official owner reads, independent valid CSV selection, ordered per-file import/target capture, explicit batch atomicity and one outer lifecycle are preserved.
++
++Full procedure/branch/production-caller correspondence and limitations are in `agent_space/reviews/review-20261112-003-command-boundary-translation.md`. Existing regression cases were extended/adapted for tuple/order/identity/noncommit silence, actual graph wrapper handoff and postcommit query failure; fixtures were **not executed**. No fixture proliferation or execution/count-based completion claim.
++
++**Stage3 remains open.** Actual UI tracing found pre-existing public-result ambiguities at `sourcecode/frontend/mantine_ui.js:1781` (palette success reporting after a possible noncommit return) and `sourcecode/frontend/mantine_ui.js:664` (move null-result dereference), including related palette reset protocol. Supervisor direction is to preserve Mantine bytes in this tuple/public-wrapper unit, not invent a UI result protocol absent detailed Source UI authority. These paths are not accepted as translated/correct; follow-up must resolve the UI correspondence upstream. Public wrapper success effects themselves remain commit-gated. Deferred tree/readTrash projection and unrelated general read/freshness owners also remain open. Screen/export static scope closure is unchanged; native/integration verification is separately pending.
++
++Exact pre-edit working-byte snapshots were used, not HEAD; previous WIP and intentional artifacts are preserved. Code138/**stale**, independent canonical-LF fingerprint `sha256:65ac8481f55dbb75be947d677f6d199e3f9ccef95a23e54b6a6dbc880157590a`; Source45/PlusCal25/verification26 and `derived_from` unchanged. Static read/search/diff/whitespace/hash only; official checker, app/tests/build/TLC/browser/Actions were not executed. No policy/upstream/dist/generated/workflow/remote/commit/push changes or nested delegation. Incremental patch/explanation: `agent_space/patches/20261112-003.patch` / `.md`. Independent final review remains required.
+diff --git a/agent_space/reviews/review-20261112-003-command-boundary-translation.md b/agent_space/reviews/review-20261112-003-command-boundary-translation.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..265ba065f537215d93998683bde5be00de764c76
+--- /dev/null
++++ b/agent_space/reviews/review-20261112-003-command-boundary-translation.md
+@@ -0,0 +1,138 @@
++# General command tuple and public-consumer translation — 2026-11-12
++
++## Scope and authority
++
++This records a **static pseudocode → JavaScript translation**, not executed verification and not completion of all Plan024 stage3 work. Full required policy/plan reads and relevant Source/PlusCal reads preceded edits. Source45 > PlusCal25 > target code remains the authority order; no policy, Source, PlusCal or verification-model changes were made.
++
++The coherent unit is `dispatchProjectCommand` plus every production interpretation of its return, including adapter-local calls, public wrappers, physically Backend-located Application creators and presentation handoffs. Stage1 screen and stage2 raster scope closure from review002 remains static and was not reopened. Tree/readTrash exact projection, unrelated general freshness and the UI result ambiguities below remain open.
++
++Baseline: HEAD `28e6dc762c75c8a2ffbbe53ed08b323f0b2b82bd`; intentional working changes and untracked artifacts were retained. Exact pre-edit working bytes, **not HEAD**, were snapshotted for this unit before editing. The incremental patch uses those bytes. No staged files, remote operation, commit/push, nested delegation or application/test/build/checker/TLC/browser/Actions execution occurred.
++
++## General adapter procedure and branches
++
++Authority: `sourcescript/application/adapter.py:92-116`, `pseudocode/application/adapter.pcal:88-124`. Target: `sourcecode/application/adapter.js:173-181`.
++
++| Authoritative operation/branch | Target correspondence |
++| --- | --- |
++| Require registered command before command work | `PROJECT_COMMANDS.has(event)` checked before `projectEFSM.send`; unknown command throws without mutation/Frontend/query work. |
++| Complete one Backend transaction | One `projectEFSM.send(event,payload)`; Backend still owns current resolution, candidate, normalization/validation, retry and one commit. |
++| Read Frontend references after command | `frontendBefore = interfaceFSM.readState()` follows send. No precommand selection restoration. |
++| Noncommit | Returns `[result, frontendBefore, null]`; no reconciliation, renderer query or command-success presentation. Original result identity retained. |
++| Commit | One `buildFrontendReconciliationInput(event,result,frontendBefore)`; one reconciliation using its validated references/hints/maps. |
++| Final Frontend state | `interfaceFSM.reconcileProjectResult` publishes once, then returns `this.readState()` (`sourcecode/frontend/interface_fsm.js:187-201`), including runtime selected slot and zoom. Returning `publish()` alone omitted those runtime fields. |
++| Final renderer projection | One `readBackendProjection("renderer", {frontendState: state, mutationResult: result})`, after reconciliation. |
++| Internal return | `[result,state,projection]`; no array properties, dual shape or public tuple exposure. All values remain call-local. |
++| Failure | Send, reconciliation-input, reconciliation and renderer-query errors propagate. A later error neither rolls back a commit nor fabricates noncommit/success. |
++
++`sourcecode/backend/project_state.js:528-574` retains reference resolution and hint/map validation. Application does not duplicate validation, retry, selection correction or commit. Independent valid CSV selection is retained; no corrective `SELECT_GRAPH_OBJECT` replay was added.
++
++## Adjacent adapter consumers and presentation
++
++Authority: `sourcescript/application/adapter.py:68-89`, `pseudocode/application/adapter.pcal:47-85`, plus public procedures mapped below.
++
++- `sourcecode/application/adapter.js:40-58`: range-edit callback extracts result and preserves its boolean output; current editable/chart checks and no-edit no-op remain.
++- `sourcecode/application/adapter.js:92-106`: slot selection extracts command result/state in the optional type-change path, but returns its distinct `[state,projectResult,projection]` order. Rejected selection remains silent; accepted selection retains its own final query, including selection with no persistent command. It does not conflate accepted selection with committed command.
++- `sourcecode/application/adapter.js:124-129`: palette command extracts all tuple members, gates presentation/notification on commit, then returns the fresh official appearance read or false.
++- `sourcecode/application/adapter.js:189-193`: compatibility `appFSM.send` command facade returns final Frontend state, not mutation result/tuple.
++- `sourcecode/application/adapter.js:226-230`: dashboard-affecting helper extracts tuple, retains `{state,payload,projectionEffect}` outward result and existing invalidation routing.
++- `sourcecode/application/adapter.js:23-37`: command presentations receive exact final state/projection; no redundant renderer/Frontend reread at this handoff. Standalone refresh still reads current authority. Existing narrow/workspace/full effect owner is unchanged; projection availability does not force full rendering.
++- `sourcecode/application/adapter.js:62-66`: caption synchronization receives the exact fresh caption owner view plus supplied command geometry/runtime. Standalone callers retain current-read defaults.
++- `sourcecode/application/adapter.js:131-135`: project rendering forwards supplied values. Import now presents once through this boundary, not twice.
++
++No presentation owner, cache, retry/rollback protocol, scheduler or cross-call snapshot was introduced.
++
++## Public procedure correspondence
++
++In the following tables, Source and PlusCal paths are fixed by each heading; each numbered anchor identifies the procedure in that file. All affected direct dispatch callers were statically searched again after edits. Public bindings remain in `sourcecode/application/public_api/index.js:42-157`; current-selection wrappers still resolve at invocation and explicit-target procedures retain their IDs.
++
++### Graphs
++
++Source: `sourcescript/application/public_api/graphs.py`; PlusCal: `pseudocode/application/public_api/graphs.pcal`; target: `sourcecode/application/public_api/graphs.js`.
++
++| Procedure | Source / PlusCal / JS start | Preserved branches/output |
++| --- | --- | --- |
++| graphEditorAdd | 11 / 10 / 42 | Unpack; noncommit original result; success fresh detached chart, one supplied render. |
++| graphEditorObjectValues | 35 / 23 / 25 | Current index validation; command input edits, not candidate chart; fresh chart/noncommit result. |
++| graphEditorMove | 59 / 33 / 60 | Valid editable equal-index branch remains command-free fresh read; mutation branch fresh chart/noncommit result. |
++| graphEditorDelete | 76 / 47 / 73 | Current order/index command; supplied render and fresh chart only after commit. |
++| graphEditorSetEditable | 89 / 58 / 106 | Fresh editable scalar/noncommit result; current-selected wrapper at JS114 retained. |
++| graphEditorSetHeaderLines | 115 / 68 / 97 (`graphEditorHeaderLines`) | Fresh header scalar and supplied render only after commit. |
++| graphEditorUpdateLayout | 132 / 79 / 152 | Fresh official layout projection; supplied render; original noncommit result. |
++| graphEditorApplyPalette | 149 / 89 / 166 | Fresh chart and wrapper success effects only on commit. |
++| importSelectedGraphFile | 165 / 99 / 140 | Copied file; command then fresh chart/availability/status on commit; original noncommit result. JS `(file,slotId)` signature and bindings retained. |
++
++`setGraphObjectValuesApi`, `addGraphObjectApi`, `moveGraphObjectApi`, `deleteGraphObjectApi`, `setGraphEditableApi`, `updateGraphLayoutApi`, `applyGraphPaletteApi` continue their current-selected ID adaptation without exposing the tuple. `exportSelectedGraph` is outside this mutation unit and unchanged.
++
++### Assets and project
++
++Source: `sourcescript/application/public_api/assets.py`; PlusCal: `pseudocode/application/public_api/assets.pcal`. Target paths are explicit because creator wrappers remain physically under Backend.
++
++| Procedure | Source / PlusCal | Target and preserved branches/output |
++| --- | --- | --- |
++| createProjectCsv / createEmptyProjectCsv | 91,113 / 113,124 | `sourcecode/backend/assets_files.js:219-242`: extracts result, returns original noncommit result or detached asset from actual committed changed path. Empty creation delegates without another lifecycle. |
++| createProjectImage | 142 / 136 | `sourcecode/backend/assets_files.js:172-180`: same result extraction/actual path read contract. No relocation or owner redesign. |
++| createEmptyProjectCsvAndSelect | 54 / 51 | `sourcecode/application/public_api/graphs.js:12-16`: noncommit forwarded; current CSV selection only after creation; selection rejection does not undo commit. |
++| importProjectFilesToDirectory | 67 / 97 | `sourcecode/application/public_api/assets.js:51-62`: empty `[]`, cancellation null, noncommit original result, success detached input-order assets; one explicit batch candidate retained. |
++| deleteProjectAsset | 173 / 146 | `sourcecode/application/public_api/assets.js:119-129`: success and noncommit null; dependent count/render/status only after commit. |
++| moveProjectNode | 198 / 160 | `sourcecode/application/public_api/assets.js:149-162`: no plan/noncommit null; success actual committed path plus fresh `trashed`, existing effect routing. |
++| emptyProjectTrash | 228 / 174 | `sourcecode/application/public_api/assets.js:172-179`: null return; success effect/notification gated on commit. |
++| createProjectDirectory | 246 / 182 | `sourcecode/application/public_api/assets.js:164-170`: actual canonical committed path; rejected postcommit selection cannot undo creation. |
++| connectProjectAssetToSlot | 267 / 195 | `sourcecode/application/public_api/assets.js:74-81`: null contract retained; selection only after commit; accepted selection presents its own final tuple once. Removed redundant second render, not selection's authoritative query. |
++| importProjectFileToSlot | 297 / 209 | `sourcecode/application/public_api/assets.js:189-203`: captured explicit target; cancel null/noncommit result; fresh detached actual asset/chart after commit. |
++| importProjectFile | 318 / 229 | `sourcecode/application/public_api/index.js:10-21`: copied file, original noncommit result; one supplied project render and detached fresh snapshot on commit. |
++| importProjectAssetFiles | 340 / 240 | `sourcecode/application/public_api/assets.js:205-229`: single target capture; ordered per-file commits; stop on cancel/noncommit/throw; earlier commits retained, no router atomicity. |
++
++Input-order reads, copied-file preparation and choice collection remain existing call-local helpers. `connectProjectAssetPathToSlot` delegates without tuple exposure. `selectProjectCsv` preserves independent selection. Tree/readTrash exact public projection is deferred, not silently redefined.
++
++### Project settings, layout, images and annotations
++
++Source: `sourcescript/application/public_api/layout_annotations.py`; PlusCal: `pseudocode/application/public_api/layout_annotations.pcal`; JS: `sourcecode/application/public_api/layout_annotations.js`, except project name in index and appearance helper in adapter.
++
++| Procedure(s) | Source / PlusCal / JS start | Preserved branches/output |
++| --- | --- | --- |
++| setProjectName | 36 / 10 / `sourcecode/application/public_api/index.js:36` | Fresh string/null. |
++| setSlotContentType / resetSlotApi / swapSlots | 46,54,60 / 20,28,36 / 52,73,8 | Null/null/committed boolean; supplied success presentation only. |
++| insertEmptyImageIntoSelectedSlot | 68 / 44 / 38 | Actual-created detached image/null; no inferred path/asset from request. |
++| mergeSlots / splitSlots | 187,210 / 152,162 / 24,31 | Fresh layout owner read/false; supplied final render only after commit. |
++| applyImageSettingsFromValues | 228 / 172 / 58 | Fresh image-editor settings/false; existing narrow effect boundary. |
++| setLayoutApiStyle / setLayoutApiGrid | 152,170 / 132,142 / 287,295 | Fresh layout read/false; supplied full invalidation, existing notification. |
++| setLabelsApiEnabled / setLabelsApiSettings | 270,285 / 193,203 / 222,231 | Fresh label owner read/false; commit-gated supplied invalidation/notification. |
++| setLabelsApiPosition / resetLabelsApiPosition | 300,317 / 213,223 / 251,261 (shared JS240) | Fresh labels/false; no second command on interaction completion. |
++| setGlobalCaptionText / setSlotCaptionText | 340,362 / 241,252 / 141,151 | Fresh caption owner read/false; global exact read is supplied to caption rendering. |
++| insertSlotCaptionsIntoGlobalCaption | 381 / 262 / 158 (`insertCaptionsApiSlotCaptions`) | Fresh global caption/false, exact owner read passed to sync once. |
++| setCaptionsApiEnabled / setCaptionsApiName / setCaptionsApiNameBold / setCaptionsApiSettings | 403,417,431,445 / 274,284,294,304 / 131,166,175,184 | Fresh captions/false; existing full/narrow effects preserved using supplied tuple. |
++| setAppearanceApiPalette / resetAppearanceApiPalette | 460,472 / 314,324 / 273,277 | Delegates to tuple-aware adapter helper; fresh appearance/false. |
++| setExportSettings | 477 / 331 / 197 (`setPrintApiSettings`) | Fresh print settings/false; no unrelated screen rendering. |
++
++`finishLabelsApiPositionInteraction` stays notification/read only. Drop selection still uses the distinct slot-selection tuple. Session zoom, export/capture and unused legacy helpers were not rewritten for volume.
++
++## Actual public bindings, UI and lifecycle trace
++
++- `sourcecode/application/public_api/index.js:42-157` still publishes detached public charts/settings/scalars/items, not internal tuple members. `sourcecode/system.js:277` remains the publication entry. `InvokePublicMethod` / `InvokePublicHelper` / `InvokePublicWrapper` (`pseudocode/application/public_api/contract.pcal:118-190`) keep one outer lifecycle and internal helper invocation.
++- `sourcecode/frontend/mantine_ui.js:320-541`: file/delete/reset/type and image-editor paths call these public bindings. `sourcecode/frontend/mantine_ui.js:595-1033`: tree/create/move/connect/import paths retain current IDs/plans and established UI error reporting.
++- `sourcecode/frontend/mantine_ui.js:1257-1315,1354-1549`: project/name/selection and graph data/layout paths consume public results rather than command tuples. CSV creation still traverses the physically Backend-located creator wrapper.
++- `sourcecode/frontend/mantine_ui.js:1743-1850,1902-1928`: graph palette/import and appearance paths retain public inputs/current-target binding. UI result ambiguity below is not declared translated.
++- `sourcecode/frontend/mantine_ui.js:2242-2398,2457-2549,2593-2627,2733-2988`: label/caption/print/layout controls remain public-boundary consumers; label completion notifies/reads rather than commits; caption overlay supplies explicit selected-slot ID when required.
++- `sourcecode/frontend/mantine_ui.js:3009-3035`: mounted file drop retains prepare/import/finally-finish ordering and one public lifecycle. No frontend direct `dispatchProjectCommand` calls exist.
++- Rejection/cancellation returned by a helper completes the outer task without manufacturing a Project commit. Thrown/rejected send/query/render failures flow through existing lifecycle failure/recovery and propagate to the UI boundary. Internal ordered imports do not reenter public lifecycle; no rollback of preceding commits.
++
++### Still-open UI correspondence (supervisor scope decision)
++
++`sourcecode/frontend/mantine_ui.js:1781` invokes `commitColors(valid)` and then unconditionally reports palette success; the wrapper may instead return the original noncommitted result. `sourcecode/frontend/mantine_ui.js:664` dereferences `moveProjectNode`'s result although its specified no-plan/noncommit result is null. Related palette reset UI does not define a uniform committed-result protocol either. These are pre-existing UI/Source-detail questions, not tuple regressions and **not accepted as correct/completed translation**.
++
++Supervisor direction: do not invent a UI result protocol from the public wrapper contract (some committed APIs return undefined or mapped values), and do not change Mantine loadPalette/reset or executeProjectNodeMove in this unit. `sourcescript/frontend/mantine_ui.py` describes ownership/lifecycle but not the detailed palette-load branch. Mantine bytes are preserved. Follow-up must resolve this exact UI correspondence from upstream authority or seek an upstream choice. The implemented public wrappers themselves remain commit-gated.
++
++## Authored fixtures and static evidence
++
++Existing `agent_space/tests/browser-regression.js` cases were extended/adapted, **not executed**:
++
++- Case40: unknown command pre-send rejection; noncommit tuple order/identity/silence; committed send → Frontend read → reconciliation input → reconciliation/read → renderer ordering; exact result/state/projection identities; supplied presentation without reread; postcommit renderer failure propagates while committed state persists and public success read is absent.
++- Case68: actual graph move/delete wrapper passes the exact command final Frontend state/projection into `renderDashboard`; fresh graph owner reads and command-free equal-index move remain distinct from mandatory renderer query.
++- Case96: distinguish the mandatory command renderer query from the existing official graph-layout success read, while retaining zero queries on noncommit/early failure.
++- Existing direct-dispatch expectations and graph-range stub were adapted for the tuple (including print, equal-index, extension swap and removed-candidate-shortcut fixtures). No new suite/fixture IDs or helper-only replacement of production translation.
++
++Static evidence: exhaustive dispatch and presentation-call searches; per-file incremental diff inspection against working-byte snapshots; whitespace/diff checks; independent canonical-LF fingerprint calculation after reading the checker implementation, without executing it. Snapshot baseline hash reproduced `sha256:789a25f36c02776a713b180ea0c9a0550c73ba9a77a34295795a968d704d94de`.
++
++Code138 remains **stale**, fingerprint `sha256:65ac8481f55dbb75be947d677f6d199e3f9ccef95a23e54b6a6dbc880157590a`. Source45, PlusCal25, verification26/stale/TLC-pending and all `derived_from` values are unchanged. Metadata points here to record this static revision, not an executed validation. No historical run or hash is presented as execution evidence.
++
++Incremental artifacts: `agent_space/patches/20261112-003.patch` and `agent_space/patches/20261112-003.md`. The patch includes this review/plan/metadata/fixture changes, excludes recursive patch/explanation self, and preserves earlier WIP. Remaining scope: explicit UI ambiguities above, deferred tree/readTrash and broader stage3 freshness/correspondence, followed separately by authorized native/browser/integration and official validation. Independent reviewer acceptance is still required.

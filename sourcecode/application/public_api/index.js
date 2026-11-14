@@ -1,8 +1,8 @@
 // Source: sourcescript/application/public_api/__init__.py; pseudocode/application/public_api/contract.pcal.
 // Public API composition; domain operations are implemented in the sibling modules.
-import { appFSM, dispatchProjectCommand, renderDashboard, renderProjectObject } from '../adapter.js';
+import { appFSM, dispatchProjectCommand, renderProjectObject } from '../adapter.js';
 import { connectProjectAssetPathToSlot, createProjectDirectory, deleteProjectAsset, downloadProjectAsset, draggableProjectAsset, emptyProjectTrash, importProjectAssetFiles, importProjectFileToSlot, importProjectFilesToDirectory, moveProjectNode, prepareCopiedImportFiles, projectNodeMoveOptions, readAssetCollisionModel, readAssetDeletionTarget, readAssetFileKind, readAssetImportPlan, readProjectTrash, selectDirectoryFromTree, selectImageFromTree, selectProjectCsv } from './assets.js';
-import { addGraphObjectApi, applyGraphPaletteApi, createEmptyProjectCsvAndSelect, deleteGraphObjectApi, downloadPlotlyJson, downloadSlotFfsx, graphEditorHeaderLines, graphEditorSelectCsv, graphEditorSelectObject, importSelectedGraphFile, moveGraphObjectApi, readGraphDataApi, readGraphLayoutApi, readGraphPaletteApi, setGraphEditableApi, setGraphObjectValuesApi, updateGraphLayoutApi } from './graphs.js';
+import { createEmptyProjectCsvAndSelect, downloadPlotlyJson, downloadSlotFfsx, graphEditorAdd, graphEditorApplyPalette, graphEditorDelete, graphEditorHeaderLines, graphEditorMove, graphEditorObjectValues, graphEditorSelectCsv, graphEditorSelectObject, graphEditorSetEditable, graphEditorUpdateLayout, importSelectedGraphFile, readGraphDataApi, readGraphLayoutApi, readGraphPaletteApi } from './graphs.js';
 import { applyImageSettingsFromValues, capturePrintApi, commitLayoutApiZoom, finishDashboardFileDrop, finishLabelsApiPositionInteraction, insertCaptionsApiSlotCaptions, insertEmptyImageIntoSelectedSlot, mergeSlots, prepareDashboardFileDrop, readAppearanceApiPalette, readGlobalCaptionState, readImageEditorApi, readLabelsApiState, readLayoutApiState, readPrintApiSettings, readSelectedSlotApi, readSlotCaptionState, resetAppearanceApiPalette, resetLabelsApiPosition, resetLayoutApiZoom, resetSlotApi, savePrintApi, setAppearanceApiPalette, setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings, setGlobalCaptionText, setLabelsApiEnabled, setLabelsApiPosition, setLabelsApiSettings, setLayoutApiGrid, setLayoutApiStyle, setLayoutApiZoom, setLayoutApiZoomLocked, setPrintApiSettings, setSelectedSlot, setSlotCaptionText, setSlotContentType, splitSlots, swapSlots } from './layout_annotations.js';
 import { interfaceFSM } from '../../frontend/interface_fsm.js';
 import { downloadExportPayload, status } from '../../frontend/renderer.js';
@@ -10,10 +10,10 @@ import { downloadExportPayload, status } from '../../frontend/renderer.js';
 export function importProjectFile(file) {
   return appFSM.run("importing", "project.importFile", async () => {
     const [copied] = await prepareCopiedImportFiles([file]),
-      result = dispatchProjectCommand("PROJECT_LOADED", { file: copied });
+      [result, state, projection] = dispatchProjectCommand("PROJECT_LOADED", { file: copied });
     if (!result.committed) return result;
     const snapshot = appFSM.query("export", {});
-    renderProjectObject(); renderDashboard();
+    renderProjectObject(projection, state);
     appFSM.send("CLOSE_OVERLAY", { reason: "project-loaded" });
     status(`${file.name} 프로젝트를 불러왔습니다.`);
     return snapshot;
@@ -34,7 +34,7 @@ export function downloadProject() {
 }
 
 export function setProjectName(value, trim = false) {
-  const result = dispatchProjectCommand("PROJECT_NAME_CHANGED", { value, trim });
+  const [result] = dispatchProjectCommand("PROJECT_NAME_CHANGED", { value, trim });
   if (!result.committed) return null;
   return appFSM.query("project-api", { operation: "project.readName" });
 }
@@ -49,7 +49,8 @@ window.FastFigureApi = Object.freeze({
   }),
   slots: Object.freeze({
     readSelected: readSelectedSlotApi,
-    select: setSelectedSlot,
+    select: (slotId, pendingContentType = null, direction = "ui-to-fsm") =>
+      setSelectedSlot(slotId, direction, pendingContentType),
     setContentType: setSlotContentType,
     reset: resetSlotApi,
     swap: swapSlots,
@@ -58,7 +59,7 @@ window.FastFigureApi = Object.freeze({
   }),
   images: Object.freeze({
     readEditor: readImageEditorApi,
-    setSettings: (values) => applyImageSettingsFromValues(appFSM.readState().selectedSlotId, values),
+    setSettings: applyImageSettingsFromValues,
     insertEmpty: insertEmptyImageIntoSelectedSlot,
   }),
   assets: Object.freeze({
@@ -95,28 +96,28 @@ window.FastFigureApi = Object.freeze({
     readPalette: readGraphPaletteApi,
     selectCsv: graphEditorSelectCsv,
     setHeaderLines: graphEditorHeaderLines,
-    setEditable: setGraphEditableApi,
-    addObject: addGraphObjectApi,
-    moveObject: moveGraphObjectApi,
+    setEditable: graphEditorSetEditable,
+    addObject: graphEditorAdd,
+    moveObject: graphEditorMove,
     selectObject: graphEditorSelectObject,
-    setObjectValues: setGraphObjectValuesApi,
-    deleteObject: deleteGraphObjectApi,
-    updateLayout: updateGraphLayoutApi,
-    applyPalette: applyGraphPaletteApi,
+    setObjectValues: graphEditorObjectValues,
+    deleteObject: graphEditorDelete,
+    updateLayout: graphEditorUpdateLayout,
+    applyPalette: graphEditorApplyPalette,
     defaultColors: () => appFSM.query("project-api", { operation: "graphs.defaultColors" }),
     hasSelectedSlot: () => appFSM.query("project-api", {
       operation: "graphs.hasSelectedSlot", selectedSlotId: interfaceFSM.readState().selectedSlotId,
     }),
-    importFile: (...args) => appFSM.run("importing", "graphs.importFile", () =>
-      importSelectedGraphFile(...args)),
+    importFile: (slotId, file) => appFSM.run("importing", "graphs.importFile", () =>
+      importSelectedGraphFile(file, slotId)),
     exportFfsx: downloadSlotFfsx,
     exportPlotlyJson: downloadPlotlyJson,
   }),
   print: Object.freeze({
     readSettings: readPrintApiSettings,
     setSettings: setPrintApiSettings,
-    save: savePrintApi,
-    capture: capturePrintApi,
+    save: (statusSink) => savePrintApi({ onStatus: statusSink }),
+    capture: (statusSink) => capturePrintApi({ onStatus: statusSink }),
   }),
   captions: Object.freeze({
     readGlobal: readGlobalCaptionState,

@@ -6,9 +6,9 @@ import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapsho
 // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
 // the mounted UI owns only its collision resolver and drag finalization.
 export async function dashboardExternalFileDrop(file, slotId, choosePlan, frontendActions) {
+  if (!frontendActions.slots.prepareFileDrop(slotId)) return false;
   let failed = false;
   try {
-    if (!frontendActions.slots.prepareFileDrop(slotId)) return false;
     return await frontendActions.assets.importToSlot(file, slotId, choosePlan);
   } catch (error) {
     failed = true;
@@ -322,7 +322,7 @@ React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트"
     const slotType = slot?.contentType || "graph";
     const [resetSlotId, setResetSlotId] = useState(null);
     const assetApi = window.FastFigureApi.assets;
-    const selectedAssetDeletable = !!assetApi.readDeletionTarget();
+    const selectedAssetDeletable = !!assetApi.readDeletionTarget(state.assetPath);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const fileResetRef = useRef(null);
     const { choosePlan: chooseProjectAssetImportPlan, modal: importCollisionModal } =
@@ -341,14 +341,14 @@ try {
 
     const performAssetDelete = (target) => {
 try {
-  assetApi.delete(target);
+  assetApi.delete({ kind: target.kind, id: target.target.id, path: target.path });
   setDeleteTarget(null);
 } catch (error) {
   status(`에셋 삭제 오류: ${error.message}`);
 }
     };
     const requestAssetDelete = () => {
-const target = assetApi.readDeletionTarget();
+const target = assetApi.readDeletionTarget(appFSM.readState().assetPath);
 if (!target) return;
 if (target.referenceCount > 0) setDeleteTarget(target);
 else performAssetDelete(target);
@@ -441,8 +441,8 @@ React.createElement(
           Text,
           null,
           deleteTarget.kind === "csv"
-            ? `${deleteTarget.name}을 ${deleteTarget.referenceCount}개 그래프 오브젝트가 참조 중입니다. 참조 중인 그래프 오브젝트와 CSV를 함께 삭제할까요?`
-            : `${deleteTarget.name}을 ${deleteTarget.referenceCount}개 이미지 슬롯이 참조 중입니다. 참조 슬롯을 초기화하고 이미지를 삭제할까요?`,
+            ? `${deleteTarget.target.name}을 ${deleteTarget.referenceCount}개 그래프 오브젝트가 참조 중입니다. 참조 중인 그래프 오브젝트와 CSV를 함께 삭제할까요?`
+            : `${deleteTarget.target.name}을 ${deleteTarget.referenceCount}개 이미지 슬롯이 참조 중입니다. 참조 슬롯을 초기화하고 이미지를 삭제할까요?`,
         ),
         React.createElement(
           Group,
@@ -503,7 +503,7 @@ React.createElement(
     const settings = image?.settings;
     const updateSettings = (patch) => {
 if (!settings) return;
-imageApi.setSettings(patch);
+imageApi.setSettings(image.slotId, patch);
     };
 
     return React.createElement(
@@ -631,7 +631,8 @@ setFolderDialog({ opened: true, parent, name: "New Folder" });
 setFolderDialog((current) => ({ ...current, opened: false }));
     const createFolderFromMantine = () => {
 try {
-  setLastDirectory(assetApi.createDirectory(folderDialog.parent, folderDialog.name));
+  const path = assetApi.createDirectory(folderDialog.parent, folderDialog.name);
+  if (path !== null) setLastDirectory(path);
   closeFolderDialog();
 } catch (error) {
   status(`폴더 생성 오류: ${error.message}`);
@@ -640,10 +641,14 @@ try {
     const trashSelected =
 state.assetSelection === "directory" && state.assetPath === PROJECT_TRASH_DIRECTORY;
     const trash = assetApi.readTrash();
-    const trashHasContents = trash.hasContents;
+    const trashHasContents = !!trash?.children.length;
+    const countTrashReferences = node => node.kind === "directory"
+? node.children.reduce((count, child) => count + countTrashReferences(child), 0)
+: assetApi.readDeletionTarget(node.path)?.referenceCount ?? 0;
+    const trashReferenceCount = trash ? countTrashReferences(trash) : 0;
     const openTrashDialog = () => {
 if (!trashSelected || !trashHasContents) return;
-setTrashDialog({ referenceCount: trash.referenceCount });
+setTrashDialog({ referenceCount: trashReferenceCount });
     };
     const closeTrashDialog = () => setTrashDialog(null);
     const emptyTrashFromMantine = () => {
@@ -665,6 +670,7 @@ setLastDirectory((current) =>
 if (!plan) return;
 try {
   const result = assetApi.move(plan, useUniqueName);
+  if (result === null) return;
   if (plan.kind === "directory" && !result.trashed)
     rewriteLastDirectoryAfterMove(plan.path, result.path);
   setMovePicker(null);
@@ -1364,7 +1370,7 @@ React.createElement(
     const columns = editor.columns;
     const objectColumns = editor.objectColumns || [];
     const columnOptions = objectColumns.map((column) => ({ value: column.id, label: column.label }));
-    const update = (values) => selectedIndex !== null && graphApi.setObjectValues(selectedIndex, values);
+    const update = (values) => selectedIndex !== null && graphApi.setObjectValues(chartId, selectedIndex, values);
     const selectField = (label, key, data) => React.createElement(Select, {
 label, data, value: selected?.[key] ?? null, disabled: busy,
 onChange: (value) => value !== null && update({ [key]: value }),
@@ -1443,11 +1449,11 @@ activeCsv && columns.length
 React.createElement(Group, { gap: "xs", grow: true },
   React.createElement(Button, {
     variant: editable ? "filled" : "light", disabled: busy || chartId === null,
-    onClick: () => graphApi.setEditable(!editable),
+    onClick: () => graphApi.setEditable(state.selectedSlotId, chartId, !editable),
   }, editable ? "편집 가능" : "원본 JSON"),
   React.createElement(Button, {
     variant: "light", disabled: busy || !activeCsv || !editable,
-    onClick: () => activeCsv && graphApi.addObject(activeCsv.id),
+    onClick: () => activeCsv && graphApi.addObject(state.selectedSlotId, activeCsv.id),
   }, "오브젝트 추가"),
 ),
 React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
@@ -1466,7 +1472,7 @@ objects.length ? React.createElement(Stack, { gap: 4 },
     onDrop: (event) => {
       if (!editable || busy) return;
       event.preventDefault();
-      if (Number.isInteger(dragRef.current)) graphApi.moveObject(dragRef.current, index);
+      if (Number.isInteger(dragRef.current)) graphApi.moveObject(chartId, dragRef.current, index);
       dragRef.current = null;
     },
   },
@@ -1478,12 +1484,12 @@ objects.length ? React.createElement(Stack, { gap: 4 },
     React.createElement(ColorInput, {
       size: "xs", value: object.color, style: { width: 72 },
       disabled: busy || !editable,
-      onChange: (color) => graphApi.setObjectValues(index, { color }),
+      onChange: (color) => graphApi.setObjectValues(chartId, index, { color }),
     }),
     React.createElement(ActionIcon, {
       size: "sm", variant: "subtle", disabled: busy || !editable,
       "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
-      onClick: () => graphApi.deleteObject(index),
+      onClick: () => graphApi.deleteObject(chartId, index),
     }, "×"),
   )),
 ) : React.createElement(Text, { size: "xs", c: "dimmed" }, "추가된 그래프 오브젝트가 없습니다."),
@@ -1544,9 +1550,9 @@ xTop: "위 X축",
 yLeft: "왼쪽 Y축",
 yRight: "오른쪽 Y축",
     };
-    const updateGlobal = (values) => graphApi.updateLayout({ globalSettings: values });
-    const updateTitle = (title) => graphApi.updateLayout({ title });
-    const updateAxis = (key, values) => graphApi.updateLayout({ axisKey: key, axisValues: values });
+    const updateGlobal = (values) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { globalSettings: values });
+    const updateTitle = (title) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { title });
+    const updateAxis = (key, values) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { axisKey: key, axisValues: values });
     const toggleGlobal = (key, label) =>
 React.createElement(
   Button,
@@ -1743,10 +1749,11 @@ React.createElement(
     const graphApi = window.FastFigureApi.graphs;
     const editor = graphApi.readData(), colors = graphApi.readPalette();
     const canEdit = !!editor.chart && editor.chart.editor.editable !== false;
-    const commitColors = (colors) => graphApi.applyPalette(colors);
+    const commitColors = (colors) => graphApi.applyPalette(editor.chart?.id ?? null, colors);
     const resetPalette = () => {
 if (!editor.chart) return status("그래프 슬롯을 먼저 선택하세요.");
-commitColors(graphApi.defaultColors());
+const result = commitColors(graphApi.defaultColors());
+if (result?.id == null || result.id !== editor.chart?.id) return result;
 debugLog("graphPalette:reset", { slotId: state.selectedSlotId });
     };
     const savePalette = () => {
@@ -1779,7 +1786,8 @@ try {
         (color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color),
       );
       if (!valid.length) throw Error("유효한 HEX 색상이 없습니다.");
-      commitColors(valid);
+      const result = commitColors(valid);
+      if (result?.id == null || result.id !== editor.chart?.id) return result;
       status(`${file.name} 색상 구성을 덮어썼습니다.`);
       debugLog("graphPalette:load", {
         slotId: appFSM.readState().selectedSlotId,
@@ -1847,7 +1855,7 @@ open();
     const importSlotFileFromMantine = async (file) => {
 if (!file) return;
 try {
-  await graphApi.importFile(file);
+  await graphApi.importFile(state.selectedSlotId, file);
 } catch (error) {
   status("슬롯 불러오기 오류: " + String(error?.message ?? error));
   debugLog("slot:import-error", { message: String(error?.message ?? error) });
@@ -1925,7 +1933,9 @@ appearanceApi.setPalette(draft);
 setOpened(false);
     };
     const resetPalette = () => {
-setDraft({ ...appearanceApi.resetPalette() });
+const result = appearanceApi.resetPalette();
+if (result === false) return;
+setDraft({ ...result });
     };
 
     return React.createElement(
@@ -2621,10 +2631,10 @@ setFormat(next.format);
 return next;
     };
     const save = () =>
-printApi.save({ onStatus: setMessage })
+printApi.save(setMessage)
   .catch((error) => reportTaskError("PRINT_EXPORT", error));
     const capture = () =>
-printApi.capture({ onStatus: setMessage })
+printApi.capture(setMessage)
   .catch((error) => reportTaskError("CAPTURE_EXPORT", error));
 
     return React.createElement(
@@ -2712,9 +2722,11 @@ React.createElement(
     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
     const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(600);
     const previewFrameRef = useRef(null);
+    const layoutApi = window.FastFigureApi.layout;
+    const layout = state.overlay === "layout" ? layoutApi.readState(renderedPreviewWidth) : null;
     useEffect(() => {
-if (state.overlay !== "layout") setLayoutSelection(new Set());
-    }, [state.overlay]);
+setLayoutSelection(new Set());
+    }, [state.overlay, layout?.gridRows, layout?.gridCols]);
     useEffect(() => {
 if (state.overlay !== "layout") return;
 const element = previewFrameRef.current;
@@ -2730,8 +2742,6 @@ return () => observer.disconnect();
     }, [state.overlay]);
     if (state.overlay !== "layout") return null;
     const busy = state.lifecycle !== "ready";
-    const layoutApi = window.FastFigureApi.layout;
-    const layout = layoutApi.readState(renderedPreviewWidth);
     const style = layout.slotStyle;
     const visibleSlots = layout.visibleSlots;
     const previewGeometry = layout.previewGeometry;

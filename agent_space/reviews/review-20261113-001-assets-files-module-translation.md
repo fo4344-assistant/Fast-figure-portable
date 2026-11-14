@@ -1,0 +1,39 @@
+# Plan025 3차 backend/assets_files — 정적 번역 종료
+
+2026-11-13 / code144. Source 566줄, PlusCal 1387줄, runtime 기존 1689줄을 구간별로 전체 확인하고 관련 state/EFSM 소비자를 연결했다. Source45 → PlusCal25의 이미 적힌 절차를 번역하며 새 논리 모듈/API/형식/권위는 만들지 않는다. 아래는 21개 Source 절차와 PlusCal private expansion의 대응이다. 정적 대응 종료는 실행 검증 통과가 아니다.
+
+표에서 A=`sourcecode/backend/assets_files.js`, E=`sourcecode/backend/project_efsm.js`. 물리적으로 A에 있는 createProjectCsv/createProjectImage/createEmptyProjectCsv는 기존 Application creator의 tuple/public 성공 read 연결(r138)을 유지하며 Backend calculation 권위로 취급하지 않는다.
+
+| Source 절차 / PlusCal 확장 | 실제 대응·판정 |
+| --- | --- |
+| normalizeProjectPath | A.normalizeProjectPath/projectCsvName: slash/absolute segment, dot/dotdot 금지, segment 정규화, file root 금지. 기존 대응 재사용. |
+| projectAssetPath | A.projectAssetPath/projectParentPath/projectPathName: directory/name으로만 canonical path 계산, 별도 path alias 저장 없음. |
+| slotFileKind | A.slotFileKind: FFSX → CSV/TSV/JSON → image MIME/extension 우선순위, sniffing 없음. |
+| projectAssetImportCollisionModel / CalculateAssetCollisionInProject | A.projectAssetImportCollisionModel: 현재 parent/path/kind·reservation 확인, empty/same-kind replace/other-kind collision, 복사된 제안과 unique sibling. callback은 이 read 경계에만 있다. |
+| resolveProjectAssetImportPlan / ResolveAssetPlanInProject | A.resolveProjectAssetImportPlan: 제안의 current kind/id/path 재확인, cancel/replace/rename 구분 및 reservation 추가. 실제 command는 최종 plan만 받는다. |
+| buildProjectAssetImportCandidate / BuildAssetImportInAttempt / BuildAssetMetadata | A.buildProjectAssetImportCandidate/stageProjectAssetImport, E.applyAssetsImportedAction: 입력 파일·최종 path/replaceId/current parent/target를 재확인, 한 source의 candidate에 입력 순서대로 id/bytes/metadata와 target 연결을 계산한다. metadata는 final canonical name/parent, 원래 MIME와 복사 bytes에서 바로 구성한다. image asset에 slot settings를 복제하지 않는다. whole validation 후 EFSM source 재확인·commit만 한다. 기존 무조건 trash parent 금지라는 추가 조건은 제거했다. |
+| planProjectNodeMove | A.planProjectNodeMove/projectNodeReferenceCount: protected node/current destination/self·descendant/collision 및 unique plan. 일반 이동도 current referenceCount를 계산한다. E.applyProjectNodeMovedAction은 새 directory-inclusive descendant 결과에서 asset만 골라 directory를 바꾸고 source 재확인 후 commit한다. |
+| projectFileStem | A.projectFileStem: 파일명 문자/whitespace/trailing dot·space/fallback 및 config exportStemMaxLength. |
+| ffpxBuildProject / BuildFfpxInRead / BuildFfpxDocumentEntries / ReferencedProjectCsvIds / EncodeGraphXml / AddPackageXml | A.ffpxBuildProject/projectSnapshot/projectCsvDataRef/ffpxSlotGraphXml/ffpxTypedXmlDocument: detached supplied/official snapshot validation, trash 제외 후 남은 참조 재확인, metadata+원래 bytes, typed project/assets/layout/caption/labels/slot 문서. null imageRef에서도 slot-local image settings를 기록하고 asset을 만들지 않는다. dataRef extension은 실제 canonical filename에서 산출한다(.json/.tsv/.csv); 존재하지 않는 path alias를 보지 않는다. |
+| ffpxReadProject / ReadStorePackage / ReadFfpxDocumentPayload / RestorePlacementVisibility / ReadPackageXml / DecodeNamedXml | A.ffpxReadProject/ffpxReadProjectBytes/ffpxZipRead/ffpxReadXmlDocument/ffpxReadNamedValue/ffpxDeriveHiddenSlots: STORE/CRC/path/version 및 필수 direct child·typed value 검사, placement 순서와 merged hidden 계산. local/central entry method·flags·size·CRC·name의 불일치도 거부한다. Project-shaped payload(meta/layout/assets/content 등) 하나를 조립하고 실제 buildProjectObject 소비자와 fixtures를 함께 연결했다. 고정 directory만 복원하며 누락 export만 보충한다. image settings 누락은 slot normalizer까지 유지하고 caption의 null/empty/exact text를 보존한다. chart id를 deduplicate/clone/drop하지 않는다. |
+| ffsxBuildSlot / BuildFfsxInRead / AddFfsxSlotDocument / RemapRealProjectCsvIds | A.ffsxBuildSlot: snapshot에서 단일 실제 slot/chart owner 확인, graph-only payload, 원래 chart/editor/imported figure와 실제 CSV 참조만 local id로 remap한다. representation-aware conversion objects는 CSV를 만들지 않는다. metadata/headerLines/copied bytes 분리·image payload 배제. |
+| ffsxReadSlot / ReadFfsxDocumentPayload | A.ffsxReadSlot/ffsxReadSlotBytes: 같은 STORE/direct-child/typed grammar, 원래 bytes·metadata/headerLines 복원, shared graph validator. 슬롯 caption은 정확히 보존한다. 포함된 CSV metadata를 ‘현재 graph가 쓰지 않는다’는 이유로 조용히 삭제/거부하지 않는다. |
+| projectVfsResolve | A.projectVfs.resolve/exists: fixed/current directory+CSV+image에서 canonical owner 0/1을 반환하고 중복 owner는 거부한다. first-match를 권위로 선택하지 않는다. |
+| projectVfsUniquePath | A.projectVfs.uniquePath: current/reserved owner가 없는 같은 parent의 basename/extension suffix, source 무변경. |
+| projectVfsDescendants | A.projectVfs.descendants: root 자체 제외, 경로 segment 기준 descendant directory/CSV/image를 반환한다. 같은 문자열 prefix sibling은 제외한다. E 이동 소비자도 함께 맞췄다. |
+| parseProjectDataAsset / ParseDelimitedText / SerializeNewDataTable | A.parseProjectCsvAsset/parseCSV/serializeNewDataTable/projectCsvDataRef: UTF-8, JSON array/data array·table, CSV/TSV 정확한 quote/doubled quote/quoted newline, 잘못된 quote 거부. 내부 물리 blank row는 유지하고 trailing empty physical line만 제외한 뒤 dataTable pad한다. synthetic 데이터만 filename별 JSON/TSV/CSV로 encoding하고 imported raw bytes는 재생성하지 않는다. |
+| collectAssetReferences | A.collectAssetReferences/projectAssetReferenceCount/removeProjectAssetReferences: source chart/object 순서·원 index와 slot/image 실제 참조, conversion 분기. 삭제는 command-owned candidate의 원 index map으로만 계산한다. 일반 move의 count도 동일 helper를 쓴다. |
+| ffpxEncodeValue / EncodeNamedXml | A.ffpxXmlValue/ffpxTypedXmlDocument: null/boolean/finite number/text/array/record의 단일 typed grammar, escaped text/key, array 순서·record property 보존. |
+| ffpxDecodeValue | A.ffpxXmlReadValue/ffpxOnlyValueChild/ffpxDirectChild/ffpxReadNamedValue: 단일 direct value, enum/finite primitive/array/record, 중복 key/부적절한 child 거부. 다른 느슨한 XML parser를 만들지 않는다. |
+| buildProjectObject / NormalizeImportedAssetCollections / NormalizeImportedCharts / NormalizeImportedSlots / FillMissingSettingRecord / CompleteProjectSettingsInCandidate | A.buildProjectObject/fillMissingSettingRecord: schema/name/grid → raw detached copy → owned asset id/path/parent/bytes → chart global pure normalize·missing-style-only/shared validator → slot geometry/reference/image settings/caption/정확히 하나의 chart owner → missing-only instance settings/palette → max+1 ids → whole validation 순서. filename으로 이름을 새로 만들거나 잘라내지 않고 false/0/empty/unknown settings를 유지한다. present invalid를 missing으로 고치지 않는다. raw copy는 structuredClone으로 하여 projectClone의 선행 slot 정규화가 이 순서를 바꾸지 않게 했다. config instance를 공유하지 않는다. |
+| applyFfsxSlot / ApplyFfsxInAttempt | E.applySlotChartImportedAction: command 내 target/current/old chart sole owner 확인, payload 자체를 bind하지 않고 candidate에 CSV/id/bytes/metadata 및 chart remap, target graph·caption 변경, whole validation/source 재확인/한 commit. 기존 image settings/다른 slot payload는 유지하고 성공 후만 effect/receipt를 돌려준다. |
+
+## 범위와 증거
+
+이 모듈의 알려진 번역 누락/상위 의미 차단은 남기지 않았다. wire ZIP/XML v3는 바꾸지 않고 이미 선언된 canonical decoded payload와 실제 constructor를 맞췄다. legacy flat payload 병행 acceptance, 참조 복구·공유 chart clone·orphan drop·missing bytes 합성은 추가하지 않았다. state/EFSM 전체 closure나 public tree/UI shape migration을 이 종료에 포함하지 않는다. 해당 owner의 나머지 절차는 후속 차수다.
+
+기존 regression59/60/76/134/135/136/137/139의 해당 fixtures를 확장·조정했다. parser invalid quote/blank row, package reference extension, canonical read/slot settings, imported name·unknown settings·missing-only defaults·nextId·owner/bytes/parent/style 실패, VFS directory/unique owner/move references, STORE local-header/CRC 실패를 기록했다. 새 ID는 없고 실행하지 않았다.
+
+code144/stale의 독립 canonical-LF byte hash는 `sha256:21da391d3918b20b7041083cbdd09762847afe8d6232cab19e445b115a5fbf68`. pre-edit code143 `sha256:4edcba7b1f7a9c0617d0fad78c944b0385f7407925eef0d2d2ba4b2072eaae77`를 재현했다. Source45/PlusCal25/verification26와 derived_from은 불변이다. 이 byte 점검은 공식 checker가 아니다. app/tests/build/checker/TLC/browser/Actions/remote/commit/push/goal은 실행하지 않았다. native File/DOM/XML/ZIP·브라우저/public lifecycle/inline·split 회귀는 마지막 허가된 실행 검증에 남긴다.
+
+다음은 Plan025 4차 backend/project_state다. 완료된 graph/layout/asset 절차를 새 증거 없이 폴리싱하거나 재작성하지 않는다.

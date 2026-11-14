@@ -1,0 +1,134 @@
+diff --git a/development-versions.json b/development-versions.json
+index e28d382..9b109ee 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 154,
++      "revision": 155,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:04dcbcaa3ce0fba57aacb2dcd9121541f42f54dc13a7335f87cfb9c79fc8471b",
++      "fingerprint": "sha256:37be78d624ec957680f40ad9e4aad8605155b33c16c0c7a1e41ab18ceec477e7",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261114-002-public-contract-bindings.md"
++      "validation_review": "agent_space/reviews/review-20261114-003-final-module-translation.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index 3338d1b..7939963 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -631,7 +631,8 @@ setFolderDialog({ opened: true, parent, name: "New Folder" });
+ setFolderDialog((current) => ({ ...current, opened: false }));
+     const createFolderFromMantine = () => {
+ try {
+-  setLastDirectory(assetApi.createDirectory(folderDialog.parent, folderDialog.name));
++  const path = assetApi.createDirectory(folderDialog.parent, folderDialog.name);
++  if (path !== null) setLastDirectory(path);
+   closeFolderDialog();
+ } catch (error) {
+   status(`폴더 생성 오류: ${error.message}`);
+@@ -669,6 +670,7 @@ setLastDirectory((current) =>
+ if (!plan) return;
+ try {
+   const result = assetApi.move(plan, useUniqueName);
++  if (result === null) return;
+   if (plan.kind === "directory" && !result.trashed)
+     rewriteLastDirectoryAfterMove(plan.path, result.path);
+   setMovePicker(null);
+@@ -1750,7 +1752,8 @@ React.createElement(
+     const commitColors = (colors) => graphApi.applyPalette(editor.chart?.id ?? null, colors);
+     const resetPalette = () => {
+ if (!editor.chart) return status("그래프 슬롯을 먼저 선택하세요.");
+-commitColors(graphApi.defaultColors());
++const result = commitColors(graphApi.defaultColors());
++if (result?.id == null || result.id !== editor.chart?.id) return result;
+ debugLog("graphPalette:reset", { slotId: state.selectedSlotId });
+     };
+     const savePalette = () => {
+@@ -1783,7 +1786,8 @@ try {
+         (color) => typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color),
+       );
+       if (!valid.length) throw Error("유효한 HEX 색상이 없습니다.");
+-      commitColors(valid);
++      const result = commitColors(valid);
++      if (result?.id == null || result.id !== editor.chart?.id) return result;
+       status(`${file.name} 색상 구성을 덮어썼습니다.`);
+       debugLog("graphPalette:load", {
+         slotId: appFSM.readState().selectedSlotId,
+@@ -1929,7 +1933,9 @@ appearanceApi.setPalette(draft);
+ setOpened(false);
+     };
+     const resetPalette = () => {
+-setDraft({ ...appearanceApi.resetPalette() });
++const result = appearanceApi.resetPalette();
++if (result === false) return;
++setDraft({ ...result });
+     };
+ 
+     return React.createElement(
+diff --git a/agent_space/memo/20261113-001.md b/agent_space/memo/20261113-001.md
+new file mode 100644
+index 0000000..06e897b
+--- /dev/null
++++ b/agent_space/memo/20261113-001.md
+@@ -0,0 +1,15 @@
++# 상위 구현 결정이 필요한 항목
++
++## 1. canonical VFS tree와 별도 slot/chart 표시의 공급 경계
++
++`pseudocode/backend/project_state.pcal`의 `BuildVfsRead`는 directories/assets의 canonical tree를 반환한다. 현재 UI의 별도 slot 목록은 visible slot의 contentType/chart/imageId와, 연결된 chart의 editability를 사용한다. 참조가 없는 chart도 이 목록에 나타날 수 있다. 이 facts를 어느 공식 read로 제공할지 Source에서 정하고 PlusCal에 반영해야 canonical tree의 공개 반환과 해당 UI 소비를 함께 전환할 수 있다. canonical tree에 slot/chart를 임의로 섞거나 Frontend가 Backend 내부를 읽는 방식으로 정하지 않는다.
++
++명시 경로 자산 조회·삭제 대상·참조 수·휴지통 하위 트리 계산은 이 결정의 대상이 아니다.
++
++## 2. grid 단일 차원 편집의 입력 조합
++
++`setGrid(rows, cols)`의 명시 입력 계약은 정해져 있다. UI가 한 dimension만 편집할 때 나머지 값을 render 때 표시된 값으로 보낼지, 이벤트 시점의 공식 read 값으로 보낼지와 invalid-input fallback 조합을 결정해야 한다. 예를 들어 화면 2×2 뒤 현재가 2×3으로 바뀌었다면 row=3 편집을 3×2와 3×3 중 어느 입력으로 해석할지다. 이 결정 전에는 새 companion 병합 규칙을 추가하지 않는다.
++
++## 3. debug toggle의 명시 입력
++
++`setDebugEnabled(value)`에 어떤 반전 값을 보낼지 정해야 한다. render 때 표시한 telemetry 값의 반전인지, 클릭 시점 runtime 값의 반전인지가 현재 상세 Source에 없다. 중간에 값이 바뀌는 경우의 의미를 정한 뒤 호출 입력을 번역한다.
+diff --git a/agent_space/reviews/review-20261114-003-final-module-translation.md b/agent_space/reviews/review-20261114-003-final-module-translation.md
+new file mode 100644
+index 0000000..354038a
+--- /dev/null
++++ b/agent_space/reviews/review-20261114-003-final-module-translation.md
+@@ -0,0 +1,25 @@
++# 모듈 번역 최종 정리
++
++기존 절차별 대응 기록과 공개 API·실제 UI 호출자의 대조를 합친 정적 범위다. 실행 검증 판정은 아니다.
++
++| pseudocode 논리 모듈 | 정리 상태 |
++| --- | --- |
++| backend/graphs | 명시 절차 대응 |
++| backend/layout_annotations | 명시 절차 대응 |
++| backend/assets_files | 명시 절차 대응 |
++| backend/project_state | 명시 절차 대응, canonical tree 소비 연결은 상위 결정 ① 대기 |
++| backend/project_efsm | 명시 command·후보·receipt 절차 대응 |
++| frontend/interface_fsm | 명시 event·publish·reconcile 절차 대응 |
++| frontend/renderer | supplied 화면·상호작용·current/target export 절차 대응 |
++| application/adapter | query·intent·command·selection·lifecycle 절차 대응 |
++| application/public_api/contract | route·명시 인자·lifecycle binding 대응 |
++| application/public_api/graphs | 명시 대상·command 후 read·반환 대응 |
++| application/public_api/layout_annotations | 명시 설정·query·export·반환 대응 |
++| application/public_api/assets | 명시 경로·import/move/delete·trash 반환 대응, tree 소비 연결은 ① 대기 |
++| frontend/mantine_ui | 명시 절차·실제 public 반환 소비 대응, ①②③ 대기 |
++| system | 초기화·노출·mount·최종 audit 순서 대응 |
++| portable_build/portable_build | bundle·외부 script 차단·출력 순서 대응 |
++
++마지막 호출자 변경은 반환 계약 소비다. graph palette는 반환 chart의 대상 id를 확인한 뒤 적용 status/log를 남긴다. UI palette reset의 false를 draft로 펼치지 않는다. move의 null을 역참조하지 않고, directory 생성의 null을 경로로 저장하지 않는다. 공통 결과 형식이나 새 rollback 동작은 추가하지 않는다.
++
++남은 상위 결정은 `agent_space/memo/20261113-001.md`의 세 항목이다: ① canonical VFS tree와 별도 slot/chart 표시 facts의 공식 공급 경계, ② grid 단일 dimension 편집의 companion/fallback 입력 조합, ③ debug toggle의 반전 대상 값. 이 결정이 필요한 소비 연결을 제외하고 별도의 하위 번역 TODO는 남기지 않는다. 새 Plan 작성 시 이 세 항목을 회수한다.

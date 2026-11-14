@@ -1,0 +1,942 @@
+diff --git a/sourcecode/backend/assets_files.js b/sourcecode/backend/assets_files.js
+index 5522d41e3d01dd2c406f53b19c6979520504cc2c..900d5c454c7273bd37ed3422d6fcfc0a14b535a1 100644
+--- a/sourcecode/backend/assets_files.js
++++ b/sourcecode/backend/assets_files.js
+@@ -1,10 +1,8 @@
+ // Source: sourcescript/backend/assets_files.py (same logical owner); pseudocode/backend/assets_files.pcal.
+ import { appFSM, dispatchProjectCommand } from '../application/adapter.js';
+ import { chartCsvIds, chartExportCopy, chartUsesConversionView, createCandidateBaseGraphObject, createChartModel, dataTable, headerLineCount, normalizeGlobalSettings, readGlobalSettings, rebuildEditableGraph, validateChartModel } from './graphs.js';
+-import { readImageSettings } from './layout_annotations.js';
+-import { ProjectObject, activeProject, getProjectCsv, getProjectImage, immutableProjectCopy, normalizeSlotContent, normalizeSlotContents, projectClone, projectColor, readFiniteProjectNumber, readProjectNumber, validateProjectObject, validateProjectObjectState } from './project_state.js';
+-import { DEFAULT_IMAGE_SETTINGS, DEFAULT_SLOT_STYLE, DEFAULT_UI_PALETTE, PACKAGE_FORMAT_VERSION } from './settings.js';
+-import { debugLog } from '../frontend/renderer.js';
++import { ProjectObject, activeProject, getProjectCsv, immutableProjectCopy, normalizeSlotContent, normalizeSlotContents, projectClone, projectColor, validateProjectObjectState } from './project_state.js';
++import { BackendSettings, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PACKAGE_FORMAT_VERSION } from './settings.js';
+ 
+ export function projectImageDataUrl(image) {
+   return image
+@@ -60,7 +58,7 @@
+ export function buildProjectAssetImportCandidate(source, payload) {
+   const { files, choices, targetSlotId } = payload;
+   if (!Array.isArray(files) || !files.length || !Array.isArray(choices) || files.length !== choices.length ||
+-      typeof payload.directory !== "string" || projectVfs.resolve(payload.directory, source)?.kind !== "directory" || projectVfs.isTrashed(payload.directory))
++      typeof payload.directory !== "string" || projectVfs.resolve(payload.directory, source)?.kind !== "directory")
+     return null;
+   const directory = normalizeProjectPath(payload.directory, { directory: true }),
+     candidate = projectClone(source), reserved = new Set(), imported = [];
+@@ -112,41 +110,45 @@
+   for (const fact of imported)
+     fact.owners = collectAssetReferences(new Set(fact.kind === "csv" ? [fact.id] : []),
+       new Set(fact.kind === "image" ? [fact.id] : []), candidate);
++  try { validateProjectObjectState(candidate, { requireSlots: true }); } catch { return null; }
+   return { candidate, imported };
+ }
+ 
+ export function parseCSV(text, d = ",") {
+-  let a = [],
+-    r = [],
+-    c = "",
+-    q = false,
+-    rowStarted = false;
++  const rows = [];
++  let row = [], field = "", quoted = false, afterQuote = false,
++    explicitLine = false, pendingBlankLines = 0;
++  const finish = () => {
++    if (explicitLine || field.length || row.length || afterQuote) {
++      while (pendingBlankLines > 0) { rows.push([""]); pendingBlankLines--; }
++      rows.push([...row, field]);
++    } else pendingBlankLines++;
++    row = []; field = ""; afterQuote = false; explicitLine = false;
++  };
+   for (let i = 0; i < text.length; i++) {
+-    let z = text[i],
+-      n = text[i + 1];
+-    rowStarted = true;
+-    if (z === '"' && q && n === '"') {
+-      c += '"';
+-      i++;
+-    } else if (z === '"') q = !q;
+-    else if (z === d && !q) {
+-      r.push(c);
+-      c = "";
+-    } else if ((z === "\n" || z === "\r") && !q) {
+-      if (z === "\r" && n === "\n") i++;
+-      r.push(c);
+-      a.push(r);
+-      r = [];
+-      c = "";
+-      rowStarted = false;
+-    } else c += z;
+-  }
+-  if (q) throw Error("CSV 인용 문자열이 닫히지 않았습니다.");
+-  if (rowStarted || r.length) {
+-    r.push(c);
+-    a.push(r);
+-  }
+-  return a;
++    const char = text[i];
++    if (quoted) {
++      if (char === '"') {
++        if (text[i + 1] === '"') { field += '"'; i++; }
++        else { quoted = false; afterQuote = true; }
++      } else field += char;
++      continue;
++    }
++    if (char === d) { row.push(field); field = ""; afterQuote = false; explicitLine = true; }
++    else if (char === "\r" || char === "\n") {
++      finish();
++      if (char === "\r" && text[i + 1] === "\n") i++;
++    } else if (char === '"') {
++      if (field.length || afterQuote) throw Error("CSV 인용 문자열 위치가 올바르지 않습니다.");
++      quoted = true; explicitLine = true;
++    } else {
++      if (afterQuote) throw Error("CSV 닫는 인용부호 뒤에 문자가 있습니다.");
++      field += char; explicitLine = true;
++    }
++  }
++  if (quoted) throw Error("CSV 인용 문자열이 닫히지 않았습니다.");
++  if (explicitLine || field.length || row.length || afterQuote) finish();
++  return rows;
+ }
+ 
+ export function buildProjectImageModel(
+@@ -245,23 +247,18 @@
+ }
+ 
+ export const PROJECT_ASSET_DIRECTORIES = Object.freeze({
+-  csv: "/assets/csv",
+-  image: "/assets/images",
++  csv: BackendSettings.defaults.vfs.csv,
++  image: BackendSettings.defaults.vfs.image,
+ });
+ 
+-export const PROJECT_TRASH_DIRECTORY = "/assets/trash";
+-
+-export const PROJECT_FIXED_DIRECTORIES = Object.freeze([
+-  "/assets",
+-  PROJECT_ASSET_DIRECTORIES.csv,
+-  PROJECT_ASSET_DIRECTORIES.image,
+-  PROJECT_TRASH_DIRECTORY,
+-]);
++export const PROJECT_TRASH_DIRECTORY = BackendSettings.defaults.vfs.trash;
++
++export const PROJECT_FIXED_DIRECTORIES = Object.freeze(Object.values(BackendSettings.defaults.vfs));
+ 
+ export function projectPathInDirectory(path, directory) {
+   let normalized = normalizeProjectPath(path, { directory: true }),
+     parent = normalizeProjectPath(directory, { directory: true });
+-  return normalized === parent || normalized.startsWith(`${parent}/`);
++  return parent === "/" || normalized === parent || normalized.startsWith(`${parent}/`);
+ }
+ 
+ export function normalizeProjectPath(value, { directory = false } = {}) {
+@@ -301,13 +298,7 @@
+ 
+ export const projectVfs = Object.freeze({
+   exists(path, state = activeProject._state) {
+-    let target = normalizeProjectPath(path, { directory: true });
+-    return (
+-      (state.fileSystem?.directories || []).includes(target) ||
+-      [...(state.assets?.csvFiles || []), ...(state.assets?.images || [])].some(
+-        (asset) => projectAssetPath(asset) === target,
+-      )
+-    );
++    return this.resolve(path, state) !== null;
+   },
+   uniquePath(directory, name, state = activeProject._state, reservedPaths = null) {
+     let parent = normalizeProjectPath(directory, { directory: true }),
+@@ -357,17 +348,16 @@
+     return state.fileSystem;
+   },
+   resolve(path, state = activeProject._state) {
+-    let normalized = normalizeProjectPath(path, { directory: true });
+-    if ((state.fileSystem?.directories || []).includes(normalized))
+-      return { kind: "directory", path: normalized };
+-    for (let [kind, assets] of [
+-      ["csv", state.assets.csvFiles],
+-      ["image", state.assets.images],
+-    ]) {
+-      let asset = assets.find((item) => projectAssetPath(item) === normalized);
+-      if (asset) return { kind, asset };
+-    }
+-    return null;
++    const normalized = normalizeProjectPath(path, { directory: true }),
++      directories = state.fileSystem?.directories || [],
++      matches = directories.filter(item => item === normalized).map(path => ({ kind: "directory", path }));
++    if (PROJECT_FIXED_DIRECTORIES.includes(normalized) && !directories.includes(normalized))
++      matches.push({ kind: "directory", path: normalized });
++    for (const [kind, assets] of [["csv", state.assets.csvFiles], ["image", state.assets.images]])
++      for (const asset of assets)
++        if (projectAssetPath(asset) === normalized) matches.push({ kind, asset });
++    if (matches.length > 1) throw Error("프로젝트 경로에 둘 이상의 소유자가 있습니다.");
++    return matches[0] || null;
+   },
+   isFixedDirectory(path) {
+     let normalized = normalizeProjectPath(path, { directory: true });
+@@ -377,14 +367,14 @@
+     return projectPathInDirectory(path, PROJECT_TRASH_DIRECTORY);
+   },
+   descendants(path, state = activeProject._state) {
+-    let root = normalizeProjectPath(path, { directory: true }),
+-      prefix = `${root}/`;
++    const parent = normalizeProjectPath(path, { directory: true });
+     return [
+-      ...(state.assets?.csvFiles || []).map((asset) => ({ kind: "csv", asset })),
+-      ...(state.assets?.images || []).map((asset) => ({ kind: "image", asset })),
+-    ].filter(({ asset }) => {
+-      let path = projectAssetPath(asset);
+-      return path === root || path.startsWith(prefix);
++      ...(state.fileSystem?.directories || []).map(path => ({ kind: "directory", path })),
++      ...(state.assets?.csvFiles || []).map(asset => ({ kind: "csv", asset })),
++      ...(state.assets?.images || []).map(asset => ({ kind: "image", asset })),
++    ].filter(node => {
++      const path = node.kind === "directory" ? node.path : projectAssetPath(node.asset);
++      return path !== parent && projectPathInDirectory(path, parent);
+     });
+   },
+   assignLocation(model, path) {
+@@ -462,51 +452,24 @@
+ }
+ 
+ export function stageProjectAssetImport(candidate, item) {
+-  let bytes = new Uint8Array(item.file.bytes);
+-  if (item.kind === "data") {
+-    const data = parseProjectCsvAsset(item.file.name, bytes);
+-    let id = Number.isInteger(item.replaceId) ? item.replaceId : candidate.nextId.csv++,
+-      model = buildProjectCsvModel(
+-        data,
+-        item.file.name,
+-        id,
+-        ffpxBytesToBase64(bytes),
+-        item.file.type || "text/csv",
+-        1,
+-        candidate,
+-      );
+-    projectVfs.assignLocation(model, item.path);
+-    let index = candidate.assets.csvFiles.findIndex((asset) => asset.id === id);
+-    if (Number.isInteger(item.replaceId)) {
+-      if (index < 0) throw Error("교체할 CSV가 없습니다.");
+-      candidate.assets.csvFiles[index] = model;
+-    } else {
+-      if (index >= 0) throw Error(`CSV ID ${id}가 중복되었습니다.`);
+-      candidate.assets.csvFiles.push(model);
+-    }
+-    return { kind: "csv", id, name: model.name, model };
+-  }
+-
+-  let id = Number.isInteger(item.replaceId) ? item.replaceId : candidate.nextId.image++,
+-    model = buildProjectImageModel(
+-      bytes,
+-      item.file.name,
+-      item.file.type,
+-      id,
+-      candidate,
+-    );
+-  projectVfs.assignLocation(model, item.path);
+-  let index = candidate.assets.images.findIndex((asset) => asset.id === id);
+-  if (Number.isInteger(item.replaceId)) {
+-    if (index < 0) throw Error("교체할 이미지가 없습니다.");
+-    if (candidate.assets.images[index]?.settings)
+-      model.settings = projectClone(candidate.assets.images[index].settings);
+-    candidate.assets.images[index] = model;
++  if (!["data", "image"].includes(item.kind)) throw Error("지원하지 않는 자산 종류입니다.");
++  const bytes = new Uint8Array(item.file.bytes), kind = item.kind === "data" ? "csv" : "image",
++    id = item.replaceId === null ? candidate.nextId[kind]++ : item.replaceId,
++    model = projectVfs.assignLocation({ id, mime: item.file.type, bytesBase64: ffpxBytesToBase64(bytes) }, item.path),
++    collection = candidate.assets[kind === "csv" ? "csvFiles" : "images"],
++    index = collection.findIndex(asset => asset.id === id);
++  if (kind === "csv") {
++    model.rows = parseProjectCsvAsset(item.file.name, bytes);
++    model.headerLines = headerLineCount(1, model.rows);
++  }
++  if (item.replaceId !== null) {
++    if (index < 0) throw Error("교체할 자산이 없습니다.");
++    collection[index] = model;
+   } else {
+-    if (index >= 0) throw Error(`이미지 ID ${id}가 중복되었습니다.`);
+-    candidate.assets.images.push(model);
+-  }
+-  return { kind: "image", id, name: model.name, model };
++    if (index >= 0) throw Error(`자산 ID ${id}가 중복되었습니다.`);
++    collection.push(model);
++  }
++  return { kind, id, name: model.name, model };
+ }
+ 
+ export function projectDataTreeSnapshot(objects = {}) {
+@@ -616,99 +579,107 @@
+   };
+ }
+ 
+-export function buildProjectObject(payload,fileName) {
+-  if(payload?.schema!=="fast-figure-project"||payload.version!==PACKAGE_FORMAT_VERSION)
++export function fillMissingSettingRecord(current, defaults) {
++  if (!current || typeof current !== "object" || Array.isArray(current))
++    throw Error("프로젝트 설정 구조가 올바르지 않습니다.");
++  const copy = projectClone(current);
++  for (const [key, value] of Object.entries(defaults)) {
++    if (!Object.hasOwn(copy, key)) copy[key] = projectClone(value);
++    else if (value && typeof value === "object" && !Array.isArray(value) &&
++        copy[key] && typeof copy[key] === "object" && !Array.isArray(copy[key]))
++      copy[key] = fillMissingSettingRecord(copy[key], value);
++  }
++  return copy;
++}
++
++export function buildProjectObject(payload, fileName) {
++  if (payload?.schema !== "fast-figure-project" || payload.version !== PACKAGE_FORMAT_VERSION)
+     throw Error("지원하지 않는 FFPX 프로젝트 형식입니다.");
+-  let candidate=new ProjectObject();
+-  candidate.projectName=typeof payload.projectName==="string"?payload.projectName.trim().slice(0,120):"";
+-  if(!candidate.projectName)
+-    candidate.projectName=String(fileName||"").replace(/\.[^.]+$/,"").trim().slice(0,120);
+-  let rows=Number(payload.gridRows),cols=Number(payload.gridCols);
+-  if(!Number.isInteger(rows)||!Number.isInteger(cols)||rows<1||rows>8||cols<1||cols>8)
+-    throw Error("프로젝트의 행 또는 열 값이 올바르지 않습니다.");
+-  if(!Array.isArray(payload.charts)||!Array.isArray(payload.slots))
+-    throw Error("프로젝트의 charts 또는 slots 배열이 없습니다.");
+-  let csvState=importedProjectCsvState(payload),imageState=importedProjectImageState(payload),
+-    charts=projectClone(payload.charts),chartIds=new Set();
+-  charts.forEach((chart,index)=>{
+-    validateChartModel(chart,`프로젝트 차트 ${index+1}`,csvState.csvFiles);
+-    if(!Number.isInteger(chart.id)||chartIds.has(chart.id))throw Error("프로젝트 차트 ID가 올바르지 않습니다.");
+-    chartIds.add(chart.id);chart.editor.globalSettings=normalizeGlobalSettings(chart.editor.globalSettings);
+-  });
+-  let slotIds=new Set(),slots=projectClone(payload.slots).map(raw=>{
+-    if(!raw||typeof raw!=="object"||!Number.isInteger(raw.id)||slotIds.has(raw.id))
++  const defaults = BackendSettings.project_object, limits = BackendSettings.defaults.limits,
++    own = (source, key, fallback) => Object.hasOwn(source, key) ? source[key] : fallback,
++    record = value => !!value && typeof value === "object" && !Array.isArray(value);
++  if (payload.kind !== "fast-figure-project-object" || !record(payload.meta) ||
++      typeof payload.meta.projectName !== "string" ||
++      payload.meta.projectName.length > BackendSettings.defaults.naming.projectNameMaxLength || !record(payload.layout) ||
++      !Number.isInteger(payload.layout.gridRows) || !Number.isInteger(payload.layout.gridCols) ||
++      payload.layout.gridRows < limits.layout.gridRows[0] || payload.layout.gridRows > limits.layout.gridRows[1] ||
++      payload.layout.gridCols < limits.layout.gridCols[0] || payload.layout.gridCols > limits.layout.gridCols[1] ||
++      !Array.isArray(payload.charts) || !Array.isArray(payload.slots) || !record(payload.fileSystem) || !record(payload.assets))
++    throw Error("프로젝트 이름, grid 또는 목록 구조가 올바르지 않습니다.");
++  const candidate = structuredClone(payload);
++  delete candidate.schema; delete candidate.version; delete candidate.layout.layoutMapWidth;
++  candidate.assets = { csvFiles: [], images: [] }; candidate.slots = []; candidate.nextId = {};
++  const paths = new Set();
++  for (const [kind, collection] of [["csv", payload.assets.csvFiles], ["image", payload.assets.images]]) {
++    if (!Array.isArray(collection)) throw Error("프로젝트 자산 목록이 없습니다.");
++    const ids = new Set();
++    for (const raw of collection) {
++      if (!record(raw) || !Number.isInteger(raw.id) || raw.id < 1 || ids.has(raw.id) ||
++          typeof raw.bytesBase64 !== "string" || (kind === "image" && Object.hasOwn(raw, "imageSettings")))
++        throw Error("프로젝트 자산 데이터가 올바르지 않습니다.");
++      const path = projectAssetPath(raw);
++      if (paths.has(path) || !candidate.fileSystem.directories?.includes(projectParentPath(path)))
++        throw Error("프로젝트 자산 경로가 중복되거나 parent가 없습니다.");
++      ids.add(raw.id); paths.add(path);
++      const asset = { id: raw.id, directory: projectParentPath(path), name: projectPathName(path),
++        mime: raw.mime, bytesBase64: ffpxBytesToBase64(ffpxBase64ToBytes(raw.bytesBase64)) };
++      if (kind === "csv") {
++        asset.rows = dataTable(raw.rows);
++        asset.headerLines = headerLineCount(own(raw, "headerLines", 1), asset.rows);
++      }
++      candidate.assets[kind === "csv" ? "csvFiles" : "images"].push(asset);
++    }
++  }
++  for (const chart of candidate.charts) {
++    if (!record(chart?.editor) || !Array.isArray(chart.editor.objects) || !Number.isInteger(chart.id) || chart.id < 1)
++      throw Error("프로젝트 차트 구조가 올바르지 않습니다.");
++    chart.editor.globalSettings = normalizeGlobalSettings(chart.editor.globalSettings);
++    chart.editor.objects = chart.editor.objects.map(object =>
++      fillMissingSettingRecord(object, BackendSettings.defaults.chartSettings.editor.objectStyle));
++    validateChartModel(chart, "프로젝트 차트", candidate.assets.csvFiles);
++  }
++  const slotIds = new Set(), owners = new Map(candidate.charts.map(chart => [chart.id, 0]));
++  for (const raw of payload.slots) {
++    const slot = normalizeSlotContent(structuredClone(raw));
++    if (!slot || !Number.isInteger(slot.id) || slotIds.has(slot.id) || typeof slot.hidden !== "boolean" ||
++        ![slot.row, slot.col, slot.rowSpan, slot.colSpan].every(value => Number.isInteger(value) && value > 0) ||
++        slot.row + slot.rowSpan - 1 > candidate.layout.gridRows || slot.col + slot.colSpan - 1 > candidate.layout.gridCols ||
++        !["graph", "image"].includes(slot.content.contentType) ||
++        (slot.content.chart !== null && slot.content.imageId !== null) ||
++        (slot.content.chart !== null && !owners.has(slot.content.chart)) ||
++        (slot.content.imageId !== null && !candidate.assets.images.some(image => image.id === slot.content.imageId)) ||
++        !(slot.caption === null || typeof slot.caption === "string"))
+       throw Error("프로젝트 슬롯 데이터가 올바르지 않습니다.");
+-    slotIds.add(raw.id);
+-    let row=Number(raw.row),col=Number(raw.col),rowSpan=Number(raw.rowSpan??1),colSpan=Number(raw.colSpan??1);
+-    if(!Number.isInteger(row)||!Number.isInteger(col)||!Number.isInteger(rowSpan)||!Number.isInteger(colSpan)||
+-      row<1||col<1||rowSpan<1||colSpan<1||row+rowSpan-1>rows||col+colSpan-1>cols)
+-      throw Error("프로젝트 슬롯 위치가 올바르지 않습니다.");
+-    let chart=raw.chart==null?null:(chartIds.has(raw.chart)?raw.chart:null),
+-      imageId=raw.imageId==null?null:(getProjectImage(raw.imageId,imageState.images)?.id??null);
+-    if(raw.chart!=null&&chart===null)throw Error("프로젝트 슬롯이 존재하지 않는 차트를 참조합니다.");
+-    if(raw.imageId!=null&&imageId===null)throw Error("프로젝트 슬롯이 존재하지 않는 이미지를 참조합니다.");
+-    return normalizeSlotContent({
+-      id:raw.id,row,col,rowSpan,colSpan,hidden:raw.hidden===true,
+-      content:{
+-        chart,imageId,
+-        contentType:raw.contentType==="image"?"image":"graph",
+-        imageSettings:readImageSettings(raw.imageSettings||raw.content?.imageSettings),
+-      },
+-      caption:typeof raw.caption==="string"&&raw.caption?raw.caption:null,
+-    });
+-  });
+-  if(!slots.length)throw Error("프로젝트 슬롯이 없습니다.");
+-  candidate.gridRows=rows;candidate.gridCols=cols;
+-  candidate.csvFiles=csvState.csvFiles;candidate.images=imageState.images;
+-  candidate.charts=charts;candidate.slots=slots;
+-  candidate.fileSystem={directories:Array.isArray(payload.fileSystem?.directories)?projectClone(payload.fileSystem.directories):[]};
+-  projectVfs.ensure(candidate._state);
+-  candidate.csvId=Math.max(Number.isInteger(payload.csvId)?payload.csvId:1,csvState.csvId);
+-  candidate.imageId=Math.max(Number.isInteger(payload.imageId)?payload.imageId:1,imageState.imageId);
+-  candidate.chartId=Math.max(Number.isInteger(payload.chartId)?payload.chartId:1,1,...charts.map(chart=>chart.id+1));
+-  let annotations=payload.annotations&&typeof payload.annotations==="object"?payload.annotations:{},
+-    labelPatch=annotations.labelSettings&&typeof annotations.labelSettings==="object"?annotations.labelSettings:{},
+-    captionPatch=annotations.captionSettings&&typeof annotations.captionSettings==="object"?annotations.captionSettings:{};
+-  candidate.labelsEnabled=annotations.labelsEnabled===true;
+-  candidate.labelSettings={...candidate.labelSettings,...labelPatch,
+-    parentheses:labelPatch.parentheses===true,
+-    x:readFiniteProjectNumber(labelPatch.x,candidate.labelSettings.x),
+-    y:readFiniteProjectNumber(labelPatch.y,candidate.labelSettings.y),
+-    fontSize:Math.max(6,readFiniteProjectNumber(labelPatch.fontSize,candidate.labelSettings.fontSize))};
+-  candidate.captionsEnabled=annotations.captionsEnabled===true;
+-  candidate.captionText=typeof annotations.captionText==="string"?annotations.captionText:"";
+-  candidate.captionAfterText=typeof annotations.captionAfterText==="string"?annotations.captionAfterText:"";
+-  candidate.captionName=typeof annotations.captionName==="string"?annotations.captionName:"";
+-  candidate.captionNameBold=annotations.captionNameBold===true;
+-  candidate.captionSettings={...candidate.captionSettings,...captionPatch,
+-    fontSize:readProjectNumber(captionPatch.fontSize,candidate.captionSettings.fontSize,6,96),
+-    lineHeight:readProjectNumber(captionPatch.lineHeight,candidate.captionSettings.lineHeight,0.8,4)};
+-  let style=payload.slotStyle&&typeof payload.slotStyle==="object"?payload.slotStyle:{},
+-    palette=payload.uiPalette&&typeof payload.uiPalette==="object"?payload.uiPalette:{},
+-    output=payload.export&&typeof payload.export==="object"?payload.export:{};
+-  candidate.layout.slotStyle={
+-    referenceWidth:readProjectNumber(style.referenceWidth,1200,100,20000),
+-    gap:readProjectNumber(style.gap,0,0,2000),
+-    outerMargin:readProjectNumber(
+-      style.outerMargin,
+-      DEFAULT_SLOT_STYLE.outerMargin,
+-      0,
+-      5000,
+-    ),
+-    radius:readProjectNumber(style.radius,0,0,2000),
+-    aspect:readProjectNumber(style.aspect,1.618,0.1,10),
+-    showBorders:style.showBorders!==false};
+-  candidate.appearance.uiPalette=Object.fromEntries(Object.entries(DEFAULT_UI_PALETTE)
+-    .map(([key,fallback])=>[key,projectColor(palette[key],fallback)]));
+-  let heightMode=output.heightMode==="explicit"?"explicit":"auto";
+-  candidate.exportSettings={
+-    width:readProjectNumber(output.width,candidate.layout.slotStyle.referenceWidth,100,20000),
+-    heightMode,
+-    height:heightMode==="explicit"?readProjectNumber(output.height,100,100,20000):null,
+-    dpi:readProjectNumber(output.dpi,300,36,1200),
+-    format:output.format==="jpeg"?"jpeg":"png"};
+-  validateProjectObject(candidate,{requireSlots:true});
+-  return candidate;
++    slotIds.add(slot.id);
++    if (slot.content.chart !== null) owners.set(slot.content.chart, owners.get(slot.content.chart) + 1);
++    if (!["contain", "cover", "manual"].includes(slot.content.imageSettings.fit) ||
++        Object.entries(limits.imageSettings).some(([key, [min, max]]) =>
++          !Number.isFinite(slot.content.imageSettings[key]) || slot.content.imageSettings[key] < min || slot.content.imageSettings[key] > max))
++      throw Error("프로젝트 슬롯 이미지 설정이 올바르지 않습니다.");
++    candidate.slots.push(slot);
++  }
++  if ([...owners.values()].some(count => count !== 1)) throw Error("프로젝트 차트의 슬롯 소유권이 올바르지 않습니다.");
++  candidate.layout = fillMissingSettingRecord(candidate.layout, defaults.layout);
++  if (!Object.hasOwn(candidate, "annotations")) candidate.annotations = {};
++  if (!record(candidate.annotations)) throw Error("프로젝트 annotation 구조가 올바르지 않습니다.");
++  for (const key of ["labels", "captions"])
++    candidate.annotations[key] = fillMissingSettingRecord(own(candidate.annotations, key, {}), defaults.annotations[key]);
++  for (const key of ["text", "afterText", "name"])
++    if (!Object.hasOwn(candidate.annotations.captions, key)) candidate.annotations.captions[key] = "";
++  if (!Object.hasOwn(candidate, "appearance")) candidate.appearance = {};
++  if (!record(candidate.appearance)) throw Error("프로젝트 appearance 구조가 올바르지 않습니다.");
++  const palette = own(candidate.appearance, "uiPalette", {});
++  if (!record(palette)) throw Error("프로젝트 palette 구조가 올바르지 않습니다.");
++  candidate.appearance.uiPalette = Object.fromEntries(Object.entries(DEFAULT_UI_PALETTE)
++    .map(([key, fallback]) => [key, projectColor(palette[key], fallback)]));
++  candidate.export = fillMissingSettingRecord(own(candidate, "export", {}), defaults.export);
++  if (!Object.hasOwn(candidate.export, "width")) candidate.export.width = candidate.layout.slotStyle.referenceWidth;
++  if (!Object.hasOwn(candidate.export, "height")) candidate.export.height = candidate.export.heightMode === "auto"
++    ? null : limits.export.logicalHeight[0];
++  for (const [kind, collection] of [["csv", candidate.assets.csvFiles], ["image", candidate.assets.images],
++      ["chart", candidate.charts]]) candidate.nextId[kind] = Math.max(0, ...collection.map(item => item.id)) + 1;
++  validateProjectObjectState(candidate, { requireSlots: true });
++  return new ProjectObject(candidate);
+ }
+ 
+ export function ffpxBytesToBase64(bytes) {
+@@ -859,13 +830,19 @@
+       /^[\\/]|^[A-Za-z]:[\\/]/.test(name) ||
+       assets.has(name) ||
+       localOffset + 30 > bytes.length ||
++      view.getUint16(cursor + 34, true) !== 0 ||
+       view.getUint32(localOffset, true) !== 0x04034b50
+     )
+       throw Error("FFPX 자산 경로가 올바르지 않습니다.");
+     let localNameLength = view.getUint16(localOffset + 26, true),
+       localExtraLength = view.getUint16(localOffset + 28, true),
+       start = localOffset + 30 + localNameLength + localExtraLength;
+-    if (start + size > bytes.length) throw Error("FFPX 자산 범위를 벗어났습니다.");
++    if (start + size > offset ||
++        view.getUint16(localOffset + 6, true) !== flags || view.getUint16(localOffset + 8, true) !== method ||
++        view.getUint32(localOffset + 14, true) !== crc ||
++        view.getUint32(localOffset + 18, true) !== compressed || view.getUint32(localOffset + 22, true) !== size ||
++        decoder.decode(bytes.subarray(localOffset + 30, localOffset + 30 + localNameLength)) !== name)
++      throw Error("FFPX ZIP local entry가 올바르지 않습니다.");
+     let data = bytes.slice(start, start + size);
+     if (ffpxCrc32(data) !== crc) throw Error("FFPX 자산 CRC 검증에 실패했습니다.");
+     assets.set(name, data);
+@@ -898,7 +875,7 @@
+ }
+ 
+ export function projectCsvDataRef(csv) {
+-  const extension = /\.[^./]+$/.exec(csv.path || "")?.[0]?.toLowerCase();
++  const extension = /\.[^./]+$/.exec(csv.name || "")?.[0]?.toLowerCase();
+   return `data/csv-${csv.id}${[".json", ".tsv", ".csv"].includes(extension) ? extension : ".csv"}`;
+ }
+ 
+@@ -1042,27 +1019,26 @@
+ }
+ 
+ export function ffpxDeriveHiddenSlots(slotList) {
+-  let byCell = new Map(
+-    slotList.map((slot) => [`${Number(slot.row)},${Number(slot.col)}`, slot]),
+-  );
+-  slotList.forEach((slot) => {
+-    slot.hidden = false;
+-  });
+-  for (let anchor of slotList) {
+-    let rowSpan = Number(anchor.rowSpan) || 1,
+-      colSpan = Number(anchor.colSpan) || 1;
+-    if (rowSpan === 1 && colSpan === 1) continue;
+-    for (let row = Number(anchor.row); row < Number(anchor.row) + rowSpan; row++)
+-      for (let col = Number(anchor.col); col < Number(anchor.col) + colSpan; col++) {
+-        if (row === Number(anchor.row) && col === Number(anchor.col)) continue;
+-        let covered = byCell.get(`${row},${col}`);
+-        if (!covered) throw Error("FFPX 병합 영역에 대응하는 슬롯이 없습니다.");
+-        if (covered.chart != null || covered.imageId != null)
++  const slots = projectClone(slotList);
++  for (const slot of slots) slot.hidden = false;
++  for (const anchor of slots) {
++    if (!Number.isInteger(anchor.rowSpan) || anchor.rowSpan < 1 ||
++        !Number.isInteger(anchor.colSpan) || anchor.colSpan < 1 ||
++        !Number.isInteger(anchor.row) || !Number.isInteger(anchor.col))
++      throw Error("FFPX 병합 geometry가 올바르지 않습니다.");
++    if (anchor.rowSpan === 1 && anchor.colSpan === 1) continue;
++    for (let row = anchor.row; row < anchor.row + anchor.rowSpan; row++)
++      for (let col = anchor.col; col < anchor.col + anchor.colSpan; col++) {
++        if (row === anchor.row && col === anchor.col) continue;
++        const matches = slots.filter(slot => slot.row === row && slot.col === col);
++        if (matches.length !== 1) throw Error("FFPX 병합 영역에 단일 슬롯이 필요합니다.");
++        const covered = matches[0];
++        if ((covered.content?.chart ?? covered.chart) != null || (covered.content?.imageId ?? covered.imageId) != null)
+           throw Error("FFPX 병합 영역의 가려진 슬롯은 비어 있어야 합니다.");
+         covered.hidden = true;
+       }
+   }
+-  return slotList;
++  return slots;
+ }
+ 
+ export function ffpxBuildProject(source = activeProject._state) {
+@@ -1365,10 +1341,6 @@
+         .filter((node) => node.tagName === "imageAsset").map(ffpxWrappedValue),
+       charts = [],
+       slots = [];
+-    debugLog("project:read-version", {
+-      format: "FFPX",
+-      appBuild: typeof project?.appBuild === "string" ? project.appBuild : null,
+-    });
+     for (let placement of layout.placements || []) {
+       let slotRoot = ffpxReadXmlDocument(
+           assets,
+@@ -1393,12 +1365,11 @@
+         id: placement.slotId,
+         chart: chart?.id ?? null,
+         imageId: imageObject?.imageRef ?? null,
+-        imageSettings: readImageSettings(imageObject?.settings),
+-        caption:
+-          typeof slotCaption?.text === "string" ? slotCaption.text : null,
++        ...(imageObject && Object.hasOwn(imageObject, "settings") ? { imageSettings: projectClone(imageObject.settings) } : {}),
++        caption: slotCaption.text,
+       });
+     }
+-    ffpxDeriveHiddenSlots(slots);
++    slots = ffpxDeriveHiddenSlots(slots);
+     let appearance =
+       project.appearance && typeof project.appearance === "object"
+         ? project.appearance
+@@ -1464,7 +1435,35 @@
+     image.bytesBase64 = ffpxBytesToBase64(assets.get(dataRef));
+     delete image.dataRef;
+   }
+-  return payload;
++  if (!payload.fileSystem || !Array.isArray(payload.fileSystem.directories))
++    throw Error("FFPX 폴더 목록이 없습니다.");
++  for (const path of PROJECT_FIXED_DIRECTORIES)
++    if (!payload.fileSystem.directories.includes(path)) payload.fileSystem.directories.push(path);
++  if (!Object.hasOwn(payload, "export")) {
++    payload.export = projectClone(BackendSettings.project_object.export);
++    payload.export.width = payload.slotStyle?.referenceWidth ?? BackendSettings.project_object.layout.slotStyle.referenceWidth;
++    payload.export.height = payload.export.heightMode === "auto" ? null : BackendSettings.defaults.limits.export.logicalHeight[0];
++  }
++  const captionState = {};
++  for (const [source, target] of [["enabled", "enabled"], ["beforeText", "text"],
++      ["afterText", "afterText"], ["name", "name"], ["nameBold", "nameBold"], ["settings", "settings"]])
++    if (Object.hasOwn(caption, source)) captionState[target] = projectClone(caption[source]);
++  const decoded = {
++    schema: project.schema, version: project.version, kind: "fast-figure-project-object",
++    meta: { projectName: project.projectName, appBuild: project.appBuild },
++    layout: { gridRows: layout.gridRows, gridCols: layout.gridCols },
++    annotations: { labels: projectClone(labels), captions: captionState },
++    fileSystem: payload.fileSystem, assets: { csvFiles: payload.csvFiles, images: payload.images },
++    charts, slots: slots.map(slot => ({
++      id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
++      hidden: slot.hidden, caption: slot.caption,
++      content: { contentType: slot.contentType, chart: slot.chart, imageId: slot.imageId,
++        ...(Object.hasOwn(slot, "imageSettings") ? { imageSettings: slot.imageSettings } : {}) },
++    })), appearance: {}, export: payload.export,
++  };
++  if (Object.hasOwn(appearance, "slotStyle")) decoded.layout.slotStyle = projectClone(appearance.slotStyle);
++  if (Object.hasOwn(appearance, "uiPalette")) decoded.appearance.uiPalette = projectClone(appearance.uiPalette);
++  return decoded;
+ }
+ 
+ export function projectFileStem(value) {
+@@ -1473,7 +1472,7 @@
+     .replace(/[\\/:*?"<>|\x00-\x1F]/g, "-")
+     .replace(/\s+/g, " ")
+     .replace(/[. ]+$/, "")
+-    .slice(0, 100);
++    .slice(0, BackendSettings.defaults.naming.exportStemMaxLength);
+   return stem || "fast-figure-project";
+ }
+ 
+@@ -1522,7 +1521,7 @@
+     enteringTrash = projectVfs.isTrashed(destination) && !projectVfs.isTrashed(source);
+   return immutableProjectCopy({ path: source, kind: match.kind, directory: targetDirectory,
+     destination, collision, uniqueName: projectPathName(uniquePath), enteringTrash,
+-    referenceCount: enteringTrash ? projectNodeReferenceCount(source, state) : 0 });
++    referenceCount: projectNodeReferenceCount(source, state) });
+ }
+ 
+ export function ffsxBuildSlot(slot, chart, source = activeProject._state) {
+@@ -1636,10 +1635,6 @@
+       );
+     if (slot?.contentType !== "graph") throw Error("FFSX graph 슬롯이 필요합니다.");
+     delete chart.id;
+-    debugLog("slotFfsx:read-version", {
+-      format: "FFSX",
+-      appBuild: typeof slot?.appBuild === "string" ? slot.appBuild : null,
+-    });
+     delete slot.appBuild;
+     chart.editor.objects = [...ffpxDirectChild(graphNode, "graphObjects").children]
+       .filter((node) => node.tagName === "graphObject").map(ffpxWrappedValue);
+@@ -1648,7 +1643,7 @@
+       version: PACKAGE_FORMAT_VERSION,
+       slot: {
+         ...slot,
+-        caption: typeof caption?.text === "string" ? caption.text : null,
++        caption: caption.text,
+       },
+       chart,
+       csvFiles: [...ffpxDirectChild(assetRoot, "dataAssets").children]
+@@ -1669,7 +1664,6 @@
+       data = typeof dataRef === "string" ? assets.get(dataRef) : null;
+     if (
+       !csv ||
+-      !chartCsvIds(chart).includes(csv.id) ||
+       typeof csv.name !== "string" ||
+       typeof dataRef !== "string" ||
+       !dataRef.startsWith("assets/data/") ||
+diff --git a/sourcecode/backend/project_efsm.js b/sourcecode/backend/project_efsm.js
+index 57dc8750bb1210653ca85da5d1ea583e1e1f63c1..37b40e1db55fed5af466816dfe13df26e0256e27 100644
+--- a/sourcecode/backend/project_efsm.js
++++ b/sourcecode/backend/project_efsm.js
+@@ -778,6 +778,9 @@
+     validateChartModel(chart, "불러온 슬롯 차트", candidate.assets.csvFiles);
+     const target = candidate.slots.find(item => item.id === slot.id),
+       oldChartId = target.content.chart;
++    if (oldChartId !== null && (!source.charts.some(item => item.id === oldChartId) ||
++        source.slots.filter(item => item.content.chart === oldChartId).length !== 1))
++      throw Error("교체할 차트의 슬롯 소유권이 올바르지 않습니다.");
+     candidate.charts = candidate.charts.filter(item => item.id !== oldChartId);
+     candidate.charts.push(chart);
+     target.content.chart = chart.id;
+@@ -909,7 +912,9 @@
+     if (match.kind === "directory") {
+       candidate.fileSystem.directories = candidate.fileSystem.directories.map(path =>
+         projectPathInDirectory(path, plan.path) ? rewrite(path) : path).sort();
+-      moving.forEach(({ asset }) => { asset.directory = projectParentPath(rewrite(projectAssetPath(asset))); });
++      moving.filter(node => node.kind !== "directory").forEach(({ asset }) => {
++        asset.directory = projectParentPath(rewrite(projectAssetPath(asset)));
++      });
+     } else {
+       match.asset.directory = projectParentPath(destination);
+       match.asset.name = projectPathName(destination);
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+index 44f72013cf608c7f4985937efa9f9ef5477d5d8e..0aa0918d835b561956a4f9096776f03a141c1300 100644
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -2394,7 +2394,7 @@
+       source.meta.projectName = "supplied FFPX";
+       const before = JSON.stringify(source), bundle = ffpxBuildProject(source),
+         roundtrip = await ffpxReadProject(new File([ffpxZipStore(bundle.assets)], "supplied.ffpx"));
+-      check(roundtrip.projectName === "supplied FFPX" && bundle.manifest.projectName === "supplied FFPX" &&
++      check(roundtrip.meta.projectName === "supplied FFPX" && bundle.manifest.projectName === "supplied FFPX" &&
+         JSON.stringify(source) === before && JSON.stringify(activeProject._state) === live,
+         "FFPX used live metadata or mutated its read source");
+       const stamp = "2030-01-02T03-04-05-000Z", payload = appFSM.query("export", { operation: "project.exportFile", stamp }),
+@@ -2450,7 +2450,7 @@
+           revoked.includes(created[0].url) && downloads[0].endsWith(".ffpx") && appFSM.state.lifecycle === "ready",
+           "project export result/resource/lifecycle mismatch");
+         const payload = await ffpxReadProject(new File([created[0].blob], "download.ffpx"));
+-        check(payload.projectName === activeProject.projectName, "handoff ZIP changed Project metadata");
++        check(payload.meta.projectName === activeProject.projectName, "handoff ZIP changed Project metadata");
+         fail = true; let caught;
+         try { await api.project.exportFile(); } catch (error) { caught = error; }
+         check(caught === failure && revoked.includes(created[1]?.url) && appFSM.state.lifecycle === "ready",
+@@ -3452,8 +3452,8 @@
+         restored = roundtrip.slots.find(item => item.id === slot.id);
+       check(node && !node.hasAttribute("imageRef") && typed.imageRef === null &&
+         JSON.stringify(typed.settings) === JSON.stringify(settings), "null image settings omitted or typed ref changed");
+-      check(restored.imageId === null && JSON.stringify(restored.imageSettings) === JSON.stringify(settings) &&
+-        roundtrip.images.length === 0 && !bundle.assets.some(entry => entry.name.startsWith("assets/media/")) &&
++      check(restored.content.imageId === null && JSON.stringify(restored.content.imageSettings) === JSON.stringify(settings) &&
++        roundtrip.assets.images.length === 0 && !bundle.assets.some(entry => entry.name.startsWith("assets/media/")) &&
+         JSON.stringify(source) === before, "null image settings did not roundtrip or created asset/mutated source");
+       // Positive image references still retain real asset identity and original bytes.
+       const image = { id: source.nextId.image++, name: "settings-roundtrip.svg", directory: "/assets/images",
+@@ -3465,10 +3465,10 @@
+         attachedNode = attachedRoot.querySelector(":scope > slot > imageObject"),
+         attachedRead = await ffpxReadProject(new File([ffpxZipStore(attached.assets)], "attached-image.ffpx")),
+         attachedSlot = attachedRead.slots.find(item => item.id === slot.id);
+-      check(attachedNode.getAttribute("imageRef") === String(image.id) && attachedSlot.imageId === image.id &&
+-        JSON.stringify(attachedSlot.imageSettings) === JSON.stringify(settings) &&
+-        attachedRead.images.length === 1 && attachedRead.images[0].id === image.id &&
+-        attachedRead.images[0].bytesBase64 === image.bytesBase64 && JSON.stringify(source) === attachedBefore &&
++      check(attachedNode.getAttribute("imageRef") === String(image.id) && attachedSlot.content.imageId === image.id &&
++        JSON.stringify(attachedSlot.content.imageSettings) === JSON.stringify(settings) &&
++        attachedRead.assets.images.length === 1 && attachedRead.assets.images[0].id === image.id &&
++        attachedRead.assets.images[0].bytesBase64 === image.bytesBase64 && JSON.stringify(source) === attachedBefore &&
+         JSON.stringify(activeProject._state) === live, "positive image package changed identity/bytes/settings or live authority");
+     });
+ 
+@@ -6457,6 +6457,9 @@
+         JSON.stringify([["a\tb", "c"], ["x,y", "2"], [""], ['a"b', "3"]]), "CSV guessed tab or dropped blank/quoted row");
+       check(JSON.stringify(parse("fixed.TSV", 'a,b\tc\r\n1\t"two\r\nlines"\r\n\r\n3\t4')) ===
+         JSON.stringify([["a,b", "c"], ["1", "two\r\nlines"], [""], ["3", "4"]]), "TSV delimiter/newline/blank row changed");
++      check(JSON.stringify(parse("tail.csv", "a,b\n\n\r\n")) === '[["a","b"]]' &&
++        JSON.stringify(parse("middle.csv", "a,b\n\n\n1,2\n\n")) === '[["a","b"],["",""],["",""],["1","2"]]',
++        "physical trailing blanks became data or internal blanks disappeared");
+       check(JSON.stringify(parse("one.csv", '""')) === '[[""]]' &&
+         JSON.stringify(parse("row.csv", "  \n")) === '[["  "]]', "empty quoted/whitespace cell lost");
+       check(JSON.stringify(parse("data.json", '{"data":[["x","y"],[null,2]]}')) === '[["x","y"],[null,2]]', "JSON data-array/null cell changed");
+@@ -6464,7 +6467,8 @@
+         JSON.stringify([["a", "b"], [null, ""], [1, 2]]), "ordered object key union/null/missing cells changed");
+       for (const [name, text] of [["empty.csv", ""], ["empty.tsv", ""], ["foreign.txt", "a,b\n1,2"],
+         ["empty.json", "[]"], ["mixed.json", '[[1],{"x":2}]'], ["mixed.json", '[{"x":1},null]'],
+-        ["shape.json", '{"data":{}}'], ["quote.csv", 'a,b\n"open,2']]) {
++        ["shape.json", '{"data":{}}'], ["quote.csv", 'a,b\n"open,2'],
++        ["quote.csv", 'a"b,c'], ["quote.csv", '"a"b,c'], ["quote.csv", '"a""b"x,c']]) {
+         let failed = false; try { parse(name, text); } catch (_) { failed = true; }
+         check(failed, `invalid data accepted: ${name}/${text}`);
+       }
+@@ -6494,7 +6498,7 @@
+         const project = activeProject._state, frontend = interfaceFSM.state,
+           ffpx = ffpxReadProjectBytes(ffpxZipStore(ffpxBuildProject().assets)), current = slotAt(id),
+           ffsx = ffsxReadSlotBytes(ffpxZipStore(ffsxBuildSlot(current, getChart(current.chart)).assets));
+-        for (const [name, text] of fixtures) for (const read of [ffpx, ffsx]) {
++        for (const [name, text] of fixtures) for (const read of [ffpx.assets, ffsx]) {
+           const asset = read.csvFiles.find(item => item.name === name);
+           check(asset && asset.bytesBase64 === ffpxBytesToBase64(new TextEncoder().encode(text)) &&
+             JSON.stringify(asset.rows) === JSON.stringify(parseProjectCsvAsset(name, new TextEncoder().encode(text))),
+@@ -6529,6 +6533,9 @@
+           importedProjectCsvState({ csvFiles: [{ id: 1, name, rows, bytesBase64: original }] }).csvFiles[0].bytesBase64 === original,
+           `original ${name} bytes were regenerated`);
+       }
++      check(projectCsvDataRef({ id: 9, name: "owned.JSON" }) === "data/csv-9.json" &&
++        projectCsvDataRef({ id: 9, name: "owned.tsv" }) === "data/csv-9.tsv" &&
++        projectCsvDataRef({ id: 9, name: "owned.other" }) === "data/csv-9.csv", "package reference extension lost canonical filename");
+       check(activeProject._state === project && interfaceFSM.state === frontend, "synthetic candidate calculation mutated authority");
+     });
+ 
+@@ -6558,6 +6565,36 @@
+           const loaded = getProjectCsv(csv.id);
+           check(loaded.headerLines === expected && loaded.bytesBase64 === bytes && JSON.stringify(loaded.rows) === rows,
+             `public FFPX import lost header metadata/bytes/rows: ${present}/${value}`);
++        }
++        const input = ffpxReadProjectBytes(ffpxZipStore(entries));
++        input.meta.projectName = "  exact name  "; input.nextId = { csv: 999, image: 999, chart: 999 };
++        input.slots[0].caption = ""; input.slots[0].content.extension = { preserved: true };
++        input.annotations.labels.settings.x = 0; input.annotations.labels.settings.extension = { zero: 0 };
++        delete input.annotations.labels.settings.fontFamily;
++        delete input.layout.slotStyle.gap; delete input.export.dpi;
++        const chart = createChartModel({ id: 7, editor: { objects: [createCandidateBaseGraphObject(input.assets.csvFiles[0])] } });
++        delete chart.editor.objects[0].lineWidth; delete chart.editor.globalSettings;
++        input.charts = [chart]; input.slots[0].content.chart = chart.id;
++        const before = JSON.stringify(input), built = buildProjectObject(input, "must-not-replace-name.ffpx")._state;
++        check(built.meta.projectName === input.meta.projectName && built.slots[0].caption === "" &&
++          built.slots[0].content.extension.preserved && built.annotations.labels.settings.extension.zero === 0 &&
++          built.annotations.labels.settings.x === 0 && built.layout.slotStyle.gap === BackendSettings.project_object.layout.slotStyle.gap &&
++          built.export.dpi === BackendSettings.project_object.export.dpi &&
++          built.charts[0].editor.objects[0].lineWidth === BackendSettings.defaults.chartSettings.editor.objectStyle.lineWidth &&
++          built.nextId.csv === csv.id + 1 && built.nextId.chart === 8 && !Object.hasOwn(built, "schema") &&
++          !Object.hasOwn(built, "version") && JSON.stringify(input) === before,
++          "import missing-only settings/canonical content/name/next-id violated input or instance ownership");
++        for (const mutate of [value => { value.layout.slotStyle = null; },
++          value => { value.annotations.captions.enabled = null; }, value => { value.slots[0].hidden = "false"; },
++          value => { value.fileSystem.directories = value.fileSystem.directories.filter(path => path !== csv.directory); },
++          value => { value.assets.csvFiles.push(projectClone(value.assets.csvFiles[0])); },
++          value => { value.assets.csvFiles[0].bytesBase64 = "!invalid!"; },
++          value => { value.charts[0].editor.objects[0].markerSize = 0; },
++          value => { value.slots[1].content.chart = chart.id; },
++          value => { value.slots[0].content.chart = null; }]) {
++          const invalid = projectClone(input); mutate(invalid); const original = JSON.stringify(invalid);
++          let rejected = false; try { buildProjectObject(invalid, "ignored.ffpx"); } catch (_) { rejected = true; }
++          check(rejected && JSON.stringify(invalid) === original, "malformed import was repaired or mutated instead of rejected");
+         }
+       } finally { renderDashboard = render; status = report; interfaceFSM.notify = notify;
+         initialize.call(activeProject, saved); interfaceFSM.state = session; interfaceRuntime.selectedSlotId = selected; }
+@@ -6610,6 +6647,18 @@
+         select(slotAt(targetId));
+         const csv = createProjectCsv([["x", "y"], ["1", "2"]], "path-probe.csv");
+         api.graphs.addObject(csv.id);
++        const vfs = projectClone(activeProject._state), path = projectAssetPath(csv),
++          before = JSON.stringify(vfs), plan = planProjectNodeMove(path, PROJECT_ASSET_DIRECTORIES.image, vfs);
++        check(plan.referenceCount === 1 && !plan.enteringTrash && JSON.stringify(vfs) === before,
++          "ordinary move plan omitted current references or mutated source");
++        vfs.fileSystem.directories.push("/assets/csv/nested", "/assets/csv/nested/inside", "/assets/csv/nested-other");
++        const descendants = projectVfs.descendants("/assets/csv/nested", vfs);
++        check(descendants.some(node => node.kind === "directory" && node.path === "/assets/csv/nested/inside") &&
++          !descendants.some(node => node.path === "/assets/csv/nested" || node.path === "/assets/csv/nested-other"),
++          "VFS descendants omitted directories or used non-segment prefix");
++        vfs.assets.csvFiles.push(projectClone(vfs.assets.csvFiles[0]));
++        let duplicateRejected = false; try { projectVfs.resolve(path, vfs); } catch (_) { duplicateRejected = true; }
++        check(duplicateRejected, "VFS resolve silently selected one of duplicate owners");
+         const current = slotAt(targetId), projectEntries = ffpxBuildProject().assets,
+           slotEntries = ffsxBuildSlot(current, getChart(current.chart)).assets,
+           data = new TextEncoder().encode("path inspection only"),
+@@ -6634,6 +6683,13 @@
+         let frontend = interfaceFSM.state;
+         for (const [entries, reader, suffix] of [[projectEntries, ffpxReadProjectBytes, "ffpx"],
+           [slotEntries, ffsxReadSlotBytes, "ffsx"]]) {
++          for (const corrupt of [bytes => new DataView(bytes.buffer).setUint16(8, 8, true),
++            bytes => { const view = new DataView(bytes.buffer); bytes[30 + view.getUint16(26, true) + view.getUint16(28, true)] ^= 1; }]) {
++            const bytes = ffpxZipStore(entries); corrupt(bytes);
++            let rejected = false; try { reader(bytes); } catch (_) { rejected = true; }
++            check(rejected && activeProject._state === project && interfaceFSM.state === frontend,
++              `${suffix} STORE header/CRC corruption accepted or changed authority`);
++          }
+           for (const name of ["assets/report..csv", "assets/.../note", "assets/.hidden", "assets/a..b/data"]) {
+             const bytes = ffpxZipStore([...entries, { name, data }]);
+             check(new TextDecoder().decode(ffpxZipRead(bytes).get(name)) === "path inspection only",
+diff --git a/development-versions.json b/development-versions.json
+index b0c02bb0c893cc7d27bbd2aa865560fcda273d9a..8715590676c93a2e6bc4ff519314eccd5670dad2 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 143,
++      "revision": 144,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:4edcba7b1f7a9c0617d0fad78c944b0385f7407925eef0d2d2ba4b2072eaae77",
++      "fingerprint": "sha256:21da391d3918b20b7041083cbdd09762847afe8d6232cab19e445b115a5fbf68",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261112-009-layout-annotations-module-translation.md"
++      "validation_review": "agent_space/reviews/review-20261113-001-assets-files-module-translation.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/plans/plan-025.md b/agent_space/plans/plan-025.md
+index 8d97cd81dfdee4a4560d70c34fab23586f8de5dd..05f4b1f5070cb179f445e4e42310bf9a82d443be 100644
+--- a/agent_space/plans/plan-025.md
++++ b/agent_space/plans/plan-025.md
+@@ -6,7 +6,7 @@
+ 
+ 이 계획은 Plan024의 **앞으로 수행할 작업 선택·순서·종료 관리**를 대체한다. Plan023/024, 기존 patch/review와 WIP는 이력으로 보존한다. Source/PlusCal/정책을 바꾸거나 새 논리 모듈을 설계하는 계획이 아니다. Plan024의 화면 → raster → 나머지 번역 → 허가된 통합 검증 순서는 유지한다. 앞 두 범위의 정적 대응 기록을 재사용하고, 현재 세 번째 범위를 모듈별로 마무리한다.
+ 
+-기준은 `development-versions.json`의 Source45/current, PlusCal25/current, code143/stale, 선택적 verification26/stale이다(2차 번역 반영). HEAD는 `28e6dc762c75c8a2ffbbe53ed08b323f0b2b82bd`이며 현재 코드는 그 이후 미커밋 WIP를 포함한다. 본 계획의 최초 작성은 문서 변경뿐이었으며, 이후 코드 번역 차수에서만 revision/fingerprint를 갱신한다. derived_from은 같은 상위 명세를 유지한다.
++기준은 `development-versions.json`의 Source45/current, PlusCal25/current, code144/stale, 선택적 verification26/stale이다(3차 번역 반영). HEAD는 `28e6dc762c75c8a2ffbbe53ed08b323f0b2b82bd`이며 현재 코드는 그 이후 미커밋 WIP를 포함한다. 본 계획의 최초 작성은 문서 변경뿐이었으며, 이후 코드 번역 차수에서만 revision/fingerprint를 갱신한다. derived_from은 같은 상위 명세를 유지한다.
+ 
+ 지금까지 한 일: r133–136 화면 선택·host 수명·geometry/zoom·resize 연결, r137 renderer 화면/raster 절차군, r138 command tuple와 실제 public 소비자, r139 system 시작 순서, r140 graph 계산, r141 Plotly import 변환을 번역했다. 이것은 유효한 부분 진척이지 15개 모듈 전체 완료가 아니다. 마지막 모듈 현황 답변의 ‘전체 미판정’은 **미작성/전면 재작성 필요**라는 뜻이 아니다. 기존 대응 기록과 코드를 이용해 남은 부분만 닫는다.
+ 
+@@ -33,8 +33,8 @@
+ | 유지 | `frontend/renderer` | 화면·current/target raster의 정적 대응 기록 있음(r137). 재번역하지 않는다. | review002를 재사용하고 native Plotly/이미지/font/canvas/download 검증만 최종 실행 목록에 둔다. system 호출 순서 보완은 r139 근거를 연결한다. |
+ | 1 — 정적 종료(r142) | `backend/graphs` | r140 계산·r141 import를 재사용하고 15개 Source 절차/PlusCal 확장과 실제 candidate/import caller의 대응을 마쳤다. pure normalize, raw header/scalar selection, 전체 validation, command 내부 object 경로와 chart 반환을 번역했다. | `agent_space/reviews/review-20261112-008-graphs-module-translation.md`. 알려진 번역 누락/상위 차단 없음. 실행 검증 대기. |
+ | 2 — 정적 종료(r143) | `backend/layout_annotations` | 11개 Source 절차/PlusCal 확장과 실제 read/candidate caller를 대응했다. grid source/검사/생성 순서, config image 기본값·limits·copy, visible image/caption read와 global caption copy, 관련 current-source 재계산을 번역했다. | `agent_space/reviews/review-20261112-009-layout-annotations-module-translation.md`. 알려진 번역 누락/상위 차단 없음. 실행 검증 대기. Mantine grid 입력 조합은 별도 8차. |
+-| 3 — 다음 작업 | `backend/assets_files` | 부분 대응. bytes/parser/metadata, VFS path/폴더/이동/삭제/trash/import/export와 새 자산 candidate 수명·반환·실패를 닫는다. | 복사된 입력, 원본 bytes, canonical path/id/소유권과 commit 전 자원 규칙. 물리적으로 이 파일에 있는 Application creator는 7차 public 검토에 연결하되 기존 tuple 번역을 반복하지 않는다. |
+-| 4 | `backend/project_state` | 부분 대응. 초기화·schema/reference/owner validation, 공식 read/projection, reconciliation 입력과 tree/trash/deletion-target 경계를 닫는다. | read의 정확한 shape·불변성·전체 Project 참조 검증. canonical tree의 고립된 shape 교체는 하지 않고 public/UI 소비와 연결 가능한 범위를 구분한다(§4). |
++| 3 — 정적 종료(r144) | `backend/assets_files` | 21개 Source 절차/PlusCal private expansion과 실제 import/move/FFSX caller를 대응했다. parser/VFS/current metadata, typed package/canonical decoded payload, missing-only constructor·owner·bytes·id 순서를 번역했다. | `agent_space/reviews/review-20261113-001-assets-files-module-translation.md`. 알려진 번역 누락/상위 차단 없음. 실행 검증 대기. wire v3 불변; public/UI tree는 별도 차수. |
++| 4 — 다음 작업 | `backend/project_state` | 부분 대응. 초기화·schema/reference/owner validation, 공식 read/projection, reconciliation 입력과 tree/trash/deletion-target 경계를 닫는다. | read의 정확한 shape·불변성·전체 Project 참조 검증. canonical tree의 고립된 shape 교체는 하지 않고 public/UI 소비와 연결 가능한 범위를 구분한다(§4). |
+ | 5 | `backend/project_efsm` | 부분 대응. 모든 등록 command의 current resolve → candidate → normalize/validate → 재확인/commit → receipt/effect 분기를 닫는다. | 1–4차 helper와 실제 command가 일치해야 한다. 부분 commit/live fallback/중복 후처리/상태 복구를 임의로 더하지 않는다. 누락이 있으면 해당 command의 caller까지 같은 단위에서 수정한다. |
+ | 6a | `frontend/interface_fsm` | 부분 대응. lifecycle/선택/drag/zoom/lock와 reconciliation 전체를 닫는다. r138 final state 반환은 유지한다. | Frontend 소유 session과 Backend 참조 입력, 거부/무변경/실패·publish 순서 대응. renderer를 다시 설계하지 않는다. |
+ | 6b | `application/adapter` | 부분 대응. dispatchProjectCommand/dispatchSlotSelection은 재사용하고 read/preparation/action routing/compatibility facade/실패 전달의 남은 절차를 닫는다. | 5차 receipt → 6a final state → supplied renderer 경계 및 다른 tuple 순서 보존. 일반 강제 refresh/cache/별도 상태 authority를 만들지 않는다. |
+@@ -66,9 +66,10 @@
+ - 모든 변경은 실제 incremental `YYYYMMDD-NNN.patch`/동명 설명으로 기록한다. 코드 변경 때만 revision/fingerprint와 Source/PlusCal lineage를 관리한다. 문서만 고치면 코드 revision을 올리지 않는다. 기존 WIP를 HEAD diff로 덮어쓰거나 제거하지 않는다.
+ - 허용되는 로컬 작업은 읽기·편집·정적 파일/diff/hash뿐이다. app/test/build/checker/TLC/browser를 실행하지 않는다. 이 일정은 Actions/remote write/commit/push/new goal 허가가 아니다. 이전 subagent 사용 허가는 범위 내에서만 적용하며 writer는 하나로 유지한다. 독립 탐색/검토가 실제 필요할 때만 분리하고 중복 문서 읽기를 위한 fanout을 기본 단계로 만들지 않는다.
+ - 새로운 상위 의미, 해결 불가능한 동시 수정, 필요한 접근/실행 권한 부재로 막힌 범위는 근거·시도·정확한 결정/허가 요청을 남기고 그 경계에서 중단한다. 이를 핑계로 번역 가능한 다른 절차를 미루거나, 인접 기능/폴리싱으로 우회하지 않는다.
+-- 최초 계획 작성은 문서 변경뿐이었다. 이후 2026-11-12 1차 backend/graphs(r142), 2차 backend/layout_annotations(r143)의 정적 번역을 종료했다. 다음 실행 항목은 **3차 backend/assets_files 전체 절차와 실제 caller를 끝내는 것**이다.
++- 최초 계획 작성은 문서 변경뿐이었다. 이후 1차 backend/graphs(r142), 2차 backend/layout_annotations(r143), 3차 backend/assets_files(r144)의 정적 번역을 종료했다. 다음 실행 항목은 **4차 backend/project_state 전체 절차와 실제 read/candidate caller를 끝내는 것**이다.
+ 
+ ## 6. 차수별 완료 기록
+ 
+ - 1차 / r142: graph 15개 Source 절차 및 PlusCal private expansion의 전체 대응표는 review008에 기록했다. 순수 설정 normalize와 실제 import caller 반환값 대입, enum/style/figure/global/reference validation, header 원값·scalar column 선택, graph-only 반환과 미명세 live postcommit replacement 경로를 바로잡았다. 기존 regression65/66만 확장했다(미실행). Source45/PlusCal25/verification26 및 derived_from 불변, code142/stale. 증분 patch009. 당시 다음 모듈은 2차이며 EFSM/assets 전체까지 종료한 것은 아니다.
+-- 2차 / r143: 11개 Source 절차 및 PlusCal 확장/실제 read·command 대응표는 review009. source-scoped grid 후보, config image 설정, read 복사/visible owner 및 global caption 전체 copy, 관련 label/layout/merge/split의 최신 source 재계산을 번역했다. 기존 regression47/97/106만 확장(미실행). Source45/PlusCal25/verification26/derived_from 불변, code143/stale. 증분 patch010. 다음은 3차 backend/assets_files; EFSM/project_state 전체 종료나 실행 검증을 뜻하지 않는다.
++- 2차 / r143: 11개 Source 절차 및 PlusCal 확장/실제 read·command 대응표는 review009. source-scoped grid 후보, config image 설정, read 복사/visible owner 및 global caption 전체 copy, 관련 label/layout/merge/split의 최신 source 재계산을 번역했다. 기존 regression47/97/106만 확장(미실행). Source45/PlusCal25/verification26/derived_from 불변, code143/stale. 증분 patch010. 당시 다음은 3차 backend/assets_files였으며 EFSM/project_state 전체 종료나 실행 검증을 뜻하지 않는다.
++- 3차 / r144(2026-11-13): 21개 Source 절차/PlusCal private expansion과 실제 command/import caller 대응표는 `agent_space/reviews/review-20261113-001-assets-files-module-translation.md`. strict delimited parser, unique-owner/directory-inclusive VFS, current final metadata·bytes, typed package/canonical decoded payload와 missing-only constructor·chart owner 검증을 번역했다. 관련 기존 fixtures만 확장·조정(미실행). Source45/PlusCal25/verification26/derived_from 불변, code144/stale. 증분 `agent_space/patches/20261113-001.patch`. 다음은 4차 backend/project_state이며 public/UI tree나 EFSM 전체 종료를 뜻하지 않는다.
+diff --git a/agent_space/reviews/review-20261113-001-assets-files-module-translation.md b/agent_space/reviews/review-20261113-001-assets-files-module-translation.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..a2953a4186a7ce25ca8ebf87f303cd2d58d355ab
+--- /dev/null
++++ b/agent_space/reviews/review-20261113-001-assets-files-module-translation.md
+@@ -0,0 +1,39 @@
++# Plan025 3차 backend/assets_files — 정적 번역 종료
++
++2026-11-13 / code144. Source 566줄, PlusCal 1387줄, runtime 기존 1689줄을 구간별로 전체 확인하고 관련 state/EFSM 소비자를 연결했다. Source45 → PlusCal25의 이미 적힌 절차를 번역하며 새 논리 모듈/API/형식/권위는 만들지 않는다. 아래는 21개 Source 절차와 PlusCal private expansion의 대응이다. 정적 대응 종료는 실행 검증 통과가 아니다.
++
++표에서 A=`sourcecode/backend/assets_files.js`, E=`sourcecode/backend/project_efsm.js`. 물리적으로 A에 있는 createProjectCsv/createProjectImage/createEmptyProjectCsv는 기존 Application creator의 tuple/public 성공 read 연결(r138)을 유지하며 Backend calculation 권위로 취급하지 않는다.
++
++| Source 절차 / PlusCal 확장 | 실제 대응·판정 |
++| --- | --- |
++| normalizeProjectPath | A.normalizeProjectPath/projectCsvName: slash/absolute segment, dot/dotdot 금지, segment 정규화, file root 금지. 기존 대응 재사용. |
++| projectAssetPath | A.projectAssetPath/projectParentPath/projectPathName: directory/name으로만 canonical path 계산, 별도 path alias 저장 없음. |
++| slotFileKind | A.slotFileKind: FFSX → CSV/TSV/JSON → image MIME/extension 우선순위, sniffing 없음. |
++| projectAssetImportCollisionModel / CalculateAssetCollisionInProject | A.projectAssetImportCollisionModel: 현재 parent/path/kind·reservation 확인, empty/same-kind replace/other-kind collision, 복사된 제안과 unique sibling. callback은 이 read 경계에만 있다. |
++| resolveProjectAssetImportPlan / ResolveAssetPlanInProject | A.resolveProjectAssetImportPlan: 제안의 current kind/id/path 재확인, cancel/replace/rename 구분 및 reservation 추가. 실제 command는 최종 plan만 받는다. |
++| buildProjectAssetImportCandidate / BuildAssetImportInAttempt / BuildAssetMetadata | A.buildProjectAssetImportCandidate/stageProjectAssetImport, E.applyAssetsImportedAction: 입력 파일·최종 path/replaceId/current parent/target를 재확인, 한 source의 candidate에 입력 순서대로 id/bytes/metadata와 target 연결을 계산한다. metadata는 final canonical name/parent, 원래 MIME와 복사 bytes에서 바로 구성한다. image asset에 slot settings를 복제하지 않는다. whole validation 후 EFSM source 재확인·commit만 한다. 기존 무조건 trash parent 금지라는 추가 조건은 제거했다. |
++| planProjectNodeMove | A.planProjectNodeMove/projectNodeReferenceCount: protected node/current destination/self·descendant/collision 및 unique plan. 일반 이동도 current referenceCount를 계산한다. E.applyProjectNodeMovedAction은 새 directory-inclusive descendant 결과에서 asset만 골라 directory를 바꾸고 source 재확인 후 commit한다. |
++| projectFileStem | A.projectFileStem: 파일명 문자/whitespace/trailing dot·space/fallback 및 config exportStemMaxLength. |
++| ffpxBuildProject / BuildFfpxInRead / BuildFfpxDocumentEntries / ReferencedProjectCsvIds / EncodeGraphXml / AddPackageXml | A.ffpxBuildProject/projectSnapshot/projectCsvDataRef/ffpxSlotGraphXml/ffpxTypedXmlDocument: detached supplied/official snapshot validation, trash 제외 후 남은 참조 재확인, metadata+원래 bytes, typed project/assets/layout/caption/labels/slot 문서. null imageRef에서도 slot-local image settings를 기록하고 asset을 만들지 않는다. dataRef extension은 실제 canonical filename에서 산출한다(.json/.tsv/.csv); 존재하지 않는 path alias를 보지 않는다. |
++| ffpxReadProject / ReadStorePackage / ReadFfpxDocumentPayload / RestorePlacementVisibility / ReadPackageXml / DecodeNamedXml | A.ffpxReadProject/ffpxReadProjectBytes/ffpxZipRead/ffpxReadXmlDocument/ffpxReadNamedValue/ffpxDeriveHiddenSlots: STORE/CRC/path/version 및 필수 direct child·typed value 검사, placement 순서와 merged hidden 계산. local/central entry method·flags·size·CRC·name의 불일치도 거부한다. Project-shaped payload(meta/layout/assets/content 등) 하나를 조립하고 실제 buildProjectObject 소비자와 fixtures를 함께 연결했다. 고정 directory만 복원하며 누락 export만 보충한다. image settings 누락은 slot normalizer까지 유지하고 caption의 null/empty/exact text를 보존한다. chart id를 deduplicate/clone/drop하지 않는다. |
++| ffsxBuildSlot / BuildFfsxInRead / AddFfsxSlotDocument / RemapRealProjectCsvIds | A.ffsxBuildSlot: snapshot에서 단일 실제 slot/chart owner 확인, graph-only payload, 원래 chart/editor/imported figure와 실제 CSV 참조만 local id로 remap한다. representation-aware conversion objects는 CSV를 만들지 않는다. metadata/headerLines/copied bytes 분리·image payload 배제. |
++| ffsxReadSlot / ReadFfsxDocumentPayload | A.ffsxReadSlot/ffsxReadSlotBytes: 같은 STORE/direct-child/typed grammar, 원래 bytes·metadata/headerLines 복원, shared graph validator. 슬롯 caption은 정확히 보존한다. 포함된 CSV metadata를 ‘현재 graph가 쓰지 않는다’는 이유로 조용히 삭제/거부하지 않는다. |
++| projectVfsResolve | A.projectVfs.resolve/exists: fixed/current directory+CSV+image에서 canonical owner 0/1을 반환하고 중복 owner는 거부한다. first-match를 권위로 선택하지 않는다. |
++| projectVfsUniquePath | A.projectVfs.uniquePath: current/reserved owner가 없는 같은 parent의 basename/extension suffix, source 무변경. |
++| projectVfsDescendants | A.projectVfs.descendants: root 자체 제외, 경로 segment 기준 descendant directory/CSV/image를 반환한다. 같은 문자열 prefix sibling은 제외한다. E 이동 소비자도 함께 맞췄다. |
++| parseProjectDataAsset / ParseDelimitedText / SerializeNewDataTable | A.parseProjectCsvAsset/parseCSV/serializeNewDataTable/projectCsvDataRef: UTF-8, JSON array/data array·table, CSV/TSV 정확한 quote/doubled quote/quoted newline, 잘못된 quote 거부. 내부 물리 blank row는 유지하고 trailing empty physical line만 제외한 뒤 dataTable pad한다. synthetic 데이터만 filename별 JSON/TSV/CSV로 encoding하고 imported raw bytes는 재생성하지 않는다. |
++| collectAssetReferences | A.collectAssetReferences/projectAssetReferenceCount/removeProjectAssetReferences: source chart/object 순서·원 index와 slot/image 실제 참조, conversion 분기. 삭제는 command-owned candidate의 원 index map으로만 계산한다. 일반 move의 count도 동일 helper를 쓴다. |
++| ffpxEncodeValue / EncodeNamedXml | A.ffpxXmlValue/ffpxTypedXmlDocument: null/boolean/finite number/text/array/record의 단일 typed grammar, escaped text/key, array 순서·record property 보존. |
++| ffpxDecodeValue | A.ffpxXmlReadValue/ffpxOnlyValueChild/ffpxDirectChild/ffpxReadNamedValue: 단일 direct value, enum/finite primitive/array/record, 중복 key/부적절한 child 거부. 다른 느슨한 XML parser를 만들지 않는다. |
++| buildProjectObject / NormalizeImportedAssetCollections / NormalizeImportedCharts / NormalizeImportedSlots / FillMissingSettingRecord / CompleteProjectSettingsInCandidate | A.buildProjectObject/fillMissingSettingRecord: schema/name/grid → raw detached copy → owned asset id/path/parent/bytes → chart global pure normalize·missing-style-only/shared validator → slot geometry/reference/image settings/caption/정확히 하나의 chart owner → missing-only instance settings/palette → max+1 ids → whole validation 순서. filename으로 이름을 새로 만들거나 잘라내지 않고 false/0/empty/unknown settings를 유지한다. present invalid를 missing으로 고치지 않는다. raw copy는 structuredClone으로 하여 projectClone의 선행 slot 정규화가 이 순서를 바꾸지 않게 했다. config instance를 공유하지 않는다. |
++| applyFfsxSlot / ApplyFfsxInAttempt | E.applySlotChartImportedAction: command 내 target/current/old chart sole owner 확인, payload 자체를 bind하지 않고 candidate에 CSV/id/bytes/metadata 및 chart remap, target graph·caption 변경, whole validation/source 재확인/한 commit. 기존 image settings/다른 slot payload는 유지하고 성공 후만 effect/receipt를 돌려준다. |
++
++## 범위와 증거
++
++이 모듈의 알려진 번역 누락/상위 의미 차단은 남기지 않았다. wire ZIP/XML v3는 바꾸지 않고 이미 선언된 canonical decoded payload와 실제 constructor를 맞췄다. legacy flat payload 병행 acceptance, 참조 복구·공유 chart clone·orphan drop·missing bytes 합성은 추가하지 않았다. state/EFSM 전체 closure나 public tree/UI shape migration을 이 종료에 포함하지 않는다. 해당 owner의 나머지 절차는 후속 차수다.
++
++기존 regression59/60/76/134/135/136/137/139의 해당 fixtures를 확장·조정했다. parser invalid quote/blank row, package reference extension, canonical read/slot settings, imported name·unknown settings·missing-only defaults·nextId·owner/bytes/parent/style 실패, VFS directory/unique owner/move references, STORE local-header/CRC 실패를 기록했다. 새 ID는 없고 실행하지 않았다.
++
++code144/stale의 독립 canonical-LF byte hash는 `sha256:21da391d3918b20b7041083cbdd09762847afe8d6232cab19e445b115a5fbf68`. pre-edit code143 `sha256:4edcba7b1f7a9c0617d0fad78c944b0385f7407925eef0d2d2ba4b2072eaae77`를 재현했다. Source45/PlusCal25/verification26와 derived_from은 불변이다. 이 byte 점검은 공식 checker가 아니다. app/tests/build/checker/TLC/browser/Actions/remote/commit/push/goal은 실행하지 않았다. native File/DOM/XML/ZIP·브라우저/public lifecycle/inline·split 회귀는 마지막 허가된 실행 검증에 남긴다.
++
++다음은 Plan025 4차 backend/project_state다. 완료된 graph/layout/asset 절차를 새 증거 없이 폴리싱하거나 재작성하지 않는다.

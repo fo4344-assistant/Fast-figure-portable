@@ -1,0 +1,156 @@
+diff --git a/sourcecode/application/public_api/layout_annotations.js b/sourcecode/application/public_api/layout_annotations.js
+--- a/sourcecode/application/public_api/layout_annotations.js
++++ b/sourcecode/application/public_api/layout_annotations.js
+@@ -15,7 +15,9 @@
+   const [state, , projection] = dispatchSlotSelection(slotId, pendingContentType, direction);
+   if (projection === null) return state;
+   updateGraphView(projection, state);
+-  requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
++  // Capture this selection's graph lifetimes now, not whichever workspace a
++  // delayed global resize event would find when it eventually runs.
++  schedulePlotResize();
+   return state;
+ }
+ 
+diff --git a/agent_space/tests/browser-regression.js b/agent_space/tests/browser-regression.js
+--- a/agent_space/tests/browser-regression.js
++++ b/agent_space/tests/browser-regression.js
+@@ -7007,6 +7007,7 @@
+ 
+     await run(160, "Scheduled resize retains requesting graph generation/operation and coalesces explicit latest work", () => {
+       const raf = window.requestAnimationFrame, resize = Plotly.Plots.resize,
++        selection = dispatchSlotSelection, workspace = updateGraphView, dispatch = window.dispatchEvent,
+         instances = rendererRuntime.graphInstances, generation = rendererRuntime.dashboardRenderGeneration,
+         pending = rendererRuntime.resizePending, requests = rendererRuntime.resizeRequests,
+         authority = activeProject._state, frames = [], resized = [], host = document.createElement("section"),
+@@ -7020,6 +7021,22 @@
+         rendererRuntime.dashboardRenderGeneration = 81000; rendererRuntime.resizePending = false; rendererRuntime.resizeRequests = [];
+         schedulePlotResize(); record.operation = {}; frames.shift()();
+         check(resized.length === 0, "old resize implicitly acquired a new graph operation");
++        const finalState = { selectedSlotId: 9900 }, projection = {}, handoffs = [];
++        dispatchSlotSelection = () => [finalState, null, projection];
++        updateGraphView = (input, state) => { handoffs.push([input, state]); record.operation = {}; };
++        window.dispatchEvent = () => { throw Error("selection emitted an unowned global resize"); };
++        check(setSelectedSlot(9900) === finalState && handoffs.length === 1 &&
++          handoffs[0][0] === projection && handoffs[0][1] === finalState && frames.length === 1,
++          "selection did not hand off final supplied state before scheduling resize");
++        record.operation = {}; frames.shift()();
++        check(resized.length === 0, "selection resize acquired a later workspace operation");
++        setSelectedSlot(9900); frames.shift()();
++        check(resized.length === 1 && resized[0] === plot, "current selection did not resize its requesting graph");
++        resized.length = 0;
++        dispatchSlotSelection = () => [finalState, null, null];
++        check(setSelectedSlot(9900) === finalState && handoffs.length === 2 && frames.length === 0,
++          "rejected selection scheduled workspace or resize work");
++        dispatchSlotSelection = selection; updateGraphView = workspace; window.dispatchEvent = dispatch;
+         schedulePlotResize(); record.chartId++; frames.shift()();
+         check(resized.length === 0, "old resize implicitly acquired a different chart relation");
+         schedulePlotResize(); record.generation = ++rendererRuntime.dashboardRenderGeneration; frames.shift()();
+@@ -7037,6 +7054,7 @@
+         check(resized.length === 2 && activeProject._state === authority, "current immediate resize failed or changed authority");
+       } finally {
+         host.remove(); window.requestAnimationFrame = raf; Plotly.Plots.resize = resize;
++        dispatchSlotSelection = selection; updateGraphView = workspace; window.dispatchEvent = dispatch;
+         rendererRuntime.graphInstances = instances; rendererRuntime.dashboardRenderGeneration = generation;
+         rendererRuntime.resizePending = pending; rendererRuntime.resizeRequests = requests;
+       }
+diff --git a/development-versions.json b/development-versions.json
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 135,
++      "revision": 136,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,13 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:29c5e333e63d5d7a64b0b145c543053b04eb26bf5b8387241ecd4428bbf94091",
++      "fingerprint": "sha256:88a9efa34356b8e38b355e8f8b18f1ae7a844f09a80aaac86202cc6f15ec5acc",
+       "derived_from": {
+         "source-script": "sha256:e68cab90bdfa0a98acf704d6c84374d02d5c818a0afd018bf1af714b27fdc8a7",
+         "pseudocode": "sha256:44857334494530ac219597bb9c52279778ea25d5477f03ebf199a98dd9b0bee6",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": "agent_space/reviews/review-20261106-007-layout-screen-open.md"
++      "validation_review": "agent_space/reviews/review-20261112-001-selection-resize-open.md"
+     },
+     "pseudocode": {
+       "revision": 25,
+diff --git a/agent_space/plans/plan-024.md b/agent_space/plans/plan-024.md
+--- a/agent_space/plans/plan-024.md
++++ b/agent_space/plans/plan-024.md
+@@ -116,3 +116,11 @@
+ - Evidence: `agent_space/reviews/review-20261106-007-layout-screen-open.md`, actual incremental patch/explanation `agent_space/patches/20261106-009.patch` / `.md`. Existing WIP and records preserved.
+ 
+ Stage1 remains open: finish remaining controller/caller and narrow effect correspondence, distinguishing implementation coverage from pending execution. No new authority, general refresh/cache mechanism, or local execution permission is introduced.
++
++## 11. Selection caller resize lifetime — r136 (2026-11-12)
++
++Continues stage1 after full policy/current-plan and relevant Source/PlusCal reads. Public setSelectedSlot handed the final supplied state to updateGraphView but delayed a global window resize event. That callback could acquire a later workspace and invoke the broad observer refresh path rather than retaining its requesting graph lifetime. It now immediately calls the existing schedulePlotResize owner after workspace handoff. The existing frame callback checks captured instance/generation/operation/slot/chart/host identity; rejection still returns without render/resize. No new scheduler/state/selection semantics.
++
++Existing case160 is extended through the actual public entry: exact final state/projection handoff, obsolete operation ignored, current selection resized and rejected selection silent; it rejects any synthetic global event. No new case IDs. Static diff/whitespace and canonical-LF hash checks only; no app/test/build/checker/Actions execution. Prior r135 hash was independently reproduced from pre-edit bytes. Code136/stale hash `sha256:88a9efa34356b8e38b355e8f8b18f1ae7a844f09a80aaac86202cc6f15ec5acc`; Source45/PlusCal25/verification26 unchanged. Review `agent_space/reviews/review-20261112-001-selection-resize-open.md`; incremental patch/explanation `agent_space/patches/20261112-001.patch` / `.md`.
++
++Stage1 remains open: finish the remaining procedure/caller map and narrow effect/controller correspondence using current implementations, not historical OPEN lists. Native browser/Plotly/mounted listener and inline/split execution remain pending separately. No capture/export/general API work, policy/dist changes, commit/push or delegation; prior WIP preserved.
+diff --git a/agent_space/reviews/review-20261112-001-selection-resize-open.md b/agent_space/reviews/review-20261112-001-selection-resize-open.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/reviews/review-20261112-001-selection-resize-open.md
+@@ -0,0 +1,22 @@
++# Selection caller resize ownership — r136 / stage1 OPEN
++
++Date: 2026-11-12. Source45/PlusCal25 unchanged. Existing uncommitted WIP retained.
++
++## Requirement and actual path
++
++- `sourcescript/frontend/renderer.py:165-180` requires public selection followed by final-state workspace presentation and resize; `sourcescript/frontend/renderer.py:149-150` restricts delayed resize to its requesting live generation/host/slot/chart.
++- `pseudocode/frontend/renderer.pcal:150-158` preserves that order, ending in `RequestResizeOfCurrentWorkspaceHosts()`.
++- Mounted click/bookmark controller supplies the public slots.select action. `sourcecode/application/public_api/layout_annotations.js:14` uses `sourcecode/application/adapter.js:93` dispatchSlotSelection and `sourcecode/application/adapter.js:110` updateGraphView, which hands explicit final projection/state to `sourcecode/frontend/renderer.js:507` updateGraphViewProjection.
++- The public wrapper previously queued `window.dispatchEvent(new Event("resize"))`. Its later callback did not retain a requesting lifetime and could feed the broad resize observer refresh action with a different current workspace. This bypassed the already implemented renderer resize ownership guard.
++- The wrapper now calls `sourcecode/frontend/renderer.js:209` schedulePlotResize immediately after workspace handoff. That captures record/generation/operation/slot/chart/host/plot; `sourcecode/frontend/renderer.js:197` resizePlots rejects obsolete or reparented work. No changes to the real OS/native observer path.
++- Rejected selection (null projection) still returns final state without workspace/resize. Current workspace failure still propagates before scheduling. No new authority, cache, state, module or scheduler.
++
++## Coverage and evidence limits
++
++Existing `agent_space/tests/browser-regression.js:7008` case160 now exercises actual setSelectedSlot with controlled final-state handoff, forbids a global event, advances operation before frame delivery, observes no stale resize, permits current resize, and checks rejected selection has no work. Existing scheduler cases for chart/generation/replacement/detach/coalescing remain. All mocks and runtime fields restore in finally. No new IDs or suites; authored coverage is not execution evidence.
++
++Static canonical-LF byte hashing independently reproduced pre-edit r135 `sha256:29c5e333e63d5d7a64b0b145c543053b04eb26bf5b8387241ecd4428bbf94091`; r136 is `sha256:88a9efa34356b8e38b355e8f8b18f1ae7a844f09a80aaac86202cc6f15ec5acc`. Diff/whitespace inspection only. Official checker, tests, browser, build, fidelity and Actions NOT executed. Code status remains stale. No commit/push/delegation/policy/dist edits.
++
++## Remaining work
++
++Stage1 is not closed by this fix. Finish current procedure/caller correspondence for controller and narrow effects, separating known implementation gaps from native Plotly/browser/mounted receiver and inline/split execution pending. Follow plan024 stage order; export lifetime/general API work remains out of this unit.
+diff --git a/agent_space/patches/20261112-001.md b/agent_space/patches/20261112-001.md
+new file mode 100644
+--- /dev/null
++++ b/agent_space/patches/20261112-001.md
+@@ -0,0 +1,25 @@
++# 20261112-001 — selection caller resize lifetime (code r136)
++
++## Purpose / reason
++
++Continue plan024 stage1 from r135 without overwriting prior WIP. Important policy, current plan, historical plan, renderer Source/PlusCal and relevant Mantine/public layout contracts were read fully in chunks. Public selection's delayed synthetic global resize bypassed the renderer's existing requesting-host/operation lifetime guard and could refresh a successor workspace.
++
++## Changes
++
++- Public setSelectedSlot schedules the existing scoped renderer resize immediately after final supplied workspace handoff. Rejection remains silent; selection/Project semantics unchanged.
++- Extend existing regression160 with actual public caller, final-state identity, stale/current resize and rejection checks. No new tests/suites.
++- Increment code135 to136 with canonical-LF fingerprint and review; keep stale and preserve upper lineage. Append plan024 progress; add focused review.
++- `.patch` is an incremental diff against bytes immediately before this unit (not HEAD), including new review and this explanation. It excludes itself and all pre-existing WIP/patches. The local snapshot used to derive it is removed after patch generation.
++
++## Alternatives rejected
++
++- Delaying the global event still permits broad observer refresh and wrong lifetime acquisition.
++- A new resize queue/token/projection cache duplicates renderer ownership already present.
++- Removing resize entirely omits the explicit Source/PlusCal selection obligation.
++- Source/PlusCal/policy changes are unnecessary: this is a lower-layer correspondence fix.
++
++## Checks / omissions
++
++Static diff/whitespace and independent canonical byte hashes only. Baseline r135 hash reproduced; r136 `sha256:88a9efa34356b8e38b355e8f8b18f1ae7a844f09a80aaac86202cc6f15ec5acc`. Authored fixture not executed. No local app/test/build/checker, Actions, commit/push, delegation, dist or policy changes. Code remains stale; stage1 remains open. Native browser/Plotly/mounted UI/inline-split integration and official lineage validation await separately authorized execution.
++
++The initial attempt to place a temporary snapshot outside the working directory was denied; no outside snapshot was made. A task-local snapshot inside the working directory was used instead. Existing user files/WIP preserved.

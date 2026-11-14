@@ -18,10 +18,10 @@ export function installSlotClickController() {
   return installSlotClickControllerProjection({ slots: { select: setSelectedSlot, swap: swapSlots } });
 }
 
-// Every refresh reads the current authority at the Application boundary, never
-// a renderer-retained domain snapshot. Callbacks carry intents, not writable models.
-export function renderDashboard() {
-  return renderDashboardProjection(readBackendProjection("renderer"), interfaceFSM.readState(), dashboardFrontendActions());
+// Commands supply their call-local final projection/state; standalone refreshes
+// read current authority here. Callbacks carry intents, not writable models.
+export function renderDashboard(projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
+  return renderDashboardProjection(projection, state, dashboardFrontendActions());
 }
 
 export function startupCoreRuntime() {
@@ -32,10 +32,9 @@ export function startupCoreRuntime() {
   return presentation;
 }
 
-export function applyCommittedDashboardProjection(event, result) {
+export function applyCommittedDashboardProjection(event, result, state, projection) {
   if (!result.committed) return "NONE";
-  return applyDashboardProjectionInvalidation(event, result, interfaceFSM.readState(),
-    readBackendProjection("renderer"), dashboardFrontendActions());
+  return applyDashboardProjectionInvalidation(event, result, state, projection, dashboardFrontendActions());
 }
 
 function dashboardFrontendActions() {
@@ -53,15 +52,15 @@ function dashboardFrontendActions() {
         if (min !== setting.min || max !== setting.max) axes[key] = { min, max };
       }
       if (!Object.keys(axes).length) return false;
-      return dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId,
-        settings: { globalSettings: { axes } } }).committed;
+      const [result] = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId,
+        settings: { globalSettings: { axes } } });
+      return result.committed;
     },
   };
 }
 
-export function syncDashboardCaption(view) {
-  const projection = readBackendProjection("renderer"), state = interfaceFSM.readState(),
-    style = projection.layout.slotStyle,
+export function syncDashboardCaption(view, projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
+  const style = projection.layout.slotStyle,
     width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth : style.referenceWidth * state.dashboardZoomIntent / 100;
   return syncDashboardCaptionProjection(view || projection.annotations.captions, width / style.referenceWidth);
 }
@@ -93,15 +92,13 @@ export function updateFileAvailability() {
 export function dispatchSlotSelection(slotId, pendingContentType = null, direction = "ui-to-fsm") {
   const validatedInput = validateFrontendIntent("SELECT_SLOT", { slotId, direction });
   if (!validatedInput.accepted) return [interfaceFSM.readState(), null, null];
-  interfaceFSM.send("SELECT_SLOT", { slotId, direction, validatedInput });
-  let state = interfaceFSM.readState(), projectResult = null;
+  let state = interfaceFSM.send("SELECT_SLOT", { validatedInput }), projectResult = null;
   if (state.selectedSlotId !== null && pendingContentType !== null) {
     const context = readBackendProjection("slot-selection-context", { slotId: state.selectedSlotId });
     if (context?.empty && context.contentType !== pendingContentType) {
-      projectResult = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
+      [projectResult, state] = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
         slotId: state.selectedSlotId, contentType: pendingContentType,
       });
-      state = interfaceFSM.readState();
     }
   }
   return [state, projectResult, readBackendProjection("renderer", { frontendState: state })];
@@ -124,14 +121,14 @@ export function applyCurrentUiPalette(notify = true) {
   return renderDashboard();
 }
 export function applyUiPaletteValues(values, notify = true) {
-  const result = dispatchProjectCommand("APPEARANCE_CHANGED", { palette: values });
+  const [result, state, projection] = dispatchProjectCommand("APPEARANCE_CHANGED", { palette: values });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("APPEARANCE_CHANGED", result);
+  applyCommittedDashboardProjection("APPEARANCE_CHANGED", result, state, projection);
   if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
   return readAppearanceApiPalette();
 }
-export function renderProjectObject() {
-  const presentation = renderDashboard();
+export function renderProjectObject(projection, state) {
+  const presentation = renderDashboard(projection, state);
   updateFileAvailability();
   return presentation;
 }
@@ -139,6 +136,19 @@ export function renderProjectObject() {
 export const BACKEND_REFERENCE_EVENTS = new Set(["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]);
 
 export const PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
+
+export function dispatchProjectQuery(query, payload) {
+  return readBackendProjection(query, payload);
+}
+
+export function dispatchInterfaceEvent(event, payload = {}) {
+  const request = event === "SELECT_GRAPH_OBJECT"
+    ? { ...payload, selectedSlotId: interfaceFSM.readState().selectedSlotId } : payload ?? {},
+    validatedInput = BACKEND_REFERENCE_EVENTS.has(event) ? validateFrontendIntent(event, request)
+      : { event, accepted: true, payload };
+  if (!validatedInput.accepted) return interfaceFSM.readState();
+  return interfaceFSM.send(event, { ...payload, validatedInput });
+}
 
 export function runLifecycleTask(lifecycle, event, task) {
   const state = interfaceFSM.readState();
@@ -148,54 +158,43 @@ export function runLifecycleTask(lifecycle, event, task) {
     );
   if (lifecycle !== "importing" && lifecycle !== "exporting")
     return Promise.reject(Error("작업 lifecycle은 importing 또는 exporting이어야 합니다."));
-  interfaceFSM.send("LIFECYCLE_START", { lifecycle, event });
+  dispatchInterfaceEvent("LIFECYCLE_START", { lifecycle, event });
   const complete = (result) => {
-    const outcome = result?.outcome === "rejected" ? "rejected" : result?.outcome || "complete";
-    interfaceFSM.send("LIFECYCLE_COMPLETE", { event, outcome });
+    dispatchInterfaceEvent("LIFECYCLE_COMPLETE", { event, outcome: result });
     return result;
   };
   const fail = (error) => {
-    interfaceFSM.send("LIFECYCLE_FAILED", { event, error });
+    dispatchInterfaceEvent("LIFECYCLE_FAILED", { event, message: error?.message || String(error) });
     throw error;
   };
-  try {
-    const result = task();
-    return result && typeof result.then === "function"
-      ? result.then(complete, fail)
-      : Promise.resolve(complete(result));
-  } catch (error) {
-    try {
-      fail(error);
-    } catch (failed) {
-      return Promise.reject(failed);
-    }
-  }
+  let completion;
+  try { completion = task(); }
+  catch (error) { return Promise.reject(error).then(undefined, fail); }
+  return Promise.resolve(completion).then(complete, fail);
 }
 
 export function dispatchProjectCommand(event, payload = {}) {
-  let result = projectEFSM.send(event, payload);
-  if (result.committed)
-    interfaceFSM.reconcileProjectResult(event,
-      buildFrontendReconciliationInput(event, result, interfaceFSM.readState()));
-  return result;
+  if (!PROJECT_COMMANDS.has(event)) throw Error(`${event}는 등록된 ProjectObject command가 아닙니다.`);
+  const result = projectEFSM.send(event, payload), frontendBefore = interfaceFSM.readState();
+  if (!result.committed) return [result, frontendBefore, null];
+  const reconciliationInput = buildFrontendReconciliationInput(event, result, frontendBefore),
+    state = interfaceFSM.reconcileProjectResult(event, reconciliationInput),
+    projection = readBackendProjection("renderer", { frontendState: state, mutationResult: result });
+  return [result, state, projection];
 }
 
 export const appFSM = Object.freeze({
   get state() { return interfaceFSM.state; },
   get writeLocks() { return interfaceFSM.writeLocks; },
   readState: () => interfaceFSM.readState(),
-  query: (kind, request) => readBackendProjection(kind, request),
+  query: (kind, request) => dispatchProjectQuery(kind, request),
   definition: (...args) => interfaceFSM.definition(...args),
   send(event, payload = {}) {
     if (PROJECT_COMMANDS.has(event)) {
-      dispatchProjectCommand(event, payload);
-      return interfaceFSM.state;
+      const [, state] = dispatchProjectCommand(event, payload);
+      return state;
     }
-    let validatedInput = BACKEND_REFERENCE_EVENTS.has(event)
-      ? validateFrontendIntent(event, { ...payload, selectedSlotId: interfaceFSM.readState().selectedSlotId }) : null;
-    if (validatedInput && !validatedInput.accepted) return interfaceFSM.state;
-    interfaceFSM.send(event, validatedInput ? { ...payload, validatedInput } : payload);
-    return interfaceFSM.state;
+    return dispatchInterfaceEvent(event, payload);
   },
   notify: (...args) => interfaceFSM.notify(...args),
   run: (...args) => runLifecycleTask(...args),
@@ -224,9 +223,9 @@ export function dashboardProjectionEffect(event, payload = {}) {
 }
 
 export function dispatchDashboardAffectingEvent(event, payload = {}) {
-  const result = dispatchProjectCommand(event, payload),
-    projectionEffect = applyCommittedDashboardProjection(event, result);
-  return { state: appFSM.state, payload, projectionEffect };
+  const [result, state, projection] = dispatchProjectCommand(event, payload),
+    projectionEffect = applyCommittedDashboardProjection(event, result, state, projection);
+  return { state, payload, projectionEffect };
 }
 
 export function activateChartModel(id) {

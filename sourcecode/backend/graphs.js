@@ -1,5 +1,4 @@
 // Source: sourcescript/backend/graphs.py (same logical owner); pseudocode/backend/graphs.pcal.
-import { appFSM, selectedProjectCsv } from '../application/adapter.js';
 import { activeProject, getProjectCsv, projectClone } from './project_state.js';
 import { BackendSettings, DEFAULT_COLORS } from './settings.js';
 
@@ -83,22 +82,7 @@ export function axisRangeValueFromPlotly(value, scaleType) {
 }
 
 export function readGlobalSettings(chart) {
-  let previous =
-      chart.editor.globalSettings && typeof chart.editor.globalSettings === "object"
-        ? chart.editor.globalSettings
-        : {},
-    settings = {
-      ...previous,
-      showLegend: previous.showLegend !== false,
-      showTitle: previous.showTitle !== false,
-      showZeroLine: previous.showZeroLine === true,
-      graphFontFamily:
-        typeof previous.graphFontFamily === "string" ? previous.graphFontFamily : "",
-      titleFontSize: previous.titleFontSize ?? "",
-      legendFontSize: previous.legendFontSize ?? "",
-      axes: currentAxes(previous),
-    };
-  return settings;
+  return normalizeGlobalSettings(chart.editor.globalSettings);
 }
 
 export function normalizeGraphLayoutSettings(input) {
@@ -136,10 +120,8 @@ export function normalizeGraphLayoutSettings(input) {
   return settings;
 }
 
-export function normalizeGlobalSettings(chart, force = false) {
-  let settings = readGlobalSettings(chart);
-  if (force || !appFSM.writeLocks.has("editor")) chart.editor.globalSettings = settings;
-  return settings;
+export function normalizeGlobalSettings(settings) {
+  return normalizeGraphLayoutSettings(settings);
 }
 
 export function axisKey(kind, side) {
@@ -208,8 +190,8 @@ export function columnDefinitions(table = [], headerLines = 1) {
     header = count > 0 && Array.isArray(table[count - 1]) ? table[count - 1] : [];
   return Array.from({ length: width }, (_, index) => {
     let id = `C${index + 1}`,
-      name = String(header[index] ?? "").trim();
-    return { id, index, name, label: name ? `${id} — ${name}` : id };
+      name = header[index], text = String(name ?? "").trim();
+    return { id, index, name, label: text ? `${id} — ${text}` : id };
   });
 }
 
@@ -227,7 +209,7 @@ export function graphDataSelection(matrix, headerLines, editor = {}) {
     body = dataRows(matrix, headerLines),
     numeric = definitions.filter((column) =>
       body.some(
-        (row) => row?.[column.index] !== "" && Number.isFinite(Number(row?.[column.index])),
+        (row) => row?.[column.index] !== "" && Number.isFinite(graphScalarNumber(row?.[column.index])),
       ),
     ),
     valid = (id) => definitions.some((column) => column.id === id),
@@ -274,67 +256,81 @@ export function defaultChartEditor(slot, matrix, headerLines) {
   };
 }
 
+// Scalar primitives for NormalizeDivisor / ScaleCoordinate / tracesSingle.
+function graphScalarNumber(input) {
+  return input === null || ["number", "string", "boolean"].includes(typeof input)
+    ? Number(input) : NaN;
+}
+
+function graphDivisor(input) {
+  const number = graphScalarNumber(input);
+  return Number.isFinite(number) && number !== 0 ? number : 1;
+}
+
+function graphScaleCoordinate(value, numeric, scaleType) {
+  if (scaleType === "linear") return value;
+  if (!numeric) return undefined;
+  if (scaleType === "log") return Number.isFinite(value) && value > 0 ? value : undefined;
+  const reciprocal = value !== 0 ? 1 / value : NaN;
+  return Number.isFinite(value) && Number.isFinite(reciprocal) ? reciprocal : undefined;
+}
+
 export function tracesSingle(c) {
-  let b = {},
-    colors = c.colors?.length ? c.colors : DEFAULT_COLORS,
-    i = 0,
-    xDivide = Number(c.xDivide) || 1,
-    yDivide = Number(c.yDivide) || 1,
-    xIndex = columnIndex(c.x),
-    yIndex = columnIndex(c.y);
-  if (xIndex < 0 || yIndex < 0) return [];
-  dataRows(c.rows || [], c.headerLines ?? 1).forEach((r) => {
-    let x = value(r?.[xIndex]),
-      y = Number(r?.[yIndex]);
-    if (x === "" || x === undefined || !Number.isFinite(y)) return;
-    if (typeof x === "number") x /= xDivide;
-    y /= yDivide;
-    if (c.xScaleType === "reciprocal") {
-      x = Number(x);
-      if (!Number.isFinite(x) || x === 0) return;
-      x = 1 / x;
-    } else if (c.xScaleType === "log" && (!Number.isFinite(Number(x)) || Number(x) <= 0))
-      return;
-    if (c.yScaleType === "reciprocal") {
-      if (y === 0) return;
-      y = 1 / y;
-    } else if (c.yScaleType === "log" && y <= 0) return;
-    if (!Number.isFinite(y)) return;
-    let g = "";
-    (b[g] ??= []).push({ x, y });
-  });
-  return Object.entries(b).map(([g, p]) => {
-    let color = colors[i++ % colors.length],
-      isBar = c.type === "bar";
-    return {
-      x: p.map((v) => v.x),
-      y: p.map((v) => v.y),
-      name: c.y,
-      type: isBar ? "bar" : "scatter",
-      mode: isBar ? undefined : c.type === "hidden" ? "lines" : c.type,
-      visible: c.type === "hidden" ? false : true,
-      opacity: isBar ? Math.max(0.05, Math.min(1, Number(c.barOpacity) || 1)) : undefined,
-      line: {
-        color,
-        width: isBar
-          ? Math.max(0, Math.min(10, Number(c.barLineWidth) || 0))
-          : Math.max(0.1, Math.min(20, Number(c.lineWidth) || 2)),
-        dash: isBar ? undefined : c.lineDash || "solid",
-      },
-      marker: {
-        color,
-        symbol: c.markerSymbol || "circle",
-        size: Math.max(1, Math.min(40, Number(c.markerSize) || 6)),
-        line: isBar
-          ? { color, width: Math.max(0, Math.min(10, Number(c.barLineWidth) || 0)) }
-          : undefined,
-      },
-    };
-  });
+  const rows = c.rows || [], width = columnDefinitions(rows, c.headerLines).length,
+    xi = columnIndex(c.x), yi = columnIndex(c.y),
+    dx = graphDivisor(c.xDivide), dy = graphDivisor(c.yDivide),
+    defaults = BackendSettings.defaults.chartSettings.editor.objectStyle,
+    limits = BackendSettings.defaults.limits.graphObject,
+    style = key => {
+      const number = graphScalarNumber(c[key]), [min, max] = limits[key];
+      return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : defaults[key];
+    }, xs = [], ys = [];
+  if (xi < 0 || yi < 0 || xi >= width || yi >= width) return [];
+  for (const row of dataRows(rows, c.headerLines ?? 1)) {
+    const rawX = row?.[xi], rawY = row?.[yi];
+    if (rawX === undefined || rawX === "" || rawY === undefined) continue;
+    let x = graphScalarNumber(rawX), y = graphScalarNumber(rawY);
+    if (!Number.isFinite(y)) continue;
+    const numericX = Number.isFinite(x);
+    if (!numericX) {
+      if (typeof rawX !== "string") continue;
+      x = rawX;
+    }
+    if (numericX) x /= dx;
+    y /= dy;
+    if (!Number.isFinite(y) || (numericX && !Number.isFinite(x))) continue;
+    x = graphScaleCoordinate(x, numericX, c.xScaleType ?? "linear");
+    y = graphScaleCoordinate(y, true, c.yScaleType ?? "linear");
+    if (x === undefined || y === undefined) continue;
+    xs.push(x); ys.push(y);
+  }
+  if (!xs.length) return [];
+  const trace = { x: xs, y: ys, name: c.y, visible: true,
+    line: { color: c.color }, marker: { color: c.color } };
+  if (c.type === "bar") {
+    trace.type = "bar";
+    trace.line.width = style("barLineWidth");
+    trace.marker.line = { color: c.color, width: trace.line.width };
+    trace.opacity = style("barOpacity");
+  } else {
+    trace.type = "scatter";
+    trace.mode = ["markers", "lines+markers"].includes(c.type) ? c.type : "lines";
+    trace.visible = c.type !== "hidden";
+    trace.line.width = style("lineWidth");
+    trace.line.dash = ALLOWED_LINE_DASHES.has(c.lineDash) ? c.lineDash : defaults.lineDash;
+    trace.marker.symbol = ALLOWED_MARKER_SYMBOLS.has(c.markerSymbol) ? c.markerSymbol : defaults.markerSymbol;
+    trace.marker.size = style("markerSize");
+  }
+  return [trace];
 }
 
 export function traces(c, project = activeProject._state) {
-  let settings = readGlobalSettings(c),
+  const owners = project.slots.filter(slot => (slot.content?.chart ?? slot.chart) === c.id),
+    current = project.charts.find(chart => chart.id === c.id);
+  if (owners.length !== 1 || !current || chartUsesConversionView(current))
+    throw Error("그래프 투영에 같은 프로젝트의 유일한 owning chart가 필요합니다.");
+  c = current;
+  let settings = normalizeGraphLayoutSettings(c.editor.globalSettings),
     editor = c.editor,
     axes = settings.axes,
     objectList =
@@ -356,11 +352,11 @@ export function traces(c, project = activeProject._state) {
         ...object,
         rows: csv.rows,
         headerLines: csv.headerLines,
-        xDivide: Number(xAxis.divide) || 1,
-        yDivide: Number(yAxis.divide) || 1,
+        xDivide: xAxis.divide,
+        yDivide: yAxis.divide,
         xScaleType: xAxis.scaleType,
         yScaleType: yAxis.scaleType,
-        colors: [object.color || DEFAULT_COLORS[index % DEFAULT_COLORS.length]],
+        color: object.color || DEFAULT_COLORS[index % DEFAULT_COLORS.length],
       }).map((trace) => {
         let extension =
           object.plotlyTrace &&
@@ -368,14 +364,16 @@ export function traces(c, project = activeProject._state) {
           !Array.isArray(object.plotlyTrace)
             ? projectClone(object.plotlyTrace)
             : {};
-        return {
-          ...extension,
-          ...trace,
-          line: { ...(extension.line || {}), ...(trace.line || {}) },
-          marker: { ...(extension.marker || {}), ...(trace.marker || {}) },
-          name: object.legendName || trace.name,
-          ...axisRefs,
-        };
+        const record = value => value && typeof value === "object" && !Array.isArray(value) ? value : {},
+          merged = {
+            ...extension, ...trace,
+            line: { ...record(extension.line), ...trace.line },
+            marker: { ...record(extension.marker), ...trace.marker },
+            name: object.legendName || object.y,
+            ...axisRefs,
+          };
+        if (!Object.hasOwn(trace, "mode")) delete merged.mode;
+        return merged;
       }),
     );
   });
@@ -410,7 +408,9 @@ export function layout(c, project = activeProject._state) {
   let bg = project.appearance.uiPalette.paperColor,
     ink = project.appearance.uiPalette.fontColor,
     editor = c.editor,
-    settings = readGlobalSettings(c),
+    settings = normalizeGraphLayoutSettings(editor.globalSettings),
+    renderDefaults = BackendSettings.defaults.graphRendering,
+    axisDefaults = BackendSettings.defaults.chartSettings.editor.axis,
     numberOrEmpty = (v) =>
       v === "" || v === undefined || v === null ? undefined : Number(v),
     axis = (title, key) => {
@@ -424,15 +424,15 @@ export function layout(c, project = activeProject._state) {
         type: scaleType === "log" ? "log" : "linear",
         title: {
           text: setting.visible === true ? setting.title || "" : "",
-          font: { size: Number(setting.titleSize) || 14 },
+          font: { size: setting.titleSize || axisDefaults.titleSize },
         },
         visible: true,
         showgrid: setting.visible === true && setting.showGrid !== false,
         showticklabels: setting.visible === true && setting.showValues !== false,
         ticks: setting.visible === true ? "outside" : "",
-        gridcolor: "#E5E7EB",
+        gridcolor: renderDefaults.gridColor,
         zeroline: setting.visible === true && settings.showZeroLine === true,
-        zerolinecolor: "#CBD5E1",
+        zerolinecolor: renderDefaults.zeroLineColor,
         showline: setting.visible === true,
         linewidth: Number(setting.lineWidth) || 0,
         range:
@@ -456,24 +456,20 @@ export function layout(c, project = activeProject._state) {
                   dtick: "D1",
                   ticks: "outside",
                   showgrid: setting.visible === true && setting.showGrid !== false,
-                  gridcolor: "#E5E7EB",
+                  gridcolor: renderDefaults.gridColor,
                 }
               : { ticks: "", showgrid: false }
             : undefined,
         minorloglabels: scaleType === "log" ? "none" : undefined,
-        tickfont: { size: Number(setting.fontSize) || 12 },
+        tickfont: { size: setting.fontSize || axisDefaults.fontSize },
         automargin: true,
         exponentformat: notation === "power" ? "power" : notation === "e" ? "e" : "none",
         showexponent: notation === "none" ? "none" : "all",
         tickformat: notation === "e" ? ".3e" : undefined,
       };
     };
-  let extension =
-      editor.plotlyExtensions?.layout &&
-      typeof editor.plotlyExtensions.layout === "object" &&
-      !Array.isArray(editor.plotlyExtensions.layout)
-        ? editor.plotlyExtensions.layout
-        : {},
+  const record = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  let extension = projectClone(record(editor.plotlyExtensions?.layout)),
     known = {
       uirevision: String(c.id),
       title: {
@@ -481,13 +477,13 @@ export function layout(c, project = activeProject._state) {
         automargin: true,
         font: {
           ...(settings.graphFontFamily ? { family: settings.graphFontFamily } : {}),
-          size: Number(settings.titleFontSize) > 0 ? Number(settings.titleFontSize) : 17,
+          size: settings.titleFontSize || renderDefaults.titleFontSize,
         },
       },
       legend: {
         font: {
           ...(settings.graphFontFamily ? { family: settings.graphFontFamily } : {}),
-          size: Number(settings.legendFontSize) > 0 ? Number(settings.legendFontSize) : 12,
+          size: settings.legendFontSize || renderDefaults.legendFontSize,
         },
       },
       xaxis: axis(editor.x, "xBottom"),
@@ -500,29 +496,18 @@ export function layout(c, project = activeProject._state) {
         color: ink,
         ...(settings.graphFontFamily ? { family: settings.graphFontFamily } : {}),
       },
-      margin: { l: 58, r: 58, t: 42, b: 50 },
+      margin: projectClone(renderDefaults.margin),
       showlegend: settings.showLegend !== false,
     };
-  return {
-    ...extension,
-    ...known,
-    title: {
-      ...(extension.title || {}),
-      ...known.title,
-      font: { ...(extension.title?.font || {}), ...(known.title.font || {}) },
-    },
-    legend: {
-      ...(extension.legend || {}),
-      ...known.legend,
-      font: { ...(extension.legend?.font || {}), ...(known.legend.font || {}) },
-    },
-    xaxis: { ...(extension.xaxis || {}), ...known.xaxis },
-    xaxis2: { ...(extension.xaxis2 || {}), ...known.xaxis2 },
-    yaxis: { ...(extension.yaxis || {}), ...known.yaxis },
-    yaxis2: { ...(extension.yaxis2 || {}), ...known.yaxis2 },
-    font: { ...(extension.font || {}), ...known.font },
-    margin: { ...(extension.margin || {}), ...known.margin },
-  };
+  const merged = { ...extension, ...known };
+  for (const key of ["title", "legend", "font", "margin", "xaxis", "xaxis2", "yaxis", "yaxis2"])
+    merged[key] = { ...record(extension[key]), ...known[key] };
+  for (const key of ["title", "legend"])
+    merged[key].font = { ...record(extension[key]?.font), ...known[key].font };
+  for (const key of ["xaxis", "xaxis2", "yaxis", "yaxis2"])
+    for (const field of ["range", "dtick", "minor", "minorloglabels", "tickformat"])
+      if (known[key][field] === undefined) delete merged[key][field];
+  return merged;
 }
 
 export function createChartModel({ id = null, editor = {}, graph = {} } = {}) {
@@ -567,25 +552,32 @@ export function createChartModel({ id = null, editor = {}, graph = {} } = {}) {
 }
 
 export function validateChartModel(chart, label = "차트", csvCollection = activeProject.csvFiles) {
-  if (!chart || typeof chart !== "object" || Array.isArray(chart))
-    throw Error(`${label} 구조가 올바르지 않습니다.`);
+  const record = value => value !== null && typeof value === "object" && !Array.isArray(value),
+    figureShape = figure => record(figure) && Array.isArray(figure.data) && figure.data.every(record) &&
+      record(figure.layout) && record(figure.config) && Array.isArray(figure.frames),
+    fail = detail => { throw Error(`${label} ${detail}`); };
+  if (!record(chart)) fail("구조가 올바르지 않습니다.");
+  if (Object.hasOwn(chart, "id") && (!Number.isInteger(chart.id) || chart.id <= 0))
+    fail("id는 양의 정수여야 합니다.");
   if (
-    !chart.editor ||
-    typeof chart.editor !== "object" ||
+    !record(chart.editor) || typeof chart.editor.editable !== "boolean" ||
     !Array.isArray(chart.editor.objects)
   )
     throw Error(`${label} editor.objects가 없습니다.`);
-  if (
-    !chart.graph ||
-    typeof chart.graph !== "object" ||
-    !Array.isArray(chart.graph.data) ||
-    !chart.graph.layout ||
-    typeof chart.graph.layout !== "object" ||
-    !chart.graph.config ||
-    typeof chart.graph.config !== "object" ||
-    !Array.isArray(chart.graph.frames)
-  )
-    throw Error(`${label} graph 구조가 올바르지 않습니다.`);
+  if (!figureShape(chart.graph) ||
+      (Object.hasOwn(chart.graph, "imported") && !figureShape(chart.graph.imported)))
+    fail("graph/imported 구조가 올바르지 않습니다.");
+  const settings = chart.editor.globalSettings;
+  if (!record(settings) || (Object.hasOwn(settings, "axes") && !record(settings.axes)))
+    fail("globalSettings/axes 구조가 올바르지 않습니다.");
+  for (const key of ["xBottom", "xTop", "yLeft", "yRight"])
+    if (settings.axes && Object.hasOwn(settings.axes, key) && !record(settings.axes[key]))
+      fail(`${key} axis 구조가 올바르지 않습니다.`);
+  if (Object.hasOwn(chart.editor, "plotlyExtensions")) {
+    const extension = chart.editor.plotlyExtensions;
+    if (!record(extension) || ["layout", "config"].some(key =>
+      Object.hasOwn(extension, key) && !record(extension[key]))) fail("plotlyExtensions 구조가 올바르지 않습니다.");
+  }
   const conversion = chartUsesConversionView(chart);
   if (conversion && (!Array.isArray(chart.editor.conversionRows) ||
       !chart.editor.conversionRows.every(Array.isArray)))
@@ -601,6 +593,14 @@ export function validateChartModel(chart, label = "차트", csvCollection = acti
       valid = (id) => columns.some((column) => column.id === id);
     if (columns.length ? !valid(object.x) || !valid(object.y) : object.x !== "" || object.y !== "")
       throw Error(`${label} 그래프 객체 ${index + 1}의 x/y column이 올바르지 않습니다.`);
+    if (!ALLOWED_CHART_TYPES.has(object.type) || !ALLOWED_AXIS_SIDES.x.has(object.xAxisSide) ||
+        !ALLOWED_AXIS_SIDES.y.has(object.yAxisSide) || !ALLOWED_LINE_DASHES.has(object.lineDash) ||
+        !ALLOWED_MARKER_SYMBOLS.has(object.markerSymbol)) fail(`그래프 객체 ${index + 1} enum이 올바르지 않습니다.`);
+    for (const [key, [min, max]] of Object.entries(BackendSettings.defaults.limits.graphObject))
+      if (!Number.isFinite(object[key]) || object[key] < min || object[key] > max)
+        fail(`그래프 객체 ${index + 1} ${key} 범위가 올바르지 않습니다.`);
+    if (Object.hasOwn(object, "plotlyTrace") && !record(object.plotlyTrace))
+      fail(`그래프 객체 ${index + 1} plotlyTrace 구조가 올바르지 않습니다.`);
   });
   return chart;
 }
@@ -608,7 +608,7 @@ export function validateChartModel(chart, label = "차트", csvCollection = acti
 export function rebuildEditableGraph(chart, project = activeProject._state) {
   chart.graph.data = traces(chart, project);
   chart.graph.layout = layout(chart, project);
-  return chart.graph;
+  return chart;
 }
 
 export function chartExportCopy(chart) {
@@ -672,177 +672,117 @@ export function chartFigure(chart, project = activeProject._state, scale = 1) {
   return scalePlotlyFigure(copy.graph, scale);
 }
 
-export function setNestedAxisFromPlotly(target, axis = {}) {
-  target.title = typeof axis.title === "string" ? axis.title : axis.title?.text || "";
-  let scaleType = axis.type === "log" ? "log" : "linear";
-  target.min = Array.isArray(axis.range)
-    ? axisRangeValueFromPlotly(axis.range[0], scaleType)
-    : "";
-  target.max = Array.isArray(axis.range)
-    ? axisRangeValueFromPlotly(axis.range[1], scaleType)
-    : "";
-  let linearTick =
-      scaleType !== "log" &&
-      typeof axis.dtick === "string" &&
-      /^L(?:\d|\.)/.test(axis.dtick),
-    denseLogTicks =
-      scaleType === "log" &&
-      (axis.dtick === "D1" ||
-        (axis.minor &&
-          (axis.minor.dtick === "D1" ||
-            axis.minor.ticks === "inside" ||
-            axis.minor.ticks === "outside" ||
-            axis.minor.showgrid === true)));
-  target.tick = linearTick
-      ? axis.dtick.slice(1)
-      : typeof axis.dtick === "number"
-        && scaleType !== "log"
-        ? axis.dtick
-        : "";
-  target.tickMode = linearTick ? "increment" : "plotly";
-  target.minorTicks = denseLogTicks;
-  target.titleSize = axis.title?.font?.size ?? target.titleSize;
-  target.fontSize = axis.tickfont?.size ?? target.fontSize;
-  target.lineWidth = axis.linewidth ?? target.lineWidth;
-  target.showGrid = axis.showgrid !== false;
-  target.visible = axis.visible !== false;
-  target.showValues = axis.showticklabels !== false;
-  target.scaleType = scaleType;
-  target.notation =
-    axis.exponentformat === "e" ? "e" : axis.exponentformat === "power" ? "power" : "none";
+export function setNestedAxisFromPlotly(target, input = {}, key = "xBottom") {
+  const axis = input && typeof input === "object" && !Array.isArray(input) ? input : {},
+    scaleType = axis.type === "log" ? "log" : "linear",
+    range = Array.isArray(axis.range) && axis.range.length === 2 ? axis.range : [],
+    bound = value => typeof value === "number" && Number.isFinite(value)
+      ? axisRangeValueFromPlotly(value, scaleType) : "",
+    linearTick = scaleType !== "log" && typeof axis.dtick === "string" &&
+      axis.dtick.startsWith("L") && axis.dtick.slice(1).trim() !== "" &&
+      Number.isFinite(Number(axis.dtick.slice(1))),
+    raw = {
+      title: typeof axis.title === "string" ? axis.title :
+        typeof axis.title?.text === "string" ? axis.title.text : "",
+      scaleType, divide: 1, min: bound(range[0]), max: bound(range[1]),
+      tick: linearTick ? Number(axis.dtick.slice(1)) :
+        scaleType !== "log" && typeof axis.dtick === "number" && Number.isFinite(axis.dtick) ? axis.dtick : "",
+      tickMode: linearTick ? "increment" : "plotly",
+      minorTicks: scaleType === "log" && (axis.dtick === "D1" || axis.minor?.dtick === "D1" ||
+        ["inside", "outside"].includes(axis.minor?.ticks) || axis.minor?.showgrid === true),
+      titleSize: axis.title?.font?.size, fontSize: axis.tickfont?.size, lineWidth: axis.linewidth,
+      showGrid: axis.showgrid !== false, showValues: axis.showticklabels !== false,
+      visible: axis.visible !== false,
+      notation: ["e", "power"].includes(axis.exponentformat) ? axis.exponentformat : "none",
+    };
+  Object.assign(target, normalizeGraphLayoutSettings({ axes: { [key]: raw } }).axes[key]);
 }
 
 export function parsePlotlyToEditor(figure, id) {
-  let data = Array.isArray(figure.data) ? figure.data : [],
-    rowsOut = [],
-    objects = [];
+  const record = value => value !== null && typeof value === "object" && !Array.isArray(value),
+    text = value => typeof value === "string" ? value : "",
+    titleText = value => typeof value === "string" ? value : text(value?.text);
+  if (!record(figure) || (!Array.isArray(figure.data) && !record(figure.layout)) ||
+      (figure.data !== undefined && !Array.isArray(figure.data)) ||
+      (figure.layout !== undefined && !record(figure.layout)) ||
+      (figure.config !== undefined && !record(figure.config)) ||
+      (figure.frames !== undefined && !Array.isArray(figure.frames)) ||
+      (figure.data || []).some(trace => !record(trace)))
+    throw Error("유효한 Plotly figure 구조가 아닙니다.");
+  const data = figure.data || [], layoutIn = figure.layout || {},
+    defaults = BackendSettings.defaults.chartSettings.editor.objectStyle,
+    limits = BackendSettings.defaults.limits.graphObject,
+    style = (value, key) => {
+      const number = graphScalarNumber(value), [min, max] = limits[key];
+      return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : defaults[key];
+    },
+    headers = [], points = [], objects = [];
   data.forEach((trace, index) => {
-    let x = Array.isArray(trace.x) ? trace.x : [],
-      y = Array.isArray(trace.y) ? trace.y : [],
-      length = Math.max(x.length, y.length);
-    let xKey = `trace${index + 1}_x`,
-      yKey = `trace${index + 1}_y`;
-    for (let i = 0; i < length; i++) {
-      rowsOut[i] ??= {};
-      rowsOut[i][xKey] = x[i] ?? "";
-      rowsOut[i][yKey] = y[i] ?? "";
+    const x = Array.isArray(trace.x) ? trace.x : [], y = Array.isArray(trace.y) ? trace.y : [],
+      length = Math.max(x.length, y.length), column = headers.length;
+    headers.push(`trace${index + 1}_x`, `trace${index + 1}_y`);
+    for (let i = 0; i < length; i++) points[i] ??= [];
+    for (let i = 0; i < points.length; i++) {
+      points[i][column] = x[i] !== undefined ? projectClone(x[i]) : "";
+      points[i][column + 1] = y[i] !== undefined ? projectClone(y[i]) : "";
     }
-    if (length) {
-      let isBar = trace.type === "bar",
-        mode = isBar ? "bar" : trace.visible === false ? "hidden" : trace.mode || "scatter";
-      let plotlyTrace = projectClone(trace);
-      delete plotlyTrace.x;
-      delete plotlyTrace.y;
-      objects.push({
-        x: xKey,
-        y: yKey,
-        xAxisSide: trace.xaxis === "x2" ? "top" : "bottom",
-        yAxisSide: trace.yaxis === "y2" ? "right" : "left",
-        type: mode,
-        color:
-          trace.line?.color ||
-          trace.marker?.color ||
-          DEFAULT_COLORS[index % DEFAULT_COLORS.length],
-        legendName: trace.name || "",
-        lineWidth: trace.line?.width ?? 2,
-        lineDash: trace.line?.dash || "solid",
-        markerSymbol: trace.marker?.symbol || "circle",
-        markerSize: Array.isArray(trace.marker?.size) ? 6 : (trace.marker?.size ?? 6),
-        barOpacity: trace.opacity ?? 1,
-        barLineWidth: trace.marker?.line?.width ?? 0,
-        plotlyTrace,
-      });
-    }
-  });
-  let sourceHeaders = [...new Set(rowsOut.flatMap((row) => Object.keys(row || {})))],
-    columnMap = Object.fromEntries(
-      sourceHeaders.map((header, index) => [header, `C${index + 1}`]),
-    );
-  objects = objects.map((object) => ({
-    ...object,
-    x: columnMap[object.x] || object.x,
-    y: columnMap[object.y] || object.y,
-  }));
-  rowsOut = rowsOut.length ? dataTable(rowsOut) : [];
-  let layoutIn = figure.layout && typeof figure.layout === "object" ? figure.layout : {},
-    chart = createChartModel({
-      id,
-      editor: { editable: false, conversionRows: rowsOut, objects },
-      graph: {
-        data: [],
-        layout: {},
-        config: {},
-        frames: [],
-        imported: {
-          data: projectClone(data),
-          layout: projectClone(layoutIn),
-          config: projectClone(figure.config || {}),
-          frames: projectClone(figure.frames || []),
-        },
-      },
+    if (!length) return;
+    const plotlyTrace = projectClone(trace), modes = text(trace.mode).split("+");
+    delete plotlyTrace.x; delete plotlyTrace.y;
+    objects.push({
+      ...projectClone(defaults),
+      x: `C${column + 1}`, y: `C${column + 2}`,
+      xAxisSide: trace.xaxis === "x2" ? "top" : "bottom",
+      yAxisSide: trace.yaxis === "y2" ? "right" : "left",
+      type: trace.visible === false ? "hidden" : trace.type === "bar" ? "bar" :
+        modes.includes("markers") ? modes.includes("lines") ? "lines+markers" : "markers" : "scatter",
+      color: [trace.line?.color, trace.marker?.color].find(value => typeof value === "string" && value.length) ||
+        DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+      legendName: text(trace.name),
+      lineWidth: style(trace.line?.width, "lineWidth"),
+      lineDash: ALLOWED_LINE_DASHES.has(trace.line?.dash) ? trace.line.dash : defaults.lineDash,
+      markerSymbol: ALLOWED_MARKER_SYMBOLS.has(trace.marker?.symbol) ? trace.marker.symbol : defaults.markerSymbol,
+      markerSize: style(trace.marker?.size, "markerSize"),
+      barOpacity: style(trace.opacity, "barOpacity"),
+      barLineWidth: style(trace.marker?.line?.width, "barLineWidth"),
+      plotlyTrace,
     });
-  let settings = normalizeGlobalSettings(chart);
-  chart.editor.title =
-    typeof layoutIn.title === "string" ? layoutIn.title : layoutIn.title?.text || "";
-  settings.showTitle = !!chart.editor.title;
-  settings.showLegend = layoutIn.showlegend !== false;
-  settings.graphFontFamily =
-    layoutIn.title?.font?.family ||
-    layoutIn.font?.family ||
-    layoutIn.legend?.font?.family ||
-    "";
-  settings.titleFontSize = layoutIn.title?.font?.size ?? "";
-  settings.legendFontSize = layoutIn.legend?.font?.size ?? "";
-  setNestedAxisFromPlotly(settings.axes.xBottom, layoutIn.xaxis || {});
-  setNestedAxisFromPlotly(settings.axes.xTop, layoutIn.xaxis2 || {});
-  setNestedAxisFromPlotly(settings.axes.yLeft, layoutIn.yaxis || {});
-  setNestedAxisFromPlotly(settings.axes.yRight, layoutIn.yaxis2 || {});
-  chart.editor.globalSettings = settings;
-  chart.editor.plotlyExtensions = {
-    layout: projectClone(layoutIn),
-    config: projectClone(figure.config || {}),
+  });
+  // Pad earlier trace columns when a later trace extends the point sequence.
+  const rows = objects.length ? [headers, ...points.map(row =>
+    headers.map((_, column) => Object.hasOwn(row, column) ? row[column] : ""))] : [];
+  const chart = createChartModel({
+    id, editor: { editable: false, conversionRows: rows, objects, title: titleText(layoutIn.title) },
+    graph: { config: projectClone(figure.config || {}), frames: projectClone(figure.frames || []),
+      imported: projectClone({ data, layout: layoutIn, config: figure.config || {}, frames: figure.frames || [] }) },
+  });
+  if (id === null || id === undefined) delete chart.id;
+  const settings = {
+    showTitle: chart.editor.title.length > 0, showLegend: layoutIn.showlegend !== false, showZeroLine: false,
+    graphFontFamily: [layoutIn.title?.font?.family, layoutIn.font?.family, layoutIn.legend?.font?.family]
+      .find(value => typeof value === "string" && value.length) || "",
+    titleFontSize: layoutIn.title?.font?.size, legendFontSize: layoutIn.legend?.font?.size, axes: {},
   };
-  chart.graph.config = projectClone(figure.config || {});
-  chart.graph.frames = projectClone(figure.frames || []);
-  if (objects.length) {
-    Object.assign(chart.editor, objects[0]);
-    chart.editor.colors = objects.map((object) => object.color);
+  for (const [key, plotlyKey] of [["xBottom", "xaxis"], ["xTop", "xaxis2"], ["yLeft", "yaxis"], ["yRight", "yaxis2"]]) {
+    settings.axes[key] = {};
+    setNestedAxisFromPlotly(settings.axes[key], layoutIn[plotlyKey], key);
   }
+  chart.editor.globalSettings = normalizeGraphLayoutSettings(settings);
+  chart.editor.plotlyExtensions = projectClone({ layout: layoutIn, config: figure.config || {} });
   return chart;
 }
 
-export function baseGraphObject(chart, csv = selectedProjectCsv()) {
-  let editor = chart.editor || {};
+export function baseGraphObject(chart, csv) {
   if (!csv) throw Error("그래프 오브젝트에 연결할 프로젝트 CSV가 없습니다.");
-  let selection = graphDataSelection(csv.rows, csv.headerLines, editor);
-  return {
-    csvId: csv.id,
-    x: selection.x,
-    y: selection.y,
-    xAxisSide: editor.xAxisSide || "bottom",
-    yAxisSide: editor.yAxisSide || "left",
-    type: editor.type || "scatter",
-    color: editor.colors?.[0] || DEFAULT_COLORS[0],
-    legendName: editor.legendName || "",
-    lineWidth: Math.max(0.1, Math.min(20, Number(editor.lineWidth) || 2)),
-    lineDash: editor.lineDash || "solid",
-    markerSymbol: editor.markerSymbol || "circle",
-    markerSize: Math.max(1, Math.min(40, Number(editor.markerSize) || 6)),
-    barOpacity: Math.max(0.05, Math.min(1, Number(editor.barOpacity) || 1)),
-    barLineWidth: Math.max(0, Math.min(10, Number(editor.barLineWidth) || 0)),
-  };
+  return createCandidateBaseGraphObject(csv);
 }
 
 export function normalizedGraphObjects(chart) {
-  if(!chart)return [];
-  if(chart.editor?.editable===false)
-    return projectClone(Array.isArray(chart.editor?.objects)?chart.editor.objects:[]);
-  return (Array.isArray(chart.editor?.objects)?chart.editor.objects:[]).map((object,index)=>{
-    let csv=getProjectCsv(object?.csvId);
-    if(!csv)throw Error(`그래프 객체 ${index+1}에 연결할 프로젝트 CSV가 없습니다.`);
-    let selection=graphDataSelection(csv.rows,csv.headerLines,object||{});
-    return {...baseGraphObject(chart,csv),...(object||{}),csvId:csv.id,x:selection.x,y:selection.y};
-  });
+  const objects = projectClone(chart.editor.objects), defaults = BackendSettings.defaults.chartSettings.editor.objectStyle;
+  for (const object of objects)
+    for (const [key, value] of Object.entries(defaults))
+      if (!Object.hasOwn(object, key)) object[key] = projectClone(value);
+  return objects;
 }
 
 export function ensureGraphObjects(chart) {

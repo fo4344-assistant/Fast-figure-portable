@@ -1,229 +1,132 @@
-// Source: sourcescript/frontend/interface_fsm.py (same logical owner); pseudocode/frontend/interface_fsm.pcal.
-import { BACKEND_REFERENCE_EVENTS, PROJECT_COMMANDS, appFSM } from '../application/adapter.js';
+// Source: sourcescript/frontend/interface_fsm.py; pseudocode/frontend/interface_fsm.pcal.
 import { debugLog } from './renderer.js';
+
+const REFERENCE_EVENTS = new Set(["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]);
+const INTERFACE_EVENTS = new Set([...REFERENCE_EVENTS, "CLEAR_ASSET_SELECTION", "CLEAR_GRAPH_OBJECT",
+  "TOGGLE_OVERLAY", "CLOSE_OVERLAY", "OUTSIDE_CLICK", "ESCAPE", "SET_DASHBOARD_ZOOM",
+  "SET_DASHBOARD_ZOOM_LOCK", "RESET_DASHBOARD_ZOOM", "LIFECYCLE_START", "LIFECYCLE_COMPLETE", "LIFECYCLE_FAILED"]);
 
 export class InterfaceStateMachine {
   constructor(definitions) {
     this.definitions = definitions;
-    this.state = Object.freeze({
-      lifecycle: "booting",
-      workspace: "project",
-      overlay: "none",
-      assetSelection: "none",
-      assetPath: null,
-      graphObject: "none",
-      graphObjectIndex: null,
-      direction: "model-to-ui",
-      revision: 0,
-      error: null,
-    });
+    this.state = Object.freeze({ lifecycle: "booting", workspace: "project", overlay: "none",
+      assetSelection: "none", assetPath: null, graphObject: "none", graphObjectIndex: null,
+      direction: "model-to-ui", revision: 0, error: null });
     this.listeners = new Set();
-    this.transitioning = 0;
     this.writeLocks = new Set();
   }
   definition(region, state = this.state[region]) {
-    let definition = this.definitions[region]?.[state];
+    const definition = this.definitions[region]?.[state];
     if (!definition) throw Error(`${region}.${state} FSM 상태가 등록되지 않았습니다.`);
     return definition;
   }
-  context(region, state, event, payload) {
-    return {
-      machine: this,
-      region,
-      state,
-      event,
-      payload,
-      direction: payload.direction || this.state.direction || "model-to-ui",
-      canWrite: (scope) => !this.writeLocks.has(scope),
-    };
-  }
-  withWriteLocks(scopes, operation) {
-    scopes.forEach((scope) => this.writeLocks.add(scope));
-    try {
-      return operation();
-    } finally {
-      scopes.forEach((scope) => this.writeLocks.delete(scope));
-    }
-  }
   assertWritable(scope, event) {
-    if (this.writeLocks.has(scope))
-      throw Error(`${event} 전이 중 잠긴 ${scope} 모델을 수정할 수 없습니다.`);
+    if (this.writeLocks.has(scope)) throw Error(`${event} 전이 중 잠긴 ${scope} 모델을 수정할 수 없습니다.`);
   }
   publish(event) {
-    document.body.dataset.appLifecycle = this.state.lifecycle;
-    document.body.dataset.appWorkspace = this.state.workspace;
-    document.body.dataset.appOverlay = this.state.overlay;
-    document.body.dataset.appAssetSelection = this.state.assetSelection;
-    document.body.dataset.appGraphObject = this.state.graphObject;
-    this.listeners.forEach((listener) => listener(this.state, event));
-    debugLog("fsm:transition", { event, ...this.state });
-    return this.state;
-  }
-  transition(region, target, event, payload = {}) {
-    if (typeof target === "function")
-      target = target(this.context(region, this.state[region], event, payload));
-    let previous = this.state[region];
-    if (!target || (target === previous && payload.reenter !== true)) {
-      let definition = this.definition(region, previous);
-      if (payload.direction)
-        this.state = Object.freeze({
-          ...this.state,
-          direction: payload.direction,
-        });
-      let update = () =>
-        definition.update?.(this.context(region, previous, event, payload));
-      if (payload.direction === "model-to-fsm" && region === "workspace")
-        this.withWriteLocks(["workspace", "editor"], update);
-      else update();
-      return this.publish(`${event}:${region}:update`);
-    }
-    this.transitioning++;
-    try {
-      this.definition(region, previous).exit?.(
-        this.context(region, previous, event, payload),
-      );
-      this.state = Object.freeze({
-        ...this.state,
-        [region]: target,
-        direction: payload.direction || this.state.direction,
-      });
-      let enter = () =>
-        this.definition(region, target).entry?.(
-          this.context(region, target, event, payload),
-        );
-      if (payload.direction === "model-to-fsm" && region === "workspace")
-        this.withWriteLocks(["workspace", "editor"], enter);
-      else enter();
-    } finally {
-      this.transitioning--;
-    }
-    return this.publish(`${event}:${region}:${previous}->${target}`);
-  }
-  transitionLifecycle(event, payload = {}) {
-    const origin = payload.event || event;
-    if (event === "LIFECYCLE_START") {
-      this.state = Object.freeze({ ...this.state, error: null });
-      return this.transition("lifecycle", payload.lifecycle, `${origin}:start`);
-    }
-    if (event === "LIFECYCLE_COMPLETE") {
-      this.state = Object.freeze({ ...this.state, error: null });
-      return this.transition("lifecycle", "ready", `${origin}:${payload.outcome || "complete"}`);
-    }
-    if (event === "LIFECYCLE_FAILED") {
-      const error = payload.error;
-      this.state = Object.freeze({
-        ...this.state,
-        error: { event: origin, message: error?.message || String(error) },
-      });
-      this.transition("lifecycle", "error", `${origin}:failed`, { error });
-      return this.transition("lifecycle", "ready", `${origin}:recovered`);
-    }
-    return this.state;
+    this.state = Object.freeze({ ...this.state, revision: this.state.revision + 1 });
+    const state = this.readState(), busy = state.lifecycle === "importing" || state.lifecycle === "exporting";
+    document.body.classList.toggle("app-busy", busy);
+    document.body.setAttribute("aria-busy", String(busy));
+    document.body.dataset.appLifecycle = state.lifecycle;
+    document.body.dataset.appWorkspace = state.workspace;
+    document.body.dataset.appOverlay = state.overlay;
+    document.body.dataset.appAssetSelection = state.assetSelection;
+    document.body.dataset.appGraphObject = state.graphObject;
+    this.listeners.forEach(listener => listener(state, event));
+    debugLog("fsm:transition", { event, ...state });
+    return state;
   }
   send(event, payload = {}) {
-    if (PROJECT_COMMANDS.has(event)) return this.state;
-    if (BACKEND_REFERENCE_EVENTS.has(event) && payload.validatedInput?.accepted !== true)
-      return this.state;
-    if (event === "LIFECYCLE_START" || event === "LIFECYCLE_COMPLETE" ||
-        event === "LIFECYCLE_FAILED")
-      return this.transitionLifecycle(event, payload);
-    if (event === "SELECT_ASSET") {
-      // Source40: publish the final selection and receipt, not intermediate regions.
-      const input = payload.validatedInput;
-      this.assertWritable("editor", event);
-      this.state = Object.freeze({ ...this.state,
-        assetSelection: input.selectionHint || "none", assetPath: input.reference ?? null,
-        graphObject: "none", graphObjectIndex: null,
-        direction: payload.direction || this.state.direction, revision: this.state.revision + 1,
-      });
-      return this.publish(event);
-    }
-    if (event === "SET_DASHBOARD_ZOOM") {
-      if (interfaceRuntime.dashboardZoomLocked) return this.state;
-      let numeric;
-      try { numeric = Number(payload.value); } catch { numeric = NaN; }
-      const value = Number.isFinite(numeric) ? Math.max(50, Math.min(200, numeric)) : 100;
-      if (value === interfaceRuntime.dashboardZoomIntent) return this.state;
+    // validatedInput is the existing Application transport envelope, not domain state.
+    const input = payload.validatedInput ?? (REFERENCE_EVENTS.has(event)
+      ? { accepted: false } : { accepted: payload.accepted !== false, payload });
+    if (input.accepted !== true) return this.readState();
+    if (!INTERFACE_EVENTS.has(event)) throw Error(`${event}는 등록된 Frontend event가 아닙니다.`);
+    const values = input.payload ?? payload, next = { ...this.state };
+    if (event === "SELECT_SLOT") {
+      const reference = input.reference;
+      interfaceRuntime.selectedSlotId = reference === null ||
+        (input.selectionHint === "toggle-clear" && reference === interfaceRuntime.selectedSlotId) ? null : reference;
+      next.workspace = interfaceRuntime.selectedSlotId === null ? "project" : input.workspaceHint;
+      next.graphObject = "none"; next.graphObjectIndex = null;
+      if (interfaceRuntime.selectedSlotId === null || input.selectionHint === "toggle-clear") {
+        next.assetSelection = "none"; next.assetPath = null;
+      }
+      if (interfaceRuntime.selectedSlotId !== null) next.overlay = "none";
+    } else if (event === "SELECT_ASSET") {
+      next.assetSelection = input.selectionHint ?? "none"; next.assetPath = input.reference;
+      next.graphObject = "none"; next.graphObjectIndex = null;
+    } else if (event === "SELECT_GRAPH_OBJECT") {
+      next.graphObject = input.reference === null ? "none" : "selected";
+      next.graphObjectIndex = input.reference;
+      if (input.reference !== null && input.selectionHint != null) {
+        next.assetSelection = "csv"; next.assetPath = input.selectionHint;
+      }
+    } else if (event === "CLEAR_ASSET_SELECTION") {
+      next.assetSelection = "none"; next.assetPath = null;
+    } else if (event === "CLEAR_GRAPH_OBJECT") {
+      next.graphObject = "none"; next.graphObjectIndex = null;
+    } else if (event === "TOGGLE_OVERLAY") {
+      next.overlay = next.overlay === values.overlay ? "none" : values.overlay;
+    } else if (["CLOSE_OVERLAY", "OUTSIDE_CLICK", "ESCAPE"].includes(event)) {
+      next.overlay = "none";
+    } else if (event === "SET_DASHBOARD_ZOOM") {
+      if (interfaceRuntime.dashboardZoomLocked) return this.readState();
+      const raw = values.value, numeric = typeof raw === "number" ||
+        (typeof raw === "string" && raw.trim() !== "") ? Number(raw) : NaN,
+        value = Number.isFinite(numeric) ? Math.max(50, Math.min(200, numeric)) : 100;
+      if (value === interfaceRuntime.dashboardZoomIntent) return this.readState();
       interfaceRuntime.dashboardZoomIntent = value;
-      return this.notify("layout", event);
-    }
-    if (event === "SET_DASHBOARD_ZOOM_LOCK" || event === "RESET_DASHBOARD_ZOOM") {
-      if (event === "SET_DASHBOARD_ZOOM_LOCK" && payload.locked === true) {
-        if (interfaceRuntime.dashboardZoomLocked || !Number.isFinite(payload.renderedWidth) || payload.renderedWidth <= 0) return this.state;
+    } else if (event === "SET_DASHBOARD_ZOOM_LOCK" || event === "RESET_DASHBOARD_ZOOM") {
+      if (event === "SET_DASHBOARD_ZOOM_LOCK" && values.locked === true) {
+        if (interfaceRuntime.dashboardZoomLocked || !Number.isFinite(values.renderedWidth) || values.renderedWidth <= 0)
+          return this.readState();
         interfaceRuntime.dashboardZoomLocked = true;
-        interfaceRuntime.dashboardZoomLockedWidth = payload.renderedWidth;
+        interfaceRuntime.dashboardZoomLockedWidth = values.renderedWidth;
       } else {
-        if (!interfaceRuntime.dashboardZoomLocked && interfaceRuntime.dashboardZoomLockedWidth === null && interfaceRuntime.dashboardZoomIntent === 100) return this.state;
-        interfaceRuntime.dashboardZoomLocked = false;
-        interfaceRuntime.dashboardZoomLockedWidth = null;
+        if (!interfaceRuntime.dashboardZoomLocked && interfaceRuntime.dashboardZoomLockedWidth === null &&
+            interfaceRuntime.dashboardZoomIntent === 100) return this.readState();
+        interfaceRuntime.dashboardZoomLocked = false; interfaceRuntime.dashboardZoomLockedWidth = null;
         interfaceRuntime.dashboardZoomIntent = 100;
       }
-      return this.notify("layout", event);
+    } else if (event === "LIFECYCLE_START") {
+      next.lifecycle = values.lifecycle; next.error = null;
+    } else if (event === "LIFECYCLE_COMPLETE") {
+      next.lifecycle = "ready"; next.error = null;
+    } else if (event === "LIFECYCLE_FAILED") {
+      next.lifecycle = "error";
+      next.error = Object.freeze({ event: values.event, message: values.message });
+      this.state = Object.freeze(next);
+      this.publish(`${values.event}:failed`);
+      this.state = Object.freeze({ ...this.state, lifecycle: "ready" });
+      return this.publish(`${values.event}:recovered`);
     }
-    let handled = false;
-    for (let region of [
-      "lifecycle",
-      "workspace",
-      "overlay",
-      "assetSelection",
-      "graphObject",
-    ]) {
-      let transition = this.definition(region).on?.[event];
-      if (!transition) continue;
-      handled = true;
-      if (typeof transition === "function")
-        transition = transition(this.context(region, this.state[region], event, payload));
-      let target = transition?.target ?? transition;
-      transition?.action?.(this.context(region, this.state[region], event, payload));
-      if (target) this.transition(region, target, event, payload);
-    }
-    if (!handled) debugLog("fsm:event-unhandled", { event, state: this.state }, "warn");
-    return this.state;
+    this.state = Object.freeze(next);
+    const outcomeLabel = event === "LIFECYCLE_COMPLETE"
+      ? (typeof values.outcome === "string" ? values.outcome : values.outcome?.outcome) : null;
+    const label = event === "LIFECYCLE_START" ? `${values.event}:start` :
+      event === "LIFECYCLE_COMPLETE" ? `${values.event}:${outcomeLabel || "complete"}` : event;
+    return this.publish(label);
   }
   readState() {
     return Object.freeze({ ...this.state, selectedSlotId: interfaceRuntime.selectedSlotId,
-      dashboardZoomIntent: interfaceRuntime.dashboardZoomIntent, dashboardZoomLocked: interfaceRuntime.dashboardZoomLocked, dashboardZoomLockedWidth: interfaceRuntime.dashboardZoomLockedWidth });
+      dashboardZoomIntent: interfaceRuntime.dashboardZoomIntent, dashboardZoomLocked: interfaceRuntime.dashboardZoomLocked,
+      dashboardZoomLockedWidth: interfaceRuntime.dashboardZoomLockedWidth });
   }
   reconcileProjectResult(event, input) {
     interfaceRuntime.selectedSlotId = input.selectedSlot;
-    this.state = Object.freeze({
-      ...this.state,
-      workspace: input.workspaceHint,
-      assetSelection: input.assetKind,
-      assetPath: input.assetSelection,
-      graphObject: input.graphObject === null ? "none" : "selected",
-      graphObjectIndex: input.graphObject,
-      direction: "model-to-ui",
-      revision: this.state.revision + 1,
-    });
+    this.state = Object.freeze({ ...this.state, workspace: input.workspaceHint,
+      assetSelection: input.assetKind ?? "none", assetPath: input.assetSelection,
+      graphObject: input.graphObject === null ? "none" : "selected", graphObjectIndex: input.graphObject });
     return this.publish(`${event}:reconcile`);
   }
-  notify(object, event, payload = {}) {
-    if (this.state.lifecycle === "booting" || this.transitioning) return this.state;
-    this.state = Object.freeze({
-      ...this.state,
-      direction: "model-to-ui",
-      revision: this.state.revision + 1,
-    });
-    for (let region of ["workspace", "overlay"]) {
-      let definition = this.definition(region);
-      if (definition.objects?.includes(object))
-        definition.update?.(
-          this.context(region, this.state[region], event, {
-            ...payload,
-            direction: "model-to-ui",
-          }),
-        );
-    }
+  notify(objectName, event, payload = {}) {
     return this.publish(event);
   }
   ready(workspaceHint = "project") {
-    this.transition("lifecycle", "ready", "READY");
-    this.transition("workspace", workspaceHint, "WORKSPACE_INIT", {
-      direction: "model-to-fsm",
-    });
-    this.transition("overlay", "none", "OVERLAY_INIT", { reenter: true });
-    return this.state;
+    this.state = Object.freeze({ ...this.state, workspace: workspaceHint, overlay: "none" });
+    return this.send("LIFECYCLE_COMPLETE", { event: "READY" });
   }
   subscribe(listener) {
     this.listeners.add(listener);
@@ -262,8 +165,8 @@ export function applyGraphObjectSelectionAction({ machine, payload }) {
 
 export function selectedGraphObjectGuard() {
   return (
-    appFSM?.state.graphObject === "selected" &&
-    Number.isInteger(appFSM.state.graphObjectIndex)
+    interfaceFSM?.state.graphObject === "selected" &&
+    Number.isInteger(interfaceFSM.state.graphObjectIndex)
   );
 }
 
