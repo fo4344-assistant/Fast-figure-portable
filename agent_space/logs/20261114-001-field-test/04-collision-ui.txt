@@ -1,0 +1,140 @@
+[p1 "Fast figure" | space "Fast figure current code field test"(3): 1 managed, 0 untracked — p1* "Fast figure"]
+root
+  container
+    button [ref=1]
+      text "사이드바 숨기기"
+    paragraph
+      text "Fast figure"
+    toolbar "Fast figure 도구"
+      button [ref=2]
+        text "레이아웃"
+      button [ref=3]
+        text "레이블"
+      button [ref=4]
+        text "캡션"
+      paragraph
+        text "선택한 슬롯: 1행 1열"
+      button "프린트" [ref=5, loc=css:button[aria-label="프린트"]]
+        text "프린트"
+  container
+    container [ref=6]
+      container
+        paragraph
+          text "데이터"
+        container
+          button [ref=32]
+            text "그래프"
+          button [ref=33]
+            text "이미지"
+        button [ref=7]
+          text "데이터 추가"
+        button [ref=8]
+          text "선택 에셋 다운로드"
+        button [ref=9]
+          text "선택 에셋 삭제"
+        button [ref=34]
+          text "선택 슬롯 초기화"
+      container
+        paragraph
+          text "PROJECT DATA"
+        button [ref=10]
+          text "새 폴더"
+        tree
+          treeitem [ref=11]
+            button [ref=12]
+              text "▾ /assets"
+            group
+              treeitem [ref=13]
+                button [ref=14]
+                  text "▾ csv"
+                group
+                  treeitem [ref=35]
+                    button [ref=36]
+                      text "measurements.csv"
+                      text "5행 · 참조 1"
+                    button "measurements.csv 작업" [ref=37, loc=css:button[aria-label="measurements.csv 작업"]]
+                      text "···"
+              treeitem [ref=15]
+                button [ref=16]
+                  text "• images"
+              treeitem [ref=17]
+                button [ref=18]
+                  text "• trash"
+        button [ref=19]
+          text "▾ /slots"
+        container
+          button [ref=20]
+            text "[row=1,col=1] — measurements.csv · /assets/csv/measurements.csv"
+          button [ref=21]
+            text "[row=1,col=2] — (에셋 없음)"
+          button [ref=107]
+            text "[row=1,col=3] — (에셋 없음)"
+          button [ref=22]
+            text "[row=2,col=1] — (에셋 없음)"
+          button [ref=250]
+            text "[row=2,col=2] — (에셋 없음)"
+          button [ref=108]
+            text "[row=2,col=3] — (에셋 없음)"
+          button [ref=109]
+            text "[row=3,col=1] — (에셋 없음)"
+          button [ref=110]
+            text "[row=3,col=2] — (에셋 없음)"
+          button [ref=111]
+            text "[row=3,col=3] — (에셋 없음)"
+    splitter "사이드바 너비 조절"
+  container
+    container
+      container
+        svg_root "0 1 2 3 4 0 2 4"
+          text "0"
+          text "1"
+          text "2"
+          text "3"
+          text "4"
+          text "0"
+          text "2"
+          text "4"
+        svg_root "C2 measurements.csv"
+          text "C2"
+          text "measurements.csv"
+        container
+          anchor [ref=63]
+            svg_root
+          container
+            anchor [ref=64]
+              svg_root
+            anchor [ref=65]
+              svg_root
+          container
+            anchor [ref=66]
+              svg_root
+            anchor [ref=67]
+              svg_root
+            anchor [ref=68]
+              svg_root
+            anchor [ref=69]
+              svg_root
+        svg_root
+      button "슬롯 이동 및 선택" [ref=249, loc=css:button[aria-label="슬롯 이동 및 선택"]]
+    text "빈 슬롯"
+    text "빈 슬롯"
+    text "빈 슬롯"
+    text "빈 슬롯"
+    text "빈 슬롯"
+    text "빈 슬롯"
+    text "빈 슬롯"
+    text "빈 슬롯"
+  dialog "같은 이름의 파일" [ref=251, loc=role:dialog[name="같은 이름의 파일"]]
+    container
+      heading
+        text "같은 이름의 파일"
+      button [ref=252]
+        svg_root
+    container
+      paragraph
+        text "/assets/csv/measurements.csv에 같은 이름의 파일이 이미 있습니다. [확인] 기존 파일을 교체하고 참조를 유지합니다. [취소] 이름을 바꿔 새 파일로 추가합니�..."
+      container
+        button [ref=253]
+          text "새 이름으로 추가"
+        button [ref=254]
+          text "기존 파일 교체"

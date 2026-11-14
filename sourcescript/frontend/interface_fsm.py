@@ -106,20 +106,39 @@ INTERFACE_LOCALITY_RULE = (
 )
 
 class InterfaceStateMachine:
+    def __init__(self):
+        """변경: 이 Frontend instance가 소유하는 변경 알림 listener 집합을 생성한다."""
+        self.listeners = set()
+
     def readState(self):
         """
         Return:
-        - state:
-          current Frontend runtime state의 immutable projection.
+        - projection: interfaceState의 lifecycle/workspace/overlay/assetSelection/assetPath,
+          graphObject/graphObjectIndex/direction/revision/error, dashboardZoomIntent,
+          dashboardZoomLocked/dashboardZoomLockedWidth와 selectedSlotId를 가진 읽기전용 record.
+          selectedSlotId의 원천은 이 Frontend 모듈이 소유하는 현재 선택 참조이며 None은 선택 해제다.
 
-        변경:
-        - 없음.
-
-        처리:
-        Application boundary와 Frontend renderer가 필요한 selection/workspace/overlay/lifecycle 및 zoom/lock scalar를 읽는다.
-        반환값을 persistent ProjectObject authority로 사용하지 않는다.
+        변경: 호출 범위의 반환 record 구성.
+        처리: 현재 interfaceState의 필드와 현재 선택 참조를 같은 호출에서 읽어 record로 반환한다.
+        숫자 0을 포함한 식별자는 원래 값으로 전달한다. 결과의 수명은 이번 호출의 소비 범위다.
         """
-        return "current Frontend runtime state projection"
+        projection = dict(interfaceState)
+        projection["selectedSlotId"] = selectedSlotId
+        return projection
+
+    def subscribe(self, onStoreChange):
+        """
+        Return: 등록한 listener를 해제하는 함수.
+        변경: interfaceFSM이 소유하는 listener 집합.
+        처리: callback을 등록하고, 반환된 함수가 같은 callback을 제거한다.
+        수락된 전이의 상태와 revision이 확정된 뒤 기존 발행 절차가 listener를 호출한다.
+        """
+        self.listeners.add(onStoreChange)
+
+        def unsubscribe():
+            self.listeners.discard(onStoreChange)
+
+        return unsubscribe
 
     def send(self, event, validatedInput):
         """
@@ -147,4 +166,4 @@ class InterfaceStateMachine:
         """model-to-ui projection revision만 변경하고 ProjectObject를 변경하지 않는다."""
         return "Frontend interface state"
 
-interfaceFSM = "Frontend session/runtime state의 유일한 InterfaceStateMachine instance"
+interfaceFSM = InterfaceStateMachine()

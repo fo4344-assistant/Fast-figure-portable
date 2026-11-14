@@ -1,0 +1,25 @@
+{
+  "method": "UI selected 1,3 and 2,3 -> explicit public API setGrid(3,4) -> UI row increment",
+  "afterExternal": {
+    "rows": 3,
+    "cols": 4,
+    "selectionActions": [
+      {
+        "name": "선택 슬롯 합치기",
+        "disabled": true
+      },
+      {
+        "name": "선택 슬롯 나누기",
+        "disabled": true
+      },
+      {
+        "name": "선택 해제",
+        "disabled": true
+      }
+    ]
+  },
+  "afterUI": {
+    "rows": 4,
+    "cols": 4
+  }
+}

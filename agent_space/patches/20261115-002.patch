@@ -1,0 +1,169 @@
+diff --git a/agent_space/patches/20261115-002.md b/agent_space/patches/20261115-002.md
+new file mode 100644
+index 0000000..cb6e54c
+--- /dev/null
++++ b/agent_space/patches/20261115-002.md
+@@ -0,0 +1,28 @@
++# 20261115-002
++
++## 목적·변경
++
++실필드 테스트에서 확인한 문제에 대해 관련 Source Script의 구체적인 수정방안을 포함한 보완 계획을 작성한다.
++
++추가 대상은 `agent_space/plans/plan-028.md`와 본 설명 문서뿐이다. 기준 commit은 `9e58bdf0381b62bb59068a44ca78d75be6edcaed`다. 실제 파일로 native Git diff를 생성하며 패치 자신은 자기참조를 피하려고 payload에서 제외한다.
++
++## 선택한 방향·이유
++
++객체 추가와 FFSX 불러오기의 두 재현 증상을 선택 슬롯의 raw state와 공식 read projection 혼동이라는 공통 경계 문제로 다룬다. Source Script → pseudocode → source code 순서의 계획으로 구성하고, Source Script 파일별 입력·반환 구조·owner·publication·이벤트 시점 ID 취득·비동기 target 고정·none/ID 0·거부와 실패를 구체화했다.
++
++기존 InterfaceStateMachine과 Application facade를 재사용하고 별도 selection authority나 신규 public API를 전제하지 않는다. external-store snapshot의 안정성도 계획에 포함해 매번 새 readState 객체를 반환하도록 getter만 치환하여 render loop를 만드는 수정을 피한다. 두 재현 지점 밖의 동일 소비자는 정적 영향 후보로 구분했다.
++
++## 고려했지만 선택하지 않은 방향
++
++- 즉시 코드 수정: 이번 요청은 계획 문서 작성이며 구현은 별도 지시와 구분한다.
++- 두 callback만 국소 수정: 공식 read/subscribe 계약과 다른 동일 소비자의 불일치를 남긴다.
++- raw state에 selectedSlotId 독립 복사: owner와 mirror의 이중 authority가 된다.
++- Backend가 UI 선택을 암묵적으로 읽거나 누락 ID를 0으로 보충: explicit target과 Backend current validation을 훼손한다.
++- 기존 UI 실패를 API 성공으로 대체: 수정 후 실제 사용자 동작의 증거가 되지 않는다.
++
++## payload 밖의 기존 작업·후속 범위
++
++- 선행 `agent_space/reviews/review-20261115-001-real-field-test.md`, `agent_space/logs/20261114-001-field-test/`, `agent_space/patches/20261115-001.patch/.md`는 기존 미커밋 산출물로 보존하며 이번 패치에 중복 편입하지 않는다.
++- Source Script, pseudocode, source code, development-versions.json, tracked dist, AGENT/정책/index/README, Git 업로드 도구는 변경하지 않았다. revision/current/closure도 갱신하지 않는다.
++- 계획의 구현·실필드 재시험·build·checker·TLC·Actions는 이번에 실행하지 않았다. 삭제된 자동 테스트를 복원하지 않으며 commit/push도 하지 않는다.
++- native Git alternate index로 신규 두 문서만의 diff를 생성한다. 일반 index/branch를 변경하지 않고 생성 후 임시 index를 삭제한다. 자체 snapshot/diff 스크립트는 만들지 않는다.
+diff --git a/agent_space/plans/plan-028.md b/agent_space/plans/plan-028.md
+new file mode 100644
+index 0000000..bb97e5a
+--- /dev/null
++++ b/agent_space/plans/plan-028.md
+@@ -0,0 +1,129 @@
++# Plan 028 — 선택 슬롯 읽기·명령 전달 경계 보완
++
++작성: 2026-11-15. 상태: 계획 작성만 완료, 구현 미착수.
++
++## 1. 근거·목표·범위
++
++- 근거: `agent_space/reviews/review-20261115-001-real-field-test.md` 전체와 `agent_space/logs/20261114-001-field-test/`의 실제 UI 증거. 기준 commit은 `9e58bdf0381b62bb59068a44ca78d75be6edcaed`, Source Script 46 → pseudocode 26 → source code 157이다. 세 계층의 기존 stale 상태와 Source Script open 판정은 유지한다.
++- 재현된 문제는 객체 추가 무반응과 FFSX 슬롯 불러오기 실패다. 두 증상은 UI가 공식 Frontend read 대신 raw state에서 selectedSlotId를 얻으려 하는 공통 경계 누락으로 묶는다. 명시적인 슬롯 ID로 호출한 API 성공을 UI 성공으로 계산하지 않는다.
++- 목표: 선택 슬롯의 유일한 owner에서 공식 projection을 읽고, 각 사용자 입력 처리에서 취득한 명시적 target을 기존 graph 명령에 전달한다. 선택이 없거나 대상이 사라진 경우도 기존 거부·실패 의미를 유지한다.
++- Plan027의 자산 표시·grid·debug 보완은 완료 이력으로 유지한다. 본 계획은 그 작업을 반복하거나 과거 실필드 review를 수정해 성공으로 바꾸지 않고, 새로 확인된 읽기 계약·호출 절차 누락을 보완한다.
++- 이번 사용자 요청은 **계획 문서 작성**이다. Source Script, pseudocode, source code, 메타데이터, 배포본을 지금 수정하지 않는다. 구현·재시험·commit/push는 별도 실행 지시와 구분한다.
++
++## 2. 확인한 기존 계약과 누락
++
++관련 Source Script는 다음 파일을 모두 읽어 확인했다.
++
++- `sourcescript/frontend/interface_fsm.py`: selectedSlotId의 owner는 interfaceFSM이고, `InterfaceStateMachine.readState(self)`는 immutable Frontend runtime projection이다. 다만 반환 구조의 필수 필드와 subscriber가 읽을 projection의 일관성은 구체적이지 않다.
++- `sourcescript/application/adapter.py`: `dispatchProjectCommand`는 공식 read와 Backend reconciliation을 사용한다. UI에 노출하는 Frontend state 조회가 raw 내부 저장 표현을 우회 노출하지 않아야 한다는 구체 계약이 부족하다.
++- `sourcescript/frontend/mantine_ui.py`: `subscribeAppState(onStoreChange)`는 interfaceFSM.state의 revision/transition 직접 구독으로만 설명된다. 구독 후 읽기와 객체 추가·슬롯 파일 입력의 선택 ID 취득 시점이 이어져 있지 않다.
++- `sourcescript/application/public_api/__init__.py`: `slots.readSelected`는 Frontend 참조와 Backend query를 결합한다. graph mutation과 lifecycle의 기존 공식 경계는 존재한다.
++- `sourcescript/application/public_api/graphs.py`: `graphEditorAdd(slotId, csvId)`와 `importSelectedGraphFile(slotId, file)`는 이미 explicit target을 받는다. wrapper의 인자 순서를 바꾸거나 Backend가 암묵적으로 UI 선택을 읽게 할 문제가 아니다.
++
++source code에서 확인한 누락은 다음과 같다.
++
++- `sourcecode/frontend/mantine_ui.js:167-172` → `sourcecode/application/adapter.js:187`: external-store snapshot이 raw `interfaceFSM.state`를 반환한다.
++- `sourcecode/frontend/interface_fsm.js:113`: selectedSlotId는 `readState()`에서 owner의 runtime reference로 합성된다.
++- `sourcecode/frontend/mantine_ui.js:1458`, `sourcecode/frontend/mantine_ui.js:1860`: 두 문제 콜백은 `state.selectedSlotId`를 명령에 넣는다.
++
++따라서 기존 ‘readState는 projection’이라는 선언만 재인용하지 않고, **공식 read의 데이터 형태 → 구독/표시 → 이벤트 시점 read → 명시적 명령 인자**를 Source Script에서 연결한다. 실필드 실패가 곧 Source Script 전체 알고리즘의 오류라는 뜻은 아니지만, 기존 명세가 이번 raw/projection 혼동을 막을 만큼 구체적이지 않았다는 점을 변경 설명에 남긴다.
++
++## 3. Source Script 파일별 수정방안
++
++### 3.1 `sourcescript/frontend/interface_fsm.py` — owner와 공식 read 계약
++
++`InterfaceStateMachine.readState(self)`의 반환 구조를 다음과 같이 명시한다.
++
++- `selectedSlotId`: 현재 owner가 보유한 validated reference 또는 명시적인 none. 슬롯 ID 0은 유효한 ID이며 false/none으로 취급하지 않는다.
++- 기존 `interfaceState`의 lifecycle/workspace/overlay/assetSelection/assetPath/graphObject/graphObjectIndex/direction/revision/error와 기존 zoom/lock scalar를 같은 publication의 값으로 제공한다. 실제 필드 식별자는 기존 정의를 그대로 쓴다.
++- 내부 selectedSlotId 저장 위치를 바꾸거나 `interfaceState`에 독립적으로 수정 가능한 복제 필드를 추가하지 않는다. projection에 포함하는 것과 두 번째 authority를 만드는 것을 구분한다.
++- read는 immutable이고 상태·revision·selection을 변경하거나 listener를 호출하지 않는다. Backend identity 재검증은 기존 Application/Backend 경계의 책임이다.
++- subscriber 알림은 기존 transition/reconciliation/notify의 final publication을 관찰한다. 같은 publication에 대해 UI가 반복 조회하는 external-store snapshot은 안정된 동일 결과를 제공하며, 새 publication에서만 새 snapshot으로 교체한다. rejected/no-op의 기존 publish 여부를 바꾸지 않는다.
++- 안정된 snapshot은 owner에서 단방향으로 파생한 읽기 결과일 뿐 command target authority가 아니다. 새로운 selection mirror·동기화 저장소·revision 권위를 만들지 않는다. 대상 언어의 구체 메모화/객체 배치는 source code에서 정한다.
++
++이 계약은 `readState()`를 매번 새 객체로 만든 채 external-store callback에 단순 연결하여 무한 재조회·렌더를 만드는 수정도 방지한다.
++
++### 3.2 `sourcescript/application/adapter.py` — 기존 Frontend 읽기 surface의 의미
++
++`APPLICATION_BOUNDARY_RULES`에 다음을 보완하고, 기존 Frontend facade의 state/readState/subscribe 대응을 명시한다.
++
++1. facade의 공개 state read는 `interfaceFSM.readState()`가 정의한 공식 projection을 전달한다. 내부 raw 저장 객체를 그대로 공개하지 않는다.
++2. 기존 `readState` 진입점과 구독용 state 조회가 selectedSlotId를 포함하는 동일한 의미의 값을 제공한다. 별도 Application state store나 복제 selection은 만들지 않는다.
++3. subscribe는 owner publication을 그대로 전달한다. getter 호출 때문에 notify/reconcile이 추가되거나 원래 하나의 transition이 중복 publish되지 않는다.
++4. command 처리에는 `dispatchProjectCommand`의 기존 current-authority resolve → candidate → validation → one commit → reconciliation → renderer 순서를 유지한다. 조회한 Frontend projection 전체를 Backend mutation candidate로 전달하지 않는다.
++
++새 public FastFigureApi나 세 번째 FSM을 추가하지 않는다. Source Script의 기존 함수·경계 설명을 확장하며, 이름만 다른 read wrapper를 기계적으로 추가하지 않는다.
++
++### 3.3 `sourcescript/frontend/mantine_ui.py` — 구독·객체 추가·파일 입력 절차
++
++#### A. 구독과 snapshot
++
++기존 `subscribeAppState(onStoreChange)`의 설명을 raw state 직접 소비가 아닌 **공식 Frontend projection publication 구독**으로 바꾼다. 기존 source code 식별자에 대응하는 `getAppStateSnapshot()`의 처리 명세를 추가한다.
++
++- 공식 facade read만 호출하며 별도 component state에 selection을 복제하지 않는다.
++- 읽기만 수행하고 위 3.1의 publication별 안정성을 보존한다.
++- 이 snapshot은 render·label·enabled 표시용이다. 나중의 사용자 명령 target은 그 이벤트에서 owner를 다시 읽는다.
++
++#### B. 객체 추가
++
++`FastFigureGraphDataEditor` 책임에 `addSelectedGraphObject(csvId)` 절차를 명시한다. csvId는 기존 CSV 선택 경로가 제공하는 명시적 참조이며 Backend가 재검증한다.
++
++1. click 또는 keyboard activation이 실제 발생했을 때 공식 Frontend read에서 현재 selectedSlotId를 읽는다.
++2. 선택이 none이면 기존 UI의 대상 없음 처리로 종료하고 project command를 보내지 않는다. ID 0은 그대로 허용한다. undefined를 0이나 첫 슬롯으로 치환하지 않는다.
++3. CSV가 선택되지 않았으면 기존 비활성/거부 의미를 유지한다. graph 객체나 CSV를 임의 생성하지 않는다.
++4. read → 필요한 scalar 추출 → 기존 `FastFigureApi.graphs.addObject(slotId, csvId)`를 같은 입력 처리 범위에서 연결한다. 이전 render의 `state.selectedSlotId`나 헤더 DOM을 target으로 사용하지 않는다.
++5. chart 유무 판정·새 chart 생성·기존 object 추가는 기존 Application/Backend command가 current authority에서 수행한다. UI가 objects projection 전체로 candidate를 만들지 않는다.
++6. 미commit 결과를 성공 chart로 해석하지 않고 원래 결과/오류를 기존 경로로 전달한다. 추가 선택 변경·두 번째 commit·성공 query를 위조하지 않는다.
++
++#### C. 슬롯 파일 불러오기
++
++`FastFigureGraphFileActions` 책임에 `importSelectedSlotFile(file)` 절차를 명시한다.
++
++1. 파일 선택 취소로 file이 없으면 명령 없이 종료한다.
++2. **파일이 UI에 전달되어 불러오기 intent를 처리하는 시점**에 공식 Frontend read에서 current selectedSlotId를 한 번 취득한다. 파일 chooser를 열기 전 render의 target을 재사용하지 않는다.
++3. 선택이 none이면 대상 없음 처리를 하고 project command를 보내지 않는다. 유효한 ID 0을 누락으로 처리하지 않는다.
++4. 취득한 scalar slotId와 file을 기존 public `graphs.importFile(slotId, file)`에 전달한다. public lifecycle wrapper가 import를 정확히 한 번 소유하고, UI는 추가 importing task로 중첩 진입하지 않는다.
++5. file read/parse 등 비동기 처리가 시작된 뒤에는 새 UI 선택으로 target을 다시 바꾸지 않는다. 한 import intent의 explicit target은 고정하되, 실제 target의 존속·visible·호환 조건은 기존 Backend command가 commit 시점의 authority에서 다시 검증한다. 삭제·병합 등으로 invalid가 됐다면 다른 슬롯으로 자동 우회하지 않고 기존 거부/실패를 따른다.
++6. FFSX/Plotly parsing·자산 remap·whole-project validation·one commit은 기존 owner에 남긴다. 성공 뒤에만 공식 chart read/reconciliation/render, 실패는 기존 lifecycle error→ready recovery와 원래 오류 표시를 유지한다. 숨은 rollback이나 파일 오류 무시를 넣지 않는다.
++
++위 두 절차의 식별자는 Source Script에서 먼저 정의할 함수 이름이다. 실제 source code가 인라인 콜백으로 구현해도 입력·조회 시점·분기·실패 의미의 대응은 남겨야 한다.
++
++### 3.4 `sourcescript/application/public_api/__init__.py` 및 `sourcescript/application/public_api/graphs.py`
++
++- public contract의 `slots.readSelected`에는 owner 공식 read에서 얻은 reference를 Backend에서 current resolve한다는 점을 명시한다. none과 ID 0의 구분을 유지한다.
++- `graphs.addObject`와 `graphs.importFile`, `graphEditorAdd(slotId, csvId)`, `importSelectedGraphFile(slotId, file)`에는 UI가 이벤트 범위에서 취득한 explicit target을 전달한다는 연결을 보완한다. 누락 target을 내부 UI 선택으로 채우는 default를 넣지 않는다.
++- import의 explicit target은 비동기 파일 처리 중 UI 선택이 바뀌어도 바뀌지 않으며 Backend는 현재 유효성만 재검증한다. 현재 성공/미commit/throw 반환 및 public lifecycle의 단일 실행 계약은 유지한다.
++- 이 파일에 이미 충분히 명시된 command 내부 계산은 다시 구현하거나 중복 서술하지 않는다. 실제 설명 보완이 필요한 항목만 수정하며 Backend Source Script에 새로운 selection authority·파일 형식·fallback을 추가하지 않는다.
++
++## 4. pseudocode → source code 반영 순서와 영향 범위
++
++1. **Source Script 먼저:** 위 파일의 read schema·publication·이벤트 target·async target 고정·none/0·실패 경계를 보완하고 해당 범위의 논리적 완결성·목적 부합·중복/통합 근거를 남긴다. 이전 closure 판정을 새 수정의 근거로 재사용하지 않는다.
++2. **pseudocode 직접 번역:** `pseudocode/frontend/interface_fsm.pcal`, `pseudocode/application/adapter.pcal`, `pseudocode/frontend/mantine_ui.pcal`, `pseudocode/application/public_api/contract.pcal`, `pseudocode/application/public_api/graphs.pcal`의 실제 책임에 대응시킨다. owner read/publication, none 분기, explicit ID 0, 파일 전달 시점 capture, 고정 target, 거부·예외 분기를 값의 흐름으로 보인다. 새 shared selection 변수나 별도 논리 모듈을 만들지 않는다.
++3. **source code 연결:** owner read/publication → Application facade → Mantine external-store snapshot → 실제 이벤트 caller 순으로 한 책임 단위에서 연결한다. `getAppStateSnapshot()`만 바꾸거나 실패한 두 줄만 고치고 다른 동일 소비자를 남기는 것을 종료로 보지 않는다.
++4. **같은 원인의 실제 소비자 확인:** `sourcecode/frontend/mantine_ui.js`의 `state.selectedSlotId` 사용을 모두 확인한다. 확인 시점에는 setEditable(1454), addObject(1458), layout/title/axis callbacks(1555-1557), palette 관련 표시/로그(1759,1774), import(1860)가 검색됐다. **추가 사용처는 정적 영향 후보이지 모두 실필드 실패로 확인된 항목은 아니다.** 명령에는 이벤트 시점 owner read를, 단순 표시/로그에는 공식 표시 projection을 적용한다. chartId 등 다른 explicit identity와 현재 target이 불일치하면 기존 Backend ownership 검증을 우회하지 않는다.
++5. Backend 내부의 합법적인 raw state 구현까지 문자열 치환하지 않는다. `appFSM.state`, `interfaceFSM.state`, `state.selectedSlotId` 각 소비자가 내부 저장·표시·명령 중 무엇인지 구분한다. 이미 공식 read를 쓰는 renderer/adapter/query 경로와 graph command의 기존 인자 순서는 보존한다.
++6. 실제 의미 파일이 변경된 계층만 revision/fingerprint/derived_from을 갱신하고 stale/closure/검증 기록을 사실대로 관리한다. 이번 계획 작성만으로 버전을 올리지 않는다. native Git diff와 동명 설명에 이번 발견에서 놓쳤던 read/consumer 경계 및 실제 잔여를 기록한다.
++
++## 5. 완료 증거와 제안 재시험
++
++구현 대응 확인과 실제 동작 확인을 분리한다. 아래는 **후속 실행 지시 후 수행할 기준**이며 이번 문서 작성 중 실행하지 않는다.
++
++| 확인 항목 | 기대 결과·증거 |
++| --- | --- |
++| owner read / subscribe | selectedSlotId가 항상 reference/none으로 존재. 같은 publication의 snapshot 안정, 실제 publication 때 갱신. read의 mutation/notify 없음. 반복 render loop 없음 |
++| ID 0 객체 추가 | 실제 UI로 CSV와 slot 0 선택 → 포인터와 keyboard activation 각각 요청당 정확히 객체 1개 추가. 새 chart 생성과 기존 chart 추가 두 경우를 구분 |
++| 다른 슬롯 / 선택 해제 | 이벤트 전에 선택을 바꾸면 현재 target에만 추가. none에서 다른 슬롯 또는 마지막 슬롯으로 우회하지 않음. 기존 CSV 선택 독립성 유지 |
++| FFSX roundtrip | 실제 UI로 내보낸 파일을 빈 visible 슬롯에 파일 선택기로 불러오기. chart/object/CSV 참조 복원과 불필요한 중복·원본 손실 부재를 공식 read와 화면으로 확인 |
++| async target | file 전달 이후 선택 변경 시 원래 명시 target 유지. 그 target이 invalid가 되면 기존 오류/미commit, 다른 슬롯 불변. 통제된 보조 실험은 순수 UI 결과와 별도 기록 |
++| 취소·실패·busy | file chooser 취소는 no command, malformed file은 기존 오류와 ready 복귀, busy는 task 실행 전 거부. 성공 query/중복 lifecycle/숨은 rollback 없음 |
++| 동일 소비자 | editable/layout/title/axis 등의 실제 수정 경로에서 current target 전달, chart ownership 검증 유지. 표시·로그까지 모두 mutation으로 취급하지 않음 |
++| 기존 확인 기능 보존 | FFPX roundtrip, image manual 0/PNG, 자산·슬롯 표시, grid 변경·선택 clear, debug 표시의 필요한 영향 사례를 다시 확인. split에서 수행한 범위는 별도로 기록 |
++
++실필드 재시험은 같은 증거 fixture를 사용하되 새 현재 빌드를 ego-browser에서 열고 실제 클릭·파일 선택·다운로드로 수행한다. API 보조 성공으로 UI 실패를 대체하지 않는다. 삭제된 회귀 suite나 workflow를 복원하지 않으며 새 전역 테스트 기반을 만들지 않는다. 미실행 checker/TLC/Actions를 통과로 표시하지 않고 버전 상태를 자동 승격하지 않는다.
++
++## 6. 경계·중단·현재 산출물
++
++- 이번 산출물은 본 계획과 실제 native diff/동명 설명뿐이다. 선행 실필드 review·증거·`20261115-001.patch/.md`는 보존하며 이번 계획 패치에 중복 편입하지 않는다.
++- AGENT/정책/index/README/Git 업로드 도구/dist를 바꾸거나 무관한 모듈을 정리하지 않는다. commit/push는 별도 지시가 필요하다.
++- 구현 중 Source Script 계약 충돌·새로운 고수준 의미·선택 owner의 불명확성이 발견되면 해당 입력·반환·상충 문구를 기록하고 그 부분에서 멈춘다. 편의상 raw state나 UI mirror로 우회하지 않는다.
++- 구현 완료는 상위 계약과 전체 실제 소비자 대응을 확인했을 때만 주장한다. 실필드 해결 완료는 실패했던 두 UI 경로를 실제로 재실행한 증거가 있어야 한다. 전체 프로젝트 닫힘·전체 회귀 통과로 확대하지 않는다.

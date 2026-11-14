@@ -37,6 +37,26 @@ APPLICATION_BOUNDARY_RULES = [
     "ProjectMutationResult/read projection/reconciliation input은 orchestration call 범위의 transient value이며 authority로 저장하지 않는다.",
 ]
 
+class ApplicationInterface:
+    """Frontend 현재 읽기와 변경 알림을 중계하는 기존 Application facade."""
+
+    def readState(self):
+        """변경: 반환 record 구성. 처리: Frontend 소유자의 이번 호출 결과를 전달한다."""
+        return interfaceFSM.readState()
+
+    @property
+    def state(self):
+        """기존 속성 소비자에게 공식 현재 읽기와 같은 필드 구조를 제공한다."""
+        return self.readState()
+
+    def subscribe(self, onStoreChange):
+        """변경: Frontend listener 등록. 반환: 같은 등록을 해제하는 함수."""
+        return interfaceFSM.subscribe(onStoreChange)
+
+
+appFSM = ApplicationInterface()
+
+
 def dispatchProjectQuery(query, payload=None):
     """
     Backend public read/query adapter.

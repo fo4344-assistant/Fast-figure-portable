@@ -1,0 +1,859 @@
+diff --git a/agent_space/patches/20261115-005.md b/agent_space/patches/20261115-005.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..6b4f2125ca86f8bc77eff20726cf96ee7c73eb29
+--- /dev/null
++++ b/agent_space/patches/20261115-005.md
+@@ -0,0 +1,45 @@
++# 20261115-005
++
++## 목적과 변경
++
++Plan028의 Source Script 보완 과정에서 입력·설정 대상·참조 해결을 설명하지 못한 절차를 다시 작성하고, 같은 형태의 후속 보완 대상을 Plan029에 기록한다.
++
++- `sourcescript/frontend/mantine_ui.py`: 현재 상태 구독과 표시 읽기, 객체 추가, 파일 불러오기, 편집 가능 전환, 설정 변경의 입력·처리·반환을 보완했다. `readProjectAssetDisplay`는 두 공식 읽기의 결과 필드를 실제 반환 record로 연결한다.
++- `updateSelectedGraphLayout(values)`는 기존 `chartModel.editor`의 title/globalSettings 부분 record를 입력받는다. 중첩 key로 변경 대상을 결정하고, `globalSettings`, 그 `axes` key, `axisSettings`의 기존 정의를 참조한다. 선택 참조 읽기, slot 소유 chart 조회, 명시적 id와 새 입력 전달, Backend의 현재 소유 관계 검증과 candidate 반영을 자연어로 연결했다.
++- `sourcescript/frontend/interface_fsm.py`: 기존 상태와 선택 참조를 포함하는 공식 읽기 및 listener 등록·해제를 명시했다.
++- `sourcescript/application/adapter.py`: `ApplicationInterface`가 기존 Frontend의 읽기와 구독을 중계한다.
++- `sourcescript/application/public_api/__init__.py`: 선택 슬롯 및 그래프 데이터의 공식 읽기를 정의하고 공개 계약 표에 연결했다.
++- `sourcescript/application/public_api/graphs.py`: 객체 추가의 event를 실제 slot.content.chart 조건으로 결정한다. 설정 변경과 파일 불러오기의 명시적 인자, Backend 처리, 성공 후 조회와 실패 반환을 보완했다.
++- `agent_space/plans/plan-028.md`: Source Script 보완 중인 현재 단계와 남은 대조 사항을 기록했다.
++- `agent_space/plans/plan-029.md`: Python 문서 15개, 함수·메서드·내부 함수 184개의 구문 조사에서 발견한 설명 문자열 반환·중간값·조건 105개 함수의 위치와 후속 보완 순서를 기록했다. 구독 발행, 공개 계약 연결, 화면 책임 이름 등 추가 의미 검토 범위도 구분했다.
++- `development-versions.json`: 실제 수정된 Source Script를 revision 47, fingerprint `sha256:b15b7749643054714282f06a71948124c6106bae954602cebf2fcae7ddae87b8`로 기록했다. 상태 stale, closure open을 유지한다.
++
++## 요구와 선택 이유
++
++사용자는 정의되지 않은 “지정 필드”나 “control”로 처리를 생략한 설명, 기존 정의를 중복 나열한 집합, 자연어 알고리즘을 Python 분기로 대신한 작성 방식을 지적했다.
++
++기존 인자인 values와 기존 chart 설정 구조를 사용하면 입력 자체에서 변경 항목과 새 값을 확인할 수 있다. 기존 공식 읽기·명령 경로를 연결하여 선택 소유자와 Backend 검증 책임을 유지한다. 설명에는 실제 정의된 인자, 필드와 메서드를 사용한다.
++
++## 고려한 대안
++
++- 함수 내부의 globalFields/axisNames/axisFields 재정의: 기존 globalSettings/axisSettings와 별도의 필드 목록 관리가 필요하여 제거했다.
++- fieldPath와 임의 입력 연결 규칙 추가: 기존 부분 record 인자에 경로 해석 절차를 추가하고 입력 생성 책임을 불명확하게 하므로 기존 values 계약을 사용했다.
++- 전체 Source Script를 실행 가능한 Python 구현으로 확장: 현재 목적은 자연어 처리 절차와 자료·참조·상태 관계를 명확히 하는 상위 명세 보완이다. 각 책임의 알고리즘을 기준으로 보완한다.
++
++## 닫힘과 후속 범위
++
++이 기록은 Source Script 단계의 중간 작업이다. 전체 Source Script의 닫힘과 Plan028 1단계 완료를 선언하지 않는다. FSM의 발행·reconciliation, Application lifecycle, 공개 읽기 결과의 구성·소비 흐름을 계속 대조해야 한다. Plan029의 105개는 구문으로 확인한 대상 수이며 전체 의미 검토 완료 수가 아니다.
++
++Source Script 보완과 닫힘 근거 확인 뒤 Plan028의 대응 pseudocode, source code와 실제 UI 재시험으로 전파한다. 이번에는 pseudocode 26과 source code 157의 파일·fingerprint·derived_from을 유지했다. 두 계층은 이전 Source Script 파생 상태인 stale이다.
++
++## 실제 diff의 기준과 범위
++
++기준 HEAD는 `9e58bdf0381b62bb59068a44ca78d75be6edcaed`다. 작업 전 승인된 Plan028이 untracked였으므로, HEAD에 그 기존 Plan028만 포함한 native Git tree `897e18918438b49b58baa4433a2fe3165843c29a`를 증분 비교 기준으로 사용한다.
++
++동명 patch는 이 tree와 현재 다섯 Source Script, metadata, Plan028, 새 Plan029 및 이 설명 문서 사이의 실제 native Git diff다. 이전 실필드 증거와 검토, 001~004 패치 쌍은 보존하며 이번 payload에 중복 포함하지 않는다. 임시 Git index로 diff를 만들고 일반 index는 유지한다.
++
++## 실행 및 미실행 사항
++
++전체 Source Script Python 파일의 구문 분석과 변경 diff·공백을 정적으로 확인했다. 기존 버전 도구의 fingerprint 계산 함수만 사용했다. version checker 본체, Source Script 실행, 테스트, application, build, browser, TLC, Actions, commit, push는 실행하지 않았다.
++
++정책·AGENT·색인·배포 파일·업로드 도구와 기존 시험 증거를 변경하지 않았다. 이 문서의 정적 조사와 기록은 동작 성공 또는 current 판정을 의미하지 않는다.
+diff --git a/agent_space/plans/plan-028.md b/agent_space/plans/plan-028.md
+index c495643fdd3b8aeed9f2b8730a2b213d97d786d5..9cd7fe57f7f7e3e66859b69ee4a00cb6cc5d1886 100644
+--- a/agent_space/plans/plan-028.md
++++ b/agent_space/plans/plan-028.md
+@@ -1,7 +1,7 @@
+ # Plan 028 — 개발 정책에 맞춘 선택 슬롯 읽기와 그래프 입력 처리 수정
+ 
+ 작성일: 2026-11-15
+-상태: 개발 정책을 다시 대조하여 계획을 재작성했다. 아래의 구현과 재시험은 아직 수행하지 않았다.
++상태: Source Script 보완 중. 정의된 입력·필드·메서드와 자연어 처리 절차를 대조하고 있다. pseudocode·source code 반영과 재시험은 아직 수행하지 않았다.
+ 기준 commit: `9e58bdf0381b62bb59068a44ca78d75be6edcaed` — Source Script 46, pseudocode 26, source code 157.
+ 
+ ## 1. 목적과 확인된 문제
+@@ -72,7 +72,7 @@ React가 사용하는 `useSyncExternalStore`의 현재값 함수에는 기존 `r
+ 
+ ## 5. Source Script의 구체적인 수정안
+ 
+-아래는 앞으로 수정할 내용이다. 이번 계획 재작성에서는 해당 파일을 변경하지 않는다. Python 표기는 Source Script의 작성 표기법이며 실제 프로그램 실행 단계가 아니다.
++아래는 승인된 Source Script 수정 범위다. 현재 진행 사항은 9절에 기록한다. Python 표기는 Source Script의 작성 표기법이다.
+ 
+ ### 5.1 `sourcescript/frontend/interface_fsm.py` — 현재 상태와 알림의 의미
+ 
+@@ -216,10 +216,19 @@ system의 기존 진단 등 `appFSM.state` 소비자에는 새 고수준 책임
+ 
+ 개발자 API 직접 호출은 원인 분리용 보조 결과일 뿐 실제 버튼·파일 입력의 성공을 대신하지 않는다. 구현 대응 완료와 실제 UI 해결 확인을 별도로 보고한다.
+ 
+-## 8. 이번 재작성의 범위와 종료 조건
++## 8. 계획 재작성 당시의 범위와 종료 조건
+ 
+ 이번에는 `agent_space/plans/plan-028.md`와 새 실제 diff·설명 쌍만 작성한다. 기존 실필드 증거·검토와 `20261115-001`~`003` 패치 기록은 보존한다.
+ 
+ Source Script, pseudocode, source code, 정책·AGENT·색인, 버전 정보, 배포 파일, 업로드 도구를 수정하지 않는다. 삭제한 테스트와 workflow를 복원하지 않고 commit·push도 하지 않는다.
+ 
+ 이 계획은 정책을 구현 편의에 맞춰 고치는 대신, 표시용 복사본과 변경 입력의 흐름 및 불필요한 보관 구조를 바로잡은 작업안이다. 계획 작성만으로 Source Script 닫힘, 구현 완료 또는 FFSX 왕복 성공을 선언하지 않는다.
++
++## 9. Source Script 보완 진행
++
++- 현재 상태 읽기와 구독, 객체 추가·파일 불러오기·편집 가능 전환·설정 변경의 입력과 반환을 기존 다섯 Source Script 파일에서 보완했다.
++- `updateSelectedGraphLayout(values)`는 기존 `chartModel.editor`의 title/globalSettings 부분 record를 받는다. 요청 record의 key와 중첩 위치가 변경 위치를 정한다. `globalSettings`, 그 `axes` key와 `axisSettings`를 원래 정의에서 참조한다.
++- 선택 참조 읽기 → 공식 chart 조회 → 명시한 slotId/chartId와 새 values 전달 → 기존 Backend의 현재 소유 관계 확인·candidate 계산·검증·한 번 반영을 자연어로 연결했다.
++- Source Script 전체 Python 15개 문서, 함수·메서드·내부 함수 184개의 구문을 조사했다. 설명 문자열로 결과·중간값·조건을 대신한 105개 함수와 관련 연결을 `plan-029.md`에 기록했다. 의미적 완결성 검토는 계속 필요하다.
++- Source Script의 닫힘은 open이다. 기존 FSM 발행·reconciliation과 Application lifecycle의 설명 문자열 처리, 공개 읽기 결과의 구성·소비 연결을 추가 대조한 뒤 1단계 완료를 판단한다.
++- 이번 기록은 Source Script 보완과 정적 조사다. pseudocode·source code·정책·AGENT·배포 파일을 변경하지 않았으며 실행 시험·commit·push를 하지 않았다.
+diff --git a/agent_space/plans/plan-029.md b/agent_space/plans/plan-029.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..5d15d499812e993b095ffdcea757db03905e2ed0
+--- /dev/null
++++ b/agent_space/plans/plan-029.md
+@@ -0,0 +1,229 @@
++# Plan 029 — Source Script의 설명 문자열과 불완전한 처리 절차 보완
++
++작성일: 2026-11-15
++상태: 전체 Python 문서의 구문 조사와 수정 대상 목록 작성. 의미 검토 및 보완 작업은 미완료.
++기준 commit: `9e58bdf0381b62bb59068a44ca78d75be6edcaed`. 아래 위치는 Plan028 Source Script 수정 중 작업 파일 기준이다.
++
++## 1. 요구와 조사 범위
++
++Plan028을 먼저 진행하고, 처리 결과나 조건을 설명 문자열로 대신한 Source Script를 모두 찾아 이 계획에 기록하라는 요청을 따른다. Source Script에는 입력의 자료형·참조·소유자, 사용하는 정의, 판단 기준, 상태 변경 순서, 결과 구성과 실패 경로를 자연어 알고리즘으로 작성한다. 필요한 Python 표기는 그 설명에 대응한다.
++
++`sourcescript/`의 Python 파일 15개를 전부 구문 분석했다. 함수·메서드와 내부 함수 184개 중 아래 105개에서 반환 결과·중간값·조건을 설명 문자열로 표현한 위치를 찾았다. 실제 명령 이름이나 파일명 문자열과 자료구조의 필드 설명은 용도에 따라 구분한다. 이 수치는 구문으로 확인한 수정 대상 수다. 나머지 함수의 의미적 완결성까지 확인한 수치로 사용하지 않는다.
++
++설정 자료형은 기존 `sourcescript/backend/graphs.py`의 `chartModel`, `globalSettings`, `axisSettings`를 사용한다. 설정 이름과 축 이름 집합을 다른 함수에서 다시 소유하지 않는다.
++
++## 2. 수정 대상 전수 목록
++
++각 항목의 함수, 위치와 발견한 표현을 기록한다. 동일한 함수에서 여러 형태가 발견되어도 함수 수에는 한 번 포함했다.
++
++### `Fast-figure-portable/sourcescript/application/adapter.py`
++
++함수 8개, 아래 형태 3개.
++
++- `Fast-figure-portable/sourcescript/application/adapter.py:88` — `dispatchSlotSelection(slotId, pendingContentType=None, direction='ui-to-fsm')`: 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/application/adapter.py:112` — `dispatchProjectCommand(event, payload)`: 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/application/adapter.py:139` — `runLifecycleTask(lifecycle, event, task)`: 문자열로 표시한 반환 결과.
++
++### `Fast-figure-portable/sourcescript/application/public_api/__init__.py`
++
++함수 2개, 아래 형태 0개.
++
++반환값·중간값·조건의 설명 문자열은 이번 구문 조사에서 검출되지 않았다. 공개 읽기의 입력·반환·참조 흐름은 Plan028에서 별도로 대조한다.
++
++
++### `Fast-figure-portable/sourcescript/application/public_api/assets.py`
++
++함수 19개, 아래 형태 9개.
++
++- `Fast-figure-portable/sourcescript/application/public_api/assets.py:33` — `selectProjectCsv(path)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/application/public_api/assets.py:54` — `createEmptyProjectCsvAndSelect()`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/application/public_api/assets.py:67` — `importProjectFilesToDirectory(files, directory, planImport)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/application/public_api/assets.py:173` — `deleteProjectAsset(target)`: 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/application/public_api/assets.py:198` — `moveProjectNode(plan, useUniqueName)`: 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/application/public_api/assets.py:246` — `createProjectDirectory(parent, name)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/application/public_api/assets.py:267` — `connectProjectAssetToSlot(path, kind, slotId)`: 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/application/public_api/assets.py:297` — `importProjectFileToSlot(file, slotId, planImport)`: 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/application/public_api/assets.py:340` — `importProjectAssetFiles(files, planImport)`: 문자열로 표시한 반환 결과.
++
++### `Fast-figure-portable/sourcescript/application/public_api/graphs.py`
++
++함수 10개, 아래 형태 1개.
++
++- `Fast-figure-portable/sourcescript/application/public_api/graphs.py:70` — `graphEditorMove(chartId, fromIndex, toIndex)`: 설명 문자열 조건.
++
++### `Fast-figure-portable/sourcescript/application/public_api/layout_annotations.py`
++
++함수 35개, 아래 형태 4개.
++
++- `Fast-figure-portable/sourcescript/application/public_api/layout_annotations.py:68` — `insertEmptyImageIntoSelectedSlot()`: 설명 문자열 조건.
++- `Fast-figure-portable/sourcescript/application/public_api/layout_annotations.py:93` — `prepareDashboardFileDrop(slotId)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/application/public_api/layout_annotations.py:111` — `readLayoutApiState(previewWidth=None)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/application/public_api/layout_annotations.py:137` — `setLayoutApiZoomLocked(locked)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++
++### `Fast-figure-portable/sourcescript/backend/assets_files.py`
++
++함수 21개, 아래 형태 21개.
++
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:162` — `normalizeProjectPath(value, directory)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:180` — `projectAssetPath(asset)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:197` — `slotFileKind(file)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:208` — `projectAssetImportCollisionModel(file, directory, reservedPaths)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:229` — `resolveProjectAssetImportPlan(model, choice, reservedPaths)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:254` — `buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=None)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:275` — `planProjectNodeMove(path, directory)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:294` — `projectFileStem(value)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:304` — `ffpxBuildProject()`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:327` — `ffpxReadProject(file)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:350` — `ffsxBuildSlot(slot, chart)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:370` — `ffsxReadSlot(file)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:390` — `projectVfsResolve(path, state)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:407` — `projectVfsUniquePath(path, state, reservedPaths)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:424` — `projectVfsDescendants(directory, state)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:440` — `parseProjectDataAsset(name, bytes)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:461` — `collectAssetReferences(csvIds, imageIds, state)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:484` — `ffpxEncodeValue(value)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:502` — `ffpxDecodeValue(element)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:519` — `buildProjectObject(payload, fileName)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/assets_files.py:547` — `applyFfsxSlot(slotPayload, targetSlot)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++
++### `Fast-figure-portable/sourcescript/backend/graphs.py`
++
++함수 15개, 아래 형태 13개.
++
++- `Fast-figure-portable/sourcescript/backend/graphs.py:150` — `dataTable(data)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:168` — `columnDefinitions(table, headerLines)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:185` — `graphDataSelection(matrix, headerLines, editor)`: 반환 구조 안의 설명 문자열.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:204` — `connectDataToSlotModel(slot, data, sourceName, projectCsv)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:249` — `graphEditorCommit(chartId, objects, index)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:279` — `tracesSingle(objectView)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:329` — `traces(chart, project)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:382` — `chartFigure(chart, project)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:404` — `layout(chart, project)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:447` — `normalizeAxisSettings(axis, key)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:476` — `normalizeGlobalSettings(settings)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:528` — `parsePlotlyToEditor(figure, chartId)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/graphs.py:570` — `convertImportedChartToEditable(chart)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++
++### `Fast-figure-portable/sourcescript/backend/layout_annotations.py`
++
++함수 11개, 아래 형태 11개.
++
++- `Fast-figure-portable/sourcescript/backend/layout_annotations.py:122` — `orderedSlotLabels(project)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/backend/layout_annotations.py:140` — `insertSlotCaptions(project, slotIds=None)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/backend/layout_annotations.py:167` — `dashboardGeometry(width, heightOverride)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/layout_annotations.py:188` — `gridSlotGeometry(layout, geometry, slot)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/layout_annotations.py:208` — `buildGridResizeCandidate(rows, cols)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/layout_annotations.py:236` — `readImageEditorApi(slotId)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/layout_annotations.py:249` — `readLabelsApiState(slotId)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/layout_annotations.py:269` — `readGlobalCaptionState()`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/layout_annotations.py:286` — `readSlotCaptionState(slotId)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/layout_annotations.py:303` — `readExportSettings()`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/layout_annotations.py:316` — `createTargetExportSnapshot()`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++
++### `Fast-figure-portable/sourcescript/backend/project_efsm.py`
++
++함수 1개, 아래 형태 1개.
++
++- `Fast-figure-portable/sourcescript/backend/project_efsm.py:182` — `send(self, event, payload)`: 문자열로 표시한 반환 결과.
++
++### `Fast-figure-portable/sourcescript/backend/project_state.py`
++
++함수 16개, 아래 형태 12개.
++
++- `Fast-figure-portable/sourcescript/backend/project_state.py:376` — `buildSlotAssetDisplay(slot, project)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/backend/project_state.py:402` — `readBackendProjection(kind, request)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/project_state.py:571` — `slotHasNonDefaultLocalState(slot)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/project_state.py:679` — `createProjectState()`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/project_state.py:706` — `resolveOwningSlot(chartId, state)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/project_state.py:725` — `getProjectCsv(csvId)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/project_state.py:738` — `getProjectImage(imageId)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/project_state.py:751` — `getChart(chartId)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/project_state.py:505` — `read(self, path)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/project_state.py:521` — `initialize(self, source)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/project_state.py:539` — `read(self, name)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/backend/project_state.py:554` — `snapshot(self, names)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++
++### `Fast-figure-portable/sourcescript/frontend/interface_fsm.py`
++
++함수 7개, 아래 형태 3개.
++
++- `Fast-figure-portable/sourcescript/frontend/interface_fsm.py:143` — `send(self, event, validatedInput)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/interface_fsm.py:154` — `reconcileProjectResult(self, event, reconciliationInput)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/interface_fsm.py:165` — `notify(self, objectName, event, payload)`: 문자열로 표시한 반환 결과.
++
++### `Fast-figure-portable/sourcescript/frontend/mantine_ui.py`
++
++함수 15개, 아래 형태 5개.
++
++- `Fast-figure-portable/sourcescript/frontend/mantine_ui.py:177` — `changeLayoutGridDimension(dimension, value)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/mantine_ui.py:195` — `handleDebugToggle()`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/mantine_ui.py:375` — `useProjectAssetImportCollision()`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/mantine_ui.py:415` — `FastFigureApp()`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/frontend/mantine_ui.py:444` — `FastFigureShell()`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++
++### `Fast-figure-portable/sourcescript/frontend/renderer.py`
++
++함수 22개, 아래 형태 20개.
++
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:60` — `publishUiTelemetry(patch)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:77` — `readDebugEnabled()`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:86` — `setDebugEnabled(enabled)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:100` — `status(message)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:128` — `applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, projectProjection)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:137` — `renderDashboard(projectProjection, interfaceState)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:176` — `setSelectedSlot(slotId, direction, frontendActions)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:196` — `installSlotClickController(frontendActions)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:237` — `swapSlotContents(source, target, frontendActions)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:265` — `prepareDashboardFileDrop(slotId, frontendActions)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:290` — `applyUiPalette(projectProjection, notify)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:302` — `applySlotStyle(projectProjection, notify)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:315` — `resolveSelectedChart(projectProjection, interfaceState)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:332` — `updateGraphView(projectProjection, interfaceState)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:344` — `startupCoreRuntime(projectProjection, interfaceState, frontendActions)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:363` — `readDashboardRenderedWidth()`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:370` — `downloadExportPayload(payload)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:384` — `exportCaptionLayout(snapshot, measureText)`: 문자열로 표시한 반환 결과.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:409` — `renderDashboardTarget(snapshot, statusSink)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++- `Fast-figure-portable/sourcescript/frontend/renderer.py:451` — `renderDashboardCurrent(snapshot, statusSink)`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++
++### `Fast-figure-portable/sourcescript/portable_build/portable_build.py`
++
++함수 1개, 아래 형태 1개.
++
++- `Fast-figure-portable/sourcescript/portable_build/portable_build.py:54` — `build(output)`: 문자열로 표시한 반환 결과.
++
++### `Fast-figure-portable/sourcescript/system.py`
++
++함수 1개, 아래 형태 1개.
++
++- `Fast-figure-portable/sourcescript/system.py:214` — `initializeFastFigure()`: 문자열로 표시한 반환 결과, 설명 문자열 중간값.
++
++## 3. 구문 목록 외에 함께 보완할 연결
++
++- `sourcescript/frontend/mantine_ui.py`의 `MANTINE_COMPONENT_OWNERSHIP`에 등록한 이름은 각 화면의 책임 표다. 화면 입력을 설명할 때 해당 이름과 실제로 호출하는 함수, 인자와 반환 필드를 연결한다. 정의되지 않은 “control”, “지정 필드”, “적절한 설정”으로 처리를 생략한 부분을 대조한다.
++- `sourcescript/application/public_api/__init__.py`의 `PUBLIC_API_METHODS`는 공개 계약의 연결 표다. 구현 절차에 사용하는 함수 이름·인자·결과 경로가 해당 Source Script의 함수 정의와 연결되는지 확인한다.
++- `sourcescript/frontend/interface_fsm.py`의 `send`, `reconcileProjectResult`, `notify`와 `subscribe` 사이에서 상태 확정, revision 증가, listener 호출 순서를 연결한다. Plan028의 구독 변경이 의존하는 부분부터 보완한다.
++- `sourcescript/application/adapter.py`의 `dispatchProjectCommand`와 `runLifecycleTask`는 성공·미반영·예외마다 실제 반환값과 ready 복귀를 구분한다.
++- `sourcescript/backend/project_state.py`의 읽기 반환 구조와 `buildSlotAssetDisplay`에서 읽는 slot·chart·CSV 참조를 연결한다.
++- `sourcescript/backend/graphs.py`의 `rebuildEditableGraph`, `validateChartModel`처럼 입력 객체를 그대로 반환하는 함수도 docstring에 기술된 계산·검증 단계와 변경 범위를 대조한다. 문자열 검출 여부만으로 완료 판정을 내리지 않는다.
++- `sourcescript/backend/settings.json`은 기본값 자료다. 알고리즘은 이 기본값을 읽는 위치와 누락·유효한 0·False·빈 값의 해석을 설명한다.
++
++## 4. 보완 순서
++
++1. Plan028의 선택 참조 읽기, 객체 추가, 파일 불러오기와 구독 발행 경로를 먼저 보완한다. 현재 단계는 Source Script다.
++2. Backend의 자료구조·현재 참조 해결·검증·읽기 반환 구성부터 보완한다. 기존 schema와 명시된 도메인 의미를 유지한다.
++3. 자산·그래프·레이아웃 계산, Project EFSM의 candidate 구성·검증·한 번 반영·결과 구성을 보완한다.
++4. Application의 공개 읽기·명령·파일 입력·lifecycle과 Frontend의 입력·표시·renderer 연결을 보완한다.
++5. system 초기화와 portable build의 입력·출력·실패·자원 정리 순서를 보완한다.
++6. 각 책임 단위에서 Source Script의 논리적 완결성, 요구 부합, 기존 정의 재사용과 복사본의 소비 경로를 확인한 뒤 pseudocode, source code 순으로 전파한다.
++
++각 함수의 자연어 처리 절차에는 실제 정의된 인자·필드·메서드를 사용한다. 분기마다 조건을 판별하는 값, 그 값을 읽는 소유자, 적용 대상과 반환값을 기록한다. 표기의 길이나 Python 문장 수를 완료 기준으로 삼지 않는다.
++
++## 5. 완료 근거와 경계
++
++- 위 105개 항목과 3절의 연결마다 보완된 Source Script 위치 및 남은 의문을 기록한다.
++- 결과 record·sequence의 구성, 참조 해결, 분기·반복·재계산과 실패 경로가 다음 계층으로 직접 번역될 정도로 구체화되어야 한다.
++- schema의 필드명·명령 enum·기본값·자료 소유자를 중복 정의하지 않는다. 기존 정의를 참조한다.
++- 문서에 근거가 있는 의미를 유지한다. 의미가 미정이면 그 위치와 필요한 결정을 기록하고 해당 단위를 닫지 않는다.
++- 실제 Source Script 수정에는 revision·fingerprint와 native Git diff 및 동명 설명을 기록한다. 검사를 실행한 범위와 정적 대조 범위를 구분한다.
++- 이번 목록 작성으로 전체 Source Script의 닫힘 또는 구현 정상 동작을 선언하지 않는다. 정책·AGENT·색인·배포 파일은 변경하지 않는다. 테스트·빌드·브라우저·commit·push는 이번 Source Script 보완에서 실행하지 않았다.
+diff --git a/development-versions.json b/development-versions.json
+index 34f3cbda2507c5169804313718a2b043d0d0646e..fc9dc30d4baa9277539c58a65121c457b017a33e 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. pseudocode (implemented in PlusCal) is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating source code implementation or current status.",
+   "layers": {
+     "source-script": {
+-      "revision": 46,
++      "revision": 47,
+       "status": "stale",
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+-      "fingerprint": "sha256:605a19a7a6787baeb782b9f5aa5945bd6343aa65b4aba324d421c8518b86cf78",
++      "fingerprint": "sha256:b15b7749643054714282f06a71948124c6106bae954602cebf2fcae7ddae87b8",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/sourcescript/application/adapter.py b/sourcescript/application/adapter.py
+index 0c462b78472822751e06a7915ae91c00f2bb225a..3cc635a585fdd627cd10b34bb9c11db03c2c1f65 100644
+--- a/sourcescript/application/adapter.py
++++ b/sourcescript/application/adapter.py
+@@ -37,6 +37,26 @@ APPLICATION_BOUNDARY_RULES = [
+     "ProjectMutationResult/read projection/reconciliation input은 orchestration call 범위의 transient value이며 authority로 저장하지 않는다.",
+ ]
+ 
++class ApplicationInterface:
++    """Frontend 현재 읽기와 변경 알림을 중계하는 기존 Application facade."""
++
++    def readState(self):
++        """변경: 반환 record 구성. 처리: Frontend 소유자의 이번 호출 결과를 전달한다."""
++        return interfaceFSM.readState()
++
++    @property
++    def state(self):
++        """기존 속성 소비자에게 공식 현재 읽기와 같은 필드 구조를 제공한다."""
++        return self.readState()
++
++    def subscribe(self, onStoreChange):
++        """변경: Frontend listener 등록. 반환: 같은 등록을 해제하는 함수."""
++        return interfaceFSM.subscribe(onStoreChange)
++
++
++appFSM = ApplicationInterface()
++
++
+ def dispatchProjectQuery(query, payload=None):
+     """
+     Backend public read/query adapter.
+diff --git a/sourcescript/application/public_api/__init__.py b/sourcescript/application/public_api/__init__.py
+index 629f03121bf5042d9555a30ff53cdf5b5de88d2a..beadc19bfbfbdfecaf06999a15fbe14f3a93451d 100644
+--- a/sourcescript/application/public_api/__init__.py
++++ b/sourcescript/application/public_api/__init__.py
+@@ -23,6 +23,53 @@ FastFigureApi = {
+ }
+ 
+ 
++def readSelectedSlot():
++    """
++    Return: 선택 slot의 읽기전용 copy. 선택 해제 또는 visible 대상 소멸이면 None.
++    변경: 이번 호출의 반환 record 구성.
++    처리:
++    1. adapter.appFSM.readState()의 selectedSlotId를 읽는다. None은 선택 해제이며 0은 유효한 id다.
++    2. 이 참조를 frontendState.selectedSlotId로 adapter.dispatchProjectQuery에 전달한다.
++    3. Backend의 slots.readSelected가 현재 activeProject.slots에서 같은 id의 visible slot을 해결한다.
++       선택 해제·대상 소멸·hidden이면 None, 그 외에는 해당 slot의 읽기전용 copy를 반환한다.
++    4. 조회 결과를 그대로 반환하고 오류는 호출자에 전파한다.
++    """
++    current = adapter.appFSM.readState()
++    return adapter.dispatchProjectQuery("project-api", {
++        "operation": "slots.readSelected",
++        "frontendState": {"selectedSlotId": current["selectedSlotId"]},
++    })
++
++
++def readGraphData():
++    """
++    Return: 기존 graphs.readData record. chart는 selectedSlotId가 가리키는 slot의 소유 chart,
++    currentCsv는 assetSelection=csv이고 assetPath가 가리키는 현재 CSV다.
++    record의 나머지 필드는 sourcescript/backend/project_state.py의 graphs.readData 계약을 따른다.
++    변경: 이번 호출의 반환 record 구성.
++    처리:
++    1. adapter.appFSM.readState()에서 이번 호출의 selectedSlotId, assetSelection, assetPath,
++       graphObject, graphObjectIndex를 읽는다.
++    2. 이 참조들을 frontendState에 담아 adapter.dispatchProjectQuery의 graphs.readData를 호출한다.
++    3. Backend는 selectedSlotId의 현재 visible slot을 찾고 slot.content.chart로 소유 chart를 해결한다.
++       assetSelection이 csv이면 assetPath를 현재 VFS에서 해결하여 currentCsv를 얻는다.
++       objectColumns는 선택 object의 csvId로 별도 해결한다.
++    4. sourcescript/backend/project_state.py의 graphs.readData 결과를 그대로 반환한다.
++       chart·CSV 없음의 각 필드와 조회 오류는 해당 Backend 읽기 계약을 따른다.
++    """
++    current = adapter.appFSM.readState()
++    return adapter.dispatchProjectQuery("project-api", {
++        "operation": "graphs.readData",
++        "frontendState": {
++            "selectedSlotId": current["selectedSlotId"],
++            "assetSelection": current["assetSelection"],
++            "assetPath": current["assetPath"],
++            "graphObject": current["graphObject"],
++            "graphObjectIndex": current["graphObjectIndex"],
++        },
++    })
++
++
+ PUBLIC_API_METHODS = {
+     "project": {
+         "readName": "Backend query; args 없음; current project meta name immutable projection",
+@@ -32,7 +79,7 @@ PUBLIC_API_METHODS = {
+     },
+     "slots": {
+         "readSelected": (
+-            "cross-layer read; Frontend selectedSlotId reference와 Backend query result를 결합한 immutable selected-slot projection"
++            "readSelectedSlot(); 현재 Frontend selectedSlotId를 Backend slots.readSelected로 해결한 읽기전용 slot 또는 None"
+         ),
+         "select": (
+             "Application operation; slot reference를 Backend에서 validate한 뒤 Frontend SELECT_SLOT을 수행한다. "
+@@ -83,7 +130,7 @@ PUBLIC_API_METHODS = {
+         "download": "assets.downloadProjectAsset; original bytes handoff True, missing/no bytes False, 오류 전파; disk 저장 보증 아님",
+     },
+     "graphs": {
+-        "readData": "read; selected chart objects + 단일 현재 CSV/columns + selected object csvId에서 별도로 resolve한 objectColumns; object reference는 현재 선택 대체 원천이 아님",
++        "readData": "readGraphData(); 이번 Frontend 참조로 Backend가 해결한 chart/currentCsv/columns/objectColumns; 결과 구조는 backend.project_state의 graphs.readData 계약",
+         "readLayout": "read; selected chart title/global/axis projection",
+         "readPalette": "read; selected chart object color projection",
+         "selectCsv": "runtime mutation; graph editor의 current CSV selection",
+diff --git a/sourcescript/application/public_api/graphs.py b/sourcescript/application/public_api/graphs.py
+index a547743b447730b4bbaa7d9f983ebd516be9fe1c..c13de2d5650a8e313c4b413549ec5e0337c99023 100644
+--- a/sourcescript/application/public_api/graphs.py
++++ b/sourcescript/application/public_api/graphs.py
+@@ -17,13 +17,24 @@ def graphEditorAdd(slotId, csvId):
+     변경:
+     - GRAPH_OBJECTS_REPLACED 또는 SLOT_DATA_CONNECTED 공식 event를 통해 chart/slot state를 변경한다.
+ 
++    입력: slotId는 이번 추가 대상의 visible slot id, csvId는 추가할 실제 project CSV id다.
+     처리:
+-    Application boundary가 받은 explicit slotId와 csvId를 Backend current authority에서 resolve한다.
+-    target slot에 chart가 없으면 SLOT_DATA_CONNECTED로 첫 chart/object를 만든다.
+-    chart가 있으면 owning chart id와 current object 목록을 Backend에서 resolve해 새 base graph object를 추가하고 GRAPH_OBJECTS_REPLACED로 commit한다.
++    1. slotId를 slots.readSelected query에 전달하여 현재 visible slot을 얻는다.
++       slot이 없으면 None을 반환한다. slotId 0도 그대로 조회한다.
++    2. slot["content"]["chart"]가 None이면 SLOT_DATA_CONNECTED를 선택한다.
++       chart id가 있으면 GRAPH_OBJECTS_REPLACED를 선택한다.
++       두 command 모두 slotId, csvId와 operation=graphs.addObject를 입력받는다.
++    3. Backend는 현재 slot과 CSV를 다시 해결한다. SLOT_DATA_CONNECTED는 빈 chart 참조를 확인하고
++       첫 chart와 object를 만든다. GRAPH_OBJECTS_REPLACED는 현재 소유 editable chart에 object를 추가한다.
++       graphs.GRAPH_OBJECT_NORMALIZATION_RULE에 따라 같은 현재 CSV에서 새 object를 계산하고
++       whole-project candidate를 검증하여 한 번 반영한다.
++    4. 미반영 result는 그대로 반환한다. 반영 성공이면 명시한 slotId로 graphs.readData를 조회하여 chart를 반환한다.
++       조회·명령 오류는 호출자에 전파한다. slotId와 csvId는 이 호출의 대상 참조로 유지한다.
+     """
+     slot = dispatchProjectQuery("project-api", {"operation": "slots.readSelected", "frontendState": {"selectedSlotId": slotId}})
+-    event = "SLOT_DATA_CONNECTED if slot has no chart else GRAPH_OBJECTS_REPLACED"
++    if slot is None:
++        return None
++    event = "SLOT_DATA_CONNECTED" if slot["content"]["chart"] is None else "GRAPH_OBJECTS_REPLACED"
+     result, interfaceState, rendererProjection = dispatchProjectCommand(
+         event, {"slotId": slotId, "csvId": csvId, "operation": "graphs.addObject"}
+     )
+@@ -131,12 +142,22 @@ def graphEditorSetHeaderLines(csvId, headerLines):
+ 
+ def graphEditorUpdateLayout(slotId, chartId, values):
+     """
+-    변경:
+-    - selected chart의 persistent title/global/axis settings.
++    입력:
++    slotId는 대상 slot의 id, chartId는 그 slot이 소유해야 하는 chart의 id다.
++    values는 sourcescript/backend/graphs.py의 chartModel.editor에서 title과 globalSettings에 해당하는 부분 record다.
++    values.globalSettings는 같은 파일의 globalSettings, 그 axes의 각 축은 axisSettings 구조를 따른다.
++    생략한 항목은 현재 값을 유지하고, 포함한 항목에는 이번 입력값을 적용한다.
+ 
+     처리:
+-    Backend command가 current owning chart에 새 values를 적용/정규화한 candidate를 CHART_LAYOUT_CHANGED로 commit한다.
+-    Plotly graph layout은 commit된 chart settings에서 다시 계산하는 projection이다.
++    1. slotId, chartId, values를 CHART_LAYOUT_CHANGED의 slotId, chartId, settings로 전달한다.
++    2. Backend는 현재 visible slot과 소유 chart를 해결하고 두 id의 소유 관계를 확인한다.
++       candidate의 현재 title/globalSettings에 새 항목을 적용하며 axes는 축 이름과 설정 항목별로 합친다.
++       normalizeGlobalSettings와 normalizeAxisSettings로 정규화하고 같은 candidate의 graph를 재계산한다.
++       whole-project 검증 뒤 한 번 반영한다.
++    3. 미반영 result는 그대로 반환한다. 성공이면 slotId의 graphs.readLayout을 새로 조회하여 반환한다.
++       조회·명령 오류는 호출자에 전파한다.
++    변경: 해당 chart의 editor.title/editor.globalSettings와 그 설정에서 계산한 graph.
++    반환: 성공 후 title/global/axis 읽기 결과 또는 미반영 result.
+     """
+     result, interfaceState, rendererInput = dispatchProjectCommand(
+         "CHART_LAYOUT_CHANGED", {"slotId": slotId, "chartId": chartId, "settings": values},
+@@ -164,14 +185,17 @@ def graphEditorApplyPalette(chartId, colors):
+ 
+ def importSelectedGraphFile(slotId, file):
+     """
+-    변경:
+-    - 선택 slot의 chart model과 package가 필요로 하는 CSV asset.
+-
++    입력: slotId는 파일 입력을 받은 시점에 호출자가 정한 대상 id, file은 이 작업의 파일 입력이다.
+     처리:
+-    Application은 explicit slotId와 file만 전달한다. Backend SLOT_CHART_IMPORTED가 다음 계산을 수행한다.
+-    FFSX면 ffsxReadSlot 검증 결과로 applyFfsxSlot candidate를 만든다.
+-    Plotly JSON이면 parsePlotlyToEditor로 non-editable imported chart candidate를 만든다.
+-    두 경우 모두 target slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증한 뒤 그 command가 한 번 commit한다.
++    1. 받은 slotId와 file을 SLOT_CHART_IMPORTED에 전달한다. 이 작업에서 사용하는 slotId를 유지한다.
++    2. Backend는 현재 project에서 slotId의 visible slot을 해결한다. 대상이 없으면 그 오류를 반환한다.
++    3. FFSX이면 ffsxReadSlot로 package를 검증하고 applyFfsxSlot로 필요한 CSV와 chart candidate를 만든다.
++       Plotly JSON이면 parsePlotlyToEditor로 원본 figure와 conversion view를 보존한 non-editable chart candidate를 만든다.
++    4. 대상 slot이 새 chart를 유일하게 소유하는 whole-project candidate를 검증하고 한 번 반영한다.
++    5. 미반영 result는 그대로 반환한다. 성공이면 받은 slotId로 graphs.readData를 조회하여 chart를 반환한다.
++       파일 읽기·해석·현재 대상 검증·command·후속 조회 오류는 기존 Application lifecycle에 전파한다.
++    변경: 명시한 slot의 chart model과 package 적용에 필요한 project CSV asset.
++    반환: 반영된 chart 또는 미반영 result.
+     """
+     result, interfaceState, rendererInput = dispatchProjectCommand("SLOT_CHART_IMPORTED", {"slotId": slotId, "file": file})
+     if not result.committed:
+diff --git a/sourcescript/frontend/interface_fsm.py b/sourcescript/frontend/interface_fsm.py
+index c718de7cd8ca52832ab8108c2e8017118591ba73..481f132d4a883e05108e2f46adb9d80a9329b3ef 100644
+--- a/sourcescript/frontend/interface_fsm.py
++++ b/sourcescript/frontend/interface_fsm.py
+@@ -106,20 +106,39 @@ INTERFACE_LOCALITY_RULE = (
+ )
+ 
+ class InterfaceStateMachine:
++    def __init__(self):
++        """변경: 이 Frontend instance가 소유하는 변경 알림 listener 집합을 생성한다."""
++        self.listeners = set()
++
+     def readState(self):
+         """
+         Return:
+-        - state:
+-          current Frontend runtime state의 immutable projection.
+-
+-        변경:
+-        - 없음.
++        - projection: interfaceState의 lifecycle/workspace/overlay/assetSelection/assetPath,
++          graphObject/graphObjectIndex/direction/revision/error, dashboardZoomIntent,
++          dashboardZoomLocked/dashboardZoomLockedWidth와 selectedSlotId를 가진 읽기전용 record.
++          selectedSlotId의 원천은 이 Frontend 모듈이 소유하는 현재 선택 참조이며 None은 선택 해제다.
++
++        변경: 호출 범위의 반환 record 구성.
++        처리: 현재 interfaceState의 필드와 현재 선택 참조를 같은 호출에서 읽어 record로 반환한다.
++        숫자 0을 포함한 식별자는 원래 값으로 전달한다. 결과의 수명은 이번 호출의 소비 범위다.
++        """
++        projection = dict(interfaceState)
++        projection["selectedSlotId"] = selectedSlotId
++        return projection
+ 
+-        처리:
+-        Application boundary와 Frontend renderer가 필요한 selection/workspace/overlay/lifecycle 및 zoom/lock scalar를 읽는다.
+-        반환값을 persistent ProjectObject authority로 사용하지 않는다.
++    def subscribe(self, onStoreChange):
+         """
+-        return "current Frontend runtime state projection"
++        Return: 등록한 listener를 해제하는 함수.
++        변경: interfaceFSM이 소유하는 listener 집합.
++        처리: callback을 등록하고, 반환된 함수가 같은 callback을 제거한다.
++        수락된 전이의 상태와 revision이 확정된 뒤 기존 발행 절차가 listener를 호출한다.
++        """
++        self.listeners.add(onStoreChange)
++
++        def unsubscribe():
++            self.listeners.discard(onStoreChange)
++
++        return unsubscribe
+ 
+     def send(self, event, validatedInput):
+         """
+@@ -147,4 +166,4 @@ class InterfaceStateMachine:
+         """model-to-ui projection revision만 변경하고 ProjectObject를 변경하지 않는다."""
+         return "Frontend interface state"
+ 
+-interfaceFSM = "Frontend session/runtime state의 유일한 InterfaceStateMachine instance"
++interfaceFSM = InterfaceStateMachine()
+diff --git a/sourcescript/frontend/mantine_ui.py b/sourcescript/frontend/mantine_ui.py
+index a4d7d621dd2f4d38b6078014550bc76beb490ad3..b67dc1af931238b2199c3090b30b2fe343f478f2 100644
+--- a/sourcescript/frontend/mantine_ui.py
++++ b/sourcescript/frontend/mantine_ui.py
+@@ -5,9 +5,9 @@ Fast Figure Source Script — Frontend / mantine-ui
+ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈이 아니다.
+ """
+ 
+-from sourcescript.frontend.interface_fsm import interfaceFSM
++from math import isnan
+ from sourcescript.application.public_api import FastFigureApi
+-from sourcescript.application.adapter import runLifecycleTask as runApplicationLifecycleTask
++from sourcescript.application.adapter import appFSM, runLifecycleTask as runApplicationLifecycleTask
+ 
+ SLOT_CAPTION_UI_RULE = (
+     "slot caption 추가/편집 UI는 selected slot의 slot.caption을 읽고 쓸 수 있게 노출하는 기능이다. "
+@@ -129,23 +129,49 @@ EMPTY_CSV_UI_RULE = (
+ 
+ def readProjectAssetDisplay():
+     """
+-    이번 표시 작업에서 FastFigureApi.assets.readTree의 canonical node sequence와
+-    FastFigureApi.layout.readState의 visibleSlots를 공식 경계로 읽는다.
+-    두 read 사이에 await/다른 project command/외부 callback을 넣거나 이전 render 결과와 혼합하지 않는다.
+-    canonical directory children과 asset metadata로 기존 에셋 목록을 표시하고,
+-    visibleSlots의 id/row/col/contentType/chart/imageId 및 assetDisplay로 /slots의 기존 연결 표시를 만든다.
+-    slot→chart→CSV/image resolve나 editable 판정은 Backend가 같은 current project에서 끝낸 값만 소비한다.
+-    empty/embedded row도 유지한다. assetDisplay.assets의 kind/id/name/path로 표시·선택 intent를 구성하되
+-    mutation은 기존 공식 API가 current identity를 다시 검증한다.
+-    directory/CSV/image 선택 후보가 필요한 다른 UI도 canonical node의 kind/asset을 사용한다.
+-    에셋 행의 참조 수는 assets.readDeletionTarget(node.path).referenceCount를 읽으며 slot 표시의 중복 제거 목록을 세지 않는다.
+-    CSV 행 수 표시는 node.asset.rows의 길이에서 headerLines의 숫자값(없거나 변환 실패이면 기존 표시 fallback 0)을 제외한 nonnegative 값이다.
+-    이는 기존 행 수 표시만 유지하며 새 CSV parser, project 정규화 또는 domain state를 만들지 않는다.
+-    기존 flat tree의 .directories/.data/.images/.charts/.slots를 public read 계약처럼 소비하지 않는다.
+-    component-local 순회/index는 이번 표시의 transient 계산일 뿐 다른 project store나 mutation authority가 아니다.
+-    query 오류는 전파하며 예전 projection으로 성공을 위장하거나 조회 중 project를 수정하지 않는다.
++    Return:
++    - {nodes, slotRows}: 이번 표시에서 사용할 canonical asset node sequence와 visible slot sequence.
++      directory node는 kind/path/name/children, asset node는 kind/path/id/name/asset을 갖는다.
++      slot row는 id/row/col/rowSpan/colSpan/contentType/chart/imageId/assetDisplay를 갖는다.
++      assetDisplay는 Backend가 해결한 {kind: empty/assets/embedded, assets: [{kind,id,name,path}]}다.
++
++    변경: 이번 호출의 반환 record 구성.
++    처리:
++    1. FastFigureApi.assets.readTree()를 호출하여 canonical node sequence를 nodes로 받는다.
++       nodes의 path와 children은 Backend가 구성한 directory·CSV·image 관계다.
++    2. 이어서 FastFigureApi.layout.readState()를 호출하여 layout을 받는다.
++       layout["visibleSlots"]는 같은 현재 project에서 계산된 visible slot 순서이며,
++       각 slot의 assetDisplay에 slot 소유 chart·image와 연결 CSV를 해결한 표시 정보가 들어 있다.
++    3. nodes와 layout["visibleSlots"]를 각각 반환 record의 nodes와 slotRows에 넣는다.
++       FastFigureProjectDataTree는 nodes로 자산 행을, slotRows로 슬롯별 연결 자산 행을 표시한다.
++       sequence 순서와 assetDisplay.kind가 empty 또는 embedded인 행도 유지한다.
++    두 조회 사이에는 다른 이벤트 처리를 삽입하지 않는다. 조회 오류는 호출자에 전파한다.
++    반환 record는 이번 표시 작업에서 소비한다.
+     """
+-    return "canonical asset nodes와 같은 표시 작업의 visible slot assetDisplay"
++    nodes = FastFigureApi.assets.readTree()
++    layout = FastFigureApi.layout.readState()
++    return {"nodes": nodes, "slotRows": layout["visibleSlots"]}
++
++
++def readAssetRowDisplay(node):
++    """
++    Args: node는 이번 canonical tree의 CSV 또는 image node다.
++    Return: referenceCount와 CSV인 경우 rowCount를 갖는 표시 record.
++    변경: 이번 행의 표시 record 구성.
++    처리: canonical path의 공식 참조 수를 조회한다. CSV는 저장된 rows에서 header 수를 뺀다.
++    header 수의 숫자 변환 실패와 NaN은 기존 표시값 0으로 처리한다. 조회 오류는 전파한다.
++    """
++    target = FastFigureApi.assets.readDeletionTarget(node["path"])
++    display = {"referenceCount": 0 if target is None else target["referenceCount"]}
++    if node["kind"] == "csv":
++        try:
++            headerLines = float(node["asset"].get("headerLines", 0))
++        except (TypeError, ValueError):
++            headerLines = 0
++        if isnan(headerLines):
++            headerLines = 0
++        display["rowCount"] = max(0, len(node["asset"]["rows"]) - headerLines)
++    return display
+ 
+ 
+ def changeLayoutGridDimension(dimension, value):
+@@ -180,19 +206,170 @@ def handleDebugToggle():
+ 
+ def subscribeAppState(onStoreChange):
+     """
+-    Return:
+-    - unsubscribe:
+-      interfaceFSM subscriber 제거 함수.
++    Return: 이번 listener 등록을 해제하는 함수.
++    변경: Application 경계를 통해 Frontend listener를 등록한다.
++    처리: 상태와 revision이 확정된 뒤 도착하는 변경 알림을 React에 전달한다.
++    """
++    return appFSM.subscribe(onStoreChange)
+ 
+-    변경:
+-    - interfaceFSM state를 변경하지 않는다.
++
++def getAppStateSnapshot():
++    """
++    Return: 현재 Frontend revision 숫자.
++    변경: 호출 범위의 읽기 결과 구성.
++    처리: 공식 현재 읽기에서 revision을 취득한다. 같은 revision은 같은 구독 현재값이다.
++    """
++    return appFSM.readState()["revision"]
++
++
++def useAppState():
++    """
++    Return: 이번 render에서 사용할 Frontend 읽기전용 record.
++    변경: React가 관리하는 이번 component의 외부-store 구독.
++    처리: React.useSyncExternalStore(subscribeAppState, getAppStateSnapshot)의 구독·재확인 계약을 사용한다.
++    getAppStateSnapshot의 revision 숫자가 달라지면 React가 render를 요청한다.
++    구독 연결 뒤 appFSM.readState()로 이번 render의 현재 상태를 읽는다.
++    반환 record는 화면 표시·버튼 사용 가능 여부·로그에 소비한다.
++    """
++    React.useSyncExternalStore(subscribeAppState, getAppStateSnapshot)
++    return appFSM.readState()
++
++
++def addSelectedGraphObject():
++    """
++    입력: FastFigureGraphDataEditor의 객체 추가 버튼 클릭 또는 Enter 활성화.
++    처리:
++    1. appFSM.readState()에서 이번 입력 시점의 lifecycle과 selectedSlotId를 읽는다.
++       lifecycle이 ready이고 selectedSlotId가 있으면 그 값을 slotId로 사용한다.
++       그 외에는 None을 반환한다. 식별자 0도 선택된 슬롯이다.
++    2. FastFigureApi.graphs.readData()를 호출하고 반환 record의 currentCsv와 chart를 읽는다.
++       currentCsv는 Frontend의 assetSelection이 csv일 때 assetPath로 Backend가 해결한 CSV다.
++       chart는 같은 선택 슬롯의 content.chart로 Backend가 해결한 소유 chart다.
++    3. currentCsv가 없거나 chart.editor.editable이 False이면 None을 반환한다.
++       chart가 없는 슬롯은 첫 graph object 생성 대상으로 사용할 수 있다.
++    4. FastFigureApi.graphs.addObject(slotId, currentCsv["id"])를 한 번 호출한다.
++       이 이벤트 안에서 두 공식 읽기와 명령 호출을 동기적으로 연속 수행한다.
++       Application의 graphEditorAdd와 Backend 명령이 현재 대상·CSV를 재확인하고
++       첫 chart 생성 또는 기존 chart의 object 추가를 한 번 반영한다.
++    5. 추가 후 chart 또는 미반영 결과를 그대로 반환한다. 조회·명령 오류는 호출자에 전파한다.
++    변경: 기존 SLOT_DATA_CONNECTED 또는 GRAPH_OBJECTS_REPLACED를 통한 대상 chart와 slot 참조.
++    반환: graphs.addObject의 결과 또는 위 조건에 따른 None.
++    """
++    current = appFSM.readState()
++    slotId = current["selectedSlotId"]
++    if current["lifecycle"] != "ready" or slotId is None:
++        return None
++    data = FastFigureApi.graphs.readData()
++    currentCsv = data["currentCsv"]
++    if currentCsv is None:
++        return None
++    chart = data["chart"]
++    if chart is not None and chart["editor"]["editable"] is False:
++        return None
++    return FastFigureApi.graphs.addObject(slotId, currentCsv["id"])
++
++
++def importSelectedSlotFile(file):
++    """
++    입력: FastFigureGraphFileActions의 파일 선택 완료가 전달하는 file. 취소는 None이다.
++    처리:
++    1. file이 None이면 None을 반환한다.
++    2. 파일을 전달받은 이 호출에서 appFSM.readState().selectedSlotId를 읽어 slotId로 삼는다.
++       선택 해제면 None을 반환한다. 식별자 0도 불러오기 대상이다.
++    3. FastFigureApi.graphs.importFile(slotId, file)을 한 번 호출한다.
++       Application은 이 slotId와 읽은 파일 바이트를 SLOT_CHART_IMPORTED에 전달한다.
++       비동기 파일 읽기 도중 선택이 바뀌어도 이 불러오기에서 사용하는 slotId를 유지한다.
++    4. Backend가 현재 project에서 slotId의 visible slot을 찾고 파일을 해석한다.
++       FFSX는 applyFfsxSlot, Plotly JSON은 parsePlotlyToEditor로 candidate를 구성한다.
++       필요한 자산과 소유 chart를 같은 project candidate로 검증하여 한 번 반영한다.
++       대상 소멸 또는 파일 해석·검증 오류는 기존 실패 경로로 반환한다.
++    5. Application의 기존 lifecycle 처리가 완료 또는 오류 뒤 ready로 복귀한다.
++       이 절차는 그 chart·미반영 결과를 반환하고 원래 오류를 호출자에 전파한다.
++    변경: 명시한 slotId가 소유하는 chart와 그 파일을 적용하는 데 필요한 project asset.
++    반환: 기존 graphs.importFile의 결과 또는 취소·선택 해제의 None.
++    """
++    if file is None:
++        return None
++    slotId = appFSM.readState()["selectedSlotId"]
++    if slotId is None:
++        return None
++    return FastFigureApi.graphs.importFile(slotId, file)
++
++
++def setSelectedGraphEditable(editable):
++    """
++    입력: editable은 FastFigureGraphFileActions에서 사용자가 입력한 편집 가능 여부 boolean이다.
++    처리:
++    1. appFSM.readState().selectedSlotId를 이번 slotId로 읽는다. 선택 해제면 None을 반환한다.
++    2. FastFigureApi.graphs.readData()["chart"]로 그 슬롯이 소유하는 현재 chart를 얻는다.
++       공식 조회는 slot.content.chart를 activeProject.charts에서 해결한다. chart가 없으면 None을 반환한다.
++    3. 같은 동기 입력 처리에서 FastFigureApi.graphs.setEditable(slotId, chart["id"], editable)을 한 번 호출한다.
++       graphEditorSetEditable이 세 인자를 CHART_MODEL_REPLACED에 전달하고 Backend가 현재 소유 관계를 검증한다.
++    4. Backend의 convertImportedChartToEditable 규칙에 따라 imported conversionRows와 object가 있으면
++       실제 CSV와 csvId 참조를 같은 candidate에 구성한다. conversionRows 또는 object가 없으면
++       그 조건에 맞게 기존 참조·빈 object를 유지한다. editable 변경과 필요한 자산을 한 번 반영한다.
++    5. 최종 editable boolean 또는 미반영 결과를 반환한다. 조회·명령 오류는 호출자에 전파한다.
++    변경: 해당 chart.editor.editable과 기존 변환 규칙에 따라 필요한 project CSV·object 참조.
++    반환: 기존 setEditable의 결과 또는 선택·chart 없음의 None.
++    """
++    slotId = appFSM.readState()["selectedSlotId"]
++    if slotId is None:
++        return None
++    chart = FastFigureApi.graphs.readData()["chart"]
++    if chart is None:
++        return None
++    return FastFigureApi.graphs.setEditable(slotId, chart["id"], editable)
++
++
++def updateSelectedGraphLayout(values):
++    """
++    입력:
++    values는 FastFigureGraphLayoutEditor에서 이번에 입력한 설정값을 담은 부분 record다.
++    구조는 sourcescript/backend/graphs.py의 chartModel["editor"] 중 title과 globalSettings를 따른다.
++    globalSettings의 항목은 같은 파일의 globalSettings 정의를 따르고,
++    globalSettings["axes"]의 축 이름은 그 정의의 axes key,
++    각 축 안의 설정 이름은 같은 파일의 axisSettings key를 사용한다.
++
++    values에 들어 있는 key와 중첩 위치로 변경 대상을 결정한다.
++    - {"title": "측정 결과"}는 chart.editor.title에 새 제목을 입력한 요청이다.
++    - {"globalSettings": {"showLegend": False}}는 chart.editor.globalSettings.showLegend를 끈 요청이다.
++    - {"globalSettings": {"axes": {"xBottom": {"min": 0}}}}는
++      chart.editor.globalSettings.axes.xBottom.min에 최솟값 0을 입력한 요청이다.
++    각 요청에는 이번에 입력한 항목과 새 값만 담는다. 생략한 항목은 현재 값을 유지한다.
++    값의 자료형과 빈 값의 의미도 globalSettings와 axisSettings의 정의를 따른다.
+ 
+     처리:
+-    React useSyncExternalStore가 interfaceFSM.state revision/transition을 직접 구독한다.
+-    별도 React project store를 만들지 않는다.
++    1. appFSM.readState()에서 이번 입력 시점의 lifecycle과 selectedSlotId를 읽는다.
++       lifecycle이 ready이고 selectedSlotId가 있으면 이를 slotId로 사용한다.
++       선택 해제 또는 busy 상태면 None을 반환하고 이 입력 처리를 끝낸다. slotId 0은 유효하다.
++    2. FastFigureApi.graphs.readData()에서 chart를 얻는다. 이 공식 읽기는 현재 선택 참조로
++       sourcescript/backend/project_state.py의 activeProject.slots에서 visible slot을 찾고,
++       slot["content"]["chart"]의 id로 activeProject.charts에서 소유 chart를 찾는다.
++       chart가 없으면 None을 반환한다.
++    3. FastFigureApi.graphs.updateLayout(slotId, chart["id"], values)를 한 번 호출한다.
++       선택 참조 읽기, chart 조회, 이 호출을 같은 동기 입력 처리에서 연속 수행한다.
++    4. 이 API의 sourcescript/application/public_api/graphs.py::graphEditorUpdateLayout은
++       values를 CHART_LAYOUT_CHANGED의 settings 인자로 전달한다.
++       Backend는 현재 slotId와 chartId의 소유 관계를 다시 확인한다.
++       values.title은 candidate chart.editor.title에 적용하고, values.globalSettings는
++       candidate의 현재 globalSettings와 항목별로 합친다. axes는 축 이름과 설정 이름까지
++       내려가 새 값이 있는 항목을 합치므로 다른 축과 생략한 설정은 유지된다.
++       normalizeGlobalSettings와 normalizeAxisSettings가 입력값을 해석하고,
++       같은 candidate의 graph를 재계산한 뒤 project 검증을 거쳐 한 번 반영한다.
++    5. API가 반환하는 반영 후 layout 또는 미반영 결과를 그대로 반환한다.
++       조회 및 명령 오류는 호출자에 전파한다.
++
++    반환: graphs.updateLayout의 결과. 선택·chart 없음 또는 busy이면 None.
++    변경: 기존 CHART_LAYOUT_CHANGED가 반영하는 해당 slot 소유 chart의 editor 설정과 graph.
+     """
+-    unsubscribe = "interfaceFSM listener 해제 함수"
+-    return unsubscribe
++    current = appFSM.readState()
++    slotId = current["selectedSlotId"]
++    if current["lifecycle"] != "ready" or slotId is None:
++        return None
++    chart = FastFigureApi.graphs.readData()["chart"]
++    if chart is None:
++        return None
++    return FastFigureApi.graphs.updateLayout(slotId, chart["id"], values)
+ 
+ 
+ def useProjectAssetImportCollision():

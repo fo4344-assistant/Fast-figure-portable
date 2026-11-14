@@ -23,6 +23,53 @@ FastFigureApi = {
 }
 
 
+def readSelectedSlot():
+    """
+    Return: 선택 slot의 읽기전용 copy. 선택 해제 또는 visible 대상 소멸이면 None.
+    변경: 이번 호출의 반환 record 구성.
+    처리:
+    1. adapter.appFSM.readState()의 selectedSlotId를 읽는다. None은 선택 해제이며 0은 유효한 id다.
+    2. 이 참조를 frontendState.selectedSlotId로 adapter.dispatchProjectQuery에 전달한다.
+    3. Backend의 slots.readSelected가 현재 activeProject.slots에서 같은 id의 visible slot을 해결한다.
+       선택 해제·대상 소멸·hidden이면 None, 그 외에는 해당 slot의 읽기전용 copy를 반환한다.
+    4. 조회 결과를 그대로 반환하고 오류는 호출자에 전파한다.
+    """
+    current = adapter.appFSM.readState()
+    return adapter.dispatchProjectQuery("project-api", {
+        "operation": "slots.readSelected",
+        "frontendState": {"selectedSlotId": current["selectedSlotId"]},
+    })
+
+
+def readGraphData():
+    """
+    Return: 기존 graphs.readData record. chart는 selectedSlotId가 가리키는 slot의 소유 chart,
+    currentCsv는 assetSelection=csv이고 assetPath가 가리키는 현재 CSV다.
+    record의 나머지 필드는 sourcescript/backend/project_state.py의 graphs.readData 계약을 따른다.
+    변경: 이번 호출의 반환 record 구성.
+    처리:
+    1. adapter.appFSM.readState()에서 이번 호출의 selectedSlotId, assetSelection, assetPath,
+       graphObject, graphObjectIndex를 읽는다.
+    2. 이 참조들을 frontendState에 담아 adapter.dispatchProjectQuery의 graphs.readData를 호출한다.
+    3. Backend는 selectedSlotId의 현재 visible slot을 찾고 slot.content.chart로 소유 chart를 해결한다.
+       assetSelection이 csv이면 assetPath를 현재 VFS에서 해결하여 currentCsv를 얻는다.
+       objectColumns는 선택 object의 csvId로 별도 해결한다.
+    4. sourcescript/backend/project_state.py의 graphs.readData 결과를 그대로 반환한다.
+       chart·CSV 없음의 각 필드와 조회 오류는 해당 Backend 읽기 계약을 따른다.
+    """
+    current = adapter.appFSM.readState()
+    return adapter.dispatchProjectQuery("project-api", {
+        "operation": "graphs.readData",
+        "frontendState": {
+            "selectedSlotId": current["selectedSlotId"],
+            "assetSelection": current["assetSelection"],
+            "assetPath": current["assetPath"],
+            "graphObject": current["graphObject"],
+            "graphObjectIndex": current["graphObjectIndex"],
+        },
+    })
+
+
 PUBLIC_API_METHODS = {
     "project": {
         "readName": "Backend query; args 없음; current project meta name immutable projection",
@@ -32,7 +79,7 @@ PUBLIC_API_METHODS = {
     },
     "slots": {
         "readSelected": (
-            "cross-layer read; Frontend selectedSlotId reference와 Backend query result를 결합한 immutable selected-slot projection"
+            "readSelectedSlot(); 현재 Frontend selectedSlotId를 Backend slots.readSelected로 해결한 읽기전용 slot 또는 None"
         ),
         "select": (
             "Application operation; slot reference를 Backend에서 validate한 뒤 Frontend SELECT_SLOT을 수행한다. "
@@ -83,7 +130,7 @@ PUBLIC_API_METHODS = {
         "download": "assets.downloadProjectAsset; original bytes handoff True, missing/no bytes False, 오류 전파; disk 저장 보증 아님",
     },
     "graphs": {
-        "readData": "read; selected chart objects + 단일 현재 CSV/columns + selected object csvId에서 별도로 resolve한 objectColumns; object reference는 현재 선택 대체 원천이 아님",
+        "readData": "readGraphData(); 이번 Frontend 참조로 Backend가 해결한 chart/currentCsv/columns/objectColumns; 결과 구조는 backend.project_state의 graphs.readData 계약",
         "readLayout": "read; selected chart title/global/axis projection",
         "readPalette": "read; selected chart object color projection",
         "selectCsv": "runtime mutation; graph editor의 current CSV selection",

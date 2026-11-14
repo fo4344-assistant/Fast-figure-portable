@@ -5,9 +5,9 @@ Fast Figure Source Script — Frontend / mantine-ui
 Python 표기의 구현 명세이며 application runtime을 실행하는 모듈이 아니다.
 """
 
-from sourcescript.frontend.interface_fsm import interfaceFSM
+from math import isnan
 from sourcescript.application.public_api import FastFigureApi
-from sourcescript.application.adapter import runLifecycleTask as runApplicationLifecycleTask
+from sourcescript.application.adapter import appFSM, runLifecycleTask as runApplicationLifecycleTask
 
 SLOT_CAPTION_UI_RULE = (
     "slot caption 추가/편집 UI는 selected slot의 slot.caption을 읽고 쓸 수 있게 노출하는 기능이다. "
@@ -129,23 +129,49 @@ EMPTY_CSV_UI_RULE = (
 
 def readProjectAssetDisplay():
     """
-    이번 표시 작업에서 FastFigureApi.assets.readTree의 canonical node sequence와
-    FastFigureApi.layout.readState의 visibleSlots를 공식 경계로 읽는다.
-    두 read 사이에 await/다른 project command/외부 callback을 넣거나 이전 render 결과와 혼합하지 않는다.
-    canonical directory children과 asset metadata로 기존 에셋 목록을 표시하고,
-    visibleSlots의 id/row/col/contentType/chart/imageId 및 assetDisplay로 /slots의 기존 연결 표시를 만든다.
-    slot→chart→CSV/image resolve나 editable 판정은 Backend가 같은 current project에서 끝낸 값만 소비한다.
-    empty/embedded row도 유지한다. assetDisplay.assets의 kind/id/name/path로 표시·선택 intent를 구성하되
-    mutation은 기존 공식 API가 current identity를 다시 검증한다.
-    directory/CSV/image 선택 후보가 필요한 다른 UI도 canonical node의 kind/asset을 사용한다.
-    에셋 행의 참조 수는 assets.readDeletionTarget(node.path).referenceCount를 읽으며 slot 표시의 중복 제거 목록을 세지 않는다.
-    CSV 행 수 표시는 node.asset.rows의 길이에서 headerLines의 숫자값(없거나 변환 실패이면 기존 표시 fallback 0)을 제외한 nonnegative 값이다.
-    이는 기존 행 수 표시만 유지하며 새 CSV parser, project 정규화 또는 domain state를 만들지 않는다.
-    기존 flat tree의 .directories/.data/.images/.charts/.slots를 public read 계약처럼 소비하지 않는다.
-    component-local 순회/index는 이번 표시의 transient 계산일 뿐 다른 project store나 mutation authority가 아니다.
-    query 오류는 전파하며 예전 projection으로 성공을 위장하거나 조회 중 project를 수정하지 않는다.
+    Return:
+    - {nodes, slotRows}: 이번 표시에서 사용할 canonical asset node sequence와 visible slot sequence.
+      directory node는 kind/path/name/children, asset node는 kind/path/id/name/asset을 갖는다.
+      slot row는 id/row/col/rowSpan/colSpan/contentType/chart/imageId/assetDisplay를 갖는다.
+      assetDisplay는 Backend가 해결한 {kind: empty/assets/embedded, assets: [{kind,id,name,path}]}다.
+
+    변경: 이번 호출의 반환 record 구성.
+    처리:
+    1. FastFigureApi.assets.readTree()를 호출하여 canonical node sequence를 nodes로 받는다.
+       nodes의 path와 children은 Backend가 구성한 directory·CSV·image 관계다.
+    2. 이어서 FastFigureApi.layout.readState()를 호출하여 layout을 받는다.
+       layout["visibleSlots"]는 같은 현재 project에서 계산된 visible slot 순서이며,
+       각 slot의 assetDisplay에 slot 소유 chart·image와 연결 CSV를 해결한 표시 정보가 들어 있다.
+    3. nodes와 layout["visibleSlots"]를 각각 반환 record의 nodes와 slotRows에 넣는다.
+       FastFigureProjectDataTree는 nodes로 자산 행을, slotRows로 슬롯별 연결 자산 행을 표시한다.
+       sequence 순서와 assetDisplay.kind가 empty 또는 embedded인 행도 유지한다.
+    두 조회 사이에는 다른 이벤트 처리를 삽입하지 않는다. 조회 오류는 호출자에 전파한다.
+    반환 record는 이번 표시 작업에서 소비한다.
     """
-    return "canonical asset nodes와 같은 표시 작업의 visible slot assetDisplay"
+    nodes = FastFigureApi.assets.readTree()
+    layout = FastFigureApi.layout.readState()
+    return {"nodes": nodes, "slotRows": layout["visibleSlots"]}
+
+
+def readAssetRowDisplay(node):
+    """
+    Args: node는 이번 canonical tree의 CSV 또는 image node다.
+    Return: referenceCount와 CSV인 경우 rowCount를 갖는 표시 record.
+    변경: 이번 행의 표시 record 구성.
+    처리: canonical path의 공식 참조 수를 조회한다. CSV는 저장된 rows에서 header 수를 뺀다.
+    header 수의 숫자 변환 실패와 NaN은 기존 표시값 0으로 처리한다. 조회 오류는 전파한다.
+    """
+    target = FastFigureApi.assets.readDeletionTarget(node["path"])
+    display = {"referenceCount": 0 if target is None else target["referenceCount"]}
+    if node["kind"] == "csv":
+        try:
+            headerLines = float(node["asset"].get("headerLines", 0))
+        except (TypeError, ValueError):
+            headerLines = 0
+        if isnan(headerLines):
+            headerLines = 0
+        display["rowCount"] = max(0, len(node["asset"]["rows"]) - headerLines)
+    return display
 
 
 def changeLayoutGridDimension(dimension, value):
@@ -180,19 +206,170 @@ def handleDebugToggle():
 
 def subscribeAppState(onStoreChange):
     """
-    Return:
-    - unsubscribe:
-      interfaceFSM subscriber 제거 함수.
+    Return: 이번 listener 등록을 해제하는 함수.
+    변경: Application 경계를 통해 Frontend listener를 등록한다.
+    처리: 상태와 revision이 확정된 뒤 도착하는 변경 알림을 React에 전달한다.
+    """
+    return appFSM.subscribe(onStoreChange)
 
-    변경:
-    - interfaceFSM state를 변경하지 않는다.
+
+def getAppStateSnapshot():
+    """
+    Return: 현재 Frontend revision 숫자.
+    변경: 호출 범위의 읽기 결과 구성.
+    처리: 공식 현재 읽기에서 revision을 취득한다. 같은 revision은 같은 구독 현재값이다.
+    """
+    return appFSM.readState()["revision"]
+
+
+def useAppState():
+    """
+    Return: 이번 render에서 사용할 Frontend 읽기전용 record.
+    변경: React가 관리하는 이번 component의 외부-store 구독.
+    처리: React.useSyncExternalStore(subscribeAppState, getAppStateSnapshot)의 구독·재확인 계약을 사용한다.
+    getAppStateSnapshot의 revision 숫자가 달라지면 React가 render를 요청한다.
+    구독 연결 뒤 appFSM.readState()로 이번 render의 현재 상태를 읽는다.
+    반환 record는 화면 표시·버튼 사용 가능 여부·로그에 소비한다.
+    """
+    React.useSyncExternalStore(subscribeAppState, getAppStateSnapshot)
+    return appFSM.readState()
+
+
+def addSelectedGraphObject():
+    """
+    입력: FastFigureGraphDataEditor의 객체 추가 버튼 클릭 또는 Enter 활성화.
+    처리:
+    1. appFSM.readState()에서 이번 입력 시점의 lifecycle과 selectedSlotId를 읽는다.
+       lifecycle이 ready이고 selectedSlotId가 있으면 그 값을 slotId로 사용한다.
+       그 외에는 None을 반환한다. 식별자 0도 선택된 슬롯이다.
+    2. FastFigureApi.graphs.readData()를 호출하고 반환 record의 currentCsv와 chart를 읽는다.
+       currentCsv는 Frontend의 assetSelection이 csv일 때 assetPath로 Backend가 해결한 CSV다.
+       chart는 같은 선택 슬롯의 content.chart로 Backend가 해결한 소유 chart다.
+    3. currentCsv가 없거나 chart.editor.editable이 False이면 None을 반환한다.
+       chart가 없는 슬롯은 첫 graph object 생성 대상으로 사용할 수 있다.
+    4. FastFigureApi.graphs.addObject(slotId, currentCsv["id"])를 한 번 호출한다.
+       이 이벤트 안에서 두 공식 읽기와 명령 호출을 동기적으로 연속 수행한다.
+       Application의 graphEditorAdd와 Backend 명령이 현재 대상·CSV를 재확인하고
+       첫 chart 생성 또는 기존 chart의 object 추가를 한 번 반영한다.
+    5. 추가 후 chart 또는 미반영 결과를 그대로 반환한다. 조회·명령 오류는 호출자에 전파한다.
+    변경: 기존 SLOT_DATA_CONNECTED 또는 GRAPH_OBJECTS_REPLACED를 통한 대상 chart와 slot 참조.
+    반환: graphs.addObject의 결과 또는 위 조건에 따른 None.
+    """
+    current = appFSM.readState()
+    slotId = current["selectedSlotId"]
+    if current["lifecycle"] != "ready" or slotId is None:
+        return None
+    data = FastFigureApi.graphs.readData()
+    currentCsv = data["currentCsv"]
+    if currentCsv is None:
+        return None
+    chart = data["chart"]
+    if chart is not None and chart["editor"]["editable"] is False:
+        return None
+    return FastFigureApi.graphs.addObject(slotId, currentCsv["id"])
+
+
+def importSelectedSlotFile(file):
+    """
+    입력: FastFigureGraphFileActions의 파일 선택 완료가 전달하는 file. 취소는 None이다.
+    처리:
+    1. file이 None이면 None을 반환한다.
+    2. 파일을 전달받은 이 호출에서 appFSM.readState().selectedSlotId를 읽어 slotId로 삼는다.
+       선택 해제면 None을 반환한다. 식별자 0도 불러오기 대상이다.
+    3. FastFigureApi.graphs.importFile(slotId, file)을 한 번 호출한다.
+       Application은 이 slotId와 읽은 파일 바이트를 SLOT_CHART_IMPORTED에 전달한다.
+       비동기 파일 읽기 도중 선택이 바뀌어도 이 불러오기에서 사용하는 slotId를 유지한다.
+    4. Backend가 현재 project에서 slotId의 visible slot을 찾고 파일을 해석한다.
+       FFSX는 applyFfsxSlot, Plotly JSON은 parsePlotlyToEditor로 candidate를 구성한다.
+       필요한 자산과 소유 chart를 같은 project candidate로 검증하여 한 번 반영한다.
+       대상 소멸 또는 파일 해석·검증 오류는 기존 실패 경로로 반환한다.
+    5. Application의 기존 lifecycle 처리가 완료 또는 오류 뒤 ready로 복귀한다.
+       이 절차는 그 chart·미반영 결과를 반환하고 원래 오류를 호출자에 전파한다.
+    변경: 명시한 slotId가 소유하는 chart와 그 파일을 적용하는 데 필요한 project asset.
+    반환: 기존 graphs.importFile의 결과 또는 취소·선택 해제의 None.
+    """
+    if file is None:
+        return None
+    slotId = appFSM.readState()["selectedSlotId"]
+    if slotId is None:
+        return None
+    return FastFigureApi.graphs.importFile(slotId, file)
+
+
+def setSelectedGraphEditable(editable):
+    """
+    입력: editable은 FastFigureGraphFileActions에서 사용자가 입력한 편집 가능 여부 boolean이다.
+    처리:
+    1. appFSM.readState().selectedSlotId를 이번 slotId로 읽는다. 선택 해제면 None을 반환한다.
+    2. FastFigureApi.graphs.readData()["chart"]로 그 슬롯이 소유하는 현재 chart를 얻는다.
+       공식 조회는 slot.content.chart를 activeProject.charts에서 해결한다. chart가 없으면 None을 반환한다.
+    3. 같은 동기 입력 처리에서 FastFigureApi.graphs.setEditable(slotId, chart["id"], editable)을 한 번 호출한다.
+       graphEditorSetEditable이 세 인자를 CHART_MODEL_REPLACED에 전달하고 Backend가 현재 소유 관계를 검증한다.
+    4. Backend의 convertImportedChartToEditable 규칙에 따라 imported conversionRows와 object가 있으면
+       실제 CSV와 csvId 참조를 같은 candidate에 구성한다. conversionRows 또는 object가 없으면
+       그 조건에 맞게 기존 참조·빈 object를 유지한다. editable 변경과 필요한 자산을 한 번 반영한다.
+    5. 최종 editable boolean 또는 미반영 결과를 반환한다. 조회·명령 오류는 호출자에 전파한다.
+    변경: 해당 chart.editor.editable과 기존 변환 규칙에 따라 필요한 project CSV·object 참조.
+    반환: 기존 setEditable의 결과 또는 선택·chart 없음의 None.
+    """
+    slotId = appFSM.readState()["selectedSlotId"]
+    if slotId is None:
+        return None
+    chart = FastFigureApi.graphs.readData()["chart"]
+    if chart is None:
+        return None
+    return FastFigureApi.graphs.setEditable(slotId, chart["id"], editable)
+
+
+def updateSelectedGraphLayout(values):
+    """
+    입력:
+    values는 FastFigureGraphLayoutEditor에서 이번에 입력한 설정값을 담은 부분 record다.
+    구조는 sourcescript/backend/graphs.py의 chartModel["editor"] 중 title과 globalSettings를 따른다.
+    globalSettings의 항목은 같은 파일의 globalSettings 정의를 따르고,
+    globalSettings["axes"]의 축 이름은 그 정의의 axes key,
+    각 축 안의 설정 이름은 같은 파일의 axisSettings key를 사용한다.
+
+    values에 들어 있는 key와 중첩 위치로 변경 대상을 결정한다.
+    - {"title": "측정 결과"}는 chart.editor.title에 새 제목을 입력한 요청이다.
+    - {"globalSettings": {"showLegend": False}}는 chart.editor.globalSettings.showLegend를 끈 요청이다.
+    - {"globalSettings": {"axes": {"xBottom": {"min": 0}}}}는
+      chart.editor.globalSettings.axes.xBottom.min에 최솟값 0을 입력한 요청이다.
+    각 요청에는 이번에 입력한 항목과 새 값만 담는다. 생략한 항목은 현재 값을 유지한다.
+    값의 자료형과 빈 값의 의미도 globalSettings와 axisSettings의 정의를 따른다.
 
     처리:
-    React useSyncExternalStore가 interfaceFSM.state revision/transition을 직접 구독한다.
-    별도 React project store를 만들지 않는다.
+    1. appFSM.readState()에서 이번 입력 시점의 lifecycle과 selectedSlotId를 읽는다.
+       lifecycle이 ready이고 selectedSlotId가 있으면 이를 slotId로 사용한다.
+       선택 해제 또는 busy 상태면 None을 반환하고 이 입력 처리를 끝낸다. slotId 0은 유효하다.
+    2. FastFigureApi.graphs.readData()에서 chart를 얻는다. 이 공식 읽기는 현재 선택 참조로
+       sourcescript/backend/project_state.py의 activeProject.slots에서 visible slot을 찾고,
+       slot["content"]["chart"]의 id로 activeProject.charts에서 소유 chart를 찾는다.
+       chart가 없으면 None을 반환한다.
+    3. FastFigureApi.graphs.updateLayout(slotId, chart["id"], values)를 한 번 호출한다.
+       선택 참조 읽기, chart 조회, 이 호출을 같은 동기 입력 처리에서 연속 수행한다.
+    4. 이 API의 sourcescript/application/public_api/graphs.py::graphEditorUpdateLayout은
+       values를 CHART_LAYOUT_CHANGED의 settings 인자로 전달한다.
+       Backend는 현재 slotId와 chartId의 소유 관계를 다시 확인한다.
+       values.title은 candidate chart.editor.title에 적용하고, values.globalSettings는
+       candidate의 현재 globalSettings와 항목별로 합친다. axes는 축 이름과 설정 이름까지
+       내려가 새 값이 있는 항목을 합치므로 다른 축과 생략한 설정은 유지된다.
+       normalizeGlobalSettings와 normalizeAxisSettings가 입력값을 해석하고,
+       같은 candidate의 graph를 재계산한 뒤 project 검증을 거쳐 한 번 반영한다.
+    5. API가 반환하는 반영 후 layout 또는 미반영 결과를 그대로 반환한다.
+       조회 및 명령 오류는 호출자에 전파한다.
+
+    반환: graphs.updateLayout의 결과. 선택·chart 없음 또는 busy이면 None.
+    변경: 기존 CHART_LAYOUT_CHANGED가 반영하는 해당 slot 소유 chart의 editor 설정과 graph.
     """
-    unsubscribe = "interfaceFSM listener 해제 함수"
-    return unsubscribe
+    current = appFSM.readState()
+    slotId = current["selectedSlotId"]
+    if current["lifecycle"] != "ready" or slotId is None:
+        return None
+    chart = FastFigureApi.graphs.readData()["chart"]
+    if chart is None:
+        return None
+    return FastFigureApi.graphs.updateLayout(slotId, chart["id"], values)
 
 
 def useProjectAssetImportCollision():

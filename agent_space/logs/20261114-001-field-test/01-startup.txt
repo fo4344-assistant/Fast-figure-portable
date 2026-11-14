@@ -1,0 +1,88 @@
+[p1 "Fast figure" | space "Fast figure current code field test"(3): 1 managed, 0 untracked — p1* "Fast figure"]
+root
+  container
+    button [ref=1]
+      text "사이드바 숨기기"
+    paragraph
+      text "Fast figure"
+    toolbar "Fast figure 도구"
+      button [ref=2]
+        text "레이아웃"
+      button [ref=3]
+        text "레이블"
+      button [ref=4]
+        text "캡션"
+      paragraph
+        text "빈 슬롯 또는 그래프를 선택하세요."
+      button "프린트" [ref=5, loc=css:button[aria-label="프린트"]]
+        text "프린트"
+  container
+    container [ref=6]
+      container
+        paragraph
+          text "데이터"
+        button [ref=7]
+          text "데이터 추가"
+        button [ref=8]
+          text "선택 에셋 다운로드"
+        button [ref=9]
+          text "선택 에셋 삭제"
+      container
+        paragraph
+          text "PROJECT DATA"
+        button [ref=10]
+          text "새 폴더"
+        tree
+          treeitem [ref=11]
+            button [ref=12]
+              text "▾ /assets"
+            group
+              treeitem [ref=13]
+                button [ref=14]
+                  text "• csv"
+              treeitem [ref=15]
+                button [ref=16]
+                  text "• images"
+              treeitem [ref=17]
+                button [ref=18]
+                  text "• trash"
+        button [ref=19]
+          text "▾ /slots"
+        container
+          button [ref=20]
+            text "[row=1,col=1] — (에셋 없음)"
+          button [ref=21]
+            text "[row=1,col=2] — (에셋 없음)"
+          button [ref=22]
+            text "[row=2,col=1] — (에셋 없음)"
+          button [ref=23]
+            text "[row=2,col=2] — (에셋 없음)"
+      container
+        paragraph
+          text "프로젝트"
+        container
+          text "프로젝트 이름"
+          textbox [ref=24]
+        container
+          button [ref=25]
+            text "FFPX 내보내기"
+          button [ref=26]
+            text "FFPX 불러오기"
+      button [ref=27]
+        text "UI 색상"
+      container
+        paragraph
+          text "준비됨"
+        container
+          button [ref=28]
+            text "디버깅 켜기"
+          button [ref=29]
+            text "로그 저장"
+          button [ref=30]
+            text "로그 지우기"
+    splitter "사이드바 너비 조절"
+  container
+    text "빈 슬롯"
+    text "빈 슬롯"
+    text "빈 슬롯"
+    text "빈 슬롯"

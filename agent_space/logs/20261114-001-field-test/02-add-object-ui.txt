@@ -1,0 +1,202 @@
+[p1 "Fast figure" | space "Fast figure current code field test"(3): 1 managed, 0 untracked — p1* "Fast figure"]
+root
+  container
+    button [ref=1]
+      text "사이드바 숨기기"
+    paragraph
+      text "Fast figure"
+    toolbar "Fast figure 도구"
+      button [ref=2]
+        text "레이아웃"
+      button [ref=3]
+        text "레이블"
+      button [ref=4]
+        text "캡션"
+      paragraph
+        text "선택한 슬롯: 1행 1열"
+      button "프린트" [ref=5, loc=css:button[aria-label="프린트"]]
+        text "프린트"
+  container
+    container [ref=6]
+      paragraph
+        text "데이터"
+      button [ref=32]
+        text "그래프"
+      button [ref=33]
+        text "이미지"
+      button [ref=7]
+        text "데이터 추가"
+      button [ref=8]
+        text "선택 에셋 다운로드"
+      button [ref=9]
+        text "선택 에셋 삭제"
+      button [ref=34]
+        text "선택 슬롯 초기화"
+      paragraph
+        text "PROJECT DATA"
+      button [ref=10]
+        text "새 폴더"
+      tree
+        treeitem [ref=11]
+          button [ref=12]
+            text "▾ /assets"
+          group
+            treeitem [ref=13]
+              button [ref=14]
+                text "▾ csv"
+              group
+                treeitem [ref=35]
+                  button [ref=36]
+                    text "measurements.csv"
+                    text "5행 · 참조 0"
+                  button "measurements.csv 작업" [ref=37, loc=css:button[aria-label="measurements.csv 작업"]]
+                    text "···"
+            treeitem [ref=15]
+              button [ref=16]
+                text "• images"
+            treeitem [ref=17]
+              button [ref=18]
+                text "• trash"
+      button [ref=19]
+        text "▾ /slots"
+      button [ref=20]
+        text "[row=1,col=1] — (에셋 없음)"
+      button [ref=21]
+        text "[row=1,col=2] — (에셋 없음)"
+      button [ref=22]
+        text "[row=2,col=1] — (에셋 없음)"
+      button [ref=23]
+        text "[row=2,col=2] — (에셋 없음)"
+      container
+        paragraph
+          text "프로젝트"
+        container
+          text "프로젝트 이름"
+          textbox [ref=31]
+            text "Field Test 157"
+        container
+          button [ref=25]
+            text "FFPX 내보내기"
+          button [ref=26]
+            text "FFPX 불러오기"
+      container
+        paragraph
+          text "그래프 / 데이터"
+        button [ref=38]
+          text "빈 CSV 삽입"
+        container
+          text "사용할 CSV"
+          container
+            comboboxgrouping [ref=39]
+              text "measurements.csv"
+            svg_root
+        container
+          text "헤더 행 수"
+          container
+            textbox [ref=40]
+              text "1"
+            container
+              button [ref=41]
+                svg_root
+              button [ref=42]
+                svg_root
+        container [ref=43]
+          table
+            table_row
+              table_cell
+                text "C1 — Time"
+              table_cell
+                text "C2 — Signal"
+              table_cell
+                text "C3 — Control"
+            table_row
+              table_cell
+                text "Time"
+              table_cell
+                text "Signal"
+              table_cell
+                text "Control"
+            table_row
+              table_cell
+                text "0"
+              table_cell
+                text "0"
+              table_cell
+                text "1"
+            table_row
+              table_cell
+                text "1"
+              table_cell
+                text "2"
+              table_cell
+                text "1.2"
+            table_row
+              table_cell
+                text "2"
+              table_cell
+                text "4"
+              table_cell
+                text "1.4"
+            table_row
+              table_cell
+                text "3"
+              table_cell
+                text "3"
+              table_cell
+                text "1.3"
+            table_row
+              table_cell
+                text "4"
+              table_cell
+                text "5"
+              table_cell
+                text "1.5"
+        container
+          button [ref=44]
+            text "편집 가능"
+          button [ref=45]
+            text "오브젝트 추가"
+        paragraph
+          text "그래프 오브젝트"
+        paragraph
+          text "추가된 그래프 오브젝트가 없습니다."
+      container
+        paragraph
+          text "그래프 색상 구성"
+        container
+          button [ref=46]
+            text "기본색"
+          button [ref=47]
+            text "저장"
+          button [ref=48]
+            text "불러오기"
+      container
+        paragraph
+          text "그래프 파일"
+        container
+          button [ref=49]
+            text "FFSX 내보내기"
+          button [ref=50]
+            text "Plotly JSON 내보내기"
+        button [ref=51]
+          text "FFSX/Plotly JSON 불러오기"
+      button [ref=27]
+        text "UI 색상"
+      paragraph
+        text "1개 자산을 프로젝트에 추가했습니다."
+      button [ref=28]
+        text "디버깅 끄기"
+      button [ref=29]
+        text "로그 저장"
+      button [ref=30]
+        text "로그 지우기"
+      container [ref=52]
+        text "0001 14:50:47.648 DEBUG fsm:transition {"event":"assets.importFiles:start","lifecycle":"importing","workspace":"project","overlay":"none","assetSelection":"none","assetPath":null,"graphObject":"none",..."
+      button [ref=53]
+        text "README"
+    splitter "사이드바 너비 조절"
+  container
+    text "빈 슬롯"
+    text "빈 슬롯"
+    text "빈 슬롯"
+    text "빈 슬롯"

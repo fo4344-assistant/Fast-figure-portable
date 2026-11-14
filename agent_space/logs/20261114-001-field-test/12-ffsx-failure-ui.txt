@@ -1,0 +1,184 @@
+[p1 "Fast figure" | space "Fast figure current code field test"(3): 1 managed, 0 untracked — p1* "Fast figure"]
+root
+  container
+    button [ref=318]
+      text "사이드바 숨기기"
+    paragraph
+      text "Fast figure"
+    toolbar "Fast figure 도구"
+      button [ref=319]
+        text "레이아웃"
+      button [ref=320]
+        text "레이블"
+      button [ref=321]
+        text "캡션"
+      paragraph
+        text "선택한 슬롯: 1행 3열"
+      button "프린트" [ref=322, loc=css:button[aria-label="프린트"]]
+        text "프린트"
+  container
+    container [ref=323]
+      paragraph
+        text "데이터"
+      button [ref=358]
+        text "그래프"
+      button [ref=359]
+        text "이미지"
+      button [ref=324]
+        text "데이터 추가"
+      button [ref=325]
+        text "선택 에셋 다운로드"
+      button [ref=326]
+        text "선택 에셋 삭제"
+      button [ref=360]
+        text "선택 슬롯 초기화"
+      container
+        paragraph
+          text "PROJECT DATA"
+        button [ref=327]
+          text "새 폴더"
+        tree
+          treeitem [ref=328]
+            button [ref=329]
+              text "▾ /assets"
+            group
+              treeitem [ref=330]
+                button [ref=331]
+                  text "▾ csv"
+                group
+                  treeitem [ref=361]
+                    button [ref=362]
+                      text "measurements.csv"
+                      text "5행 · 참조 1"
+                    button "measurements.csv 작업" [ref=363, loc=css:button[aria-label="measurements.csv 작업"]]
+                      text "···"
+                  treeitem [ref=364]
+                    button [ref=365]
+                      text "measurements (2).csv"
+                      text "5행 · 참조 1"
+                    button "measurements (2).csv 작업" [ref=366, loc=css:button[aria-label="measurements (2).csv 작업"]]
+                      text "···"
+              treeitem [ref=332]
+                button [ref=333]
+                  text "▸ images"
+              treeitem [ref=334]
+                button [ref=335]
+                  text "• trash"
+        button [ref=336]
+          text "▾ /slots"
+        button [ref=337]
+          text "[row=1,col=1] — measurements.csv · /assets/csv/measurements.csv, measurements (2).csv · /assets/csv/measurements (2).csv"
+        button [ref=338]
+          text "[row=1,col=2] — edge-colors.png · /assets/images/edge-colors.png"
+        button [ref=339]
+          text "[row=1,col=3] — (에셋 없음)"
+        button [ref=340]
+          text "[row=2,col=1] — (에셋 없음)"
+        button [ref=341]
+          text "[row=2,col=2] — (에셋 없음)"
+        button [ref=342]
+          text "[row=2,col=3] — (에셋 없음)"
+        button [ref=343]
+          text "[row=3,col=1] — (에셋 없음)"
+        button [ref=344]
+          text "[row=3,col=2] — (에셋 없음)"
+        button [ref=345]
+          text "[row=3,col=3] — (에셋 없음)"
+      container
+        paragraph
+          text "프로젝트"
+        container
+          text "프로젝트 이름"
+          textbox [ref=346]
+            text "Field Test 157"
+        container
+          button [ref=347]
+            text "FFPX 내보내기"
+          button [ref=348]
+            text "FFPX 불러오기"
+      container
+        paragraph
+          text "그래프 / 데이터"
+        button [ref=374]
+          text "빈 CSV 삽입"
+        container
+          text "사용할 CSV"
+          container
+            comboboxgrouping [ref=375]
+            svg_root
+        container
+          button [ref=380]
+            text "편집 가능"
+          button [ref=381]
+            text "오브젝트 추가"
+        paragraph
+          text "그래프 오브젝트"
+        paragraph
+          text "추가된 그래프 오브젝트가 없습니다."
+      container
+        paragraph
+          text "그래프 색상 구성"
+        container
+          button [ref=513]
+            text "기본색"
+          button [ref=514]
+            text "저장"
+          button [ref=515]
+            text "불러오기"
+      container
+        paragraph
+          text "그래프 파일"
+        container
+          button [ref=516]
+            text "FFSX 내보내기"
+          button [ref=517]
+            text "Plotly JSON 내보내기"
+        button [ref=518]
+          text "FFSX/Plotly JSON 불러오기"
+      button [ref=349]
+        text "UI 색상"
+      container
+        paragraph
+          text "슬롯 불러오기 오류: 불러올 visible 슬롯이 없습니다."
+        container
+          button [ref=350]
+            text "디버깅 켜기"
+          button [ref=351]
+            text "로그 저장"
+          button [ref=352]
+            text "로그 지우기"
+      button [ref=353]
+        text "README"
+    splitter "사이드바 너비 조절"
+  container [ref=354]
+    container
+      container
+        container
+          svg_root "0 1 2 3 4 0 2 4"
+            text "0"
+            text "1"
+            text "2"
+            text "3"
+            text "4"
+            text "0"
+            text "2"
+            text "4"
+          svg_root "C2 C2 measurements.csv"
+            text "C2"
+            text "C2"
+            text "measurements.csv"
+          svg_root
+        button "슬롯 이동 및 선택" [ref=519]
+      container
+        image
+        button "슬롯 이동 및 선택" [ref=520]
+      text "빈 슬롯"
+      text "빈 슬롯"
+      text "빈 슬롯"
+      text "빈 슬롯"
+      text "빈 슬롯"
+      text "빈 슬롯"
+      text "빈 슬롯"
+    textfield [ref=357]
+      text "Field caption <b>literal</b> Time versus Signal"
+  svg_root

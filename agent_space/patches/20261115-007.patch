@@ -1,0 +1,82 @@
+diff --git a/agent_space/patches/20261115-007.md b/agent_space/patches/20261115-007.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..969843480173a1cc9360dfb3306bc039c5ddb37a
+--- /dev/null
++++ b/agent_space/patches/20261115-007.md
+@@ -0,0 +1,17 @@
++# 20261115-007
++
++## 목적과 변경
++
++사용자가 제시한 `Args`·`Return`·`변경`·`처리` 양식에 맞춰 `agent_space/policies/examples/source-script_example1.py`의 함수 설명을 수정했다.
++
++인자와 반환값을 `- 이름:` 항목으로 표시하고, 별도 목적 항목을 제거했다. 반환 설명에는 계산 결과의 의미와 px 단위를 적었다. 변경 항목을 목록으로 표시하고 공백 오류를 정리했다. 기존 원형·Source of Truth 표기, 자연어 알고리즘과 `return slotGeometry`는 유지했다.
++
++## 선택 이유와 대안
++
++사용자가 지정한 양식을 그대로 적용했다. 기존 한국어 입력·반환 제목을 유지하거나 다른 문서화 형식을 도입하는 대안은 요청한 양식과 달라 선택하지 않았다.
++
++## 실제 diff와 범위
++
++수정 직전 예시에는 지역변수 정의가 설명 블록 위로 이동되어 있었다. 그 배치를 보존했다. 기준 HEAD `9e58bdf0381b62bb59068a44ca78d75be6edcaed`에 수정 직전 예시를 포함한 native Git tree `b93430a0a2278d10eb8fa9b62bd173d447b3e023`를 비교 기준으로 사용했다. 동명 patch는 예시의 이번 형식 변경과 이 설명 문서의 실제 native Git diff다. 임시 index만 사용하며 일반 index와 기존 작업은 유지한다.
++
++기존 006 패치 쌍은 최초 저장 기록으로 보존한다. 개발 정책 본문, Source Script 의미 파일, pseudocode, source code와 계층 metadata는 변경하지 않았다. 테스트·예시 실행·build·version checker·commit·push는 수행하지 않았다.
+diff --git a/agent_space/policies/examples/source-script_example1.py b/agent_space/policies/examples/source-script_example1.py
+index 7955c9bd189bf5c4d5d896f22785a4d4a7f815f1..79e6627183fd1961dc89659b05e4078776da9d2b 100644
+--- a/agent_space/policies/examples/source-script_example1.py
++++ b/agent_space/policies/examples/source-script_example1.py
+@@ -25,33 +25,30 @@ def gridSlotGeometry(layout, geometry, slot):
+         "rowHeight": "기본 셀 높이. 단위: px.",
+         "width": "대상 슬롯 너비. 단위: px.",
+         "height": "대상 슬롯 높이. 단위: px.",
+-    }    
++    }
+     """
+-    목적:
+-        기본 셀과 대상 슬롯의 너비·높이를 계산한다.
+-
+-    입력:
+-        layout:
+-            딕셔너리.
+-                원형: /backend/project_state/ProjectObject._state.layout
+-                Source of Truth: /backend/project_state/activeProject._state.layout
+-
+-        geometry:
+-            딕셔너리.
+-                원형: /backend/layout_annotations/dashboardGeometryResult
+-
+-        slot:
+-            슬롯 오브젝트 또는 None.
+-            슬롯 오브젝트:
+-                원형: /backend/project_state/slot
+-                Source of Truth: /backend/project_state/activeProject._state.slots의 원소.
+-
+-    반환:
+-        slotGeometry:
+-            딕셔너리.
++    Args:
++    - layout:
++      딕셔너리.
++        원형: /backend/project_state/ProjectObject._state.layout
++        Source of Truth: /backend/project_state/activeProject._state.layout
++
++    - geometry:
++      딕셔너리.
++        원형: /backend/layout_annotations/dashboardGeometryResult
++
++    - slot:
++      슬롯 오브젝트 또는 None.
++      슬롯 오브젝트:
++        원형: /backend/project_state/slot
++        Source of Truth: /backend/project_state/activeProject._state.slots의 원소.
++
++    Return:
++    - slotGeometry:
++      기본 셀과 대상 슬롯의 너비·높이(px)를 담은 딕셔너리.
+ 
+     변경:
+-        없음.
++    - 없음.
+ 
+     처리:
+         1. 전체 너비에서 좌우 여백과 열 사이 간격을 빼고,

@@ -1,0 +1,129 @@
+diff --git a/agent_space/patches/20261115-006.md b/agent_space/patches/20261115-006.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..635418036ad41923236e22e2ddf9befb4e4414d0
+--- /dev/null
++++ b/agent_space/patches/20261115-006.md
+@@ -0,0 +1,19 @@
++# 20261115-006
++
++## 목적과 변경
++
++사용자가 다듬은 Source Script 예시를 요청한 경로인 `agent_space/policies/examples/source-script_example1.py`에 저장한다.
++
++입력의 자료형·원형·Source of Truth를 구분하고, 지역변수는 함수 바깥과 같은 선언 표기로 작성한다. 처리 절차는 자연어와 계산식으로 설명한다. 함수 내부에서 정의한 반환값의 원형 표기를 생략하고, 본문 끝에 `return slotGeometry`를 포함했다.
++
++## 선택 이유와 대안
++
++대화에서 수정한 예시를 별도 파일로 보관하여 이후 Source Script 작성 시 직접 참조할 수 있게 했다. 개발 정책 본문에 예시를 삽입하는 방식은 사용자가 지정한 examples 경로와 별도의 변경이므로 선택하지 않았다. 실행 가능한 치수 계산 구현으로 바꾸는 방식은 자연어 알고리즘을 사용하는 이번 예시의 작성 목적과 달라 선택하지 않았다.
++
++## 실제 diff와 범위
++
++동명 patch는 기준 HEAD `9e58bdf0381b62bb59068a44ca78d75be6edcaed`에 대한 새 예시와 이 설명 문서의 실제 native Git diff다. 일반 index는 유지하고 임시 index로 두 파일만 기록한다.
++
++기존 Source Script 수정, Plan028·Plan029, 실필드 증거와 001~005 패치 쌍은 보존하며 이번 payload에는 포함하지 않는다. Source Script 의미 파일, pseudocode, source code, 계층 metadata, 개발 정책 본문과 AGENT는 변경하지 않았다. 예시 저장은 기존 Source Script의 닫힘이나 동작 검증 완료를 의미하지 않는다.
++
++테스트·예시 실행·build·version checker·commit·push는 수행하지 않았다.
+diff --git a/agent_space/policies/examples/source-script_example1.py b/agent_space/policies/examples/source-script_example1.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..0e61bae4f7fccd4c3211c1e8b54c1ac1d7e33c74
+--- /dev/null
++++ b/agent_space/policies/examples/source-script_example1.py
+@@ -0,0 +1,98 @@
++# /backend/layout_annotations
++
++# dashboardGeometry 반환값의 원형
++dashboardGeometryResult = {
++    "referenceWidth": "기준 너비. 단위: px.",
++    "width": "대시보드 전체 너비. 단위: px.",
++    "height": "대시보드 전체 높이. 단위: px.",
++    "scale": "기준 너비에 대한 배율.",
++    "aspect": "대시보드의 너비 대 높이 비율.",
++    "outerMargin": "상하좌우 각각의 바깥 여백. 단위: px.",
++    "gap": "인접한 셀 사이의 간격. 단위: px.",
++    "radius": "모서리 반경. 단위: px.",
++}
++
++
++def gridSlotGeometry(layout, geometry, slot):
++    """
++    목적:
++        기본 셀과 대상 슬롯의 너비·높이를 계산한다.
++
++    입력:
++        layout:
++            딕셔너리.
++                원형: /backend/project_state/ProjectObject._state.layout
++                Source of Truth: /backend/project_state/activeProject._state.layout
++
++        geometry:
++            딕셔너리.
++                원형: /backend/layout_annotations/dashboardGeometryResult
++
++        slot:
++            슬롯 오브젝트 또는 None.
++            슬롯 오브젝트:
++                원형: /backend/project_state/slot
++                Source of Truth: /backend/project_state/activeProject._state.slots의 원소.
++
++    반환:
++        slotGeometry:
++            딕셔너리.
++
++    변경:
++        없음.
++
++    처리:
++        1. 전체 너비에서 좌우 여백과 열 사이 간격을 빼고,
++           전체 열 수로 나누어 colWidth에 대입한다.
++
++           colWidth =
++               (geometry["width"]
++                - 2 × geometry["outerMargin"]
++                - geometry["gap"] × (layout["gridCols"] - 1))
++               ÷ layout["gridCols"]
++
++        2. 전체 높이에서 상하 여백과 행 사이 간격을 빼고,
++           전체 행 수로 나누어 rowHeight에 대입한다.
++
++           rowHeight =
++               (geometry["height"]
++                - 2 × geometry["outerMargin"]
++                - geometry["gap"] × (layout["gridRows"] - 1))
++               ÷ layout["gridRows"]
++
++        3. slot이 None이면 colSpan과 rowSpan에 각각 1을 대입한다.
++           그 외에는 colSpan에 slot.colSpan을,
++           rowSpan에 slot.rowSpan을 대입한다.
++
++        4. 기본 셀들의 너비와 슬롯 내부의 열 간격을 합하여
++           slotWidth에 대입한다.
++
++           slotWidth =
++               colWidth × colSpan + geometry["gap"] × (colSpan - 1)
++
++        5. 기본 셀들의 높이와 슬롯 내부의 행 간격을 합하여
++           slotHeight에 대입한다.
++
++           slotHeight =
++               rowHeight × rowSpan + geometry["gap"] × (rowSpan - 1)
++
++        6. slotGeometry["colWidth"]에 colWidth를,
++           slotGeometry["rowHeight"]에 rowHeight를,
++           slotGeometry["width"]에 slotWidth를,
++           slotGeometry["height"]에 slotHeight를 대입한다.
++
++        7. slotGeometry를 반환한다.
++    """
++    colWidth = "기본 셀 한 열의 너비. 단위: px."
++    rowHeight = "기본 셀 한 행의 높이. 단위: px."
++    colSpan = "대상 슬롯이 차지하는 열 수. 양의 정수."
++    rowSpan = "대상 슬롯이 차지하는 행 수. 양의 정수."
++    slotWidth = "대상 슬롯의 너비. 내부 열 간격을 포함한다. 단위: px."
++    slotHeight = "대상 슬롯의 높이. 내부 행 간격을 포함한다. 단위: px."
++    slotGeometry = {
++        "colWidth": "기본 셀 너비. 단위: px.",
++        "rowHeight": "기본 셀 높이. 단위: px.",
++        "width": "대상 슬롯 너비. 단위: px.",
++        "height": "대상 슬롯 높이. 단위: px.",
++    }
++    return slotGeometry
