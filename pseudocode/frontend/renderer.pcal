@@ -366,7 +366,7 @@ EachWord:
       proposed := IF line = "" THEN words[wi] ELSE line \o " " \o words[wi];
       budget := Maximum(style.minimumTextWidth,available - IF firstLine THEN prefixWidth ELSE 0);
       if InvokeMeasureText(measureText,proposed,caption.settings.fontFamily,caption.settings.fontSize,400) > budget
-         /\ (line # "" \/ (firstLine /\ prefix # "")) then
+         /\ line # "" then
         lines := Append(lines,[text |-> line,prefix |-> IF firstLine THEN prefix ELSE "",prefixWidth |-> IF firstLine THEN prefixWidth ELSE 0]);
         firstLine := FALSE;
         line := "";

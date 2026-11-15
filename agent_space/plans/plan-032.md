@@ -6,10 +6,10 @@
 - 사용자 요구: 번역 불일치 검토 결과에 대한 수정 계획을 작성한다.
 - 근거: `agent_space/reviews/review-20261115-002-source-script-pseudocode.md`의 R01~R20. 각 항목의 Source Script·pseudocode 경로와 행, 대조 입력은 해당 review에 기록되어 있다.
 - 기준 commit: `959f154dfbec5441945593b5a36740e9347de316`.
-- 현재 계층: Source Script 52/stale/open, pseudocode 26/stale, source code 157/stale.
+- 계획 작성 시점 계층: Source Script 52/stale/open, pseudocode 26/stale, source code 157/stale.
 - 고정된 번역 기준: Source Script 52, fingerprint `sha256:2740bd377c0f52c2ee99b32cb72eef0501e2c644656a788fe3c8aa581b095604`. 이 작업에서 Source Script는 수정하지 않는다.
 - Plan031까지 작성된 Source Script를 그대로 읽고, R01~R20의 차이를 pseudocode에서 수정한다. 기존 review와 패치 기록은 보존한다.
-- 현재 요청에서는 이 계획과 실제 diff·동명 설명 문서만 작성한다. 아래 구현 단계는 후속 작업 승인을 받은 뒤 시작한다.
+- 계획 작성 후 사용자가 pseudocode 수정과 선행 커밋을 승인했다. 실제 수정 결과는 §8에 기록한다.
 
 이 문서의 경로는 `Fast-figure-portable/` 기준이다. PlusCal은 pseudocode의 구현 언어다. 계층 이름은 Source Script → pseudocode → source code로 사용한다.
 
@@ -122,7 +122,7 @@ P1의 자료 보존·명령 반영 문제를 우선하되, 공통 정규화와 �
 - Source Script 52와 수정된 pseudocode의 입력·처리·반환·실패를 대조한 근거를 기록한다. 정적 수정·검토와 checker 실행·통과를 구분한다. 실행하지 않은 checker나 TLC를 통과로 기록하거나 current로 자동 승격하지 않는다. 정책상 버전 완료 조건이 남으면 그 상태와 필요한 후속 승인을 기록한다.
 - source code 157과 선택적 verification-model의 기존 derived_from·상태는 이 수정으로 최신이라고 간주하지 않는다. 후속 전파는 별도 승인 범위로 둔다.
 - 각 coherent 수정에는 실제 native Git diff와 동명 설명을 남긴다. 기존 plan·review·patch 기록과 다른 작업의 미커밋 파일을 보존한다.
-- 현재 계획 작성 산출물: `agent_space/plans/plan-032.md`, `agent_space/patches/20261115-017.patch`, `agent_space/patches/20261115-017.md`. 현재 단계에서는 구현·계층 metadata를 수정하지 않는다.
+- 현재 계획 작성 산출물: `agent_space/plans/plan-032.md`, `agent_space/patches/20261115-017.patch`, `agent_space/patches/20261115-017.md`. 계획 작성 단계에서는 구현·계층 metadata를 보존했으며, 승인 후 변경은 §8에 기록한다.
 
 ## 7. 중단 조건
 
@@ -130,3 +130,19 @@ P1의 자료 보존·명령 반영 문제를 우선하되, 공통 정규화와 �
 - 전체 content 보존, chart 단일 소유, 현재 참조 재검사, 단일 반영을 지키면서 번역할 수 없으면 책임 경계부터 재검토한다.
 - 기준 파일이나 HEAD가 다른 작업으로 변경되면 관련 항목을 다시 읽고 이미 반영된 수정을 확인한다.
 - 필요한 실행 검증에 별도 승인이 없으면 정적 결과와 미실행 항목을 기록한다. 이 계획에서 실행·원격 작업을 자동 시작하지 않는다.
+
+## 8. 승인 후 실제 수정 결과 — 2026-11-15
+
+- 사용자 지시에 따라 기존 문서를 commit `32bde7f00809d63e4592366a5a13df1823a72ef7`에 먼저 보존했다. 이후 이 commit을 실제 증분 기준으로 사용했다. 추가 커밋·푸시는 수행하지 않았다.
+- 고정된 Source Script 52와 source code는 보존하고 pseudocode 12개 파일을 수정했다.
+- §4.1 R10~R14: 일반 초기화와 가져오기가 공통 설정 보완을 사용하며, 전체 content의 추가 필드와 명시적 무효 imageSettings를 보존한다. 등록 조회와 gridLimits 전달·설정 범위 검사를 반영했다.
+- §4.2 R08/R09: 파일 대기 뒤 권위 재확인을 취소·후보 부재보다 먼저 수행하고, 성공 결과 count를 실제 전후 참조의 중복 개수 차이로 계산한다.
+- §4.3 R18: objects를 정규화·검증한 뒤 같은 후보의 CSV로 graph를 재계산하여 저장한다.
+- §4.4 R15/R16/R17/R20: raw image의 슬롯 전환, raw CSV 교체의 기존 header 유지, 빈 CSV/TSV 행 반환, FFPX reader의 header 정규화를 반영했다.
+- §4.5 R04~R07: Frontend 방향 발행, CSV 선택 helper 별칭·전이 후 공식 재조회, 부재 슬롯 add의 명령 전 반환을 반영했다.
+- §4.6 R01~R03: 네 현재 입력 절차와 컴포넌트 이벤트 연결, revision 구독 비교·각 render의 공식 읽기, nodes·slotRows 필드를 반영했다.
+- §4.7 R19: 빈 본문 줄의 긴 단어를 유지하는 조건으로 맞추고 기존 clip·caption/export 높이 계산을 보존했다.
+- 후속 정적 대조: `agent_space/reviews/review-20261115-003-pseudocode-corrections.md`. R01~R20 각각의 수정 위치·같은 입력·결과·한계를 기록했다. 기존 review의 발견 기록과 미확정 상위 의미는 보존했다.
+- pseudocode 27 fingerprint: `sha256:5e40212959fccdb995ced547c8947a9ec0584c53eca8e11ac61d7ffed38a6558`. derived_from은 고정 Source Script 52 fingerprint를 가리킨다. 상태는 stale을 유지하며 Source Script의 stale/open과 source code·verification-model의 lineage는 변경하지 않았다.
+- 실제 native diff와 설명: `agent_space/patches/20261115-019.patch`, `agent_space/patches/20261115-019.md`.
+- 테스트·앱·브라우저·빌드·TLC·checker 본체·Actions는 실행하지 않았다. 정적 수정·대조 결과이며 실행 통과나 전체 계층 닫힘을 선언하지 않는다.

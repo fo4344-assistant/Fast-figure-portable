@@ -12,6 +12,7 @@ variables slot = NoValue, event = "", tuple = NoValue;
 begin
 ReadForRoutingNotCandidate:
   call dispatchProjectQuery("project-api",[operation |-> "slots.readSelected",frontendState |-> [selectedSlotId |-> slotId]]); slot := result;
+  if slot = NoValue then result := NoValue; return; end if;
   event := IF HasOwningChart(slot) THEN "GRAPH_OBJECTS_REPLACED" ELSE "SLOT_DATA_CONNECTED";
   call dispatchProjectCommand(event,[slotId |-> slotId,csvId |-> csvId,operation |-> "graphs.addObject"]); tuple := result;
   if ~tuple[1].committed then result := tuple[1]; return; end if;

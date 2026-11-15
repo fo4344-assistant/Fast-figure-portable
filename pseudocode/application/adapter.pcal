@@ -15,6 +15,20 @@ BACKEND_REFERENCE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT
 (* --algorithm ApplicationAdapter
 variables result = NoValue;
 
+procedure ApplicationInterface_readState()
+begin
+CurrentFrontendOwnerRead:
+  call InterfaceStateMachine_readState();
+  return;
+end procedure;
+
+procedure ApplicationInterface_subscribe(onStoreChange)
+begin
+FrontendPublicationSubscription:
+  result := SubscribeToInterfaceFsmRevisionTransitions(onStoreChange);
+  return;
+end procedure;
+
 procedure dispatchProjectQuery(query, payload)
 begin
 ReadThroughBackend:

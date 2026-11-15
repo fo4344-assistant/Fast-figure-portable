@@ -3,6 +3,13 @@ EXTENDS Naturals, Reals, Sequences, FiniteSets
 \* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
 \* FastFigureApi is the supplied public action surface; no Backend import.
 \* UI drafts/resolvers/selection/geometry below live only within component lifetime.
+\* ReactUseSyncExternalStore(subscribe,getSnapshot): React registers subscribe's listener,
+\* compares getSnapshot's scalar revision with the previous revision, schedules render
+\* on a difference, and calls the returned unsubscribe on component teardown.
+\* BindComponentEvent(component,event,handler): associates a defined procedure reference
+\* with that component event, invokes it once with the event's arguments, and propagates
+\* its result/failure. BindComponentRenderRead(reader) calls reader for each render.
+\* These platform bindings retain no Project mutation input or display-state authority.
 CONSTANT NoValue
 SettingsOverlayNames == {"layout","label","caption","print"}
 ComponentOwners == [
@@ -38,7 +45,7 @@ begin
 OfficialReadsInOneSynchronousDisplay:
   nodes := InvokePublicApi("assets.readTree",[]);
   layout := InvokePublicApi("layout.readState",[]);
-  result := [assetNodes |-> nodes,slotRows |-> layout.visibleSlots];
+  result := [nodes |-> nodes,slotRows |-> layout.visibleSlots];
   \* No await/callback/command between reads, retained mirror or flat public tree contract.
   \* Canonical node kind/asset supplies directory and CSV/image UI candidates.
   \* Slot rows consume Backend assetDisplay, including empty and embedded rows.
@@ -68,8 +75,8 @@ CurrentAuthorityThenSynchronousCommand:
   rows := current.gridRows; cols := current.gridCols;
   number := TryNonemptyFiniteInputNumber(value);
   if number.valid then
-    if dimension = "rows" then rows := Maximum(1,Minimum(8,number.value));
-    else cols := Maximum(1,Minimum(8,number.value)); end if;
+    if dimension = "rows" then rows := Maximum(current.gridLimits.gridRows[1],Minimum(current.gridLimits.gridRows[2],number.value));
+    else cols := Maximum(current.gridLimits.gridCols[1],Minimum(current.gridLimits.gridCols[2],number.value)); end if;
   end if;
   result := InvokePublicApi("layout.setGrid",[rows |-> rows,cols |-> cols]);
   \* Empty/invalid input keeps SAME current dimension; companion is also current.
@@ -93,8 +100,79 @@ end procedure;
 procedure subscribeAppState(onStoreChange)
 begin
 DirectFsmExternalStore:
-  result := SubscribeToInterfaceFsmRevisionTransitions(onStoreChange);
+  call ApplicationInterface_subscribe(onStoreChange);
   \* Return unsubscribe. No React project store or subscription-driven Project write.
+  return;
+end procedure;
+
+procedure getAppStateSnapshot()
+begin
+CurrentRevisionNumber:
+  call ApplicationInterface_readState(); result := result.revision;
+  return;
+end procedure;
+
+procedure useAppState()
+begin
+RevisionSubscriptionAndFreshRenderRead:
+  \* React hook plumbing receives these defined procedure references.
+  ReactUseSyncExternalStore(subscribeAppState,getAppStateSnapshot);
+  call ApplicationInterface_readState();
+  return;
+end procedure;
+
+procedure addSelectedGraphObject()
+variables state = NoValue, context = NoValue, slotId = NoValue;
+begin
+CurrentReadySlotAndCsv:
+  call ApplicationInterface_readState(); state := result;
+  slotId := state.selectedSlotId;
+  if state.lifecycle # "ready" \/ slotId = NoValue then result := NoValue; return; end if;
+  context := InvokePublicApi("graphs.readData",[]);
+  if context.currentCsv = NoValue then result := NoValue; return; end if;
+  if context.chart # NoValue then
+    if context.chart.editor.editable = FALSE then result := NoValue; return; end if;
+  end if;
+  result := InvokePublicApi("graphs.addObject",[slotId |-> slotId,csvId |-> context.currentCsv.id]);
+  return;
+end procedure;
+
+procedure importSelectedSlotFile(file)
+variables state = NoValue, slotId = NoValue;
+begin
+CaptureFileReceiptTarget:
+  if file = NoValue then result := NoValue; return; end if;
+  call ApplicationInterface_readState(); state := result;
+  slotId := state.selectedSlotId;
+  if slotId = NoValue then result := NoValue; return; end if;
+  result := InvokePublicApi("graphs.importFile",[slotId |-> slotId,file |-> file]);
+  \* The public import lifecycle owns the await; slotId remains this operation's input.
+  return;
+end procedure;
+
+procedure setSelectedGraphEditable(editable)
+variables state = NoValue, context = NoValue, slotId = NoValue;
+begin
+CurrentSlotAndOwningChart:
+  call ApplicationInterface_readState(); state := result;
+  slotId := state.selectedSlotId;
+  if slotId = NoValue then result := NoValue; return; end if;
+  context := InvokePublicApi("graphs.readData",[]);
+  if context.chart = NoValue then result := NoValue; return; end if;
+  result := InvokePublicApi("graphs.setEditable",[slotId |-> slotId,chartId |-> context.chart.id,editable |-> editable]);
+  return;
+end procedure;
+
+procedure updateSelectedGraphLayout(values)
+variables state = NoValue, context = NoValue, slotId = NoValue;
+begin
+CurrentReadySlotAndLayoutInput:
+  call ApplicationInterface_readState(); state := result;
+  slotId := state.selectedSlotId;
+  if state.lifecycle # "ready" \/ slotId = NoValue then result := NoValue; return; end if;
+  context := InvokePublicApi("graphs.readData",[]);
+  if context.chart = NoValue then result := NoValue; return; end if;
+  result := InvokePublicApi("graphs.updateLayout",[slotId |-> slotId,chartId |-> context.chart.id,values |-> values]);
   return;
 end procedure;
 
@@ -183,6 +261,12 @@ procedure FastFigureShell()
 begin
 NoProjectStoreInShell:
   ApplySessionSidebarGeometryCss(sidebarGeometry);
+  \* Procedure references bind component events to the current-input algorithms above.
+  BindComponentEvent("FastFigureGraphDataEditor","addObject",addSelectedGraphObject);
+  BindComponentEvent("FastFigureGraphFileActions","fileReceived",importSelectedSlotFile);
+  BindComponentEvent("FastFigureGraphFileActions","editableChanged",setSelectedGraphEditable);
+  BindComponentEvent("FastFigureGraphLayoutEditor","settingsChanged",updateSelectedGraphLayout);
+  BindComponentRenderRead(useAppState);
   result := ComposeExistingAppShellHeaderNavbarMainAndOverlayComponents(ComponentOwners);
   return;
 end procedure;

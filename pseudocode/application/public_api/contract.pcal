@@ -62,7 +62,7 @@ PUBLIC_API_METHODS == [
  "graphs.readData" |-> <<"selected-query","graphs.readData">>,
  "graphs.readLayout" |-> <<"selected-query","graphs.readLayout">>,
  "graphs.readPalette" |-> <<"selected-query","graphs.readPalette">>,
- "graphs.selectCsv" |-> <<"select-asset","csv">>,
+ "graphs.selectCsv" |-> <<"wrapper","selectProjectCsv">>,
  "graphs.setHeaderLines" |-> <<"wrapper","graphEditorSetHeaderLines">>,
  "graphs.setEditable" |-> <<"wrapper","graphEditorSetEditable">>,
  "graphs.addObject" |-> <<"wrapper","graphEditorAdd">>,
@@ -217,7 +217,7 @@ BindExactSourceInputs:
     call readAssetCollisionModel(args.file,args.directory,args.reservedPaths);
   elsif method = "assets.resolveImportPlan" then
     call readAssetImportPlan(args.model,args.choice,args.reservedPaths);
-  elsif method = "assets.selectCsv" then
+  elsif method \in {"assets.selectCsv","graphs.selectCsv"} then
     call selectProjectCsv(args.path);
   elsif method = "assets.download" then
     call downloadProjectAsset(args.path);

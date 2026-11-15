@@ -256,6 +256,7 @@ CommandInternalArrayOnly:
   call NormalizeCommandObjects(objects); chart.editor.objects := result;
 ValidateZeroOrMoreObjects:
   call validateChartModel(chart, candidate.assets.csvFiles);
+  call rebuildEditableGraph(chart,candidate); chart := result;
   ReplaceCandidateChart(candidate, chartId, chart);
   \* No fake object when empty; no commit, selection event or current CSV write.
   result := [candidate |-> candidate, indexHint |-> index];

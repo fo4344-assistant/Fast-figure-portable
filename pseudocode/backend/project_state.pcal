@@ -20,7 +20,8 @@ PUBLIC_BACKEND_READ_OPERATIONS == {"project.readName","slots.readSelected","imag
   "captions.readSlot","labels.readState","layout.readState","assets.readTree","assets.readTrash",
   "assets.isTrashed","assets.movable","assets.draggableAsset","assets.readDeletionTarget",
   "assets.moveOptions","assets.planMove","assets.resolveTreeSelection","assets.fileKind",
-  "assets.collisionModel","assets.resolveImportPlan"}
+  "assets.collisionModel","assets.resolveImportPlan","project.exportFile","assets.download",
+  "graphs.exportFfsx","graphs.exportPlotlyJson"}
 SequenceSet(seq) == {seq[i] : i \in 1..Len(seq)}
 VisibleSlot(project, id) ==
   IF \E s \in SequenceSet(project.slots): s.id = id /\ ~s.hidden
@@ -236,10 +237,7 @@ CanonicalSourcePathsAndLegacyStorageOnly:
     i := i + 1;
   end while;
 MissingLocalImageSettingsNotAssetSettings:
-  if content.imageSettings = NoValue then
-    content.imageSettings := DeepCopy(BackendSettings.defaults.slotSettings.content.imageSettings);
-  else
-    Require(IsRecord(content.imageSettings));
+  if IsRecord(content.imageSettings) then
     names := PropertyNames(BackendSettings.defaults.slotSettings.content.imageSettings); i := 1;
     while i <= Len(names) do
       key := names[i];
@@ -264,16 +262,11 @@ ReturnSameSlotMeaning:
 end procedure;
 
 procedure slotHasNonDefaultLocalState(slot)
-variables normalized = NoValue, defaults = BackendSettings.defaults.slotSettings.content;
+variables defaults = DeepCopy(BackendSettings.defaults.slotSettings.content);
 begin
-WholeLocalPayloadNotGeometry:
-  call normalizeSlotContent(DeepCopy(slot)); normalized := result;
-  result := normalized.content.chart # NoValue
-         \/ normalized.content.imageId # NoValue
-         \/ normalized.content.contentType # defaults.contentType
-         \/ normalized.content.imageSettings # defaults.imageSettings
-         \/ normalized.caption # NoValue;
-  \* Image settings are compared as a whole. row/col/span/hidden are not payload.
+WholeLocalPayloadComparison:
+  defaults.chart := NoValue; defaults.imageId := NoValue;
+  result := slot.content # defaults \/ slot.caption # NoValue;
   return;
 end procedure;
 
@@ -372,6 +365,7 @@ SlotsGeometryReferencesAndLocalDisplay:
       Require(item.content.chart \in chartIds); owners[item.content.chart] := owners[item.content.chart] + 1;
     end if;
     if item.content.imageId # NoValue then Require(ImageById(state,item.content.imageId) # NoValue); end if;
+    Require(IsRecord(item.content.imageSettings));
     Require(item.content.imageSettings.fit \in {"contain","cover","manual"});
     Require(FiniteInRange(item.content.imageSettings.scale,BackendSettings.defaults.limits.imageSettings.scale));
     Require(FiniteInRange(item.content.imageSettings.x,BackendSettings.defaults.limits.imageSettings.x));
@@ -443,6 +437,42 @@ FormalPathFromCurrentInternalState:
   return;
 end procedure;
 
+procedure normalizeProjectSettings(state)
+variables names = <<"layout","annotations","export">>, i = 1, key = "",
+          supplied = [], palette = [];
+begin
+RequiredBackendConfiguration:
+  Require(BackendSettingsHasRequiredBackendOnlyShapeAndNoProjectData(BackendSettings));
+FillOnlyMissingConfiguredSettings:
+  while i <= Len(names) do
+    key := names[i];
+    if ~HasField(state,key) then state[key] := []; end if;
+    Require(IsRecord(state[key]));
+    call FillMissingSettingRecord(state[key],BackendSettings.project_object[key]);
+    state[key] := result;
+    i := i + 1;
+  end while;
+ConfiguredPaletteKeys:
+  if ~HasField(state,"appearance") then state.appearance := []; end if;
+  Require(IsRecord(state.appearance));
+  if HasField(state.appearance,"uiPalette") then
+    if IsRecord(state.appearance.uiPalette) then supplied := state.appearance.uiPalette; end if;
+  end if;
+  names := PropertyNames(BackendSettings.project_object.appearance.uiPalette); i := 1;
+  while i <= Len(names) do
+    key := names[i];
+    if HasField(supplied,key) then
+      if IsSixDigitHexColor(supplied[key]) then palette[key] := supplied[key];
+      else palette[key] := BackendSettings.project_object.appearance.uiPalette[key]; end if;
+    else palette[key] := BackendSettings.project_object.appearance.uiPalette[key]; end if;
+    i := i + 1;
+  end while;
+  state.appearance.uiPalette := palette;
+  RemoveField(state.layout,"layoutMapWidth");
+  result := state;
+  return;
+end procedure;
+
 procedure ProjectObject_initialize(source)
 variables candidate = DeepCopy(source), previous = NoValue, i = 1;
 begin
@@ -450,6 +480,7 @@ NormalizeOutsideAuthority:
   while i <= Len(candidate.slots) do
     call normalizeSlotContent(candidate.slots[i]); candidate.slots[i] := result; i := i + 1;
   end while;
+  call normalizeProjectSettings(candidate); candidate := result;
   call validateProjectObjectState(candidate,TRUE);
 OneValidatedBindingReplacement:
   previous := activeProject;
@@ -706,9 +737,8 @@ variables source = activeProject, operation = FieldOrNoValue(request,"operation"
           output = NoValue, width = NoValue, geometry = NoValue, i = 1, slots = <<>>;
 begin
 RegisteredKindsOnly:
-  Require(kind \in {"project-api","slot-selection-context","interface-intent","interface-reconciliation","renderer","export"});
-  if kind = "interface-intent" then call validateFrontendIntent(request.event,request.payload); return;
-  elsif kind = "interface-reconciliation" then call buildFrontendReconciliationInput(request.event,request.mutationResult,request.frontendReferences); return;
+  Require(kind \in {"project-api","slot-selection-context","interface-reconciliation","renderer","export"});
+  if kind = "interface-reconciliation" then call buildFrontendReconciliationInput(request.event,request.mutationResult,request.frontendReferences); return;
   elsif kind = "slot-selection-context" then
     slot := VisibleSlot(source,request.slotId);
     result := IF slot = NoValue THEN NoValue ELSE ImmutableCopy([id |-> slot.id,
@@ -718,6 +748,9 @@ RegisteredKindsOnly:
   elsif kind = "export" then goto ExportRead; end if;
 PublicReadRegisteredOperation:
   Require(operation \in PUBLIC_BACKEND_READ_OPERATIONS);
+  if operation \in {"project.exportFile","assets.download","graphs.exportFfsx","graphs.exportPlotlyJson"} then
+    goto ExportRead;
+  end if;
   if operation = "project.readName" then output := source.meta.projectName;
   elsif operation = "slots.readSelected" then output := SelectedSlotIdentityGeometryContentCopy(source,request.frontendState.selectedSlotId);
   elsif operation = "images.readEditor" then call BuildImageEditorRead(source,request.slotId); output := result;
@@ -752,7 +785,8 @@ PublicReadRegisteredOperation:
       i := i + 1;
     end while;
     output.visibleSlots := slots;
-    \* Same source as grid/style/geometry; not a separate chart manager or VFS tree field.
+    output.gridLimits := DeepCopy([gridRows |-> BackendSettings.defaults.limits.layout.gridRows,
+                                  gridCols |-> BackendSettings.defaults.limits.layout.gridCols]);
   elsif operation = "assets.fileKind" then call slotFileKind(request.file); output := result;
   elsif operation = "assets.collisionModel" then call projectAssetImportCollisionModel(request.file,request.directory,request.reservedPaths); output := result;
   elsif operation = "assets.resolveImportPlan" then call resolveProjectAssetImportPlan(request.model,request.choice,request.reservedPaths); output := result;

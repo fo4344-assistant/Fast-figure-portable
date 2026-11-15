@@ -252,19 +252,22 @@ FileOrderWithinOneCandidate:
     call projectVfsResolve(canonicalPath,candidate); current := result;
     \* Final plan is input, not authority: current same-kind/id/path must match.
     \* A now-occupied create path rejects rather than silently changing the plan.
-    call BuildAssetMetadata(AssetSequenceKind(kind),plan.path,FileMime(files[i]),CopyBytes(files[i])); asset := result;
-    if kind = "data" then
-      asset.rows := parsed;
-      asset.headerLines := NormalizeHeaderCount(1,parsed);
-    end if;
     if plan.replaceId # NoValue then
       Require(current # NoValue /\ AssetKindEqualsFileKind(current,kind));
       Require(current.id = plan.replaceId);
+    else Require(current = NoValue /\ plan.path \notin reserved); end if;
+    call BuildAssetMetadata(AssetSequenceKind(kind),plan.path,FileMime(files[i]),CopyBytes(files[i])); asset := result;
+    if kind = "data" then
+      asset.rows := parsed;
+      if plan.replaceId # NoValue then
+        asset.headerLines := NormalizeHeaderCount(CsvById(candidate,plan.replaceId).headerLines,parsed);
+      else asset.headerLines := NormalizeHeaderCount(1,parsed); end if;
+    end if;
+    if plan.replaceId # NoValue then
       asset.id := current.id;
       ReplaceSameKindAssetAtId(candidate,AssetSequenceKind(kind),current.id,asset);
       \* Referencing graph objects/image slots retain this id; no detach/relink.
     else
-      Require(current = NoValue /\ plan.path \notin reserved);
       asset.id := candidate.nextId[AssetSequenceKind(kind)];
       AppendAssetOfKind(candidate,AssetSequenceKind(kind),asset);
       candidate.nextId[AssetSequenceKind(kind)] := asset.id + 1;
@@ -276,7 +279,10 @@ FileOrderWithinOneCandidate:
         candidate := result;
       else
         target := ResolveVisibleSlot(candidate,targetSlotId);
-        Require(target # NoValue /\ target.content.contentType = "image");
+        Require(target # NoValue);
+        RemoveOnlyChartOwnedBySlot(candidate,targetSlotId);
+        CandidateSlot(candidate,targetSlotId).content.chart := NoValue;
+        CandidateSlot(candidate,targetSlotId).content.contentType := "image";
         CandidateSlot(candidate,targetSlotId).content.imageId := asset.id;
       end if;
     end if;
@@ -405,7 +411,7 @@ ExtensionSpecificDecode:
     Require(extension \in {".csv",".tsv"});
     call ParseDelimitedText(text,IF extension = ".tsv" THEN TabCharacter() ELSE ",");
     input := result;
-    call dataTable(input);
+    result := input;
   end if;
   \* Original bytes remain separate asset input; rows never replace owned bytes.
   return;
@@ -932,7 +938,10 @@ RestoreOwnedBytes:
       Require(EntryExists(entries,asset.dataRef));
       bytes := CopyBytes(EntryBytes(entries,asset.dataRef));
       asset.bytesBase64 := Base64Encode(bytes);
-      if kinds[k] = "csv" then call parseProjectDataAsset(asset.name,bytes); asset.rows := result; end if;
+      if kinds[k] = "csv" then
+        call parseProjectDataAsset(asset.name,bytes); asset.rows := result;
+        asset.headerLines := NormalizeHeaderCount(IF HasField(asset,"headerLines") THEN asset.headerLines ELSE 1,asset.rows);
+      end if;
       RemoveField(asset,"dataRef");
       normalized := Append(normalized,asset);
       i := i + 1;
@@ -1104,54 +1113,22 @@ MissingMergeReturn:
 end procedure;
 
 procedure CompleteProjectSettingsInCandidate(candidate)
-variables names = <<>>, i = 1, key = "", palette = [], supplied = [];
+variables names = <<"text","afterText","name">>, i = 1, key = "";
 begin
-LayoutSettingsNotPlacementData:
-  if ~HasField(candidate,"layout") then candidate.layout := []; end if;
-  call FillMissingSettingRecord(candidate.layout,BackendSettings.project_object.layout);
-  candidate.layout := result;
-AnnotationSettingsNotCaptionBodies:
-  if ~HasField(candidate,"annotations") then candidate.annotations := []; end if;
-  if ~HasField(candidate.annotations,"labels") then candidate.annotations.labels := []; end if;
-  if ~HasField(candidate.annotations,"captions") then candidate.annotations.captions := []; end if;
-  call FillMissingSettingRecord(candidate.annotations.labels,BackendSettings.project_object.annotations.labels);
-  candidate.annotations.labels := result;
-  call FillMissingSettingRecord(candidate.annotations.captions,BackendSettings.project_object.annotations.captions);
-  candidate.annotations.captions := result;
-InstanceCaptionDataOutsideConfig:
-  names := <<"text","afterText","name">>; i := 1;
+CommonConfiguredSettings:
+  call normalizeProjectSettings(candidate); candidate := result;
+ImportedInstanceCaptionData:
   while i <= Len(names) do
     key := names[i];
     if ~HasField(candidate.annotations.captions,key) then candidate.annotations.captions[key] := ""; end if;
     i := i + 1;
   end while;
-PaletteHasItsOwnWholePaletteRule:
-  if ~HasField(candidate,"appearance") then candidate.appearance := []; end if;
-  if HasField(candidate.appearance,"uiPalette") then supplied := candidate.appearance.uiPalette; end if;
-  Require(IsRecord(supplied));
-  names := PropertyNames(BackendSettings.project_object.appearance.uiPalette); i := 1;
-  while i <= Len(names) do
-    key := names[i];
-    if HasField(supplied,key) then
-      if IsSixDigitHexColor(supplied[key]) then palette[key] := supplied[key];
-      else palette[key] := BackendSettings.project_object.appearance.uiPalette[key]; end if;
-    else palette[key] := BackendSettings.project_object.appearance.uiPalette[key]; end if;
-    i := i + 1;
-  end while;
-  candidate.appearance.uiPalette := palette;
-ExportMissingOnly:
-  if ~HasField(candidate,"export") then candidate.export := []; end if;
-  call FillMissingSettingRecord(candidate.export,BackendSettings.project_object.export);
-  candidate.export := result;
+ImportedInstanceExportDimensions:
   if ~HasField(candidate.export,"width") then candidate.export.width := candidate.layout.slotStyle.referenceWidth; end if;
   if ~HasField(candidate.export,"height") then
     if candidate.export.heightMode = "auto" then candidate.export.height := NoValue;
     else candidate.export.height := BackendSettings.defaults.limits.export.logicalHeight[1]; end if;
   end if;
-NoSettingsAuthorityReplacement:
-  \* Current instance data (names/text/rows/bytes/id/collections/nextId) is not
-  \* populated by config. Later whole validation handles invalid present fields.
-  \* No commit, live Project reread, Frontend access or config synchronization.
   result := candidate;
   return;
 end procedure;

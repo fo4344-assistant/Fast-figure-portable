@@ -273,7 +273,8 @@ variables candidate = NoValue,
 begin
 ValidateGridBounds:
   assert IsInteger(rows) /\ IsInteger(cols);
-  assert rows >= 1 /\ rows <= 8 /\ cols >= 1 /\ cols <= 8;
+  assert IntegerInRange(rows,BackendSettings.defaults.limits.layout.gridRows);
+  assert IntegerInRange(cols,BackendSettings.defaults.limits.layout.gridCols);
 InspectEveryRemovedOrCrossingSlot:
   \* Includes hidden cells. The read remains this one source/candidate operation.
   while i <= Len(source.slots) do

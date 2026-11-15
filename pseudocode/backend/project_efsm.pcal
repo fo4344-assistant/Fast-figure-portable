@@ -679,16 +679,46 @@ MultisetReferencesNotMoveIndices:
   return;
 end procedure;
 
+procedure AssetReferenceKeys(state)
+variables refs = <<>>, keys = <<>>, i = 1, ref = NoValue;
+begin
+CollectCurrentAssetReferences:
+  call collectAssetReferences({a.id : a \in SequenceSet(state.assets.csvFiles)},
+                              {a.id : a \in SequenceSet(state.assets.images)},state);
+  refs := result;
+ReferenceMultiplicity:
+  while i <= Len(refs) do
+    ref := refs[i];
+    if ref.kind = "csv" then keys := Append(keys,<<"csv",ref.chartId,ref.assetId>>);
+    else keys := Append(keys,<<"image",ref.slotId,ref.assetId>>); end if;
+    i := i + 1;
+  end while;
+  result := keys;
+  return;
+end procedure;
+
 procedure FormActualMutationResult(event,pre,post,calculation)
 variables hints = calculation.selectionHints, facts = calculation.domainFacts,
-          maps = <<>>, i = 1, changed = [], graphCount = 0, imageCount = 0, projectionEffect = NoValue;
+          maps = <<>>, i = 1, changed = [], graphCount = 0, imageCount = 0, projectionEffect = NoValue,
+          beforeRefs = <<>>, afterRefs = <<>>, seen = {}, key = NoValue, removed = 0;
 begin
 FactsOfThisSuccessfulAttemptOnly:
   call BuildActualChanged(event,pre,post,facts); changed := result;
   \* Helper resolves recorded command calculations against post ids/paths, never
   \* reads UI/old projection. Replacements preserve input order, not asset id order.
-  if HasField(facts,"removedGraphReferenceCount") then graphCount := facts.removedGraphReferenceCount; end if;
-  if HasField(facts,"resetImageSlotCount") then imageCount := facts.resetImageSlotCount; end if;
+  call AssetReferenceKeys(pre); beforeRefs := result;
+  call AssetReferenceKeys(post); afterRefs := result;
+  while i <= Len(beforeRefs) do
+    key := beforeRefs[i];
+    if key \notin seen then
+      seen := seen \cup {key};
+      removed := Maximum(0,CountEqualItems(beforeRefs,key) - CountEqualItems(afterRefs,key));
+      if key[1] = "csv" then graphCount := graphCount + removed;
+      else imageCount := imageCount + removed; end if;
+    end if;
+    i := i + 1;
+  end while;
+  i := 1;
   if HasField(facts,"graphObjectIndexMaps") then
     while i <= Len(facts.graphObjectIndexMaps) do
       if UniqueChartOwnerExists(post,facts.graphObjectIndexMaps[i].chartId) then
@@ -733,17 +763,17 @@ CalculateWithoutAuthorityWrites:
 DistinguishFailureFromSuccessfulCandidate:
   if transactionOutcome.threw then
     PropagateOriginalFailure(transactionOutcome.failure);
-  elsif transactionOutcome.cancelled \/ ~transactionOutcome.hasCandidate then
-    result := UncommittedUnchanged();
-    return;
   end if;
-  calculation := transactionOutcome.calculation;
-  candidate := calculation.candidate;
 RevalidateAfterFileWait:
   \* Domain calculation re-resolves current VFS/target/references/collision/next-id
   \* after its await and validates completed replace choices against same id/path.
   \* No UI resolver callback, silent rename/replace selection, partial write or rollback.
   if CurrentAuthorityReference(activeProject) # sourceReference then goto ReResolveCurrentAuthority; end if;
+  if transactionOutcome.cancelled \/ ~transactionOutcome.hasCandidate then
+    result := UncommittedUnchanged(); return;
+  end if;
+  calculation := transactionOutcome.calculation;
+  candidate := calculation.candidate;
 ValidateWholeCandidate:
   call validateProjectObjectState(candidate, TRUE);
 CommitExactlyOnce:

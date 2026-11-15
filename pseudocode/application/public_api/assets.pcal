@@ -42,7 +42,10 @@ ValidatedSingleTransition:
   \* Source requires rejection to return none even when that CSV was already selected.
   \* Source40 SELECT_ASSET receipt: accepted publication advances revision exactly once,
   \* including repeat selection; rejected input preserves revision/state without publication.
-  if final.revision > priorRevision /\ final.assetSelection = "csv" /\ final.assetPath = canonical then result := target;
+  if final.revision > priorRevision /\ final.assetSelection = "csv" /\ final.assetPath = canonical then
+    call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> canonical]);
+    resolved := result;
+    result := IF ResolvedTargetIsCsv(resolved) THEN resolved.target ELSE NoValue;
   else result := NoValue; end if;
   \* SELECT_ASSET itself clears graph object; no preceding clear/persistent mutation.
   return;

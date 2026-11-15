@@ -191,6 +191,7 @@ ApplyOnlyBackendValidatedScalars:
   else interfaceState.graphObject := "selected"; end if;
   interfaceState.workspace := reconciliationInput.workspaceHint;
 PublishReconciledRuntime:
+  interfaceState.direction := "model-to-fsm";
   \* Backend already resolved reset/hint/map priorities. Do not store hints,
   \* resend SELECT_GRAPH_OBJECT, re-query a chart or change Project here.
   call publishRuntime();
@@ -200,6 +201,7 @@ end procedure;
 procedure InterfaceStateMachine_notify(objectName, event, payload)
 begin
 ProjectionRevisionOnly:
+  interfaceState.direction := "model-to-fsm";
   call publishRuntime();
   \* No persistent write, secondary data authority or Backend callback.
   return;
