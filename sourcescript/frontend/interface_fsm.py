@@ -1,169 +1,263 @@
 """
 Fast Figure Source Script — Frontend interface/runtime FSM
 
-FFPX ProjectObject가 아닌 Frontend session/runtime과 사용자 상호작용 상태만 소유한다.
-Backend ProjectObject, projectObjects, projectVfs, projectEFSM을 직접 import/read/call하지 않는다.
+Frontend session/runtime과 사용자 상호작용 상태를 소유한다.
+Application이 전달한 참조 판정 결과로 선택 상태를 전이하고 발행한다.
 """
 
 selectedSlotId = (
-    "영속 project state가 아닌 현재 Frontend slot 선택 reference id. interfaceFSM이 소유한다."
+    "현재 Frontend slot 선택 reference id. 소유자는 interfaceFSM이다."
 )
 
-interfaceState = {
-    "lifecycle": "booting/ready/importing/exporting/error",
-    "workspace": "project/slot.graph/slot.image",
-    "overlay": "none/layout/label/caption/print/readme",
-    "assetSelection": "none/csv/image/directory",
-    "assetPath": "Application boundary가 Backend에서 검증한 selected path reference 또는 없음",
-    "graphObject": "none/selected",
-    "graphObjectIndex": "validated selected chart context의 object index 또는 없음",
-    "direction": "ui-to-fsm/model-to-fsm/model-to-ui",
-    "revision": "frontend external-store subscriber용 revision",
-    "error": "마지막 lifecycle task error projection 또는 없음",
-    "dashboardZoomIntent": "session zoom percent; initial 100, finite 50..200",
-    "dashboardZoomLocked": "session width lock; initial False",
-    "dashboardZoomLockedWidth": "lock 때의 finite positive rendered width 또는 none; initial none",
-}
+interfaceState = {'lifecycle': 'booting/ready/importing/exporting/error',
+ 'workspace': 'project/slot.graph/slot.image',
+ 'overlay': 'none/layout/label/caption/print/readme',
+ 'assetSelection': 'none/csv/image/directory',
+ 'assetPath': '선택 asset의 canonical 경로 문자열 또는 None.',
+ 'graphObject': 'none/selected',
+ 'graphObjectIndex': '선택 graph object의 0 기반 정수 index 또는 None.',
+ 'direction': 'ui-to-fsm/model-to-fsm/model-to-ui',
+ 'revision': 'frontend external-store subscriber용 revision',
+ 'error': '마지막 lifecycle task error projection 또는 없음',
+ 'dashboardZoomIntent': '세션 대시보드 표시 배율. 단위: %.',
+ 'dashboardZoomLocked': '대시보드 너비 잠금 여부인 논리값.',
+ 'dashboardZoomLockedWidth': '잠금 기준 너비인 양수 또는 None. 단위: px.'}
 
 INTERFACE_REGION_ORDER = ["lifecycle", "workspace", "overlay", "assetSelection", "graphObject"]
 
 INTERFACE_EVENTS = {
-    "SELECT_SLOT": "validated slot reference의 selectedSlotId/workspace selection/toggle",
-    "SELECT_ASSET": "validated asset reference의 runtime selection",
-    "CLEAR_ASSET_SELECTION": "asset selection 해제",
-    "SELECT_GRAPH_OBJECT": "validated graph object reference/index의 runtime selection",
-    "CLEAR_GRAPH_OBJECT": "graph object selection 해제",
-    "TOGGLE_OVERLAY": "overlay toggle",
-    "CLOSE_OVERLAY": "overlay close",
-    "OUTSIDE_CLICK": "generic overlay close",
-    "ESCAPE": "generic overlay close",
-    "SET_DASHBOARD_ZOOM": "session zoom intent 변경; lock 중에는 유지",
-    "SET_DASHBOARD_ZOOM_LOCK": "명시적 current renderedWidth로 lock; unlock은 100 percent로 복귀",
-    "RESET_DASHBOARD_ZOOM": "unlock/width clear/100 percent를 한 runtime transition으로 수행",
-    "LIFECYCLE_START": "Application boundary가 시작한 import/export runtime 표시",
-    "LIFECYCLE_COMPLETE": "Application boundary가 전달한 ready 복귀",
-    "LIFECYCLE_FAILED": "Application boundary가 전달한 error projection과 recovery",
+    'SELECT_SLOT': 'SELECT_SLOT',
+    'SELECT_ASSET': 'SELECT_ASSET',
+    'CLEAR_ASSET_SELECTION': 'CLEAR_ASSET_SELECTION',
+    'SELECT_GRAPH_OBJECT': 'SELECT_GRAPH_OBJECT',
+    'CLEAR_GRAPH_OBJECT': 'CLEAR_GRAPH_OBJECT',
+    'TOGGLE_OVERLAY': 'TOGGLE_OVERLAY',
+    'CLOSE_OVERLAY': 'CLOSE_OVERLAY',
+    'OUTSIDE_CLICK': 'OUTSIDE_CLICK',
+    'ESCAPE': 'ESCAPE',
+    'SET_DASHBOARD_ZOOM': 'SET_DASHBOARD_ZOOM',
+    'SET_DASHBOARD_ZOOM_LOCK': 'SET_DASHBOARD_ZOOM_LOCK',
+    'RESET_DASHBOARD_ZOOM': 'RESET_DASHBOARD_ZOOM',
+    'LIFECYCLE_START': 'LIFECYCLE_START',
+    'LIFECYCLE_COMPLETE': 'LIFECYCLE_COMPLETE',
+    'LIFECYCLE_FAILED': 'LIFECYCLE_FAILED',
 }
 
-INTERFACE_SELECTION_INVARIANTS = {
-    "slot": (
-        "selectedSlotId는 Application boundary가 Backend validateFrontendIntent 또는 reconciliation query로 검증한 "
-        "visible slot reference 또는 none이다. Frontend FSM이 activeProject를 직접 조회해 유효성을 판정하지 않는다."
-    ),
-    "asset": "asset selection/path는 Backend query에서 accepted된 reference 또는 none이다.",
-    "graphObject": "selected index는 Backend query가 current selected chart context에 대해 accepted한 index 또는 none이다.",
-}
 
-FRONTEND_FSM_BOUNDARY_RULE = (
-    "interfaceFSM은 Frontend 내부 runtime authority다. Backend function/task callback을 실행하지 않고 "
-    "Backend command/query를 직접 호출하지 않는다. Backend identity를 가리키는 event는 Application boundary가 "
-    "검증한 input만 받고, project commit 뒤에는 Application boundary가 만든 reconciliation input만 소비한다."
-)
 
-FRONTEND_TRANSITION_RULES = {
-    "rejected": "accepted=False이면 state/revision/selection을 그대로 유지하고 publish하지 않는다.",
-    "SELECT_SLOT": (
-        "reference none이면 deselect; toggle-clear hint이며 같은 id이면 deselect; 그 외 validated id를 선택한다. "
-        "workspace는 none이면 project, 아니면 workspaceHint다. 모든 accepted slot selection은 graphObject/index를 clear한다. "
-        "최종 reference가 none이거나 hint가 toggle-clear이면 assetSelection/path도 clear한다. "
-        "non-null reference와 clear-graph-object hint이면 현재 assetSelection/path를 그대로 유지한다. "
-        "따라서 model-to-fsm 선택은 같은 id도 toggle하지 않고 독립 asset 선택을 보존한다. raw direction이나 Backend를 다시 읽지 않는다. "
-        "overlay는 explicit deselection이면 유지하고 non-null slot 선택이면 닫는다."
-    ),
-    "SELECT_ASSET": (
-        "validated kind/path 또는 none을 assetSelection/path에 반영하고 graphObject/index를 clear한다. slot/workspace는 유지한다. "
-        "accepted event는 이미 같은 asset이 선택되어 값이 같아도 final state를 publish하며 revision을 정확히 1 증가시킨다. "
-        "이 revision 변화는 이번 selection intent가 수락되었다는 Frontend receipt다. "
-        "rejected event는 같은 asset이 이미 선택되어 있어도 revision/state를 보존하고 publish하지 않는다."
-    ),
-    "SELECT_GRAPH_OBJECT": (
-        "reference none이면 graphObject/index만 clear한다. accepted index면 graphObject=selected/index를 반영한다. "
-        "selectionHint에 CSV path가 제공된 경우에만 assetSelection=csv/path를 함께 바꾼다. hint none이면 기존 asset selection을 유지한다."
-    ),
-    "CLEAR_ASSET_SELECTION": "assetSelection/path만 none으로 만든다.",
-    "CLEAR_GRAPH_OBJECT": "graphObject/index만 none으로 만든다. current CSV 선택을 변경하지 않는다.",
-    "SET_DASHBOARD_ZOOM": (
-        "lock이면 no-op. 아니면 finite numeric input을 50..200으로 제한하며 invalid는 100이다. "
-        "실제 값이 달라질 때만 publish한다. Project layout/referenceWidth는 바꾸지 않는다."
-    ),
-    "SET_DASHBOARD_ZOOM_LOCK": (
-        "locked=True이면 처음 lock할 때만 supplied finite positive renderedWidth를 width anchor로 저장한다. "
-        "invalid width는 rejected unchanged이며 이미 locked면 기존 anchor를 유지한다. "
-        "locked=False이면 lock=False/width=none/zoom=100으로 돌아간다. actual change만 publish한다."
-    ),
-    "RESET_DASHBOARD_ZOOM": "lock=False/width=none/zoom=100으로 함께 바꾸고 actual change만 publish한다.",
-    "LIFECYCLE_START": "Application이 전달한 importing/exporting으로 전환하고 이전 error를 clear한 뒤 publish한다.",
-    "LIFECYCLE_COMPLETE": "ready로 전환하고 error를 clear한 뒤 publish한다. outcome은 project commit result를 대체하지 않는다.",
-    "LIFECYCLE_FAILED": (
-        "event/message error projection을 저장하고 error 상태를 publish한 다음, 같은 failure 처리에서 ready recovery를 publish한다. "
-        "error projection은 다음 START/COMPLETE까지 유지한다. task 실행 또는 Backend mutation은 없다."
-    ),
-}
 
-INTERFACE_LOCALITY_RULE = (
-    "Layout selection Set, form draft, collision resolver, pointer drag, overlay resize height 등 component lifetime 값은 "
-    "cross-component authority가 필요하지 않는 한 interfaceFSM으로 승격하지 않는다."
-)
+
+
+
+
 
 class InterfaceStateMachine:
     def __init__(self):
-        """변경: 이 Frontend instance가 소유하는 변경 알림 listener 집합을 생성한다."""
-        self.listeners = set()
+        self.listeners = "변경 알림 함수의 집합."
+        """
+        Args:
+        - 없음.
+
+        Return:
+        - 없음.
+
+        변경:
+        - 이 인스턴스의 listeners와 모듈이 소유하는 interfaceState, selectedSlotId.
+
+        처리:
+            1. listeners를 빈 집합으로 둔다.
+            2. selectedSlotId에 None을 둔다. interfaceState의 lifecycle은 booting,
+               workspace는 project, overlay와 assetSelection과 graphObject는 none으로 둔다.
+               assetPath, graphObjectIndex, error에는 None, direction에는 model-to-ui를 둔다.
+            3. revision에 0, dashboardZoomIntent에 100, dashboardZoomLocked에 False,
+               dashboardZoomLockedWidth에 None을 둔다.
+        """
 
     def readState(self):
+        projection = "Frontend 상태 읽기 딕셔너리."
         """
-        Return:
-        - projection: interfaceState의 lifecycle/workspace/overlay/assetSelection/assetPath,
-          graphObject/graphObjectIndex/direction/revision/error, dashboardZoomIntent,
-          dashboardZoomLocked/dashboardZoomLockedWidth와 selectedSlotId를 가진 읽기전용 record.
-          selectedSlotId의 원천은 이 Frontend 모듈이 소유하는 현재 선택 참조이며 None은 선택 해제다.
+        Args:
+        - 없음.
 
-        변경: 호출 범위의 반환 record 구성.
-        처리: 현재 interfaceState의 필드와 현재 선택 참조를 같은 호출에서 읽어 record로 반환한다.
-        숫자 0을 포함한 식별자는 원래 값으로 전달한다. 결과의 수명은 이번 호출의 소비 범위다.
+        Return:
+        - projection:
+          interfaceState의 필드와 selectedSlotId를 담은 읽기 전용 딕셔너리.
+          Source of Truth: /frontend/interface_fsm/interfaceState와 selectedSlotId
+
+        변경:
+        - 없음.
+
+        처리:
+            1. 현재 interfaceState의 필드를 projection에 분리 복사한다.
+            2. projection["selectedSlotId"]에 현재 selectedSlotId를 넣는다.
+               None은 선택 해제이며 0을 포함한 정수 id는 원래 값을 보존한다.
+            3. projection을 읽기 전용 결과로 반환한다. 호출자는 이번 작업에 사용한다.
         """
-        projection = dict(interfaceState)
-        projection["selectedSlotId"] = selectedSlotId
         return projection
 
     def subscribe(self, onStoreChange):
         """
-        Return: 등록한 listener를 해제하는 함수.
-        변경: interfaceFSM이 소유하는 listener 집합.
-        처리: callback을 등록하고, 반환된 함수가 같은 callback을 제거한다.
-        수락된 전이의 상태와 revision이 확정된 뒤 기존 발행 절차가 listener를 호출한다.
+        Args:
+        - onStoreChange:
+          상태 발행 뒤 인자 없이 호출하는 알림 함수.
+
+        Return:
+        - unsubscribe:
+          이 등록을 해제하는 함수.
+
+        변경:
+        - self.listeners.
+
+        처리:
+            1. onStoreChange를 self.listeners에 추가한다.
+            2. 같은 onStoreChange를 제거하는 unsubscribe를 반환한다.
         """
-        self.listeners.add(onStoreChange)
-
         def unsubscribe():
-            self.listeners.discard(onStoreChange)
+            """
+            Args:
+            - 없음.
 
+            Return:
+            - 없음.
+
+            변경:
+            - 이 등록의 self.listeners 원소.
+
+            처리:
+                1. 등록한 onStoreChange가 self.listeners에 있으면 제거한다.
+                   이미 제거되었으면 집합을 유지한다.
+            """
         return unsubscribe
 
+    def publish(self):
+        projection = "Frontend 상태 읽기 딕셔너리."
+        """
+        Args:
+        - 없음.
+
+        Return:
+        - projection:
+          이번 발행의 상태 읽기 결과.
+
+        변경:
+        - interfaceState["revision"].
+
+        처리:
+            1. 상태 필드와 selectedSlotId 변경을 마친 뒤 revision을 1 증가시킨다.
+            2. readState() 결과를 projection에 둔다.
+            3. 현재 등록된 listener들을 이번 통지 순회용 배열로 복사하여 각각 인자 없이 호출한다.
+               통지 중 등록·해제는 다음 통지의 집합에 반영한다.
+            4. projection을 반환한다.
+        """
+        return projection
+
     def send(self, event, validatedInput):
+        projection = "Frontend 상태 읽기 딕셔너리."
         """
-        Frontend region transition만 실행한다.
-        persistent ProjectObject mutation action과 Backend read/resolve를 실행하지 않는다.
-        Backend identity가 필요한 event는 accepted FrontendValidatedInput을 받아 처리한다.
-        rejected input은 state/revision을 그대로 보존하며 publish하지 않는다.
-        accepted input의 값 변경과 publish 순서는 FRONTEND_TRANSITION_RULES를 따른다.
-        Backend reference가 필요 없는 overlay/lifecycle event는 Application boundary가 만든 local accepted input을 받는다.
+        Args:
+        - event:
+          INTERFACE_EVENTS의 등록값.
+
+        - validatedInput:
+          accepted, reference, workspaceHint, selectionHint와 이벤트 인자를 담은 딕셔너리.
+          원형: /backend/project_state/FrontendValidatedInput
+
+        Return:
+        - projection:
+          이번 전이의 Frontend 읽기 결과.
+
+        변경:
+        - interfaceState, selectedSlotId와 수락된 발행의 revision.
+
+        처리:
+            1. validatedInput의 accepted가 False이면 현재 readState()를 반환한다.
+            2. INTERFACE_EVENTS["SELECT_SLOT"]이면 reference와 selectionHint를 확인한다.
+               reference가 None이거나 같은 id에 toggle-clear hint가 있으면 selectedSlotId를 None으로 둔다.
+               그 외에는 검증된 id를 selectedSlotId에 둔다. None의 workspace는 project, 나머지는 workspaceHint다.
+               graphObject와 graphObjectIndex를 none으로 둔다. 최종 reference가 None이거나 toggle-clear hint이면
+               assetSelection과 assetPath도 none으로 두고, clear-graph-object hint이면 현재 asset 선택을 유지한다.
+               검증된 non-null slot 선택은 overlay를 닫으며 명시적 deselection은 overlay를 유지한다.
+            3. INTERFACE_EVENTS["SELECT_ASSET"]이면 검증된 kind/path 또는 none을 assetSelection/assetPath에 반영한다.
+               graphObject/index를 none으로 두고 slot과 workspace를 유지한다. 같은 asset도 수락된 입력마다 한 번 발행한다.
+            4. INTERFACE_EVENTS["SELECT_GRAPH_OBJECT"]이면 reference가 None일 때 graphObject/index를 none으로 둔다.
+               검증된 index이면 graphObject=selected와 해당 index를 저장한다.
+               selectionHint에 CSV path가 있으면 assetSelection=csv와 해당 path를 저장하고 나머지 경우 현재 asset 선택을 유지한다.
+            5. INTERFACE_EVENTS["CLEAR_ASSET_SELECTION"]이면 assetSelection/path를, INTERFACE_EVENTS["CLEAR_GRAPH_OBJECT"]이면 graphObject/index를 none으로 둔다.
+               각 경우 다른 독립 선택 필드는 유지한다.
+            6. INTERFACE_EVENTS["TOGGLE_OVERLAY"]이면 현재와 같은 이름은 none, 다른 이름은 전달된 overlay로 바꾼다.
+               INTERFACE_EVENTS["CLOSE_OVERLAY"], INTERFACE_EVENTS["OUTSIDE_CLICK"], INTERFACE_EVENTS["ESCAPE"]이면 overlay를 none으로 둔다.
+            7. INTERFACE_EVENTS["SET_DASHBOARD_ZOOM"]이면 lock 상태에서 현재 readState()를 반환한다.
+               잠금이 풀려 있으면 유한 수 입력을 50..200으로 제한하고 무효 입력은 100으로 정한다.
+               실제 배율 변화가 없으면 현재 읽기 결과를 반환한다.
+            8. INTERFACE_EVENTS["SET_DASHBOARD_ZOOM_LOCK"]이면 최초 lock=True에 전달된 유한 양수 renderedWidth를 anchor로 저장한다.
+               무효 너비이면 현재 읽기 결과를 반환하고, 이미 잠겼으면 기존 anchor를 유지한다.
+               lock=False이면 lock=False, width=None, zoom=100으로 둔다. 실제 변화가 없으면 현재 읽기 결과를 반환한다.
+            9. INTERFACE_EVENTS["RESET_DASHBOARD_ZOOM"]이면 lock=False, width=None, zoom=100으로 둔다.
+               실제 변화가 없으면 현재 읽기 결과를 반환한다.
+            10. INTERFACE_EVENTS["LIFECYCLE_START"]이면 전달된 importing/exporting과 error=None을 저장한다.
+                INTERFACE_EVENTS["LIFECYCLE_COMPLETE"]이면 ready와 error=None을 저장한다.
+            11. INTERFACE_EVENTS["LIFECYCLE_FAILED"]이면 error projection과 error lifecycle을 저장하여 publish()한다.
+                같은 오류 처리에서 lifecycle만 ready로 바꿔 다시 publish()한 결과를 반환한다.
+                error projection은 다음 START 또는 COMPLETE까지 유지한다.
+            12. 나머지 수락된 전이는 변경된 필드로 publish()한 결과를 반환한다.
+            13. projection를 반환한다.
         """
-        return "final Frontend interface state"
+        return projection
 
     def reconcileProjectResult(self, event, reconciliationInput):
+        projection = "Frontend 상태 읽기 딕셔너리."
         """
-        Project EFSM commit 성공 뒤 Application boundary가 계산한 FrontendReconciliationInput을 받는다.
-        valid reference는 유지하고 moved reference는 supplied identity/path result로 갱신하며 invalid reference만 clear한다.
-        graphObject에는 Backend가 current chart와 post-edit index hint를 함께 검증한 최종 scalar만 적용한다.
-        별도 selectedIndexHint 저장/사후 SELECT_GRAPH_OBJECT 전이를 만들지 않으며 asset selection은 supplied assetKind/path만 따른다.
-        workspace는 reconciled selectedSlotId와 supplied workspaceHint에서 다시 파생한다.
-        Backend를 재조회하거나 project mutation을 다시 호출하지 않고 final Frontend state를 publish한다.
+        Args:
+        - event:
+          반영된 Project EFSM 명령 이름.
+
+        - reconciliationInput:
+          buildFrontendReconciliationInput의 검증된 selectedSlotId, workspaceHint,
+          assetKind/path, graphObjectIndex와 방향을 담은 딕셔너리.
+
+        Return:
+        - projection:
+          프로젝트 반영 결과와 참조를 맞춘 Frontend 읽기 결과.
+
+        변경:
+        - selectedSlotId와 interfaceState의 선택 필드, workspace, direction, revision.
+
+        처리:
+            1. supplied selectedSlotId를 현재 선택 참조에 반영한다.
+            2. 선택이 None이면 workspace에 project, 그 외에는 workspaceHint를 넣는다.
+            3. assetKind/path와 graphObjectIndex를 전달된 값으로 반영한다.
+               index가 None이면 graphObject를 none, 그 외에는 selected로 둔다.
+            4. direction을 model-to-fsm으로 두고 publish()한 결과를 반환한다.
+               overlay와 독립 session zoom 값은 유지한다.
         """
-        return "reconciled Frontend interface state"
+        return projection
 
     def notify(self, objectName, event, payload):
-        """model-to-ui projection revision만 변경하고 ProjectObject를 변경하지 않는다."""
-        return "Frontend interface state"
+        projection = "Frontend 상태 읽기 딕셔너리."
+        """
+        Args:
+        - objectName:
+          변경 내용을 표시할 논리 오브젝트 이름.
+
+        - event:
+          화면 갱신 사유의 이벤트 이름.
+
+        - payload:
+          이번 알림의 표시 자료 또는 None.
+
+        Return:
+        - projection:
+          알림 뒤의 Frontend 읽기 결과.
+
+        변경:
+        - interfaceState["direction"]과 revision.
+
+        처리:
+            1. 기존 interfaceState의 direction을 model-to-fsm으로 설정한다.
+            2. self.publish()로 변경 후 revision을 발행하고 구독자에게 알린다.
+            3. self.readState()의 결과를 projection에 두고 반환한다.
+        """
+        return projection
+
 
 interfaceFSM = InterfaceStateMachine()

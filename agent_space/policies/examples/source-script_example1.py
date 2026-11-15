@@ -40,8 +40,8 @@ def gridSlotGeometry(layout, geometry, slot):
     - slot:
       슬롯 오브젝트 또는 None.
       슬롯 오브젝트:
-        원형: /backend/project_state/slot
-        Source of Truth: /backend/project_state/activeProject._state.slots의 원소.
+        원형: /backend/project_state/Slot
+        Source of Truth: /backend/project_state/activeProject._state["slots"]의 원소.
 
     Return:
     - slotGeometry:

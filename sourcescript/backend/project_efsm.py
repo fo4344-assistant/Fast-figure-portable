@@ -1,244 +1,239 @@
 """
 Fast Figure Source Script — FFPX ProjectObject EFSM
 
-EFSM 대상은 저장 파일이 아니라 저장·복원되는 authoritative ProjectObject 자체다.
+EFSM은 authoritative ProjectObject의 상태 전이를 담당한다.
 """
 
-from sourcescript.backend.project_state import activeProject, projectObjects
+from sourcescript.backend.project_state import activeProject, projectObjects, Slot, resolveVisibleSlot, normalizeSlotContent, normalizeProjectSettings, validateProjectObjectState
 from sourcescript.backend import assets_files, graphs, layout_annotations
 
-PROJECT_EFSM_BOUNDARY_RULE = (
-    "Project EFSM은 Backend 내부 persistent mutation controller다. "
-    "Frontend component/FSM/renderer는 projectEFSM.send를 직접 호출하지 않는다. "
-    "persistent mutation intent는 public mutation API와 Application adapter를 통해 command로 전달된다. "
-    "Project EFSM은 Frontend state, DOM, Mantine/React state를 import하거나 변경하지 않는다."
-)
+
+
+ProjectMutationResult = {'event': '프로젝트 명령 이름 문자열.',
+ 'committed': '프로젝트 반영 성공 여부인 논리값.',
+ 'changed': '변경 asset·chart·slot의 실제 id, canonical 경로와 소유 관계를 담은 딕셔너리.',
+ 'removedGraphReferenceCount': '실제 제거한 graph-object CSV reference 수',
+ 'resetImageSlotCount': '실제 image reference를 비운 slot 수',
+ 'selectionHints': '참조 식별자·경로·chartId·선택 index와 이전/이후 index 대응표를 담은 딕셔너리.',
+ 'projectionEffect': '참조 제거와 표시 입력 변경 여부를 담은 딕셔너리.'}
+
+
+
+
+
+def buildSlotCommandCandidate(event, payload, state):
+    candidateState = "프로젝트 상태 딕셔너리. 원형: /backend/project_state/ProjectObject._state"
+    slot = "Slot 인스턴스."
+    other = "Slot 인스턴스."
+    defaults = "Slot 인스턴스."
+    imported = "chart 또는 Slot 패키지 딕셔너리."
+    """
+    Args:
+    - event:
+      이 함수에 연결된 프로젝트 명령 등록의 키.
+        원천: /backend/project_efsm/PROJECT_COMMANDS
+
+    - payload:
+      대상 Slot·CSV·image id와 새 종류·설정·파일을 가진 명령 입력 딕셔너리.
+
+    - state:
+      이번 명령의 분리된 상태 딕셔너리. 원형: /backend/project_state/ProjectObject._state
+
+    Return:
+    - candidateState:
+      후보 상태 딕셔너리 또는 거부의 None.
+
+    변경:
+    - 이번 명령의 state에 Slot·소유 chart·새 asset 변경을 적용한다.
+
+    처리:
+        1. candidateState에 state를 둔다. 명시한 slotId는
+           resolveVisibleSlot(payload["slotId"],candidateState)의 결과를 slot에 둔다.
+           대상 id 배열은 각 id를 같은 상태에서 조회하며 그때의 원소를 slot에 둔다.
+           strict integer id와 visible 조건을 확인한다. 0은 유효하다.
+           대상 부재·종류·소유 관계 불일치는 None을 반환한다.
+        2. SLOT_TYPE_CHANGED이면 contentType 입력이 image일 때 image, 그 외에는 graph로 둔다.
+           다른 content 필드와 caption을 유지한다.
+        3. SLOTS_RESET이면 대상마다 Slot(id,row,col)을 defaults로 생성한다.
+           소유 chart를 제거하고 content·caption을 defaults에서 분리 복사한다.
+           id·row·col·rowSpan·colSpan·hidden은 기존 값으로 유지한다.
+        4. SLOTS_SWAPPED이면 두 id를 같은 candidateState에서 resolveVisibleSlot로 조회하여
+           서로 다른 두 visible Slot을 slot·other에 둔다.
+           content·caption을 교환하고 각각의 id·배치·span·hidden을 유지한다.
+        5. SLOT_IMAGE_LINKED이면 같은 상태의 image id를 확인하고 Slot.content["imageId"]에 연결한다.
+           SLOT_IMAGE_SETTINGS_CHANGED이면 현재 image Slot의 imageSettings에 새 필드를 합치고
+           backend.defaults.limits.imageSettings와 fit 원형으로 검증한다.
+        6. SLOT_DATA_CONNECTED이면 같은 상태의 CSV와 graph Slot을 확인한다.
+           graphs.addObject가 빈 Slot을 대상으로 보낸 명령은 현재 chart가 있으면 거부한다.
+           그 외 기존 chart는 editable 조건을 확인한다. Slot·CSV rows·name·CSV와 candidateState를
+           graphs.connectDataToSlotModel에 전달하고 반환 후보를 candidateState로 둔다.
+        7. SLOT_IMAGE_IMPORTED이면 현재 visible image Slot을 확인하고 payload의 name·MIME·bytes로
+           assets_files.buildAssetCommandCandidate의 IMAGE_OBJECT_CREATED 계산을 수행한다.
+           후보의 새 image id를 Slot.content["imageId"]에 연결하고 소유 chart를 제거한다.
+           Slot.content["chart"]를 None으로 둔다. 기존 image·CSV asset, 배치·caption·imageSettings를 보존한다.
+           images.insertEmpty의 1600×900 SVG는 public 호출이 전달한 bytes를 사용한다.
+        8. SLOT_CHART_IMPORTED이면 같은 파일 입력을 해석한다. FFSX는 assets_files.ffsxReadSlot 결과를 imported에 두고
+           assets_files.applyFfsxSlot(imported, slot, candidateState)의 반환값을 candidateState에 둔다.
+           Plotly JSON은 파일 bytes를 JSON figure로 읽고 candidateState["nextId"]["chart"]와 함께
+           graphs.parsePlotlyToEditor에 전달하여 imported에 둔다. nextId.chart를 증가시키고
+           기존 소유 chart를 제거한다. imported를 candidateState["charts"]에 넣고
+           slot.content["chart"]에 imported["id"]를 연결한다.
+           Slot의 id·row·col·span·hidden을 유지한다. FFSX는 패키지의 slot-local caption도 적용한다.
+        9. 파일 해석 오류는 호출자에게 전달한다. candidateState를 반환한다.
+    """
+    return candidateState
+
+
+def buildProjectMutationResult(event, payload, beforeState, afterState, retainedOriginalIndicesByChart):
+    result = "ProjectMutationResult 딕셔너리."
+    graphObjectIndexMaps = "chartId와 indices를 가진 딕셔너리의 배열."
+    selectionHints = "id·경로·chartId·선택 index·순번 대응표의 딕셔너리."
+    indices = "이전 object 순번에 대응하는 새 순번 또는 None의 배열."
+    n = "이전 chart의 object 개수인 0 이상의 정수."
+    j = "새 object 배열의 0 기반 정수 순번."
+    k = "이전 object 배열의 0 기반 정수 순번."
+    """
+    Args:
+    - event:
+      반영한 PROJECT_COMMANDS 명령 이름.
+
+    - payload:
+      이번 명령의 대상 id·경로와 새 입력 딕셔너리.
+
+    - beforeState:
+      반영 직전 프로젝트 상태. 원형: /backend/project_state/ProjectObject._state
+
+    - afterState:
+      반영 직후 프로젝트 상태. 원형: /backend/project_state/ProjectObject._state
+
+    - retainedOriginalIndicesByChart:
+      참조 해제 계산이 남긴 chart id별 원래 object 순번 배열 딕셔너리.
+
+    Return:
+    - result:
+      이번 반영의 읽기 전용 ProjectMutationResult.
+
+    변경:
+    - 없음.
+
+    처리:
+        1. result의 event에 event, committed에 True를 둔다.
+           두 상태의 asset id·canonical 경로·chart id·Slot id와 소유 관계를 비교하여
+           실제 생성·교체·이동·제거 항목을 changed에 넣는다.
+           생성·가져오기 asset은 입력 순서를 유지한다. DATA_OBJECT_REPLACED는 실제 CSV 경로,
+           directory 생성·이동은 최종 canonical 경로를 기록한다.
+        2. 두 상태의 collectAssetReferences 결과를 비교하여 실제 제거 graph-object CSV 참조 수와
+           image 참조를 비운 Slot 수를 각각 removedGraphReferenceCount와 resetImageSlotCount에 둔다.
+           같은 CSV의 여러 object 참조는 각각 센다.
+           제거된 참조와 변경된 표시 입력으로 projectionEffect를 구성한다.
+        3. afterState의 실제 id·경로·chart 소유 관계에서 selectionHints를 구성하고
+           result["selectionHints"]에 둔다.
+           직접 graph add는 마지막 순번, move는 최종 to, setObjectValues는 같은 index를
+           selectedIndexHint로 둔다. delete는 명시적 None을 둔다. 해당 owning chartId를 함께 기록한다.
+           palette는 index hint를 생략한다. CSV 선택은 이 hint와 별도로 유지한다.
+        4. graphObjectIndexMaps를 빈 배열로 둔다. retainedOriginalIndicesByChart의 chart마다
+           beforeState의 object 개수를 n에 두고 indices를 n개의 None으로 만든다.
+           유지한 원래 순번 배열의 j번째 원소 k에 indices[k]=j를 대입한다.
+           실제 제거가 있고 afterState에도 남아 있는 chart만 chartId·indices 쌍으로 한 번 넣는다.
+           [A,B,C]에서 첫 원소 제거는 [None,0,1], 가운데 제거는 [0,None,1]이다.
+           같은 값의 object도 원래 순번으로 구별한다.
+        5. 대응표가 있으면 selectionHints["graphObjectIndexMaps"]에 넣는다.
+           chart 삭제는 afterState의 owner 조회 부재로 선택 해제한다.
+           단순 경로 이동과 image-only 참조 해제는 graph 대응표를 생략한다.
+        6. result를 중첩 필드까지 읽기 전용으로 만들어 반환한다.
+    """
+    return result
+
 
 PROJECT_COMMANDS = {
-    "PROJECT_LOADED": "검증된 ProjectObject 전체 교체",
-    "PROJECT_NAME_CHANGED": "project metadata 이름 변경",
-    "PROJECT_DIRECTORY_CREATED": "VFS directory 추가",
-    "PROJECT_NODE_MOVED": "VFS path 변경과 entering-trash reference detach",
-    "PROJECT_TRASH_EMPTIED": "trash subtree와 남은 reference 제거",
-    "ASSETS_IMPORTED": "raw CSV/image file batch와 선택적 target slot 연결을 하나의 whole-project candidate로 import",
-    "DATA_OBJECT_CREATED": "CSV asset 추가",
-    "DATA_OBJECT_REPLACED": "CSV asset 내용 교체",
-    "DATA_OBJECT_DELETED": "CSV asset과 그 asset을 참조하는 graph-object reference를 같은 candidate에서 원자적으로 제거",
-    "IMAGE_OBJECT_CREATED": "image asset 추가",
-    "IMAGE_OBJECT_REPLACED": "image asset 내용 교체",
-    "IMAGE_OBJECT_DELETED": "image asset과 그 asset을 참조하는 slot image reference를 같은 candidate에서 원자적으로 제거",
-    "SLOT_TYPE_CHANGED": "slot-local contentType 변경",
-    "SLOTS_RESET": "slot-local payload reset과 owned chart 제거",
-    "SLOTS_SWAPPED": "두 GUI 위치의 slot-local payload 교환",
-    "SLOT_IMAGE_LINKED": "existing image reference를 slot에 연결",
-    "SLOT_IMAGE_SETTINGS_CHANGED": "slot-local imageSettings candidate commit",
-    "SLOT_DATA_CONNECTED": "CSV를 graph slot/chart object에 연결",
-    "SLOT_IMAGE_IMPORTED": "imported image와 slot reference commit",
-    "SLOT_CHART_IMPORTED": "FFSX/Plotly chart, 필요한 package CSV와 owning slot을 같은 candidate로 commit",
-    "GRAPH_OBJECTS_REPLACED": "chart.editor.objects 교체",
-    "CHART_LAYOUT_CHANGED": "chart persistent layout 설정 교체",
-    "CHART_MODEL_REPLACED": "chart model 교체; imported chart editable 전환이면 필요한 project CSV 생성과 reference remap도 같은 candidate에 포함",
-    "GRID_LAYOUT_CHANGED": "grid 크기와 slot arrangement 변경",
-    "LAYOUT_STYLE_CHANGED": "persistent slotStyle candidate commit",
-    "SLOTS_MERGED": "선택 직사각형의 slot-local payload를 top-left anchor로 원자적 병합",
-    "SLOTS_SPLIT": "merged anchor를 visible 1x1 slots로 복원",
-    "CAPTION_TEXT_INPUT": "explicit global/slot caption owner text 변경",
-    "SLOT_CAPTIONS_INSERTED": "layout_annotations.insertSlotCaptions의 current-order label grouping/append 계산을 한 candidate로 commit",
-    "CAPTION_SETTINGS_CHANGED": "global caption enabled/name/nameBold/presentation settings commit",
-    "LABEL_SETTINGS_CHANGED": "persistent label 설정 변경",
-    "LABEL_POSITION_CHANGED": "persistent label 위치 변경",
-    "APPEARANCE_CHANGED": "persistent UI palette 변경",
-    "EXPORT_SETTINGS_CHANGED": "persistent export 설정 변경",
+    'PROJECT_LOADED': assets_files.buildAssetCommandCandidate,
+    'PROJECT_NAME_CHANGED': assets_files.buildAssetCommandCandidate,
+    'PROJECT_DIRECTORY_CREATED': assets_files.buildAssetCommandCandidate,
+    'PROJECT_NODE_MOVED': assets_files.buildAssetCommandCandidate,
+    'PROJECT_TRASH_EMPTIED': assets_files.buildAssetCommandCandidate,
+    'ASSETS_IMPORTED': assets_files.buildAssetCommandCandidate,
+    'DATA_OBJECT_CREATED': assets_files.buildAssetCommandCandidate,
+    'DATA_OBJECT_REPLACED': assets_files.buildAssetCommandCandidate,
+    'DATA_OBJECT_DELETED': assets_files.buildAssetCommandCandidate,
+    'IMAGE_OBJECT_CREATED': assets_files.buildAssetCommandCandidate,
+    'IMAGE_OBJECT_REPLACED': assets_files.buildAssetCommandCandidate,
+    'IMAGE_OBJECT_DELETED': assets_files.buildAssetCommandCandidate,
+    'SLOT_TYPE_CHANGED': buildSlotCommandCandidate,
+    'SLOTS_RESET': buildSlotCommandCandidate,
+    'SLOTS_SWAPPED': buildSlotCommandCandidate,
+    'SLOT_IMAGE_LINKED': buildSlotCommandCandidate,
+    'SLOT_IMAGE_SETTINGS_CHANGED': buildSlotCommandCandidate,
+    'SLOT_DATA_CONNECTED': buildSlotCommandCandidate,
+    'SLOT_IMAGE_IMPORTED': buildSlotCommandCandidate,
+    'SLOT_CHART_IMPORTED': buildSlotCommandCandidate,
+    'GRAPH_OBJECTS_REPLACED': graphs.buildGraphCommandCandidate,
+    'CHART_LAYOUT_CHANGED': graphs.buildGraphCommandCandidate,
+    'CHART_MODEL_REPLACED': graphs.buildGraphCommandCandidate,
+    'GRID_LAYOUT_CHANGED': layout_annotations.buildLayoutCommandCandidate,
+    'LAYOUT_STYLE_CHANGED': layout_annotations.buildLayoutCommandCandidate,
+    'SLOTS_MERGED': layout_annotations.buildLayoutCommandCandidate,
+    'SLOTS_SPLIT': layout_annotations.buildLayoutCommandCandidate,
+    'CAPTION_TEXT_INPUT': layout_annotations.buildLayoutCommandCandidate,
+    'SLOT_CAPTIONS_INSERTED': layout_annotations.buildLayoutCommandCandidate,
+    'CAPTION_SETTINGS_CHANGED': layout_annotations.buildLayoutCommandCandidate,
+    'LABEL_SETTINGS_CHANGED': layout_annotations.buildLayoutCommandCandidate,
+    'LABEL_POSITION_CHANGED': layout_annotations.buildLayoutCommandCandidate,
+    'APPEARANCE_CHANGED': layout_annotations.buildLayoutCommandCandidate,
+    'EXPORT_SETTINGS_CHANGED': layout_annotations.buildLayoutCommandCandidate,
 }
 
-PUBLIC_PROJECT_MUTATION_ROUTES = {
-    "project.setName": "PROJECT_NAME_CHANGED",
-    "project.importFile": "PROJECT_LOADED",
-    "slots.setContentType": "SLOT_TYPE_CHANGED",
-    "slots.select.pendingContentType": "SLOT_TYPE_CHANGED",
-    "slots.reset": "SLOTS_RESET",
-    "slots.swap": "SLOTS_SWAPPED",
-    "images.setSettings": "SLOT_IMAGE_SETTINGS_CHANGED",
-    "images.insertEmpty": "SLOT_IMAGE_IMPORTED",
-    "assets.delete.csv": "DATA_OBJECT_DELETED",
-    "assets.delete.image": "IMAGE_OBJECT_DELETED",
-    "assets.move": "PROJECT_NODE_MOVED",
-    "assets.createDirectory": "PROJECT_DIRECTORY_CREATED",
-    "assets.createEmptyCsv": "DATA_OBJECT_CREATED",
-    "assets.emptyTrash": "PROJECT_TRASH_EMPTIED",
-    "assets.connectToSlot.csv": "SLOT_DATA_CONNECTED",
-    "assets.connectToSlot.image": "SLOT_IMAGE_LINKED",
-    "assets.importToDirectory": "ASSETS_IMPORTED",
-    "assets.importToSlot": "ASSETS_IMPORTED",
-    "graphs.setHeaderLines": "DATA_OBJECT_REPLACED",
-    "graphs.setEditable": "CHART_MODEL_REPLACED",
-    "graphs.addObject.emptySlot": "SLOT_DATA_CONNECTED",
-    "graphs.addObject.existingChart": "GRAPH_OBJECTS_REPLACED",
-    "graphs.moveObject": "GRAPH_OBJECTS_REPLACED",
-    "graphs.setObjectValues": "GRAPH_OBJECTS_REPLACED",
-    "graphs.deleteObject": "GRAPH_OBJECTS_REPLACED",
-    "graphs.updateLayout": "CHART_LAYOUT_CHANGED",
-    "graphs.applyPalette": "GRAPH_OBJECTS_REPLACED",
-    "graphs.importFile": "SLOT_CHART_IMPORTED",
-    "print.setSettings": "EXPORT_SETTINGS_CHANGED",
-    "captions.setEnabled": "CAPTION_SETTINGS_CHANGED",
-    "captions.setGlobalText": "CAPTION_TEXT_INPUT",
-    "captions.setSlotText": "CAPTION_TEXT_INPUT",
-    "captions.insertSlotCaptions": "SLOT_CAPTIONS_INSERTED",
-    "captions.setName": "CAPTION_SETTINGS_CHANGED",
-    "captions.setNameBold": "CAPTION_SETTINGS_CHANGED",
-    "captions.setSettings": "CAPTION_SETTINGS_CHANGED",
-    "labels.setEnabled": "LABEL_SETTINGS_CHANGED",
-    "labels.setSettings": "LABEL_SETTINGS_CHANGED",
-    "labels.setPosition": "LABEL_POSITION_CHANGED",
-    "labels.resetPosition": "LABEL_POSITION_CHANGED",
-    "appearance.setPalette": "APPEARANCE_CHANGED",
-    "appearance.resetPalette": "APPEARANCE_CHANGED",
-    "layout.setStyle": "LAYOUT_STYLE_CHANGED",
-    "layout.setGrid": "GRID_LAYOUT_CHANGED",
-    "layout.mergeSlots": "SLOTS_MERGED",
-    "layout.splitSlots": "SLOTS_SPLIT",
-}
-
-PROJECT_MUTATION_GROUPS = {
-    "project": "whole ProjectObject replacement와 metadata",
-    "assets": "CSV/image/VFS와 reference",
-    "slot-local": "slot content/chart/image/imageSettings/caption",
-    "graphs": "chart model과 graph object/CSV reference",
-    "layout": "grid와 slot geometry/payload ownership",
-    "annotations": "persistent label/global caption/slot caption",
-    "appearance-export": "persistent palette/export settings",
-}
-
-PROJECT_MUTATION_CONTRACT = [
-    "Application boundary에서 전달된 declared command만 persistent mutation entry로 받으며 Frontend/renderer direct call을 공식 route로 두지 않는다.",
-    "command input의 id/path/reference를 current activeProject에서 다시 resolve한다.",
-    "command writable scope와 precondition을 확인한다.",
-    "activeProject를 직접 부분 변경하기 전에 candidate ProjectObject 또는 candidate patch를 만든다.",
-    "local rule, VFS/reference integrity, chart ownership, whole-project invariant를 검증한다.",
-    "검증 성공 뒤 activeProject authority를 정확히 한 번 commit한다.",
-    "실패하면 activeProject는 command 시작 전 authoritative state를 유지한다.",
-    "commit pre/post에서 실제 mutation 사실을 ProjectMutationResult로 산출한다.",
-    "selectedSlotId, asset/graph selection, workspace, overlay 등 interface state는 직접 변경하지 않는다.",
-    "DOM/Plotly/Mantine projection을 수행하지 않는다.",
-]
-
-GRAPH_OBJECT_EDIT_INPUT_CONTRACT = {
-    "input": (
-        "GRAPH_OBJECTS_REPLACED receives chartId (add also accepts slotId/csvId), the existing public operation name, "
-        "and only that operation's new values/index/from/to/colors. Current objects/candidate arrays are not Application inputs. "
-        "Backend resolves current owning editable chart, CSV and index, calculates objects using sourcescript.backend.graphs, "
-        "and uses graphEditorCommit as a Backend-only candidate helper. SLOT_DATA_CONNECTED add rejects a now-occupied target; "
-        "GRAPH_OBJECTS_REPLACED add rejects a now-missing/non-editable chart rather than trusting the earlier routing read."
-    ),
-    "add": "append the base object from the resolved CSV; result hint is the appended post-edit index.",
-    "move": (
-        "resolve the requested existing from/to indices, not just adjacent moves; invalid/out-of-bounds rejects without commit. "
-        "Move that object and result hint selects to, not the previous numeric index; from=to preserves the no-op meaning."
-    ),
-    "one-object": "resolve index and values using graphs.graphEditorCommit one-object rules; result hint selects that same post-edit index.",
-    "delete": (
-        "remove the resolved requested index; result hint is explicit none, retaining the existing selection-clear meaning. "
-        "Do not invent selection of a neighboring object. Empty chart remains valid."
-    ),
-    "palette": "use graphs.GRAPH_PALETTE_RULE on current editable objects, cycling the non-empty input; omit index hint so existing selection remains.",
-    "selection": (
-        "Backend writes selectionHints.chartId and selectedIndexHint from the actual post-edit array. "
-        "Missing hint preserves the current index; explicit none clears. Application forwards it through the common "
-        "buildFrontendReconciliationInput path only, and never substitutes object.csvId for current CSV selection."
-    ),
-}
-
-ProjectMutationResult = {
-    "event": "처리한 project command",
-    "committed": "commit 성공 여부",
-    "changed": "command별 실제 changed ids/path/owner; create/import는 input 순서의 실제 생성 asset path/id와 owning chart/slot id, DATA_OBJECT_REPLACED는 실제 updated CSV path, PROJECT_DIRECTORY_CREATED는 실제 생성 directory path, PROJECT_NODE_MOVED는 실제 final destination path를 포함한다. 기존 공식 query의 post-commit read에 사용하며 stale input/plan path를 성공 결과로 재사용하지 않는다",
-    "removedGraphReferenceCount": "실제 제거한 graph-object CSV reference 수",
-    "resetImageSlotCount": "실제 image reference를 비운 slot 수",
-    "selectionHints": (
-        "후속 reconciliation의 identity/path 결과와 chartId에 한정된 optional selectedIndexHint; absence와 explicit none을 구별. "
-        "CSV cascade는 graphObjectIndexMaps=[{chartId, indices}]를 사용한다. chartId는 중복 없는 실제 affected chart의 id, "
-        "indices는 제거 전 object 개수 길이의 배열이며 각 old index entry는 retained object의 post index 또는 제거된 경우 none이다. "
-        "identity/path나 objects snapshot을 대체하지 않는 한 command의 immutable delta다"
-    ),
-    "projectionEffect": "renderer effect를 결정할 수 있는 실제 commit 결과",
-}
-
-PROJECT_COMMAND_COVERAGE_RULE = (
-    "PUBLIC_API_METHODS에서 persistent ProjectObject mutation으로 분류한 operation은 PUBLIC_PROJECT_MUTATION_ROUTES에 존재하고 "
-    "그 route가 PROJECT_COMMANDS의 declared command로 수렴해야 한다. "
-    "kind 또는 precondition에 따라 command가 달라지는 operation은 matrix에 explicit branch route를 둔다. "
-    "domain helper가 candidate를 계산할 수는 있지만 activeProject commit을 독립 mutation path로 수행하지 않는다. "
-    "같은 owner를 변경하는 UI/API 진입점은 동일 project command semantics를 공유한다."
-)
-
-PROJECT_RESULT_RULE = (
-    "ProjectMutationResult는 장기 authority가 아니라 한 command의 immutable result다. "
-    "Backend는 result를 Application boundary에 반환하고, Application adapter가 Backend reconciliation query를 거쳐 "
-    "Frontend reconciliation input과 renderer effect로 변환한다. Project EFSM이 Frontend FSM 또는 renderer를 직접 호출하지 않는다."
-)
 
 class ProjectStateMachine:
     def send(self, event, payload):
+        source = "ProjectObject 인스턴스."
+        sourceState = "프로젝트 상태 딕셔너리. 원형: /backend/project_state/ProjectObject._state"
+        candidateState = "프로젝트 상태 딕셔너리 또는 None."
+        retainedOriginalIndicesByChart = "chart id별 원래 object 순번 배열 딕셔너리."
+        result = "ProjectMutationResult 딕셔너리."
+        handler = "후보 상태를 계산하는 함수 참조."
         """
-        1. PROJECT_COMMANDS membership과 precondition을 검증한다.
-        2. current activeProject에서 모든 input/reference를 다시 resolve한다.
-        3. 해당 domain module의 candidate builder를 실행한다. Application-provided project/model/objects candidate는 받지 않는다.
-           asset import는 buildProjectAssetImportCandidate, project load는 ffpxReadProject/buildProjectObject,
-           slot package import는 ffsxReadSlot/applyFfsxSlot, editable 전환은 convertImportedChartToEditable를 내부에서 호출한다.
-           file bytes 읽기/parsing 동안 authority를 변경하지 않는다. collision prompt와 choice 수집은 Application이 dispatch 전에 완료한다.
-           Backend는 UI resolver/callback을 호출하지 않는다. file 대기가 끝난 뒤에는 전달된 choice와
-           current directory/target/reference/collision/next-id를 다시 resolve하고 candidate를 완성한다.
-           선택된 replace id/path가 더 이상 같은 대상을 가리키지 않으면 거부한다. stale 계획으로 덮어쓰거나 자동 재선택하지 않는다.
-           candidate의 원천이 된 authority가 commit 전 바뀌면 그대로 commit하지 않고 현재 authority에 대해 재계산/검증한다.
-           실패/취소는 미commit 결과이며 부분 변경/복구용 rollback/성공 hint를 만들지 않는다.
-           PROJECT_NAME_CHANGED는 value를 문자열로 변환하고 trim=True이면 양끝 공백 제거 뒤 backend.defaults.naming.projectNameMaxLength로 제한해 meta.projectName candidate를 만든다.
-           SLOT_TYPE_CHANGED는 explicit visible slotId를 resolve하며 type은 image일 때 image, 그 외 graph로 정규화한다.
-           missing/hidden slot은 거부하며 선택되지 않았다고 pending type을 별도 저장하지 않는다.
-           SLOTS_RESET은 explicit visible slotIds의 SLOT_LOCAL_DEFAULTS 복원과 owned chart 제거를 같은 candidate로 수행한다.
-           SLOTS_SWAPPED는 서로 다른 visible 두 slot만 허용한다. missing/hidden/same-id는 미commit이며
-           slot-local payload 전체를 교환하고 위치/geometry identity는 유지한다. result hint로 공통 selection reconciliation을 수행한다.
-           SLOT_IMAGE_IMPORTED의 images.insertEmpty는 new SVG bytes/name/MIME만 받아 current next-id/VFS로 model을 만들고
-           current target이 visible image slot인지 재검증한다. image 삽입은 renderable reference 교체이므로 current slot이 소유한 chart만
-           같은 candidate에서 제거하고 chart reference를 none으로 만든 뒤 새 image reference를 설정한다. 기존 image asset과 CSV asset은
-           삭제하지 않으며 geometry/caption/current slot-local imageSettings는 보존한다. asset 생성과 reference 교체를 한 번에 commit한다.
-           ASSET delete의 없는 target은 미commit이며 kind/id/path가 다른 asset으로 바뀌었으면 자동 재선택하지 않는다.
-           PROJECT_NODE_MOVED/PROJECT_DIRECTORY_CREATED는 actual final canonical path를 changed에 기록한다.
-           APPEARANCE_CHANGED는 project_state.APPEARANCE_PALETTE_RULE에 따라 10개 field의 전체 palette candidate를 만든다.
-           CHART_LAYOUT_CHANGED는 current owning chart의 title/global/axis field에 새 edit만 적용하고 graphs의 normalize/layout을 사용한다.
-           새 값에 없는 current title/axis field는 유지하며 invalid 새 값은 graph default/empty 규칙으로 정규화한다.
-           nested axis patch는 해당 axis의 명시된 field에만 적용하고 다른 axis/global field를 버리지 않는다.
-           project.appearance와 chart.editor가 각 의미의 원천이며 graph.data/layout/CSS는 candidate 계산/표시 결과다.
-           label/caption create/load/missing/partial edit는 layout_annotations.ANNOTATION_SETTINGS_RULE을 사용한다.
-           LABEL_POSITION_CHANGED의 reset=True는 settings.json backend.project_object.annotations.labels.settings.x/y를 Backend 내부에서 읽어 적용한다.
-           CAPTION_TEXT_INPUT은 layout_annotations.CAPTION_TEXT_RULE의 owner/문자열 변환/empty 저장 규칙을 command 내부에서 적용한다.
-           SLOT_CAPTIONS_INSERTED는 current candidate와 payload.slotIds로 layout_annotations.insertSlotCaptions를 계산한다.
-           no target이면 committed=False/unchanged이고 success read나 selection을 실행하지 않는다.
-           JSON config 값/계산 결과를 Frontend state에서 다시 만들거나 별도 authority로 저장하지 않는다.
-        4. candidate whole-project invariant를 검증한다.
-        5. 성공 candidate만 activeProject에 한 번 commit한다.
-        6. 실제 pre/post 차이에서 ProjectMutationResult를 계산한다. 생성/import의 changed id/path/owner는 실제 commit 결과를 사용한다.
-           graphEditorCommit이 계산한 index hint가 있으면 실제 owning chart id와 함께 selectionHints.chartId/selectedIndexHint에 담는다.
-           graphs.addObject는 append된 index, graphs.moveObject는 제거 후 목적 위치 to, graphs.setObjectValues는 편집한 index,
-           graphs.deleteObject는 explicit none을 계산한다. current chart/index/from/to를 command에서 resolve하고 유효하지 않으면 commit 전에 거부한다.
-           이동은 from object를 제거해 최종 to 위치에 삽입하고 나머지 상대 순서를 유지한다. 마지막 object 삭제도 empty 배열로 유효하다.
-           DATA_OBJECT_DELETED, PROJECT_NODE_MOVED의 entering-trash detach, PROJECT_TRASH_EMPTIED가 실제 graph reference를 제거하면
-           같은 candidate의 filter에서 chart별 retained original index 순서를 사용해 graphObjectIndexMaps를 계산한다.
-           원래 n개 object에 대해 indices를 n개의 none으로 시작하고 retained original indices [k0,k1,...]의
-           indices[kj]=j로 채운다. 예: [A,B,C]에서 A 제거는 [none,0,1], B 제거는 [0,none,1]이다.
-           동일 값의 중복 object/같은 CSV의 여러 reference도 original 위치로 구별한다. equality로 post 배열을 역매칭하지 않는다.
-           실제 제거가 있는 retained chart만 항목을 만들고 다른 chart/단순 path 이동/image-only detach에는 mapping을 만들지 않는다.
-           이 filter와 reference count는 asset-domain의 동일 actual reference set을 사용한다. conversion view는 그 집합에서 제외한다.
-           삭제된 chart는 current owner resolve 실패로 clear되므로 map이 필요 없다. 여러 affected chart는 각각 별도 항목을 만든다.
-           candidate 재계산 시 mapping도 새 authority에서 다시 계산한다. mapping을 persistent chart에 저장하거나 Frontend 선택을 읽지 않는다.
-           direct graphs.deleteObject의 explicit-none hint는 그대로 유지하며 cascade와 다른 선택 의미를 임의로 합치지 않는다.
-           hint가 없는 command는 그 key를 생략하며 none과 혼동하지 않는다. 실패 결과에는 성공 hint/map을 넣지 않는다.
-        7. interface state와 renderer를 변경하지 않고 result를 반환한다.
+        Args:
+        - event:
+          PROJECT_COMMANDS에 등록된 명령 이름 문자열.
+
+        - payload:
+          명령 대상 id·경로와 새 사용자 입력·파일·최종 import 선택을 가진 딕셔너리.
+
+        Return:
+        - result:
+          ProjectMutationResult 원형의 읽기 전용 딕셔너리.
+
+        변경:
+        - 성공한 명령의 후보 상태를 activeProject.initialize로 한 번 반영한다.
+
+        처리:
+            1. event 등록 여부를 확인한다. 현재 activeProject를 source에, source._state를
+               sourceState에 둔다. payload의 id·경로를 그 상태에서 조회하여 현재 대상을 확인한다.
+               명령 거부·취소·변경 없음은 event·committed=False와 빈 변경 사실의 result를 반환한다.
+               성공 selection hint는 생략한다. 입력과 파일 해석 오류는 호출자에게 전달한다.
+            2. sourceState의 딕셔너리·배열·Slot·중첩 content를 분리 복사하여 candidateState에 둔다.
+               retainedOriginalIndicesByChart를 빈 딕셔너리로 둔다.
+            3. PROJECT_COMMANDS에서 event 키에 연결된 함수를 handler에 둔다.
+               handler(event,payload,candidateState)를 한 번 호출한다.
+               handler가 assets_files.buildAssetCommandCandidate이면 반환 쌍의 상태와
+               순번 대응 자료를 candidateState와 retainedOriginalIndicesByChart에 각각 둔다.
+               그 외 담당 함수의 반환 상태를 candidateState에 둔다.
+            4. 파일 대기 뒤 현재 activeProject와 그 _state가 source·sourceState와 달라졌으면
+               1번으로 돌아간다. 같을 때 후보가 None이면 1번의 미반영 결과를 반환한다.
+               directory·target·참조·충돌·next-id와 최종 choice의 replace id/path를 sourceState에서 재검사한다.
+               normalizeSlotContent와 normalizeProjectSettings로 후보를 정규화하고
+               validateProjectObjectState(candidateState, True)로 전체 불변조건을 검증한다.
+            5. 현재 activeProject와 그 _state를 source·sourceState와 각각 비교한다.
+               달라졌으면 1번으로 돌아가 같은 새 입력·choice로 계산한다.
+               최종 choice가 다른 대상에 대응하면 미반영 결과를 반환한다.
+               같으면 activeProject.initialize(candidateState)를 한 번 호출한다.
+            6. sourceState·반영 직후 activeProject._state·retainedOriginalIndicesByChart를
+               event·payload와 함께 buildProjectMutationResult에 전달하여 result에 둔다.
+               계산 도중 거부·취소된 후보는 버리고, 재시도에서는 순번 배열도 새로 계산한다.
+            7. result를 반환한다. Application은 반환 결과와 현재 Frontend 참조로
+               buildFrontendReconciliationInput을 호출한다.
         """
-        result = "ProjectMutationResult"
         return result
 
-projectEFSM = (
-    "activeProject를 유일한 persistent authority로 사용하는 ProjectStateMachine instance. "
-    "별도 persistent project-state copy를 소유하지 않는다."
-)
+
+projectEFSM = 'ProjectStateMachine 인스턴스.'

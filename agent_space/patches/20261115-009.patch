@@ -1,0 +1,1107 @@
+diff --git a/agent_space/patches/20261115-009.md b/agent_space/patches/20261115-009.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..38113cfafce12cc729a10c90ba1b7689cc8f1603
+--- /dev/null
++++ b/agent_space/patches/20261115-009.md
+@@ -0,0 +1,30 @@
++# 20261115-009 — Plan029의 Slot 원형·생성·소유·조회 1차 반영
++
++## 범위와 목적
++
++작업 시작 지시에 따라 Source Script에 공통 `Slot` 클래스를 작성하고 생성·복원·조회·소비 경로를 연결했다. 전체 Source Script 재작성은 진행 중이며 닫힘을 선언하지 않는다.
++
++- `sourcescript/backend/project_state.py`: 기존 슬롯 딕셔너리 원형을 `Slot`으로 바꾸고 프로젝트 상태 구조를 `ProjectObject._state`에 배치했다. 각 슬롯의 content를 독립적으로 초기화하며 `activeProject`를 현재 프로젝트의 소유자로 유지한다. 생성, 저장 자료 정규화, 프로젝트 복사·교체, visible 슬롯 조회와 슬롯별 에셋 표시를 연결했다.
++- `sourcescript/backend/layout_annotations.py`: grid 확대의 새 좌표에 `Slot(id, row, col)`을 생성하도록 명시했다. 라벨 조회에서 현재 상태와 슬롯을 찾고 대시보드 치수와 슬롯 치수를 계산하는 호출을 연결했다. `gridSlotGeometry`는 승인된 예시의 변수 선언·입력·반환·자연어 계산 형식을 적용했다.
++- `sourcescript/backend/assets_files.py`: 저장 딕셔너리와 Slot 인스턴스 사이의 복원·저장 변환을 명시했다. FFSX 적용은 현재 대상 id를 재조회하고 분리된 candidate의 슬롯에 적용하며 대상의 id·좌표·span을 보존한다.
++- graph·Application public API·Frontend·system의 관련 참조와 예시를 Slot 속성 및 실제 `_state` 컬렉션 경로에 맞췄다. 프로젝트 설정의 초기값과 허용 범위 설명도 구분했다.
++
++## 보존한 의미와 선택 근거
++
++공통 원형은 `Slot` 하나로 두고 기존 필드명·저장 문서의 키를 유지했다. 새 클래스에 맞춘 저장 자료 변환을 경계에 배치하여 저장 파일 형식을 바꾸지 않았다. 초기 슬롯은 기존 행 우선 id 계산을 사용하고 grid 확대는 기존 최대 id 다음부터 할당한다. 기존 슬롯의 내용·배치와 chart의 단일 소유 관계를 유지한다.
++
++현재 프로젝트와 명령의 작업 candidate를 구분한다. 복사·정규화·검증은 candidate에서 수행하고 검증 성공 후 소유 상태를 반영한다. 조회 결과는 해당 읽기 작업에 소비하며 별도 프로젝트 읽기 원천이나 선택 상태를 추가하지 않았다. 설정 기본값은 `sourcescript/backend/settings.json`을 사용한다. 이전 전역 `projectState` 원형은 `_state` 구조로 이동하여 같은 상태 구조를 중복 정의하지 않았다.
++
++## 실제 변경 기록
++
++- 기준 HEAD: `3081b4120257cfea77b72fb2941ed688f7617d5a`.
++- 비교 기준 tree: `42e089fd55cca34547f6435144505c91cf3ab42e`. 위 HEAD에 작업 시작 전의 Plan029 수정과 008 기록을 포함한 native Git tree다.
++- 이 기준과 현재 파일의 실제 차이를 native Git의 별도 index로 계산했다. 계획 수정 기록 008을 중복 포함하지 않으며 일반 index는 변경하지 않는다. 동명 patch에는 이 설명도 포함하고 patch 자기 자신은 포함하지 않는다.
++
++## 계층 상태와 확인 범위
++
++- Source Script: revision 48, `stale`, closure `open`.
++- 실제 fingerprint: `sha256:7dc7ee44a17e10274b6a64c02522ee2275b954dc8fd472a9126715712f8e73f2`.
++- 15개 Python 문서는 실행하지 않고 구문 파싱만 수행했다. 실제 변경을 구간별로 읽고 필드·생성·참조 전달을 정적으로 대조했다. 기존 계층 도구의 hash 함수만 재사용했으며 version checker 본체는 실행하지 않았다.
++- 전체 소비 경로와 실패 의미 검토, 15개 Python 문서 전체의 예시 양식·알고리즘 재작성은 남아 있다. 이 기록은 Source Script의 완결성 검토나 실행 성공 증거가 아니다.
++- pseudocode·source code·배포 파일·정책 본문·AGENT는 변경하지 않았다. 테스트·앱·빌드·브라우저·커밋·푸시는 실행하지 않았다.
+diff --git a/agent_space/plans/plan-029.md b/agent_space/plans/plan-029.md
+index 4892a3b8cc2cc756abcfa9368a3800130f97a0a3..a133b0788cdd4da060960259fbe85f201378549c 100644
+--- a/agent_space/plans/plan-029.md
++++ b/agent_space/plans/plan-029.md
+@@ -259,11 +259,20 @@
+ - Source Script의 논리적 완결성·요구 부합·중복 정의·복사본의 소비 경로를 검토한 근거를 확인한 뒤 닫힘을 판단한다. 미해결 의미가 남은 위치는 열린 상태로 기록한다.
+ - 실제 Source Script 수정 시 revision·fingerprint, 실제 native Git diff와 동명 설명을 기록한다. 실행한 검사와 정적 대조를 구분한다.
+ - 전체 Source Script의 보완·닫힘 근거를 확인한 뒤 pseudocode, source code 순으로 대응 절차와 전체 소비 경로에 전파한다. 하위 계층에서 발견한 미정 의미는 Source Script에 먼저 반영한다.
+-- 이번 요청으로 수행한 작업은 기존 로컬 변경의 선행 커밋과 Plan029 수정이다. Source Script 구현, pseudocode·source code 수정, 테스트·빌드·브라우저·version checker·push는 수행하지 않는다. 정책 본문·AGENT·색인·배포 파일을 변경하지 않는다.
++- 계획 수정 요청에서 수행한 작업은 기존 로컬 변경의 선행 커밋과 Plan029 수정이다. 이어진 작업 시작 지시에 따른 Source Script 수정 경과는 8절에 기록한다. 전체 Source Script의 보완과 닫힘 판단 전까지 pseudocode·source code를 수정하지 않는다. 정책 본문·AGENT·색인·배포 파일을 변경하지 않는다.
+ 
+ ## 7. 계획 수정 시점의 결과
+ 
+ - 선행 로컬 커밋: `3081b4120257cfea77b72fb2941ed688f7617d5a`.
+ - 기존 구문 조사 목록을 보존하고, Slot 오브젝트 정리를 첫 단계로 배치했다.
+ - 예시 양식의 적용 대상을 105개 검출 함수에서 현재 Source Script 전체로 확대했다.
+-- 이 계획 수정 뒤의 구현과 추가 커밋·푸시는 미실행이다.
++- 계획 수정 완료 시점에는 이후 구현과 추가 커밋·푸시를 실행하지 않았다.
++
++## 8. 구현 경과 — Source Script 48, 열린 상태
++
++- 작업 시작 지시에 따라 1단계의 `Slot` 클래스와 `ProjectObject._state` 소유 구조를 작성했다. `createProjectState`, `normalizeSlotContent`, `resolveVisibleSlot`에 생성·복원·조회 경로를 연결했다.
++- grid 확대의 새 슬롯 생성, 프로젝트/슬롯 패키지의 저장 자료와 Slot 간 변환, 라벨 기준 치수 조회와 `gridSlotGeometry` 전달을 보완했다. 기존 소비 절차와 예시의 슬롯 원형·속성 접근도 맞췄다.
++- 새 프로젝트의 행 우선 id 계산, 기존 슬롯 id·좌표·span·내용 보존, 현재 `activeProject` 소유와 검증 후 반영 경계를 유지한다. 슬롯 기본값은 `sourcescript/backend/settings.json`에서 읽는다.
++- Source Script 48의 실제 fingerprint와 native 변경 기록은 `development-versions.json`, `agent_space/patches/20261115-009.patch` 및 동명 설명에 기록한다. 구문 파싱과 실제 변경 대조만 수행했다.
++- 이 기록은 1단계의 1차 반영이다. 전체 소비 경로·실패 의미의 재검토와 15개 Python 문서의 전체 양식·알고리즘 재작성은 진행 대상이다. Source Script는 `stale`·`open`을 유지하며 닫힘을 선언하지 않는다.
++- pseudocode·source code·배포 파일은 수정하지 않았다. 테스트·앱·빌드·브라우저·version checker 본체·커밋·푸시는 실행하지 않았다.
+diff --git a/agent_space/policies/examples/source-script_example1.py b/agent_space/policies/examples/source-script_example1.py
+index 79e6627183fd1961dc89659b05e4078776da9d2b..0d326346e3671aa068e0395b16b97bf5aad08d90 100644
+--- a/agent_space/policies/examples/source-script_example1.py
++++ b/agent_space/policies/examples/source-script_example1.py
+@@ -40,8 +40,8 @@ def gridSlotGeometry(layout, geometry, slot):
+     - slot:
+       슬롯 오브젝트 또는 None.
+       슬롯 오브젝트:
+-        원형: /backend/project_state/slot
+-        Source of Truth: /backend/project_state/activeProject._state.slots의 원소.
++        원형: /backend/project_state/Slot
++        Source of Truth: /backend/project_state/activeProject._state["slots"]의 원소.
+ 
+     Return:
+     - slotGeometry:
+diff --git a/development-versions.json b/development-versions.json
+index fc9dc30d4baa9277539c58a65121c457b017a33e..a59af05ee0ee8d2517e7ec8f8f7170516c3759e5 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. pseudocode (implemented in PlusCal) is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating source code implementation or current status.",
+   "layers": {
+     "source-script": {
+-      "revision": 47,
++      "revision": 48,
+       "status": "stale",
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+-      "fingerprint": "sha256:b15b7749643054714282f06a71948124c6106bae954602cebf2fcae7ddae87b8",
++      "fingerprint": "sha256:7dc7ee44a17e10274b6a64c02522ee2275b954dc8fd472a9126715712f8e73f2",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/sourcescript/application/public_api/__init__.py b/sourcescript/application/public_api/__init__.py
+index beadc19bfbfbdfecaf06999a15fbe14f3a93451d..81bf2515b43aafcb0e7c46e086210598bea525e7 100644
+--- a/sourcescript/application/public_api/__init__.py
++++ b/sourcescript/application/public_api/__init__.py
+@@ -30,7 +30,7 @@ def readSelectedSlot():
+     처리:
+     1. adapter.appFSM.readState()의 selectedSlotId를 읽는다. None은 선택 해제이며 0은 유효한 id다.
+     2. 이 참조를 frontendState.selectedSlotId로 adapter.dispatchProjectQuery에 전달한다.
+-    3. Backend의 slots.readSelected가 현재 activeProject.slots에서 같은 id의 visible slot을 해결한다.
++    3. Backend의 slots.readSelected가 현재 activeProject._state['slots']에서 같은 id의 visible slot을 해결한다.
+        선택 해제·대상 소멸·hidden이면 None, 그 외에는 해당 slot의 읽기전용 copy를 반환한다.
+     4. 조회 결과를 그대로 반환하고 오류는 호출자에 전파한다.
+     """
+@@ -51,7 +51,7 @@ def readGraphData():
+     1. adapter.appFSM.readState()에서 이번 호출의 selectedSlotId, assetSelection, assetPath,
+        graphObject, graphObjectIndex를 읽는다.
+     2. 이 참조들을 frontendState에 담아 adapter.dispatchProjectQuery의 graphs.readData를 호출한다.
+-    3. Backend는 selectedSlotId의 현재 visible slot을 찾고 slot.content.chart로 소유 chart를 해결한다.
++    3. Backend는 selectedSlotId의 현재 visible slot을 찾고 slot.content["chart"]로 소유 chart를 해결한다.
+        assetSelection이 csv이면 assetPath를 현재 VFS에서 해결하여 currentCsv를 얻는다.
+        objectColumns는 선택 object의 csvId로 별도 해결한다.
+     4. sourcescript/backend/project_state.py의 graphs.readData 결과를 그대로 반환한다.
+diff --git a/sourcescript/application/public_api/graphs.py b/sourcescript/application/public_api/graphs.py
+index c13de2d5650a8e313c4b413549ec5e0337c99023..6e9a6109d50c6d89c70b41c2eba81f27285c5399 100644
+--- a/sourcescript/application/public_api/graphs.py
++++ b/sourcescript/application/public_api/graphs.py
+@@ -21,7 +21,7 @@ def graphEditorAdd(slotId, csvId):
+     처리:
+     1. slotId를 slots.readSelected query에 전달하여 현재 visible slot을 얻는다.
+        slot이 없으면 None을 반환한다. slotId 0도 그대로 조회한다.
+-    2. slot["content"]["chart"]가 None이면 SLOT_DATA_CONNECTED를 선택한다.
++    2. slot.content["chart"]가 None이면 SLOT_DATA_CONNECTED를 선택한다.
+        chart id가 있으면 GRAPH_OBJECTS_REPLACED를 선택한다.
+        두 command 모두 slotId, csvId와 operation=graphs.addObject를 입력받는다.
+     3. Backend는 현재 slot과 CSV를 다시 해결한다. SLOT_DATA_CONNECTED는 빈 chart 참조를 확인하고
+@@ -34,7 +34,7 @@ def graphEditorAdd(slotId, csvId):
+     slot = dispatchProjectQuery("project-api", {"operation": "slots.readSelected", "frontendState": {"selectedSlotId": slotId}})
+     if slot is None:
+         return None
+-    event = "SLOT_DATA_CONNECTED" if slot["content"]["chart"] is None else "GRAPH_OBJECTS_REPLACED"
++    event = "SLOT_DATA_CONNECTED" if slot.content["chart"] is None else "GRAPH_OBJECTS_REPLACED"
+     result, interfaceState, rendererProjection = dispatchProjectCommand(
+         event, {"slotId": slotId, "csvId": csvId, "operation": "graphs.addObject"}
+     )
+diff --git a/sourcescript/backend/assets_files.py b/sourcescript/backend/assets_files.py
+index 0d97a0a0bd30c8097ed4e3eba4553c6247ec4971..5e12b8d2dbc6329a26ca7cf95f8de3c542bdb83a 100644
+--- a/sourcescript/backend/assets_files.py
++++ b/sourcescript/backend/assets_files.py
+@@ -5,7 +5,7 @@ Fast Figure Source Script — Backend / asset-domain
+ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈이 아니다.
+ """
+ 
+-from sourcescript.backend.project_state import activeProject, projectVfs, projectObjects, getProjectCsv, getProjectImage, validateProjectObjectState
++from sourcescript.backend.project_state import activeProject, projectVfs, projectObjects, getProjectCsv, getProjectImage, validateProjectObjectState, ProjectObject, normalizeSlotContent, resolveVisibleSlot
+ from sourcescript.backend import graphs
+ 
+ ASSET_BOUNDARY_RULE = (
+@@ -317,6 +317,9 @@ def ffpxBuildProject():
+     4. chart CSV reference, chart 1:1 ownership, slot image reference가 export 가능한지 재검사한다.
+     5. project.xml에 project metadata, fileSystem, appearance, persistent export settings와 document ref를 기록한다.
+     6. layout/caption/labels/slot 문서는 각 책임 데이터만 기록한다.
++       snapshot의 Slot 인스턴스는 Slot 원형에 정의된 영속 속성을 같은 이름의 키로 가진
++       저장용 딕셔너리로 구성한다. content의 중첩 필드와 caption을 포함한다.
++       이 작업용 딕셔너리를 typed XML writer에 전달하고 저장 문서의 기존 필드명을 유지한다.
+     7. typed XML grammar는 ffpxEncodeValue 하나를 writer 원천으로 사용한다.
+     8. CSV/image bytes는 metadata와 분리해 dataRef로 연결한다.
+     """
+@@ -357,6 +360,9 @@ def ffsxBuildSlot(slot, chart):
+     - 없음.
+ 
+     처리:
++    slot은 /backend/project_state/Slot 인스턴스다. slot.content["chart"]로 소유 chart를
++    확인하고 slot.caption을 슬롯 문서에 기록한다. Slot의 영속 속성은 같은 이름의 저장용
++    딕셔너리로 옮겨 typed XML writer에 전달한다. package-local id mapping은 이 복사본에 적용한다.
+     graphs.validateChartModel이 실제 project CSV object로 판정한 object가 참조하는 CSV만 package-local 연속 id로 remap한다.
+     그 object csvId도 같은 mapping으로 변경한다. non-editable imported conversion chart는 원본과 conversion view를 보존하며
+     conversion object를 CSV 수집/remap 대상에 넣지 않는다. validateChartModel의 representation 판정을 그대로 사용한다.
+@@ -517,30 +523,44 @@ def ffpxDecodeValue(element):
+ 
+ 
+ def buildProjectObject(payload, fileName):
++    state = {}
++    candidate = "복원과 검증을 마친 ProjectObject 인스턴스."
+     """
++    Args:
++    - payload:
++      ffpxReadProject가 해석한 프로젝트 저장 자료. 슬롯 원소는 저장 필드 딕셔너리다.
++    - fileName:
++      가져온 프로젝트 파일 이름. 프로젝트 이름 보완에 사용하는 문자열.
++
+     Return:
+     - candidate:
+-      current project invariant를 모두 만족하는 import candidate ProjectObject.
++      복원한 슬롯을 Slot 인스턴스로 소유하는 ProjectObject.
++        원형: /backend/project_state/ProjectObject
+ 
+     변경:
+-    - activeProject를 변경하지 않는다.
++    - 없음.
+ 
+     처리:
+-    1. current schema/version과 project name/grid shape를 검증한다.
+-    2. CSV/image id, bytes, canonical VFS location을 candidate collection으로 정규화한다.
+-       image asset에는 slot-local display settings를 두지 않는다.
+-    3. chart와 graph object를 정규화하고 validateChartModel의 representation 판정을 적용한다.
+-       실제 project object의 CSV reference만 resolve한다. non-editable conversion view에는 project CSV를 만들거나 요구하지 않는다.
+-       zero-object editable chart는 그대로 허용한다.
+-    4. slot geometry, chart/image reference, slot-local imageSettings/caption을 정규화한다.
+-    5. chart마다 owning slot이 정확히 하나인지 확인한다.
+-       shared/orphan topology는 clone/drop하지 않고 실패한다.
+-    6. labels/captions/appearance/export settings를 정규화한다.
+-       없는 additive export settings는 project default를 사용한다.
+-    7. collection 최대 id에서 next-id를 계산한다.
+-    8. validateProjectObjectState를 통과한 candidate만 반환한다.
+-    """
+-    candidate = "완전 검증된 import ProjectObject"
++        1. payload의 schema/version, 프로젝트 이름과 grid 크기를 확인하고
++           ProjectObject._state 원형의 state 딕셔너리에 프로젝트 필드를 분리 복사한다.
++        2. CSV와 이미지의 id, bytes, canonical VFS 위치를 state["assets"]에 구성한다.
++           state["charts"]에는 chart와 graph object를 복원한다.
++           graphs.validateChartModel의 representation 판정에 따라 실제 project object의
++           CSV 참조를 검증한다. 가져온 conversion view와 원본 표현을 보존한다.
++        3. state["slots"]를 빈 배열로 둔다. payload의 슬롯 딕셔너리를 저장 순서대로
++           normalizeSlotContent에 전달하고 반환된 Slot을 배열 끝에 추가한다.
++           이 변환은 원본 필드의 존재 여부로 canonical/legacy 우선순위를 결정하므로
++           저장된 None, False, 0, 빈 문자열과 필드 누락을 구별한다.
++        4. 각 chart가 state["slots"]의 slot.content["chart"]에 정확히 한 번 연결되는지
++           검증한다. 공유 또는 소유자가 없는 chart가 있으면 복원을 실패시킨다.
++        5. labels/captions/appearance/export 설정을 복원한다.
++           같은 버전의 자료에서 export 설정이 없으면 프로젝트 설정 기본값으로 보완한다.
++           저장된 슬롯 배치와 content의 추가 필드는 정규화 과정에서 보존한다.
++        6. CSV/image/chart 컬렉션의 최대 id보다 큰 다음 id를 state["nextId"]에 계산한다.
++        7. validateProjectObjectState(state, True)로 state 전체를 검증한다. 성공하면 ProjectObject(state)를
++           생성하여 candidate에 둔다. 실패하면 복원 실패를 호출자에게 전달한다.
++        8. candidate를 반환한다. 현재 프로젝트로 채택하는 명령이 최종 검증과 교체를 수행한다.
++    """
+     return candidate
+ 
+ 
+@@ -554,11 +574,16 @@ def applyFfsxSlot(slotPayload, targetSlot):
+     - candidate만 계산한다. SLOT_CHART_IMPORTED 내부 Backend helper이며 자체 commit/Application 역호출은 없다.
+ 
+     처리:
+-    1. targetSlot을 current project에서 다시 resolve한다.
++    1. targetSlot은 Slot 인스턴스이며 그 id만 작업 대상 식별자로 사용한다.
++       resolveVisibleSlot(targetSlot.id, activeProject._state)로 현재 대상의 존재를 확인한다.
++       activeProject._state를 Slot과 중첩 content까지 분리 복사한 candidate를 만든다.
++       같은 id의 candidate Slot에 적용하며 대상이 사라졌으면 명령의 거부 결과를 반환한다.
+     2. validateChartModel이 실제 project CSV object로 판정한 object가 참조하는 package-local CSV마다 새 project id/path candidate를 만든다.
+     3. 그 object csvId만 새 mapping으로 바꾼다. non-editable conversion chart의 imported/conversion view는 그대로 보존한다.
+-    4. 새 chart id를 할당하고 target slot이 그 chart를 유일하게 소유하도록 candidate를 만든다.
+-    5. FFSX가 제공하는 slot caption을 target slot annotation candidate에 적용한다.
++    4. 새 chart id를 할당하고 candidate의 대상 Slot.content["chart"]에 연결한다.
++       기존 대상의 row, col, rowSpan, colSpan, hidden과 id는 유지한다.
++       교체되는 chart의 소유 참조 정리는 같은 명령의 candidate 계산에 포함한다.
++    5. FFSX가 제공하는 caption을 candidate의 대상 Slot.caption에 적용한다.
+     6. whole-project invariant를 검증한다.
+     7. caller인 SLOT_CHART_IMPORTED가 최종 검증 후 한 번 commit한다.
+     """
+diff --git a/sourcescript/backend/graphs.py b/sourcescript/backend/graphs.py
+index ec2c0a52296ac8d0ef9465b5f61052b3578cb092..edd815b24394cde1cbc85d46221bd615192d7837 100644
+--- a/sourcescript/backend/graphs.py
++++ b/sourcescript/backend/graphs.py
+@@ -104,7 +104,7 @@ graphObject = {
+ 
+ 
+ chartModel = {
+-    "id": "activeProject.charts 안에서 유일한 양의 정수 chart id",
++    "id": "activeProject._state['charts'] 안에서 유일한 양의 정수 chart id",
+     "editor": {
+         "objects": "graphObject 목록; editable chart의 data reference 원천",
+         "editable": "Fast Figure editor로 수정 가능한지 여부",
+@@ -215,7 +215,7 @@ def connectDataToSlotModel(slot, data, sourceName, projectCsv):
+     2. existing owning chart가 있으면 editable인지 검증한 뒤 그 chart copy에 새 graph object를 추가한다.
+        non-editable chart에는 실제 CSV object를 conversion view로 섞지 않으며 실패 시 project/selection을 보존한다.
+        편집 가능 전환은 기존 graphs.setEditable의 명시적 별도 command를 사용한다.
+-    3. chart가 없으면 next chart id를 사용하는 새 chart candidate와 slot.chart candidate를 만든다.
++    3. chart가 없으면 next chart id를 사용하는 새 chart candidate와 slot.content["chart"] candidate를 만든다.
+     4. graph object는 실제 projectCsv id를 참조한다. column이 있으면 유효한 column selection만 사용하고,
+        최대 row 폭이 0인 CSV는 x=y=empty string으로 연결한다. 가짜 column을 생성하지 않는다.
+     5. candidate chart projection을 계산하고 project-level mutation action이 검증/commit하도록 반환한다.
+diff --git a/sourcescript/backend/layout_annotations.py b/sourcescript/backend/layout_annotations.py
+index 12a197b2f400e90ff9d9e92f33666c3d4f976dfb..68d64439692b1273b494f535510139279970c298 100644
+--- a/sourcescript/backend/layout_annotations.py
++++ b/sourcescript/backend/layout_annotations.py
+@@ -5,7 +5,7 @@ Fast Figure Source Script — Backend / layout-annotation-domain
+ Python 표기의 구현 명세이며 application runtime을 실행하는 모듈이 아니다.
+ """
+ 
+-from sourcescript.backend.project_state import activeProject, projectObjects, SLOT_LOCAL_DEFAULTS, slotHasNonDefaultLocalState
++from sourcescript.backend.project_state import activeProject, projectObjects, SLOT_LOCAL_DEFAULTS, slotHasNonDefaultLocalState, Slot, resolveVisibleSlot
+ 
+ ANNOTATION_SETTINGS_RULE = (
+     "기본값의 단일 데이터 원천은 sourcescript/backend/settings.json의 backend.project_object.annotations 및 backend.defaults.captionReferenceStyle이다. "
+@@ -164,47 +164,137 @@ def insertSlotCaptions(project, slotIds=None):
+     return "candidate appended global caption text or unchanged"
+ 
+ 
++dashboardGeometryResult = {
++    "referenceWidth": "기준 너비. 단위: px.",
++    "width": "대시보드 전체 너비. 단위: px.",
++    "height": "대시보드 전체 높이. 단위: px.",
++    "scale": "기준 너비에 대한 배율.",
++    "aspect": "대시보드의 너비 대 높이 비율.",
++    "outerMargin": "상하좌우 각각의 바깥 여백. 단위: px.",
++    "gap": "인접한 셀 사이의 간격. 단위: px.",
++    "radius": "모서리 반경. 단위: px.",
++}
++
++
+ def dashboardGeometry(width, heightOverride):
++    layout = "이번 계산 시작 시 읽은 현재 프로젝트의 layout 딕셔너리."
++    style = "layout의 slotStyle 딕셔너리."
++    naturalHeight = "종횡비로 계산한 높이. 단위: px."
++    geometry = "dashboardGeometryResult 원형으로 구성할 이번 계산의 결과 딕셔너리."
+     """
++    Args:
++    - width:
++      계산에 사용할 대시보드 전체 너비. 단위: px.
++    - heightOverride:
++      명시한 양의 유한 높이(px) 또는 None.
++
+     Return:
+     - geometry:
+-      referenceWidth, width, height, scale, aspect, outerMargin, gap, radius.
++      현재 layout의 스타일을 지정 너비와 높이에 적용한 치수 딕셔너리.
+ 
+     변경:
+     - 없음.
+ 
+-    확정 계산:
+-    scale = width / referenceWidth
+-    naturalHeight = width / configuredAspect
+-    height = 유효한 heightOverride가 있으면 override, 아니면 naturalHeight
+-    outerMargin = min(configuredOuterMargin * scale, min(width, height) * 0.49)
+-    gap = configuredGap * scale
+-    radius = configuredRadius * scale
++    처리:
++        1. activeProject._state["layout"]을 layout에, layout["slotStyle"]을 style에 둔다.
++           이 동기 계산과 반환 사이에는 프로젝트 변경 명령을 호출하지 않는다.
++        2. geometry["referenceWidth"]에 style["referenceWidth"],
++           geometry["width"]에 width, geometry["aspect"]에 style["aspect"]를 대입한다.
++        3. geometry["scale"]에 width ÷ style["referenceWidth"]를 대입한다.
++           naturalHeight에 width ÷ style["aspect"]를 대입한다.
++        4. heightOverride가 양의 유한 수이면 geometry["height"]에 그 값을,
++           그 외에는 naturalHeight를 대입한다.
++        5. style["outerMargin"] × geometry["scale"]과
++           min(width, geometry["height"]) × 0.49 중 작은 값을
++           geometry["outerMargin"]에 대입한다.
++        6. geometry["gap"]에 style["gap"] × geometry["scale"],
++           geometry["radius"]에 style["radius"] × geometry["scale"]을 대입한다.
++        7. geometry를 반환한다. 기준 폭과 스타일 값의 유효성은 현재 프로젝트 검증이 보장한다.
+     """
+-    geometry = "dashboard reference geometry"
+     return geometry
+ 
+ 
+ def gridSlotGeometry(layout, geometry, slot):
++    colWidth = "기본 셀 한 열의 너비. 단위: px."
++    rowHeight = "기본 셀 한 행의 높이. 단위: px."
++    colSpan = "대상 슬롯이 차지하는 열 수. 양의 정수."
++    rowSpan = "대상 슬롯이 차지하는 행 수. 양의 정수."
++    slotWidth = "대상 슬롯의 너비. 내부 열 간격을 포함한다. 단위: px."
++    slotHeight = "대상 슬롯의 높이. 내부 행 간격을 포함한다. 단위: px."
++    slotGeometry = {
++        "colWidth": "기본 셀 너비. 단위: px.",
++        "rowHeight": "기본 셀 높이. 단위: px.",
++        "width": "대상 슬롯 너비. 단위: px.",
++        "height": "대상 슬롯 높이. 단위: px.",
++    }
+     """
++    Args:
++    - layout:
++      딕셔너리.
++        원형: /backend/project_state/ProjectObject._state.layout
++        Source of Truth: /backend/project_state/activeProject._state.layout
++
++    - geometry:
++      딕셔너리.
++        원형: /backend/layout_annotations/dashboardGeometryResult
++
++    - slot:
++      슬롯 오브젝트 또는 None.
++      슬롯 오브젝트:
++        원형: /backend/project_state/Slot
++        Source of Truth: /backend/project_state/activeProject._state["slots"]의 원소.
++
+     Return:
+     - slotGeometry:
+-      colWidth, rowHeight와 target slot의 width/height.
++      기본 셀과 대상 슬롯의 너비·높이(px)를 담은 딕셔너리.
+ 
+     변경:
+     - 없음.
+ 
+-    확정 계산:
+-    colWidth = (width - 2*outerMargin - gap*(gridCols-1)) / gridCols
+-    rowHeight = (height - 2*outerMargin - gap*(gridRows-1)) / gridRows
+-    merged slot width/height는 span 내부 gap까지 포함한다.
+-    label editor의 target slot이 none/missing이면 width=colWidth, height=rowHeight인 기본 1x1 reference를 사용한다.
+-    이 fallback은 표시 geometry일 뿐 기본 slot을 생성하거나 Frontend selection을 변경하지 않는다.
++    처리:
++        1. 전체 너비에서 좌우 여백과 열 사이 간격을 빼고,
++           전체 열 수로 나누어 colWidth에 대입한다.
++
++           colWidth =
++               (geometry["width"]
++                - 2 × geometry["outerMargin"]
++                - geometry["gap"] × (layout["gridCols"] - 1))
++               ÷ layout["gridCols"]
++
++        2. 전체 높이에서 상하 여백과 행 사이 간격을 빼고,
++           전체 행 수로 나누어 rowHeight에 대입한다.
++
++           rowHeight =
++               (geometry["height"]
++                - 2 × geometry["outerMargin"]
++                - geometry["gap"] × (layout["gridRows"] - 1))
++               ÷ layout["gridRows"]
++
++        3. slot이 None이면 colSpan과 rowSpan에 각각 1을 대입한다.
++           그 외에는 colSpan에 slot.colSpan을,
++           rowSpan에 slot.rowSpan을 대입한다.
++
++        4. 기본 셀들의 너비와 슬롯 내부의 열 간격을 합하여
++           slotWidth에 대입한다.
++
++           slotWidth =
++               colWidth × colSpan + geometry["gap"] × (colSpan - 1)
++
++        5. 기본 셀들의 높이와 슬롯 내부의 행 간격을 합하여
++           slotHeight에 대입한다.
++
++           slotHeight =
++               rowHeight × rowSpan + geometry["gap"] × (rowSpan - 1)
++
++        6. slotGeometry["colWidth"]에 colWidth를,
++           slotGeometry["rowHeight"]에 rowHeight를,
++           slotGeometry["width"]에 slotWidth를,
++           slotGeometry["height"]에 slotHeight를 대입한다.
++
++        7. slotGeometry를 반환한다.
+     """
+-    slotGeometry = "layout grid에서 계산한 slot geometry"
+     return slotGeometry
+ 
+-
+ def buildGridResizeCandidate(rows, cols):
+     """
+     Return:
+@@ -217,16 +307,19 @@ def buildGridResizeCandidate(rows, cols):
+     - authoritative project를 변경하지 않는다.
+ 
+     처리:
+-    1. rows/cols가 1..8 정수인지 검증한다.
++    1. rows/cols가 1..8 정수인지 검증한다. activeProject._state의 layout과 Slot 배열을
++       중첩 content까지 분리 복사한 candidate를 이 명령의 작업 자료로 둔다.
+     2. 확대면 기존 모든 grid cell/slot id/geometry와 모든 slot-local properties를 같은 좌표에 보존하고
+-       새 좌표에만 SLOT_LOCAL_DEFAULTS를 가진 empty 1x1 slot을 추가한다. SLOT_STRUCTURE와 같이 row/col은 1-based다.
++       기존 좌표 집합에 없는 새 좌표마다 Slot(id, row, col)을 생성하여 candidate["slots"]에
++       넣는다. row/col은 1-based이며 각 슬롯의 content는 별도로 생성한다.
+        새 id는 resize 시작 시 기존 모든 slot id의 최대값+1부터 새 좌표 row-major 순서로 할당한다.
+        임시 local counter이며 새 persistent sequence/재배치/기존 id 변경을 만들지 않는다.
+     3. 축소면 삭제될 row/column과 교차하는 slot을 검사한다.
+        - slotHasNonDefaultLocalState(slot)이 참이면 거부한다.
+        - rowSpan/colSpan이 새 boundary를 넘거나 제거되는 merged cell이 있으면 거부한다.
+     4. 위 조건을 통과한 경우 local state가 default인 empty 1x1 slot만 candidate에서 제거한다.
+-    5. 남은 slot geometry와 chart ownership을 whole-project candidate에서 다시 검증한다.
++    5. candidate["layout"]["gridRows"]와 ["gridCols"]에 rows와 cols를 반영한다.
++       남은 Slot의 geometry와 chart ownership을 whole-project candidate에서 다시 검증한다.
+     6. content를 다른 좌표로 packing/reflow하지 않는다.
+     """
+     candidate = "안전한 grid resize candidate 또는 rejected result"
+@@ -247,22 +340,46 @@ def readImageEditorApi(slotId):
+ 
+ 
+ def readLabelsApiState(slotId):
++    state = "이번 조회 시작 시 캡처한 activeProject._state 딕셔너리."
++    slot = "state에서 찾은 표시 가능한 Slot 인스턴스 또는 None."
++    geometry = "기준 너비에서 계산한 대시보드 치수."
++    reference = "gridSlotGeometry가 반환한 기본 셀 또는 대상 슬롯 치수."
++    labelState = {
++        "enabled": "현재 라벨 표시 설정의 복사본.",
++        "settings": "현재 라벨 설정 딕셔너리의 분리 복사본.",
++        "reference": {
++            "width": "라벨 위치 편집에 사용하는 슬롯 너비. 단위: px.",
++            "height": "라벨 위치 편집에 사용하는 슬롯 높이. 단위: px.",
++        },
++        "sampleText": "번호 0을 현재 format과 parentheses 설정으로 표시한 문자열.",
++    }
+     """
++    Args:
++    - slotId:
++      라벨 위치 편집의 기준이 될 슬롯 id 또는 None. 0은 유효한 id다.
++
+     Return:
+     - labelState:
+-      persistent label enabled/settings copy와 현재 선택 slot 기준 reference width/height.
+-    reference는 현재 layout의 referenceWidth dashboardGeometry와 gridSlotGeometry로 계산한다.
+-    explicit slotId가 none/missing이면 같은 grid의 1x1 cell 크기이며 merged slot이면 해당 span 크기다.
+-    sampleText는 orderedSlotLabels의 formatter를 현재 label format/parentheses와 ordinal 0에 적용한 예시다. 선택 slot의 caption을 sample 원천으로 쓰지 않는다.
+-    이 read는 label position/settings/Frontend selection을 변경하지 않는다.
++      라벨 설정과 위치 편집의 기준 치수 및 예시 문자열을 담은 읽기 결과.
+ 
+     변경:
+     - 없음.
+ 
+     처리:
+-    reference geometry는 current Backend layout과 explicit slotId로 resolve한 slot span에서 계산한다.
++        1. activeProject._state를 state에 둔다. state["annotations"]["labels"]에서
++           enabled와 settings를 분리 복사하여 labelState의 같은 이름 필드에 넣는다.
++        2. resolveVisibleSlot(slotId, state) 결과를 slot에 둔다.
++        3. dashboardGeometry(state["layout"]["slotStyle"]["referenceWidth"], None)를
++           호출하여 geometry에 둔다. 현재 프로젝트의 설정을 같은 동기 호출 안에서 읽는다.
++        4. gridSlotGeometry(state["layout"], geometry, slot)을 호출하여 reference에 둔다.
++           labelState["reference"]에 그 결과의 width와 height를 복사한다.
++           slot이 None이면 기본 1×1 셀, 병합 슬롯이면 그 span을 포함한 치수를 사용한다.
++        5. 현재 format이 lower-alpha이면 a, upper-alpha이면 A, decimal이면 1,
++           lower-roman이면 i, upper-roman이면 I를 labelState["sampleText"]에 대입한다.
++           parentheses가 True이면 labelState["sampleText"]의 앞뒤에 괄호를 붙인다.
++           이 값은 orderedSlotLabels의 첫 번째 번호 표기와 같다.
++        6. labelState를 읽기 전용 결과로 반환한다.
+     """
+-    labelState = "label editor read projection"
+     return labelState
+ 
+ 
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index 6cb0cbc0ab4dc7da45d8882f8aa0e71ec0a8132e..137eba59a6de1dd67db47f161dacd8dbfc4c2030 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -41,72 +41,12 @@ PROJECT_OBJECT_PATHS = {
+     "images": "image asset collection의 공식 read path",
+     "files": "virtual directory collection의 공식 read path",
+     "charts": "chart collection의 공식 read path",
+-    "slots": "slot collection의 공식 read path",
++    "slots": "activeProject._state[\"slots\"]의 Slot 인스턴스 배열을 조회하는 공식 read path",
+     "sequences": "CSV/image/chart next-id sequence의 공식 read path",
+     "appearance": "persistent UI palette의 공식 read path",
+     "export": "persistent raster export settings의 공식 read path",
+ }
+ 
+-projectState = {
+-    "kind": "fast-figure-project-object라는 고정 schema 식별자",
+-    "meta": {
+-        "projectName": "사용자가 지정한 프로젝트 이름",
+-        "appBuild": "이 project state를 생성/저장한 application build 표식",
+-    },
+-    "layout": {
+-        "gridRows": "backend.defaults.limits.layout.gridRows 범위의 grid 행 수",
+-        "gridCols": "backend.defaults.limits.layout.gridCols 범위의 grid 열 수",
+-        "slotStyle": {
+-            "referenceWidth": "dashboard 기준 폭; backend.defaults.limits.layout.referenceWidth",
+-            "gap": "slot 사이 기준 간격; backend.defaults.limits.layout.gap",
+-            "outerMargin": "dashboard 기준 바깥 여백; backend.defaults.limits.layout.outerMargin",
+-            "radius": "slot 기준 모서리 반경; backend.defaults.limits.layout.radius",
+-            "aspect": "dashboard 종횡비; backend.defaults.limits.layout.aspect",
+-            "showBorders": "slot 외곽선 표시 여부",
+-        },
+-    },
+-    "annotations": {
+-        "labels": {
+-            "enabled": "slot label 표시 여부",
+-            "settings": "label format/order/font/position 설정",
+-        },
+-        "captions": {
+-            "enabled": "global caption 표시 여부",
+-            "text": "global caption의 앞쪽 본문",
+-            "afterText": "global caption의 뒤쪽 본문",
+-            "name": "global caption 이름",
+-            "nameBold": "global caption 이름 굵게 표시 여부",
+-            "settings": "global caption의 공통 font/size/line-height 설정",
+-        },
+-    },
+-    "assets": {
+-        "csvFiles": "프로젝트 CSV asset의 authoritative collection",
+-        "images": "프로젝트 image asset의 authoritative collection",
+-    },
+-    "fileSystem": {
+-        "directories": (
+-            "project VFS directory 목록. 고정 root 설정은 backend.defaults.vfs에서 읽고 "
+-            "실제 directory instance는 생성/복원 알고리즘이 만든다."
+-        ),
+-    },
+-    "charts": "프로젝트 chart model의 authoritative collection",
+-    "slots": "dashboard slot의 authoritative collection",
+-    "nextId": {
+-        "csv": "새 CSV에 사용할 다음 정수 id",
+-        "image": "새 image에 사용할 다음 정수 id",
+-        "chart": "새 chart에 사용할 다음 정수 id",
+-    },
+-    "appearance": {
+-        "uiPalette": "프로젝트에 영속되는 Fast Figure UI 색상 palette",
+-    },
+-    "export": {
+-        "width": "target raster width; backend.defaults.limits.export.logicalWidth",
+-        "heightMode": "auto 또는 explicit",
+-        "height": "explicit target raster height; backend.defaults.limits.export.logicalHeight",
+-        "dpi": "raster metadata DPI; backend.defaults.limits.export.dpi",
+-        "format": "png 또는 jpeg",
+-    },
+-}
+ 
+ csvAsset = {
+     "id": "project 안에서 유일한 양의 정수 CSV id",
+@@ -126,30 +66,52 @@ imageAsset = {
+     "bytesBase64": "image bytes의 base64 표현",
+ }
+ 
+-slot = {
+-    "id": "project slot collection 안에서 유일한 정수 id",
+-    "row": "1-based grid row",
+-    "col": "1-based grid column",
+-    "rowSpan": "slot이 차지하는 행 수",
+-    "colSpan": "slot이 차지하는 열 수",
+-    "hidden": "다른 merged slot에 포함되어 직접 표시되지 않는지 여부",
+-    "content": {
+-        "chart": "activeProject.charts의 chart id 또는 없음",
+-        "imageId": "activeProject.images의 image id 또는 없음",
+-        "contentType": "graph 또는 image",
+-        "imageSettings": {
+-            "fit": "contain, cover, manual 중 하나",
+-            "scale": "manual image scale percent",
+-            "x": "manual image center x percent",
+-            "y": "manual image center y percent",
+-        },
+-    },
+-    "caption": (
+-        "이 slot object에 귀속된 slot-local caption text 또는 없음. "
+-        "UI에서 slot caption을 노출하거나 global caption text에 삽입할 때 읽는 authoritative 값이다. "
+-        "UI placeholder 문자열은 authoritative caption 값으로 저장하지 않는다."
+-    ),
+-}
++class Slot:
++    def __init__(self, id, row, col):
++        self.id = "프로젝트의 slots 컬렉션 안에서 유일한 정수 식별자."
++        self.row = "슬롯의 시작 행. 1부터 세는 정수."
++        self.col = "슬롯의 시작 열. 1부터 세는 정수."
++        self.rowSpan = "슬롯이 차지하는 행 수. 양의 정수."
++        self.colSpan = "슬롯이 차지하는 열 수. 양의 정수."
++        self.hidden = "병합된 다른 슬롯에 포함되어 직접 표시되지 않는지 나타내는 논리값."
++        self.content = {
++            "chart": "같은 프로젝트의 _state[\"charts\"] 원소를 가리키는 chart id 또는 None.",
++            "imageId": "같은 프로젝트의 _state[\"assets\"][\"images\"] 원소를 가리키는 image id 또는 None.",
++            "contentType": "graph 또는 image 문자열.",
++            "imageSettings": {
++                "fit": "contain, cover, manual 중 하나인 문자열.",
++                "scale": "manual 이미지 크기 배율. 단위: %.",
++                "x": "manual 이미지 중심의 슬롯 너비 대비 위치. 단위: %.",
++                "y": "manual 이미지 중심의 슬롯 높이 대비 위치. 단위: %.",
++            },
++        }
++        self.caption = "이 인스턴스가 소유하는 슬롯 자막 문자열 또는 None."
++        """
++        Args:
++        - id:
++          생성할 슬롯의 정수 식별자. 0도 유효하다.
++        - row:
++          생성할 슬롯의 시작 행 번호.
++        - col:
++          생성할 슬롯의 시작 열 번호.
++
++        변경:
++        - 새 인스턴스 self의 위 속성을 초기화한다.
++
++        처리:
++            1. self.id, self.row, self.col에 각각 id, row, col을 대입한다.
++               식별자 할당과 다른 슬롯과의 중복 확인은 생성 호출자와 프로젝트 검증이 수행한다.
++            2. self.rowSpan과 self.colSpan에 각각 1, self.hidden에 False를 대입한다.
++            3. sourcescript/backend/settings.json의 backend.defaults.slotSettings.content를
++               중첩 딕셔너리까지 복사하여 이 인스턴스의 self.content로 둔다.
++               self.content["chart"]와 self.content["imageId"]에 각각 None을 대입한다.
++               contentType과 imageSettings의 설정값은 위 설정 원천에서 가져온다.
++            4. self.caption에 None을 대입한다. 호출마다 content와 imageSettings를 따로
++               생성하므로 한 슬롯의 설정 수정은 다른 슬롯의 설정에 영향을 주지 않는다.
++            5. 호출자는 생성된 Slot 인스턴스를 자신의 candidate["slots"]에 넣는다.
++               저장 자료 복원은 normalizeSlotContent가 저장 필드의 존재 여부를 판별하여 수행한다.
++        """
++
+ 
+ SLOT_LOCAL_PROPERTY_RULE = (
+     "특정 slot에만 적용되는 영속 값은 그 slot object의 하위 속성으로 둔다. "
+@@ -198,11 +160,11 @@ LEGACY_PROJECT_FIELDS = {
+ }
+ 
+ REFERENCE_RELATIONS = {
+-    "slot.chart": (
+-        "activeProject.charts에서 같은 chart id를 resolve해야 하며 "
++    "slot.content[\"chart\"]": (
++        "activeProject._state[\"charts\"]에서 같은 chart id를 resolve해야 하며 "
+         "각 chart id는 정확히 하나의 slot에서만 나타나야 한다."
+     ),
+-    "slot.imageId": "activeProject.images에서 같은 image id를 resolve해야 한다.",
++    "slot.content[\"imageId\"]": "activeProject._state[\"assets\"][\"images\"]에서 같은 image id를 resolve해야 한다.",
+     "chart.editor.objects[].csvId": (
+         "validateChartModel이 실제 project CSV object로 판정한 object만 activeProject.csvFiles에서 같은 CSV id를 resolve한다. "
+         "non-editable imported chart의 conversion view는 project CSV 참조 집합에 넣지 않는다. "
+@@ -374,29 +336,51 @@ RENDERER_BACKEND_READ_CONTRACT = {
+ 
+ 
+ def buildSlotAssetDisplay(slot, project):
++    display = {
++        "kind": "empty, assets, embedded 중 하나.",
++        "assets": "표시할 에셋 메타데이터 딕셔너리의 배열.",
++    }
++    chart = "slot이 참조하는 현재 chart 딕셔너리 또는 None."
++    asset = "현재 프로젝트에서 찾은 CSV 또는 이미지 에셋 딕셔너리."
++    seenCsvIds = "이번 슬롯 표시에서 이미 담은 CSV id의 집합."
+     """
++    Args:
++    - slot:
++      project가 소유하는 표시 가능한 슬롯 인스턴스.
++        원형: /backend/project_state/Slot
++        Source of Truth: 인자로 받은 project._state["slots"]의 원소.
++    - project:
++      이번 layout.readState 조회가 캡처한 ProjectObject 인스턴스.
++        원형: /backend/project_state/ProjectObject
++        Source of Truth: /backend/project_state/activeProject
++
+     Return:
+-    - display: {kind: "empty"/"assets"/"embedded", assets: [{kind, id, name, path}, ...]}의 detached 값.
++    - display:
++      슬롯에 연결된 에셋의 표시 결과. 각 assets 원소는 kind, id, name, path를 가진다.
++      empty는 연결된 표시 에셋이 없음, embedded는 외부 CSV를 사용하지 않는 가져온 그래프다.
+ 
+-    변경: 없음. project는 layout.readState가 이번 호출에서 읽은 동일 current authority다.
++    변경:
++    - 없음.
+ 
+     처리:
+-    1. layout.readState가 기존 slot 순서를 유지하며 hidden=False인 각 slot에 대해 호출한다.
+-       slot의 id/geometry/contentType/chart/imageId와 이 결과를 같은 visibleSlots entry에 copy한다.
+-    2. contentType=image이면 같은 project.assets.images에서 imageId를 resolve한다.
+-       있으면 kind=assets와 image metadata 한 항목, 없으면 kind=empty와 []다.
+-    3. contentType=graph이면 같은 project.charts에서 slot.chart를 resolve한다.
+-       chart가 없으면 empty/[]다. editor.editable=False이면 embedded/[]다.
+-       non-editable conversion object의 csvId를 실제 project CSV로 resolve하지 않는다.
+-    4. editable chart의 editor.objects 순서대로 같은 project.assets.csvFiles에서 csvId를 resolve한다.
+-       실제 CSV마다 kind/id/name/canonical path만 copy하며 같은 CSV id는 처음 등장한 순서로 한 번만 담는다.
+-       CSV가 하나 이상이면 assets, 하나도 없으면 empty다. 가짜 CSV/object/chart는 만들지 않는다.
+-    5. 빈 슬롯과 외부 CSV 참조 없는 editable graph도 visibleSlots에서 제거하지 않는다.
+-       embedded 표시는 독립 chart 관리 기능이 아니라 그 slot의 기존 사용 에셋 표시다.
+-    6. asset metadata에 bytes/rows/Backend object/callback을 넣지 않는다. read는 mutation이나 resource 할당을 하지 않는다.
+-       다음 표시 작업은 current authority에서 다시 조회하며 이 결과를 연결/삭제 command의 candidate로 보내지 않는다.
++        1. display["kind"]에 empty, display["assets"]에 빈 배열을 둔다.
++        2. slot.content["contentType"]이 image이면 slot.content["imageId"]와 같은 id의
++           원소를 project._state["assets"]["images"]에서 찾는다. 찾으면 그 원소의 kind=image,
++           id, name과 assets_files.projectAssetPath가 계산한 path만 별도 딕셔너리로 담고
++           display["kind"]에 assets를 둔다. display를 반환한다.
++        3. graph이면 slot.content["chart"]와 같은 id의 chart를 project._state["charts"]에서
++           찾는다. 없으면 초기 display를 반환한다. chart["editor"]["editable"]이 False이면
++           display["kind"]에 embedded를 두고 반환한다.
++        4. seenCsvIds를 빈 집합으로 둔다. chart["editor"]["objects"]를 순서대로 확인하여
++           object의 csvId를 project._state["assets"]["csvFiles"]에서 찾는다.
++           실제 CSV가 있고 아직 담지 않은 id이면 kind=csv, id, name, projectAssetPath의 path를
++           별도 딕셔너리로 display["assets"] 끝에 넣고 그 id를 seenCsvIds에 추가한다.
++        5. display["assets"]가 비어 있지 않으면 display["kind"]에 assets를 둔다.
++           빈 배열인 슬롯도 호출자가 구성하는 visibleSlots의 한 행으로 유지한다.
++        6. display의 중첩 배열과 딕셔너리를 읽기 전용 결과로 반환한다.
++           이 결과의 수명은 이번 표시 작업이며 다음 작업은 현재 project에서 다시 읽는다.
+     """
+-    return "같은 current project에서 resolve한 slot의 immutable assetDisplay"
++    return display
+ 
+ 
+ def readBackendProjection(kind, request):
+@@ -502,6 +486,91 @@ def buildFrontendReconciliationInput(event, mutationResult, frontendReferences):
+     return reconciliationInput
+ 
+ class ProjectObject:
++    def __init__(self, source):
++        self._state = {
++            "kind": "fast-figure-project-object라는 고정 schema 식별자",
++            "meta": {
++                "projectName": "사용자가 지정한 프로젝트 이름",
++                "appBuild": "이 project state를 생성/저장한 application build 표식",
++            },
++            "layout": {
++                "gridRows": "backend.defaults.limits.layout.gridRows 범위의 grid 행 수",
++                "gridCols": "backend.defaults.limits.layout.gridCols 범위의 grid 열 수",
++                "slotStyle": {
++                    "referenceWidth": "dashboard 기준 폭. 단위: px. 초기값은 backend.project_object.layout.slotStyle.referenceWidth.",
++                    "gap": "셀 사이 간격. 단위: px. 초기값은 backend.project_object.layout.slotStyle.gap.",
++                    "outerMargin": "바깥 여백. 단위: px. 초기값은 backend.project_object.layout.slotStyle.outerMargin.",
++                    "radius": "모서리 반경. 단위: px. 초기값은 backend.project_object.layout.slotStyle.radius.",
++                    "aspect": "너비 대 높이 비율. 초기값은 backend.project_object.layout.slotStyle.aspect.",
++                    "showBorders": "slot 외곽선 표시 여부",
++                },
++            },
++            "annotations": {
++                "labels": {
++                    "enabled": "slot label 표시 여부",
++                    "settings": "label format/order/font/position 설정",
++                },
++                "captions": {
++                    "enabled": "global caption 표시 여부",
++                    "text": "global caption의 앞쪽 본문",
++                    "afterText": "global caption의 뒤쪽 본문",
++                    "name": "global caption 이름",
++                    "nameBold": "global caption 이름 굵게 표시 여부",
++                    "settings": "global caption의 공통 font/size/line-height 설정",
++                },
++            },
++            "assets": {
++                "csvFiles": "프로젝트 CSV asset의 authoritative collection",
++                "images": "프로젝트 image asset의 authoritative collection",
++            },
++            "fileSystem": {
++                "directories": (
++                    "project VFS directory 목록. 고정 root 설정은 backend.defaults.vfs에서 읽고 "
++                    "실제 directory instance는 생성/복원 알고리즘이 만든다."
++                ),
++            },
++            "charts": "프로젝트 chart model의 authoritative collection",
++            "slots": "이 프로젝트가 소유하는 Slot 인스턴스의 배열",
++            "nextId": {
++                "csv": "새 CSV에 사용할 다음 정수 id",
++                "image": "새 image에 사용할 다음 정수 id",
++                "chart": "새 chart에 사용할 다음 정수 id",
++            },
++            "appearance": {
++                "uiPalette": "프로젝트에 영속되는 Fast Figure UI 색상 palette",
++            },
++            "export": {
++                "width": "target raster width; backend.defaults.limits.export.logicalWidth",
++                "heightMode": "auto 또는 explicit",
++                "height": "explicit target raster height; backend.defaults.limits.export.logicalHeight",
++                "dpi": "raster metadata DPI; backend.defaults.limits.export.dpi",
++                "format": "png 또는 jpeg",
++            },
++        }
++        candidate = "생성과 검증에 사용할 분리 복사한 프로젝트 딕셔너리."
++        """
++        Args:
++        - source:
++          생성 또는 복원을 마친 프로젝트 candidate 딕셔너리.
++            원형: /backend/project_state/ProjectObject._state
++
++        변경:
++        - 새 ProjectObject 인스턴스의 self._state를 초기화한다.
++
++        처리:
++            1. source를 중첩 딕셔너리·배열과 Slot 인스턴스까지 복사하여 candidate에 둔다.
++               각 슬롯은 원래 id, 좌표, span, hidden, content, caption을 보존한 별도 Slot이다.
++            2. candidate["slots"]의 각 원소를 normalizeSlotContent에 전달하고 반환된 Slot으로
++               같은 배열 위치를 대체한다.
++            3. validateProjectObjectState(candidate, True)로 복사한 전체 프로젝트를 검증한다.
++               실패하면 이 생성 호출은 실패하며 기존 activeProject를 변경하지 않는다.
++            4. 검증한 candidate를 self._state에 대입한다.
++               self._state["layout"]은 레이아웃 딕셔너리이며,
++               self._state["slots"]는 이 프로젝트가 소유하는 Slot 인스턴스의 배열이다.
++               생성된 ProjectObject를 activeProject로 채택하는 작업은 세션 초기화 또는
++               검증을 마친 프로젝트 교체의 책임이다.
++        """
++
+     def read(self, path):
+         """
+         Return:
+@@ -519,15 +588,18 @@ class ProjectObject:
+         return value
+ 
+     def initialize(self, source):
++        candidate = "이번 교체를 위해 분리 복사하고 검증할 프로젝트 상태 딕셔너리."
+         """
+         변경:
+         - 현재 ProjectObject의 전체 authoritative state를 검증된 candidate state로 한 번 교체한다.
+ 
+         처리:
+-        1. source를 active authority 밖의 candidate로 다룬다.
+-        2. slot representation을 정규화한다.
+-        3. validateProjectObjectState로 전체 구조와 참조를 검증한다.
+-        4. 검증 성공 후에만 내부 authoritative state reference를 한 번 교체한다.
++        1. source를 중첩 배열·딕셔너리와 Slot 인스턴스까지 복사하여 작업 candidate로 둔다.
++           현재 self._state와 그 Slot 인스턴스는 이 과정에서 수정하지 않는다.
++        2. candidate["slots"]의 각 원소를 normalizeSlotContent에 전달하고
++           반환된 Slot 인스턴스로 그 원소를 대체한다. 입력의 슬롯 순서를 유지한다.
++        3. validateProjectObjectState(candidate, True)로 candidate 전체 구조와 참조를 검증한다.
++        4. 검증 성공 후에만 self._state를 candidate로 한 번 교체한다.
+         5. 이전 state는 기존 runtime resource release처럼 교체 후 처리가 필요한 경우에만 반환한다.
+            mutation 실패를 전제로 authority를 먼저 바꾼 뒤 복구하는 일반 패턴으로 사용하지 않는다.
+         """
+@@ -586,26 +658,57 @@ def slotHasNonDefaultLocalState(slot):
+ 
+ 
+ def normalizeSlotContent(slot):
++    sourceContent = {
++        "present": "정규화 전 입력에 content 필드가 존재하는지 나타내는 논리값.",
++        "value": "존재할 때 그 content 딕셔너리의 분리 복사본. 부재이면 None.",
++    }
++    sourceCaption = {
++        "present": "정규화 전 입력에 caption 필드가 존재하는지 나타내는 논리값.",
++        "value": "원래 caption 값. 부재이면 None.",
++    }
++    normalizedSlot = "정규화 결과를 받을 Slot 인스턴스."
+     """
++    Args:
++    - slot:
++      작업 candidate의 Slot 인스턴스 또는 저장 자료에서 복원한 슬롯 딕셔너리.
++      Slot 인스턴스:
++        원형: /backend/project_state/Slot
++
+     Return:
+     - slot:
+-      renderable content와 caption annotation이 의미적으로 분리된 동일 slot object.
++      canonical 속성을 갖춘 Slot 인스턴스. Slot 입력은 같은 인스턴스다.
++      딕셔너리 입력은 같은 식별자와 배치를 가진 새 인스턴스로 변환한다.
+ 
+     변경:
+-    - 전달된 candidate slot representation만 정규화한다.
++    - 입력이 Slot이면 그 candidate 인스턴스의 content와 caption을 정규화한다.
++    - 입력이 딕셔너리이면 새 Slot만 구성하고 원본 딕셔너리는 보존한다.
+ 
+     처리:
+-    1. chart/image/contentType/imageSettings는 하나의 slot-local renderable-content 원천으로 정규화한다.
+-    2. 누락된 slot-local field는 SLOT_LOCAL_DEFAULTS에서 채운다.
+-       imageSettings가 없으면 slot default imageSettings를 만든다.
+-       image asset 자체에서 display settings를 읽어 authority로 사용하지 않는다.
+-    3. caption은 slot-local caption 원천으로 정규화한다.
+-    4. legacy representation에서 caption이 nested content 안에 있으면 같은 caption property로 이동한다.
+-    5. UI placeholder 문자열을 새 authoritative caption 값으로 생성하지 않는다.
+-    6. compatibility alias가 필요하더라도 같은 의미에 두 저장값을 두지 않는다.
+-    canonical content.<field>가 있으면 그 값을 보존하고, 없을 때만 flat legacy field를 이동한 뒤 flat storage를 제거한다.
+-    caption도 canonical slot.caption이 있으면 None/empty를 포함해 보존하며, 없을 때만 content.caption을 이동하고 nested storage를 제거한다.
+-    이 precedence는 현재 owner path를 명시한 것이며 이미지 asset/DOM/다른 slot을 fallback source로 사용하지 않는다.
++        1. 기본값을 채우기 전에 입력의 content와 caption 필드 존재 여부를 각각
++           sourceContent["present"], sourceCaption["present"]에 기록한다.
++           Slot이면 slot.content와 slot.caption, 딕셔너리이면 해당 키의 값을 읽어
++           각각의 value에 분리 복사한다. 부재는 present=False와 value=None으로 기록한다.
++           content가 존재하면서 딕셔너리가 아니면 정규화를 실패시킨다.
++           필드 부재와 존재하는 None, False, 0, 빈 문자열을 구별한다.
++        2. Slot 입력이면 normalizedSlot에 그 인스턴스를 대입한다.
++           딕셔너리 입력이면 입력의 id, row, col을 인자로 Slot을 생성하고 normalizedSlot에 둔다.
++           입력의 rowSpan, colSpan, hidden도 보존한다. 저장 입력의 필수 배치 정보가
++           누락되거나 잘못되었으면 변환을 거부한다. 이 조건은 Slot 원형과 전체 프로젝트의
++           배치 검증 조건을 따른다. 입력 content의 추가 키와 별도 저장 속성도 분리 복사하여 보존한다.
++        3. sourceContent["present"]가 True이면 그 value 딕셔너리의 추가 키를 보존한다.
++           이어서 Slot.content 원형의 각 canonical 필드를 채운다. 원래 content 딕셔너리에 해당 키가 있으면 그 값을 복사한다.
++           없을 때만 같은 입력의 flat legacy 필드를 사용한다.
++           두 위치 모두 없으면 SLOT_LOCAL_DEFAULTS의 해당 값을 별도로 복사한다.
++           imageSettings가 딕셔너리이면 저장된 하위 필드를 보존하고 누락된 설정만 기본값으로 채운다.
++           존재하는 필드의 형식 오류는 기본값으로 바꾸지 않고 프로젝트 검증의 실패로 전달한다.
++        4. sourceCaption["present"]가 True이면 sourceCaption["value"]를 보존한다.
++           False이고 sourceContent["present"]가 True이며 그 value에 caption 키가 있으면
++           그 값을 이동한다. 두 위치 모두 없으면
++           normalizedSlot.caption에 None을 대입한다. 화면 안내 문구를 생성하지 않는다.
++        5. canonical 값으로 옮긴 flat legacy 속성과 content 안의 caption을 제거한다.
++           chart/imageId는 같은 프로젝트 컬렉션을 가리키는 id로 유지한다.
++           참조 대상의 존재와 소유 관계는 validateProjectObjectState가 검증한다.
++        6. slot에 normalizedSlot을 대입하고 반환한다.
+     """
+     return slot
+ 
+@@ -634,10 +737,10 @@ def validateProjectObjectState(state, requireSlots):
+     - 모든 chart에 sourcescript.backend.graphs의 validateChartModel을 적용한다. editable chart는 graph object가 0개여도 유효하다.
+       해당 validator가 실제 project CSV object로 판정한 object만 CSV/column 참조 검증 집합에 넣는다. non-editable conversion view는 넣지 않으며
+       chart/Plotly/imported representation의 구조 검증은 그대로 수행한다. 이곳에 별도 완화/강화 validator를 만들지 않는다.
+-    - slot id와 geometry가 유효하고 grid 범위를 넘지 않는다.
++    - state["slots"]의 모든 원소가 Slot 인스턴스이며 id와 geometry가 유효하고 grid 범위를 넘지 않는다.
+     - slot은 chart와 image를 동시에 참조하지 않는다.
+     - slot chart/image 참조 대상이 존재한다.
+-    - slot.content.imageSettings는 fit/scale/x/y schema와 허용 범위를 만족한다.
++    - slot.content["imageSettings"]는 fit/scale/x/y schema와 허용 범위를 만족한다.
+     - image asset에는 slot-local display settings를 요구하지 않는다.
+     - 각 chart는 정확히 하나의 slot에서 참조되며 shared chart와 orphan chart가 없다.
+     - unset slot caption은 null/empty이고 UI placeholder를 project 값으로 요구하지 않는다.
+@@ -677,6 +780,10 @@ DEFAULT_PROJECT_RULES = {
+ 
+ 
+ def createProjectState():
++    state = {}
++    row = "생성할 슬롯의 행 번호. 1부터 세는 정수."
++    col = "생성할 슬롯의 열 번호. 1부터 세는 정수."
++    id = "현재 행과 열에서 계산한 슬롯 식별자."
+     """
+     Return:
+     - state:
+@@ -694,15 +801,48 @@ def createProjectState():
+        빈 graph용 default CSV나 fake graph object를 만들지 않는다.
+     4. 고정 VFS directory와 next-id sequence를 만든다.
+     5. persistent appearance와 export settings를 만든다.
+-    6. 설정된 grid의 각 cell에 empty 1 x 1 slot을 만든다. row/col은 SLOT_STRUCTURE와 같이 1-based이고 id=(row-1)*gridCols+(col-1)인 0-based row-major 정수다.
+-       hidden=False, chart/imageId/caption=None이며 imageSettings/contentType만 config slot defaults에서 복사한다.
+-       id/좌표/reference는 config가 아니라 생성 알고리즘이 만든다.
+-    7. validateProjectObjectState를 통과한 candidate를 반환한다.
++    6. state["layout"]의 gridRows와 gridCols로 행 우선 순회한다. row와 col은 1부터 세며
++       id=(row-1)*state["layout"]["gridCols"]+(col-1)로 계산한다. 각 좌표마다 Slot(id, row, col)을 호출하고
++       새 인스턴스를 state["slots"] 배열 끝에 넣는다. 각 인스턴스의 span·hidden·빈 참조·
++       caption과 content 설정 초기화는 Slot.__init__이 수행한다.
++    7. validateProjectObjectState(state, True)로 검증한 state를 반환한다.
+     """
+-    state = "새 project invariant를 만족하는 candidate ProjectObject state"
+     return state
+ 
+ 
++def resolveVisibleSlot(slotId, state):
++    slot = "state의 slots에서 찾은 표시 가능한 Slot 인스턴스 또는 None."
++    """
++    Args:
++    - slotId:
++      조회할 슬롯의 정수 식별자 또는 None. 0은 유효한 식별자다.
++    - state:
++      이번 조회가 사용하는 프로젝트 상태 딕셔너리.
++        원형: /backend/project_state/ProjectObject._state
++        Source of Truth: /backend/project_state/activeProject._state
++      명령의 candidate를 검사하는 호출에서는 그 명령이 소유한 candidate를 전달한다.
++
++    Return:
++    - slot:
++      같은 id를 가지며 hidden이 False인 Slot 인스턴스 또는 None.
++        원형: /backend/project_state/Slot
++        Source of Truth: 인자로 전달한 state["slots"]의 원소.
++
++    변경:
++    - 없음.
++
++    처리:
++        1. slotId가 None이거나 정수 식별자가 아니면 slot에 None을 대입한다.
++        2. 그 외에는 state["slots"]를 저장 순서대로 확인한다.
++           원소의 id가 slotId와 같고 hidden이 False인 원소를 slot에 대입한다.
++           슬롯 id의 유일성은 validateProjectObjectState의 프로젝트 불변식이다.
++        3. 일치하는 표시 슬롯이 없으면 slot에 None을 대입한다.
++        4. slot을 반환한다. 외부 읽기 경계는 필요한 필드를 분리 복사한다.
++           이 내부 조회 결과를 수정하는 것은 해당 candidate를 소유한 명령의 책임이다.
++    """
++    return slot
++
++
+ def resolveOwningSlot(chartId, state):
+     """
+     Return:
+@@ -715,7 +855,7 @@ def resolveOwningSlot(chartId, state):
+     - 없음.
+ 
+     처리:
+-    state.slots에서 chartId reference를 모두 수집한다.
++    state["slots"]의 Slot 인스턴스에서 slot.content["chart"]가 chartId인 원소를 모두 수집한다.
+     정확히 하나일 때만 그 slot을 owner로 resolve한다.
+     shared/orphan 상태를 임의로 clone/drop하여 고치지 않는다.
+     """
+@@ -726,7 +866,7 @@ def getProjectCsv(csvId):
+     """
+     Return:
+     - csv:
+-      activeProject.csvFiles에서 csvId로 resolve한 asset 또는 없음.
++      activeProject._state["assets"]["csvFiles"]에서 csvId로 resolve한 asset 또는 없음.
+ 
+     변경:
+     - 없음.
+@@ -739,7 +879,7 @@ def getProjectImage(imageId):
+     """
+     Return:
+     - image:
+-      activeProject.images에서 imageId로 resolve한 asset 또는 없음.
++      activeProject._state["assets"]["images"]에서 imageId로 resolve한 asset 또는 없음.
+ 
+     변경:
+     - 없음.
+@@ -752,7 +892,7 @@ def getChart(chartId):
+     """
+     Return:
+     - chart:
+-      activeProject.charts에서 chartId로 resolve한 chart 또는 없음.
++      activeProject._state["charts"]에서 chartId로 resolve한 chart 또는 없음.
+ 
+     변경:
+     - 없음.
+diff --git a/sourcescript/frontend/mantine_ui.py b/sourcescript/frontend/mantine_ui.py
+index b67dc1af931238b2199c3090b30b2fe343f478f2..53b22dbc3352aad217aafa94aa6d35e20e3dea48 100644
+--- a/sourcescript/frontend/mantine_ui.py
++++ b/sourcescript/frontend/mantine_ui.py
+@@ -302,7 +302,7 @@ def setSelectedGraphEditable(editable):
+     처리:
+     1. appFSM.readState().selectedSlotId를 이번 slotId로 읽는다. 선택 해제면 None을 반환한다.
+     2. FastFigureApi.graphs.readData()["chart"]로 그 슬롯이 소유하는 현재 chart를 얻는다.
+-       공식 조회는 slot.content.chart를 activeProject.charts에서 해결한다. chart가 없으면 None을 반환한다.
++       공식 조회는 slot.content["chart"]를 activeProject._state['charts']에서 해결한다. chart가 없으면 None을 반환한다.
+     3. 같은 동기 입력 처리에서 FastFigureApi.graphs.setEditable(slotId, chart["id"], editable)을 한 번 호출한다.
+        graphEditorSetEditable이 세 인자를 CHART_MODEL_REPLACED에 전달하고 Backend가 현재 소유 관계를 검증한다.
+     4. Backend의 convertImportedChartToEditable 규칙에 따라 imported conversionRows와 object가 있으면
+@@ -343,8 +343,8 @@ def updateSelectedGraphLayout(values):
+        lifecycle이 ready이고 selectedSlotId가 있으면 이를 slotId로 사용한다.
+        선택 해제 또는 busy 상태면 None을 반환하고 이 입력 처리를 끝낸다. slotId 0은 유효하다.
+     2. FastFigureApi.graphs.readData()에서 chart를 얻는다. 이 공식 읽기는 현재 선택 참조로
+-       sourcescript/backend/project_state.py의 activeProject.slots에서 visible slot을 찾고,
+-       slot["content"]["chart"]의 id로 activeProject.charts에서 소유 chart를 찾는다.
++       sourcescript/backend/project_state.py의 activeProject._state['slots']에서 visible slot을 찾고,
++       slot.content["chart"]의 id로 activeProject._state["charts"]에서 소유 chart를 찾는다.
+        chart가 없으면 None을 반환한다.
+     3. FastFigureApi.graphs.updateLayout(slotId, chart["id"], values)를 한 번 호출한다.
+        선택 참조 읽기, chart 조회, 이 호출을 같은 동기 입력 처리에서 연속 수행한다.
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index 976630e209b0c416366081f068ea56d6aa697029..e0d65752edb67228f210db57065ac9c409943699 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -119,7 +119,7 @@ AUTHORITATIVE_STATE_RULE = (
+ 
+ RUNTIME_STATE_RULE = (
+     "selectedSlotId, dashboard zoom/drag state, telemetry와 같은 값은 영속 project state가 아닌 runtime state다. "
+-    "선택 chart는 selectedSlotId -> slot.chart -> chart로 resolve하며 별도 global editing pointer를 Source Script 상태로 두지 않는다. "
++    "선택 chart는 selectedSlotId -> slot.content['chart'] -> chart로 resolve하며 별도 global editing pointer를 Source Script 상태로 두지 않는다. "
+     "각 runtime 값은 책임 범위를 벗어나 project state의 대체 읽기 원천으로 사용하지 않는다."
+ )
+ 
+@@ -129,7 +129,7 @@ RESOLVED_REVIEW_ITEMS = [
+         "interaction finish는 position의 두 번째 commit이 아니다."
+     ),
+     (
+-        "editing global pointer는 독립 기능 의미가 없고 selectedSlotId -> slot.chart -> chart로 resolve 가능하므로 "
++        "editing global pointer는 독립 기능 의미가 없고 selectedSlotId -> slot.content['chart'] -> chart로 resolve 가능하므로 "
+         "Source Script runtime state에서 제거했다."
+     ),
+     (

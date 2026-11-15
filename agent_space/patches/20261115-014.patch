@@ -1,0 +1,1712 @@
+diff --git a/agent_space/patches/20261115-014.md b/agent_space/patches/20261115-014.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..b435ca40d7a29f2d8a04d7b6365a2994d0481bab
+--- /dev/null
++++ b/agent_space/patches/20261115-014.md
+@@ -0,0 +1,27 @@
++# 20261115-014 — Plan031 Source Script 참조 연결 적용
++
++## 요구와 범위
++
++사용자의 수정 시작·계속 지시에 따라 Plan031의 여덟 수정 대상과 두 추가 후보를 적용·판정했다. Source Script의 명령·함수·조회·이벤트·허용값·원형·설정 범위·라벨 계산의 원천과 소비자를 연결한다.
++
++## 변경 이유와 방법
++
++- PROJECT_COMMANDS에 실제 담당 함수 참조를 두고 send가 한 번 선택한다. 네 helper의 Args는 등록 원천을 참조한다. 실제 담당 34개와 후보 계산·재확인·재시도·단일 반영·결과 계산은 유지한다.
++- 미사용 PUBLIC_PROJECT_MUTATION_ROUTES를 제거하고 공개 함수의 실제 명령 전달을 유지했다. PUBLIC_API_METHODS는 기존 공개 집합을 실제 함수와 Backend 조회 등록값에 연결한다.
++- Application이 Frontend 이벤트 등록값과 세 Backend 참조 판정 함수를 연결한다. 실제 사용처가 없는 interface-intent 등록·설명은 제거했다. Backend의 Frontend import는 추가하지 않았다.
++- 기존 Backend 설정의 grid 범위를 공식 layout.readState의 gridLimits로 전달한다. 이미지 범위·graph enum·imageSettings 원형의 소비자는 공통 정의를 참조한다. 설정 값과 기본값은 유지한다.
++- formatSlotLabel을 실제 번호와 예시가 함께 사용한다. FFPX/FFSX 문서 구조는 각 파일 형식의 역할로 유지하고 writer/reader에 연결했다. 미사용 system 목록은 제거하고 실제 portable build 입력인 SCRIPTS는 유지했다.
++- 계산은 담당 함수의 처리에 두었다. 변수 정의에는 자료형·원형·값의 의미를 적고 함수 참조·등록 자료에 절차 문장을 추가하지 않았다.
++
++## 실제 diff의 기준
++
++- HEAD: `3081b4120257cfea77b72fb2941ed688f7617d5a`.
++- 기준 tree: `7e27e054d4e879365c90d259ce2956404899146c`. 수정 시작 전의 미커밋 작업과 기존 Plan031·013 기록을 포함한다.
++- 임시 Git index에서 이 tree와 현재 파일을 native `git diff --cached --binary --full-index`로 비교했다. 동명 patch는 Source Script 13개 파일·development-versions.json·Plan031·이 설명의 실제 증분이며 patch 자신은 포함하지 않는다. 이전 패치와 작업 내용을 보존했다.
++
++## 확인과 한계
++
++- Source Script 15개 파일·201개 함수의 AST 양식·import와 실제 함수 연결, 34개 명령 담당, 15개 이벤트 값, 공개 메서드 집합과 조회 operation 값을 정적으로 대조했다. 실제 Source Script 증분 diff를 끝까지 확인했다.
++- 기존 hash 함수만 사용하여 Source Script 52 fingerprint `sha256:2740bd377c0f52c2ee99b32cb72eef0501e2c644656a788fe3c8aa581b095604`를 기록했다. stale/open과 하위 계층 lineage는 유지했다.
++- native whitespace 확인과 reverse apply --check로 실제 payload를 대조한다. 일반 index는 변경하지 않으며 임시 index와 lock은 제거한다.
++- pseudocode·source code·settings.json·빌드 스크립트·dist·개발 정책·AGENT·예시는 이번 단계에서 변경하지 않았다. 테스트·앱·빌드·브라우저·checker 본체·커밋·푸시는 실행하지 않았다. 전체 기능의 실행 성공이나 Source Script 논리적 닫힘을 선언하지 않는다.
+diff --git a/agent_space/plans/plan-031.md b/agent_space/plans/plan-031.md
+index 66e15f9a6505ce71b80176ce22d28a118b1496df..eb52d30e278ff95ba7347a3443833e8b05d206bb 100644
+--- a/agent_space/plans/plan-031.md
++++ b/agent_space/plans/plan-031.md
+@@ -4,9 +4,9 @@
+ 
+ - 작성일: 2026-11-15.
+ - 사용자 요구: Slot 명령 helper의 Args에 이벤트 이름을 복사한 사례와 유사한 위반을 조사하고 수정 계획을 작성한다.
+-- 이번 변경은 조사와 계획 작성이다. Source Script 수정은 후속 적용 작업이다.
++- 최초 작성은 조사와 계획 작성이다. 사용자 승인 후 Source Script 적용을 진행했으며 결과는 §8에 기록한다.
+ - 조사 기준: HEAD `3081b4120257cfea77b72fb2941ed688f7617d5a` 위의 현재 작업 파일. Plan030까지의 미커밋 변경을 포함한다.
+-- 현재 계층 기록: Source Script 51, pseudocode 26, source code 157. Source Script의 상태는 stale/open이다.
++- 조사 당시 계층 기록: Source Script 51, pseudocode 26, source code 157. 적용 결과 Source Script는 52/stale/open이며 하위 계층 기록은 유지한다.
+ - Plan030의 명령 계산 분리, 현재 소유 상태 조회, 후보 계산, 참조 재확인, 단일 반영, 실제 결과 계산을 유지한다. 이번 계획은 그 연결과 공통 정의를 정리한다.
+ 
+ ## 2. 조사 방법과 판정 기준
+@@ -122,8 +122,22 @@ Frontend 이벤트, Application의 검증 선택, Backend의 실제 참조 판
+ - 소비자가 원천 정의를 실제로 가리키는 경로를 확인한다. 존재하지 않는 함수·원형·필드 참조를 남기지 않는다.
+ - 허용값 변경의 영향이 문서 복사본에 묻히지 않는지, 문서 Args가 원소를 다시 적고 있지 않은지 대조한다.
+ - 정책 원문·AGENT·예시 양식과 기존 미커밋 작업을 보존한다.
+-- 현재 조사와 계획 작성에서는 구현·계층 메타데이터를 변경하지 않는다. 테스트·빌드·브라우저·checker 실행·커밋·푸시도 수행하지 않는다.
++- 최초 조사·계획 단계에서는 구현·계층 메타데이터를 보존했다. 후속 승인에 따른 적용은 Source Script와 그 계층 기록에 한정한다. 테스트·빌드·브라우저·checker 실행·커밋·푸시는 수행하지 않는다.
+ 
+ ## 7. 중단 조건
+ 
+ 서로 다른 기능 의미를 하나의 정의로 합쳐야 하거나 기존 허용값·공개 계약을 바꿔야만 진행할 수 있으면 해당 항목을 멈춘다. 충돌하는 정의·사용처·영향과 필요한 결정을 기록한다. 검사 통과만으로 설계 문제를 닫거나, 참조 추적을 위해 불필요한 새 프레임워크를 추가하지 않는다.
++
++## 8. 적용 결과
++
++- §3.1~3.2: PROJECT_COMMANDS의 34개 키를 실제 담당 함수에 연결했다. send는 이 등록에서 함수를 한 번 선택한다. 네 helper의 Args는 등록 원천을 참조하며 명령별 계산 분기는 각 처리에 유지한다. asset 담당 함수의 상태·순번 대응 반환과 나머지 함수의 상태 반환을 구별했다. 기존 12/8/3/11 담당 관계, 현재 참조 재확인·재시도·단일 initialize·반영 후 결과 계산을 유지했다.
++- §3.3: 사용하지 않는 PUBLIC_PROJECT_MUTATION_ROUTES를 제거했다. 공개 함수의 실제 명령 전달과 공개 namespace·메서드 집합을 유지했다.
++- §3.4: PUBLIC_API_METHODS의 내부 함수는 실제 함수 참조로 연결했다. 조회 operation은 Backend의 BACKEND_QUERY_KINDS 구성원을 공개 binding·요청·Backend 분기가 함께 참조한다. 실제 공개 operation 값과 위치 인자의 필드 대응을 유지했다.
++- §3.5: Application의 BACKEND_REFERENCE_EVENTS가 Frontend 이벤트 등록값과 세 Backend 판정 함수를 직접 연결한다. Slot·asset·graph object 판정은 각각 validateSlotSelection·validateAssetSelection·validateGraphObjectSelection에 두었다. Backend에서 Frontend를 import하지 않는다. 실제 호출이 없는 interface-intent 등록과 그 설명은 제거하고 Application의 실제 판정 경로를 유지했다. lifecycle 전송도 INTERFACE_EVENTS의 등록값을 사용한다.
++- §3.6: grid 검증은 Backend 설정 범위를 참조한다. layout.readState의 gridLimits를 통해 UI가 같은 범위를 읽으며 현재 companion·무효 입력 fallback을 유지한다. 이미지 범위도 기존 설정의 해당 필드를 참조한다. 설정 파일의 값은 변경하지 않았다.
++- §3.7: graphObject·axisSettings의 허용값과 imageSettings 원형을 사용처에서 참조한다. Slot.content.imageSettings는 공통 원형을 가리킨다. 실제 허용값과 축 변환 의미를 유지했다.
++- §3.8: formatSlotLabel의 번호·대소문자·괄호 계산을 실제 라벨과 ordinal 0 예시가 함께 사용한다. 슬롯 정렬과 병합 anchor 처리는 orderedSlotLabels에 유지했다.
++- §4 후보 판정: FFPX_STRUCTURE·FFSX_STRUCTURE는 서로 다른 문서 역할·외부 경로 정의로 유지하고 네 writer/reader가 해당 정의를 참조한다. 사용하지 않는 system의 IMPLEMENTATION_SOURCES·SOURCE_SCRIPT_LOGICAL_HIERARCHY는 제거했다. 실제 인라인 입력 순서를 소비하는 portable build의 SCRIPTS는 유지했다. 외부 파일 형식과 필수·선택 문서 조건은 변경하지 않았다.
++- 현재 Source Script 15개 Python 문서의 함수·메서드·중첩 함수는 201개다. AST로 양식 순서·내부 import·실제 함수 binding·34개 담당 관계·15개 Frontend 이벤트·공개 메서드 집합·조회 식별자 값을 정적으로 대조했다. 변경된 Source Script 13개 파일의 실제 증분 diff를 끝까지 읽고 연결과 반환 의미를 대조했다. 이 확인은 Source Script 실행이나 전체 기능의 논리적 닫힘 판정으로 사용하지 않는다.
++- Source Script 52/stale/open, fingerprint `sha256:2740bd377c0f52c2ee99b32cb72eef0501e2c644656a788fe3c8aa581b095604`. pseudocode 26·source code 157과 기존 derived_from은 유지했다. 후속 계층 전파는 Source Script 닫힘 평가 이후 별도 작업이다.
++- 실제 증분 기록은 `agent_space/patches/20261115-014.patch`와 동명 설명이다. 기준 tree는 `7e27e054d4e879365c90d259ce2956404899146c`이며 이전 미커밋 작업·Plan031·013 기록을 포함한다. 테스트·앱·빌드·브라우저·checker 본체·커밋·푸시는 실행하지 않았다.
+diff --git a/development-versions.json b/development-versions.json
+index 7466e85b4db7f943b3b8ec034b6c25a9dba19a05..a8b465c4969bedd05874a02e575f57d7a1618eb3 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. pseudocode (implemented in PlusCal) is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating source code implementation or current status.",
+   "layers": {
+     "source-script": {
+-      "revision": 51,
++      "revision": 52,
+       "status": "stale",
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+-      "fingerprint": "sha256:4b4559213587d05980978d05ea3ea38c793965a4d3a0da24ea37eb29c4c8c9b5",
++      "fingerprint": "sha256:2740bd377c0f52c2ee99b32cb72eef0501e2c644656a788fe3c8aa581b095604",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/sourcescript/application/adapter.py b/sourcescript/application/adapter.py
+index 5858ed564fbed59f60da542b955e56ebc0ddb6b8..aab405ca0fd5d4cab15adb0c5c52e1d454eca3aa 100644
+--- a/sourcescript/application/adapter.py
++++ b/sourcescript/application/adapter.py
+@@ -7,16 +7,18 @@ Backend와 Frontend 사이의 command/query/result/lifecycle Adapter를 명세
+ 
+ from sourcescript.backend.project_state import (
+     readBackendProjection,
+-    validateFrontendIntent,
++    validateSlotSelection,
++    validateAssetSelection,
++    validateGraphObjectSelection,
+     buildFrontendReconciliationInput,
+ )
+ from sourcescript.backend.project_efsm import projectEFSM, PROJECT_COMMANDS
+-from sourcescript.frontend.interface_fsm import interfaceFSM
++from sourcescript.frontend.interface_fsm import interfaceFSM, INTERFACE_EVENTS
+ 
+ BACKEND_REFERENCE_EVENTS = {
+-    "SELECT_SLOT",
+-    "SELECT_ASSET",
+-    "SELECT_GRAPH_OBJECT",
++    INTERFACE_EVENTS["SELECT_SLOT"]: validateSlotSelection,
++    INTERFACE_EVENTS["SELECT_ASSET"]: validateAssetSelection,
++    INTERFACE_EVENTS["SELECT_GRAPH_OBJECT"]: validateGraphObjectSelection,
+ }
+ 
+ 
+@@ -116,6 +118,7 @@ def dispatchProjectQuery(query, payload=None):
+ def dispatchInterfaceEvent(event, payload=None):
+     validatedInput = "FrontendValidatedInput 원형의 딕셔너리."
+     projection = "Frontend 상태 읽기 딕셔너리."
++    validator = "참조 판정 함수."
+     """
+     Args:
+     - event:
+@@ -132,8 +135,8 @@ def dispatchInterfaceEvent(event, payload=None):
+     - interfaceFSM이 소유하는 runtime 상태.
+ 
+     처리:
+-        1. event가 BACKEND_REFERENCE_EVENTS에 있으면
+-           validateFrontendIntent(event, payload) 결과를 validatedInput에 둔다.
++        1. BACKEND_REFERENCE_EVENTS에서 event에 대응하는 함수를 validator에 둔다.
++           등록된 함수가 있으면 validator(event,payload)를 한 번 호출하여 validatedInput에 둔다.
+         2. 그 외에는 accepted=True와 event의 입력을 담은 validatedInput을 구성한다.
+         3. interfaceFSM.send(event, validatedInput)의 결과를 projection에 두고 반환한다.
+            accepted=False 입력은 Frontend 소유자가 상태와 revision을 유지한다.
+@@ -168,9 +171,10 @@ def dispatchSlotSelection(slotId, pendingContentType=None, direction="ui-to-fsm"
+     - Frontend 선택 상태. 빈 슬롯의 종류 변경 조건을 만족하면 해당 슬롯 contentType.
+ 
+     처리:
+-        1. slotId와 direction으로 validateFrontendIntent("SELECT_SLOT", payload)를 호출한다.
++        1. INTERFACE_EVENTS["SELECT_SLOT"]에 대응하는 BACKEND_REFERENCE_EVENTS의 함수에
++           해당 이벤트 값과 slotId·direction을 가진 payload를 전달하여 반환값을 validatedInput에 둔다.
+         2. 거부이면 현재 Frontend 읽기, None, None을 반환한다.
+-        3. interfaceFSM.send("SELECT_SLOT", validatedInput)으로 선택을 확정한다.
++        3. interfaceFSM.send(INTERFACE_EVENTS["SELECT_SLOT"], validatedInput)으로 선택을 확정한다.
+            ui-to-fsm의 같은 슬롯 입력은 toggle-clear, model-to-fsm 입력은 선택 유지다.
+         4. 확정된 선택 id가 있고 pendingContentType이 있으면
+            readBackendProjection("slot-selection-context", 현재 선택 참조)를 호출한다.
+@@ -246,11 +250,11 @@ def runLifecycleTask(lifecycle, event, task):
+         1. interfaceFSM.readState()["lifecycle"]이 ready인지 확인한다.
+            busy이면 task 실행 전에 busy 거부 결과를 반환한다.
+         2. lifecycle이 importing/exporting인지 확인하고 잘못된 값이면 실행 전에 거부한다.
+-        3. LIFECYCLE_START에 lifecycle과 event를 전달한다.
++        3. INTERFACE_EVENTS["LIFECYCLE_START"]로 lifecycle과 event를 interfaceFSM.send에 전달한다.
+         4. task를 정확히 한 번 호출한다. 동기 반환 또는 비동기 완료 값을 outcome에 둔다.
+-        5. 정상 완료이면 LIFECYCLE_COMPLETE에 event와 outcome을 전달한 뒤 outcome을 반환한다.
++        5. 정상 완료이면 INTERFACE_EVENTS["LIFECYCLE_COMPLETE"]로 event와 outcome을 interfaceFSM.send에 전달한 뒤 outcome을 반환한다.
+         6. 동기 예외 또는 비동기 거부이면 원래 오류를 failure에 둔다.
+-           LIFECYCLE_FAILED에 event와 메시지를 전달하여 error 발행과 ready 복귀를 마친 뒤
++           INTERFACE_EVENTS["LIFECYCLE_FAILED"]로 event와 메시지를 interfaceFSM.send에 전달하여 error 발행과 ready 복귀를 마친 뒤
+            failure를 호출자에게 전파한다.
+     """
+     return outcome
+diff --git a/sourcescript/application/public_api/__init__.py b/sourcescript/application/public_api/__init__.py
+index 4547d33e44e923b0521cfe9d7e84dcee549126e7..75baaf46919b0e0dcbafd128b234bdf5f2764530 100644
+--- a/sourcescript/application/public_api/__init__.py
++++ b/sourcescript/application/public_api/__init__.py
+@@ -5,7 +5,9 @@ Fast Figure Source Script — Application boundary / public-api contract
+ Python 문법으로 작성한 구현 명세다.
+ """
+ 
++from sourcescript.backend.project_state import BACKEND_QUERY_KINDS
+ from sourcescript.application import adapter
++from sourcescript.frontend.interface_fsm import INTERFACE_EVENTS
+ from sourcescript.application.public_api import assets, graphs, layout_annotations
+ 
+ 
+@@ -28,7 +30,7 @@ def readSelectedSlot():
+ 
+     처리:
+         1. adapter.appFSM.readState()의 현재 selectedSlotId를 slotId에 둔다. None은 선택 해제이고 0은 유효하다.
+-        2. operation=slots.readSelected와 frontendState의 selectedSlotId=slotId를 담아 adapter.dispatchProjectQuery("project-api", 요청)를 호출한다.
++        2. operation=BACKEND_QUERY_KINDS['project-api']['slots.readSelected']와 frontendState의 selectedSlotId=slotId를 담아 adapter.dispatchProjectQuery("project-api", 요청)를 호출한다.
+         3. Backend는 같은 현재 프로젝트에서 resolveVisibleSlot로 대상을 찾고 읽기 전용 Slot 또는 None을 반환한다.
+         4. 조회 결과를 slot에 두고 반환한다. 조회 오류는 호출자에게 전달한다.
+     """
+@@ -54,7 +56,7 @@ def readGraphData():
+ 
+     처리:
+         1. adapter.appFSM.readState()를 current에 두고 selectedSlotId·assetSelection·assetPath·graphObject·graphObjectIndex를 읽는다.
+-        2. 그 필드만 frontendState에 넣고 operation=graphs.readData로 adapter.dispatchProjectQuery("project-api", 요청)를 호출한다.
++        2. 그 필드만 frontendState에 넣고 operation=BACKEND_QUERY_KINDS['project-api']['graphs.readData']로 adapter.dispatchProjectQuery("project-api", 요청)를 호출한다.
+         3. Backend는 같은 현재 프로젝트의 visible Slot.content["chart"]로 chart를 찾는다. CSV 선택이면 assetPath로 currentCsv와 columns를 찾는다.
+            선택 object의 csvId로 objectColumns를 별도로 구하며 각 누락 결과는 backend.project_state.readBackendProjection의 처리["graphs.readData"]를 따른다.
+         4. 반환값을 graphData에 두고 반환한다. 조회 오류는 호출자에게 전달한다.
+@@ -62,93 +64,115 @@ def readGraphData():
+     return graphData
+ 
+ 
+-PUBLIC_API_METHODS = {'project': {'readName': ('query', 'project.readName', ()),
+-             'setName': 'layout_annotations.setProjectName',
+-             'importFile': 'assets.importProjectFile',
+-             'exportFile': 'assets.downloadProject'},
+- 'slots': {'readSelected': 'readSelectedSlot',
+-           'select': 'adapter.dispatchSlotSelection',
+-           'setContentType': 'layout_annotations.setSlotContentType',
+-           'reset': 'layout_annotations.resetSlotApi',
+-           'swap': 'layout_annotations.swapSlots',
+-           'prepareFileDrop': 'layout_annotations.prepareDashboardFileDrop',
+-           'finishFileDrop': 'layout_annotations.finishDashboardFileDrop'},
+- 'images': {'readEditor': ('query', 'images.readEditor', ()),
+-            'setSettings': 'layout_annotations.applyImageSettingsFromValues',
+-            'insertEmpty': 'layout_annotations.insertEmptyImageIntoSelectedSlot'},
+- 'assets': {'readDeletionTarget': ('query', 'assets.readDeletionTarget', ('path',)),
+-            'delete': 'assets.deleteProjectAsset',
+-            'readTree': ('query', 'assets.readTree', ()),
+-            'isTrashed': ('query', 'assets.isTrashed', ('path',)),
+-            'movable': ('query', 'assets.movable', ('path',)),
+-            'readTrash': ('query', 'assets.readTrash', ()),
+-            'moveOptions': ('query', 'assets.moveOptions', ('path',)),
+-            'planMove': ('query', 'assets.planMove', ('path', 'directory')),
+-            'move': 'assets.moveProjectNode',
+-            'createDirectory': 'assets.createProjectDirectory',
+-            'createEmptyCsv': 'assets.createEmptyProjectCsvAndSelect',
+-            'emptyTrash': 'assets.emptyProjectTrash',
+-            'draggableAsset': ('query', 'assets.draggableAsset', ('path',)),
+-            'connectToSlot': 'assets.connectProjectAssetToSlot',
+-            'importToDirectory': 'assets.importProjectFilesToDirectory',
+-            'importToSlot': 'assets.importProjectFileToSlot',
+-            'fileKind': 'assets.readAssetFileKind',
+-            'importFiles': 'assets.importProjectAssetFiles',
+-            'collisionModel': 'assets.readAssetCollisionModel',
+-            'resolveImportPlan': 'assets.readAssetImportPlan',
+-            'selectDirectory': ('event', 'SELECT_ASSET', 'directory'),
+-            'selectCsv': 'assets.selectProjectCsv',
+-            'selectImage': ('event', 'SELECT_ASSET', 'image'),
+-            'download': 'assets.downloadProjectAsset'},
+- 'graphs': {'readData': 'readGraphData',
+-            'readLayout': ('query', 'graphs.readLayout', ()),
+-            'readPalette': ('query', 'graphs.readPalette', ()),
+-            'selectCsv': 'assets.selectProjectCsv',
+-            'setHeaderLines': 'graphs.graphEditorSetHeaderLines',
+-            'setEditable': 'graphs.graphEditorSetEditable',
+-            'addObject': 'graphs.graphEditorAdd',
+-            'moveObject': 'graphs.graphEditorMove',
+-            'selectObject': ('event', 'SELECT_GRAPH_OBJECT'),
+-            'setObjectValues': 'graphs.graphEditorObjectValues',
+-            'deleteObject': 'graphs.graphEditorDelete',
+-            'updateLayout': 'graphs.graphEditorUpdateLayout',
+-            'applyPalette': 'graphs.graphEditorApplyPalette',
+-            'defaultColors': ('query', 'graphs.defaultColors', ()),
+-            'hasSelectedSlot': ('query', 'graphs.hasSelectedSlot', ()),
+-            'importFile': 'graphs.importSelectedGraphFile',
+-            'exportFfsx': ('call', 'graphs.exportSelectedGraph', 'graphs.exportFfsx'),
+-            'exportPlotlyJson': ('call', 'graphs.exportSelectedGraph', 'graphs.exportPlotlyJson')},
+- 'print': {'readSettings': ('query', 'print.readSettings', ()),
+-           'setSettings': 'layout_annotations.setExportSettings',
+-           'save': 'layout_annotations.exportDashboardTarget',
+-           'capture': 'layout_annotations.captureDashboardCurrent'},
+- 'captions': {'readGlobal': ('query', 'captions.readGlobal', ()),
+-              'readSlot': ('query', 'captions.readSlot', ('slotId',)),
+-              'setEnabled': 'layout_annotations.setCaptionsApiEnabled',
+-              'setGlobalText': 'layout_annotations.setGlobalCaptionText',
+-              'setSlotText': 'layout_annotations.setSlotCaptionText',
+-              'insertSlotCaptions': 'layout_annotations.insertSlotCaptionsIntoGlobalCaption',
+-              'setName': 'layout_annotations.setCaptionsApiName',
+-              'setNameBold': 'layout_annotations.setCaptionsApiNameBold',
+-              'setSettings': 'layout_annotations.setCaptionsApiSettings'},
+- 'labels': {'readState': 'layout_annotations.readLabelsApiState',
+-            'setEnabled': 'layout_annotations.setLabelsApiEnabled',
+-            'setSettings': 'layout_annotations.setLabelsApiSettings',
+-            'setPosition': 'layout_annotations.setLabelsApiPosition',
+-            'finishPositionInteraction': 'layout_annotations.finishLabelsApiPositionInteraction',
+-            'resetPosition': 'layout_annotations.resetLabelsApiPosition'},
+- 'appearance': {'readPalette': ('query', 'appearance.readPalette', ()),
+-                'setPalette': 'layout_annotations.setAppearanceApiPalette',
+-                'resetPalette': 'layout_annotations.resetAppearanceApiPalette'},
+- 'layout': {'readState': 'layout_annotations.readLayoutApiState',
+-            'setStyle': 'layout_annotations.setLayoutApiStyle',
+-            'setGrid': 'layout_annotations.setLayoutApiGrid',
+-            'setZoom': 'layout_annotations.setLayoutApiZoom',
+-            'commitZoom': 'layout_annotations.commitLayoutApiZoom',
+-            'setZoomLocked': 'layout_annotations.setLayoutApiZoomLocked',
+-            'resetZoom': 'layout_annotations.resetLayoutApiZoom',
+-            'mergeSlots': 'layout_annotations.mergeSlots',
+-            'splitSlots': 'layout_annotations.splitSlots'}}
++PUBLIC_API_METHODS = {
++    'project': {
++        'readName': ('query', BACKEND_QUERY_KINDS['project-api']['project.readName'], ()),
++        'setName': layout_annotations.setProjectName,
++        'importFile': assets.importProjectFile,
++        'exportFile': assets.downloadProject,
++    },
++    'slots': {
++        'readSelected': readSelectedSlot,
++        'select': adapter.dispatchSlotSelection,
++        'setContentType': layout_annotations.setSlotContentType,
++        'reset': layout_annotations.resetSlotApi,
++        'swap': layout_annotations.swapSlots,
++        'prepareFileDrop': layout_annotations.prepareDashboardFileDrop,
++        'finishFileDrop': layout_annotations.finishDashboardFileDrop,
++    },
++    'images': {
++        'readEditor': ('query', BACKEND_QUERY_KINDS['project-api']['images.readEditor'], ()),
++        'setSettings': layout_annotations.applyImageSettingsFromValues,
++        'insertEmpty': layout_annotations.insertEmptyImageIntoSelectedSlot,
++    },
++    'assets': {
++        'readDeletionTarget': ('query', BACKEND_QUERY_KINDS['project-api']['assets.readDeletionTarget'], ('path',)),
++        'delete': assets.deleteProjectAsset,
++        'readTree': ('query', BACKEND_QUERY_KINDS['project-api']['assets.readTree'], ()),
++        'isTrashed': ('query', BACKEND_QUERY_KINDS['project-api']['assets.isTrashed'], ('path',)),
++        'movable': ('query', BACKEND_QUERY_KINDS['project-api']['assets.movable'], ('path',)),
++        'readTrash': ('query', BACKEND_QUERY_KINDS['project-api']['assets.readTrash'], ()),
++        'moveOptions': ('query', BACKEND_QUERY_KINDS['project-api']['assets.moveOptions'], ('path',)),
++        'planMove': ('query', BACKEND_QUERY_KINDS['project-api']['assets.planMove'], ('path', 'directory')),
++        'move': assets.moveProjectNode,
++        'createDirectory': assets.createProjectDirectory,
++        'createEmptyCsv': assets.createEmptyProjectCsvAndSelect,
++        'emptyTrash': assets.emptyProjectTrash,
++        'draggableAsset': ('query', BACKEND_QUERY_KINDS['project-api']['assets.draggableAsset'], ('path',)),
++        'connectToSlot': assets.connectProjectAssetToSlot,
++        'importToDirectory': assets.importProjectFilesToDirectory,
++        'importToSlot': assets.importProjectFileToSlot,
++        'fileKind': assets.readAssetFileKind,
++        'importFiles': assets.importProjectAssetFiles,
++        'collisionModel': assets.readAssetCollisionModel,
++        'resolveImportPlan': assets.readAssetImportPlan,
++        'selectDirectory': ('event', INTERFACE_EVENTS['SELECT_ASSET'], 'directory'),
++        'selectCsv': assets.selectProjectCsv,
++        'selectImage': ('event', INTERFACE_EVENTS['SELECT_ASSET'], 'image'),
++        'download': assets.downloadProjectAsset,
++    },
++    'graphs': {
++        'readData': readGraphData,
++        'readLayout': ('query', BACKEND_QUERY_KINDS['project-api']['graphs.readLayout'], ()),
++        'readPalette': ('query', BACKEND_QUERY_KINDS['project-api']['graphs.readPalette'], ()),
++        'selectCsv': assets.selectProjectCsv,
++        'setHeaderLines': graphs.graphEditorSetHeaderLines,
++        'setEditable': graphs.graphEditorSetEditable,
++        'addObject': graphs.graphEditorAdd,
++        'moveObject': graphs.graphEditorMove,
++        'selectObject': ('event', INTERFACE_EVENTS['SELECT_GRAPH_OBJECT']),
++        'setObjectValues': graphs.graphEditorObjectValues,
++        'deleteObject': graphs.graphEditorDelete,
++        'updateLayout': graphs.graphEditorUpdateLayout,
++        'applyPalette': graphs.graphEditorApplyPalette,
++        'defaultColors': ('query', BACKEND_QUERY_KINDS['project-api']['graphs.defaultColors'], ()),
++        'hasSelectedSlot': ('query', BACKEND_QUERY_KINDS['project-api']['graphs.hasSelectedSlot'], ()),
++        'importFile': graphs.importSelectedGraphFile,
++        'exportFfsx': ('call', graphs.exportSelectedGraph, BACKEND_QUERY_KINDS['project-api']['graphs.exportFfsx']),
++        'exportPlotlyJson': ('call', graphs.exportSelectedGraph, BACKEND_QUERY_KINDS['project-api']['graphs.exportPlotlyJson']),
++    },
++    'print': {
++        'readSettings': ('query', BACKEND_QUERY_KINDS['project-api']['print.readSettings'], ()),
++        'setSettings': layout_annotations.setExportSettings,
++        'save': layout_annotations.exportDashboardTarget,
++        'capture': layout_annotations.captureDashboardCurrent,
++    },
++    'captions': {
++        'readGlobal': ('query', BACKEND_QUERY_KINDS['project-api']['captions.readGlobal'], ()),
++        'readSlot': ('query', BACKEND_QUERY_KINDS['project-api']['captions.readSlot'], ('slotId',)),
++        'setEnabled': layout_annotations.setCaptionsApiEnabled,
++        'setGlobalText': layout_annotations.setGlobalCaptionText,
++        'setSlotText': layout_annotations.setSlotCaptionText,
++        'insertSlotCaptions': layout_annotations.insertSlotCaptionsIntoGlobalCaption,
++        'setName': layout_annotations.setCaptionsApiName,
++        'setNameBold': layout_annotations.setCaptionsApiNameBold,
++        'setSettings': layout_annotations.setCaptionsApiSettings,
++    },
++    'labels': {
++        'readState': layout_annotations.readLabelsApiState,
++        'setEnabled': layout_annotations.setLabelsApiEnabled,
++        'setSettings': layout_annotations.setLabelsApiSettings,
++        'setPosition': layout_annotations.setLabelsApiPosition,
++        'finishPositionInteraction': layout_annotations.finishLabelsApiPositionInteraction,
++        'resetPosition': layout_annotations.resetLabelsApiPosition,
++    },
++    'appearance': {
++        'readPalette': ('query', BACKEND_QUERY_KINDS['project-api']['appearance.readPalette'], ()),
++        'setPalette': layout_annotations.setAppearanceApiPalette,
++        'resetPalette': layout_annotations.resetAppearanceApiPalette,
++    },
++    'layout': {
++        'readState': layout_annotations.readLayoutApiState,
++        'setStyle': layout_annotations.setLayoutApiStyle,
++        'setGrid': layout_annotations.setLayoutApiGrid,
++        'setZoom': layout_annotations.setLayoutApiZoom,
++        'commitZoom': layout_annotations.commitLayoutApiZoom,
++        'setZoomLocked': layout_annotations.setLayoutApiZoomLocked,
++        'resetZoom': layout_annotations.resetLayoutApiZoom,
++        'mergeSlots': layout_annotations.mergeSlots,
++        'splitSlots': layout_annotations.splitSlots,
++    },
++}
+ 
+ 
+ 
+@@ -185,22 +209,22 @@ def createPublicApi():
+     처리:
+         1. api에 PUBLIC_API_METHODS의 namespace별 오브젝트를 만들고 각 메서드의 binding을 읽는다.
+            각 callable의 본문을 다음 연결 절차로 구성한다. 인자 조회와 작업 실행은 그 callable이 호출될 때 수행한다.
+-        2. binding이 함수 식별 문자열이면 이 모듈의 import 또는 정의에서 해당 함수를 찾는다.
+-           callable은 그 함수의 인자 순서대로 입력을 전달하고 반환값 또는 오류를 호출자에게 전달한다.
++        2. binding이 함수 참조이면 callable은 그 함수에 입력을 기존 인자 순서대로 전달한다.
++           반환값 또는 오류를 호출자에게 전달한다.
+         3. query binding의 두 번째 원소는 operation, 세 번째 원소는 위치 인자의 필드 이름 tuple이다.
+            callable은 그 이름과 입력을 짝지어 request를 만들고 operation을 넣는다.
+            images.readEditor이면 adapter.appFSM.readState()의 selectedSlotId를 request의 slotId에 넣는다.
+            graphs.readLayout/readPalette/hasSelectedSlot이면 현재 selectedSlotId를 request에 넣는다.
+            adapter.dispatchProjectQuery("project-api", request)를 한 번 호출하고 결과 또는 오류를 전달한다.
+         4. event binding이면 callable이 adapter.dispatchInterfaceEvent를 한 번 호출하도록 연결한다.
+-           SELECT_ASSET은 binding의 세 번째 원소인 kind와 입력 path를 전달한다.
+-           SELECT_GRAPH_OBJECT는 입력 index와 selectAsset=True를 전달한다.
++           이벤트 값이 INTERFACE_EVENTS["SELECT_ASSET"]이면 binding의 세 번째 원소인 kind와 입력 path를 전달한다.
++           INTERFACE_EVENTS["SELECT_GRAPH_OBJECT"]이면 입력 index와 selectAsset=True를 전달한다.
+            adapter가 현재 프로젝트 참조를 검증하여 만든 결과를 callable의 결과로 전달한다.
+         5. project.importFile의 callable은 assets.importProjectFile에 입력 file을 전달하는 task를 만든다.
+            이 helper가 PROJECT_LOADED의 미반영 결과 또는 성공 후 export 조회 결과를 반환한다.
+            file 읽기·명령·성공 후 조회의 오류와 취소 결과는 해당 task의 결과로 전달한다.
+-        6. call binding인 graphs.exportFfsx/exportPlotlyJson은 binding의 함수인 graphs.exportSelectedGraph에
+-           입력 slotId와 binding의 operation 식별자를 전달하는 callable로 연결한다.
++        6. call binding은 두 번째 원소의 함수 참조와 세 번째 원소의 operation 식별자를 가진다.
++           callable은 그 함수에 입력 slotId와 operation을 기존 인자 순서대로 전달한다.
+         7. project.importFile, assets.importToDirectory/importToSlot/importFiles, graphs.importFile의 callable은
+            해당 작업을 importing task로 adapter.runLifecycleTask에 한 번 전달한다.
+            project.exportFile, assets.download, graphs.exportFfsx/exportPlotlyJson, print.save/capture는
+diff --git a/sourcescript/application/public_api/assets.py b/sourcescript/application/public_api/assets.py
+index d6ae0a730a1bd24df735e00251c288d8c1498eb8..59d250f30d0ace6164a0375dfff7cb058c95a412 100644
+--- a/sourcescript/application/public_api/assets.py
++++ b/sourcescript/application/public_api/assets.py
+@@ -5,6 +5,7 @@ Fast Figure Source Script — Application boundary / public-api — asset wrappe
+ Python 문법으로 작성한 구현 명세다.
+ """
+ 
++from sourcescript.backend.project_state import BACKEND_QUERY_KINDS
+ from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection
+ from sourcescript.backend.assets_files import EMPTY_CSV_TEMPLATE, PROJECT_ASSET_DIRECTORIES
+ from sourcescript.frontend.interface_fsm import interfaceFSM
+@@ -27,7 +28,7 @@ def readAssetFileKind(file):
+ 
+     처리:
+         1. assets.fileKind: copied name/type만 공식 pure query에 전달하고 kind 문자열을 그대로 반환한다.
+-           dispatchProjectQuery('project-api', {'operation': 'assets.fileKind', 'file': 'file의 name/type copy'})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['assets.fileKind'], 'file': 'file의 name/type copy'})를 반환한다.
+     """
+     return kind
+ 
+@@ -54,7 +55,7 @@ def readAssetCollisionModel(file, directory, reservedPaths):
+ 
+     처리:
+         1. assets.collisionModel: immutable 한 작업용 model; UI choice는 이 query 밖에서 수집한다.
+-           dispatchProjectQuery('project-api', {'operation': 'assets.collisionModel', 'file': file, 'directory': directory, 'reservedPaths': reservedPaths})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['assets.collisionModel'], 'file': file, 'directory': directory, 'reservedPaths': reservedPaths})를 반환한다.
+     """
+     return model
+ 
+@@ -81,7 +82,7 @@ def readAssetImportPlan(model, choice, reservedPaths):
+ 
+     처리:
+         1. assets.resolveImportPlan: UI 제안과 explicit choice만 전달; 오류는 전파하고 commit/예약으로 취급하지 않는다.
+-           dispatchProjectQuery('project-api', {'operation': 'assets.resolveImportPlan', 'model': model, 'choice': choice, 'reservedPaths': reservedPaths})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['assets.resolveImportPlan'], 'model': model, 'choice': choice, 'reservedPaths': reservedPaths})를 반환한다.
+     """
+     return plan
+ 
+@@ -222,7 +223,7 @@ def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
+         2. Backend는 현재 nextId·VFS·동일 id의 대상을 해결하고 표·원본 바이트·헤더·경로를 검증하여 한 번 반영한다.
+         3. 명령 결과를 result에 둔다. committed가 False이면 result를 반환한다.
+         4. ProjectMutationResult.changed에 기록한 이번 생성 CSV의 canonical path를 assetPath에 둔다.
+-        5. operation=assets.readDeletionTarget, path=assetPath로 dispatchProjectQuery("project-api", 요청)를 호출한다.
++        5. operation=BACKEND_QUERY_KINDS['project-api']['assets.readDeletionTarget'], path=assetPath로 dispatchProjectQuery("project-api", 요청)를 호출한다.
+            결과의 target을 csv에 두고 반환한다. 명령과 후속 조회 오류는 호출자에게 전달한다.
+     """
+     return csv
+@@ -292,7 +293,7 @@ def createProjectImage(bytes, name, mime, id, path):
+         2. Backend는 현재 nextId·VFS·동일 id의 대상을 해결하고 원본 바이트·MIME·이름·경로를 검증하여 한 번 반영한다.
+         3. 명령 결과를 result에 둔다. committed가 False이면 result를 반환한다.
+         4. ProjectMutationResult.changed에 기록한 이번 생성 image의 canonical path를 assetPath에 둔다.
+-        5. operation=assets.readDeletionTarget, path=assetPath로 dispatchProjectQuery("project-api", 요청)를 호출한다.
++        5. operation=BACKEND_QUERY_KINDS['project-api']['assets.readDeletionTarget'], path=assetPath로 dispatchProjectQuery("project-api", 요청)를 호출한다.
+            결과의 target을 image에 두고 반환한다. 이미지 표시 설정은 Slot.content["imageSettings"]에 유지한다.
+         6. 명령과 후속 조회 오류는 호출자에게 전달한다.
+     """
+@@ -584,7 +585,7 @@ def downloadProjectAsset(path):
+         1. assets.download: 원본 bytes handoff 성공 True, absent/wrong-kind/no bytes False; 오류 전파.
+            path 생략은 public binding이 현재 Frontend assetPath scalar를 전달한다. 새 Project query는 이 작업에만 소비한다.
+            브라우저 다운로드 handoff 완료를 뜻한다. selection/Project/asset bytes를 변경하지 않는다.
+-           dispatchProjectQuery('export', {'operation': 'assets.download', 'path': path})의 값을 payload에 대입한다.
++           dispatchProjectQuery('export', {'operation': BACKEND_QUERY_KINDS['project-api']['assets.download'], 'path': path})의 값을 payload에 대입한다.
+            payload is None인 경우:
+            False를 반환한다.
+            downloadExportPayload(payload)를 호출한다.
+@@ -612,7 +613,7 @@ def downloadProject():
+            error는 원래 failure로 전파한다. 이 API는 handoff 후 None을 반환한다.
+            interfaceFSM.readState()['selectedSlotId'] is not None인 경우:
+            None를 반환한다.
+-           dispatchProjectQuery('export', {'operation': 'project.exportFile', 'stamp': '이번 호출의 UTC ISO timestamp'})의 값을 payload에 대입한다.
++           dispatchProjectQuery('export', {'operation': BACKEND_QUERY_KINDS['project-api']['project.exportFile'], 'stamp': '이번 호출의 UTC ISO timestamp'})의 값을 payload에 대입한다.
+            downloadExportPayload(payload)를 반환한다.
+     """
+     return outcome
+diff --git a/sourcescript/application/public_api/graphs.py b/sourcescript/application/public_api/graphs.py
+index 1c85efbb666cbc74450e10872a00ff67743e17ed..becb3735524db5b5b18acf3474ccb01d98d0ed0b 100644
+--- a/sourcescript/application/public_api/graphs.py
++++ b/sourcescript/application/public_api/graphs.py
+@@ -5,6 +5,7 @@ Fast Figure Source Script — Application boundary / public-api — graph wrappe
+ Python 문법으로 작성한 구현 명세다.
+ """
+ 
++from sourcescript.backend.project_state import BACKEND_QUERY_KINDS
+ from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery
+ from sourcescript.frontend.renderer import downloadExportPayload
+ 
+@@ -28,7 +29,7 @@ def graphEditorAdd(slotId, csvId):
+     - 대상 Slot의 chart 참조와 chart의 editor["objects"] 및 graph.
+ 
+     처리:
+-        1. dispatchProjectQuery("project-api", {"operation": "slots.readSelected",
++        1. dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['slots.readSelected'],
+            "selectedSlotId": slotId})로 slot을 얻는다. 없으면 outcome=None을 반환한다.
+         2. slot.content["chart"]가 None이면 event를 SLOT_DATA_CONNECTED로, 그 외에는
+            GRAPH_OBJECTS_REPLACED로 둔다.
+@@ -36,7 +37,7 @@ def graphEditorAdd(slotId, csvId):
+            Backend는 현재 Slot과 CSV를 조회하고 editable chart의 object 추가 또는 새 chart 생성을
+            계산하여 전체 프로젝트 검증 후 한 번 반영한다.
+         4. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
+-           True이면 dispatchProjectQuery("project-api", {"operation": "graphs.readData",
++           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+            "selectedSlotId": slotId})를 조회하고 결과의 chart를 outcome에 둔다.
+            실패는 호출자에게 전파한다.
+     """
+@@ -69,7 +70,7 @@ def graphEditorObjectValues(chartId, index, values):
+            graphs.graphEditorCommit으로 지정 object의 필드를 정규화한다.
+            다른 object와 확장 필드를 보존하고 전체 검증 뒤 반영한다.
+         3. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
+-           True이면 dispatchProjectQuery("project-api", {"operation": "graphs.readData",
++           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+            "chartId": chartId})를 조회하고 결과의 chart를 outcome에 둔다.
+            실패는 호출자에게 전파한다.
+     """
+@@ -97,14 +98,14 @@ def graphEditorMove(chartId, fromIndex, toIndex):
+     - chart["editor"]["objects"]의 순서와 graph 및 선택 index.
+ 
+     처리:
+-        1. dispatchProjectQuery("project-api", {"operation": "graphs.readData", "chartId": chartId})를
++        1. dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'], "chartId": chartId})를
+            조회한다. fromIndex=toIndex이고 editable chart의 유효한
+            정수 index이면 현재 chart를 outcome에 두어 반환한다.
+         2. 그 외에는 GRAPH_OBJECTS_REPLACED에 chartId, operation=graphs.moveObject,
+            from=fromIndex, to=toIndex를 전달한다. Backend가 현재 index들을 검증하고 이동과
+            object index mapping을 같은 candidate에 계산한다.
+         3. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
+-           True이면 dispatchProjectQuery("project-api", {"operation": "graphs.readData",
++           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+            "chartId": chartId})를 조회하고 결과의 chart를 outcome에 둔다.
+            실패는 호출자에게 전파한다.
+     """
+@@ -133,7 +134,7 @@ def graphEditorDelete(chartId, index):
+         2. Backend가 현재 index를 확인하여 해당 object를 제거하고 선택 해제 hint를 만든다.
+            마지막 object 삭제는 빈 editable chart로 반영한다.
+         3. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
+-           True이면 dispatchProjectQuery("project-api", {"operation": "graphs.readData",
++           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+            "chartId": chartId})를 조회하고 결과의 chart를 outcome에 둔다.
+            실패는 호출자에게 전파한다.
+     """
+@@ -224,7 +225,7 @@ def graphEditorUpdateLayout(slotId, chartId, values):
+            axes는 축 이름과 하위 항목별로 합친 뒤 normalizeGlobalSettings와
+            normalizeAxisSettings를 적용하고 graph를 계산하여 전체 검증 후 반영한다.
+         3. 미반영이면 명령 결과를 반환한다. 성공이면 dispatchProjectQuery("project-api",
+-           {"operation": "graphs.readLayout", "selectedSlotId": slotId})의 결과를
++           {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readLayout'], "selectedSlotId": slotId})의 결과를
+            outcome에 두고 반환한다. 오류는 호출자에게 전파한다.
+     """
+     return outcome
+@@ -252,7 +253,7 @@ def graphEditorApplyPalette(chartId, colors):
+         2. Backend는 현재 object 순서에서 index를 colors 길이로 나눈 나머지의 색상을 적용한다.
+            색상 외 object 필드는 유지하고 graph와 전체 candidate를 검증하여 반영한다.
+         3. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
+-           True이면 dispatchProjectQuery("project-api", {"operation": "graphs.readData",
++           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+            "chartId": chartId})를 조회하고 결과의 chart를 outcome에 둔다.
+            실패는 호출자에게 전파한다.
+     """
+@@ -282,7 +283,7 @@ def importSelectedGraphFile(slotId, file):
+            Plotly JSON은 parsePlotlyToEditor로 원본과 conversion view를 가진 chart를 구성한다.
+         3. Backend는 대상 Slot의 단일 chart 소유 관계를 포함한 전체 candidate를 검증하고 반영한다.
+         4. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
+-           True이면 dispatchProjectQuery("project-api", {"operation": "graphs.readData",
++           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+            "selectedSlotId": slotId})를 조회하고 결과의 chart를 outcome에 둔다.
+            실패는 호출자에게 전파한다.
+     """
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index 6e506b4a0b318c2500bec34222b09a3d832369ac..2cc53edfc65892308e9257d5b5f81307f554f709 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -5,6 +5,7 @@ Fast Figure Source Script — Application boundary / public-api — layout, anno
+ Python 문법으로 작성한 구현 명세다.
+ """
+ 
++from sourcescript.backend.project_state import BACKEND_QUERY_KINDS
+ from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection
+ from sourcescript.backend.project_state import DEFAULT_UI_PALETTE
+ from sourcescript.frontend.interface_fsm import interfaceFSM
+@@ -38,7 +39,7 @@ def setProjectName(value, trim=False):
+            dispatchProjectCommand('PROJECT_NAME_CHANGED', {'value': value, 'trim': trim})의 값을 (result, interfaceState, rendererInput)에 대입한다.
+            not result["committed"]인 경우:
+            None를 반환한다.
+-           dispatchProjectQuery('project-api', {'operation': 'project.readName'})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['project.readName']})를 반환한다.
+     """
+     return outcome
+ 
+@@ -198,7 +199,7 @@ def finishDashboardFileDrop():
+ 
+ 
+ def readLayoutApiState(previewWidth=None):
+-    layoutState = "gridRows·gridCols·slotStyle·visibleSlots·previewGeometry·zoom·zoomLocked 딕셔너리."
++    layoutState = "gridRows·gridCols·gridLimits·slotStyle·visibleSlots·previewGeometry·zoom·zoomLocked 딕셔너리."
+     """
+     Args:
+     - previewWidth:
+@@ -206,7 +207,7 @@ def readLayoutApiState(previewWidth=None):
+ 
+     Return:
+     - layoutState:
+-      gridRows·gridCols·slotStyle·visibleSlots·previewGeometry·zoom·zoomLocked 딕셔너리.
++      gridRows·gridCols·gridLimits·slotStyle·visibleSlots·previewGeometry·zoom·zoomLocked 딕셔너리.
+       layout detached fields에 session["dashboardZoomIntent"]/Locked를 zoom/zoomLocked로 합성한 immutable public state
+ 
+     변경:
+@@ -215,7 +216,7 @@ def readLayoutApiState(previewWidth=None):
+     처리:
+         1. current layout["readState"] Backend query에 previewWidth만 전달한다.
+            previewWidth의 omitted/invalid 기본값과 bounds는 Backend의 backend.defaults.preview에서만 read copy에 적용한다. Application은 값을 복제하지 않는다.
+-           반환은 gridRows/gridCols/slotStyle/visibleSlots/previewGeometry와 현재 Frontend zoom/zoomLocked다.
++           Backend의 gridRows/gridCols/gridLimits/slotStyle/visibleSlots/previewGeometry를 보존하고 현재 Frontend zoom/zoomLocked를 합성한다.
+            visibleSlots의 contentType/chart/imageId와 assetDisplay는 Backend가 같은 project read에서 resolve한 detached 값이다.
+            Application이 별도 chart/asset copy를 재조합하거나 canonical assets.readTree에 slot/chart를 끼워 넣지 않는다.
+            Application이 interfaceFSM의 zoom/lock scalar를 합성하며 previewGeometry를 session/Project에 저장하지 않는다.
+@@ -449,8 +450,8 @@ def applyImageSettingsFromValues(slotId, values):
+         1. 이 procedure는 Application operation이다. image editor query가 none이면 command 없이 False를 반환한다.
+            Application boundary는 explicit slotId와 새 values patch만 SLOT_IMAGE_SETTINGS_CHANGED로 전달한다.
+            Backend command는 current visible slot/image와 slot.content["imageSettings"]를 resolve하고 current settings에 제공된 field만 덮어쓴 candidate를 만든다.
+-           fit은 contain/cover/manual 중 유효한 입력만 적용하고 invalid/missing이면 current fit을 유지한다.
+-           manual일 때 유효한 유한 숫자 scale은 1..1000, x/y는 -100..200으로 제한한다.
++           fit은 /backend/layout_annotations/imageSettings의 fit 허용값에서 선택하며 invalid/missing이면 current fit을 유지한다.
++           manual일 때 유효한 유한 숫자 scale·x·y는 Backend가 backend.defaults.limits.imageSettings의 각 필드 범위로 제한한다.
+            x/y의 0은 유효한 좌표이며 false-like 값이라는 이유로 50으로 바꾸지 않는다.
+            생략되거나 숫자로 변환되지 않는 field는 current 값을 유지한다. JS truthiness를 정규화 규칙으로 가져오지 않는다.
+            projectEFSM은 그 whole-project candidate를 검증 후 한 번 commit한다. read projection을 candidate 원천으로 사용하지 않는다.
+@@ -481,7 +482,7 @@ def readLabelsApiState():
+            선택 identity를 별도 저장하거나 이전 renderer geometry를 재사용하지 않는다.
+            read/query 오류는 전파하고 Project/Frontend state는 변경하지 않는다.
+            interfaceFSM.readState()["selectedSlotId"]의 값을 slotId에 대입한다.
+-           dispatchProjectQuery('project-api', {'operation': 'labels.readState', 'slotId': slotId})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['labels.readState'], 'slotId': slotId})를 반환한다.
+     """
+     return labelState
+ 
+@@ -661,7 +662,7 @@ def setSlotCaptionText(slotId, text):
+            dispatchProjectCommand('CAPTION_TEXT_INPUT', {'target': {'kind': 'slot', 'id': slotId}, 'text': text})의 값을 (result, interfaceState, rendererInput)에 대입한다.
+            not result["committed"]인 경우:
+            False를 반환한다.
+-           dispatchProjectQuery('project-api', {'operation': 'captions.readSlot', 'slotId': slotId})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['captions.readSlot'], 'slotId': slotId})를 반환한다.
+     """
+     return captionState
+ 
+@@ -712,7 +713,7 @@ def setCaptionsApiEnabled(enabled):
+            dispatchProjectCommand('CAPTION_SETTINGS_CHANGED', {'enabled': enabled})의 값을 (result, interfaceState, rendererInput)에 대입한다.
+            not result["committed"]인 경우:
+            False를 반환한다.
+-           dispatchProjectQuery('project-api', {'operation': 'captions.readGlobal'})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['captions.readGlobal']})를 반환한다.
+     """
+     return captionState
+ 
+@@ -736,7 +737,7 @@ def setCaptionsApiName(name):
+            dispatchProjectCommand('CAPTION_SETTINGS_CHANGED', {'name': name})의 값을 (result, interfaceState, rendererInput)에 대입한다.
+            not result["committed"]인 경우:
+            False를 반환한다.
+-           dispatchProjectQuery('project-api', {'operation': 'captions.readGlobal'})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['captions.readGlobal']})를 반환한다.
+     """
+     return captionState
+ 
+@@ -760,7 +761,7 @@ def setCaptionsApiNameBold(nameBold):
+            dispatchProjectCommand('CAPTION_SETTINGS_CHANGED', {'nameBold': nameBold})의 값을 (result, interfaceState, rendererInput)에 대입한다.
+            not result["committed"]인 경우:
+            False를 반환한다.
+-           dispatchProjectQuery('project-api', {'operation': 'captions.readGlobal'})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['captions.readGlobal']})를 반환한다.
+     """
+     return captionState
+ 
+@@ -785,7 +786,7 @@ def setCaptionsApiSettings(values):
+            dispatchProjectCommand('CAPTION_SETTINGS_CHANGED', {'settings': values})의 값을 (result, interfaceState, rendererInput)에 대입한다.
+            not result["committed"]인 경우:
+            False를 반환한다.
+-           dispatchProjectQuery('project-api', {'operation': 'captions.readGlobal'})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['captions.readGlobal']})를 반환한다.
+     """
+     return captionState
+ 
+@@ -811,7 +812,7 @@ def setAppearanceApiPalette(values):
+            dispatchProjectCommand('APPEARANCE_CHANGED', {'palette': values})의 값을 (result, interfaceState, rendererInput)에 대입한다.
+            not result["committed"]인 경우:
+            False를 반환한다.
+-           dispatchProjectQuery('project-api', {'operation': 'appearance.readPalette'})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['appearance.readPalette']})를 반환한다.
+     """
+     return palette
+ 
+@@ -878,7 +879,7 @@ def exportDashboardTarget(statusSink):
+ 
+     처리:
+         1. 공식 export query의 한 작업용 snapshot을 Frontend raster renderer에 전달한다.
+-           dispatchProjectQuery('export', {'operation': 'print.save'})의 값을 snapshot에 대입한다.
++           dispatchProjectQuery('export', {'operation': BACKEND_QUERY_KINDS['export']['print.save']})의 값을 snapshot에 대입한다.
+            renderDashboardTarget(snapshot, statusSink)를 반환한다.
+     """
+     return outcome
+@@ -900,7 +901,7 @@ def captureDashboardCurrent(statusSink):
+ 
+     처리:
+         1. 현재 화면 one-shot capture; persistent target settings를 변경하지 않는다.
+-           dispatchProjectQuery('export', {'operation': 'print.capture'})의 값을 snapshot에 대입한다.
++           dispatchProjectQuery('export', {'operation': BACKEND_QUERY_KINDS['export']['print.capture']})의 값을 snapshot에 대입한다.
+            renderDashboardCurrent(snapshot, statusSink)를 반환한다.
+     """
+     return outcome
+diff --git a/sourcescript/backend/assets_files.py b/sourcescript/backend/assets_files.py
+index 84a688a62d25e8004e4a023d08399a0445ba8e69..7abb3e72d47aa5872d24273dd1d3a0020de0dd00 100644
+--- a/sourcescript/backend/assets_files.py
++++ b/sourcescript/backend/assets_files.py
+@@ -436,26 +436,27 @@ def ffpxBuildProject():
+     - activeProject를 변경하지 않는다.
+ 
+     처리:
+-        1. activeProject 전체를 validation한다.
+-        2. projectObjects 공식 read path에서 export snapshot을 읽는다.
+-        3. trash asset/directory를 제외한다.
+-        4. chart CSV reference, chart 1:1 ownership, slot image reference가 export 가능한지 재검사한다.
+-        5. project.xml에 project metadata, fileSystem, appearance, persistent export settings와 document ref를 기록한다.
+-        6. layout/caption/labels/slot 문서는 각 책임 데이터만 기록한다.
++        1. 문서 경로와 역할은 FFPX_STRUCTURE를 사용한다. 각 XML entry 이름과 data/media 경로는 그 정의의 키를 참조한다.
++        2. activeProject 전체를 validation한다.
++        3. projectObjects 공식 read path에서 export snapshot을 읽는다.
++        4. trash asset/directory를 제외한다.
++        5. chart CSV reference, chart 1:1 ownership, slot image reference가 export 가능한지 재검사한다.
++        6. project.xml에 project metadata, fileSystem, appearance, persistent export settings와 document ref를 기록한다.
++        7. layout/caption/labels/slot 문서는 각 책임 데이터만 기록한다.
+            snapshot의 Slot 인스턴스는 Slot 원형에 정의된 영속 속성을 같은 이름의 키로 가진
+            저장용 딕셔너리로 구성한다. content의 중첩 필드와 caption을 포함한다.
+            이 작업용 딕셔너리를 typed XML writer에 전달하고 저장 문서의 기존 필드명을 유지한다.
+-        7. 각 Slot의 imageSettings는 imageRef가 None이어도 typed imageObject/settings에 기록한다.
++        8. 각 Slot의 imageSettings는 imageRef가 None이어도 typed imageObject/settings에 기록한다.
+            typed XML grammar는 ffpxEncodeValue를 사용한다.
+-        8. CSV/image bytes는 metadata와 분리해 dataRef로 연결한다.
++        9. CSV/image bytes는 metadata와 분리해 dataRef로 연결한다.
+ 
+-        9. FFPX export는 PROJECT_TRASH_DIRECTORY 아래의 CSV, image, directory를 package에 포함하지 않는다. export 대상 chart/slot이 trash asset을 참조하면 실패한다.
+-        10. FFPX/FFSX가 포함하는 data/image asset은 project/package가 소유한 copied bytes로 읽고 쓴다. package 내부 metadata에 원본 local filesystem path를 재개방 필수 reference로 저장하지 않는다. package를 다른 환경으로 이동해도 package entry만으로 asset을 복원할 수 있어야 한다.
+-        11. raw file import는 원본 bytes를 그대로 보존한다. 원본 bytes가 없는 새 table asset은
++        10. FFPX export는 PROJECT_TRASH_DIRECTORY 아래의 CSV, image, directory를 package에 포함하지 않는다. export 대상 chart/slot이 trash asset을 참조하면 실패한다.
++        11. FFPX/FFSX가 포함하는 data/image asset은 project/package가 소유한 copied bytes로 읽고 쓴다. package 내부 metadata에 원본 local filesystem path를 재개방 필수 reference로 저장하지 않는다. package를 다른 환경으로 이동해도 package entry만으로 asset을 복원할 수 있어야 한다.
++        12. raw file import는 원본 bytes를 그대로 보존한다. 원본 bytes가 없는 새 table asset은
+             encodeTableAssetBytes에 rows와 target filename을 전달하여 바이트를 얻는다.
+             package dataRef 확장자는 .json/.tsv/.csv를 유지하고 그 외는 .csv로 정한다.
+             기존 filename·path·MIME과 원본 bytes를 유지한다.
+-        12. package를 반환한다.
++        13. package를 반환한다.
+     """
+     return package
+ 
+@@ -477,18 +478,19 @@ def ffpxReadProject(file):
+     - activeProject를 변경하지 않는다.
+ 
+     처리:
+-        1. readStorePackage(file)로 검사한 entries를 얻는다.
+-        2. 필수 XML 문서와 slot 문서를 ffpxDecodeValue로 읽고 schema/version을 PACKAGE_FORMAT_VERSION과 비교한다.
++        1. 프로젝트 XML·문서 참조와 data/media entry의 경로는 FFPX_STRUCTURE의 키를 참조한다.
++        2. readStorePackage(file)로 검사한 entries를 얻는다.
++        3. 필수 XML 문서와 slot 문서를 ffpxDecodeValue로 읽고 schema/version을 PACKAGE_FORMAT_VERSION과 비교한다.
+            지원하는 현재 version이 아니면 실패한다.
+-        3. 저장 순서대로 slot 배치와 chart/image 참조를 payload에 구성한다.
++        4. 저장 순서대로 slot 배치와 chart/image 참조를 payload에 구성한다.
+            각 CSV/image dataRef가 허용 subtree 안의 실제 entry를 가리키는지 확인한다.
+-        4. CSV entry의 bytes를 parseProjectDataAsset로 읽고 원본 bytes와 함께 보존한다.
++        5. CSV entry의 bytes를 parseProjectDataAsset로 읽고 원본 bytes와 함께 보존한다.
+            저장된 headerLines는 normalizeCsvHeaderLines로 정규화한다.
+-        5. imageRef가 None이어도 typed imageObject/settings의 슬롯별 imageSettings를 복원한다.
++        6. imageRef가 None이어도 typed imageObject/settings의 슬롯별 imageSettings를 복원한다.
+            imageRef=None이면 image asset을 생성하지 않는다.
+-        6. 같은 version에서 export settings가 없으면 project default로 보완한다.
++        7. 같은 version에서 export settings가 없으면 project default로 보완한다.
+            chart 공유·orphan의 검증은 buildProjectObject에 전달할 구조를 보존하여 수행한다.
+-        7. payload를 반환한다.
++        8. payload를 반환한다.
+     """
+     return payload
+ 
+@@ -512,7 +514,8 @@ def ffsxBuildSlot(slot, chart):
+     - 없음.
+ 
+     처리:
+-        1. slot은 /backend/project_state/Slot 인스턴스다. slot.content["chart"]로 소유 chart를
++        1. 슬롯 XML·asset metadata·CSV entry의 경로와 역할은 FFSX_STRUCTURE의 키를 참조한다.
++        2. slot은 /backend/project_state/Slot 인스턴스다. slot.content["chart"]로 소유 chart를
+            확인하고 slot.caption을 슬롯 문서에 기록한다. Slot의 영속 속성은 같은 이름의 저장용
+            딕셔너리로 옮겨 typed XML writer에 전달한다. package-local id mapping은 이 복사본에 적용한다.
+            graphs.validateChartModel이 실제 project CSV object로 판정한 object가 참조하는 CSV만 package-local 연속 id로 remap한다.
+@@ -521,8 +524,8 @@ def ffsxBuildSlot(slot, chart):
+            graph object가 0개인 blank editable chart는 CSV entry 없이 유효하게 package한다.
+            CSV bytes는 assets/data subtree에 별도 저장한다.
+ 
+-        2. FFSX graph settings에는 Project chart id를 기록하지 않는다. applyFfsxSlot이 현재 candidate에서 새 id를 할당한다. package schema/version은 wire metadata에 기록한다.
+-        3. package를 반환한다.
++        3. FFSX graph settings에는 Project chart id를 기록하지 않는다. applyFfsxSlot이 현재 candidate에서 새 id를 할당한다. package schema/version은 wire metadata에 기록한다.
++        4. package를 반환한다.
+     """
+     return package
+ 
+@@ -544,17 +547,18 @@ def ffsxReadSlot(file):
+     - activeProject를 변경하지 않는다.
+ 
+     처리:
+-        1. readStorePackage(file)로 entries를 얻고 slot XML의 schema/version을 PACKAGE_FORMAT_VERSION과 비교한다.
++        1. 슬롯 XML·asset metadata·CSV entry의 경로와 역할은 FFSX_STRUCTURE의 키를 참조한다.
++        2. readStorePackage(file)로 entries를 얻고 slot XML의 schema/version을 PACKAGE_FORMAT_VERSION과 비교한다.
+            지원하는 현재 version이 아니면 실패한다.
+-        2. ffpxDecodeValue로 slot caption과 chart 설정, package-local CSV metadata를 읽는다.
++        3. ffpxDecodeValue로 slot caption과 chart 설정, package-local CSV metadata를 읽는다.
+            실제 project graph object의 CSV 참조와 dataRef가 올바른 entry를 가리키는지 확인한다.
+-        3. CSV bytes를 parseProjectDataAsset로 읽고 원본 bytes와 함께 보존한다.
++        4. CSV bytes를 parseProjectDataAsset로 읽고 원본 bytes와 함께 보존한다.
+            headerLines는 normalizeCsvHeaderLines로 정규화한다.
+-        4. conversion view는 graphs.validateChartModel의 representation 판정으로 검증한다.
++        5. conversion view는 graphs.validateChartModel의 representation 판정으로 검증한다.
+            objects가 빈 배열인 editable chart는 CSV entry 없이 허용한다.
+-        5. FFSX의 chart에는 Project chart id를 부여하지 않는다.
++        6. FFSX의 chart에는 Project chart id를 부여하지 않는다.
+            applyFfsxSlot이 현재 candidate의 nextId.chart로 새 Project id를 할당한다.
+-        6. graphs.validateChartModel로 검증한 slotPayload를 반환한다.
++        7. graphs.validateChartModel로 검증한 slotPayload를 반환한다.
+     """
+     return slotPayload
+ 
+@@ -859,8 +863,8 @@ def buildAssetCommandCandidate(event, payload, state):
+     """
+     Args:
+     - event:
+-      PROJECT_LOADED, PROJECT_NAME_CHANGED, PROJECT_DIRECTORY_CREATED, PROJECT_NODE_MOVED,
+-      PROJECT_TRASH_EMPTIED, ASSETS_IMPORTED 또는 DATA_OBJECT/IMAGE_OBJECT 생성·교체·삭제 명령 이름.
++      이 함수에 연결된 프로젝트 명령 등록의 키.
++        원천: /backend/project_efsm/PROJECT_COMMANDS
+ 
+     - payload:
+       해당 명령의 대상 id·경로, 새 값, 파일과 최종 import 선택을 담은 딕셔너리.
+diff --git a/sourcescript/backend/graphs.py b/sourcescript/backend/graphs.py
+index 8c54e1438bb7841f4ef2d7071a385884ceb222ad..9c1852bc33174d7765f49d7c94131cc5acac789a 100644
+--- a/sourcescript/backend/graphs.py
++++ b/sourcescript/backend/graphs.py
+@@ -22,10 +22,10 @@ GRAPH_STYLE_LIMITS = "config reference: backend.defaults.limits.graphObject"
+ axisSettings = {'min': '축 최솟값인 수 또는 빈 값.',
+  'max': '축 최댓값인 수 또는 빈 값.',
+  'tick': '주 눈금 간격인 양수 또는 빈 값.',
+- 'tickMode': 'plotly 또는 increment 문자열.',
++ 'tickMode': ('plotly', 'increment'),
+  'minorTicks': 'log axis의 dense/minor tick 표시 여부',
+- 'notation': 'none, e, power 중 하나',
+- 'scaleType': 'linear, log, reciprocal 중 하나인 문자열.',
++ 'notation': ('none', 'e', 'power'),
++ 'scaleType': ('linear', 'log', 'reciprocal'),
+  'divide': '축 자료 나눗셈의 제수인 유한한 0 이외의 수.',
+  'title': 'axis title text',
+  'titleSize': 'axis title font size',
+@@ -61,14 +61,14 @@ globalSettings = {
+ graphObject = {'csvId': '실제 project CSV 또는 imported conversion 자료의 식별자.',
+  'x': 'C1, C2 형식의 x column identifier',
+  'y': 'C1, C2 형식의 y column identifier',
+- 'xAxisSide': 'bottom 또는 top',
+- 'yAxisSide': 'left 또는 right',
+- 'type': 'scatter, markers, lines+markers, bar, hidden 중 하나',
++ 'xAxisSide': ('bottom', 'top'),
++ 'yAxisSide': ('left', 'right'),
++ 'type': ('scatter', 'markers', 'lines+markers', 'bar', 'hidden'),
+  'color': '현재 graph object color',
+  'legendName': 'legend에서 사용할 optional 이름',
+  'lineWidth': 'GRAPH_STYLE_LIMITS.lineWidth',
+- 'lineDash': 'solid, dot, dash, dashdot 중 하나',
+- 'markerSymbol': '현재 지원 marker symbol',
++ 'lineDash': ('solid', 'dot', 'dash', 'dashdot'),
++ 'markerSymbol': ('circle', 'square', 'diamond', 'cross', 'x', 'triangle-up', 'triangle-down'),
+  'markerSize': 'GRAPH_STYLE_LIMITS.markerSize',
+  'barOpacity': 'GRAPH_STYLE_LIMITS.barOpacity',
+  'barLineWidth': 'GRAPH_STYLE_LIMITS.barLineWidth',
+@@ -513,7 +513,7 @@ def normalizeAxisSettings(axis, key):
+       축 설정 딕셔너리. 원형: /backend/graphs/axisSettings
+ 
+     - key:
+-      xBottom, xTop, yLeft, yRight 중 대상 축 이름.
++      globalSettings["axes"]의 대상 축 키.
+ 
+     Return:
+     - normalized:
+@@ -532,7 +532,7 @@ def normalizeAxisSettings(axis, key):
+            showGrid/showValues는 명시적 false만 false, visible은 boolean 아니면 axis별 default,
+            minorTicks는 명시적 true만 true다. notation enum invalid는 none, tickMode invalid는 plotly다.
+            axis별 기본 visible은 위 config의 axisVisibility만 사용한다.
+-           scaleType은 linear/log/reciprocal이며 생략/invalid는 항등 변환인 linear다.
++           scaleType은 axisSettings의 해당 허용값에서 선택하며 생략/invalid는 항등 변환인 linear다.
+            reciprocal을 linear의 별칭으로 지우지 않는다. data 변환은 tracesSingle의 divide 다음 역수 순서다.
+            enum과 numeric/empty field를 정규화하며 divide는 유한 non-zero 수치, 생략/invalid/0은 항등 divisor 1이다.
+            log scale에서는 increment tick mode를 허용하지 않는다. reciprocal은 log가 아니므로 기존 increment 선택을 보존한다.
+@@ -714,7 +714,8 @@ def buildGraphCommandCandidate(event, payload, state):
+     """
+     Args:
+     - event:
+-      GRAPH_OBJECTS_REPLACED, CHART_LAYOUT_CHANGED 또는 CHART_MODEL_REPLACED.
++      이 함수에 연결된 프로젝트 명령 등록의 키.
++        원천: /backend/project_efsm/PROJECT_COMMANDS
+ 
+     - payload:
+       slotId·chartId·operation과 새 object 값, index, from, to, colors 또는 settings 딕셔너리.
+@@ -753,9 +754,7 @@ def buildGraphCommandCandidate(event, payload, state):
+            새 x/y가 columns에 유효하면 적용하고, 그 외에는 같은 CSV에 유효한 기존 선택을 유지한다.
+            양쪽 모두 무효이면 graphDataSelection(csv["rows"],csv["headerLines"],object)를
+            selection에 두고 그 x/y를 사용한다. 열이 없으면 x/y는 빈 문자열이다.
+-           type은 scatter/markers/lines+markers/bar/hidden, xAxisSide는 bottom/top,
+-           yAxisSide는 left/right, lineDash는 solid/dot/dash/dashdot 중에서 선택한다.
+-           markerSymbol은 circle/square/diamond/cross/x/triangle-up/triangle-down 중에서 선택한다.
++           type·xAxisSide·yAxisSide·lineDash·markerSymbol은 graphObject의 해당 필드에 정의된 허용값에서 선택한다.
+            새 enum이 무효·생략이면 기존 값, 기존 값도 없으면 GRAPH_STYLE_DEFAULTS를 사용한다.
+            color는 비어 있지 않은 새 문자열만 적용하고, legendName은 명시된 문자열이면 빈 값도 적용한다.
+            numeric style은 새 유한 값을 GRAPH_STYLE_LIMITS의 해당 범위로 제한하고,
+diff --git a/sourcescript/backend/layout_annotations.py b/sourcescript/backend/layout_annotations.py
+index 48af0157e35a85580b73036b7965b7952b32105c..23af9da187ee3f1fa0e5d571cfa3d3a75919f737 100644
+--- a/sourcescript/backend/layout_annotations.py
++++ b/sourcescript/backend/layout_annotations.py
+@@ -18,7 +18,7 @@ layoutRules = "config reference: backend.defaults.limits.layout"
+ 
+ imageSettings = {
+     "owner": "Slot.content의 imageSettings 슬롯별 표시 설정.",
+-    "fit": "contain, cover, manual 중 하나",
++    "fit": ("contain", "cover", "manual"),
+     "scale": "manual fit percent; backend.defaults.limits.imageSettings.scale",
+     "x": "manual image center x; backend.defaults.limits.imageSettings.x",
+     "y": "manual image center y; backend.defaults.limits.imageSettings.y",
+@@ -26,7 +26,7 @@ imageSettings = {
+ 
+ 
+ labelSettings = {
+-    "format": "lower/upper alpha, decimal, lower/upper roman",
++    "format": ("lower-alpha", "upper-alpha", "decimal", "lower-roman", "upper-roman"),
+     "parentheses": "identifier에 괄호를 표시하는지 여부",
+     "x": "slot reference 좌표계의 label x position",
+     "y": "slot reference 좌표계의 label y position",
+@@ -62,8 +62,52 @@ EXPORT_LIMITS = "config reference: backend.defaults.limits.export"
+ 
+ 
+ 
++def formatSlotLabel(ordinal, settings):
++    n = "양의 정수."
++    letterIndex = "영문자 순번 정수."
++    identifier = "번호 문자열."
++    label = {
++        "identifier": "괄호 없는 번호 문자열.",
++        "displayLabel": "표시 번호 문자열.",
++    }
++    """
++    Args:
++    - ordinal:
++      0 기반 번호인 음이 아닌 정수.
++
++    - settings:
++      라벨 설정 딕셔너리.
++        원형: /backend/layout_annotations/labelSettings
++
++    Return:
++    - label:
++      identifier와 displayLabel을 가진 딕셔너리.
++
++    변경:
++    - 없음.
++
++    처리:
++        1. n에 ordinal+1을, identifier에 빈 문자열을 둔다.
++        2. settings["format"]이 decimal이면 n의 십진 문자열을 identifier에 둔다.
++        3. settings["format"]이 lower-alpha 또는 upper-alpha이면 n이 양수인 동안
++           letterIndex=(n-1)을 26으로 나눈 나머지로 두고
++           그 순번의 소문자 영문자를 identifier의 앞에 붙인다.
++           n에는 (n-1)을 26으로 나눈 정수 몫을 둔다.
++           upper-alpha이면 identifier를 대문자로 바꾼다.
++        4. settings["format"]이 lower-roman 또는 upper-roman이면 1000→M, 900→CM, 500→D, 400→CD, 100→C, 90→XC,
++           50→L, 40→XL, 10→X, 9→IX, 5→V, 4→IV, 1→I 순서로 처리한다.
++           각 값이 n 이하인 동안 해당 기호를 identifier 끝에 붙이고 n에서 그 값을 뺀다.
++           lower-roman이면 identifier를 소문자로 바꾼다. 천 단위는 M을 반복한다.
++        5. label의 identifier와 displayLabel을 identifier로 둔다.
++           settings["parentheses"]가 True이면 displayLabel의 양끝에 괄호를 붙인다.
++        6. label을 반환한다.
++    """
++    return label
++
++
+ def orderedSlotLabels(project):
+     labels = "slot id·순번·label 문자열의 배열."
++    label = "번호 문자열 딕셔너리. 원형: /backend/layout_annotations/formatSlotLabel의 반환값"
+     """
+     Args:
+     - project:
+@@ -82,13 +126,10 @@ def orderedSlotLabels(project):
+         project가 ProjectObject이면 project._state를, 딕셔너리이면 project를 이 호출의 상태로 사용한다.
+         1. project의 상태에서 hidden=False인 anchor Slot을 선택한다. 빈 슬롯도 포함한다.
+         2. annotations["labels"]["settings"]["order"]가 row-major이면 (row,col), column-major이면 (col,row)로 정렬한다.
+-        3. 정렬 순서의 0-based ordinal마다 identifier를 만든다. decimal은 ordinal+1이다.
+-           alpha는 ordinal+1을 1-based 26진 자릿수로 바꾸어 a..z, aa.. 순서로 만들고 요청한 대소문자를 적용한다.
+-           roman은 ordinal+1에서 M,CM,D,CD,C,XC,L,XL,X,IX,V,IV,I의 값을 큰 순서로 반복 빼며 기호를 이어 붙인다.
+-           3999를 넘는 천 단위도 M을 반복하며 요청한 대소문자를 적용한다.
+-        4. parentheses가 True이면 identifier의 양쪽에 괄호를 붙여 displayLabel을 만든다. False이면 identifier 그대로다.
+-        5. 각 slotId·ordinal·identifier·displayLabel을 labels에 넣어 읽기 전용 배열로 반환한다.
+-           enabled는 그리기 여부에만 사용한다. labels.readState의 sampleText도 같은 ordinal=0 변환을 사용한다.
++        3. 정렬 순서의 0 기반 ordinal과 같은 상태의 annotations["labels"]["settings"]를
++           formatSlotLabel에 전달하여 label에 둔다.
++        4. 각 Slot id·ordinal과 label의 identifier·displayLabel을 labels에 넣는다.
++        5. labels를 읽기 전용 배열로 반환한다. enabled는 그리기 여부에 사용한다.
+     """
+     return labels
+ 
+@@ -290,7 +331,7 @@ def buildGridResizeCandidate(rows, cols, state=None):
+ 
+     처리:
+         1. state가 None이면 activeProject._state를 사용한다.
+-           rows/cols가 1..8 정수인지 검증한다. state 전체를 Slot과 중첩 content까지
++           rows/cols가 backend.defaults.limits.layout의 gridRows/gridCols 범위에 속하는 정수인지 검증한다. state 전체를 Slot과 중첩 content까지
+            분리 복사하여 candidate에 둔다. layout·slots의 변경을 이 후보에 적용하고 다른 필드를 보존한다.
+         2. 확대면 기존 모든 grid cell/slot id/geometry와 모든 slot-local properties를 같은 좌표에 보존하고
+            기존 좌표 집합에 없는 새 좌표마다 Slot(id, row, col)을 생성하여 candidate["slots"]에
+@@ -371,10 +412,7 @@ def readLabelsApiState(slotId):
+         4. gridSlotGeometry(state["layout"], geometry, slot)을 호출하여 reference에 둔다.
+            labelState["reference"]에 그 결과의 width와 height를 복사한다.
+            slot이 None이면 기본 1×1 셀, 병합 슬롯이면 그 span을 포함한 치수를 사용한다.
+-        5. 현재 format이 lower-alpha이면 a, upper-alpha이면 A, decimal이면 1,
+-           lower-roman이면 i, upper-roman이면 I를 labelState["sampleText"]에 대입한다.
+-           parentheses가 True이면 labelState["sampleText"]의 앞뒤에 괄호를 붙인다.
+-           이 값은 orderedSlotLabels의 첫 번째 번호 표기와 같다.
++        5. formatSlotLabel(0, labelState["settings"])의 displayLabel을 labelState["sampleText"]에 둔다.
+         6. labelState를 읽기 전용 결과로 반환한다.
+     """
+     return labelState
+@@ -486,9 +524,8 @@ def buildLayoutCommandCandidate(event, payload, state):
+     """
+     Args:
+     - event:
+-      GRID_LAYOUT_CHANGED, LAYOUT_STYLE_CHANGED, SLOTS_MERGED, SLOTS_SPLIT,
+-      CAPTION_TEXT_INPUT, SLOT_CAPTIONS_INSERTED, CAPTION_SETTINGS_CHANGED,
+-      LABEL_SETTINGS_CHANGED, LABEL_POSITION_CHANGED, APPEARANCE_CHANGED 또는 EXPORT_SETTINGS_CHANGED.
++      이 함수에 연결된 프로젝트 명령 등록의 키.
++        원천: /backend/project_efsm/PROJECT_COMMANDS
+ 
+     - payload:
+       행·열, Slot id 배열, 캡션 소유 대상·새 본문 또는 해당 설정의 변경 필드 딕셔너리.
+diff --git a/sourcescript/backend/project_efsm.py b/sourcescript/backend/project_efsm.py
+index 85cec900cd5000047f2f8b7067e760bf5f04151c..6609046f4b3f1a350c324fd98182fdcbe41706fd 100644
+--- a/sourcescript/backend/project_efsm.py
++++ b/sourcescript/backend/project_efsm.py
+@@ -9,96 +9,6 @@ from sourcescript.backend import assets_files, graphs, layout_annotations
+ 
+ 
+ 
+-PROJECT_COMMANDS = ('PROJECT_LOADED',
+- 'PROJECT_NAME_CHANGED',
+- 'PROJECT_DIRECTORY_CREATED',
+- 'PROJECT_NODE_MOVED',
+- 'PROJECT_TRASH_EMPTIED',
+- 'ASSETS_IMPORTED',
+- 'DATA_OBJECT_CREATED',
+- 'DATA_OBJECT_REPLACED',
+- 'DATA_OBJECT_DELETED',
+- 'IMAGE_OBJECT_CREATED',
+- 'IMAGE_OBJECT_REPLACED',
+- 'IMAGE_OBJECT_DELETED',
+- 'SLOT_TYPE_CHANGED',
+- 'SLOTS_RESET',
+- 'SLOTS_SWAPPED',
+- 'SLOT_IMAGE_LINKED',
+- 'SLOT_IMAGE_SETTINGS_CHANGED',
+- 'SLOT_DATA_CONNECTED',
+- 'SLOT_IMAGE_IMPORTED',
+- 'SLOT_CHART_IMPORTED',
+- 'GRAPH_OBJECTS_REPLACED',
+- 'CHART_LAYOUT_CHANGED',
+- 'CHART_MODEL_REPLACED',
+- 'GRID_LAYOUT_CHANGED',
+- 'LAYOUT_STYLE_CHANGED',
+- 'SLOTS_MERGED',
+- 'SLOTS_SPLIT',
+- 'CAPTION_TEXT_INPUT',
+- 'SLOT_CAPTIONS_INSERTED',
+- 'CAPTION_SETTINGS_CHANGED',
+- 'LABEL_SETTINGS_CHANGED',
+- 'LABEL_POSITION_CHANGED',
+- 'APPEARANCE_CHANGED',
+- 'EXPORT_SETTINGS_CHANGED')
+-
+-PUBLIC_PROJECT_MUTATION_ROUTES = {
+-    "project.setName": "PROJECT_NAME_CHANGED",
+-    "project.importFile": "PROJECT_LOADED",
+-    "slots.setContentType": "SLOT_TYPE_CHANGED",
+-    "slots.select.pendingContentType": "SLOT_TYPE_CHANGED",
+-    "slots.reset": "SLOTS_RESET",
+-    "slots.swap": "SLOTS_SWAPPED",
+-    "images.setSettings": "SLOT_IMAGE_SETTINGS_CHANGED",
+-    "images.insertEmpty": "SLOT_IMAGE_IMPORTED",
+-    "assets.delete.csv": "DATA_OBJECT_DELETED",
+-    "assets.delete.image": "IMAGE_OBJECT_DELETED",
+-    "assets.move": "PROJECT_NODE_MOVED",
+-    "assets.createDirectory": "PROJECT_DIRECTORY_CREATED",
+-    "assets.createEmptyCsv": "DATA_OBJECT_CREATED",
+-    "assets.emptyTrash": "PROJECT_TRASH_EMPTIED",
+-    "assets.connectToSlot.csv": "SLOT_DATA_CONNECTED",
+-    "assets.connectToSlot.image": "SLOT_IMAGE_LINKED",
+-    "assets.importToDirectory": "ASSETS_IMPORTED",
+-    "assets.importToSlot": "ASSETS_IMPORTED",
+-    "graphs.setHeaderLines": "DATA_OBJECT_REPLACED",
+-    "graphs.setEditable": "CHART_MODEL_REPLACED",
+-    "graphs.addObject.emptySlot": "SLOT_DATA_CONNECTED",
+-    "graphs.addObject.existingChart": "GRAPH_OBJECTS_REPLACED",
+-    "graphs.moveObject": "GRAPH_OBJECTS_REPLACED",
+-    "graphs.setObjectValues": "GRAPH_OBJECTS_REPLACED",
+-    "graphs.deleteObject": "GRAPH_OBJECTS_REPLACED",
+-    "graphs.updateLayout": "CHART_LAYOUT_CHANGED",
+-    "graphs.applyPalette": "GRAPH_OBJECTS_REPLACED",
+-    "graphs.importFile": "SLOT_CHART_IMPORTED",
+-    "print.setSettings": "EXPORT_SETTINGS_CHANGED",
+-    "captions.setEnabled": "CAPTION_SETTINGS_CHANGED",
+-    "captions.setGlobalText": "CAPTION_TEXT_INPUT",
+-    "captions.setSlotText": "CAPTION_TEXT_INPUT",
+-    "captions.insertSlotCaptions": "SLOT_CAPTIONS_INSERTED",
+-    "captions.setName": "CAPTION_SETTINGS_CHANGED",
+-    "captions.setNameBold": "CAPTION_SETTINGS_CHANGED",
+-    "captions.setSettings": "CAPTION_SETTINGS_CHANGED",
+-    "labels.setEnabled": "LABEL_SETTINGS_CHANGED",
+-    "labels.setSettings": "LABEL_SETTINGS_CHANGED",
+-    "labels.setPosition": "LABEL_POSITION_CHANGED",
+-    "labels.resetPosition": "LABEL_POSITION_CHANGED",
+-    "appearance.setPalette": "APPEARANCE_CHANGED",
+-    "appearance.resetPalette": "APPEARANCE_CHANGED",
+-    "layout.setStyle": "LAYOUT_STYLE_CHANGED",
+-    "layout.setGrid": "GRID_LAYOUT_CHANGED",
+-    "layout.mergeSlots": "SLOTS_MERGED",
+-    "layout.splitSlots": "SLOTS_SPLIT",
+-}
+-
+-
+-
+-
+-
+-
+-
+ ProjectMutationResult = {'event': '프로젝트 명령 이름 문자열.',
+  'committed': '프로젝트 반영 성공 여부인 논리값.',
+  'changed': '변경 asset·chart·slot의 실제 id, canonical 경로와 소유 관계를 담은 딕셔너리.',
+@@ -120,8 +30,8 @@ def buildSlotCommandCandidate(event, payload, state):
+     """
+     Args:
+     - event:
+-      SLOT_TYPE_CHANGED, SLOTS_RESET, SLOTS_SWAPPED, SLOT_IMAGE_LINKED,
+-      SLOT_IMAGE_SETTINGS_CHANGED, SLOT_DATA_CONNECTED, SLOT_IMAGE_IMPORTED 또는 SLOT_CHART_IMPORTED.
++      이 함수에 연결된 프로젝트 명령 등록의 키.
++        원천: /backend/project_efsm/PROJECT_COMMANDS
+ 
+     - payload:
+       대상 Slot·CSV·image id와 새 종류·설정·파일을 가진 명령 입력 딕셔너리.
+@@ -235,6 +145,44 @@ def buildProjectMutationResult(event, payload, beforeState, afterState, retained
+     return result
+ 
+ 
++PROJECT_COMMANDS = {
++    'PROJECT_LOADED': assets_files.buildAssetCommandCandidate,
++    'PROJECT_NAME_CHANGED': assets_files.buildAssetCommandCandidate,
++    'PROJECT_DIRECTORY_CREATED': assets_files.buildAssetCommandCandidate,
++    'PROJECT_NODE_MOVED': assets_files.buildAssetCommandCandidate,
++    'PROJECT_TRASH_EMPTIED': assets_files.buildAssetCommandCandidate,
++    'ASSETS_IMPORTED': assets_files.buildAssetCommandCandidate,
++    'DATA_OBJECT_CREATED': assets_files.buildAssetCommandCandidate,
++    'DATA_OBJECT_REPLACED': assets_files.buildAssetCommandCandidate,
++    'DATA_OBJECT_DELETED': assets_files.buildAssetCommandCandidate,
++    'IMAGE_OBJECT_CREATED': assets_files.buildAssetCommandCandidate,
++    'IMAGE_OBJECT_REPLACED': assets_files.buildAssetCommandCandidate,
++    'IMAGE_OBJECT_DELETED': assets_files.buildAssetCommandCandidate,
++    'SLOT_TYPE_CHANGED': buildSlotCommandCandidate,
++    'SLOTS_RESET': buildSlotCommandCandidate,
++    'SLOTS_SWAPPED': buildSlotCommandCandidate,
++    'SLOT_IMAGE_LINKED': buildSlotCommandCandidate,
++    'SLOT_IMAGE_SETTINGS_CHANGED': buildSlotCommandCandidate,
++    'SLOT_DATA_CONNECTED': buildSlotCommandCandidate,
++    'SLOT_IMAGE_IMPORTED': buildSlotCommandCandidate,
++    'SLOT_CHART_IMPORTED': buildSlotCommandCandidate,
++    'GRAPH_OBJECTS_REPLACED': graphs.buildGraphCommandCandidate,
++    'CHART_LAYOUT_CHANGED': graphs.buildGraphCommandCandidate,
++    'CHART_MODEL_REPLACED': graphs.buildGraphCommandCandidate,
++    'GRID_LAYOUT_CHANGED': layout_annotations.buildLayoutCommandCandidate,
++    'LAYOUT_STYLE_CHANGED': layout_annotations.buildLayoutCommandCandidate,
++    'SLOTS_MERGED': layout_annotations.buildLayoutCommandCandidate,
++    'SLOTS_SPLIT': layout_annotations.buildLayoutCommandCandidate,
++    'CAPTION_TEXT_INPUT': layout_annotations.buildLayoutCommandCandidate,
++    'SLOT_CAPTIONS_INSERTED': layout_annotations.buildLayoutCommandCandidate,
++    'CAPTION_SETTINGS_CHANGED': layout_annotations.buildLayoutCommandCandidate,
++    'LABEL_SETTINGS_CHANGED': layout_annotations.buildLayoutCommandCandidate,
++    'LABEL_POSITION_CHANGED': layout_annotations.buildLayoutCommandCandidate,
++    'APPEARANCE_CHANGED': layout_annotations.buildLayoutCommandCandidate,
++    'EXPORT_SETTINGS_CHANGED': layout_annotations.buildLayoutCommandCandidate,
++}
++
++
+ class ProjectStateMachine:
+     def send(self, event, payload):
+         source = "ProjectObject 인스턴스."
+@@ -242,6 +190,7 @@ class ProjectStateMachine:
+         candidateState = "프로젝트 상태 딕셔너리 또는 None."
+         retainedOriginalIndicesByChart = "chart id별 원래 object 순번 배열 딕셔너리."
+         result = "ProjectMutationResult 딕셔너리."
++        handler = "후보 상태를 계산하는 함수 참조."
+         """
+         Args:
+         - event:
+@@ -264,31 +213,24 @@ class ProjectStateMachine:
+                성공 selection hint는 생략한다. 입력과 파일 해석 오류는 호출자에게 전달한다.
+             2. sourceState의 딕셔너리·배열·Slot·중첩 content를 분리 복사하여 candidateState에 둔다.
+                retainedOriginalIndicesByChart를 빈 딕셔너리로 둔다.
+-            3. PROJECT_LOADED·PROJECT_NAME_CHANGED·PROJECT_DIRECTORY_CREATED·PROJECT_NODE_MOVED·
+-               PROJECT_TRASH_EMPTIED·ASSETS_IMPORTED와 DATA_OBJECT/IMAGE_OBJECT의 생성·교체·삭제는
+-               assets_files.buildAssetCommandCandidate(event,payload,candidateState)를 호출한다.
+-               반환 상태와 원래 순번 배열을 각각 두 지역값에 둔다.
+-            4. SLOT_TYPE_CHANGED·SLOTS_RESET·SLOTS_SWAPPED·SLOT_IMAGE_LINKED·SLOT_IMAGE_SETTINGS_CHANGED·
+-               SLOT_DATA_CONNECTED·SLOT_IMAGE_IMPORTED·SLOT_CHART_IMPORTED는
+-               buildSlotCommandCandidate(event,payload,candidateState)를 호출한다.
+-               GRAPH_OBJECTS_REPLACED·CHART_LAYOUT_CHANGED·CHART_MODEL_REPLACED는
+-               graphs.buildGraphCommandCandidate(event,payload,candidateState)를 호출한다.
+-               나머지 등록된 layout·annotation·appearance·export 명령은
+-               layout_annotations.buildLayoutCommandCandidate(event,payload,candidateState)를 호출한다.
+-               각 반환 상태를 candidateState에 둔다. 3~4번에서는 해당 함수 하나만 호출한다.
+-            5. 파일 대기 뒤 현재 activeProject와 그 _state가 source·sourceState와 달라졌으면
++            3. PROJECT_COMMANDS에서 event 키에 연결된 함수를 handler에 둔다.
++               handler(event,payload,candidateState)를 한 번 호출한다.
++               handler가 assets_files.buildAssetCommandCandidate이면 반환 쌍의 상태와
++               순번 대응 자료를 candidateState와 retainedOriginalIndicesByChart에 각각 둔다.
++               그 외 담당 함수의 반환 상태를 candidateState에 둔다.
++            4. 파일 대기 뒤 현재 activeProject와 그 _state가 source·sourceState와 달라졌으면
+                1번으로 돌아간다. 같을 때 후보가 None이면 1번의 미반영 결과를 반환한다.
+                directory·target·참조·충돌·next-id와 최종 choice의 replace id/path를 sourceState에서 재검사한다.
+                normalizeSlotContent와 normalizeProjectSettings로 후보를 정규화하고
+                validateProjectObjectState(candidateState, True)로 전체 불변조건을 검증한다.
+-            6. 현재 activeProject와 그 _state를 source·sourceState와 각각 비교한다.
++            5. 현재 activeProject와 그 _state를 source·sourceState와 각각 비교한다.
+                달라졌으면 1번으로 돌아가 같은 새 입력·choice로 계산한다.
+                최종 choice가 다른 대상에 대응하면 미반영 결과를 반환한다.
+                같으면 activeProject.initialize(candidateState)를 한 번 호출한다.
+-            7. sourceState·반영 직후 activeProject._state·retainedOriginalIndicesByChart를
++            6. sourceState·반영 직후 activeProject._state·retainedOriginalIndicesByChart를
+                event·payload와 함께 buildProjectMutationResult에 전달하여 result에 둔다.
+                계산 도중 거부·취소된 후보는 버리고, 재시도에서는 순번 배열도 새로 계산한다.
+-            8. result를 반환한다. Application은 반환 결과와 현재 Frontend 참조로
++            7. result를 반환한다. Application은 반환 결과와 현재 Frontend 참조로
+                buildFrontendReconciliationInput을 호출한다.
+         """
+         return result
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index 3de143b969299ccb091925a35142189006c9bfcb..09245183feef3057845dc2e066444aa298eb8001 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -58,12 +58,7 @@ class Slot:
+                 "chart": "같은 프로젝트의 _state[\"charts\"] 원소를 가리키는 chart id 또는 None.",
+                 "imageId": "같은 프로젝트의 _state[\"assets\"][\"images\"] 원소를 가리키는 image id 또는 None.",
+                 "contentType": "graph 또는 image 문자열.",
+-                "imageSettings": {
+-                    "fit": "contain, cover, manual 중 하나인 문자열.",
+-                    "scale": "manual 이미지 크기 배율. 단위: %.",
+-                    "x": "manual 이미지 중심의 슬롯 너비 대비 위치. 단위: %.",
+-                    "y": "manual 이미지 중심의 슬롯 높이 대비 위치. 단위: %.",
+-                },
++                "imageSettings": "슬롯별 이미지 표시 설정 딕셔너리. 원형: /backend/layout_annotations/imageSettings",
+             }
+         self.caption = "이 인스턴스가 소유하는 슬롯 자막 문자열 또는 None."
+         """
+@@ -126,12 +121,50 @@ projectObjects = '프로젝트 조회 레지스트리인 ProjectObjectRegistry 
+ 
+ projectVfs = '현재 ProjectObject의 VFS 경로 조회 인터페이스.'
+ 
+-BACKEND_QUERY_KINDS = ('project-api',
+- 'slot-selection-context',
+- 'interface-intent',
+- 'interface-reconciliation',
+- 'renderer',
+- 'export')
++BACKEND_QUERY_KINDS = {
++    'project-api': {
++        'project.readName': 'project.readName',
++        'slots.readSelected': 'slots.readSelected',
++        'images.readEditor': 'images.readEditor',
++        'print.readSettings': 'print.readSettings',
++        'appearance.readPalette': 'appearance.readPalette',
++        'graphs.readData': 'graphs.readData',
++        'graphs.readLayout': 'graphs.readLayout',
++        'graphs.readPalette': 'graphs.readPalette',
++        'graphs.hasSelectedSlot': 'graphs.hasSelectedSlot',
++        'graphs.defaultColors': 'graphs.defaultColors',
++        'captions.readGlobal': 'captions.readGlobal',
++        'captions.readSlot': 'captions.readSlot',
++        'labels.readState': 'labels.readState',
++        'layout.readState': 'layout.readState',
++        'assets.readTree': 'assets.readTree',
++        'assets.readTrash': 'assets.readTrash',
++        'assets.isTrashed': 'assets.isTrashed',
++        'assets.movable': 'assets.movable',
++        'assets.draggableAsset': 'assets.draggableAsset',
++        'assets.readDeletionTarget': 'assets.readDeletionTarget',
++        'assets.moveOptions': 'assets.moveOptions',
++        'assets.planMove': 'assets.planMove',
++        'assets.resolveTreeSelection': 'assets.resolveTreeSelection',
++        'assets.fileKind': 'assets.fileKind',
++        'assets.collisionModel': 'assets.collisionModel',
++        'assets.resolveImportPlan': 'assets.resolveImportPlan',
++        'project.exportFile': 'project.exportFile',
++        'assets.download': 'assets.download',
++        'graphs.exportFfsx': 'graphs.exportFfsx',
++        'graphs.exportPlotlyJson': 'graphs.exportPlotlyJson',
++    },
++    'slot-selection-context': {
++    },
++    'interface-reconciliation': {
++    },
++    'renderer': {
++    },
++    'export': {
++        'print.save': 'print.save',
++        'print.capture': 'print.capture',
++    },
++}
+ 
+ 
+ 
+@@ -251,40 +284,40 @@ def readBackendProjection(kind, request):
+            그 외 알 수 없는 export operation은 query error다. package builder가 사용하는 operation 없는 export read는
+            plain snapshot일 뿐 같은 package operation을 재귀 호출하지 않는다. 같은 read 작업의 chart/CSV를 끝까지 사용한다.
+            supplied renderer input을 받은 Frontend가 Backend helper를 재호출하거나 프로젝트 mirror를 별도로 구성하지 않는다.
+-           interface-intent/reconciliation kind는 아래 validation/reconciliation 계산과 같은 contract를 사용하며 별도 판정 규칙을 만들지 않는다.
++           interface-reconciliation kind는 buildFrontendReconciliationInput의 입력과 반환 원형을 사용한다.
+ 
+         5. Backend query는 current activeProject에서 필요한 값만 resolve하여 read-only projection을 반환한다. query/read 계산은 activeProject를 변경하지 않으며 누락 field normalization이 필요하면 분리된 projection/candidate에서 수행한다. 반환 projection은 다른 subsystem의 project authority 또는 무검증 mutation candidate로 재사용하지 않는다. Frontend가 mutation을 요청하면 id/path/reference와 새 사용자 입력만 전달하고 Project EFSM이 current activeProject에서 다시 resolve한다.
+-        6. request의 operation이 project.readName이면: meta.projectName 문자열 copy
+-        7. request의 operation이 slots.readSelected이면: selectedSlotId로 visible Slot을 찾아 id/row/col/rowSpan/colSpan/hidden/content/caption을 분리 복사한 Slot 또는 None
+-        8. request의 operation이 images.readEditor이면: explicit slotId -> visible slot -> image asset; slotId/name/copied bytes와 그 bytes에서 순수 계산한 display URL, normalized slot-local settings copy, 없으면 none. Backend query는 revocable display resource를 할당하거나 runtime handle을 Project에 저장하지 않는다. surface resource lifetime은 supplied input을 소비하는 Frontend renderer가 소유한다.
+-        9. request의 operation이 print.readSettings이면: export의 width/heightMode/height/dpi/format scalar copy
+-        10. request의 operation이 appearance.readPalette이면: current appearance.uiPalette의 field copy; persistent palette hex validation과 defaults는 이 파일의 ProjectObject 규칙 사용
+-        11. request의 operation이 graphs.readData이면: frontendState.selectedSlotId로 graph chart를 resolve; Application의 post-commit read에 explicit chartId가 있으면 유일한 owning slot까지 resolve한다. chart의 detached copy(없으면 none), objects copy와 graphObjectIndex의 valid selectedIndex, assetSelection=csv인 assetPath에서 currentCsv/columns, selected object.csvId에서 별도 objectColumns를 계산. object.csvId를 currentCsv 대체 원천으로 쓰지 않는다. non-editable conversion view는 표시용 copy일 뿐 editable selectedIndex/objectColumns를 만들지 않는다. chart 없으면 objects=[], selectedIndex=none; CSV 없으면 해당 columns=[]
+-        12. request의 operation이 graphs.readLayout이면: explicit selectedSlotId로 owning chart를 resolve한 title/globalSettings/axis copy; 없으면 none
+-        13. request의 operation이 graphs.readPalette이면: 같은 owning chart의 editor object color sequence copy; 없으면 empty sequence
+-        14. request의 operation이 graphs.hasSelectedSlot이면: explicit selectedSlotId가 visible graph slot인지 boolean; chart가 없어도 graph slot이면 true
+-        15. request의 operation이 graphs.defaultColors이면: sourcescript.backend.graphs의 immutable default color sequence copy; ProjectObject read 불필요
+-        16. request의 operation이 captions.readGlobal이면: project annotations.captions의 enabled/text/afterText/name/nameBold/settings copy
+-        17. request의 operation이 captions.readSlot이면: explicit slotId의 slot.caption copy; 없는 slot이면 none; placeholder는 반환 presentation일 뿐 저장하지 않음
+-        18. request의 operation이 labels.readState이면: sourcescript.backend.layout_annotations readLabelsApiState(slotId)의 label settings와 explicit slot reference geometry copy
+-        19. request의 operation이 layout.readState이면: 같은 current project에서 gridRows/gridCols/slotStyle, visibleSlots, renderedWidth의 previewGeometry를 copy한다. visibleSlots는 기존 id/row/col/rowSpan/colSpan과 contentType/chart/imageId 및 buildSlotAssetDisplay(slot, project)의 assetDisplay를 포함한다. width는 backend.defaults.preview.widthRange/fallbackWidth를 사용한다. Backend는 session zoom/lock을 읽지 않으며 Application만 public read에 합성한다. DOM 역추론/preview 저장이나 독립 slot/chart authority는 없다.
+-        20. request의 operation이 assets.readTree이면: current directories 순서의 directory node와 CSV/image collection 순서의 asset node로 만든 canonical VFS node sequence copy. directory는 kind/path/name/children, asset은 kind/path/id/name/asset detached copy를 갖고 canonical parent의 children으로 연결한다. slot/chart collection을 이 반환에 혼합하거나 legacy directories/data/images/charts/slots 묶음으로 대체하지 않는다.
+-        21. request의 operation이 assets.readTrash이면: 같은 tree 계산의 trash subtree copy
+-        22. request의 operation이 assets.isTrashed이면: 요청 path를 canonical 경로로 만들고
++        6. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["project.readName"]이면: meta.projectName 문자열 copy
++        7. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["slots.readSelected"]이면: selectedSlotId로 visible Slot을 찾아 id/row/col/rowSpan/colSpan/hidden/content/caption을 분리 복사한 Slot 또는 None
++        8. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["images.readEditor"]이면: explicit slotId -> visible slot -> image asset; slotId/name/copied bytes와 그 bytes에서 순수 계산한 display URL, normalized slot-local settings copy, 없으면 none. Backend query는 revocable display resource를 할당하거나 runtime handle을 Project에 저장하지 않는다. surface resource lifetime은 supplied input을 소비하는 Frontend renderer가 소유한다.
++        9. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["print.readSettings"]이면: export의 width/heightMode/height/dpi/format scalar copy
++        10. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["appearance.readPalette"]이면: current appearance.uiPalette의 field copy; persistent palette hex validation과 defaults는 이 파일의 ProjectObject 규칙 사용
++        11. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.readData"]이면: frontendState.selectedSlotId로 graph chart를 resolve; Application의 post-commit read에 explicit chartId가 있으면 유일한 owning slot까지 resolve한다. chart의 detached copy(없으면 none), objects copy와 graphObjectIndex의 valid selectedIndex, assetSelection=csv인 assetPath에서 currentCsv/columns, selected object.csvId에서 별도 objectColumns를 계산. object.csvId를 currentCsv 대체 원천으로 쓰지 않는다. non-editable conversion view는 표시용 copy일 뿐 editable selectedIndex/objectColumns를 만들지 않는다. chart 없으면 objects=[], selectedIndex=none; CSV 없으면 해당 columns=[]
++        12. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.readLayout"]이면: explicit selectedSlotId로 owning chart를 resolve한 title/globalSettings/axis copy; 없으면 none
++        13. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.readPalette"]이면: 같은 owning chart의 editor object color sequence copy; 없으면 empty sequence
++        14. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.hasSelectedSlot"]이면: explicit selectedSlotId가 visible graph slot인지 boolean; chart가 없어도 graph slot이면 true
++        15. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.defaultColors"]이면: sourcescript.backend.graphs의 immutable default color sequence copy; ProjectObject read 불필요
++        16. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["captions.readGlobal"]이면: project annotations.captions의 enabled/text/afterText/name/nameBold/settings copy
++        17. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["captions.readSlot"]이면: explicit slotId의 slot.caption copy; 없는 slot이면 none; placeholder는 반환 presentation일 뿐 저장하지 않음
++        18. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["labels.readState"]이면: sourcescript.backend.layout_annotations readLabelsApiState(slotId)의 label settings와 explicit slot reference geometry copy
++        19. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["layout.readState"]이면: 같은 current project에서 gridRows/gridCols/slotStyle, visibleSlots, renderedWidth의 previewGeometry를 copy한다. gridLimits에는 backend.defaults.limits.layout의 gridRows/gridCols 범위를 같은 조회에서 분리 복사한다. visibleSlots는 기존 id/row/col/rowSpan/colSpan과 contentType/chart/imageId 및 buildSlotAssetDisplay(slot, project)의 assetDisplay를 포함한다. width는 backend.defaults.preview.widthRange/fallbackWidth를 사용한다. Backend는 session zoom/lock을 읽지 않으며 Application만 public read에 합성한다. DOM 역추론/preview 저장이나 독립 slot/chart authority는 없다.
++        20. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.readTree"]이면: current directories 순서의 directory node와 CSV/image collection 순서의 asset node로 만든 canonical VFS node sequence copy. directory는 kind/path/name/children, asset은 kind/path/id/name/asset detached copy를 갖고 canonical parent의 children으로 연결한다. slot/chart collection을 이 반환에 혼합하거나 legacy directories/data/images/charts/slots 묶음으로 대체하지 않는다.
++        21. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.readTrash"]이면: 같은 tree 계산의 trash subtree copy
++        22. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.isTrashed"]이면: 요청 path를 canonical 경로로 만들고
+            trash root와 같거나 root + slash로 시작하는지 검사한 논리값을 projection에 둔다.
+-        23. request의 operation이 assets.movable이면: current VFS source 존재와 fixed-root 규칙으로 계산한 boolean; trash 소속만으로 거부하지 않음
+-        24. request의 operation이 assets.draggableAsset이면: 존재하는 non-trash csv/image의 kind/id/path/name copy 또는 none; slot 연결용이며 tree move와 구별
+-        25. request의 operation이 assets.readDeletionTarget이면: explicit path -> target asset의 detached copy와 collectAssetReferences의 사용 count/owner copy; 없으면 none; 생성 wrapper도 성공 뒤 target만 반환할 수 있음
+-        26. request의 operation이 assets.moveOptions이면: current directories와 기존 move eligibility 규칙에서 계산한 destination 후보 copy
+-        27. request의 operation이 assets.planMove이면: explicit source/destination을 current VFS에서 resolve한 collision/reference-count plan copy; commit 때 반드시 재검증
+-        28. request의 operation이 assets.resolveTreeSelection이면: path를 resolve한 accepted/kind/canonical path scalar input; invalid면 accepted=False
+-        29. request의 operation이 assets.fileKind이면: request.file의 copied name/type -> assets_files.slotFileKind의 kind 문자열; ProjectObject/Frontend read 불필요; bytes는 읽지 않음
+-        30. request의 operation이 assets.collisionModel이면: request.file/directory/reservedPaths -> assets_files.projectAssetImportCollisionModel; current VFS의 detached collision model; 다른 작업의 권위로 보존하지 않음
+-        31. request의 operation이 assets.resolveImportPlan이면: request.model/choice/reservedPaths -> assets_files.resolveProjectAssetImportPlan; model은 identity/choice 제안일 뿐이다. 같은 current VFS의 충돌/replace target을 재검증한 detached path/replaceId; invalid/stale replace는 오류, input/Project/Frontend 변경 없음. ASSETS_IMPORTED가 이 결과를 사용할 때 current authority를 다시 검증한다
+-        32. request의 operation이 project.exportFile이면: current whole-project validation 후 assets_files.ffpxBuildProject의 FFPX entries copy; MIME application/vnd.fast-figure-project. Frontend selected slot 금지는 Application precondition이며 Backend는 Frontend를 조회하지 않음
+-        33. request의 operation이 assets.download이면: explicit canonical path로 CSV/image original bytes/name/MIME copy; absent/wrong kind/no original bytes는 none; fallback MIME application/octet-stream
+-        34. request의 operation이 graphs.exportFfsx이면: explicit visible graph slotId -> unique owning chart -> assets_files.ffsxBuildSlot의 entries copy; MIME application/vnd.fast-figure-slot; missing slot/chart는 none
+-        35. request의 operation이 graphs.exportPlotlyJson이면: 같은 target의 graphs.chartFigure(chart, current project) -> UTF-8 JSON bytes copy; MIME application/json; noneditable imported figure/frame 보존; missing은 none
++        23. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.movable"]이면: current VFS source 존재와 fixed-root 규칙으로 계산한 boolean; trash 소속만으로 거부하지 않음
++        24. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.draggableAsset"]이면: 존재하는 non-trash csv/image의 kind/id/path/name copy 또는 none; slot 연결용이며 tree move와 구별
++        25. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.readDeletionTarget"]이면: explicit path -> target asset의 detached copy와 collectAssetReferences의 사용 count/owner copy; 없으면 none; 생성 wrapper도 성공 뒤 target만 반환할 수 있음
++        26. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.moveOptions"]이면: current directories와 기존 move eligibility 규칙에서 계산한 destination 후보 copy
++        27. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.planMove"]이면: explicit source/destination을 current VFS에서 resolve한 collision/reference-count plan copy; commit 때 반드시 재검증
++        28. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.resolveTreeSelection"]이면: path를 resolve한 accepted/kind/canonical path scalar input; invalid면 accepted=False
++        29. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.fileKind"]이면: request.file의 copied name/type -> assets_files.slotFileKind의 kind 문자열; ProjectObject/Frontend read 불필요; bytes는 읽지 않음
++        30. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.collisionModel"]이면: request.file/directory/reservedPaths -> assets_files.projectAssetImportCollisionModel; current VFS의 detached collision model; 다른 작업의 권위로 보존하지 않음
++        31. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.resolveImportPlan"]이면: request.model/choice/reservedPaths -> assets_files.resolveProjectAssetImportPlan; model은 identity/choice 제안일 뿐이다. 같은 current VFS의 충돌/replace target을 재검증한 detached path/replaceId; invalid/stale replace는 오류, input/Project/Frontend 변경 없음. ASSETS_IMPORTED가 이 결과를 사용할 때 current authority를 다시 검증한다
++        32. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["project.exportFile"]이면: current whole-project validation 후 assets_files.ffpxBuildProject의 FFPX entries copy; MIME application/vnd.fast-figure-project. Frontend selected slot 금지는 Application precondition이며 Backend는 Frontend를 조회하지 않음
++        33. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.download"]이면: explicit canonical path로 CSV/image original bytes/name/MIME copy; absent/wrong kind/no original bytes는 none; fallback MIME application/octet-stream
++        34. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.exportFfsx"]이면: explicit visible graph slotId -> unique owning chart -> assets_files.ffsxBuildSlot의 entries copy; MIME application/vnd.fast-figure-slot; missing slot/chart는 none
++        35. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.exportPlotlyJson"]이면: 같은 target의 graphs.chartFigure(chart, current project) -> UTF-8 JSON bytes copy; MIME application/json; noneditable imported figure/frame 보존; missing은 none
+         36. 위 export operation의 파일 이름은 다음과 같이 계산한다: request.stamp는 Application이 이번 호출에 만든 UTC ISO timestamp의 colon/dot을 hyphen으로 바꾼 값이며 이번 다운로드 작업의 값이다. project는 assets_files.projectFileStem의 project-name sanitize + stamp + .ffpx; slot은 fast-figure-slot-{slotId}-{stamp}.ffsx; Plotly는 plotly-figure-{slotId}-{stamp}.json; original asset은 asset.name을 그대로 사용한다.
+         37. export 결과에는 한 download 작업의 copied entries/bytes/name/MIME만 반환; resource URL 할당이나 다운로드는 하지 않으며 원본을 mutation input으로 쓰지 않음
+         38. kind=renderer의 전면 투영 요청이면: default renderer request는 final frontendState와 optional mutationResult를 받는다. current layout/grid/style, appearance, annotations, visible slots와 slot-local content/caption/settings를 detached copy로 구성한다. label 번호/표시는 layout_annotations.orderedSlotLabels(current project)로 계산하며 captionReferenceStyle은 backend/settings.json의 backend.defaults.captionReferenceStyle에서 복사한다. 각 visible graph slot의 owning chart, 실제 project object의 참조 CSV/columns와 graphs.chartFigure(chart, project) 계산 결과를 포함한다. project는 이번 query가 읽는 같은 current authority이며 chart copy와 CSV가 같은 read 작업에 속한다. non-editable imported conversion chartFigure는 imported representation을 보존하며 conversion view로 project CSV를 resolve하지 않는다. image slot은 images.readEditor와 같은 copied bytes/name/display URL 의미를 사용한다. slot/chart/CSV resolve와 graph projection 계산은 Backend에서 끝내며 renderer가 Backend를 다시 조회하지 않는다. Backend authority에 없는 default/compatibility 값은 copy에만 적용한다. final Frontend state는 ProjectObject에 합치지 않는다.
+@@ -293,54 +326,104 @@ def readBackendProjection(kind, request):
+         41. renderer의 투영 결과는 한 render 작업에만 소비; 다음 작업은 current authority에서 재조회; mutation 입력이나 장기 project mirror로 재사용 금지
+         42. kind=project-api: FastFigureApi read operation에 필요한 project/asset/chart/layout/caption/label/export projection
+         43. kind=slot-selection-context: validated slot selection 뒤 optional contentType intent 판단에 필요한 empty/contentType projection
+-        44. kind=interface-intent: Frontend selection/reference event를 current Backend authority에서 검증한 input
+-        45. kind=interface-reconciliation: ProjectMutationResult 뒤 current Backend authority에서 계산한 Frontend reconciliation input
+-        46. kind=renderer: DOM/Plotly renderer가 한 projection 작업에 사용할 immutable project view
+-        47. kind=export: 한 작업용 immutable snapshot. 일반 project export/import 반환은 기존 whole-project snapshot이다. print.save/print.capture 요청은 같은 작업의 project settings/geometry와 renderer contract의 slot별 precomputed figure/image 입력을 함께 제공한다. transient export input이며 Frontend가 whole-project copy에서 graph domain 계산을 재실행하는 경로를 만들지 않는다.
+-        48. compatibility/default normalization은 detached copy에서만 수행한다. 중첩 array/object까지 read-only로 반환하고
++        44. kind=interface-reconciliation: ProjectMutationResult 뒤 current Backend authority에서 계산한 Frontend reconciliation input
++        45. kind=renderer: DOM/Plotly renderer가 한 projection 작업에 사용할 immutable project view
++        46. kind=export: 한 작업용 immutable snapshot. 일반 project export/import 반환은 기존 whole-project snapshot이다. print.save/print.capture 요청은 같은 작업의 project settings/geometry와 renderer contract의 slot별 precomputed figure/image 입력을 함께 제공한다. transient export input이며 Frontend가 whole-project copy에서 graph domain 계산을 재실행하는 경로를 만들지 않는다.
++        47. compatibility/default normalization은 detached copy에서만 수행한다. 중첩 array/object까지 read-only로 반환하고
+            Backend 내부 mutable reference, event handler, DOM node, query/command callback은 projection에 포함하지 않는다.
+-        49. projection를 반환한다.
++        48. projection를 반환한다.
+     """
+     return projection
+ 
+ 
+-def validateFrontendIntent(event, payload):
++def validateSlotSelection(event, payload):
+     validatedInput = "FrontendValidatedInput 딕셔너리."
+     """
+     Args:
+     - event:
+-      처리할 이벤트 이름 문자열.
++      Application이 전달한 Frontend 이벤트 식별자.
+ 
+     - payload:
+-      이벤트 또는 파일 형식이 정한 입력 딕셔너리.
++      Slot 선택 입력 딕셔너리.
+ 
+     Return:
+     - validatedInput:
+-      FrontendValidatedInput 딕셔너리.
+-      FrontendValidatedInput.
++      참조 판정 결과. 원형: /backend/project_state/FrontendValidatedInput
+ 
+     변경:
+-    - activeProject와 Frontend state를 변경하지 않는다.
++    - 없음.
+ 
+     처리:
+-        1. 공통: event/accepted/reference/workspaceHint/selectionHint를 새 immutable input으로 구성한다.
+-           미등록 event 또는 invalid reference는 accepted=False이며 Frontend state를 변경하지 않는다.
+-           explicit none은 accepted deselection이다. invalid identity를 none으로 바꾸어 승인하지 않는다.
+-           SELECT_SLOT:
++        1. event와 accepted, reference, workspaceHint, selectionHint를 가진 결과를 구성한다.
++           event에는 입력 식별자를 보존한다. 참조가 무효이면 accepted=False를 반환한다.
++           명시적인 선택 해제는 accepted=True와 None 참조로 표현한다.
++        2. 현재 activeProject._state의 다음 참조를 판정한다.
+            slotId를 visible slot에서 resolve한다. workspaceHint는 contentType image이면 slot.image, 아니면 slot.graph다.
+            non-null slot에 direction=model-to-fsm이면 clear-graph-object, 그 외 일반 selection은 toggle-clear hint를 반환한다.
+            explicit none은 direction과 무관하게 toggle-clear의 명시적 deselection이며 graph/asset 선택을 함께 해제한다.
+            hint가 Frontend의 clear 범위를 결정한다. raw direction이나 보존할 asset snapshot을 Frontend input에 추가하지 않는다.
+-           SELECT_ASSET:
++        3. validatedInput를 읽기 전용 결과로 반환한다.
++    """
++    return validatedInput
++
++
++def validateAssetSelection(event, payload):
++    validatedInput = "FrontendValidatedInput 딕셔너리."
++    """
++    Args:
++    - event:
++      Application이 전달한 Frontend 이벤트 식별자.
++
++    - payload:
++      asset 선택 입력 딕셔너리.
++
++    Return:
++    - validatedInput:
++      참조 판정 결과. 원형: /backend/project_state/FrontendValidatedInput
++
++    변경:
++    - 없음.
++
++    처리:
++        1. event와 accepted, reference, workspaceHint, selectionHint를 가진 결과를 구성한다.
++           event에는 입력 식별자를 보존한다. 참조가 무효이면 accepted=False를 반환한다.
++           명시적인 선택 해제는 accepted=True와 None 참조로 표현한다.
++        2. 현재 activeProject._state의 다음 참조를 판정한다.
+            path를 current VFS에서 resolve하고 요청 kind와 일치하는 csv/image/directory만 승인한다.
+            reference는 canonical path, selectionHint는 resolved kind다. none이면 hint도 none이다.
+-           SELECT_GRAPH_OBJECT:
++        3. validatedInput를 읽기 전용 결과로 반환한다.
++    """
++    return validatedInput
++
++
++def validateGraphObjectSelection(event, payload):
++    validatedInput = "FrontendValidatedInput 딕셔너리."
++    """
++    Args:
++    - event:
++      Application이 전달한 Frontend 이벤트 식별자.
++
++    - payload:
++      graph object 선택 입력 딕셔너리.
++
++    Return:
++    - validatedInput:
++      참조 판정 결과. 원형: /backend/project_state/FrontendValidatedInput
++
++    변경:
++    - 없음.
++
++    처리:
++        1. event와 accepted, reference, workspaceHint, selectionHint를 가진 결과를 구성한다.
++           event에는 입력 식별자를 보존한다. 참조가 무효이면 accepted=False를 반환한다.
++           명시적인 선택 해제는 accepted=True와 None 참조로 표현한다.
++        2. 현재 activeProject._state의 다음 참조를 판정한다.
+            payload["selectedSlotId"] -> visible graph slot -> owning chart -> integer index의 existing editor object를 resolve한다.
+            read 과정에서 ensure/normalize로 live chart를 변경하지 않는다. editable chart의 object.csvId가 current CSV에서 resolve되어야 승인한다.
+            non-editable conversion object의 editable-object 선택 요청은 accepted=False로 반환한다.
+            reference는 index다. selectAsset=True일 때만 CSV canonical path를 selectionHint로 반환하고, False/생략이면 hint none이다.
+            explicit index none은 graph selection clear이며 asset selection에 대한 hint를 생성하지 않는다.
+-           validatedInput를 반환한다.
++        3. validatedInput를 읽기 전용 결과로 반환한다.
+     """
+     return validatedInput
+ 
+@@ -720,7 +803,7 @@ def validateProjectObjectState(state, requireSlots):
+ 
+     처리:
+         1. - project top-level structure와 필수 nested object가 존재한다.
+-           - gridRows/gridCols는 1..8 정수다.
++           - gridRows/gridCols는 backend.defaults.limits.layout의 gridRows/gridCols 범위에 속하는 정수다.
+            - slotStyle 수치와 boolean이 허용 범위에 있다.
+            - label position은 finite이고 fontSize는 backend.defaults.limits.labels.fontSizeMin 이상이다.
+            - export width/height mode/height/dpi/format이 정의된 범위와 관계를 만족한다.
+diff --git a/sourcescript/frontend/interface_fsm.py b/sourcescript/frontend/interface_fsm.py
+index 20069738741e2aa2d84fcdff7a98bed00dd029a5..b6d2ba0ec9f94af79c9966af358ee866e73f5b45 100644
+--- a/sourcescript/frontend/interface_fsm.py
++++ b/sourcescript/frontend/interface_fsm.py
+@@ -25,21 +25,23 @@ interfaceState = {'lifecycle': 'booting/ready/importing/exporting/error',
+ 
+ INTERFACE_REGION_ORDER = ["lifecycle", "workspace", "overlay", "assetSelection", "graphObject"]
+ 
+-INTERFACE_EVENTS = ('SELECT_SLOT',
+- 'SELECT_ASSET',
+- 'CLEAR_ASSET_SELECTION',
+- 'SELECT_GRAPH_OBJECT',
+- 'CLEAR_GRAPH_OBJECT',
+- 'TOGGLE_OVERLAY',
+- 'CLOSE_OVERLAY',
+- 'OUTSIDE_CLICK',
+- 'ESCAPE',
+- 'SET_DASHBOARD_ZOOM',
+- 'SET_DASHBOARD_ZOOM_LOCK',
+- 'RESET_DASHBOARD_ZOOM',
+- 'LIFECYCLE_START',
+- 'LIFECYCLE_COMPLETE',
+- 'LIFECYCLE_FAILED')
++INTERFACE_EVENTS = {
++    'SELECT_SLOT': 'SELECT_SLOT',
++    'SELECT_ASSET': 'SELECT_ASSET',
++    'CLEAR_ASSET_SELECTION': 'CLEAR_ASSET_SELECTION',
++    'SELECT_GRAPH_OBJECT': 'SELECT_GRAPH_OBJECT',
++    'CLEAR_GRAPH_OBJECT': 'CLEAR_GRAPH_OBJECT',
++    'TOGGLE_OVERLAY': 'TOGGLE_OVERLAY',
++    'CLOSE_OVERLAY': 'CLOSE_OVERLAY',
++    'OUTSIDE_CLICK': 'OUTSIDE_CLICK',
++    'ESCAPE': 'ESCAPE',
++    'SET_DASHBOARD_ZOOM': 'SET_DASHBOARD_ZOOM',
++    'SET_DASHBOARD_ZOOM_LOCK': 'SET_DASHBOARD_ZOOM_LOCK',
++    'RESET_DASHBOARD_ZOOM': 'RESET_DASHBOARD_ZOOM',
++    'LIFECYCLE_START': 'LIFECYCLE_START',
++    'LIFECYCLE_COMPLETE': 'LIFECYCLE_COMPLETE',
++    'LIFECYCLE_FAILED': 'LIFECYCLE_FAILED',
++}
+ 
+ 
+ 
+@@ -154,7 +156,7 @@ class InterfaceStateMachine:
+         """
+         Args:
+         - event:
+-          INTERFACE_EVENTS의 이벤트 이름.
++          INTERFACE_EVENTS의 등록값.
+ 
+         - validatedInput:
+           accepted, reference, workspaceHint, selectionHint와 이벤트 인자를 담은 딕셔너리.
+@@ -169,32 +171,32 @@ class InterfaceStateMachine:
+ 
+         처리:
+             1. validatedInput의 accepted가 False이면 현재 readState()를 반환한다.
+-            2. SELECT_SLOT이면 reference와 selectionHint를 확인한다.
++            2. INTERFACE_EVENTS["SELECT_SLOT"]이면 reference와 selectionHint를 확인한다.
+                reference가 None이거나 같은 id에 toggle-clear hint가 있으면 selectedSlotId를 None으로 둔다.
+                그 외에는 검증된 id를 selectedSlotId에 둔다. None의 workspace는 project, 나머지는 workspaceHint다.
+                graphObject와 graphObjectIndex를 none으로 둔다. 최종 reference가 None이거나 toggle-clear hint이면
+                assetSelection과 assetPath도 none으로 두고, clear-graph-object hint이면 현재 asset 선택을 유지한다.
+                검증된 non-null slot 선택은 overlay를 닫으며 명시적 deselection은 overlay를 유지한다.
+-            3. SELECT_ASSET이면 검증된 kind/path 또는 none을 assetSelection/assetPath에 반영한다.
++            3. INTERFACE_EVENTS["SELECT_ASSET"]이면 검증된 kind/path 또는 none을 assetSelection/assetPath에 반영한다.
+                graphObject/index를 none으로 두고 slot과 workspace를 유지한다. 같은 asset도 수락된 입력마다 한 번 발행한다.
+-            4. SELECT_GRAPH_OBJECT이면 reference가 None일 때 graphObject/index를 none으로 둔다.
++            4. INTERFACE_EVENTS["SELECT_GRAPH_OBJECT"]이면 reference가 None일 때 graphObject/index를 none으로 둔다.
+                검증된 index이면 graphObject=selected와 해당 index를 저장한다.
+                selectionHint에 CSV path가 있으면 assetSelection=csv와 해당 path를 저장하고 나머지 경우 현재 asset 선택을 유지한다.
+-            5. CLEAR_ASSET_SELECTION이면 assetSelection/path를, CLEAR_GRAPH_OBJECT이면 graphObject/index를 none으로 둔다.
++            5. INTERFACE_EVENTS["CLEAR_ASSET_SELECTION"]이면 assetSelection/path를, INTERFACE_EVENTS["CLEAR_GRAPH_OBJECT"]이면 graphObject/index를 none으로 둔다.
+                각 경우 다른 독립 선택 필드는 유지한다.
+-            6. TOGGLE_OVERLAY이면 현재와 같은 이름은 none, 다른 이름은 전달된 overlay로 바꾼다.
+-               CLOSE_OVERLAY, OUTSIDE_CLICK, ESCAPE이면 overlay를 none으로 둔다.
+-            7. SET_DASHBOARD_ZOOM이면 lock 상태에서 현재 readState()를 반환한다.
++            6. INTERFACE_EVENTS["TOGGLE_OVERLAY"]이면 현재와 같은 이름은 none, 다른 이름은 전달된 overlay로 바꾼다.
++               INTERFACE_EVENTS["CLOSE_OVERLAY"], INTERFACE_EVENTS["OUTSIDE_CLICK"], INTERFACE_EVENTS["ESCAPE"]이면 overlay를 none으로 둔다.
++            7. INTERFACE_EVENTS["SET_DASHBOARD_ZOOM"]이면 lock 상태에서 현재 readState()를 반환한다.
+                잠금이 풀려 있으면 유한 수 입력을 50..200으로 제한하고 무효 입력은 100으로 정한다.
+                실제 배율 변화가 없으면 현재 읽기 결과를 반환한다.
+-            8. SET_DASHBOARD_ZOOM_LOCK이면 최초 lock=True에 전달된 유한 양수 renderedWidth를 anchor로 저장한다.
++            8. INTERFACE_EVENTS["SET_DASHBOARD_ZOOM_LOCK"]이면 최초 lock=True에 전달된 유한 양수 renderedWidth를 anchor로 저장한다.
+                무효 너비이면 현재 읽기 결과를 반환하고, 이미 잠겼으면 기존 anchor를 유지한다.
+                lock=False이면 lock=False, width=None, zoom=100으로 둔다. 실제 변화가 없으면 현재 읽기 결과를 반환한다.
+-            9. RESET_DASHBOARD_ZOOM이면 lock=False, width=None, zoom=100으로 둔다.
++            9. INTERFACE_EVENTS["RESET_DASHBOARD_ZOOM"]이면 lock=False, width=None, zoom=100으로 둔다.
+                실제 변화가 없으면 현재 읽기 결과를 반환한다.
+-            10. LIFECYCLE_START이면 전달된 importing/exporting과 error=None을 저장한다.
+-                LIFECYCLE_COMPLETE이면 ready와 error=None을 저장한다.
+-            11. LIFECYCLE_FAILED이면 error projection과 error lifecycle을 저장하여 publish()한다.
++            10. INTERFACE_EVENTS["LIFECYCLE_START"]이면 전달된 importing/exporting과 error=None을 저장한다.
++                INTERFACE_EVENTS["LIFECYCLE_COMPLETE"]이면 ready와 error=None을 저장한다.
++            11. INTERFACE_EVENTS["LIFECYCLE_FAILED"]이면 error projection과 error lifecycle을 저장하여 publish()한다.
+                 같은 오류 처리에서 lifecycle만 ready로 바꿔 다시 publish()한 결과를 반환한다.
+                 error projection은 다음 START 또는 COMPLETE까지 유지한다.
+             12. 나머지 수락된 전이는 변경된 필드로 publish()한 결과를 반환한다.
+diff --git a/sourcescript/frontend/mantine_ui.py b/sourcescript/frontend/mantine_ui.py
+index 9f67cc0227f8bda15d00ea0b72fd577f84fd853c..af2789f1dc63910c2efd701487fa190b71cc86d6 100644
+--- a/sourcescript/frontend/mantine_ui.py
++++ b/sourcescript/frontend/mantine_ui.py
+@@ -109,6 +109,7 @@ def readAssetRowDisplay(node):
+ 
+ def changeLayoutGridDimension(dimension, value):
+     outcome = "layout.readState 딕셔너리 또는 False."
++    current = "공식 layout 조회 결과 딕셔너리."
+     """
+     Args:
+     - dimension:
+@@ -127,10 +128,10 @@ def changeLayoutGridDimension(dimension, value):
+ 
+     처리:
+         layout 행/열 입력 이벤트의 처리 절차. dimension은 rows 또는 cols이며 그 외는 입력 오류다.
+-        1. 이벤트 시점에 FastFigureApi.layout["readState"]()를 호출해 current gridRows/gridCols를 읽는다.
+-           companion과 fallback은 이번 공식 layout 조회 결과에서 읽는다.
++        1. 이벤트 시점에 FastFigureApi.layout["readState"]()의 반환값을 current에 둔다.
++           gridRows/gridCols와 gridLimits를 이 결과에서 읽는다. companion과 fallback도 이 결과를 사용한다.
+         2. 비어 있거나 숫자로 변환할 수 없거나 non-finite인 편집 입력은 같은 read의 해당 dimension을 유지한다.
+-           유효 숫자는 기존 grid 입력 범위 1..8로 제한한다. 정수 여부 등 최종 유효성은 기존 Backend 검증이 담당한다.
++           유효 숫자는 같은 layout 조회의 gridLimits에서 해당 gridRows 또는 gridCols 범위로 제한한다. 정수 여부 등 최종 유효성은 기존 Backend 검증이 담당한다.
+         3. rows 편집이면 새 rows와 current gridCols, cols 편집이면 current gridRows와 새 cols를 구성한다.
+         4. 이 read→입력 구성→FastFigureApi.layout["setGrid"](rows, cols)는 await/외부 callback/다른 project command 없이
+            같은 동기 입력 처리에서 연속 실행한다. 별도 snapshot/session에 보관했다가 나중에 command로 보내지 않는다.
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index b294fc23c1e296367ce8aa4eb95a3dbf0829bb09..d5ff2ec86055b5922651e56daceb8874294ab125 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -19,29 +19,14 @@ Fast Figure Source Script — system initialization
+   split source를 단일 portable HTML로 결합하는 현재 build 검증 자료.
+ """
+ 
+-IMPLEMENTATION_SOURCES = ('Fast-figure.html',
+- 'fast-figure.js',
+- 'fast-figure-ui.js',
+- 'vendor/plotly.min.js',
+- 'vendor/fast-figure-ui-runtime.js',
+- 'scripts/build-portable.py')
++
+ 
+ from sourcescript.backend import project_state, project_efsm, assets_files, graphs, layout_annotations
+ from sourcescript.application import adapter, public_api
+ from sourcescript.frontend import interface_fsm, mantine_ui, renderer
+ from sourcescript.portable_build import portable_build
+ 
+-SOURCE_SCRIPT_LOGICAL_HIERARCHY = {'Backend': {'project-state': 'sourcescript.backend.project_state',
+-             'project-efsm': 'sourcescript.backend.project_efsm',
+-             'asset-domain': 'sourcescript.backend.assets_files',
+-             'graph-domain': 'sourcescript.backend.graphs',
+-             'layout-annotation-domain': 'sourcescript.backend.layout_annotations'},
+- 'Application boundary': {'command-query-adapter': 'sourcescript.application.adapter',
+-                          'public-api': 'sourcescript.application.public_api'},
+- 'Frontend': {'frontend-fsm': 'sourcescript.frontend.interface_fsm',
+-              'mantine-ui': 'sourcescript.frontend.mantine_ui',
+-              'renderer': 'sourcescript.frontend.renderer'},
+- 'Portable build': {'portable-build': 'sourcescript.portable_build.portable_build'}}
++
+ 
+ 
+ 
