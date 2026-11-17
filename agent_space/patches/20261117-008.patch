@@ -1,0 +1,770 @@
+diff --git a/development-versions.json b/development-versions.json
+index 85c59ebce79dd91a524b6d74827d95fcac040a3c..1277661791df7c6e767d2082623e7cfbd0b0205c 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -64,14 +64,14 @@
+       "translation_review": "agent_space/reviews/review-20261117-004-plan036-source-code.md"
+     },
+     "pseudocode": {
+-      "revision": 29,
++      "revision": 30,
+       "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:470c3d345205c9508226ae0332b079301fa660b4b61163fdef8355ba01d96c4b",
++      "fingerprint": "sha256:e13679a938eebdc592d6dbda032e8091a0536bf480d733dfdde5c14fa1a66dce",
+       "derived_from": {
+         "source-script": "sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252"
+       },
+-      "translation_review": "agent_space/reviews/review-20261117-005-plan037-system.md"
++      "translation_review": "agent_space/reviews/review-20261117-006-plan037-modules.md"
+     }
+   }
+ }
+diff --git a/pseudocode/application/adapter.pcal b/pseudocode/application/adapter.pcal
+index 6db249e140063cdd34fe0fd976f4a566085a8886..8bf61bda562d429e1602cdfe83c7f39a3f2cf93d 100644
+--- a/pseudocode/application/adapter.pcal
++++ b/pseudocode/application/adapter.pcal
+@@ -22,10 +22,17 @@ CurrentFrontendOwnerRead:
+   return;
+ end procedure;
+ 
++procedure ApplicationInterface_state()
++begin
++CurrentStateProperty:
++  call ApplicationInterface_readState();
++  return;
++end procedure;
++
+ procedure ApplicationInterface_subscribe(onStoreChange)
+ begin
+ FrontendPublicationSubscription:
+-  result := SubscribeToInterfaceFsmRevisionTransitions(onStoreChange);
++  call InterfaceStateMachine_subscribe(onStoreChange);
+   return;
+ end procedure;
+ 
+@@ -104,6 +111,7 @@ OptionalPersistentIntent:
+     end if;
+   end if;
+ ReadFinalSelectionProjection:
++  call InterfaceStateMachine_readState(); interfaceState := result;
+   call dispatchProjectQuery("renderer", [frontendState |-> interfaceState]);
+   rendererProjection := result;
+ ReturnSlotOrchestration:
+diff --git a/pseudocode/application/public_api/contract.pcal b/pseudocode/application/public_api/contract.pcal
+index 87aee917b5013516adbfd32c9b69447dde6b0f9d..074883726dbbd97d0cc631f465654839e14a1d27 100644
+--- a/pseudocode/application/public_api/contract.pcal
++++ b/pseudocode/application/public_api/contract.pcal
+@@ -115,6 +115,18 @@ REMOVED_OR_REPLACED == {"print.readDefaults","captions.readState","captions.setS
+ (* --algorithm PublicApiBoundary
+ variables result = NoValue;
+ 
++procedure createPublicApi()
++variables api = [], methods = SequenceOfSet(DOMAIN PUBLIC_API_METHODS), i = 1;
++begin
++CreateNamespacesAndDeferredMethods:
++  while i <= Len(methods) do
++    InstallNamespaceMethod(api,methods[i],BoundProcedure(InvokePublicMethod,methods[i]));
++    i := i + 1;
++  end while;
++  result := api;
++  return;
++end procedure;
++
+ procedure InvokePublicMethod(method,args)
+ variables lifecycle = "";
+ begin
+@@ -159,8 +171,7 @@ RouteWithoutReenteringLifecycle:
+     call dispatchInterfaceEvent("SELECT_GRAPH_OBJECT",[selectedSlotId |-> state.selectedSlotId,index |-> args.index,selectAsset |-> TRUE]);
+     \* Only explicit selection changes current CSV. Graph commit index hints do not.
+   elsif route[1] = "graph-export" then
+-    call InterfaceStateMachine_readState(); slotId := result.selectedSlotId;
+-    call exportSelectedGraph(slotId,route[2]);
++    call exportSelectedGraph(args.slotId,route[2]);
+   end if;
+   \* Helpers import to helpers, not InvokePublicMethod, so router children share task.
+   return;
+@@ -171,6 +182,7 @@ end procedure;
+ \* is inserted here. Only Source-declared defaults are applied. The wrapper
+ \* keeps its own committed gate, return value, throw and fresh-query behavior.
+ procedure InvokePublicWrapper(method,args)
++variables path = NoValue;
+ begin
+ BindExactSourceInputs:
+   if method = "project.setName" then
+@@ -220,7 +232,9 @@ BindExactSourceInputs:
+   elsif method \in {"assets.selectCsv","graphs.selectCsv"} then
+     call selectProjectCsv(args.path);
+   elsif method = "assets.download" then
+-    call downloadProjectAsset(args.path);
++    if HasField(args,"path") then path := args.path;
++    else call InterfaceStateMachine_readState(); path := result.assetPath; end if;
++    call downloadProjectAsset(path);
+   elsif method = "graphs.setHeaderLines" then
+     call graphEditorSetHeaderLines(args.csvId,args.headerLines);
+   elsif method = "graphs.setEditable" then
+diff --git a/pseudocode/backend/assets_files.pcal b/pseudocode/backend/assets_files.pcal
+index 31b68f546d1c3ef44a5721e9e6d6cefc3aeb7e2b..e6250d90e6ceb5fde430cec2b00a85e67cc0af57 100644
+--- a/pseudocode/backend/assets_files.pcal
++++ b/pseudocode/backend/assets_files.pcal
+@@ -217,6 +217,25 @@ OwnedBytesAndNoSlotSettings:
+   return;
+ end procedure;
+ 
++procedure RebuildCsvChartsInCandidate(candidate,csvIds)
++variables i = 1, j = 1, chart = NoValue, affected = FALSE;
++begin
++SameCandidateChartValues:
++  while i <= Len(candidate.charts) do
++    chart := candidate.charts[i]; affected := FALSE; j := 1;
++    if ~ConversionRepresentation(chart) then
++      while j <= Len(chart.editor.objects) do
++        if chart.editor.objects[j].csvId \in csvIds then affected := TRUE; end if;
++        j := j + 1;
++      end while;
++    end if;
++    if affected then call rebuildEditableGraph(chart,candidate); candidate.charts[i] := result; end if;
++    i := i + 1;
++  end while;
++  result := candidate;
++  return;
++end procedure;
++
+ procedure BuildAssetImportInAttempt(source, files, directory, planImport, targetSlotId)
+ variables candidate = NoValue, target = NoValue, parent = NoValue, canonicalPath = "",
+           i = 1, kind = "", parsed = NoValue, plan = NoValue, asset = NoValue, reserved = {},
+@@ -272,6 +291,7 @@ FileOrderWithinOneCandidate:
+       AppendAssetOfKind(candidate,AssetSequenceKind(kind),asset);
+       candidate.nextId[AssetSequenceKind(kind)] := asset.id + 1;
+     end if;
++    if kind = "data" then call RebuildCsvChartsInCandidate(candidate,{asset.id}); candidate := result; end if;
+     reserved := reserved \cup {plan.path};
+     if target # NoValue then
+       if kind = "data" then
+@@ -494,7 +514,26 @@ StrictTypeAndShape:
+   return;
+ end procedure;
+ 
+-procedure ReadStorePackage(file, packageKind)
++procedure normalizeCsvHeaderLines(value,rowCount,present)
++variables number = 1, parsed = NoValue;
++begin
++PresentVersusMissingHeader:
++  if present then
++    parsed := TryScalarNumber(value);
++    number := IF parsed.valid /\ IsFinite(parsed.value) THEN parsed.value ELSE 0;
++  end if;
++  result := Maximum(0,Minimum(rowCount,TruncateTowardZero(number)));
++  return;
++end procedure;
++
++procedure encodeTableAssetBytes(rows,name)
++begin
++EncodeSourceTable:
++  call SerializeNewDataTable(rows,name);
++  return;
++end procedure;
++
++procedure readStorePackage(file)
+ variables entries = <<>>, i = 1, entry = NoValue;
+ begin
+ ContainerValidation:
+@@ -508,7 +547,16 @@ EachEntry:
+     Require(Crc32(entry.bytes) = entry.crc32);
+     i := i + 1;
+   end while;
+-SchemaAndVersion:
++ContainerEntriesReturn:
++  result := entries;
++  return;
++end procedure;
++
++procedure ReadStorePackage(file,packageKind)
++variables entries = <<>>;
++begin
++PackageSpecificVersion:
++  call readStorePackage(file); entries := result;
+   Require(ManifestKind(entries) = packageKind /\ ManifestVersion(entries) = PACKAGE_FORMAT_VERSION);
+   result := entries;
+   return;
+@@ -940,7 +988,8 @@ RestoreOwnedBytes:
+       asset.bytesBase64 := Base64Encode(bytes);
+       if kinds[k] = "csv" then
+         call parseProjectDataAsset(asset.name,bytes); asset.rows := result;
+-        asset.headerLines := NormalizeHeaderCount(IF HasField(asset,"headerLines") THEN asset.headerLines ELSE 1,asset.rows);
++        call normalizeCsvHeaderLines(FieldOrNoValue(asset,"headerLines"),Len(asset.rows),HasField(asset,"headerLines"));
++        asset.headerLines := result;
+       end if;
+       RemoveField(asset,"dataRef");
+       normalized := Append(normalized,asset);
+@@ -1072,8 +1121,8 @@ CsvBytesAndRealReferences:
+     bytes := CopyBytes(EntryBytes(entries,asset.dataRef));
+     asset.bytesBase64 := Base64Encode(bytes);
+     call parseProjectDataAsset(asset.name,bytes); asset.rows := result;
+-    \* Source CSV_HEADER_RULE applies to stored FFSX metadata as well as Project imports.
+-    asset.headerLines := NormalizeHeaderCount(IF HasField(asset,"headerLines") THEN asset.headerLines ELSE 1,asset.rows);
++    call normalizeCsvHeaderLines(FieldOrNoValue(asset,"headerLines"),Len(asset.rows),HasField(asset,"headerLines"));
++    asset.headerLines := result;
+     RemoveField(asset,"dataRef");
+     payload.csvFiles[i] := asset;
+     i := i + 1;
+@@ -1160,7 +1209,8 @@ CsvRowsAndHeaderOnly:
+       if kinds[k] = "csv" then
+         call dataTable(raw.rows); rows := result;
+         asset.rows := rows;
+-        asset.headerLines := NormalizeHeaderCount(IF HasField(raw,"headerLines") THEN raw.headerLines ELSE 1,rows);
++        call normalizeCsvHeaderLines(FieldOrNoValue(raw,"headerLines"),Len(rows),HasField(raw,"headerLines"));
++        asset.headerLines := result;
+       end if;
+       normalized := Append(normalized,asset);
+       i := i + 1;
+@@ -1290,7 +1340,7 @@ RecomputeIdsAndWholeValidate:
+                        image |-> MaximumIdOrZero(candidate.assets.images) + 1,
+                        chart |-> MaximumIdOrZero(candidate.charts) + 1];
+   call validateProjectObjectState(candidate,TRUE);
+-  result := candidate;
++  call ProjectObject_create(candidate);
+   return;
+ end procedure;
+ 
+diff --git a/pseudocode/backend/graphs.pcal b/pseudocode/backend/graphs.pcal
+index fa1aef9719a9f8aa781b07e2f1540c558dff8123..d6b10dc1562772bafb9f13cb6d76387e70d32a1e 100644
+--- a/pseudocode/backend/graphs.pcal
++++ b/pseudocode/backend/graphs.pcal
+@@ -70,8 +70,11 @@ NormalizeHeaderForSameTable:
+   headerLines := NormalizeHeaderCount(headerLines,table);
+ ColumnLoop:
+   while i < width do
+-    name := NoValue;
+-    if headerLines >= 1 then name := CellOrMissing(table, headerLines - 1, i); end if;
++    name := "";
++    if headerLines >= 1 then
++      name := CellOrMissing(table,headerLines - 1,i);
++      if name = Missing then name := ""; end if;
++    end if;
+     columns := Append(columns, [id |-> "C" \o IntegerText(i + 1), index |-> i,
+        name |-> name, label |-> ColumnDisplayLabel("C" \o IntegerText(i + 1), name)]);
+     i := i + 1;
+@@ -247,12 +250,15 @@ end procedure;
+ \* Private expansion passes the existing command-attempt reference explicitly.
+ \* It adds no public parameter, mutation entry, authority or retry token.
+ procedure GraphCommitInAttempt(source, chartId, objects, index)
+-variables candidate = DeepCopy(source), chart = NoValue;
++variables candidate = DeepCopy(source), chart = NoValue, owner = NoValue;
+ begin
+ CommandInternalArrayOnly:
+   \* objects are computed inside EFSM; never a public projection/Frontend array.
+   chart := ResolveCandidateChart(candidate, chartId);
+   Require(chart # NoValue /\ chart.editor.editable);
++  call resolveOwningSlot(chart.id,candidate); owner := result;
++  Require(owner # NoValue /\ ~owner.hidden);
++  if index # NoValue then Require(IsValidIndex(index,objects)); end if;
+   call NormalizeCommandObjects(objects); chart.editor.objects := result;
+ ValidateZeroOrMoreObjects:
+   call validateChartModel(chart, candidate.assets.csvFiles);
+@@ -404,7 +410,7 @@ begin
+ SameProjectChartAndOwner:
+   Require(UniqueOwningSlot(chart.id,project));
+   Require(~ConversionRepresentation(chart));
+-  chart := ResolveChart(project,chart.id);
++  Require(ResolveChart(project,chart.id) # NoValue);
+ ObjectOrder:
+   while i < Len(chart.editor.objects) do
+     object := chart.editor.objects[i + 1];
+diff --git a/pseudocode/backend/layout_annotations.pcal b/pseudocode/backend/layout_annotations.pcal
+index 981937175eb29c345d43b6bcc524b1c30f249a07..ebd1fd5c23d57b71305a0caadc069275a87e6630 100644
+--- a/pseudocode/backend/layout_annotations.pcal
++++ b/pseudocode/backend/layout_annotations.pcal
+@@ -74,6 +74,16 @@ FormatDone:
+   return;
+ end procedure;
+ 
++procedure formatSlotLabel(ordinal,settings)
++variables identifier = "", display = "";
++begin
++SourceLabelResult:
++  call formatLabel(ordinal,settings.format); identifier := result; display := identifier;
++  if settings.parentheses then display := "(" \o identifier \o ")"; end if;
++  result := [identifier |-> identifier,displayLabel |-> display];
++  return;
++end procedure;
++
+ procedure orderedSlotLabels(project)
+ variables settings = project.annotations.labels.settings,
+           anchors = <<>>, labels = <<>>, i = 1, identifier = "", display = "";
+@@ -305,9 +315,7 @@ KeepCoordinateAndCreateOnlyNewCells:
+     col := 1;
+     while col <= cols do
+       if row > oldRows \/ col > oldCols then
+-        newSlot := [id |-> freshId,row |-> row,col |-> col,rowSpan |-> 1,colSpan |-> 1,hidden |-> FALSE,
+-                    content |-> DeepCopy(BackendSettings.defaults.slotSettings.content),caption |-> NoValue];
+-        newSlot.content.chart := NoValue; newSlot.content.imageId := NoValue;
++        call Slot_create(freshId,row,col); newSlot := result;
+         candidate.slots := Append(candidate.slots,newSlot);
+         freshId := freshId + 1;
+         \* No chart/CSV/image asset or reference is synthesized.
+@@ -339,7 +347,7 @@ NormalizeOnlyReadCopy:
+   slot := result;
+ ImageReadOnlyOutput:
+   \* Backend creates no revocable URL/handle; pure URL is derived from copied bytes.
+-  result := ImmutableCopy([slotId |-> slot.id, name |-> image.name,
++  result := ImmutableCopy([slotId |-> slot.id,imageId |-> image.id,name |-> image.name,mime |-> image.mime,
+     bytes |-> CopiedBytes(image), displayUrl |-> PureDisplayUrl(CopiedBytes(image), image.mime),
+     settings |-> slot.content.imageSettings]);
+   return;
+@@ -369,7 +377,7 @@ SameFormatterForSample:
+   if labels.settings.parentheses then sample := "(" \o sample \o ")"; end if;
+ LabelReadOutput:
+   result := ImmutableCopy([enabled |-> labels.enabled,
+-       settings |-> labels.settings, reference |-> reference, sampleText |-> sample]);
++       settings |-> labels.settings, reference |-> [width |-> reference.width,height |-> reference.height], sampleText |-> sample]);
+   \* No selection write or default slot creation; slot caption is not the sample.
+   return;
+ end procedure;
+diff --git a/pseudocode/backend/project_efsm.pcal b/pseudocode/backend/project_efsm.pcal
+index 32f9fe5ab1628d73fb92cc9f967f44c40c07747a..204d436ad03d7c86b3a145d88cdcce1a8c7823cd 100644
+--- a/pseudocode/backend/project_efsm.pcal
++++ b/pseudocode/backend/project_efsm.pcal
+@@ -154,9 +154,13 @@ variables asset = NoValue, path = "", requestedId = NoValue, table = NoValue, by
+ begin
+ OnlyNewFieldsNotApplicationModel:
+   requestedId := FieldOrNoValue(payload,"id");
++  if HasField(payload,"bytes") then bytes := CopyBytes(payload.bytes);
++  elsif HasField(payload,"bytesBase64") then bytes := DecodeCopiedBase64Bytes(payload.bytesBase64); end if;
+   if kind = "csv" then
+-    call dataTable(payload.data); table := result;
+-  else bytes := CopyImageInputBytes(payload.bytes); end if;
++    if HasField(payload,"data") then call dataTable(payload.data); table := result;
++    elsif HasField(payload,"rows") then table := DeepCopy(payload.rows);
++    else call parseProjectDataAsset(payload.name,bytes); table := result; end if;
++  end if;
+ CurrentLocationAndCollisionFreeName:
+   path := FieldOrNoValue(payload,"path");
+   if path = NoValue \/ path = "" then
+@@ -167,19 +171,19 @@ CurrentLocationAndCollisionFreeName:
+   call projectVfsUniquePath(path,candidate,{}); path := result;
+ CandidateAssetIdAndMetadata:
+   if kind = "csv" then
+-    if HasField(payload,"bytesBase64") /\ payload.bytesBase64 # "" /\ payload.bytesBase64 # NoValue then
+-      bytes := DecodeCopiedBase64Bytes(payload.bytesBase64);
+-    else
+-      \* Source SYNTHETIC_DATA_BYTES_RULE: filename-aware UTF-8 only without original bytes.
+-      call SerializeNewDataTable(table,path); bytes := result;
+-    end if;
++    if bytes = NoValue then call encodeTableAssetBytes(table,path); bytes := result; end if;
+   end if;
+   call BuildAssetMetadata(kind,path,payload.mime,bytes); asset := result;
+   asset.id := IF requestedId = NoValue THEN candidate.nextId[kind] ELSE requestedId;
+   \* An explicitly invalid/duplicate id is rejected by whole validation, not silently renamed.
+-  if kind = "csv" then asset.rows := table; asset.headerLines := NormalizeHeaderCount(payload.headerLines,table); end if;
++  if kind = "csv" then
++    asset.rows := table;
++    call normalizeCsvHeaderLines(FieldOrNoValue(payload,"headerLines"),Len(table),HasField(payload,"headerLines"));
++    asset.headerLines := result;
++  end if;
+   AppendAssetOfKind(candidate,kind,asset);
+   AdvanceOnlyCorrespondingNextIdAboveAssignedId(candidate,kind,asset.id);
++  if kind = "csv" then call RebuildCsvChartsInCandidate(candidate,{asset.id}); candidate := result; end if;
+   \* Asset bytes/data live in Project instance, never BackendSettings.
+   result := [candidate |-> candidate,createdAsset |-> [kind |-> kind,id |-> asset.id,path |-> path]];
+   return;
+@@ -478,10 +482,14 @@ DomainBranchNotAlternativeMutationEntry:
+   elsif event \in {"DATA_OBJECT_REPLACED","IMAGE_OBJECT_REPLACED"} then
+     name := IF event = "DATA_OBJECT_REPLACED" THEN "csv" ELSE "image";
+     image := ResolveCurrentSameKindAssetAndRequestedIdentity(source,name,payload);
+-    if event = "DATA_OBJECT_REPLACED" /\ HasField(payload,"headerLines") then
+-      CandidateCsv(candidate,image.id).headerLines := NormalizeHeaderCount(payload.headerLines,image.rows);
+-      \* Current id/path/bytes/rows unchanged; no caller candidate or read projection.
+-    else ReplaceOnlyNewAssetDataFieldsPreservingIdentityPathAndReferences(candidate,name,image,payload); end if;
++    ReplaceOnlyNewAssetDataFieldsPreservingIdentityPathAndReferences(candidate,name,image,payload);
++    if event = "DATA_OBJECT_REPLACED" then
++      if HasField(payload,"headerLines") then
++        call normalizeCsvHeaderLines(payload.headerLines,Len(CandidateCsv(candidate,image.id).rows),TRUE);
++        CandidateCsv(candidate,image.id).headerLines := result;
++      end if;
++      call RebuildCsvChartsInCandidate(candidate,{image.id}); candidate := result;
++    end if;
+     calculation := [updatedAsset |-> [kind |-> name,id |-> image.id,path |-> CanonicalAssetPath(image)]];
+   elsif event \in {"DATA_OBJECT_DELETED","IMAGE_OBJECT_DELETED"} then
+     name := IF event = "DATA_OBJECT_DELETED" THEN "csv" ELSE "image";
+@@ -759,7 +767,7 @@ end procedure;
+ 
+ procedure ProjectStateMachine_send(event, payload)
+ variables sourceReference = NoValue, resolved = NoValue, calculation = NoValue,
+-          candidate = NoValue, transactionOutcome = NoValue, pre = NoValue, post = NoValue;
++          candidate = NoValue, transactionOutcome = NoValue, pre = NoValue, post = NoValue, i = 1;
+ begin
+ DeclaredMutationEntry:
+   if event \notin PROJECT_COMMANDS then RejectDeclaredCommandUnchanged(event); end if;
+@@ -791,6 +799,12 @@ RevalidateAfterFileWait:
+   calculation := transactionOutcome.calculation;
+   candidate := calculation.candidate;
+ ValidateWholeCandidate:
++  i := 1;
++  while i <= Len(candidate.slots) do
++    call normalizeSlotContent(candidate.slots[i]); candidate.slots[i] := result;
++    i := i + 1;
++  end while;
++  call normalizeProjectSettings(candidate); candidate := result;
+   call validateProjectObjectState(candidate, TRUE);
+ CommitExactlyOnce:
+   \* Final freshness comparison + synchronous validated state replacement is ONE
+diff --git a/pseudocode/backend/project_state.pcal b/pseudocode/backend/project_state.pcal
+index 17c74b8b2ba5db7bb502bb1fed9dc168c691f618..1c7e04f499ea0c882d6e4df113c5d38651f15a54 100644
+--- a/pseudocode/backend/project_state.pcal
++++ b/pseudocode/backend/project_state.pcal
+@@ -211,8 +211,22 @@ ReturnReconciliation:
+   return;
+ end procedure;
+ 
++procedure Slot_create(id,row,col)
++variables slot = NoValue;
++begin
++NewOwnedSlot:
++  slot := NewSlotInstance();
++  slot.id := id; slot.row := row; slot.col := col;
++  slot.rowSpan := 1; slot.colSpan := 1; slot.hidden := FALSE;
++  slot.content := DeepCopy(BackendSettings.defaults.slotSettings.content);
++  slot.content.chart := NoValue; slot.content.imageId := NoValue;
++  slot.caption := NoValue;
++  result := slot;
++  return;
++end procedure;
++
+ procedure normalizeSlotContent(slot)
+-variables local = DeepCopy(slot), content = [],
++variables local = NoValue, content = [],
+           fields = <<"chart","imageId","contentType","imageSettings">>,
+           names = <<>>, i = 1, key = "", caption = NoValue;
+ begin
+@@ -220,6 +234,21 @@ CanonicalSourcePathsAndLegacyStorageOnly:
+   if HasField(slot,"content") then
+     Require(IsRecord(slot.content)); content := DeepCopy(slot.content);
+   end if;
++  if IsSlotInstance(slot) then local := slot;
++  else
++    Require(IsRecord(slot));
++    Require(HasField(slot,"id") /\ HasField(slot,"row") /\ HasField(slot,"col") /\
++            HasField(slot,"rowSpan") /\ HasField(slot,"colSpan") /\ HasField(slot,"hidden"));
++    Require(IsInteger(slot.id) /\ IsInteger(slot.row) /\ slot.row >= 1 /\
++            IsInteger(slot.col) /\ slot.col >= 1 /\ IsInteger(slot.rowSpan) /\ slot.rowSpan >= 1 /\
++            IsInteger(slot.colSpan) /\ slot.colSpan >= 1 /\ IsBoolean(slot.hidden));
++    call Slot_create(slot.id,slot.row,slot.col); local := result;
++    names := PropertyNames(slot); i := 1;
++    while i <= Len(names) do
++      local[names[i]] := DeepCopy(slot[names[i]]); i := i + 1;
++    end while;
++  end if;
++  i := 1;
+   while i <= Len(fields) do
+     key := fields[i];
+     if ~HasField(content,key) then
+@@ -262,11 +291,11 @@ ReturnSameSlotMeaning:
+ end procedure;
+ 
+ procedure slotHasNonDefaultLocalState(slot)
+-variables defaults = DeepCopy(BackendSettings.defaults.slotSettings.content);
++variables defaults = NoValue;
+ begin
+ WholeLocalPayloadComparison:
+-  defaults.chart := NoValue; defaults.imageId := NoValue;
+-  result := slot.content # defaults \/ slot.caption # NoValue;
++  call Slot_create(slot.id,slot.row,slot.col); defaults := result;
++  result := slot.content # defaults.content \/ slot.caption # defaults.caption;
+   return;
+ end procedure;
+ 
+@@ -358,7 +387,8 @@ SingleSharedChartValidator:
+ SlotsGeometryReferencesAndLocalDisplay:
+   i := 1;
+   while i <= Len(state.slots) do
+-    item := state.slots[i]; Require(IsInteger(item.id) /\ item.id \notin slotIds); slotIds := slotIds \cup {item.id};
++    item := state.slots[i]; Require(IsSlotInstance(item));
++    Require(IsInteger(item.id) /\ item.id \notin slotIds); slotIds := slotIds \cup {item.id};
+     Require(ValidSlotGeometryInsideGrid(item,state.layout));
+     Require(~(item.content.chart # NoValue /\ item.content.imageId # NoValue));
+     if item.content.chart # NoValue then
+@@ -414,10 +444,8 @@ EachCellEmptyNotProtectedCsv:
+   while row <= candidate.layout.gridRows do
+     col := 1;
+     while col <= candidate.layout.gridCols do
+-      slot := [id |-> (row - 1) * candidate.layout.gridCols + (col - 1),row |-> row,col |-> col];
+-      slot.rowSpan := 1; slot.colSpan := 1; slot.hidden := FALSE;
+-      slot.content := DeepCopy(BackendSettings.defaults.slotSettings.content);
+-      slot.content.chart := NoValue; slot.content.imageId := NoValue; slot.caption := NoValue;
++      call Slot_create((row - 1) * candidate.layout.gridCols + (col - 1),row,col);
++      slot := result;
+       candidate.slots := Append(candidate.slots,slot);
+       col := col + 1;
+     end while;
+@@ -432,7 +460,8 @@ end procedure;
+ procedure ProjectObject_read(path)
+ begin
+ FormalPathFromCurrentInternalState:
+-  Require(RegisteredProjectObjectPath(path));
++  if path \in DOMAIN PROJECT_OBJECT_PATHS then path := PROJECT_OBJECT_PATHS[path]; end if;
++  Require(ExistingProjectObjectPath(activeProject,path));
+   result := ResolveProjectObjectPath(activeProject,path);
+   return;
+ end procedure;
+diff --git a/pseudocode/frontend/interface_fsm.pcal b/pseudocode/frontend/interface_fsm.pcal
+index 52cb342802e599aa081031e7099efcc24385cd3d..e9b655a2f537a39740efca21c6288c00547401cc 100644
+--- a/pseudocode/frontend/interface_fsm.pcal
++++ b/pseudocode/frontend/interface_fsm.pcal
+@@ -3,15 +3,14 @@ EXTENDS Naturals, Reals, Sequences
+ 
+ \* Active direct Source r38 translation; see the translation review for scope/evidence.
+ \* Only this module owns selectedSlotId/interfaceState. No Backend import/call.
+-\* SourceInterfaceState/SourceSelectedSlotId denote the Source's existing runtime
+-\* initialization, not nondeterministic domain states invented for verification.
++\* InterfaceStateMachine_create initializes the Source-owned runtime fields.
+ \* Explicit Source initial zoom=100, locked=FALSE, lockedWidth=NoValue.
+ \* Qualified method names are mechanically flattened with '_' for call notation.
+ \* Source singleton interfaceFSM_* calls bind to InterfaceStateMachine_* below.
+ \* Local payload.overlay denotes the named overlay intent; it does not add a
+ \* persistent field or prescribe a target-language transport object layout.
+ \* result is a call return channel; publishRuntime is local subscriber plumbing.
+-CONSTANT NoValue, SourceInterfaceState, SourceSelectedSlotId
++CONSTANT NoValue
+ INTERFACE_REGION_ORDER == <<"lifecycle", "workspace", "overlay", "assetSelection", "graphObject">>
+ INTERFACE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "CLEAR_ASSET_SELECTION",
+   "SELECT_GRAPH_OBJECT", "CLEAR_GRAPH_OBJECT", "TOGGLE_OVERLAY", "CLOSE_OVERLAY",
+@@ -19,9 +18,50 @@ INTERFACE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "CLEAR_ASSET_SELECTION",
+   "RESET_DASHBOARD_ZOOM", "LIFECYCLE_START", "LIFECYCLE_COMPLETE", "LIFECYCLE_FAILED"}
+ 
+ (* --algorithm FrontendInterfaceFSM
+-variables selectedSlotId = SourceSelectedSlotId,
+-          interfaceState = SourceInterfaceState,
+-          result = NoValue;
++variables selectedSlotId = NoValue,
++          interfaceState = NoValue,
++          listeners = {}, result = NoValue;
++
++procedure InterfaceStateMachine_create()
++begin
++InitializeOwnedFrontendState:
++  listeners := {}; selectedSlotId := NoValue;
++  interfaceState := [lifecycle |-> "booting",workspace |-> "project",overlay |-> NoValue,
++    assetSelection |-> NoValue,assetPath |-> NoValue,graphObject |-> NoValue,
++    graphObjectIndex |-> NoValue,direction |-> "model-to-ui",revision |-> 0,error |-> NoValue,
++    dashboardZoomIntent |-> 100,dashboardZoomLocked |-> FALSE,dashboardZoomLockedWidth |-> NoValue];
++  return;
++end procedure;
++
++procedure InterfaceStateMachine_subscribe(onStoreChange)
++begin
++RegisterListener:
++  listeners := listeners \cup {onStoreChange};
++  result := BoundProcedure(InterfaceStateMachine_unsubscribe,onStoreChange);
++  return;
++end procedure;
++
++procedure InterfaceStateMachine_unsubscribe(onStoreChange)
++begin
++RemoveSameListener:
++  listeners := listeners \ {onStoreChange};
++  return;
++end procedure;
++
++procedure InterfaceStateMachine_publish()
++variables projection = NoValue, notifications = <<>>, i = 1;
++begin
++PublishCompletedState:
++  interfaceState.revision := interfaceState.revision + 1;
++  call InterfaceStateMachine_readState(); projection := result;
++  notifications := SequenceOfSet(listeners);
++NotifySnapshotWithoutArguments:
++  while i <= Len(notifications) do
++    InvokeCallbackWithoutArguments(notifications[i]); i := i + 1;
++  end while;
++  result := projection;
++  return;
++end procedure;
+ 
+ procedure InterfaceStateMachine_readState()
+ begin
+@@ -33,9 +73,7 @@ end procedure;
+ procedure publishRuntime()
+ begin
+ PublishFrontendRevisionOnly:
+-  interfaceState.revision := interfaceState.revision + 1;
+-  call InterfaceStateMachine_readState();
+-  PublishToFrontendSubscribers(result);
++  call InterfaceStateMachine_publish();
+   return;
+ end procedure;
+ 
+@@ -209,6 +247,6 @@ end procedure;
+ 
+ begin
+ ModuleDefinitions:
+-  skip;
++  call InterfaceStateMachine_create();
+ end algorithm; *)
+ ====
+diff --git a/pseudocode/frontend/mantine_ui.pcal b/pseudocode/frontend/mantine_ui.pcal
+index 5a65d3e47f1ac91ddb66ba5f6a5a0d67a684b2da..a33770727d273f459fecdb2cbd34df18c900948e 100644
+--- a/pseudocode/frontend/mantine_ui.pcal
++++ b/pseudocode/frontend/mantine_ui.pcal
+@@ -9,6 +9,9 @@ EXTENDS Naturals, Reals, Sequences, FiniteSets
+ \* BindComponentEvent(component,event,handler): associates a defined procedure reference
+ \* with that component event, invokes it once with the event's arguments, and propagates
+ \* its result/failure. BindComponentRenderRead(reader) calls reader for each render.
++\* BindComponentPublicMethods(component,methods): binds the named public methods
++\* as reads/actions of that component, forwarding each call's declared arguments.
++\* This is function binding; each public method owns its input/return/failure algorithm.
+ \* These platform bindings retain no Project mutation input or display-state authority.
+ CONSTANT NoValue
+ SettingsOverlayNames == {"layout","label","caption","print"}
+@@ -362,6 +365,28 @@ NoProjectStoreInShell:
+   BindComponentEvent("FastFigureLayoutOverlay","dimensionBlur",LayoutDimensionBlur);
+   BindComponentEvent("FastFigureLayoutOverlay","previewWidthMeasured",RenderLayoutPreview);
+   BindComponentRenderRead(useAppState);
++  BindComponentRenderReadFor("FastFigureProjectDataTree","assetDisplay",readProjectAssetDisplay);
++  BindComponentEvent("FastFigureStatusDebug","debugClicked",handleDebugToggle);
++  BindComponentPublicMethods("FastFigureToolbar",<<"slots.readSelected">>);
++  BindComponentPublicMethods("FastFigureDataActions",<<"assets.importFiles","slots.reset","assets.delete">>);
++  BindComponentPublicMethods("FastFigureImageEditor",<<"images.readEditor","images.setSettings","images.insertEmpty">>);
++  BindComponentPublicMethods("FastFigureProjectDataTree",<<"assets.selectCsv","assets.selectImage","assets.selectDirectory",
++    "assets.planMove","assets.move","assets.createDirectory","assets.delete","assets.emptyTrash",
++    "assets.download","assets.draggableAsset","assets.connectToSlot">>);
++  BindComponentPublicMethods("FastFigureProjectActions",<<"project.readName","project.setName","project.importFile","project.exportFile">>);
++  BindComponentPublicMethods("FastFigureGraphDataEditor",<<"graphs.readData","graphs.selectCsv","graphs.setHeaderLines",
++    "graphs.selectObject","graphs.setObjectValues","graphs.moveObject","graphs.deleteObject","assets.createEmptyCsv">>);
++  BindComponentPublicMethods("FastFigureGraphLayoutEditor",<<"graphs.readLayout">>);
++  BindComponentPublicMethods("FastFigureGraphPaletteActions",<<"graphs.readPalette","graphs.applyPalette">>);
++  BindComponentPublicMethods("FastFigureGraphFileActions",<<"graphs.exportFfsx","graphs.exportPlotlyJson">>);
++  BindComponentPublicMethods("FastFigurePaletteActions",<<"appearance.readPalette","appearance.setPalette","appearance.resetPalette">>);
++  BindComponentPublicMethods("FastFigureLabelOverlay",<<"labels.readState","labels.setEnabled","labels.setSettings",
++    "labels.setPosition","labels.resetPosition","labels.finishPositionInteraction">>);
++  BindComponentPublicMethods("FastFigureCaptionOverlay",<<"captions.readGlobal","captions.readSlot","captions.setGlobalText",
++    "captions.setSlotText","captions.setName","captions.setNameBold","captions.setSettings","captions.setEnabled","captions.insertSlotCaptions">>);
++  BindComponentPublicMethods("FastFigurePrintOverlay",<<"print.readSettings","print.setSettings","print.save","print.capture">>);
++  BindComponentPublicMethods("FastFigureLayoutOverlay",<<"layout.readState","layout.setStyle","layout.setZoom",
++    "layout.setZoomLocked","layout.resetZoom","layout.mergeSlots","layout.splitSlots">>);
+   result := ComposeExistingAppShellHeaderNavbarMainAndOverlayComponents(ComponentOwners);
+   return;
+ end procedure;
+diff --git a/pseudocode/frontend/renderer.pcal b/pseudocode/frontend/renderer.pcal
+index d60edd5e1e3b38174a01dfbe6bc4fccc1b1c7851..f4ab64163c7bba76fd22263b6aaf5fd601bedb83 100644
+--- a/pseudocode/frontend/renderer.pcal
++++ b/pseudocode/frontend/renderer.pcal
+@@ -17,7 +17,7 @@ procedure syncDashboardCaption(captionState)
+ begin
+ SuppliedCaptionOnlyNoBackendQueryOrPersistentWrite:
+   ApplyCaptionHostsFromSuppliedTextNameSettingsEnabled(captionState);
+-  result := None; return;
++  result := NoValue; return;
+ end procedure;
+ 
+ procedure publishUiTelemetry(patch)
+@@ -324,16 +324,17 @@ NoDomOrBufferReadAsProjectSource:
+ end procedure;
+ 
+ procedure startupCoreRuntime(projectProjection,interfaceState,frontendActions)
++variables clickController = NoValue, dropController = NoValue;
+ begin
+ InitialZoomAndControllers:
+   ApplyZoomProjectionFromSuppliedState(projectProjection,interfaceState);
+-  call installSlotClickController(frontendActions);
+-  InstallExistingPublicDropController(frontendActions);
++  call installSlotClickController(frontendActions); clickController := result;
++  dropController := InstallExistingPublicDropController(frontendActions);
+ ExistingSlotsOnly:
+   call renderDashboard(projectProjection,interfaceState);
+   call applySlotStyle(projectProjection,FALSE);
+   AuditSuppliedProjectReferenceRuntimeProjectionContracts(projectProjection,interfaceState);
+-  result := "ready core runtime";
++  result := RendererRuntimeWithOwnedControllers(clickController,dropController);
+   \* Application, not renderer, sends lifecycle-ready. No default CSV/grid recreation.
+   return;
+ end procedure;
+diff --git a/agent_space/reviews/review-20261117-006-plan037-modules.md b/agent_space/reviews/review-20261117-006-plan037-modules.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..b56be08202ba5a9382336dcc00cc88cf287b4d04
+--- /dev/null
++++ b/agent_space/reviews/review-20261117-006-plan037-modules.md
+@@ -0,0 +1,59 @@
++# Plan037 M02–M15 — Source Script → pseudocode 검토
++
++## 1. 범위와 판단
++
++- 계획: `../plans/plan-037.md`. M01 결과는 `review-20261117-005-plan037-system.md`에 보존했다.
++- Source Script 53을 고정하고 M02–M15의 Source Script와 pseudocode를 파일 끝까지 구간별로 읽었다. 함수 이름의 일치만으로 판단하지 않고 직접 호출·물리적 helper 확장·현재 원천·후보 검증·반영·반환·실패를 대조했다.
++- 아래 확정된 절차는 입력과 소유자가 결정되어 있어 번역했다. §3의 두 계약 충돌은 Source Script 판단을 보류한다. 모든 15개 모듈의 비교 완료와 모든 의미의 번역 완료를 구분한다.
++- Backend의 현재 project, Frontend의 session, Application의 연결, renderer의 실제 graph/image 자원, UI-local 표시 상태를 유지한다. 슬롯의 클래스 원형과 인스턴스 생성은 Source Script에 이미 정의되어 있다.
++
++## 2. 전체 모듈 대응과 수정·유지
++
++경로는 저장소 루트 기준이다. 표의 Source Script와 pseudocode는 모두 전체 파일을 대조한 범위다.
++
++| 구간 | Source Script → pseudocode | 전체 절차 대응과 결과 |
++|---|---|---|
++| M02 | `sourcescript/backend/project_state.py` → `pseudocode/backend/project_state.pcal` | Slot·ProjectObject 생성/초기화/정규화/검증/읽기, 등록 조회·VFS·참조 보정을 대조했다. `Slot_create`를 추가하고 초기 grid/확장 grid에서 사용한다. Slot 입력은 같은 인스턴스를 정규화하고 저장 dictionary는 필수 배치를 확인한 뒤 Slot을 구성한다. 현재 content와 caption 우선순위·추가 필드를 유지한다. 전체 검증의 Slot 타입과 등록 이름/직접 경로 읽기를 반영했다. M01의 ProjectObject 생성자는 유지한다. |
++| M03 | `sourcescript/backend/project_efsm.py` → `pseudocode/backend/project_efsm.pcal` | 모든 명령과 candidate helper의 물리적 확장, 파일 대기 후 현재 참조 재검증, 한 번 반영, 실제 전후 결과·삭제/이동 index 대응을 대조했다. 전체 후보 검증 전에 Slot·project 설정 정규화를 추가했다. 에셋 생성의 data/rows/bytes/base64 입력, 원본 bytes 우선, header 존재 여부, 교체 시 데이터와 header의 함께 갱신, 같은 후보의 CSV 참조 chart 재계산을 반영했다. 다른 명령·반영 실패·재시도·index 계산은 유지한다. |
++| M04 | `sourcescript/backend/assets_files.py` → `pseudocode/backend/assets_files.pcal` | VFS·파일 분류·파싱·충돌 계획·가져오기·삭제·패키지 읽기/쓰기·복원을 대조했다. `normalizeCsvHeaderLines`의 누락/명시 값 구분과 정수화·범위 제한, `encodeTableAssetBytes`, 일반 STORE container 검증과 패키지별 manifest 검증을 연결했다. CSV 갱신 후 같은 후보 chart 재계산과 복원 뒤 ProjectObject 생성을 반영했다. 기존 직렬화 계산을 재사용한다. 최종 import plan의 mode 계약은 §3.1에 보류했다. |
++| M05 | `sourcescript/backend/graphs.py` → `pseudocode/backend/graphs.pcal` | 열·오브젝트 정규화/편집/순서·색상·축·trace/figure·가져온 표현/전환·검증을 대조했다. 누락된 열 이름은 빈 문자열, graph commit은 visible 단독 소유와 전달 index 검증으로 수정했다. `traces(chart,project)`는 등록·소유를 검증하되 이번 계산의 수정된 chart를 오래된 project chart로 바꾸지 않는다. 나머지 계산과 candidate 경로는 유지한다. |
++| M06 | `sourcescript/backend/layout_annotations.py` → `pseudocode/backend/layout_annotations.pcal` | grid 크기·병합/분할·slot 정렬·기하·label·caption·이미지 editor·candidate 처리를 대조했다. `formatSlotLabel`의 identifier/displayLabel 반환을 추가했다. 새 grid cell은 Slot 생성자를 사용하고 image editor에 imageId/MIME을 반환한다. label reference는 width/height로 한정한다. 기존 기하 공식과 현재 원천·순서는 유지한다. |
++| M07 | `sourcescript/frontend/interface_fsm.py` → `pseudocode/frontend/interface_fsm.pcal` | 생성·모든 session 전이·읽기·구독/해제·publish·참조 보정을 대조했다. 명시된 초기 필드와 listener 집합 생성, 같은 callback 해제, revision 증가 후 읽기·listener snapshot·인자 없는 통지·같은 projection 반환을 추가했다. 기존 전이와 한 번 보정·오류 전달은 유지한다. |
++| M08 | `sourcescript/application/adapter.py` → `pseudocode/application/adapter.pcal` | ApplicationInterface 읽기/state/subscribe, lifecycle·명령·선택·현재 너비 조회·투영·실패를 대조했다. state property와 실제 FSM subscribe를 연결하고 선택 처리 종료 시 현재 Frontend 상태를 다시 읽는다. 기존 전체 renderer 중앙 조회와 부분 갱신·원래 오류를 유지한다. |
++| M09 | `sourcescript/application/public_api/__init__.py` → `pseudocode/application/public_api/contract.pcal` | 전체 공개 method 등록·인자·lifecycle 경계·query/wrapper/선택/graph-export 경로를 대조했다. 선언된 method의 namespace와 지연 호출 binding을 추가했다. graph export는 명시 slotId를 전달하고 asset download의 path 생략은 호출 시 현재 assetPath로 연결한다. 기존 공개 등록표와 실제 wrapper 알고리즘을 사용한다. |
++| M10 | `sourcescript/application/public_api/assets.py` → `pseudocode/application/public_api/assets.pcal` | 이름·CSV/이미지 선택·생성/연결·삭제·이동·directory/trash·프로젝트/파일 import/export/download의 모든 wrapper를 대조했다. 원자적 directory batch와 순서대로 실행하는 router, 명시 대상, 취소/미반영, 성공 후 공식 조회·앞선 반영 보존이 이미 대응하여 파일을 유지했다. download 생략 인자 처리는 M09에 반영했다. import plan 생산 계약은 §3.1 근거에 포함한다. |
++| M11 | `sourcescript/application/public_api/graphs.py` → `pseudocode/application/public_api/graphs.pcal` | 전체 11개 wrapper의 add/move/delete·editable/header/layout/palette·가져오기/내보내기를 대조했다. tuple 입력, 실제 반영 gate, 현재 공식 조회, 원래 실패 반환이 대응하여 유지했다. 이름이 다른 private query 입력은 Backend의 실제 소비와 대조했다. |
++| M12 | `sourcescript/application/public_api/layout_annotations.py` → `pseudocode/application/public_api/layout_annotations.pcal` | 전체 34개 wrapper의 이미지·layout/zoom·appearance·label·caption·print를 대조했다. 최초 zoom lock의 한 번 측정, session/영속 변경 구분, label reference·caption 표시와 복사 export snapshot, 미반영/예외 의미가 대응하여 유지했다. |
++| M13 | `sourcescript/frontend/renderer.py` → `pseudocode/frontend/renderer.pcal` | 모든 supplied 표시·공통 frame·graph/image 비동기 완료·host/current/generation 확인·정리·click/drop controller·target/current export·startup을 대조했다. caption의 None 표기를 공통 NoValue로 정리하고 startup이 실제 controller handle을 보유한 runtime을 반환하도록 수정했다. 자원·export 계산은 유지했다. palette 후 figure 갱신은 §3.2에 보류했다. |
++| M14 | `sourcescript/frontend/mantine_ui.py` → `pseudocode/frontend/mantine_ui.pcal` | 모든 UI handler·read·입력/blur·파일 drop·접기·목록·미리보기와 FastFigureApp의 component action 연결을 대조했다. tree 표시 읽기와 debug event, toolbar/data/image/tree/project/graph/palette/label/caption/print/layout의 공개 method 연결을 명시했다. 기존 현재 입력 handler·공통 기하·UI-local 상태·파일 목표 고정과 listener 정리를 유지한다. |
++| M15 | `sourcescript/portable_build/portable_build.py` → `pseudocode/portable_build/portable_build.pcal` | 입력 확인→한 번 bundle→정확한 script 태그/개수·source 존재 검사→치환→잔여 외부 script 검사→출력·실패 전체 순서가 대응하여 유지했다. |
++
++### 직접 연결과 표현
++
++- `Slot_create`는 Source Script의 Slot 인스턴스 할당을 나타낸다. `NewSlotInstance`/`IsSlotInstance`는 그 타입의 표기이며 저장 project에 식별 tag나 필드를 추가하지 않는다. 저장 필드 복사 뒤 기존 canonical/legacy 정규화를 수행한다.
++- 새 CSV 재계산 helper는 같은 candidate의 오브젝트를 순회하여 기존 `rebuildEditableGraph`를 호출한다. 별도 project 조회나 두 번째 계산 원천을 만들지 않는다.
++- 생성·구독·공개 method/component binding의 플랫폼 표기는 객체/함수 연결이다. 명령·조회·반환·실패의 알고리즘은 기존 명시 절차에 남는다.
++- UI/renderer 변경은 Backend 읽기나 변경 진입점을 추가하지 않는다. 이미 번역된 공통 frame, 실제 자원 소유와 오래된 비동기 완료의 정리를 보존한다.
++
++## 3. Source Script 미결정 계약
++
++### 3.1 import plan의 mode
++
++- `sourcescript/backend/assets_files.py:315-316`은 최종 plan 원소에 mode/path/replaceId를 요구하고, `sourcescript/backend/assets_files.py:343-346`은 mode를 다시 choice로 사용한다.
++- `sourcescript/backend/project_state.py:317`의 resolveImportPlan 반환과 `sourcescript/application/public_api/assets.py`의 `importProjectFileToSlot`은 최종 path/replaceId를 생산한다. mode의 전달 계약이 연결되지 않는다.
++- 기존 pseudocode의 최종 path/replaceId 재검증을 유지했다. Source Script에서 mode를 최종 계획에 포함할지, 확정 path/replaceId를 사용할지 결정해야 한다. lower layer에서 필드나 choice를 추정하여 추가하지 않았다.
++
++### 3.2 palette 변경 뒤 graph figure 입력
++
++- `sourcescript/backend/project_state.py:333`은 renderer의 ui-palette 요청에 palette copy만 반환한다.
++- `sourcescript/frontend/renderer.py:493-496`은 scalar CSS 적용 뒤 Application이 같은 현재 project의 figure projection도 전달하여 graph paper/ink를 갱신한다고 설명한다. 해당 부분 요청의 figure 전달 계약은 정의되어 있지 않다.
++- 기존 부분 palette 조회/CSS 적용을 유지했다. Source Script에서 부분 반환에 figure를 포함할지 별도 명시 투영을 전달할지 결정해야 한다. Backend 조회나 임시 figure 필드를 임의로 추가하지 않았다.
++
++## 4. 논리·목적·비중복 판단과 확인 수준
++
++- 확정된 변경은 원래 목적의 입력→검증/계산→해당 소유자의 결과에 연결된다. constructor·실제 subscriber·명시 인자·현재 참조·데이터와 header의 동시 교체 누락을 보완한다.
++- 중첩 복사와 candidate 정규화는 반영 전 작업에 한정한다. 성공 결과는 같은 작업의 실제 반영 전후에서 만들고 Frontend는 그 결과로 참조를 한 번 보정한다. 공유 읽기의 원천은 현재 소유자다.
++- 함수 이름/물리적 분리 차이만으로 새 알고리즘이나 전체 파일 재작성을 만들지 않았다. 기존 상세 helper와 query/wrapper·기하·자원 정리를 재사용한다.
++- M01을 포함한 15개 모듈의 전체 비교는 마쳤다. 위 두 Source Script 계약의 해소와 관련 번역은 보류되어 있으므로 전체 의미 닫힘을 선언하지 않는다. Source Script 53의 `stale`, `closure: open`을 유지한다.
++- pseudocode 30의 실제 diff·fingerprint·호출/반환·보호 경로·메타데이터 변경 범위를 정적으로 확인한다. source code 159의 이전 derived_from은 유지하여 후속 번역이 필요함을 드러낸다.
++- PlusCal 변환·TLC·앱·브라우저·테스트·빌드·checker main·commit/push는 수행하지 않았다. 실행 성공이나 UI 회귀 통과를 주장하지 않는다.
+diff --git a/agent_space/patches/20261117-008.md b/agent_space/patches/20261117-008.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..54a6af59dd4331d9a7b0fbcedca2db33334f953a
+--- /dev/null
++++ b/agent_space/patches/20261117-008.md
+@@ -0,0 +1,18 @@
++# Plan037 M02–M15 — Source Script → pseudocode
++
++## 목적과 선택
++
++- 나머지 14개 모듈의 전체 Source Script/pseudocode를 대조하여 확정된 누락·왜곡을 번역했다. M01 결과와 기존 문서는 보존했다.
++- Slot 생성/복원/검증, transaction 전 정규화, CSV bytes·header·참조 chart 처리, graph 계산 입력, FSM 생성/구독, 공개 method 인자·UI 연결, runtime 반환을 보완했다.
++- 기존 상세 helper·현재 원천·candidate·실제 반영 결과·자원 정리를 재사용했다. 함수 이름 차이만을 이유로 전체 모듈을 재작성하지 않았다.
++- import plan의 mode와 부분 palette 조회의 figure 입력은 Source Script 내부 계약이 충돌한다. 하위 계층에서 의미를 추가하지 않고 후속 검토에 보류했다.
++
++## 실제 기록과 확인 범위
++
++- native Git 기준: `13fb335b2b8350aa05395ebe731d2d8cd417a438` — M01 작업 직후 tracked 상태. HEAD `f9dcca6ecabd2a5284a7bd7d882ea03bc29cd461`과 normal index는 유지했다.
++- patch는 이번 pseudocode 변경·메타데이터와 신규 review/설명 문서의 native diff다. M01·007 기록과 Plan037 문서는 중복 포함하지 않았다.
++- Source Script 53: `sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252`.
++- pseudocode 30: `sha256:e13679a938eebdc592d6dbda032e8091a0536bf480d733dfdde5c14fa1a66dce`.
++- 전체 결과·유지 모듈·두 보류 계약: `../reviews/review-20261117-006-plan037-modules.md`.
++- 실제 전체 diff·호출 관계·fingerprint·reverse patch·공백·변경 범위를 정적으로 확인했다. Source Script·source code·verification·dist·설정·기존 문서는 유지했다.
++- PlusCal 변환·TLC·앱·브라우저·테스트·빌드·checker main·commit/push는 실행하지 않았다. 전체 의미 닫힘이나 실행 성공을 주장하지 않는다.

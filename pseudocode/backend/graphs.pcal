@@ -70,8 +70,11 @@ NormalizeHeaderForSameTable:
   headerLines := NormalizeHeaderCount(headerLines,table);
 ColumnLoop:
   while i < width do
-    name := NoValue;
-    if headerLines >= 1 then name := CellOrMissing(table, headerLines - 1, i); end if;
+    name := "";
+    if headerLines >= 1 then
+      name := CellOrMissing(table,headerLines - 1,i);
+      if name = Missing then name := ""; end if;
+    end if;
     columns := Append(columns, [id |-> "C" \o IntegerText(i + 1), index |-> i,
        name |-> name, label |-> ColumnDisplayLabel("C" \o IntegerText(i + 1), name)]);
     i := i + 1;
@@ -247,12 +250,15 @@ end procedure;
 \* Private expansion passes the existing command-attempt reference explicitly.
 \* It adds no public parameter, mutation entry, authority or retry token.
 procedure GraphCommitInAttempt(source, chartId, objects, index)
-variables candidate = DeepCopy(source), chart = NoValue;
+variables candidate = DeepCopy(source), chart = NoValue, owner = NoValue;
 begin
 CommandInternalArrayOnly:
   \* objects are computed inside EFSM; never a public projection/Frontend array.
   chart := ResolveCandidateChart(candidate, chartId);
   Require(chart # NoValue /\ chart.editor.editable);
+  call resolveOwningSlot(chart.id,candidate); owner := result;
+  Require(owner # NoValue /\ ~owner.hidden);
+  if index # NoValue then Require(IsValidIndex(index,objects)); end if;
   call NormalizeCommandObjects(objects); chart.editor.objects := result;
 ValidateZeroOrMoreObjects:
   call validateChartModel(chart, candidate.assets.csvFiles);
@@ -404,7 +410,7 @@ begin
 SameProjectChartAndOwner:
   Require(UniqueOwningSlot(chart.id,project));
   Require(~ConversionRepresentation(chart));
-  chart := ResolveChart(project,chart.id);
+  Require(ResolveChart(project,chart.id) # NoValue);
 ObjectOrder:
   while i < Len(chart.editor.objects) do
     object := chart.editor.objects[i + 1];

@@ -154,9 +154,13 @@ variables asset = NoValue, path = "", requestedId = NoValue, table = NoValue, by
 begin
 OnlyNewFieldsNotApplicationModel:
   requestedId := FieldOrNoValue(payload,"id");
+  if HasField(payload,"bytes") then bytes := CopyBytes(payload.bytes);
+  elsif HasField(payload,"bytesBase64") then bytes := DecodeCopiedBase64Bytes(payload.bytesBase64); end if;
   if kind = "csv" then
-    call dataTable(payload.data); table := result;
-  else bytes := CopyImageInputBytes(payload.bytes); end if;
+    if HasField(payload,"data") then call dataTable(payload.data); table := result;
+    elsif HasField(payload,"rows") then table := DeepCopy(payload.rows);
+    else call parseProjectDataAsset(payload.name,bytes); table := result; end if;
+  end if;
 CurrentLocationAndCollisionFreeName:
   path := FieldOrNoValue(payload,"path");
   if path = NoValue \/ path = "" then
@@ -167,19 +171,19 @@ CurrentLocationAndCollisionFreeName:
   call projectVfsUniquePath(path,candidate,{}); path := result;
 CandidateAssetIdAndMetadata:
   if kind = "csv" then
-    if HasField(payload,"bytesBase64") /\ payload.bytesBase64 # "" /\ payload.bytesBase64 # NoValue then
-      bytes := DecodeCopiedBase64Bytes(payload.bytesBase64);
-    else
-      \* Source SYNTHETIC_DATA_BYTES_RULE: filename-aware UTF-8 only without original bytes.
-      call SerializeNewDataTable(table,path); bytes := result;
-    end if;
+    if bytes = NoValue then call encodeTableAssetBytes(table,path); bytes := result; end if;
   end if;
   call BuildAssetMetadata(kind,path,payload.mime,bytes); asset := result;
   asset.id := IF requestedId = NoValue THEN candidate.nextId[kind] ELSE requestedId;
   \* An explicitly invalid/duplicate id is rejected by whole validation, not silently renamed.
-  if kind = "csv" then asset.rows := table; asset.headerLines := NormalizeHeaderCount(payload.headerLines,table); end if;
+  if kind = "csv" then
+    asset.rows := table;
+    call normalizeCsvHeaderLines(FieldOrNoValue(payload,"headerLines"),Len(table),HasField(payload,"headerLines"));
+    asset.headerLines := result;
+  end if;
   AppendAssetOfKind(candidate,kind,asset);
   AdvanceOnlyCorrespondingNextIdAboveAssignedId(candidate,kind,asset.id);
+  if kind = "csv" then call RebuildCsvChartsInCandidate(candidate,{asset.id}); candidate := result; end if;
   \* Asset bytes/data live in Project instance, never BackendSettings.
   result := [candidate |-> candidate,createdAsset |-> [kind |-> kind,id |-> asset.id,path |-> path]];
   return;
@@ -478,10 +482,14 @@ DomainBranchNotAlternativeMutationEntry:
   elsif event \in {"DATA_OBJECT_REPLACED","IMAGE_OBJECT_REPLACED"} then
     name := IF event = "DATA_OBJECT_REPLACED" THEN "csv" ELSE "image";
     image := ResolveCurrentSameKindAssetAndRequestedIdentity(source,name,payload);
-    if event = "DATA_OBJECT_REPLACED" /\ HasField(payload,"headerLines") then
-      CandidateCsv(candidate,image.id).headerLines := NormalizeHeaderCount(payload.headerLines,image.rows);
-      \* Current id/path/bytes/rows unchanged; no caller candidate or read projection.
-    else ReplaceOnlyNewAssetDataFieldsPreservingIdentityPathAndReferences(candidate,name,image,payload); end if;
+    ReplaceOnlyNewAssetDataFieldsPreservingIdentityPathAndReferences(candidate,name,image,payload);
+    if event = "DATA_OBJECT_REPLACED" then
+      if HasField(payload,"headerLines") then
+        call normalizeCsvHeaderLines(payload.headerLines,Len(CandidateCsv(candidate,image.id).rows),TRUE);
+        CandidateCsv(candidate,image.id).headerLines := result;
+      end if;
+      call RebuildCsvChartsInCandidate(candidate,{image.id}); candidate := result;
+    end if;
     calculation := [updatedAsset |-> [kind |-> name,id |-> image.id,path |-> CanonicalAssetPath(image)]];
   elsif event \in {"DATA_OBJECT_DELETED","IMAGE_OBJECT_DELETED"} then
     name := IF event = "DATA_OBJECT_DELETED" THEN "csv" ELSE "image";
@@ -759,7 +767,7 @@ end procedure;
 
 procedure ProjectStateMachine_send(event, payload)
 variables sourceReference = NoValue, resolved = NoValue, calculation = NoValue,
-          candidate = NoValue, transactionOutcome = NoValue, pre = NoValue, post = NoValue;
+          candidate = NoValue, transactionOutcome = NoValue, pre = NoValue, post = NoValue, i = 1;
 begin
 DeclaredMutationEntry:
   if event \notin PROJECT_COMMANDS then RejectDeclaredCommandUnchanged(event); end if;
@@ -791,6 +799,12 @@ RevalidateAfterFileWait:
   calculation := transactionOutcome.calculation;
   candidate := calculation.candidate;
 ValidateWholeCandidate:
+  i := 1;
+  while i <= Len(candidate.slots) do
+    call normalizeSlotContent(candidate.slots[i]); candidate.slots[i] := result;
+    i := i + 1;
+  end while;
+  call normalizeProjectSettings(candidate); candidate := result;
   call validateProjectObjectState(candidate, TRUE);
 CommitExactlyOnce:
   \* Final freshness comparison + synchronous validated state replacement is ONE

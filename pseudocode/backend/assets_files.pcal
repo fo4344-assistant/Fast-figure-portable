@@ -217,6 +217,25 @@ OwnedBytesAndNoSlotSettings:
   return;
 end procedure;
 
+procedure RebuildCsvChartsInCandidate(candidate,csvIds)
+variables i = 1, j = 1, chart = NoValue, affected = FALSE;
+begin
+SameCandidateChartValues:
+  while i <= Len(candidate.charts) do
+    chart := candidate.charts[i]; affected := FALSE; j := 1;
+    if ~ConversionRepresentation(chart) then
+      while j <= Len(chart.editor.objects) do
+        if chart.editor.objects[j].csvId \in csvIds then affected := TRUE; end if;
+        j := j + 1;
+      end while;
+    end if;
+    if affected then call rebuildEditableGraph(chart,candidate); candidate.charts[i] := result; end if;
+    i := i + 1;
+  end while;
+  result := candidate;
+  return;
+end procedure;
+
 procedure BuildAssetImportInAttempt(source, files, directory, planImport, targetSlotId)
 variables candidate = NoValue, target = NoValue, parent = NoValue, canonicalPath = "",
           i = 1, kind = "", parsed = NoValue, plan = NoValue, asset = NoValue, reserved = {},
@@ -272,6 +291,7 @@ FileOrderWithinOneCandidate:
       AppendAssetOfKind(candidate,AssetSequenceKind(kind),asset);
       candidate.nextId[AssetSequenceKind(kind)] := asset.id + 1;
     end if;
+    if kind = "data" then call RebuildCsvChartsInCandidate(candidate,{asset.id}); candidate := result; end if;
     reserved := reserved \cup {plan.path};
     if target # NoValue then
       if kind = "data" then
@@ -494,7 +514,26 @@ StrictTypeAndShape:
   return;
 end procedure;
 
-procedure ReadStorePackage(file, packageKind)
+procedure normalizeCsvHeaderLines(value,rowCount,present)
+variables number = 1, parsed = NoValue;
+begin
+PresentVersusMissingHeader:
+  if present then
+    parsed := TryScalarNumber(value);
+    number := IF parsed.valid /\ IsFinite(parsed.value) THEN parsed.value ELSE 0;
+  end if;
+  result := Maximum(0,Minimum(rowCount,TruncateTowardZero(number)));
+  return;
+end procedure;
+
+procedure encodeTableAssetBytes(rows,name)
+begin
+EncodeSourceTable:
+  call SerializeNewDataTable(rows,name);
+  return;
+end procedure;
+
+procedure readStorePackage(file)
 variables entries = <<>>, i = 1, entry = NoValue;
 begin
 ContainerValidation:
@@ -508,7 +547,16 @@ EachEntry:
     Require(Crc32(entry.bytes) = entry.crc32);
     i := i + 1;
   end while;
-SchemaAndVersion:
+ContainerEntriesReturn:
+  result := entries;
+  return;
+end procedure;
+
+procedure ReadStorePackage(file,packageKind)
+variables entries = <<>>;
+begin
+PackageSpecificVersion:
+  call readStorePackage(file); entries := result;
   Require(ManifestKind(entries) = packageKind /\ ManifestVersion(entries) = PACKAGE_FORMAT_VERSION);
   result := entries;
   return;
@@ -940,7 +988,8 @@ RestoreOwnedBytes:
       asset.bytesBase64 := Base64Encode(bytes);
       if kinds[k] = "csv" then
         call parseProjectDataAsset(asset.name,bytes); asset.rows := result;
-        asset.headerLines := NormalizeHeaderCount(IF HasField(asset,"headerLines") THEN asset.headerLines ELSE 1,asset.rows);
+        call normalizeCsvHeaderLines(FieldOrNoValue(asset,"headerLines"),Len(asset.rows),HasField(asset,"headerLines"));
+        asset.headerLines := result;
       end if;
       RemoveField(asset,"dataRef");
       normalized := Append(normalized,asset);
@@ -1072,8 +1121,8 @@ CsvBytesAndRealReferences:
     bytes := CopyBytes(EntryBytes(entries,asset.dataRef));
     asset.bytesBase64 := Base64Encode(bytes);
     call parseProjectDataAsset(asset.name,bytes); asset.rows := result;
-    \* Source CSV_HEADER_RULE applies to stored FFSX metadata as well as Project imports.
-    asset.headerLines := NormalizeHeaderCount(IF HasField(asset,"headerLines") THEN asset.headerLines ELSE 1,asset.rows);
+    call normalizeCsvHeaderLines(FieldOrNoValue(asset,"headerLines"),Len(asset.rows),HasField(asset,"headerLines"));
+    asset.headerLines := result;
     RemoveField(asset,"dataRef");
     payload.csvFiles[i] := asset;
     i := i + 1;
@@ -1160,7 +1209,8 @@ CsvRowsAndHeaderOnly:
       if kinds[k] = "csv" then
         call dataTable(raw.rows); rows := result;
         asset.rows := rows;
-        asset.headerLines := NormalizeHeaderCount(IF HasField(raw,"headerLines") THEN raw.headerLines ELSE 1,rows);
+        call normalizeCsvHeaderLines(FieldOrNoValue(raw,"headerLines"),Len(rows),HasField(raw,"headerLines"));
+        asset.headerLines := result;
       end if;
       normalized := Append(normalized,asset);
       i := i + 1;
@@ -1290,7 +1340,7 @@ RecomputeIdsAndWholeValidate:
                        image |-> MaximumIdOrZero(candidate.assets.images) + 1,
                        chart |-> MaximumIdOrZero(candidate.charts) + 1];
   call validateProjectObjectState(candidate,TRUE);
-  result := candidate;
+  call ProjectObject_create(candidate);
   return;
 end procedure;
 

@@ -74,6 +74,16 @@ FormatDone:
   return;
 end procedure;
 
+procedure formatSlotLabel(ordinal,settings)
+variables identifier = "", display = "";
+begin
+SourceLabelResult:
+  call formatLabel(ordinal,settings.format); identifier := result; display := identifier;
+  if settings.parentheses then display := "(" \o identifier \o ")"; end if;
+  result := [identifier |-> identifier,displayLabel |-> display];
+  return;
+end procedure;
+
 procedure orderedSlotLabels(project)
 variables settings = project.annotations.labels.settings,
           anchors = <<>>, labels = <<>>, i = 1, identifier = "", display = "";
@@ -305,9 +315,7 @@ KeepCoordinateAndCreateOnlyNewCells:
     col := 1;
     while col <= cols do
       if row > oldRows \/ col > oldCols then
-        newSlot := [id |-> freshId,row |-> row,col |-> col,rowSpan |-> 1,colSpan |-> 1,hidden |-> FALSE,
-                    content |-> DeepCopy(BackendSettings.defaults.slotSettings.content),caption |-> NoValue];
-        newSlot.content.chart := NoValue; newSlot.content.imageId := NoValue;
+        call Slot_create(freshId,row,col); newSlot := result;
         candidate.slots := Append(candidate.slots,newSlot);
         freshId := freshId + 1;
         \* No chart/CSV/image asset or reference is synthesized.
@@ -339,7 +347,7 @@ NormalizeOnlyReadCopy:
   slot := result;
 ImageReadOnlyOutput:
   \* Backend creates no revocable URL/handle; pure URL is derived from copied bytes.
-  result := ImmutableCopy([slotId |-> slot.id, name |-> image.name,
+  result := ImmutableCopy([slotId |-> slot.id,imageId |-> image.id,name |-> image.name,mime |-> image.mime,
     bytes |-> CopiedBytes(image), displayUrl |-> PureDisplayUrl(CopiedBytes(image), image.mime),
     settings |-> slot.content.imageSettings]);
   return;
@@ -369,7 +377,7 @@ SameFormatterForSample:
   if labels.settings.parentheses then sample := "(" \o sample \o ")"; end if;
 LabelReadOutput:
   result := ImmutableCopy([enabled |-> labels.enabled,
-       settings |-> labels.settings, reference |-> reference, sampleText |-> sample]);
+       settings |-> labels.settings, reference |-> [width |-> reference.width,height |-> reference.height], sampleText |-> sample]);
   \* No selection write or default slot creation; slot caption is not the sample.
   return;
 end procedure;

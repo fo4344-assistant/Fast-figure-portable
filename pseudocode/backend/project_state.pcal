@@ -211,8 +211,22 @@ ReturnReconciliation:
   return;
 end procedure;
 
+procedure Slot_create(id,row,col)
+variables slot = NoValue;
+begin
+NewOwnedSlot:
+  slot := NewSlotInstance();
+  slot.id := id; slot.row := row; slot.col := col;
+  slot.rowSpan := 1; slot.colSpan := 1; slot.hidden := FALSE;
+  slot.content := DeepCopy(BackendSettings.defaults.slotSettings.content);
+  slot.content.chart := NoValue; slot.content.imageId := NoValue;
+  slot.caption := NoValue;
+  result := slot;
+  return;
+end procedure;
+
 procedure normalizeSlotContent(slot)
-variables local = DeepCopy(slot), content = [],
+variables local = NoValue, content = [],
           fields = <<"chart","imageId","contentType","imageSettings">>,
           names = <<>>, i = 1, key = "", caption = NoValue;
 begin
@@ -220,6 +234,21 @@ CanonicalSourcePathsAndLegacyStorageOnly:
   if HasField(slot,"content") then
     Require(IsRecord(slot.content)); content := DeepCopy(slot.content);
   end if;
+  if IsSlotInstance(slot) then local := slot;
+  else
+    Require(IsRecord(slot));
+    Require(HasField(slot,"id") /\ HasField(slot,"row") /\ HasField(slot,"col") /\
+            HasField(slot,"rowSpan") /\ HasField(slot,"colSpan") /\ HasField(slot,"hidden"));
+    Require(IsInteger(slot.id) /\ IsInteger(slot.row) /\ slot.row >= 1 /\
+            IsInteger(slot.col) /\ slot.col >= 1 /\ IsInteger(slot.rowSpan) /\ slot.rowSpan >= 1 /\
+            IsInteger(slot.colSpan) /\ slot.colSpan >= 1 /\ IsBoolean(slot.hidden));
+    call Slot_create(slot.id,slot.row,slot.col); local := result;
+    names := PropertyNames(slot); i := 1;
+    while i <= Len(names) do
+      local[names[i]] := DeepCopy(slot[names[i]]); i := i + 1;
+    end while;
+  end if;
+  i := 1;
   while i <= Len(fields) do
     key := fields[i];
     if ~HasField(content,key) then
@@ -262,11 +291,11 @@ ReturnSameSlotMeaning:
 end procedure;
 
 procedure slotHasNonDefaultLocalState(slot)
-variables defaults = DeepCopy(BackendSettings.defaults.slotSettings.content);
+variables defaults = NoValue;
 begin
 WholeLocalPayloadComparison:
-  defaults.chart := NoValue; defaults.imageId := NoValue;
-  result := slot.content # defaults \/ slot.caption # NoValue;
+  call Slot_create(slot.id,slot.row,slot.col); defaults := result;
+  result := slot.content # defaults.content \/ slot.caption # defaults.caption;
   return;
 end procedure;
 
@@ -358,7 +387,8 @@ SingleSharedChartValidator:
 SlotsGeometryReferencesAndLocalDisplay:
   i := 1;
   while i <= Len(state.slots) do
-    item := state.slots[i]; Require(IsInteger(item.id) /\ item.id \notin slotIds); slotIds := slotIds \cup {item.id};
+    item := state.slots[i]; Require(IsSlotInstance(item));
+    Require(IsInteger(item.id) /\ item.id \notin slotIds); slotIds := slotIds \cup {item.id};
     Require(ValidSlotGeometryInsideGrid(item,state.layout));
     Require(~(item.content.chart # NoValue /\ item.content.imageId # NoValue));
     if item.content.chart # NoValue then
@@ -414,10 +444,8 @@ EachCellEmptyNotProtectedCsv:
   while row <= candidate.layout.gridRows do
     col := 1;
     while col <= candidate.layout.gridCols do
-      slot := [id |-> (row - 1) * candidate.layout.gridCols + (col - 1),row |-> row,col |-> col];
-      slot.rowSpan := 1; slot.colSpan := 1; slot.hidden := FALSE;
-      slot.content := DeepCopy(BackendSettings.defaults.slotSettings.content);
-      slot.content.chart := NoValue; slot.content.imageId := NoValue; slot.caption := NoValue;
+      call Slot_create((row - 1) * candidate.layout.gridCols + (col - 1),row,col);
+      slot := result;
       candidate.slots := Append(candidate.slots,slot);
       col := col + 1;
     end while;
@@ -432,7 +460,8 @@ end procedure;
 procedure ProjectObject_read(path)
 begin
 FormalPathFromCurrentInternalState:
-  Require(RegisteredProjectObjectPath(path));
+  if path \in DOMAIN PROJECT_OBJECT_PATHS then path := PROJECT_OBJECT_PATHS[path]; end if;
+  Require(ExistingProjectObjectPath(activeProject,path));
   result := ResolveProjectObjectPath(activeProject,path);
   return;
 end procedure;
@@ -470,6 +499,25 @@ ConfiguredPaletteKeys:
   state.appearance.uiPalette := palette;
   RemoveField(state.layout,"layoutMapWidth");
   result := state;
+  return;
+end procedure;
+
+\* Source Script ProjectObject.__init__: construct without adopting the instance.
+\* The physical value is its owned state; the caller adopts the sole Backend binding.
+procedure ProjectObject_create(source)
+variables candidate = DeepCopy(source), i = 1;
+begin
+NormalizeNewProjectInstance:
+  while i <= Len(candidate.slots) do
+    call normalizeSlotContent(candidate.slots[i]);
+    candidate.slots[i] := result;
+    i := i + 1;
+  end while;
+  call normalizeProjectSettings(candidate); candidate := result;
+  call validateProjectObjectState(candidate,TRUE);
+ReturnValidatedNewInstance:
+  result := candidate;
+  \* Failure before return leaves activeProject unchanged.
   return;
 end procedure;
 

@@ -115,6 +115,18 @@ REMOVED_OR_REPLACED == {"print.readDefaults","captions.readState","captions.setS
 (* --algorithm PublicApiBoundary
 variables result = NoValue;
 
+procedure createPublicApi()
+variables api = [], methods = SequenceOfSet(DOMAIN PUBLIC_API_METHODS), i = 1;
+begin
+CreateNamespacesAndDeferredMethods:
+  while i <= Len(methods) do
+    InstallNamespaceMethod(api,methods[i],BoundProcedure(InvokePublicMethod,methods[i]));
+    i := i + 1;
+  end while;
+  result := api;
+  return;
+end procedure;
+
 procedure InvokePublicMethod(method,args)
 variables lifecycle = "";
 begin
@@ -159,8 +171,7 @@ RouteWithoutReenteringLifecycle:
     call dispatchInterfaceEvent("SELECT_GRAPH_OBJECT",[selectedSlotId |-> state.selectedSlotId,index |-> args.index,selectAsset |-> TRUE]);
     \* Only explicit selection changes current CSV. Graph commit index hints do not.
   elsif route[1] = "graph-export" then
-    call InterfaceStateMachine_readState(); slotId := result.selectedSlotId;
-    call exportSelectedGraph(slotId,route[2]);
+    call exportSelectedGraph(args.slotId,route[2]);
   end if;
   \* Helpers import to helpers, not InvokePublicMethod, so router children share task.
   return;
@@ -171,6 +182,7 @@ end procedure;
 \* is inserted here. Only Source-declared defaults are applied. The wrapper
 \* keeps its own committed gate, return value, throw and fresh-query behavior.
 procedure InvokePublicWrapper(method,args)
+variables path = NoValue;
 begin
 BindExactSourceInputs:
   if method = "project.setName" then
@@ -220,7 +232,9 @@ BindExactSourceInputs:
   elsif method \in {"assets.selectCsv","graphs.selectCsv"} then
     call selectProjectCsv(args.path);
   elsif method = "assets.download" then
-    call downloadProjectAsset(args.path);
+    if HasField(args,"path") then path := args.path;
+    else call InterfaceStateMachine_readState(); path := result.assetPath; end if;
+    call downloadProjectAsset(path);
   elsif method = "graphs.setHeaderLines" then
     call graphEditorSetHeaderLines(args.csvId,args.headerLines);
   elsif method = "graphs.setEditable" then

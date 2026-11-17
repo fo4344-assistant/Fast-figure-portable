@@ -9,6 +9,9 @@ EXTENDS Naturals, Reals, Sequences, FiniteSets
 \* BindComponentEvent(component,event,handler): associates a defined procedure reference
 \* with that component event, invokes it once with the event's arguments, and propagates
 \* its result/failure. BindComponentRenderRead(reader) calls reader for each render.
+\* BindComponentPublicMethods(component,methods): binds the named public methods
+\* as reads/actions of that component, forwarding each call's declared arguments.
+\* This is function binding; each public method owns its input/return/failure algorithm.
 \* These platform bindings retain no Project mutation input or display-state authority.
 CONSTANT NoValue
 SettingsOverlayNames == {"layout","label","caption","print"}
@@ -362,6 +365,28 @@ NoProjectStoreInShell:
   BindComponentEvent("FastFigureLayoutOverlay","dimensionBlur",LayoutDimensionBlur);
   BindComponentEvent("FastFigureLayoutOverlay","previewWidthMeasured",RenderLayoutPreview);
   BindComponentRenderRead(useAppState);
+  BindComponentRenderReadFor("FastFigureProjectDataTree","assetDisplay",readProjectAssetDisplay);
+  BindComponentEvent("FastFigureStatusDebug","debugClicked",handleDebugToggle);
+  BindComponentPublicMethods("FastFigureToolbar",<<"slots.readSelected">>);
+  BindComponentPublicMethods("FastFigureDataActions",<<"assets.importFiles","slots.reset","assets.delete">>);
+  BindComponentPublicMethods("FastFigureImageEditor",<<"images.readEditor","images.setSettings","images.insertEmpty">>);
+  BindComponentPublicMethods("FastFigureProjectDataTree",<<"assets.selectCsv","assets.selectImage","assets.selectDirectory",
+    "assets.planMove","assets.move","assets.createDirectory","assets.delete","assets.emptyTrash",
+    "assets.download","assets.draggableAsset","assets.connectToSlot">>);
+  BindComponentPublicMethods("FastFigureProjectActions",<<"project.readName","project.setName","project.importFile","project.exportFile">>);
+  BindComponentPublicMethods("FastFigureGraphDataEditor",<<"graphs.readData","graphs.selectCsv","graphs.setHeaderLines",
+    "graphs.selectObject","graphs.setObjectValues","graphs.moveObject","graphs.deleteObject","assets.createEmptyCsv">>);
+  BindComponentPublicMethods("FastFigureGraphLayoutEditor",<<"graphs.readLayout">>);
+  BindComponentPublicMethods("FastFigureGraphPaletteActions",<<"graphs.readPalette","graphs.applyPalette">>);
+  BindComponentPublicMethods("FastFigureGraphFileActions",<<"graphs.exportFfsx","graphs.exportPlotlyJson">>);
+  BindComponentPublicMethods("FastFigurePaletteActions",<<"appearance.readPalette","appearance.setPalette","appearance.resetPalette">>);
+  BindComponentPublicMethods("FastFigureLabelOverlay",<<"labels.readState","labels.setEnabled","labels.setSettings",
+    "labels.setPosition","labels.resetPosition","labels.finishPositionInteraction">>);
+  BindComponentPublicMethods("FastFigureCaptionOverlay",<<"captions.readGlobal","captions.readSlot","captions.setGlobalText",
+    "captions.setSlotText","captions.setName","captions.setNameBold","captions.setSettings","captions.setEnabled","captions.insertSlotCaptions">>);
+  BindComponentPublicMethods("FastFigurePrintOverlay",<<"print.readSettings","print.setSettings","print.save","print.capture">>);
+  BindComponentPublicMethods("FastFigureLayoutOverlay",<<"layout.readState","layout.setStyle","layout.setZoom",
+    "layout.setZoomLocked","layout.resetZoom","layout.mergeSlots","layout.splitSlots">>);
   result := ComposeExistingAppShellHeaderNavbarMainAndOverlayComponents(ComponentOwners);
   return;
 end procedure;

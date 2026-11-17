@@ -17,7 +17,7 @@ procedure syncDashboardCaption(captionState)
 begin
 SuppliedCaptionOnlyNoBackendQueryOrPersistentWrite:
   ApplyCaptionHostsFromSuppliedTextNameSettingsEnabled(captionState);
-  result := None; return;
+  result := NoValue; return;
 end procedure;
 
 procedure publishUiTelemetry(patch)
@@ -324,16 +324,17 @@ NoDomOrBufferReadAsProjectSource:
 end procedure;
 
 procedure startupCoreRuntime(projectProjection,interfaceState,frontendActions)
+variables clickController = NoValue, dropController = NoValue;
 begin
 InitialZoomAndControllers:
   ApplyZoomProjectionFromSuppliedState(projectProjection,interfaceState);
-  call installSlotClickController(frontendActions);
-  InstallExistingPublicDropController(frontendActions);
+  call installSlotClickController(frontendActions); clickController := result;
+  dropController := InstallExistingPublicDropController(frontendActions);
 ExistingSlotsOnly:
   call renderDashboard(projectProjection,interfaceState);
   call applySlotStyle(projectProjection,FALSE);
   AuditSuppliedProjectReferenceRuntimeProjectionContracts(projectProjection,interfaceState);
-  result := "ready core runtime";
+  result := RendererRuntimeWithOwnedControllers(clickController,dropController);
   \* Application, not renderer, sends lifecycle-ready. No default CSV/grid recreation.
   return;
 end procedure;

@@ -15,16 +15,20 @@ variables result = NoValue;
 
 procedure initializeFastFigure()
 variables candidate = NoValue, projectProjection = NoValue,
-          interfaceState = NoValue, frontendActions = NoValue;
+          interfaceState = NoValue, frontendActions = NoValue,
+          coreRuntime = NoValue, uiMount = NoValue;
 begin
+RequireCoreAndHosts:
+  assert RequiredRendererHostsAndStylesExist() /\ PlotlyRuntimeReady() /\ ReactMantineRuntimeReady();
 CreateValidatedInitialProject:
   call createProjectState();
   candidate := result;
-  call validateProjectObjectState(candidate, TRUE);
-  \* The sole initial Backend binding is initialized to this valid candidate.
-  call ProjectObject_initialize(candidate);
-RequireCoreAndHosts:
-  assert CoreRuntimeAndRequiredRendererHostsExist();
+  call ProjectObject_create(candidate);
+  \* Adopt only the successfully constructed instance; this is the imported sole binding.
+  activeProject := result;
+ExposeExistingBoundary:
+  ExposeFastFigureApi(FastFigureApi);
+  \* Public actions exist before their renderer/startup consumers.
 PrepareBoundaryInputs:
   \* Application obtains the initial read input BEFORE its Frontend consumer.
   \* This is the supplied input of renderer.startupCoreRuntime, not a system mirror.
@@ -37,17 +41,18 @@ PrepareAndRenderCore:
   \* Directly reuse renderer.startupCoreRuntime's Source-defined order:
   \* zoom -> controllers -> existing visible slots -> supplied slot style -> audit.
   call startupCoreRuntime(projectProjection, interfaceState, frontendActions);
+  coreRuntime := result;
 ReadyThroughApplication:
   call dispatchInterfaceEvent("LIFECYCLE_COMPLETE", []);
-ExposeExistingBoundary:
-  ExposeFastFigureApi(FastFigureApi);
-  \* Renderer receives only public actions/read input, not Backend helpers.
 MountExistingUi:
-  MountMantineProviderAndFastFigureShellAtExistingReactRoot();
+  uiMount := MountMantineProviderAndFastFigureShellAtExistingReactRoot();
 AuditStartup:
   \* Startup does not create default CSV/fake objects or reconstruct grid data.
   AuditProjectReferenceRuntimeInvariantsThroughTheirOwners();
-  result := "initialized_runtime";
+  \* A startup-call-local runtime value containing the supplied Application actions,
+  \* returned core/controller runtime and the one UI mount; concrete platform handles
+  \* are represented symbolically, with no new project or session authority.
+  result := InitializedRuntimeConfiguration(frontendActions,coreRuntime,uiMount);
   return;
 end procedure;
 

@@ -3,15 +3,14 @@ EXTENDS Naturals, Reals, Sequences
 
 \* Active direct Source r38 translation; see the translation review for scope/evidence.
 \* Only this module owns selectedSlotId/interfaceState. No Backend import/call.
-\* SourceInterfaceState/SourceSelectedSlotId denote the Source's existing runtime
-\* initialization, not nondeterministic domain states invented for verification.
+\* InterfaceStateMachine_create initializes the Source-owned runtime fields.
 \* Explicit Source initial zoom=100, locked=FALSE, lockedWidth=NoValue.
 \* Qualified method names are mechanically flattened with '_' for call notation.
 \* Source singleton interfaceFSM_* calls bind to InterfaceStateMachine_* below.
 \* Local payload.overlay denotes the named overlay intent; it does not add a
 \* persistent field or prescribe a target-language transport object layout.
 \* result is a call return channel; publishRuntime is local subscriber plumbing.
-CONSTANT NoValue, SourceInterfaceState, SourceSelectedSlotId
+CONSTANT NoValue
 INTERFACE_REGION_ORDER == <<"lifecycle", "workspace", "overlay", "assetSelection", "graphObject">>
 INTERFACE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "CLEAR_ASSET_SELECTION",
   "SELECT_GRAPH_OBJECT", "CLEAR_GRAPH_OBJECT", "TOGGLE_OVERLAY", "CLOSE_OVERLAY",
@@ -19,9 +18,50 @@ INTERFACE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "CLEAR_ASSET_SELECTION",
   "RESET_DASHBOARD_ZOOM", "LIFECYCLE_START", "LIFECYCLE_COMPLETE", "LIFECYCLE_FAILED"}
 
 (* --algorithm FrontendInterfaceFSM
-variables selectedSlotId = SourceSelectedSlotId,
-          interfaceState = SourceInterfaceState,
-          result = NoValue;
+variables selectedSlotId = NoValue,
+          interfaceState = NoValue,
+          listeners = {}, result = NoValue;
+
+procedure InterfaceStateMachine_create()
+begin
+InitializeOwnedFrontendState:
+  listeners := {}; selectedSlotId := NoValue;
+  interfaceState := [lifecycle |-> "booting",workspace |-> "project",overlay |-> NoValue,
+    assetSelection |-> NoValue,assetPath |-> NoValue,graphObject |-> NoValue,
+    graphObjectIndex |-> NoValue,direction |-> "model-to-ui",revision |-> 0,error |-> NoValue,
+    dashboardZoomIntent |-> 100,dashboardZoomLocked |-> FALSE,dashboardZoomLockedWidth |-> NoValue];
+  return;
+end procedure;
+
+procedure InterfaceStateMachine_subscribe(onStoreChange)
+begin
+RegisterListener:
+  listeners := listeners \cup {onStoreChange};
+  result := BoundProcedure(InterfaceStateMachine_unsubscribe,onStoreChange);
+  return;
+end procedure;
+
+procedure InterfaceStateMachine_unsubscribe(onStoreChange)
+begin
+RemoveSameListener:
+  listeners := listeners \ {onStoreChange};
+  return;
+end procedure;
+
+procedure InterfaceStateMachine_publish()
+variables projection = NoValue, notifications = <<>>, i = 1;
+begin
+PublishCompletedState:
+  interfaceState.revision := interfaceState.revision + 1;
+  call InterfaceStateMachine_readState(); projection := result;
+  notifications := SequenceOfSet(listeners);
+NotifySnapshotWithoutArguments:
+  while i <= Len(notifications) do
+    InvokeCallbackWithoutArguments(notifications[i]); i := i + 1;
+  end while;
+  result := projection;
+  return;
+end procedure;
 
 procedure InterfaceStateMachine_readState()
 begin
@@ -33,9 +73,7 @@ end procedure;
 procedure publishRuntime()
 begin
 PublishFrontendRevisionOnly:
-  interfaceState.revision := interfaceState.revision + 1;
-  call InterfaceStateMachine_readState();
-  PublishToFrontendSubscribers(result);
+  call InterfaceStateMachine_publish();
   return;
 end procedure;
 
@@ -209,6 +247,6 @@ end procedure;
 
 begin
 ModuleDefinitions:
-  skip;
+  call InterfaceStateMachine_create();
 end algorithm; *)
 ====

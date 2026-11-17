@@ -22,10 +22,17 @@ CurrentFrontendOwnerRead:
   return;
 end procedure;
 
+procedure ApplicationInterface_state()
+begin
+CurrentStateProperty:
+  call ApplicationInterface_readState();
+  return;
+end procedure;
+
 procedure ApplicationInterface_subscribe(onStoreChange)
 begin
 FrontendPublicationSubscription:
-  result := SubscribeToInterfaceFsmRevisionTransitions(onStoreChange);
+  call InterfaceStateMachine_subscribe(onStoreChange);
   return;
 end procedure;
 
@@ -104,6 +111,7 @@ OptionalPersistentIntent:
     end if;
   end if;
 ReadFinalSelectionProjection:
+  call InterfaceStateMachine_readState(); interfaceState := result;
   call dispatchProjectQuery("renderer", [frontendState |-> interfaceState]);
   rendererProjection := result;
 ReturnSlotOrchestration:

@@ -1,0 +1,163 @@
+diff --git a/development-versions.json b/development-versions.json
+index eb25fd59fffd9b55df702584c1e65fdea0022c82..85c59ebce79dd91a524b6d74827d95fcac040a3c 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -64,14 +64,14 @@
+       "translation_review": "agent_space/reviews/review-20261117-004-plan036-source-code.md"
+     },
+     "pseudocode": {
+-      "revision": 28,
++      "revision": 29,
+       "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:9a21f200b224af97d67278b47e172d921ca3a2a15d90c30a074277f4290109b8",
++      "fingerprint": "sha256:470c3d345205c9508226ae0332b079301fa660b4b61163fdef8355ba01d96c4b",
+       "derived_from": {
+         "source-script": "sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252"
+       },
+-      "translation_review": "agent_space/reviews/review-20261117-003-plan036-pseudocode.md"
++      "translation_review": "agent_space/reviews/review-20261117-005-plan037-system.md"
+     }
+   }
+ }
+diff --git a/pseudocode/backend/project_state.pcal b/pseudocode/backend/project_state.pcal
+index a4854877189470f00e3f95746a63eb062ddb59fc..17c74b8b2ba5db7bb502bb1fed9dc168c691f618 100644
+--- a/pseudocode/backend/project_state.pcal
++++ b/pseudocode/backend/project_state.pcal
+@@ -473,6 +473,25 @@ ConfiguredPaletteKeys:
+   return;
+ end procedure;
+ 
++\* Source Script ProjectObject.__init__: construct without adopting the instance.
++\* The physical value is its owned state; the caller adopts the sole Backend binding.
++procedure ProjectObject_create(source)
++variables candidate = DeepCopy(source), i = 1;
++begin
++NormalizeNewProjectInstance:
++  while i <= Len(candidate.slots) do
++    call normalizeSlotContent(candidate.slots[i]);
++    candidate.slots[i] := result;
++    i := i + 1;
++  end while;
++  call normalizeProjectSettings(candidate); candidate := result;
++  call validateProjectObjectState(candidate,TRUE);
++ReturnValidatedNewInstance:
++  result := candidate;
++  \* Failure before return leaves activeProject unchanged.
++  return;
++end procedure;
++
+ procedure ProjectObject_initialize(source)
+ variables candidate = DeepCopy(source), previous = NoValue, i = 1;
+ begin
+diff --git a/pseudocode/system.pcal b/pseudocode/system.pcal
+index 25f7d5945f679428eb53f36012db2f880a3923ba..8be27d751c24e61306f92812c27bc08775604e00 100644
+--- a/pseudocode/system.pcal
++++ b/pseudocode/system.pcal
+@@ -15,16 +15,20 @@ variables result = NoValue;
+ 
+ procedure initializeFastFigure()
+ variables candidate = NoValue, projectProjection = NoValue,
+-          interfaceState = NoValue, frontendActions = NoValue;
++          interfaceState = NoValue, frontendActions = NoValue,
++          coreRuntime = NoValue, uiMount = NoValue;
+ begin
++RequireCoreAndHosts:
++  assert RequiredRendererHostsAndStylesExist() /\ PlotlyRuntimeReady() /\ ReactMantineRuntimeReady();
+ CreateValidatedInitialProject:
+   call createProjectState();
+   candidate := result;
+-  call validateProjectObjectState(candidate, TRUE);
+-  \* The sole initial Backend binding is initialized to this valid candidate.
+-  call ProjectObject_initialize(candidate);
+-RequireCoreAndHosts:
+-  assert CoreRuntimeAndRequiredRendererHostsExist();
++  call ProjectObject_create(candidate);
++  \* Adopt only the successfully constructed instance; this is the imported sole binding.
++  activeProject := result;
++ExposeExistingBoundary:
++  ExposeFastFigureApi(FastFigureApi);
++  \* Public actions exist before their renderer/startup consumers.
+ PrepareBoundaryInputs:
+   \* Application obtains the initial read input BEFORE its Frontend consumer.
+   \* This is the supplied input of renderer.startupCoreRuntime, not a system mirror.
+@@ -37,17 +41,18 @@ PrepareAndRenderCore:
+   \* Directly reuse renderer.startupCoreRuntime's Source-defined order:
+   \* zoom -> controllers -> existing visible slots -> supplied slot style -> audit.
+   call startupCoreRuntime(projectProjection, interfaceState, frontendActions);
++  coreRuntime := result;
+ ReadyThroughApplication:
+   call dispatchInterfaceEvent("LIFECYCLE_COMPLETE", []);
+-ExposeExistingBoundary:
+-  ExposeFastFigureApi(FastFigureApi);
+-  \* Renderer receives only public actions/read input, not Backend helpers.
+ MountExistingUi:
+-  MountMantineProviderAndFastFigureShellAtExistingReactRoot();
++  uiMount := MountMantineProviderAndFastFigureShellAtExistingReactRoot();
+ AuditStartup:
+   \* Startup does not create default CSV/fake objects or reconstruct grid data.
+   AuditProjectReferenceRuntimeInvariantsThroughTheirOwners();
+-  result := "initialized_runtime";
++  \* A startup-call-local runtime value containing the supplied Application actions,
++  \* returned core/controller runtime and the one UI mount; concrete platform handles
++  \* are represented symbolically, with no new project or session authority.
++  result := InitializedRuntimeConfiguration(frontendActions,coreRuntime,uiMount);
+   return;
+ end procedure;
+ 
+diff --git a/agent_space/reviews/review-20261117-005-plan037-system.md b/agent_space/reviews/review-20261117-005-plan037-system.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..6efbc5c50b79496c84f99d9ccfe6d69b3c3424f5
+--- /dev/null
++++ b/agent_space/reviews/review-20261117-005-plan037-system.md
+@@ -0,0 +1,28 @@
++# Plan037 M01 — system 번역 검토
++
++## 1. 범위와 Source Script 판단
++
++- 계획: `../plans/plan-037.md`. 기준 commit: `f9dcca6ecabd2a5284a7bd7d882ea03bc29cd461`.
++- `sourcescript/system.py`와 `pseudocode/system.pcal` 전체 및 ProjectObject 생성/initialize, renderer startup의 직접 호출 계약을 대조했다.
++- 이 구간은 `initializeFastFigure` 한 절차와 초기 생성 호출의 번역이다. Source Script의 입력·순서·반환·현재 원천·변경 소유가 명시되어 있다. 준비 확인→검증된 프로젝트 채택→공개 API→초기 투영과 renderer→ready→UI mount→runtime 반환의 목적·책임이 연결된다.
++- 프로젝트는 Backend의 한 activeProject, ready는 Application 경유 Frontend FSM, graph/image 자원은 실제 renderer, UI mount는 기존 React root가 소유한다. 새로운 상태 원천을 추가하지 않는다.
++- 위 판단은 M01의 번역 대상 절차에 대한 판단이다. Source Script 전체의 `closure: open`과 나머지 14개 구간은 유지한다.
++
++## 2. 실제 차이와 수정
++
++| 항목 | Source Script 근거 | 기존 pseudocode 차이와 수정 |
++|---|---|---|
++| 준비 확인 | `sourcescript/system.py:71-72` | 프로젝트 채택 뒤 검사하던 순서를 맨 앞으로 옮겼다. host·스타일, Plotly, React/Mantine 준비를 각각 확인한다. 준비 실패 전에 project를 교체하지 않는다. |
++| 생성과 채택 | `sourcescript/system.py:73-74`, `sourcescript/backend/project_state.py:489-576` | 기존 `ProjectObject_initialize` 호출은 현재 객체 교체 경로였다. `ProjectObject_create(source)`를 생성자에 대응시켜 중첩 복사→슬롯 정규화→project 설정 정규화→전체 검증→새 값 반환을 번역하고, 성공한 값만 초기 activeProject로 채택한다. |
++| API 노출 | `sourcescript/system.py:75-76` | ready 뒤 노출하던 API를 초기 투영·renderer 시작 전에 공개한다. renderer에는 기존 public actions와 supplied 조회 결과를 전달한다. |
++| 초기 투영·core | `sourcescript/system.py:77-82` | 기존 `dispatchProjectQuery`→현재 Frontend read→`startupCoreRuntime` 연결과 zoom/controller/기존 슬롯/style 순서를 유지한다. core 반환을 호출 local에 보관한다. |
++| ready·mount | `sourcescript/system.py:83-85` | Application lifecycle event 뒤 기존 React root 한 곳에 mount하는 순서를 유지하고 mount 반환을 호출 local로 받는다. |
++| 반환 | `sourcescript/system.py:86-87` | 고정 문자열을 반환하던 부분을 Application actions·core/controller·UI mount의 runtime 구성 값으로 연결한다. 플랫폼 handle의 구체 표현은 기호값이며 project 저장 필드는 추가하지 않는다. |
++
++## 3. 보존과 확인 수준
++
++- `ProjectObject_create`는 채택 전 복사본만 정규화·검증한다. 생성 실패는 기존 activeProject를 보존한다. 기존 `ProjectObject_initialize`와 다른 변경 경로는 유지했다.
++- 초기화 중 후속 호출 실패를 원래 오류로 전달하며 이후 단계로 진행하지 않는다. 이미 성공한 초기화 단계의 새로운 rollback 규칙을 추가하지 않았다.
++- 실제 두 pseudocode 파일 diff, 호출·반환 순서와 fingerprint를 정적으로 확인했다. Backend 모듈 전체 비교는 M02에 남는다.
++- pseudocode 29는 Source Script 53에서 파생한다. Source Script·source code·verification·dist·설정·기존 문서는 유지했다. source code의 이전 derived_from은 아직 번역되지 않은 차이를 드러낸다.
++- PlusCal 변환·TLC·앱·브라우저·테스트·빌드·checker main·commit/push는 수행하지 않았다. 정적 번역 결과를 실행 성공이나 전체 번역 완료로 표시하지 않는다.
+diff --git a/agent_space/patches/20261117-007.md b/agent_space/patches/20261117-007.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..17d3d2781584913c2dd938a587924c7280828408
+--- /dev/null
++++ b/agent_space/patches/20261117-007.md
+@@ -0,0 +1,16 @@
++# Plan037 M01 — 초기화 pseudocode 번역
++
++## 목적과 선택
++
++- Source Script의 준비 확인·초기 ProjectObject 생성/채택·API 공개 순서를 pseudocode에 반영했다.
++- 생성자 대응 `ProjectObject_create`는 검증한 새 값만 반환한다. 기존 객체 교체용 initialize를 초기 생성처럼 호출하던 연결을 분리했다.
++- core와 UI mount의 반환을 초기화 runtime 구성에 전달했다. 프로젝트 저장 필드·추가 상태 원천·새 rollback 의미는 추가하지 않았다.
++
++## 기록과 한계
++
++- 기준: `f9dcca6ecabd2a5284a7bd7d882ea03bc29cd461`의 native Git diff.
++- 실제 변경: pseudocode 2개, 버전 메타데이터, 이번 review와 설명. 문서만 작성한 Plan037은 code patch에 넣지 않았다.
++- Source Script 53 fingerprint는 유지했다. pseudocode 29: `sha256:470c3d345205c9508226ae0332b079301fa660b4b61163fdef8355ba01d96c4b`.
++- 상세 근거: `../reviews/review-20261117-005-plan037-system.md`.
++- 전체 실제 patch·순서·호출·hash·보존 범위의 정적 대조를 기록한다. M02–M15와 전체 Source Script closure는 남아 있다.
++- PlusCal 변환·TLC·앱·브라우저·테스트·빌드·checker main·commit/push는 실행하지 않았다.
