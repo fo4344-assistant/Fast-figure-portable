@@ -27,9 +27,8 @@ export function renderDashboard(projection = dispatchProjectQuery("renderer"), s
 export function startupCoreRuntime() {
   const projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState(),
     actions = { ...dashboardFrontendActions(), slots: { select: setSelectedSlot, swap: swapSlots } },
-    presentation = startupCoreRuntimeProjection(projection, state, actions);
-  appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
-  return presentation;
+    runtime = startupCoreRuntimeProjection(projection, state, actions);
+  return runtime;
 }
 
 export function applyCommittedDashboardProjection(event, result, state, projection) {

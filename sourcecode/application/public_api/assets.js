@@ -82,8 +82,7 @@ export function connectProjectAssetToSlot(path, kind, slotId) {
 
 export function downloadProjectAsset(path) {
   return appFSM.run("exporting", "assets.download", async () => {
-    const target = path === undefined ? interfaceFSM.readState().assetPath : path,
-      payload = appFSM.query("export", { operation: "assets.download", path: target });
+    const payload = appFSM.query("export", { operation: "assets.download", path });
     if (payload === null) return false;
     await downloadExportPayload(payload);
     return true;

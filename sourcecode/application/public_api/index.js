@@ -39,8 +39,8 @@ export function setProjectName(value, trim = false) {
   return appFSM.query("project-api", { operation: "project.readName" });
 }
 
-export function publishPublicApi() {
-window.FastFigureApi = Object.freeze({
+export function createPublicApi() {
+return Object.freeze({
   project: Object.freeze({
     readName: () => appFSM.query("project-api", { operation: "project.readName" }),
     setName: setProjectName,
@@ -88,7 +88,7 @@ window.FastFigureApi = Object.freeze({
     selectDirectory: selectDirectoryFromTree,
     selectCsv: selectProjectCsv,
     selectImage: selectImageFromTree,
-    download: downloadProjectAsset,
+    download: path => downloadProjectAsset(path === undefined ? interfaceFSM.readState().assetPath : path),
   }),
   graphs: Object.freeze({
     readData: readGraphDataApi,
@@ -155,4 +155,10 @@ window.FastFigureApi = Object.freeze({
     splitSlots,
   }),
 });
+}
+
+export function publishPublicApi() {
+  const api = createPublicApi();
+  window.FastFigureApi = api;
+  return api;
 }

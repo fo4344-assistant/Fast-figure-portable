@@ -1,5 +1,5 @@
 // Source: sourcescript/backend/layout_annotations.py (same logical owner); pseudocode/backend/layout_annotations.pcal.
-import { activeProject, getProjectImage, normalizeSlotContent, projectClone, projectObjects, slotHasNonDefaultLocalState, validateProjectObjectState } from './project_state.js';
+import { Slot, activeProject, getProjectImage, normalizeSlotContent, projectClone, projectObjects, slotHasNonDefaultLocalState, validateProjectObjectState } from './project_state.js';
 import { BackendSettings, DEFAULT_IMAGE_SETTINGS } from './settings.js';
 
 export function resolveLayoutCommandSlots(candidate, slotIds) {
@@ -81,16 +81,7 @@ export function gridSlotGeometry(layout, geometry, slot = null) {
 }
 
 export function newGridSlot(id, row, col) {
-  return normalizeSlotContent({
-    id,
-    row,
-    col,
-    rowSpan: 1,
-    colSpan: 1,
-    hidden: false,
-    content: { ...projectClone(BackendSettings.defaults.slotSettings.content), chart: null, imageId: null },
-    caption: null,
-  });
+  return new Slot(id, row, col);
 }
 
 export function buildGridResizeCandidate(rows, cols) {
@@ -122,7 +113,7 @@ export function buildGridResizeInProject(source, rows, cols) {
 }
 
 export function slotImage(slot, collection = activeProject.images) {
-  return getProjectImage(slot?.imageId, collection);
+  return getProjectImage(slot?.content.imageId, collection);
 }
 
 export function normalizeImageSettings(slot) {
@@ -131,8 +122,7 @@ export function normalizeImageSettings(slot) {
     ? slot.content : {};
   const settings = content.imageSettings && typeof content.imageSettings === "object"
     ? content.imageSettings
-    : slot.imageSettings && typeof slot.imageSettings === "object"
-      ? slot.imageSettings : DEFAULT_IMAGE_SETTINGS;
+    : DEFAULT_IMAGE_SETTINGS;
   return readImageSettings(settings);
 }
 

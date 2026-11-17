@@ -297,7 +297,7 @@ export function scheduleSlotDragClickSuppressionRelease() {
 
 export function installSlotClickControllerProjection(frontendActions) {
   const dashboard = $("dashboard");
-  if (dashboard.dataset.clickController) return;
+  if (dashboard.dataset.clickController) return dashboard;
   dashboard.dataset.clickController = "true";
   const hostFor = event => {
     const host = event.target.closest?.(".slot");
@@ -351,6 +351,32 @@ export function installSlotClickControllerProjection(frontendActions) {
   dashboard.addEventListener("dragend", () => {
     clearSlotDragState(); scheduleSlotDragClickSuppressionRelease();
   });
+  return dashboard;
+}
+
+let dashboardFileDropController;
+
+function installDashboardFileDropControllerProjection() {
+  if (dashboardFileDropController) return dashboardFileDropController;
+  const host = $("dashboard");
+  let receive = null;
+  const handle = {
+    host,
+    connect(handler) {
+      receive = handler;
+      return () => { if (receive === handler) receive = null; };
+    },
+  };
+  host.addEventListener("drop", event => {
+    if (dataTransferHasFiles(event.dataTransfer)) receive?.(event);
+  }, true);
+  dashboardFileDropController = handle;
+  return handle;
+}
+
+export function bindDashboardFileDropReceiver(handler) {
+  if (!dashboardFileDropController) throw Error("대시보드 파일 drop controller가 준비되지 않았습니다.");
+  return dashboardFileDropController.connect(handler);
 }
 
 export function syncDashboardCaptionProjection(view, scale = 1) {
@@ -464,7 +490,7 @@ export function applyDashboardProjectionInvalidation(event, mutationResult, inte
     sameHosts = hosts.length === slots.length && slots.every(slot => {
       const host = hosts.find(host => host.dataset.slot === String(slot.id));
       if (!host) return false;
-      if (slot.contentType !== "image" && slot.figure) {
+      if (slot.content.contentType !== "image" && slot.figure) {
         const record = rendererRuntime.graphInstances.get(slot.id);
         return record?.host === host && record.chartId === slot.content.chart && hasLiveGraphSurface(record);
       }
@@ -524,7 +550,7 @@ export function applyDashboardProjectionInvalidation(event, mutationResult, inte
 // One-call resolved relation, never a retained editing pointer or Backend lookup.
 export function resolveSelectedChart(projectProjection, interfaceState) {
   const slot = projectProjection.visibleSlots.find(slot => slot.id === interfaceState.selectedSlotId);
-  return slot && slot.contentType !== "image" ? slot.chart || null : null;
+  return slot && slot.content.contentType !== "image" ? slot.chart || null : null;
 }
 
 // Selection/workspace presentation owns existing surfaces, not domain selection.
@@ -540,7 +566,7 @@ export function updateGraphViewProjection(projectProjection, interfaceState, fro
     const host = hosts.get(String(slot.id)), record = rendererRuntime.graphInstances.get(slot.id),
       surface = rendererRuntime.imageSurfaces.get(slot.id);
     if (!host?.isConnected) return true;
-    if (slot.contentType !== "image" && slot.figure)
+    if (slot.content.contentType !== "image" && slot.figure)
       return !record || record.host !== host || !hasLiveGraphSurface(record) || record.chartId !== slot.content.chart;
     if (record) return true;
     return slot.imageView ? !surface || surface.host !== host || !hasLiveImageSurface(surface) || surface.imageInput.src !== slot.imageView.src : !!surface;
@@ -563,11 +589,12 @@ export function updateGraphViewProjection(projectProjection, interfaceState, fro
 // Lifecycle ready and Backend acquisition belong to the Application boundary.
 export function startupCoreRuntimeProjection(projectProjection, interfaceState, frontendActions) {
   applyDashboardZoomProjection(projectProjection, interfaceState);
-  installSlotClickControllerProjection(frontendActions);
-  const presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
+  const clickController = installSlotClickControllerProjection(frontendActions),
+    dropController = installDashboardFileDropControllerProjection(),
+    presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
   applySlotStyleProjection(projectProjection);
   auditSuppliedRendererContracts(projectProjection, interfaceState);
-  return presentation;
+  return { clickController, dropController, presentation };
 }
 
 // Low-level realization of startup's supplied project/reference/runtime audit.
@@ -605,7 +632,7 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
   };
   for (const record of rendererRuntime.graphInstances.values()) {
     const slot = slots.find(slot => slot.id === record.slotId);
-    if (!slot || slot.contentType === "image" || !slot.figure || slot.content.chart !== record.chartId ||
+    if (!slot || slot.content.contentType === "image" || !slot.figure || slot.content.chart !== record.chartId ||
         !hasLiveGraphSurface(record)) discard(record);
   }
   // Image elements are surface-owned decode handles, never shared asset handles.
@@ -615,7 +642,7 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
   $("dashboardCaption")?.style.setProperty("--slot-border-color",
     projectProjection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
   for (const slot of slots) {
-    const graph = slot.contentType !== "image" && slot.figure,
+    const graph = slot.content.contentType !== "image" && slot.figure,
       image = !graph && slot.imageView,
       selected = slot.id === interfaceState.selectedSlotId;
     let record = rendererRuntime.graphInstances.get(slot.id);

@@ -1,7 +1,7 @@
 // Source: sourcescript/frontend/mantine_ui.py (same logical owner); pseudocode/frontend/mantine_ui.pcal.
 import { appFSM } from '../application/adapter.js';
 import { PROJECT_TRASH_DIRECTORY, projectParentPath, projectPathInDirectory, projectPathName } from '../backend/assets_files.js';
-import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
+import { bindDashboardFileDropReceiver, clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
 
 // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
 // the mounted UI owns only its collision resolver and drag finalization.
@@ -334,12 +334,12 @@ collision
   }
 
   function exportSlotFfsxFromMantine() {
-    return window.FastFigureApi.graphs.exportFfsx()
+    return window.FastFigureApi.graphs.exportFfsx(appFSM.readState().selectedSlotId)
       .catch((error) => reportTaskError("SLOT_EXPORT", error));
   }
 
   function exportPlotlyJsonFromMantine() {
-    return window.FastFigureApi.graphs.exportPlotlyJson()
+    return window.FastFigureApi.graphs.exportPlotlyJson(appFSM.readState().selectedSlotId)
       .catch((error) => reportTaskError("PLOTLY_EXPORT", error));
   }
 
@@ -3063,8 +3063,7 @@ const handleDrop = async (event) => {
     status("불러오기 실패: " + String(error?.message ?? error));
   }
 };
-dashboard.addEventListener("drop", handleDrop, true);
-return () => dashboard.removeEventListener("drop", handleDrop, true);
+return bindDashboardFileDropReceiver(handleDrop);
     }, [choosePlan]);
     return modal;
   }
@@ -3279,4 +3278,5 @@ React.createElement(FastFigureShell),
   }
 
   window.fastFigureUiRoot.render(React.createElement(FastFigureApp));
+  return window.fastFigureUiRoot;
 }

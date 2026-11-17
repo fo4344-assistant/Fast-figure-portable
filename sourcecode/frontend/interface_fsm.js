@@ -14,6 +14,8 @@ export class InterfaceStateMachine {
       direction: "model-to-ui", revision: 0, error: null });
     this.listeners = new Set();
     this.writeLocks = new Set();
+    Object.assign(interfaceRuntime, { selectedSlotId: null, dashboardZoomIntent: 100,
+      dashboardZoomLocked: false, dashboardZoomLockedWidth: null });
   }
   definition(region, state = this.state[region]) {
     const definition = this.definitions[region]?.[state];
@@ -33,7 +35,8 @@ export class InterfaceStateMachine {
     document.body.dataset.appOverlay = state.overlay;
     document.body.dataset.appAssetSelection = state.assetSelection;
     document.body.dataset.appGraphObject = state.graphObject;
-    this.listeners.forEach(listener => listener(state, event));
+    const listeners = [...this.listeners];
+    for (const listener of listeners) listener();
     debugLog("fsm:transition", { event, ...state });
     return state;
   }
@@ -131,7 +134,7 @@ export class InterfaceStateMachine {
   }
   subscribe(listener) {
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return () => { this.listeners.delete(listener); };
   }
 }
 

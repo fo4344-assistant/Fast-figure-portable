@@ -1,0 +1,1350 @@
+diff --git a/development-versions.json b/development-versions.json
+index 1277661791df7c6e767d2082623e7cfbd0b0205c..24fdf8aac82ffe87cc36c088da2a030e6290d0e9 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 159,
++      "revision": 160,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,14 +54,14 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:b2b283e1d77be57131b9384a9cc9122359f2bfb3c293892707460d1d0bfed6ef",
++      "fingerprint": "sha256:54239f1e01f62bf4843579704e0767ee4dd2781a4099699f8f87e10430bae0d0",
+       "derived_from": {
+         "source-script": "sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252",
+-        "pseudocode": "sha256:9a21f200b224af97d67278b47e172d921ca3a2a15d90c30a074277f4290109b8",
++        "pseudocode": "sha256:e13679a938eebdc592d6dbda032e8091a0536bf480d733dfdde5c14fa1a66dce",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+       "validation_review": null,
+-      "translation_review": "agent_space/reviews/review-20261117-004-plan036-source-code.md"
++      "translation_review": "agent_space/reviews/review-20261117-007-plan038-source-code.md"
+     },
+     "pseudocode": {
+       "revision": 30,
+diff --git a/sourcecode/application/adapter.js b/sourcecode/application/adapter.js
+index 6372cb03f552bff7251429fd3dbca1ff726c5fe9..56b3a98bd42f6706ccddb74867007cd814451bca 100644
+--- a/sourcecode/application/adapter.js
++++ b/sourcecode/application/adapter.js
+@@ -27,9 +27,8 @@ export function renderDashboard(projection = dispatchProjectQuery("renderer"), s
+ export function startupCoreRuntime() {
+   const projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState(),
+     actions = { ...dashboardFrontendActions(), slots: { select: setSelectedSlot, swap: swapSlots } },
+-    presentation = startupCoreRuntimeProjection(projection, state, actions);
+-  appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+-  return presentation;
++    runtime = startupCoreRuntimeProjection(projection, state, actions);
++  return runtime;
+ }
+ 
+ export function applyCommittedDashboardProjection(event, result, state, projection) {
+diff --git a/sourcecode/application/public_api/assets.js b/sourcecode/application/public_api/assets.js
+index 8460c7501f464ae9a93e03e31335bed5fbc08734..0047800eb38358c488f1c988345c72ff326b9f21 100644
+--- a/sourcecode/application/public_api/assets.js
++++ b/sourcecode/application/public_api/assets.js
+@@ -82,8 +82,7 @@ export function connectProjectAssetToSlot(path, kind, slotId) {
+ 
+ export function downloadProjectAsset(path) {
+   return appFSM.run("exporting", "assets.download", async () => {
+-    const target = path === undefined ? interfaceFSM.readState().assetPath : path,
+-      payload = appFSM.query("export", { operation: "assets.download", path: target });
++    const payload = appFSM.query("export", { operation: "assets.download", path });
+     if (payload === null) return false;
+     await downloadExportPayload(payload);
+     return true;
+diff --git a/sourcecode/application/public_api/graphs.js b/sourcecode/application/public_api/graphs.js
+index fbe81bc472336d5d37c9745ce32c74fa731f17c7..b5d7dc4a91c271aacb9c3fba5b7d6e5d9bc2607d 100644
+--- a/sourcecode/application/public_api/graphs.js
++++ b/sourcecode/application/public_api/graphs.js
+@@ -177,9 +177,9 @@ export function applyGraphPaletteApi(colors) {
+   return graphEditorApplyPalette(context.chart?.id ?? null, colors);
+ }
+ 
+-export function downloadSlotFfsx() {
++export function downloadSlotFfsx(slotId) {
+   return appFSM.run("exporting", "graphs.exportFfsx", () =>
+-    exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportFfsx"));
++    exportSelectedGraph(slotId, "graphs.exportFfsx"));
+ }
+ 
+ export async function exportSelectedGraph(slotId, operation) {
+@@ -190,7 +190,7 @@ export async function exportSelectedGraph(slotId, operation) {
+   await downloadExportPayload(payload);
+ }
+ 
+-export function downloadPlotlyJson() {
++export function downloadPlotlyJson(slotId) {
+   return appFSM.run("exporting", "graphs.exportPlotlyJson", () =>
+-    exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportPlotlyJson"));
++    exportSelectedGraph(slotId, "graphs.exportPlotlyJson"));
+ }
+diff --git a/sourcecode/application/public_api/index.js b/sourcecode/application/public_api/index.js
+index 99c9105be97f15f73e7feea91c4947f1474bd8c7..7bf415976abfcbf25bd8560df6bba5a072753a99 100644
+--- a/sourcecode/application/public_api/index.js
++++ b/sourcecode/application/public_api/index.js
+@@ -39,8 +39,8 @@ export function setProjectName(value, trim = false) {
+   return appFSM.query("project-api", { operation: "project.readName" });
+ }
+ 
+-export function publishPublicApi() {
+-window.FastFigureApi = Object.freeze({
++export function createPublicApi() {
++return Object.freeze({
+   project: Object.freeze({
+     readName: () => appFSM.query("project-api", { operation: "project.readName" }),
+     setName: setProjectName,
+@@ -88,7 +88,7 @@ window.FastFigureApi = Object.freeze({
+     selectDirectory: selectDirectoryFromTree,
+     selectCsv: selectProjectCsv,
+     selectImage: selectImageFromTree,
+-    download: downloadProjectAsset,
++    download: path => downloadProjectAsset(path === undefined ? interfaceFSM.readState().assetPath : path),
+   }),
+   graphs: Object.freeze({
+     readData: readGraphDataApi,
+@@ -156,3 +156,9 @@ window.FastFigureApi = Object.freeze({
+   }),
+ });
+ }
++
++export function publishPublicApi() {
++  const api = createPublicApi();
++  window.FastFigureApi = api;
++  return api;
++}
+diff --git a/sourcecode/backend/assets_files.js b/sourcecode/backend/assets_files.js
+index da58f89a6ae4821f262e6f9019a2563de7cb7335..7310833b235b50bbc591441356479213b756ebad 100644
+--- a/sourcecode/backend/assets_files.js
++++ b/sourcecode/backend/assets_files.js
+@@ -1,7 +1,7 @@
+ // Source: sourcescript/backend/assets_files.py (same logical owner); pseudocode/backend/assets_files.pcal.
+ import { appFSM, dispatchProjectCommand } from '../application/adapter.js';
+-import { chartCsvIds, chartExportCopy, chartUsesConversionView, createCandidateBaseGraphObject, createChartModel, dataTable, headerLineCount, normalizeGlobalSettings, readGlobalSettings, rebuildEditableGraph, validateChartModel } from './graphs.js';
+-import { ProjectObject, activeProject, getProjectCsv, immutableProjectCopy, normalizeSlotContent, normalizeSlotContents, projectClone, projectColor, validateProjectObjectState } from './project_state.js';
++import { chartCsvIds, chartExportCopy, chartUsesConversionView, createCandidateBaseGraphObject, createChartModel, dataTable, normalizeGlobalSettings, readGlobalSettings, rebuildEditableGraph, validateChartModel } from './graphs.js';
++import { ProjectObject, activeProject, getProjectCsv, immutableProjectCopy, normalizeSlotContent, normalizeSlotContents, projectClone, projectColor, slotLegacyState, validateProjectObjectState } from './project_state.js';
+ import { BackendSettings, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PACKAGE_FORMAT_VERSION } from './settings.js';
+ 
+ export function projectImageDataUrl(image) {
+@@ -20,7 +20,7 @@ export function collectAssetReferences(csvIds, imageIds, state) {
+     });
+   });
+   state.slots.forEach((slot) => {
+-    const imageId = slot.content?.imageId ?? slot.imageId;
++    const imageId = slot.content.imageId;
+     if (imageIds.has(imageId)) refs.push({ kind: "image", assetId: imageId, slotId: slot.id, slot });
+   });
+   return refs;
+@@ -89,15 +89,15 @@ export function buildProjectAssetImportCandidate(source, payload) {
+         target.content.contentType = "image";
+         target.content.imageId = staged.id;
+       } else {
+-        if (target.contentType !== "graph") return null;
+-        let chart = candidate.charts.find(item => item.id === target.chart);
++        if (target.content.contentType !== "graph") return null;
++        let chart = candidate.charts.find(item => item.id === target.content.chart);
+         if (chart?.editor?.editable === false) return null;
+         const csv = candidate.assets.csvFiles.find(item => item.id === staged.id);
+         if (!chart) {
+           chart = createChartModel({ id: candidate.nextId.chart++, editor: { title: csv.name,
+             globalSettings: readGlobalSettings({ editor: {} }), plotlyExtensions: { layout: {}, config: {} },
+             objects: [] } });
+-          candidate.charts.push(chart); target.chart = chart.id;
++          candidate.charts.push(chart); target.content.chart = chart.id;
+         }
+         chart.editor.objects.push(createCandidateBaseGraphObject(csv));
+       }
+@@ -193,6 +193,12 @@ export function projectCsvName(value, fallback = "data.csv") {
+   return name || fallback;
+ }
+ 
++export function normalizeCsvHeaderLines(value, rowCount, present = true) {
++  const parsed = !present || (value !== null && typeof value === "object") ? NaN : Number(value);
++  const count = present ? (Number.isFinite(parsed) ? parsed : 0) : 1;
++  return Math.max(0, Math.min(rowCount, Math.trunc(count)));
++}
++
+ export function buildProjectCsvModel(
+   data,
+   name,
+@@ -214,7 +220,7 @@ export function buildProjectCsvModel(
+             serializeNewDataTable(dataTable(data), projectCsvName(name)),
+           ),
+     mime: typeof mime === "string" && mime ? mime : "text/csv",
+-    headerLines: headerLineCount(headerLines, data),
++    headerLines: normalizeCsvHeaderLines(headerLines, dataTable(data).length),
+   };
+   projectVfs.assignUniqueLocation(model, PROJECT_ASSET_DIRECTORIES.csv, state);
+   return model;
+@@ -463,7 +469,7 @@ export function stageProjectAssetImport(candidate, item) {
+   if (kind === "csv") {
+     model.rows = parseProjectCsvAsset(item.file.name, bytes);
+     if (item.replaceId !== null && index < 0) throw Error("교체할 자산이 없습니다.");
+-    model.headerLines = headerLineCount(item.replaceId === null ? 1 : collection[index].headerLines, model.rows);
++    model.headerLines = normalizeCsvHeaderLines(item.replaceId === null ? 1 : collection[index].headerLines, model.rows.length);
+   }
+   if (item.replaceId !== null) {
+     if (index < 0) throw Error("교체할 자산이 없습니다.");
+@@ -507,9 +513,9 @@ export function projectDataTreeSnapshot(objects = {}) {
+       row: slot.row,
+       col: slot.col,
+       hidden: slot.hidden === true,
+-      contentType: slot.contentType,
+-      chart: slot.chart,
+-      imageId: slot.imageId,
++      contentType: slot.content.contentType,
++      chart: slot.content.chart,
++      imageId: slot.content.imageId,
+     })),
+   };
+ }
+@@ -541,7 +547,7 @@ export function importedProjectCsvState(payload) {
+                 serializeNewDataTable(source.rows, projectCsvName(source.name, `data-${index + 1}.csv`)),
+               ),
+         mime: typeof source.mime === "string" ? source.mime : "text/csv",
+-        headerLines: headerLineCount(Object.hasOwn(source, "headerLines") ? source.headerLines : 1, source.rows),
++        headerLines: normalizeCsvHeaderLines(source.headerLines, source.rows.length, Object.hasOwn(source, "headerLines")),
+       };
+     });
+   return {
+@@ -628,7 +634,7 @@ export function buildProjectObject(payload, fileName) {
+         mime: raw.mime, bytesBase64: ffpxBytesToBase64(ffpxBase64ToBytes(raw.bytesBase64)) };
+       if (kind === "csv") {
+         asset.rows = dataTable(raw.rows);
+-        asset.headerLines = headerLineCount(own(raw, "headerLines", 1), asset.rows);
++        asset.headerLines = normalizeCsvHeaderLines(raw.headerLines, asset.rows.length, Object.hasOwn(raw, "headerLines"));
+       }
+       candidate.assets[kind === "csv" ? "csvFiles" : "images"].push(asset);
+     }
+@@ -1045,7 +1051,7 @@ export function ffpxDeriveHiddenSlots(slotList) {
+ }
+ 
+ export function ffpxBuildProject(source = activeProject._state) {
+-  // Legacy validation installs slot accessors: confine that work to the detached read.
++  // Validate the detached read; encode legacy XML fields only at the storage boundary.
+   const snapshot = projectClone(source);
+   validateProjectObjectState(snapshot, { requireSlots: true });
+   let projectObject = snapshot.meta,
+@@ -1115,7 +1121,7 @@ export function ffpxBuildProject(source = activeProject._state) {
+     manifest.charts.push(chartExportCopy(chart));
+   }
+   for (let slot of slotObjects) {
+-    let copy = projectClone(slot);
++    let copy = slotLegacyState(slot);
+     if (copy.imageId != null) {
+       let image = imageObjects.find((item) => item.id === copy.imageId);
+       if (!image)
+@@ -1420,7 +1426,7 @@ export function ffpxReadProjectBytes(bytes) {
+     )
+       throw Error("FFPX CSV 자산이 없습니다.");
+     csv.rows = parseProjectCsvAsset(csv.name, assets.get(dataRef));
+-    csv.headerLines = headerLineCount(Object.hasOwn(csv, "headerLines") ? csv.headerLines : 1, csv.rows);
++    csv.headerLines = normalizeCsvHeaderLines(csv.headerLines, csv.rows.length, Object.hasOwn(csv, "headerLines"));
+     csv.bytesBase64 = ffpxBytesToBase64(assets.get(dataRef));
+     delete csv.dataRef;
+   }
+@@ -1678,7 +1684,7 @@ export function ffsxReadSlotBytes(bytes) {
+       throw Error("FFSX 슬롯 내부 CSV ID가 올바르지 않습니다.");
+     slotCsvIds.add(csv.id);
+     csv.rows = parseProjectCsvAsset(csv.name, data);
+-    csv.headerLines = headerLineCount(Object.hasOwn(csv, "headerLines") ? csv.headerLines : 1, csv.rows);
++    csv.headerLines = normalizeCsvHeaderLines(csv.headerLines, csv.rows.length, Object.hasOwn(csv, "headerLines"));
+     csv.bytesBase64 = ffpxBytesToBase64(data);
+     delete csv.dataRef;
+   }
+diff --git a/sourcecode/backend/graphs.js b/sourcecode/backend/graphs.js
+index 103b1ce72ebef5b3d58ddf44c72463553ea8c54b..09fe610f5405035487f4dd48b467ff715a36c2d9 100644
+--- a/sourcecode/backend/graphs.js
++++ b/sourcecode/backend/graphs.js
+@@ -170,7 +170,7 @@ export function chartCsvIds(chart) {
+ }
+ 
+ export function headerLineCount(value, table = []) {
+-  const number = Number(value);
++  const number = graphScalarNumber(value);
+   return Number.isFinite(number)
+     ? Math.min(Math.max(0, Math.trunc(number)), Array.isArray(table) ? table.length : 0)
+     : 0;
+@@ -190,7 +190,7 @@ export function columnDefinitions(table = [], headerLines = 1) {
+     header = count > 0 && Array.isArray(table[count - 1]) ? table[count - 1] : [];
+   return Array.from({ length: width }, (_, index) => {
+     let id = `C${index + 1}`,
+-      name = header[index], text = String(name ?? "").trim();
++      name = header[index] ?? "", text = String(name).trim();
+     return { id, index, name, label: text ? `${id} — ${text}` : id };
+   });
+ }
+@@ -325,11 +325,10 @@ export function tracesSingle(c) {
+ }
+ 
+ export function traces(c, project = activeProject._state) {
+-  const owners = project.slots.filter(slot => (slot.content?.chart ?? slot.chart) === c.id),
++  const owners = project.slots.filter(slot => slot.content.chart === c.id),
+     current = project.charts.find(chart => chart.id === c.id);
+-  if (owners.length !== 1 || !current || chartUsesConversionView(current))
++  if (owners.length !== 1 || !current || chartUsesConversionView(c))
+     throw Error("그래프 투영에 같은 프로젝트의 유일한 owning chart가 필요합니다.");
+-  c = current;
+   let settings = normalizeGraphLayoutSettings(c.editor.globalSettings),
+     editor = c.editor,
+     axes = settings.axes,
+diff --git a/sourcecode/backend/layout_annotations.js b/sourcecode/backend/layout_annotations.js
+index 41d1d03e5e7bd6a540c8cb2a4bf082f0b5646752..398c260909999d615e69e5171fcd69230f38daab 100644
+--- a/sourcecode/backend/layout_annotations.js
++++ b/sourcecode/backend/layout_annotations.js
+@@ -1,5 +1,5 @@
+ // Source: sourcescript/backend/layout_annotations.py (same logical owner); pseudocode/backend/layout_annotations.pcal.
+-import { activeProject, getProjectImage, normalizeSlotContent, projectClone, projectObjects, slotHasNonDefaultLocalState, validateProjectObjectState } from './project_state.js';
++import { Slot, activeProject, getProjectImage, normalizeSlotContent, projectClone, projectObjects, slotHasNonDefaultLocalState, validateProjectObjectState } from './project_state.js';
+ import { BackendSettings, DEFAULT_IMAGE_SETTINGS } from './settings.js';
+ 
+ export function resolveLayoutCommandSlots(candidate, slotIds) {
+@@ -81,16 +81,7 @@ export function gridSlotGeometry(layout, geometry, slot = null) {
+ }
+ 
+ export function newGridSlot(id, row, col) {
+-  return normalizeSlotContent({
+-    id,
+-    row,
+-    col,
+-    rowSpan: 1,
+-    colSpan: 1,
+-    hidden: false,
+-    content: { ...projectClone(BackendSettings.defaults.slotSettings.content), chart: null, imageId: null },
+-    caption: null,
+-  });
++  return new Slot(id, row, col);
+ }
+ 
+ export function buildGridResizeCandidate(rows, cols) {
+@@ -122,7 +113,7 @@ export function buildGridResizeInProject(source, rows, cols) {
+ }
+ 
+ export function slotImage(slot, collection = activeProject.images) {
+-  return getProjectImage(slot?.imageId, collection);
++  return getProjectImage(slot?.content.imageId, collection);
+ }
+ 
+ export function normalizeImageSettings(slot) {
+@@ -131,8 +122,7 @@ export function normalizeImageSettings(slot) {
+     ? slot.content : {};
+   const settings = content.imageSettings && typeof content.imageSettings === "object"
+     ? content.imageSettings
+-    : slot.imageSettings && typeof slot.imageSettings === "object"
+-      ? slot.imageSettings : DEFAULT_IMAGE_SETTINGS;
++    : DEFAULT_IMAGE_SETTINGS;
+   return readImageSettings(settings);
+ }
+ 
+diff --git a/sourcecode/backend/project_efsm.js b/sourcecode/backend/project_efsm.js
+index 40029754044fdbd55a0feb1d18989dd29afb6921..a5892361a16721f8a3fd1f9a77e2dfb6b0a46832 100644
+--- a/sourcecode/backend/project_efsm.js
++++ b/sourcecode/backend/project_efsm.js
+@@ -1,8 +1,8 @@
+ // Source: sourcescript/backend/project_efsm.py (same logical owner); pseudocode/backend/project_efsm.pcal.
+-import { PROJECT_ASSET_DIRECTORIES, buildProjectAssetImportCandidate, buildProjectCsvModel, buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBytesToBase64, ffpxReadProjectBytes, ffsxReadSlotBytes, normalizeProjectPath, planProjectNodeMove, projectAssetPath, projectCsvName, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, removeProjectAssetReferences, serializeNewDataTable } from './assets_files.js';
+-import { chartCsvIds, chartUsesConversionView, columnDefinitions, createCandidateBaseGraphObject, createChartModel, dataTable, graphDataSelection, headerLineCount, normalizeGlobalSettings, normalizeGraphLayoutSettings, parsePlotlyToEditor, readGlobalSettings, rebuildEditableGraph, validateChartModel } from './graphs.js';
++import { PROJECT_ASSET_DIRECTORIES, buildProjectAssetImportCandidate, buildProjectCsvModel, buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBytesToBase64, ffpxReadProjectBytes, ffsxReadSlotBytes, normalizeProjectPath, planProjectNodeMove, projectAssetPath, projectCsvName, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, removeProjectAssetReferences, normalizeCsvHeaderLines, parseProjectCsvAsset, serializeNewDataTable } from './assets_files.js';
++import { chartCsvIds, chartUsesConversionView, columnDefinitions, createCandidateBaseGraphObject, createChartModel, dataTable, graphDataSelection, normalizeGlobalSettings, normalizeGraphLayoutSettings, parsePlotlyToEditor, readGlobalSettings, rebuildEditableGraph, validateChartModel } from './graphs.js';
+ import { buildGridResizeInProject, insertSlotCaptions, resolveLayoutCommandSlots } from './layout_annotations.js';
+-import { activeProject, immutableProjectCopy, normalizeSlotContents, projectClone, projectObjects, projectRuntime, readProjectNumber, resetSlotLocalState, setSlotLocalState, slotHasNonDefaultLocalState, slotLocalState, resolveOwningSlot, validateProjectObjectState } from './project_state.js';
++import { activeProject, immutableProjectCopy, normalizeSlotContents, normalizeProjectSettings, projectClone, projectObjects, projectRuntime, readProjectNumber, resetSlotLocalState, setSlotLocalState, slotHasNonDefaultLocalState, slotLocalState, resolveOwningSlot, validateProjectObjectState } from './project_state.js';
+ import { BackendSettings, DEFAULT_UI_PALETTE } from './settings.js';
+ 
+ 
+@@ -105,6 +105,12 @@ function removedReferenceCounts(pre, post) {
+   return result;
+ }
+ 
++function normalizeAndValidateCandidate(candidate) {
++  normalizeSlotContents(candidate.slots);
++  normalizeProjectSettings(candidate);
++  return validateProjectObjectState(candidate, { requireSlots: true });
++}
++
+ export class ProjectStateMachine {
+   constructor(objects, actions) {
+     this.objects = objects;
+@@ -158,7 +164,7 @@ export function applySlotTypeAction({ machine, event, payload }) {
+     const candidate = projectClone(source);
+     normalizeSlotContents(candidate.slots);
+     candidate.slots.find(slot => slot.id === current.id).content.contentType = payload.contentType === "image" ? "image" : "graph";
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const after = activeProject._state.slots.find(slot => slot.id === current.id);
+@@ -184,7 +190,7 @@ export function applyCaptionTextAction({ machine, event, payload }) {
+     }
+     if (slot) candidate.slots.find(item => item.id === slot.id).caption = text || null;
+     else candidate.annotations.captions.text = text;
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     payload.changed = { slotIds: candidate.slots.filter(after =>
+@@ -206,7 +212,7 @@ export function applySlotCaptionsInsertedAction({ machine, event, payload }) {
+     const text = insertSlotCaptions(candidate, payload.slotIds ?? null);
+     if (text === candidate.annotations.captions.text) return false;
+     candidate.annotations.captions.text = text;
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     payload.changed = { slotIds: [], chartIds: [], csvIds: [], imageIds: [], assets: [] };
+@@ -214,12 +220,24 @@ export function applySlotCaptionsInsertedAction({ machine, event, payload }) {
+   }
+ }
+ 
++function copiedAssetBytes(payload) {
++  if (Object.hasOwn(payload, "bytes"))
++    return typeof payload.bytes === "string" ? ffpxBase64ToBytes(payload.bytes) : new Uint8Array(payload.bytes);
++  if (payload.bytesBase64 != null && payload.bytesBase64 !== "")
++    return ffpxBase64ToBytes(payload.bytesBase64);
++  return null;
++}
++
+ export function applyDataObjectCreatedAction({ machine, event, payload }) {
+-  machine.assertWritable("data","DATA_OBJECT_CREATED");
+-  machine.assertWritable("files","DATA_OBJECT_CREATED");
++  machine.assertWritable("data", event);
++  machine.assertWritable("files", event);
++  machine.assertWritable("charts", event);
+   while (true) {
+     const source = activeProject._state, candidate = projectClone(source),
+-      rows = projectClone(dataTable(payload.data)),
++      bytes = copiedAssetBytes(payload),
++      rows = Object.hasOwn(payload, "data") ? projectClone(dataTable(payload.data))
++        : Object.hasOwn(payload, "rows") ? projectClone(payload.rows)
++        : parseProjectCsvAsset(payload.name, bytes),
+       requested = payload.path || `${PROJECT_ASSET_DIRECTORIES.csv}/${projectCsvName(payload.name)}`,
+       normalized = normalizeProjectPath(requested), directory = projectParentPath(normalized);
+     if (!source.fileSystem.directories.includes(directory)) throw Error("CSV 상위 directory가 없습니다.");
+@@ -227,20 +245,19 @@ export function applyDataObjectCreatedAction({ machine, event, payload }) {
+       id = payload.id == null ? source.nextId.csv : payload.id;
+     if (!Number.isInteger(id) || id <= 0 || source.assets.csvFiles.some(csv => csv.id === id))
+       throw Error(`CSV ID ${id}가 올바르지 않거나 중복되었습니다.`);
+-    const original = payload.bytesBase64,
+-      bytesBase64 = original != null && original !== "" ?
+-        (ffpxBase64ToBytes(original), original) : ffpxBytesToBase64(serializeNewDataTable(rows, path)),
+-      csv = { id, rows, bytesBase64, mime: payload.mime || "text/csv",
+-        headerLines: headerLineCount(payload.headerLines, rows),
+-        directory: projectParentPath(path), name: projectPathName(path) };
++    const csv = { id, rows,
++      bytesBase64: ffpxBytesToBase64(bytes ?? serializeNewDataTable(rows, path)),
++      mime: payload.mime || "text/csv",
++      headerLines: normalizeCsvHeaderLines(payload.headerLines, rows.length, Object.hasOwn(payload, "headerLines")),
++      directory, name: projectPathName(path) };
+     candidate.assets.csvFiles.push(csv);
+     candidate.nextId.csv = Math.max(candidate.nextId.csv, id + 1);
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    for (const chart of candidate.charts)
++      if (chart.editor.editable !== false && chartCsvIds(chart).includes(id)) rebuildEditableGraph(chart, candidate);
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+-    const committed = activeProject._state.assets.csvFiles.find(item => item.id === id);
+-    payload.changed = { slotIds: [], chartIds: [], csvIds: [id], imageIds: [],
+-      assets: [{ role: "created", kind: "csv", id, path: projectAssetPath(committed), owners: [] }] };
++    payload.changed = { assets: [{ role: "created", kind: "csv", id, path }] };
+     return;
+   }
+ }
+@@ -251,25 +268,30 @@ export function applyAssetObjectReplacedAction({ machine, event, payload }, kind
+   machine.assertWritable("files", event);
+   if (!image) machine.assertWritable("charts", event);
+   while (true) {
+-    const source = activeProject._state, previous = source.assets[collection].find(item => item.id === payload.id);
++    const source = activeProject._state,
++      id = image ? payload.id : payload.id ?? payload.csvId,
++      previous = source.assets[collection].find(item => item.id === id);
+     if (!previous || (Object.hasOwn(payload, "path") && projectAssetPath(previous) !== payload.path))
+       throw Error("교체할 asset의 현재 id/path가 요청과 다릅니다.");
+-    const candidate = projectClone(source), next = candidate.assets[collection].find(item => item.id === previous.id);
+-    if (image) {
+-      const bytes = typeof payload.bytes === "string" ? ffpxBase64ToBytes(payload.bytes) : new Uint8Array(payload.bytes || []);
+-      if (!bytes.length) throw Error("이미지 데이터가 비어 있습니다.");
++    const candidate = projectClone(source), next = candidate.assets[collection].find(item => item.id === previous.id),
++      bytes = copiedAssetBytes(payload);
++    if (bytes !== null) {
++      if (image && !bytes.length) throw Error("이미지 데이터가 비어 있습니다.");
+       next.bytesBase64 = ffpxBytesToBase64(bytes);
+-    } else {
+-      next.rows = projectClone(dataTable(payload.data));
+-      next.headerLines = headerLineCount(Object.hasOwn(payload, "headerLines") ? payload.headerLines : previous.headerLines, next.rows);
+-      next.bytesBase64 = payload.bytesBase64 != null && payload.bytesBase64 !== "" ?
+-        (ffpxBase64ToBytes(payload.bytesBase64), payload.bytesBase64) :
+-        ffpxBytesToBase64(serializeNewDataTable(next.rows, projectAssetPath(previous)));
++    }
++    if (!image) {
++      if (Object.hasOwn(payload, "data")) next.rows = projectClone(dataTable(payload.data));
++      else if (Object.hasOwn(payload, "rows")) next.rows = projectClone(payload.rows);
++      else if (bytes !== null) next.rows = parseProjectCsvAsset(previous.name, bytes);
++      if (bytes === null && (Object.hasOwn(payload, "data") || Object.hasOwn(payload, "rows")))
++        next.bytesBase64 = ffpxBytesToBase64(serializeNewDataTable(next.rows, projectAssetPath(previous)));
++      next.headerLines = normalizeCsvHeaderLines(Object.hasOwn(payload, "headerLines")
++        ? payload.headerLines : previous.headerLines, next.rows.length);
+       for (const chart of candidate.charts)
+-        if (chart.editor.editable && chartCsvIds(chart).includes(next.id)) rebuildEditableGraph(chart, candidate);
++        if (chart.editor.editable !== false && chartCsvIds(chart).includes(next.id)) rebuildEditableGraph(chart, candidate);
+     }
+     if (Object.hasOwn(payload, "mime")) next.mime = payload.mime;
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     payload.changed = { assets: [{ role: "updated", kind, id: next.id, path: projectAssetPath(next) }] };
+@@ -278,42 +300,7 @@ export function applyAssetObjectReplacedAction({ machine, event, payload }, kind
+ }
+ 
+ export function applyDataObjectReplacedAction(context) {
+-  const { machine, event, payload } = context;
+-  if (!Object.hasOwn(payload, "headerLines")) {
+-    applyAssetObjectReplacedAction(context, "csv");
+-    return;
+-  }
+-  machine.assertWritable("data", "DATA_OBJECT_REPLACED");
+-  machine.assertWritable("files", "DATA_OBJECT_REPLACED");
+-  machine.assertWritable("charts", "DATA_OBJECT_REPLACED");
+-  while (true) {
+-    const source = activeProject._state,
+-      current = source.assets.csvFiles.find((csv) => csv.id === payload.csvId);
+-    if (!current) throw Error("헤더를 변경할 프로젝트 CSV가 없습니다.");
+-    const candidate = projectClone(source),
+-      csv = candidate.assets.csvFiles.find((item) => item.id === current.id);
+-    csv.headerLines = headerLineCount(payload.headerLines, csv.rows);
+-    candidate.charts.forEach((chart) => {
+-      if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id))
+-        rebuildEditableGraph(chart, candidate);
+-    });
+-    validateProjectObjectState(candidate, { requireSlots: true });
+-    if (activeProject._state !== source) continue;
+-    commitProjectCandidate(candidate, event, payload);
+-    const post = activeProject._state,
+-      committed = post.assets.csvFiles.find((item) => item.id === current.id),
+-      changedIds = (before, after) => after.filter((item) =>
+-        JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id),
+-      owners = post.charts.filter((chart) => chartCsvIds(chart).includes(committed.id)).map((chart) => ({
+-        chartId: chart.id, slotId: post.slots.find((slot) => (slot.content?.chart ?? slot.chart) === chart.id).id,
+-      }));
+-    payload.changed = { slotIds: changedIds(source.slots, post.slots),
+-      chartIds: changedIds(source.charts, post.charts),
+-      csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
+-      imageIds: changedIds(source.assets.images, post.assets.images),
+-      assets: [{ role: "updated", kind: "csv", id: committed.id, path: projectAssetPath(committed), owners }] };
+-    return;
+-  }
++  return applyAssetObjectReplacedAction(context, "csv");
+ }
+ 
+ export function applyDataObjectDeletedAction(context) {
+@@ -345,7 +332,7 @@ export function applyAssetObjectDeletedAction({ machine, payload }, kind) {
+     const removedReferences = removeProjectAssetReferences(csvIds, imageIds, candidate),
+       collection = kind === "csv" ? "csvFiles" : "images";
+     candidate.assets[collection] = candidate.assets[collection].filter(item => item.id !== target.id);
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const post = activeProject._state,
+@@ -372,14 +359,13 @@ export function applyImageObjectCreatedAction({ machine, event, payload }) {
+       id = payload.id == null ? source.nextId.image : payload.id;
+     if (!Number.isInteger(id) || id <= 0 || source.assets.images.some(image => image.id === id))
+       throw Error(`이미지 ID ${id}가 올바르지 않거나 중복되었습니다.`);
+-    const input = payload.bytes,
+-      bytes = typeof input === "string" ? ffpxBase64ToBytes(input) : new Uint8Array(input || []);
+-    if (!bytes.length) throw Error("이미지 데이터가 비어 있습니다.");
++    const bytes = copiedAssetBytes(payload);
++    if (!bytes?.length) throw Error("이미지 데이터가 비어 있습니다.");
+     candidate.assets.images.push({ id, name: projectPathName(path), directory: projectParentPath(path),
+       mime: typeof payload.mime === "string" && payload.mime ? payload.mime : "application/octet-stream",
+       bytesBase64: ffpxBytesToBase64(bytes) });
+     candidate.nextId.image = Math.max(candidate.nextId.image, id + 1);
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const image = activeProject._state.assets.images.find(item => item.id === id);
+@@ -413,12 +399,12 @@ export function applySlotsResetAction({ machine, event, payload }) {
+     const chartIds = new Set();
+     for (const id of ids) {
+       const slot = candidate.slots.find(slot => slot.id === id);
+-      if (Number.isInteger(slot.chart)) chartIds.add(slot.chart);
++      if (Number.isInteger(slot.content.chart)) chartIds.add(slot.content.chart);
+       slot.content = { ...projectClone(BackendSettings.defaults.slotSettings.content), chart: null, imageId: null };
+       slot.caption = null;
+     }
+     candidate.charts = candidate.charts.filter(chart => !chartIds.has(chart.id));
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const after = activeProject._state;
+@@ -441,7 +427,6 @@ export function applySlotsSwappedAction({ machine, event, payload }) {
+     if (!first || !second || first.id === second.id) return false;
+     const candidate = projectClone(source);
+     normalizeSlotContents(candidate.slots);
+-    // Legacy slot.toJSON flattens known fields; preserve the complete canonical content instead.
+     for (const slot of candidate.slots) {
+       const current = source.slots.find(item => item.id === slot.id);
+       if (current?.content) slot.content = projectClone(current.content);
+@@ -450,7 +435,7 @@ export function applySlotsSwappedAction({ machine, event, payload }) {
+       content = a.content, caption = a.caption;
+     a.content = b.content; a.caption = b.caption;
+     b.content = content; b.caption = caption;
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const after = activeProject._state;
+@@ -475,29 +460,29 @@ export function applyProjectAssetConnectedAction({ machine, payload }, kind) {
+       slot = source.slots.find(item => item.id === payload.slotId && !item.hidden),
+       node = typeof payload.path === "string" ? projectVfs.resolve(payload.path, source) : null;
+     if (payload.kind !== kind || node?.kind !== kind || projectVfs.isTrashed(payload.path) ||
+-        !slot || slot.contentType !== (kind === "csv" ? "graph" : "image"))
++        !slot || slot.content.contentType !== (kind === "csv" ? "graph" : "image"))
+       throw Error("연결할 현재 non-trash asset kind/path 또는 visible slot type이 올바르지 않습니다.");
+     const candidate = projectClone(source);
+     candidate.slots.forEach((item, index) => { item.content = projectClone(source.slots[index].content); });
+     normalizeSlotContents(candidate.slots);
+     const target = candidate.slots.find(item => item.id === slot.id);
+     let chart = null;
+-    if (kind === "image") target.imageId = node.asset.id;
++    if (kind === "image") target.content.imageId = node.asset.id;
+     else {
+-      chart = candidate.charts.find(item => item.id === target.chart);
++      chart = candidate.charts.find(item => item.id === target.content.chart);
+       if (chart?.editor?.editable === false) throw Error("편집 가능한 graph slot이 필요합니다.");
+       if (!chart) {
+         chart = createChartModel({ id: candidate.nextId.chart++, editor: { title: node.asset.name,
+           globalSettings: readGlobalSettings({ editor: {} }), plotlyExtensions: { layout: {}, config: {} }, objects: [] } });
+-        candidate.charts.push(chart); target.chart = chart.id;
++        candidate.charts.push(chart); target.content.chart = chart.id;
+       }
+       chart.editor.objects.push(createCandidateBaseGraphObject(candidate.assets.csvFiles.find(item => item.id === node.asset.id)));
+       rebuildEditableGraph(chart, candidate);
+     }
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+-    payload.changed = { slotIds: slot.chart !== target.chart || slot.imageId !== target.imageId ? [slot.id] : [],
++    payload.changed = { slotIds: slot.content.chart !== target.content.chart || slot.content.imageId !== target.content.imageId ? [slot.id] : [],
+       chartIds: chart ? [chart.id] : [], csvIds: [], imageIds: [], assets: [] };
+     return;
+   }
+@@ -511,7 +496,7 @@ export function applyGraphFirstObjectAction({ machine, event, payload }) {
+     const source = activeProject._state,
+       slot = source.slots.find((item) => item.id === payload.slotId && !item.hidden),
+       csv = source.assets.csvFiles.find((item) => item.id === payload.csvId);
+-    if (!slot || slot.contentType !== "graph" || !csv || (slot.content?.chart ?? slot.chart) != null)
++    if (!slot || slot.content.contentType !== "graph" || !csv || slot.content.chart != null)
+       throw Error("첫 오브젝트의 현재 빈 graph 슬롯 또는 CSV가 없습니다.");
+     const candidate = projectClone(source);
+     normalizeSlotContents(candidate.slots);
+@@ -521,9 +506,9 @@ export function applyGraphFirstObjectAction({ machine, event, payload }) {
+         title: candidateCsv.name, globalSettings: readGlobalSettings({ editor: {} }),
+         plotlyExtensions: { layout: {}, config: {} }, objects: [createCandidateBaseGraphObject(candidateCsv)],
+       } });
+-    candidate.charts.push(chart); target.chart = chart.id;
++    candidate.charts.push(chart); target.content.chart = chart.id;
+     rebuildEditableGraph(chart, candidate);
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     payload.changed = { slotIds: [slot.id], chartIds: [chart.id], csvIds: [], imageIds: [], assets: [] };
+@@ -550,11 +535,11 @@ export function applyGraphObjectEditAction({ machine, event, payload }) {
+   while (true) {
+     const source = activeProject._state, operation = payload.operation,
+       target = operation === "graphs.addObject" ? source.slots.find((slot) => slot.id === payload.slotId && !slot.hidden) : null,
+-      chartId = operation === "graphs.addObject" ? target?.content?.chart ?? target?.chart : payload.chartId,
++      chartId = operation === "graphs.addObject" ? target?.content.chart : payload.chartId,
+       current = source.charts.find((chart) => chart.id === chartId),
+-      owners = source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === chartId),
++      owners = source.slots.filter((slot) => slot.content.chart === chartId),
+       index = payload.index, values = payload.values || {};
+-    if (!current || owners.length !== 1 || owners[0].hidden || owners[0].contentType === "image" ||
++    if (!current || owners.length !== 1 || owners[0].hidden || owners[0].content.contentType === "image" ||
+         current.editor?.editable === false)
+       throw Error("변경할 현재 편집 가능 차트 또는 유일한 visible graph owner가 없습니다.");
+     const validIndex = (value) => Number.isInteger(value) && value >= 0 && value < current.editor.objects.length;
+@@ -630,7 +615,7 @@ export function applyGraphObjectEditAction({ machine, event, payload }) {
+     }
+     validateChartModel(chart, "변경할 차트", candidate.assets.csvFiles);
+     rebuildEditableGraph(chart, candidate);
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const post = activeProject._state,
+@@ -656,9 +641,9 @@ export function applyChartLayoutChangedAction({ machine, event, payload }) {
+   machine.assertWritable("editor", "CHART_LAYOUT_CHANGED");
+   while (true) {
+     const source = activeProject._state, slot = source.slots.find(item => item.id === payload.slotId && !item.hidden),
+-      chartId = slot?.content?.chart ?? slot?.chart, current = source.charts.find(item => item.id === chartId),
+-      owners = source.slots.filter(item => (item.content?.chart ?? item.chart) === chartId), values = payload.settings;
+-    if (!slot || slot.contentType === "image" || !current || current.id !== payload.chartId ||
++      chartId = slot?.content.chart, current = source.charts.find(item => item.id === chartId),
++      owners = source.slots.filter(item => item.content.chart === chartId), values = payload.settings;
++    if (!slot || slot.content.contentType === "image" || !current || current.id !== payload.chartId ||
+         owners.length !== 1)
+       throw Error("전역 설정을 변경할 현재 owning chart가 없습니다.");
+     if (!values || typeof values !== "object" || Array.isArray(values)) throw Error("적용할 그래프 설정이 없습니다.");
+@@ -685,7 +670,7 @@ export function applyChartLayoutChangedAction({ machine, event, payload }) {
+     if (["xBottom", "xTop", "yLeft", "yRight"].includes(values.axisKey)) applyAxis(values.axisKey, values.axisValues);
+     chart.editor.globalSettings = normalizeGraphLayoutSettings(settings);
+     if (chart.editor.editable) rebuildEditableGraph(chart, candidate);
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const after = activeProject._state;
+@@ -701,9 +686,9 @@ export function applyChartModelReplacedAction({ machine, event, payload }) {
+     machine.assertWritable(target, "CHART_MODEL_REPLACED");
+   while (true) {
+     const source = activeProject._state,
+-      owners = source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === payload.chartId),
++      owners = source.slots.filter((slot) => slot.content.chart === payload.chartId),
+       current = source.charts.find((chart) => chart.id === payload.chartId);
+-    if (!current || owners.length !== 1 || owners[0].hidden || owners[0].contentType === "image" ||
++    if (!current || owners.length !== 1 || owners[0].hidden || owners[0].content.contentType === "image" ||
+         owners[0].id !== payload.slotId || typeof payload.editable !== "boolean")
+       throw Error("편집 상태를 변경할 현재 차트 또는 유일한 graph owner가 없습니다.");
+     const candidate = projectClone(source),
+@@ -726,7 +711,7 @@ export function applyChartModelReplacedAction({ machine, event, payload }) {
+     chart.editor.editable = payload.editable;
+     validateChartModel(chart, "편집 상태 변경 차트", candidate.assets.csvFiles);
+     if (chart.editor.editable) rebuildEditableGraph(chart, candidate);
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const post = activeProject._state,
+@@ -749,7 +734,7 @@ export function applyEmptyImageInsertedAction({ machine, event, payload }) {
+   machine.assertWritable("charts", "SLOT_IMAGE_IMPORTED");
+   while (true) {
+     const source = activeProject._state, current = source.slots.find(slot => slot.id === payload.slotId && !slot.hidden);
+-    if (!current || (current.content?.contentType ?? current.contentType) !== "image")
++    if (!current || current.content.contentType !== "image")
+       throw Error("빈 이미지를 삽입할 현재 visible image 슬롯이 없습니다.");
+     const input = payload.operation === "images.insertEmpty" ? payload.imageInput : payload,
+       bytes = typeof input?.bytes === "string" ? ffpxBase64ToBytes(input.bytes) : new Uint8Array(input?.bytes || []),
+@@ -771,7 +756,7 @@ export function applyEmptyImageInsertedAction({ machine, event, payload }) {
+     candidate.charts = candidate.charts.filter(chart => chart.id !== removedChartId);
+     target.content.chart = null;
+     target.content.imageId = id;
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const image = activeProject._state.assets.images.find(item => item.id === id);
+@@ -842,7 +827,7 @@ export function applySlotChartImportedAction({ machine, event, payload }) {
+     target.content.imageId = null;
+     target.content.contentType = "graph";
+     if (packaged) target.caption = input.slot.caption;
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     payload.changed = { slotIds: [slot.id],
+@@ -879,7 +864,7 @@ export function applyProjectDirectoryCreatedAction({ machine, event, payload })
+     const candidate = projectClone(source);
+     candidate.fileSystem.directories.push(path);
+     candidate.fileSystem.directories.sort();
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const actual = projectVfs.resolve(path, activeProject._state);
+@@ -913,7 +898,7 @@ export function applyProjectTrashEmptiedAction({ machine, event, payload }) {
+     candidate.assets.csvFiles = candidate.assets.csvFiles.filter(csv => !csvIds.has(csv.id));
+     candidate.assets.images = candidate.assets.images.filter(image => !imageIds.has(image.id));
+     candidate.fileSystem.directories = candidate.fileSystem.directories.filter(path => !directories.includes(path));
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const post = activeProject._state,
+@@ -970,7 +955,7 @@ export function applyProjectNodeMovedAction({ machine, event, payload }) {
+       match.asset.directory = projectParentPath(destination);
+       match.asset.name = projectPathName(destination);
+     }
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const post = activeProject._state,
+@@ -995,7 +980,7 @@ export function applyProjectNameChangedAction({ machine, event, payload }) {
+     if (payload.trim === true) name = name.trim();
+     const candidate = projectClone(source);
+     candidate.meta.projectName = name.slice(0, BackendSettings.defaults.naming.projectNameMaxLength);
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const post = activeProject._state,
+@@ -1036,7 +1021,7 @@ export function applyLabelSettingsChangedAction({ machine, event, payload }) {
+       settings[key] = edits[key];
+     }
+   }
+-  validateProjectObjectState(candidate, { requireSlots: true });
++  normalizeAndValidateCandidate(candidate);
+   if (activeProject._state !== source) continue;
+   commitProjectCandidate(candidate, event, payload);
+   return;
+@@ -1055,7 +1040,7 @@ export function applyLabelPositionChangedAction({ machine, event, payload }) {
+     throw Error("레이블 위치는 유한한 수여야 합니다.");
+   settings.x = x;
+   settings.y = y;
+-  validateProjectObjectState(candidate, { requireSlots: true });
++  normalizeAndValidateCandidate(candidate);
+   if (activeProject._state !== source) continue;
+   commitProjectCandidate(candidate, event, payload);
+   return;
+@@ -1071,7 +1056,7 @@ export function applyAppearanceChangedAction({ machine, event, payload }) {
+         const value = payload.palette?.[key];
+         return [key, typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback];
+       }));
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     return;
+@@ -1083,7 +1068,6 @@ export function applyExportSettingsChangedAction({ machine, event, payload }) {
+   while (true) {
+     const source = activeProject._state, candidate = projectClone(source), current = source.export,
+       next = { ...current }, values = payload.settings || {}, limits = BackendSettings.defaults.limits.export;
+-    // Legacy slot.toJSON omits canonical content extensions; export edits do not own them.
+     normalizeSlotContents(candidate.slots);
+     for (const slot of candidate.slots) {
+       const original = source.slots.find(item => item.id === slot.id);
+@@ -1107,7 +1091,7 @@ export function applyExportSettingsChangedAction({ machine, event, payload }) {
+     next.height = next.heightMode === "auto" ? null
+       : next.height ?? current.height ?? limits.logicalHeight[0];
+     candidate.export = next;
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const post = activeProject._state, changedIds = (before, after) => after.filter(item =>
+@@ -1145,7 +1129,7 @@ export function applySlotImageSettingsChangedAction({ machine, event, payload })
+       }
+     }
+     target.content.imageSettings = next;
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const post = activeProject._state, changedIds = (before, after) => after.filter(item =>
+@@ -1185,7 +1169,7 @@ export function applyCaptionSettingsChangedAction({ machine, event, payload }) {
+           ? Math.max(min, Math.min(max, number)) : defaults[key];
+       }
+     }
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     const post = activeProject._state, changedIds = (before, after) => after.filter(item =>
+@@ -1207,7 +1191,7 @@ export function applyLayoutStyleChangedAction({ machine, event, payload }) {
+   }
+   if (Object.prototype.hasOwnProperty.call(payload, "showBorders"))
+     style.showBorders = payload.showBorders === true;
+-  validateProjectObjectState(candidate, { requireSlots: true });
++  normalizeAndValidateCandidate(candidate);
+   if (activeProject._state !== source) continue;
+   commitProjectCandidate(candidate, event, payload);
+   return;
+@@ -1249,7 +1233,7 @@ export function applySlotsMergedAction({ machine, event, payload }) {
+   anchor.rowSpan = bottom - top + 1;
+   anchor.colSpan = right - left + 1;
+   anchor.hidden = false;
+-  validateProjectObjectState(candidate, { requireSlots: true });
++  normalizeAndValidateCandidate(candidate);
+   if (activeProject._state !== current) continue;
+   commitProjectCandidate(candidate, event, payload);
+   payload.selectionHints = {
+@@ -1286,7 +1270,7 @@ export function applySlotsSplitAction({ machine, event, payload }) {
+       }
+     });
+   }
+-  validateProjectObjectState(candidate, { requireSlots: true });
++  normalizeAndValidateCandidate(candidate);
+   if (activeProject._state !== current) continue;
+   commitProjectCandidate(candidate, event, payload);
+   return;
+@@ -1300,7 +1284,7 @@ export function applyAssetsImportedAction({ machine, event, payload }) {
+     const source = activeProject._state, calculation = buildProjectAssetImportCandidate(source, payload);
+     if (!calculation) return false;
+     const { candidate, imported } = calculation;
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     const changedIds = (before, after) => after.filter(item =>
+       JSON.stringify(before.find(old => old.id === item.id)) !== JSON.stringify(item)).map(item => item.id);
+@@ -1362,7 +1346,7 @@ export function applyProjectLoadedAction({ machine, event, payload }) {
+     const source = activeProject._state, file = payload.file;
+     if (!file || !(file.bytes instanceof Uint8Array)) throw Error("불러올 copied FFPX bytes가 없습니다.");
+     const candidate = buildProjectObject(ffpxReadProjectBytes(new Uint8Array(file.bytes)), file.name)._state;
+-    validateProjectObjectState(candidate, { requireSlots: true });
++    normalizeAndValidateCandidate(candidate);
+     if (activeProject._state !== source) continue;
+     commitProjectCandidate(candidate, event, payload);
+     projectRuntime.projectObjectGeneration += 1;
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+index de1b7ef90aa68069b26ae786c88a0ae6e229ea0b..d413f6652d6f71aa04ec11cceb76390364365892 100644
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -4,6 +4,21 @@ import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraph
+ import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
+ import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
+ 
++export class Slot {
++  constructor(id, row, col) {
++    this.id = id;
++    this.row = row;
++    this.col = col;
++    this.rowSpan = 1;
++    this.colSpan = 1;
++    this.hidden = false;
++    this.content = structuredClone(BackendSettings.defaults.slotSettings.content);
++    this.content.chart = null;
++    this.content.imageId = null;
++    this.caption = null;
++  }
++}
++
+ export function createProjectState() {
+   let state = {
+     kind: "fast-figure-project-object",
+@@ -55,7 +70,7 @@ export class ProjectObject {
+     return buildProjectObject(payload, fileName);
+   }
+   read(path) {
+-    let value = projectObjectPath(this._state, path);
++    let value = projectObjectPath(this._state, Object.hasOwn(PROJECT_OBJECT_PATHS, path) ? PROJECT_OBJECT_PATHS[path] : path);
+     if (value === undefined) throw Error(`프로젝트 오브젝트 경로 ${path}가 없습니다.`);
+     return value;
+   }
+@@ -351,7 +366,7 @@ export function readBackendProjection(kind, request = {}) {
+       identifier = slotIdentifier(0, source);
+     return immutableProjectCopy({
+       enabled: labels.enabled, settings: Object.freeze({ ...labels.settings }),
+-      reference: Object.freeze(reference),
++      reference: Object.freeze({ width: reference.width, height: reference.height }),
+       sampleText: labels.settings.parentheses ? `(${identifier})` : identifier,
+     });
+   }
+@@ -534,7 +549,7 @@ export function buildBackendImageRead(source, slotId) {
+   const image = source.assets.images.find(item => item.id === original.content.imageId);
+   if (!image) return null;
+   const slot = normalizeSlotContent(structuredClone(original));
+-  return { slotId: slot.id, name: image.name,
++  return { slotId: slot.id, imageId: image.id, mime: image.mime, name: image.name,
+     bytes: Array.from(ffpxBase64ToBytes(image.bytesBase64 || "")),
+     src: projectImageDataUrl(image), settings: structuredClone(slot.content.imageSettings),
+   };
+@@ -793,45 +808,21 @@ export function normalizeSlotContent(slot) {
+         content.imageSettings[key] = structuredClone(DEFAULT_IMAGE_SETTINGS[key]);
+   }
+   delete content.caption;
++  if (!(slot instanceof Slot)) {
++    if (!Number.isInteger(slot.id) || ![slot.row, slot.col, slot.rowSpan, slot.colSpan].every(value =>
++        Number.isInteger(value) && value > 0) || typeof slot.hidden !== "boolean")
++      throw Error("저장된 슬롯 배치가 올바르지 않습니다.");
++    slot = Object.assign(new Slot(slot.id, slot.row, slot.col), structuredClone(slot));
++  }
++  for (const key of ["chart", "imageId", "contentType", "imageSettings"]) delete slot[key];
+   slot.content = content;
+   slot.caption = caption;
+-  Object.defineProperties(slot, {
+-    chart: {
+-      configurable: true,
+-      enumerable: false,
+-      get() { return this.content.chart; },
+-      set(value) { this.content.chart = value; },
+-    },
+-    imageId: {
+-      configurable: true,
+-      enumerable: false,
+-      get() { return this.content.imageId; },
+-      set(value) { this.content.imageId = value; },
+-    },
+-    contentType: {
+-      configurable: true,
+-      enumerable: false,
+-      get() { return this.content.contentType; },
+-      set(value) { this.content.contentType = value; },
+-    },
+-    imageSettings: {
+-      configurable: true,
+-      enumerable: false,
+-      get() { return this.content.imageSettings; },
+-      set(value) { this.content.imageSettings = value; },
+-    },
+-    toJSON: {
+-      configurable: true,
+-      enumerable: false,
+-      value() { return slotLegacyState(this); },
+-    },
+-  });
+   return slot;
+ }
+ 
+ export function normalizeSlotContents(slots) {
+   if (!Array.isArray(slots)) return slots;
+-  slots.forEach(normalizeSlotContent);
++  for (let index = 0; index < slots.length; index++) slots[index] = normalizeSlotContent(slots[index]);
+   return slots;
+ }
+ 
+@@ -925,7 +916,7 @@ export function validateProjectObjectState(state, { requireSlots = false } = {})
+   });
+   let slotIds=new Set(),owners=new Map([...chartIds].map(id=>[id,0]));
+   state.slots.forEach(slot=>{
+-    if(!record(slot)||!Number.isInteger(slot.id)||slotIds.has(slot.id)||
++    if(!(slot instanceof Slot)||typeof slot.hidden!=="boolean"||!Number.isInteger(slot.id)||slotIds.has(slot.id)||
+       !Number.isInteger(slot.row)||!Number.isInteger(slot.col)||
+       !Number.isInteger(slot.rowSpan)||!Number.isInteger(slot.colSpan)||
+       slot.row<1||slot.col<1||slot.rowSpan<1||slot.colSpan<1||
+diff --git a/sourcecode/frontend/interface_fsm.js b/sourcecode/frontend/interface_fsm.js
+index 4d6f87da6c8ca8152d3df24881835e4905628710..689d2d2eaa575707712096d19841a20ea20c7452 100644
+--- a/sourcecode/frontend/interface_fsm.js
++++ b/sourcecode/frontend/interface_fsm.js
+@@ -14,6 +14,8 @@ export class InterfaceStateMachine {
+       direction: "model-to-ui", revision: 0, error: null });
+     this.listeners = new Set();
+     this.writeLocks = new Set();
++    Object.assign(interfaceRuntime, { selectedSlotId: null, dashboardZoomIntent: 100,
++      dashboardZoomLocked: false, dashboardZoomLockedWidth: null });
+   }
+   definition(region, state = this.state[region]) {
+     const definition = this.definitions[region]?.[state];
+@@ -33,7 +35,8 @@ export class InterfaceStateMachine {
+     document.body.dataset.appOverlay = state.overlay;
+     document.body.dataset.appAssetSelection = state.assetSelection;
+     document.body.dataset.appGraphObject = state.graphObject;
+-    this.listeners.forEach(listener => listener(state, event));
++    const listeners = [...this.listeners];
++    for (const listener of listeners) listener();
+     debugLog("fsm:transition", { event, ...state });
+     return state;
+   }
+@@ -131,7 +134,7 @@ export class InterfaceStateMachine {
+   }
+   subscribe(listener) {
+     this.listeners.add(listener);
+-    return () => this.listeners.delete(listener);
++    return () => { this.listeners.delete(listener); };
+   }
+ }
+ 
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index c84e235c636a170933112af2a08be425d64bd384..55f0d6d1608e97820ce7f45db9d9e7e3d5a4a609 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -1,7 +1,7 @@
+ // Source: sourcescript/frontend/mantine_ui.py (same logical owner); pseudocode/frontend/mantine_ui.pcal.
+ import { appFSM } from '../application/adapter.js';
+ import { PROJECT_TRASH_DIRECTORY, projectParentPath, projectPathInDirectory, projectPathName } from '../backend/assets_files.js';
+-import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
++import { bindDashboardFileDropReceiver, clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
+ 
+ // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
+ // the mounted UI owns only its collision resolver and drag finalization.
+@@ -334,12 +334,12 @@ collision
+   }
+ 
+   function exportSlotFfsxFromMantine() {
+-    return window.FastFigureApi.graphs.exportFfsx()
++    return window.FastFigureApi.graphs.exportFfsx(appFSM.readState().selectedSlotId)
+       .catch((error) => reportTaskError("SLOT_EXPORT", error));
+   }
+ 
+   function exportPlotlyJsonFromMantine() {
+-    return window.FastFigureApi.graphs.exportPlotlyJson()
++    return window.FastFigureApi.graphs.exportPlotlyJson(appFSM.readState().selectedSlotId)
+       .catch((error) => reportTaskError("PLOTLY_EXPORT", error));
+   }
+ 
+@@ -3063,8 +3063,7 @@ const handleDrop = async (event) => {
+     status("불러오기 실패: " + String(error?.message ?? error));
+   }
+ };
+-dashboard.addEventListener("drop", handleDrop, true);
+-return () => dashboard.removeEventListener("drop", handleDrop, true);
++return bindDashboardFileDropReceiver(handleDrop);
+     }, [choosePlan]);
+     return modal;
+   }
+@@ -3279,4 +3278,5 @@ React.createElement(FastFigureShell),
+   }
+ 
+   window.fastFigureUiRoot.render(React.createElement(FastFigureApp));
++  return window.fastFigureUiRoot;
+ }
+diff --git a/sourcecode/frontend/renderer.js b/sourcecode/frontend/renderer.js
+index 2077cf65c48d7b569e5279eac8c85dfdd59d306c..8cf0a01c0c253bd1b738c58beb2c5cf4b472d2f0 100644
+--- a/sourcecode/frontend/renderer.js
++++ b/sourcecode/frontend/renderer.js
+@@ -297,7 +297,7 @@ export function scheduleSlotDragClickSuppressionRelease() {
+ 
+ export function installSlotClickControllerProjection(frontendActions) {
+   const dashboard = $("dashboard");
+-  if (dashboard.dataset.clickController) return;
++  if (dashboard.dataset.clickController) return dashboard;
+   dashboard.dataset.clickController = "true";
+   const hostFor = event => {
+     const host = event.target.closest?.(".slot");
+@@ -351,6 +351,32 @@ export function installSlotClickControllerProjection(frontendActions) {
+   dashboard.addEventListener("dragend", () => {
+     clearSlotDragState(); scheduleSlotDragClickSuppressionRelease();
+   });
++  return dashboard;
++}
++
++let dashboardFileDropController;
++
++function installDashboardFileDropControllerProjection() {
++  if (dashboardFileDropController) return dashboardFileDropController;
++  const host = $("dashboard");
++  let receive = null;
++  const handle = {
++    host,
++    connect(handler) {
++      receive = handler;
++      return () => { if (receive === handler) receive = null; };
++    },
++  };
++  host.addEventListener("drop", event => {
++    if (dataTransferHasFiles(event.dataTransfer)) receive?.(event);
++  }, true);
++  dashboardFileDropController = handle;
++  return handle;
++}
++
++export function bindDashboardFileDropReceiver(handler) {
++  if (!dashboardFileDropController) throw Error("대시보드 파일 drop controller가 준비되지 않았습니다.");
++  return dashboardFileDropController.connect(handler);
+ }
+ 
+ export function syncDashboardCaptionProjection(view, scale = 1) {
+@@ -464,7 +490,7 @@ export function applyDashboardProjectionInvalidation(event, mutationResult, inte
+     sameHosts = hosts.length === slots.length && slots.every(slot => {
+       const host = hosts.find(host => host.dataset.slot === String(slot.id));
+       if (!host) return false;
+-      if (slot.contentType !== "image" && slot.figure) {
++      if (slot.content.contentType !== "image" && slot.figure) {
+         const record = rendererRuntime.graphInstances.get(slot.id);
+         return record?.host === host && record.chartId === slot.content.chart && hasLiveGraphSurface(record);
+       }
+@@ -524,7 +550,7 @@ export function applyDashboardProjectionInvalidation(event, mutationResult, inte
+ // One-call resolved relation, never a retained editing pointer or Backend lookup.
+ export function resolveSelectedChart(projectProjection, interfaceState) {
+   const slot = projectProjection.visibleSlots.find(slot => slot.id === interfaceState.selectedSlotId);
+-  return slot && slot.contentType !== "image" ? slot.chart || null : null;
++  return slot && slot.content.contentType !== "image" ? slot.chart || null : null;
+ }
+ 
+ // Selection/workspace presentation owns existing surfaces, not domain selection.
+@@ -540,7 +566,7 @@ export function updateGraphViewProjection(projectProjection, interfaceState, fro
+     const host = hosts.get(String(slot.id)), record = rendererRuntime.graphInstances.get(slot.id),
+       surface = rendererRuntime.imageSurfaces.get(slot.id);
+     if (!host?.isConnected) return true;
+-    if (slot.contentType !== "image" && slot.figure)
++    if (slot.content.contentType !== "image" && slot.figure)
+       return !record || record.host !== host || !hasLiveGraphSurface(record) || record.chartId !== slot.content.chart;
+     if (record) return true;
+     return slot.imageView ? !surface || surface.host !== host || !hasLiveImageSurface(surface) || surface.imageInput.src !== slot.imageView.src : !!surface;
+@@ -563,11 +589,12 @@ export function updateGraphViewProjection(projectProjection, interfaceState, fro
+ // Lifecycle ready and Backend acquisition belong to the Application boundary.
+ export function startupCoreRuntimeProjection(projectProjection, interfaceState, frontendActions) {
+   applyDashboardZoomProjection(projectProjection, interfaceState);
+-  installSlotClickControllerProjection(frontendActions);
+-  const presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
++  const clickController = installSlotClickControllerProjection(frontendActions),
++    dropController = installDashboardFileDropControllerProjection(),
++    presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
+   applySlotStyleProjection(projectProjection);
+   auditSuppliedRendererContracts(projectProjection, interfaceState);
+-  return presentation;
++  return { clickController, dropController, presentation };
+ }
+ 
+ // Low-level realization of startup's supplied project/reference/runtime audit.
+@@ -605,7 +632,7 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
+   };
+   for (const record of rendererRuntime.graphInstances.values()) {
+     const slot = slots.find(slot => slot.id === record.slotId);
+-    if (!slot || slot.contentType === "image" || !slot.figure || slot.content.chart !== record.chartId ||
++    if (!slot || slot.content.contentType === "image" || !slot.figure || slot.content.chart !== record.chartId ||
+         !hasLiveGraphSurface(record)) discard(record);
+   }
+   // Image elements are surface-owned decode handles, never shared asset handles.
+@@ -615,7 +642,7 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
+   $("dashboardCaption")?.style.setProperty("--slot-border-color",
+     projectProjection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
+   for (const slot of slots) {
+-    const graph = slot.contentType !== "image" && slot.figure,
++    const graph = slot.content.contentType !== "image" && slot.figure,
+       image = !graph && slot.imageView,
+       selected = slot.id === interfaceState.selectedSlotId;
+     let record = rendererRuntime.graphInstances.get(slot.id);
+diff --git a/sourcecode/system.js b/sourcecode/system.js
+index c6e9b723708a79404c11002f2e4e430a3ef69c18..ee0f3118aa32cdd18fd88bf76f6d286d42e93aa5 100644
+--- a/sourcecode/system.js
++++ b/sourcecode/system.js
+@@ -29,13 +29,13 @@ export const REQUIRED_APP_FUNCTIONS = [
+   ["createProjectState", () => typeof createProjectState === "function"],
+   ["applyImageSettingsFromValues", () => typeof applyImageSettingsFromValues === "function"],
+   ["projectClone", () => typeof projectClone === "function"],
+-  ["ProjectObject", () => activeProject instanceof ProjectObject],
++  ["ProjectObject", () => typeof ProjectObject === "function"],
+   ["buildProjectObject", () => typeof buildProjectObject === "function"],
+   ["validateProjectObject", () => typeof validateProjectObject === "function"],
+   ["renderProjectObject", () => typeof renderProjectObject === "function"],
+-  ["projectObjects", () => projectObjects instanceof ProjectObjectRegistry],
+-  ["interfaceFSM", () => interfaceFSM instanceof InterfaceStateMachine],
+-  ["projectEFSM", () => projectEFSM instanceof ProjectStateMachine],
++  ["projectObjects", () => typeof ProjectObjectRegistry === "function"],
++  ["interfaceFSM", () => typeof InterfaceStateMachine === "function"],
++  ["projectEFSM", () => typeof ProjectStateMachine === "function"],
+   ["auditApp", () => typeof auditApp === "function"],
+ ];
+ 
+@@ -46,8 +46,10 @@ export function requireCoreRuntimeAndRendererHosts() {
+   const missing = REQUIRED_APP_FUNCTIONS.filter(([, check]) => !check()).map(([name]) => name);
+   missing.push(...REQUIRED_RENDERER_HOSTS.filter((id) => !document.getElementById(id)));
+   if (typeof window.Plotly?.react !== "function") missing.push("Plotly.react");
+-  if (!window.FastFigureUiRuntime) missing.push("FastFigureUiRuntime");
+-  if (!window.fastFigureUiRoot) missing.push("fastFigureUiRoot");
++  const ui = window.FastFigureUiRuntime;
++  if (typeof ui?.React?.createElement !== "function" || !ui?.MantineCore?.MantineProvider ||
++      typeof ui?.MantineCore?.createTheme !== "function") missing.push("FastFigureUiRuntime");
++  if (typeof window.fastFigureUiRoot?.render !== "function") missing.push("fastFigureUiRoot");
+   if (missing.length) throw Error(`Fast Figure startup prerequisites missing: ${missing.join(", ")}`);
+ }
+ 
+@@ -256,10 +258,10 @@ export function auditApp(context = "manual") {
+   activeProject.slots.forEach((slot, index) => {
+     if (!slot || typeof slot !== "object") issues.push({ kind: "invalid-slot", index });
+     else {
+-      if (slot.chart !== null && slot.chart !== undefined && !chartIds.has(slot.chart))
+-        issues.push({ kind: "orphan-slot-chart", slotId: slot.id, chart: slot.chart });
+-      if (slot.imageId !== null && slot.imageId !== undefined && !imageIds.has(slot.imageId))
+-        issues.push({ kind: "orphan-slot-image", slotId: slot.id, imageId: slot.imageId });
++      if (slot.content.chart !== null && slot.content.chart !== undefined && !chartIds.has(slot.content.chart))
++        issues.push({ kind: "orphan-slot-chart", slotId: slot.id, chart: slot.content.chart });
++      if (slot.content.imageId !== null && slot.content.imageId !== undefined && !imageIds.has(slot.content.imageId))
++        issues.push({ kind: "orphan-slot-image", slotId: slot.id, imageId: slot.content.imageId });
+       if (slot.caption !== null && typeof slot.caption !== "string")
+         issues.push({
+           kind: "invalid-slot-caption",
+@@ -286,11 +288,12 @@ export function auditApp(context = "manual") {
+ 
+ 
+ export function initializeFastFigure() {
++  requireCoreRuntimeAndRendererHosts();
+   initializeActiveProject();
+   initializeProjectObjects();
+   initializeInterfaceFSM();
+   initializeProjectEFSM();
+-  requireCoreRuntimeAndRendererHosts();
++  const frontendActions = publishPublicApi();
+ window.addEventListener("error", (event) =>
+   debugLog("window:error", {
+     message: event.message,
+@@ -312,7 +315,7 @@ debugLog("app:init", {
+   location: location.href,
+ });
+ 
+-startupCoreRuntime();
++const coreRuntime = startupCoreRuntime();
+ 
+ appFSM.ready();
+ 
+@@ -326,10 +329,8 @@ debugLog(
+   "info",
+ );
+ 
+-  // Source/PlusCal: ready -> expose -> mount -> final owner audit.
+-  publishPublicApi();
+-  mountMantineUi();
++  const uiMount = mountMantineUi();
+   auditApp("app:init");
+-  return "initialized_runtime";
++  return { frontendActions, coreRuntime, uiMount };
+ }
+ initializeFastFigure();
+diff --git a/agent_space/reviews/review-20261117-007-plan038-source-code.md b/agent_space/reviews/review-20261117-007-plan038-source-code.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..3154c3c95a9d08ce05e47478b97046d58eebe20d
+--- /dev/null
++++ b/agent_space/reviews/review-20261117-007-plan038-source-code.md
+@@ -0,0 +1,36 @@
++# Plan038 — pseudocode 30 → source code 모듈 대조
++
++## 1. 대상과 판정
++
++`plan-038.md`의 15개 논리 모듈을 절차·인자·현재 원천·반환·실패 의미로 대조했다. 앞서 전체를 읽은 변경 없는 절차를 재사용하고 이번 수정과 직접 호출자/private 확장을 다시 확인했다. 확인된 번역 차이를 13개 JavaScript 파일에서 수정했다. Source Script 53, pseudocode, 설정, 기존 문서와 dist는 보존했다.
++
++| 구간 | 수정 또는 유지 근거 |
++|---|---|
++| M01 system | `sourcecode/system.js:45`에서 함수·host·Plotly·React/Mantine·root.render를 채택 전에 확인한다. `sourcecode/system.js:290`은 생성/채택→API 공개→runtime→ready→mount→실제 handle을 담은 반환 순서다. 새 rollback은 추가하지 않았다. |
++| M02 state | `sourcecode/backend/project_state.js:7`의 Slot과 `sourcecode/backend/project_state.js:790`의 기존 인스턴스 유지/저장 record 복원, `sourcecode/backend/project_state.js:823`의 배열 위치 갱신으로 한 원형을 사용한다. 평면 accessor/toJSON을 제거하고 Slot 인스턴스를 검증한다. `sourcecode/backend/project_state.js:72`는 등록 이름/직접 path를 해석한다. image read는 imageId/MIME, labels reference는 width/height를 반환한다. |
++| M03 EFSM | `sourcecode/backend/project_efsm.js:108`에서 후보 Slot/설정을 정규화한 뒤 전체 검증한다. 현재 참조 재검사·한 번 initialize·실제 전후 결과는 보존한다. `sourcecode/backend/project_efsm.js:231`과 `sourcecode/backend/project_efsm.js:265`는 data/rows/bytes/base64와 독립 header 갱신, 같은 후보의 참조 chart 재계산을 연결한다. header가 있으면 data/bytes를 무시하던 분기를 제거했다. |
++| M04 assets | `sourcecode/backend/assets_files.js:196`은 누락 시 1, 명시 scalar 변환/절삭/행수 clamp를 맡고 model/import/FFPX/FFSX에서 재사용한다. VFS·충돌·참조·STORE/CRC/XML·원자 가져오기는 유지한다. `sourcecode/backend/assets_files.js:1053`의 package 쓰기 경계에서 평면 저장 형식으로 명시 변환한다. |
++| M05 graphs | `sourcecode/backend/graphs.js:184`의 누락 열 이름은 빈 문자열이다. `sourcecode/backend/graphs.js:327`은 같은 project의 등록 chart/유일 owner를 확인하고 이번 호출이 전달한 chart의 표현과 내용을 사용한다. 축·trace 확장·figure 계산은 유지한다. |
++| M06 layout | `sourcecode/backend/layout_annotations.js:83`이 Slot을 생성하며 내부 image 참조는 content를 사용한다. grid/merge/split·span/gap/margin/radius·label/caption 계산을 유지한다. |
++| M07 FSM | `sourcecode/frontend/interface_fsm.js:28`은 revision 갱신 후 listener snapshot에 인자 없이 통지한다. 초기 session 선택/zoom/lock을 초기화하고 `sourcecode/frontend/interface_fsm.js:135`의 해제는 멱등이다. 기존 전이·실패·이동 map 참조 보정을 유지한다. |
++| M08 adapter | `sourcecode/application/adapter.js:27`은 실제 renderer runtime을 반환하고 불필요한 초기 layout 변경 통지를 제거했다. 현재 state/query·명시 width·명령/선택의 단일 경로·부분 통지·lifecycle의 원래 실패를 유지한다. |
++| M09 contract | `sourcecode/application/public_api/index.js:42`가 API를 구성해 반환하고 `sourcecode/application/public_api/index.js:160`이 같은 값을 공개한다. 생략한 download path는 공개 binding에서 현재 선택으로 확정한다. 전체 method/명시 graph export 인자를 대조했다. |
++| M10 public assets | `sourcecode/application/public_api/assets.js:83`은 binding에서 확정한 path를 사용한다. 고정 target·충돌/취소·원자 directory batch/순차 router·성공 후 공식 읽기·미반영/원래 실패를 유지한다. |
++| M11 public graphs | `sourcecode/application/public_api/graphs.js:180`과 `sourcecode/application/public_api/graphs.js:193`이 명시 slotId를 export에 전달한다. UI도 이벤트 시점 slotId를 전달한다. 기존 add/move/delete·편집 전환·header·layout/palette·import 절차는 유지한다. |
++| M12 public layout | `sourcecode/application/public_api/layout_annotations.js`의 전체 wrapper를 대조했다. zoom lock의 한 번 측정·session 의도·image/labels/caption·복사한 print snapshot·원래 실패가 대응해 수정하지 않았다. |
++| M13 renderer | `sourcecode/frontend/renderer.js:359`가 초기 렌더 전에 한 개의 연속 file-drop receiver를 설치한다. `sourcecode/frontend/renderer.js:377`로 UI 처리를 연결하고 `sourcecode/frontend/renderer.js:590`이 실제 click/drop/presentation handle을 반환한다. 공통 frame·graph/image generation/host 검사·오래된 완료 정리·export는 유지한다. |
++| M14 UI | `sourcecode/frontend/mantine_ui.js`에서 명시 slot export·기존 drop 처리와 receiver 연결·실제 mount handle 반환을 맞췄다. 다른 component binding·현재 입력·빈칸 blur·fold/control/preview·실패 후 resolver/finalizer는 유지한다. |
++| M15 portable | `sourcecode/portable_build/portable_build.mjs`와 `scripts/build-portable.py`의 기존 bundle·tag 개수/존재 확인·치환·외부 script 검사·쓰기/중단 경로가 대응해 수정하지 않았다. 빌드는 실행하지 않았다. |
++
++## 2. 논리·목적·비중복
++
++- Slot 생성/저장 복원→같은 후보 정규화/전체 검증→현재 owner 재검사→한 번 반영→실제 결과의 연결을 확인했다. 일반 읽기에 후보를 공유하지 않는다.
++- API 공개/시작 결과, CSV 입력/bytes/header, listener 통지, chart 인자의 실제 차이를 수정하고 Slot 표현 변경의 직접 사용처도 추적했다.
++- ProjectObject가 현재 project를, Frontend가 session을 소유한다. class 원형을 저장 tag로 기록하지 않고 평면 package 형식은 입출력 경계에서 변환한다. drop controller는 DOM listener/연결 handle을 보유한다.
++- UI에 index 보정·Backend 계산·별도 수신 listener를 중복하지 않는다. 공통 frame·Application 경로·실제 commit 결과를 재사용한다.
++
++## 3. 보류와 확인 범위
++
++`review-20261117-006-plan037-modules.md`의 상위 계약 두 건(import mode와 완료 path/replaceId, ui-palette 이후 figure 입력)은 보류를 유지했다. 추가 field/query/의미를 만들지 않았다.
++
++변경 JavaScript의 `node --check`, 전체 실제 native diff, hash/metadata 범위, 역적용·공백·보호 path·index를 정적으로 확인했다. 테스트·앱·브라우저·빌드·TLC·checker main은 실행하지 않았다. UI 동작·package 왕복·비동기 자원의 실행상 정확성이나 전체 계층 닫힘은 선언하지 않는다.
+diff --git a/agent_space/patches/20261117-009.md b/agent_space/patches/20261117-009.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..e56fde7ac1ba956e7516a8d471b5a75855e70138
+--- /dev/null
++++ b/agent_space/patches/20261117-009.md
+@@ -0,0 +1,17 @@
++# Plan038 source code 번역 차이 수정
++
++## 목적과 선택
++
++- `plan-038.md`의 15개 논리 모듈을 pseudocode 30과 대조하고 실제 차이를 13개 JavaScript 파일에서 수정했다.
++- Slot class와 명시적 저장 복원을 사용하고 평면 accessor/toJSON을 제거했다. 기존 XML 저장 형식은 package 입출력 경계에서 변환해 유지했다.
++- 후보 정규화/전체 검증, CSV data/bytes/header 동시 갱신, 전달 chart 보존, listener snapshot, 준비 검사/공개/시작/반환과 명시 API 인자를 연결했다.
++- 기존 Application·commit 결과·공통 frame·자원 수명 경로를 재사용했다. file-drop은 한 수신 listener와 UI 처리 연결을 사용한다.
++
++## 실제 변경과 확인
++
++- 기준: 사용자 요청으로 먼저 커밋한 `658eebffd462168c4ddd4abe668cc1ac4daa274d`. 이후 commit/push는 실행하지 않았다.
++- native Git diff는 source code 13개, 메타데이터, 신규 검토 문서와 이 설명을 포함한다. 새 계획만의 code patch는 만들지 않았다.
++- Source Script 53과 pseudocode 30은 보존했다. source code 160 fingerprint: `sha256:54239f1e01f62bf4843579704e0767ee4dd2781a4099699f8f87e10430bae0d0`.
++- 검토: `../reviews/review-20261117-007-plan038-source-code.md`. 기존 두 상위 계약 보류는 유지했다.
++- JavaScript 구문·실제 diff 전체·hash/metadata 범위·역적용/공백·보호 경로·index를 정적으로 확인했다.
++- 테스트·앱·브라우저·빌드·TLC·checker main은 실행하지 않았다. 실행 결과와 전체 계층 닫힘은 주장하지 않는다.

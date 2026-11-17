@@ -170,7 +170,7 @@ export function chartCsvIds(chart) {
 }
 
 export function headerLineCount(value, table = []) {
-  const number = Number(value);
+  const number = graphScalarNumber(value);
   return Number.isFinite(number)
     ? Math.min(Math.max(0, Math.trunc(number)), Array.isArray(table) ? table.length : 0)
     : 0;
@@ -190,7 +190,7 @@ export function columnDefinitions(table = [], headerLines = 1) {
     header = count > 0 && Array.isArray(table[count - 1]) ? table[count - 1] : [];
   return Array.from({ length: width }, (_, index) => {
     let id = `C${index + 1}`,
-      name = header[index], text = String(name ?? "").trim();
+      name = header[index] ?? "", text = String(name).trim();
     return { id, index, name, label: text ? `${id} — ${text}` : id };
   });
 }
@@ -325,11 +325,10 @@ export function tracesSingle(c) {
 }
 
 export function traces(c, project = activeProject._state) {
-  const owners = project.slots.filter(slot => (slot.content?.chart ?? slot.chart) === c.id),
+  const owners = project.slots.filter(slot => slot.content.chart === c.id),
     current = project.charts.find(chart => chart.id === c.id);
-  if (owners.length !== 1 || !current || chartUsesConversionView(current))
+  if (owners.length !== 1 || !current || chartUsesConversionView(c))
     throw Error("그래프 투영에 같은 프로젝트의 유일한 owning chart가 필요합니다.");
-  c = current;
   let settings = normalizeGraphLayoutSettings(c.editor.globalSettings),
     editor = c.editor,
     axes = settings.axes,

@@ -177,9 +177,9 @@ export function applyGraphPaletteApi(colors) {
   return graphEditorApplyPalette(context.chart?.id ?? null, colors);
 }
 
-export function downloadSlotFfsx() {
+export function downloadSlotFfsx(slotId) {
   return appFSM.run("exporting", "graphs.exportFfsx", () =>
-    exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportFfsx"));
+    exportSelectedGraph(slotId, "graphs.exportFfsx"));
 }
 
 export async function exportSelectedGraph(slotId, operation) {
@@ -190,7 +190,7 @@ export async function exportSelectedGraph(slotId, operation) {
   await downloadExportPayload(payload);
 }
 
-export function downloadPlotlyJson() {
+export function downloadPlotlyJson(slotId) {
   return appFSM.run("exporting", "graphs.exportPlotlyJson", () =>
-    exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportPlotlyJson"));
+    exportSelectedGraph(slotId, "graphs.exportPlotlyJson"));
 }

@@ -1,7 +1,7 @@
 // Source: sourcescript/backend/assets_files.py (same logical owner); pseudocode/backend/assets_files.pcal.
 import { appFSM, dispatchProjectCommand } from '../application/adapter.js';
-import { chartCsvIds, chartExportCopy, chartUsesConversionView, createCandidateBaseGraphObject, createChartModel, dataTable, headerLineCount, normalizeGlobalSettings, readGlobalSettings, rebuildEditableGraph, validateChartModel } from './graphs.js';
-import { ProjectObject, activeProject, getProjectCsv, immutableProjectCopy, normalizeSlotContent, normalizeSlotContents, projectClone, projectColor, validateProjectObjectState } from './project_state.js';
+import { chartCsvIds, chartExportCopy, chartUsesConversionView, createCandidateBaseGraphObject, createChartModel, dataTable, normalizeGlobalSettings, readGlobalSettings, rebuildEditableGraph, validateChartModel } from './graphs.js';
+import { ProjectObject, activeProject, getProjectCsv, immutableProjectCopy, normalizeSlotContent, normalizeSlotContents, projectClone, projectColor, slotLegacyState, validateProjectObjectState } from './project_state.js';
 import { BackendSettings, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PACKAGE_FORMAT_VERSION } from './settings.js';
 
 export function projectImageDataUrl(image) {
@@ -20,7 +20,7 @@ export function collectAssetReferences(csvIds, imageIds, state) {
     });
   });
   state.slots.forEach((slot) => {
-    const imageId = slot.content?.imageId ?? slot.imageId;
+    const imageId = slot.content.imageId;
     if (imageIds.has(imageId)) refs.push({ kind: "image", assetId: imageId, slotId: slot.id, slot });
   });
   return refs;
@@ -89,15 +89,15 @@ export function buildProjectAssetImportCandidate(source, payload) {
         target.content.contentType = "image";
         target.content.imageId = staged.id;
       } else {
-        if (target.contentType !== "graph") return null;
-        let chart = candidate.charts.find(item => item.id === target.chart);
+        if (target.content.contentType !== "graph") return null;
+        let chart = candidate.charts.find(item => item.id === target.content.chart);
         if (chart?.editor?.editable === false) return null;
         const csv = candidate.assets.csvFiles.find(item => item.id === staged.id);
         if (!chart) {
           chart = createChartModel({ id: candidate.nextId.chart++, editor: { title: csv.name,
             globalSettings: readGlobalSettings({ editor: {} }), plotlyExtensions: { layout: {}, config: {} },
             objects: [] } });
-          candidate.charts.push(chart); target.chart = chart.id;
+          candidate.charts.push(chart); target.content.chart = chart.id;
         }
         chart.editor.objects.push(createCandidateBaseGraphObject(csv));
       }
@@ -193,6 +193,12 @@ export function projectCsvName(value, fallback = "data.csv") {
   return name || fallback;
 }
 
+export function normalizeCsvHeaderLines(value, rowCount, present = true) {
+  const parsed = !present || (value !== null && typeof value === "object") ? NaN : Number(value);
+  const count = present ? (Number.isFinite(parsed) ? parsed : 0) : 1;
+  return Math.max(0, Math.min(rowCount, Math.trunc(count)));
+}
+
 export function buildProjectCsvModel(
   data,
   name,
@@ -214,7 +220,7 @@ export function buildProjectCsvModel(
             serializeNewDataTable(dataTable(data), projectCsvName(name)),
           ),
     mime: typeof mime === "string" && mime ? mime : "text/csv",
-    headerLines: headerLineCount(headerLines, data),
+    headerLines: normalizeCsvHeaderLines(headerLines, dataTable(data).length),
   };
   projectVfs.assignUniqueLocation(model, PROJECT_ASSET_DIRECTORIES.csv, state);
   return model;
@@ -463,7 +469,7 @@ export function stageProjectAssetImport(candidate, item) {
   if (kind === "csv") {
     model.rows = parseProjectCsvAsset(item.file.name, bytes);
     if (item.replaceId !== null && index < 0) throw Error("교체할 자산이 없습니다.");
-    model.headerLines = headerLineCount(item.replaceId === null ? 1 : collection[index].headerLines, model.rows);
+    model.headerLines = normalizeCsvHeaderLines(item.replaceId === null ? 1 : collection[index].headerLines, model.rows.length);
   }
   if (item.replaceId !== null) {
     if (index < 0) throw Error("교체할 자산이 없습니다.");
@@ -507,9 +513,9 @@ export function projectDataTreeSnapshot(objects = {}) {
       row: slot.row,
       col: slot.col,
       hidden: slot.hidden === true,
-      contentType: slot.contentType,
-      chart: slot.chart,
-      imageId: slot.imageId,
+      contentType: slot.content.contentType,
+      chart: slot.content.chart,
+      imageId: slot.content.imageId,
     })),
   };
 }
@@ -541,7 +547,7 @@ export function importedProjectCsvState(payload) {
                 serializeNewDataTable(source.rows, projectCsvName(source.name, `data-${index + 1}.csv`)),
               ),
         mime: typeof source.mime === "string" ? source.mime : "text/csv",
-        headerLines: headerLineCount(Object.hasOwn(source, "headerLines") ? source.headerLines : 1, source.rows),
+        headerLines: normalizeCsvHeaderLines(source.headerLines, source.rows.length, Object.hasOwn(source, "headerLines")),
       };
     });
   return {
@@ -628,7 +634,7 @@ export function buildProjectObject(payload, fileName) {
         mime: raw.mime, bytesBase64: ffpxBytesToBase64(ffpxBase64ToBytes(raw.bytesBase64)) };
       if (kind === "csv") {
         asset.rows = dataTable(raw.rows);
-        asset.headerLines = headerLineCount(own(raw, "headerLines", 1), asset.rows);
+        asset.headerLines = normalizeCsvHeaderLines(raw.headerLines, asset.rows.length, Object.hasOwn(raw, "headerLines"));
       }
       candidate.assets[kind === "csv" ? "csvFiles" : "images"].push(asset);
     }
@@ -1045,7 +1051,7 @@ export function ffpxDeriveHiddenSlots(slotList) {
 }
 
 export function ffpxBuildProject(source = activeProject._state) {
-  // Legacy validation installs slot accessors: confine that work to the detached read.
+  // Validate the detached read; encode legacy XML fields only at the storage boundary.
   const snapshot = projectClone(source);
   validateProjectObjectState(snapshot, { requireSlots: true });
   let projectObject = snapshot.meta,
@@ -1115,7 +1121,7 @@ export function ffpxBuildProject(source = activeProject._state) {
     manifest.charts.push(chartExportCopy(chart));
   }
   for (let slot of slotObjects) {
-    let copy = projectClone(slot);
+    let copy = slotLegacyState(slot);
     if (copy.imageId != null) {
       let image = imageObjects.find((item) => item.id === copy.imageId);
       if (!image)
@@ -1420,7 +1426,7 @@ export function ffpxReadProjectBytes(bytes) {
     )
       throw Error("FFPX CSV 자산이 없습니다.");
     csv.rows = parseProjectCsvAsset(csv.name, assets.get(dataRef));
-    csv.headerLines = headerLineCount(Object.hasOwn(csv, "headerLines") ? csv.headerLines : 1, csv.rows);
+    csv.headerLines = normalizeCsvHeaderLines(csv.headerLines, csv.rows.length, Object.hasOwn(csv, "headerLines"));
     csv.bytesBase64 = ffpxBytesToBase64(assets.get(dataRef));
     delete csv.dataRef;
   }
@@ -1678,7 +1684,7 @@ export function ffsxReadSlotBytes(bytes) {
       throw Error("FFSX 슬롯 내부 CSV ID가 올바르지 않습니다.");
     slotCsvIds.add(csv.id);
     csv.rows = parseProjectCsvAsset(csv.name, data);
-    csv.headerLines = headerLineCount(Object.hasOwn(csv, "headerLines") ? csv.headerLines : 1, csv.rows);
+    csv.headerLines = normalizeCsvHeaderLines(csv.headerLines, csv.rows.length, Object.hasOwn(csv, "headerLines"));
     csv.bytesBase64 = ffpxBytesToBase64(data);
     delete csv.dataRef;
   }

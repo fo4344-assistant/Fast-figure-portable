@@ -29,13 +29,13 @@ export const REQUIRED_APP_FUNCTIONS = [
   ["createProjectState", () => typeof createProjectState === "function"],
   ["applyImageSettingsFromValues", () => typeof applyImageSettingsFromValues === "function"],
   ["projectClone", () => typeof projectClone === "function"],
-  ["ProjectObject", () => activeProject instanceof ProjectObject],
+  ["ProjectObject", () => typeof ProjectObject === "function"],
   ["buildProjectObject", () => typeof buildProjectObject === "function"],
   ["validateProjectObject", () => typeof validateProjectObject === "function"],
   ["renderProjectObject", () => typeof renderProjectObject === "function"],
-  ["projectObjects", () => projectObjects instanceof ProjectObjectRegistry],
-  ["interfaceFSM", () => interfaceFSM instanceof InterfaceStateMachine],
-  ["projectEFSM", () => projectEFSM instanceof ProjectStateMachine],
+  ["projectObjects", () => typeof ProjectObjectRegistry === "function"],
+  ["interfaceFSM", () => typeof InterfaceStateMachine === "function"],
+  ["projectEFSM", () => typeof ProjectStateMachine === "function"],
   ["auditApp", () => typeof auditApp === "function"],
 ];
 
@@ -46,8 +46,10 @@ export function requireCoreRuntimeAndRendererHosts() {
   const missing = REQUIRED_APP_FUNCTIONS.filter(([, check]) => !check()).map(([name]) => name);
   missing.push(...REQUIRED_RENDERER_HOSTS.filter((id) => !document.getElementById(id)));
   if (typeof window.Plotly?.react !== "function") missing.push("Plotly.react");
-  if (!window.FastFigureUiRuntime) missing.push("FastFigureUiRuntime");
-  if (!window.fastFigureUiRoot) missing.push("fastFigureUiRoot");
+  const ui = window.FastFigureUiRuntime;
+  if (typeof ui?.React?.createElement !== "function" || !ui?.MantineCore?.MantineProvider ||
+      typeof ui?.MantineCore?.createTheme !== "function") missing.push("FastFigureUiRuntime");
+  if (typeof window.fastFigureUiRoot?.render !== "function") missing.push("fastFigureUiRoot");
   if (missing.length) throw Error(`Fast Figure startup prerequisites missing: ${missing.join(", ")}`);
 }
 
@@ -256,10 +258,10 @@ export function auditApp(context = "manual") {
   activeProject.slots.forEach((slot, index) => {
     if (!slot || typeof slot !== "object") issues.push({ kind: "invalid-slot", index });
     else {
-      if (slot.chart !== null && slot.chart !== undefined && !chartIds.has(slot.chart))
-        issues.push({ kind: "orphan-slot-chart", slotId: slot.id, chart: slot.chart });
-      if (slot.imageId !== null && slot.imageId !== undefined && !imageIds.has(slot.imageId))
-        issues.push({ kind: "orphan-slot-image", slotId: slot.id, imageId: slot.imageId });
+      if (slot.content.chart !== null && slot.content.chart !== undefined && !chartIds.has(slot.content.chart))
+        issues.push({ kind: "orphan-slot-chart", slotId: slot.id, chart: slot.content.chart });
+      if (slot.content.imageId !== null && slot.content.imageId !== undefined && !imageIds.has(slot.content.imageId))
+        issues.push({ kind: "orphan-slot-image", slotId: slot.id, imageId: slot.content.imageId });
       if (slot.caption !== null && typeof slot.caption !== "string")
         issues.push({
           kind: "invalid-slot-caption",
@@ -286,11 +288,12 @@ export function auditApp(context = "manual") {
 
 
 export function initializeFastFigure() {
+  requireCoreRuntimeAndRendererHosts();
   initializeActiveProject();
   initializeProjectObjects();
   initializeInterfaceFSM();
   initializeProjectEFSM();
-  requireCoreRuntimeAndRendererHosts();
+  const frontendActions = publishPublicApi();
 window.addEventListener("error", (event) =>
   debugLog("window:error", {
     message: event.message,
@@ -312,7 +315,7 @@ debugLog("app:init", {
   location: location.href,
 });
 
-startupCoreRuntime();
+const coreRuntime = startupCoreRuntime();
 
 appFSM.ready();
 
@@ -326,10 +329,8 @@ debugLog(
   "info",
 );
 
-  // Source/PlusCal: ready -> expose -> mount -> final owner audit.
-  publishPublicApi();
-  mountMantineUi();
+  const uiMount = mountMantineUi();
   auditApp("app:init");
-  return "initialized_runtime";
+  return { frontendActions, coreRuntime, uiMount };
 }
 initializeFastFigure();

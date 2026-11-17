@@ -4,6 +4,21 @@ import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraph
 import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
 import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
 
+export class Slot {
+  constructor(id, row, col) {
+    this.id = id;
+    this.row = row;
+    this.col = col;
+    this.rowSpan = 1;
+    this.colSpan = 1;
+    this.hidden = false;
+    this.content = structuredClone(BackendSettings.defaults.slotSettings.content);
+    this.content.chart = null;
+    this.content.imageId = null;
+    this.caption = null;
+  }
+}
+
 export function createProjectState() {
   let state = {
     kind: "fast-figure-project-object",
@@ -55,7 +70,7 @@ export class ProjectObject {
     return buildProjectObject(payload, fileName);
   }
   read(path) {
-    let value = projectObjectPath(this._state, path);
+    let value = projectObjectPath(this._state, Object.hasOwn(PROJECT_OBJECT_PATHS, path) ? PROJECT_OBJECT_PATHS[path] : path);
     if (value === undefined) throw Error(`프로젝트 오브젝트 경로 ${path}가 없습니다.`);
     return value;
   }
@@ -351,7 +366,7 @@ export function readBackendProjection(kind, request = {}) {
       identifier = slotIdentifier(0, source);
     return immutableProjectCopy({
       enabled: labels.enabled, settings: Object.freeze({ ...labels.settings }),
-      reference: Object.freeze(reference),
+      reference: Object.freeze({ width: reference.width, height: reference.height }),
       sampleText: labels.settings.parentheses ? `(${identifier})` : identifier,
     });
   }
@@ -534,7 +549,7 @@ export function buildBackendImageRead(source, slotId) {
   const image = source.assets.images.find(item => item.id === original.content.imageId);
   if (!image) return null;
   const slot = normalizeSlotContent(structuredClone(original));
-  return { slotId: slot.id, name: image.name,
+  return { slotId: slot.id, imageId: image.id, mime: image.mime, name: image.name,
     bytes: Array.from(ffpxBase64ToBytes(image.bytesBase64 || "")),
     src: projectImageDataUrl(image), settings: structuredClone(slot.content.imageSettings),
   };
@@ -793,45 +808,21 @@ export function normalizeSlotContent(slot) {
         content.imageSettings[key] = structuredClone(DEFAULT_IMAGE_SETTINGS[key]);
   }
   delete content.caption;
+  if (!(slot instanceof Slot)) {
+    if (!Number.isInteger(slot.id) || ![slot.row, slot.col, slot.rowSpan, slot.colSpan].every(value =>
+        Number.isInteger(value) && value > 0) || typeof slot.hidden !== "boolean")
+      throw Error("저장된 슬롯 배치가 올바르지 않습니다.");
+    slot = Object.assign(new Slot(slot.id, slot.row, slot.col), structuredClone(slot));
+  }
+  for (const key of ["chart", "imageId", "contentType", "imageSettings"]) delete slot[key];
   slot.content = content;
   slot.caption = caption;
-  Object.defineProperties(slot, {
-    chart: {
-      configurable: true,
-      enumerable: false,
-      get() { return this.content.chart; },
-      set(value) { this.content.chart = value; },
-    },
-    imageId: {
-      configurable: true,
-      enumerable: false,
-      get() { return this.content.imageId; },
-      set(value) { this.content.imageId = value; },
-    },
-    contentType: {
-      configurable: true,
-      enumerable: false,
-      get() { return this.content.contentType; },
-      set(value) { this.content.contentType = value; },
-    },
-    imageSettings: {
-      configurable: true,
-      enumerable: false,
-      get() { return this.content.imageSettings; },
-      set(value) { this.content.imageSettings = value; },
-    },
-    toJSON: {
-      configurable: true,
-      enumerable: false,
-      value() { return slotLegacyState(this); },
-    },
-  });
   return slot;
 }
 
 export function normalizeSlotContents(slots) {
   if (!Array.isArray(slots)) return slots;
-  slots.forEach(normalizeSlotContent);
+  for (let index = 0; index < slots.length; index++) slots[index] = normalizeSlotContent(slots[index]);
   return slots;
 }
 
@@ -925,7 +916,7 @@ export function validateProjectObjectState(state, { requireSlots = false } = {})
   });
   let slotIds=new Set(),owners=new Map([...chartIds].map(id=>[id,0]));
   state.slots.forEach(slot=>{
-    if(!record(slot)||!Number.isInteger(slot.id)||slotIds.has(slot.id)||
+    if(!(slot instanceof Slot)||typeof slot.hidden!=="boolean"||!Number.isInteger(slot.id)||slotIds.has(slot.id)||
       !Number.isInteger(slot.row)||!Number.isInteger(slot.col)||
       !Number.isInteger(slot.rowSpan)||!Number.isInteger(slot.colSpan)||
       slot.row<1||slot.col<1||slot.rowSpan<1||slot.colSpan<1||
