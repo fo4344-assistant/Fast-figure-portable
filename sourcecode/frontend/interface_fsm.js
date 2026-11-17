@@ -116,12 +116,13 @@ export class InterfaceStateMachine {
   }
   reconcileProjectResult(event, input) {
     interfaceRuntime.selectedSlotId = input.selectedSlot;
-    this.state = Object.freeze({ ...this.state, workspace: input.workspaceHint,
+    this.state = Object.freeze({ ...this.state, workspace: input.workspaceHint, direction: "model-to-fsm",
       assetSelection: input.assetKind ?? "none", assetPath: input.assetSelection,
       graphObject: input.graphObject === null ? "none" : "selected", graphObjectIndex: input.graphObject });
     return this.publish(`${event}:reconcile`);
   }
   notify(objectName, event, payload = {}) {
+    this.state = Object.freeze({ ...this.state, direction: "model-to-fsm" });
     return this.publish(event);
   }
   ready(workspaceHint = "project") {

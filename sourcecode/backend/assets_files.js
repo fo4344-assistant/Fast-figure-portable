@@ -84,8 +84,10 @@ export function buildProjectAssetImportCandidate(source, payload) {
     reserved.add(path);
     if (target) {
       if (kind === "image") {
-        if (target.contentType !== "image") return null;
-        target.imageId = staged.id;
+        candidate.charts = candidate.charts.filter(chart => chart.id !== target.content.chart);
+        target.content.chart = null;
+        target.content.contentType = "image";
+        target.content.imageId = staged.id;
       } else {
         if (target.contentType !== "graph") return null;
         let chart = candidate.charts.find(item => item.id === target.chart);
@@ -460,7 +462,8 @@ export function stageProjectAssetImport(candidate, item) {
     index = collection.findIndex(asset => asset.id === id);
   if (kind === "csv") {
     model.rows = parseProjectCsvAsset(item.file.name, bytes);
-    model.headerLines = headerLineCount(1, model.rows);
+    if (item.replaceId !== null && index < 0) throw Error("교체할 자산이 없습니다.");
+    model.headerLines = headerLineCount(item.replaceId === null ? 1 : collection[index].headerLines, model.rows);
   }
   if (item.replaceId !== null) {
     if (index < 0) throw Error("교체할 자산이 없습니다.");
@@ -871,7 +874,7 @@ export function parseProjectCsvAsset(name, bytes) {
   }
   const extension = /\.[^./]+$/.exec(String(name))?.[0]?.toLowerCase();
   if (![".csv", ".tsv"].includes(extension)) throw Error("지원하는 데이터 확장자가 아닙니다.");
-  return dataTable(parseCSV(text, extension === ".tsv" ? "\t" : ","));
+  return parseCSV(text, extension === ".tsv" ? "\t" : ",");
 }
 
 export function projectCsvDataRef(csv) {
@@ -1417,6 +1420,7 @@ export function ffpxReadProjectBytes(bytes) {
     )
       throw Error("FFPX CSV 자산이 없습니다.");
     csv.rows = parseProjectCsvAsset(csv.name, assets.get(dataRef));
+    csv.headerLines = headerLineCount(Object.hasOwn(csv, "headerLines") ? csv.headerLines : 1, csv.rows);
     csv.bytesBase64 = ffpxBytesToBase64(assets.get(dataRef));
     delete csv.dataRef;
   }

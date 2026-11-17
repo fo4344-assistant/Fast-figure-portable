@@ -10020,8 +10020,9 @@ function buildGridResizeCandidate(rows, cols) {
   return buildGridResizeInProject(activeProject._state, rows, cols);
 }
 function buildGridResizeInProject(source, rows, cols) {
-  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < 1 || rows > 8 || cols < 1 || cols > 8)
-    throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
+  const limits = BackendSettings.defaults.limits.layout;
+  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < limits.gridRows[0] || rows > limits.gridRows[1] || cols < limits.gridCols[0] || cols > limits.gridCols[1])
+    throw Error("레이아웃 행과 열은 설정 범위 안의 정수여야 합니다.");
   for (const slot of source.slots) {
     if (slot.row + slot.rowSpan - 1 <= rows && slot.col + slot.colSpan - 1 <= cols) continue;
     if (slotHasNonDefaultLocalState(slot))
@@ -10217,9 +10218,11 @@ function projectObjectPath(state, path) {
 }
 var ProjectObject = class _ProjectObject {
   constructor(state = createProjectState()) {
-    normalizeSlotContents(state.slots);
-    validateProjectObjectState(state);
-    this._state = state;
+    const next = structuredClone(state instanceof _ProjectObject ? state._state : state);
+    normalizeSlotContents(next.slots);
+    normalizeProjectSettings(next);
+    validateProjectObjectState(next, { requireSlots: true });
+    this._state = next;
   }
   static fromFFPX(payload, fileName) {
     return buildProjectObject(payload, fileName);
@@ -10232,6 +10235,7 @@ var ProjectObject = class _ProjectObject {
   initialize(source) {
     let next = projectClone(source instanceof _ProjectObject ? source._state : source);
     normalizeSlotContents(next.slots);
+    normalizeProjectSettings(next);
     validateProjectObjectState(next, { requireSlots: true });
     let previous = this._state;
     this._state = next;
@@ -10429,7 +10433,6 @@ var ProjectObjectRegistry = class {
 var BACKEND_QUERY_KINDS = /* @__PURE__ */ new Set([
   "project-api",
   "slot-selection-context",
-  "interface-intent",
   "interface-reconciliation",
   "renderer",
   "export"
@@ -10460,8 +10463,37 @@ var PUBLIC_BACKEND_READ_OPERATIONS = /* @__PURE__ */ new Set([
   "assets.resolveTreeSelection",
   "assets.fileKind",
   "assets.collisionModel",
-  "assets.resolveImportPlan"
+  "assets.resolveImportPlan",
+  "project.exportFile",
+  "assets.download",
+  "graphs.exportFfsx",
+  "graphs.exportPlotlyJson"
 ]);
+function buildSlotAssetDisplay(slot, source) {
+  const display = { kind: "empty", assets: [] };
+  if (slot.content.contentType === "image") {
+    const image = source.assets.images.find((item) => item.id === slot.content.imageId);
+    if (image) {
+      display.kind = "assets";
+      display.assets.push({ kind: "image", id: image.id, name: image.name, path: projectAssetPath(image) });
+    }
+  } else if (slot.content.contentType === "graph") {
+    const chart = source.charts.find((item) => item.id === slot.content.chart);
+    if (chart?.editor.editable === false) display.kind = "embedded";
+    else if (chart) {
+      const seen = /* @__PURE__ */ new Set();
+      for (const object of chart.editor.objects) {
+        const csv = source.assets.csvFiles.find((item) => item.id === object.csvId);
+        if (csv && !seen.has(csv.id)) {
+          seen.add(csv.id);
+          display.assets.push({ kind: "csv", id: csv.id, name: csv.name, path: projectAssetPath(csv) });
+        }
+      }
+      if (display.assets.length) display.kind = "assets";
+    }
+  }
+  return immutableProjectCopy(display);
+}
 function buildBackendVfsTree(source) {
   const nodes = new Map(source.fileSystem.directories.map((path) => [path, {
     kind: "directory",
@@ -10484,7 +10516,8 @@ function buildBackendVfsTree(source) {
 function readBackendProjection(kind, request = {}) {
   if (!BACKEND_QUERY_KINDS.has(kind) || kind === "project-api" && !PUBLIC_BACKEND_READ_OPERATIONS.has(request.operation))
     throw Error(`알 수 없는 Backend query: ${kind}/${request.operation}`);
-  if (kind === "interface-intent") return validateFrontendIntent(request.event, request.payload);
+  if (kind === "project-api" && ["project.exportFile", "assets.download", "graphs.exportFfsx", "graphs.exportPlotlyJson"].includes(request.operation))
+    return readBackendProjection("export", request);
   if (kind === "interface-reconciliation")
     return buildFrontendReconciliationInput(request.event, request.mutationResult, request.frontendReferences);
   if (kind === "project-api" && request.operation === "project.readName")
@@ -10500,13 +10533,18 @@ function readBackendProjection(kind, request = {}) {
     return immutableProjectCopy({
       gridRows: source.layout.gridRows,
       gridCols: source.layout.gridCols,
+      gridLimits: structuredClone(BackendSettings.defaults.limits.layout),
       slotStyle: Object.freeze({ ...source.layout.slotStyle }),
       visibleSlots: Object.freeze(source.slots.filter((slot2) => !slot2.hidden).map((slot2) => Object.freeze({
         id: slot2.id,
         row: slot2.row,
         col: slot2.col,
         rowSpan: slot2.rowSpan,
-        colSpan: slot2.colSpan
+        colSpan: slot2.colSpan,
+        contentType: slot2.content.contentType,
+        chart: slot2.content.chart,
+        imageId: slot2.content.imageId,
+        assetDisplay: buildSlotAssetDisplay(slot2, source)
       }))),
       previewGeometry: Object.freeze(dashboardGeometryInProject(source, width))
     });
@@ -10597,9 +10635,11 @@ function readBackendProjection(kind, request = {}) {
       id: slot2.id,
       row: slot2.row,
       col: slot2.col,
-      contentType: slot2.content.contentType,
-      chart: slot2.content.chart,
-      imageId: slot2.content.imageId
+      rowSpan: slot2.rowSpan,
+      colSpan: slot2.colSpan,
+      hidden: slot2.hidden,
+      content: slot2.content,
+      caption: slot2.caption
     }) : null;
   }
   if (kind === "project-api" && request.operation === "assets.readTrash") {
@@ -10608,13 +10648,7 @@ function readBackendProjection(kind, request = {}) {
   }
   if (kind === "project-api" && request.operation === "assets.readTree") {
     const source = activeProject._state;
-    return immutableProjectCopy(projectDataTreeSnapshot({
-      files: source.fileSystem,
-      data: source.assets.csvFiles,
-      images: source.assets.images,
-      charts: source.charts,
-      slots: source.slots
-    }));
+    return immutableProjectCopy(Array.from(buildBackendVfsTree(source).values()));
   }
   if (kind === "project-api" && request.operation === "graphs.defaultColors")
     return immutableProjectCopy(DEFAULT_COLORS);
@@ -10893,9 +10927,17 @@ function projectValuesEqual(left, right) {
   const keys = Object.keys(left);
   return keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key) && projectValuesEqual(left[key], right[key]));
 }
+function normalizeProjectSettings(state) {
+  for (const key of ["layout", "annotations", "export"])
+    state[key] = Object.hasOwn(state, key) ? fillMissingSettingRecord(state[key], BackendSettings.project_object[key]) : structuredClone(BackendSettings.project_object[key]);
+  if (!Object.hasOwn(state, "appearance")) state.appearance = {};
+  const palette = state.appearance.uiPalette;
+  state.appearance.uiPalette = Object.fromEntries(Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) => [key, typeof palette?.[key] === "string" && /^#[0-9a-fA-F]{6}$/.test(palette[key]) ? palette[key] : fallback]));
+  delete state.layout.layoutMapWidth;
+  return state;
+}
 function slotHasNonDefaultLocalState(slot) {
-  let local = slotLocalState(slot), defaults = SLOT_LOCAL_DEFAULTS;
-  return local.chart !== defaults.chart || local.imageId !== defaults.imageId || local.contentType !== defaults.contentType || local.caption !== defaults.caption || !projectValuesEqual(local.imageSettings, defaults.imageSettings);
+  return !projectValuesEqual(slotLocalState(slot), SLOT_LOCAL_DEFAULTS);
 }
 function slotLegacyState(slot) {
   let local = slotLocalState(slot);
@@ -10919,10 +10961,7 @@ function normalizeSlotContent(slot) {
       content[key] = structuredClone(legacy?.enumerable && Object.hasOwn(legacy, "value") ? legacy.value : SLOT_LOCAL_DEFAULTS[key]);
     }
   }
-  if (content.imageSettings === null) content.imageSettings = structuredClone(DEFAULT_IMAGE_SETTINGS);
-  else {
-    if (!content.imageSettings || typeof content.imageSettings !== "object" || Array.isArray(content.imageSettings))
-      throw Error("슬롯 imageSettings 구조가 올바르지 않습니다.");
+  if (content.imageSettings && typeof content.imageSettings === "object" && !Array.isArray(content.imageSettings)) {
     for (const key of Object.keys(DEFAULT_IMAGE_SETTINGS))
       if (!Object.hasOwn(content.imageSettings, key))
         content.imageSettings[key] = structuredClone(DEFAULT_IMAGE_SETTINGS[key]);
@@ -11811,8 +11850,10 @@ function buildProjectAssetImportCandidate(source, payload) {
     reserved.add(path);
     if (target) {
       if (kind === "image") {
-        if (target.contentType !== "image") return null;
-        target.imageId = staged.id;
+        candidate.charts = candidate.charts.filter((chart) => chart.id !== target.content.chart);
+        target.content.chart = null;
+        target.content.contentType = "image";
+        target.content.imageId = staged.id;
       } else {
         if (target.contentType !== "graph") return null;
         let chart = candidate.charts.find((item) => item.id === target.chart);
@@ -12133,7 +12174,8 @@ function stageProjectAssetImport(candidate, item) {
   const bytes = new Uint8Array(item.file.bytes), kind = item.kind === "data" ? "csv" : "image", id = item.replaceId === null ? candidate.nextId[kind]++ : item.replaceId, model = projectVfs.assignLocation({ id, mime: item.file.type, bytesBase64: ffpxBytesToBase64(bytes) }, item.path), collection = candidate.assets[kind === "csv" ? "csvFiles" : "images"], index = collection.findIndex((asset) => asset.id === id);
   if (kind === "csv") {
     model.rows = parseProjectCsvAsset(item.file.name, bytes);
-    model.headerLines = headerLineCount(1, model.rows);
+    if (item.replaceId !== null && index < 0) throw Error("교체할 자산이 없습니다.");
+    model.headerLines = headerLineCount(item.replaceId === null ? 1 : collection[index].headerLines, model.rows);
   }
   if (item.replaceId !== null) {
     if (index < 0) throw Error("교체할 자산이 없습니다.");
@@ -12447,7 +12489,7 @@ function parseProjectCsvAsset(name, bytes) {
   }
   const extension = /\.[^./]+$/.exec(String(name))?.[0]?.toLowerCase();
   if (![".csv", ".tsv"].includes(extension)) throw Error("지원하는 데이터 확장자가 아닙니다.");
-  return dataTable(parseCSV(text, extension === ".tsv" ? "	" : ","));
+  return parseCSV(text, extension === ".tsv" ? "	" : ",");
 }
 function projectCsvDataRef(csv) {
   const extension = /\.[^./]+$/.exec(csv.name || "")?.[0]?.toLowerCase();
@@ -12870,6 +12912,7 @@ function ffpxReadProjectBytes(bytes) {
     if (!csv || !Number.isInteger(csv.id) || typeof csv.name !== "string" || typeof dataRef !== "string" || !dataRef.startsWith("assets/data/") || !assets.has(dataRef))
       throw Error("FFPX CSV 자산이 없습니다.");
     csv.rows = parseProjectCsvAsset(csv.name, assets.get(dataRef));
+    csv.headerLines = headerLineCount(Object.hasOwn(csv, "headerLines") ? csv.headerLines : 1, csv.rows);
     csv.bytesBase64 = ffpxBytesToBase64(assets.get(dataRef));
     delete csv.dataRef;
   }
@@ -13202,6 +13245,27 @@ function actualChanged(payload) {
   }
   return changed;
 }
+function removedReferenceCounts(pre, post) {
+  const references = (state) => {
+    const counts = /* @__PURE__ */ new Map();
+    for (const ref of collectAssetReferences(
+      new Set(state.assets.csvFiles.map((csv) => csv.id)),
+      new Set(state.assets.images.map((image) => image.id)),
+      state
+    )) {
+      const key = JSON.stringify([ref.kind, ref.kind === "csv" ? ref.chartId : ref.slotId, ref.assetId]);
+      const entry = counts.get(key) ?? { kind: ref.kind, count: 0 };
+      entry.count++;
+      counts.set(key, entry);
+    }
+    return counts;
+  }, before = references(pre), after = references(post), result = { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
+  for (const [key, entry] of before) {
+    const removed = Math.max(0, entry.count - (after.get(key)?.count ?? 0));
+    result[entry.kind === "csv" ? "removedGraphReferenceCount" : "resetImageSlotCount"] += removed;
+  }
+  return result;
+}
 var ProjectStateMachine = class {
   constructor(objects, actions) {
     this.objects = objects;
@@ -13226,13 +13290,12 @@ var ProjectStateMachine = class {
       "removedGraphReferenceCount",
       "resetImageSlotCount"
     ]) delete input[key];
-    const outcome = action({ machine: this, event, payload: input }), committed = outcome !== false && !!input.commitFacts, changed = committed ? actualChanged(input) : {};
+    const outcome = action({ machine: this, event, payload: input }), committed = outcome !== false && !!input.commitFacts, changed = committed ? actualChanged(input) : {}, counts = committed ? removedReferenceCounts(input.commitFacts.pre, input.commitFacts.post) : { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
     return immutableProjectCopy({
       event,
       committed,
       changed,
-      removedGraphReferenceCount: committed ? changed.removedGraphReferenceCount || input.removedGraphReferenceCount || 0 : 0,
-      resetImageSlotCount: committed ? changed.resetImageSlotCount || input.resetImageSlotCount || 0 : 0,
+      ...counts,
       selectionHints: committed ? input.selectionHints || {} : {},
       projectionEffect: committed ? input.projectionEffect : null
     });
@@ -14485,6 +14548,9 @@ function status(message) {
 }
 var debugEnabled = false;
 var debugSequence = 0;
+function readDebugEnabled() {
+  return debugEnabled;
+}
 function setDebugEnabled(enabled) {
   debugEnabled = enabled === true;
   publishUiTelemetry({ debugEnabled });
@@ -15539,7 +15605,7 @@ async function exportCaptionLayout(snapshot, measureText) {
     let wi = 0;
     while (wi < words.length) {
       let word = words[wi], trial = line ? `${line} ${word}` : word, budget = Math.max(style.minimumTextWidth, available - (firstLine ? prefixWidth : 0));
-      if (measureText(trial, fontFamily, fontSize, 400) > budget && (line !== "" || firstLine && prefix !== "")) {
+      if (measureText(trial, fontFamily, fontSize, 400) > budget && line !== "") {
         lines.push({ text: line, prefix: firstLine ? prefix : "", prefixWidth: firstLine ? prefixWidth : 0 });
         line = "";
         firstLine = false;
@@ -15986,6 +16052,7 @@ var InterfaceStateMachine = class {
     this.state = Object.freeze({
       ...this.state,
       workspace: input.workspaceHint,
+      direction: "model-to-fsm",
       assetSelection: input.assetKind ?? "none",
       assetPath: input.assetSelection,
       graphObject: input.graphObject === null ? "none" : "selected",
@@ -15994,6 +16061,7 @@ var InterfaceStateMachine = class {
     return this.publish(`${event}:reconcile`);
   }
   notify(objectName, event, payload = {}) {
+    this.state = Object.freeze({ ...this.state, direction: "model-to-fsm" });
     return this.publish(event);
   }
   ready(workspaceHint = "project") {
@@ -16697,7 +16765,7 @@ function dispatchProjectCommand(event, payload = {}) {
 }
 var appFSM = Object.freeze({
   get state() {
-    return interfaceFSM.state;
+    return interfaceFSM.readState();
   },
   get writeLocks() {
     return interfaceFSM.writeLocks;
@@ -16752,7 +16820,7 @@ function activateChartModel(id) {
 
 // sourcecode/application/public_api/graphs.js
 function graphEditorSelectCsv(path) {
-  return appFSM.send("SELECT_ASSET", { kind: "csv", path, direction: "ui-to-fsm" });
+  return selectProjectCsv(path);
 }
 function createEmptyProjectCsvAndSelect() {
   const csv = createEmptyProjectCsv();
@@ -16787,7 +16855,9 @@ function setGraphObjectValuesApi(index, values = {}) {
   return graphEditorObjectValues(context.chart?.id ?? null, index, values);
 }
 function graphEditorAdd(slotId, csvId) {
-  const slot = appFSM.query("project-api", { operation: "slots.readSelected", frontendState: { selectedSlotId: slotId } }), event = slot?.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED", [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
+  const slot = appFSM.query("project-api", { operation: "slots.readSelected", frontendState: { selectedSlotId: slotId } });
+  if (!slot) return null;
+  const event = slot.content.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED", [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;
   renderDashboard(projection, state);
@@ -17025,7 +17095,9 @@ function selectProjectCsv(path) {
     path: resolved.path,
     direction: "ui-to-fsm"
   });
-  return state.revision > priorRevision && state.assetSelection === "csv" && state.assetPath === resolved.path ? resolved.target : null;
+  if (!(state.revision > priorRevision && state.assetSelection === "csv" && state.assetPath === resolved.path)) return null;
+  const current = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: resolved.path });
+  return current?.kind === "csv" ? current.target : null;
 }
 function selectImageFromTree(path) {
   return appFSM.send("SELECT_ASSET", { kind: "image", path, direction: "ui-to-fsm" });
@@ -17417,10 +17489,38 @@ function mountMantineUi() {
     return appFSM.subscribe(onStoreChange);
   }
   function getAppStateSnapshot() {
-    return appFSM.state;
+    return appFSM.readState().revision;
   }
   function useAppState() {
-    return useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
+    useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
+    return appFSM.readState();
+  }
+  function addSelectedGraphObject() {
+    const current = appFSM.readState();
+    if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
+    const context = window.FastFigureApi.graphs.readData();
+    if (!context.currentCsv || context.chart?.editor.editable === false) return null;
+    return window.FastFigureApi.graphs.addObject(current.selectedSlotId, context.currentCsv.id);
+  }
+  function setSelectedGraphEditable(editable) {
+    const current = appFSM.readState();
+    if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
+    const context = window.FastFigureApi.graphs.readData();
+    if (!context.chart) return null;
+    return window.FastFigureApi.graphs.setEditable(current.selectedSlotId, context.chart.id, editable);
+  }
+  function updateSelectedGraphLayout(values) {
+    const current = appFSM.readState();
+    if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
+    const context = window.FastFigureApi.graphs.readData();
+    if (!context.chart || context.chart.editor.editable === false) return null;
+    return window.FastFigureApi.graphs.updateLayout(current.selectedSlotId, context.chart.id, values);
+  }
+  function importSelectedSlotFile(file) {
+    if (!file) return null;
+    const current = appFSM.readState();
+    if (current.selectedSlotId == null) return null;
+    return window.FastFigureApi.graphs.importFile(current.selectedSlotId, file);
   }
   function useUiTelemetry() {
     return useSyncExternalStore(
@@ -17545,7 +17645,7 @@ function mountMantineUi() {
     const busy = state.lifecycle !== "ready";
     const slotApi = window.FastFigureApi.slots;
     const slot = state.workspace === "project" ? null : slotApi.readSelected();
-    const slotType = slot?.contentType || "graph";
+    const slotType = slot?.content.contentType || "graph";
     const [resetSlotId, setResetSlotId] = useState(null);
     const assetApi = window.FastFigureApi.assets;
     const selectedAssetDeletable = !!assetApi.readDeletionTarget(state.assetPath);
@@ -17748,7 +17848,7 @@ function mountMantineUi() {
         disabled: busy || state.assetSelection !== "image" || !state.assetPath,
         onClick: () => {
           const slot = window.FastFigureApi.slots.readSelected();
-          if (slot?.contentType === "image")
+          if (slot?.content.contentType === "image")
             window.FastFigureApi.assets.connectToSlot(state.assetPath, "image", slot.id);
         }
       }, "선택 이미지 추가"),
@@ -17798,10 +17898,30 @@ function mountMantineUi() {
       ) : null
     );
   }
+  function readProjectAssetDisplay() {
+    const assetNodes = window.FastFigureApi.assets.readTree();
+    const slotRows = window.FastFigureApi.layout.readState().visibleSlots;
+    return { assetNodes, slotRows };
+  }
   function FastFigureProjectDataTree() {
     const state = useAppState();
     const assetApi = window.FastFigureApi.assets;
-    const snapshot = assetApi.readTree();
+    const { assetNodes, slotRows } = readProjectAssetDisplay();
+    const snapshot = {
+      directories: assetNodes.filter((node) => node.kind === "directory").map((node) => node.path),
+      data: assetNodes.filter((node) => node.kind === "csv").map((node) => ({
+        id: node.id,
+        name: node.name,
+        path: node.path,
+        readable: Array.isArray(node.asset.rows),
+        rowCount: Math.max(0, node.asset.rows.length - (Number(node.asset.headerLines) || 0))
+      })),
+      images: assetNodes.filter((node) => node.kind === "image").map((node) => ({
+        id: node.id,
+        name: node.name,
+        path: node.path
+      }))
+    };
     const selectedSlotId = window.FastFigureApi.slots.readSelected()?.id;
     const assetTreeController = useTree({
       initialExpandedState: { "/assets": true }
@@ -17885,11 +18005,7 @@ function mountMantineUi() {
         status(`프로젝트 항목 이동 오류: ${error.message}`);
       }
     };
-    const csvReferenceCount = (id) => snapshot.charts.reduce(
-      (count, chart) => count + chart.csvReferences.filter((csvId) => csvId === id).length,
-      0
-    );
-    const imageReferenceCount = (id) => snapshot.slots.filter((slot) => slot.imageId === id).length;
+    const assetReferenceCount = (path) => assetApi.readDeletionTarget(path)?.referenceCount ?? 0;
     const dataByPath = new Map(
       snapshot.data.map((asset) => [asset.path, { kind: "csv", asset }])
     );
@@ -17928,7 +18044,7 @@ function mountMantineUi() {
     const treeNodeMeta = (path, kind) => {
       const asset = dataByPath.get(path)?.asset;
       if (!asset) return "";
-      return kind === "csv" ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${csvReferenceCount(asset.id)}` : `참조 ${imageReferenceCount(asset.id)}`;
+      return kind === "csv" ? `${asset.readable ? `${asset.rowCount}행` : "읽기 실패"} · 참조 ${assetReferenceCount(path)}` : `참조 ${assetReferenceCount(path)}`;
     };
     const allowProjectTreeDrop = ({ draggedNode, targetNode, position }) => !busy && position === "inside" && directorySet.has(targetNode) && assetApi.movable(draggedNode);
     const moveProjectTreeNode = (payload) => {
@@ -18129,16 +18245,11 @@ function mountMantineUi() {
         menu
       );
     };
-    const visibleSlots = snapshot.slots.filter((slot) => !slot.hidden).sort((a, b) => a.row - b.row || a.col - b.col);
+    const visibleSlots = [...slotRows].sort((a, b) => a.row - b.row || a.col - b.col);
     const slotReference = (slot) => {
-      if (slot.contentType === "image") {
-        const image = snapshot.images.find((item) => item.id === slot.imageId);
-        return image ? `${image.name} · ${image.path}` : "(에셋 없음)";
-      }
-      const chart = snapshot.charts.find((item) => item.id === slot.chart);
-      if (!chart) return "(에셋 없음)";
-      if (chart.editable === false) return "Plotly JSON 내부 데이터 · 외부 참조 없음";
-      const references = chart.csvIds.map((id) => snapshot.data.find((item) => item.id === id)).filter(Boolean).map((csv) => `${csv.name} · ${csv.path}`);
+      if (slot.assetDisplay.kind === "embedded")
+        return "Plotly JSON 내부 데이터 · 외부 참조 없음";
+      const references = slot.assetDisplay.assets.map((asset) => `${asset.name} · ${asset.path}`);
       return references.length ? references.join(", ") : "(에셋 없음)";
     };
     const draggedProjectAsset = (event) => {
@@ -18487,7 +18598,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const assetApi = window.FastFigureApi.assets;
     const editor = graphApi.readData();
     const chartId = editor.chart?.id ?? null, editable = editor.chart?.editor?.editable !== false;
-    const csvAssets = assetApi.readTree().data;
+    const csvAssets = assetApi.readTree().filter((node) => node.kind === "csv").map((node) => node.asset);
     const csvOptions = csvAssets.map((csv) => ({ value: String(csv.id), label: csv.name }));
     const objects = editor.objects;
     const selectedIndex = editor.selectedIndex;
@@ -18590,12 +18701,15 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         React.createElement(Button, {
           variant: editable ? "filled" : "light",
           disabled: busy || chartId === null,
-          onClick: () => graphApi.setEditable(state.selectedSlotId, chartId, !editable)
+          onClick: () => {
+            const context = graphApi.readData();
+            if (context.chart) return setSelectedGraphEditable(!context.chart.editor.editable);
+          }
         }, editable ? "편집 가능" : "원본 JSON"),
         React.createElement(Button, {
           variant: "light",
           disabled: busy || !activeCsv || !editable,
-          onClick: () => activeCsv && graphApi.addObject(state.selectedSlotId, activeCsv.id)
+          onClick: addSelectedGraphObject
         }, "오브젝트 추가")
       ),
       React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
@@ -18729,9 +18843,9 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       yLeft: "왼쪽 Y축",
       yRight: "오른쪽 Y축"
     };
-    const updateGlobal = (values) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { globalSettings: values });
-    const updateTitle = (title) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { title });
-    const updateAxis = (key, values) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { axisKey: key, axisValues: values });
+    const updateGlobal = (values) => updateSelectedGraphLayout({ globalSettings: values });
+    const updateTitle = (title) => updateSelectedGraphLayout({ title });
+    const updateAxis = (key, values) => updateSelectedGraphLayout({ axisKey: key, axisValues: values });
     const toggleGlobal = (key, label) => React.createElement(
       Button,
       {
@@ -19004,7 +19118,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const importSlotFileFromMantine = async (file) => {
       if (!file) return;
       try {
-        await graphApi.importFile(state.selectedSlotId, file);
+        await importSelectedSlotFile(file);
       } catch (error) {
         status("슬롯 불러오기 오류: " + String(error?.message ?? error));
         debugLog("slot:import-error", { message: String(error?.message ?? error) });
@@ -19181,7 +19295,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
             variant: telemetry.debugEnabled ? "filled" : "light",
             disabled: busy,
             "aria-pressed": telemetry.debugEnabled,
-            onClick: () => setDebugEnabled(!telemetry.debugEnabled)
+            onClick: () => setDebugEnabled(!readDebugEnabled())
           },
           telemetry.debugEnabled ? "디버깅 끄기" : "디버깅 켜기"
         ),
@@ -19848,11 +19962,17 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
     };
     const commitStyle = (patch) => layoutApi.setStyle(patch);
-    const changeGrid = (patch) => {
-      const rows = patch.rows ?? layout2.gridRows;
-      const cols = patch.cols ?? layout2.gridCols;
-      layoutApi.setGrid(rows, cols);
+    const changeGrid = (dimension, value2) => {
+      if (!["rows", "cols"].includes(dimension)) throw Error("알 수 없는 grid 편집 차원입니다.");
+      const current = layoutApi.readState();
+      const number = typeof value2 === "number" || typeof value2 === "string" && value2.trim() !== "" ? Number(value2) : NaN;
+      const bounds = current.gridLimits[dimension === "rows" ? "gridRows" : "gridCols"];
+      const edited = Number.isFinite(number) ? Math.max(bounds[0], Math.min(bounds[1], number)) : dimension === "rows" ? current.gridRows : current.gridCols;
+      const rows = dimension === "rows" ? edited : current.gridRows;
+      const cols = dimension === "cols" ? edited : current.gridCols;
+      const result = layoutApi.setGrid(rows, cols);
       setLayoutSelection(/* @__PURE__ */ new Set());
+      return result;
     };
     const toggleSlot = (slotId) => {
       setLayoutSelection((current) => {
@@ -19889,20 +20009,20 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           React.createElement(NumberInput, {
             label: "행",
             value: layout2.gridRows,
-            min: 1,
-            max: 8,
+            min: layout2.gridLimits.gridRows[0],
+            max: layout2.gridLimits.gridRows[1],
             allowDecimal: false,
             disabled: busy,
-            onChange: (value2) => changeGrid({ rows: clamp(value2, layout2.gridRows, 1, 8) })
+            onChange: (value2) => changeGrid("rows", value2)
           }),
           React.createElement(NumberInput, {
             label: "열",
             value: layout2.gridCols,
-            min: 1,
-            max: 8,
+            min: layout2.gridLimits.gridCols[0],
+            max: layout2.gridLimits.gridCols[1],
             allowDecimal: false,
             disabled: busy,
-            onChange: (value2) => changeGrid({ cols: clamp(value2, layout2.gridCols, 1, 8) })
+            onChange: (value2) => changeGrid("cols", value2)
           })
         ),
         React.createElement(

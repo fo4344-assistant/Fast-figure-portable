@@ -184,7 +184,7 @@ export function dispatchProjectCommand(event, payload = {}) {
 }
 
 export const appFSM = Object.freeze({
-  get state() { return interfaceFSM.state; },
+  get state() { return interfaceFSM.readState(); },
   get writeLocks() { return interfaceFSM.writeLocks; },
   readState: () => interfaceFSM.readState(),
   query: (kind, request) => dispatchProjectQuery(kind, request),

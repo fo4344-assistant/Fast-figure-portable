@@ -165,11 +165,43 @@ label: option.label,
   }
 
   function getAppStateSnapshot() {
-    return appFSM.state;
+    return appFSM.readState().revision;
   }
 
   function useAppState() {
-    return useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
+    useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
+    return appFSM.readState();
+  }
+
+  function addSelectedGraphObject() {
+    const current = appFSM.readState();
+    if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
+    const context = window.FastFigureApi.graphs.readData();
+    if (!context.currentCsv || context.chart?.editor.editable === false) return null;
+    return window.FastFigureApi.graphs.addObject(current.selectedSlotId, context.currentCsv.id);
+  }
+
+  function setSelectedGraphEditable(editable) {
+    const current = appFSM.readState();
+    if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
+    const context = window.FastFigureApi.graphs.readData();
+    if (!context.chart) return null;
+    return window.FastFigureApi.graphs.setEditable(current.selectedSlotId, context.chart.id, editable);
+  }
+
+  function updateSelectedGraphLayout(values) {
+    const current = appFSM.readState();
+    if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
+    const context = window.FastFigureApi.graphs.readData();
+    if (!context.chart || context.chart.editor.editable === false) return null;
+    return window.FastFigureApi.graphs.updateLayout(current.selectedSlotId, context.chart.id, values);
+  }
+
+  function importSelectedSlotFile(file) {
+    if (!file) return null;
+    const current = appFSM.readState();
+    if (current.selectedSlotId == null) return null;
+    return window.FastFigureApi.graphs.importFile(current.selectedSlotId, file);
   }
 
   function useUiTelemetry() {
@@ -319,7 +351,7 @@ React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트"
     const busy = state.lifecycle !== "ready";
     const slotApi = window.FastFigureApi.slots;
     const slot = state.workspace === "project" ? null : slotApi.readSelected();
-    const slotType = slot?.contentType || "graph";
+    const slotType = slot?.content.contentType || "graph";
     const [resetSlotId, setResetSlotId] = useState(null);
     const assetApi = window.FastFigureApi.assets;
     const selectedAssetDeletable = !!assetApi.readDeletionTarget(state.assetPath);
@@ -537,7 +569,7 @@ React.createElement(Button, {
   disabled: busy || state.assetSelection !== "image" || !state.assetPath,
   onClick: () => {
     const slot = window.FastFigureApi.slots.readSelected();
-    if (slot?.contentType === "image")
+    if (slot?.content.contentType === "image")
       window.FastFigureApi.assets.connectToSlot(state.assetPath, "image", slot.id);
   },
 }, "선택 이미지 추가"),
@@ -1451,11 +1483,14 @@ activeCsv && columns.length
 React.createElement(Group, { gap: "xs", grow: true },
   React.createElement(Button, {
     variant: editable ? "filled" : "light", disabled: busy || chartId === null,
-    onClick: () => graphApi.setEditable(state.selectedSlotId, chartId, !editable),
+    onClick: () => {
+      const context = graphApi.readData();
+      if (context.chart) return setSelectedGraphEditable(!context.chart.editor.editable);
+    },
   }, editable ? "편집 가능" : "원본 JSON"),
   React.createElement(Button, {
     variant: "light", disabled: busy || !activeCsv || !editable,
-    onClick: () => activeCsv && graphApi.addObject(state.selectedSlotId, activeCsv.id),
+    onClick: addSelectedGraphObject,
   }, "오브젝트 추가"),
 ),
 React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
@@ -1552,9 +1587,9 @@ xTop: "위 X축",
 yLeft: "왼쪽 Y축",
 yRight: "오른쪽 Y축",
     };
-    const updateGlobal = (values) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { globalSettings: values });
-    const updateTitle = (title) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { title });
-    const updateAxis = (key, values) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { axisKey: key, axisValues: values });
+    const updateGlobal = (values) => updateSelectedGraphLayout({ globalSettings: values });
+    const updateTitle = (title) => updateSelectedGraphLayout({ title });
+    const updateAxis = (key, values) => updateSelectedGraphLayout({ axisKey: key, axisValues: values });
     const toggleGlobal = (key, label) =>
 React.createElement(
   Button,
@@ -1857,7 +1892,7 @@ open();
     const importSlotFileFromMantine = async (file) => {
 if (!file) return;
 try {
-  await graphApi.importFile(state.selectedSlotId, file);
+  await importSelectedSlotFile(file);
 } catch (error) {
   status("슬롯 불러오기 오류: " + String(error?.message ?? error));
   debugLog("slot:import-error", { message: String(error?.message ?? error) });
@@ -2758,7 +2793,8 @@ if (!["rows", "cols"].includes(dimension)) throw Error("알 수 없는 grid 편�
 const current = layoutApi.readState();
 const number = typeof value === "number" || (typeof value === "string" && value.trim() !== "")
   ? Number(value) : NaN;
-const edited = Number.isFinite(number) ? Math.max(1, Math.min(8, number))
+const bounds = current.gridLimits[dimension === "rows" ? "gridRows" : "gridCols"];
+const edited = Number.isFinite(number) ? Math.max(bounds[0], Math.min(bounds[1], number))
   : dimension === "rows" ? current.gridRows : current.gridCols;
 const rows = dimension === "rows" ? edited : current.gridRows;
 const cols = dimension === "cols" ? edited : current.gridCols;
@@ -2803,8 +2839,8 @@ React.createElement(
     React.createElement(NumberInput, {
       label: "행",
       value: layout.gridRows,
-      min: 1,
-      max: 8,
+      min: layout.gridLimits.gridRows[0],
+      max: layout.gridLimits.gridRows[1],
       allowDecimal: false,
       disabled: busy,
       onChange: (value) =>
@@ -2813,8 +2849,8 @@ React.createElement(
     React.createElement(NumberInput, {
       label: "열",
       value: layout.gridCols,
-      min: 1,
-      max: 8,
+      min: layout.gridLimits.gridCols[0],
+      max: layout.gridLimits.gridCols[1],
       allowDecimal: false,
       disabled: busy,
       onChange: (value) =>

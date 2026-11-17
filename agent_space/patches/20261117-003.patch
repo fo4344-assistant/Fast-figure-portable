@@ -1,0 +1,45 @@
+diff --git a/agent_space/patches/20261117-003.md b/agent_space/patches/20261117-003.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..1f2f88cb43b479f9517c8881ace2e65954f8e429
+--- /dev/null
++++ b/agent_space/patches/20261117-003.md
+@@ -0,0 +1,8 @@
++# 변경 목적
++
++Plan034의 중복 실행을 줄인다. WF80의 FFPX 저장·재열기는 WF50·WF51과 겹치므로 실행 제외로 표시하고, 로그 정리와 브라우저 종료는 공통 절차로 유지한다. WF36은 WF35의 행 변경과 겹치지 않도록 기존 3행을 유지한 열 변경으로 한정한다. split, 입력 형식, 오류 종류 등 목적이 다른 과정은 유지한다.
++
++## 기록 범위
++
++- 기존 `agent_space/plans/plan-034.md`의 수정 전 내용은 `.work/ego-plan034/planning/plan-034-before-dedup.md`에 보관했다.
++- 이 패치는 해당 계획 변경과 이 설명을 기록한다. 기존 source code 변경과 이전 리뷰·패치는 포함하지 않는다.
+diff --git a/agent_space/plans/plan-034.md b/agent_space/plans/plan-034.md
+index 02934dad20d0bd7cd8dfb33e4e017e98cf6bcc8a..7a8ccc134d490b335b6ce9bb6ec1718124b25f32 100644
+--- a/agent_space/plans/plan-034.md
++++ b/agent_space/plans/plan-034.md
+@@ -162,7 +162,7 @@ WF34의 영구 비우기 확인은 별도 reload에서 실행한다. 폴더째 
+ | ID | 목표 / 시작 | 짧은 과정 | 판정 |
+ |---|---|---|---|
+ | WF35 | 행만 변경 / S0 | 레이아웃 열기 → 열 3 → 행 3 | 3×3이며 현재 다른 차원 보존, 기존 좌표/id 유지 |
+-| WF36 | 열만 변경 / L | 행 4 → 열 4 | 4×4, 새 빈 cell만 추가, 이전 cell 내용·id 유지 |
++| WF36 | 열만 변경 / L | 열 4 | 3×4, 현재 행 3과 기존 cell의 내용·id 유지, 새 빈 cell만 추가 |
+ | WF37 | 빈 입력 fallback / L | 행 입력 비우기 → blur | 기준의 현재 행 값 유지; 열이 이전 render 값으로 덮이지 않음 |
+ | WF38 | 안전 축소 / L | 빈 마지막 행 삭제 방향으로 크기 축소 | 제거 가능한 빈 cell만 제거, 남은 id·좌표 유지 |
+ | WF39 | 데이터가 있는 축소 거부 / M | 채워진 slot을 범위 밖으로 내보내는 축소 시도 | 거부/안내, 전체 기존 배치·내용 보존 |
+@@ -239,7 +239,7 @@ WF76은 실제 지연 구간이 관찰될 때만 실행 가능 판정을 한다.
+ | WF77 | split 시작 / S0 | 이번 ZIP 해제 HTML 열기 → 데이터 입력 | file://에서 vendor·UI·차트가 서버 없이 동작 |
+ | WF78 | split 교환 / 이번 build split | WF50 FFPX 열기 → 빈 slot에 WF52 FFSX 입력 | inline과 같은 데이터/참조/이름·설정 결과 |
+ | WF79 | 좁은 viewport / M | viewport 1024×768 수준에서 설정·트리 접근 | 주요 입력·닫기·스크롤·저장 접근 가능, graph/슬롯 유지 |
+-| WF80 | 다시 열기와 정리 / M | FFPX 저장 → reload → 저장 파일 열기 | session 로그 누적 없이 프로젝트 복구, 마지막 증거 저장 뒤 TaskSpace 종료 |
++| WF80 | 실행 제외 — WF50·WF51과 중복 | M의 FFPX 저장과 reload 후 복원은 WF50·WF51 결과를 사용 | 독립 테스트로 실행·통과 집계하지 않는다. 디버깅 로그 비우기와 종료는 §2·§3 절차로 수행하고 별도 기록한다. |
+ 
+ viewport 변경은 현재 ego-browser의 지원 API를 확인한 뒤 사용한다. 사용자가 관리하는 창·프로필 설정은 임의 변경하지 않는다. split에서 WF09/25/53/57을 각각 새 상태로 재실행해 핵심 경로를 교차 확인하고, inline 전체 항목을 split에서도 했다고 기록하지 않는다.
+ 
+@@ -258,7 +258,7 @@ viewport 변경은 현재 ego-browser의 지원 API를 확인한 뒤 사용한
+ - C01/C02는 WF09~14/53/76, C07~10은 프로젝트 복원·안전한 실패 경로, C12/C13은 WF20/35~43, C14는 WF26/32/33의 안내·실제 참조 변화, C15~18은 WF25/29/08/60, C19는 WF49/57/59에 연결한다. 일반 UI만으로 추가 content 확장 필드나 constructor alias, 독립 reader 중간 반환, receipt count 전체를 증명할 수는 없다. 그 항목은 관찰 범위와 미확인 경계를 별도로 남긴다.
+ - 그림 내보내기는 실제 PNG/JPEG를 열어 보고 치수·관련 metadata도 확인한다. 캡션 높이·manual 0·라벨·merged span 등 눈으로 봐야 하는 결과는 snapshot 문자열만으로 통과시키지 않는다.
+ - 브라우저 automation의 stale ref·chooser timeout·스크립트 구문 오류는 앱 오류와 분리한다. 앱 실패라고 판정하기 전에 현재 snapshot/상태와 실제 파일 수신 여부를 확인한다.
+-- 결과 review는 실행한 ID와 미실행/차단 ID를 모두 나열한다. 80개 계획이 있다는 이유로 80개 통과를 기록하지 않는다. 실행 성공은 전체 Source Script/pseudocode 의미 일치나 계층 current 승격의 근거로 자동 사용하지 않는다.
++- 결과 review는 실행한 ID와 미실행/차단 ID를 모두 나열한다. WF80은 WF50·WF51의 중복으로 실행 제외하며 통과나 미실행으로 집계하지 않는다. 80개 계획이 있다는 이유로 80개 통과를 기록하지 않는다. 실행 성공은 전체 Source Script/pseudocode 의미 일치나 계층 current 승격의 근거로 자동 사용하지 않는다.
+ 
+ ## 8. 완료 조건과 중단 조건
+ 

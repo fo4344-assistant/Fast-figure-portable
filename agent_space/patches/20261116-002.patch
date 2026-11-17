@@ -1,0 +1,590 @@
+diff --git a/agent_space/patches/20261116-002.md b/agent_space/patches/20261116-002.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..35e26d9e00c0c927979496550b8103dcab38c618
+--- /dev/null
++++ b/agent_space/patches/20261116-002.md
+@@ -0,0 +1,23 @@
++# Plan033 source code 번역 수정
++
++## 목적과 실제 변경
++
++- 사용자 구현 지시에 따라 review의 C01~C19를 source code에 반영했다.
++- Backend 입력 소유/설정 정규화/추가 content 보호/query 집합/전체 Slot/gridLimits, 실제 전후 참조 수, raw 이미지 전환/CSV header/빈 delimited 자료/FFPX reader, Frontend direction/CSV 선택 반환, UI 현재 읽기, 공통 캡션 줄바꿈을 수정했다.
++- 전체 Slot 반환 변경과 public graph/UI 소비자를 함께 연결했다. revision 숫자 구독과 이벤트 시점 읽기를 사용한다.
++- source code 158/stale, fingerprint `sha256:db39318f772903519b191f43621a1bb5fe3c859fd932208a926903dc75546cd6`. derived_from은 고정 Source Script 52/pseudocode 27이다.
++- 후속 정적 대조는 `agent_space/reviews/review-20261116-002-source-code-corrections.md`, 실제 결과는 Plan033에 기록했다.
++
++## 선택 이유와 대안
++
++- 기존 설정 보완·참조 수집·parser·Application 경계를 재사용하고 해당 호출 범위에서 계산한다. 기존 단일 commit과 선택 hint/index map을 유지한다.
++- 별도 선택 상태/전체 snapshot 캐시, 상위 계층 수정, 34개 command의 물리적 전면 재배치는 추가하지 않았다. 현재 차이의 입력·반환·처리를 기존 책임 안에서 연결할 수 있다.
++- 내부 assetNodes 이름은 일관되게 변환되고 있어 보존했다. 기존 graph rebuild/manual 이미지 0/debug/grid 선택 초기화/drop 및 출력 수명 구현도 유지했다.
++
++## 실제 native 기록과 확인 범위
++
++- HEAD는 `9991697cf25c29ceb051c91779dc506331d6a7ba`다. 기존 미추적 Plan033 원문을 native 대체 index에 포함한 tree `5c7779d5379144dd175f20107f7bca5c841bd6bf`에서 현재 변경까지 native Git diff를 기록한다. 기존 review001/계획 작성용001쌍은 이번 payload에서 중복 추가하지 않는다.
++- payload는 source code 10개 파일, 버전 자료, Plan033 증분, 새 후속 review와 이 설명을 포함한다. 패치 자체는 payload에서 제외한다. 일반 index를 유지하고 임시 index를 제거한다.
++- 전체 실제 구현 diff 읽기와 소비자 추적, JavaScript 구문 분석(node --check), whitespace·상위 파일 불변 대조, 기존 hash 함수 계산을 수행했다. checker 본체를 실행하지 않았다.
++- Source Script/pseudocode/settings/verification/정책/AGENT/배포물/빌드 도구는 보존했다. 이전 review001/001패치쌍도 보존했다.
++- 앱·테스트·빌드·브라우저·TLC·Actions·커밋·푸시를 수행하지 않았다. 실행 성공이나 전체 계층의 닫힘을 판정하지 않았다.
+diff --git a/agent_space/plans/plan-033.md b/agent_space/plans/plan-033.md
+index 19d4dac0713765fac9977c3cd9fa06400b9f88a0..749e4a2d7a2829079effb08691785409c07dcc7a 100644
+--- a/agent_space/plans/plan-033.md
++++ b/agent_space/plans/plan-033.md
+@@ -9,7 +9,7 @@
+ - 고정 Source Script: revision 52, `sha256:2740bd377c0f52c2ee99b32cb72eef0501e2c644656a788fe3c8aa581b095604`.
+ - 고정 pseudocode: revision 27, `sha256:5e40212959fccdb995ced547c8947a9ec0584c53eca8e11ac61d7ffed38a6558`.
+ - 수정 전 source code: revision 157/stale, `sha256:0b20697db1a985c659dd08d14b27ca2cdf66ee23cf6f1a12b19d18f5d363fa22`.
+-- 이 문서는 수정 계획이다. 작성 요청에는 구현·실행·커밋·푸시 승인이 포함되어 있지 않다.
++- 최초 작성 요청은 계획까지였다. 후속 사용자 지시에 따라 source code 수정을 진행했으며 결과는 §6에 기록한다.
+ 
+ 경로는 `Fast-figure-portable/` 기준이다. 계층 이름은 Source Script → pseudocode → source code로 사용한다. PlusCal은 pseudocode의 구현 언어다.
+ 
+@@ -103,8 +103,16 @@
+ 4. 구현 파일이 바뀌면 source code revision/fingerprint와 derived_from의 Source Script 52/pseudocode 27을 갱신한다. 현재 157 다음 값은 구현 시점의 실제 메타데이터를 확인하여 정한다. 상위 두 계층·선택적 verification model의 값과 닫힘 상태는 유지한다. 실행하지 않은 검증을 current/pass로 기록하지 않는다.
+ 5. 실제 native Git diff 패치와 같은 basename 설명 문서를 만들고 적용 대상·역방향 점검·작업 트리·상위 계층 불변 여부를 확인한다. 구현 승인 이후의 작업 기록에는 완료 범위와 남은 범위를 구분한다.
+ 
+-## 6. 중단 조건
++## 6. 실제 수정 결과
++
++- C01~C19의 source code 수정과 실제 소비자 연결을 반영했다. 항목별 변경·입력·반환 대조는 `agent_space/reviews/review-20261116-002-source-code-corrections.md`에 기록했다.
++- Source Script 52와 pseudocode 27은 수정하지 않았다. source code는 158/stale로 기록하고 두 고정 상위 fingerprint를 derived_from에 연결했다. 상위 닫힘과 선택적 verification model 상태는 유지했다.
++- 실제 변경 diff 전체와 호출자를 대조했다. 변경 JavaScript 10개 파일의 구문 분석, native whitespace 확인, 상위/설정/정책/배포물 불변 대조, 기존 hash 함수 계산만 수행했다.
++- 앱·테스트·빌드·브라우저·TLC·checker 본체·Actions·커밋·푸시는 수행하지 않았다. 동작 확인 결과는 미확인 상태다.
++- 실제 native 패치와 설명은 `agent_space/patches/20261116-002.patch`와 동명 `.md`에 기록한다.
++
++## 7. 중단 조건
+ 
+ - Source Script와 pseudocode에서 같은 입력의 의미가 충돌하거나 필요한 규칙이 없으면 해당 경로와 입력을 보고한다. 이번 source code 수정의 편의를 위해 상위를 바꾸지 않는다.
+ - 같은 파일의 다른 작업 변경이나 기준 fingerprint 변경을 발견하면 최신 본문과 이전 기록을 대조한 뒤 범위를 조정한다.
+-- 실행 확인이나 커밋·푸시가 필요하면 요청된 권한을 확인한다. 이번 계획 작성 단계에서는 구현과 실행을 수행하지 않는다.
++- 실행 확인이나 커밋·푸시가 필요하면 요청된 권한을 확인한다. 실행 확인과 커밋·푸시는 별도 승인을 따른다.
+diff --git a/agent_space/reviews/review-20261116-002-source-code-corrections.md b/agent_space/reviews/review-20261116-002-source-code-corrections.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..6fdb56a1a9e9d92cde050e52e45706f0ddb82781
+--- /dev/null
++++ b/agent_space/reviews/review-20261116-002-source-code-corrections.md
+@@ -0,0 +1,40 @@
++# Plan033 source code 수정 정적 대조
++
++- 작성일: 2026-11-16.
++- 기준 commit: `9991697cf25c29ceb051c91779dc506331d6a7ba`.
++- 요구: Plan033에 따라 source code를 수정한다.
++- 고정 기준: Source Script 52와 pseudocode 27. 두 계층의 파일과 fingerprint는 보존했다.
++- 선행 검토: `review-20261116-001-pseudocode-source-code.md`의 C01~C19.
++- 아래 경로는 `Fast-figure-portable/` 기준이다. 결과는 실제 변경 diff와 호출 경로의 정적 대조다.
++
++| 항목 | 변경 위치 | 대조한 처리와 결과 |
++|---|---|---|
++| C01 | `sourcecode/application/adapter.js`, `sourcecode/frontend/mantine_ui.js` | appFSM.state는 공식 readState에 위임한다. 구독 비교는 revision 숫자이고 render는 공식 상태를 새로 읽는다. selectedSlotId는 공식 읽기에 포함된다. |
++| C02 | `sourcecode/frontend/mantine_ui.js` | 추가/editable/layout/파일 입력은 현재 선택과 graphs.readData를 읽는 helper에 연결했다. 추가는 현재 CSV를 사용한다. 선택 없음과 파일 취소는 명령을 발행하지 않으며 id 0은 유지한다. 파일 입력의 id는 public import 호출 때 고정된다. |
++| C03 | `sourcecode/frontend/interface_fsm.js` | reconcile/notify가 publish 전에 direction=model-to-fsm을 기록한다. |
++| C04 | `sourcecode/application/public_api/graphs.js` | graphs.selectCsv는 selectProjectCsv에 위임하여 CSV/null을 반환한다. |
++| C05 | `sourcecode/application/public_api/assets.js` | 수락된 선택 뒤 assets.readDeletionTarget을 다시 읽어 현재 CSV/null을 반환한다. |
++| C06 | `sourcecode/application/public_api/graphs.js` | 슬롯 조회 실패는 명령 전 null로 반환한다. |
++| C07 | `sourcecode/backend/project_state.js` | 생성/initialize 모두 슬롯과 프로젝트 설정을 정규화한 후 전체 검증한다. 기존 fillMissingSettingRecord를 재사용하며 누락 설정만 보완한다. palette는 공통 key와 유효 hex 대소문자를 유지한다. |
++| C08 | `sourcecode/backend/project_state.js` | 생성자는 structuredClone으로 입력을 분리한 뒤 정규화/검증/소유한다. 호출자 객체에 슬롯 접근자를 설치하거나 그 객체를 _state로 보관하지 않는다. |
++| C09 | `sourcecode/backend/project_state.js` | 전체 local content와 caption을 기본값과 비교한다. content.extension=1도 차이로 판정되어 기존 merge/shrink 거부 조건에 전달된다. |
++| C10 | `sourcecode/backend/project_state.js` | 정규화는 명시된 imageSettings:null을 보존하고 전체 프로젝트 검증이 형식 오류로 거부한다. 부재 필드의 기본값 보완은 유지한다. |
++| C11 | `sourcecode/backend/project_state.js` | interface-intent query 등록을 제거하고 project-api의 네 export operation을 기존 export 처리에 연결했다. Application이 사용하는 직접 선택 검증은 유지한다. |
++| C12 | `sourcecode/backend/project_state.js` 및 public graphs/UI | 전체 Slot 영속 필드(id/좌표/span/hidden/content/caption)를 분리 복사한다. 그래프 추가와 두 이미지/선택 UI 소비자는 content 경로를 사용한다. slot-selection-context의 별도 반환은 보존한다. |
++| C13 | `sourcecode/backend/project_state.js`, `sourcecode/backend/layout_annotations.js`, `sourcecode/frontend/mantine_ui.js` | 공식 layout 읽기에 설정 gridLimits를 포함한다. Backend resize, 현재값 clamp, 행/열 NumberInput이 해당 범위를 사용한다. 현재 다른 차원과 잘못된 입력 fallback을 유지한다. |
++| C14 | `sourcecode/backend/project_efsm.js` | collectAssetReferences의 실제 commit 전후 결과를 kind/owner/asset별 다중집합으로 비교한다. CSV object 한 개/두 개 reset, image reset, 같은 chart의 순서 이동은 각각 1/2/1/0으로 추적된다. 실패는 0이며 actualChanged/hint/map 경로를 유지한다. |
++| C15 | `sourcecode/backend/assets_files.js` | raw 이미지 가져오기는 대상의 소유 chart만 제거하고 chart=null/type=image/imageId를 적용한다. Slot id/배치/span/caption은 유지한다. |
++| C16 | `sourcecode/backend/assets_files.js` | CSV 교체는 현재 자산 존재를 확인한 뒤 기존 headerLines를 새 row 수로 제한한다. 기존 0은 유지하고 신규 기본값은 1이다. |
++| C17 | `sourcecode/backend/assets_files.js` | CSV/TSV는 parseCSV 결과 []를 그대로 반환한다. JSON은 기존 dataTable 검증을 유지한다. |
++| C18 | `sourcecode/backend/assets_files.js` | FFPX reader가 rows 복원 직후 headerLineCount를 적용한다. 두 행/header 99는 payload 반환 시점에 2가 된다. |
++| C19 | `sourcecode/frontend/renderer.js` | 초과 폭이며 본문 line이 비어 있지 않을 때만 줄을 넘긴다. available=100/prefix=20/word=90은 한 clipped line으로 계산한다. 현재/목표 출력은 같은 helper를 사용한다. |
++
++## 범위와 확인 한계
++
++- 수정된 source code의 실제 native diff 전체를 읽고 반환 구조의 소비자를 검색·대조했다.
++- 변경 JavaScript 10개 파일에 `node --check`를 수행했다. 이는 구문 분석이며 모듈 실행·앱 실행·테스트 결과가 아니다.
++- git diff whitespace 확인과 Source Script/pseudocode/config/verification/scripts/dist/정책/AGENT 불변 대조를 수행했다.
++- 기존 hash 함수만 호출하여 source code fingerprint와 고정 상위 두 fingerprint를 계산했다. version checker 본체는 실행하지 않았다.
++- source code 158은 stale을 유지한다. Source Script의 open 상태와 선택적 verification model의 기존 lineage를 보존한다.
++- 런타임·브라우저·테스트·빌드·TLC·Actions를 실행하지 않았다. 이 문서는 이전 real-field 결과의 재실행 또는 전체 프로젝트 검증 완료를 주장하지 않는다.
++- 기존 graph rebuild/manual 이미지 0/debug owner 읽기/grid 변경 선택 초기화/drop 정리의 구현은 유지했다. 내부 assetNodes 변환은 변경하지 않았다.
+diff --git a/development-versions.json b/development-versions.json
+index 04b546eaa38ed24df7e86ee0e56a7a08e2554f11..f6953bc268dcbf55de925db1646214932404e419 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 157,
++      "revision": 158,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,10 +54,10 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:0b20697db1a985c659dd08d14b27ca2cdf66ee23cf6f1a12b19d18f5d363fa22",
++      "fingerprint": "sha256:db39318f772903519b191f43621a1bb5fe3c859fd932208a926903dc75546cd6",
+       "derived_from": {
+-        "source-script": "sha256:605a19a7a6787baeb782b9f5aa5945bd6343aa65b4aba324d421c8518b86cf78",
+-        "pseudocode": "sha256:4589e59d50c88005bc3b9a942be675a22b10a8543a55934ccc9897b2a537aaab",
++        "source-script": "sha256:2740bd377c0f52c2ee99b32cb72eef0501e2c644656a788fe3c8aa581b095604",
++        "pseudocode": "sha256:5e40212959fccdb995ced547c8947a9ec0584c53eca8e11ac61d7ffed38a6558",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+       "validation_review": null
+diff --git a/sourcecode/application/adapter.js b/sourcecode/application/adapter.js
+index de0933c2a092597186f0c80c4c523ce07947e4b3..8cd713338a5a8966d17c62f6028df6de8630fecb 100644
+--- a/sourcecode/application/adapter.js
++++ b/sourcecode/application/adapter.js
+@@ -184,7 +184,7 @@ export function dispatchProjectCommand(event, payload = {}) {
+ }
+ 
+ export const appFSM = Object.freeze({
+-  get state() { return interfaceFSM.state; },
++  get state() { return interfaceFSM.readState(); },
+   get writeLocks() { return interfaceFSM.writeLocks; },
+   readState: () => interfaceFSM.readState(),
+   query: (kind, request) => dispatchProjectQuery(kind, request),
+diff --git a/sourcecode/application/public_api/assets.js b/sourcecode/application/public_api/assets.js
+index d09c2c8dacbfcf124bea3213fdbade22d161cea9..8460c7501f464ae9a93e03e31335bed5fbc08734 100644
+--- a/sourcecode/application/public_api/assets.js
++++ b/sourcecode/application/public_api/assets.js
+@@ -100,8 +100,9 @@ export function selectProjectCsv(path) {
+   const priorRevision = interfaceFSM.readState().revision, state = appFSM.send("SELECT_ASSET", {
+     kind: "csv", path: resolved.path, direction: "ui-to-fsm",
+   });
+-  return state.revision > priorRevision && state.assetSelection === "csv" && state.assetPath === resolved.path
+-    ? resolved.target : null;
++  if (!(state.revision > priorRevision && state.assetSelection === "csv" && state.assetPath === resolved.path)) return null;
++  const current = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: resolved.path });
++  return current?.kind === "csv" ? current.target : null;
+ }
+ 
+ export function selectImageFromTree(path) {
+diff --git a/sourcecode/application/public_api/graphs.js b/sourcecode/application/public_api/graphs.js
+index 6001b76b961701c589b82711a9b12d4c8fccf86a..fbe81bc472336d5d37c9745ce32c74fa731f17c7 100644
+--- a/sourcecode/application/public_api/graphs.js
++++ b/sourcecode/application/public_api/graphs.js
+@@ -6,7 +6,7 @@ import { interfaceFSM } from '../../frontend/interface_fsm.js';
+ import { downloadExportPayload, status } from '../../frontend/renderer.js';
+ 
+ export function graphEditorSelectCsv(path) {
+-  return appFSM.send("SELECT_ASSET", { kind: "csv", path, direction: "ui-to-fsm" });
++  return selectProjectCsv(path);
+ }
+ 
+ export function createEmptyProjectCsvAndSelect() {
+@@ -40,8 +40,9 @@ export function setGraphObjectValuesApi(index, values = {}) {
+ }
+ 
+ export function graphEditorAdd(slotId, csvId) {
+-  const slot = appFSM.query("project-api", { operation: "slots.readSelected", frontendState: { selectedSlotId: slotId } }),
+-    event = slot?.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED",
++  const slot = appFSM.query("project-api", { operation: "slots.readSelected", frontendState: { selectedSlotId: slotId } });
++  if (!slot) return null;
++  const event = slot.content.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED",
+     [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;
+diff --git a/sourcecode/backend/assets_files.js b/sourcecode/backend/assets_files.js
+index 85dd2d87aec11b7892dac798753e47e9aa202ed9..da58f89a6ae4821f262e6f9019a2563de7cb7335 100644
+--- a/sourcecode/backend/assets_files.js
++++ b/sourcecode/backend/assets_files.js
+@@ -84,8 +84,10 @@ export function buildProjectAssetImportCandidate(source, payload) {
+     reserved.add(path);
+     if (target) {
+       if (kind === "image") {
+-        if (target.contentType !== "image") return null;
+-        target.imageId = staged.id;
++        candidate.charts = candidate.charts.filter(chart => chart.id !== target.content.chart);
++        target.content.chart = null;
++        target.content.contentType = "image";
++        target.content.imageId = staged.id;
+       } else {
+         if (target.contentType !== "graph") return null;
+         let chart = candidate.charts.find(item => item.id === target.chart);
+@@ -460,7 +462,8 @@ export function stageProjectAssetImport(candidate, item) {
+     index = collection.findIndex(asset => asset.id === id);
+   if (kind === "csv") {
+     model.rows = parseProjectCsvAsset(item.file.name, bytes);
+-    model.headerLines = headerLineCount(1, model.rows);
++    if (item.replaceId !== null && index < 0) throw Error("교체할 자산이 없습니다.");
++    model.headerLines = headerLineCount(item.replaceId === null ? 1 : collection[index].headerLines, model.rows);
+   }
+   if (item.replaceId !== null) {
+     if (index < 0) throw Error("교체할 자산이 없습니다.");
+@@ -871,7 +874,7 @@ export function parseProjectCsvAsset(name, bytes) {
+   }
+   const extension = /\.[^./]+$/.exec(String(name))?.[0]?.toLowerCase();
+   if (![".csv", ".tsv"].includes(extension)) throw Error("지원하는 데이터 확장자가 아닙니다.");
+-  return dataTable(parseCSV(text, extension === ".tsv" ? "\t" : ","));
++  return parseCSV(text, extension === ".tsv" ? "\t" : ",");
+ }
+ 
+ export function projectCsvDataRef(csv) {
+@@ -1417,6 +1420,7 @@ export function ffpxReadProjectBytes(bytes) {
+     )
+       throw Error("FFPX CSV 자산이 없습니다.");
+     csv.rows = parseProjectCsvAsset(csv.name, assets.get(dataRef));
++    csv.headerLines = headerLineCount(Object.hasOwn(csv, "headerLines") ? csv.headerLines : 1, csv.rows);
+     csv.bytesBase64 = ffpxBytesToBase64(assets.get(dataRef));
+     delete csv.dataRef;
+   }
+diff --git a/sourcecode/backend/layout_annotations.js b/sourcecode/backend/layout_annotations.js
+index 1737f9611bfde1ff9e332820672eaf65e45bf882..41d1d03e5e7bd6a540c8cb2a4bf082f0b5646752 100644
+--- a/sourcecode/backend/layout_annotations.js
++++ b/sourcecode/backend/layout_annotations.js
+@@ -99,8 +99,10 @@ export function buildGridResizeCandidate(rows, cols) {
+ 
+ // BuildGridResizeInAttempt: the command's existing source, not a second authority read.
+ export function buildGridResizeInProject(source, rows, cols) {
+-  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < 1 || rows > 8 || cols < 1 || cols > 8)
+-    throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
++  const limits = BackendSettings.defaults.limits.layout;
++  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < limits.gridRows[0] || rows > limits.gridRows[1] ||
++      cols < limits.gridCols[0] || cols > limits.gridCols[1])
++    throw Error("레이아웃 행과 열은 설정 범위 안의 정수여야 합니다.");
+   for (const slot of source.slots) {
+     if (slot.row + slot.rowSpan - 1 <= rows && slot.col + slot.colSpan - 1 <= cols) continue;
+     if (slotHasNonDefaultLocalState(slot))
+diff --git a/sourcecode/backend/project_efsm.js b/sourcecode/backend/project_efsm.js
+index 14a4b2731895f9445c4692c7320edaa5b7931278..8c147e3ee0dd4c40051d146335f4303b0724df41 100644
+--- a/sourcecode/backend/project_efsm.js
++++ b/sourcecode/backend/project_efsm.js
+@@ -85,6 +85,26 @@ function actualChanged(payload) {
+   return changed;
+ }
+ 
++function removedReferenceCounts(pre, post) {
++  const references = state => {
++    const counts = new Map();
++    for (const ref of collectAssetReferences(new Set(state.assets.csvFiles.map(csv => csv.id)),
++        new Set(state.assets.images.map(image => image.id)), state)) {
++      const key = JSON.stringify([ref.kind, ref.kind === "csv" ? ref.chartId : ref.slotId, ref.assetId]);
++      const entry = counts.get(key) ?? { kind: ref.kind, count: 0 };
++      entry.count++;
++      counts.set(key, entry);
++    }
++    return counts;
++  }, before = references(pre), after = references(post),
++    result = { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
++  for (const [key, entry] of before) {
++    const removed = Math.max(0, entry.count - (after.get(key)?.count ?? 0));
++    result[entry.kind === "csv" ? "removedGraphReferenceCount" : "resetImageSlotCount"] += removed;
++  }
++  return result;
++}
++
+ export class ProjectStateMachine {
+   constructor(objects, actions) {
+     this.objects = objects;
+@@ -106,10 +126,10 @@ export class ProjectStateMachine {
+     for (const key of ["changed", "selectionHints", "projectionEffect", "commitFacts",
+       "removedGraphReferenceCount", "resetImageSlotCount"]) delete input[key];
+     const outcome = action({ machine: this, event, payload: input }), committed = outcome !== false && !!input.commitFacts,
+-      changed = committed ? actualChanged(input) : {};
+-    return immutableProjectCopy({ event, committed, changed,
+-      removedGraphReferenceCount: committed ? changed.removedGraphReferenceCount || input.removedGraphReferenceCount || 0 : 0,
+-      resetImageSlotCount: committed ? changed.resetImageSlotCount || input.resetImageSlotCount || 0 : 0,
++      changed = committed ? actualChanged(input) : {},
++      counts = committed ? removedReferenceCounts(input.commitFacts.pre, input.commitFacts.post)
++        : { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
++    return immutableProjectCopy({ event, committed, changed, ...counts,
+       selectionHints: committed ? input.selectionHints || {} : {},
+       projectionEffect: committed ? input.projectionEffect : null,
+     });
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+index 1624935a2d6b889af2368aa9ad2bec41aeebfd24..6e0db4eef0db0c63557eeebdfc452e2509fddd3f 100644
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -1,5 +1,5 @@
+ // Source: sourcescript/backend/project_state.py (same logical owner); pseudocode/backend/project_state.pcal.
+-import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectFileStem, projectImageDataUrl, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
++import { fillMissingSettingRecord, buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectFileStem, projectImageDataUrl, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
+ import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraphLayoutSettings, validateChartModel } from './graphs.js';
+ import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
+ import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
+@@ -45,9 +45,11 @@ export function projectObjectPath(state, path) {
+ 
+ export class ProjectObject {
+   constructor(state = createProjectState()) {
+-    normalizeSlotContents(state.slots);
+-    validateProjectObjectState(state);
+-    this._state = state;
++    const next = structuredClone(state instanceof ProjectObject ? state._state : state);
++    normalizeSlotContents(next.slots);
++    normalizeProjectSettings(next);
++    validateProjectObjectState(next, { requireSlots: true });
++    this._state = next;
+   }
+   static fromFFPX(payload, fileName) {
+     return buildProjectObject(payload, fileName);
+@@ -60,6 +62,7 @@ export class ProjectObject {
+   initialize(source) {
+     let next = projectClone(source instanceof ProjectObject ? source._state : source);
+     normalizeSlotContents(next.slots);
++    normalizeProjectSettings(next);
+     validateProjectObjectState(next, { requireSlots: true });
+     let previous = this._state;
+     this._state = next;
+@@ -257,7 +260,7 @@ export class ProjectObjectRegistry {
+   }
+ }
+ 
+-const BACKEND_QUERY_KINDS = new Set(["project-api", "slot-selection-context", "interface-intent",
++const BACKEND_QUERY_KINDS = new Set(["project-api", "slot-selection-context",
+   "interface-reconciliation", "renderer", "export"]);
+ const PUBLIC_BACKEND_READ_OPERATIONS = new Set([
+   "project.readName", "slots.readSelected", "images.readEditor", "print.readSettings", "appearance.readPalette",
+@@ -265,7 +268,7 @@ const PUBLIC_BACKEND_READ_OPERATIONS = new Set([
+   "captions.readGlobal", "captions.readSlot", "labels.readState", "layout.readState", "assets.readTree",
+   "assets.readTrash", "assets.isTrashed", "assets.movable", "assets.draggableAsset", "assets.readDeletionTarget",
+   "assets.moveOptions", "assets.planMove", "assets.resolveTreeSelection", "assets.fileKind", "assets.collisionModel",
+-  "assets.resolveImportPlan",
++  "assets.resolveImportPlan", "project.exportFile", "assets.download", "graphs.exportFfsx", "graphs.exportPlotlyJson",
+ ]);
+ 
+ function buildSlotAssetDisplay(slot, source) {
+@@ -315,7 +318,8 @@ export function readBackendProjection(kind, request = {}) {
+   if (!BACKEND_QUERY_KINDS.has(kind) ||
+       (kind === "project-api" && !PUBLIC_BACKEND_READ_OPERATIONS.has(request.operation)))
+     throw Error(`알 수 없는 Backend query: ${kind}/${request.operation}`);
+-  if (kind === "interface-intent") return validateFrontendIntent(request.event, request.payload);
++  if (kind === "project-api" && ["project.exportFile", "assets.download", "graphs.exportFfsx", "graphs.exportPlotlyJson"].includes(request.operation))
++    return readBackendProjection("export", request);
+   if (kind === "interface-reconciliation")
+     return buildFrontendReconciliationInput(request.event, request.mutationResult, request.frontendReferences);
+   if (kind === "project-api" && request.operation === "project.readName")
+@@ -329,6 +333,7 @@ export function readBackendProjection(kind, request = {}) {
+         request.renderedWidth, preview.fallbackWidth, ...preview.widthRange);
+     return immutableProjectCopy({
+       gridRows: source.layout.gridRows, gridCols: source.layout.gridCols,
++      gridLimits: structuredClone(BackendSettings.defaults.limits.layout),
+       slotStyle: Object.freeze({ ...source.layout.slotStyle }),
+       visibleSlots: Object.freeze(source.slots.filter((slot) => !slot.hidden).map((slot) => Object.freeze({
+         id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
+@@ -402,8 +407,8 @@ export function readBackendProjection(kind, request = {}) {
+     const source = activeProject._state,
+       slot = source.slots.find((item) => item.id === request.frontendState?.selectedSlotId && !item.hidden);
+     return slot ? immutableProjectCopy({ id: slot.id, row: slot.row, col: slot.col,
+-      contentType: slot.content.contentType, chart: slot.content.chart,
+-      imageId: slot.content.imageId }) : null;
++      rowSpan: slot.rowSpan, colSpan: slot.colSpan, hidden: slot.hidden,
++      content: slot.content, caption: slot.caption }) : null;
+   }
+   if (kind === "project-api" && request.operation === "assets.readTrash") {
+     const source = activeProject._state, tree = buildBackendVfsTree(source);
+@@ -733,16 +738,21 @@ function projectValuesEqual(left, right) {
+     Object.hasOwn(right, key) && projectValuesEqual(left[key], right[key]));
+ }
+ 
++export function normalizeProjectSettings(state) {
++  for (const key of ["layout", "annotations", "export"])
++    state[key] = Object.hasOwn(state, key)
++      ? fillMissingSettingRecord(state[key], BackendSettings.project_object[key])
++      : structuredClone(BackendSettings.project_object[key]);
++  if (!Object.hasOwn(state, "appearance")) state.appearance = {};
++  const palette = state.appearance.uiPalette;
++  state.appearance.uiPalette = Object.fromEntries(Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) =>
++    [key, typeof palette?.[key] === "string" && /^#[0-9a-fA-F]{6}$/.test(palette[key]) ? palette[key] : fallback]));
++  delete state.layout.layoutMapWidth;
++  return state;
++}
++
+ export function slotHasNonDefaultLocalState(slot) {
+-  let local = slotLocalState(slot),
+-    defaults = SLOT_LOCAL_DEFAULTS;
+-  return (
+-    local.chart !== defaults.chart ||
+-    local.imageId !== defaults.imageId ||
+-    local.contentType !== defaults.contentType ||
+-    local.caption !== defaults.caption ||
+-    !projectValuesEqual(local.imageSettings, defaults.imageSettings)
+-  );
++  return !projectValuesEqual(slotLocalState(slot), SLOT_LOCAL_DEFAULTS);
+ }
+ 
+ export function slotLegacyState(slot) {
+@@ -772,10 +782,7 @@ export function normalizeSlotContent(slot) {
+         ? legacy.value : SLOT_LOCAL_DEFAULTS[key]);
+     }
+   }
+-  if (content.imageSettings === null) content.imageSettings = structuredClone(DEFAULT_IMAGE_SETTINGS);
+-  else {
+-    if (!content.imageSettings || typeof content.imageSettings !== "object" || Array.isArray(content.imageSettings))
+-      throw Error("슬롯 imageSettings 구조가 올바르지 않습니다.");
++  if (content.imageSettings && typeof content.imageSettings === "object" && !Array.isArray(content.imageSettings)) {
+     for (const key of Object.keys(DEFAULT_IMAGE_SETTINGS))
+       if (!Object.hasOwn(content.imageSettings, key))
+         content.imageSettings[key] = structuredClone(DEFAULT_IMAGE_SETTINGS[key]);
+diff --git a/sourcecode/frontend/interface_fsm.js b/sourcecode/frontend/interface_fsm.js
+index 527b8273f7316abf6270811dd3f13d0ce70f7cac..4d6f87da6c8ca8152d3df24881835e4905628710 100644
+--- a/sourcecode/frontend/interface_fsm.js
++++ b/sourcecode/frontend/interface_fsm.js
+@@ -116,12 +116,13 @@ export class InterfaceStateMachine {
+   }
+   reconcileProjectResult(event, input) {
+     interfaceRuntime.selectedSlotId = input.selectedSlot;
+-    this.state = Object.freeze({ ...this.state, workspace: input.workspaceHint,
++    this.state = Object.freeze({ ...this.state, workspace: input.workspaceHint, direction: "model-to-fsm",
+       assetSelection: input.assetKind ?? "none", assetPath: input.assetSelection,
+       graphObject: input.graphObject === null ? "none" : "selected", graphObjectIndex: input.graphObject });
+     return this.publish(`${event}:reconcile`);
+   }
+   notify(objectName, event, payload = {}) {
++    this.state = Object.freeze({ ...this.state, direction: "model-to-fsm" });
+     return this.publish(event);
+   }
+   ready(workspaceHint = "project") {
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index 80def3bab3e184f12883feedde2959e7db26c7c0..37e33a1289e093461f653494c69507802e10fdca 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -165,11 +165,43 @@ label: option.label,
+   }
+ 
+   function getAppStateSnapshot() {
+-    return appFSM.state;
++    return appFSM.readState().revision;
+   }
+ 
+   function useAppState() {
+-    return useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
++    useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
++    return appFSM.readState();
++  }
++
++  function addSelectedGraphObject() {
++    const current = appFSM.readState();
++    if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
++    const context = window.FastFigureApi.graphs.readData();
++    if (!context.currentCsv || context.chart?.editor.editable === false) return null;
++    return window.FastFigureApi.graphs.addObject(current.selectedSlotId, context.currentCsv.id);
++  }
++
++  function setSelectedGraphEditable(editable) {
++    const current = appFSM.readState();
++    if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
++    const context = window.FastFigureApi.graphs.readData();
++    if (!context.chart) return null;
++    return window.FastFigureApi.graphs.setEditable(current.selectedSlotId, context.chart.id, editable);
++  }
++
++  function updateSelectedGraphLayout(values) {
++    const current = appFSM.readState();
++    if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
++    const context = window.FastFigureApi.graphs.readData();
++    if (!context.chart || context.chart.editor.editable === false) return null;
++    return window.FastFigureApi.graphs.updateLayout(current.selectedSlotId, context.chart.id, values);
++  }
++
++  function importSelectedSlotFile(file) {
++    if (!file) return null;
++    const current = appFSM.readState();
++    if (current.selectedSlotId == null) return null;
++    return window.FastFigureApi.graphs.importFile(current.selectedSlotId, file);
+   }
+ 
+   function useUiTelemetry() {
+@@ -319,7 +351,7 @@ React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트"
+     const busy = state.lifecycle !== "ready";
+     const slotApi = window.FastFigureApi.slots;
+     const slot = state.workspace === "project" ? null : slotApi.readSelected();
+-    const slotType = slot?.contentType || "graph";
++    const slotType = slot?.content.contentType || "graph";
+     const [resetSlotId, setResetSlotId] = useState(null);
+     const assetApi = window.FastFigureApi.assets;
+     const selectedAssetDeletable = !!assetApi.readDeletionTarget(state.assetPath);
+@@ -537,7 +569,7 @@ React.createElement(Button, {
+   disabled: busy || state.assetSelection !== "image" || !state.assetPath,
+   onClick: () => {
+     const slot = window.FastFigureApi.slots.readSelected();
+-    if (slot?.contentType === "image")
++    if (slot?.content.contentType === "image")
+       window.FastFigureApi.assets.connectToSlot(state.assetPath, "image", slot.id);
+   },
+ }, "선택 이미지 추가"),
+@@ -1451,11 +1483,14 @@ activeCsv && columns.length
+ React.createElement(Group, { gap: "xs", grow: true },
+   React.createElement(Button, {
+     variant: editable ? "filled" : "light", disabled: busy || chartId === null,
+-    onClick: () => graphApi.setEditable(state.selectedSlotId, chartId, !editable),
++    onClick: () => {
++      const context = graphApi.readData();
++      if (context.chart) return setSelectedGraphEditable(!context.chart.editor.editable);
++    },
+   }, editable ? "편집 가능" : "원본 JSON"),
+   React.createElement(Button, {
+     variant: "light", disabled: busy || !activeCsv || !editable,
+-    onClick: () => activeCsv && graphApi.addObject(state.selectedSlotId, activeCsv.id),
++    onClick: addSelectedGraphObject,
+   }, "오브젝트 추가"),
+ ),
+ React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
+@@ -1552,9 +1587,9 @@ xTop: "위 X축",
+ yLeft: "왼쪽 Y축",
+ yRight: "오른쪽 Y축",
+     };
+-    const updateGlobal = (values) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { globalSettings: values });
+-    const updateTitle = (title) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { title });
+-    const updateAxis = (key, values) => graphApi.updateLayout(state.selectedSlotId, editor.chartId, { axisKey: key, axisValues: values });
++    const updateGlobal = (values) => updateSelectedGraphLayout({ globalSettings: values });
++    const updateTitle = (title) => updateSelectedGraphLayout({ title });
++    const updateAxis = (key, values) => updateSelectedGraphLayout({ axisKey: key, axisValues: values });
+     const toggleGlobal = (key, label) =>
+ React.createElement(
+   Button,
+@@ -1857,7 +1892,7 @@ open();
+     const importSlotFileFromMantine = async (file) => {
+ if (!file) return;
+ try {
+-  await graphApi.importFile(state.selectedSlotId, file);
++  await importSelectedSlotFile(file);
+ } catch (error) {
+   status("슬롯 불러오기 오류: " + String(error?.message ?? error));
+   debugLog("slot:import-error", { message: String(error?.message ?? error) });
+@@ -2758,7 +2793,8 @@ if (!["rows", "cols"].includes(dimension)) throw Error("알 수 없는 grid 편
+ const current = layoutApi.readState();
+ const number = typeof value === "number" || (typeof value === "string" && value.trim() !== "")
+   ? Number(value) : NaN;
+-const edited = Number.isFinite(number) ? Math.max(1, Math.min(8, number))
++const bounds = current.gridLimits[dimension === "rows" ? "gridRows" : "gridCols"];
++const edited = Number.isFinite(number) ? Math.max(bounds[0], Math.min(bounds[1], number))
+   : dimension === "rows" ? current.gridRows : current.gridCols;
+ const rows = dimension === "rows" ? edited : current.gridRows;
+ const cols = dimension === "cols" ? edited : current.gridCols;
+@@ -2803,8 +2839,8 @@ React.createElement(
+     React.createElement(NumberInput, {
+       label: "행",
+       value: layout.gridRows,
+-      min: 1,
+-      max: 8,
++      min: layout.gridLimits.gridRows[0],
++      max: layout.gridLimits.gridRows[1],
+       allowDecimal: false,
+       disabled: busy,
+       onChange: (value) =>
+@@ -2813,8 +2849,8 @@ React.createElement(
+     React.createElement(NumberInput, {
+       label: "열",
+       value: layout.gridCols,
+-      min: 1,
+-      max: 8,
++      min: layout.gridLimits.gridCols[0],
++      max: layout.gridLimits.gridCols[1],
+       allowDecimal: false,
+       disabled: busy,
+       onChange: (value) =>
+diff --git a/sourcecode/frontend/renderer.js b/sourcecode/frontend/renderer.js
+index 11025d14cb016e538b08c3bf9f7b84e56a077695..6784cd6cce89ca34a8635641fc9345d07026b1d3 100644
+--- a/sourcecode/frontend/renderer.js
++++ b/sourcecode/frontend/renderer.js
+@@ -1121,7 +1121,7 @@ export async function exportCaptionLayout(snapshot, measureText) {
+         trial = line ? `${line} ${word}` : word,
+         budget = Math.max(style.minimumTextWidth, available - (firstLine ? prefixWidth : 0));
+       if (measureText(trial, fontFamily, fontSize, 400) > budget &&
+-          (line !== "" || (firstLine && prefix !== ""))) {
++          line !== "") {
+         lines.push({ text: line, prefix: firstLine ? prefix : "", prefixWidth: firstLine ? prefixWidth : 0 });
+         line = "";
+         firstLine = false;

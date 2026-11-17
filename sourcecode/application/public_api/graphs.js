@@ -6,7 +6,7 @@ import { interfaceFSM } from '../../frontend/interface_fsm.js';
 import { downloadExportPayload, status } from '../../frontend/renderer.js';
 
 export function graphEditorSelectCsv(path) {
-  return appFSM.send("SELECT_ASSET", { kind: "csv", path, direction: "ui-to-fsm" });
+  return selectProjectCsv(path);
 }
 
 export function createEmptyProjectCsvAndSelect() {
@@ -40,8 +40,9 @@ export function setGraphObjectValuesApi(index, values = {}) {
 }
 
 export function graphEditorAdd(slotId, csvId) {
-  const slot = appFSM.query("project-api", { operation: "slots.readSelected", frontendState: { selectedSlotId: slotId } }),
-    event = slot?.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED",
+  const slot = appFSM.query("project-api", { operation: "slots.readSelected", frontendState: { selectedSlotId: slotId } });
+  if (!slot) return null;
+  const event = slot.content.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED",
     [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;

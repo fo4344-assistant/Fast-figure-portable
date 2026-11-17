@@ -85,6 +85,26 @@ function actualChanged(payload) {
   return changed;
 }
 
+function removedReferenceCounts(pre, post) {
+  const references = state => {
+    const counts = new Map();
+    for (const ref of collectAssetReferences(new Set(state.assets.csvFiles.map(csv => csv.id)),
+        new Set(state.assets.images.map(image => image.id)), state)) {
+      const key = JSON.stringify([ref.kind, ref.kind === "csv" ? ref.chartId : ref.slotId, ref.assetId]);
+      const entry = counts.get(key) ?? { kind: ref.kind, count: 0 };
+      entry.count++;
+      counts.set(key, entry);
+    }
+    return counts;
+  }, before = references(pre), after = references(post),
+    result = { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
+  for (const [key, entry] of before) {
+    const removed = Math.max(0, entry.count - (after.get(key)?.count ?? 0));
+    result[entry.kind === "csv" ? "removedGraphReferenceCount" : "resetImageSlotCount"] += removed;
+  }
+  return result;
+}
+
 export class ProjectStateMachine {
   constructor(objects, actions) {
     this.objects = objects;
@@ -106,10 +126,10 @@ export class ProjectStateMachine {
     for (const key of ["changed", "selectionHints", "projectionEffect", "commitFacts",
       "removedGraphReferenceCount", "resetImageSlotCount"]) delete input[key];
     const outcome = action({ machine: this, event, payload: input }), committed = outcome !== false && !!input.commitFacts,
-      changed = committed ? actualChanged(input) : {};
-    return immutableProjectCopy({ event, committed, changed,
-      removedGraphReferenceCount: committed ? changed.removedGraphReferenceCount || input.removedGraphReferenceCount || 0 : 0,
-      resetImageSlotCount: committed ? changed.resetImageSlotCount || input.resetImageSlotCount || 0 : 0,
+      changed = committed ? actualChanged(input) : {},
+      counts = committed ? removedReferenceCounts(input.commitFacts.pre, input.commitFacts.post)
+        : { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
+    return immutableProjectCopy({ event, committed, changed, ...counts,
       selectionHints: committed ? input.selectionHints || {} : {},
       projectionEffect: committed ? input.projectionEffect : null,
     });

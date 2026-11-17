@@ -99,8 +99,10 @@ export function buildGridResizeCandidate(rows, cols) {
 
 // BuildGridResizeInAttempt: the command's existing source, not a second authority read.
 export function buildGridResizeInProject(source, rows, cols) {
-  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < 1 || rows > 8 || cols < 1 || cols > 8)
-    throw Error("레이아웃 행과 열은 1~8의 정수여야 합니다.");
+  const limits = BackendSettings.defaults.limits.layout;
+  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < limits.gridRows[0] || rows > limits.gridRows[1] ||
+      cols < limits.gridCols[0] || cols > limits.gridCols[1])
+    throw Error("레이아웃 행과 열은 설정 범위 안의 정수여야 합니다.");
   for (const slot of source.slots) {
     if (slot.row + slot.rowSpan - 1 <= rows && slot.col + slot.colSpan - 1 <= cols) continue;
     if (slotHasNonDefaultLocalState(slot))

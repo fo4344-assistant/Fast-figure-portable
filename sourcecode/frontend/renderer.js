@@ -1121,7 +1121,7 @@ export async function exportCaptionLayout(snapshot, measureText) {
         trial = line ? `${line} ${word}` : word,
         budget = Math.max(style.minimumTextWidth, available - (firstLine ? prefixWidth : 0));
       if (measureText(trial, fontFamily, fontSize, 400) > budget &&
-          (line !== "" || (firstLine && prefix !== ""))) {
+          line !== "") {
         lines.push({ text: line, prefix: firstLine ? prefix : "", prefixWidth: firstLine ? prefixWidth : 0 });
         line = "";
         firstLine = false;

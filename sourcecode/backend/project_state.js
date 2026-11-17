@@ -1,5 +1,5 @@
 // Source: sourcescript/backend/project_state.py (same logical owner); pseudocode/backend/project_state.pcal.
-import { buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectFileStem, projectImageDataUrl, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
+import { fillMissingSettingRecord, buildProjectObject, collectAssetReferences, ffpxBase64ToBytes, ffpxBuildProject, ffsxBuildSlot, normalizeProjectPath, planProjectNodeMove, projectAssetImportCollisionModel, projectAssetPath, projectFileStem, projectImageDataUrl, projectParentPath, projectPathInDirectory, projectPathName, projectVfs, resolveProjectAssetImportPlan, slotFileKind } from './assets_files.js';
 import { chartFigure, chartUsesConversionView, columnDefinitions, normalizeGraphLayoutSettings, validateChartModel } from './graphs.js';
 import { dashboardGeometryInProject, gridSlotGeometry, newGridSlot, orderedSlotLabels, slotIdentifier } from './layout_annotations.js';
 import { APP_BUILD, BackendSettings, DEFAULT_COLORS, DEFAULT_IMAGE_SETTINGS, DEFAULT_UI_PALETTE, PROJECT_OBJECT_PATHS, SLOT_LOCAL_DEFAULTS } from './settings.js';
@@ -45,9 +45,11 @@ export function projectObjectPath(state, path) {
 
 export class ProjectObject {
   constructor(state = createProjectState()) {
-    normalizeSlotContents(state.slots);
-    validateProjectObjectState(state);
-    this._state = state;
+    const next = structuredClone(state instanceof ProjectObject ? state._state : state);
+    normalizeSlotContents(next.slots);
+    normalizeProjectSettings(next);
+    validateProjectObjectState(next, { requireSlots: true });
+    this._state = next;
   }
   static fromFFPX(payload, fileName) {
     return buildProjectObject(payload, fileName);
@@ -60,6 +62,7 @@ export class ProjectObject {
   initialize(source) {
     let next = projectClone(source instanceof ProjectObject ? source._state : source);
     normalizeSlotContents(next.slots);
+    normalizeProjectSettings(next);
     validateProjectObjectState(next, { requireSlots: true });
     let previous = this._state;
     this._state = next;
@@ -257,7 +260,7 @@ export class ProjectObjectRegistry {
   }
 }
 
-const BACKEND_QUERY_KINDS = new Set(["project-api", "slot-selection-context", "interface-intent",
+const BACKEND_QUERY_KINDS = new Set(["project-api", "slot-selection-context",
   "interface-reconciliation", "renderer", "export"]);
 const PUBLIC_BACKEND_READ_OPERATIONS = new Set([
   "project.readName", "slots.readSelected", "images.readEditor", "print.readSettings", "appearance.readPalette",
@@ -265,7 +268,7 @@ const PUBLIC_BACKEND_READ_OPERATIONS = new Set([
   "captions.readGlobal", "captions.readSlot", "labels.readState", "layout.readState", "assets.readTree",
   "assets.readTrash", "assets.isTrashed", "assets.movable", "assets.draggableAsset", "assets.readDeletionTarget",
   "assets.moveOptions", "assets.planMove", "assets.resolveTreeSelection", "assets.fileKind", "assets.collisionModel",
-  "assets.resolveImportPlan",
+  "assets.resolveImportPlan", "project.exportFile", "assets.download", "graphs.exportFfsx", "graphs.exportPlotlyJson",
 ]);
 
 function buildSlotAssetDisplay(slot, source) {
@@ -315,7 +318,8 @@ export function readBackendProjection(kind, request = {}) {
   if (!BACKEND_QUERY_KINDS.has(kind) ||
       (kind === "project-api" && !PUBLIC_BACKEND_READ_OPERATIONS.has(request.operation)))
     throw Error(`알 수 없는 Backend query: ${kind}/${request.operation}`);
-  if (kind === "interface-intent") return validateFrontendIntent(request.event, request.payload);
+  if (kind === "project-api" && ["project.exportFile", "assets.download", "graphs.exportFfsx", "graphs.exportPlotlyJson"].includes(request.operation))
+    return readBackendProjection("export", request);
   if (kind === "interface-reconciliation")
     return buildFrontendReconciliationInput(request.event, request.mutationResult, request.frontendReferences);
   if (kind === "project-api" && request.operation === "project.readName")
@@ -329,6 +333,7 @@ export function readBackendProjection(kind, request = {}) {
         request.renderedWidth, preview.fallbackWidth, ...preview.widthRange);
     return immutableProjectCopy({
       gridRows: source.layout.gridRows, gridCols: source.layout.gridCols,
+      gridLimits: structuredClone(BackendSettings.defaults.limits.layout),
       slotStyle: Object.freeze({ ...source.layout.slotStyle }),
       visibleSlots: Object.freeze(source.slots.filter((slot) => !slot.hidden).map((slot) => Object.freeze({
         id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
@@ -402,8 +407,8 @@ export function readBackendProjection(kind, request = {}) {
     const source = activeProject._state,
       slot = source.slots.find((item) => item.id === request.frontendState?.selectedSlotId && !item.hidden);
     return slot ? immutableProjectCopy({ id: slot.id, row: slot.row, col: slot.col,
-      contentType: slot.content.contentType, chart: slot.content.chart,
-      imageId: slot.content.imageId }) : null;
+      rowSpan: slot.rowSpan, colSpan: slot.colSpan, hidden: slot.hidden,
+      content: slot.content, caption: slot.caption }) : null;
   }
   if (kind === "project-api" && request.operation === "assets.readTrash") {
     const source = activeProject._state, tree = buildBackendVfsTree(source);
@@ -733,16 +738,21 @@ function projectValuesEqual(left, right) {
     Object.hasOwn(right, key) && projectValuesEqual(left[key], right[key]));
 }
 
+export function normalizeProjectSettings(state) {
+  for (const key of ["layout", "annotations", "export"])
+    state[key] = Object.hasOwn(state, key)
+      ? fillMissingSettingRecord(state[key], BackendSettings.project_object[key])
+      : structuredClone(BackendSettings.project_object[key]);
+  if (!Object.hasOwn(state, "appearance")) state.appearance = {};
+  const palette = state.appearance.uiPalette;
+  state.appearance.uiPalette = Object.fromEntries(Object.entries(DEFAULT_UI_PALETTE).map(([key, fallback]) =>
+    [key, typeof palette?.[key] === "string" && /^#[0-9a-fA-F]{6}$/.test(palette[key]) ? palette[key] : fallback]));
+  delete state.layout.layoutMapWidth;
+  return state;
+}
+
 export function slotHasNonDefaultLocalState(slot) {
-  let local = slotLocalState(slot),
-    defaults = SLOT_LOCAL_DEFAULTS;
-  return (
-    local.chart !== defaults.chart ||
-    local.imageId !== defaults.imageId ||
-    local.contentType !== defaults.contentType ||
-    local.caption !== defaults.caption ||
-    !projectValuesEqual(local.imageSettings, defaults.imageSettings)
-  );
+  return !projectValuesEqual(slotLocalState(slot), SLOT_LOCAL_DEFAULTS);
 }
 
 export function slotLegacyState(slot) {
@@ -772,10 +782,7 @@ export function normalizeSlotContent(slot) {
         ? legacy.value : SLOT_LOCAL_DEFAULTS[key]);
     }
   }
-  if (content.imageSettings === null) content.imageSettings = structuredClone(DEFAULT_IMAGE_SETTINGS);
-  else {
-    if (!content.imageSettings || typeof content.imageSettings !== "object" || Array.isArray(content.imageSettings))
-      throw Error("슬롯 imageSettings 구조가 올바르지 않습니다.");
+  if (content.imageSettings && typeof content.imageSettings === "object" && !Array.isArray(content.imageSettings)) {
     for (const key of Object.keys(DEFAULT_IMAGE_SETTINGS))
       if (!Object.hasOwn(content.imageSettings, key))
         content.imageSettings[key] = structuredClone(DEFAULT_IMAGE_SETTINGS[key]);

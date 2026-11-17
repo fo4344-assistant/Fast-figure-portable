@@ -100,8 +100,9 @@ export function selectProjectCsv(path) {
   const priorRevision = interfaceFSM.readState().revision, state = appFSM.send("SELECT_ASSET", {
     kind: "csv", path: resolved.path, direction: "ui-to-fsm",
   });
-  return state.revision > priorRevision && state.assetSelection === "csv" && state.assetPath === resolved.path
-    ? resolved.target : null;
+  if (!(state.revision > priorRevision && state.assetSelection === "csv" && state.assetPath === resolved.path)) return null;
+  const current = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: resolved.path });
+  return current?.kind === "csv" ? current.target : null;
 }
 
 export function selectImageFromTree(path) {
