@@ -103,11 +103,8 @@ export function readmeContentHtml() {
   return template ? template.innerHTML.replaceAll("{{APP_BUILD}}", APP_BUILD) : "";
 }
 
-export function applyReferenceGeometryProjection(element, style, width) {
+export function applyReferenceGeometryProjection(element, geometry) {
   if (!element) return;
-  const scale = width / style.referenceWidth,
-    geometry = { outerMargin: Math.min(style.outerMargin * scale, Math.min(width, width / style.aspect) * .49),
-      gap: style.gap * scale, radius: style.radius * scale, scale };
   element.style.setProperty("--dashboard-outer-margin", `${geometry.outerMargin}px`);
   element.style.setProperty("--slot-gap", `${geometry.gap}px`);
   element.style.setProperty("--slot-radius", `${geometry.radius}px`);
@@ -124,21 +121,49 @@ export function syncDashboardCaptionWidth() {
   caption.style.minWidth = `${width}px`;
 }
 
-export function applySlotStyleProjection(style, interfaceState) {
-  const dashboard = $("dashboard"), border = style.showBorders ? "var(--ui-color)" : "transparent",
-    width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
-      : style.referenceWidth * interfaceState.dashboardZoomIntent / 100;
-  for (const id of ["dashboard", "dashboardCaption"]) {
-    const host = $(id);
-    host?.style.setProperty("--slot-border-color", border);
-    host?.style.setProperty("--layout-slot-border-style", style.showBorders ? "solid" : "dashed");
+export function renderDashboardFrame(host, layout, visibleSlots, geometry) {
+  host.classList.add("dashboard", "fixed-aspect");
+  Object.assign(host.style, {
+    display: "grid", boxSizing: "border-box", width: `${geometry.width}px`,
+    minWidth: `${geometry.width}px`, height: `${geometry.height}px`, minHeight: "0",
+    gridTemplateColumns: `repeat(${layout.gridCols}, minmax(0, 1fr))`,
+    gridTemplateRows: `repeat(${layout.gridRows}, minmax(0, 1fr))`,
+    gap: `${geometry.gap}px`, padding: `${geometry.outerMargin}px`, borderRadius: "0",
+  });
+  host.style.setProperty("--grid-cols", layout.gridCols);
+  host.style.setProperty("--grid-rows", layout.gridRows);
+  host.style.setProperty("--dashboard-aspect", `${geometry.aspect} / 1`);
+  host.style.setProperty("--slot-border-color", layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
+  applyReferenceGeometryProjection(host, geometry);
+  const slots = new Map(), existing = new Map([...host.children]
+    .filter(element => element.classList.contains("slot")).map(element => [Number(element.dataset.slot), element]));
+  for (const slot of visibleSlots) {
+    let frame = existing.get(slot.id);
+    if (!frame) {
+      frame = document.createElement("section"); frame.className = "slot"; frame.dataset.slot = slot.id;
+    }
+    let content = frame.querySelector(":scope > .slot-content"),
+      decoration = frame.querySelector(":scope > .slot-decoration");
+    if (!content) { content = document.createElement("div"); content.className = "slot-content"; frame.append(content); }
+    if (!decoration) { decoration = document.createElement("div"); decoration.className = "slot-decoration"; frame.append(decoration); }
+    Object.assign(frame.style, { gridArea: `${slot.row} / ${slot.col} / span ${slot.rowSpan} / span ${slot.colSpan}`,
+      minWidth: "0", minHeight: "0", boxSizing: "border-box", borderRadius: `${geometry.radius}px`,
+      border: "1px solid var(--slot-border-color)", background: "var(--graph-bg, #fff)" });
+    Object.assign(content.style, { width: "100%", height: "100%", minWidth: "0", minHeight: "0",
+      overflow: "hidden", borderRadius: "inherit" });
+    Object.assign(decoration.style, { position: "absolute", inset: "0", pointerEvents: "none", borderRadius: "inherit" });
+    host.append(frame); slots.set(slot.id, { frame, content, decoration }); existing.delete(slot.id);
   }
-  const hasAspect = Number.isFinite(style.aspect) && style.aspect > 0;
-  dashboard.classList.toggle("fixed-aspect", hasAspect);
-  if (hasAspect) dashboard.style.setProperty("--dashboard-aspect", `${style.aspect} / 1`);
-  else dashboard.style.removeProperty("--dashboard-aspect");
-  applyReferenceGeometryProjection(dashboard, style, width);
+  for (const frame of existing.values()) frame.remove();
+  return { grid: host, slots };
+}
+
+export function applySlotStyleProjection(projection) {
+  const view = renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
+  $("dashboardCaption")?.style.setProperty("--slot-border-color",
+    projection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
   syncDashboardCaptionWidth();
+  return view;
 }
 
 export const projectImageDisplayUrls = new Map();
@@ -455,10 +480,7 @@ export function applyDashboardProjectionInvalidation(event, mutationResult, inte
     renderDashboardProjection(projectProjection, interfaceState, frontendActions);
     return "FULL_DASHBOARD";
   }
-  const style = projectProjection.layout.slotStyle,
-    width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
-      : style.referenceWidth * interfaceState.dashboardZoomIntent / 100,
-    scale = width / style.referenceWidth;
+  const scale = projectProjection.geometry.scale;
   if (["CAPTION_TEXT_INPUT", "SLOT_CAPTIONS_INSERTED", "CAPTION_SETTINGS_CHANGED"].includes(event)) {
     syncDashboardCaptionProjection(projectProjection.annotations.captions, scale);
     syncDashboardCaptionWidth();
@@ -486,14 +508,14 @@ export function applyDashboardProjectionInvalidation(event, mutationResult, inte
       settings = projectProjection.annotations.labels.settings;
     for (const slot of slots) {
       const host = hosts.find(host => host.dataset.slot === String(slot.id));
-      host.querySelectorAll(":scope > .slot-label").forEach(label => label.remove());
+      host.querySelectorAll(":scope > .slot-decoration > .slot-label").forEach(label => label.remove());
       if (!projectProjection.annotations.labels.enabled || !labels.has(slot.id)) continue;
       const label = document.createElement("span");
       label.className = "slot-label"; label.textContent = labels.get(slot.id);
       label.setAttribute("aria-label", "슬롯 식별자");
       label.style.left = `${settings.x * scale}px`; label.style.top = `${settings.y * scale}px`;
       label.style.fontFamily = settings.fontFamily; label.style.fontSize = `${settings.fontSize * scale}px`;
-      host.append(label);
+      host.querySelector(":scope > .slot-decoration").append(label);
     }
   }
   return "TARGETED_PROJECTION";
@@ -523,9 +545,7 @@ export function updateGraphViewProjection(projectProjection, interfaceState, fro
     if (record) return true;
     return slot.imageView ? !surface || surface.host !== host || !hasLiveImageSurface(surface) || surface.imageInput.src !== slot.imageView.src : !!surface;
   })) return renderDashboardProjection(projectProjection, interfaceState, frontendActions);
-  const chart = resolveSelectedChart(projectProjection, interfaceState), style = projectProjection.layout.slotStyle,
-    scale = (interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
-      : style.referenceWidth * interfaceState.dashboardZoomIntent / 100) / style.referenceWidth;
+  const chart = resolveSelectedChart(projectProjection, interfaceState), scale = projectProjection.geometry.scale;
   for (const slot of slots) {
     const selected = slot.id === interfaceState.selectedSlotId, record = rendererRuntime.graphInstances.get(slot.id);
     hosts.get(String(slot.id)).classList.toggle("selected", selected);
@@ -542,10 +562,10 @@ export function updateGraphViewProjection(projectProjection, interfaceState, fro
 // Source startupCoreRuntime: one supplied initial read, in the declared order.
 // Lifecycle ready and Backend acquisition belong to the Application boundary.
 export function startupCoreRuntimeProjection(projectProjection, interfaceState, frontendActions) {
-  applyDashboardZoomProjection(projectProjection.layout, interfaceState);
+  applyDashboardZoomProjection(projectProjection, interfaceState);
   installSlotClickControllerProjection(frontendActions);
   const presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
-  applySlotStyleProjection(projectProjection.layout.slotStyle, interfaceState);
+  applySlotStyleProjection(projectProjection);
   auditSuppliedRendererContracts(projectProjection, interfaceState);
   return presentation;
 }
@@ -571,26 +591,9 @@ function auditSuppliedRendererContracts(projectProjection, interfaceState) {
 // All domain content is supplied by Application; associations below own only DOM lifetimes.
 export function renderDashboardProjection(projectProjection, interfaceState, frontendActions = {}) {
   const generation = ++rendererRuntime.dashboardRenderGeneration,
-    dashboard = $("dashboard"), style = projectProjection.layout.slotStyle,
-    width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
-      : style.referenceWidth * interfaceState.dashboardZoomIntent / 100,
-    scale = width / style.referenceWidth,
-    geometry = { scale, outerMargin: Math.min(style.outerMargin * scale, Math.min(width, width / style.aspect) * .49),
-      gap: style.gap * scale, radius: style.radius * scale },
+    dashboard = $("dashboard"), geometry = projectProjection.geometry, scale = geometry.scale,
     slots = projectProjection.visibleSlots,
     labels = new Map(projectProjection.orderedSlotLabels.map(label => [label.slotId, label.displayLabel]));
-  dashboard.style.width = dashboard.style.minWidth = `${width}px`;
-  dashboard.style.setProperty("--grid-cols", projectProjection.layout.gridCols);
-  dashboard.style.setProperty("--grid-rows", projectProjection.layout.gridRows);
-  dashboard.style.setProperty("--dashboard-outer-margin", `${geometry.outerMargin}px`);
-  dashboard.style.setProperty("--slot-gap", `${geometry.gap}px`);
-  dashboard.style.setProperty("--slot-radius", `${geometry.radius}px`);
-  dashboard.style.setProperty("--dashboard-aspect", `${style.aspect} / 1`);
-  dashboard.classList.toggle("fixed-aspect", Number.isFinite(style.aspect) && style.aspect > 0);
-  for (const host of [dashboard, $("dashboardCaption")]) {
-    host?.style.setProperty("--slot-border-color", style.showBorders ? "var(--ui-color)" : "transparent");
-    host?.style.setProperty("--layout-slot-border-style", style.showBorders ? "solid" : "dashed");
-  }
   applyUiPaletteProjection(projectProjection.appearance.uiPalette);
   const discard = record => {
     rendererRuntime.graphInstances.delete(record.slotId);
@@ -608,30 +611,27 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
   // Image elements are surface-owned decode handles, never shared asset handles.
   // Detach before dropping src; an obsolete decode may reject but is no longer current.
   for (const surface of rendererRuntime.imageSurfaces.values()) releaseImageSurface(surface);
-  const ids = new Set(slots.map(slot => String(slot.id)));
-  dashboard.querySelectorAll(":scope > .slot").forEach(host => {
-    if (!ids.has(host.dataset.slot)) host.remove();
-  });
+  const frameView = renderDashboardFrame(dashboard, projectProjection.layout, slots, geometry);
+  $("dashboardCaption")?.style.setProperty("--slot-border-color",
+    projectProjection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
   for (const slot of slots) {
     const graph = slot.contentType !== "image" && slot.figure,
       image = !graph && slot.imageView,
       selected = slot.id === interfaceState.selectedSlotId;
-    let record = rendererRuntime.graphInstances.get(slot.id),
-      host = record?.host || [...dashboard.children].find(host => host.dataset.slot === String(slot.id));
-    if (!host) { host = document.createElement("section"); host.dataset.slot = slot.id; }
+    let record = rendererRuntime.graphInstances.get(slot.id);
+    const { frame: host, content, decoration } = frameView.slots.get(slot.id);
     host.className = "slot" + (!graph && !image ? " empty" : "") + (selected ? " selected" : "");
-    host.style.gridArea = `${slot.row} / ${slot.col} / span ${slot.rowSpan} / span ${slot.colSpan}`;
     if (graph && !record) {
-      host.replaceChildren();
+      content.replaceChildren();
       const card = document.createElement("div"), plot = document.createElement("div");
       card.className = "chart-card"; plot.className = "plot-item"; plot.id = `plot-${slot.id}`;
-      card.append(plot); host.append(card);
+      card.append(plot); content.append(card);
       record = { host, plot, slotId: slot.id, chartId: slot.content.chart, generation, pending: Promise.resolve() };
       rendererRuntime.graphInstances.set(slot.id, record);
     } else if (!graph) {
       // Copied pure URLs avoid shared revocation. Each native decode still belongs
       // to this surface/generation and must settle without reviving replaced DOM.
-      host.replaceChildren();
+      content.replaceChildren();
       if (image) {
         const frame = document.createElement("div"), element = document.createElement("img"),
           settings = image.settings;
@@ -641,7 +641,7 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
           element.classList.add("manual");
           element.style.width = `${settings.scale}%`; element.style.left = `${settings.x}%`; element.style.top = `${settings.y}%`;
         } else element.style.objectFit = settings.fit;
-        frame.append(element); host.append(frame);
+        frame.append(element); content.append(frame);
         const surface = { host, element, slotId: slot.id, imageInput: image, generation, pending: null };
         rendererRuntime.imageSurfaces.set(slot.id, surface);
         const current = () => generation === rendererRuntime.dashboardRenderGeneration &&
@@ -662,16 +662,17 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
         });
       }
     }
-    host.querySelectorAll(".slot-tab,.slot-label").forEach(element => element.remove());
+    decoration.replaceChildren();
     if (graph || image) {
       const tab = document.createElement("button"); tab.className = "slot-tab"; tab.type = "button"; tab.draggable = true;
-      tab.setAttribute("aria-label", "슬롯 이동 및 선택"); tab.innerHTML = '<span class="slot-tab-shape"></span>'; host.append(tab);
+      tab.setAttribute("aria-label", "슬롯 이동 및 선택"); tab.style.pointerEvents = "auto";
+      tab.innerHTML = '<span class="slot-tab-shape"></span>'; decoration.append(tab);
     }
     if (projectProjection.annotations.labels.enabled && labels.has(slot.id)) {
       const label = document.createElement("span"), settings = projectProjection.annotations.labels.settings;
       label.className = "slot-label"; label.textContent = labels.get(slot.id); label.setAttribute("aria-label", "슬롯 식별자");
       label.style.left = `${settings.x * scale}px`; label.style.top = `${settings.y * scale}px`;
-      label.style.fontFamily = settings.fontFamily; label.style.fontSize = `${settings.fontSize * scale}px`; host.append(label);
+      label.style.fontFamily = settings.fontFamily; label.style.fontSize = `${settings.fontSize * scale}px`; decoration.append(label);
     }
     dashboard.append(host);
     if (record) presentSuppliedGraph(record, slot, selected, generation, scale, frontendActions);
@@ -1419,12 +1420,8 @@ export async function downloadExportPayload(payload) {
   }
 }
 
-export function applyDashboardZoomProjection(layout, interfaceState, resize = true) {
-  const dashboard = $("dashboard"), style = layout.slotStyle,
-    width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
-      : style.referenceWidth * interfaceState.dashboardZoomIntent / 100;
-  dashboard.style.minWidth = dashboard.style.width = `${width}px`;
-  applyReferenceGeometryProjection(dashboard, style, width);
+export function applyDashboardZoomProjection(projection, interfaceState, resize = true) {
+  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
   syncDashboardCaptionWidth();
   if (resize) schedulePlotResize();
 }

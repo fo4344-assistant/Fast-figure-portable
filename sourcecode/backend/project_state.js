@@ -461,6 +461,11 @@ export function readBackendProjection(kind, request = {}) {
   if (kind === "renderer" ||
       (kind === "export" && ["print.save", "print.capture"].includes(request.operation))) {
     const source = activeProject._state, output = buildBackendSurfaceRead(source);
+    if (kind === "renderer") {
+      if (!Number.isFinite(request.width) || request.width <= 0)
+        throw Error("renderer 너비는 유한한 양수여야 합니다.");
+      output.geometry = dashboardGeometryInProject(source, request.width);
+    }
     if (kind === "export") {
       output.export = structuredClone(source.export);
       output.rasterLimits = structuredClone(BackendSettings.defaults.limits.export);

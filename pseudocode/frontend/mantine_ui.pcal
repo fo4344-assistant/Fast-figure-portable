@@ -36,6 +36,7 @@ ComponentOwners == [
 variables result = NoValue,
   collisionModel = NoValue, collisionResolver = NoValue,
   layoutSelectedSlotIds = {}, settingsOverlayHeight = NoValue,
+  folding = [], layoutDimensionEdit = [],
   sidebarGeometry = InitialSessionSidebarGeometry(),
   dropMounted = FALSE, dropAllowed = FALSE, dropReceiver = NoValue;
 
@@ -66,11 +67,22 @@ OfficialReferenceCountNotSlotDisplayDeduplication:
   return;
 end procedure;
 
-procedure changeLayoutGridDimension(dimension,value)
+procedure changeLayoutGridDimension(dimension,value,editingFinished)
 variables current = NoValue, number = NoValue, rows = NoValue, cols = NoValue;
 begin
-CurrentAuthorityThenSynchronousCommand:
+EmptyEditingAndCurrentValueRestoration:
   Require(dimension \in {"rows","cols"});
+  layoutDimensionEdit[dimension] := value;
+  if value = NoValue \/ value = "" then
+    layoutDimensionEdit[dimension] := "";
+    if ~editingFinished then result := NoValue; return; end if;
+    current := InvokePublicApi("layout.readState",[]);
+    DisplayLayoutDimension(dimension,IF dimension = "rows" THEN current.gridRows ELSE current.gridCols);
+    RemoveField(layoutDimensionEdit,dimension);
+    result := current; return;
+    \* No setGrid, selection clearing or resize in this branch.
+  end if;
+CurrentAuthorityThenSynchronousCommand:
   current := InvokePublicApi("layout.readState",[]);
   rows := current.gridRows; cols := current.gridCols;
   number := TryNonemptyFiniteInputNumber(value);
@@ -79,10 +91,33 @@ CurrentAuthorityThenSynchronousCommand:
     else cols := Maximum(current.gridLimits.gridCols[1],Minimum(current.gridLimits.gridCols[2],number.value)); end if;
   end if;
   result := InvokePublicApi("layout.setGrid",[rows |-> rows,cols |-> cols]);
-  \* Empty/invalid input keeps SAME current dimension; companion is also current.
+  \* Invalid nonempty input keeps the current dimension; companion is also current.
   \* This entire read/compose/dispatch is synchronous: no await/external callback/other command.
   \* Existing Backend integer/candidate/whole-validation/current-source retry/one commit remains.
   \* False and original failure are not converted to success. No second resize/commit.
+  return;
+end procedure;
+
+\* Private expansion of FastFigureApp's input bindings.
+procedure LayoutDimensionChanged(dimension,value)
+begin
+InputChange:
+  call changeLayoutGridDimension(dimension,value,FALSE);
+  return;
+end procedure;
+
+procedure LayoutDimensionBlur(dimension,value)
+variables current = NoValue;
+begin
+FinishOnlyThisInput:
+  if value = NoValue \/ value = "" then
+    call changeLayoutGridDimension(dimension,value,TRUE);
+  else
+    current := InvokePublicApi("layout.readState",[]);
+    DisplayLayoutDimension(dimension,IF dimension = "rows" THEN current.gridRows ELSE current.gridCols);
+    RemoveField(layoutDimensionEdit,dimension);
+    result := current;
+  end if;
   return;
 end procedure;
 
@@ -223,9 +258,44 @@ DeclaredTransferFunction:
   return;
 end procedure;
 
+\* Private display expansion of FastFigureApp step 5, called on each editor render.
+procedure ReadGraphObjectOptions()
+variables editor = NoValue, options = <<>>, i = 1, object = NoValue,
+          title = "", identity = "", label = "";
+begin
+SameOfficialChartAndObjects:
+  editor := InvokePublicApi("graphs.readData",[]);
+  if editor.chart = NoValue then result := options; return; end if;
+  title := editor.chart.editor.title;
+  while i <= Len(editor.objects) do
+    object := editor.objects[i];
+    identity := IF object.legendName # "" THEN object.legendName ELSE object.x \o " · " \o object.y;
+    label := Text(i) \o ". " \o (IF title = "" THEN identity ELSE title \o " — " \o identity);
+    options := Append(options,[value |-> i-1,label |-> label,title |-> title,identity |-> identity]);
+    i := i + 1;
+  end while;
+  result := options;
+  \* Rendering wraps title, preserves a readable identity part and exposes the full accessible name.
+  \* No stored display field, trace legend change or replacement selection value.
+  return;
+end procedure;
+
+\* Private UI-local interaction expansion of FastFigureApp step 6.
+procedure ToggleUiFold(key)
+begin
+OneGroupOnly:
+  Require(key \in DOMAIN folding);
+  if folding[key] then MoveContainedFocusToGroupHeadingIfNeeded(key); end if;
+  folding[key] := ~folding[key];
+  UpdateGroupExpandedAndContentLink(key,folding[key]);
+  result := folding[key]; return;
+end procedure;
+
 procedure FastFigureApp()
 variables palette = NoValue, shades = <<>>, i = 1, channels = <<>>, linear = <<>>,
-          luminance = 0, contrast = "", theme = NoValue, css = NoValue, tree = NoValue;
+          luminance = 0, contrast = "", theme = NoValue, css = NoValue, tree = NoValue,
+          controls = <<"Button","ActionIcon","Input","Select","NumberInput","ColorInput">>,
+          groups = <<"global","objects","x","y","xBottom","xTop","yLeft","yRight","objectType","uiColors","debug">>;
 begin
 CurrentReadNotDraftOrMirror:
   palette := InvokePublicApi("appearance.readPalette",[]);
@@ -237,6 +307,27 @@ ContrastFromCurrentUiColor:
   contrast := IF luminance > 0.179 THEN "#000000" ELSE "#FFFFFF";
 ThemeAndCssProjection:
   theme := ExistingFastFigureCommonTheme();
+  i := 1;
+  while i <= Len(controls) do
+    UseCommonRoleHeightFontPaddingRadiusInThemeAndDefaultProps(theme,controls[i]);
+    RemoveSameRoleInstanceSizeOverrides(controls[i]); i := i + 1;
+  end while;
+  ApplyCommonInputWidthsRowGapAndInputBottomAlignment(
+    <<"graphData","objects","axes","layout","labels","captions","print","assets">>);
+  WrapEachInputTogetherWithItsLabelWhenRowIsNarrow();
+  PreserveTextRendererShapeAndResizeHandleDimensions();
+  ApplyExistingModalCenteredEscapeOutsideDefaultsAndCommonSettingsMaximum(theme);
+  i := 1;
+  while i <= Len(groups) do
+    if ~HasField(folding,groups[i]) then folding[groups[i]] := groups[i] \in {"global","objects"}; end if;
+    BindKeyboardAccessibleGroupHeading(groups[i],folding[groups[i]],ToggleUiFold);
+    i := i + 1;
+  end while;
+  ComposeFoldHierarchy([global |-> <<"x","y">>,x |-> <<"xBottom","xTop">>,
+    y |-> <<"yLeft","yRight">>,objects |-> <<"objectType">>]);
+  BindFourAxisContentsToTheirExistingGlobalSettingsFields();
+  KeepObjectXYSideSelectorsInsideObjectSettings();
+  \* uiColors/debug are independent groups. Folding never changes project, selection or debugEnabled.
   theme.colors.ffui := shades; theme.primaryColor := "ffui"; theme.colorScheme := "light";
   css := [body |-> palette.uiBackgroundColor,text |-> palette.fontColor,
     defaultColor |-> palette.fontColor,primaryLightColor |-> palette.fontColor,
@@ -266,6 +357,10 @@ NoProjectStoreInShell:
   BindComponentEvent("FastFigureGraphFileActions","fileReceived",importSelectedSlotFile);
   BindComponentEvent("FastFigureGraphFileActions","editableChanged",setSelectedGraphEditable);
   BindComponentEvent("FastFigureGraphLayoutEditor","settingsChanged",updateSelectedGraphLayout);
+  BindComponentRenderReadFor("FastFigureGraphDataEditor","objectOptions",ReadGraphObjectOptions);
+  BindComponentEvent("FastFigureLayoutOverlay","dimensionChanged",LayoutDimensionChanged);
+  BindComponentEvent("FastFigureLayoutOverlay","dimensionBlur",LayoutDimensionBlur);
+  BindComponentEvent("FastFigureLayoutOverlay","previewWidthMeasured",RenderLayoutPreview);
   BindComponentRenderRead(useAppState);
   result := ComposeExistingAppShellHeaderNavbarMainAndOverlayComponents(ComponentOwners);
   return;
@@ -320,12 +415,29 @@ ControlConsumesSelectionBeforeParentClear:
   return;
 end procedure;
 
-procedure RenderLayoutPreview(layoutRead,actualRenderedWidth)
+procedure RenderLayoutPreview(previewHost,actualRenderedWidth)
+variables layoutRead = NoValue, frameView = NoValue, i = 1, slot = NoValue, width = NoValue;
 begin
-SingleWidthForAllDependentGeometry:
-  result := RenderSuppliedPreviewAtOneWidthAndSuppliedAspect(layoutRead,actualRenderedWidth);
-  \* Height/gap/margin/radius use SAME width; no separate preview-size drag.
-  \* Modal height change alone does not issue a width command.
+CurrentPreviewQuery:
+  width := IF PositiveFinite(actualRenderedWidth) THEN actualRenderedWidth ELSE NoValue;
+  call readLayoutApiState(width); layoutRead := result;
+  SetPreviewHostWidthAndOuterHorizontalScroll(previewHost,layoutRead.previewGeometry.width);
+  call renderDashboardFrame(previewHost,
+    [gridRows |-> layoutRead.gridRows,gridCols |-> layoutRead.gridCols,slotStyle |-> layoutRead.slotStyle],
+    layoutRead.visibleSlots,layoutRead.previewGeometry);
+  frameView := result;
+LocalDecorationsAndInteraction:
+  while i <= Len(layoutRead.visibleSlots) do
+    slot := layoutRead.visibleSlots[i];
+    DrawCoordinatesSelectionAndFocusWithoutChangingGeometry(frameView.slots[slot.id].decoration,
+                                                           slot,slot.id \in layoutSelectedSlotIds);
+    BindPreviewSlotClick(frameView.slots[slot.id].frame,slot.id,LayoutSelectionInteraction);
+    i := i + 1;
+  end while;
+  InstallHostScopedPreviewCleanup(previewHost,frameView);
+  \* Width/viewport changes requery. Modal vertical resize changes only local height.
+  \* Cleanup releases only these frames/listeners; no actual dashboard generation/Plotly/decode effects.
+  result := frameView;
   return;
 end procedure;
 

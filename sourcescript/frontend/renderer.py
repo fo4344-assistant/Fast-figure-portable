@@ -191,8 +191,55 @@ def applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, 
     return effect
 
 
+def renderDashboardFrame(host, layout, visibleSlots, geometry):
+    frameView = "grid host와 슬롯 id별 frame·content·decoration DOM 참조를 담은 딕셔너리."
+    """
+    Args:
+    - host:
+      이번 표시 대상의 grid DOM host.
+
+    - layout:
+      같은 Backend 조회에서 제공한 gridRows·gridCols·slotStyle 딕셔너리.
+      원형: /backend/project_state/ProjectObject._state.layout
+
+    - visibleSlots:
+      같은 조회의 visible Slot별 id·row·col·rowSpan·colSpan 읽기 결과 배열.
+      원형: /backend/project_state/Slot의 배치 필드.
+
+    - geometry:
+      이번 host 너비의 읽기 전용 기하 딕셔너리.
+      원형: /backend/layout_annotations/dashboardGeometryResult
+
+    Return:
+    - frameView:
+      grid와 슬롯별 DOM 참조. 각 슬롯 항목은 frame·content·decoration을 가진다.
+
+    변경:
+    - supplied host의 grid·slot 틀과 배치 CSS.
+
+    처리:
+        1. host의 border-box 너비·높이에 geometry의 width·height를 적용한다.
+           gridRows·gridCols 개수의 같은 비율 행·열을 구성하고 gap과 padding에는
+           geometry의 gap·outerMargin을 적용한다. grid 바깥 모서리 반경은 0이다.
+           표시용 외곽선은 내부 기하를 밀지 않는 장식으로 그린다.
+        2. visibleSlots의 id마다 현재 host 아래의 같은 id 틀을 재사용하거나 새 틀을 만든다.
+           행·열 시작점과 span을 해당 슬롯의 row·col·rowSpan·colSpan으로 배치한다.
+           틀의 min-width·min-height는 0이고 모서리 반경은 geometry["radius"]다.
+           layout["slotStyle"]["showBorders"]이면 슬롯 외곽선을 표시하고 False이면 숨긴다.
+           외곽선 두께·배경·box sizing·내용 영역의 배치 규칙은 실제 dashboard와 미리보기에 함께 적용한다.
+        3. 각 틀은 기존 content 영역과 치수에 영향을 주지 않는 decoration 영역을 유지한다.
+           기존 content 자식은 같은 틀의 갱신에서 보존한다. 이번 visibleSlots에 없는 틀은 host에서 분리한다.
+           frameView["grid"]에 host를, frameView["slots"][id]에 해당
+           frame·content·decoration 참조를 담은 딕셔너리를 넣고 frameView를 반환한다.
+           이 함수는 Plotly 호출·이미지 decode·선택 전이·resize 요청을 수행하지 않는다.
+           호출자는 자신의 content와 listener 수명을 관리한다.
+    """
+    return frameView
+
+
 def renderDashboard(projectProjection, interfaceState):
     dashboardView = "대시보드 DOM 표시 결과."
+    frameView = "renderDashboardFrame의 이번 DOM 참조 결과."
     """
     Args:
     - projectProjection:
@@ -211,12 +258,14 @@ def renderDashboard(projectProjection, interfaceState):
     - Backend project state와 Frontend FSM state는 변경하지 않는다.
 
     처리:
-        1. supplied projectProjection의 grid와 style을 dashboard CSS geometry에 반영한다.
-           width는 interfaceState의 lock이면 dashboardZoomLockedWidth, 아니면 supplied slotStyle.referenceWidth * dashboardZoomIntent / 100이다.
-           이 width에서 같은 supplied slotStyle의 aspect/gap/outerMargin/radius를 비례 계산한다. DOM/control로 Project 값을 역추론하지 않는다.
-           host resize나 referenceWidth 변경에도 lock width는 그대로며 unlock/reset 이후에는 최신 supplied referenceWidth의 100 percent를 사용한다.
-           geometry 변경 뒤 current host만 resize하며 zoom/anchor를 Project/FFPX에 저장하지 않는다.
-        2. visible slot projection마다 slot container와 label/bookmark control surface를 구성한다.
+        1. 7~8번의 수명 규칙에 따라 교체·제거되는 이전 graph instance와 image surface를 먼저 정리한다.
+           Application이 제공한 projectProjection["geometry"]와 같은 조회의 layout·visible slots를
+           실제 dashboard host와 함께 renderDashboardFrame에 전달한다.
+           반환값을 frameView에 두고 그 frame·content·decoration 참조를 이번 표시 작업에서 사용한다.
+           너비·height·margin·gap·radius는 supplied geometry를 적용하고
+           zoom/anchor는 Frontend 세션에 유지한다. geometry 변경 뒤 current host만 resize한다.
+        2. 공통 틀의 decoration 영역에 label/bookmark와 선택·상호작용 표시를 구성한다.
+           슬롯 content 영역은 graph·image 표시에 사용한다.
         3. graph slot은 Backend가 같은 project read에서 계산해 projection에 포함한 figure를 Plotly로 표시한다.
            supplied CSV/columns는 editor 표시용 read 값이며 Frontend에서 traces/chartFigure를 다시 계산하거나
            CSV를 resolve해 Backend figure를 다른 결과로 바꾸지 않는다.
@@ -472,9 +521,11 @@ def applySlotStyle(projectProjection, notify):
     - notify가 참이면 layout model-to-ui notification.
 
     처리:
-        1. supplied projectProjection["layout"]["slotStyle"]에서 border/aspect/outer-margin/gap/radius를 계산한다.
-           DOM computed state나 renderer projection을 Backend authority로 되돌려 쓰지 않는다.
-           styleView를 반환한다.
+        1. supplied projectProjection의 geometry·layout·visible slots와 현재 dashboard host로
+           renderDashboardFrame을 호출하여 같은 grid·slot 스타일을 갱신한다.
+           그 반환값을 styleView에 둔다. caption의 기존 표시 규칙에도 supplied geometry를 사용한다.
+        2. notify가 True이면 기존 layout model-to-ui 알림을 한 번 전달한다.
+           호출자에게 styleView를 반환한다. Project와 Frontend 선택은 유지한다.
     """
     return styleView
 

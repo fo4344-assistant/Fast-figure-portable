@@ -30,9 +30,21 @@ FrontendPublicationSubscription:
 end procedure;
 
 procedure dispatchProjectQuery(query, payload)
+variables request = [], frontendState = NoValue, layout = NoValue, width = NoValue;
 begin
+CurrentWholeRendererInputs:
+  request := IF payload = NoValue THEN [] ELSE DeepCopy(payload);
+  if query = "renderer" /\ FieldOrNoValue(request,"operation") \notin {"slot-image","ui-palette"} then
+    call InterfaceStateMachine_readState(); frontendState := result;
+    call readBackendProjection("project-api",[operation |-> "layout.readState"]); layout := result;
+    width := IF frontendState.dashboardZoomLocked THEN frontendState.dashboardZoomLockedWidth
+             ELSE layout.slotStyle.referenceWidth * frontendState.dashboardZoomIntent / 100;
+    request.frontendState := frontendState; request.width := width;
+    \* These current reads and the final query are synchronous, with no callback or command.
+    \* The lock anchor stays unchanged across reference-width/host changes.
+  end if;
 ReadThroughBackend:
-  call readBackendProjection(query, payload);
+  call readBackendProjection(query, request);
   \* Immutable output only; no mutable Backend helper escapes.
   return;
 end procedure;
@@ -92,7 +104,7 @@ OptionalPersistentIntent:
     end if;
   end if;
 ReadFinalSelectionProjection:
-  call readBackendProjection("renderer", [frontendState |-> interfaceState]);
+  call dispatchProjectQuery("renderer", [frontendState |-> interfaceState]);
   rendererProjection := result;
 ReturnSlotOrchestration:
   result := <<interfaceState, projectResult, rendererProjection>>;
@@ -127,8 +139,8 @@ ReconcileOnce:
   interfaceState := result;
   \* Do not resend SELECT_GRAPH_OBJECT or overwrite independent CSV selection.
 ReadFinalRendererInput:
-  call readBackendProjection("renderer", [frontendState |-> interfaceState,
-                                         mutationResult |-> mutationResult]);
+  call dispatchProjectQuery("renderer", [frontendState |-> interfaceState,
+                                          mutationResult |-> mutationResult]);
   rendererProjection := result;
 ReturnInternalTuple:
   \* Not a public chart/settings/bool result. Wrapper owns its declared return.

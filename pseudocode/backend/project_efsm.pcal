@@ -80,8 +80,8 @@ ChooseExistingOperation:
     moved := objects[payload.from + 1];
     objects := RemoveSequencePosition(objects, payload.from + 1);
     objects := InsertAtFinalPosition(objects, payload.to + 1, moved);
-    selectedIndexHint := payload.to;
-    hasIndexHint := TRUE;
+    \* Preserve the current object's selection through the committed full index map.
+    \* Move contributes no explicit selectedIndexHint.
   elsif operation = "graphs.setObjectValues" then
     assert ValidZeroBasedIndex(payload.index, objects);
     \* graphs.graphEditorCommit owns one-object normalization/field rules.
@@ -697,10 +697,11 @@ ReferenceMultiplicity:
   return;
 end procedure;
 
-procedure FormActualMutationResult(event,pre,post,calculation)
+procedure FormActualMutationResult(event,payload,pre,post,calculation)
 variables hints = calculation.selectionHints, facts = calculation.domainFacts,
           maps = <<>>, i = 1, changed = [], graphCount = 0, imageCount = 0, projectionEffect = NoValue,
-          beforeRefs = <<>>, afterRefs = <<>>, seen = {}, key = NoValue, removed = 0;
+          beforeRefs = <<>>, afterRefs = <<>>, seen = {}, key = NoValue, removed = 0,
+          chart = NoValue, indices = <<>>, k = 0, n = 0, fromIndex = NoValue, toIndex = NoValue;
 begin
 FactsOfThisSuccessfulAttemptOnly:
   call BuildActualChanged(event,pre,post,facts); changed := result;
@@ -726,8 +727,23 @@ FactsOfThisSuccessfulAttemptOnly:
       end if;
       i := i + 1;
     end while;
-    if Len(maps) > 0 then hints.graphObjectIndexMaps := maps; end if;
   end if;
+CommittedMoveCorrespondence:
+  if event = "GRAPH_OBJECTS_REPLACED" /\ FieldOrNoValue(payload,"operation") = "graphs.moveObject" then
+    chart := ChartById(pre,payload.chartId);
+    Require(chart # NoValue /\ UniqueChartOwnerExists(post,chart.id));
+    n := Len(chart.editor.objects); fromIndex := payload.from; toIndex := payload.to;
+    \* Same validated payload and actual pre/post of this committed attempt.
+    while k < n do
+      if k = fromIndex then indices := Append(indices,toIndex);
+      elsif fromIndex < toIndex /\ fromIndex < k /\ k <= toIndex then indices := Append(indices,k-1);
+      elsif toIndex < fromIndex /\ toIndex <= k /\ k < fromIndex then indices := Append(indices,k+1);
+      else indices := Append(indices,k); end if;
+      k := k + 1;
+    end while;
+    maps := Append(maps,[chartId |-> chart.id,indices |-> indices]);
+  end if;
+  if Len(maps) > 0 then hints.graphObjectIndexMaps := maps; end if;
 ResetAndExplicitGraphHintSemantics:
   if event = "PROJECT_LOADED" then hints.resetInterfaceSelection := TRUE; end if;
   \* calculateGraphObjectEdit supplies chartId+explicit none for direct delete;
@@ -785,9 +801,11 @@ CommitExactlyOnce:
   call ProjectObject_initialize(candidate);
   post := CurrentAuthorityReference(activeProject);
 FormActualImmutableResult:
-  call FormActualMutationResult(event,pre,post,calculation);
+  call FormActualMutationResult(event,payload,pre,post,calculation);
+  \* Move uses the same validated chartId/from/to without intervening callbacks/commands.
+  \* Rejection, same-position no-op and validation failure produce no success map.
   \* ActualSelectionHints uses same original-index filter/actual reference set:
-  \* append -> actual append index; move -> final to; edit -> same index;
+  \* append -> actual append index; move -> full old-to-new map; edit -> same index;
   \* direct delete -> explicit none; palette/no hint -> omitted key.
   \* Cascade maps are recalculated on retry, include only affected retained charts,
   \* and exclude noneditable imported conversion views using graph validator scope.

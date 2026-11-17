@@ -1,0 +1,512 @@
+diff --git a/development-versions.json b/development-versions.json
+index 3aaa831fd56d9ce575a54865bd1b0979dfd3e411..6b711ea621ff3008b18789c6f49e98982a61623c 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -63,14 +63,14 @@
+       "validation_review": null
+     },
+     "pseudocode": {
+-      "revision": 27,
++      "revision": 28,
+       "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:5e40212959fccdb995ced547c8947a9ec0584c53eca8e11ac61d7ffed38a6558",
++      "fingerprint": "sha256:9a21f200b224af97d67278b47e172d921ca3a2a15d90c30a074277f4290109b8",
+       "derived_from": {
+-        "source-script": "sha256:2740bd377c0f52c2ee99b32cb72eef0501e2c644656a788fe3c8aa581b095604"
++        "source-script": "sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252"
+       },
+-      "translation_review": "agent_space/reviews/review-20261115-003-pseudocode-corrections.md"
++      "translation_review": "agent_space/reviews/review-20261117-003-plan036-pseudocode.md"
+     }
+   }
+ }
+diff --git a/pseudocode/application/adapter.pcal b/pseudocode/application/adapter.pcal
+index 236faa55be68f05fe916f7b796651f9e01633678..6db249e140063cdd34fe0fd976f4a566085a8886 100644
+--- a/pseudocode/application/adapter.pcal
++++ b/pseudocode/application/adapter.pcal
+@@ -30,9 +30,21 @@ FrontendPublicationSubscription:
+ end procedure;
+ 
+ procedure dispatchProjectQuery(query, payload)
++variables request = [], frontendState = NoValue, layout = NoValue, width = NoValue;
+ begin
++CurrentWholeRendererInputs:
++  request := IF payload = NoValue THEN [] ELSE DeepCopy(payload);
++  if query = "renderer" /\ FieldOrNoValue(request,"operation") \notin {"slot-image","ui-palette"} then
++    call InterfaceStateMachine_readState(); frontendState := result;
++    call readBackendProjection("project-api",[operation |-> "layout.readState"]); layout := result;
++    width := IF frontendState.dashboardZoomLocked THEN frontendState.dashboardZoomLockedWidth
++             ELSE layout.slotStyle.referenceWidth * frontendState.dashboardZoomIntent / 100;
++    request.frontendState := frontendState; request.width := width;
++    \* These current reads and the final query are synchronous, with no callback or command.
++    \* The lock anchor stays unchanged across reference-width/host changes.
++  end if;
+ ReadThroughBackend:
+-  call readBackendProjection(query, payload);
++  call readBackendProjection(query, request);
+   \* Immutable output only; no mutable Backend helper escapes.
+   return;
+ end procedure;
+@@ -92,7 +104,7 @@ OptionalPersistentIntent:
+     end if;
+   end if;
+ ReadFinalSelectionProjection:
+-  call readBackendProjection("renderer", [frontendState |-> interfaceState]);
++  call dispatchProjectQuery("renderer", [frontendState |-> interfaceState]);
+   rendererProjection := result;
+ ReturnSlotOrchestration:
+   result := <<interfaceState, projectResult, rendererProjection>>;
+@@ -127,8 +139,8 @@ ReconcileOnce:
+   interfaceState := result;
+   \* Do not resend SELECT_GRAPH_OBJECT or overwrite independent CSV selection.
+ ReadFinalRendererInput:
+-  call readBackendProjection("renderer", [frontendState |-> interfaceState,
+-                                         mutationResult |-> mutationResult]);
++  call dispatchProjectQuery("renderer", [frontendState |-> interfaceState,
++                                          mutationResult |-> mutationResult]);
+   rendererProjection := result;
+ ReturnInternalTuple:
+   \* Not a public chart/settings/bool result. Wrapper owns its declared return.
+diff --git a/pseudocode/backend/project_efsm.pcal b/pseudocode/backend/project_efsm.pcal
+index ee8d5679ce517129fe01270abc72246392bd4b10..32f9fe5ab1628d73fb92cc9f967f44c40c07747a 100644
+--- a/pseudocode/backend/project_efsm.pcal
++++ b/pseudocode/backend/project_efsm.pcal
+@@ -80,8 +80,8 @@ ChooseExistingOperation:
+     moved := objects[payload.from + 1];
+     objects := RemoveSequencePosition(objects, payload.from + 1);
+     objects := InsertAtFinalPosition(objects, payload.to + 1, moved);
+-    selectedIndexHint := payload.to;
+-    hasIndexHint := TRUE;
++    \* Preserve the current object's selection through the committed full index map.
++    \* Move contributes no explicit selectedIndexHint.
+   elsif operation = "graphs.setObjectValues" then
+     assert ValidZeroBasedIndex(payload.index, objects);
+     \* graphs.graphEditorCommit owns one-object normalization/field rules.
+@@ -697,10 +697,11 @@ ReferenceMultiplicity:
+   return;
+ end procedure;
+ 
+-procedure FormActualMutationResult(event,pre,post,calculation)
++procedure FormActualMutationResult(event,payload,pre,post,calculation)
+ variables hints = calculation.selectionHints, facts = calculation.domainFacts,
+           maps = <<>>, i = 1, changed = [], graphCount = 0, imageCount = 0, projectionEffect = NoValue,
+-          beforeRefs = <<>>, afterRefs = <<>>, seen = {}, key = NoValue, removed = 0;
++          beforeRefs = <<>>, afterRefs = <<>>, seen = {}, key = NoValue, removed = 0,
++          chart = NoValue, indices = <<>>, k = 0, n = 0, fromIndex = NoValue, toIndex = NoValue;
+ begin
+ FactsOfThisSuccessfulAttemptOnly:
+   call BuildActualChanged(event,pre,post,facts); changed := result;
+@@ -726,8 +727,23 @@ FactsOfThisSuccessfulAttemptOnly:
+       end if;
+       i := i + 1;
+     end while;
+-    if Len(maps) > 0 then hints.graphObjectIndexMaps := maps; end if;
+   end if;
++CommittedMoveCorrespondence:
++  if event = "GRAPH_OBJECTS_REPLACED" /\ FieldOrNoValue(payload,"operation") = "graphs.moveObject" then
++    chart := ChartById(pre,payload.chartId);
++    Require(chart # NoValue /\ UniqueChartOwnerExists(post,chart.id));
++    n := Len(chart.editor.objects); fromIndex := payload.from; toIndex := payload.to;
++    \* Same validated payload and actual pre/post of this committed attempt.
++    while k < n do
++      if k = fromIndex then indices := Append(indices,toIndex);
++      elsif fromIndex < toIndex /\ fromIndex < k /\ k <= toIndex then indices := Append(indices,k-1);
++      elsif toIndex < fromIndex /\ toIndex <= k /\ k < fromIndex then indices := Append(indices,k+1);
++      else indices := Append(indices,k); end if;
++      k := k + 1;
++    end while;
++    maps := Append(maps,[chartId |-> chart.id,indices |-> indices]);
++  end if;
++  if Len(maps) > 0 then hints.graphObjectIndexMaps := maps; end if;
+ ResetAndExplicitGraphHintSemantics:
+   if event = "PROJECT_LOADED" then hints.resetInterfaceSelection := TRUE; end if;
+   \* calculateGraphObjectEdit supplies chartId+explicit none for direct delete;
+@@ -785,9 +801,11 @@ CommitExactlyOnce:
+   call ProjectObject_initialize(candidate);
+   post := CurrentAuthorityReference(activeProject);
+ FormActualImmutableResult:
+-  call FormActualMutationResult(event,pre,post,calculation);
++  call FormActualMutationResult(event,payload,pre,post,calculation);
++  \* Move uses the same validated chartId/from/to without intervening callbacks/commands.
++  \* Rejection, same-position no-op and validation failure produce no success map.
+   \* ActualSelectionHints uses same original-index filter/actual reference set:
+-  \* append -> actual append index; move -> final to; edit -> same index;
++  \* append -> actual append index; move -> full old-to-new map; edit -> same index;
+   \* direct delete -> explicit none; palette/no hint -> omitted key.
+   \* Cascade maps are recalculated on retry, include only affected retained charts,
+   \* and exclude noneditable imported conversion views using graph validator scope.
+diff --git a/pseudocode/backend/project_state.pcal b/pseudocode/backend/project_state.pcal
+index 21748dd2456e55e6d9ed3d4ceaa4251d3f352d63..a4854877189470f00e3f95746a63eb062ddb59fc 100644
+--- a/pseudocode/backend/project_state.pcal
++++ b/pseudocode/backend/project_state.pcal
+@@ -180,7 +180,7 @@ MatchingExplicitHintFirst:
+       goto ValidatePostIndex;
+     end if;
+   end if;
+-FindOnlyThisChartsCascadeMap:
++FindOnlyThisChartsRemovalOrMoveMap:
+   if HasField(hints, "graphObjectIndexMaps") then
+     while i <= Len(hints.graphObjectIndexMaps) do
+       if hints.graphObjectIndexMaps[i].chartId = chart.id then
+@@ -796,7 +796,12 @@ PublicReadRegisteredOperation:
+ RendererRead:
+   if operation = "slot-image" then call BuildImageEditorRead(source,request.slotId); output := result; goto ImmutableReturn;
+   elsif operation = "ui-palette" then output := DeepCopy(source.appearance.uiPalette); goto ImmutableReturn; end if;
++  width := FieldOrNoValue(request,"width");
++  Require(PositiveFinite(width));
++  call DashboardGeometryInProject(source,width,NoValue); geometry := result;
+   call BuildSurfaceRead(source); output := result;
++  output.geometry := geometry;
++  \* One synchronous source read; actual width is not preview-clamped.
+   goto ImmutableReturn;
+ ExportRead:
+   if operation = NoValue then call BuildPlainProjectRead(source); output := result; goto ImmutableReturn;
+diff --git a/pseudocode/frontend/mantine_ui.pcal b/pseudocode/frontend/mantine_ui.pcal
+index 6cb0845d211cda61e0e78f507b9ecbef2ff2ac78..5a65d3e47f1ac91ddb66ba5f6a5a0d67a684b2da 100644
+--- a/pseudocode/frontend/mantine_ui.pcal
++++ b/pseudocode/frontend/mantine_ui.pcal
+@@ -36,6 +36,7 @@ ComponentOwners == [
+ variables result = NoValue,
+   collisionModel = NoValue, collisionResolver = NoValue,
+   layoutSelectedSlotIds = {}, settingsOverlayHeight = NoValue,
++  folding = [], layoutDimensionEdit = [],
+   sidebarGeometry = InitialSessionSidebarGeometry(),
+   dropMounted = FALSE, dropAllowed = FALSE, dropReceiver = NoValue;
+ 
+@@ -66,11 +67,22 @@ OfficialReferenceCountNotSlotDisplayDeduplication:
+   return;
+ end procedure;
+ 
+-procedure changeLayoutGridDimension(dimension,value)
++procedure changeLayoutGridDimension(dimension,value,editingFinished)
+ variables current = NoValue, number = NoValue, rows = NoValue, cols = NoValue;
+ begin
+-CurrentAuthorityThenSynchronousCommand:
++EmptyEditingAndCurrentValueRestoration:
+   Require(dimension \in {"rows","cols"});
++  layoutDimensionEdit[dimension] := value;
++  if value = NoValue \/ value = "" then
++    layoutDimensionEdit[dimension] := "";
++    if ~editingFinished then result := NoValue; return; end if;
++    current := InvokePublicApi("layout.readState",[]);
++    DisplayLayoutDimension(dimension,IF dimension = "rows" THEN current.gridRows ELSE current.gridCols);
++    RemoveField(layoutDimensionEdit,dimension);
++    result := current; return;
++    \* No setGrid, selection clearing or resize in this branch.
++  end if;
++CurrentAuthorityThenSynchronousCommand:
+   current := InvokePublicApi("layout.readState",[]);
+   rows := current.gridRows; cols := current.gridCols;
+   number := TryNonemptyFiniteInputNumber(value);
+@@ -79,13 +91,36 @@ CurrentAuthorityThenSynchronousCommand:
+     else cols := Maximum(current.gridLimits.gridCols[1],Minimum(current.gridLimits.gridCols[2],number.value)); end if;
+   end if;
+   result := InvokePublicApi("layout.setGrid",[rows |-> rows,cols |-> cols]);
+-  \* Empty/invalid input keeps SAME current dimension; companion is also current.
++  \* Invalid nonempty input keeps the current dimension; companion is also current.
+   \* This entire read/compose/dispatch is synchronous: no await/external callback/other command.
+   \* Existing Backend integer/candidate/whole-validation/current-source retry/one commit remains.
+   \* False and original failure are not converted to success. No second resize/commit.
+   return;
+ end procedure;
+ 
++\* Private expansion of FastFigureApp's input bindings.
++procedure LayoutDimensionChanged(dimension,value)
++begin
++InputChange:
++  call changeLayoutGridDimension(dimension,value,FALSE);
++  return;
++end procedure;
++
++procedure LayoutDimensionBlur(dimension,value)
++variables current = NoValue;
++begin
++FinishOnlyThisInput:
++  if value = NoValue \/ value = "" then
++    call changeLayoutGridDimension(dimension,value,TRUE);
++  else
++    current := InvokePublicApi("layout.readState",[]);
++    DisplayLayoutDimension(dimension,IF dimension = "rows" THEN current.gridRows ELSE current.gridCols);
++    RemoveField(layoutDimensionEdit,dimension);
++    result := current;
++  end if;
++  return;
++end procedure;
++
+ procedure handleDebugToggle()
+ variables enabled = FALSE;
+ begin
+@@ -223,9 +258,44 @@ DeclaredTransferFunction:
+   return;
+ end procedure;
+ 
++\* Private display expansion of FastFigureApp step 5, called on each editor render.
++procedure ReadGraphObjectOptions()
++variables editor = NoValue, options = <<>>, i = 1, object = NoValue,
++          title = "", identity = "", label = "";
++begin
++SameOfficialChartAndObjects:
++  editor := InvokePublicApi("graphs.readData",[]);
++  if editor.chart = NoValue then result := options; return; end if;
++  title := editor.chart.editor.title;
++  while i <= Len(editor.objects) do
++    object := editor.objects[i];
++    identity := IF object.legendName # "" THEN object.legendName ELSE object.x \o " · " \o object.y;
++    label := Text(i) \o ". " \o (IF title = "" THEN identity ELSE title \o " — " \o identity);
++    options := Append(options,[value |-> i-1,label |-> label,title |-> title,identity |-> identity]);
++    i := i + 1;
++  end while;
++  result := options;
++  \* Rendering wraps title, preserves a readable identity part and exposes the full accessible name.
++  \* No stored display field, trace legend change or replacement selection value.
++  return;
++end procedure;
++
++\* Private UI-local interaction expansion of FastFigureApp step 6.
++procedure ToggleUiFold(key)
++begin
++OneGroupOnly:
++  Require(key \in DOMAIN folding);
++  if folding[key] then MoveContainedFocusToGroupHeadingIfNeeded(key); end if;
++  folding[key] := ~folding[key];
++  UpdateGroupExpandedAndContentLink(key,folding[key]);
++  result := folding[key]; return;
++end procedure;
++
+ procedure FastFigureApp()
+ variables palette = NoValue, shades = <<>>, i = 1, channels = <<>>, linear = <<>>,
+-          luminance = 0, contrast = "", theme = NoValue, css = NoValue, tree = NoValue;
++          luminance = 0, contrast = "", theme = NoValue, css = NoValue, tree = NoValue,
++          controls = <<"Button","ActionIcon","Input","Select","NumberInput","ColorInput">>,
++          groups = <<"global","objects","x","y","xBottom","xTop","yLeft","yRight","objectType","uiColors","debug">>;
+ begin
+ CurrentReadNotDraftOrMirror:
+   palette := InvokePublicApi("appearance.readPalette",[]);
+@@ -237,6 +307,27 @@ ContrastFromCurrentUiColor:
+   contrast := IF luminance > 0.179 THEN "#000000" ELSE "#FFFFFF";
+ ThemeAndCssProjection:
+   theme := ExistingFastFigureCommonTheme();
++  i := 1;
++  while i <= Len(controls) do
++    UseCommonRoleHeightFontPaddingRadiusInThemeAndDefaultProps(theme,controls[i]);
++    RemoveSameRoleInstanceSizeOverrides(controls[i]); i := i + 1;
++  end while;
++  ApplyCommonInputWidthsRowGapAndInputBottomAlignment(
++    <<"graphData","objects","axes","layout","labels","captions","print","assets">>);
++  WrapEachInputTogetherWithItsLabelWhenRowIsNarrow();
++  PreserveTextRendererShapeAndResizeHandleDimensions();
++  ApplyExistingModalCenteredEscapeOutsideDefaultsAndCommonSettingsMaximum(theme);
++  i := 1;
++  while i <= Len(groups) do
++    if ~HasField(folding,groups[i]) then folding[groups[i]] := groups[i] \in {"global","objects"}; end if;
++    BindKeyboardAccessibleGroupHeading(groups[i],folding[groups[i]],ToggleUiFold);
++    i := i + 1;
++  end while;
++  ComposeFoldHierarchy([global |-> <<"x","y">>,x |-> <<"xBottom","xTop">>,
++    y |-> <<"yLeft","yRight">>,objects |-> <<"objectType">>]);
++  BindFourAxisContentsToTheirExistingGlobalSettingsFields();
++  KeepObjectXYSideSelectorsInsideObjectSettings();
++  \* uiColors/debug are independent groups. Folding never changes project, selection or debugEnabled.
+   theme.colors.ffui := shades; theme.primaryColor := "ffui"; theme.colorScheme := "light";
+   css := [body |-> palette.uiBackgroundColor,text |-> palette.fontColor,
+     defaultColor |-> palette.fontColor,primaryLightColor |-> palette.fontColor,
+@@ -266,6 +357,10 @@ NoProjectStoreInShell:
+   BindComponentEvent("FastFigureGraphFileActions","fileReceived",importSelectedSlotFile);
+   BindComponentEvent("FastFigureGraphFileActions","editableChanged",setSelectedGraphEditable);
+   BindComponentEvent("FastFigureGraphLayoutEditor","settingsChanged",updateSelectedGraphLayout);
++  BindComponentRenderReadFor("FastFigureGraphDataEditor","objectOptions",ReadGraphObjectOptions);
++  BindComponentEvent("FastFigureLayoutOverlay","dimensionChanged",LayoutDimensionChanged);
++  BindComponentEvent("FastFigureLayoutOverlay","dimensionBlur",LayoutDimensionBlur);
++  BindComponentEvent("FastFigureLayoutOverlay","previewWidthMeasured",RenderLayoutPreview);
+   BindComponentRenderRead(useAppState);
+   result := ComposeExistingAppShellHeaderNavbarMainAndOverlayComponents(ComponentOwners);
+   return;
+@@ -320,12 +415,29 @@ ControlConsumesSelectionBeforeParentClear:
+   return;
+ end procedure;
+ 
+-procedure RenderLayoutPreview(layoutRead,actualRenderedWidth)
++procedure RenderLayoutPreview(previewHost,actualRenderedWidth)
++variables layoutRead = NoValue, frameView = NoValue, i = 1, slot = NoValue, width = NoValue;
+ begin
+-SingleWidthForAllDependentGeometry:
+-  result := RenderSuppliedPreviewAtOneWidthAndSuppliedAspect(layoutRead,actualRenderedWidth);
+-  \* Height/gap/margin/radius use SAME width; no separate preview-size drag.
+-  \* Modal height change alone does not issue a width command.
++CurrentPreviewQuery:
++  width := IF PositiveFinite(actualRenderedWidth) THEN actualRenderedWidth ELSE NoValue;
++  call readLayoutApiState(width); layoutRead := result;
++  SetPreviewHostWidthAndOuterHorizontalScroll(previewHost,layoutRead.previewGeometry.width);
++  call renderDashboardFrame(previewHost,
++    [gridRows |-> layoutRead.gridRows,gridCols |-> layoutRead.gridCols,slotStyle |-> layoutRead.slotStyle],
++    layoutRead.visibleSlots,layoutRead.previewGeometry);
++  frameView := result;
++LocalDecorationsAndInteraction:
++  while i <= Len(layoutRead.visibleSlots) do
++    slot := layoutRead.visibleSlots[i];
++    DrawCoordinatesSelectionAndFocusWithoutChangingGeometry(frameView.slots[slot.id].decoration,
++                                                           slot,slot.id \in layoutSelectedSlotIds);
++    BindPreviewSlotClick(frameView.slots[slot.id].frame,slot.id,LayoutSelectionInteraction);
++    i := i + 1;
++  end while;
++  InstallHostScopedPreviewCleanup(previewHost,frameView);
++  \* Width/viewport changes requery. Modal vertical resize changes only local height.
++  \* Cleanup releases only these frames/listeners; no actual dashboard generation/Plotly/decode effects.
++  result := frameView;
+   return;
+ end procedure;
+ 
+diff --git a/pseudocode/frontend/renderer.pcal b/pseudocode/frontend/renderer.pcal
+index f1be5fa26623866351c348760be4b7204895df2e..d60edd5e1e3b38174a01dfbe6bc4fccc1b1c7851 100644
+--- a/pseudocode/frontend/renderer.pcal
++++ b/pseudocode/frontend/renderer.pcal
+@@ -71,24 +71,50 @@ ActualRemovedRenderedReferenceFirst:
+   return;
+ end procedure;
+ 
++procedure renderDashboardFrame(host,layout,visibleSlots,geometry)
++variables frameView = [grid |-> host,slots |-> []], i = 1, slot = NoValue, refs = NoValue;
++begin
++SuppliedGridGeometry:
++  SetHostBorderBoxWidthHeight(host,geometry.width,geometry.height);
++  SetEqualFractionGridRowsColumns(host,layout.gridRows,layout.gridCols);
++  SetGridGapPaddingAndRadius(host,geometry.gap,geometry.outerMargin,0);
++  DrawOuterDecorationWithoutChangingInnerGeometry(host);
++HostScopedSlotFrames:
++  while i <= Len(visibleSlots) do
++    slot := visibleSlots[i];
++    refs := ReuseOrCreateSameIdFrameContentAndDecoration(host,slot.id);
++    PlaceFrameAtRowColumnAndSpans(refs.frame,slot.row,slot.col,slot.rowSpan,slot.colSpan);
++    SetFrameMinDimensionsAndRadius(refs.frame,0,0,geometry.radius);
++    ApplySharedSlotBorderBackgroundBoxSizingAndContentLayout(refs,layout.slotStyle.showBorders);
++    PreserveExistingContentChildren(refs.content);
++    KeepDecorationOutsideLayoutSizing(refs.decoration);
++    frameView.slots[slot.id] := refs; i := i + 1;
++  end while;
++  DetachFramesWhoseIdsAreAbsent(host,visibleSlots);
++  result := frameView;
++  \* This host's structure only. Caller owns content/listeners and resource cleanup.
++  \* No Plotly/decode/selection/session/generation/resize effects.
++  return;
++end procedure;
++
+ procedure renderDashboard(projectProjection,interfaceState)
+-variables width = 0, geometry = NoValue, slots = <<>>, i = 1, slot = NoValue,
+-          host = NoValue, identity = NoValue, currentGeneration = 0, instance = NoValue;
++variables geometry = NoValue, slots = <<>>, i = 1, slot = NoValue, frameView = NoValue,
++          host = NoValue, frame = NoValue, identity = NoValue, currentGeneration = 0, instance = NoValue;
+ begin
+ OneGeneration:
+   dashboardGeneration := dashboardGeneration + 1;
+   currentGeneration := dashboardGeneration;
+-WidthFromSuppliedState:
+-  width := IF interfaceState.dashboardZoomLocked THEN interfaceState.dashboardZoomLockedWidth
+-           ELSE projectProjection.layout.slotStyle.referenceWidth * interfaceState.dashboardZoomIntent / 100;
+-  geometry := SuppliedSlotStyleGeometryAtWidth(projectProjection.layout,width);
+-  ApplyDashboardCssGeometry(geometry);
+-VisibleHosts:
+-  slots := projectProjection.visibleSlots;
++ReleaseObsoleteContentBeforeFrameChanges:
++  geometry := projectProjection.geometry; slots := projectProjection.visibleSlots;
+   PurgeGraphAssociationsForRemovedOrReplacedHosts(graphInstances,slots);
+   DetachAndReleaseObsoleteImageSurfaces(imageSurfaces,slots);
++SharedDashboardFrame:
++  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,slots,geometry);
++  frameView := result;
++VisibleHosts:
+   while i <= Len(slots) do
+-    slot := slots[i]; host := EnsureSlotContainerLabelBookmarkSurface(slot,geometry);
++    slot := slots[i]; host := frameView.slots[slot.id].content;
++    frame := frameView.slots[slot.id].frame;
+     if IsGraphSlotWithFigure(slot) then
+       identity := [host |-> host,slotId |-> slot.id,chartId |-> slot.content.chart];
+       instance := CurrentGraphInstanceForIdentity(graphInstances,identity);
+@@ -112,8 +138,8 @@ VisibleHosts:
+       DetachImageSurfaceThenReleaseOwnedResources(imageSurfaces,host);
+       ApplyEmptySlotSurface(host,slot);
+     end if;
+-    ApplySelectedInteractionClass(host,slot.id = interfaceState.selectedSlotId);
+-    ApplySuppliedLabelAndCaption(host,slot,projectProjection.orderedSlotLabels);
++    ApplySelectedInteractionClass(frame,slot.id = interfaceState.selectedSlotId);
++    ApplySuppliedLabelAndCaption(frameView.slots[slot.id].decoration,slot,projectProjection.orderedSlotLabels);
+     i := i + 1;
+   end while;
+ ResizeAfterContentStyleAndGeometry:
+@@ -271,11 +297,15 @@ FiveLegacyCssVariables:
+ end procedure;
+ 
+ procedure applySlotStyle(projectProjection,notify)
++variables styleView = NoValue;
+ begin
+-StyleProjectionNotAuthority:
+-  ApplyDashboardCaptionCssFromSuppliedSlotStyle(projectProjection.layout.slotStyle);
++SharedStyleApplication:
++  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
++                           projectProjection.visibleSlots,projectProjection.geometry);
++  styleView := result;
++  ApplyDashboardCaptionCssFromSuppliedStyleAndGeometry(projectProjection.layout.slotStyle,projectProjection.geometry);
+   if notify then ExistingLayoutModelToUiNotification(); end if;
+-  result := CurrentDashboardStyleProjection();
++  result := styleView;
+   return;
+ end procedure;
+ 
+diff --git a/agent_space/reviews/review-20261117-003-plan036-pseudocode.md b/agent_space/reviews/review-20261117-003-plan036-pseudocode.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..f71ef529181d807d387c34175102bd197dfeeb75
+--- /dev/null
++++ b/agent_space/reviews/review-20261117-003-plan036-pseudocode.md
+@@ -0,0 +1,28 @@
++# Plan036 Source Script → pseudocode 번역 검토
++
++## 1. 기준
++
++- 계획: `../plans/plan-036.md`. Source Script 변경 근거: `review-20261117-002-plan036-source-script.md`.
++- Source Script 53의 변경 절차와 호출 관계를 기준으로 pseudocode를 번역했다. 관련 pseudocode 6개 파일 전체와 Source Script의 실제 변경 patch 전체를 확인했다.
++- 기존 계획·검토 문서는 보존했다. 이번 변경은 pseudocode 5개 파일과 버전 메타데이터다.
++
++## 2. 대응과 논리·목적·중복 검토
++
++| Source Script 절차 | pseudocode 대응 | 검토 |
++|---|---|---|
++| `application/adapter.py:dispatchProjectQuery`, 선택·명령 경로 | `application/adapter.pcal`의 같은 절차들 | 현재 Frontend state와 현재 layout에서 잠금/배율 너비를 정해 요청 사본에 담는다. 전면 renderer만 이 경로를 사용하고 부분 조회는 유지한다. 조회 사이에 명령·callback·비동기 대기를 넣지 않는다. |
++| `backend/project_state.py:readBackendProjection` | `backend/project_state.pcal:RendererRead` | 유한 양수 너비를 검증하고 캡처한 같은 source로 기존 `DashboardGeometryInProject`를 호출한다. 전면 투영에 geometry를 포함한다. preview의 clamp/fallback은 기존 절차에 유지한다. |
++| `frontend/renderer.py:renderDashboardFrame`, `renderDashboard`, `applySlotStyle` | `frontend/renderer.pcal`의 같은 절차들 | host별 grid와 슬롯 틀을 한 절차로 구성한다. grid radius 0, 슬롯 radius, span·gap·margin·외곽선·내용/장식 영역을 함께 적용한다. 실제 자원 정리는 틀 갱신 전에 수행하고 기존 비동기 완료 검증·export 절차를 유지한다. |
++| `frontend/mantine_ui.py:FastFigureApp`의 미리보기 | `frontend/mantine_ui.pcal:RenderLayoutPreview` | 공식 `readLayoutApiState(width)`에서 반환된 effective geometry를 공통 틀에 전달한다. 외부 폭이 좁으면 스크롤하고 좌표·선택·포커스는 치수에 영향을 주지 않는 장식으로 둔다. 미리보기 host/listener만 정리한다. |
++| 같은 `FastFigureApp`의 공통 크기·정렬·접기 | `FastFigureApp`, `ToggleUiFold` | theme/default props의 같은 역할 규칙, 입력 폭·간격·하단 정렬·줄바꿈을 연결했다. 전역/오브젝트 초기 열림과 축·종류·UI 색상·debug 초기 닫힘, 계층, 개별 개폐·키보드·포커스 이동을 표현했다. 일반 재렌더에서 UI-local 상태를 유지한다. |
++| `changeLayoutGridDimension`, UI 입력 연결 | 같은 절차와 `LayoutDimensionChanged/Blur` | 빈 값 편집 중에는 명령 없이 반환하고 빈 blur는 현재 공식 행·열을 표시한다. 일반 blur도 표시만 갱신한다. 유효 숫자만 기존 setGrid 경로로 이어지며 거부·예외를 보존한다. |
++| `backend/project_efsm.py:buildProjectMutationResult`, `send` | `FormActualMutationResult`, `ProjectStateMachine_send` | 동일한 검증 payload와 실제 반영 전후 chart로 모든 이전 순번의 새 순번을 구성한다. move의 명시 index hint를 제거했다. 기존 삭제 대응표와 현재 owning chart에 한 번 적용하는 참조 보정을 사용한다. 실패·동일 위치의 비반영 경로는 성공 대응표를 만들지 않는다. |
++| `FastFigureApp`의 오브젝트 목록 | `ReadGraphObjectOptions` 및 render binding | 같은 공식 readData의 chart 제목과 기존 legendName/x·y 식별 문자열을 사용한다. 원래 0 기반 선택 값, 빈 제목, 긴 제목 줄바꿈·식별 부분·접근성 이름을 보존한다. 저장 필드와 trace 범례는 유지한다. |
++| `system.py:initializeFastFigure` | 기존 `system.pcal:PrepareBoundaryInputs` | 초기 `dispatchProjectQuery("renderer", …)`가 startup 전에 이미 연결돼 있어 추가 변경 없이 새 너비/기하 경로를 사용한다. |
++
++## 3. 확인 수준과 다음 계층
++
++- 실제 전체 Git diff와 새 절차의 호출·반환·선택 대응 경로를 정적으로 확인했다. UI의 private 절차는 Source Script `FastFigureApp` 처리 단계의 물리적 분해다.
++- 기존 fingerprint 함수만 사용해 Source Script 53과 pseudocode 28의 실제 hash를 확인했다. checker main과 PlusCal 변환·TLC·앱·브라우저·빌드·테스트는 실행하지 않았다.
++- Source Script 53은 그대로이며 pseudocode의 derived_from만 현재 Source Script hash로 갱신했다. 기존 stale와 Source Script open 상태를 유지한다. 이 검토는 실행·시각 검증 결과가 아니다.
++- source code 158, verification, dist, 설정, 정책과 기존 문서는 변경하지 않았다. source code의 이전 derived_from은 미번역 상태를 표시하도록 유지했다.
+diff --git a/agent_space/patches/20261117-005.md b/agent_space/patches/20261117-005.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..127ef1cd675f8b9b9aea3ed76a06a38ec9666448
+--- /dev/null
++++ b/agent_space/patches/20261117-005.md
+@@ -0,0 +1,18 @@
++# Plan036 pseudocode 번역
++
++## 목적과 선택
++
++- Source Script 53의 여섯 UI 요구사항과 현재 너비/기하 전달을 pseudocode로 번역했다.
++- 기존 Backend 기하 계산과 참조 보정 경로를 사용한다. renderer와 미리보기는 하나의 host별 grid/슬롯 틀을 호출한다.
++- 이동 결과는 검증된 명령과 실제 반영 전후 chart에서 전체 순번 대응을 제공한다. 별도 UI 이동 계산이나 object 식별 필드는 추가하지 않았다.
++- 빈 입력 복원·접기·제목 목록은 Source Script의 UI-local/공식 조회 표시 계약을 따른다. 저장 형식과 자원 소유는 유지한다.
++
++## 기록과 확인
++
++- 직전 작업 상태의 native Git snapshot: `5bea716c1485b515a8b87ef2eebe992d12cddd5d`. HEAD는 `a310ef4757c4ef5c756aaa4dbdad835dbfc4a5fc`로 유지했다.
++- 실제 native Git diff: pseudocode 5개, 메타데이터, 신규 검토 문서와 이 설명. 기존 Source Script 변경·004 기록은 이번 incremental patch에 포함하지 않았다.
++- Source Script 53: `sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252`.
++- pseudocode 28: `sha256:9a21f200b224af97d67278b47e172d921ca3a2a15d90c30a074277f4290109b8`.
++- 상세: `../reviews/review-20261117-003-plan036-pseudocode.md`.
++- 전체 실제 diff·호출 관계·hash·변경 범위를 정적으로 확인했다. Source Script와 source code·verification·dist는 유지했다.
++- PlusCal 변환·TLC·테스트·앱·브라우저·빌드·checker main·commit/push는 실행하지 않았다.

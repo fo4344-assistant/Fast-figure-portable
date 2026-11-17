@@ -1,7 +1,7 @@
 // Source: sourcescript/frontend/mantine_ui.py (same logical owner); pseudocode/frontend/mantine_ui.pcal.
 import { appFSM } from '../application/adapter.js';
 import { PROJECT_TRASH_DIRECTORY, projectParentPath, projectPathInDirectory, projectPathName } from '../backend/assets_files.js';
-import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
+import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
 
 // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
 // the mounted UI owns only its collision resolver and drag finalization.
@@ -76,37 +76,23 @@ shell: {
 },
     },
     components: {
+Group: Group.extend({ defaultProps: { align: "flex-end", gap: "xs", wrap: "wrap" } }),
 Button: Button.extend({
-  defaultProps: { size: "ff" },
-  vars: (_theme, props) =>
-    props.size === "ff"
-      ? {
-          root: {
-            "--button-height": "38px",
-            "--button-padding-x": "12px",
-            "--button-fz": "14px",
-          },
-        }
-      : { root: {} },
+  defaultProps: { size: "ff", radius: "ff" },
+  vars: () => ({ root: { "--button-height": "38px", "--button-padding-x": "12px", "--button-fz": "14px" } }),
 }),
 ActionIcon: ActionIcon.extend({
-  defaultProps: { size: "ff" },
-  vars: (_theme, props) =>
-    props.size === "ff" ? { root: { "--ai-size": "38px" } } : { root: {} },
+  defaultProps: { size: "ff", radius: "ff" },
+  vars: () => ({ root: { "--ai-size": "38px" } }),
 }),
 Input: Input.extend({
-  defaultProps: { size: "ff" },
-  vars: (_theme, props) =>
-    props.size === "ff"
-      ? {
-          wrapper: {
-            "--input-height": "38px",
-            "--input-fz": "14px",
-            "--input-radius": "6px",
-          },
-        }
-      : { wrapper: {} },
+  defaultProps: { size: "ff", radius: "ff" },
+  vars: () => ({ wrapper: { "--input-height": "38px", "--input-fz": "14px", "--input-radius": "6px" } }),
 }),
+TextInput: TextInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
+Select: Select.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
+NumberInput: NumberInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
+ColorInput: ColorInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
 Modal: Modal.extend({
   defaultProps: {
     centered: true,
@@ -135,6 +121,45 @@ Modal: Modal.extend({
     { value: "Georgia, serif", label: "Georgia" },
     { value: "Courier New, monospace", label: "Courier New" },
   ]);
+  function FoldSection({ title, initiallyOpen = false, children }) {
+    const [open, setOpen] = useState(initiallyOpen);
+    const id = React.useId(), button = useRef(null), content = useRef(null);
+    const toggle = () => {
+      if (open && content.current?.contains(document.activeElement)) button.current?.focus();
+      setOpen(value => !value);
+    };
+    return React.createElement(Stack, { gap: "xs" },
+      React.createElement(Button, { ref: button, variant: "subtle", onClick: toggle,
+        "aria-expanded": open, "aria-controls": id }, title),
+      React.createElement("div", { id, ref: content, hidden: !open }, children));
+  }
+
+  function LayoutPreview({ layout, selection, busy, onToggle }) {
+    const hostRef = useRef(null);
+    useEffect(() => {
+      const view = renderDashboardFrame(hostRef.current, layout, layout.visibleSlots, layout.previewGeometry);
+      const listeners = [];
+      for (const slot of layout.visibleSlots) {
+        const decoration = view.slots.get(slot.id).decoration;
+        const button = document.createElement("button");
+        button.type = "button"; button.disabled = busy;
+        button.textContent = `${slot.row},${slot.col}`;
+        button.setAttribute("aria-pressed", String(selection.has(slot.id)));
+        Object.assign(button.style, { position: "absolute", inset: "0", width: "100%", height: "100%",
+          border: "0", borderRadius: "inherit", padding: "0", pointerEvents: "auto", color: "inherit",
+          background: selection.has(slot.id) ? "var(--mantine-primary-color-light)" : "transparent",
+          boxShadow: selection.has(slot.id) ? "inset 0 0 0 2px var(--mantine-primary-color-filled)" : "none" });
+        const click = event => { event.stopPropagation(); onToggle(slot.id); };
+        button.addEventListener("click", click); listeners.push([button, click]);
+        decoration.replaceChildren(button);
+      }
+      return () => listeners.forEach(([button, click]) => button.removeEventListener("click", click));
+    }, [layout, selection, busy, onToggle]);
+    useEffect(() => { const host = hostRef.current; return () => host.replaceChildren(); }, []);
+    return React.createElement("div", { ref: hostRef, role: "grid", "aria-label": "레이아웃 슬롯 선택",
+      style: { marginTop: 0 } });
+  }
+
   function fontSelectData(options, currentValue) {
     const current = typeof currentValue === "string" ? currentValue : "";
     const values = options.some((option) => option.value === current)
@@ -920,7 +945,6 @@ if (directory && movable) {
         ActionIcon,
         {
           variant: "subtle",
-          size: "sm",
           "aria-label": `${projectPathName(path)} 폴더 작업`,
         },
         "···",
@@ -963,7 +987,6 @@ if (directory && movable) {
         ActionIcon,
         {
           variant: "subtle",
-          size: "sm",
           "aria-label": `${projectPathName(path)} 작업`,
         },
         "···",
@@ -1083,7 +1106,6 @@ React.createElement(
   Button,
   {
     variant: "light",
-    size: "xs",
     disabled: busy,
     onClick: openFolderDialog,
   },
@@ -1125,7 +1147,6 @@ trashSelected
       Button,
       {
         variant: "light",
-        size: "xs",
         disabled: busy || !trashHasContents,
         onClick: openTrashDialog,
       },
@@ -1271,7 +1292,6 @@ React.createElement(
   Button,
   {
     variant: "subtle",
-    size: "xs",
     fullWidth: true,
     justify: "flex-start",
     "aria-expanded": slotsExpanded,
@@ -1290,7 +1310,6 @@ slotsExpanded
               {
                 key: slot.id,
                 variant: state.workspace !== "project" && selectedSlotId === slot.id ? "filled" : "subtle",
-                size: "xs",
                 fullWidth: true,
                 justify: "flex-start",
                 disabled: busy,
@@ -1494,9 +1513,9 @@ React.createElement(Group, { gap: "xs", grow: true },
   }, "오브젝트 추가"),
 ),
 React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
-objects.length ? React.createElement(Stack, { gap: 4 },
+objects.length ? React.createElement(Stack, { gap: "xs" },
   ...objects.map((object, index) => React.createElement(Group, {
-    key: `${chartId}-${index}`, gap: 4, wrap: "nowrap",
+    key: `${chartId}-${index}`, gap: "xs",
     draggable: editable && !busy,
     onDragStart: (event) => {
       if (!editable || busy) return event.preventDefault();
@@ -1514,17 +1533,21 @@ objects.length ? React.createElement(Stack, { gap: 4 },
     },
   },
     React.createElement(Button, {
-      size: "xs", variant: selectedIndex === index ? "filled" : "light",
-      style: { flex: "1 1 auto", minWidth: 0 },
+      variant: selectedIndex === index ? "filled" : "light",
+      style: { flex: "1 1 auto", minWidth: 0, height: "auto", minHeight: "var(--button-height)" },
+      styles: { label: { whiteSpace: "normal", overflowWrap: "anywhere", display: "block" } },
+      "aria-label": `${index + 1}. ${editor.chart?.editor.title ? editor.chart.editor.title + " — " : ""}${object.legendName || `${object.x} · ${object.y}`}`,
       onClick: () => graphApi.selectObject(index),
-    }, `${index + 1}. ${object.legendName || `${object.x} · ${object.y}`}`),
+    }, React.createElement("span", null,
+      editor.chart?.editor.title ? React.createElement("span", null, `${index + 1}. ${editor.chart.editor.title} — `) : `${index + 1}. `,
+      React.createElement("span", { style: { display: "block" } }, object.legendName || `${object.x} · ${object.y}`))),
     React.createElement(ColorInput, {
-      size: "xs", value: object.color, style: { width: 72 },
+      value: object.color,
       disabled: busy || !editable,
       onChange: (color) => graphApi.setObjectValues(chartId, index, { color }),
     }),
     React.createElement(ActionIcon, {
-      size: "sm", variant: "subtle", disabled: busy || !editable,
+      variant: "subtle", disabled: busy || !editable,
       "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
       onClick: () => graphApi.deleteObject(chartId, index),
     }, "×"),
@@ -1542,6 +1565,7 @@ selected && activeCsv && editable ? React.createElement(Stack, { gap: "xs" },
     selectField("X 축", "xAxisSide", [{ value: "bottom", label: "아래" }, { value: "top", label: "위" }]),
     selectField("Y 축", "yAxisSide", [{ value: "left", label: "왼쪽" }, { value: "right", label: "오른쪽" }]),
   ),
+  React.createElement(FoldSection, { title: "종류별 세부 설정" },
   selectField("유형", "type", [
     { value: "scatter", label: "선" }, { value: "markers", label: "마커" },
     { value: "lines+markers", label: "선 + 마커" }, { value: "bar", label: "막대" },
@@ -1569,6 +1593,7 @@ selected && activeCsv && editable ? React.createElement(Stack, { gap: "xs" },
     numberField("막대 불투명도", "barOpacity", 0.05, 1, 0.05),
     numberField("막대 테두리", "barLineWidth", 0, 10, 0.1),
   ) : null,
+  ),
 ) : null,
     );
   }
@@ -1594,7 +1619,6 @@ yRight: "오른쪽 Y축",
 React.createElement(
   Button,
   {
-    size: "xs",
     variant: settings[key] ? "filled" : "light",
     disabled: busy || !editable,
     "aria-pressed": settings[key],
@@ -1617,7 +1641,6 @@ React.createElement(NumberInput, {
 React.createElement(
   Button,
   {
-    size: "xs",
     variant: axis[field] ? "filled" : "light",
     disabled: busy || !editable,
     "aria-pressed": axis[field],
@@ -1629,9 +1652,8 @@ React.createElement(
 const axis = settings.axes[key];
 const logScale = axis.scaleType === "log";
 return React.createElement(
-  Stack,
-  { key, gap: "xs" },
-  React.createElement(Text, { size: "sm", fw: 600 }, axisLabels[key]),
+  FoldSection,
+  { key, title: axisLabels[key] },
   React.createElement(TextInput, {
     label: "축 이름",
     value: axis.title,
@@ -1775,7 +1797,8 @@ React.createElement(
       updateGlobal({ legendFontSize: value === "" ? "" : String(value) }),
   }),
 ),
-...Object.keys(axisLabels).map(axisEditor),
+React.createElement(FoldSection, { title: "X축" }, axisEditor("xBottom"), axisEditor("xTop")),
+React.createElement(FoldSection, { title: "Y축" }, axisEditor("yLeft"), axisEditor("yRight")),
     );
   }
   function FastFigureGraphPaletteActions() {
@@ -2066,13 +2089,13 @@ React.createElement(
   },
   telemetry.status || "준비됨",
 ),
+React.createElement(FoldSection, { title: "디버그 로그" },
 React.createElement(
   Group,
   { gap: "xs", grow: true },
   React.createElement(
     Button,
     {
-      size: "xs",
       variant: telemetry.debugEnabled ? "filled" : "light",
       disabled: busy,
       "aria-pressed": telemetry.debugEnabled,
@@ -2083,7 +2106,6 @@ React.createElement(
   React.createElement(
     Button,
     {
-      size: "xs",
       variant: "light",
       disabled: busy || !telemetry.debugLines.length,
       onClick: saveDebugOutput,
@@ -2093,7 +2115,6 @@ React.createElement(
   React.createElement(
     Button,
     {
-      size: "xs",
       variant: "light",
       disabled: busy || !telemetry.debugLines.length,
       onClick: clearDebugOutput,
@@ -2118,6 +2139,7 @@ telemetry.debugEnabled
       ),
     )
   : null,
+),
     );
   }
 
@@ -2757,7 +2779,9 @@ React.createElement(
   function FastFigureLayoutOverlay() {
     const state = useAppState();
     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
-    const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(600);
+    const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(null);
+    const [dimensionEdits, setDimensionEdits] = useState({});
+    useEffect(() => { setDimensionEdits({}); }, [state.overlay]);
     const previewFrameRef = useRef(null);
     const layoutApi = window.FastFigureApi.layout;
     const layout = state.overlay === "layout" ? layoutApi.readState(renderedPreviewWidth) : null;
@@ -2780,16 +2804,21 @@ return () => observer.disconnect();
     if (state.overlay !== "layout") return null;
     const busy = state.lifecycle !== "ready";
     const style = layout.slotStyle;
-    const visibleSlots = layout.visibleSlots;
-    const previewGeometry = layout.previewGeometry;
 
     const clamp = (value, fallback, min, max) => {
 const number = Number(value);
 return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
     };
     const commitStyle = (patch) => layoutApi.setStyle(patch);
-    const changeGrid = (dimension, value) => {
+    const changeGrid = (dimension, value, editingFinished = false) => {
 if (!["rows", "cols"].includes(dimension)) throw Error("알 수 없는 grid 편집 차원입니다.");
+if (editingFinished) {
+  layoutApi.readState();
+  setDimensionEdits(current => ({ ...current, [dimension]: undefined }));
+  return null;
+}
+setDimensionEdits(current => ({ ...current, [dimension]: value }));
+if (value == null || value === "") return null;
 const current = layoutApi.readState();
 const number = typeof value === "number" || (typeof value === "string" && value.trim() !== "")
   ? Number(value) : NaN;
@@ -2838,23 +2867,27 @@ React.createElement(
     { gap: "xs", grow: true },
     React.createElement(NumberInput, {
       label: "행",
-      value: layout.gridRows,
+      value: dimensionEdits.rows ?? layout.gridRows,
+      clampBehavior: "none",
       min: layout.gridLimits.gridRows[0],
       max: layout.gridLimits.gridRows[1],
       allowDecimal: false,
       disabled: busy,
       onChange: (value) =>
         changeGrid("rows", value),
+      onBlur: () => changeGrid("rows", dimensionEdits.rows, true),
     }),
     React.createElement(NumberInput, {
       label: "열",
-      value: layout.gridCols,
+      value: dimensionEdits.cols ?? layout.gridCols,
+      clampBehavior: "none",
       min: layout.gridLimits.gridCols[0],
       max: layout.gridLimits.gridCols[1],
       allowDecimal: false,
       disabled: busy,
       onChange: (value) =>
         changeGrid("cols", value),
+      onBlur: () => changeGrid("cols", dimensionEdits.cols, true),
     }),
   ),
   React.createElement(
@@ -2957,67 +2990,12 @@ React.createElement(
         width: 600,
         maxWidth: "100%",
         marginInline: "auto",
+        overflowX: "auto",
       },
     },
-    React.createElement(
-      "div",
-      {
-        role: "grid",
-        "aria-label": "레이아웃 슬롯 선택",
-        style: {
-          display: "grid",
-          boxSizing: "border-box",
-          width: "100%",
-          height: previewGeometry.height,
-          aspectRatio: `${style.aspect} / 1`,
-          gridTemplateColumns: `repeat(${layout.gridCols}, minmax(0, 1fr))`,
-          gridTemplateRows: `repeat(${layout.gridRows}, minmax(0, 1fr))`,
-          gap: previewGeometry.gap,
-          padding: previewGeometry.outerMargin,
-          border: "1px solid var(--mantine-color-default-border)",
-          borderRadius: previewGeometry.radius,
-          overflow: "hidden",
-        },
-      },
-      ...visibleSlots.map((slot) => {
-        const selected = layoutSelection.has(slot.id);
-        return React.createElement(
-          UnstyledButton,
-          {
-            key: slot.id,
-            disabled: busy,
-            "aria-pressed": selected,
-            onClick: (event) => {
-              event.stopPropagation();
-              toggleSlot(slot.id);
-            },
-            style: {
-              gridColumn: `${slot.col} / span ${slot.colSpan}`,
-              gridRow: `${slot.row} / span ${slot.rowSpan}`,
-              width: "100%",
-              height: "100%",
-              minWidth: 0,
-              minHeight: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 0,
-              borderWidth: 1,
-              borderStyle: style.showBorders ? "solid" : "dashed",
-              borderColor: selected
-                ? "var(--mantine-primary-color-filled)"
-                : "var(--mantine-color-default-border)",
-              background: selected
-                ? "var(--mantine-primary-color-light)"
-                : "transparent",
-              color: "inherit",
-              cursor: busy ? "default" : "pointer",
-            },
-          },
-          `${slot.row},${slot.col}`,
-        );
-      }),
-    ),
+    React.createElement(LayoutPreview, {
+      layout, selection: layoutSelection, busy, onToggle: toggleSlot,
+    }),
   ),
   React.createElement(
     Group,
@@ -3175,11 +3153,11 @@ React.createElement(
     React.createElement(FastFigureImageEditor),
     React.createElement(FastFigureProjectDataTree),
     React.createElement(FastFigureProjectActions),
-    React.createElement(FastFigureGraphDataEditor),
-    React.createElement(FastFigureGraphLayoutEditor),
+    React.createElement(FoldSection, { title: "오브젝트 설정", initiallyOpen: true }, React.createElement(FastFigureGraphDataEditor)),
+    React.createElement(FoldSection, { title: "전역 설정", initiallyOpen: true }, React.createElement(FastFigureGraphLayoutEditor)),
     React.createElement(FastFigureGraphPaletteActions),
     React.createElement(FastFigureGraphFileActions),
-    React.createElement(FastFigurePaletteActions),
+    React.createElement(FoldSection, { title: "UI 색상" }, React.createElement(FastFigurePaletteActions)),
     React.createElement(FastFigureStatusDebug),
     React.createElement(FastFigureUtilityActions),
   ),

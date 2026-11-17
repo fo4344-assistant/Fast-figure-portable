@@ -129,8 +129,21 @@ export class ProjectStateMachine {
       changed = committed ? actualChanged(input) : {},
       counts = committed ? removedReferenceCounts(input.commitFacts.pre, input.commitFacts.post)
         : { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
+    const selectionHints = committed ? { ...input.selectionHints } : {};
+    if (committed && input.operation === "graphs.moveObject") {
+      const { pre, post } = input.commitFacts,
+        before = pre.charts.find(chart => chart.id === input.chartId),
+        after = post.charts.find(chart => chart.id === input.chartId),
+        from = input.from, to = input.to;
+      if (!before || !after || before.editor.objects.length !== after.editor.objects.length)
+        throw Error("이동 결과의 반영 전후 차트가 일치하지 않습니다.");
+      const indices = before.editor.objects.map((_, index) => index === from ? to
+        : from < to && index > from && index <= to ? index - 1
+        : to < from && index >= to && index < from ? index + 1 : index);
+      selectionHints.graphObjectIndexMaps = [{ chartId: after.id, indices }];
+    }
     return immutableProjectCopy({ event, committed, changed, ...counts,
-      selectionHints: committed ? input.selectionHints || {} : {},
+      selectionHints,
       projectionEffect: committed ? input.projectionEffect : null,
     });
   }
@@ -559,7 +572,6 @@ export function applyGraphObjectEditAction({ machine, event, payload }) {
     } else if (operation === "graphs.moveObject") {
       const moved = chart.editor.objects.splice(payload.from, 1)[0];
       chart.editor.objects.splice(payload.to, 0, moved);
-      selectedIndexHint = payload.to;
     } else if (operation === "graphs.deleteObject") {
       chart.editor.objects.splice(index, 1);
       selectedIndexHint = null;
@@ -628,7 +640,7 @@ export function applyGraphObjectEditAction({ machine, event, payload }) {
       chartIds: changedIds(source.charts, post.charts),
       csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
       imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
-    payload.selectionHints = Object.freeze(operation === "graphs.applyPalette" ?
+    payload.selectionHints = Object.freeze(["graphs.applyPalette", "graphs.moveObject"].includes(operation) ?
       { chartId: current.id } : { chartId: current.id, selectedIndexHint });
     return;
   }

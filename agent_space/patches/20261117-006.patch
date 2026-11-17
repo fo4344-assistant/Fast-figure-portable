@@ -1,0 +1,947 @@
+diff --git a/development-versions.json b/development-versions.json
+index 6b711ea621ff3008b18789c6f49e98982a61623c..eb25fd59fffd9b55df702584c1e65fdea0022c82 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 158,
++      "revision": 159,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,13 +54,14 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:db39318f772903519b191f43621a1bb5fe3c859fd932208a926903dc75546cd6",
++      "fingerprint": "sha256:b2b283e1d77be57131b9384a9cc9122359f2bfb3c293892707460d1d0bfed6ef",
+       "derived_from": {
+-        "source-script": "sha256:2740bd377c0f52c2ee99b32cb72eef0501e2c644656a788fe3c8aa581b095604",
+-        "pseudocode": "sha256:5e40212959fccdb995ced547c8947a9ec0584c53eca8e11ac61d7ffed38a6558",
++        "source-script": "sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252",
++        "pseudocode": "sha256:9a21f200b224af97d67278b47e172d921ca3a2a15d90c30a074277f4290109b8",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+-      "validation_review": null
++      "validation_review": null,
++      "translation_review": "agent_space/reviews/review-20261117-004-plan036-source-code.md"
+     },
+     "pseudocode": {
+       "revision": 28,
+diff --git a/sourcecode/application/adapter.js b/sourcecode/application/adapter.js
+index 8cd713338a5a8966d17c62f6028df6de8630fecb..6372cb03f552bff7251429fd3dbca1ff726c5fe9 100644
+--- a/sourcecode/application/adapter.js
++++ b/sourcecode/application/adapter.js
+@@ -20,12 +20,12 @@ export function installSlotClickController() {
+ 
+ // Commands supply their call-local final projection/state; standalone refreshes
+ // read current authority here. Callbacks carry intents, not writable models.
+-export function renderDashboard(projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
++export function renderDashboard(projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState()) {
+   return renderDashboardProjection(projection, state, dashboardFrontendActions());
+ }
+ 
+ export function startupCoreRuntime() {
+-  const projection = readBackendProjection("renderer"), state = interfaceFSM.readState(),
++  const projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState(),
+     actions = { ...dashboardFrontendActions(), slots: { select: setSelectedSlot, swap: swapSlots } },
+     presentation = startupCoreRuntimeProjection(projection, state, actions);
+   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+@@ -59,28 +59,25 @@ function dashboardFrontendActions() {
+   };
+ }
+ 
+-export function syncDashboardCaption(view, projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
+-  const style = projection.layout.slotStyle,
+-    width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth : style.referenceWidth * state.dashboardZoomIntent / 100;
+-  return syncDashboardCaptionProjection(view || projection.annotations.captions, width / style.referenceWidth);
++export function syncDashboardCaption(view, projection = dispatchProjectQuery("renderer")) {
++  return syncDashboardCaptionProjection(view || projection.annotations.captions, projection.geometry.scale);
+ }
+ 
+ export function applyReferenceGeometry(element) {
+-  const style = readBackendProjection("renderer").layout.slotStyle, state = interfaceFSM.readState(),
+-    width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth : style.referenceWidth * state.dashboardZoomIntent / 100;
+-  return applyReferenceGeometryProjection(element, style, width);
++  return applyReferenceGeometryProjection(element, dispatchProjectQuery("renderer").geometry);
+ }
+ export function applySlotStyle(_fromControls = false, notify = true) {
+-  applySlotStyleProjection(readBackendProjection("renderer").layout.slotStyle, interfaceFSM.readState());
++  const result = applySlotStyleProjection(dispatchProjectQuery("renderer"));
+   if (notify) appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
++  return result;
+ }
+ export function applyDashboardZoom(resize = true) {
+-  return applyDashboardZoomProjection(readBackendProjection("renderer").layout, interfaceFSM.readState(), resize);
++  return applyDashboardZoomProjection(dispatchProjectQuery("renderer"), interfaceFSM.readState(), resize);
+ }
+ export function syncDashboardZoomDisplay() {
+   const width = readDashboardRenderedWidth(), state = interfaceFSM.readState();
+   if (!width) return;
+-  const reference = readBackendProjection("renderer").layout.slotStyle.referenceWidth;
++  const reference = dispatchProjectQuery("renderer").layout.slotStyle.referenceWidth;
+   return state.dashboardZoomLocked ? Math.max(50, Math.min(200, Math.round(width / reference * 100)))
+     : Math.round(state.dashboardZoomIntent);
+ }
+@@ -101,10 +98,10 @@ export function dispatchSlotSelection(slotId, pendingContentType = null, directi
+       });
+     }
+   }
+-  return [state, projectResult, readBackendProjection("renderer", { frontendState: state })];
++  return [state, projectResult, dispatchProjectQuery("renderer", { frontendState: state })];
+ }
+ 
+-export function updateGraphView(projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
++export function updateGraphView(projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState()) {
+   debugLog("updateGraphView", { selectedSlotId: state.selectedSlotId });
+   return updateGraphViewProjection(projection, state, dashboardFrontendActions());
+ }
+@@ -117,7 +114,7 @@ export function applyUiPalette(palette, notify = true) {
+   return result;
+ }
+ export function applyCurrentUiPalette(notify = true) {
+-  applyUiPalette(readBackendProjection("renderer", { operation: "ui-palette" }), notify);
++  applyUiPalette(dispatchProjectQuery("renderer", { operation: "ui-palette" }), notify);
+   return renderDashboard();
+ }
+ export function applyUiPaletteValues(values, notify = true) {
+@@ -137,8 +134,16 @@ export const BACKEND_REFERENCE_EVENTS = new Set(["SELECT_SLOT", "SELECT_ASSET",
+ 
+ export const PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
+ 
+-export function dispatchProjectQuery(query, payload) {
+-  return readBackendProjection(query, payload);
++export function dispatchProjectQuery(query, payload = {}) {
++  const request = { ...payload };
++  if (query === "renderer" && !["slot-image", "ui-palette"].includes(request.operation)) {
++    const state = interfaceFSM.readState(),
++      layout = readBackendProjection("project-api", { operation: "layout.readState" });
++    request.frontendState = state;
++    request.width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth
++      : layout.slotStyle.referenceWidth * state.dashboardZoomIntent / 100;
++  }
++  return readBackendProjection(query, request);
+ }
+ 
+ export function dispatchInterfaceEvent(event, payload = {}) {
+@@ -179,7 +184,7 @@ export function dispatchProjectCommand(event, payload = {}) {
+   if (!result.committed) return [result, frontendBefore, null];
+   const reconciliationInput = buildFrontendReconciliationInput(event, result, frontendBefore),
+     state = interfaceFSM.reconcileProjectResult(event, reconciliationInput),
+-    projection = readBackendProjection("renderer", { frontendState: state, mutationResult: result });
++    projection = dispatchProjectQuery("renderer", { frontendState: state, mutationResult: result });
+   return [result, state, projection];
+ }
+ 
+diff --git a/sourcecode/backend/project_efsm.js b/sourcecode/backend/project_efsm.js
+index 8c147e3ee0dd4c40051d146335f4303b0724df41..40029754044fdbd55a0feb1d18989dd29afb6921 100644
+--- a/sourcecode/backend/project_efsm.js
++++ b/sourcecode/backend/project_efsm.js
+@@ -129,8 +129,21 @@ export class ProjectStateMachine {
+       changed = committed ? actualChanged(input) : {},
+       counts = committed ? removedReferenceCounts(input.commitFacts.pre, input.commitFacts.post)
+         : { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
++    const selectionHints = committed ? { ...input.selectionHints } : {};
++    if (committed && input.operation === "graphs.moveObject") {
++      const { pre, post } = input.commitFacts,
++        before = pre.charts.find(chart => chart.id === input.chartId),
++        after = post.charts.find(chart => chart.id === input.chartId),
++        from = input.from, to = input.to;
++      if (!before || !after || before.editor.objects.length !== after.editor.objects.length)
++        throw Error("이동 결과의 반영 전후 차트가 일치하지 않습니다.");
++      const indices = before.editor.objects.map((_, index) => index === from ? to
++        : from < to && index > from && index <= to ? index - 1
++        : to < from && index >= to && index < from ? index + 1 : index);
++      selectionHints.graphObjectIndexMaps = [{ chartId: after.id, indices }];
++    }
+     return immutableProjectCopy({ event, committed, changed, ...counts,
+-      selectionHints: committed ? input.selectionHints || {} : {},
++      selectionHints,
+       projectionEffect: committed ? input.projectionEffect : null,
+     });
+   }
+@@ -559,7 +572,6 @@ export function applyGraphObjectEditAction({ machine, event, payload }) {
+     } else if (operation === "graphs.moveObject") {
+       const moved = chart.editor.objects.splice(payload.from, 1)[0];
+       chart.editor.objects.splice(payload.to, 0, moved);
+-      selectedIndexHint = payload.to;
+     } else if (operation === "graphs.deleteObject") {
+       chart.editor.objects.splice(index, 1);
+       selectedIndexHint = null;
+@@ -628,7 +640,7 @@ export function applyGraphObjectEditAction({ machine, event, payload }) {
+       chartIds: changedIds(source.charts, post.charts),
+       csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
+       imageIds: changedIds(source.assets.images, post.assets.images), assets: [] };
+-    payload.selectionHints = Object.freeze(operation === "graphs.applyPalette" ?
++    payload.selectionHints = Object.freeze(["graphs.applyPalette", "graphs.moveObject"].includes(operation) ?
+       { chartId: current.id } : { chartId: current.id, selectedIndexHint });
+     return;
+   }
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+index 6e0db4eef0db0c63557eeebdfc452e2509fddd3f..de1b7ef90aa68069b26ae786c88a0ae6e229ea0b 100644
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -461,6 +461,11 @@ export function readBackendProjection(kind, request = {}) {
+   if (kind === "renderer" ||
+       (kind === "export" && ["print.save", "print.capture"].includes(request.operation))) {
+     const source = activeProject._state, output = buildBackendSurfaceRead(source);
++    if (kind === "renderer") {
++      if (!Number.isFinite(request.width) || request.width <= 0)
++        throw Error("renderer 너비는 유한한 양수여야 합니다.");
++      output.geometry = dashboardGeometryInProject(source, request.width);
++    }
+     if (kind === "export") {
+       output.export = structuredClone(source.export);
+       output.rasterLimits = structuredClone(BackendSettings.defaults.limits.export);
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index 37e33a1289e093461f653494c69507802e10fdca..c84e235c636a170933112af2a08be425d64bd384 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -1,7 +1,7 @@
+ // Source: sourcescript/frontend/mantine_ui.py (same logical owner); pseudocode/frontend/mantine_ui.pcal.
+ import { appFSM } from '../application/adapter.js';
+ import { PROJECT_TRASH_DIRECTORY, projectParentPath, projectPathInDirectory, projectPathName } from '../backend/assets_files.js';
+-import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
++import { clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
+ 
+ // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
+ // the mounted UI owns only its collision resolver and drag finalization.
+@@ -76,37 +76,23 @@ shell: {
+ },
+     },
+     components: {
++Group: Group.extend({ defaultProps: { align: "flex-end", gap: "xs", wrap: "wrap" } }),
+ Button: Button.extend({
+-  defaultProps: { size: "ff" },
+-  vars: (_theme, props) =>
+-    props.size === "ff"
+-      ? {
+-          root: {
+-            "--button-height": "38px",
+-            "--button-padding-x": "12px",
+-            "--button-fz": "14px",
+-          },
+-        }
+-      : { root: {} },
++  defaultProps: { size: "ff", radius: "ff" },
++  vars: () => ({ root: { "--button-height": "38px", "--button-padding-x": "12px", "--button-fz": "14px" } }),
+ }),
+ ActionIcon: ActionIcon.extend({
+-  defaultProps: { size: "ff" },
+-  vars: (_theme, props) =>
+-    props.size === "ff" ? { root: { "--ai-size": "38px" } } : { root: {} },
++  defaultProps: { size: "ff", radius: "ff" },
++  vars: () => ({ root: { "--ai-size": "38px" } }),
+ }),
+ Input: Input.extend({
+-  defaultProps: { size: "ff" },
+-  vars: (_theme, props) =>
+-    props.size === "ff"
+-      ? {
+-          wrapper: {
+-            "--input-height": "38px",
+-            "--input-fz": "14px",
+-            "--input-radius": "6px",
+-          },
+-        }
+-      : { wrapper: {} },
++  defaultProps: { size: "ff", radius: "ff" },
++  vars: () => ({ wrapper: { "--input-height": "38px", "--input-fz": "14px", "--input-radius": "6px" } }),
+ }),
++TextInput: TextInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
++Select: Select.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
++NumberInput: NumberInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
++ColorInput: ColorInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
+ Modal: Modal.extend({
+   defaultProps: {
+     centered: true,
+@@ -135,6 +121,45 @@ Modal: Modal.extend({
+     { value: "Georgia, serif", label: "Georgia" },
+     { value: "Courier New, monospace", label: "Courier New" },
+   ]);
++  function FoldSection({ title, initiallyOpen = false, children }) {
++    const [open, setOpen] = useState(initiallyOpen);
++    const id = React.useId(), button = useRef(null), content = useRef(null);
++    const toggle = () => {
++      if (open && content.current?.contains(document.activeElement)) button.current?.focus();
++      setOpen(value => !value);
++    };
++    return React.createElement(Stack, { gap: "xs" },
++      React.createElement(Button, { ref: button, variant: "subtle", onClick: toggle,
++        "aria-expanded": open, "aria-controls": id }, title),
++      React.createElement("div", { id, ref: content, hidden: !open }, children));
++  }
++
++  function LayoutPreview({ layout, selection, busy, onToggle }) {
++    const hostRef = useRef(null);
++    useEffect(() => {
++      const view = renderDashboardFrame(hostRef.current, layout, layout.visibleSlots, layout.previewGeometry);
++      const listeners = [];
++      for (const slot of layout.visibleSlots) {
++        const decoration = view.slots.get(slot.id).decoration;
++        const button = document.createElement("button");
++        button.type = "button"; button.disabled = busy;
++        button.textContent = `${slot.row},${slot.col}`;
++        button.setAttribute("aria-pressed", String(selection.has(slot.id)));
++        Object.assign(button.style, { position: "absolute", inset: "0", width: "100%", height: "100%",
++          border: "0", borderRadius: "inherit", padding: "0", pointerEvents: "auto", color: "inherit",
++          background: selection.has(slot.id) ? "var(--mantine-primary-color-light)" : "transparent",
++          boxShadow: selection.has(slot.id) ? "inset 0 0 0 2px var(--mantine-primary-color-filled)" : "none" });
++        const click = event => { event.stopPropagation(); onToggle(slot.id); };
++        button.addEventListener("click", click); listeners.push([button, click]);
++        decoration.replaceChildren(button);
++      }
++      return () => listeners.forEach(([button, click]) => button.removeEventListener("click", click));
++    }, [layout, selection, busy, onToggle]);
++    useEffect(() => { const host = hostRef.current; return () => host.replaceChildren(); }, []);
++    return React.createElement("div", { ref: hostRef, role: "grid", "aria-label": "레이아웃 슬롯 선택",
++      style: { marginTop: 0 } });
++  }
++
+   function fontSelectData(options, currentValue) {
+     const current = typeof currentValue === "string" ? currentValue : "";
+     const values = options.some((option) => option.value === current)
+@@ -920,7 +945,6 @@ if (directory && movable) {
+         ActionIcon,
+         {
+           variant: "subtle",
+-          size: "sm",
+           "aria-label": `${projectPathName(path)} 폴더 작업`,
+         },
+         "···",
+@@ -963,7 +987,6 @@ if (directory && movable) {
+         ActionIcon,
+         {
+           variant: "subtle",
+-          size: "sm",
+           "aria-label": `${projectPathName(path)} 작업`,
+         },
+         "···",
+@@ -1083,7 +1106,6 @@ React.createElement(
+   Button,
+   {
+     variant: "light",
+-    size: "xs",
+     disabled: busy,
+     onClick: openFolderDialog,
+   },
+@@ -1125,7 +1147,6 @@ trashSelected
+       Button,
+       {
+         variant: "light",
+-        size: "xs",
+         disabled: busy || !trashHasContents,
+         onClick: openTrashDialog,
+       },
+@@ -1271,7 +1292,6 @@ React.createElement(
+   Button,
+   {
+     variant: "subtle",
+-    size: "xs",
+     fullWidth: true,
+     justify: "flex-start",
+     "aria-expanded": slotsExpanded,
+@@ -1290,7 +1310,6 @@ slotsExpanded
+               {
+                 key: slot.id,
+                 variant: state.workspace !== "project" && selectedSlotId === slot.id ? "filled" : "subtle",
+-                size: "xs",
+                 fullWidth: true,
+                 justify: "flex-start",
+                 disabled: busy,
+@@ -1494,9 +1513,9 @@ React.createElement(Group, { gap: "xs", grow: true },
+   }, "오브젝트 추가"),
+ ),
+ React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
+-objects.length ? React.createElement(Stack, { gap: 4 },
++objects.length ? React.createElement(Stack, { gap: "xs" },
+   ...objects.map((object, index) => React.createElement(Group, {
+-    key: `${chartId}-${index}`, gap: 4, wrap: "nowrap",
++    key: `${chartId}-${index}`, gap: "xs",
+     draggable: editable && !busy,
+     onDragStart: (event) => {
+       if (!editable || busy) return event.preventDefault();
+@@ -1514,17 +1533,21 @@ objects.length ? React.createElement(Stack, { gap: 4 },
+     },
+   },
+     React.createElement(Button, {
+-      size: "xs", variant: selectedIndex === index ? "filled" : "light",
+-      style: { flex: "1 1 auto", minWidth: 0 },
++      variant: selectedIndex === index ? "filled" : "light",
++      style: { flex: "1 1 auto", minWidth: 0, height: "auto", minHeight: "var(--button-height)" },
++      styles: { label: { whiteSpace: "normal", overflowWrap: "anywhere", display: "block" } },
++      "aria-label": `${index + 1}. ${editor.chart?.editor.title ? editor.chart.editor.title + " — " : ""}${object.legendName || `${object.x} · ${object.y}`}`,
+       onClick: () => graphApi.selectObject(index),
+-    }, `${index + 1}. ${object.legendName || `${object.x} · ${object.y}`}`),
++    }, React.createElement("span", null,
++      editor.chart?.editor.title ? React.createElement("span", null, `${index + 1}. ${editor.chart.editor.title} — `) : `${index + 1}. `,
++      React.createElement("span", { style: { display: "block" } }, object.legendName || `${object.x} · ${object.y}`))),
+     React.createElement(ColorInput, {
+-      size: "xs", value: object.color, style: { width: 72 },
++      value: object.color,
+       disabled: busy || !editable,
+       onChange: (color) => graphApi.setObjectValues(chartId, index, { color }),
+     }),
+     React.createElement(ActionIcon, {
+-      size: "sm", variant: "subtle", disabled: busy || !editable,
++      variant: "subtle", disabled: busy || !editable,
+       "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
+       onClick: () => graphApi.deleteObject(chartId, index),
+     }, "×"),
+@@ -1542,6 +1565,7 @@ selected && activeCsv && editable ? React.createElement(Stack, { gap: "xs" },
+     selectField("X 축", "xAxisSide", [{ value: "bottom", label: "아래" }, { value: "top", label: "위" }]),
+     selectField("Y 축", "yAxisSide", [{ value: "left", label: "왼쪽" }, { value: "right", label: "오른쪽" }]),
+   ),
++  React.createElement(FoldSection, { title: "종류별 세부 설정" },
+   selectField("유형", "type", [
+     { value: "scatter", label: "선" }, { value: "markers", label: "마커" },
+     { value: "lines+markers", label: "선 + 마커" }, { value: "bar", label: "막대" },
+@@ -1569,6 +1593,7 @@ selected && activeCsv && editable ? React.createElement(Stack, { gap: "xs" },
+     numberField("막대 불투명도", "barOpacity", 0.05, 1, 0.05),
+     numberField("막대 테두리", "barLineWidth", 0, 10, 0.1),
+   ) : null,
++  ),
+ ) : null,
+     );
+   }
+@@ -1594,7 +1619,6 @@ yRight: "오른쪽 Y축",
+ React.createElement(
+   Button,
+   {
+-    size: "xs",
+     variant: settings[key] ? "filled" : "light",
+     disabled: busy || !editable,
+     "aria-pressed": settings[key],
+@@ -1617,7 +1641,6 @@ React.createElement(NumberInput, {
+ React.createElement(
+   Button,
+   {
+-    size: "xs",
+     variant: axis[field] ? "filled" : "light",
+     disabled: busy || !editable,
+     "aria-pressed": axis[field],
+@@ -1629,9 +1652,8 @@ React.createElement(
+ const axis = settings.axes[key];
+ const logScale = axis.scaleType === "log";
+ return React.createElement(
+-  Stack,
+-  { key, gap: "xs" },
+-  React.createElement(Text, { size: "sm", fw: 600 }, axisLabels[key]),
++  FoldSection,
++  { key, title: axisLabels[key] },
+   React.createElement(TextInput, {
+     label: "축 이름",
+     value: axis.title,
+@@ -1775,7 +1797,8 @@ React.createElement(
+       updateGlobal({ legendFontSize: value === "" ? "" : String(value) }),
+   }),
+ ),
+-...Object.keys(axisLabels).map(axisEditor),
++React.createElement(FoldSection, { title: "X축" }, axisEditor("xBottom"), axisEditor("xTop")),
++React.createElement(FoldSection, { title: "Y축" }, axisEditor("yLeft"), axisEditor("yRight")),
+     );
+   }
+   function FastFigureGraphPaletteActions() {
+@@ -2066,13 +2089,13 @@ React.createElement(
+   },
+   telemetry.status || "준비됨",
+ ),
++React.createElement(FoldSection, { title: "디버그 로그" },
+ React.createElement(
+   Group,
+   { gap: "xs", grow: true },
+   React.createElement(
+     Button,
+     {
+-      size: "xs",
+       variant: telemetry.debugEnabled ? "filled" : "light",
+       disabled: busy,
+       "aria-pressed": telemetry.debugEnabled,
+@@ -2083,7 +2106,6 @@ React.createElement(
+   React.createElement(
+     Button,
+     {
+-      size: "xs",
+       variant: "light",
+       disabled: busy || !telemetry.debugLines.length,
+       onClick: saveDebugOutput,
+@@ -2093,7 +2115,6 @@ React.createElement(
+   React.createElement(
+     Button,
+     {
+-      size: "xs",
+       variant: "light",
+       disabled: busy || !telemetry.debugLines.length,
+       onClick: clearDebugOutput,
+@@ -2118,6 +2139,7 @@ telemetry.debugEnabled
+       ),
+     )
+   : null,
++),
+     );
+   }
+ 
+@@ -2757,7 +2779,9 @@ React.createElement(
+   function FastFigureLayoutOverlay() {
+     const state = useAppState();
+     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
+-    const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(600);
++    const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(null);
++    const [dimensionEdits, setDimensionEdits] = useState({});
++    useEffect(() => { setDimensionEdits({}); }, [state.overlay]);
+     const previewFrameRef = useRef(null);
+     const layoutApi = window.FastFigureApi.layout;
+     const layout = state.overlay === "layout" ? layoutApi.readState(renderedPreviewWidth) : null;
+@@ -2780,16 +2804,21 @@ return () => observer.disconnect();
+     if (state.overlay !== "layout") return null;
+     const busy = state.lifecycle !== "ready";
+     const style = layout.slotStyle;
+-    const visibleSlots = layout.visibleSlots;
+-    const previewGeometry = layout.previewGeometry;
+ 
+     const clamp = (value, fallback, min, max) => {
+ const number = Number(value);
+ return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+     };
+     const commitStyle = (patch) => layoutApi.setStyle(patch);
+-    const changeGrid = (dimension, value) => {
++    const changeGrid = (dimension, value, editingFinished = false) => {
+ if (!["rows", "cols"].includes(dimension)) throw Error("알 수 없는 grid 편집 차원입니다.");
++if (editingFinished) {
++  layoutApi.readState();
++  setDimensionEdits(current => ({ ...current, [dimension]: undefined }));
++  return null;
++}
++setDimensionEdits(current => ({ ...current, [dimension]: value }));
++if (value == null || value === "") return null;
+ const current = layoutApi.readState();
+ const number = typeof value === "number" || (typeof value === "string" && value.trim() !== "")
+   ? Number(value) : NaN;
+@@ -2838,23 +2867,27 @@ React.createElement(
+     { gap: "xs", grow: true },
+     React.createElement(NumberInput, {
+       label: "행",
+-      value: layout.gridRows,
++      value: dimensionEdits.rows ?? layout.gridRows,
++      clampBehavior: "none",
+       min: layout.gridLimits.gridRows[0],
+       max: layout.gridLimits.gridRows[1],
+       allowDecimal: false,
+       disabled: busy,
+       onChange: (value) =>
+         changeGrid("rows", value),
++      onBlur: () => changeGrid("rows", dimensionEdits.rows, true),
+     }),
+     React.createElement(NumberInput, {
+       label: "열",
+-      value: layout.gridCols,
++      value: dimensionEdits.cols ?? layout.gridCols,
++      clampBehavior: "none",
+       min: layout.gridLimits.gridCols[0],
+       max: layout.gridLimits.gridCols[1],
+       allowDecimal: false,
+       disabled: busy,
+       onChange: (value) =>
+         changeGrid("cols", value),
++      onBlur: () => changeGrid("cols", dimensionEdits.cols, true),
+     }),
+   ),
+   React.createElement(
+@@ -2957,67 +2990,12 @@ React.createElement(
+         width: 600,
+         maxWidth: "100%",
+         marginInline: "auto",
++        overflowX: "auto",
+       },
+     },
+-    React.createElement(
+-      "div",
+-      {
+-        role: "grid",
+-        "aria-label": "레이아웃 슬롯 선택",
+-        style: {
+-          display: "grid",
+-          boxSizing: "border-box",
+-          width: "100%",
+-          height: previewGeometry.height,
+-          aspectRatio: `${style.aspect} / 1`,
+-          gridTemplateColumns: `repeat(${layout.gridCols}, minmax(0, 1fr))`,
+-          gridTemplateRows: `repeat(${layout.gridRows}, minmax(0, 1fr))`,
+-          gap: previewGeometry.gap,
+-          padding: previewGeometry.outerMargin,
+-          border: "1px solid var(--mantine-color-default-border)",
+-          borderRadius: previewGeometry.radius,
+-          overflow: "hidden",
+-        },
+-      },
+-      ...visibleSlots.map((slot) => {
+-        const selected = layoutSelection.has(slot.id);
+-        return React.createElement(
+-          UnstyledButton,
+-          {
+-            key: slot.id,
+-            disabled: busy,
+-            "aria-pressed": selected,
+-            onClick: (event) => {
+-              event.stopPropagation();
+-              toggleSlot(slot.id);
+-            },
+-            style: {
+-              gridColumn: `${slot.col} / span ${slot.colSpan}`,
+-              gridRow: `${slot.row} / span ${slot.rowSpan}`,
+-              width: "100%",
+-              height: "100%",
+-              minWidth: 0,
+-              minHeight: 0,
+-              display: "flex",
+-              alignItems: "center",
+-              justifyContent: "center",
+-              padding: 0,
+-              borderWidth: 1,
+-              borderStyle: style.showBorders ? "solid" : "dashed",
+-              borderColor: selected
+-                ? "var(--mantine-primary-color-filled)"
+-                : "var(--mantine-color-default-border)",
+-              background: selected
+-                ? "var(--mantine-primary-color-light)"
+-                : "transparent",
+-              color: "inherit",
+-              cursor: busy ? "default" : "pointer",
+-            },
+-          },
+-          `${slot.row},${slot.col}`,
+-        );
+-      }),
+-    ),
++    React.createElement(LayoutPreview, {
++      layout, selection: layoutSelection, busy, onToggle: toggleSlot,
++    }),
+   ),
+   React.createElement(
+     Group,
+@@ -3175,11 +3153,11 @@ React.createElement(
+     React.createElement(FastFigureImageEditor),
+     React.createElement(FastFigureProjectDataTree),
+     React.createElement(FastFigureProjectActions),
+-    React.createElement(FastFigureGraphDataEditor),
+-    React.createElement(FastFigureGraphLayoutEditor),
++    React.createElement(FoldSection, { title: "오브젝트 설정", initiallyOpen: true }, React.createElement(FastFigureGraphDataEditor)),
++    React.createElement(FoldSection, { title: "전역 설정", initiallyOpen: true }, React.createElement(FastFigureGraphLayoutEditor)),
+     React.createElement(FastFigureGraphPaletteActions),
+     React.createElement(FastFigureGraphFileActions),
+-    React.createElement(FastFigurePaletteActions),
++    React.createElement(FoldSection, { title: "UI 색상" }, React.createElement(FastFigurePaletteActions)),
+     React.createElement(FastFigureStatusDebug),
+     React.createElement(FastFigureUtilityActions),
+   ),
+diff --git a/sourcecode/frontend/renderer.js b/sourcecode/frontend/renderer.js
+index 6784cd6cce89ca34a8635641fc9345d07026b1d3..2077cf65c48d7b569e5279eac8c85dfdd59d306c 100644
+--- a/sourcecode/frontend/renderer.js
++++ b/sourcecode/frontend/renderer.js
+@@ -103,11 +103,8 @@ export function readmeContentHtml() {
+   return template ? template.innerHTML.replaceAll("{{APP_BUILD}}", APP_BUILD) : "";
+ }
+ 
+-export function applyReferenceGeometryProjection(element, style, width) {
++export function applyReferenceGeometryProjection(element, geometry) {
+   if (!element) return;
+-  const scale = width / style.referenceWidth,
+-    geometry = { outerMargin: Math.min(style.outerMargin * scale, Math.min(width, width / style.aspect) * .49),
+-      gap: style.gap * scale, radius: style.radius * scale, scale };
+   element.style.setProperty("--dashboard-outer-margin", `${geometry.outerMargin}px`);
+   element.style.setProperty("--slot-gap", `${geometry.gap}px`);
+   element.style.setProperty("--slot-radius", `${geometry.radius}px`);
+@@ -124,21 +121,49 @@ export function syncDashboardCaptionWidth() {
+   caption.style.minWidth = `${width}px`;
+ }
+ 
+-export function applySlotStyleProjection(style, interfaceState) {
+-  const dashboard = $("dashboard"), border = style.showBorders ? "var(--ui-color)" : "transparent",
+-    width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
+-      : style.referenceWidth * interfaceState.dashboardZoomIntent / 100;
+-  for (const id of ["dashboard", "dashboardCaption"]) {
+-    const host = $(id);
+-    host?.style.setProperty("--slot-border-color", border);
+-    host?.style.setProperty("--layout-slot-border-style", style.showBorders ? "solid" : "dashed");
++export function renderDashboardFrame(host, layout, visibleSlots, geometry) {
++  host.classList.add("dashboard", "fixed-aspect");
++  Object.assign(host.style, {
++    display: "grid", boxSizing: "border-box", width: `${geometry.width}px`,
++    minWidth: `${geometry.width}px`, height: `${geometry.height}px`, minHeight: "0",
++    gridTemplateColumns: `repeat(${layout.gridCols}, minmax(0, 1fr))`,
++    gridTemplateRows: `repeat(${layout.gridRows}, minmax(0, 1fr))`,
++    gap: `${geometry.gap}px`, padding: `${geometry.outerMargin}px`, borderRadius: "0",
++  });
++  host.style.setProperty("--grid-cols", layout.gridCols);
++  host.style.setProperty("--grid-rows", layout.gridRows);
++  host.style.setProperty("--dashboard-aspect", `${geometry.aspect} / 1`);
++  host.style.setProperty("--slot-border-color", layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
++  applyReferenceGeometryProjection(host, geometry);
++  const slots = new Map(), existing = new Map([...host.children]
++    .filter(element => element.classList.contains("slot")).map(element => [Number(element.dataset.slot), element]));
++  for (const slot of visibleSlots) {
++    let frame = existing.get(slot.id);
++    if (!frame) {
++      frame = document.createElement("section"); frame.className = "slot"; frame.dataset.slot = slot.id;
++    }
++    let content = frame.querySelector(":scope > .slot-content"),
++      decoration = frame.querySelector(":scope > .slot-decoration");
++    if (!content) { content = document.createElement("div"); content.className = "slot-content"; frame.append(content); }
++    if (!decoration) { decoration = document.createElement("div"); decoration.className = "slot-decoration"; frame.append(decoration); }
++    Object.assign(frame.style, { gridArea: `${slot.row} / ${slot.col} / span ${slot.rowSpan} / span ${slot.colSpan}`,
++      minWidth: "0", minHeight: "0", boxSizing: "border-box", borderRadius: `${geometry.radius}px`,
++      border: "1px solid var(--slot-border-color)", background: "var(--graph-bg, #fff)" });
++    Object.assign(content.style, { width: "100%", height: "100%", minWidth: "0", minHeight: "0",
++      overflow: "hidden", borderRadius: "inherit" });
++    Object.assign(decoration.style, { position: "absolute", inset: "0", pointerEvents: "none", borderRadius: "inherit" });
++    host.append(frame); slots.set(slot.id, { frame, content, decoration }); existing.delete(slot.id);
+   }
+-  const hasAspect = Number.isFinite(style.aspect) && style.aspect > 0;
+-  dashboard.classList.toggle("fixed-aspect", hasAspect);
+-  if (hasAspect) dashboard.style.setProperty("--dashboard-aspect", `${style.aspect} / 1`);
+-  else dashboard.style.removeProperty("--dashboard-aspect");
+-  applyReferenceGeometryProjection(dashboard, style, width);
++  for (const frame of existing.values()) frame.remove();
++  return { grid: host, slots };
++}
++
++export function applySlotStyleProjection(projection) {
++  const view = renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
++  $("dashboardCaption")?.style.setProperty("--slot-border-color",
++    projection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
+   syncDashboardCaptionWidth();
++  return view;
+ }
+ 
+ export const projectImageDisplayUrls = new Map();
+@@ -455,10 +480,7 @@ export function applyDashboardProjectionInvalidation(event, mutationResult, inte
+     renderDashboardProjection(projectProjection, interfaceState, frontendActions);
+     return "FULL_DASHBOARD";
+   }
+-  const style = projectProjection.layout.slotStyle,
+-    width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
+-      : style.referenceWidth * interfaceState.dashboardZoomIntent / 100,
+-    scale = width / style.referenceWidth;
++  const scale = projectProjection.geometry.scale;
+   if (["CAPTION_TEXT_INPUT", "SLOT_CAPTIONS_INSERTED", "CAPTION_SETTINGS_CHANGED"].includes(event)) {
+     syncDashboardCaptionProjection(projectProjection.annotations.captions, scale);
+     syncDashboardCaptionWidth();
+@@ -486,14 +508,14 @@ export function applyDashboardProjectionInvalidation(event, mutationResult, inte
+       settings = projectProjection.annotations.labels.settings;
+     for (const slot of slots) {
+       const host = hosts.find(host => host.dataset.slot === String(slot.id));
+-      host.querySelectorAll(":scope > .slot-label").forEach(label => label.remove());
++      host.querySelectorAll(":scope > .slot-decoration > .slot-label").forEach(label => label.remove());
+       if (!projectProjection.annotations.labels.enabled || !labels.has(slot.id)) continue;
+       const label = document.createElement("span");
+       label.className = "slot-label"; label.textContent = labels.get(slot.id);
+       label.setAttribute("aria-label", "슬롯 식별자");
+       label.style.left = `${settings.x * scale}px`; label.style.top = `${settings.y * scale}px`;
+       label.style.fontFamily = settings.fontFamily; label.style.fontSize = `${settings.fontSize * scale}px`;
+-      host.append(label);
++      host.querySelector(":scope > .slot-decoration").append(label);
+     }
+   }
+   return "TARGETED_PROJECTION";
+@@ -523,9 +545,7 @@ export function updateGraphViewProjection(projectProjection, interfaceState, fro
+     if (record) return true;
+     return slot.imageView ? !surface || surface.host !== host || !hasLiveImageSurface(surface) || surface.imageInput.src !== slot.imageView.src : !!surface;
+   })) return renderDashboardProjection(projectProjection, interfaceState, frontendActions);
+-  const chart = resolveSelectedChart(projectProjection, interfaceState), style = projectProjection.layout.slotStyle,
+-    scale = (interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
+-      : style.referenceWidth * interfaceState.dashboardZoomIntent / 100) / style.referenceWidth;
++  const chart = resolveSelectedChart(projectProjection, interfaceState), scale = projectProjection.geometry.scale;
+   for (const slot of slots) {
+     const selected = slot.id === interfaceState.selectedSlotId, record = rendererRuntime.graphInstances.get(slot.id);
+     hosts.get(String(slot.id)).classList.toggle("selected", selected);
+@@ -542,10 +562,10 @@ export function updateGraphViewProjection(projectProjection, interfaceState, fro
+ // Source startupCoreRuntime: one supplied initial read, in the declared order.
+ // Lifecycle ready and Backend acquisition belong to the Application boundary.
+ export function startupCoreRuntimeProjection(projectProjection, interfaceState, frontendActions) {
+-  applyDashboardZoomProjection(projectProjection.layout, interfaceState);
++  applyDashboardZoomProjection(projectProjection, interfaceState);
+   installSlotClickControllerProjection(frontendActions);
+   const presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
+-  applySlotStyleProjection(projectProjection.layout.slotStyle, interfaceState);
++  applySlotStyleProjection(projectProjection);
+   auditSuppliedRendererContracts(projectProjection, interfaceState);
+   return presentation;
+ }
+@@ -571,26 +591,9 @@ function auditSuppliedRendererContracts(projectProjection, interfaceState) {
+ // All domain content is supplied by Application; associations below own only DOM lifetimes.
+ export function renderDashboardProjection(projectProjection, interfaceState, frontendActions = {}) {
+   const generation = ++rendererRuntime.dashboardRenderGeneration,
+-    dashboard = $("dashboard"), style = projectProjection.layout.slotStyle,
+-    width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
+-      : style.referenceWidth * interfaceState.dashboardZoomIntent / 100,
+-    scale = width / style.referenceWidth,
+-    geometry = { scale, outerMargin: Math.min(style.outerMargin * scale, Math.min(width, width / style.aspect) * .49),
+-      gap: style.gap * scale, radius: style.radius * scale },
++    dashboard = $("dashboard"), geometry = projectProjection.geometry, scale = geometry.scale,
+     slots = projectProjection.visibleSlots,
+     labels = new Map(projectProjection.orderedSlotLabels.map(label => [label.slotId, label.displayLabel]));
+-  dashboard.style.width = dashboard.style.minWidth = `${width}px`;
+-  dashboard.style.setProperty("--grid-cols", projectProjection.layout.gridCols);
+-  dashboard.style.setProperty("--grid-rows", projectProjection.layout.gridRows);
+-  dashboard.style.setProperty("--dashboard-outer-margin", `${geometry.outerMargin}px`);
+-  dashboard.style.setProperty("--slot-gap", `${geometry.gap}px`);
+-  dashboard.style.setProperty("--slot-radius", `${geometry.radius}px`);
+-  dashboard.style.setProperty("--dashboard-aspect", `${style.aspect} / 1`);
+-  dashboard.classList.toggle("fixed-aspect", Number.isFinite(style.aspect) && style.aspect > 0);
+-  for (const host of [dashboard, $("dashboardCaption")]) {
+-    host?.style.setProperty("--slot-border-color", style.showBorders ? "var(--ui-color)" : "transparent");
+-    host?.style.setProperty("--layout-slot-border-style", style.showBorders ? "solid" : "dashed");
+-  }
+   applyUiPaletteProjection(projectProjection.appearance.uiPalette);
+   const discard = record => {
+     rendererRuntime.graphInstances.delete(record.slotId);
+@@ -608,30 +611,27 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
+   // Image elements are surface-owned decode handles, never shared asset handles.
+   // Detach before dropping src; an obsolete decode may reject but is no longer current.
+   for (const surface of rendererRuntime.imageSurfaces.values()) releaseImageSurface(surface);
+-  const ids = new Set(slots.map(slot => String(slot.id)));
+-  dashboard.querySelectorAll(":scope > .slot").forEach(host => {
+-    if (!ids.has(host.dataset.slot)) host.remove();
+-  });
++  const frameView = renderDashboardFrame(dashboard, projectProjection.layout, slots, geometry);
++  $("dashboardCaption")?.style.setProperty("--slot-border-color",
++    projectProjection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
+   for (const slot of slots) {
+     const graph = slot.contentType !== "image" && slot.figure,
+       image = !graph && slot.imageView,
+       selected = slot.id === interfaceState.selectedSlotId;
+-    let record = rendererRuntime.graphInstances.get(slot.id),
+-      host = record?.host || [...dashboard.children].find(host => host.dataset.slot === String(slot.id));
+-    if (!host) { host = document.createElement("section"); host.dataset.slot = slot.id; }
++    let record = rendererRuntime.graphInstances.get(slot.id);
++    const { frame: host, content, decoration } = frameView.slots.get(slot.id);
+     host.className = "slot" + (!graph && !image ? " empty" : "") + (selected ? " selected" : "");
+-    host.style.gridArea = `${slot.row} / ${slot.col} / span ${slot.rowSpan} / span ${slot.colSpan}`;
+     if (graph && !record) {
+-      host.replaceChildren();
++      content.replaceChildren();
+       const card = document.createElement("div"), plot = document.createElement("div");
+       card.className = "chart-card"; plot.className = "plot-item"; plot.id = `plot-${slot.id}`;
+-      card.append(plot); host.append(card);
++      card.append(plot); content.append(card);
+       record = { host, plot, slotId: slot.id, chartId: slot.content.chart, generation, pending: Promise.resolve() };
+       rendererRuntime.graphInstances.set(slot.id, record);
+     } else if (!graph) {
+       // Copied pure URLs avoid shared revocation. Each native decode still belongs
+       // to this surface/generation and must settle without reviving replaced DOM.
+-      host.replaceChildren();
++      content.replaceChildren();
+       if (image) {
+         const frame = document.createElement("div"), element = document.createElement("img"),
+           settings = image.settings;
+@@ -641,7 +641,7 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
+           element.classList.add("manual");
+           element.style.width = `${settings.scale}%`; element.style.left = `${settings.x}%`; element.style.top = `${settings.y}%`;
+         } else element.style.objectFit = settings.fit;
+-        frame.append(element); host.append(frame);
++        frame.append(element); content.append(frame);
+         const surface = { host, element, slotId: slot.id, imageInput: image, generation, pending: null };
+         rendererRuntime.imageSurfaces.set(slot.id, surface);
+         const current = () => generation === rendererRuntime.dashboardRenderGeneration &&
+@@ -662,16 +662,17 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
+         });
+       }
+     }
+-    host.querySelectorAll(".slot-tab,.slot-label").forEach(element => element.remove());
++    decoration.replaceChildren();
+     if (graph || image) {
+       const tab = document.createElement("button"); tab.className = "slot-tab"; tab.type = "button"; tab.draggable = true;
+-      tab.setAttribute("aria-label", "슬롯 이동 및 선택"); tab.innerHTML = '<span class="slot-tab-shape"></span>'; host.append(tab);
++      tab.setAttribute("aria-label", "슬롯 이동 및 선택"); tab.style.pointerEvents = "auto";
++      tab.innerHTML = '<span class="slot-tab-shape"></span>'; decoration.append(tab);
+     }
+     if (projectProjection.annotations.labels.enabled && labels.has(slot.id)) {
+       const label = document.createElement("span"), settings = projectProjection.annotations.labels.settings;
+       label.className = "slot-label"; label.textContent = labels.get(slot.id); label.setAttribute("aria-label", "슬롯 식별자");
+       label.style.left = `${settings.x * scale}px`; label.style.top = `${settings.y * scale}px`;
+-      label.style.fontFamily = settings.fontFamily; label.style.fontSize = `${settings.fontSize * scale}px`; host.append(label);
++      label.style.fontFamily = settings.fontFamily; label.style.fontSize = `${settings.fontSize * scale}px`; decoration.append(label);
+     }
+     dashboard.append(host);
+     if (record) presentSuppliedGraph(record, slot, selected, generation, scale, frontendActions);
+@@ -1419,12 +1420,8 @@ export async function downloadExportPayload(payload) {
+   }
+ }
+ 
+-export function applyDashboardZoomProjection(layout, interfaceState, resize = true) {
+-  const dashboard = $("dashboard"), style = layout.slotStyle,
+-    width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth
+-      : style.referenceWidth * interfaceState.dashboardZoomIntent / 100;
+-  dashboard.style.minWidth = dashboard.style.width = `${width}px`;
+-  applyReferenceGeometryProjection(dashboard, style, width);
++export function applyDashboardZoomProjection(projection, interfaceState, resize = true) {
++  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
+   syncDashboardCaptionWidth();
+   if (resize) schedulePlotResize();
+ }
+diff --git a/agent_space/reviews/review-20261117-004-plan036-source-code.md b/agent_space/reviews/review-20261117-004-plan036-source-code.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..fe611b7cb950d2f9fa94dc1b22c758acb8cc83eb
+--- /dev/null
++++ b/agent_space/reviews/review-20261117-004-plan036-source-code.md
+@@ -0,0 +1,34 @@
++# Plan036 source code 번역 검토
++
++## 기준
++
++- 계획: `../plans/plan-036.md`.
++- Source Script 53: `sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252`.
++- pseudocode 28: `sha256:9a21f200b224af97d67278b47e172d921ca3a2a15d90c30a074277f4290109b8`.
++- source code 159: `sha256:b2b283e1d77be57131b9384a9cc9122359f2bfb3c293892707460d1d0bfed6ef`.
++- 직전 tracked 작업 상태: `a552d77fe6d357047762e8e4c70c003ccad0bdc4`. 기존 Source Script·pseudocode 변경과 앞선 기록은 보존했다.
++
++## 대응
++
++| 요구 | 실제 구현 및 정적 확인 |
++| --- | --- |
++| 현재 너비 전달 | `sourcecode/application/adapter.js`의 `dispatchProjectQuery`가 현재 Frontend 상태와 공식 layout을 읽고 실제 renderer 요청 너비를 구성한다. startup·선택·명령·개별 표시 갱신의 whole-renderer 조회를 이 경로에 연결했다. Backend `readBackendProjection`은 유한 양수 너비와 기존 `dashboardGeometryInProject`를 사용한다. preview의 기존 너비 제한과 export 조회는 유지한다. |
++| 공통 조작 규격 | `sourcecode/frontend/mantine_ui.js`의 theme에 Button·ActionIcon·Input·Select·NumberInput·ColorInput과 행 정렬/줄바꿈을 모았다. 개별 xs/sm 조작 크기와 object 색상 입력의 고정 폭을 제거했다. 설명 Text 크기와 resize handle은 유지했다. |
++| 접기 | UI-local `FoldSection`에 키보드 버튼·expanded/content 연결·닫기 시 내부 포커스 복원을 구현했다. 전역·오브젝트는 열림, X/Y·네 방향 축·종류별 설정·UI 색상·디버그는 닫힘으로 시작한다. 내용은 유지하여 일반 재렌더의 입력/개폐 상태를 보존한다. |
++| 공통 프레임 | `sourcecode/frontend/renderer.js`의 `renderDashboardFrame(host, layout, visibleSlots, geometry)`를 actual render·style·zoom과 UI `LayoutPreview`가 함께 호출한다. grid 반경 0, 슬롯 반경·span·간격·여백·border-box가 한 구현에 있다. preview 선택/포커스 표시는 장식 영역에 있고 좁은 외부 영역은 가로 스크롤한다. |
++| 빈 행·열 입력 | UI-local 편집값으로 빈 문자열을 유지한다. 빈 입력은 command를 보내지 않고 blur에서 공식 layout을 다시 읽어 편집값을 정리한다. NumberInput의 blur 자동 clamp를 끄고 기존 유효 숫자 command 경로에서 범위를 처리한다. blur 자체는 selection을 지우지 않는다. |
++| 이동 선택 | `sourcecode/backend/project_efsm.js`는 move의 selectedIndexHint를 제거하고 실제 commit 전후 chart와 검증된 from/to에서 전체 순번 대응을 만든다. 기존 `buildFrontendReconciliationInput`이 해당 chart의 이전 선택에 한 번 적용한다. 다른 command의 hint와 삭제 대응은 유지한다. |
++| 제목 표시 | 같은 `graphs.readData` 결과의 소유 chart 제목과 기존 legendName 또는 x · y 식별을 함께 표시한다. 빈 제목은 기존 식별을 사용한다. 제목 줄바꿈과 별도 식별 부분, 전체 접근성 이름을 제공하고 index·object·trace·저장 필드는 유지한다. |
++
++## 논리·목적·중복 점검
++
++- 실제 render는 기존 graph/image 자원을 먼저 정리한 다음 공통 틀을 갱신한다. graph record의 frame/plot 관계와 generation·현재 연결 검사, 비동기 완료 정리는 유지했다. 내용 wrapper와 장식 wrapper의 선택자도 함께 갱신했다.
++- 공통 프레임은 전달된 기하와 host 내부 DOM만 사용한다. preview listener/틀 정리는 해당 preview에 한정되고 Plotly·decode·actual generation을 호출하지 않는다.
++- domain 기하 계산은 Backend, 실제 너비 구성은 Application, 이동 순번 대응은 commit 결과, 접기·편집·preview 선택은 UI-local 책임으로 연결했다. 초기 system 경로는 기존 startup의 중앙 조회로 연결되어 별도 변경이 필요하지 않았다.
++- target/current export의 래스터·캡션·자원 처리 절차와 프로젝트 저장 형식은 변경하지 않았다.
++
++## 확인 범위
++
++- 변경된 다섯 JS 파일의 `node --check`, 실제 전체 diff/호출 관계/선택자 검토, native patch reverse check·공백·hash·메타데이터·보호 경로 확인을 수행했다.
++- 테스트·앱·브라우저·빌드·PlusCal 변환·TLC·checker main은 실행하지 않았다. 실제 UI 배치·포커스·입력 및 자원 동작의 실행 확인은 남아 있다.
++- 기존 문서와 Source Script·pseudocode·verification·dist·정책을 보존했다. 각 계층의 stale 상태와 Source Script의 open 상태를 유지했다.
+diff --git a/agent_space/patches/20261117-006.md b/agent_space/patches/20261117-006.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..b2e2c7f3049c6190a530b4ec3af94acc7c8f8d00
+--- /dev/null
++++ b/agent_space/patches/20261117-006.md
+@@ -0,0 +1,18 @@
++# Plan036 source code 번역
++
++## 목적과 선택
++
++- Source Script 53 → pseudocode 28의 UI 수정을 source code에 반영했다.
++- Backend 기하와 Application의 현재 너비 전달을 사용하고 actual/preview의 grid·슬롯 생성은 하나의 host별 프레임으로 모았다. Plotly·이미지 자원은 기존 renderer가 소유한다.
++- theme/행 규칙, 독립 접기 상태, 빈 행·열 blur 복원, commit 순번 대응, 소유 chart 제목 표시를 기존 경로에 연결했다.
++- 별도 preview grid, UI 이동 순번 계산, 제목 저장 필드 추가를 피하고 기존 계산·조회·참조 보정 절차를 재사용했다.
++
++## 실제 변경 기록
++
++- HEAD: `a310ef4757c4ef5c756aaa4dbdad835dbfc4a5fc`.
++- 직전 tracked 작업 상태 native snapshot: `a552d77fe6d357047762e8e4c70c003ccad0bdc4`.
++- 이 snapshot과의 실제 Git diff에 source code 5개·메타데이터·신규 검토 문서와 이 설명을 포함한다. 기존 Source Script·pseudocode·004/005 기록은 유지한다.
++- source code 159: `sha256:b2b283e1d77be57131b9384a9cc9122359f2bfb3c293892707460d1d0bfed6ef`.
++- 검토: `../reviews/review-20261117-004-plan036-source-code.md`.
++- 구문·전체 diff·호출/선택자·hash·메타데이터·변경 범위를 정적으로 확인했다. 실행 검증은 남아 있고 stale/open 상태를 유지한다.
++- 테스트·앱·브라우저·빌드·checker main·commit/push는 실행하지 않았다.

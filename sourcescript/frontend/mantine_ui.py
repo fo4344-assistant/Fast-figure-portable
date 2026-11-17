@@ -8,6 +8,7 @@ Python 문법으로 작성한 구현 명세다.
 from math import isnan
 from sourcescript.application.public_api import FastFigureApi
 from sourcescript.application.adapter import appFSM, dispatchInterfaceEvent, runLifecycleTask as runApplicationLifecycleTask
+from sourcescript.frontend.renderer import renderDashboardFrame
 
 
 
@@ -21,7 +22,9 @@ UI_LOCAL_STATE = {'asset collision': 'Modal이 열려 있는 동안의 collision
  'caption editor target': 'global 또는 선택 slot인 자막 편집 대상.',
  'sidebar geometry': '현재 session의 navbar width/collapsed/drag state',
  'pointer drag': 'label/overlay resize 같은 pointer interaction의 component-local state',
- 'settings overlay height': 'opened settings overlay lifetime 동안만 유지되는 component-local height projection'}
+ 'settings overlay height': 'opened settings overlay lifetime 동안만 유지되는 component-local height projection',
+ 'folding': '같은 화면이 mount된 동안 유지하는 접기 그룹별 열림 상태',
+ 'layout dimension edit': '레이아웃 Modal의 행·열 입력별 편집 중 문자열 또는 숫자'}
 
 
 
@@ -107,8 +110,8 @@ def readAssetRowDisplay(node):
     return display
 
 
-def changeLayoutGridDimension(dimension, value):
-    outcome = "layout.readState 딕셔너리 또는 False."
+def changeLayoutGridDimension(dimension, value, editingFinished=False):
+    outcome = "layout.readState 딕셔너리, False 또는 편집 중 빈 값의 None."
     current = "공식 layout 조회 결과 딕셔너리."
     """
     Args:
@@ -118,26 +121,35 @@ def changeLayoutGridDimension(dimension, value):
     - value:
       편집 중인 행 또는 열 입력. 숫자·문자열 또는 빈 입력이다.
 
+    - editingFinished:
+      Tab·포커스 이동으로 편집을 끝낸 경우 True인 논리값.
+
     Return:
     - outcome:
-      layout["readState"] 딕셔너리 또는 False.
-      공식 setGrid의 결과 또는 원래 실패
+      공식 setGrid의 결과, 빈 입력의 편집 종료 시 현재 layout 조회 결과,
+      편집 중 빈 값이면 None. 거부 False를 보존하고 원래 예외는 전파한다.
 
     변경:
-    - 성공한 GRID_LAYOUT_CHANGED의 프로젝트 layout·slots와 UI의 layout selection.
+    - 입력의 UI-local 편집값. 유효 입력의 성공한 GRID_LAYOUT_CHANGED만 프로젝트 layout·slots를 변경한다.
+    - 빈 입력 복원은 layout selection을 유지한다.
 
     처리:
-        layout 행/열 입력 이벤트의 처리 절차. dimension은 rows 또는 cols이며 그 외는 입력 오류다.
-        1. 이벤트 시점에 FastFigureApi.layout["readState"]()의 반환값을 current에 둔다.
+        dimension은 rows 또는 cols이며 그 외는 입력 오류다.
+        1. value가 None 또는 빈 문자열이면 UI-local 편집값을 빈 문자열로 둔다.
+           editingFinished가 False이면 None을 반환한다.
+           True이면 그 시점의 FastFigureApi.layout["readState"]()를 current에 둔다.
+           current의 해당 gridRows 또는 gridCols를 입력란에 표시하고 그 입력의 편집값을 정리한다.
+           current를 반환한다. 이 분기는 setGrid·선택 변경·resize를 호출하지 않는다.
+        2. 나머지 입력은 이벤트 시점에 FastFigureApi.layout["readState"]()의 반환값을 current에 둔다.
            gridRows/gridCols와 gridLimits를 이 결과에서 읽는다. companion과 fallback도 이 결과를 사용한다.
-        2. 비어 있거나 숫자로 변환할 수 없거나 non-finite인 편집 입력은 같은 read의 해당 dimension을 유지한다.
+        3. 숫자로 변환할 수 없거나 non-finite인 편집 입력은 같은 read의 해당 dimension을 유지한다.
            유효 숫자는 같은 layout 조회의 gridLimits에서 해당 gridRows 또는 gridCols 범위로 제한한다. 정수 여부 등 최종 유효성은 기존 Backend 검증이 담당한다.
-        3. rows 편집이면 새 rows와 current gridCols, cols 편집이면 current gridRows와 새 cols를 구성한다.
-        4. 이 read→입력 구성→FastFigureApi.layout["setGrid"](rows, cols)는 await/외부 callback/다른 project command 없이
+        4. rows 편집이면 새 rows와 current gridCols, cols 편집이면 current gridRows와 새 cols를 구성한다.
+        5. 이 read→입력 구성→FastFigureApi.layout["setGrid"](rows, cols)는 await/외부 callback/다른 project command 없이
            같은 동기 입력 처리에서 연속 실행한다. 별도 snapshot/session에 보관했다가 나중에 command로 보내지 않는다.
            Application dispatch와 Backend candidate 계산/검증도 이 경로에서는 동기이며 대기 중 project 변경이 개입하지 않는다.
            setGrid의 명시 전체 크기 계약과 Backend의 current-source 재확인·재계산·한 번 commit은 그대로 유지한다.
-        5. setter의 거부 False와 원래 예외를 그대로 처리하며 성공처럼 표시하거나 별도 resize/commit을 하지 않는다.
+        6. setter의 거부 False와 원래 예외를 그대로 처리하며 성공처럼 표시하거나 별도 resize/commit을 하지 않는다.
            grid shape 변경과 overlay close의 local selection clear는 기존 interaction 규칙대로 수행한다.
            outcome를 반환한다.
     """
@@ -454,6 +466,7 @@ def FastFigureApp():
     g = "선형화한 green 채널의 0..1 수치."
     b = "선형화한 blue 채널의 0..1 수치."
     luminance = "상대 휘도 수치."
+    previewFrame = "renderDashboardFrame의 미리보기 DOM 참조 결과."
     """
     Args:
     - 없음.
@@ -482,8 +495,15 @@ def FastFigureApp():
            graph paper는 paperColor, graph ink는 fontColor에서 읽는다. UI surface와 background는 각각 uiSurfaceColor와 uiBackgroundColor에서 읽는다.
            이 theme을 아래 MantineProvider 구성에 사용한다.
 
-        2. Button·ActionIcon·Input 크기와 Modal의 centered/Escape/outside-click 기본값을
-           theme에 둔다. Layout·Label·Caption·Print Modal에 공통 최대 너비를 적용한다.
+        2. Button·ActionIcon·Input·Select·NumberInput·ColorInput의 일반 조작 크기를
+           theme/default props에서 함께 정한다. 같은 역할의 입력·버튼·행 동작 아이콘은 같은 높이,
+           글꼴, padding, radius 규칙을 사용한다. 각 사용처는 이 규칙을 사용한다.
+           그래프 데이터·오브젝트·축, 레이아웃·라벨·캡션·프린트·자산 입력 행에 같은 배치 규칙을 적용한다.
+           같은 역할의 입력은 공통 폭을 사용하고 행 간격을 일치시킨다. 라벨 있는 필드의 입력 부분과
+           단독 버튼의 아래쪽을 맞춘다. 폭이 부족하면 입력과 그 라벨을 한 단위로 다음 줄에 배치한다.
+           텍스트 설명 크기와 renderer 도형·resize handle 치수는 해당 표시의 규칙을 유지한다.
+           Modal의 centered/Escape/outside-click 기본값을 theme에 둔다.
+           Layout·Label·Caption·Print Modal에 공통 최대 너비를 적용한다.
            이 너비는 Mantine의 최대 size token보다 넓게 정하며 구체 CSS 표현은 source code에서 정한다.
            네 Modal의 하단 resize 입력은 각각 열린 Modal의 UI-local 높이를 갱신한다.
            README Modal에는 해당 resize 입력을 붙이지 않는다.
@@ -504,10 +524,30 @@ def FastFigureApp():
            object 추가는 addSelectedGraphObject를 호출한다.
            빈 CSV 입력은 assets.createEmptyCsv의 생성·선택 결과를 반영하고,
            이후 object 추가 입력은 같은 addSelectedGraphObject로 처리한다.
+           오브젝트 목록의 각 선택 항목은 같은 readData 결과의 chart["editor"]["title"]과
+           object를 사용한다. object["legendName"]이 비어 있지 않으면 그것을 식별 문자열로 쓰고,
+           그 외에는 object["x"], ' · ', object["y"]를 순서대로 연결한다.
+           제목이 비어 있으면 '{index+1}. {식별 문자열}', 있으면
+           '{index+1}. {제목} — {식별 문자열}'을 표시한다. 선택 값은 원래 index다.
+           제목은 줄바꿈 가능하게 표시하고 식별 문자열은 항상 읽을 수 있는 별도 부분으로 배치한다.
+           접근성 이름에는 전체 제목·식별 문자열을 제공한다.
+           제목 변경·추가·이동·프로젝트 불러오기 후에도 이번 공식 조회로 표시를 다시 구성한다.
+           chart가 없으면 빈 목록이다. 이 표시는 object·title·trace 범례·저장 필드를 변경하지 않는다.
         6. GraphLayoutEditor는 graphs.readLayout을 표시하고 updateSelectedGraphLayout을 호출한다.
            GraphPaletteActions는 graphs.readPalette를 표시하고 graphs.applyPalette를 호출한다.
            GraphFileActions는 importSelectedSlotFile·setSelectedGraphEditable와
            graphs.exportFfsx/exportPlotlyJson을 연결한다.
+           그래프 편집에는 '전역 설정'과 '오브젝트 설정' 접기 그룹을 두고 처음에는 연다.
+           전역 설정 안에 X축과 Y축 그룹을 두며, X축 안에 아래 X축·위 X축,
+           Y축 안에 왼쪽 Y축·오른쪽 Y축 그룹을 둔다. 이 여섯 축 그룹은 처음에는 닫는다.
+           네 세부 축은 각각 globalSettings.axes의 xBottom·xTop·yLeft·yRight를 편집한다.
+           오브젝트 설정 안의 '종류별 세부 설정'은 처음에는 닫고 기존 종류별 입력을 담는다.
+           object의 X/Y축 위치 입력은 오브젝트 설정에 유지한다.
+           'UI 색상'과 '디버그 로그'도 독립된 접기 그룹으로 두고 처음에는 닫는다.
+           개폐는 그룹별 UI-local 열림 상태만 변경한다. 같은 화면의 일반 재렌더에서는 유지한다.
+           각 제목을 키보드로 조작할 수 있게 하고 expanded 상태·내용 연결을 제공한다.
+           닫을 때 내부에 포커스가 있으면 그룹 제목으로 옮긴다.
+           접기 조작은 project 값·선택 object·axis 설정·debugEnabled를 변경하지 않는다.
         7. PaletteActions는 appearance.readPalette 결과를 draft로 표시하고 명시적 apply/reset에
            appearance.setPalette/resetPalette를 호출한다.
            StatusDebug는 telemetry를 표시하고 debug 클릭에 handleDebugToggle을 호출한다.
@@ -520,15 +560,28 @@ def FastFigureApp():
            편집 대상 global/slot은 열린 편집기의 UI-local 값으로 유지한다.
         9. PrintOverlay는 print.readSettings의 값을 표시하고 setSettings/save/capture를 연결한다.
            LayoutOverlay는 layout.readState의 grid/style/visibleSlots를 표시한다.
-           행·열 입력은 changeLayoutGridDimension, style은 layout.setStyle,
-           zoom/lock/reset은 layout의 해당 session API를 호출한다.
+           행·열 입력은 UI-local 편집값을 표시한다. 입력 변경은
+           changeLayoutGridDimension(dimension,value,False)에 연결한다.
+           blur에서 편집값이 비어 있으면 changeLayoutGridDimension(dimension,value,True)를 호출한다.
+           나머지 blur에서는 현재 layout을 다시 읽어 표시하고 UI-local 편집값을 정리한다.
+           빈 값 복원에서는 현재 행·열 수만 표시한다. 유효 숫자 입력은 기존 setGrid 경로를 사용한다.
+           style은 layout.setStyle, zoom/lock/reset은 layout의 해당 session API를 호출한다.
         10. LayoutOverlay에서 slot click은 해당 id의 local selection을 toggle한다.
             배경 click·grid shape 변경·overlay close는 selection을 비운다.
             slot click과 merge/split 입력은 먼저 자신의 동작을 처리하고 parent clear 전파를 소비한다.
             merge/split에는 그 시점의 선택 id 배열을 layout.mergeSlots/splitSlots에 전달한다.
-        11. preview의 실제 rendered width를 한 번 읽어 layout.readState에 전달한다.
-            같은 width에서 aspect·height·gap·margin·radius를 계산한 preview를 표시한다.
-            Modal/viewport 폭이 달라지면 다시 계산하고, 세로 resize는 Modal local 높이만 바꾼다.
+        11. 미리보기 host의 너비를 측정하여 layout.readState에 전달한다.
+            readState의 기존 preview 너비 범위·무효 입력 기본값을 유지하고 반환된
+            previewGeometry["width"]를 host 너비로 적용한다. 외부 표시 영역이 더 좁으면 가로 스크롤로 본다.
+            측정 전·표시 불가의 너비는 None으로 전달하여 기존 fallback을 사용한다.
+            반환된 gridRows/gridCols/slotStyle, visibleSlots, previewGeometry를 같은 표시 회차에
+            renderDashboardFrame에 미리보기 host와 함께 전달하고 반환값을 previewFrame에 둔다.
+            이 공통 절차가 grid와 각 슬롯 틀을 만든다. 좌표·local selection·포커스 강조를
+            그 슬롯 틀의 장식 영역에 표시하고 slot click을 10번의 동작에 연결한다.
+            미리보기의 장식 테두리·선택 표시는 슬롯 경계와 기하 치수를 유지한다.
+            host 정리 시 이 미리보기의 틀과 listener만 해제한다.
+            Modal/viewport 폭이 달라지면 다시 조회한다. 세로 resize는 Modal local 높이만 바꾼다.
+            preview 갱신은 실제 dashboard generation·Plotly instance·이미지 decode 자원을 변경하지 않는다.
         12. DashboardFileDrop이 수신 가능한 동안 dashboard의 논리적 수신 경로를 하나 유지한다.
             rerender·callback 교체 사이에도 유효한 drop은 정확히 한 import 시도로 전달한다.
             unmount 또는 수신 불가 lifecycle/target 상태가 되면 수신을 해제한다.

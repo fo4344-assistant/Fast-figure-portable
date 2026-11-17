@@ -20,12 +20,12 @@ export function installSlotClickController() {
 
 // Commands supply their call-local final projection/state; standalone refreshes
 // read current authority here. Callbacks carry intents, not writable models.
-export function renderDashboard(projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
+export function renderDashboard(projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState()) {
   return renderDashboardProjection(projection, state, dashboardFrontendActions());
 }
 
 export function startupCoreRuntime() {
-  const projection = readBackendProjection("renderer"), state = interfaceFSM.readState(),
+  const projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState(),
     actions = { ...dashboardFrontendActions(), slots: { select: setSelectedSlot, swap: swapSlots } },
     presentation = startupCoreRuntimeProjection(projection, state, actions);
   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
@@ -59,28 +59,25 @@ function dashboardFrontendActions() {
   };
 }
 
-export function syncDashboardCaption(view, projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
-  const style = projection.layout.slotStyle,
-    width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth : style.referenceWidth * state.dashboardZoomIntent / 100;
-  return syncDashboardCaptionProjection(view || projection.annotations.captions, width / style.referenceWidth);
+export function syncDashboardCaption(view, projection = dispatchProjectQuery("renderer")) {
+  return syncDashboardCaptionProjection(view || projection.annotations.captions, projection.geometry.scale);
 }
 
 export function applyReferenceGeometry(element) {
-  const style = readBackendProjection("renderer").layout.slotStyle, state = interfaceFSM.readState(),
-    width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth : style.referenceWidth * state.dashboardZoomIntent / 100;
-  return applyReferenceGeometryProjection(element, style, width);
+  return applyReferenceGeometryProjection(element, dispatchProjectQuery("renderer").geometry);
 }
 export function applySlotStyle(_fromControls = false, notify = true) {
-  applySlotStyleProjection(readBackendProjection("renderer").layout.slotStyle, interfaceFSM.readState());
+  const result = applySlotStyleProjection(dispatchProjectQuery("renderer"));
   if (notify) appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+  return result;
 }
 export function applyDashboardZoom(resize = true) {
-  return applyDashboardZoomProjection(readBackendProjection("renderer").layout, interfaceFSM.readState(), resize);
+  return applyDashboardZoomProjection(dispatchProjectQuery("renderer"), interfaceFSM.readState(), resize);
 }
 export function syncDashboardZoomDisplay() {
   const width = readDashboardRenderedWidth(), state = interfaceFSM.readState();
   if (!width) return;
-  const reference = readBackendProjection("renderer").layout.slotStyle.referenceWidth;
+  const reference = dispatchProjectQuery("renderer").layout.slotStyle.referenceWidth;
   return state.dashboardZoomLocked ? Math.max(50, Math.min(200, Math.round(width / reference * 100)))
     : Math.round(state.dashboardZoomIntent);
 }
@@ -101,10 +98,10 @@ export function dispatchSlotSelection(slotId, pendingContentType = null, directi
       });
     }
   }
-  return [state, projectResult, readBackendProjection("renderer", { frontendState: state })];
+  return [state, projectResult, dispatchProjectQuery("renderer", { frontendState: state })];
 }
 
-export function updateGraphView(projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
+export function updateGraphView(projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState()) {
   debugLog("updateGraphView", { selectedSlotId: state.selectedSlotId });
   return updateGraphViewProjection(projection, state, dashboardFrontendActions());
 }
@@ -117,7 +114,7 @@ export function applyUiPalette(palette, notify = true) {
   return result;
 }
 export function applyCurrentUiPalette(notify = true) {
-  applyUiPalette(readBackendProjection("renderer", { operation: "ui-palette" }), notify);
+  applyUiPalette(dispatchProjectQuery("renderer", { operation: "ui-palette" }), notify);
   return renderDashboard();
 }
 export function applyUiPaletteValues(values, notify = true) {
@@ -137,8 +134,16 @@ export const BACKEND_REFERENCE_EVENTS = new Set(["SELECT_SLOT", "SELECT_ASSET", 
 
 export const PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
 
-export function dispatchProjectQuery(query, payload) {
-  return readBackendProjection(query, payload);
+export function dispatchProjectQuery(query, payload = {}) {
+  const request = { ...payload };
+  if (query === "renderer" && !["slot-image", "ui-palette"].includes(request.operation)) {
+    const state = interfaceFSM.readState(),
+      layout = readBackendProjection("project-api", { operation: "layout.readState" });
+    request.frontendState = state;
+    request.width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth
+      : layout.slotStyle.referenceWidth * state.dashboardZoomIntent / 100;
+  }
+  return readBackendProjection(query, request);
 }
 
 export function dispatchInterfaceEvent(event, payload = {}) {
@@ -179,7 +184,7 @@ export function dispatchProjectCommand(event, payload = {}) {
   if (!result.committed) return [result, frontendBefore, null];
   const reconciliationInput = buildFrontendReconciliationInput(event, result, frontendBefore),
     state = interfaceFSM.reconcileProjectResult(event, reconciliationInput),
-    projection = readBackendProjection("renderer", { frontendState: state, mutationResult: result });
+    projection = dispatchProjectQuery("renderer", { frontendState: state, mutationResult: result });
   return [result, state, projection];
 }
 

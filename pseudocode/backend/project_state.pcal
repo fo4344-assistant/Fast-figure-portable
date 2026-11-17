@@ -180,7 +180,7 @@ MatchingExplicitHintFirst:
       goto ValidatePostIndex;
     end if;
   end if;
-FindOnlyThisChartsCascadeMap:
+FindOnlyThisChartsRemovalOrMoveMap:
   if HasField(hints, "graphObjectIndexMaps") then
     while i <= Len(hints.graphObjectIndexMaps) do
       if hints.graphObjectIndexMaps[i].chartId = chart.id then
@@ -796,7 +796,12 @@ PublicReadRegisteredOperation:
 RendererRead:
   if operation = "slot-image" then call BuildImageEditorRead(source,request.slotId); output := result; goto ImmutableReturn;
   elsif operation = "ui-palette" then output := DeepCopy(source.appearance.uiPalette); goto ImmutableReturn; end if;
+  width := FieldOrNoValue(request,"width");
+  Require(PositiveFinite(width));
+  call DashboardGeometryInProject(source,width,NoValue); geometry := result;
   call BuildSurfaceRead(source); output := result;
+  output.geometry := geometry;
+  \* One synchronous source read; actual width is not preview-clamped.
   goto ImmutableReturn;
 ExportRead:
   if operation = NoValue then call BuildPlainProjectRead(source); output := result; goto ImmutableReturn;

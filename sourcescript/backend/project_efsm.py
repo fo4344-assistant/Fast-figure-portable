@@ -92,6 +92,8 @@ def buildProjectMutationResult(event, payload, beforeState, afterState, retained
     n = "이전 chart의 object 개수인 0 이상의 정수."
     j = "새 object 배열의 0 기반 정수 순번."
     k = "이전 object 배열의 0 기반 정수 순번."
+    fromIndex = "반영된 이동의 이전 순번."
+    toIndex = "반영된 이동의 최종 순번."
     """
     Args:
     - event:
@@ -128,8 +130,9 @@ def buildProjectMutationResult(event, payload, beforeState, afterState, retained
            제거된 참조와 변경된 표시 입력으로 projectionEffect를 구성한다.
         3. afterState의 실제 id·경로·chart 소유 관계에서 selectionHints를 구성하고
            result["selectionHints"]에 둔다.
-           직접 graph add는 마지막 순번, move는 최종 to, setObjectValues는 같은 index를
+           직접 graph add는 마지막 순번, setObjectValues는 같은 index를
            selectedIndexHint로 둔다. delete는 명시적 None을 둔다. 해당 owning chartId를 함께 기록한다.
+           graphs.moveObject는 selectedIndexHint를 생략한다.
            palette는 index hint를 생략한다. CSV 선택은 이 hint와 별도로 유지한다.
         4. graphObjectIndexMaps를 빈 배열로 둔다. retainedOriginalIndicesByChart의 chart마다
            beforeState의 object 개수를 n에 두고 indices를 n개의 None으로 만든다.
@@ -137,10 +140,21 @@ def buildProjectMutationResult(event, payload, beforeState, afterState, retained
            실제 제거가 있고 afterState에도 남아 있는 chart만 chartId·indices 쌍으로 한 번 넣는다.
            [A,B,C]에서 첫 원소 제거는 [None,0,1], 가운데 제거는 [0,None,1]이다.
            같은 값의 object도 원래 순번으로 구별한다.
-        5. 대응표가 있으면 selectionHints["graphObjectIndexMaps"]에 넣는다.
+        5. event가 GRAPH_OBJECTS_REPLACED이고 payload["operation"]이 graphs.moveObject이면
+           반영된 payload["chartId"]로 beforeState와 afterState의 같은 소유 chart를 찾는다.
+           beforeState의 object 개수를 n, 검증된 payload["from"]과 payload["to"]를 fromIndex와 toIndex에 둔다.
+           indices를 n개 원소의 배열로 구성한다. 이전 순번 k 각각에 다음 새 순번을 넣는다.
+           - k=fromIndex이면 toIndex.
+           - fromIndex<toIndex이고 fromIndex<k<=toIndex이면 k-1.
+           - toIndex<fromIndex이고 toIndex<=k<fromIndex이면 k+1.
+           - 그 외에는 k.
+           그 chartId와 indices를 graphObjectIndexMaps에 한 번 넣는다.
+           이동한 object와 밀려난 object의 대응을 같은 배열로 제공한다.
+           object의 값이 같아도 이전 순번으로 각각 구별한다.
+        6. 대응표가 있으면 selectionHints["graphObjectIndexMaps"]에 넣는다.
            chart 삭제는 afterState의 owner 조회 부재로 선택 해제한다.
            단순 경로 이동과 image-only 참조 해제는 graph 대응표를 생략한다.
-        6. result를 중첩 필드까지 읽기 전용으로 만들어 반환한다.
+        7. result를 중첩 필드까지 읽기 전용으로 만들어 반환한다.
     """
     return result
 
@@ -229,6 +243,10 @@ class ProjectStateMachine:
                같으면 activeProject.initialize(candidateState)를 한 번 호출한다.
             6. sourceState·반영 직후 activeProject._state·retainedOriginalIndicesByChart를
                event·payload와 함께 buildProjectMutationResult에 전달하여 result에 둔다.
+               move의 payload는 graphs.buildGraphCommandCandidate가 현재 sourceState의 소유 chart에서
+               검증한 같은 chartId·from·to다. 이동 계산부터 결과 구성까지 동기적으로 처리하며
+               중간에 사용자 callback이나 다른 명령을 실행하지 않는다.
+               후보 거부·동일 위치 이동·검증 실패에서는 성공 대응표를 만들지 않는다.
                계산 도중 거부·취소된 후보는 버리고, 재시도에서는 순번 배열도 새로 계산한다.
             7. result를 반환한다. Application은 반환 결과와 현재 Frontend 참조로
                buildFrontendReconciliationInput을 호출한다.

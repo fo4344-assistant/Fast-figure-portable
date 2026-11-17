@@ -71,24 +71,50 @@ ActualRemovedRenderedReferenceFirst:
   return;
 end procedure;
 
+procedure renderDashboardFrame(host,layout,visibleSlots,geometry)
+variables frameView = [grid |-> host,slots |-> []], i = 1, slot = NoValue, refs = NoValue;
+begin
+SuppliedGridGeometry:
+  SetHostBorderBoxWidthHeight(host,geometry.width,geometry.height);
+  SetEqualFractionGridRowsColumns(host,layout.gridRows,layout.gridCols);
+  SetGridGapPaddingAndRadius(host,geometry.gap,geometry.outerMargin,0);
+  DrawOuterDecorationWithoutChangingInnerGeometry(host);
+HostScopedSlotFrames:
+  while i <= Len(visibleSlots) do
+    slot := visibleSlots[i];
+    refs := ReuseOrCreateSameIdFrameContentAndDecoration(host,slot.id);
+    PlaceFrameAtRowColumnAndSpans(refs.frame,slot.row,slot.col,slot.rowSpan,slot.colSpan);
+    SetFrameMinDimensionsAndRadius(refs.frame,0,0,geometry.radius);
+    ApplySharedSlotBorderBackgroundBoxSizingAndContentLayout(refs,layout.slotStyle.showBorders);
+    PreserveExistingContentChildren(refs.content);
+    KeepDecorationOutsideLayoutSizing(refs.decoration);
+    frameView.slots[slot.id] := refs; i := i + 1;
+  end while;
+  DetachFramesWhoseIdsAreAbsent(host,visibleSlots);
+  result := frameView;
+  \* This host's structure only. Caller owns content/listeners and resource cleanup.
+  \* No Plotly/decode/selection/session/generation/resize effects.
+  return;
+end procedure;
+
 procedure renderDashboard(projectProjection,interfaceState)
-variables width = 0, geometry = NoValue, slots = <<>>, i = 1, slot = NoValue,
-          host = NoValue, identity = NoValue, currentGeneration = 0, instance = NoValue;
+variables geometry = NoValue, slots = <<>>, i = 1, slot = NoValue, frameView = NoValue,
+          host = NoValue, frame = NoValue, identity = NoValue, currentGeneration = 0, instance = NoValue;
 begin
 OneGeneration:
   dashboardGeneration := dashboardGeneration + 1;
   currentGeneration := dashboardGeneration;
-WidthFromSuppliedState:
-  width := IF interfaceState.dashboardZoomLocked THEN interfaceState.dashboardZoomLockedWidth
-           ELSE projectProjection.layout.slotStyle.referenceWidth * interfaceState.dashboardZoomIntent / 100;
-  geometry := SuppliedSlotStyleGeometryAtWidth(projectProjection.layout,width);
-  ApplyDashboardCssGeometry(geometry);
-VisibleHosts:
-  slots := projectProjection.visibleSlots;
+ReleaseObsoleteContentBeforeFrameChanges:
+  geometry := projectProjection.geometry; slots := projectProjection.visibleSlots;
   PurgeGraphAssociationsForRemovedOrReplacedHosts(graphInstances,slots);
   DetachAndReleaseObsoleteImageSurfaces(imageSurfaces,slots);
+SharedDashboardFrame:
+  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,slots,geometry);
+  frameView := result;
+VisibleHosts:
   while i <= Len(slots) do
-    slot := slots[i]; host := EnsureSlotContainerLabelBookmarkSurface(slot,geometry);
+    slot := slots[i]; host := frameView.slots[slot.id].content;
+    frame := frameView.slots[slot.id].frame;
     if IsGraphSlotWithFigure(slot) then
       identity := [host |-> host,slotId |-> slot.id,chartId |-> slot.content.chart];
       instance := CurrentGraphInstanceForIdentity(graphInstances,identity);
@@ -112,8 +138,8 @@ VisibleHosts:
       DetachImageSurfaceThenReleaseOwnedResources(imageSurfaces,host);
       ApplyEmptySlotSurface(host,slot);
     end if;
-    ApplySelectedInteractionClass(host,slot.id = interfaceState.selectedSlotId);
-    ApplySuppliedLabelAndCaption(host,slot,projectProjection.orderedSlotLabels);
+    ApplySelectedInteractionClass(frame,slot.id = interfaceState.selectedSlotId);
+    ApplySuppliedLabelAndCaption(frameView.slots[slot.id].decoration,slot,projectProjection.orderedSlotLabels);
     i := i + 1;
   end while;
 ResizeAfterContentStyleAndGeometry:
@@ -271,11 +297,15 @@ FiveLegacyCssVariables:
 end procedure;
 
 procedure applySlotStyle(projectProjection,notify)
+variables styleView = NoValue;
 begin
-StyleProjectionNotAuthority:
-  ApplyDashboardCaptionCssFromSuppliedSlotStyle(projectProjection.layout.slotStyle);
+SharedStyleApplication:
+  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
+                           projectProjection.visibleSlots,projectProjection.geometry);
+  styleView := result;
+  ApplyDashboardCaptionCssFromSuppliedStyleAndGeometry(projectProjection.layout.slotStyle,projectProjection.geometry);
   if notify then ExistingLayoutModelToUiNotification(); end if;
-  result := CurrentDashboardStyleProjection();
+  result := styleView;
   return;
 end procedure;
 

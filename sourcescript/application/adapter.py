@@ -93,6 +93,10 @@ appFSM = ApplicationInterface()
 
 def dispatchProjectQuery(query, payload=None):
     projection = "Backend 조회 결과."
+    request = "이번 호출용 요청 딕셔너리."
+    frontendState = "interfaceFSM.readState의 이번 읽기 결과."
+    layout = "layout.readState의 이번 읽기 결과."
+    width = "실제 대시보드 표시 너비. 단위: px."
     """
     Args:
     - query:
@@ -109,8 +113,18 @@ def dispatchProjectQuery(query, payload=None):
     - 없음.
 
     처리:
-        1. query와 payload를 readBackendProjection에 전달한다.
-        2. 반환된 projection을 이번 호출의 결과로 전달한다. 조회 실패는 호출자에게 전파한다.
+        1. payload의 필드를 이번 호출의 request에 복사한다. None이면 빈 딕셔너리다.
+        2. query가 renderer의 전면 투영 요청이면 interfaceFSM.readState()를 frontendState에 둔다.
+           readBackendProjection("project-api", {operation: BACKEND_QUERY_KINDS["project-api"]["layout.readState"]})를
+           layout에 둔다. 잠금 상태이면 frontendState["dashboardZoomLockedWidth"]를 width에 둔다.
+           그 외에는 layout["slotStyle"]["referenceWidth"] * frontendState["dashboardZoomIntent"] / 100을 width에 둔다.
+           request["frontendState"]와 request["width"]에 이 두 읽기·계산 결과를 넣는다.
+           두 조회와 반환 사이에 비동기 대기·사용자 callback·다른 명령을 실행하지 않는다.
+           잠금 기준 너비는 referenceWidth·host resize에도 유지되고 unlock/reset 이후에는
+           최신 referenceWidth와 현재 배율을 사용한다. 이 계산값은 이번 요청에서만 사용한다.
+        3. query와 request를 readBackendProjection에 전달하여 projection에 둔다.
+           slot-image·ui-palette 등의 부분 renderer 요청은 기존 요청 필드만 전달한다.
+        4. projection을 이번 호출의 결과로 전달한다. 조회 실패는 호출자에게 전파한다.
     """
     return projection
 
@@ -182,7 +196,7 @@ def dispatchSlotSelection(slotId, pendingContentType=None, direction="ui-to-fsm"
            dispatchProjectCommand("SLOT_TYPE_CHANGED", {slotId, contentType})를 한 번 호출한다.
            그 결과를 projectResult에 둔다. 그 외 projectResult에는 None을 둔다.
         6. 최종 interfaceFSM.readState()를 interfaceState에 두고 이를 요청에 담아
-           renderer 조회를 수행하여 rendererProjection에 둔다.
+           dispatchProjectQuery("renderer", 요청)를 호출하여 rendererProjection에 둔다.
         7. 세 결과를 반환한다. 처리 중 예외는 호출자에게 전파한다.
     """
     return interfaceState, projectResult, rendererProjection
@@ -217,8 +231,8 @@ def dispatchProjectCommand(event, payload):
         4. buildFrontendReconciliationInput(event, result, frontendBefore)를 호출한다.
            결과를 interfaceFSM.reconcileProjectResult에 전달하여 interfaceState에 둔다.
            object index mapping과 selection hint는 이 조회에서 현재 대상과 대조한다.
-        5. interfaceState를 포함한 renderer 요청으로 readBackendProjection을 호출하여
-           rendererProjection에 둔다.
+        5. interfaceState를 포함한 renderer 요청으로 dispatchProjectQuery("renderer", 요청)를 호출하여
+           rendererProjection에 둔다. 이동 뒤 index 대응과 최종 선택은 4번에서 확정한 값을 사용한다.
         6. 튜플을 반환한다. 명령 실패와 반영 후 조회 실패는 원래 예외로 전달한다.
            이미 반영한 명령의 상태는 반영 후 표시 실패 시에도 유지한다.
     """

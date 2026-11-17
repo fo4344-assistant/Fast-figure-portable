@@ -251,6 +251,7 @@ def readBackendProjection(kind, request):
     projection = "등록된 조회의 읽기 전용 결과."
     project = "ProjectObject 인스턴스."
     state = "ProjectObject._state 원형의 딕셔너리."
+    geometry = "dashboardGeometryResult 원형의 읽기 전용 딕셔너리."
     """
     Args:
     - kind:
@@ -321,6 +322,13 @@ def readBackendProjection(kind, request):
         36. 위 export operation의 파일 이름은 다음과 같이 계산한다: request.stamp는 Application이 이번 호출에 만든 UTC ISO timestamp의 colon/dot을 hyphen으로 바꾼 값이며 이번 다운로드 작업의 값이다. project는 assets_files.projectFileStem의 project-name sanitize + stamp + .ffpx; slot은 fast-figure-slot-{slotId}-{stamp}.ffsx; Plotly는 plotly-figure-{slotId}-{stamp}.json; original asset은 asset.name을 그대로 사용한다.
         37. export 결과에는 한 download 작업의 copied entries/bytes/name/MIME만 반환; resource URL 할당이나 다운로드는 하지 않으며 원본을 mutation input으로 쓰지 않음
         38. kind=renderer의 전면 투영 요청이면: default renderer request는 final frontendState와 optional mutationResult를 받는다. current layout/grid/style, appearance, annotations, visible slots와 slot-local content/caption/settings를 detached copy로 구성한다. label 번호/표시는 layout_annotations.orderedSlotLabels(current project)로 계산하며 captionReferenceStyle은 backend/settings.json의 backend.defaults.captionReferenceStyle에서 복사한다. 각 visible graph slot의 owning chart, 실제 project object의 참조 CSV/columns와 graphs.chartFigure(chart, project) 계산 결과를 포함한다. project는 이번 query가 읽는 같은 current authority이며 chart copy와 CSV가 같은 read 작업에 속한다. non-editable imported conversion chartFigure는 imported representation을 보존하며 conversion view로 project CSV를 resolve하지 않는다. image slot은 images.readEditor와 같은 copied bytes/name/display URL 의미를 사용한다. slot/chart/CSV resolve와 graph projection 계산은 Backend에서 끝내며 renderer가 Backend를 다시 조회하지 않는다. Backend authority에 없는 default/compatibility 값은 copy에만 적용한다. final Frontend state는 ProjectObject에 합치지 않는다.
+           전면 renderer 요청의 request["width"]는 Application이 전달한 유한 양수 px다.
+           무효 너비는 조회 오류로 전파한다. 같은 동기 조회에서
+           layout_annotations.dashboardGeometry(request["width"], None)를 geometry에 둔다.
+           이번 query가 처음 읽은 project와 같은 activeProject를 사용하는 동안 호출하며
+           project 교체·명령·callback·비동기 대기를 끼우지 않는다.
+           projection["geometry"]에 geometry를 넣는다. 실제 renderer 너비에는 preview의 너비 제한을 적용하지 않는다.
+           같은 geometry의 scale·margin·gap·radius 계산은 dashboardGeometry에서 수행한다.
         39. kind=renderer의 slot-image 요청이면: explicit slotId에 대한 images.readEditor와 동일한 Backend 계산; UI selection을 query 내부에서 읽지 않음
         40. kind=renderer의 ui-palette 요청이면: appearance.readPalette와 동일한 palette copy; CSS variable 적용은 Frontend가 수행
         41. renderer의 투영 결과는 한 render 작업에만 소비; 다음 작업은 current authority에서 재조회; mutation 입력이나 장기 project mirror로 재사용 금지
@@ -463,7 +471,7 @@ def buildFrontendReconciliationInput(event, mutationResult, frontendReferences):
            original index가 none/non-integer/out-of-range이거나 mapping 값이 none이면 clear한다. 인접 object를 새로 선택하지 않는다.
            mapping은 original index별 한 entry이며 0도 유효한 post-index다. 남은 숫자 index의 단순 범위 검사로 mapping을 대체하지 않는다.
            matching hint/map이 없을 때만 기존 integer index를 유지한다. 다른 chart의 hint/map은 현재 선택에 적용하지 않는다.
-           resetInterfaceSelection/clearGraphSelection이 최우선, 그 다음 matching explicit index hint, 그 다음 cascade map 순서다.
+           resetInterfaceSelection/clearGraphSelection이 최우선, 그 다음 matching explicit index hint, 그 다음 삭제·이동의 graphObjectIndexMaps 순서다.
            image workspace/non-editable/no chart/none/out-of-range/non-integer 후보면 clear하고, 유효한 후보면 그 index를 반환한다.
            hint는 command의 계산 결과로서 post-commit object 배열에 대해 검증한다. graph object를 ensure/normalize하지 않는다.
            이 index-only 갱신은 asset selection/path를 변경하지 않는다. 별도 SELECT_GRAPH_OBJECT 전이나 사후 hint 적용은 없다.
