@@ -318,6 +318,8 @@ begin
 WholePaletteMissingDefaultsNotCurrentMerge:
   call dispatchProjectCommand("APPEARANCE_CHANGED",[palette |-> values]); tuple := result;
   if ~tuple[1].committed then result := FALSE; return; end if;
+  call applyDashboardProjectionInvalidation("APPEARANCE_CHANGED",tuple[1],tuple[2],tuple[3]);
+  call InterfaceStateMachine_notify("ui","UI_PALETTE_CHANGED",[]);
   call dispatchProjectQuery("project-api",[operation |-> "appearance.readPalette"]);
   return;
 end procedure;

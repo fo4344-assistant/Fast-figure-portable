@@ -293,11 +293,10 @@ def resolveProjectAssetImportPlan(model, choice, reservedPaths, state=None):
 
 def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=None, state=None):
     candidate = "프로젝트 상태 딕셔너리. 원형: /backend/project_state/ProjectObject._state"
-    reservedPaths = "canonical 경로 문자열의 집합."
-    model = "충돌 모델 딕셔너리."
-    plan = "최종 경로·교체 id 딕셔너리 또는 None."
+    reservedPaths = "이번 작업에서 사용한 canonical 경로 문자열의 집합."
+    plan = "최종 경로 path와 교체 대상 replaceId를 가진 딕셔너리."
+    target = "프로젝트 VFS의 해당 경로 조회 결과 또는 None."
     file = "name·MIME·bytes를 가진 입력 파일 자료."
-    choice = "해당 파일의 최종 rename/replace 선택 또는 취소의 None."
     event = "DATA_OBJECT 또는 IMAGE_OBJECT의 생성·교체 명령 이름."
     input = "해당 명령의 새 asset 입력 딕셔너리."
     rows = "CSV 행 배열의 배열."
@@ -313,7 +312,8 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
       대상 VFS 디렉터리 경로 문자열.
 
     - planImport:
-      files와 같은 순서의 최종 선택 딕셔너리 배열. 원소는 mode·path·replaceId를 담는다.
+      files와 같은 순서의 확정된 경로 딕셔너리 배열. 각 원소는 canonical path와 replaceId를 담는다.
+      replaceId는 새 파일이면 None, 교체이면 해당 자산의 양의 정수 id다.
 
     - targetSlotId:
       연결할 visible Slot의 정수 id 또는 None.
@@ -332,19 +332,22 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
     처리:
         state가 None이면 activeProject._state를 사용한다. 그 상태를 분리 복사한 candidate에서
         다음 파일·충돌·id·참조 계산을 수행한다.
-        1. ASSETS_IMPORTED command 내부에서만 호출한다. planImport는 Application이 이미 수집한 명시적 collision choice/plan 값이며
-           입력에는 사용자의 최종 선택 값을 담는다. Modal과 task 호출은 Application이 담당한다.
-           directory/target slot을 그 candidate에서 resolve하고 모든 file parse/collision plan/id/path/reference를
-           candidate 안에서 계산한다. targetSlotId가 있으면 그 slot 연결까지 같은 candidate에 포함한다.
-           이미 선택한 replace id/path와 current kind/target이 일치해야 한다. 대기 중 바뀐 대상에 choice를 옮겨 적용하지 않는다.
-           parse/collision/reference/whole-project validation 실패는 candidate rejection으로 끝나며 commit을 수행하지 않는다.
+        1. ASSETS_IMPORTED command 내부에서 호출한다. Application은 assets.resolveImportPlan 조회에서
+           확정한 path·replaceId를 planImport에 넣고, 취소이면 명령을 호출하기 전에 None을 반환한다.
+           files와 planImport가 비어 있거나 개수가 다르면 거부한다.
+           directory의 canonical 경로와 현재 후보의 디렉터리 존재 여부를 검사한다.
+           targetSlotId가 있으면 같은 후보에서 visible Slot을 확인한다. 없으면 거부한다.
+           파일 파싱·경로·참조·전체 후보 검증 실패는 후보 거부로 전달하고 반영을 수행하지 않는다.
 
-        2. reservedPaths를 빈 집합으로 둔다. files를 입력 순서로 처리한다.
-           projectAssetImportCollisionModel(file,directory,reservedPaths,candidate)를 model에 둔다.
-           planImport의 같은 순번 원소에서 mode를 choice에 둔다. 그 원소의 path·replaceId를
-           model에 적용하여 선택 당시 대상을 유지한다. 선택 개수·형식 불일치는 거부한다.
-           resolveProjectAssetImportPlan(model,choice,reservedPaths,candidate)를
-           plan에 둔다. 선택 취소 또는 replace id/path 불일치이면 None을 반환한다.
+        2. reservedPaths를 빈 집합으로 둔다. files를 입력 순서로 처리하며
+           planImport의 같은 순번 원소를 plan에 둔다. 각 plan의 path 문자열과
+           replaceId의 None 또는 양의 정수 형식을 검사한다.
+           path가 canonical 형식이고 부모가 directory와 같으며 reservedPaths에 없어야 한다.
+           파일 종류는 slotFileKind(file)로 확인하여 data 또는 image를 허용한다.
+           projectVfsResolve(plan["path"],candidate)를 target에 둔다.
+           replaceId가 None이면 target이 없어야 한다.
+           교체이면 target이 존재하고 종류가 입력 파일의 CSV 또는 image 종류와 같으며
+           자산 id가 plan["replaceId"]와 같아야 한다. 불일치이면 거부한다.
            CSV이면 parseProjectDataAsset에 file의 name·bytes를 전달하여 rows에 둔다.
            plan이 교체이면 종류별 REPLACED를, 생성이면 CREATED를 event에 둔다.
            plan의 경로·교체 id와 파일의 name·MIME·bytes, CSV의 rows로 input을 구성하고

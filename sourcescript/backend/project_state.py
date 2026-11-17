@@ -328,6 +328,10 @@ def readBackendProjection(kind, request):
            이번 query가 처음 읽은 project와 같은 activeProject를 사용하는 동안 호출하며
            project 교체·명령·callback·비동기 대기를 끼우지 않는다.
            projection["geometry"]에 geometry를 넣는다. 실제 renderer 너비에는 preview의 너비 제한을 적용하지 않는다.
+           projection["appearance"]["uiPalette"]는 이번 프로젝트의 팔레트 복사다.
+           projection["visibleSlots"]의 각 graph slot의 figure는 위 graphs.chartFigure 계산 결과다.
+           Application은 전체 조회 결과를 renderer.applyDashboardProjectionInvalidation의
+           projectProjection 인자로 전달하여 팔레트 CSS와 Plotly 표시에 사용한다.
            같은 geometry의 scale·margin·gap·radius 계산은 dashboardGeometry에서 수행한다.
         39. kind=renderer의 slot-image 요청이면: explicit slotId에 대한 images.readEditor와 동일한 Backend 계산; UI selection을 query 내부에서 읽지 않음
         40. kind=renderer의 ui-palette 요청이면: appearance.readPalette와 동일한 palette copy; CSS variable 적용은 Frontend가 수행

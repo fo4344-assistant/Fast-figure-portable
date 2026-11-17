@@ -793,6 +793,9 @@ def setCaptionsApiSettings(values):
 
 def setAppearanceApiPalette(values):
     palette = "appearance.readPalette 딕셔너리 또는 False."
+    result = "ProjectMutationResult 딕셔너리."
+    interfaceState = "명령 뒤 참조 보정을 마친 Frontend 상태."
+    rendererInput = "같은 표시 작업의 전체 renderer 조회 결과 또는 None."
     """
     Args:
     - values:
@@ -810,8 +813,12 @@ def setAppearanceApiPalette(values):
            Backend project_state.ProjectObject.initialize의 palette 정규화 처리의 전체 palette 정규화/commit 뒤 fresh palette copy를 반환한다.
            missing field를 current palette와 merge하지 않는다. 미commit False, throw/rejection 전파; 성공 read로 위장하지 않는다.
            dispatchProjectCommand('APPEARANCE_CHANGED', {'palette': values})의 값을 (result, interfaceState, rendererInput)에 대입한다.
-           not result["committed"]인 경우:
-           False를 반환한다.
+           result["committed"]가 False이면 False를 반환한다.
+           반영되었으면 renderer.applyDashboardProjectionInvalidation에 APPEARANCE_CHANGED,
+           result, interfaceState, rendererInput을 순서대로 전달한다.
+           rendererInput은 dispatchProjectCommand 내부의 전체 renderer 조회 결과다.
+           그 안의 appearance.uiPalette와 visibleSlots의 figure를 CSS·Plotly 표시에 사용한다.
+           interfaceFSM.notify("ui", "UI_PALETTE_CHANGED")로 한 번 알린다.
            dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['appearance.readPalette']})를 반환한다.
     """
     return palette

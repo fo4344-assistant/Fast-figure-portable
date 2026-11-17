@@ -251,17 +251,12 @@ CommandContextAndCurrentTarget:
   candidate := DeepCopy(source);
 NoBackendUiCallback:
   Require(CompletedCollisionChoicesNotCallback(planImport));
+  Require(Len(files) > 0 /\ Len(files) = Len(planImport));
 FileOrderWithinOneCandidate:
   while i <= Len(files) do
     call slotFileKind(files[i]); kind := result;
     Require(kind \in {"data","image"});
-    if kind = "data" then
-      call parseProjectDataAsset(files[i].name,CopyBytes(files[i])); parsed := result;
-    else parsed := CopyImageBytesAndMetadata(files[i]); end if;
-    \* Parse may await in implementation. EFSM rechecks authority and recalculates
-    \* whole candidate on revision change; stale completed choices cannot retarget.
-    \* UI choosePlan returns the Source core final {path,replaceId} plan.
-    \* Do not require invented proposal/decision fields from that producer.
+    \* Application supplies the completed {path,replaceId} result.
     plan := planImport[i];
     Require(ValidFinalImportPlanShape(plan));
     call normalizeProjectPath(plan.path,FALSE); canonicalPath := result;
@@ -275,6 +270,10 @@ FileOrderWithinOneCandidate:
       Require(current # NoValue /\ AssetKindEqualsFileKind(current,kind));
       Require(current.id = plan.replaceId);
     else Require(current = NoValue /\ plan.path \notin reserved); end if;
+    if kind = "data" then
+      call parseProjectDataAsset(files[i].name,CopyBytes(files[i])); parsed := result;
+    else parsed := CopyImageBytesAndMetadata(files[i]); end if;
+    \* EFSM rechecks current authority before the single whole-candidate commit.
     call BuildAssetMetadata(AssetSequenceKind(kind),plan.path,FileMime(files[i]),CopyBytes(files[i])); asset := result;
     if kind = "data" then
       asset.rows := parsed;

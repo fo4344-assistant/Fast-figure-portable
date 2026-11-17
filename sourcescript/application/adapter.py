@@ -233,6 +233,10 @@ def dispatchProjectCommand(event, payload):
            object index mapping과 selection hint는 이 조회에서 현재 대상과 대조한다.
         5. interfaceState를 포함한 renderer 요청으로 dispatchProjectQuery("renderer", 요청)를 호출하여
            rendererProjection에 둔다. 이동 뒤 index 대응과 최종 선택은 4번에서 확정한 값을 사용한다.
+           APPEARANCE_CHANGED의 호출자는 튜플의 rendererProjection 전체를
+           renderer.applyDashboardProjectionInvalidation의 네 번째 인자로 전달한다.
+           renderer는 그 결과의 appearance.uiPalette와 visibleSlots별 figure를 사용한다.
+           같은 명령의 표시 입력을 다시 조회하지 않는다.
         6. 튜플을 반환한다. 명령 실패와 반영 후 조회 실패는 원래 예외로 전달한다.
            이미 반영한 명령의 상태는 반영 후 표시 실패 시에도 유지한다.
     """

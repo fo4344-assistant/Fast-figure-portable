@@ -1,0 +1,382 @@
+diff --git a/development-versions.json b/development-versions.json
+index 24fdf8aac82ffe87cc36c088da2a030e6290d0e9..20541b8ee5a968da6a95496823d20281ea5292ca 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. pseudocode (implemented in PlusCal) is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating source code implementation or current status.",
+   "layers": {
+     "source-script": {
+-      "revision": 53,
++      "revision": 54,
+       "status": "stale",
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+-      "fingerprint": "sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252",
++      "fingerprint": "sha256:a5e9dcb5d07b44ca7a8b91153e3361876b51951e74f476b746f6abbb7c4e6007",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+@@ -56,22 +56,22 @@
+       ],
+       "fingerprint": "sha256:54239f1e01f62bf4843579704e0767ee4dd2781a4099699f8f87e10430bae0d0",
+       "derived_from": {
+-        "source-script": "sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252",
+-        "pseudocode": "sha256:e13679a938eebdc592d6dbda032e8091a0536bf480d733dfdde5c14fa1a66dce",
++        "source-script": "sha256:a5e9dcb5d07b44ca7a8b91153e3361876b51951e74f476b746f6abbb7c4e6007",
++        "pseudocode": "sha256:f8a8bd6e0424fec8b87f7b3a2fe6378bed29ff83dd7fa9d3bf5e3ca40cf1e005",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+       "validation_review": null,
+-      "translation_review": "agent_space/reviews/review-20261117-007-plan038-source-code.md"
++      "translation_review": "agent_space/reviews/review-20261117-008-plan039-contracts.md"
+     },
+     "pseudocode": {
+-      "revision": 30,
++      "revision": 31,
+       "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:e13679a938eebdc592d6dbda032e8091a0536bf480d733dfdde5c14fa1a66dce",
++      "fingerprint": "sha256:f8a8bd6e0424fec8b87f7b3a2fe6378bed29ff83dd7fa9d3bf5e3ca40cf1e005",
+       "derived_from": {
+-        "source-script": "sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252"
++        "source-script": "sha256:a5e9dcb5d07b44ca7a8b91153e3361876b51951e74f476b746f6abbb7c4e6007"
+       },
+-      "translation_review": "agent_space/reviews/review-20261117-006-plan037-modules.md"
++      "translation_review": "agent_space/reviews/review-20261117-008-plan039-contracts.md"
+     }
+   }
+ }
+diff --git a/pseudocode/application/public_api/layout_annotations.pcal b/pseudocode/application/public_api/layout_annotations.pcal
+index 9645a8dc6471271c904cb19d1bdd6b6f766ee829..178ad0a260bd6cac6f7fe5a0775f0a85a968096c 100644
+--- a/pseudocode/application/public_api/layout_annotations.pcal
++++ b/pseudocode/application/public_api/layout_annotations.pcal
+@@ -318,6 +318,8 @@ begin
+ WholePaletteMissingDefaultsNotCurrentMerge:
+   call dispatchProjectCommand("APPEARANCE_CHANGED",[palette |-> values]); tuple := result;
+   if ~tuple[1].committed then result := FALSE; return; end if;
++  call applyDashboardProjectionInvalidation("APPEARANCE_CHANGED",tuple[1],tuple[2],tuple[3]);
++  call InterfaceStateMachine_notify("ui","UI_PALETTE_CHANGED",[]);
+   call dispatchProjectQuery("project-api",[operation |-> "appearance.readPalette"]);
+   return;
+ end procedure;
+diff --git a/pseudocode/backend/assets_files.pcal b/pseudocode/backend/assets_files.pcal
+index e6250d90e6ceb5fde430cec2b00a85e67cc0af57..bd7f70dc6e36a645cf3b3cb4c4e5cfacc2b8edc9 100644
+--- a/pseudocode/backend/assets_files.pcal
++++ b/pseudocode/backend/assets_files.pcal
+@@ -251,17 +251,12 @@ CommandContextAndCurrentTarget:
+   candidate := DeepCopy(source);
+ NoBackendUiCallback:
+   Require(CompletedCollisionChoicesNotCallback(planImport));
++  Require(Len(files) > 0 /\ Len(files) = Len(planImport));
+ FileOrderWithinOneCandidate:
+   while i <= Len(files) do
+     call slotFileKind(files[i]); kind := result;
+     Require(kind \in {"data","image"});
+-    if kind = "data" then
+-      call parseProjectDataAsset(files[i].name,CopyBytes(files[i])); parsed := result;
+-    else parsed := CopyImageBytesAndMetadata(files[i]); end if;
+-    \* Parse may await in implementation. EFSM rechecks authority and recalculates
+-    \* whole candidate on revision change; stale completed choices cannot retarget.
+-    \* UI choosePlan returns the Source core final {path,replaceId} plan.
+-    \* Do not require invented proposal/decision fields from that producer.
++    \* Application supplies the completed {path,replaceId} result.
+     plan := planImport[i];
+     Require(ValidFinalImportPlanShape(plan));
+     call normalizeProjectPath(plan.path,FALSE); canonicalPath := result;
+@@ -275,6 +270,10 @@ FileOrderWithinOneCandidate:
+       Require(current # NoValue /\ AssetKindEqualsFileKind(current,kind));
+       Require(current.id = plan.replaceId);
+     else Require(current = NoValue /\ plan.path \notin reserved); end if;
++    if kind = "data" then
++      call parseProjectDataAsset(files[i].name,CopyBytes(files[i])); parsed := result;
++    else parsed := CopyImageBytesAndMetadata(files[i]); end if;
++    \* EFSM rechecks current authority before the single whole-candidate commit.
+     call BuildAssetMetadata(AssetSequenceKind(kind),plan.path,FileMime(files[i]),CopyBytes(files[i])); asset := result;
+     if kind = "data" then
+       asset.rows := parsed;
+diff --git a/pseudocode/frontend/renderer.pcal b/pseudocode/frontend/renderer.pcal
+index f4ab64163c7bba76fd22263b6aaf5fd601bedb83..de77848f3f050cb01bad7bec2aaa3d90248a8dcb 100644
+--- a/pseudocode/frontend/renderer.pcal
++++ b/pseudocode/frontend/renderer.pcal
+@@ -56,7 +56,7 @@ StatusNotTaskOutcome:
+ end procedure;
+ 
+ procedure applyDashboardProjectionInvalidation(event,mutationResult,interfaceState,projectProjection)
+-variables effect = "NONE";
++variables effect = "NONE", i = 1, slot = NoValue;
+ begin
+ ActualRemovedRenderedReferenceFirst:
+   if mutationResult.projectionEffect.referencesRemoved then effect := "FULL_DASHBOARD";
+@@ -66,7 +66,19 @@ ActualRemovedRenderedReferenceFirst:
+         /\ ExistingHostIdentitiesMatchSuppliedSlots(projectProjection) then effect := "TARGETED_PROJECTION";
+   else effect := "FULL_DASHBOARD"; end if;
+   if effect = "FULL_DASHBOARD" then call renderDashboard(projectProjection,interfaceState);
+-  elsif effect = "TARGETED_PROJECTION" then ApplySuppliedNarrowProjection(event,projectProjection,interfaceState); end if;
++  elsif effect = "TARGETED_PROJECTION" then
++    if event = "APPEARANCE_CHANGED" then
++      call applyUiPalette(projectProjection.appearance.uiPalette,FALSE);
++      while i <= Len(projectProjection.visibleSlots) do
++        slot := projectProjection.visibleSlots[i];
++        if FieldOrNoValue(slot,"figure") # NoValue then
++          \* Existing Plotly presentation retains generation/host/chart checks and failure handling.
++          PresentSuppliedGraphFigureOnCurrentHost(slot,interfaceState,projectProjection.geometry.scale);
++        end if;
++        i := i + 1;
++      end while;
++    else ApplySuppliedNarrowProjection(event,projectProjection,interfaceState); end if;
++  end if;
+   result := effect;
+   return;
+ end procedure;
+@@ -286,7 +298,8 @@ end procedure;
+ 
+ procedure applyUiPalette(projectProjection,notify)
+ variables palette = projectProjection;
+-\* This argument is the supplied renderer ui-palette projection itself, not whole Project.
++\* Application supplies the ui-palette query result or whole renderer result.appearance.uiPalette.
++\* Graph figures are applied by applyDashboardProjectionInvalidation.
+ begin
+ FiveLegacyCssVariables:
+   SetCssVariables(["--ui-color" |-> palette.uiColor,"--paper" |-> palette.uiBackgroundColor,
+diff --git a/sourcescript/application/adapter.py b/sourcescript/application/adapter.py
+index 9ab78c4361b220b02fc8401a4d53c260c67225d6..83a53e80dfa149a24549ecc871f7eaa0cc28ce1f 100644
+--- a/sourcescript/application/adapter.py
++++ b/sourcescript/application/adapter.py
+@@ -233,6 +233,10 @@ def dispatchProjectCommand(event, payload):
+            object index mapping과 selection hint는 이 조회에서 현재 대상과 대조한다.
+         5. interfaceState를 포함한 renderer 요청으로 dispatchProjectQuery("renderer", 요청)를 호출하여
+            rendererProjection에 둔다. 이동 뒤 index 대응과 최종 선택은 4번에서 확정한 값을 사용한다.
++           APPEARANCE_CHANGED의 호출자는 튜플의 rendererProjection 전체를
++           renderer.applyDashboardProjectionInvalidation의 네 번째 인자로 전달한다.
++           renderer는 그 결과의 appearance.uiPalette와 visibleSlots별 figure를 사용한다.
++           같은 명령의 표시 입력을 다시 조회하지 않는다.
+         6. 튜플을 반환한다. 명령 실패와 반영 후 조회 실패는 원래 예외로 전달한다.
+            이미 반영한 명령의 상태는 반영 후 표시 실패 시에도 유지한다.
+     """
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index 2cc53edfc65892308e9257d5b5f81307f554f709..5abcd29e607d6848d9b8df663264148bd6d9d186 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -793,6 +793,9 @@ def setCaptionsApiSettings(values):
+ 
+ def setAppearanceApiPalette(values):
+     palette = "appearance.readPalette 딕셔너리 또는 False."
++    result = "ProjectMutationResult 딕셔너리."
++    interfaceState = "명령 뒤 참조 보정을 마친 Frontend 상태."
++    rendererInput = "같은 표시 작업의 전체 renderer 조회 결과 또는 None."
+     """
+     Args:
+     - values:
+@@ -810,8 +813,12 @@ def setAppearanceApiPalette(values):
+            Backend project_state.ProjectObject.initialize의 palette 정규화 처리의 전체 palette 정규화/commit 뒤 fresh palette copy를 반환한다.
+            missing field를 current palette와 merge하지 않는다. 미commit False, throw/rejection 전파; 성공 read로 위장하지 않는다.
+            dispatchProjectCommand('APPEARANCE_CHANGED', {'palette': values})의 값을 (result, interfaceState, rendererInput)에 대입한다.
+-           not result["committed"]인 경우:
+-           False를 반환한다.
++           result["committed"]가 False이면 False를 반환한다.
++           반영되었으면 renderer.applyDashboardProjectionInvalidation에 APPEARANCE_CHANGED,
++           result, interfaceState, rendererInput을 순서대로 전달한다.
++           rendererInput은 dispatchProjectCommand 내부의 전체 renderer 조회 결과다.
++           그 안의 appearance.uiPalette와 visibleSlots의 figure를 CSS·Plotly 표시에 사용한다.
++           interfaceFSM.notify("ui", "UI_PALETTE_CHANGED")로 한 번 알린다.
+            dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['appearance.readPalette']})를 반환한다.
+     """
+     return palette
+diff --git a/sourcescript/backend/assets_files.py b/sourcescript/backend/assets_files.py
+index 7abb3e72d47aa5872d24273dd1d3a0020de0dd00..6af73f08c844c2118ac29b7317fe4da16a56d175 100644
+--- a/sourcescript/backend/assets_files.py
++++ b/sourcescript/backend/assets_files.py
+@@ -293,11 +293,10 @@ def resolveProjectAssetImportPlan(model, choice, reservedPaths, state=None):
+ 
+ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=None, state=None):
+     candidate = "프로젝트 상태 딕셔너리. 원형: /backend/project_state/ProjectObject._state"
+-    reservedPaths = "canonical 경로 문자열의 집합."
+-    model = "충돌 모델 딕셔너리."
+-    plan = "최종 경로·교체 id 딕셔너리 또는 None."
++    reservedPaths = "이번 작업에서 사용한 canonical 경로 문자열의 집합."
++    plan = "최종 경로 path와 교체 대상 replaceId를 가진 딕셔너리."
++    target = "프로젝트 VFS의 해당 경로 조회 결과 또는 None."
+     file = "name·MIME·bytes를 가진 입력 파일 자료."
+-    choice = "해당 파일의 최종 rename/replace 선택 또는 취소의 None."
+     event = "DATA_OBJECT 또는 IMAGE_OBJECT의 생성·교체 명령 이름."
+     input = "해당 명령의 새 asset 입력 딕셔너리."
+     rows = "CSV 행 배열의 배열."
+@@ -313,7 +312,8 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
+       대상 VFS 디렉터리 경로 문자열.
+ 
+     - planImport:
+-      files와 같은 순서의 최종 선택 딕셔너리 배열. 원소는 mode·path·replaceId를 담는다.
++      files와 같은 순서의 확정된 경로 딕셔너리 배열. 각 원소는 canonical path와 replaceId를 담는다.
++      replaceId는 새 파일이면 None, 교체이면 해당 자산의 양의 정수 id다.
+ 
+     - targetSlotId:
+       연결할 visible Slot의 정수 id 또는 None.
+@@ -332,19 +332,22 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
+     처리:
+         state가 None이면 activeProject._state를 사용한다. 그 상태를 분리 복사한 candidate에서
+         다음 파일·충돌·id·참조 계산을 수행한다.
+-        1. ASSETS_IMPORTED command 내부에서만 호출한다. planImport는 Application이 이미 수집한 명시적 collision choice/plan 값이며
+-           입력에는 사용자의 최종 선택 값을 담는다. Modal과 task 호출은 Application이 담당한다.
+-           directory/target slot을 그 candidate에서 resolve하고 모든 file parse/collision plan/id/path/reference를
+-           candidate 안에서 계산한다. targetSlotId가 있으면 그 slot 연결까지 같은 candidate에 포함한다.
+-           이미 선택한 replace id/path와 current kind/target이 일치해야 한다. 대기 중 바뀐 대상에 choice를 옮겨 적용하지 않는다.
+-           parse/collision/reference/whole-project validation 실패는 candidate rejection으로 끝나며 commit을 수행하지 않는다.
+-
+-        2. reservedPaths를 빈 집합으로 둔다. files를 입력 순서로 처리한다.
+-           projectAssetImportCollisionModel(file,directory,reservedPaths,candidate)를 model에 둔다.
+-           planImport의 같은 순번 원소에서 mode를 choice에 둔다. 그 원소의 path·replaceId를
+-           model에 적용하여 선택 당시 대상을 유지한다. 선택 개수·형식 불일치는 거부한다.
+-           resolveProjectAssetImportPlan(model,choice,reservedPaths,candidate)를
+-           plan에 둔다. 선택 취소 또는 replace id/path 불일치이면 None을 반환한다.
++        1. ASSETS_IMPORTED command 내부에서 호출한다. Application은 assets.resolveImportPlan 조회에서
++           확정한 path·replaceId를 planImport에 넣고, 취소이면 명령을 호출하기 전에 None을 반환한다.
++           files와 planImport가 비어 있거나 개수가 다르면 거부한다.
++           directory의 canonical 경로와 현재 후보의 디렉터리 존재 여부를 검사한다.
++           targetSlotId가 있으면 같은 후보에서 visible Slot을 확인한다. 없으면 거부한다.
++           파일 파싱·경로·참조·전체 후보 검증 실패는 후보 거부로 전달하고 반영을 수행하지 않는다.
++
++        2. reservedPaths를 빈 집합으로 둔다. files를 입력 순서로 처리하며
++           planImport의 같은 순번 원소를 plan에 둔다. 각 plan의 path 문자열과
++           replaceId의 None 또는 양의 정수 형식을 검사한다.
++           path가 canonical 형식이고 부모가 directory와 같으며 reservedPaths에 없어야 한다.
++           파일 종류는 slotFileKind(file)로 확인하여 data 또는 image를 허용한다.
++           projectVfsResolve(plan["path"],candidate)를 target에 둔다.
++           replaceId가 None이면 target이 없어야 한다.
++           교체이면 target이 존재하고 종류가 입력 파일의 CSV 또는 image 종류와 같으며
++           자산 id가 plan["replaceId"]와 같아야 한다. 불일치이면 거부한다.
+            CSV이면 parseProjectDataAsset에 file의 name·bytes를 전달하여 rows에 둔다.
+            plan이 교체이면 종류별 REPLACED를, 생성이면 CREATED를 event에 둔다.
+            plan의 경로·교체 id와 파일의 name·MIME·bytes, CSV의 rows로 input을 구성하고
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index 9095b9da88b0e049c974b7aa4069f03748dfe32f..fbe77b6dd70e780cab0c30a5268d5c06c22a08bd 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -328,6 +328,10 @@ def readBackendProjection(kind, request):
+            이번 query가 처음 읽은 project와 같은 activeProject를 사용하는 동안 호출하며
+            project 교체·명령·callback·비동기 대기를 끼우지 않는다.
+            projection["geometry"]에 geometry를 넣는다. 실제 renderer 너비에는 preview의 너비 제한을 적용하지 않는다.
++           projection["appearance"]["uiPalette"]는 이번 프로젝트의 팔레트 복사다.
++           projection["visibleSlots"]의 각 graph slot의 figure는 위 graphs.chartFigure 계산 결과다.
++           Application은 전체 조회 결과를 renderer.applyDashboardProjectionInvalidation의
++           projectProjection 인자로 전달하여 팔레트 CSS와 Plotly 표시에 사용한다.
+            같은 geometry의 scale·margin·gap·radius 계산은 dashboardGeometry에서 수행한다.
+         39. kind=renderer의 slot-image 요청이면: explicit slotId에 대한 images.readEditor와 동일한 Backend 계산; UI selection을 query 내부에서 읽지 않음
+         40. kind=renderer의 ui-palette 요청이면: appearance.readPalette와 동일한 palette copy; CSS variable 적용은 Frontend가 수행
+diff --git a/sourcescript/frontend/renderer.py b/sourcescript/frontend/renderer.py
+index 14935b8ba744139e5f5561f4fd66bc2802fe9744..761f25b3d4825d5e2e3f9e922d71f8a2c99e8e5f 100644
+--- a/sourcescript/frontend/renderer.py
++++ b/sourcescript/frontend/renderer.py
+@@ -186,7 +186,17 @@ def applyDashboardProjectionInvalidation(event, mutationResult, interfaceState,
+            ProjectObject 또는 interface state를 변경하지 않는다.
+ 
+         2. Application boundary는 Project EFSM commit result 뒤 Backend reconciliation query와 Frontend FSM reconciliation을 먼저 완료하고 final interfaceState, mutationResult, 필요한 Backend renderer projection을 renderer에 전달한다. 실제 rendered reference 제거가 있으면 FULL_DASHBOARD, path/tree 변화만 있으면 NONE, 기존 narrow update가 충분하면 TARGETED_PROJECTION이다. renderer는 supplied projection만 소비하고 Backend command/query 또는 Frontend FSM command를 재귀 호출하지 않는다. rendered reference 제거는 result의 실제 제거 delta/현재 host identity와 supplied final slot/chart/image reference로 판정한다. 제거가 없고 actual 변경이 project name/VFS path/tree에만 한정되면 NONE이다. CAPTION_TEXT_INPUT/SLOT_CAPTIONS_INSERTED/CAPTION_SETTINGS_CHANGED/LABEL_SETTINGS_CHANGED/LABEL_POSITION_CHANGED/APPEARANCE_CHANGED/SLOT_IMAGE_SETTINGS_CHANGED는 기존 host identity가 모두 유지되고 supplied projection만으로 갱신 가능할 때 TARGETED_PROJECTION이다. 해당 narrow projection은 각각 caption/label, CSS palette와 graph presentation, 해당 image surface를 갱신한다. host 교체/제거가 있거나 그 외 persistent visual 변경이면 FULL_DASHBOARD로 fallback한다. 추측한 event별 stale Backend snapshot을 사용하지 않는다.
+-        3. effect를 반환한다.
++        3. APPEARANCE_CHANGED의 TARGETED_PROJECTION이면 다음 표시를 수행한다.
++           projectProjection은 Application의 dispatchProjectCommand가 참조 보정 뒤
++           dispatchProjectQuery("renderer", {frontendState: 최종 Frontend 상태})로 조회해 반환한 값이다.
++           projectProjection["appearance"]["uiPalette"]를 applyUiPalette의 첫 인자로,
++           False를 notify로 전달하여 CSS를 적용한다.
++           projectProjection["visibleSlots"]의 각 graph slot에 대해 그 slot의 figure를
++           현재 host의 기존 Plotly 갱신 절차에 전달한다. figure의 배경·글자색은 Backend의
++           graphs.chartFigure(chart, project)가 같은 프로젝트의 appearance.uiPalette에서 계산한 값이다.
++           기존 generation·host·chart 확인과 비동기 실패 처리를 유지한다.
++           host가 바뀌어 FULL_DASHBOARD이면 기존 renderDashboard가 같은 조회 결과를 적용한다.
++        4. effect를 반환한다.
+     """
+     return effect
+ 
+@@ -476,7 +486,10 @@ def applyUiPalette(projectProjection, notify):
+     """
+     Args:
+     - projectProjection:
+-      Application이 제공한 이번 표시 작업의 읽기 전용 Backend projection.
++      Application이 제공한 팔레트 색상 딕셔너리.
++      dispatchProjectQuery("renderer", {operation: "ui-palette"})의 반환값 또는
++      같은 작업의 전체 renderer 조회 결과에서 읽은 appearance.uiPalette다.
++      원본: /backend/project_state/activeProject._state.appearance.uiPalette
+ 
+     - notify:
+       표시 변경 알림 여부인 논리값.
+@@ -487,13 +500,13 @@ def applyUiPalette(projectProjection, notify):
+       palette CSS projection
+ 
+     변경:
+-    - supplied palette에 대응하는 CSS 변수와 graph 표시.
++    - supplied palette에 대응하는 CSS 변수.
+ 
+     처리:
+-        1. supplied renderer ui-palette projection의 scalar field만 CSS에 적용한다.
++        1. 전달받은 팔레트의 색상 필드를 CSS 변수에 적용한다.
+            --ui-color=uiColor, --paper=uiBackgroundColor, --ui-subtle=uiSubtleColor,
+-           --ink=fontColor, --graph-bg=paperColor다. Backend를 조회하거나 default/DOM 색으로 project를 수정하지 않는다.
+-           Application이 같은 current project의 figure projection도 전달하므로 graph paper/ink 변경을 새 figure로 표시한다.
++           --ink=fontColor, --graph-bg=paperColor다.
++           그래프 갱신은 applyDashboardProjectionInvalidation이 같은 작업의 전체 renderer 조회 결과로 수행한다.
+            notify가 참이면 UI_PALETTE_CHANGED를 한 번 알린다.
+            MantineProvider의 전체 UI 변수 계산은 mantine_ui.FastFigureApp이 소유한다.
+            paletteView를 반환한다.
+diff --git a/agent_space/reviews/review-20261117-008-plan039-contracts.md b/agent_space/reviews/review-20261117-008-plan039-contracts.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..012c1d5c3f4b3b3f911b42907da4538865b86381
+--- /dev/null
++++ b/agent_space/reviews/review-20261117-008-plan039-contracts.md
+@@ -0,0 +1,36 @@
++# Plan039 — 파일 가져오기·팔레트 입력 계약 수정
++
++## 범위
++
++- 수정 전 커밋: `b729c3d96834bff9baedcaaa8bb603c3558a2c24`.
++- 기준 계획: `../plans/plan-039.md`. 기존 계획·검토 기록은 보존했다.
++- Source Script 54, pseudocode 31. source code 160은 실제 파일을 유지하고 수정 계약과의 대응을 재확인했다.
++
++## R01 — 파일 가져오기
++
++- `sourcescript/backend/assets_files.py`의 `buildProjectAssetImportCandidate` 입력은 파일 순서의 `path`·`replaceId`다. Application의 `assets.resolveImportPlan` 결과가 그대로 명령에 전달된다. 취소는 명령 호출 전에 끝난다.
++- 파일 수·입력 수·형식, canonical 경로·부모 디렉터리·작업 내 중복, 현재 경로의 자산 종류와 id를 검사한다. 생성 경로는 비어 있어야 하며 교체 대상은 선택 당시 id와 같아야 한다. 실패 시 후보를 거부한다.
++- 후보 안의 파일 처리·참조 연결, 전체 검증·현재 권위 재확인·한 번 반영을 유지했다.
++- `pseudocode/backend/assets_files.pcal`의 `BuildAssetImportInAttempt`에 개수 검사를 명시하고 경로·대상 검사 뒤 파싱하도록 순서를 맞췄다. 기존 확정 경로 소비를 유지했다.
++- `sourcecode/backend/assets_files.js`의 `buildProjectAssetImportCandidate`는 이미 같은 검사를 수행한다. 실행 단계에 `mode`나 추가 선택을 요구하는 코드를 넣지 않았다.
++
++## R02 — 팔레트 입력 연결
++
++- 전체 표시 입력: `dispatchProjectCommand` → 참조 보정 → `dispatchProjectQuery("renderer", request)` → `readBackendProjection("renderer", request)` → 튜플의 `rendererProjection`.
++- `rendererProjection.appearance.uiPalette`는 같은 프로젝트의 팔레트 복사이고, `rendererProjection.visibleSlots[].figure`는 같은 조회에서 `graphs.chartFigure(chart, project)`가 계산한 표시 입력이다.
++- `setAppearanceApiPalette`는 반영 뒤 튜플의 결과·최종 Frontend 상태·전체 renderer 입력을 `applyDashboardProjectionInvalidation`에 전달한다. 새 조회를 중복 수행하지 않는다.
++- 해당 renderer는 CSS 팔레트와 현재 그래프의 Plotly 표시를 갱신한다. host 변경이면 기존 전체 표시 경로를 사용한다. generation·host·chart 확인과 실패 처리를 유지한다.
++- `applyUiPalette`는 기존 CSS 함수로 유지했다. 인자는 부분 `ui-palette` 조회 결과 또는 전체 조회 결과의 `appearance.uiPalette`다. 그래프 적용 책임은 기존 `applyDashboardProjectionInvalidation`에 명시했다. Plan039 R02의 목적을 기존 두 함수의 역할 분담으로 구현하여 인자 변경·중복 그래프 갱신을 피했다.
++- Source Script의 Application/Backend/renderer 설명과 pseudocode의 공개 wrapper/renderer 분기를 함께 맞췄다. 실제 source code의 `applyUiPaletteValues` → `applyCommittedDashboardProjection` → `applyDashboardProjectionInvalidation`는 이미 이 경로를 수행하므로 유지했다.
++
++## 논리·목적·비중복 확인
++
++- 생산자가 확정한 경로·id와 소비자의 검증 입력이 일치한다. 같은 후보의 현재 대상 검사 뒤 한 번 반영한다.
++- 두 보류 사유인 실행 단계의 선택 재요구와 팔레트 표시 입력의 출처 누락을 수정했다.
++- 새 query/API/저장 필드/상태 소유자를 추가하지 않았다. CSS 함수와 기존 Plotly 갱신 절차를 재사용했다.
++
++## 정적 확인과 한계
++
++- 실제 전체 Git diff, Source Script의 AST 문법, 세 계층 fingerprint, 변경 범위와 native patch의 reverse 적용 가능성을 확인했다.
++- source code·dist·settings·verification·scripts·기존 계획/검토 문서는 유지했다. source code 160의 fingerprint는 그대로다. 메타데이터의 Source Script/pseudocode 참조와 검토 링크만 새 계약에 맞췄다.
++- 테스트·앱·브라우저·빌드·TLC·checker main은 실행하지 않았다. 런타임 성공이나 전체 계층의 closure를 주장하지 않는다. 상태 `stale`과 Source Script `open`을 유지했다.
+diff --git a/agent_space/patches/20261117-010.md b/agent_space/patches/20261117-010.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..e78a5b481062a33a59044caae95b10ce6065852c
+--- /dev/null
++++ b/agent_space/patches/20261117-010.md
+@@ -0,0 +1,18 @@
++# Plan039 계약 수정
++
++## 목적과 선택
++
++- 파일 가져오기에서 확정된 `path`·`replaceId`를 현재 후보와 검증하도록 Source Script를 수정했다. 소비 단계의 `mode` 재선택을 제거했다.
++- 팔레트 CSS와 Plotly 표시 입력의 API·반환 필드·인자 전달을 Source Script와 pseudocode에 연결했다.
++- 기존 CSS 함수와 그래프 갱신 함수를 사용했다. 부분 조회에 figure를 추가하거나 별도 API를 만드는 방법은 입력 중복과 불필요한 변경을 늘려 선택하지 않았다.
++- 실제 source code는 해당 경로와 검사를 이미 구현하고 있어 유지했다.
++
++## 실제 변경 기록
++
++- 기준 커밋: `b729c3d96834bff9baedcaaa8bb603c3558a2c24`.
++- native Git diff: Source Script 5개, pseudocode 3개, 메타데이터, 신규 검토 문서와 이 설명. 기존 계획 문서는 포함하지 않았다.
++- Source Script 54: `sha256:a5e9dcb5d07b44ca7a8b91153e3361876b51951e74f476b746f6abbb7c4e6007`.
++- pseudocode 31: `sha256:f8a8bd6e0424fec8b87f7b3a2fe6378bed29ff83dd7fa9d3bf5e3ca40cf1e005`.
++- source code 160: `sha256:54239f1e01f62bf4843579704e0767ee4dd2781a4099699f8f87e10430bae0d0` 유지.
++- 검토: `../reviews/review-20261117-008-plan039-contracts.md`.
++- AST·전체 실제 diff·hash·reverse 적용·변경 범위를 정적으로 확인했다. 테스트·실행·빌드·추가 commit/push는 수행하지 않았다.

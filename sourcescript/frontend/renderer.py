@@ -186,7 +186,17 @@ def applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, 
            ProjectObject 또는 interface state를 변경하지 않는다.
 
         2. Application boundary는 Project EFSM commit result 뒤 Backend reconciliation query와 Frontend FSM reconciliation을 먼저 완료하고 final interfaceState, mutationResult, 필요한 Backend renderer projection을 renderer에 전달한다. 실제 rendered reference 제거가 있으면 FULL_DASHBOARD, path/tree 변화만 있으면 NONE, 기존 narrow update가 충분하면 TARGETED_PROJECTION이다. renderer는 supplied projection만 소비하고 Backend command/query 또는 Frontend FSM command를 재귀 호출하지 않는다. rendered reference 제거는 result의 실제 제거 delta/현재 host identity와 supplied final slot/chart/image reference로 판정한다. 제거가 없고 actual 변경이 project name/VFS path/tree에만 한정되면 NONE이다. CAPTION_TEXT_INPUT/SLOT_CAPTIONS_INSERTED/CAPTION_SETTINGS_CHANGED/LABEL_SETTINGS_CHANGED/LABEL_POSITION_CHANGED/APPEARANCE_CHANGED/SLOT_IMAGE_SETTINGS_CHANGED는 기존 host identity가 모두 유지되고 supplied projection만으로 갱신 가능할 때 TARGETED_PROJECTION이다. 해당 narrow projection은 각각 caption/label, CSS palette와 graph presentation, 해당 image surface를 갱신한다. host 교체/제거가 있거나 그 외 persistent visual 변경이면 FULL_DASHBOARD로 fallback한다. 추측한 event별 stale Backend snapshot을 사용하지 않는다.
-        3. effect를 반환한다.
+        3. APPEARANCE_CHANGED의 TARGETED_PROJECTION이면 다음 표시를 수행한다.
+           projectProjection은 Application의 dispatchProjectCommand가 참조 보정 뒤
+           dispatchProjectQuery("renderer", {frontendState: 최종 Frontend 상태})로 조회해 반환한 값이다.
+           projectProjection["appearance"]["uiPalette"]를 applyUiPalette의 첫 인자로,
+           False를 notify로 전달하여 CSS를 적용한다.
+           projectProjection["visibleSlots"]의 각 graph slot에 대해 그 slot의 figure를
+           현재 host의 기존 Plotly 갱신 절차에 전달한다. figure의 배경·글자색은 Backend의
+           graphs.chartFigure(chart, project)가 같은 프로젝트의 appearance.uiPalette에서 계산한 값이다.
+           기존 generation·host·chart 확인과 비동기 실패 처리를 유지한다.
+           host가 바뀌어 FULL_DASHBOARD이면 기존 renderDashboard가 같은 조회 결과를 적용한다.
+        4. effect를 반환한다.
     """
     return effect
 
@@ -476,7 +486,10 @@ def applyUiPalette(projectProjection, notify):
     """
     Args:
     - projectProjection:
-      Application이 제공한 이번 표시 작업의 읽기 전용 Backend projection.
+      Application이 제공한 팔레트 색상 딕셔너리.
+      dispatchProjectQuery("renderer", {operation: "ui-palette"})의 반환값 또는
+      같은 작업의 전체 renderer 조회 결과에서 읽은 appearance.uiPalette다.
+      원본: /backend/project_state/activeProject._state.appearance.uiPalette
 
     - notify:
       표시 변경 알림 여부인 논리값.
@@ -487,13 +500,13 @@ def applyUiPalette(projectProjection, notify):
       palette CSS projection
 
     변경:
-    - supplied palette에 대응하는 CSS 변수와 graph 표시.
+    - supplied palette에 대응하는 CSS 변수.
 
     처리:
-        1. supplied renderer ui-palette projection의 scalar field만 CSS에 적용한다.
+        1. 전달받은 팔레트의 색상 필드를 CSS 변수에 적용한다.
            --ui-color=uiColor, --paper=uiBackgroundColor, --ui-subtle=uiSubtleColor,
-           --ink=fontColor, --graph-bg=paperColor다. Backend를 조회하거나 default/DOM 색으로 project를 수정하지 않는다.
-           Application이 같은 current project의 figure projection도 전달하므로 graph paper/ink 변경을 새 figure로 표시한다.
+           --ink=fontColor, --graph-bg=paperColor다.
+           그래프 갱신은 applyDashboardProjectionInvalidation이 같은 작업의 전체 renderer 조회 결과로 수행한다.
            notify가 참이면 UI_PALETTE_CHANGED를 한 번 알린다.
            MantineProvider의 전체 UI 변수 계산은 mantine_ui.FastFigureApp이 소유한다.
            paletteView를 반환한다.

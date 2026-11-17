@@ -56,7 +56,7 @@ StatusNotTaskOutcome:
 end procedure;
 
 procedure applyDashboardProjectionInvalidation(event,mutationResult,interfaceState,projectProjection)
-variables effect = "NONE";
+variables effect = "NONE", i = 1, slot = NoValue;
 begin
 ActualRemovedRenderedReferenceFirst:
   if mutationResult.projectionEffect.referencesRemoved then effect := "FULL_DASHBOARD";
@@ -66,7 +66,19 @@ ActualRemovedRenderedReferenceFirst:
         /\ ExistingHostIdentitiesMatchSuppliedSlots(projectProjection) then effect := "TARGETED_PROJECTION";
   else effect := "FULL_DASHBOARD"; end if;
   if effect = "FULL_DASHBOARD" then call renderDashboard(projectProjection,interfaceState);
-  elsif effect = "TARGETED_PROJECTION" then ApplySuppliedNarrowProjection(event,projectProjection,interfaceState); end if;
+  elsif effect = "TARGETED_PROJECTION" then
+    if event = "APPEARANCE_CHANGED" then
+      call applyUiPalette(projectProjection.appearance.uiPalette,FALSE);
+      while i <= Len(projectProjection.visibleSlots) do
+        slot := projectProjection.visibleSlots[i];
+        if FieldOrNoValue(slot,"figure") # NoValue then
+          \* Existing Plotly presentation retains generation/host/chart checks and failure handling.
+          PresentSuppliedGraphFigureOnCurrentHost(slot,interfaceState,projectProjection.geometry.scale);
+        end if;
+        i := i + 1;
+      end while;
+    else ApplySuppliedNarrowProjection(event,projectProjection,interfaceState); end if;
+  end if;
   result := effect;
   return;
 end procedure;
@@ -286,7 +298,8 @@ end procedure;
 
 procedure applyUiPalette(projectProjection,notify)
 variables palette = projectProjection;
-\* This argument is the supplied renderer ui-palette projection itself, not whole Project.
+\* Application supplies the ui-palette query result or whole renderer result.appearance.uiPalette.
+\* Graph figures are applied by applyDashboardProjectionInvalidation.
 begin
 FiveLegacyCssVariables:
   SetCssVariables(["--ui-color" |-> palette.uiColor,"--paper" |-> palette.uiBackgroundColor,

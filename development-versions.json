@@ -9,10 +9,10 @@
   "authority_rule": "Source Script is the highest semantic authority. pseudocode (implemented in PlusCal) is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating source code implementation or current status.",
   "layers": {
     "source-script": {
-      "revision": 53,
+      "revision": 54,
       "status": "stale",
       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
-      "fingerprint": "sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252",
+      "fingerprint": "sha256:a5e9dcb5d07b44ca7a8b91153e3361876b51951e74f476b746f6abbb7c4e6007",
       "derived_from": null,
       "closure": "open",
       "closure_review": null
@@ -56,22 +56,22 @@
       ],
       "fingerprint": "sha256:54239f1e01f62bf4843579704e0767ee4dd2781a4099699f8f87e10430bae0d0",
       "derived_from": {
-        "source-script": "sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252",
-        "pseudocode": "sha256:e13679a938eebdc592d6dbda032e8091a0536bf480d733dfdde5c14fa1a66dce",
+        "source-script": "sha256:a5e9dcb5d07b44ca7a8b91153e3361876b51951e74f476b746f6abbb7c4e6007",
+        "pseudocode": "sha256:f8a8bd6e0424fec8b87f7b3a2fe6378bed29ff83dd7fa9d3bf5e3ca40cf1e005",
         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
       },
       "validation_review": null,
-      "translation_review": "agent_space/reviews/review-20261117-007-plan038-source-code.md"
+      "translation_review": "agent_space/reviews/review-20261117-008-plan039-contracts.md"
     },
     "pseudocode": {
-      "revision": 30,
+      "revision": 31,
       "status": "stale",
       "path_rule": "pseudocode/**/*.pcal",
-      "fingerprint": "sha256:e13679a938eebdc592d6dbda032e8091a0536bf480d733dfdde5c14fa1a66dce",
+      "fingerprint": "sha256:f8a8bd6e0424fec8b87f7b3a2fe6378bed29ff83dd7fa9d3bf5e3ca40cf1e005",
       "derived_from": {
-        "source-script": "sha256:0bab921cdb83cfeb9fdc411a966a9600bcf5cf23bd6d6f03bc4ba5fde2b87252"
+        "source-script": "sha256:a5e9dcb5d07b44ca7a8b91153e3361876b51951e74f476b746f6abbb7c4e6007"
       },
-      "translation_review": "agent_space/reviews/review-20261117-006-plan037-modules.md"
+      "translation_review": "agent_space/reviews/review-20261117-008-plan039-contracts.md"
     }
   }
 }
